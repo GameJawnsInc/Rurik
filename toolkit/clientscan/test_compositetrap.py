@@ -21,6 +21,18 @@ WITHOUT one, and it is two different things:
 §5 ties the prediction to the CONTENT: P4's index->type table must be what
 `content/items.toml` and the archive's composite table jointly say, so the
 prediction cannot quietly drift away from the rows the server actually sends.
+
+§6-§8 do the same three jobs for the SLOT-CACHE half (the `cache`/`cachesame`
+sites, S2..S7). §6 is the one worth reading: it does not merely check the
+three CpsBase offsets, it checks that they CLOSE -- `0x24 + 9*16 = 0xB4` and
+`0xB4 + 9*4 = 0xD8`, three contiguous nine-slot arrays -- and that §9.2's
+"+0x99/+0xA9 dye bytes" land inside the first of them, on rows 7 and 8 at byte
+1. Three independently-read displacements agreeing to the byte is an assertion
+the artifact can refute; a list of offsets copied out of a disassembly is not.
+§8 pins the slot tables to `authsrv.py`'s own source and `content/items.toml`,
+including the deliberately awkward one: `costume_body`'s dye tint is 0, which
+is also what an unwritten row holds, so the check exists to keep the module
+honest about which half of S7 can actually decide anything.
 """
 import os
 import struct
@@ -35,8 +47,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(HERE), "authsrv"))
 import checks             # noqa: E402
 import compositetrap as t  # noqa: E402
 
-# Floor set from a real green run (18 checks, 2026-08-23).
-LEDGER = checks.Ledger("composite trap", floor=18)
+# Floor set from a real green run (18 checks 2026-08-23; 48 after the
+# slot-cache half landed the same day).
+LEDGER = checks.Ledger("composite trap", floor=48)
 check = checks.adopt(LEDGER)
 
 # ---------------------------------------------------------------- section 1
@@ -205,5 +218,248 @@ else:
           "content row without changing the prediction goes RED here rather "
           "than producing a run that cannot fail",
           f"content says {got}, module says {t.OUR_ARMOUR}")
+
+# ---------------------------------------------------------------- section 6
+print("== 6. CpsBase's three arrays, decoded from the image ==")
+if data is not None:
+    check(at(0x0082EDAE, 3) == bytes.fromhex("83fe09")
+          and t.CPS_SLOTS == 9,
+          f"the function bounds its slot at {t.CPS_SLOTS} -- ArenaNet's own "
+          f"`cmp esi,9`, the value behind `CpsBase:173 slot < "
+          f"arrsize(m_slotItemId)`", f"bytes {at(0x0082EDAE, 3).hex()}")
+    row = at(0x0082F0E0, 4)
+    shl = at(0x0082F03F, 3)
+    check(row == bytes.fromhex("89443a24") and row[3] == t.CPS_ITEMDATA
+          and shl == bytes.fromhex("c1e204") and t.CPS_ROW == 1 << shl[2],
+          f"m_slotItemData starts at +0x{t.CPS_ITEMDATA:02X} with a "
+          f"{t.CPS_ROW}-byte row -- both read off the store's own "
+          f"displacement and the shift that builds its index",
+          f"store {row.hex()} shift {shl.hex()}")
+    itemid = at(0x0082F05C, 3)
+    ovr = at(0x0082EF21, 5)
+    check(itemid == bytes.fromhex("8d4e2d") and itemid[2] * 4 == t.CPS_ITEMID
+          and ovr == bytes.fromhex("ba36000000")
+          and ovr[1] * 4 == t.CPS_OVERRIDE,
+          f"m_slotItemId is at +0x{t.CPS_ITEMID:02X} (`lea ecx,[esi+0x2d]`) "
+          f"and the costume override array at +0x{t.CPS_OVERRIDE:02X} "
+          f"(`mov edx,0x36`) -- both scaled indices, not guessed offsets",
+          f"itemId {itemid.hex()} override {ovr.hex()}")
+    # THE CHECK THAT CAN REFUTE THE WHOLE LAYOUT. Three arrays, nine slots
+    # each, and the arithmetic has to close to the byte in both joints. It
+    # does -- 0x24 + 9*16 = 0xB4 and 0xB4 + 9*4 = 0xD8 -- which is why the
+    # dye bytes are not loose fields: 0x99 and 0xA9 land INSIDE the first
+    # array, on rows 7 and 8, at byte 1 of the packed dword. If any of the
+    # three offsets were wrong this identity would miss.
+    check(t.CPS_ITEMDATA + t.CPS_SLOTS * t.CPS_ROW == t.CPS_ITEMID
+          and t.CPS_ITEMID + t.CPS_SLOTS * 4 == t.CPS_OVERRIDE,
+          "the three nine-slot arrays are CONTIGUOUS and the arithmetic "
+          "closes exactly at both joints -- an offset off by one row would "
+          "break it",
+          f"0x{t.CPS_ITEMDATA:02X} + 9*{t.CPS_ROW} = "
+          f"0x{t.CPS_ITEMDATA + t.CPS_SLOTS * t.CPS_ROW:02X} vs "
+          f"0x{t.CPS_ITEMID:02X}")
+    body_dye = at(0x0082F001, 6)
+    head_dye = at(0x0082EFEF, 6)
+    check(body_dye[:2] == bytes.fromhex("8a87")
+          and struct.unpack_from("<I", body_dye, 2)[0]
+          == t.CPS_ITEMDATA + 7 * t.CPS_ROW + 5
+          and head_dye[:2] == bytes.fromhex("8a87")
+          and struct.unpack_from("<I", head_dye, 2)[0]
+          == t.CPS_ITEMDATA + 8 * t.CPS_ROW + 5,
+          "§9.2's '+0x99/+0xA9 dye bytes' ARE m_slotItemData[7]+5 and [8]+5 "
+          "-- byte 1 of each costume slot's own row, i.e. its dye tint. The "
+          "costume's dye is read back out of its cache row, not held loose",
+          f"body {body_dye.hex()} head {head_dye.hex()}")
+    slot4 = at(0x0082EFEA, 3)
+    check(slot4 == bytes.fromhex("83fe04"),
+          "and the branch that picks between them tests slot == 4, which on "
+          "the wire is LEGS -- so S2 has to establish the index vocabulary "
+          "before S7's value can be read",
+          f"bytes {slot4.hex()}")
+    orins = at(0x0082EFD4, 6)
+    repl = at(0x0082EFDA, 3)
+    check(orins[0] == 0x81 and orins[1] == 0xCA
+          and struct.unpack_from("<I", orins, 2)[0] == t.COSTUME_FLAG_BITS
+          and repl == bytes.fromhex("8945f8"),
+          f"the override MERGES the flags (`or edx,0x{t.COSTUME_FLAG_BITS:08X}"
+          f"`, opcode 0x81 /1 -- an OR, not a MOV) and REPLACES the file id "
+          f"(`mov [ebp-8],eax`) in adjacent instructions. Per-field, which is "
+          f"why 'replace or merge' has no one-word answer",
+          f"or {orins.hex()} replace {repl.hex()}")
+
+# ---------------------------------------------------------------- section 7
+print("== 7. the cache analyser, and the sabotages it must redden on ==")
+CSITES = [t.SITES["getids"], t.SITES["record"],
+          t.SITES["cache"], t.SITES["cachesame"]]
+GOOD_IDS = [0, 0, 3, 4, 5, 6, 7, 8, 9]
+#: The body costume's run expanded per slot, plus the head costume at slot 6
+#: and each costume slot's own entry. This is ONE of S6's two branches; the
+#: other is exercised below and is not a failure.
+GOOD_OVR = [0, 0, 2806, 2805, 2808, 2807, 2654, 2806, 2654]
+GOOD_ROWS = {2: (2806, 7, 0), 3: (2805, 4, 0), 4: (2808, 19, 35),
+             5: (2807, 13, 0), 6: (2654, 16, 0),
+             7: (2806, 44, 0), 8: (2654, 45, 35)}
+
+
+def chits(rows, ids=None, ovr=None, cps=0x0AB00000, site=2, extra=()):
+    """Synthetic slot-cache hits in the shape HwTrap + _cap_slotcache give."""
+    ids = GOOD_IDS if ids is None else ids
+    ovr = GOOD_OVR if ovr is None else ovr
+    out = []
+    for slot in sorted(rows):
+        rec, tb, tint = rows[slot]
+        out.append({"slot": site, "t": float(slot), "cap": {
+            "CpsBase": cps, "slot": slot, "edx (slot*16)": slot * 16,
+            "item id (arg1)": t.OUR_SLOT_ITEM.get(slot),
+            "file id": rec, "record": rec & 0x7FFFFFFF, "type byte": tb,
+            "dye tint": tint, "dye colors": 11, "row+8": 0,
+            "flags": 0x20001006, "m_slotItemId": list(ids),
+            "override": list(ovr)}})
+    return list(extra) + out
+
+
+lines, rc = t._analyse_cache(CSITES, chits(GOOD_ROWS))
+blob = "\n".join(lines)
+check(rc == 0 and "S2 m_slotItemId is the WIRE slot: PASS" in blob,
+      "the predicted-good run scores rc 0 and S2 PASS", blob)
+check("S3 REPLACE on the file id: PASS" in blob,
+      "S3 PASSES when every overridden row carries the costume record -- the "
+      "question §9.9 and §9.10 both closed on and could not reach")
+check("S4 CARRY-THROUGH on the type byte: PASS" in blob,
+      "S4 PASSES when the armour's own wire type survives into the row")
+check("S5 the flag bits: PASS" in blob and "LIMIT, stated" in blob,
+      "S5 passes AND prints its own limit -- our armour and costume rows "
+      "declare the same flags, so this run cannot separate OR from assign, "
+      "and the report says so rather than claiming the stronger result")
+check("expands AT REGISTRATION" in blob,
+      "S6 reads four distinct override ids as the run expanding at "
+      "registration time")
+check("PASS, and DECISIVELY" in blob and "S7 the dye tint" in blob,
+      "S7 is decisive on the HEAD half: tint 35 is a value only "
+      "`costume_head` declares")
+check("the body half, NOT decisive" in blob,
+      "and it refuses to claim the body half, because `costume_body` declares "
+      "tint 0 and so does an unwritten row -- the one place this rig agrees "
+      "with itself for free")
+
+lines, rc = t._analyse_cache(CSITES, [])
+check(rc is None and "never fired" in "\n".join(lines)
+      and "NO VERDICT" in "\n".join(lines),
+      "CONTROL SILENT: no cache hit is NO VERDICT (rc None), not a pass -- "
+      "the same discipline the base-lookup control enforces for P1..P5")
+
+bad3 = {**GOOD_ROWS, 2: (91, 7, 0)}
+lines, rc = t._analyse_cache(CSITES, chits(bad3))
+check(rc == 1 and "S3 REPLACE on the file id: REFUTED" in "\n".join(lines),
+      "S3 SABOTAGE: a row that kept the ARMOUR's record while its override "
+      "slot is set refutes REPLACE -- the single result this whole run is "
+      "for, so it must be able to come out the other way")
+
+bad4 = {**GOOD_ROWS, 2: (2806, 44, 0)}
+lines, rc = t._analyse_cache(CSITES, chits(bad4))
+check(rc == 1 and "S4 CARRY-THROUGH on the type byte: REFUTED"
+      in "\n".join(lines),
+      "S4 SABOTAGE: a costume wire type reaching an armour slot's type byte "
+      "refutes the carry-through")
+
+bad7 = {**GOOD_ROWS, 4: (2808, 19, t.TINT_ARMOUR)}
+lines, rc = t._analyse_cache(CSITES, chits(bad7))
+check(rc == 1 and "S7 the dye tint: REFUTED" in "\n".join(lines),
+      "S7 SABOTAGE: slot 4 keeping the armour tint refutes the dye "
+      "replacement in the one slot where the value is unambiguous")
+
+lines, rc = t._analyse_cache(
+    CSITES, chits(GOOD_ROWS, ids=[0, 0, 7, 6, 5, 4, 3, 8, 9]))
+check(rc == 1 and "S2 m_slotItemId is the WIRE slot: REFUTED"
+      in "\n".join(lines),
+      "S2 SABOTAGE: our item ids appearing at slots we did not send them to "
+      "means CpsBase re-indexes, and S7's slot-4 reading would then be about "
+      "a different body part")
+
+lines, rc = t._analyse_cache(
+    CSITES, chits(GOOD_ROWS, ovr=[0, 0, 2806, 2806, 2806, 2806, 2806,
+                                  2806, 2654]))
+check("DOWNSTREAM" in "\n".join(lines),
+      "S6's OTHER branch is a result, not a failure: one id repeated across "
+      "the armour slots sites the run expansion past this function, which "
+      "would move §9.9's reconstruction rather than refute it")
+
+lines, rc = t._analyse_cache(CSITES, chits(GOOD_ROWS, ovr=[0] * 9))
+check(rc is None and "no slot carries an override" in "\n".join(lines),
+      "NO OVERRIDE: with an empty override array the analyser gives NO "
+      "VERDICT on S3..S7 rather than passing them vacuously -- a run without "
+      "--costume looks exactly like a costume path that never fired")
+
+doll = chits({s: (0, 0, 0) for s in range(2, 7)},
+             ids=[0] * 9, ovr=[0] * 9, cps=0x0AC00000)
+lines, rc = t._analyse_cache(CSITES, chits(GOOD_ROWS, extra=doll))
+check(rc == 0 and "2 CpsBase instance(s)" in "\n".join(lines)
+      and "scoring 0x0AB00000" in "\n".join(lines),
+      "TWO INSTANCES: §9.6 saw the character-select doll and the world agent "
+      "build in one session, so the analyser picks the instance wearing our "
+      "items instead of scoring the doll's empty slots as a refutation")
+
+# ---------------------------------------------------------------- section 8
+print("== 8. the slot tables are authsrv's and content's, not a hand-copy ==")
+import re                                                     # noqa: E402
+srv = os.path.join(os.path.dirname(HERE), "authsrv", "authsrv.py")
+try:
+    src = open(srv, encoding="utf-8").read()
+    blk = re.search(r"STARTER_ARMOUR = \((.*?)\n\)", src, re.S).group(1)
+    armour = {int(s): (int(i), k) for i, k, s in
+              re.findall(r"\(\s*(\d+),\s*\"([a-z_]+)\",\s*(\d+)\)", blk)}
+    cslot = int(re.search(r"^COSTUME_SLOT = (\d+)", src, re.M).group(1))
+    citem = int(re.search(r"^COSTUME_ITEM_ID = (\d+)", src, re.M).group(1))
+    hslot = int(re.search(r"^COSTUME_HEAD_SLOT = (\d+)", src, re.M).group(1))
+    hitem = int(re.search(r"^COSTUME_HEAD_ITEM_ID = (\d+)", src, re.M).group(1))
+except Exception as exc:                                      # noqa: BLE001
+    LEDGER.skip("the authsrv slot cross-check", f"unreadable: {exc}")
+else:
+    want = {s: i for s, (i, _k) in armour.items()}
+    want[cslot], want[hslot] = citem, hitem
+    check(want == t.OUR_SLOT_ITEM,
+          "OUR_SLOT_ITEM is exactly authsrv.py's STARTER_ARMOUR plus its two "
+          "costume constants -- S2 compares the client's array against what "
+          "the SERVER sends, so a slot renumbered on one side has to redden "
+          "here rather than quietly refute a prediction",
+          f"authsrv says {want}, module says {t.OUR_SLOT_ITEM}")
+    try:
+        import agents
+        keys = {s: k for s, (_i, k) in armour.items()}
+        keys[cslot], keys[hslot] = "costume_body", "costume_head"
+        rows = {s: agents.item_template(k) for s, k in keys.items()}
+    except Exception as exc:                                  # noqa: BLE001
+        LEDGER.skip("the content slot cross-check", f"unavailable: {exc}")
+    else:
+        types = {s: r["item_type"] for s, r in rows.items()}
+        check(types == t.OUR_SLOT_TYPE,
+              "and OUR_SLOT_TYPE is content/items.toml's own item_type per "
+              "slot -- the value S4 says survives the override",
+              f"content says {types}, module says {t.OUR_SLOT_TYPE}")
+        recs = {s: rows[s]["file_id"] & 0x7FFFFFFF
+                for s in rows if s in t.OUR_SLOT_RECORD}
+        cost = {s: rows[s]["file_id"] & 0x7FFFFFFF for s in (cslot, hslot)}
+        check(recs == t.OUR_SLOT_RECORD and cost == t.OUR_COSTUME_RECORD,
+              "and both record tables are the content's masked file ids",
+              f"content {recs} / {cost}, module {t.OUR_SLOT_RECORD} / "
+              f"{t.OUR_COSTUME_RECORD}")
+        tints = (rows[2]["dye_tint"], rows[cslot]["dye_tint"],
+                 rows[hslot]["dye_tint"])
+        check(tints == (t.TINT_ARMOUR, t.TINT_COSTUME_BODY,
+                        t.TINT_COSTUME_HEAD),
+              "S7's three tints are the rows' own dye_tint values",
+              f"content {tints}, module {(t.TINT_ARMOUR, t.TINT_COSTUME_BODY, t.TINT_COSTUME_HEAD)}")
+        check(len(set(tints)) == 3,
+              "and they are DISTINCT, which is the whole reason the tint can "
+              "discriminate at all. Two rows sharing a tint would make S7 a "
+              "description instead of a measurement",
+              f"{tints}")
+        check(t.TINT_COSTUME_BODY == 0,
+              "while `costume_body`'s tint IS zero -- the value an unwritten "
+              "row also holds. Pinned deliberately: it is why the module "
+              "calls the body half not decisive, and if a future content "
+              "edit made it non-zero this line should redden so somebody "
+              "strengthens the claim rather than leaving it hedged",
+              f"tint {t.TINT_COSTUME_BODY}")
 
 sys.exit(LEDGER.verdict())

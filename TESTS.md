@@ -6157,8 +6157,41 @@ Every one of these, in the order they were written:
   vacuous pass). §5 ties the prediction to the content: `OUR_ARMOUR` must be
   exactly what `content/items.toml`'s five rows resolve to through the
   archive's composite table, so editing a content row without editing the
-  prediction goes red here instead of producing a run that cannot fail. Needs
-  the pinned exe for §§1-2 and the vault for §5, both SKIP-declared; floor 18),
+  prediction goes red here instead of producing a run that cannot fail.
+  **§§6-8 are the SLOT-CACHE half** (the `cache`/`cachesame` sites and S2–S7,
+  which answer whether a costume override REPLACES the armour row or merges
+  with it). §6 is the one worth reading, because it is an assertion the
+  artifact can refute rather than a list of offsets copied out of a
+  disassembly: `m_slotItemData` at +0x24 with a 16-byte row, `m_slotItemId` at
+  +0xB4 and the costume override array at +0xD8 are each read from a DIFFERENT
+  instruction's own operand — a store displacement, a `lea ecx,[esi+0x2d]`, a
+  `mov edx,0x36` — and then required to CLOSE: `0x24 + 9*16 = 0xB4` and
+  `0xB4 + 9*4 = 0xD8`, three contiguous nine-slot arrays behind ArenaNet's own
+  `cmp esi,9` (`CpsBase:173 slot < arrsize(m_slotItemId)`). It also pins the
+  finding that §9.2's "+0x99/+0xA9 dye bytes" are `m_slotItemData[7]+5` and
+  `[8]+5` — byte 1 of each costume slot's own row — and that the override
+  `or edx,0x20000006` really is opcode 0x81 /1 rather than a MOV, next to the
+  `mov [ebp-8],eax` that overwrites the file id, which is why "replace or
+  merge" is a per-field question. §7 scores `_analyse_cache` on synthetic hits
+  and breaks it eight ways: no cache hit at all (rc **None**, NO VERDICT — an
+  unwatched row and an unwritten row are one picture); a row keeping the
+  ARMOUR record with its override set (refutes S3, the single result the run
+  exists for); a costume wire type reaching an armour slot's type byte
+  (refutes S4); slot 4 keeping tint 19 (refutes S7 in the only slot whose
+  value is unambiguous); our item ids at slots we never sent them to (refutes
+  S2, after which S7's slot-4 reading would be about a different body part);
+  one override id repeated (S6's OTHER branch — a result that moves §9.9's
+  reconstruction downstream rather than a failure); an all-zero override array
+  (NO VERDICT on S3–S7, because a run without `--costume` and a costume path
+  that never fired look identical); and two CpsBase instances, where the
+  analyser must score the one wearing our items rather than the
+  character-select doll's empty slots. §8 pins `OUR_SLOT_ITEM` to
+  `authsrv.py`'s own `STARTER_ARMOUR` source and the slot types, records and
+  dye tints to `content/items.toml`, including the deliberately awkward line:
+  `costume_body`'s tint is **0**, which is also what an unwritten row holds,
+  so the pin exists to stop the module claiming the body half of S7 decides
+  anything. Needs the pinned exe for §§1-2/§6 and the vault for §5, all
+  SKIP-declared; floor 48),
   `toolkit/clientscan/test_msgshape.py` (the client's message-format tables,
   DERIVED from the image instead of remembered — `studies/crossbuild/PLAN.md` §3,
   and the reason that plan put this file first. `msgshape` underpins
