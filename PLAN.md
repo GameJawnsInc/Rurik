@@ -6106,11 +6106,21 @@ which is the defect `CLAUDE.md` already names from the other side.*
        (62 checks, floors 56→62 / 16→22). Checked and clear: no Path basename
        collides, so task 3's read is unaffected.
 
-    **And one analyser check that needs no new session either:** run the `0x001E`
-    tick-clock integral against the wire span on the two EXISTING captures. If it
-    reddens there, the wire-clock-to-plaintext mapping every timed claim in this repo
-    rests on is broken — which is worth knowing before a campaign is designed on top
-    of it, not after.
+    ~~**And one analyser check that needs no new session either:** run the `0x001E`
+    tick-clock integral against the wire span on the two EXISTING captures.~~
+    ✅ **DONE — twice, and this line was stale the day after it was written.** The
+    two-capture run happened 2026-08-11 (`behaviourrun.py --preflight`: green, 8
+    connections, worst **+18.1 ms**, reproducing `test_smsgnames.py` §1 through a
+    second code path — recorded in `studies/monsterai` §7.1/§7.3 while this line
+    survived unstruck). **And extended to the WHOLE live corpus 2026-08-23**
+    (`corpus_tick_sweep()`, pinned by `test_tickclock.py`, 14 checks), because the
+    timed claims made since ride captures the two-capture check never covered: the
+    binding holds over 54 connections — the residual is bounded transport JITTER,
+    not skew (52/54 end ≤ 20 ms; the 1,076 s connection closes at −4.6 ms, ~4 ppm)
+    — with exactly two non-cancelling steps, both in `20260817T183756`, pinned by
+    identity. The per-connection envelope is now the error bar timed claims quote:
+    `studies/isle` §10's 120.499 s and 30 s claims stand at ±0.08 s; its 10.044 s
+    player revive rides the +219 ms step and is now quoted as ~10.0 s.
 
     **What is NOT on this list is the campaign itself.** It is 6–10 operator sessions
     at human cadence over two to three weeks and it is the owner's call, not a task an

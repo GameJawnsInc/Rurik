@@ -4566,6 +4566,26 @@ Every one of these, in the order they were written:
   Section 8 requires `narrate()` to write the MARK file BEFORE printing the prompt, and
   greps the analyser for `SendInput`/`keybd_event`/`hold_key`/`click`: the driver sends
   no keystrokes and no clicks, and that is the rule that protects the account),
+  `toolkit/authsrv/test_tickclock.py` (**the `0x001E` tick clock vs the wire clock over
+  the WHOLE live corpus** — `test_smsgnames.py` §1 proved the payload IS elapsed
+  milliseconds on the two 2026-08-07/10 captures its corpus deliberately pins; every
+  timed claim since (the respawn pins, the burrow windows) rides captures that check
+  never covered, so this one runs `behaviourrun.corpus_tick_sweep()` over all 54
+  measurable live connections (5 short town hops counted, never dropped). What it pins,
+  from the 2026-08-23 sweep: the residual is a bounded transport-jitter WALK, not a
+  clock skew — 52/54 walks end within 50 ms (most within 20), the 1,076 s connection
+  closes at −4.6 ms (~4 ppm, the rate witness that rules out skew), and exactly TWO
+  connections carry non-cancelling steps, both `20260817T183756` (+219.1 / −109.5 ms,
+  a town-cadence 2 Hz tick connection among them), pinned by IDENTITY and exact value
+  so a third step or a moved decode goes red. The breakage guard (|final| ≤ 500 ms and
+  ≤ 1% of span) is deliberately looser than the jitter: real damage — a lost chunk, a
+  misordered decode, a wrong clock scale — blows both bounds; honest jitter reaches
+  neither. §5 is the part that feeds other studies: the per-connection ENVELOPE
+  (max |residual|) is the wire-timestamp error bar a timed claim inherits, and the
+  claim-bearing connections are pinned — the 120.499 s revive and 30 s respawn ride
+  ≤ 100 ms envelopes (claims stand at ±0.08 s), while the 10.044 s player revive rides
+  the +219 ms step (bar ±0.22 s, now quoted as ~10.0 s in studies/isle §10). Needs
+  `vault/captures/live/`, skips whole if absent; floor 14),
   `toolkit/authsrv/test_labelrun.py` (the labelled input run, which names GAME_CMSG
   opcodes from what a human was told to do: a message lands in exactly one step's
   window, instance-load traffic is never folded into step 1, and a dirty idle CONTROL

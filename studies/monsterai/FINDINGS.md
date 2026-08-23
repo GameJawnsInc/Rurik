@@ -970,6 +970,27 @@ walks it during a session writing `MARK` files, and a stamp analyses afterwards.
 worst +18.1 ms**, reproducing `test_smsgnames.py` §1 through a different code path
 (`decode_all` framing the whole stream, against that file's per-event carry).
 
+**EXTENDED TO THE WHOLE LIVE CORPUS 2026-08-23** (`corpus_tick_sweep()` in the
+analyser, pinned by `toolkit/authsrv/test_tickclock.py`, 14 checks), because the
+timed claims made since 2026-08-11 ride captures the two-capture check never
+covered. Result over **54 measurable connections** (5 short town hops counted
+apart): the binding HOLDS, and the residual turns out to be a bounded
+transport-jitter WALK, not a clock skew — per-interval swings up to ~330 ms
+cancel in pairs, quarter slopes wander both directions, 52 of 54 walks end
+within 20 ms, and the longest connection (1,076 s) closes at **−4.6 ms, a
+~4 ppm rate agreement**. Exactly two connections carry non-cancelling steps,
+both in `20260817T183756` (the Shing Jea armour capture): **+219 ms** (a 2 Hz
+town-tick connection, modal payload 500 ms, where jitter averages away
+slowest) and **−110 ms**, each acquired in its map-load phase and flat after —
+pinned by identity so a third joining goes red. Consequence worth more than
+the pass: the per-connection **envelope** (max |residual|) is the
+wire-timestamp error bar any timed claim from that connection inherits —
+typical 20–90 ms, and `studies/isle/FINDINGS.md` §10 now quotes its revive
+claims with exactly those bars. The preflight itself gained the corpus
+section with BREAKAGE bounds (|final| ≤ 500 ms and ≤ 1% of span — real damage
+blows both, honest jitter reaches neither); the 50 ms bound stays on the
+original two-capture corpus where it holds.
+
 The step table lives in the analyser rather than beside the narrator so the two cannot
 drift: the thing that prompts the operator and the thing that windows the result are the
 same list.

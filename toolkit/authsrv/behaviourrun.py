@@ -216,6 +216,38 @@ def control_verdict(label, msgs):
     return clean, detail
 
 
+def tick_residual(smsg):
+    """The tick-vs-wire residual walk, whole: dict or None (too few ticks).
+
+    r(i) = sum(payload[1..i]) - wire_elapsed(i), in ms. `final` is where the
+    walk ends (the integral-vs-span drift), `envelope` is max |r(i)| -- the
+    worst wire-timestamp error at any single point of the connection, which
+    is the error bar a timed claim from that connection inherits. The
+    2026-08-23 corpus sweep found the walk is transport JITTER, not clock
+    skew: per-interval swings up to ~330 ms cancel in pairs (a late-delivered
+    tick lengthens one interval and shortens the next), quarter slopes wander
+    both ways, and the longest connection (1,076 s) closes at -4.6 ms -- a
+    rate agreement of ~4 ppm. Returns None when there are too few ticks,
+    which is a real case for a short town hop and must not read as a pass.
+    """
+    ticks = [(t, v[1]) for t, op, v in smsg if op == TICK and len(v) > 1]
+    if len(ticks) < 2:
+        return None
+    t0 = ticks[0][0]
+    cum, envelope, final = 0.0, 0.0, 0.0
+    for i in range(1, len(ticks)):                # the first tick's payload
+        cum += ticks[i][1]                        # covers time BEFORE it
+        final = cum - (ticks[i][0] - t0) * 1000.0
+        envelope = max(envelope, abs(final))
+    span = ticks[-1][0] - t0
+    if span <= 0:
+        return None
+    mode_ms = collections.Counter(v for _t, v in ticks).most_common(1)[0][0]
+    return {"n": len(ticks), "span_s": span, "final_ms": final,
+            "ratio": (cum / (span * 1000.0)) if span else None,
+            "envelope_ms": envelope, "mode_ms": mode_ms}
+
+
 def tick_drift(smsg):
     """(drift_ms, ratio) -- 0x001E's payload summed against the tape's own wire span.
 
@@ -223,14 +255,50 @@ def tick_drift(smsg):
     (None, None) when there are too few ticks to say anything, which is a real case for a
     very short connection and must not read as a pass.
     """
-    ticks = [(t, v[1]) for t, op, v in smsg if op == TICK and len(v) > 1]
-    if len(ticks) < 2:
+    r = tick_residual(smsg)
+    if r is None:
         return None, None
-    total = sum(v for _t, v in ticks[1:])         # the first covers time before it
-    span = (ticks[-1][0] - ticks[0][0]) * 1000.0
-    if span <= 0:
-        return None, None
-    return total - span, total / span
+    return r["final_ms"], r["ratio"]
+
+
+# The corpus-wide guard bounds. Real mapping breakage (a lost capture chunk, a
+# misordered decode, a wrong clock scale) shows up as SECONDS of final drift or
+# a sustained slope; honest transport jitter measured across the whole 2026-08
+# corpus tops out at +219 ms final / 0.20% of span (two connections of
+# 20260817T183756, steps acquired in their map-load phase and flat after).
+# These bounds sit far above the noise and far below any breakage.
+CORPUS_DRIFT_MS = 500.0
+CORPUS_DRIFT_RATE = 0.01
+
+
+def corpus_tick_sweep():
+    """tick_residual over EVERY wire-bearing live connection, no pooling.
+
+    Yields (stamp, connection, origin_kind, residual-or-None) -- None rows are
+    the too-few-ticks connections, yielded rather than dropped so a caller can
+    count coverage honestly (a sweep that silently skips is the failure mode
+    `checks.py` exists for).
+    """
+    import tape as tapemod
+    import vaultpath
+    from codec import Codec
+    live = vaultpath.require_dir("captures", "live", why="the tick sweep")
+    codec = Codec(overrides=os.path.join(os.path.dirname(os.path.dirname(HERE)),
+                                         "schema", "overrides.json"))
+    for stamp in sorted(os.listdir(live)):
+        cap = os.path.join(live, stamp)
+        if not os.path.isdir(cap):
+            continue
+        for chan in tapemod.channel_files(cap):
+            kind, _why = origin.origin_of(chan["path"])
+            try:
+                _meta, events = tapemod.load_tape(cap, chan["connection"])
+                msgs, _r = tapemod.decode_all(events, codec,
+                                              channel="GAME_SMSG")
+            except Exception:                               # noqa: BLE001
+                yield stamp, chan["connection"], kind, None
+                continue
+            yield stamp, chan["connection"], kind, tick_residual(msgs)
 
 
 def encounters(smsg, player_agent=None):
@@ -429,6 +497,42 @@ def preflight(ledger, stamps=("20260807T143055", "20260810T235916")):
               f"worst {worst:+.1f} ms at {where} over {n} connections. If this is red, "
               f"the wire-clock-to-plaintext mapping is broken and every timed claim in "
               f"this repo is suspect -- fix that before spending a live session")
+
+    # -- the WHOLE live corpus, 2026-08-23: breakage bounds, not jitter ones.
+    # The 50 ms bound above holds on the two original captures; corpus-wide it
+    # is the wrong shape, because the residual is a bounded jitter WALK, not a
+    # skew -- two connections of 20260817T183756 carry non-cancelling steps
+    # (+219 / -110 ms) acquired during their map-load phase and flat after,
+    # while the longest connection closes 1,076 s at -4.6 ms. The guard here
+    # is for real breakage; the per-connection ENVELOPE (the timed-claim error
+    # bar) is printed, and test_tickclock.py pins both tiers and the two
+    # outliers by identity.
+    measured = unmeasured = 0
+    bad = []
+    worst_row = None
+    for stamp, conn, kind, r in corpus_tick_sweep():
+        if kind != "live":
+            continue
+        if r is None:
+            unmeasured += 1
+            continue
+        measured += 1
+        if worst_row is None or abs(r["final_ms"]) > abs(worst_row[2]):
+            worst_row = (stamp, conn, r["final_ms"], r["envelope_ms"])
+        if abs(r["final_ms"]) > CORPUS_DRIFT_MS or \
+                abs(r["final_ms"]) > CORPUS_DRIFT_RATE * r["span_s"] * 1000.0:
+            bad.append((stamp, conn, r["final_ms"], r["span_s"]))
+    ledger.ok(measured >= 54,
+              "the corpus-wide sweep measured the whole live corpus",
+              f"{measured} measurable connection(s), {unmeasured} with too "
+              f"few ticks (short town hops, counted rather than dropped)")
+    ledger.ok(measured and not bad,
+              "no live connection drifts past the breakage bounds "
+              f"(|final| <= {CORPUS_DRIFT_MS:.0f} ms and "
+              f"<= {CORPUS_DRIFT_RATE:.0%} of span)",
+              f"worst {worst_row[2]:+.1f} ms (envelope {worst_row[3]:.1f} ms) "
+              f"at {worst_row[0]} {worst_row[1][:16]}" if worst_row else
+              "nothing measured" if not bad else f"OVER: {bad}")
 
 
 def main(argv=None):

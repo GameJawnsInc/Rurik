@@ -1853,3 +1853,17 @@ death exists in any capture), the interrupt window diff, knockdown, and the
 deliberate player deaths — which the corpus already brackets at 10.044 s and
 12.168 s (n=2, disagreeing; measure, do not assume our `PLAYER_REVIVE_AFTER
 = 10.0` is retail's constant).
+
+**Error bars for this section's timed claims, measured 2026-08-23**
+(`toolkit/authsrv/test_tickclock.py`, the `0x001E` residual walk per
+connection — the wire-timestamp error a claim inherits is its connection's
+max |residual| envelope). The **120.499 s** Student revive (conn `:63805`)
+rides an **80.5 ms** envelope and the **30 s** practice-target claims
+(conn `:54071`) a **79.3 ms** one — both stand, and the ±0.011 s spread on
+the 30 s population is AT the jitter floor, so the underlying timer is at
+least that tight. The **10.044 s** player revive is different: its
+connection (`20260817T183756` conn `:52294`) carries a **+219 ms
+non-cancelling step** acquired during its map-load phase, so that figure's
+honest bar is **±0.22 s** — quote it as ~10.0 s, not to the millisecond.
+(The n=2 disagreement with 12.168 s was already 2.1 s, so rung 9's
+"measure, do not assume" stands unchanged.)
