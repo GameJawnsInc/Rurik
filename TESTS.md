@@ -1378,6 +1378,32 @@ Every one of these, in the order they were written:
   nothing legitimately varies; vault-less runs skip sections 2-4 and go
   red on the floor. ~90 s: needs `vault/dat_study` and the three keyed
   live captures),
+  `toolkit/mapdata/test_playerassembly.py` (**the player-assembly rung — what
+  sits ON the composite table**, `playerassembly.py` + the exe-side
+  `clientscan/composite.py`. The composite TABLE itself — its decode closures,
+  the geometry/texture split, the two-witness shell join, the monster-shell
+  rejection — is `test_cpsdata.py`'s ground and is deliberately not
+  re-litigated here. §1 pins the module's own sex/slot split as DISJOINT: sex 0
+  reads {0..4,10}, sex 1 reads {5..9,10}, overlapping only at the shared slot,
+  so a player's files are its sex's half and never the other's. §2 checks the
+  manifest's record picks — the shell resolving to file 15018, all four base
+  pieces, type 9 in by default and droppable, exactly one ROLE_SHELL seed, and
+  texture vs geometry seeds disjoint. §3/§4 are the closure: group 0/prof 1/sex
+  0 closes on shell **15018 — the archivewrite arc's hardest wall, resolved as
+  a player identity** — in a pinned 173-file set, **all 40 resolvable
+  identities close** and the 136 foreign-group cells REFUSE per the home-group
+  rule. §5 re-checks the monster-shell rejection at the assembly boundary (the
+  hatcher 116228 IS composited and DOES walk, so only the table can reject it).
+  §6 pins the two capabilities the seeds split added: a ROLE_SOUND seed refuses
+  outright (the audio closure hangs off a model's FA6) and a lone ROLE_TEXTURE
+  seed CLOSES as a terminal (read, not walked as a model). §7 crosses witnesses
+  with the exe extractor: s_fileFlags' clear bits equal the assembly's
+  GEOMETRY_SLOTS from a disjoint source, base_types match the manifest's four,
+  359 live rects LTRB-shut with 88 .data zero-fill records counted apart (the
+  tail is MODELLED — a reader past a section's raw size returns zeros, not the
+  next section's bytes), and the build is derived 38797 from the hash, never
+  typed. Needs `vault/dat_study` (skips declared without it) and the pinned exe
+  for §7; ~2 min; floor 29),
   `toolkit/mapdata/test_datmove.py` (the RELOCATION verb `datwrite` refuses on
   purpose, and the wall FINDINGS 38 ran into: `--replace` writes uncompressed and
   will not move a row, so authoring only worked where the stream SHRANK. Against

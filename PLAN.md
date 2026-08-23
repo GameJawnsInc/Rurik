@@ -1369,6 +1369,44 @@ byte-identical on `main`, not this change.
 
 ## 8. Immediate next actions
 
+### MODEL AUTHORING: the one-bit question is answered, and every player identity closes (2026-08-22)
+
+The playercomposite rung landed end to end at a desk —
+[studies/playercomposite/FINDINGS.md](studies/playercomposite/FINDINGS.md) §7–§8,
+`test_playerassembly.py` (35 checks, §5's acceptance criterion
+institutionalised). **The arg0 answer first, because it was the highest
+blocker**: the CpsPlayer factory has six call sites, every IN-WORLD one passes
+bit 0 = 0 → **composite type 1, the fully animated twenty — author against
+type 1**; bit 0 = 1 comes only from the character-model UI (UiChModel's
+literal 3, GmDoll's style-conditional 6/7), so type 2 is the menu-preview
+skeleton set. Bit 2 gates a poll-MdlApi virtual (GmDoll only); bit 1's
+consumer is NOT FOUND and says so.
+
+The stack: **P1 `toolkit/mapdata/cpsdata.py` was already landed by the
+archive-write session** (`28cab35`, the `CompositeTable` decoder +
+`test_cpsdata.py`); this arc added the two rungs on top. **P2
+`toolkit/clientscan/composite.py`** — anchor-located from the client's own
+`__FILE__` strings and the accessor's own operands, closure-verified, refuses
+on an unknown build naming which anchor failed; emits
+`vault/content/composite.toml` (106 client-table rows). **P3
+`toolkit/mapdata/playerassembly.py`** on a behaviour-neutral `seeds` split of
+`unitassembly.Resolver` (its own commit, 57/57 oracle untouched): **all 40
+resolvable player identities CLOSE** — group 0 / prof 1 / sex 0 resolves shell
+**15018, the archivewrite arc's hardest wall, in a 173-file closure** — and
+the 136 foreign-group cells refuse per the home-group rule. Two corrections
+the build forced: composite.py models the PE zero-fill tail (the 88 degenerate
+rect-records live in it, and a naive reader returns the NEXT section's bytes),
+and the study's own §1.22 "10–17 sequences" summary hid an outlier — the (0,5)
+sex-1 type-2 shell carries **115**, recorded in FINDINGS.
+
+**NEXT, in cost order:** (1) the wire item-type ↔ composite-type mapping
+(§4's number 2 — our server picks the wire type, and a wrong induction lands
+every equipped piece on the wrong component); (2) `FILE_ID_RESERVED_BIT`
+(CpsData:484), which gates authoring a NEW file id; (3) whether the twenty
+type-1 shells round-trip through `modelwrite.py`/`skelwrite.py` (proven on
+monster geometry, never on a player component); (4) the runtime confirmation
+priced in §4.12 — a breakpoint on `0x00833420` during a character load.
+
 ### The effects DO SOMETHING — five mechanics modelled, one refuted formula, one deliberate lever (2026-08-22)
 
 The R4b tally's MECHANIC column went from 3 of 9 to **8 of 9** in one desk arc
@@ -2999,16 +3037,23 @@ walk names, 20/20 composited**, and type 2 is a second twenty on element-for-ele
 node counts.
 
 **NEXT, in cost order:**
-1. **What is `arg0`, whose bit 0 picks composite type 1 over type 2?** (`and eax,1; inc eax` at
-   `0x008315B5`, stored `this+0x3E4`; trace back through `0x0082DBB0`/`0x0082DBA0`'s callers.)
-   Two complete twenty-shell sets exist on identical skeletons — one with 220–289 sequences, one
-   with 10–17 — so **authoring against the wrong one produces a character that cannot animate.**
-   One bit, total consequence. Everything else on this path is cheaper than it is important.
-2. **P2** `toolkit/clientscan/composite.py` — the static half (`s_components` `0x00A3AE58`,
-   `s_dims` `0x00BF37F8`, `s_fileFlags` `0x00A978EC`, base pieces `0x00A96D9C`,
-   `s_appearanceSlot` `0x00BC8AC8`, the ConstComposite CSR/rect pair). Stdlib only, bare-machine.
-3. **P3** `toolkit/mapdata/playerassembly.py`, after a behaviour-neutral `seeds` refactor of
-   `unitassembly.Resolver` — its pinned 54/54 is the refactor's regression oracle.
+1. ~~**What is `arg0`?**~~ **ANSWERED 2026-08-22** (`studies/playercomposite` §7): the factory
+   has SIX call sites and every IN-WORLD one passes bit 0 = 0 → **type 1, the fully animated
+   twenty — that is the authoring target**; bit 0 = 1 comes only from the character-model UI
+   (UiChModel's literal 3 at char select; GmDoll's style-conditional 6/7), so type 2's 10–17
+   sequences are the MENU-PREVIEW skeleton set. Bit 2 gates a poll-MdlApi virtual (GmDoll
+   only); bit 1's consumer is NOT FOUND, honestly recorded.
+2. ~~**P2** `toolkit/clientscan/composite.py`~~ **BUILT 2026-08-22** — anchor-located from the
+   client's own strings and the accessor's own instructions, closure-verified (359 live rects
+   LTRB-shut, 44 of 132 cells content-bearing, the appearance bitfield tiling all 32 bits),
+   refuses on any unknown build naming it; emits `vault/content/composite.toml` (106 rows,
+   `client-table` provenance per row).
+3. ~~**P3** `toolkit/mapdata/playerassembly.py`~~ **BUILT 2026-08-22**, on a behaviour-neutral
+   `seeds` split of `unitassembly.Resolver` committed alone under its 57-check oracle. With
+   `cpsdata.py` (the research parser promoted, scores → refusals): **all 40 resolvable player
+   identities CLOSE** — group 0 / prof 1 / sex 0 resolves shell 15018 (the archivewrite wall)
+   in a 173-file closure — and §5's two-witness acceptance criterion is institutionalised in
+   `test_playerassembly.py`.
 4. **The wire item-type ↔ composite-type mapping** (§2 step E). Our server picks the wire type; if
    it does not induce the right composite type, every equipped piece lands on the wrong component.
 5. **`npcdefs.py` refuses on the full 14-capture pool** — "definition 159 has two move speeds

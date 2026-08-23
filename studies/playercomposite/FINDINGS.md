@@ -303,3 +303,90 @@ Measured today: **type 1 → 20/20 composited, type 2 → 20/20 composited, n2C 
 ## 6. What a session should do first
 
 Run the join, because it is the one thing that turns five separate readings into one mechanism and it costs one script and no client launch. Load `C:\gd\Rurik\vault\research\equipment\cpsdata.json` (or re-run `cpsdata_parse.py` against `vault/dat_study/Gw.dat` to reproduce it from scratch — 3,803 records, residue 0), resolve section 1 at composite types 1 and 2 across all `(group ∈ 0..3, profession ∈ 0..10)`, take `s_items[id].file[0]` and `file[5]`, and push every id through `archive.file_id_table(raw=True)` onto an MFT row — **not** through `shells.jsonl`'s single-valued `stored` column, which loses the second id and silently returns 0/40. You should get twenty type-1 shells that are exactly the archive band's twenty in the same sex pairing, twenty type-2 shells on element-for-element identical node counts with sequence counts of 10–17 instead of 220–289, and 40/40 classified composited with no FA0. That single result is the acceptance criterion of §5, it proves the CpsData reading and the archive reading are describing the same twenty files, and it converts "we cannot name the files the client would load for a given player appearance" into a manifest you can print — after which the first real decision is §4's number one: which of the two skeleton sets `arg0`'s bit 0 selects, and why.
+---
+
+## 7. The arg0 trace — bit 0 is answered, and the answer is "author against type 1" (2026-08-22)
+
+§4's highest blocker is closed by walking the constructor's argument back to
+its six call sites. The chain: `this+0x3E4` is written once in `CpsPlayer`'s
+ctor (`mov [edi+0x3E4], ebx` at 0x0082F66A, ebx = the FIRST stack argument),
+the ctor has ONE caller — the factory 0x0082DB10, which allocates 0x3F8 bytes,
+forwards its own six arguments verbatim and registers the object under the
+`'comp'` handle tag — and the factory has exactly SIX direct call sites
+(`codescan --xrefs`; no data word holds either address, so a vtable route is
+excluded; computed calls remain the standing caveat). The availability
+predicate 0x00831540 consumes ONLY bit 0 (`and eax,1; inc eax` → CpsData type
+1 or 2, after its three bound asserts CpsPlayer:405–407). **OBSERVED**, per
+site:
+
+| call site | region / TU evidence | arg0 | bit 0 → type |
+|---|---|---|---|
+| 0x007F4E5D | agent view (Av) | literal 0 | 0 → **1** |
+| 0x007FBEA9 | agent view, same fn | 0 or 2 (a caller bool → bit 1) | 0 → **1** |
+| 0x007FC055 | same fn, other branch | 0 or 2 | 0 → **1** |
+| 0x00800A37 | agent-view manager | literal 2 | 0 → **1** |
+| 0x00875A21 | UiChModel.cpp (character select/creation; UiChModel/UiChInfo asserts bracket it) | literal **3** | 1 → **2** |
+| 0x004EE3FD | GmDoll.cpp (GmDoll:1138 in-function) | **6 or 7** — 6 + FrameTestStyles(frame, style) on the doll's own frame | style-dependent |
+
+**The reading: every in-world agent gets composite type 1 — the fully
+animated twenty (FA1 sequences 220–289). Bit 0 = 1, selecting the near-static
+type-2 set (sequences 10–17), is set ONLY by the character-model UI views —
+the char-select model and (style-dependent) the paperdoll — which need idle
+poses, not combat animation.** So the authoring question is closed: **author
+a playable character against TYPE 1**; type 2 is the menu-preview skeleton
+set. RECONSTRUCTION on the *purpose* ("menu preview"), OBSERVED on every
+value and consumer above.
+
+**The other bits, honestly:** bit 2 (value 4) gates a CpsPlayer VIRTUAL
+(0x00831810, in the vtable at 0x00A96B74): bit set → the return of an MdlApi
+call (0x777FF0, MdlApi:85's TU) on the argument; clear → literal 1. Only
+GmDoll's 6/7 ever sets it — a "poll the model" behaviour for the UI doll,
+unconditionally-true for in-world composites. **Bit 1** (value 2) is carried
+by five of six sites (a bool at the agent-view sites, constant at the UI
+ones) and its consumer is **NOT FOUND** — the displacement scan sees only
+five `+0x3E4` accesses image-wide and none tests bit 1, so it is read through
+a register copy or a biased pointer if it is read at all.
+
+## 8. The rung LANDED (2026-08-22)
+
+**P1 was already done by the archive-write session** — `toolkit/mapdata/cpsdata.py`
+(the `CompositeTable`/`Record` decoder, `test_cpsdata.py`), landed `28cab35`.
+This arc built the two rungs on top of it, plus the one-bit answer §7 above:
+
+**P2 — `toolkit/clientscan/composite.py`.** The client's static tables, read
+out of `Gw.exe` and anchor-located (from ArenaNet's own `__FILE__` strings and
+the accessor's own operands), closure-verified (359 live rects LTRB-shut, the
+88 degenerate zero-records of blits 2–5 counted apart, the appearance bitfield
+tiling all 32 bits, s_components on the study's exact bytes), and REFUSING on
+any unknown build naming which anchor failed. Emits `vault/content/composite.toml`
+(106 rows, `source = "client-table"`, extractor + build per row). One PE detail
+it had to get right: the `.data` virtual zero-fill TAIL is modelled — the 88
+degenerate records live in it, and a reader that slices past a section's raw
+size returns the next section's bytes, which is how those 88 first parsed as
+garbage.
+
+**P3 — `toolkit/mapdata/playerassembly.py`**, on a behaviour-neutral `seeds`
+split of `unitassembly.Resolver` (committed alone, `test_unitassembly` 57/57
+untouched). It takes `cpsdata.CompositeTable`'s record picks and drives the
+monster closure walk from a player manifest: **all 40 resolvable identities
+CLOSE** — group 0 / prof 1 / sex 0 resolves shell **15018, the archivewrite
+arc's hardest wall, in a 173-file closure** — while the 136 foreign-group
+cells refuse per the home-group rule. `test_playerassembly.py` owns what sits
+ON the table (the manifest's record picks, the disjoint sex/slot split, the
+40/40 closure, the exe-side cross-witness that s_fileFlags' clear bits equal
+the assembly's geometry slots from a disjoint source); the two-witness shell
+closure itself stays `test_cpsdata.py`'s, not re-litigated. One capability the
+split added beyond the refactor: a texture/fad-role seed is a TERMINAL (checked
+and read, never walked as a model), and a sound/audio seed is refused outright
+— the audio closure hangs off a model's FA6.
+
+**One correction the test's first run forced, recorded because the summary it
+refutes is this document's own.** §1.22 says the type-2 set's FA1 sequence
+counts are "10–17 against type 1's 220–289" — the counts were elided with an
+ellipsis, and the universal reading is FALSE: nineteen of the twenty type-2
+shells sit in 10..17 and **the (group 0, profession 5) sex-1 shell carries
+115**. Still under half its type-1 sibling's 220, so the ordering ("every
+type-2 has fewer sequences than its type-1 twin", 20/20) and the reading
+("near-static preview set") both stand — but the RANGE claim needed the
+outlier named, and `test_playerassembly` §4 now pins it by identity so a
+second outlier, or this one moving, goes red. OBSERVED.
