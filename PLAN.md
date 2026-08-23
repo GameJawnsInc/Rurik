@@ -5040,6 +5040,27 @@ had gone stale on four items that were since closed, which is the drift the top 
    array. **Still open:** empty does not distinguish *the event never fires* from *case 93
    runs and its my-id filter rejects*; that needs a trace on `0x008590CA`, and the case for
    spending native tooling is now made of a measurement rather than a hypothesis. Note
+   **✅ THE TRACE RAN 2026-08-23 and the arc moved, `studies/heroes` §37.**
+   `commandertrap.py`, build 38833, map 280, four bounded loopback runs.
+   **Inline: `worker` 1 → `raise` 1 → `case93` 0** — the event IS raised and
+   its handler never runs, so "the event never fires" is REFUTED and so is
+   "case 93 runs and its filter rejects": it is raised into nothing.
+   **Late (`--hero-late 10`): `case93` fires** — reproducing §35's contrast a
+   sixth and seventh time. **The new result is the MECHANISM of the assert
+   §35.6 could only name**: case 93's FIRST call forwards the event to the
+   SkillListContext singleton (`0x8C9630` → `ecx = 0x10886D0` → `0x8D2500`),
+   whose OWN my-id test **passes** (so our `0x01C2` carries the right owner —
+   §11.1's "wrong owner id" branch retired from an unexpected direction) and
+   calls `0x8D26D0`, which asserts `SKILL_LIST_USERS != skillListUser` at
+   `0x8D270A` (`GmCtlSkListContext.cpp:574`). Two things fall out: the
+   `case93`-without-`filter` gap is NOT a trap defect (the call never
+   returns — `commandertrap`'s verdict said "suspect the trap" and is
+   corrected, with a new `postcall` bisect site), and **§35.7's unexplained
+   4-of-4 vs 0-of-3 site-set asymmetry is EXPLAINED** — every site in the
+   0-of-3 set is downstream of the assert, so those runs could never have
+   observed case 93 however often it ran. Still open, and now cheap to aim at:
+   WHY `skillListUser` is out of range. §35.6's prescription stands — fix the
+   assert first, a rig that asserts is not a rig — but its target is named.
    `ctx[0x44][0x2ac]` is NOT readable the same cheap way — `0x0047F660` goes through **TLS**
    (`fs:[0x2c]`), so it needs the target thread's TEB, not a global read.
    **Then the next cheap read WAS TRIED AND WAS WRONG (§28).** The UI subscriber map at

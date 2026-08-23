@@ -2575,10 +2575,15 @@ ERROR DIALOG captured
 >>> Assertion: SkillListContext::SKILL_LIST_USERS != skillListUser
 ```
 
-**Every late run produced it -- 4 of 4, identical string.** `--hero-late` does not merely move
-the roster sequence, it puts the client into an assert it never hits on the inline rig. The
-likely cause is the hero's skill bar (`0x00DA`) arriving 20 s after the load, but that is not
-measured and is a guess.
+**Every late run produced it -- 4 of 4, identical string** (**7 of 7** as of
+2026-08-23; three more late runs, plus one inline run without it). `--hero-late` does not
+merely move the roster sequence, it puts the client into an assert it never hits on the
+inline rig. ~~The likely cause is the hero's skill bar (`0x00DA`) arriving 20 s after the
+load, but that is not measured and is a guess.~~ **THE CALL PATH IS MEASURED — §37**: case
+93's first call forwards the event to the SkillListContext singleton (`0x8C9630` →
+`ecx = 0x10886D0` → `0x8D2500`), whose own my-id test PASSES and calls `0x8D26D0`, which
+asserts at `0x8D270A`. WHY `skillListUser` is out of range is still unread, so the skill-bar
+reasoning below remains the standing hypothesis — but the site is no longer a guess.
 
 **This is a confound over 35.1 and 35.5, and it is mine.** Every late measurement in this
 section was taken from a client that asserts during the run. "The subscriber appears later"
@@ -2935,7 +2940,7 @@ correct rig defers the **whole hero pipeline as one unit**, preserving relative 
 moving only the absolute time -- which is what "change one thing" required from the start and
 what this flag did not do.
 
-### 35.7 A site-set asymmetry, recorded and NOT explained
+### 35.7 A site-set asymmetry, recorded and NOT explained — ✅ **EXPLAINED 2026-08-23, §37**: every site in the 0-of-3 set is DOWNSTREAM of the late rig's assert, so those runs could not observe case 93 however often it ran. Not variance, not an observer effect. Original text follows.
 
 The two trap configurations disagreed systematically:
 
@@ -2986,3 +2991,70 @@ itself.
 - **The 7-hero cap is a 2011-03-03 update gated on party size, not an EotN feature** (§6).
 - **`0x01C2` has no dedupe scan**, so the "entry+0 is the primary key" analogy is refuted
   (§1.2).
+
+## 37. The late-rig assert's CALL PATH is measured — and it explains §35.7's asymmetry (2026-08-23)
+
+§35.6 recorded that every late run asserts (`SkillListContext::SKILL_LIST_USERS
+!= skillListUser`, 4 of 4) and said the cause "is not measured and is a guess".
+It is measured now. **Three more late runs today assert 3 of 3 — the corpus is
+7 of 7 — and one inline run did not, consistent with §35.6a.** The path, from a
+trap bisect plus a static read of the pristine 38833 image:
+
+    0x004E5DE1  case 93          push edi
+    0x004E5DE2                   call 0x8C9630      <-- never returns
+    0x008C9630                   mov ecx, 0x10886D0   (the SkillListContext singleton)
+    0x008C963B                   call 0x8D2500
+    0x008D250A                   mov esi, [eax+4]
+    0x008D250D                   call 0x0084DD70      (our identity, via TLS)
+    0x008D2512                   cmp [esi+4], eax     <-- the skill list's OWN my-id test
+    0x008D2515                   jne skip
+    0x008D251B                   call 0x8D26D0        <-- taken only when the entry IS ours
+    0x008D270A                   ASSERT  GmCtlSkListContext.cpp:574
+                                 SkillListContext::SKILL_LIST_USERS != skillListUser
+
+**Three consequences, in rising order of value.**
+
+**1. The `case93`-without-`filter` gap is NOT a trap defect.** `commandertrap`'s
+verdict used to call it "impossible -- they are four instructions apart with no
+branch between them" and told the reader to suspect the trap. There is no
+BRANCH between them but there are two CALLS, and the first one dies. The
+instrument was right; the verdict's assumption was wrong, and it is corrected
+in the module. A new site, **`postcall` (`0x004E5DE7`, where the first call
+returns)**, bisects the gap: `case93` hit with `postcall` silent means the
+first call swallowed the thread, which is exactly what a late run produces.
+
+**2. §35.7's site-set asymmetry is EXPLAINED, and it is neither variance nor an
+observer effect.** That table records `worker,raise,lookup,case93` reaching
+case 93 **4 of 4** while `worker,filter,create,notfound` reached it **0 of 3**,
+with three readings offered and no way to choose. The answer falls straight out
+of the path above: **every site in the second set — `filter` (`0x004E5DF2`),
+`create` (`0x00524C40`), `notfound` — is DOWNSTREAM of the assert**, and the
+assert fires inside case 93's first call. Those runs could not have observed
+case 93 no matter how many times it ran, because the only evidence they could
+have collected lies past the point where the client dies. The first set
+observes upstream of it and sees it every time. One set watches the near bank,
+the other the far bank of a river the client never crosses.
+
+**3. The skill list's own ownership test PASSES on our hero entry.** `0x8D26D0`
+is called only on the `jne`-not-taken path, so reaching the assert *requires*
+`[esi+4] == our identity`. Our `0x01C2` puts the right owner in the entry —
+which retires the "we populate it with the wrong owner id" branch §11.1 posed,
+from a direction that branch never anticipated. **Note the scope**: this is the
+SKILL LIST's copy of the my-id idiom at `0x8D2512`, not GmView's `filter` at
+`0x004E5DF2`, which still has never executed. Same shape, same comparison,
+different subscriber.
+
+**What this does NOT settle.** Why `skillListUser` equals its own bound is not
+read — that is the fix, and §35.6c's reasoning (a hero skill bar addressed to
+an agent the party does not yet hold) remains the standing hypothesis, still
+unmeasured. §35.1/§35.5's timing claims stay **CONTESTED** exactly as §35.6
+downgraded them: today's runs reproduce the contrast (inline: `raise` 1,
+`case93` 0; late: `case93` 1) for a sixth and seventh time, but they were taken
+on a client that asserts, so they inherit the same confound. **§35.6's
+prescription is unchanged and is now cheaper: find and fix the assert first,
+and the target is named.**
+
+**Reproduction.** Build 38833 (`vault/run/2026-08-13_64fae3b1369b`), map 280,
+`--hero 1 --hero-bust-cache [--hero-late 10]`, trap
+`--sites case93,postcall,filter`. Captures `20260823T131154` (inline),
+`20260823T131508`, `20260823T132034`, `20260823T132426` (late).

@@ -819,6 +819,26 @@ SITES = {
         "filter", 0x004E5DF2, bytes.fromhex("394604"),
         "`cmp [esi+4],eax` -- the my-id filter, with BOTH operands",
         _cap_filter),
+    # THE BISECT SITE, added 2026-08-23 for an anomaly this file's own verdict
+    # refused to believe. A `--hero-late` run reported case93=1 filter=0, and
+    # the verdict says that "should be impossible -- they are four
+    # instructions apart with no branch between them". Re-read on 38833, that
+    # is correct: 0x004E5DE1 `push edi; call 0x8c9630; mov esi,[edi+4]; add
+    # esp,4; call 0x84dd70; cmp [esi+4],eax` is straight-line with TWO calls
+    # in it. So execution either stopped inside a call or the trap missed the
+    # hit, and this site separates those: it is the instruction the FIRST call
+    # returns to. case93 hit + postcall miss => 0x8c9630 did not return;
+    # case93 + postcall hit + filter miss => 0x84dd70 (the identity getter,
+    # which reaches through TLS at 0x0047F660) did not return; all three hit
+    # => the earlier miss was the trap, not the client.
+    "postcall": Site(
+        "postcall", 0x004E5DE7, bytes.fromhex("8b770483c404"),
+        "`mov esi,[edi+4]` -- where case 93's first call RETURNS. Bisects a "
+        "case93-without-filter run into 'a call did not return' versus 'the "
+        "trap missed it'",
+        capture=lambda ctx, rd: {"esi(entry) after load": None,
+                                 "edi(payload)": ctx.Edi,
+                                 "VERDICT": "the first call returned"}),
     # Downstream. Not in the default set because the prediction says the chain
     # stops before them -- so they are the flags a SECOND run uses if it does not.
     "search": Site(
@@ -1172,9 +1192,19 @@ def _verdict(counts, sites, out=sys.stdout):
           "  nothing -- which is 28's subscriber question, answered by trap\n"
           "  rather than by walking a map we could not read.\n")
     elif counts.get("case93") and not counts.get("filter", 1):
-        w("  Case 93 ran but the filter site did not, which should be\n"
-          "  impossible -- they are four instructions apart with no branch\n"
-          "  between them. Suspect the trap before believing this.\n")
+        w("  Case 93 ran and the filter site did not. There is no BRANCH\n"
+          "  between them -- but there are two CALLS, and this verdict used\n"
+          "  to say the gap was impossible and to suspect the trap.\n"
+          "  MEASURED 2026-08-23: the trap was right and that reading was\n"
+          "  wrong. Case 93's first call (0x8c9630) forwards the event to the\n"
+          "  SkillListContext singleton (ecx = 0x10886d0, then 0x8d2500),\n"
+          "  whose OWN my-id test passes and calls 0x8d26d0, which ASSERTS\n"
+          "  `SKILL_LIST_USERS != skillListUser` at 0x8d270a\n"
+          "  (GmCtlSkListContext.cpp:574). The client raises its crash dialog\n"
+          "  there, so the call never returns and the two later sites never\n"
+          "  execute. Check the session log for that assert before doubting\n"
+          "  the instrument; add --sites ...,postcall to see which of the two\n"
+          "  calls swallowed the thread.\n")
     elif counts.get("filter"):
         w("  The filter RAN. Its two operands are printed above and they are\n"
           "  the answer: equal means the chain continues into 0x524cc0 and the\n"
