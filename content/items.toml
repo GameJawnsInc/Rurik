@@ -253,3 +253,49 @@ NOT decoded, and deliberately not guessed: `flags` 0x20001400 and the single mod
 word 0x24470000. They go out verbatim because that is what retail sends. `enc_name` is \
 the encoded string id, which is the pattern CLAUDE.md names -- commit the id, let the \
 client resolve the text out of the owner's own archive."""
+
+# THE COSTUME, and it exists to test ONE mechanism rather than to dress anybody.
+#
+# studies/playercomposite 9.2 read a costume-override path out of the client:
+# equip slots 7/8 feed a registry keyed by file id, and at m_slotItemData
+# build time (0x0082EFAA) a per-armour-slot override array at CpsBase+0xD8
+# REPLACES the armour slot's fileId and flags with the costume's, forcing
+# `flags |= 0x20000006`, while the costume's own dye bytes replace the
+# armour's. Nothing in this repo could exercise it, because every item row we
+# had is an armour type (4/7/13/16/19) and the override needs wire type 44 or
+# 45. 9.8 recorded that gap; this row closes it.
+#
+# EVERY IDENTITY FIELD IS MEASURED, not chosen. Five different players in five
+# captures declare this same item and agree on all of them; the ONLY field
+# that varies between them is dye_colors (11, 4, 41, 2, 10), which is
+# per-character. Note file_id's top bit is CLEAR here where our armour rows
+# set it -- that bit is the deferred-fetch request (smsgnames 9), and retail
+# does not set it for this item.
+#
+# FOUR FIELDS ARE OURS AND SAY SO: model_id, quantity, enc_name and modifiers
+# are NOT measured, because retail declares this item through 0x015E
+# (low detail) which carries none of them, and our sender uses 0x0161. They
+# are set to the empty/neutral values a mechanism test wants -- an unnamed,
+# unmodified costume. Anything that needs this item's real name must read it
+# off a high-detail declare, and no capture in the vault has one.
+[item.costume_body]
+name = "costume body (wire type 44) -- the override probe"
+file_id = 0x00000AF6        # record 2806, composite type 15 (the chest)
+item_type = 44              # worn slot 7, n=97 in the corpus (test_wearmap 3)
+dye_tint = 0
+dye_colors = 11
+materials = 0
+unk1 = 0
+flags = 0x20001006          # bit 2 set: ITEM_FLAG_COMPOSITE
+value = 0
+model_id = 0
+quantity = 1
+enc_name = []
+modifiers = []
+
+[item.costume_body.provenance]
+source = "capture"
+capture = "20260807T143055"
+origin = "live"
+verified = "25 declares of this item across five live captures (20260807T143055, 20260810T235916, 20260817T231139 x2, 20260818T132739); file_id, item_type, dye_tint, materials, unk1, flags and value identical in all five, dye_colors the only variable. Its record 2806 resolves to composite type 15 through cpsdata (toolkit/mapdata/cpsdata.py), which is what test_wearmap 4 pins for wire type 44"
+note = "model_id, quantity, enc_name and modifiers are OURS and unmeasured -- retail declares this item low-detail (0x015E), which carries none of the four. The row exists to fire the 9.2 override path, not to reproduce a retail costume."

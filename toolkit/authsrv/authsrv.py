@@ -1534,6 +1534,21 @@ for _iid, _armour_key, _armour_slot in STARTER_ARMOUR:
     wearmap.check_content_row(_armour_slot,
                               agents.item_template(_armour_key))
 del _iid, _armour_key, _armour_slot
+# THE COSTUME, opt-in, and it is an INSTRUMENT rather than an outfit.
+# studies/playercomposite 9.2 read a costume-override path statically -- equip
+# slots 7/8 feed a registry keyed by file id, and at m_slotItemData build time
+# (0x0082EFAA) an override array at CpsBase+0xD8 REPLACES the armour slots'
+# fileId, flags and dye with the costume's -- and 9.8 recorded that nothing
+# here could fire it, because every item row we had was an armour type and the
+# path needs wire type 44/45. content/items.toml's `costume_body` is that row
+# (measured off 25 declares in five live captures); this wears it.
+#
+# Item id 8 is the first free one: 1 is the weapon, 2 the backpack, 3..7 the
+# five armour pieces.
+EQUIP_COSTUME = False
+COSTUME_ITEM_ID = 8
+COSTUME_SLOT = 7
+COSTUME_KEY = "costume_body"
 # The 0x006E nine-dword array, filled from STARTER_ARMOUR. Position 0 is the
 # weapon and 1 is the offhand; 7 and 8 are the costume slots retail leaves at
 # zero on all thirty-one players observed in one town.
@@ -12338,6 +12353,20 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                      [1, item_id, EQUIPPED_BAG_ID, slot],
                                      f"ITEM_MOVED_TO_LOCATION({key} -> "
                                      f"equipped {slot})")
+                        if EQUIP_COSTUME:
+                            # Declared like any other item; what makes it a
+                            # costume is its wire TYPE (44), which is the only
+                            # thing the override registry keys on.
+                            send(GAME_SMSG_CREATE_NAMED_ITEM,
+                                 agents.named_item(
+                                     COSTUME_ITEM_ID,
+                                     agents.item_template(COSTUME_KEY)),
+                                 f"CREATE_NAMED_ITEM({COSTUME_KEY})")
+                            send(GAME_SMSG_ITEM_MOVED_TO_LOCATION,
+                                 [1, COSTUME_ITEM_ID, EQUIPPED_BAG_ID,
+                                  COSTUME_SLOT],
+                                 f"ITEM_MOVED_TO_LOCATION({COSTUME_KEY} -> "
+                                 f"equipped {COSTUME_SLOT})")
                         send(GAME_SMSG_ITEM_SET_ACTIVE_WEAPON_SET, [1, 0],
                              "SET_ACTIVE_WEAPON_SET")
                         for slot in range(4):
@@ -14431,13 +14460,22 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # Positions 1..8 are all zero here, so this send never
                         # depended on the dispute; anything that DRESSES a body
                         # must use the measured order above.
-                        if EQUIP_WEAPON or EQUIP_ARMOUR:
+                        if EQUIP_WEAPON or EQUIP_ARMOUR or EQUIP_COSTUME:
                             worn = [0] * VISUAL_EQUIPMENT_SLOTS
                             if EQUIP_WEAPON:
                                 worn[0] = WEAPON_ITEM_ID
                             if EQUIP_ARMOUR:
                                 for item_id, _key, slot in STARTER_ARMOUR:
                                     worn[slot] = item_id
+                            if EQUIP_COSTUME:
+                                # Slot 7, the costume BODY cell. The whole
+                                # point is that this slot is not additive:
+                                # studies/playercomposite 9.2 read an override
+                                # array at CpsBase+0xD8 that REPLACES the
+                                # armour slots' cached rows at build time, so
+                                # wearing this should change what the ARMOUR
+                                # components draw rather than adding a piece.
+                                worn[COSTUME_SLOT] = COSTUME_ITEM_ID
                             send(GAME_SMSG_UPDATE_AGENT_VISUAL_EQUIPMENT,
                                  [PLAYER_AGENT_ID] + worn,
                                  "UPDATE_AGENT_VISUAL_EQUIPMENT("
@@ -15664,6 +15702,17 @@ def main():
                          "with it the paper doll shows five empty slots and no "
                          "tooltip can be hovered, which is the state this "
                          "server shipped in until 2026-08-20.")
+    ap.add_argument("--costume", action="store_true",
+                    help="Wear content/items.toml's `costume_body` (wire type "
+                         "44) in equip slot 7. THE OVERRIDE PROBE: "
+                         "studies/playercomposite 9.2 read a path where slots "
+                         "7/8 feed a registry that REPLACES the armour slots' "
+                         "cached fileId/flags/dye at m_slotItemData build "
+                         "time, so a costume should change what the ARMOUR "
+                         "components draw rather than adding a piece. Pair it "
+                         "with clientscan/compositetrap.py: the prediction is "
+                         "that the chest rebuild stops fetching record 91 and "
+                         "fetches the costume's 2806 instead.")
     ap.add_argument("--no-weapon", action="store_true",
                     help="Log in with empty weapon slots, as every session before "
                          "2026-08-06 did. Attacking and weapon skills were both "
@@ -16640,6 +16689,17 @@ def main():
         EQUIP_ARMOUR = False
         print("NO ARMOUR: the character wears nothing and the paper doll's "
               "five armour slots stay empty.")
+
+    if a.costume:
+        global EQUIP_COSTUME
+        EQUIP_COSTUME = True
+        _crow = agents.item_template(COSTUME_KEY)
+        wearmap.check_content_row(COSTUME_SLOT, _crow)
+        print(f"COSTUME: wearing {COSTUME_KEY} (wire type "
+              f"{_crow['item_type']}, record "
+              f"{_crow['file_id'] & 0x7FFFFFFF}) in equip slot "
+              f"{COSTUME_SLOT}. The override probe -- if 9.2 is right the "
+              f"ARMOUR components change, and nothing new is added.")
 
     if a.netgraph is not None:
         global NETGRAPH_FLAGS

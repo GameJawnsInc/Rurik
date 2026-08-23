@@ -865,3 +865,63 @@ is the precondition, and it is a content decision rather than a probe.
 
 **No visual evidence**, same as §9.7: both harness frames land on the load
 screen. Everything here is what the client asked its own table for.
+
+## 9.9 The costume override FIRES, and one costume id overrides FOUR components (2026-08-23)
+
+§9.8 closed with "the costume half of §9.2 is NOT tested and cannot be yet —
+there is no wire type 44/45 item in content". There is one now
+(`content/items.toml` `costume_body`, every identity field measured off **25
+declares in five live captures**, five different players agreeing on all of
+them and varying only in dye), `authsrv --costume` wears it in equip slot 7,
+and the override path fires.
+
+**OBSERVED (runtime).** We declare exactly ONE costume item — record **2806**,
+composite type 15, the chest. At the in-world composite build the client
+fetches **four** costume records, each immediately after the armour record for
+the same component:
+
+| armour fetched | then costume | component |
+|---|---|---|
+| 91 → type 15 | **2806 → 15** ×3 | chest |
+| 90 → type 14 | **2805 → 14** | boots |
+| 92 → type 16 | **2807 → 16** ×3 | gloves |
+| 94 → type 18 | **2808 → 18** ×3 | legs |
+| 93 → type 17 | *(nothing)* | head — untouched |
+
+So a single costume id reaches four components, the armour record is read
+first and the costume record second (which is the shape of a REPLACEMENT at
+`m_slotItemData` build time, §9.2's `0x0082EFAA`), and the head is left alone.
+
+**OBSERVED (archive), and this is what explains it.** The composite table
+stores costumes as **five-record runs in a fixed component order —
+(14, 15, 16, 18, 17)**: boots, chest, gloves, legs, head. There are **253
+aligned runs** of that exact pattern, covering 36.6% of records 339..3799.
+Our 2806 is **member 1** of the run based at 2805, and the client fetched
+members **0, 1, 2, 3** — everything but the head at member 4.
+
+**And retail's own costume ids obey the rule.** All five distinct wire-type-44
+items in the corpus (2806, 2656, 2787, 2533, 3550) are **member 1 — the
+type-15 chest — of such a run**, without exception. That is why §9.2's census
+found wire type 44 pairing only ever with record type 15: a costume BODY item
+is *named by its chest record*, and the other three components are its
+siblings.
+
+**The reading, with its labels.** A costume body item's file id names the
+type-15 member of a five-record run; the client overrides the four body
+components from that run and leaves the head to the costume HEAD slot (wire
+type 45, equip slot 8) — which is exactly why §9.2's census saw type 45
+carrying record types 17 and 19 rather than 15. The four fetches and the run
+structure are **OBSERVED**; that the client derives the siblings by walking
+from a computed run base (rather than by a component-keyed lookup that happens
+to land on the same records) is **RECONSTRUCTION** from one runtime identity
+plus the archive's regularity, and separating those two would need a second
+costume whose run sits at a different offset.
+
+**Not tested:** the costume HEAD half (slot 8 was never worn this run), and
+whether the override replaces the armour row outright or merges with it — the
+resolver sees both records fetched, and which one survives into the atlas is a
+question for a site inside the build path, not the record site.
+
+**No assert fired**, and no visual: both harness frames land on the load
+screen as before, so what the costumed character LOOKED like is **NOT
+OBSERVED**. Capture `20260823T16*`, build 38797, `--map 148 --costume`.

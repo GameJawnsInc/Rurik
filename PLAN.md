@@ -1485,9 +1485,25 @@ corroboration of §9.6's restated P2: the type-2 shell builds at +0.00 and the
 type-1 at +4.58, **4.5 s apart on the clock** — preview then world, argued
 from timing rather than call sites. Reported and NOT interpreted: the reset
 arms also fetch records, which needs a site inside the cache-build path
-(`0x0082EFAA`) to explain. **The costume half of §9.2 stays untested** — it
-needs a wire type 44/45 item and `content/items.toml` has none, which is a
-content decision rather than a probe.
+(`0x0082EFAA`) to explain. ~~**The costume half of §9.2 stays untested**~~ **TESTED 2026-08-23, §9.9 —
+and it is bigger than the static read.** `content/items.toml` gained
+`costume_body` (every identity field measured off **25 declares in five live
+captures**; four fields marked OURS because retail declares it low-detail) and
+`authsrv --costume` wears it in slot 7. **One declared costume id overrides
+FOUR components**: we send record 2806 (type 15, chest) and the client fetches
+**2805/2806/2807/2808** — boots, chest, gloves, legs — each right after the
+armour record it replaces, leaving the head alone. The archive explains it:
+costumes are stored as **five-record runs in a fixed order (14, 15, 16, 18,
+17)**, **253 aligned runs** in the table, and **all five of retail's own
+wire-type-44 ids are member 1 — the type-15 chest — of such a run**. So a
+costume BODY is *named by its chest record* and carries its siblings, which is
+why §9.2's census only ever saw type 44 paired with record type 15, and why
+type 45 (the head slot) carries 17/19 instead. The four fetches and the run
+structure are OBSERVED; that the client walks from a computed run base rather
+than doing a component-keyed lookup is RECONSTRUCTION off one identity.
+Untested: the costume HEAD slot, and whether the override replaces or merges
+(the resolver sees both records; which survives into the atlas needs a site
+inside `0x0082EFAA`).
 Prior status follows.
 **BUILT AND ARMED 2026-08-23, RUN WAS BLOCKED**
 (`toolkit/clientscan/compositetrap.py`, `test_compositetrap.py` 18 checks,
