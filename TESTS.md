@@ -5243,6 +5243,19 @@ Every one of these, in the order they were written:
   raw they make the angle check compare garbage to pi AND make the turn-rate check pass
   vacuously — and the third conflated "arrives before its create" with "names an agent
   never created", which are different facts),
+  `toolkit/authsrv/test_smsgnames2.py` (**two more GAME_SMSG names, 2026-08-22
+  round 2 — the held player-record/agent pair, earned by reading the consumers**;
+  the binary-side claims live in each overrides `why`, this pins the wire. §2:
+  `0x003C PLAYER_UPDATE_FLAGS` — ≥1,393 corpus messages, and the MASK (field 3)
+  is **7 in every one** (the 3-bit flags word), the VALUE never sets a bit outside
+  the mask (consistent with `(old & ~mask) | value`, not an arbitrary write), and
+  89 distinct playerIds are addressed (keyed by player). §3: `0x003E
+  AGENT_VIEW_UNLINK` — ≥65 messages, each a single agent id, and 0x0021
+  WORLD_REMOVE_AGENT outnumbers it **2,253 to 65**, which is the critic's
+  narrowing made concrete (a view unlink is not the world despawn). `0x008D`
+  MAP_MARKER and `0x00B0` stayed HELD — no ArenaNet naming string and no named
+  consumer, recorded in studies/smsgnames §10 rather than promoted on inference.
+  Needs `vault/captures/live/`, §1 runs bare; floor 9),
   `toolkit/authsrv/test_itemdetail.py` (**the five GAME_SMSG names of the 2026-08-22
   static pass — ITEM_LOW_DETAIL/ITEM_HIGH_DETAIL, the equip-set pair, and
   AGENT_SET_MODEL_SCALE — held to what a `.raw` can arbitrate**, so the corpus can take

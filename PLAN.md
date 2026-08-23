@@ -3451,9 +3451,16 @@ deliberately OUT of the schema; full ledger and each held-reason at `studies/sms
    `ITEM_SET_ACTIVE_EQUIP_SET` [high/high]** (§9): `ITEM_PLAYER_EQUIP_SETS = 4`, a set is a PAIR
    of slots at `inventory+0x64+set*8` with the active index at `+0x84`, and the server streams
    the COMPLETE four-set table — 236 corpus updates = 59 × all four indices, item refs
-   null-or-declared 472/472. **What remains held**: the player-record pair
+   null-or-declared 472/472. **What remains held** ~~the player-record pair
    `0x003C PLAYER_UPDATE_FLAGS`/`0x00B0`, the marker `0x008D`, and the critic's `0x003E`
-   narrowing — consumers unread, nothing new this pass.
+   narrowing~~ — **TWO EARNED 2026-08-22** by reading the consumers (`studies/smsgnames` §10,
+   `test_smsgnames2.py`, GAME_SMSG named 120→122): `0x003C PLAYER_UPDATE_FLAGS` (masked flags
+   RMW into `player_record+0x34`, event 0x10000067 → GmView + the attribute panel, 1,393 wire
+   msgs with mask=7) and `0x003E AGENT_VIEW_UNLINK` (the critic's narrowing — a mission-view
+   detach, not the world despawn; 0x0021 outnumbers it 2253:65). **Still held, honestly**:
+   `0x008D` (marker store confirmed but no named consumer — the +0x7ec readers collide with a
+   GlDev struct, and no assert names it) and `0x00B0` (a per-player byte at +0x38 that GmView
+   reacts to, no clean semantic).
 
 ### Unit setup — the pipeline is one document, ALL 11 questions ran, and the fixes landed (2026-08-17)
 

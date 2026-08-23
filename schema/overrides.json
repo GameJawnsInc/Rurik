@@ -3186,6 +3186,52 @@
     "name": "ITEM_HIGH_DETAIL",
     "name_confidence": "high",
     "why": "OBSERVED, the client's own bit vocabulary: handler 0x00846d70 (fileId guard ItCliApi:2505) runs the SAME builder 0x00848450 on fields 1-9 as 0x015E, then installer 0x00848250 (ItCliApi:240 'item') adds the high-detail payload -- f10 model_id -> +0x2C, f11 quantity word -> +0x4C (over the builder's default 1), f12 name (wire field TWELVE, string16(64)) wcslen-copied to +0x34, f13 code[] (field THIRTEEN, nested) reallocated at +0x10 with count+1 at +0x14 -- and then ors [item+0x40] |= 2, THE IsDetailHigh BIT (test byte [item+0x40],2 under ItCliApi:66 'baseItem->IsDetailHigh()'). Field indices 12/13 corrected per msgshape from an earlier 11/12 draft (smsgnames critic). THE TERMINATOR IS REFUSED ON THE WIRE: ItemCode:516 asserts '!count || code[count-1] != ITEM_CODE_TERMINATOR' -- the message must arrive WITHOUT 0xC0000000 and the client appends its own; a server that sends the sentinel trips the assert. Prediction confirmed with no free parameter: 0 terminator dwords in all corpus code[] entries. LIVE: 2,235 messages; quantity is 1 x2,234 and 3 x1; the name string is near-empty (length 1) in 1,651 -- standard items resolve names from the code words, only named items carry text; declared field 14 (trailing u32) is ABSENT from every retail message (0/2,235), settling studies/smsg FINDINGS' open question -- the client's format table declares a slot retail never fills. The last of the 66 functions question: the installer itself walks the code words and interprets exactly one identifier family (bits 29-20 == 647) inline, consistent with studies/itemmods 4.1's sixteen-site census. studies/smsgnames FINDINGS 9."
+   },
+   "60": {
+    "opcode": 60,
+    "table": "GAME_SMSG_0060",
+    "declared_unpack_size": 12,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 60
+     },
+     {
+      "type": "word",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     }
+    ],
+    "name": "PLAYER_UPDATE_FLAGS",
+    "name_confidence": "medium",
+    "why": "OBSERVED binary + live wire. A masked read-modify-write of a per-player flags word. RECV handler 0x0091d960 -> worker 0x0080eb70 grows the ChCliApi player array to cover field1 (ctx+0x2C +0x80c, count +0x814, stride 0x50), then at 0x0080EC26 `and [rec+0x34], ~field3` clears the bits of the MASK and at 0x0080EC48 `or [rec+0x34], field2` sets the VALUE -- so player_record+0x34 = (old & ~mask) | value, keyed by playerId. It then posts UI event 0x10000067 with {playerId, mask, newFlags} (0x0080EC7F), SUBSCRIBED by GmView (the world view; nearest assert GmView:3737) at 0x004ECDD0 and by the attribute panel (AttribFrame/AttribList) at 0x008A7030 -- two consumers, so the flags drive both the 3D view and the character UI. Fields [u16 playerId, u32 value, u32 mask] cross-checked vs msgshape ([u16,u32,u32], wire 12); this row changes no field list. LIVE: 1,393 messages over 59 connections, and field3 (mask) is 7 in every sampled message -- a 3-bit flags word, matching the study's '3-bit flags at +0x34'. THE NAME IS THE OPERATION, not the flag meanings: which player-state each of the (up to 3) bits carries is UNRESOLVED, exactly as AGENT_SET_NAME named the store without decoding the string. This is the SERVER->CLIENT (GAME_SMSG) 0x3c; the SEND-table 0x3c ([u32]) is a different, client->server message. studies/smsgnames 10."
+   },
+   "62": {
+    "opcode": 62,
+    "table": "GAME_SMSG_0062",
+    "declared_unpack_size": 6,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 62
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     }
+    ],
+    "name": "AGENT_VIEW_UNLINK",
+    "name_confidence": "medium",
+    "why": "OBSERVED binary + live wire. NARROWED from the critic's candidate AGENT_REMOVE (studies/smsgnames 6) so it never reads as the world-level despawn WORLD_REMOVE_AGENT (0x0021): this is NOT that. RECV handler 0x0091d980 -> 0x0080ecf0 binary-search-deletes the agent (by field1 = agent id) from ONE by-id list at ctx+0x2C +0x8c (`lea edi,[ebx+0x8c]`, 0x0080ED07) and detaches its mission-map view through the chain 0x00807c50 then 0x0084d9b0/0x0084dd20/0x008576b0 -- a view unlink, not the canonical agent destroy. Field [agent_id] cross-checked vs msgshape ([agent_id], wire 6). LIVE: 65 messages over the corpus, each [agent_id]. This is the SERVER->CLIENT (GAME_SMSG) 0x3e; the SEND-table 0x3e is a different client->server message. studies/smsgnames 10."
    }
   }
  }

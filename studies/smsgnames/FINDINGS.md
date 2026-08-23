@@ -51,8 +51,8 @@ These are not failures. Several carry a strong candidate name held back on disci
 |---|---|---|---|
 | 0x001F | — | AgMsg.cpp | Server pushes a single u32 time value; the handler rebases the agent subsystem's two timer queues (world context +0x18c and +0x128) by (value - last_base) and marks them  |
 | 0x002D | — | AgMsg.cpp | Per-agent state cancel on a MOVING agent. field[1] is the agent id; the handler resolves sync (and, gated on a slot in the [esi+0x1ec] array, async) pointers and calls 0x |
-| 0x003C | `PLAYER_UPDATE_FLAGS` | ChCli/table | Masked read-modify-write of a 3-bit flags word at player_record+0x34 in the ChCliApi player array (ctx+0x2c +0x80c, count +0x814, stride 0x50), keyed by playerId; fires e |
-| 0x003E | `AGENT_REMOVE` | ChCli/table | Removes an agent (by id) from the client's by-id sorted agent list at ctx+0x2c +0x8c (binary-searched, entry memmoved out, count decremented) and detaches it from the mis |
+| 0x003C | `PLAYER_UPDATE_FLAGS` → **EARNED 2026-08-22 (§10)** — event 0x10000067 + GmView/AttribFrame subscribers + 1,393 wire msgs, mask=7 | ChCli/table | Masked read-modify-write of a 3-bit flags word at player_record+0x34 in the ChCliApi player array (ctx+0x2c +0x80c, count +0x814, stride 0x50), keyed by playerId; fires e |
+| 0x003E | `AGENT_REMOVE` → **EARNED 2026-08-22 as `AGENT_VIEW_UNLINK` (§10, critic's narrowing)** — mission-view detach chain + 65 wire msgs, 0x0021 outnumbers it 2253:65 | ChCli/table | Removes an agent (by id) from the client's by-id sorted agent list at ctx+0x2c +0x8c (binary-searched, entry memmoved out, count decremented) and detaches it from the mis |
 | 0x005D | `CHAT_MESSAGE` → **EARNED 2026-08-19 as `CHAT_MESSAGE_CORE`** (studies/chat/FINDINGS.md — the sender/body cross-check ran offline; the whole family 0x005E/0x005F/0x0061 landed with it) | ChCli/table | Delivers an encoded (EncString) wide message string, appended to a growing string table at ctx+0x2c +4 (count +0xc); the same channel that carries level-up templates, /bo |
 | 0x008D | `MAP_MARKER` | ChCli/table | Stores a 40-byte indexed marker record -- world position (vec2), two small ints, two file-id-shaped dwords and an 8-unit label -- into the marker table at ctx+0x2c +0x7ec |
 | 0x009A | — | ChCli/table | Indexed store into the ChCli char/agent-by-id table (ctx+0x2c +0x7cc, count +0x7d4, stride 0x38): ensures the id exists, then writes field2 to record+0x30. The ensure run |
@@ -199,3 +199,53 @@ those bits on THIS message, and if one ever arrives, SCALE under-names the paylo
 **Still held, and why:** `0x003C`/`0x00B0` (the player-record pair) and `0x008D`
 (the marker store) — mechanisms in §4, consumers unread; nothing new this pass.
 `0x003E`'s narrowing to a view-unlink name (critic §6) also remains open.
+
+## 10. Follow-up: the consumers were read; two of the four earned names (2026-08-22)
+
+Worked the four held opcodes above by reading their unread consumers. Two
+earned a name (GAME_SMSG named 120 → 122); two stay held, now with their
+consumer findings on record. Static disassembly of the pinned 38797 build plus
+the live-corpus census; wire invariants pinned by `toolkit/authsrv/test_smsgnames2.py`.
+
+**`0x003C` → `PLAYER_UPDATE_FLAGS` [medium], PROMOTED.** RECV handler
+0x0091d960 → worker 0x0080eb70 grows the ChCliApi player array to cover field 1
+(playerId) and does a **masked read-modify-write** of the flags word at
+`player_record+0x34`: `and [rec+0x34], ~field3` (the mask, 0x0080EC26) then
+`or [rec+0x34], field2` (the value, 0x0080EC48) — i.e. `(old & ~mask) | value`.
+It posts UI event **0x10000067** with {playerId, mask, newFlags}, **subscribed
+by two consumers**: GmView (the world view; nearest assert GmView:3737, subscribe
+at 0x004ECDD0) and the attribute panel (AttribFrame/AttribList, subscribe at
+0x008A7030). Wire: **1,393 messages**, fields `[u16 playerId, u32 value, u32
+mask]` (msgshape-confirmed), and the **mask is 7 in every one** — the 3-bit
+flags word §4 measured, from the other direction. Two witnesses (binary
+store+event; live wire). The name is the OPERATION; which player-state each of
+the three bits carries is UNRESOLVED, exactly as AGENT_SET_NAME named a store
+without decoding its string.
+
+**`0x003E` → `AGENT_VIEW_UNLINK` [medium], PROMOTED (the critic's narrowing).**
+§6 asked for a name that never reads as the world-level despawn
+WORLD_REMOVE_AGENT (0x0021); this is not that. RECV handler 0x0091d980 →
+0x0080ecf0 binary-search-deletes the agent (by id) from ONE by-id list at
+`ctx+0x2C +0x8c` and detaches its mission-map view (chain 0x00807c50 on
+[ebx+0x8c], then 0x0084d9b0/0x0084dd20/0x008576b0). Wire: **65 messages**,
+`[agent_id]` — and 0x0021 outnumbers it **2,253 to 65**, which is the narrowing
+made concrete: a view unlink is not the canonical remove.
+
+**`0x008D` MAP_MARKER — STILL HELD.** The store is confirmed: handler 0x0091e970
+→ 0x00811e80 grows an indexed table at `ctx+0x2C +0x7ec` and stores a 40-byte
+record — world position (vec2), two small ints, two file-id-shaped dwords, and
+a string16 label — keyed by field 1. 56 wire messages. But **no consumer names
+it**: the +0x7ec readers are ChCliApi-internal getters (Array asserts only), the
+other +0x7ec accessors in the image belong to `GlDev` (a graphics-device struct,
+an offset collision, not the marker table), and no assert anywhere in the image
+contains "marker"/"compass"/"beacon". The name MAP_MARKER is inference from the
+store shape (a positioned, labelled, indexed record); with no ArenaNet naming
+string and no named consumer, it stays PARTIAL rather than promoted on a guess.
+
+**`0x00B0` — STILL HELD, no candidate name.** RECV handler 0x0091efc0 → setter
+0x0081ed80 writes a {dword, dword} pair at `player_record+0x38` (field 1 →
++0x38, field 2 → +0x3c) and posts event **0x10000048**, subscribed by GmView
+(the same world-view function as 0x003C, 0x004ECD90). Wire fields `[u16
+playerId, u8 value]`. No assert names +0x38 and no reader gives it a clean
+meaning, so there is no honest name — it is a per-player byte the world view
+reacts to, and that is all the evidence supports.
