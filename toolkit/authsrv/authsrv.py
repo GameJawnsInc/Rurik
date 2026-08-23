@@ -4488,6 +4488,19 @@ GAME_SMSG_SKILL_RECHARGED = 0x00E6
 GAME_CMSG_TURN_TO_DIRECTION = 0x003D
 GAME_CMSG_MOVE_TO_COORD = 0x003E
 GAME_CMSG_LAST_POS_BEFORE_MOVE_CANCELED = 0x0047
+# CANCEL ACTION, and the name is INFERRED from one operator-narrated run
+# rather than any catalog -- every source we mirror leaves 0x0028 unnamed,
+# and combat/PLAN P1 had seen its empty payload exactly once. The loopback
+# run 20260823T101329 has NINE, and the context does the naming: all nine
+# sit inside a held action, and the three during the run's one 2.0 s cast
+# land exactly where the operator reports pressing the three cancel inputs
+# (WASD, a ground click, Esc) -- while the same window carries NO movement
+# c2s at all. So the client does not send movement while casting; it sends
+# THIS, and a server that drops it has an uncancellable cast, which is
+# precisely what the operator saw (studies/castmech 3d). Header-only
+# payload: the message carries no information beyond "cancel what I am
+# doing".
+GAME_CMSG_CANCEL_ACTION = 0x0028
 
 # THE THREE PURE-INBOUND ONES. Each is fully named in `schema/overrides.json`
 # with the client-side evidence beside it, each is among the largest single
@@ -6048,18 +6061,85 @@ def cancel_on_move(send, state, conn_id):
         state["player_swing_cancel"] = "movement"
     if state.get("attacking"):
         state["attacking"] = None
+    dropped = _mark_cancelled(state, "movement", now, spare_mid_attack=True)
+    if dropped:
+        print(f"[c{conn_id}] movement cancels {dropped} pending cast(s); "
+              f"no recharge, costs stay paid where a begin paid them",
+              flush=True)
+
+
+def _mark_cancelled(state, reason, now, spare_mid_attack):
+    """Mark every cancellable pending cast; the tick releases them with E2.
+
+    `spare_mid_attack` is the wiki's movement rule (an attack skill
+    mid-activation shrugs movement off); the cancel-action door passes False
+    because the CLIENT decides what Esc may cancel -- it withholds the
+    request for the skills that resist it ("most quick attack skills",
+    GWW "Cancel"), so a request that arrived is granted. Rolls the busy
+    window back whenever anything was marked, so the next press schedules
+    from now.
+    """
     dropped = 0
     for cast in list(state.get("pending_casts") or ()):
         if cast["e5_sent"] or cast.get("cancelled"):
             continue
-        if cast["attack"] and now >= cast["begin_at"]:
+        if spare_mid_attack and cast["attack"] and now >= cast["begin_at"]:
             continue                       # mid-activation attack skill
-        cast["cancelled"] = "movement"
+        cast["cancelled"] = reason
         dropped += 1
     if dropped:
         state["cast_busy_until"] = now
-        print(f"[c{conn_id}] movement cancels {dropped} pending cast(s); "
-              f"no recharge, costs stay paid", flush=True)
+    return dropped
+
+
+def cancel_action(send, state, conn_id):
+    """0x0028: the client asks to cancel its current action. Grant it.
+
+    THE OPCODE IS THE WHOLE MECHANISM the movement-cancel arms cannot reach:
+    the client sends NO movement c2s while it holds a cast -- the operator's
+    three cancel inputs during run 20260823T101329's one 2.0 s cast (WASD, a
+    ground click, Esc) each arrived as this header-only message and nothing
+    else, so a server without this arm has an uncancellable cast however
+    many cancel doors it wires on the movement side. That run is also why
+    the arm exists at all: checklist item 1 failed on screen, and the
+    capture named the reason (studies/castmech 3d).
+
+    What a grant is: every pending entry short of its E5 is marked (the
+    tick answers each with the bare 0x00E2 -- no recharge, no aftercast,
+    the wiki's contract), the live chain closes with the measured stop pair
+    ([8 -> 0] then GV_ATTACK_STOPPED, the t=16.578 adjacency), the armed
+    swing drops through the tick-owned flag, and the attack order is
+    forgotten -- Esc means stop, so a chain paused mid-cast does not
+    resume out of it. NO mid-activation attack-skill exemption here,
+    deliberately: the wiki's "most quick attack skills cannot be canceled"
+    is the CLIENT withholding the request, not the server refusing one.
+
+    An aftercast is uncancellable (every entry past its E5 stays), and when
+    nothing at all was cancellable this sends NOTHING -- the hold, if one
+    rides, is the aftercast's own and keeps riding.
+    """
+    now = time.time()
+    chain_live = (state.get("attacking") or state.get("player_swing")) \
+        and not any(not c["e3_sent"]
+                    for c in state.get("pending_casts") or ())
+    dropped = _mark_cancelled(state, "cancel action", now,
+                              spare_mid_attack=False)
+    if chain_live or dropped:
+        # The release precedes the close -- the corpus's stop pair and the
+        # cancel instant agree on release-first (castmech 3b/3c; the live
+        # cancel's own release rode property 45, unnamed and unsent here,
+        # so the flag WE release is the one WE set).
+        action_hold(send, state, 0, "cancel action")
+    if chain_live:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.GV_ATTACK_STOPPED, PLAYER_AGENT_ID, 0],
+             "attack_stopped: cancel action")
+        state["player_swing_cancel"] = "cancel action"
+    if state.get("attacking"):
+        state["attacking"] = None
+    if dropped:
+        print(f"[c{conn_id}] cancel action drops {dropped} pending cast(s); "
+              f"no recharge", flush=True)
 
 
 def hero_late_tick(send, state, conn_id):
@@ -12526,6 +12606,13 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                              f"PARTY_FLAG_SET({_axy}, plane {_apl})")
                         print(f"[c{conn_id}] party flag echo: {_axy}",
                               flush=True)
+                    elif opcode == GAME_CMSG_CANCEL_ACTION:
+                        # The one door that reaches a held cast -- the client
+                        # sends no movement while casting, only this (the
+                        # constant's comment has the run). Header-only, so
+                        # there is nothing to read; the request is the
+                        # message.
+                        cancel_action(send, state, conn_id)
                     elif opcode == GAME_CMSG_TURN_TO_DIRECTION:
                         # Keyboard movement comes through here, not through
                         # MOVE_TO_COORD: WASD sends a HEADING from where you

@@ -7389,7 +7389,18 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   activation out, not behind the cancelled cast's ghost. §5 is the chain
   half: one GV_ATTACK_STOPPED and the target forgotten (a move REPLACES the
   attack order), the armed swing dropped unlanded — and the negative, no
-  second STOPPED when the chain was already paused by a press. Floor 15),
+  second STOPPED when the chain was already paused by a press. §6 is the
+  `0x0028` CANCEL_ACTION door, the arm the first operator run forced: the
+  client sends NO movement c2s while it holds a cast — the operator's three
+  cancel inputs each arrived as a header-only 0x0028 (run 20260823T101329),
+  so the movement door alone left casts uncancellable on screen. The section
+  pins the grant: the request marks the cast and releases the hold ([8→0],
+  the E2 staying the tick's), reaches the mid-activation attack skill that
+  movement spares (the client withholds Esc for skills that resist it, so an
+  arrived request is granted), leaves an aftercast holding and unmarked
+  through this door too, and closes a live chain with the [8→0]-then-STOPPED
+  pair while forgetting the attack order — Esc means stop, not pause.
+  Floor 20),
   `toolkit/authsrv/test_killwindow.py` (the kill window, checked against
   ArenaNet's own kills. Our server sent one message when an agent died —
   `0x00F1` with the death bit — where the real service sends three: status,
