@@ -6198,11 +6198,19 @@ Every one of these, in the order they were written:
   the lot — so the check drives real `_report` over list-valued captures past
   the census threshold. §8 pins `OUR_SLOT_ITEM` to `authsrv.py`'s own
   `STARTER_ARMOUR` source and the slot types, records and dye tints to
-  `content/items.toml`, including the deliberately awkward line:
+  `content/items.toml`, including two deliberately awkward lines:
   `costume_body`'s tint is **0**, which is also what an unwritten row holds,
   so the pin exists to stop the module claiming the body half of S7 decides
-  anything. Needs the pinned exe for §§1-2/§6 and the vault for §5, all
-  SKIP-declared; floor 53),
+  anything; and every armour row already contains the costume override's whole
+  flag mask, which is the reason `--armour-flags-clear` has to exist at all —
+  if a future row lacks a mask bit that line reddens and the flag can be
+  retired. S5's three readings (OR / copy-unchanged / constant assignment) are
+  each exercised BY NAME under a simulated `--flags-clear`, because a scorer
+  that can only recognise the answer it expects is not a scorer — and because
+  the first statement of S5's limit was wrong in a way none of the other
+  checks could catch (it claimed the run separated nothing, when the surviving
+  out-of-mask bit had already killed the assignment reading). Needs the pinned
+  exe for §§1-2/§6 and the vault for §5, all SKIP-declared; floor 59),
   `toolkit/clientscan/test_msgshape.py` (the client's message-format tables,
   DERIVED from the image instead of remembered — `studies/crossbuild/PLAN.md` §3,
   and the reason that plan put this file first. `msgshape` underpins

@@ -156,6 +156,10 @@ leaving one off would make a silent path look like an absent one.
       **every** one of 107 distinct flag values on a worn composite armour item
       carries bits 0x2 and 0x4 (so the OR can never be caught setting those),
       while 0x20000000 is CLEAR on **28 of 5,281 wears**.
+      **RAN 2026-08-23 and it is (a) — §9.12.** Declared 0x00001006, the row
+      reads 0x20001006 on all five armour slots, and the PRE-override write on
+      the same slots 10 ms earlier reads 0x00001006, which is the control:
+      the client is not stamping that bit on every row it builds.
   S6  The override array says WHERE the five-record run expands. Four
       DISTINCT ids at slots 2..5 means the expansion happened at registration
       and is visible here; the same id repeated, or non-zero only at 7/8,

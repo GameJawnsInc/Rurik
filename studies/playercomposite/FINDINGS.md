@@ -1114,12 +1114,15 @@ permutation is scoped to the in-world path rather than stated of the class.
 - **S3 REPLACE — PASS.** Every overridden slot's row carries the costume
   record: chest 2806, legs 2808, head 2654, boots 2805, gloves 2807, and each
   costume slot its own. The armour record that was there 10 ms earlier is gone.
-- **S5 flags — PASS, with its limit printed by the tool itself.** The row
-  carries `0x20000006`. **This run cannot separate the OR from an assignment**,
-  because our armour rows and our costume rows both declare `0x20001006` and
-  both readings predict the same dword. The `or` at `0x0082EFD4` is static
-  evidence only; the discriminator would be an armour row carrying a bit
-  outside `0x20001006`.
+- **S5 flags — PASS on the mask.** The row carries `0x20000006`.
+  ⚠ **The limit I printed beside it was WRONG — see §9.12.** It said the run
+  could not separate the OR from an assignment "because our armour rows and
+  our costume rows both declare `0x20001006`", which conflated two different
+  dwords: `edx` comes from the SLOT's own item and the costume's flags are
+  never read here. A constant assignment was in fact **already refuted by
+  these very rows** — we declare `0x20001006`, bit `0x1000` is outside the
+  mask, and the built row carries it. The residual was OR against
+  copy-unchanged, and §9.12 closes it.
 - **S6 — the run expands AT REGISTRATION.** The override array holds **five
   distinct ids**, each the right component for its body part:
   `[_, _, 2806, 2808, 2654, 2805, 2807, 2806, 2654]`. So §9.9's RECONSTRUCTION
@@ -1161,7 +1164,127 @@ permutation is scoped to the in-world path rather than stated of the class.
 
 ### Still open
 
-Whether the flags are OR-ed or assigned (needs an armour row with a bit
-outside `0x20001006`); what the two wire-ordered CpsBase instances are; and
-`row+0x08`, which nothing in this arc has ever seen non-zero. No visual: both
+~~Whether the flags are OR-ed or assigned~~ **CLOSED, §9.12 — they are
+OR-ed, and the client put back a bit we cleared.** What the two wire-ordered
+CpsBase instances are; and `row+0x08`, which nothing in this arc has ever seen
+non-zero. No visual: both
 runs' harness frames land on the load screen, as before.
+
+## 9.12 The flags are OR-ed — the client put back a bit we cleared, and the same slots ten milliseconds earlier are the control (2026-08-23)
+
+§9.11 left one field unsettled and **stated its limit wrongly**, which is the
+more useful half of this entry. It said the run "cannot separate the OR from
+an assignment, because our armour rows and our costume rows both declare
+`0x20001006`". That conflated two different dwords.
+
+`edx` is loaded at `0x0082EFB4` from **the slot's own item** — the armour —
+and the costume's flags dword is never read anywhere in the function; its
+declare is touched only at `0x0082EEF1`, `mov ebx,[eax]`, the file id. So the
+costume's flags are irrelevant, and the live readings were:
+
+| | reading | status after §9.11 |
+|---|---|---|
+| (a) | `row.flags = armour.flags \| 0x20000006` | the OR |
+| (b) | `row.flags = 0x20000006` | **already REFUTED** and I did not notice |
+| (c) | `row.flags = armour.flags` | indistinguishable from (a) on our rows |
+
+**(b) was dead in the run that stated the limit.** We declare `0x20001006`;
+bit `0x1000` is outside the mask; the built row carries it. An assignment
+would have cleared it. The real residual was (a) against (c), invisible only
+because our rows already contain the whole mask.
+
+### A corpus census says why, and supplies the discriminator
+
+Across **59 live connections**, 5,281 wears of composite armour carry **107
+distinct flag values**:
+
+- bits `0x2` and `0x4` are present on **5,281 of 5,281** — so the OR can never
+  be caught setting *those*, on retail's data or ours;
+- `0x20000000` is **CLEAR on 28 of them** (`0x00110007`, `0x00000007`,
+  `0x00010007`, `0x00104007`), so retail itself ships composite armour without
+  that bit and the client demonstrably handles the shape;
+- **every** one of the 107 carries bits outside the mask, so an assignment
+  would destroy real data on every retail armour item.
+
+`0x20000000` is therefore the only bit of the mask the OR can ever be seen
+setting — and it is a bit retail sometimes omits rather than one we invented.
+
+### The experiment
+
+`authsrv --armour-flags-clear 0x20000000` clears bits from every armour
+declare before sending. Deliberately a **flag and not a content row**: the
+probe input stays a probe input, and nothing in `content/` starts claiming an
+item retail never sent. `armour_row()` re-validates *after* the edit, so a
+clear that removed the composite bit dies at the flag rather than becoming a
+mis-render thirty seconds into a run.
+
+Run: build 38797, loopback, `--map 148 --costume --costume-head
+--armour-flags-clear 0x20000000`, capture `20260823T180959`, verdict **PASS**,
+zero asserts. We declared `0x00001006`. Predictions, registered at `3320f6d`
+before it ran: OR → the row reads `0x20001006`; copy → `0x00001006`;
+assignment → `0x20000006`.
+
+```
++4.70s  slot 2  record   91  flags 0x00001006     the armour goes in first,
++4.70s  slot 5  record   90  flags 0x00001006     override still zero:
++4.70s  slot 3  record   94  flags 0x00001006     the cleared bit STAYS CLEAR
++4.71s  slot 6  record   92  flags 0x00001006
++4.71s  slot 4  record   93  flags 0x00001006
++4.71s  slot 7  record 2806  flags 0x20001006     the costume registers
++4.71s  slot 5  record 2805  flags 0x20001006     and now, overridden:
++4.71s  slot 3  record 2808  flags 0x20001006     the bit is BACK
++4.71s  slot 6  record 2807  flags 0x20001006
++4.71s  slot 2  record 2806  flags 0x20001006
++4.72s  slot 8  record 2654  flags 0x20001006
++4.72s  slot 4  record 2654  flags 0x20001006
+```
+
+**OBSERVED: the client put back a bit we cleared, on all five armour slots.**
+`0x00001006 → 0x20001006`, with `0x1000` — outside the mask — carried through
+in the same dword. (a) confirmed, (b) and (c) refuted.
+
+### The control is inside the run, and it is what makes this attributable
+
+The pre-override write on **the same five slots, ten milliseconds earlier**,
+reads `0x00001006`. Those rows go through the *other* branch of the same
+`test eax,eax` at `0x0082EFD0`, where the override entry is still zero. So:
+
+- the client is **not** setting `0x20000000` on every row it builds — a whole
+  pass of five rows kept it clear;
+- `0x0082F01C`'s own `or edx,0x20000000` did **not** fire, so `[ebp+0x10]` was
+  zero on that pass. Reported, not interpreted: what that argument is remains
+  unread;
+- the bit therefore arrives specifically on the override branch, which is the
+  instruction we are claiming about.
+
+Same client, same slots, same 10 ms window, one branch apart. A null control
+this tight was free and was not designed for — it fell out of the armour being
+written before the costume registers.
+
+The weapon (slot 0) kept `0x22201000` throughout: the clear is scoped to
+`STARTER_ARMOUR` and the row proves it.
+
+### What the mask is FOR
+
+Putting the census and the run together: the OR forces `0x2|0x4`, which every
+retail composite armour item already carries — a **guard**, never observed
+doing anything — and `0x20000000`, which retail omits on 28 of 5,281 wears and
+which the client sets when a costume covers the slot. Since it must not
+destroy the item's other bits (`0x1000` and the 24 other out-of-mask patterns
+the census found), an OR is the only shape that works. The instruction and the
+data agree about the reason, not just the result.
+
+### Method note, because this is twice in one arc
+
+§9.11's S5 limit was wrong in the same way §9.6's P2 and §9.11's S2 were: the
+error was in the prediction's **frame** — which dwords were even in play —
+rather than in its content. All three were caught by re-reading the operand
+rather than the claim, which is `feedback-verify-the-operand-not-just-the-predicate`
+applied to my own predictions instead of to the client's.
+
+`test_compositetrap` 53 → 59 checks: all three readings are exercised by name
+(OR passes, COPY and ASSIGN each redden), `OUR_SLOT_FLAGS` is pinned to
+`content/items.toml`, and one check pins the awkward fact deliberately — every
+armour row already contains the whole mask, which is the reason the flag has
+to exist at all. If a future content row lacks a mask bit, that line reddens
+and somebody can retire the flag.

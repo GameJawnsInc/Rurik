@@ -1545,9 +1545,33 @@ with §9.4); `cachesame` fired ZERO times in both runs and says so; the weapon
 is an n=1 null control that keeps its own declared bytes. Two tool defects the
 runs paid for are fixed and pinned — `_report` died on an unhashable capture
 AFTER a completed run had collected everything, and TOTALS printed 0 beside a
-census of 13. **Still open**: the flags OR-vs-assign (needs an armour row with
-a bit outside `0x20001006`), what the two wire-ordered instances are, and the
-standalone type-19 kind of head costume.
+census of 13.
+**AND THE FLAGS ARE OR-ED (§9.12, same day, and it CORRECTS §9.11's own stated
+limit).** That limit — "the run cannot separate the OR from an assignment
+because our armour and costume rows both declare 0x20001006" — conflated two
+dwords: `edx` is loaded from the SLOT's own item and the costume's flags are
+never read in the function, so a constant assignment was **already refuted by
+those rows** (we declare 0x20001006, bit 0x1000 is outside the mask, the built
+row keeps it). The real residual was OR against copy-unchanged, invisible only
+because our rows contain the whole mask. **A corpus census supplied the
+discriminator and it is retail's own shape**: over 59 live connections, 5,281
+composite-armour wears carry 107 distinct flag values, bits 0x2 and 0x4 are
+present on 5,281 of 5,281 (so the OR can never be caught setting those), and
+**0x20000000 is CLEAR on 28 of them** — retail ships armour without it.
+`authsrv --armour-flags-clear 0x20000000` (a probe INPUT, deliberately a flag
+and not a content row, re-validated AFTER the edit so an unsafe clear dies at
+the flag) declares 0x00001006, and the client's row reads **0x20001006 on all
+five armour slots — it put back the bit we cleared**, with 0x1000 carried
+through. ★ **The control is inside the run**: the PRE-override write on the
+same five slots ten milliseconds earlier reads 0x00001006, on the other branch
+of the same `test eax,eax`, so the client is not stamping that bit on every row
+and 0x0082F01C's own `or edx,0x20000000` did not fire. Same client, same slots,
+one branch apart. Method note, twice in one arc: §9.11's S5 limit was wrong the
+same way §9.6's P2 and §9.11's S2 were — the error was in the prediction's
+FRAME rather than its content, caught by re-reading the operand instead of the
+claim. `test_compositetrap` 53 -> 59; all three readings exercised by name.
+**Still open**: what the two wire-ordered instances are, and the standalone
+type-19 kind of head costume.
 Prior status follows.
 **BUILT AND ARMED 2026-08-23, RUN WAS BLOCKED**
 (`toolkit/clientscan/compositetrap.py`, `test_compositetrap.py` 18 checks,
