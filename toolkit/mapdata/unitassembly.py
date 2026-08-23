@@ -383,8 +383,24 @@ class Resolver:
         links with the visited set, FAE and the null-slot accounting are all
         seed-independent; only WHO seeds the queue is monster-specific.
         `unit` is whatever the caller wants the Resolution to carry.
+
+        A seed whose role is ROLE_TEXTURE or ROLE_FAD is a TERMINAL exactly
+        as a chunk-referenced texture is: membership and id-resolvability
+        checked, read under `deep`, never walked as a model. `resolve` never
+        seeds one (shell and bodies are model roles), so unit resolution is
+        byte-identical to the pre-split walk -- a player manifest seeds its
+        record's ATEX slots this way. A ROLE_SOUND or ROLE_AUDIO seed is
+        REFUSED rather than half-walked: the sound closure needs the FA6 hop
+        that starts from a MODEL, and a caller seeding one directly is
+        holding the walk wrong.
         """
         res = Resolution(unit)
+        for _fid, role in seeds:
+            if role in (ROLE_SOUND, ROLE_AUDIO):
+                raise ValueError(
+                    f"a {role!r} seed cannot be walked from here -- the "
+                    f"audio closure hangs off a model's FA6 chunk; seed the "
+                    f"model instead")
         queue = collections.deque(seeds)
         walked = set()
 
@@ -410,6 +426,9 @@ class Resolver:
 
         while queue:
             fid, role = queue.popleft()
+            if role in (ROLE_TEXTURE, ROLE_FAD):
+                touch(fid, role, read=deep)   # a terminal seed: never walked
+                continue
             f = touch(fid, role, read=True)
             if f is None:
                 continue
