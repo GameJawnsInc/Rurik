@@ -47,11 +47,18 @@ sys.path.insert(0, os.path.join(os.path.dirname(HERE), "authsrv"))
 import checks             # noqa: E402
 import compositetrap as t  # noqa: E402
 
+
+def JOIN(ls):
+    return chr(10).join(ls)
+
+
 # Floor set from a real green run, never guessed -- 18 checks 2026-08-23,
 # then 48 / 49 / 52 / 53 / 59 / 60 / 70 as the slot-cache half, the _report
 # regression guard, the S2/S4/S8 restatements, S5's three readings, the
-# caller map and the CLEAR analyser landed the same day.
-LEDGER = checks.Ledger("composite trap", floor=71)
+# caller map and the CLEAR analyser landed the same day, then 71 for the
+# symmetric R4 window and 75 for S7's ordering check plus the second
+# costume-head row. Set from the run every time; guessed low five times.
+LEDGER = checks.Ledger("composite trap", floor=75)
 check = checks.adopt(LEDGER)
 
 # ---------------------------------------------------------------- section 1
@@ -329,7 +336,7 @@ CPS_ITEM = t._by_cps(t.OUR_SLOT_ITEM)
 
 
 def chits(rows, ids=None, ovr=None, cps=0x0AB00000, site=2, extra=(),
-          flags=None):
+          flags=None, times=None):
     """Synthetic slot-cache hits in the shape HwTrap + _cap_slotcache give."""
     ids = GOOD_IDS if ids is None else ids
     ovr = GOOD_OVR if ovr is None else ovr
@@ -337,7 +344,9 @@ def chits(rows, ids=None, ovr=None, cps=0x0AB00000, site=2, extra=(),
     out = []
     for slot in sorted(rows):
         rec, tb, tint = rows[slot]
-        out.append({"slot": site, "t": float(slot), "cap": {
+        out.append({"slot": site, "t": (times or {}).get(slot,
+                                                        float(slot)),
+                    "cap": {
             "CpsBase": cps, "slot": slot, "edx (slot*16)": slot * 16,
             "item id": CPS_ITEM.get(slot),
             "file id": rec, "record": rec & 0x7FFFFFFF, "type byte": tb,
@@ -375,10 +384,26 @@ check("expands AT REGISTRATION" in blob,
 check("PASS, and DECISIVELY" in blob and "S7 the dye tint" in blob,
       "S7 is decisive on the HEAD half: tint 35 is a value only "
       "`costume_head` declares")
-check("the body half, NOT decisive" in blob,
-      "and it refuses to claim the body half, because `costume_body` declares "
-      "tint 0 and so does an unwritten row -- the one place this rig agrees "
-      "with itself for free")
+check("the body half, NOT decisive" in blob
+      and "was NOT written first" in blob,
+      "and with the SOURCE row written last it refuses the body half -- an "
+      "unwritten m_slotItemData[7] would read tint 0 too")
+# THE REAL ORDER, and it is a correction to §9.11's own hedge. Every live run
+# writes slot 7's row BEFORE the four body overrides, and the dye is copied
+# FROM that row -- so "the source was never written" is not a live
+# alternative and the body half IS decisive. §9.11 hedged it as a blanket
+# caveat; it is a checkable ORDERING condition, and the check is here.
+REAL_T = {0: 4.70, 2: 4.705, 3: 4.706, 4: 4.72, 5: 4.703, 6: 4.707,
+          7: 4.700, 8: 4.719}
+lines, rc = t._analyse_cache(
+    CSITES, chits(GOOD_ROWS,
+                  times={**REAL_T, 2: 4.715, 3: 4.712, 5: 4.711, 6: 4.713}))
+check(rc == 0 and "IS decisive on the observed ORDER" in JOIN(lines),
+      "with the LIVE write order -- slot 7's own row first, the four body "
+      "overrides after -- the body half of S7 IS decisive, and the tool now "
+      "checks that ordering instead of hedging around it. §9.11 called this "
+      "half 'not decisive' as a blanket caveat; the data always had the "
+      "order in it")
 check("S8 the null control (unoverridden slots): PASS" in blob
       and "n=1, which is small and is said rather than smoothed" in blob,
       "S8 PASSES on the weapon -- the one worn slot no costume covers -- and "
@@ -676,11 +701,28 @@ else:
               "description instead of a measurement",
               f"{tints}")
         check(t.TINT_COSTUME_BODY == 0,
-              "while `costume_body`'s tint IS zero -- the value an unwritten "
-              "row also holds. Pinned deliberately: it is why the module "
-              "calls the body half not decisive, and if a future content "
-              "edit made it non-zero this line should redden so somebody "
-              "strengthens the claim rather than leaving it hedged",
+              "while `costume_body`'s tint IS zero -- the same value an "
+              "unwritten row holds, which is why S7's body half has to lean "
+              "on the WRITE ORDER rather than on the value alone. Pinned so "
+              "that a content edit making it non-zero reddens here and "
+              "somebody can drop the ordering argument for a simpler one",
               f"tint {t.TINT_COSTUME_BODY}")
+        for key, want in sorted(t.HEAD_ROWS.items()):
+            r = agents.item_template(key)
+            got = {"record": r["file_id"] & 0x7FFFFFFF,
+                   "tint": r["dye_tint"], "colors": r["dye_colors"]}
+            check(all(got[k] == want[k] for k in got) and r["item_type"] == 45,
+                  f"HEAD_ROWS[{key!r}] is content/items.toml's own row -- both "
+                  f"costume heads are wire type 45 in slot 8, so the RECORD's "
+                  f"composite type is the only variable between them and a "
+                  f"drifted constant would silently change what the run means",
+                  f"content {got}, module "
+                  f"{ {k: want[k] for k in got} }")
+        check(t.HEAD_ROWS["costume_head"]["component"] !=
+              t.HEAD_ROWS["costume_head_second"]["component"],
+              "and the two land on DIFFERENT components (2 vs 1) -- if they "
+              "ever agreed, the second row would be testing nothing",
+              f"{t.HEAD_ROWS['costume_head']['component']} vs "
+              f"{t.HEAD_ROWS['costume_head_second']['component']}")
 
 sys.exit(LEDGER.verdict())

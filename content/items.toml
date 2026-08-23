@@ -344,3 +344,25 @@ capture = "20260807T143055"
 origin = "live"
 verified = "12 declares across six live captures (20260807T143055, 20260810T235916, 20260817T231139, 20260818T094648, 20260818T132739, 20260821T205552); file_id, item_type, dye_tint, materials, unk1, flags and value identical in all twelve, dye_colors the only variable. Record 2654 resolves to composite type 17 through cpsdata, which test_wearmap 4 pins as one of wire type 45's two record types"
 note = "model_id, quantity, enc_name and modifiers are OURS and unmeasured -- retail declares this item low-detail (0x015E). Chosen from a DIFFERENT run than costume_body on purpose: see the family note above."
+
+[item.costume_head_second]
+name = "costume head (wire type 45) -- the STANDALONE type-19 kind"
+file_id = 0x00000B01        # record 2817, composite type 19, in NO five-record run
+item_type = 45              # worn slot 8; all 28 type-45 ids in the corpus are slot-8-only
+dye_tint = 0
+dye_colors = 0
+materials = 0
+unk1 = 0
+flags = 0x20001006          # bit 2 set: ITEM_FLAG_COMPOSITE
+value = 0
+model_id = 0
+quantity = 1
+enc_name = []
+modifiers = []
+
+[item.costume_head_second.provenance]
+source = "capture"
+capture = "20260817T231139"
+origin = "live"
+verified = "16 declares across eight live captures (20260817T231139, 20260818T094648, 20260818T132739, 20260821T152147, 20260821T155022, 20260821T163511, 20260821T184758, 20260821T205552) and 16 wears, every one of them in equip slot 8. file_id, item_type, dye_tint, dye_colors, materials, unk1 and value are identical in all sixteen; flags is the only variable and takes 0x20001006 (13) or 0x20001007 (3), differing in bit 0 alone, so the modal value is carried. Record 2817 resolves to composite type 19 through cpsdata, which is wire type 45's OTHER record type (test_wearmap 4 pins both), and 19 maps to component 1 through the exe's own s_components"
+note = "model_id, quantity, enc_name and modifiers are OURS and unmeasured -- retail declares this item low-detail (0x015E). This row exists to test a DIFFERENT COMPONENT rather than a different run: costume_head is type 17 -> component 2, the hair-replace head our armour piece 93 also occupies, while this is type 19 -> component 1, which NO armour slot holds (our five cover components 3, 5, 2, 6 and 4). See studies/playercomposite 9.10's 'still unmeasured'."

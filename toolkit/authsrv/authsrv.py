@@ -15767,14 +15767,20 @@ def main():
                          "with clientscan/compositetrap.py: the prediction is "
                          "that the chest rebuild stops fetching record 91 and "
                          "fetches the costume's 2806 instead.")
-    ap.add_argument("--costume-head", action="store_true",
-                    dest="costume_head",
+    ap.add_argument("--costume-head", nargs="?", const="",
+                    metavar="CONTENT_KEY", dest="costume_head",
                     help="Wear `costume_head` (wire type 45) in equip slot 8. "
                          "The other half of 9.9: the body costume overrode "
                          "run members 0..3 and left the head. This row is "
                          "member 4 of a DIFFERENT run, so with both worn "
                          "record 2809 -- the body run's own head member -- "
-                         "must stay unfetched.")
+                         "must stay unfetched. Takes an optional content key: "
+                         "bare it wears `costume_head` (record 2654, type 17, "
+                         "component 2), and `--costume-head "
+                         "costume_head_second` wears the STANDALONE type-19 "
+                         "kind (record 2817, component 1) -- the same wire "
+                         "type and the same slot through the identical path, "
+                         "so the record's component is the only variable.")
     ap.add_argument("--armour-flags-clear", metavar="HEX",
                     dest="armour_flags_clear",
                     help="Clear these bits from every armour row's declared "
@@ -16778,9 +16784,14 @@ def main():
               f"instead of "
               f"0x{agents.item_template(STARTER_ARMOUR[0][1])['flags']:08X}.")
 
-    if a.costume_head:
-        global EQUIP_COSTUME_HEAD
+    if a.costume_head is not None:
+        global EQUIP_COSTUME_HEAD, COSTUME_HEAD_KEY
         EQUIP_COSTUME_HEAD = True
+        # Bare `--costume-head` keeps the default row; a key swaps it.
+        # `const` is "" rather than the constant because argparse is
+        # built in this same function, and naming the global there would
+        # read it before the `global` statement below.
+        COSTUME_HEAD_KEY = a.costume_head or COSTUME_HEAD_KEY
         _hrow = agents.item_template(COSTUME_HEAD_KEY)
         wearmap.check_content_row(COSTUME_HEAD_SLOT, _hrow)
         print(f"COSTUME HEAD: wearing {COSTUME_HEAD_KEY} (wire type "

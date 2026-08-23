@@ -179,6 +179,39 @@ leaving one off would make a silent path look like an absent one.
       so n is small and the report says so — but without it, "every overridden
       row changed" has nothing to be measured against.
 
+THE STANDALONE TYPE-19 HEAD: A COMPONENT NO ARMOUR SLOT HOLDS (T1..T4)
+----------------------------------------------------------------------
+§9.10 tested one of wire type 45's kinds and said so: `costume_head` is record
+2654, composite type **17 → component 2**, the hair-replace head our armour
+piece 93 also occupies. The other kind is untested — record 2817 is composite
+type **19 → component 1**, standalone (in no five-record run), and **no armour
+slot holds component 1**: our five cover components 3, 5, 2, 6 and 4.
+
+`costume_head_second` is that row, measured off **16 declares in 8 captures
+and 16 wears, every one in equip slot 8** (all 28 type-45 ids in the corpus
+are slot-8-only). Every field agrees across the sixteen except `flags`, which
+takes 0x20001006 thirteen times and 0x20001007 three — bit 0 alone — so the
+modal value is carried. Same wire type, same slot, same code path as
+`costume_head`: **the record's component is the only variable.**
+
+  T1  SLOT-KEYED. `override[head]` = 2817 and the head row carries record
+      2817, so a component-1 record lands in the slot a component-2 record
+      held. The costume registry keys on the equip slot and the component
+      follows the record wherever it points.
+  T2  COMPONENT-KEYED. `override[head]` stays 0 and the head row keeps armour
+      record 93, so a record naming a component no slot holds does not reach
+      the slot vocabulary at all.
+  T3  Either way, 2817 must reach the record resolver — we send it, and if it
+      is never fetched the wear did nothing and T1/T2 are both moot.
+  T4  CONTROL: no body costume is worn, so the four body slots must carry NO
+      override. If they do, something other than the head item is writing the
+      array and neither T1 nor T2 means what it says.
+
+The dye is a second, independent readout and it is unambiguous here even
+though the tint is 0: the head slot's row is written at load with the ARMOUR's
+tint 19, so 19 → 0 is a transition rather than a value that might be an
+unwritten row.
+
 THE RESET ARMS: WHY A NINE-ZERO 0x006E RE-READS RECORDS (R1..R4)
 ----------------------------------------------------------------
 §9.8 reported and refused to interpret: the `armor_slots` probe's two RESET
@@ -364,6 +397,32 @@ def _by_cps(d):
             if w in CPS_SLOT_OF_WIRE}
 #: The two costume records we wear, by the slot that names them.
 OUR_COSTUME_RECORD = {7: 2806, 8: 2654}
+
+#: content/items.toml's two costume-head rows, and the ONLY thing that differs
+#: between them is the record's composite type: 17 -> **component 2**, the
+#: hair-replace head our armour piece 93 also occupies, versus 19 ->
+#: **component 1**, which NO armour slot holds (our five cover components 3,
+#: 5, 2, 6, 4). Same wire type 45, same equip slot 8, same code path, so the
+#: component is the only variable. `--head` tells this tool which one ran.
+HEAD_ROWS = {
+    "costume_head": {"record": 2654, "ctype": 17, "component": 2,
+                     "tint": 35, "colors": 10},
+    "costume_head_second": {"record": 2817, "ctype": 19, "component": 1,
+                            "tint": 0, "colors": 0},
+}
+HEAD_KEY = "costume_head"
+
+
+def use_head(key):
+    """Point the head-slot predictions at `key`'s row."""
+    global HEAD_KEY
+    if key not in HEAD_ROWS:
+        raise SystemExit(f"unknown head row {key!r}; have "
+                         f"{', '.join(HEAD_ROWS)}")
+    HEAD_KEY = key
+    r = HEAD_ROWS[key]
+    OUR_COSTUME_RECORD[8] = r["record"]
+    OUR_SLOT_TINT[8] = r["tint"]
 #: content/items.toml's declared dye tints. Three distinct values is what
 #: makes S7 a discriminator rather than a description -- but 0 is also the
 #: value of an unwritten row, which is exactly why the body half is weak.
@@ -772,6 +831,15 @@ def _analyse_cache(sites, hits):
     for c in inst[best]:
         final[c["slot"]] = c
     ovr = inst[best][-1]["override"]
+    # First-write CLOCK per slot, which S7's body half needs: the dye is
+    # copied out of another slot's row, so "was the source written first" is
+    # a question about order and answerable from the hits themselves.
+    firstwrite = {}
+    for h in hits:
+        c = h.get("cap") or {}
+        if (order[h["slot"]] in CACHE_SITES and c.get("CpsBase") == best
+                and "file id" in c):
+            firstwrite.setdefault(c["slot"], h.get("t", 0.0))
 
     got = {s: ids[s] for s in range(min(CPS_SLOTS, len(ids))) if ids[s]}
     mis = {s: v for s, v in got.items() if cps_item.get(s) != v}
@@ -889,27 +957,78 @@ def _analyse_cache(sites, hits):
 
     head = [s for s in overridden if s == cps_head]
     tints = {s: final[s]["dye tint"] for s in overridden}
-    if head and tints.get(cps_head) == TINT_COSTUME_HEAD:
+    want_head_tint = HEAD_ROWS[HEAD_KEY]["tint"]
+    if head and tints.get(cps_head) == want_head_tint:
         s7 = (f"PASS, and DECISIVELY -- the HEAD slot (CpsBase {cps_head}) "
-              f"reads tint {TINT_COSTUME_HEAD}, which only `costume_head` "
-              f"declares, so the +0xA9 branch is m_slotItemData[8] byte 5")
+              f"reads tint {want_head_tint}, which is `{HEAD_KEY}`'s and not "
+              f"the armour's {TINT_ARMOUR}, so the +0xA9 branch is "
+              f"m_slotItemData[8] byte 5")
     elif head and tints.get(cps_head) == TINT_ARMOUR:
         s7 = (f"REFUTED -- the head slot kept the ARMOUR tint {TINT_ARMOUR}; "
               f"the dye is not replaced")
     elif head:
         s7 = (f"UNEXPECTED -- the head slot reads tint {tints.get(cps_head)}, "
-              f"neither the armour's {TINT_ARMOUR} nor the head costume's "
-              f"{TINT_COSTUME_HEAD}")
+              f"neither the armour's {TINT_ARMOUR} nor `{HEAD_KEY}`'s "
+              f"{want_head_tint}")
     else:
         s7 = (f"NO VERDICT -- CpsBase slot {cps_head} (the head) carries no "
-              f"override, and it is the only slot whose tint is unambiguous")
+              f"override, so the dye branch's own slot was never exercised")
     L.append(f"S7 the dye tint: {s7}")
+    # THE BODY HALF, and §9.11 hedged this harder than the data required.
+    # It called `costume_body`'s tint 0 indistinguishable from an unwritten
+    # row -- but the dye is copied FROM m_slotItemData[7], and if slot 7's own
+    # row was written BEFORE the overrides then "unwritten" was never a live
+    # alternative. That ordering is in the timeline, so it can be CHECKED
+    # rather than hedged around.
     others = {s: v for s, v in tints.items()
               if s != cps_head and s in cps_record}
     if others:
-        L.append(f"   the body half, NOT decisive: {others} against "
-                 f"`costume_body`'s {TINT_COSTUME_BODY} -- which is also what "
-                 f"an unwritten row holds, so these agree without proving.")
+        src = firstwrite.get(CPS_SLOT_OF_WIRE[7])
+        tgt = [firstwrite.get(s) for s in others if s in firstwrite]
+        ordered = (src is not None and tgt
+                   and all(x is not None and src <= x for x in tgt))
+        if ordered:
+            L.append(f"   the body half, and it IS decisive on the observed "
+                     f"ORDER: {others} against `costume_body`'s "
+                     f"{TINT_COSTUME_BODY}, with slot {CPS_SLOT_OF_WIRE[7]}'s "
+                     f"own row written FIRST -- so 'the source row was never "
+                     f"written' is not a live alternative here.")
+        else:
+            L.append(f"   the body half, NOT decisive: {others} against "
+                     f"`costume_body`'s {TINT_COSTUME_BODY}, and slot "
+                     f"{CPS_SLOT_OF_WIRE[7]}'s row was NOT written first, so "
+                     f"an unwritten source would read the same.")
+
+    # T1..T4 -- what a head costume whose record names a component NO armour
+    # slot holds actually does. Printed only when the type-19 row ran.
+    hr = HEAD_ROWS[HEAD_KEY]
+    if HEAD_KEY != "costume_head":
+        hslot = CPS_SLOT_OF_WIRE[8]
+        row = final.get(cps_head)
+        t1 = (ovr[cps_head] & ~FILE_ID_RESERVED_BIT) if cps_head < len(ovr)             else 0
+        got = row["record"] if row else None
+        if t1 == hr["record"] and got == hr["record"]:
+            tv = (f"T1 -- the override is SLOT-keyed: record {hr['record']} "
+                  f"(type {hr['ctype']}, component {hr['component']}) lands "
+                  f"in the HEAD slot, replacing a component-"
+                  f"{HEAD_ROWS['costume_head']['component']} record with a "
+                  f"component-{hr['component']} one")
+        elif not t1 and got == OUR_SLOT_RECORD.get(6):
+            tv = (f"T2 -- the head slot keeps its ARMOUR record {got} and "
+                  f"carries no override, so a component no armour slot holds "
+                  f"does NOT reach the slot vocabulary")
+        else:
+            tv = (f"UNEXPECTED -- override {t1}, row record {got}, against "
+                  f"record {hr['record']}")
+        L.append(f"T  the standalone type-19 head (`{HEAD_KEY}`): {tv}")
+        L.append(f"   head slot {cps_head}: override 0x{t1:X}, row record "
+                 f"{got}, type byte {row['type byte'] if row else None}, "
+                 f"tint {row['dye tint'] if row else None}, colors "
+                 f"{row['dye colors'] if row else None}")
+        untouched = [s for s in (2, 3, 5, 6) if s < len(ovr) and not ovr[s]]
+        L.append(f"   T4 control -- no body costume was worn, so the four "
+                 f"body slots must carry NO override: "
+                 f"{'PASS ' + str(untouched) if len(untouched) == 4 else 'VIOLATED ' + str([s for s in (2, 3, 5, 6) if ovr[s]])}")
 
     quiet = [s for s in sorted(final) if s < len(ovr) and not ovr[s]]
     bad8 = {s: (final[s]["type byte"], final[s]["dye tint"])
@@ -1037,6 +1156,13 @@ def main(argv=None):
                     help="wait for a Gw.exe to appear")
     ap.add_argument("--seconds", type=float, default=240.0)
     ap.add_argument("--sites", default=",".join(DEFAULT_SITES))
+    ap.add_argument("--head", metavar="CONTENT_KEY", default=HEAD_KEY,
+                    help="which costume-head row the server wore: "
+                         "`costume_head` (record 2654, type 17, component 2) "
+                         "or `costume_head_second` (record 2817, type 19, "
+                         "component 1 -- which NO armour slot holds). The "
+                         "head-slot predictions are keyed off it, so a run "
+                         "scored against the wrong row would refute itself.")
     ap.add_argument("--flags-clear", metavar="HEX", dest="flags_clear",
                     help="what `authsrv --armour-flags-clear` removed from "
                          "the armour rows this run. S5 needs it to score OR "
@@ -1047,6 +1173,8 @@ def main(argv=None):
     if a.flags_clear:
         global FLAGS_CLEAR
         FLAGS_CLEAR = int(a.flags_clear, 0)
+    if a.head != HEAD_KEY:
+        use_head(a.head)
 
     want = [s.strip() for s in a.sites.split(",") if s.strip()]
     for n in want:
