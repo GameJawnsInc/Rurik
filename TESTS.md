@@ -7773,7 +7773,21 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   window source locks — cleared on every grant, re-armed only at a
   `,stop` lead send sized to the leg at 288 u/s, and the stop-arm answer
   guarded on CANCEL_STOP AND the live window, which is what keeps it from
-  being the refuted --stop-echo under a new name. Floor 29),
+  being the refuted --stop-echo under a new name. **Extended 2026-08-24 for
+  R6's `--stop-answer`** (the state-diff round's H6 test, CANCELWALK.md
+  §7.4): §6 drives `parse_stop_answer` (`ack` in, `repin` REFUSED as
+  deliberately unbuilt — the refusal itself carries the licensing decision,
+  naming --stop-echo's wire effect — and typos refused naming the real arm),
+  the two new composition refusals (no `--zero-lead`: the run answers an
+  unregistered question; with `--cancel-answer`: two levers, attributable to
+  neither), the allowed-with-note combination, the constant TIED TO THE
+  SCHEMA (overrides.json GAME_SMSG "40" must still name AGENT_STOP_MOVING at
+  high confidence, or the arm's mechanism story moved and the check goes
+  red), the exact wire shape round-tripped through the real codec (6 bytes,
+  `[0x0028, player]`, zero residual — "a wrong ANSWER SHAPE from the server
+  would be this file's"), and the source locks: ONE send site gated on
+  STOP_ANSWER, default None, main() routing the parsed MODE into the
+  composition matrix so the refusals cannot be dead letters. Floor 43),
   `toolkit/authsrv/test_killwindow.py` (the kill window, checked against
   ArenaNet's own kills. Our server sent one message when an agent died —
   `0x00F1` with the death bit — where the real service sends three: status,

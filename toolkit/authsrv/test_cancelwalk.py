@@ -19,9 +19,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
 import checks  # noqa: E402
 
-# FLOOR 29, from the green run of 2026-08-24 that landed R4's stop modifier
-# (24 when the file carried R1-R3 alone).
-LEDGER = checks.Ledger("cancelwalk arms", floor=29)
+# FLOOR 43, from the green run of 2026-08-24 that landed R6's --stop-answer
+# section (29 with R1-R4's arms alone; 24 when the file carried R1-R3).
+LEDGER = checks.Ledger("cancelwalk arms", floor=43)
 check = LEDGER.ok
 
 PLAYER = 1
@@ -190,12 +190,125 @@ def section_handler_wiring():
           "what keeps this from being --stop-echo (REFUTED) under a new name")
 
 
+def section_stop_answer():
+    import authsrv
+
+    print("6. R6 --stop-answer: parse, composition, wire shape, wiring")
+    # Parse. Same contract as parse_cancel_answer: a mistyped arm must not
+    # run the shipped default under an experiment's name.
+    check(authsrv.parse_stop_answer(None) == (None, None),
+          "no flag parses to no arm, no refusal")
+    check(authsrv.parse_stop_answer("ack") == ("ack", None),
+          "R6: ack")
+    m, why = authsrv.parse_stop_answer("repin")
+    check(m is None and why is not None and "--stop-echo" in why,
+          "repin is refused as DELIBERATELY UNBUILT, and the refusal names "
+          "the refuted flag whose wire effect it would resurrect -- the "
+          "licensing decision lives in the refusal, where a cold session "
+          "trips over it", f"{why!r}")
+    m, why = authsrv.parse_stop_answer("akc")
+    check(m is None and why is not None and "ack" in why,
+          "a typo'd arm is refused LOUDLY and the refusal names the real "
+          "arm", f"{why!r}")
+    # Composition. R6 is registered against the SHIPPED configuration and
+    # against ONE lever per run.
+    why, _ = authsrv.zero_lead_composition(zero_lead=False, stop_answer="ack")
+    check(why is not None and "--stop-answer requires --zero-lead" in why,
+          "without --zero-lead the run answers a question nobody "
+          "registered -- refused", f"{why!r}")
+    why, _ = authsrv.zero_lead_composition(zero_lead=True, stop_answer="ack",
+                                           cancel_answer="suppress")
+    check(why is not None and "--stop-answer and --cancel-answer" in why,
+          "with --cancel-answer the run changes two levers and could "
+          "attribute its outcome to neither -- refused", f"{why!r}")
+    why, notes = authsrv.zero_lead_composition(zero_lead=True,
+                                               stop_answer="ack")
+    check(why is None and any("R6" in n and "DIAGNOSTIC" in n
+                              for n in notes),
+          "allowed with --zero-lead, and the startup note names R6 and its "
+          "diagnostic-only status", f"notes={notes}")
+    why, _ = authsrv.zero_lead_composition(zero_lead=False,
+                                           stop_answer="ack",
+                                           cancel_answer="suppress")
+    check(why is not None and "--stop-answer and --cancel-answer" in why,
+          "all three flags at once gets the PAIRWISE refusal, not "
+          "requires-zero-lead -- 'you passed two levers' is the more useful "
+          "thing to be told, the plane/arrival pair's own precedent",
+          f"{why!r}")
+    # The constant, tied to the schema rather than restated beside it.
+    check(authsrv.GAME_SMSG_AGENT_STOP_MOVING == 0x0028,
+          "the constant is s2c 0x0028")
+    import json
+    here = os.path.dirname(os.path.abspath(authsrv.__file__))
+    with open(os.path.join(here, "..", "..", "schema", "overrides.json"),
+              encoding="utf-8") as fh:
+        row = json.load(fh)["channels"]["GAME_SMSG"]["40"]
+    check(row.get("name") == "AGENT_STOP_MOVING"
+          and row.get("name_confidence") == "high",
+          "the schema row this arm sends is the high-confidence "
+          "AGENT_STOP_MOVING -- if the name or confidence moves, this arm's "
+          "mechanism story moves with it and this check goes red",
+          f"row name={row.get('name')!r}")
+    # Wire shape. "A wrong ANSWER SHAPE from the server would be this
+    # file's" (module docstring) -- encode THE BUILDER'S OWN OUTPUT, not a
+    # literal this file typed for itself: a mutation pass planted
+    # [PLAYER, 0] at the send site and a literal-encoding version of this
+    # check stayed green. The send routes through agents.agent_stop_moving,
+    # this check drives that same builder, and the source lock below pins
+    # the send to it -- so corrupting the payload now reddens one of the
+    # three.
+    import agents
+    body = agents.agent_stop_moving(PLAYER)
+    check(body == [PLAYER],
+          "the builder emits exactly [agent] -- one field, no destination, "
+          "no plane, no speed, which is the whole licensing argument",
+          f"{body}")
+    try:
+        agents.agent_stop_moving(0)
+        check(False, "agent id 0 must raise -- it resolves no agent and the "
+              "halt silently no-ops")
+    except ValueError:
+        check(True, "agent id 0 raises ValueError rather than building a "
+              "silent no-op")
+    sys.path.insert(0, os.path.join(here, "..", "schema"))
+    import codec
+    c = codec.Codec(overrides=os.path.join(here, "..", "..", "schema",
+                                           "overrides.json"))
+    wire = c.encode("GAME_SMSG", 0x0028, body)
+    check(len(wire) == 6,
+          "the ack is 6 bytes -- header + one agent dword, nothing else",
+          f"{wire.hex()}")
+    op, vals, used = c.decode_one("GAME_SMSG", wire)
+    check(op == 0x0028 and vals[1] == PLAYER and used == 6,
+          "and it decodes back to [0x0028, player] with zero residual",
+          f"({op:#06x}, {vals}, {used})")
+    # Wiring. The send site exists once, gated on the global, inside the
+    # 0x0047 arm -- and the general stop arm stays otherwise silent.
+    src = open(os.path.join(here, "authsrv.py"), encoding="utf-8").read()
+    check(src.count('if STOP_ANSWER == "ack":') == 1
+          and src.count("send(GAME_SMSG_AGENT_STOP_MOVING,") == 1
+          and src.count("agents.agent_stop_moving(PLAYER_AGENT_ID)") == 1,
+          "ONE gate, ONE send call, and the send's payload comes from the "
+          "builder the wire-shape check above drives -- a gate with the "
+          "send deleted, a second site, or a hand-built payload the check "
+          "never sees would each redden this")
+    check("STOP_ANSWER = None" in src,
+          "the global defaults to None -- defaults are an owner ruling in "
+          "this repo and no diagnostic ships on")
+    check("_sa_mode, _sa_refusal = parse_stop_answer(a.stop_answer)" in src
+          and "stop_answer=_sa_mode)" in src,
+          "main() parses the flag through the pure parser and hands the "
+          "MODE to the composition matrix -- the refusals above cannot fire "
+          "on a flag main() never routes")
+
+
 def main():
     section_parse()
     section_lead_formula()
     section_composition()
     section_hit_kind()
     section_handler_wiring()
+    section_stop_answer()
     return LEDGER.verdict()
 
 
