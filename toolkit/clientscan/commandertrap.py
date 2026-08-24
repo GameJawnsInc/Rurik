@@ -315,6 +315,36 @@ kernel32.CreateProcessW.argtypes = [
     ctypes.POINTER(STARTUPINFOW), ctypes.POINTER(PROCESS_INFORMATION)]
 kernel32.CreateProcessW.restype = wintypes.BOOL
 
+# THREAD ENUMERATION. Attaching to a RUNNING process gave us one thread, and a
+# hardware breakpoint is per-thread state, so the rest were blind spots that
+# looked like quiet code. Toolhelp is the ground truth the debug loop is not.
+TH32CS_SNAPTHREAD = 0x00000004
+INVALID_HANDLE_VALUE = wintypes.HANDLE(-1).value
+#: GET_CONTEXT | SET_CONTEXT | QUERY_INFORMATION -- exactly what arming needs.
+THREAD_DR_ACCESS = 0x0008 | 0x0010 | 0x0040
+
+
+class THREADENTRY32(ctypes.Structure):
+    _fields_ = [("dwSize", wintypes.DWORD),
+                ("cntUsage", wintypes.DWORD),
+                ("th32ThreadID", wintypes.DWORD),
+                ("th32OwnerProcessID", wintypes.DWORD),
+                ("tpBasePri", ctypes.c_long),
+                ("tpDeltaPri", ctypes.c_long),
+                ("dwFlags", wintypes.DWORD)]
+
+
+kernel32.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
+kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+kernel32.Thread32First.argtypes = [wintypes.HANDLE,
+                                   ctypes.POINTER(THREADENTRY32)]
+kernel32.Thread32First.restype = wintypes.BOOL
+kernel32.Thread32Next.argtypes = [wintypes.HANDLE,
+                                  ctypes.POINTER(THREADENTRY32)]
+kernel32.Thread32Next.restype = wintypes.BOOL
+kernel32.OpenThread.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+kernel32.OpenThread.restype = wintypes.HANDLE
+
 
 class TrapError(Exception):
     """Refusing to arm, or refusing to answer. Never a half-measurement."""
@@ -388,6 +418,8 @@ class HwTrap:
         self.capped = set()
         # Filled by snapshot_coverage() at the end of pump().
         self.coverage = None
+        self.adopted = None       # (threads the process had, newly armed)
+        self._opened = []         # thread handles WE opened, ours to close
         self._getctx = None
         self._setctx = None
 
@@ -483,6 +515,48 @@ class HwTrap:
             return None
         return (ctx.Dr0, ctx.Dr1, ctx.Dr2, ctx.Dr3, ctx.Dr7)
 
+    def adopt_existing_threads(self):
+        """Arm every thread the process ALREADY has, not just the ones the
+        debug loop reports.
+
+        MEASURED 2026-08-23: after attaching to a running client, `self.threads`
+        held **one** thread. Every hit this arc has ever recorded came from
+        that one, which reads as "the composite work is single-threaded" and is
+        equally consistent with "we watched one thread". A hardware breakpoint
+        is per-THREAD state, so an unarmed thread is a silent blind spot, and
+        the claims it silently protects are the dangerous ones -- `cachesame`
+        fired zero across seven runs, and `0x0082EDA0`'s two exits were both
+        "silent" while a row changed underneath them.
+
+        Called from inside the debug loop, where the process is frozen, so the
+        contexts can be written safely.
+        """
+        found, armed = 0, 0
+        snap = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0)
+        if snap == INVALID_HANDLE_VALUE:
+            return 0, 0
+        try:
+            te = THREADENTRY32()
+            te.dwSize = ctypes.sizeof(THREADENTRY32)
+            ok = kernel32.Thread32First(snap, ctypes.byref(te))
+            while ok:
+                if te.th32OwnerProcessID == self.pid:
+                    found += 1
+                    tid = te.th32ThreadID
+                    if tid not in self.threads:
+                        h = kernel32.OpenThread(THREAD_DR_ACCESS, False, tid)
+                        if h:
+                            self.threads[tid] = h
+                            self._opened.append(h)
+                            if self._arm(h):
+                                armed += 1
+                te.dwSize = ctypes.sizeof(THREADENTRY32)
+                ok = kernel32.Thread32Next(snap, ctypes.byref(te))
+        finally:
+            kernel32.CloseHandle(snap)
+        self.adopted = (found, armed)
+        return found, armed
+
     def snapshot_coverage(self):
         """Per thread: do the debug registers ACTUALLY hold our addresses?
 
@@ -547,6 +621,13 @@ class HwTrap:
                 self.addrs = list(self.on_create(self, info))
             self.threads[ev.dwThreadId] = info.hThread
             self._arm(info.hThread)
+            # The process is FROZEN inside a debug event, so this is the safe
+            # moment to take in every thread the debug loop did not report.
+            # Attaching to a running client gave us exactly ONE.
+            try:
+                self.adopt_existing_threads()
+            except Exception:                                # noqa: BLE001
+                self.adopted = None
             if info.hFile:
                 kernel32.CloseHandle(info.hFile)
             return DBG_CONTINUE
@@ -671,6 +752,9 @@ class HwTrap:
         except Exception:
             pass
         kernel32.DebugActiveProcessStop(self.pid)
+        for h in self._opened:
+            kernel32.CloseHandle(h)
+        self._opened = []
         self.attached = False
 
 
@@ -1217,6 +1301,10 @@ def _report(sites, hits, base, out=sys.stdout, trap=None):
         else:
             w(f"  threads armed and VERIFIED     {cov['armed']} of "
               f"{cov['threads']}\n")
+            ad = getattr(trap, "adopted", None)
+            if ad:
+                w(f"  threads the PROCESS had        {ad[0]} "
+                  f"({ad[1]} adopted beyond the debug loop's)\n")
             for tid, why in cov["bad"][:8]:
                 w(f"      tid {tid}: {why}\n")
             if len(cov["bad"]) > 8:
