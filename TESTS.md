@@ -6138,7 +6138,16 @@ Every one of these, in the order they were written:
   thread missing a site, reports an unreadable context as unreadable
   rather than as armed, and `_report` prints **NOT SAMPLED -- a zero hit
   count from this run is not evidence of absence** when no snapshot
-  exists. The four checks run against a fake trap with no process at all.
+  exists. The checks run against a fake trap with no process at all.
+  §7 grew TWO more on 2026-08-23, and they close a hole in the coverage
+  half itself: coverage was sampled only at ATTACH, so a run that started
+  covered and lost its registers at hit one printed a healthy `10 of 10`
+  all the way through -- which is exactly what the resume path did to the
+  row watch for three runs. `pump()` now takes a SECOND sample at the end,
+  while the process is still alive; the two are kept in separate fields so
+  one cannot be printed twice, and a shortfall makes `_report` say
+  **COVERAGE WAS LOST DURING THE RUN** above the hit counts. Both are
+  broken on purpose against the fake trap.
   **§8 is the DATA WATCHPOINT** -- DR R/W = 01 instead of 00, which §1's own
   check calls out as the silent failure mode of a wrong R/W field, now made
   the deliberate case. It pins the encoding per SLOT (a write watch in slot
@@ -6148,9 +6157,28 @@ Every one of these, in the order they were written:
   not have, and **an unaligned address**, which is the important one: a
   misaligned DR does not error, it watches the wrong bytes and reports
   silence, the worst possible failure for an instrument whose job is to
-  catch a rare write. Floor 26 = the mandatory core (§1+§5+§6+§7+§8);
-  §§2-4 need the vault and a 32-bit Windows and SKIP with their reason; a
-  whole green run is 51, ~6s),
+  catch a rare write. **§9 exists because a "fix" was audited and turned out
+  not to be one, and it is the shape of check that would have caught it.**
+  On 2026-08-23 `adopt_existing_threads` was added against the reading
+  "after attaching to a running client, `self.threads` held ONE thread" --
+  sampled inside the CREATE_PROCESS handler, the FIRST debug event after
+  attach, where one thread is what you see whether or not the OS goes on to
+  deliver a synthetic CREATE_THREAD per pre-existing thread. It does deliver
+  them. §9 starts a 32-bit `cmd.exe` normally (the client's own bitness --
+  `_arm` writes a `WOW64_CONTEXT`, so a 64-bit target would answer the
+  enumeration half and silently fail the arming half), waits for it to reach
+  several threads, requires **>= 3 as a positive control** (a single-threaded
+  target agrees with both hypotheses and makes the section vacuous), then
+  attaches **with adoption disabled** and requires the debug loop to reach
+  all of them unaided, every one verified holding the armed address, with no
+  arming failures and coverage intact at the END of the run. The last check
+  is the pointed one: on the same target with adoption ON it still reports
+  `(5, 4) found, newly armed` -- so that second number is a count of threads
+  the loop had not ANNOUNCED yet, never a count of unwatched ones, and the
+  misread is reproduced on demand rather than argued about. Full audit:
+  `studies/heroes/FINDINGS.md` §39. Floor 31 = the mandatory core
+  (§1+§5+§6+§7+§8); §§2-4 and §9 need the vault and a 32-bit Windows and SKIP
+  with their reason; a whole green run is 71, ~20s),
   `toolkit/clientscan/test_compositetrap.py` (**the composite pipeline's runtime
   instrument, checked without a client** — `compositetrap.py` is the probe for
   playercomposite §4.12 ("nothing here was checked against a running client"),

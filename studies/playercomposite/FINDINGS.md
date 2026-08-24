@@ -1803,7 +1803,27 @@ The writer outside `0x0082EDA0` (new, and the sharpest); what triggers the
 wire-ordered instances (movement refuted, still unnamed); `row+0x08`; and the
 third kind of type-45 id, which remains a weak experiment.
 
-## 9.18 The trap was watching ONE thread of ten — and the writer outside `0x0082EDA0` survives the correction (2026-08-23)
+## 9.18 ~~The trap was watching ONE thread of ten~~ — and the writer outside `0x0082EDA0` survives the correction (2026-08-23)
+
+> ⚠ **THIS SECTION'S HEADLINE IS WRONG AND IS RETRACTED. The trap was watching
+> every thread all along.** `DebugActiveProcess` *does* hand the debug loop its
+> pre-existing threads, as synthetic `CREATE_THREAD` events; the "one thread"
+> below was sampled inside the `CREATE_PROCESS` handler, the first event after
+> attach, and cannot separate *"the loop never reports them"* from *"the loop
+> had not reported them yet"*. Measured against a 32-bit WOW64 target with
+> adoption disabled: **4 of 4 threads reached unaided, all 4 verified holding
+> the armed address**, while adoption on the same target still reported
+> `(5, 4)` — the misread reproduced on demand. Full audit:
+> [studies/heroes/FINDINGS.md](../heroes/FINDINGS.md) §39, pinned by
+> `test_commandertrap.py` §9.
+>
+> **What this changes below:** the "1 thread vs 10 threads" table compares two
+> fully-covered configurations, so it is a *replication*, not a coverage
+> correction — and the inference it was used for, "the composite work is
+> single-threaded", is **withdrawn as unsupported**. What it does not change:
+> every count in the table, `cachesame`'s zero, the silent write exits, and the
+> conclusion that a writer exists outside `0x0082EDA0` — which §9.20 then found.
+> Nothing in §9.6–§9.17 was ever unwitnessed and none of it needed re-running.
 
 §9.17 claimed `m_slotItemData` has a writer outside `0x0082EDA0`, on the
 strength of a row going **91 → 90** with both write exits armed and silent.
@@ -1811,7 +1831,7 @@ Before hunting that writer I went looking for it statically, failed, and then
 asked the question that should have come first: **was the instrument actually
 watching?**
 
-### The answer was no, and it had never been asked
+### ~~The answer was no~~, and it had never been asked
 
 `armed_now()` has existed since `commandertrap.py` was written and was called
 only from its own test. **No run had ever verified its own debug registers.**
@@ -1825,24 +1845,28 @@ said:
 threads armed and VERIFIED     0 of 1
 ```
 
-**One thread.** Every hit this arc has ever recorded came from that one, which
-reads as "the composite work is single-threaded" and is equally consistent
-with "we watched one thread". A hardware breakpoint is per-THREAD state, so
-the other threads were blind spots.
+**One thread** — and worse than stated at the time: that sample ran at
+`detach()`, *after* the client exited, by which point every `EXIT_THREAD` event
+had already popped its thread from the dict. The "1" was residue, not a live
+count, which the last subsection of this entry notices without following it
+through. ⚠ It was read as "a hardware breakpoint is per-thread state, so the
+other threads were blind spots". **That reading is retracted** — see the banner.
 
-`DebugActiveProcess` on an already-running process does not hand the debug
-loop its pre-existing threads. `adopt_existing_threads()` enumerates the real
-list with Toolhelp32, opens what the loop missed with
-`GET_CONTEXT|SET_CONTEXT|QUERY_INFORMATION` and arms it, from inside the
-CREATE_PROCESS event where the process is frozen. On the next run:
+`adopt_existing_threads()` enumerates the real list with Toolhelp32, opens what
+the loop had not yet announced with `GET_CONTEXT|SET_CONTEXT|QUERY_INFORMATION`
+and arms it, from inside the CREATE_PROCESS event where the process is frozen.
+On the next run:
 
 ```
-threads the PROCESS had        10 (9 adopted beyond the debug loop's)
+threads the PROCESS had        10 (9 armed early, before the loop announced them)
 ```
 
-**Ten threads. Nine of them unwatched, for this entire arc.**
+⚠ This line used to read *"9 adopted beyond the debug loop's"*, in the report
+and here, and that wording is what carried the error: it asserts the loop would
+never have had them. It would have, within a few events. **Ten threads, and all
+ten were watched either way.**
 
-### What ten-thread coverage changed: nothing, and that is the result
+### What ten-thread coverage changed: nothing — and the reason is not the one given
 
 Re-running the identical probe with all ten armed:
 
@@ -1853,9 +1877,13 @@ Re-running the identical probe with all ten armed:
 | cachesame | 0 | **0** |
 | clear | 7 | **7** |
 
-Identical. So the composite work *is* single-threaded, and every count this
-arc has reported stands — but it stands on evidence now rather than on luck.
-**`cachesame`'s zero is real**, witnessed across ten threads: path A is the
+Identical — and every count this arc has reported stands. ⚠ But the conclusion
+drawn here, *"so the composite work **is** single-threaded"*, is **WITHDRAWN as
+unsupported**: both columns were fully covered, so this table is a clean
+replication of the same measurement and says nothing about how many threads the
+work uses. The direct check is free and has never been read — `_report` prints
+`tid` on every hit line. **`cachesame`'s zero is real**, witnessed across ten
+threads (and, per §39, across ten in the earlier runs too): path A is the
 weapon-slot branch (`test ebx,ebx` on the slot argument at `0x0082F081`) and
 armour never takes it.
 
@@ -1893,20 +1921,28 @@ not started.
 
 ### What this qualifies, and the asymmetry that matters
 
-Every "fired zero times" and "never requested" in §9.6–§9.17 was measured on
-one thread of ten. The re-run above restores the ones this probe exercises;
-the others are *unwitnessed rather than wrong*, and re-running any of them now
-costs one run each.
+⚠ **RETRACTED IN FULL.** This paragraph read: *"Every 'fired zero times' and
+'never requested' in §9.6–§9.17 was measured on one thread of ten … the others
+are unwitnessed rather than wrong, and re-running any of them now costs one run
+each."* They were measured on **every** thread, the same as the re-run, and
+none of them needs re-running. The sentence also condemned four headline nulls
+in `studies/heroes/FINDINGS.md` — §27, §33, §34, §36 — which is what forced the
+audit that overturned it (§39 there). Nothing was re-run and nothing needed to
+be.
 
 **The POSITIVE results are untouched.** A hit is a hit: every prediction those
 runs CONFIRMED was confirmed by something firing, and an unarmed thread cannot
 manufacture a hit. Only the nulls needed the witness — which is exactly the
 distinction [[feedback-zero-exposure-is-not-a-null]] draws, applied to the
-instrument instead of to an experiment.
+instrument instead of to an experiment. That asymmetry is the durable part of
+this entry and it is the reason the retraction above is cheap: **an
+instrument-doubt scare can only ever touch the nulls**, so the blast radius was
+bounded before the audit started.
 
-This session has now found **three** zeros that needed a witness — `cachesame`
-twice, and the silent write exits — and this is the one that produced the
-other two.
+⚠ And the count in this entry's last line — *"three zeros that needed a
+witness"* — is now **one**: the row watch, killed by the DR-restore bug (§9.20),
+which was a real defect. `cachesame`'s zero was never in doubt and the silent
+write exits were a true reading of a genuinely silent pair.
 
 ### A second timing bug, caught by its own output
 
@@ -1979,7 +2015,13 @@ WATCH: a write-watch site was armed but NEVER GIVEN AN ADDRESS
 ```
 
 Which is the instrument declining to be read as a finding. Coverage read
-**10 of 10** threads verified, so §9.18's fix is holding.
+**10 of 10** threads verified. ⚠ That was written as "so §9.18's fix is
+holding"; per §9.18's banner there was nothing to fix, and 10 of 10 is what any
+run would have read. The line worth keeping is the other one: this sample was
+taken at ATTACH, and an attach-time sample cannot see a register lost later —
+which is exactly what was about to happen. `pump()` now takes a second sample at
+the end of the run and prints **COVERAGE WAS LOST DURING THE RUN** on a
+shortfall.
 
 ### Status, stated plainly
 

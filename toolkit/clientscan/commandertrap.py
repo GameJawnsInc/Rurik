@@ -436,8 +436,14 @@ class HwTrap:
         # not totals", which is false and is the kind of label that gets a
         # correct measurement re-litigated later.
         self.capped = set()
-        # Filled by snapshot_coverage() at the end of pump().
+        # Filled by snapshot_coverage() at attach, and AGAIN at the end of
+        # pump(). Two samples, because they answer different questions: the
+        # first says the run started covered, the second says it STAYED
+        # covered. A run can pass the first and lose its registers at hit one
+        # -- which is exactly what the resume path did to the row watch -- and
+        # an attach-time sample reads "10 of 10" all the way through.
         self.coverage = None
+        self.coverage_end = None
         self.adopted = None       # (threads the process had, newly armed)
         self._opened = []         # thread handles WE opened, ours to close
         # Per slot, parallel to `addrs`: "x" execute, "w" write-watch; and the
@@ -618,17 +624,35 @@ class HwTrap:
                       f"thread(s), VERIFIED live on {live}")
 
     def adopt_existing_threads(self):
-        """Arm every thread the process ALREADY has, not just the ones the
-        debug loop reports.
+        """Arm every thread the process ALREADY has, a few events EARLY.
 
-        MEASURED 2026-08-23: after attaching to a running client, `self.threads`
-        held **one** thread. Every hit this arc has ever recorded came from
-        that one, which reads as "the composite work is single-threaded" and is
-        equally consistent with "we watched one thread". A hardware breakpoint
-        is per-THREAD state, so an unarmed thread is a silent blind spot, and
-        the claims it silently protects are the dangerous ones -- `cachesame`
-        fired zero across seven runs, and `0x0082EDA0`'s two exits were both
-        "silent" while a row changed underneath them.
+        BELT AND BRACES, NOT A BUG FIX -- and this docstring used to say
+        otherwise, so read the correction before trusting either version.
+
+        It was added on the strength of "after attaching to a running client,
+        `self.threads` held **one** thread", and that number was sampled inside
+        the CREATE_PROCESS handler -- the FIRST debug event after attach. One
+        thread at that instant is what you see WHETHER OR NOT the OS goes on to
+        deliver a CREATE_THREAD event per pre-existing thread. The number could
+        not tell "the loop never reports them" from "the loop had not reported
+        them yet", and it was read as the first.
+
+        MEASURED 2026-08-23, against a 32-bit WOW64 target -- the client's own
+        configuration -- with this function disabled: the loop reached **4 of 4**
+        threads on its own and `snapshot_coverage` read every one of them
+        holding the armed address. Windows synthesises the CREATE_THREAD events
+        on attach. The same run, with this function back on, still reported
+        "(5, 4) found, newly armed", because it runs before those events arrive
+        -- so that second number is a count of threads the loop had not
+        ANNOUNCED yet, never a count of unwatched ones. `test_commandertrap.py`
+        section 9 pins both halves.
+
+        What it is still worth: it closes the microseconds between
+        ContinueDebugEvent(CREATE_PROCESS) and the synthetic CREATE_THREAD
+        events, during which a pre-existing thread is briefly running unarmed,
+        and it covers a thread whose CREATE event is missed for any other
+        reason. Cheap, and `snapshot_coverage` is what actually makes coverage
+        auditable.
 
         Called from inside the debug loop, where the process is frozen, so the
         contexts can be written safely.
@@ -659,7 +683,7 @@ class HwTrap:
         self.adopted = (found, armed)
         return found, armed
 
-    def snapshot_coverage(self):
+    def snapshot_coverage(self, store="coverage"):
         """Per thread: do the debug registers ACTUALLY hold our addresses?
 
         `armed_now()` has existed since this module was written and was called
@@ -683,9 +707,10 @@ class HwTrap:
             else:
                 bad.append((tid, f"missing {[hex(m) for m in missing]} "
                                  f"dr7=0x{got[4]:X}"))
-        self.coverage = {"threads": len(self.threads), "armed": ok,
-                         "bad": bad, "want": sorted(want)}
-        return self.coverage
+        cov = {"threads": len(self.threads), "armed": ok,
+               "bad": bad, "want": sorted(want)}
+        setattr(self, store, cov)
+        return cov
 
     def _disarm_all(self):
         keep, self.addrs = self.addrs, []
@@ -709,6 +734,15 @@ class HwTrap:
                 raise TrapError(f"WaitForDebugEvent failed: WinError {err}")
             status = self._dispatch(ev)
             kernel32.ContinueDebugEvent(ev.dwProcessId, ev.dwThreadId, status)
+        # SAMPLE AGAIN, HERE. The attach-time sample cannot see a register lost
+        # mid-run, and `detach()` is too late -- by then the client has usually
+        # exited and every context reads "unreadable", which looks like a
+        # coverage failure and is only a dead process.
+        if not self.exited and self.threads:
+            try:
+                self.snapshot_coverage(store="coverage_end")
+            except Exception:                                # noqa: BLE001
+                self.coverage_end = None
         return self.hits
 
     def _dispatch(self, ev):
@@ -1483,11 +1517,29 @@ def _report(sites, hits, base, out=sys.stdout, trap=None):
               "count from this run is not evidence of absence\n")
         else:
             w(f"  threads armed and VERIFIED     {cov['armed']} of "
-              f"{cov['threads']}\n")
+              f"{cov['threads']}  (at attach)\n")
             ad = getattr(trap, "adopted", None)
             if ad:
+                # WORDED CAREFULLY. This line used to read "(N adopted beyond
+                # the debug loop's)", which says the loop would never have had
+                # them -- and that reading cost a whole re-audit. Adoption runs
+                # inside CREATE_PROCESS, BEFORE the OS delivers its synthetic
+                # CREATE_THREAD events, so its second number is a count of
+                # threads not yet ANNOUNCED, not of threads left unwatched.
                 w(f"  threads the PROCESS had        {ad[0]} "
-                  f"({ad[1]} adopted beyond the debug loop's)\n")
+                  f"({ad[1]} armed early, before the loop announced them)\n")
+            end = getattr(trap, "coverage_end", None)
+            if end is None:
+                w("  coverage AT THE END            NOT SAMPLED -- the run "
+                  "started covered; whether it stayed covered is unknown\n")
+            else:
+                w(f"  threads armed and VERIFIED     {end['armed']} of "
+                  f"{end['threads']}  (at the end of the run)\n")
+                if end["armed"] < end["threads"]:
+                    w("      COVERAGE WAS LOST DURING THE RUN -- a zero hit "
+                      "count from this run is not evidence of absence\n")
+                    for tid, why in end["bad"][:8]:
+                        w(f"      tid {tid}: {why}\n")
         # WATCHPOINT STATE, in the report rather than only on stdout -- a
         # live console scrolls and gets truncated, and "the watch never
         # fired" is worth nothing without "the watch was verified live".

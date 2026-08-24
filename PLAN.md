@@ -1705,7 +1705,26 @@ the probe's resets it picked a five-slot wire-ordered instance over the
 eight-slot world one and printed "S2 REFUTED the other way" for a run whose
 world instance shows the permutation plainly; it scores the PEAK now.
 `test_compositetrap` 76 -> 80.
-**AND THE INSTRUMENT WAS WATCHING ONE THREAD OF TEN (9.18).** Before hunting
+⚠ **RETRACTED 2026-08-23 by heroes 39 — the trap was watching EVERY thread all
+along, and none of the paragraph below's "unwitnessed" nulls needed re-running.**
+`DebugActiveProcess` DOES hand the loop its pre-existing threads, as synthetic
+CREATE_THREAD events; the `0 of 1` was sampled at `detach()` after the client
+exited, and the `10 threads, 9 adopted` inside the CREATE_PROCESS handler before
+those events arrive. Measured with adoption disabled against a 32-bit WOW64
+target: **4 of 4 reached unaided, all 4 verified holding the armed address**,
+while adoption on the same target still reported `(5, 4)` — the misread
+reproduced on demand (`test_commandertrap` 9). Everything the paragraph reports
+as a RESULT stands (the counts, `cachesame`'s zero, the surviving writer, which
+9.20 then found); what does not is the coverage diagnosis, the "one run each to
+restore" debt, and the inference **"the composite work IS single-threaded"**,
+which compared two fully-covered configurations and is withdrawn as
+unsupported. `adopt_existing_threads` is kept as belt-and-braces, not as a fix.
+The audit's real yield is elsewhere: coverage was sampled only at ATTACH, so a
+run that lost its registers at hit one still printed `10 of 10` — `pump()` now
+samples again at the end and says **COVERAGE WAS LOST DURING THE RUN**.
+`test_commandertrap` 63 -> 71, floor 29 -> 31.
+
+**~~AND THE INSTRUMENT WAS WATCHING ONE THREAD OF TEN~~ (9.18).** Before hunting
 9.17's writer I asked whether the trap was actually watching, and it was not:
 `armed_now()` had existed since commandertrap was written, was called only
 from its own test, and **no run had ever verified its own debug registers** --

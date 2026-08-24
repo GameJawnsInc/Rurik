@@ -3194,3 +3194,114 @@ opt-in and the default path is byte-for-byte unchanged (with it off the party
 build extends exactly where it always did and the deferred list is empty).
 Whether the *retail* server avoids this problem by ordering, by a different
 message, or by never sending `0x0072` at all is **NOT FOUND**.
+
+## 39. THE RE-AUDIT: the coverage bug was NOT REAL, and every null in this arc stands (2026-08-23)
+
+`commandertrap.py` acquired two changes on 2026-08-23 while it was being used
+by the composite arc, and both were written up as fixes to bugs that had been
+biting this arc's runs for weeks. **One of them was not a bug.** This section is
+the audit, and it retracts the claim rather than the results.
+
+### What was claimed against this arc
+
+`studies/playercomposite/FINDINGS.md` §9.18, headline *"The trap was watching
+ONE thread of ten"*, concluded: *"Every 'fired zero times' and 'never
+requested' in §9.6–§9.17 was measured on one thread of ten … the others are
+unwitnessed rather than wrong."* `commandertrap` has exactly two consumers, and
+this arc is the other one — so the same sentence condemned §27's `count=0`,
+§33's *"the handler never runs"*, §34's NO SUBSCRIBER, and §36's dispatch-case-90
+zero. Four headline nulls, on an instrument this arc has already caught being
+broken twice (§33.8's WX86 exception codes and `EFLAGS.RF`, both of which would
+have produced *"the commander event is never raised"* out of nothing).
+
+### The measurement it rested on could not support it
+
+*"After attaching to a running client, `self.threads` held **one** thread."*
+That number was sampled inside the `CREATE_PROCESS_DEBUG_EVENT` handler — the
+**first** debug event after attach. One thread at that instant is what you see
+**whether or not** the OS goes on to deliver a `CREATE_THREAD_DEBUG_EVENT` for
+each pre-existing thread. The number cannot separate *"the loop never reports
+them"* from *"the loop had not reported them yet"*, and it was read as the
+first without the question being asked.
+
+Prediction registered before the run, and it was a prediction against my own
+claim: **the synthetic events do arrive.**
+
+### The run
+
+A 32-bit WOW64 target — the client's own configuration, and it has to be, since
+`_arm` writes a `WOW64_CONTEXT` — started normally, allowed to reach four
+threads, then attached to **with `adopt_existing_threads` disabled** so the
+debug loop had to answer for itself:
+
+```
+the target already has 4 threads before attach          (positive control)
+the debug loop reached ALL 4 of them UNAIDED
+every one of the 4 holds the armed address              (read back from DR0-DR7)
+0 threads refused SetThreadContext
+```
+
+And, on the same target in the same run, with adoption back on:
+
+```
+adopted = (5, 4)      found, newly armed
+```
+
+**Both at once.** Adoption runs inside `CREATE_PROCESS`, *before* the synthetic
+events arrive, so its second number is a count of threads the loop had not
+**announced** yet — never a count of threads left unwatched. The misread is
+reproduced on demand, which is what makes this a measurement rather than an
+argument.
+
+### Verdict, per claim
+
+| claim | status |
+|---|---|
+| "`DebugActiveProcess` does not hand the loop its pre-existing threads" | **REFUTED.** It does, every one. |
+| "nine of ten threads were unwatched, for this entire arc" | **REFUTED.** All ten were armed within the first few events. |
+| §27 `count=0`, §33 the handler never runs, §34 NO SUBSCRIBER, §36 case 90 | **STAND.** Never needed re-running. |
+| the DR-restore bug (the trap switching its own watch off) | **REAL** — and it could not reach this arc. See below. |
+
+**No heroes re-runs are needed and none were made.** The re-audit's whole cost
+was the offline run above.
+
+### The other change WAS a bug, and this arc escaped it by ordering
+
+`_exception` read the thread context, called `on_hit`, then wrote that context
+back to set `EFLAGS.RF`. `CONTEXT_FULL_READ` includes the debug registers, so
+the write **restored the pre-handler DRs** — undoing anything the handler armed.
+Measured: a watch armed from `on_hit` verified live on 51 threads and was found
+cleared at 50 of 50 later checks, `DR7` back to `0x15`.
+
+This arc arms nothing from inside a handler. Its deferred sites re-arm through
+`_arm_all()` at [`commandertrap.py:942`](../../toolkit/clientscan/commandertrap.py:942),
+which runs **after** the resume write and therefore wins. Verified by reading
+the order, not assumed. §33's deferred `lookup` site — whose entire job is to
+report "no subscriber", the most dangerous null in the arc — is on that path.
+
+### What this cost, and the one thing it bought
+
+Cost: a wrong docstring, a wrong FINDINGS headline in a neighbouring arc, and a
+re-audit. `adopt_existing_threads` itself is kept — it closes the microseconds
+between `ContinueDebugEvent(CREATE_PROCESS)` and the synthetic events, during
+which a pre-existing thread briefly runs unarmed — but it is no longer sold as
+a fix, and `test_commandertrap.py` §9 pins both halves so the number cannot be
+misread again.
+
+Bought: **`snapshot_coverage()` is the piece that mattered all along**, and the
+audit found it half-built. It sampled only at ATTACH, so a run that started
+covered and lost its registers at hit one printed `10 of 10` all the way
+through — which is precisely what the DR-restore bug did, undetected, for three
+runs. `pump()` now takes a second sample at the end, while the process is still
+alive, and a shortfall prints **COVERAGE WAS LOST DURING THE RUN** above the hit
+counts. That gap was real, it was in the instrument this arc depends on, and it
+was found by auditing a fix rather than by using one.
+
+### One inference does NOT survive, and it is not a null
+
+§9.18 also concluded *"the composite work **is** single-threaded"*, from the
+hit counts being identical between the "one thread" and "ten thread"
+configurations. Both configurations were fully covered, so that comparison
+compared nothing and the inference is **withdrawn** — not refuted, unsupported.
+The direct check is free and has simply never been read: `_report` prints
+`tid` on every hit line, so any future run answers it by inspection.

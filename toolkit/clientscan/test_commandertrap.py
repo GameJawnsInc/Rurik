@@ -39,15 +39,19 @@ sys.path.insert(0, TOOLKIT)
 sys.path.insert(0, HERE)
 import checks                                                   # noqa: E402
 
-# 14 = the MANDATORY core, counted from a real green run: 5 in section 1, 3 in
-# section 5, 6 in section 6, none of which need the vault or a 32-bit Windows.
-# A whole green run is 29; sections 2 (8), 3 (5) and 4 (2) declare skips instead,
-# which is `checks.py`'s own guidance -- "set the floor to its mandatory core and
-# let the optional sections declare skips."
-# Floor 14 = the mandatory core (§1+§5+§6); §§2-4 need the vault and a 32-bit
-# Windows and SKIP. §7's four coverage checks and §8's eight watchpoint
-# checks are process-free, so they raise the mandatory floor to 29.
-LEDGER = checks.Ledger("commandertrap", floor=29)
+# THE MANDATORY CORE, counted from a real green run (2026-08-23, 71 checks):
+#   §1  5   DR7 encoding                     process-free
+#   §5  3   the verdict's control gate       process-free
+#   §6  6   the capture decoders             process-free
+#   §7  5   coverage, both samples           process-free
+#   §8 12   the watchpoint's encoding        process-free
+#   -----   = 31, and that is the floor.
+# The rest need something this machine may not have and declare skips instead,
+# per `checks.py`'s own guidance: §2 (21) the vaulted 38833 client, §3 (7),
+# §3b (4), §4 (2) and §9 (6) a 32-bit `cmd.exe`. A whole green run is 71.
+# Ladder: 14 -> 26 -> 27 -> 29 -> 31, each step re-read off a green run and
+# never guessed.
+LEDGER = checks.Ledger("commandertrap", floor=31)
 
 WOW64_CMD = r"C:\Windows\SysWOW64\cmd.exe"
 
@@ -360,6 +364,35 @@ def main():
               "a thread whose context cannot be read is reported unreadable "
               "rather than counted as armed")
 
+    # TWO SAMPLES, and the second is the one an execute run never had. Coverage
+    # was sampled only at ATTACH, so a run that started covered and lost its
+    # registers at hit one -- which is what the resume path did to the row
+    # watch -- printed "10 of 10" all the way through. The watch re-check
+    # caught that for WATCHES only; execute slots had no equivalent.
+    ft = _FakeTrap([A], {11: (A, 0, 0, 0, 0x1)})
+    ft.snapshot_coverage()
+    ft._dr[11] = (0, 0, 0, 0, 0)          # the registers go away mid-run
+    ft.snapshot_coverage(store="coverage_end")
+    LEDGER.ok(ft.coverage["armed"] == 1 and ft.coverage_end["armed"] == 0,
+              "the two coverage samples are kept APART, so a run that started "
+              "covered and ended uncovered cannot report the first number "
+              "twice",
+              f"attach={ft.coverage} end={ft.coverage_end}")
+    buf2 = io.StringIO()
+    ct._report([], [], 0x00400000, out=buf2,
+               trap=type("T", (), {"bp_first": 0, "bp_second": 0,
+                                   "foreign_steps": 0, "other_exceptions": 0,
+                                   "arm_failures": 0, "resume_failures": 0,
+                                   "capped": set(), "oneshot": set(),
+                                   "adopted": None,
+                                   "coverage": ft.coverage,
+                                   "coverage_end": ft.coverage_end})())
+    LEDGER.ok("COVERAGE WAS LOST DURING THE RUN" in buf2.getvalue(),
+              "and the report SAYS SO, in those words, rather than printing a "
+              "healthy attach-time number above a set of hit counts nobody can "
+              "read",
+              buf2.getvalue())
+
     # ------------------------------------------------- data watchpoints
     print("== 8. the DATA watchpoint's encoding and its refusals ==")
     LEDGER.ok(ct.dr7_for(2) == 0b0101 and ct.dr7_for(2) >> 16 == 0,
@@ -468,7 +501,127 @@ def main():
               "and a report with NO coverage snapshot says so IN THOSE WORDS, "
               "rather than printing hit counts that read as complete")
 
+    # ---- 9. ATTACH REPORTS EVERY THREAD THE PROCESS ALREADY HAD -----------
+    print("\n9. attaching to a running process: does the loop see its threads?")
+    # WHY THIS SECTION EXISTS. On 2026-08-23 `adopt_existing_threads` was added
+    # against a MEASUREMENT -- "after attaching to a running client,
+    # `self.threads` held one thread" -- and that measurement was taken inside
+    # the CREATE_PROCESS handler, the FIRST debug event after attach. One thread
+    # at that instant is what you see WHETHER OR NOT the OS goes on to deliver a
+    # CREATE_THREAD event per pre-existing thread. The number could not tell
+    # "the loop never reports them" from "the loop had not reported them yet",
+    # and it was read as the first. It is the second: Windows synthesises the
+    # CREATE_THREAD events, the loop reaches every thread on its own, and no run
+    # in this repo was ever short of coverage. Pinned here so the claim is a
+    # measurement with a control rather than an inference from an event handler.
+    #
+    # The target is 32-bit, because that is what the client is and `_arm` writes
+    # a WOW64_CONTEXT -- a 64-bit target would answer the enumeration half and
+    # silently fail the arming half.
+    if not os.path.isfile(WOW64_CMD):
+        LEDGER.skip("section 9", "needs the 32-bit cmd.exe target")
+    else:
+        import subprocess
+        child = subprocess.Popen([WOW64_CMD, "/c", "ping -n 20 127.0.0.1 >nul"],
+                                 stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.DEVNULL)
+        try:
+            time.sleep(1.0)
+            before = _count_threads(ct, child.pid)
+            # THE POSITIVE CONTROL. A single-threaded target agrees with both
+            # hypotheses and would make every check below vacuous.
+            LEDGER.ok(before >= 3,
+                      f"the target already has {before} threads before attach",
+                      f"only {before} -- a target this thin cannot distinguish "
+                      f"'the loop saw them all' from 'there was one'")
+
+            base = {}
+
+            def on_create3(trap, info):
+                # The PE header. Never executed, so nothing can fire; the
+                # question is only whether the registers HOLD it.
+                base["addr"] = int(info.lpBaseOfImage)
+                return [base["addr"]]
+
+            t3 = ct.HwTrap(on_create=on_create3)
+            # ADOPTION OFF: let the debug loop answer for itself. With it on,
+            # every thread ends up armed either way and the section proves
+            # nothing about which mechanism did it.
+            t3.adopt_existing_threads = lambda: (0, 0)
+            t3.attach(child.pid)
+            try:
+                t3.pump(4.0)
+                seen = len(t3.threads)
+                cov = t3.snapshot_coverage()
+                fails = t3.arm_failures
+            finally:
+                t3.detach()
+
+            LEDGER.ok(seen >= before,
+                      f"AND THE DEBUG LOOP REACHED ALL {seen} OF THEM "
+                      f"UNAIDED -- the OS synthesises CREATE_THREAD on attach",
+                      f"the loop saw {seen} of {before}: pre-existing threads "
+                      f"are a blind spot after all, and every zero-hit reading "
+                      f"taken before adoption existed is unwitnessed")
+            LEDGER.ok(cov["armed"] == cov["threads"] and not cov["bad"],
+                      f"and every one of the {cov['threads']} holds the armed "
+                      f"address -- coverage is complete, read back from the "
+                      f"processor",
+                      f"armed {cov['armed']} of {cov['threads']}: {cov['bad']}")
+            LEDGER.ok(fails == 0,
+                      "with no arming failures on any of them",
+                      f"{fails} threads refused SetThreadContext")
+            end = t3.coverage_end
+            LEDGER.ok(end and end["armed"] == end["threads"] and end["threads"],
+                      f"and the END-OF-RUN sample says it STAYED covered "
+                      f"({end['armed'] if end else 0} of "
+                      f"{end['threads'] if end else 0}) -- taken by pump(), "
+                      f"while the process is still alive",
+                      f"coverage_end={end}")
+
+            # AND THE OTHER HALF: adoption still reports a large `armed` count,
+            # because it runs INSIDE the CREATE_PROCESS event before the
+            # synthetic ones arrive. That number is the one that was misread.
+            t4 = ct.HwTrap(on_create=on_create3)
+            t4.attach(child.pid)
+            try:
+                t4.pump(2.0)
+                adopted = t4.adopted
+            finally:
+                t4.detach()
+            LEDGER.ok(adopted and adopted[1] >= 1,
+                      f"while adoption reports {adopted} -- found, newly armed. "
+                      f"With the check above, that second number is NOT a count "
+                      f"of unwatched threads; it is a count of threads the loop "
+                      f"had not announced YET",
+                      f"adopted={adopted}: if it newly armed none, the misread "
+                      f"this section documents could not have happened and its "
+                      f"premise is wrong")
+        finally:
+            child.kill()
+
     return LEDGER.verdict()
+
+
+def _count_threads(ct, pid):
+    """Toolhelp32's count, as ground truth independent of the debug loop."""
+    import ctypes
+    n = 0
+    snap = ct.kernel32.CreateToolhelp32Snapshot(ct.TH32CS_SNAPTHREAD, 0)
+    if snap == ct.INVALID_HANDLE_VALUE:
+        return -1
+    try:
+        te = ct.THREADENTRY32()
+        te.dwSize = ctypes.sizeof(ct.THREADENTRY32)
+        ok = ct.kernel32.Thread32First(snap, ctypes.byref(te))
+        while ok:
+            if te.th32OwnerProcessID == pid:
+                n += 1
+            te.dwSize = ctypes.sizeof(ct.THREADENTRY32)
+            ok = ct.kernel32.Thread32Next(snap, ctypes.byref(te))
+    finally:
+        ct.kernel32.CloseHandle(snap)
+    return n
 
 
 if __name__ == "__main__":
