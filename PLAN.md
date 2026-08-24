@@ -1442,8 +1442,14 @@ a parked body and the treatment never reached the client. Unconfounded bonus:
 the freeze reproduces from a pure standstill, which **weakens H6** — an
 unclosed movement episode is not necessary for the freeze — and **strengthens
 H5** (the cast hold alone sets the suppress state). R6 arm code +
-`test_cancelwalk.py` §6 floor 46 stand, adversarially reviewed), R7 flag read
-at the edge (int3/trnhook). **R5 BUILT AND RAN** (Tier-1 decode-only field
+`test_cancelwalk.py` §6 floor 46 stand, adversarially reviewed), **R7 IS BUILT** — `toolkit/clientscan/gatetrace.py`, the hardware-breakpoint
+gate trace (Dr0–Dr3 in the NATIVE context, 64-bit debugger loop, read-only
+against the client, `PeekMessageW` control whose silence is rc 2 VOID rather
+than a null), guarded by `test_gatetrace.py` floor 42 whose §1 encodes every
+expected instruction byte FROM the module constants and matches the pinned
+image. **It is the only instrument left that can answer the arc** (§7.4e has
+its per-hypothesis predictions, registered before the run) and it awaits an
+elevated operator run. **R5 BUILT AND RAN** (Tier-1 decode-only field
 adds to `movetap`; capture `movetap-20260824T141620` + gamesrv `141556`,
 CANCELWALK.md §7.4c): the instrument paid for itself — **the §5 WIRE criterion
 was about to score a 182 u WARP as a walk** (F16), and the memory read says

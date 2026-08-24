@@ -834,6 +834,85 @@ failure exits differ in shape but **not** in return value — a gate bail
 (`0x0081ACFA`) returns 0, and the success path also returns 1 — so a hook must
 read the gate operands, not the result.
 
+### 7.4e R7 IS BUILT — `toolkit/clientscan/gatetrace.py`, predictions registered (2026-08-24)
+
+The instrument the arc has been narrowing toward since §7.2, and after §7.4d it
+is the only one left that can answer the question: every wire hypothesis is
+closed at value parity, and every field `movetap` samples matches across a
+frozen press and a walking one. The gate operands live on the controller — an
+object `movetap` does not resolve — and are read and discarded inside one
+frame, so they have to be caught at the instruction that reads them.
+
+**What it does.** Attaches a 64-bit debugger to the loopback client
+(`DebugActiveProcess` + `WaitForDebugEvent`, `DebugSetProcessKillOnExit(FALSE)`
+so detaching leaves the session alive), arms four hardware breakpoints in the
+**NATIVE** context, and on each applier entry reads `ecx` (the controller,
+witnessed by the function's own assert) and pulls both operands
+cross-process:
+
+| Dr | address | what it gives |
+|---|---|---|
+| Dr0 | `0x0081A8F0` applier entry | `[ctrl+0x10C]`, `byte[ctrl+0x64]`, and `mt` at `[esp+0x10]` |
+| Dr1 | `0x0081AD0F` | the shared bail for GATE A, B **and** C |
+| Dr2 | `0x0081ACFA` | the navmesh-empty exit |
+| Dr3 | `PeekMessageW` | **the control** |
+
+**The entry read is the measurement and the exits are the CHECK.** Both
+operands are read before the client has branched, so all three gates are
+evaluated here, in Python; the exit breakpoints then say which way it actually
+went, and a row where the two disagree prints `agrees: false` rather than being
+smoothed. That is a check the artifact can refute — a tool watching only the
+exits could never notice. Do **not** try to separate a gate bail from a success
+by the return value: measured, the bail (`0x0081AD0F`) and the success path
+**both return 1**, and only the navmesh exit returns 0.
+
+**The control is not optional, and it is inherited rather than invented.**
+`debugread.py`'s header records this route's own failure mode: a DLL-hosted
+vectored handler NEVER receives the hardware-breakpoint exception in a WOW64
+process (49 verified threads, zero hits, two commits of conclusions retracted),
+because the exception is raised 64-bit side and the CPU keeps Dr0–Dr7 in the
+NATIVE context, not the WOW64 shadow that `Wow64SetThreadContext` writes. So
+`PeekMessageW` — called every frame by any Windows game loop — occupies Dr3,
+and **a run whose control never fires is rc 2 VOID, never a null**: it cannot
+distinguish "the applier did not run" from "the breakpoints never worked". The
+control disarms itself after one hit so it cannot flood the loop.
+
+**Guard: `test_gatetrace.py`, floor 42 (33 on a bare machine).** Its §1 is the
+one that carries the file — every expected instruction byte is **encoded from
+the module's own constant** and matched against the pinned image, with a
+control that moves `OFF_STATUS` one dword and requires the match to break,
+because a wrong address here does not error: it returns a confident value that
+never changes, which is *exactly what a freeze looks like*. All seven addresses
+verified against build 38797 as this landed.
+
+**Predictions, registered before the run:**
+- **H5 (a controller bit suppresses the walk)** → at a FROZEN press,
+  `[ctrl+0x10C] & 0x100` is SET (GATE A) **or** `byte[ctrl+0x64] & 1` is SET
+  (GATE B), the row's `first_bail` names which, and the client leaves via
+  `gate-bail` (`agrees: true`). At a WALKING press in the same session, both
+  clear. **This is the single observation that settles H5, and it separates
+  H5's two bits from each other for the first time.**
+- **H7 (navmesh/path degeneracy)** → at a frozen press **all three gates are
+  clear** and the client leaves via `navmesh-empty`.
+- **Neither** → gates clear and no exit fires: the applier ran through and the
+  refusal is downstream of everything read here (the dedup at `0x0081AA5B`, or
+  ASYNC-MOVE-START itself), which is a new and narrower place to look.
+- **GATE C should never be the bail at a frozen press.** MOVE-DISPATCH tests
+  the same bit before sending `0x003D` (`0x008163BD`), and the press reached the
+  wire — so C bailing here would mean the two reads disagree within one frame,
+  a finding about the model rather than about the press. Recorded as a
+  falsifier of the reading, not of the hypotheses.
+
+**Protocol.** Loopback, Isle pin, shipped configuration (no diagnostic flag —
+the freeze must reproduce), walk-first as R5 established, ≥3 cancelled casts
+plus ordinary presses as the in-session control. Run `movetap` alongside if
+convenient; the two are independent. **The trace needs an elevated shell**
+(`DebugActiveProcess`), and the applier is not a per-frame function — one
+direct caller, 8 firings in R5's 60 s — so the loop is cheap.
+
+    python toolkit/clientscan/gatetrace.py --selftest       # first, no client
+    python toolkit/clientscan/gatetrace.py <pid> 180        # elevated
+
 ### 7.5 Measured dead this round — do not retry
 
 - `0x0027`/speed-base as differentiator, trigger, or fix (F8/F13) — and the
