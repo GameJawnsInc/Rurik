@@ -117,7 +117,7 @@ send(0x0029, [PLAYER_AGENT_ID, list(dest), dest_plane, state["plane"]])   # S3, 
 #                         lag p50 2.58 s). Do NOT build an unsolicited-grant channel.
 ```
 
-**Planes are `(dest_plane, cur_plane)`, never `(0, 0)`** — field 3 = destination plane, field 4 = current plane, closed from the binary three times (`FINDINGS:3364`, `:3428`, `studies/smsg/FINDINGS.md:130-135`); forcing 0 writes a wrong map index into `agent+0x80`. `authsrv.py:9987` already orders them correctly. `FAMILY_RATE` is **CONTESTED**; the decider is `movetap.py` on `agent+0x5C`/`+0x60` during sustained backpedalling, not the wire.
+**Planes are `(dest_plane, cur_plane)`, never `(0, 0)`** — field 3 = destination plane, field 4 = current plane, closed from the binary three times (`FINDINGS:3364`, `:3428`, `studies/smsg/FINDINGS.md:130-135`); forcing 0 writes a wrong map index into `agent+0x80`. `authsrv.py:9987` already orders them correctly. `FAMILY_RATE` is **CONTESTED**; the decider is `movetap.py` on `agent+0x5C`/`+0x60` during sustained backpedalling, not the wire — though the wire now carries one row's witness: `0x002B [0.66, 4]` answers the backpedal press at `20260824T074002` t=108.376 ([CANCELWALK.md](CANCELWALK.md) F4), agreeing with the table's 4:0.66. **And the stop arm's "NEVER `0x0028`" gained a caveat 2026-08-24**: right about the c2s side, but retail's s2c stop answer has a second form — a bare s2c `0x0028 [agent]` with no re-pin at t=65.095 of the same capture, selector unread (CANCELWALK-F5).
 
 **Four-variable delta from `--client-endpoint`. Do not run before the lead family; a bad result names none of the four.**
 
