@@ -1442,14 +1442,22 @@ a parked body and the treatment never reached the client. Unconfounded bonus:
 the freeze reproduces from a pure standstill, which **weakens H6** — an
 unclosed movement episode is not necessary for the freeze — and **strengthens
 H5** (the cast hold alone sets the suppress state). R6 arm code +
-`test_cancelwalk.py` §6 floor 46 stand, adversarially reviewed), **R7 IS BUILT** — `toolkit/clientscan/gatetrace.py`, the hardware-breakpoint
-gate trace (Dr0–Dr3 in the NATIVE context, 64-bit debugger loop, read-only
-against the client, `PeekMessageW` control whose silence is rc 2 VOID rather
-than a null), guarded by `test_gatetrace.py` floor 42 whose §1 encodes every
-expected instruction byte FROM the module constants and matches the pinned
-image. **It is the only instrument left that can answer the arc** (§7.4e has
-its per-hypothesis predictions, registered before the run) and it awaits an
-elevated operator run. **R5 BUILT AND RAN** (Tier-1 decode-only field
+`test_cancelwalk.py` §6 floor 46 stand, adversarially reviewed), **R7 SHIPS AS A POLL, NOT A TRAP** (§7.4e). It was built as a
+hardware-breakpoint gate trace and **adversarially reviewed before it ever
+touched a client — five BLOCKERS, each measured on a real WOW64 target, the
+first of which would have KILLED the client on the first breakpoint hit**
+(dispatching on `EXCEPTION_SINGLE_STEP` where WOW64 delivers
+`STATUS_WX86_SINGLE_STEP`; a constant `commandertrap.py` in the same directory
+already defines — a regression, not a discovery). `gatetrace.py` now REFUSES to
+run (`UNSAFE_TO_RUN`, checked by calling it) and its pure half is kept.
+**The review also refuted the reason for building it**: the gate operands are
+persistent object fields two dereferences from a `ctx` `movetap.resolve()`
+already returns, so **`movetap.controller_read()` reads them with no debugger
+at all** — rows now carry `gate_a`/`gate_b`/`gate_c`/`walk_suppressed`, every
+failure named and never `False` (the value H5 predicts). movetap selftest
+240 → 250. **The run needs no elevation**; predictions are registered at §7.4e.
+Residual the poll cannot see: a bit set and cleared inside one frame, which is
+the only thing that would revive the trap — on `commandertrap`'s `HwTrap`. **R5 BUILT AND RAN** (Tier-1 decode-only field
 adds to `movetap`; capture `movetap-20260824T141620` + gamesrv `141556`,
 CANCELWALK.md §7.4c): the instrument paid for itself — **the §5 WIRE criterion
 was about to score a 182 u WARP as a walk** (F16), and the memory read says

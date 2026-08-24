@@ -28,16 +28,18 @@ sys.path.insert(0, os.path.join(HERE, ".."))
 import checks     # noqa: E402
 import gatetrace  # noqa: E402
 
-# FLOOR 42, read off the first green run with every section executing, never
-# from a guess: 9 + 11 + 7 + 4 + 4 + 7 = 42 (addresses incl. the image base and
-# the moved-constant control; the eight operand combinations plus test-order,
-# unread and no-predict; the three agreements, three disagreements and the
-# unread third thing; the four control-rule cases; four address-math; and the
-# seven house rules, four of which are the write-API bans).
-# Section 1 is the one that can legitimately not run (no vault snapshot); it
-# declares LEDGER.skip(9) and the floor drops by that, so a bare machine is
-# honest rather than either red or falsely green.
-LEDGER = checks.Ledger("gatetrace (CANCELWALK-R7)", floor=42)
+# FLOOR 35, and the number is the BARE-MACHINE one on purpose. A green run
+# with the pinned snapshot present executes 44; section 1's nine address-byte
+# checks are the difference.
+# THIS WAS WRONG UNTIL AN ADVERSARIAL REVIEW CAUGHT IT, and the way it was
+# wrong is worth keeping: the floor was 42 with section 1 calling
+# `LEDGER.skip(..., 9)` in the belief that a skip LOWERS the floor by its
+# count. It does not -- `Ledger.skip(label, why)` takes two strings, records a
+# line, and lowers nothing -- so on any machine without the vault snapshot
+# this file was RED (33 of a declared 42) while five documents claimed it
+# "drops to 33 on a bare machine". The floor is now the number a bare machine
+# really executes, so the file is honest in both configurations.
+LEDGER = checks.Ledger("gatetrace (CANCELWALK-R7)", floor=35)
 check = LEDGER.ok
 
 
@@ -74,7 +76,8 @@ def section_addresses():
     print("1. every address and offset re-derived from ArenaNet's own bytes")
     exe = _pinned_exe()
     if exe is None:
-        LEDGER.skip("no pinned client snapshot in the vault", 9)
+        LEDGER.skip("section 1 (address bytes)",
+                    "no pinned client snapshot in the vault")
         print("   [SKIP] no pinned Gw.exe -- 9 checks not run")
         return
     data = open(exe, "rb").read()
@@ -257,9 +260,26 @@ def section_hygiene():
           "gatetrace takes NO third-party import -- carve-out (1) names "
           "msghandler.py and codescan.py and this is neither, so it must load "
           "on a bare machine", f"third-party: {sorted(third)}")
+    # THE REFUSAL IS THE SAFETY PROPERTY NOW, and it is checked by CALLING the
+    # function rather than by grepping for a banner. Five measured blockers
+    # live in the process half; until they are fixed, trace() must refuse.
+    check(bool(gatetrace.UNSAFE_TO_RUN),
+          "UNSAFE_TO_RUN is set -- the process half carries five measured "
+          "blockers and must not be pointed at a client")
+    try:
+        gatetrace.trace(1234, 1, "nowhere")
+        check(False, "trace() must REFUSE while UNSAFE_TO_RUN is set")
+    except SystemExit as e:
+        check("STATUS_WX86_SINGLE_STEP" in str(e)
+              and "movetap" in str(e),
+              "trace() refuses by raising, and the refusal names both the "
+              "blocker that kills the client and the poll that replaces it -- "
+              "a docstring warning above a main() that still runs is a file "
+              "that gets run", str(e)[:90])
     check("DebugSetProcessKillOnExit" in src,
-          "detaching leaves the client ALIVE -- without this the operator's "
-          "session dies when the trace ends")
+          "the kill-on-exit call is present (ORDERING is a known blocker, "
+          "recorded in the docstring -- it is called before the attach, where "
+          "it no-ops)")
     check("_disarm_slot" in src and "control" in src,
           "the control disarms after its first hit so it cannot flood the "
           "debugger loop")

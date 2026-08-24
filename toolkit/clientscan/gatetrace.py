@@ -1,7 +1,58 @@
 """CANCELWALK-R7: read the local walk-start's GATE OPERANDS at the press.
 
-    python toolkit/clientscan/gatetrace.py --selftest        # no client needed
-    python toolkit/clientscan/gatetrace.py <pid> [seconds]   # elevated
+*** DO NOT POINT THIS AT A CLIENT. IT WILL KILL IT. ***  (2026-08-24)
+
+An adversarial review measured five BLOCKERS in this file on a real WOW64
+target, each with a positive control, and every one of them is fatal to the
+operator's session rather than merely wrong:
+
+  1. A 64-bit debugger attached to a WOW64 target receives
+     STATUS_WX86_SINGLE_STEP (0x4000001E), NOT EXCEPTION_SINGLE_STEP
+     (0x80000004). The dispatch below matches ZERO hits, falls through to
+     DBG_EXCEPTION_NOT_HANDLED, and the client -- which has no handler --
+     is TERMINATED on the first breakpoint hit, i.e. on the first
+     PeekMessageW, within one frame of arming, having measured nothing.
+     `commandertrap.py` IN THIS DIRECTORY already defines both WX86
+     constants and its header already explains this exact failure. This
+     file was modelled on `trnhook/debugread.py`, which carries the same
+     latent defect. Grepping the directory first would have prevented it.
+  2. `DebugSetProcessKillOnExit(False)` is called BEFORE
+     `DebugActiveProcess`, where it fails with ERROR_INVALID_HANDLE and does
+     nothing -- so kill-on-exit stays TRUE and any error takes the client
+     with it. There is no try/finally, and `keytap.read_at` RAISES rather
+     than returning None, so an in-loop raise is a live path.
+  3. The debug registers are never cleared on detach. The client is left
+     carrying four enabled execute breakpoints with no debugger to receive
+     the exception -- the next PeekMessageW kills it.
+  4. The control is disarmed through the WOW64 SHADOW while it was armed in
+     the NATIVE context, which by this file's own thesis is a different
+     register set. Both outcomes are silent.
+  5. No EFLAGS.RF, so a hardware execute breakpoint re-faults on the same
+     instruction forever: measured 230,759 traps in 8 s against the 8 the
+     victim's real executions warranted.
+
+AND THE REASON IT EXISTS IS ALSO WRONG. The claim that these operands need a
+breakpoint -- "they live on an object movetap cannot resolve and are read and
+discarded inside one frame" -- is false on both halves. They are PERSISTENT
+OBJECT FIELDS, and the object is two dereferences from a `ctx` that
+`movetap.resolve()` already returns: MOVE-DISPATCH's own first instructions
+are `call 0x0047F660 / mov eax,[eax+0x2C] / mov esi,[eax+0x680]`. **The poll
+is built and shipped -- `movetap.controller_read()`, CANCELWALK-R7's operands
+without a debugger at all.** Use that.
+
+WHAT THIS FILE IS STILL FOR, and why it is kept rather than deleted: a poll
+at ~11 Hz cannot see a bit that is SET and CLEARED inside one frame. If the
+movetap read comes back with the gates clear at a frozen press, that residual
+is the remaining question and a trap is the only way to close it. Reviving
+this file means fixing all five blockers -- and the right way is to delete the
+hand-rolled debugger loop below and drive `commandertrap.py`'s `HwTrap`, which
+already has the WX86 codes, EFLAGS.RF, a runaway guard, disarm-all and a
+tested detach. The pure half (`gate_verdict`, `reconcile`, `run_verdict`) and
+its guard are sound and survive as-is; it is only the process half that is
+unsafe.
+
+    python toolkit/clientscan/gatetrace.py --selftest        # safe, no client
+    python toolkit/clientscan/gatetrace.py <pid> [seconds]   # REFUSED, see above
 
 WHAT THIS ANSWERS, and why nothing cheaper can. The arc's question is why a
 movement key pressed mid-cast sometimes does not walk the player. Every wire
@@ -314,8 +365,34 @@ def _disarm_slot(h, arm64, index):
     k32.Wow64SetThreadContext(h, ctypes.byref(c))
 
 
+# The five measured blockers, as a refusal rather than a warning. A file whose
+# header says "do not run this" and whose main() runs it anyway is a file that
+# gets run: the operator types the command the docstring shows. Clearing this
+# flag is the deliberate act of someone who has fixed the process half.
+UNSAFE_TO_RUN = (
+    "gatetrace's debugger loop is REFUSED: an adversarial review measured five "
+    "blockers on a real WOW64 target, and the first one KILLS THE CLIENT on "
+    "the first breakpoint hit (it dispatches on EXCEPTION_SINGLE_STEP, but a "
+    "64-bit debugger attached to a WOW64 target receives "
+    "STATUS_WX86_SINGLE_STEP 0x4000001E, so every hit is handed back to a "
+    "client that has no handler for it). The others: kill-on-exit is set "
+    "before the attach where it no-ops, the debug registers are never cleared "
+    "on detach, the control is disarmed through the wrong context, and "
+    "EFLAGS.RF is never set so the breakpoint re-faults ~29,000 times a "
+    "second. See this module's docstring.\n\n"
+    "USE THE POLL INSTEAD -- it needs no debugger and is already shipped:\n"
+    "    python toolkit/clientscan/movetap.py --seconds 180\n"
+    "whose rows now carry ctrl_status / ctrl_flagbyte / gate_a / gate_b / "
+    "gate_c / walk_suppressed, the same operands this file was built to trap. "
+    "Only revive this file if the poll shows the gates CLEAR at a frozen "
+    "press, and revive it on commandertrap.py's HwTrap rather than on the "
+    "loop below.")
+
+
 def trace(pid, budget, out_path):
-    """The run. Returns (rc, summary dict)."""
+    """The run. Returns (rc, summary dict). REFUSES while UNSAFE_TO_RUN is set."""
+    if UNSAFE_TO_RUN:
+        raise SystemExit(UNSAFE_TO_RUN)
     import arm64
     import inject
     import keytap
