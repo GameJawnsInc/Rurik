@@ -1443,9 +1443,25 @@ the freeze reproduces from a pure standstill, which **weakens H6** — an
 unclosed movement episode is not necessary for the freeze — and **strengthens
 H5** (the cast hold alone sets the suppress state). R6 arm code +
 `test_cancelwalk.py` §6 floor 46 stand, adversarially reviewed), R7 flag read
-at the edge (int3/trnhook). **Owner's call (§7.4b): re-run R6 with a walk-
-first exposure floor, or skip to R5** — the standstill freeze already points
-at H5 and R5 is the more decisive instrument. R4's ship candidate is
+at the edge (int3/trnhook). **R5 BUILT AND RAN** (Tier-1 decode-only field
+adds to `movetap`; capture `movetap-20260824T141620` + gamesrv `141556`,
+CANCELWALK.md §7.4c): the instrument paid for itself — **the §5 WIRE criterion
+was about to score a 182 u WARP as a walk** (F16), and the memory read says
+only 1 of 3 mid-cast presses ran a genuine local walk-start. **F17: the freeze
+is NOT deterministic** (one press walked normally), which kills H5's simplest
+form; the one field separating them is the async `planner` (+0x50) at the
+press — 0 on both non-starters, 24 on the walker, with ordinary presses from 0
+walking fine (5 of 5), so the condition is COMPOUND. **New CANCELWALK-H8**
+(RECONSTRUCTION, n=3): mid-cast, the walk-start refuses on a body whose
+queued-move store is clear and proceeds on one carrying a stale one — and it
+predicts R6's null independently, since `0x0028` CLEARS that store. **F18: the
+operator-reported WARP is the drawn body snapping onto the lagging sync copy**,
+sub-gate-1 (max sep 265.8 vs the 299.33 cut), no `0x002C`, nearest agent 350+ u
+(gate 3 excluded) — **not new** (the 08-21/08-22 corpus carries it at up to
+81,179 u/s; today's is the mildest on record) and **not caused by this
+session**; the walk-first protocol is what exposed it. It contradicts
+REALFIX-O1's "sync copy and nothing else" at those instants and is filed to the
+movement arc as an OPEN sub-gate-1 rubber-band class. R4's ship candidate is
 unaffected; the ruling stays the owner's.
 
 ### MODEL AUTHORING: the one-bit question is answered, and every player identity closes (2026-08-22)
