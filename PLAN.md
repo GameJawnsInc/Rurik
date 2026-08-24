@@ -1442,7 +1442,29 @@ a parked body and the treatment never reached the client. Unconfounded bonus:
 the freeze reproduces from a pure standstill, which **weakens H6** — an
 unclosed movement episode is not necessary for the freeze — and **strengthens
 H5** (the cast hold alone sets the suppress state). R6 arm code +
-`test_cancelwalk.py` §6 floor 46 stand, adversarially reviewed), **R7 SHIPS AS A POLL, NOT A TRAP** (§7.4e). It was built as a
+`test_cancelwalk.py` §6 floor 46 stand, adversarially reviewed), **R7 RAN AND THE ARC'S CENTRAL QUESTION IS ANSWERED** (§7.6, capture
+`movetap-20260824T163558` + gamesrv `163550`, 552/552 operand reads OK).
+**The walk-suppress gate is GATE B — `byte[controller+0x64]` bit 0 — and it is
+PROPERTY 8's BIT, which OUR SERVER SETS AND CLEARS**: five SET windows opening
+within 0.04–0.10 s of our prop8→1 and closing within 0.06 s of our prop8→0,
+5 of 5 and 5 of 5, joining the arc to `skillcast` §16.2's read of the same
+offset. At all three frozen presses the bit was still SET when the applier ran
+(body 0.0 u/s, position bit-identical) and cleared ~90 ms later; at the one
+walking press it was already clear and the body ran at 288.0 u/s in exactly the
+pressed direction. **The mechanism: the client's applier reads the bit on the
+key edge, in its own frame, a full round trip before our `[8→0, 59, E2]` can
+clear it — so the press is spent, and nothing re-runs the walk-start because a
+held key produces no new edge** (refuting "they were taps": the key was held
+0.83–1.33 s, ~0.75 s past the clear, with zero motion). This explains every
+prior run at once — R1's zero-byte freeze, R2–R4's leads only moving the body
+by ORDERING it, R6's stop-ack being irrelevant — and it retires
+**GATE A** (word 0 in all 552 samples; the read-site census named the wrong one
+of two candidates) and **H7** (the applier never reached the navmesh query).
+**Next, and it is free**: `skillcast` §16.2 read property 8's value-0 path as
+scheduling a DEFERRED action (`0x0081C090` → state bit `+0x110`, due time
+`+0x114`, registered via `0x009217C0`). Retail's client re-walks when the hold
+clears (F3); if that deferred "return to ready" is what does it, reading it to
+depth lands the arc. **R7's poll is the instrument** (§7.4e). It was built as a
 hardware-breakpoint gate trace and **adversarially reviewed before it ever
 touched a client — five BLOCKERS, each measured on a real WOW64 target, the
 first of which would have KILLED the client on the first breakpoint hit**
