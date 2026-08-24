@@ -563,6 +563,64 @@ frozen press — one-shot int3/trnhook at `0x0081A931`/`0x0081A93C` (arm before
 launch; the injection window is map-load), or plumb the controller object into
 movetap. This separates H5's two bits from each other and from H7 directly.
 
+### 7.4a R6 RAN — VOID for H6 (zero exposure), but a clean standstill freeze that weakens H6 (2026-08-24)
+
+`--stop-answer=ack`, capture `authsrv-20260824T135521-c1`, operator-driven, map
+280 explorable (`INSTANCE_LOAD_INFO [409,1,280,1,0,0,0]`, identical to R2/R4;
+the jsonl header's `map_id 148` is the login-outpost handshake). Six operator
+actions, all present on the wire: one normal cast (t=20.5, completes with E5 at
+22.5 and E3 recharge at 23.3), one Esc cancel (t=32.2), two W taps (37/38 and
+43/45), one W hold (cast 53.7, press 54.7, released 57.0 — held 2.2 s), one
+camera-rotated W hold (cast 63.8, press 64.9 — vec2 `(46.0, 765.8)`, rotated
+~90° off the earlier `(766, ±14)`, so the discriminator's camera turn is
+confirmed on the wire). **The arm fired: five s2c `0x0028 [1]` stop-acks, one
+per player `0x0047`.** Every movement cancel **FROZE, 0.0 u** (4 of 4): each W
+press reported the spawn point, was answered with the burst + zero-lead grant +
+stop-ack, and the client's own next `0x0047` re-reported the same spawn point.
+Operator: "didn't move at all, for any command." The wire agrees.
+
+**But the run is VOID as a test of H6 — zero exposure — and the reason is a
+pre-registration miss.** The operator cast from a **standstill**: every position
+report all session is the spawn `(-6036.0, -2519.0)`, distinct positions = `{spawn}`
+(contrast the canonical freeze `081335`, which walked through **8** distinct
+positions before its cast). The `0x0028` handler halts the body **only when the
+in-motion flag is set** (`[agent+0x20] & 0x20000`; schema GAME_SMSG "40") and is a
+**no-op on a parked body** — so every stop-ack we sent did **nothing** at the
+client. Retail's F9 stop-ack answered a **real walk's stop** (retail ran the
+led/re-grant regime, then stopped at t=65.058, got the `0x0028` at 65.095); ours
+answered a body that had never moved. The treatment was on the wire and never in
+the client's state machine. H6's registration (§7.4) named "the pre-cast `0x0047`"
+but did **not** pre-register a movement-exposure floor — that the player must have
+**walked and stopped** before the cancelled cast — which is exactly the
+[[feedback-zero-exposure-is-not-a-null]] failure: a treatment arm that never met
+its condition has zero trials, not a null. **H6 is NOT refuted; it is untested.**
+
+**The unconfounded finding this run does deliver, and it is worth the run:** the
+freeze reproduces from a **pure standstill**, with the body at its cleanest
+possible state (fresh spawn, never moved, `agent+0x50` never dirtied). Since the
+canonical freeze had a prior walk and this one had none, and both froze
+identically, **an unclosed movement episode is not NECESSARY for the freeze** —
+which weakens H6 as the *differentiator* independent of the void treatment, and
+strengthens **H5**: the walk-suppress state is set by the **cast hold itself**,
+needing no movement history, exactly F10's local-write picture. A structural
+caveat that shifts weight toward R5 over a re-run: our `0x0028` always arrives
+*after* the client's own `0x0047` (36–37 ms here; 37 ms in retail too), i.e. after
+the client already parked itself — so even a walk-first re-run may find the
+handler no-ops on an already-stopped body, and a wire-only arm may be unable to
+deliver R6's treatment at all. **Two ways forward, owner's call (§7.4b).**
+
+### 7.4b The decision R6 leaves — re-run with exposure, or go to R5
+
+- **Re-run R6 with a movement-exposure floor**: operator **walks a few steps,
+  stops, then casts** before each cancelled press, so the pre-cast `0x0047`
+  answers a real stop. Cheap (same server, same flag). Risk: the ack may still
+  no-op if the client parks before it lands (the 37 ms caveat above) — in which
+  case R6 is shown structurally inert and H6 needs R5/R7 to settle anyway.
+- **Skip to R5** (the movetap poll, §7.3's instrument): reads the walk-start
+  signature and the suppress bits directly, does not depend on getting the
+  exposure condition right, and the standstill freeze already points at H5. This
+  is the more decisive path and the one the owner offered.
+
 ### 7.5 Measured dead this round — do not retry
 
 - `0x0027`/speed-base as differentiator, trigger, or fix (F8/F13) — and the
