@@ -256,6 +256,25 @@ leg, and the stop side moves to a client read. *Registered lead for the
 run: 288 u ≈ one second of walking — long enough that a normal press-and-
 release never parks, short enough that a hold parks in ~1 s.*
 
+### 5b. R4 RAN — every prediction confirmed, operator and wire agreeing (2026-08-24)
+
+`--cancel-answer=lead:288,stop`, capture `authsrv-20260824T103556-c1`, three
+cancelled casts. **Tap:** the release reports +97.6 u mid-glide, the
+`CANCELWALK STOP` re-pin answers it (t=9.555), and the next report three
+seconds later is at the **same point** — release-to-stop works, and R2's
+identical release (answered with nothing, glide to 768) is the control.
+**Held:** both casts park at **+288.0 u exactly, the granted point to the
+decimal**, stop windows expiring unconsumed (0x0047 at +3.76 s and +2.05 s,
+both past the 2.0 s window, neither needing an answer). Operator report:
+"worked as you described." **CANCELWALK-R4 PASSES.** The licensed ship
+candidate is: cancel-instant lead + scoped stop re-pin. Ship-time terms,
+unchanged: clip the leg (the stairs phasing is real — and the clip must
+measure from the REPORTED point, not our model's), choose the lead
+(288 = park after ~1 s of held walking; retail's 766 triples the runaway),
+promote the flag out of the experiment namespace, and the audited-exception
+review against REALFIX's zero-lead invariants. **Defaults are an owner
+ruling in this repo; none is made here.**
+
 ## 6. Against the handover's three questions
 
 1. *Is a lead grant safe in this one instant?* Reframed: the lead does not
