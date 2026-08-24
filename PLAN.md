@@ -1393,13 +1393,28 @@ mid-hold movement request as "stay put"**. Three pre-registered loopback runs
 discriminate (CANCELWALK.md §5): R1 `--cancel-answer=suppress` (burst alone,
 zero risk), R2 `--cancel-answer=retail-lead` (the D1 tail verbatim,
 diagnostic only, warp cost pre-registered), R3 `lead:16` (the bisection).
-Arms built and refused into the composition matrix (`test_cancelwalk.py`, 24
-checks; `test_position_trust` re-encodes its two AST locks and fixes a
+Arms built and refused into the composition matrix (`test_cancelwalk.py`;
+`test_position_trust` re-encodes its two AST locks and fixes a
 red-at-HEAD NameError the castmech door left in its arm extractor). **No arm
 ships from a run directly** — the lead family's refutation stands
 steady-state; a PASS licenses one audited exception at one instant.
-**Operator-driven** (world-anchored casts): ≥3 cancelled casts per arm plus
-one camera-rotated direction-discriminator, wire readout only.
+**R1–R3 RAN the same day** (CANCELWALK.md §5a, captures
+`20260824T095712/100352/100643`): R1 suppress **froze** (H2 refuted); R2/R3
+**walk the granted leg to the point exactly** — +768.1 and +16.0 u to the
+decimal — parking there, key state ignored, release ignored, straight
+through collision. **CANCELWALK-F7**: at the cancel instant our 38797
+client executes the answering `0x0029` as a **click-order** (zero-lead =
+"click where you stand" = the freeze), the mid-cast vec2 is live on our
+build, and the pre-registered warp never materialised (body and copy walk
+the leg together). Retail's 38849 self-walks instead — build drift or
+unread state, and for our pinned build it no longer matters: the contract
+is measured. **R4 pre-registered and built the same day**
+(`--cancel-answer=lead:288,stop`): retail's own stop pair (`0x002B [1.0,
+9]` + zero-distance `0x0029`) answering a release **scoped to the in-flight
+cancel leg only** — the general stop arm stays silent, which is what
+separates it from the refuted `--stop-echo`. Awaiting its operator run;
+ship-time terms if it passes: clip the leg, and the audited-exception
+review.
 
 ### MODEL AUTHORING: the one-bit question is answered, and every player identity closes (2026-08-22)
 

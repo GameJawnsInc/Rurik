@@ -194,6 +194,68 @@ residual. **No arm ships from this ladder directly; a run's PASS licenses a
 candidate, and shipping stays a separate, audited step** — the lead family's
 refutation stands for every steady-state grant regardless of outcome.
 
+## 5a. R1–R3 RAN, same day — H1 confirmed sharper than predicted (2026-08-24)
+
+Operator-driven, loopback, Isle pin, captures
+`authsrv-20260824T095712` (R1), `100352` (R2), `100643` (R3);
+`score_runs`-style readout of every cancel instant, press, answer and the
+motion after.
+
+- **R1 suppress: FROZEN, 2 of 2** — burst-only answers, 0.0 u at the release
+  report both times. **CANCELWALK-H2 is REFUTED** (it predicted a walk).
+- **R2 retail-lead: WALKS, 3 of 3 — to the granted point exactly.** Cancel 3
+  lands at **+768.1 u, the granted coordinate to the decimal, and parks
+  there** (four consecutive reports at the same point). The release arrives
+  mid-glide (`0x0047` at +0.08 s, +19 u) and the body glides on regardless.
+  The leg is straight and unclipped — the operator walked through stair
+  collision. **H3/H4 in their strong form ("no cancel-instant answer can
+  unfreeze") are REFUTED.**
+- **R3 lead:16: WALKS 16.0 u exactly and parks, 2 of 3** — key still held,
+  nothing until a fresh edge. (The third cast's 96 u run contains a second
+  press: a mid-walk `0x003D` edge at +0.25 s.)
+
+**CANCELWALK-F7 — OBSERVED, and it reframes H1.** At the cancel instant our
+client (build 38797) executes the answering `0x0029` as a **click-order**:
+it walks the granted leg to completion, straight-line, key state ignored,
+and parks at the granted point. Zero-lead = "click where you stand" = the
+freeze. This is the click arm's own mechanism expressing on the heading arm
+at the one instant the client is not self-driving. Two corollaries: the mid-
+cast vec2 on OUR build is **live**, not retail's latch (every walk went the
+way the operator pressed — R2 cancel 2's vec2 points where the operator had
+turned), and the pre-registered warp cost never materialised — the body
+walks the leg WITH the copy, so nothing diverges to snap.
+
+**The residual retail divergence stands, now cleanly bounded**: retail's
+38849 client walked its own live direction *against* the grant (F3) and
+stopped on release; our 38797 walks the grant and ignores release. Same
+answer shape, different client behaviour — build drift (H4) or unread
+client state (H3), and for OUR pinned build it no longer matters: the
+contract is measured, and the server can be built against it.
+
+### CANCELWALK-R4 · `--cancel-answer=<lead-form>,stop` — pre-registered before its run
+
+What stock feel still lacks under a bare lead: release-to-stop. R2's own
+capture supplies the trigger — the client **reports the release mid-glide**
+— and retail's stop arm answers every such report with `0x002B [1.0, 9]` +
+a zero-distance `0x0029` re-pin (F4/F5). R4 sends exactly that pair,
+**scoped to the in-flight cancel leg**: a window armed at the lead send
+(leg ÷ 288 u/s + 1 s slack), consumed by the first `0x0047` inside it,
+cleared by any subsequent grant. The general stop arm stays silent —
+`--stop-echo`'s refutation (teleport 9.9 s later, walk back) was measured
+in ordinary self-driven play, which the window never covers, and the re-pin
+is a zero-distance order at the client's **own** reported point, which
+cannot move anybody even if this reading is wrong.
+
+*Predictions:* release mid-leg **stops the body at the reported point**; a
+press held past the leg still parks at the lead, its window expiring
+unconsumed; the leg still cannot be steered mid-flight and still crosses
+geometry (unclipped — a ship-time clip is a named open term, priced by the
+stairs observation). If the body
+does **not** stop, a zero-distance order does not supersede an executing
+leg, and the stop side moves to a client read. *Registered lead for the
+run: 288 u ≈ one second of walking — long enough that a normal press-and-
+release never parks, short enough that a hold parks in ~1 s.*
+
 ## 6. Against the handover's three questions
 
 1. *Is a lead grant safe in this one instant?* Reframed: the lead does not

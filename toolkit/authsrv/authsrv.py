@@ -1530,38 +1530,62 @@ ARRIVAL_CARRY = False
 # the composition matrix in zero_lead_composition() is the check.
 CANCEL_ANSWER = None   # None | "suppress" | "lead"
 CANCEL_LEAD = None     # None = retail's |vec2| + 0.5; else units along vec2
+# R4's `,stop` modifier: while a cancelwalk leg is IN FLIGHT, a 0x0047
+# answers with retail's own stop shape (0x002B [1.0, 9] + a zero-distance
+# 0x0029 at the reported point). Scoped by state["cancelwalk_leg_until"],
+# armed at the lead send and cleared at the first stop answer or the next
+# grant -- NEVER the general stop arm, which stays silent (a stop-arm grant
+# in ordinary play is --stop-echo and is REFUTED). What licenses the scoped
+# form: R2/R3 measured (20260824T100352/100643) that the client walks the
+# granted leg to completion IGNORING key release -- the body executes the
+# order like a click -- and it reports the release mid-glide (0x0047 at
+# +0.08 s, +19 u, glide continuing to the full 768). The re-pin is a
+# zero-distance order at the client's OWN reported point, which cannot move
+# anybody even if the mechanism reading is wrong.
+CANCEL_STOP = False
 
 
 def parse_cancel_answer(text):
-    """Pure: an --cancel-answer argument -> (mode, lead) or a refusal.
+    """Pure: an --cancel-answer argument -> (mode, lead, stop) or a refusal.
 
-    Returns (mode, lead, refusal): mode in (None, "suppress", "lead"), lead
-    None or a positive float, refusal None or the SystemExit text. Refusals
-    are loud because a mistyped arm would otherwise run the shipped default
-    while the operator's log said an experiment was on -- the exact defect
-    zero_lead_composition() exists to refuse (an inert flag scored as a run).
+    Returns (mode, lead, stop, refusal): mode in (None, "suppress", "lead"),
+    lead None or a positive float, stop bool (the `,stop` modifier), refusal
+    None or the SystemExit text. Refusals are loud because a mistyped arm
+    would otherwise run the shipped default while the operator's log said an
+    experiment was on -- the exact defect zero_lead_composition() exists to
+    refuse (an inert flag scored as a run).
     """
     if text is None:
-        return None, None, None
+        return None, None, False, None
+    stop = False
+    if text.endswith(",stop"):
+        stop, text = True, text[:-5]
     if text == "suppress":
-        return "suppress", None, None
+        if stop:
+            return None, None, False, (
+                "--cancel-answer=suppress,stop: the stop modifier answers a "
+                "release DURING a granted cancel leg, and suppress grants no "
+                "leg -- there is nothing for it to stop. Passed together it "
+                "would be inert while the run log said R4 was on. Use "
+                "'retail-lead,stop' or 'lead:<units>,stop'.")
+        return "suppress", None, False, None
     if text == "retail-lead":
-        return "lead", None, None
+        return "lead", None, stop, None
     if text.startswith("lead:"):
         try:
             lead = float(text[5:])
         except ValueError:
             lead = None
         if lead is None or not (0.0 < lead <= 768.5):
-            return None, None, (
+            return None, None, False, (
                 f"--cancel-answer={text}: the lead must be a number of units "
                 f"in (0, 768.5] -- 768.5 is retail's own |vec2| + 0.5 ceiling "
                 f"and 0 is the shipped zero-lead answer, which needs no flag.")
-        return "lead", lead, None
-    return None, None, (
+        return "lead", lead, stop, None
+    return None, None, False, (
         f"--cancel-answer={text!r} names no arm. The arms are 'suppress', "
-        f"'retail-lead' and 'lead:<units>' -- studies/movement/CANCELWALK.md "
-        f"5 (R1, R2, R3).")
+        f"'retail-lead' and 'lead:<units>', each lead form optionally "
+        f"'+ ,stop' (R4) -- studies/movement/CANCELWALK.md 5.")
 
 
 def cancelwalk_lead_dest(reported, heading, lead=None):
@@ -13747,6 +13771,21 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                          [PLAYER_AGENT_ID, zl_point,
                                           plane, zl_plane_cur],
                                          zl_label)
+                                    # R4's LEG WINDOW. Any grant supersedes an
+                                    # in-flight cancel leg (a fresh order
+                                    # re-aims the body), so the window clears
+                                    # on every send -- and re-arms only when
+                                    # THIS send was a cancelwalk lead under
+                                    # `,stop`: leg time at the client's own
+                                    # 288 u/s plus 1 s of slack. The 0x0047
+                                    # arm consumes it.
+                                    state["cancelwalk_leg_until"] = 0.0
+                                    if cw_dest is not None and CANCEL_STOP:
+                                        cw_leg = math.hypot(
+                                            cw_dest[0] - reported[0],
+                                            cw_dest[1] - reported[1])
+                                        state["cancelwalk_leg_until"] = (
+                                            now_z + cw_leg / 288.0 + 1.0)
                                     # AFTER THE SEND, and only after a send. See
                                     # the block above: this slot is the plane
                                     # that went out WITH the point the copy is
@@ -14246,6 +14285,39 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # measured, added a second one). 0x002C arms nothing --
                         # 0x00602B20 writes destination = current.
                         _maybe_resync(send, state, rec)
+                        # CANCELWALK R4, and it is NOT --stop-echo: this fires
+                        # only while a cancel leg granted under `,stop` is IN
+                        # FLIGHT (the window armed at that send, sized to the
+                        # leg at 288 u/s + 1 s), and once per leg. R2/R3
+                        # measured the need (20260824T100352/100643): the
+                        # client walks a cancel-instant grant like a click --
+                        # to the granted point, key state ignored -- and
+                        # reports the release mid-glide, which we answered
+                        # with nothing, so the body glided on to the full 768.
+                        # The answer is retail's own stop shape (0x002B
+                        # [1.0, 9] then a zero-distance 0x0029, its stop-arm
+                        # pair at every observed stop re-pin), at the client's
+                        # OWN reported point -- a zero-distance order cannot
+                        # move anybody even if this reading is wrong. The
+                        # general stop arm stays silent: --stop-echo's
+                        # refutation (a teleport 9.9 s later, a walk back) was
+                        # measured in ordinary self-driven play, which this
+                        # window never covers.
+                        if CANCEL_STOP and \
+                                (state.get("cancelwalk_leg_until", 0.0)
+                                 > time.time()):
+                            state["cancelwalk_leg_until"] = 0.0
+                            send(GAME_SMSG_AGENT_UPDATE_SPEED,
+                                 agents.agent_update_speed(
+                                     PLAYER_AGENT_ID, 1.0, 9),
+                                 "AGENT_UPDATE_SPEED(player, 1.0, type 9) "
+                                 "[cancelwalk stop]")
+                            send(GAME_SMSG_AGENT_MOVE_TO_POINT,
+                                 [PLAYER_AGENT_ID, list(reported),
+                                  plane, plane],
+                                 f"CANCELWALK STOP ({reported[0]:.0f},"
+                                 f"{reported[1]:.0f}) plane {plane} -- "
+                                 f"release mid-leg, zero-distance re-pin")
                         if STOP_ECHO:
                             # DISARM the destination the client is still
                             # holding. Zero-distance by construction -- the
@@ -15962,7 +16034,14 @@ def main():
                          "re-pin may snap visibly; that lands AFTER the walk "
                          "readout and is why R2 can never ship as-is. "
                          "'lead:<units>' (R3) is the bisection arm, 16 the "
-                         "registered first rung. NO ARM SHIPS FROM A RUN "
+                         "registered first rung. Either lead form takes an "
+                         "optional ',stop' modifier (R4): while that leg is "
+                         "in flight, a 0x0047 release is answered with "
+                         "retail's own stop shape (0x002B [1.0, 9] + a "
+                         "zero-distance 0x0029 at the reported point) -- "
+                         "scoped to the leg window, never the general stop "
+                         "arm, which is what keeps it from being the refuted "
+                         "--stop-echo. NO ARM SHIPS FROM A RUN "
                          "DIRECTLY; a PASS licenses a candidate for a "
                          "separate audited step, and the zero-lead policy "
                          "is untouched on every other report.")
@@ -16687,7 +16766,8 @@ def main():
     zero_lead = a.zero_lead if a.zero_lead is not None else True
     grant_suppress = a.grant_suppress if a.grant_suppress is not None else True
     plane_carry = a.plane_carry if a.plane_carry is not None else zero_lead
-    _cw_mode, _cw_lead, _cw_refusal = parse_cancel_answer(a.cancel_answer)
+    _cw_mode, _cw_lead, _cw_stop, _cw_refusal = (
+        parse_cancel_answer(a.cancel_answer))
     if _cw_refusal:
         raise SystemExit(_cw_refusal)
     _zl_refusal, _zl_notes = zero_lead_composition(
@@ -16765,11 +16845,13 @@ def main():
     # CANCELWALK. Same house style: the prediction goes out BEFORE the run so
     # it cannot be rationalised after it. ASCII only (the --resync lesson).
     if _cw_mode:
-        global CANCEL_ANSWER, CANCEL_LEAD
-        CANCEL_ANSWER, CANCEL_LEAD = _cw_mode, _cw_lead
+        global CANCEL_ANSWER, CANCEL_LEAD, CANCEL_STOP
+        CANCEL_ANSWER, CANCEL_LEAD, CANCEL_STOP = _cw_mode, _cw_lead, _cw_stop
         _cw_name = ("R1 suppress" if _cw_mode == "suppress"
                     else ("R2 retail-lead" if _cw_lead is None
                           else f"R3 lead:{_cw_lead:g}"))
+        if _cw_stop:
+            _cw_name = f"R4 ({_cw_name.split()[1]} + stop)"
         print(f"[map] --cancel-answer={a.cancel_answer} ON. CANCELWALK "
               f"{_cw_name}, DIAGNOSTIC ONLY -- no outcome ships from this "
               f"run directly.")
@@ -16799,6 +16881,24 @@ def main():
                   "inside that window may snap visibly. A warp AFTER the "
                   "walk readout does not bear on the walk verdict; it is "
                   "the known price of leads and why this arm cannot ship.")
+            print("      MEASURED 2026-08-24 (R2/R3, 20260824T100352/100643): "
+                  "the client walks the granted leg TO COMPLETION like a "
+                  "click order -- straight, unclipped, key state ignored -- "
+                  "and parks at the granted point exactly (+768.1 and +16.0 "
+                  "u to the decimal). It reports the release mid-glide.")
+        if _cw_stop:
+            print("      + ,stop (R4): while THAT leg is in flight, a 0x0047 "
+                  "release is answered with retail's own stop shape -- "
+                  "0x002B [1.0, 9] then a zero-distance 0x0029 at the "
+                  "client's reported point. NOT --stop-echo: the general "
+                  "stop arm stays silent outside the leg window (leg time at "
+                  "288 u/s + 1 s, cleared at first use or the next grant).")
+            print("      PREDICTS  release mid-leg STOPS the body at the "
+                  "reported point; the leg still cannot be steered while "
+                  "held and still crosses geometry (unclipped). If the body "
+                  "does NOT stop, the zero-distance order does not supersede "
+                  "an executing leg, and the stop side moves to the client "
+                  "read.")
         print("      READOUT   the wire, not the screen: a cast PASSES if "
               "the client's own reports move >= 30 u within 0.5 s of the "
               "cancel press with no second press; <= 5 u is a freeze. >= 3 "
