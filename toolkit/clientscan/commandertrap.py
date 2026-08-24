@@ -509,31 +509,39 @@ class HwTrap:
             return None
         return ctx
 
-    def _arm(self, hthread):
-        ctx = self._get_context(hthread, CONTEXT_DEBUG_REGISTERS)
-        if ctx is None:
-            return False
+    def dr_state(self):
+        """(Dr0, Dr1, Dr2, Dr3, Dr7) for the CURRENTLY armed set.
+
+        Built per ENABLED slot rather than through dr7_for's contiguous
+        `n_slots`, because a disarmed slot in the middle must stay off while
+        the ones after it stay on. `dr7_for` keeps the encoding documented and
+        tested; this is the same encoding applied to a sparse set.
+        """
         slots = (list(self.addrs) + [0] * MAX_SLOTS)[:MAX_SLOTS]
         kinds = (list(self.kinds) + ["x"] * MAX_SLOTS)[:MAX_SLOTS]
         sizes = (list(self.sizes) + [4] * MAX_SLOTS)[:MAX_SLOTS]
         for i in self.disarmed:
             if i < MAX_SLOTS:
                 slots[i] = 0
-        ctx.Dr0, ctx.Dr1, ctx.Dr2, ctx.Dr3 = slots
-        ctx.Dr6 = 0
-        ctx.Dr7 = 0
-        # Built per ENABLED slot rather than through dr7_for's contiguous
-        # n_slots, because a disarmed slot in the middle must stay off while
-        # the ones after it stay on. dr7_for keeps the encoding documented and
-        # tested; this is the same encoding applied to a sparse set.
+        dr7 = 0
         for i, a in enumerate(slots):
             if not a:
                 continue
             k = kinds[i] or "x"
-            ctx.Dr7 |= 1 << (2 * i)
+            dr7 |= 1 << (2 * i)
             if k != "x":
-                ctx.Dr7 |= RW_BITS[k] << (16 + 4 * i)
-                ctx.Dr7 |= LEN_BITS[sizes[i]] << (18 + 4 * i)
+                dr7 |= RW_BITS[k] << (16 + 4 * i)
+                dr7 |= LEN_BITS[sizes[i]] << (18 + 4 * i)
+        return tuple(slots) + (dr7,)
+
+    def _arm(self, hthread):
+        ctx = self._get_context(hthread, CONTEXT_DEBUG_REGISTERS)
+        if ctx is None:
+            return False
+        d = self.dr_state()
+        ctx.Dr0, ctx.Dr1, ctx.Dr2, ctx.Dr3 = d[:4]
+        ctx.Dr6 = 0
+        ctx.Dr7 = d[4]
         ctx.ContextFlags = CONTEXT_DEBUG_REGISTERS
         ok = bool(self._setctx(hthread, ctypes.byref(ctx)))
         if not ok:
@@ -863,6 +871,21 @@ class HwTrap:
         if ctx is not None and h:
             ctx.EFlags |= EFLAGS_RF
             ctx.Dr6 = 0
+            # AND RE-STAMP THE DEBUG REGISTERS FROM THE CURRENT ARMED SET.
+            # `ctx` was read BEFORE `on_hit`, and CONTEXT_FULL_READ includes
+            # the debug registers -- so writing it back verbatim RESTORES
+            # whatever DR state existed before the handler ran. Anything a
+            # handler armed is silently undone, on the very thread that just
+            # produced a hit, which is the thread most likely to matter.
+            # MEASURED: a row watch armed from `on_hit` verified live on 51
+            # threads and was then found cleared at 50 of 50 later checks,
+            # with DR7 back to 0x15 -- exactly the three execute slots that
+            # existed before it. The deferred-arming path never hit this only
+            # because it re-arms AFTER this write rather than during the
+            # handler.
+            d = self.dr_state()
+            ctx.Dr0, ctx.Dr1, ctx.Dr2, ctx.Dr3 = d[:4]
+            ctx.Dr7 = d[4]
             ctx.ContextFlags = CONTEXT_FULL_READ
             if not self._setctx(h, ctypes.byref(ctx)):
                 self.resume_failures += 1

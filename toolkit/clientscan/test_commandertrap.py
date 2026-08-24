@@ -46,8 +46,8 @@ import checks                                                   # noqa: E402
 # let the optional sections declare skips."
 # Floor 14 = the mandatory core (§1+§5+§6); §§2-4 need the vault and a 32-bit
 # Windows and SKIP. §7's four coverage checks and §8's eight watchpoint
-# checks are process-free, so they raise the mandatory floor to 27.
-LEDGER = checks.Ledger("commandertrap", floor=27)
+# checks are process-free, so they raise the mandatory floor to 29.
+LEDGER = checks.Ledger("commandertrap", floor=29)
 
 WOW64_CMD = r"C:\Windows\SysWOW64\cmd.exe"
 
@@ -426,6 +426,29 @@ def main():
     ok, why = tr.arm_watch(9, 0x0AB00044, 4)
     LEDGER.ok(not ok and "outside DR0" in why,
               "and refuses a slot the processor does not have")
+
+    # THE ORDERING BUG, pinned. `_exception` reads the context, calls
+    # on_hit, then writes the context back -- so anything a handler ARMED was
+    # restored to the pre-handler DR state. dr_state() is what the resume path
+    # re-stamps from, so it must reflect a mid-run arm_watch.
+    tr2 = _ArmTrap()
+    tr2.addrs = [0x401000, 0x402000, 0x403000, 0]
+    tr2.kinds, tr2.sizes = ["x", "x", "x", "x"], [4, 4, 4, 4]
+    tr2.dr_state = ct.HwTrap.dr_state.__get__(tr2)
+    before = tr2.dr_state()
+    LEDGER.ok(before[3] == 0 and before[4] == 0b010101,
+              "three execute slots and an empty fourth give DR7 0x15 -- the "
+              "exact state a live run found restored over its watch",
+              f"{before[4]:#x}")
+    tr2.arm_watch(3, 0x0AB00044, 4)
+    after = tr2.dr_state()
+    LEDGER.ok(after[3] == 0x0AB00044
+              and (after[4] & (1 << 6))
+              and ((after[4] >> 28) & 0b11) == 0b01,
+              "and after a mid-run arm_watch, dr_state carries the watch -- "
+              "so the resume path re-stamps it instead of restoring the old "
+              "registers over it, which is what silently killed the first "
+              "three watch runs", f"{after[4]:#x}")
 
     LEDGER.ok(ct.Site("w", 0, None, "why", None, kind="w").code is None
               and ct.Site("x", 1, b"\x90", "why").kind == "x",
