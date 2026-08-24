@@ -919,6 +919,95 @@ a hypothesis.
 
 Walk-first, ≥3 cancelled casts, ordinary presses as the in-session control.
 
+### 7.6 R7 RAN — THE GATE IS FOUND, IT IS PROPERTY 8's BIT, AND IT IS OURS (2026-08-24)
+
+`movetap-20260824T163558` (552 samples, `ctrl_why: ok` on **all 552**) paired
+with gamesrv `authsrv-20260824T163550-c1`, aligned on the wall clock both files
+carry. Five casts, four cancelled by a movement press. The poll read the
+walk-start applier's gate operands directly, and the answer is unambiguous.
+
+**CANCELWALK-F21 — OBSERVED. GATE A and GATE C are never set; the live gate is
+GATE B, and my "primary" hypothesis named the wrong bit.** `[ctrl+0x10C]` is
+**0 in all 552 samples**, so neither bit 0x100 (GATE A, the "dedicated
+suppress-self-walk bit" the read-site census made primary) nor bit 0x10
+(GATE C) is ever involved. The flag byte `[ctrl+0x64]` alternates **2 and 3** —
+bit 0, GATE B, toggling — 170 samples set, 382 clear. H5's shape is right and
+its operand was wrong: **the census argument ("read at only two sites, a
+dedicated bit") predicted the wrong one of the two candidates**, which is what
+a structural argument can do when a measurement is available and unmade.
+
+**CANCELWALK-F22 — OBSERVED, 5 of 5 and 5 of 5. GATE B is property 8's bit, and
+THE SERVER DRIVES IT.** Every SET window opens within 0.04–0.10 s of one of our
+`0x009F` property-8 → 1 sends and closes within 0.06 s of the matching → 0:
+
+| our prop8 → 1 | gate B set at | our prop8 → 0 | gate B clear at |
+|---|---|---|---|
+| 12.656 | 12.69 | 23.533 | 23.47 |
+| 28.205 | 28.30 | 29.257 | 29.19 |
+| 36.497 | 36.54 | 37.681 | 37.69 |
+| 43.204 | 43.28 | 44.238 | 44.25 |
+| 50.262 | 50.35 | 51.362 | 51.33 |
+
+Five windows, five casts, no unexplained transition. This **joins the arc to
+`studies/skillcast` §16.2**, which read property 8's case body as "a one-bit
+flag at object `+0x64`, set by a non-zero value and cleared by zero" — the same
+offset, now caught in the act on the object the walk-start applier gates on.
+Property 8 is not merely "animation plumbing": **it is the walk-suppress gate.**
+
+**CANCELWALK-F23 — OBSERVED, 3 of 3 frozen and 1 of 1 walking. The freeze is
+the applier reading a bit our answer has not cleared yet.** At the last sample
+before each of the three frozen presses, `gate_b` is **SET** and the body never
+moves (velocity 0.0, position bit-identical, for the whole window); the bit
+clears ~90 ms *after* the press. At the one press that walked, `gate_b` was
+already **CLEAR** at the press sample and the body was at **288.0 u/s in
+exactly the pressed direction** — async velocity `(+0.956, −0.294)` against the
+press's own `vec2` direction `(+0.956, −0.294)`, so that one is a genuine local
+walk-start, not a grant-driven order (a 318 u snap rode along with it, F18's
+class again).
+
+**AND THE OBVIOUS ALTERNATIVE IS REFUTED BY THE SAME DATA.** "The frozen ones
+were taps" does not survive: the key was held **0.834 s, 1.334 s and 0.849 s**
+after the three frozen presses (press → its own `0x0047` release), i.e. for
+~0.75 s *after* the bit cleared, and the body still never moved. **Clearing the
+hold does not re-evaluate a held key on our build.**
+
+**THE MECHANISM, end to end, OBSERVED except where marked:**
+1. Cast starts; we send property 8 → 1; GATE B is set. The client's local
+   walk-start is now suppressed — which is correct, that is what an action hold
+   is for.
+2. The player presses a movement key. **The client's applier runs on that key
+   edge, in its own frame, reads GATE B still SET, and bails** (`0x0081AD0F`).
+   No walk. The key edge is spent.
+3. The press reaches us ~one round trip later; we answer `[8→0, 59, E2]`; GATE B
+   clears about a frame after that.
+4. **Nothing re-runs the walk-start**, because no new key edge exists — and the
+   held key does not produce one. The body stays still for as long as the key
+   is down.
+5. The second press finds GATE B clear and walks. **That is the double-press
+   symptom, exactly.**
+
+**What this closes and what it opens.** It closes the arc's central question:
+the differentiator is a bit we set, read by the client one round trip before we
+clear it, and *no cancel-instant answer content can win that race* — which is
+why R1 (zero bytes) froze, why R2–R4's leads only moved the body by ordering it
+to a point, and why R6's stop-ack could not matter. It opens a sharper one, and
+it is a **desk** question: retail's client walks on the single press (F3, "self-
+walks its own live direction the moment the burst clears the hold"), so on
+retail *something re-starts the walk when the hold clears*. `skillcast` §16.2
+already read property 8's value-0 path as scheduling a DEFERRED action —
+`0x0081C090` sets a state bit in `+0x110`, computes a due time into `+0x114`
+(`0x006044E0()` + 0xFA) and registers it through `0x009217C0`. **Reading that
+deferred action to depth is the next step, and it costs nothing.** If it is a
+"return to ready" that re-invokes the walk-start when a movement key is held,
+the whole arc lands on why it does not fire here.
+
+**Registered predictions, scored:** H5 **CONFIRMED in shape, corrected in
+operand** — a controller bit does suppress the walk at a frozen press, and it
+is GATE B, not GATE A. H7 (navmesh/path degeneracy) is **REFUTED for these
+presses**: the applier never reached the navmesh query, because a gate above it
+bailed. GATE C never set, as the reading predicted (it would have falsified the
+model, since the press reached the wire).
+
 ### 7.5 Measured dead this round — do not retry
 
 - `0x0027`/speed-base as differentiator, trigger, or fix (F8/F13) — and the
