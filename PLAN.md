@@ -1947,8 +1947,37 @@ content and says **"PASS, and WEAK BY CONSTRUCTION"** in the report because
 every declared value is 0 today -- broken both ways in the test, including a
 sabotage that catches the wire-vs-CpsBase re-key the all-zero table hides.
 `test_compositetrap` 96 -> 102, floor 70 -> 78.
-**Still open**: the THIRD kind of type-45 id -- record type 17 OUTSIDE any run
-(1887, 3663 and 20 others), which is neither kind tested so far.
+★★ **AND THE LAST ITEM IS CLOSED (9.24): the third kind of type-45 id is
+REAL AND IS NOT A THIRD KIND.** Desk only, no run. 29 distinct costume-head
+record ids in the live corpus (9.16 said 28); a run is five CONSECUTIVE record
+indices typed (14,15,16,18,17) and there are 253 of them. Type 17 member-of-a-
+run: 10, component 2. Type 17 OUTSIDE any run: 14, component **2**. Type 19
+outside: 5, component 1. **The component is a function of the record TYPE
+alone**, because it comes from `s_components[hdr>>22]` and `hdr` is a field OF
+THE RECORD -- nothing in that chain consults section 1, so no property of the
+table's LAYOUT can reach the dressing path. With 9.15 (slot-keyed override, the
+component follows the record), the 2x2 of (type, run membership) has three
+occupied cells, TWO ALREADY TESTED, and the third shares its component with one
+and its run-membership with the other: no free parameter left, and the
+experiment is already performed by composition. 1887 and 3663 really are
+outside a run, so 9.10's classification survives ("20 others" was 12).
+⚠ T45-2 partly REFUTED and it is the better half: the outside-run records are
+NOT structurally like the in-run ones -- three carry file slots (3,8,10) with
+NEITHER per-sex base slot (`SEX_BASE_SLOT = (0,5)`) and look degenerate, but
+`SHARED_SLOT = 10` is present and `base_file` falls back to it, so all 29
+resolve for BOTH sexes, 0 unresolvable. ⚠ **The census was wrong TWICE before
+it was right**, both times on the operand: it read only opcode 0x0161 (costume
+heads are declared under 0x015E) and found zero -- caught by its own
+pre-registered positive control, which printed "not measuring the thing"; then
+it scored "run" as membership of a section-1 LIST CELL, which everything is in,
+producing a true statement that answered nothing and would have read as
+refuting 9.10. The fix carries its own control: 9.11's costume overrode
+2805..2808 and 2809 is a type-17 head, so 2805..2809 must detect as a run or
+nothing prints. `test_wearmap` 36 -> 40, floor 36 -> **20** (the mandatory
+core: sections 3-5 need the vault, so the old floor failed a bare machine on a
+shortfall rather than on honest skips -- the same latent bug test_compositetrap
+had, corrected the same day).
+**THE COMPOSITE ARC HAS NO OPEN ITEMS.**
 Prior status follows.
 **BUILT AND ARMED 2026-08-23, RUN WAS BLOCKED**
 (`toolkit/clientscan/compositetrap.py`, `test_compositetrap.py` 18 checks,

@@ -5403,8 +5403,27 @@ Every one of these, in the order they were written:
   `authsrv.py` runs at import so an authored row that would draw on the wrong body
   part dies at the desk. The 5,709 floor carries its own correction: an earlier census
   said 5,710, having misread a `0x006F` UNEQUIP through an order-probing heuristic;
-  the field order is now the handler's own. Needs `vault/captures/live/` for §3–§4 and
-  the study archive for §4, skips declared; floor 36),
+  the field order is now the handler's own. **§5 is the TYPE-45 TAXONOMY**, which
+  closed the composite arc's last open item at a desk (§9.24): it pins that all
+  **29** costume-head records are record type 17 or 19, that the COMPONENT is a
+  function of the record type ALONE (`{17: {2}, 19: {1}}`, no exceptions), and that
+  all 29 resolve geometry for BOTH sexes. That second check is the whole closure --
+  a component comes from `s_components[hdr>>22]`, a field of the RECORD, so no
+  property of the table's layout (which five-record run an id belongs to, the thing
+  §9.10 sorted them by) can reach the dressing path at all. The fourth check exists
+  to stop the other three agreeing vacuously: **3 of the 29 carry NO per-sex base
+  slot** (`SEX_BASE_SLOT = (0, 5)`) and resolve only through `SHARED_SLOT = 10`, so
+  a census reading a different archive, or a `base_file` that stopped falling back,
+  would find none of them and quietly pass everything else. The census that produced
+  this was WRONG TWICE on the operand before it was right -- it read only opcode
+  `0x0161` when costume heads are declared under `0x015E` (caught by its own
+  pre-registered positive control, which printed "not measuring the thing" rather
+  than a census of nothing), then scored "run" as membership of a section-1 LIST
+  CELL, which every record is in. Needs `vault/captures/live/` for §§3–5 and the
+  study archive for §§4–5, skips declared; a whole green run is 40 and the floor is
+  **20**, its MANDATORY CORE -- lowered from 36, which sat above it, so a machine
+  without a vault would have failed on the shortfall instead of reading the skip the
+  vault block already declares),
   `toolkit/authsrv/test_msgmix.py` (the tool that ranks what to build next, and the
   three ways it answered confidently about a corpus it had not read: it took the
   newest **6 of 439** gamesrv captures, it read the c2s direction off the server's

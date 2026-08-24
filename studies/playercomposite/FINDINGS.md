@@ -2486,3 +2486,104 @@ slot 4.
 | `+0x04` | type / dye tint / dye colours | `item+0x20..0x23` |
 | `+0x08` | **`value`** | `item+0x24` |
 | `+0x0C` | flags, OR-merged `0x20000006` | `item+0x28`, ORed by the writer |
+
+## 9.24 The THIRD kind of type-45 id: it is real, and it is not a third kind (2026-08-24)
+
+The arc's last open item, carried for weeks and described in two surveys as
+"a weak experiment". It is closed at a desk, **no client run**, and the honest
+outcome was the one worth wanting: **the distinction is real in the table and
+invisible to the dressing path.**
+
+### What was open
+
+§9.10 sorted the costume-head (wire type 45) ids by how their RECORD sits in
+the composite table: `2654/2784/3673` are **member 4 of a five-record run**
+(TESTED, §9.11); `2817/3350` are **standalone type 19**, component 1 (TESTED,
+§9.15); and `3663/1887` are **type 17 outside any run** — untested.
+
+### The census, re-derived rather than trusted
+
+**29** distinct type-45 record ids across the live corpus (§9.16 said 28; that
+count was one short, and §9.10's "seven" was already corrected once). A run is
+**five CONSECUTIVE record indices** typed `(14, 15, 16, 18, 17)` — boots,
+chest, gloves, legs, head — and there are **253** of them in the table.
+
+| kind | n | component |
+|---|---|---|
+| record type 17, **member 4 of a run** | 10 | 2 |
+| record type 17, **outside any run** | 14 | **2** |
+| record type 19, outside any run | 5 | 1 |
+
+**T45-3 CONFIRMED**: `1887` and `3663` really are type 17 outside any run, and
+§9.16's five type-19 ids (2817, 3349, 3350, 3351, 3675) are exactly right. The
+"20 others" was 12 others — loose, but the kind is real.
+
+### T45-1 CONFIRMED: the component is a function of the record TYPE alone
+
+Type 17 → component **2**, in a run or not, 24 for 24. Type 19 → component 1,
+5 for 5. That is the whole closure and it is structural rather than
+statistical: a component comes from `s_components[hdr >> 22]`, and `hdr` is a
+field **of the record**. Nothing in that chain consults section 1, so no
+property of the table's *layout* — run membership included — can reach the
+dressing path at all.
+
+Combined with §9.15 (the override is SLOT-keyed and the component follows the
+record wherever it points), the 2×2 of *(record type, run membership)* has
+three occupied cells, **two of them already tested**, and the third shares its
+component with one tested cell and its run-membership with the other. There is
+no free parameter left to measure. **The experiment is not weak — it is
+already performed, by composition.**
+
+### T45-2 partly REFUTED, and the refutation is worth more than the prediction
+
+I predicted the outside-run records would look structurally like the in-run
+ones. They do not. Their file-slot shapes include three the in-run set never
+has: `(0, 5)`, `(0, 1, 3, 5, 6, 8)` and — the odd one — **`(3, 8, 10)`**, held
+by 2379, 2429 and 2785. `SEX_BASE_SLOT = (0, 5)`, so those three carry
+**neither** per-sex base slot and at a glance look degenerate.
+
+They are not. `SHARED_SLOT = 10` is present, and `Record.base_file` falls back
+to it — so they resolve for **both** sexes, as does every other one:
+**29 records × 2 sexes, 0 unresolvable.** A degenerate record would have
+predicted a visible failure and there is none to chase.
+
+### ⚠ TWO WRONG OPERANDS, and the first was caught by its own control
+
+This census was wrong twice before it was right, both times by measuring
+something adjacent to the question:
+
+1. **It read only opcode `0x0161`** and found **zero** type-45 declares. The
+   costume heads are declared under `0x015E`; `test_wearmap` has always read
+   `LOW, HIGH = 0x015E, 0x0161` together. The pre-registered positive control
+   — *"the census must separate two kinds we already know differ"* — failed and
+   printed *"not measuring the thing"* instead of reporting a census of
+   nothing. That is the control earning its place.
+2. **It then scored "run" as membership of a section-1 LIST CELL.** Every
+   record is in one, so everything came back "in a run" — a true statement
+   answering nothing, and it would have read as *"§9.10's classification is
+   refuted"*. A run is five consecutive record INDICES. The fix carries its
+   own control: §9.11's costume overrode 2805/2806/2807/2808 and **2809 is a
+   type-17 head**, so `2805..2809` must come back as a run or the detector is
+   still wrong. It does, and the census refuses to print anything if it does
+   not.
+
+[[feedback-verify-the-operand-not-just-the-predicate]], twice in one task, on
+a question where every wrong operand produced a plausible, specific, *wrong*
+answer rather than an error.
+
+### Pinned
+
+`test_wearmap.py` §5: all 29 are record type 17 or 19; the component is a
+function of the type alone (`{17: {2}, 19: {1}}`); all 29 resolve for both
+sexes; and **3 of them resolve only through the shared slot** — the last check
+exists because a census reading a different archive, or a `base_file` that
+stopped falling back, would find none of those and quietly agree with
+everything else. `test_wearmap` 36 → 40, and its floor **36 → 20**, the
+mandatory core: sections 3–5 all need the vault, so the old floor would have
+failed a bare machine on a shortfall rather than on four honest skips — the
+same latent bug `test_compositetrap.py` had, corrected the same day.
+
+### The composite arc has no open items
+
+§4.6, §4.12, §9.1, §9.2, the REPLACE-vs-MERGE question, the writer outside
+`0x0082EDA0`, the two odd instances and their trigger, `row+0x08`, and this.
