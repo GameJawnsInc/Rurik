@@ -6129,8 +6129,18 @@ Every one of these, in the order they were written:
   why: a hardware execute breakpoint fires on an instruction's FIRST byte, so a
   dependent at `entry+1` is mid-instruction and would be silent for reasons
   unrelated to deferral. §§2-4 need the vault and a 32-bit Windows and SKIP with
-  their reason. Floor 14 = the mandatory core (§1+§5+§6); a whole green run is
-  39, ~6s),
+  their reason. **§7 is the COVERAGE half, added 2026-08-23 and it is the one
+  that makes every other hit count mean something**: `armed_now()` existed
+  from the start and was called only from this test, so no RUN had ever
+  verified that its debug registers were actually live on every thread --
+  and `arm_failures == 0` counts only the threads the trap TRIED.
+  `snapshot_coverage()` reads DR0-DR3/DR7 back per thread, names any
+  thread missing a site, reports an unreadable context as unreadable
+  rather than as armed, and `_report` prints **NOT SAMPLED -- a zero hit
+  count from this run is not evidence of absence** when no snapshot
+  exists. The four checks run against a fake trap with no process at all.
+  Floor 18 = the mandatory core (§1+§5+§6+§7); §§2-4 need the vault and a
+  32-bit Windows and SKIP with their reason; a whole green run is 43, ~6s),
   `toolkit/clientscan/test_compositetrap.py` (**the composite pipeline's runtime
   instrument, checked without a client** — `compositetrap.py` is the probe for
   playercomposite §4.12 ("nothing here was checked against a running client"),

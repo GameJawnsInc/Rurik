@@ -386,6 +386,8 @@ class HwTrap:
         # not totals", which is false and is the kind of label that gets a
         # correct measurement re-litigated later.
         self.capped = set()
+        # Filled by snapshot_coverage() at the end of pump().
+        self.coverage = None
         self._getctx = None
         self._setctx = None
 
@@ -480,6 +482,34 @@ class HwTrap:
         if ctx is None:
             return None
         return (ctx.Dr0, ctx.Dr1, ctx.Dr2, ctx.Dr3, ctx.Dr7)
+
+    def snapshot_coverage(self):
+        """Per thread: do the debug registers ACTUALLY hold our addresses?
+
+        `armed_now()` has existed since this module was written and was called
+        only from its own test -- so no RUN had ever verified its own coverage,
+        and `arm_failures == 0` counts only the threads we TRIED. That gap
+        matters most for the claim a trap is best at: a site firing ZERO times
+        means nothing unless every thread could have fired it. Sampled before
+        `detach()` clears the registers, and stored for `_report`.
+        """
+        want = {a for a in self.addrs if a}
+        ok, bad = 0, []
+        for tid, h in list(self.threads.items()):
+            got = self.armed_now(h)
+            if got is None:
+                bad.append((tid, "context unreadable"))
+                continue
+            have = {d for d in got[:MAX_SLOTS] if d}
+            missing = sorted(want - have)
+            if not missing and got[4]:
+                ok += 1
+            else:
+                bad.append((tid, f"missing {[hex(m) for m in missing]} "
+                                 f"dr7=0x{got[4]:X}"))
+        self.coverage = {"threads": len(self.threads), "armed": ok,
+                         "bad": bad, "want": sorted(want)}
+        return self.coverage
 
     def _disarm_all(self):
         keep, self.addrs = self.addrs, []
@@ -628,6 +658,14 @@ class HwTrap:
     def detach(self):
         if not self.attached:
             return
+        # BEFORE _disarm_all clears the registers -- this is the last moment
+        # the coverage question can be answered, and every consumer calls
+        # detach() in a finally block, so putting it here means no run can
+        # report hit counts without also reporting whether they were watchable.
+        try:
+            self.snapshot_coverage()
+        except Exception:                                    # noqa: BLE001
+            self.coverage = None
         try:
             self._disarm_all()
         except Exception:
@@ -1169,6 +1207,20 @@ def _report(sites, hits, base, out=sys.stdout, trap=None):
         w(f"  other exceptions passed on     {trap.other_exceptions}\n")
         w(f"  arm failures / resume failures {trap.arm_failures} / "
           f"{trap.resume_failures}\n")
+        # COVERAGE, printed every run. A site firing zero times is evidence of
+        # absence only if every thread could have fired it, and until
+        # 2026-08-23 no run said whether they could.
+        cov = getattr(trap, "coverage", None)
+        if cov is None:
+            w("  DR coverage                    NOT SAMPLED -- a zero hit "
+              "count from this run is not evidence of absence\n")
+        else:
+            w(f"  threads armed and VERIFIED     {cov['armed']} of "
+              f"{cov['threads']}\n")
+            for tid, why in cov["bad"][:8]:
+                w(f"      tid {tid}: {why}\n")
+            if len(cov["bad"]) > 8:
+                w(f"      ... {len(cov['bad']) - 8} more\n")
         if trap.capped:
             w(f"  SLOTS CAPPED AT max_hits: "
               f"{sorted(order[i] for i in trap.capped)} -- those counts are "

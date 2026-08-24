@@ -44,7 +44,10 @@ import checks                                                   # noqa: E402
 # A whole green run is 29; sections 2 (8), 3 (5) and 4 (2) declare skips instead,
 # which is `checks.py`'s own guidance -- "set the floor to its mandatory core and
 # let the optional sections declare skips."
-LEDGER = checks.Ledger("commandertrap", floor=14)
+# Floor 14 = the mandatory core (§1+§5+§6); §§2-4 need the vault and a 32-bit
+# Windows and SKIP. §7's four coverage checks are process-free, so they raise
+# the mandatory floor to 18.
+LEDGER = checks.Ledger("commandertrap", floor=18)
 
 WOW64_CMD = r"C:\Windows\SysWOW64\cmd.exe"
 
@@ -317,6 +320,57 @@ def main():
                             lambda a, s: None)["entry+0 agent"] is None,
               "and an unreadable entry decodes to None, not to zeros",
               "a zeroed row would read as a real measurement of zeros")
+
+    # ---------------------------------------------------------- coverage
+    print("== 7. coverage: a zero hit count needs a witness ==")
+
+    class _FakeTrap:
+        """Enough of HwTrap for snapshot_coverage, with no process at all."""
+
+        def __init__(self, addrs, dr_by_tid):
+            self.addrs = list(addrs)
+            self.threads = {tid: ("h", tid) for tid in dr_by_tid}
+            self._dr = dr_by_tid
+            self.coverage = None
+
+        def armed_now(self, h):
+            return self._dr[h[1]]
+
+        snapshot_coverage = ct.HwTrap.snapshot_coverage
+
+    A, B = 0x00401000, 0x00402000
+    cov = _FakeTrap([A, B], {11: (A, B, 0, 0, 0x5),
+                             12: (A, B, 0, 0, 0x5)}).snapshot_coverage()
+    LEDGER.ok(cov["armed"] == 2 and cov["threads"] == 2 and not cov["bad"],
+              "snapshot_coverage passes when every thread's DRs really hold "
+              "our addresses -- READ BACK from the registers, never assumed "
+              "from a SetThreadContext that returned TRUE", str(cov))
+
+    cov = _FakeTrap([A, B], {11: (A, B, 0, 0, 0x5),
+                             12: (A, 0, 0, 0, 0x1)}).snapshot_coverage()
+    LEDGER.ok(cov["armed"] == 1 and len(cov["bad"]) == 1
+              and "0x402000" in cov["bad"][0][1],
+              "and it NAMES the thread missing a site. This is what makes "
+              "'the site fired zero times' mean anything: without it, an "
+              "unarmed thread and an event that never happened are the same "
+              "report", str(cov))
+
+    cov = _FakeTrap([A], {11: None}).snapshot_coverage()
+    LEDGER.ok(cov["armed"] == 0 and cov["bad"][0][1] == "context unreadable",
+              "a thread whose context cannot be read is reported unreadable "
+              "rather than counted as armed")
+
+    buf = io.StringIO()
+    ct._report([], [], 0x00400000, out=buf,
+               trap=type("T", (), {"bp_first": 0, "bp_second": 0,
+                                   "foreign_steps": 0, "other_exceptions": 0,
+                                   "arm_failures": 0, "resume_failures": 0,
+                                   "capped": set(), "oneshot": set(),
+                                   "coverage": None})())
+    LEDGER.ok("NOT SAMPLED" in buf.getvalue()
+              and "not evidence of absence" in buf.getvalue(),
+              "and a report with NO coverage snapshot says so IN THOSE WORDS, "
+              "rather than printing hit counts that read as complete")
 
     return LEDGER.verdict()
 
