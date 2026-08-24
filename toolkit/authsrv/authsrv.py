@@ -1598,17 +1598,28 @@ STOP_ANSWER = None     # None | "ack"
 # 288). Retail stops you when you start casting; we never send anything
 # that does.
 #
-# THE ARM: at the free-caster cast burst (the `not queued` branch -- a
-# queued cast begins under a hold that never released, so with this flag on
-# its body was already stopped at the FIRST cast's start; the one exception
-# is a first cast that was an ATTACK skill, which the scoping below skips,
-# so a spell queued behind one can still begin in motion unhalted -- a
-# NAMED residual, zero exposure in R8's spell-only protocol, §8), send one
-# s2c 0x0028 AGENT_STOP_MOVING [player] first in the burst, before the
-# animation and the prop-8 hold. SPELLS ONLY (`not is_attack`): the
-# float-forward was measured on casts, and an attack skill's start drives
-# chase movement a halt would fight -- extending to that family needs its
-# own evidence.
+# THE ARM: at the free-caster cast burst (the `not queued` branch), send
+# one s2c 0x0028 AGENT_STOP_MOVING [player] first in the cast-begin TAIL
+# -- before the animation and the prop-8 hold. NOT first in the burst: the
+# E4 press-ack and the debits precede it, and a capture reviewer expecting
+# the halt at the burst head would mis-score valid exposure. NON-ATTACK
+# CASTS ONLY (`not is_attack`): the float-forward was measured on spell
+# casts, and an attack skill's start drives chase movement a halt would
+# fight. Three NAMED residuals, each zero-exposure in R8's spell-only
+# protocol and each a ship-time term (§8.1), found by the adversarial
+# review pass rather than smoothed over:
+#   (1) instant non-attack skills -- shouts, stances, signets -- also take
+#       the halt under this gate, a divergence from retail, which does not
+#       stop a runner for them;
+#   (2) a NON-ATTACK ADRENAL skill's halt lands between its 0x00D2 and the
+#       naming property, breaking a measured 39-of-39 adjacency;
+#   (3) the queued begin sends nothing, and its "body already stopped at
+#       the first cast's start" premise fails two ways: a spell queued
+#       behind an attack-headed chain, and a spell queued during an
+#       aftercast whose hold a movement press already released
+#       (cancel_on_move releases the hold but cannot cancel an aftercast
+#       entry or roll back the busy window, so a camera-turn walk can be
+#       in flight at the begin).
 #
 # WHY THIS MESSAGE: the 0x0028 handler halts both world copies via 0x602540
 # only when IN MOTION and no-ops on a parked body (schema GAME_SMSG "40" --
@@ -4335,6 +4346,37 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
                 "stay clean. Pass --zero-lead --plane-carry for the F1 arm, "
                 "--zero-lead --arrival-carry for the F1b arm, or --zero-lead "
                 "alone for the P2 control both are measured against."), []
+    # The cast_stop pairwise cells sit ABOVE the requires-zero-lead checks,
+    # like the plane/arrival pair and for its reason: "you passed two
+    # levers" is the more useful thing to be told, and a requires-zero-lead
+    # refusal here would hand out advice (--zero-lead --arrival-carry) that
+    # the pairwise cell below would then refuse on the next restart -- an
+    # adversarial pass caught exactly that with the arrival cell placed low.
+    if cast_stop and cancel_answer:
+        return ("--cast-stop and --cancel-answer cannot run together. R8's "
+                "readout is the body's motion across the CAST START and the "
+                "cancel arms change the answer at the CANCEL instant -- two "
+                "levers in one run, and a halt (or a walk, or a freeze) "
+                "could be attributed to neither. One change per run is this "
+                "arc's own rule (CANCELWALK.md sec.5). Run --cast-stop "
+                "alone."), []
+    if cast_stop and stop_answer:
+        return ("--cast-stop and --stop-answer cannot run together. Both "
+                "send the SAME opcode (s2c 0x0028 AGENT_STOP_MOVING) on "
+                "different triggers -- every free-caster non-attack cast "
+                "start vs every player 0x0047 stop -- so the capture could "
+                "not attribute any halt, or any freeze/walk change, to one "
+                "lever. One change per run (CANCELWALK.md sec.5). Run them "
+                "in separate sessions."), []
+    if cast_stop and arrival_carry:
+        return ("--cast-stop and --arrival-carry cannot run together. The "
+                "cast-start 0x0028 halts BOTH world copies mid-leg when the "
+                "body is in motion, so a grant the F1b queue modelled as "
+                "arriving never arrives -- the queue would carry an arrival "
+                "plane for a leg the halt cut short, and a snap it caused "
+                "would be attributed to the wrong arm. One diagnostic at a "
+                "time; R8 is pre-registered against the shipped default "
+                "(--zero-lead --plane-carry) and nothing else."), []
     if arrival_carry and not zero_lead:
         return ("--arrival-carry requires --zero-lead. REALFIX-F1b is a "
                 "MODIFIER on the zero-lead grant, not a policy of its own: it "
@@ -4388,31 +4430,6 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
                 "freeze) to neither lever. One change per run is this "
                 "arc's own rule (CANCELWALK.md sec.5). Run "
                 "--stop-answer=ack alone."), []
-    if cast_stop and cancel_answer:
-        return ("--cast-stop and --cancel-answer cannot run together. R8's "
-                "readout is the body's motion across the CAST START and the "
-                "cancel arms change the answer at the CANCEL instant -- two "
-                "levers in one run, and a halt (or a walk, or a freeze) "
-                "could be attributed to neither. One change per run is this "
-                "arc's own rule (CANCELWALK.md sec.5). Run --cast-stop "
-                "alone."), []
-    if cast_stop and stop_answer:
-        return ("--cast-stop and --stop-answer cannot run together. Both "
-                "send the SAME opcode (s2c 0x0028 AGENT_STOP_MOVING) on "
-                "different triggers -- every free-caster spell cast start "
-                "vs every player 0x0047 stop -- so the capture could not "
-                "attribute any halt, or any freeze/walk change, to one "
-                "lever. One change per run (CANCELWALK.md sec.5). Run them "
-                "in separate sessions."), []
-    if cast_stop and arrival_carry:
-        return ("--cast-stop and --arrival-carry cannot run together. The "
-                "cast-start 0x0028 halts BOTH world copies mid-leg when the "
-                "body is in motion, so a grant the F1b queue modelled as "
-                "arriving never arrives -- the queue would carry an arrival "
-                "plane for a leg the halt cut short, and a snap it caused "
-                "would be attributed to the wrong arm. One diagnostic at a "
-                "time; R8 is pre-registered against the shipped default "
-                "(--zero-lead --plane-carry) and nothing else."), []
     if cancel_answer and not zero_lead:
         return ("--cancel-answer requires --zero-lead. The CANCELWALK arms "
                 "are MODIFIERS on the zero-lead answer to the one report "
@@ -4523,8 +4540,9 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
     if cast_stop:
         notes.append(
             "      + --cast-stop: CANCELWALK-R8 arm, DIAGNOSTIC ONLY. Adds "
-            "one s2c 0x0028 [player] at every free-caster SPELL cast start "
-            "-- halts a body still in flight (F28's float-forward), no-ops "
+            "one s2c 0x0028 [player] at every free-caster non-attack cast "
+            "start -- halts a body still in flight (F28's float-forward), "
+            "no-ops "
             "on a parked one. NOT a grant: no destination armed, no grant "
             "clock stamped. Every grant and every cancel-instant answer "
             "stays exactly as --zero-lead ships. Predictions and readout: "
@@ -8551,8 +8569,10 @@ def handle_skill_press(values, send, state, conn_id, opcode):
         # -- retail never captured a cast-while-running start -- and chosen:
         # the movement family closes before the action family opens, the
         # adjacency retail's cancel bursts use in the other direction
-        # ([8->0] before the movement tail, F1). SPELLS ONLY: an attack
-        # skill's start drives chase movement a halt would fight. The
+        # ([8->0] before the movement tail, F1). NON-ATTACK ONLY (spells
+        # are the measured family; the flag block names the instant-skill
+        # and adrenal-adjacency residuals): an attack skill's start drives
+        # chase movement a halt would fight. The
         # handler no-ops on a parked body (schema GAME_SMSG "40"), so a
         # standstill cast is untouched -- not a grant, no grant clock,
         # zero warp exposure. Predictions: the flag's comment block and
@@ -16305,7 +16325,9 @@ def main():
                          "with --cancel-answer, --stop-answer or "
                          "--arrival-carry. Sends one s2c 0x0028 "
                          "AGENT_STOP_MOVING [player] at every free-caster "
-                         "SPELL cast start, first in the burst. FIX "
+                         "NON-ATTACK cast start, first in the cast-begin "
+                         "tail (before the animation and the prop-8 hold; "
+                         "the E4 press-ack and the debits precede it). FIX "
                          "CANDIDATE for CANCELWALK-F28 (the float-forward): "
                          "our prop-8 hold suppresses the walk-START but "
                          "stops nothing in flight, so a cast begun while "
@@ -17219,8 +17241,10 @@ def main():
         print("[map] --cast-stop ON. CANCELWALK R8 (cast-start halt), "
               "DIAGNOSTIC ONLY -- no outcome ships from this run directly.")
         print("      SENDS     one s2c 0x0028 AGENT_STOP_MOVING [player] at "
-              "every free-caster SPELL cast start, first in the burst, "
-              "before the animation and the prop-8 hold. Attack skills, "
+              "every free-caster NON-ATTACK cast start, first in the "
+              "cast-begin tail: before the animation and the prop-8 hold "
+              "(the E4 press-ack and the debits PRECEDE it -- do not score "
+              "'not first in the burst' as a misfire). Attack skills, "
               "queued casts and every grant are untouched.")
         print("      FIXES     CANCELWALK-F28 if it works: the hold gates "
               "the walk-START and stops nothing in flight, so a cast begun "

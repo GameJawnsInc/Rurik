@@ -1398,11 +1398,13 @@ flight, so casting while running leaves the body gliding at **288 u/s for the
 whole cast** (~690 u measured). **The fix is WIRED as of 2026-08-24**: s2c
 `0x0028` AGENT_STOP_MOVING (halts when in motion, no-ops when parked; built for
 R6, where it was VOID only because it was fired at *stops*) now goes out at the
-free-caster SPELL cast start behind **`--cast-stop`** — CANCELWALK-R8, refused
-without `--zero-lead` and with any other CANCELWALK lever, prediction
+free-caster non-attack cast start behind **`--cast-stop`** — CANCELWALK-R8,
+refused without `--zero-lead` and with any other CANCELWALK lever, prediction
 registered at CANCELWALK.md §8 before any run, `test_cancelwalk.py` §7 (floor
-58) driving the lattice and the burst. The run is the owner's; defaults are an
-owner ruling; it ships OFF.
+59) driving the lattice and the burst, the whole change adversarially reviewed
+(three agents, 6-of-6 mutation catch; §8.1 carries the three named residuals
+it yielded). The run is the owner's; defaults are an owner ruling; it ships
+OFF.
 
 **Moved to REALFIX: the WARP.** Our zero-lead policy grants only on c2s
 `0x003D`, and the client only sends `0x003D` on direction change — so a long

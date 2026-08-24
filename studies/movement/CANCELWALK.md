@@ -74,12 +74,14 @@ AGENT_STOP_MOVING, which **halts when in motion and no-ops when parked**
 because it was fired at **stops**, where it can only no-op (§7.4a). **Fired at
 CAST START it is the right message for a real bug.**
 *Wired 2026-08-24:* **`--cast-stop` (CANCELWALK-R8, §8)** sends it at the
-free-caster SPELL cast start, first in the burst — refused without
-`--zero-lead` and with `--cancel-answer`, `--stop-answer` or
-`--arrival-carry`; `test_cancelwalk.py` §7 drives the lattice, the burst
-order and both scoping branches. The prediction is registered at §8; the run
-is the owner's, and shipping stays a separate audited step. **Defaults are an
-owner ruling in this repo — do not ship it on.**
+free-caster non-attack cast start, first in the cast-begin tail (the E4 and
+the debits precede it) — refused without `--zero-lead` and with
+`--cancel-answer`, `--stop-answer` or `--arrival-carry`;
+`test_cancelwalk.py` §7 drives the lattice, the burst order and both scoping
+branches, and the change survived a three-agent adversarial review (§8.1's
+residual list is that review's yield). The prediction is registered at §8;
+the run is the owner's, and shipping stays a separate audited step.
+**Defaults are an owner ruling in this repo — do not ship it on.**
 
 ### What is CLOSED — do not re-open without new evidence
 
@@ -1397,25 +1399,48 @@ protocol's class. Each registration carries its own exposure floor, because
 
 ### 8.1 CANCELWALK-R8 · `--cast-stop` — the F28 float-forward fix, wired and unrun
 
-**The code is in the tree (2026-08-24, this commit):** `--cast-stop` sends
-one s2c `0x0028` AGENT_STOP_MOVING `[player]` at every free-caster SPELL
-cast start, first in the burst, before the animation and the prop-8 hold.
-Details that are choices, named as such: the burst SLOT is unwitnessed
-(retail never captured a cast-while-running start) and chosen so the
-movement family closes before the action family opens; the scoping is
-SPELLS ONLY (`not is_attack` — the defect was measured on casts, and an
-attack skill's start drives chase movement a halt would fight); the queued
-begin sends nothing (a queued cast begins under a hold that never released,
-so with the flag on its body was already stopped at the FIRST cast's start —
-**except when that first cast was an ATTACK skill**, which the scoping skips,
-so a spell queued behind one can still begin in motion unhalted: a NAMED
-residual with zero exposure in this run's spell-only protocol, priced at a
-sentence rather than a second send site). Refused without `--zero-lead` and
-with `--cancel-answer`,
-`--stop-answer` (same opcode, two triggers — its own cell) or
-`--arrival-carry` (the halt cuts short a leg the F1b queue modelled as
-arriving). `test_cancelwalk.py` §7 drives the lattice, the burst order and
-both scoping branches; floor 58.
+**The code is in the tree (2026-08-24):** `--cast-stop` sends one s2c
+`0x0028` AGENT_STOP_MOVING `[player]` at every free-caster **non-attack**
+cast start, **first in the cast-begin TAIL** — before the animation and the
+prop-8 hold; the E4 press-ack and the debits precede it, so do not score
+"not first in the burst" as a misfire when reading the capture. Details
+that are choices, named as such: the tail SLOT is unwitnessed (retail
+never captured a cast-while-running start) and chosen so the movement
+family closes before the action family opens; the scoping is NON-ATTACK
+(`not is_attack` — spells are the measured family, and an attack skill's
+start drives chase movement a halt would fight). Refused without
+`--zero-lead` and with `--cancel-answer`, `--stop-answer` (same opcode,
+two triggers — its own cell) or `--arrival-carry` (the halt cuts short a
+leg the F1b queue modelled as arriving); all three pairwise cells sit
+ABOVE the requires-zero-lead checks, pairwise-first. `test_cancelwalk.py`
+§7 drives the lattice, the burst order and both scoping branches; floor 59.
+
+**The change was adversarially reviewed the same day** (three agents:
+lattice driven live through 16 cells and real argv, send-site semantics
+re-derived at code level, and a 6-mutation probe — 6 of 6 caught, tree
+restored clean). Its findings are fixed in the follow-up commit, and three
+of them survive as **NAMED residuals, each zero-exposure in this run's
+spell-only protocol and each a ship-time term**:
+1. **Instant non-attack skills** (shouts, stances, signets) also take the
+   halt under this gate — a divergence from retail, which does not stop a
+   runner for them.
+2. **A non-attack ADRENAL skill's halt** lands between its `0x00D2` and
+   the naming property, breaking a measured 39-of-39 adjacency.
+3. **The queued begin sends nothing**, and its "body already stopped at
+   the first cast's start" premise fails two ways: a spell queued behind
+   an attack-headed chain, and a spell queued during an aftercast whose
+   hold a movement press already released (`cancel_on_move` releases the
+   hold but cannot cancel an aftercast entry or roll back the busy
+   window, so a camera-turn walk can be in flight at the begin).
+The review also verified the licensing claims at code level: `grant_at` is
+written only by `_note_wire_move`, which `send()` consults only for
+`0x0029`/`0x002A`/`0x002C` — the halt cannot stamp the grant clock; and
+the R8 send is reachable from exactly one site (the free-caster player
+burst), with `begin_cast`, the aftercast pulse, the swing sites and every
+replay path excluded by read. One transport note: `send()` writes each
+message with its own `sendall`, so in-burst ORDER is guaranteed by
+same-thread sequencing over one TCP stream, one-segment delivery is not —
+nothing in R8 rests on segmentation.
 
 *Protocol:* ≥3 casts started WHILE RUNNING — press the skill mid-stride
 with no stop first, F28's own shape (the last pre-cast report is a MOVING

@@ -19,9 +19,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
 import checks  # noqa: E402
 
-# FLOOR 58, from the green run of 2026-08-24 that landed R8's --cast-stop
-# section (43 with R1-R6's arms; 29 with R1-R4's alone; 24 with R1-R3).
-LEDGER = checks.Ledger("cancelwalk arms", floor=58)
+# FLOOR 59, from the green run of 2026-08-24 that landed the adversarial
+# review pass over R8's --cast-stop section (58 when the section landed;
+# 43 with R1-R6's arms; 29 with R1-R4's alone; 24 with R1-R3).
+LEDGER = checks.Ledger("cancelwalk arms", floor=59)
 check = LEDGER.ok
 
 PLAYER = 1
@@ -298,10 +299,13 @@ def section_stop_answer():
           "the global defaults to None -- defaults are an owner ruling in "
           "this repo and no diagnostic ships on")
     check("_sa_mode, _sa_refusal = parse_stop_answer(a.stop_answer)" in src
-          and "stop_answer=_sa_mode" in src,
-          "main() parses the flag through the pure parser and hands the "
-          "MODE to the composition matrix -- the refusals above cannot fire "
-          "on a flag main() never routes")
+          and "stop_answer=_sa_mode" in src
+          and "STOP_ANSWER = _sa_mode" in src,
+          "main() parses the flag through the pure parser, hands the MODE "
+          "to the composition matrix, AND arms the global -- the refusals "
+          "above cannot fire on a flag main() never routes, and the arm "
+          "cannot regress to a banner-only inert flag (the R8 review "
+          "found this arming pin missing HERE too)")
 
 
 def section_cast_stop():
@@ -333,6 +337,14 @@ def section_cast_stop():
     check(why is not None and "--cast-stop and --arrival-carry" in why,
           "with --arrival-carry the F1b queue would model an arrival the "
           "halt cut short -- refused", f"{why!r}")
+    why, _ = authsrv.zero_lead_composition(zero_lead=False, cast_stop=True,
+                                           arrival_carry=True)
+    check(why is not None and "--cast-stop and --arrival-carry" in why,
+          "and WITHOUT --zero-lead the same PAIRWISE cell fires, not "
+          "arrival-requires-zero-lead -- placed low, that check handed out "
+          "advice (--zero-lead --arrival-carry) the pairwise cell then "
+          "refused on the next restart, which the adversarial pass caught "
+          "live", f"{why!r}")
     why, _ = authsrv.zero_lead_composition(zero_lead=False, cast_stop=True,
                                            stop_answer="ack")
     check(why is not None and "--cast-stop and --stop-answer" in why,
@@ -382,9 +394,11 @@ def section_cast_stop():
                 and vals[0] == agents.GV_DISABLED and vals[2] == 1]
         check(len(anim) == 1 and len(hold) == 1
               and stops(on)[0] < anim[0] < hold[0],
-              "and it rides FIRST: before the cast animation, which "
-              "precedes the prop-8 hold -- the movement family closes "
-              "before the action family opens",
+              "and it rides first in the cast-begin TAIL: before the cast "
+              "animation, which precedes the prop-8 hold -- the movement "
+              "family closes before the action family opens (the E4 and "
+              "the debits legitimately precede it; 'first in the burst' "
+              "was the review-corrected overstatement)",
               f"stop={stops(on)}, anim={anim}, hold={hold}")
         atk = burst(True, True)
         atk_anim = [i for i, (op, vals) in enumerate(atk)
@@ -393,9 +407,10 @@ def section_cast_stop():
         check(stops(atk) == [] and len(atk_anim) == 1,
               "flag ON, ATTACK skill: the burst goes out (its own "
               "animation proves the press was not refused) and carries no "
-              "0x0028 -- the halt is scoped to spells, the family the "
-              "float-forward was measured on; an attack skill's start "
-              "drives chase movement a halt would fight",
+              "0x0028 -- the halt is scoped to NON-ATTACK casts (spells "
+              "are the measured family; the flag block names the "
+              "instant-skill and adrenal residuals); an attack skill's "
+              "start drives chase movement a halt would fight",
               f"{atk}")
     finally:
         authsrv.skill_timing = saved_timing
@@ -410,11 +425,15 @@ def section_cast_stop():
           "ONE gate carrying the spells-only scoping, ONE R8-labelled "
           "send site")
     check(src.count("CAST_STOP = False") == 1
+          and src.count("CAST_STOP = True") == 1
           and "cast_stop=a.cast_stop" in src
           and "global CAST_STOP" in src,
           "the global defaults to False (defaults are an owner ruling), "
-          "and main() routes the flag into both the composition matrix "
-          "and the global -- the refusals above cannot be dead letters")
+          "main() routes the flag into both the composition matrix and "
+          "the global, AND the arming assignment itself is pinned -- with "
+          "'CAST_STOP = True' deleted the flag would print R8's full "
+          "banner and send NOTHING, the inert-flag defect on a readout "
+          "the wire cannot even see (the adversarial pass's finding)")
 
 
 def main():
