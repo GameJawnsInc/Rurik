@@ -1451,10 +1451,21 @@ only 1 of 3 mid-cast presses ran a genuine local walk-start. **F17: the freeze
 is NOT deterministic** (one press walked normally), which kills H5's simplest
 form; the one field separating them is the async `planner` (+0x50) at the
 press — 0 on both non-starters, 24 on the walker, with ordinary presses from 0
-walking fine (5 of 5), so the condition is COMPOUND. **New CANCELWALK-H8**
-(RECONSTRUCTION, n=3): mid-cast, the walk-start refuses on a body whose
-queued-move store is clear and proceeds on one carrying a stale one — and it
-predicts R6's null independently, since `0x0028` CLEARS that store. **F18: the
+walking fine (5 of 5), so the condition is COMPOUND. **CANCELWALK-H8 was minted and REFUTED the same
+day, at a desk, before any run** (§7.4d): `+0x50` is not a planner but a
+MOVE-REQUEST CORRELATION TOKEN that **nothing in the image branches on** (zero
+cmp/test operands; zero accesses anywhere in the applier's 131-function
+closure, twice enumerated and positive-controlled), and re-scoring on the
+EXACT wall-clock alignment both captures carried shows **cancel 1 walked with
+the token at 0** — 288.0 u/s in the pressed direction. Two §7.4c readings are
+corrected with it: the scoreboard is **2 of 3 mid-cast presses WALKED**, and
+the freeze is **intermittent** (against 100% in every earlier run). The field
+survives as a better instrument than the wrong name implied (**F19**: a fresh
+token per successful walk-start call = a positive walk-start detector;
+`movetap` now names it `reqtoken`). **F20**: the warp is a walk-start
+RECONCILIATION — the drawn body snapping onto the sync copy, twice in eight
+walk-starts, at the run's two largest separations — so its size is the
+separation OUR grant policy allows (p50 122 u), a REALFIX-shaped cost. **F18: the
 operator-reported WARP is the drawn body snapping onto the lagging sync copy**,
 sub-gate-1 (max sep 265.8 vs the 299.33 cut), no `0x002C`, nearest agent 350+ u
 (gate 3 excluded) — **not new** (the 08-21/08-22 corpus carries it at up to
