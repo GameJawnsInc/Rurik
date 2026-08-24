@@ -7719,7 +7719,14 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   depends on: the 0x0025 send and the walking latch both guarded on NOT
   cw_suppress, ONE 0x0029 send site serving default and lead arms alike, and
   the hit captured from the return value rather than a state latch the click
-  arm would leak through. Floor 24),
+  arm would leak through. **Extended same day for R4's `,stop` modifier**
+  (the runs landed within hours: R1 froze, R2/R3 walked the granted leg to
+  the point exactly — CANCELWALK.md §5a): the modifier parses on both lead
+  forms and is REFUSED on suppress (no leg to stop), and §5 gains the leg-
+  window source locks — cleared on every grant, re-armed only at a
+  `,stop` lead send sized to the leg at 288 u/s, and the stop-arm answer
+  guarded on CANCEL_STOP AND the live window, which is what keeps it from
+  being the refuted --stop-echo under a new name. Floor 29),
   `toolkit/authsrv/test_killwindow.py` (the kill window, checked against
   ArenaNet's own kills. Our server sent one message when an agent died —
   `0x00F1` with the death bit — where the real service sends three: status,

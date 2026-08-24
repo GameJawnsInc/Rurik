@@ -19,8 +19,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
 import checks  # noqa: E402
 
-# FLOOR 24, from the green run of 2026-08-24 that landed the file.
-LEDGER = checks.Ledger("cancelwalk arms", floor=24)
+# FLOOR 29, from the green run of 2026-08-24 that landed R4's stop modifier
+# (24 when the file carried R1-R3 alone).
+LEDGER = checks.Ledger("cancelwalk arms", floor=29)
 check = LEDGER.ok
 
 PLAYER = 1
@@ -30,22 +31,35 @@ def section_parse():
     import authsrv
 
     print("1. parse_cancel_answer: three arms in, everything else refused")
-    check(authsrv.parse_cancel_answer(None) == (None, None, None),
+    check(authsrv.parse_cancel_answer(None) == (None, None, False, None),
           "no flag parses to no arm, no refusal")
-    check(authsrv.parse_cancel_answer("suppress") == ("suppress", None, None),
+    check(authsrv.parse_cancel_answer("suppress")
+          == ("suppress", None, False, None),
           "R1: suppress")
-    check(authsrv.parse_cancel_answer("retail-lead") == ("lead", None, None),
+    check(authsrv.parse_cancel_answer("retail-lead")
+          == ("lead", None, False, None),
           "R2: retail-lead, lead None = the D1 expression")
-    check(authsrv.parse_cancel_answer("lead:16") == ("lead", 16.0, None),
+    check(authsrv.parse_cancel_answer("lead:16") == ("lead", 16.0, False, None),
           "R3: lead:16 parses to 16.0 units")
-    m, l, why = authsrv.parse_cancel_answer("lead:0")
+    check(authsrv.parse_cancel_answer("retail-lead,stop")
+          == ("lead", None, True, None),
+          "R4: the ,stop modifier rides the retail-lead form")
+    check(authsrv.parse_cancel_answer("lead:288,stop")
+          == ("lead", 288.0, True, None),
+          "R4: and the fixed-lead form")
+    m, l, s, why = authsrv.parse_cancel_answer("suppress,stop")
+    check(m is None and why is not None and "nothing for it to stop" in why,
+          "suppress,stop is refused -- no leg is granted, so the stop "
+          "modifier would be inert while the run log said R4 was on",
+          f"{why!r}")
+    m, l, s, why = authsrv.parse_cancel_answer("lead:0")
     check(m is None and why is not None and "768.5" in why,
           "lead:0 is the shipped answer wearing a flag -- refused, and the "
           "refusal names the bounds", f"({m}, {l}, {why!r})")
-    m, l, why = authsrv.parse_cancel_answer("lead:banana")
+    m, l, s, why = authsrv.parse_cancel_answer("lead:banana")
     check(m is None and why is not None,
           "a non-number lead is refused, not defaulted")
-    m, l, why = authsrv.parse_cancel_answer("supress")
+    m, l, s, why = authsrv.parse_cancel_answer("supress")
     check(m is None and why is not None and "suppress" in why,
           "a typo'd arm is refused LOUDLY and the refusal lists the real "
           "arms -- a mistyped experiment must not run the shipped default "
@@ -163,6 +177,17 @@ def section_handler_wiring():
           "the 0x003D arm captures what the press hit from the return value "
           "-- a state latch would leak through the click arm, which calls "
           "cancel_on_move too")
+    check('state["cancelwalk_leg_until"] = 0.0' in src
+          and src.count("cw_leg / 288.0 + 1.0") == 1,
+          "R4's leg window: cleared on every grant, re-armed only when the "
+          "send was a cancelwalk lead under ,stop, sized to the leg at the "
+          "client's own 288 u/s")
+    check(src.count("if CANCEL_STOP and") == 1
+          and "cw_dest is not None and CANCEL_STOP" in src
+          and "cancelwalk stop" in src,
+          "the stop arm's answer is guarded on CANCEL_STOP AND the live "
+          "window -- outside it the general stop arm stays silent, which is "
+          "what keeps this from being --stop-echo (REFUTED) under a new name")
 
 
 def main():
