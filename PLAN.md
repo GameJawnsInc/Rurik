@@ -1678,10 +1678,36 @@ opcode, so it is a BUILD rather than a probe. A confidence promotion for
 `AGENT_SET_TABARD_VISIBLE` (medium, for want of an assert naming the bit) is now
 available on a second witness of a different kind; `overrides.json` is
 deliberately NOT edited, because another arc's rating is not this arc's to raise.
-**Still open**: what the two wire-ordered instances are (movement excluded,
-operator input the standing candidate), `row+0x08` which is still zero
-everywhere, why record 91 in particular never appears in the reset residue,
-and the THIRD kind of type-45 id -- record type 17 OUTSIDE any run (1887,
+**AND PER-CLEAR ATTRIBUTION CLOSED THREE THINGS AND OPENED ONE (9.17, W1-W3
+at `8dfad75` and X1-X3 at `5a98afc`, two runs).** (1) **Each clear produces
+exactly ONE fetch and it is the record that slot's OWN row held**, from one
+consumer (0x00830764), replicated n=2 -- so the notify's rebuild reads the row
+BEFORE the memset, and 9.14's "residue" reading is SUPERSEDED by its own
+successor. (2) **Record 91's absence is an item-id COLLISION IN OUR OWN
+PROBE**: `armor_slots` declares `_ARMOR_BOOTS_ITEM = 3` and STARTER_ARMOUR
+already uses item id 3 for `warrior_body`, so the chest is silently redefined
+as boots and nothing holds 91. Recorded, NOT fixed -- probes.py is another
+arc's instrument. (3) ★ **9.11's two wire-ordered instances are REPRODUCED --
+three of them, in a run with NO movement -- and IDENTIFIED**: same class
+(**CpsPlayer**, vtable 0xA96B5C) and same caller (**CpsApi::SetSlotItem**) as
+the world agent. So the two orderings are not two classes or two entry points;
+the ordering is chosen ABOVE CpsApi entirely, and both coexist in one client.
+Movement stays refuted and the trigger stays unnamed. ⚠ **AND X1/X2 ARE BOTH
+REFUTED, which is the new open item**: `cachesame` fired ZERO even with the
+exposure that should produce it (seven runs now), and on the world instance
+slot 2's row went 91 -> 90 with its item id UNCHANGED and BOTH write exits
+silent. **So `m_slotItemData` has a writer outside `0x0082EDA0`** -- 9.11
+called that function "the writer" and it is not the only one. Every row-level
+claim in 9.11-9.16 survives (they are readings of rows at moments we watched),
+but "nothing else writes here" was never tested and is now false. One rig
+defect fixed: `worn()` scored an instance by its FINAL m_slotItemId, so after
+the probe's resets it picked a five-slot wire-ordered instance over the
+eight-slot world one and printed "S2 REFUTED the other way" for a run whose
+world instance shows the permutation plainly; it scores the PEAK now.
+`test_compositetrap` 76 -> 80.
+**Still open**: the writer outside `0x0082EDA0` (new, and the sharpest), what
+TRIGGERS the wire-ordered instances (movement excluded), `row+0x08` which is
+still zero everywhere, and the THIRD kind of type-45 id -- record type 17 OUTSIDE any run (1887,
 3663 and 20 others), which is neither kind tested so far.
 Prior status follows.
 **BUILT AND ARMED 2026-08-23, RUN WAS BLOCKED**

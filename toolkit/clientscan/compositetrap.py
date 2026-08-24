@@ -895,9 +895,18 @@ def _analyse_cache(sites, hits):
     # character-select doll and the world agent build in one session -- and
     # scoring the doll's empty slots as a refutation would be a rig error.
     def worn(cs):
-        ids = cs[-1]["m_slotItemId"]
-        return sum(1 for s, i in cps_item.items()
-                   if s < len(ids) and ids[s] == i)
+        # PEAK over the instance's life, not its FINAL state. A run that
+        # RESETS -- `--probe armor_slots` sends nine zeros twice -- leaves the
+        # world instance nearly empty, and scoring the last sample picked a
+        # five-slot wire-ordered instance over the eight-slot world one, then
+        # printed "S2 REFUTED the other way" for a run whose world instance
+        # showed the permutation plainly at +4.67.
+        best = 0
+        for c in cs:
+            ids = c["m_slotItemId"]
+            best = max(best, sum(1 for s, i in cps_item.items()
+                                 if s < len(ids) and ids[s] == i))
+        return best
     best = max(sorted(inst), key=lambda k: worn(inst[k]))
     L.append(f"  scoring 0x{best:08X} -- it carries {worn(inst[best])} of our "
              f"{len(cps_item)} slots")

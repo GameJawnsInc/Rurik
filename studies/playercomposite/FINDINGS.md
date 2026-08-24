@@ -1440,6 +1440,13 @@ what is absent — **record 91, the chest, is never fetched during the reset**,
 though it was there at +4.73. The rows are zeroed one at a time and the
 rebuild reads what survives; a re-dress would have read all five.
 
+⚠ **THE PARAGRAPH ABOVE IS SUPERSEDED BY §9.17.** Attributing the fetches PER
+CLEAR instead of per burst shows each clear producing exactly ONE fetch, and
+it is the record that slot's OWN row held — read by the notify *before* the
+memset zeroes it. Not a residue sweep. And record 91's absence is not about
+91: an item-id collision inside the `armor_slots` probe means nothing holds 91
+by then. The counts here are right; the reading of them was not.
+
 ### An ordering correction the run earned
 
 The analyser's R4 window was forward-only, and it printed **5** where the
@@ -1688,3 +1695,110 @@ an emblem-sized atlas that no equipment ever fills, and whose ten records serve
 every profession. `schema/overrides.json` is deliberately **not edited here**:
 another arc's confidence rating is not this arc's to raise, and the evidence is
 recorded so that arc can weigh it.
+
+## 9.17 Per-clear attribution: one fetch per clear, record 91 explained, §9.11's ⚠ CLOSED — and a writer this arc had not found (2026-08-23)
+
+Two `armor_slots` runs (`20260823T210213`, `20260823T210750`), W1–W3 and
+X1–X3 registered at `8dfad75` and `5a98afc` before them. Four results, two of
+them corrections to my own work and one of them a genuine surprise.
+
+### W1–W3: one fetch per clear, and it is the slot's own record
+
+| | prediction | result |
+|---|---|---|
+| W1 | every fetch inside a burst's span reaches a clear | **0 orphans of 6**, both runs |
+| W2 | a clear's fetches are the slot's own record, or the others' | **its own**, 6 of 6 |
+| W3 | control: the one-clear burst has one possible answer | **PASS**, both runs |
+
+```
++18.574s  clear slot 0 (held 39776) <- 0 fetches      (the weapon; not a composite record)
++18.575s  clear slot 2 (held    90) <- 90 from 0x00830764
++18.576s  clear slot 5 (held    94) <- 94 from 0x00830764
++18.576s  clear slot 3 (held    94) <- 94 from 0x00830764
++18.577s  clear slot 6 (held    92) <- 92 from 0x00830764
++18.577s  clear slot 4 (held    93) <- 93 from 0x00830764
++29.586s  clear slot 6 (held    94) <- 94 from 0x00830764
+```
+
+**One fetch per clear, always the record that slot held, always from the same
+consumer `0x00830764`.** So the reset's record reads are the notify's rebuild
+reading each row *before* the memset zeroes it — one per slot, not a residue
+sweep. §9.8's "five indices then one" is fully accounted for: five composite
+slots then one, with the weapon contributing nothing because 39776 is not a
+composite record. Replicated n=2, identical to the millisecond in shape.
+
+§9.14 offered a "residue" reading — each notify rebuilding from what remains.
+That is **wrong** and this supersedes it: the rebuild reads the row being
+destroyed, not the survivors.
+
+### Record 91's absence is an ITEM-ID COLLISION IN OUR OWN PROBE
+
+§9.14 asked why record 91, the chest, never appears. Because by then **nothing
+holds 91**. `armor_slots` declares `_ARMOR_BOOTS_ITEM = 3`, and
+`STARTER_ARMOUR` already uses **item id 3** for `warrior_body`. The probe
+silently redefines the chest as boots, and CpsBase slot 2 — which still holds
+item id 3 — reads record **90**.
+
+§9.8's run had the same collision. Its leggings conclusions ride on item id 2
+and are untouched; anything in that entry about the chest is contaminated.
+**Recorded, not fixed**: `probes.py` is another arc's instrument and changing
+it changes what §9.8 measured.
+
+### ⚠ X1 AND X2 BOTH REFUTED, and X2 is a finding
+
+I predicted the 91 → 90 change was **path A** — a re-set with the same item id,
+taking the `cachesame` exit I had dropped. It is not.
+
+- **X1 refuted**: `cachesame` fired **zero times** in a run that re-declares a
+  worn item id — the exact exposure I said would produce it. Seven runs now,
+  zero hits, and this time the condition was met.
+- **X2 refuted**: on the world instance `0x25A1E8D0`, slot 2's row was written
+  **91** at +4.67, its `m_slotItemId[2]` still read **item 3** at the clear,
+  and the row read **90**. Both write exits armed. Both silent.
+
+**So `m_slotItemData` has a writer outside `0x0082EDA0`.** §9.11 called that
+function "the writer"; it is not the only one. An item re-declare refreshes the
+cached row of whatever slot wears that id, by a route this arc has not found.
+Named, not resolved — and it is now the sharpest open item here, because every
+row-level claim in §9.11–§9.16 was made on the assumption that one function
+owned the array. *Those claims survive* — they are readings of rows at moments
+we watched — but "nothing else writes here" was never tested and is now false.
+
+### ★ §9.11's TWO WIRE-ORDERED INSTANCES: REPRODUCED AND IDENTIFIED
+
+They came back — **three of them**, at +78.88, +78.91 and +121.68, in a run
+with **no movement at all**. So §9.13's refutation of movement stands, and the
+trigger is still unnamed; but the instances themselves are no longer a mystery:
+
+```
+0x25349518  5 writes  m_slotItemId=(1,0,3,4,0,6,7,0,0)  vtable 0x00A96B5C CpsPlayer
+0x25349D28  5 writes  (identical)                        vtable 0x00A96B5C CpsPlayer
+0x2534B558  5 writes  (identical)                        vtable 0x00A96B5C CpsPlayer
+   all five writes from 0x0082D6F6 -- CpsApi::SetSlotItem
+```
+
+**Same class as the world agent (CpsPlayer), same caller (`CpsApi::SetSlotItem`).**
+So the two slot orderings are not two classes and not two entry points — the
+ordering is chosen *above* `CpsApi::SetSlotItem`, which forwards its caller's
+slot verbatim (§9.13). Both orderings coexist in one client, in one class,
+through one function. §9.11's "the ordering belongs to the CALLER" is confirmed
+and narrowed: the caller in question is upstream of CpsApi entirely.
+
+Their slot 2 reads record **90**, the post-collision value, so they were built
+after the probe's re-declare — which is also why they have no legs: wire slot 4
+holds item 5, and these instances only ever received five slots.
+
+### A scorer defect the run exposed
+
+`worn()` scored an instance by its **final** `m_slotItemId`. An `armor_slots`
+run resets twice, so the world instance ends nearly empty, and the analyser
+picked a five-slot wire-ordered instance over the eight-slot world one — then
+printed **"S2 REFUTED the other way — the measured permutation was a fluke"**
+for a run whose world instance shows the permutation plainly at +4.67. It
+scores the **peak** now, and the test pins it. The permutation is not refuted.
+
+### Still open
+
+The writer outside `0x0082EDA0` (new, and the sharpest); what triggers the
+wire-ordered instances (movement refuted, still unnamed); `row+0x08`; and the
+third kind of type-45 id, which remains a weak experiment.

@@ -58,9 +58,9 @@ def JOIN(ls):
 # caller map and the CLEAR analyser landed the same day, then 71 for the
 # symmetric R4 window and 75 for S7's ordering check plus the second
 # costume-head row, 76 for S6 refusing to discriminate on one slot,
-# 79 for W1-W3 per-clear attribution.
+# 79 for W1-W3 per-clear attribution, 80 for peak-not-final scoring.
 # Set from the run every time; guessed low five times before that stuck.
-LEDGER = checks.Ledger("composite trap", floor=79)
+LEDGER = checks.Ledger("composite trap", floor=80)
 check = checks.adopt(LEDGER)
 
 # ---------------------------------------------------------------- section 1
@@ -524,6 +524,23 @@ check(rc == 0 and "2 CpsBase instance(s)" in "\n".join(lines)
       "TWO INSTANCES: §9.6 saw the character-select doll and the world agent "
       "build in one session, so the analyser picks the instance wearing our "
       "items instead of scoring the doll's empty slots as a refutation")
+
+# AND IT SCORES ON THE PEAK, NOT THE FINAL STATE. An `armor_slots` run RESETS
+# -- nine zeros, twice -- so the world instance ends nearly empty, and a
+# final-state scorer picked a five-slot wire-ordered instance over the
+# eight-slot world one and then printed "S2 REFUTED the other way" for a run
+# whose world instance showed the permutation plainly.
+emptied = chits(GOOD_ROWS) + chits(
+    {s: (0, 0, 0) for s in (2, 3, 4, 5, 6)},
+    ids=[0] * 9, ovr=[0] * 9, cps=0x0AB00000)
+rival = chits({s: (90, 4, 19) for s in (0, 2, 3, 5, 6)},
+              ids=[1, 0, 3, 4, 0, 6, 7, 0, 0], ovr=[0] * 9, cps=0x0AD00000)
+lines, _rc = t._analyse_cache(CSITES, emptied + rival)
+check("scoring 0x0AB00000" in JOIN(lines),
+      "PEAK not FINAL: an instance that was reset to empty still outscores a "
+      "rival that never wore our kit, because what identifies the world agent "
+      "is what it ONCE held -- a live run scored the wrong instance before "
+      "this check existed")
 
 # REGRESSION, and it cost a completed run. `_report` keys its census on the
 # captured values, and these captures hold CpsBase's nine-slot ARRAYS. The
