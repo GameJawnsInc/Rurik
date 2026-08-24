@@ -56,12 +56,14 @@ def section_move_cancels():
         sent.clear()
         authsrv.cancel_on_move(send, state, 0)
         check([(op, vals) for op, vals, _ in sent] ==
-              [(0x009F, [authsrv.agents.GV_DISABLED, PLAYER, 0])]
+              [(0x009F, [authsrv.agents.GV_DISABLED, PLAYER, 0]),
+               (0x009F, [authsrv.agents.GV_SKILL_STOPPED, PLAYER, 0]),
+               (0x00E2, [PLAYER, 42, 7])]
               and state["pending_casts"][0].get("cancelled"),
-              "the connection thread MARKS the cast and releases only the "
-              "HOLD -- [8, agent, 0] rides the movement instant (4 of 4 in "
-              "the corpus, castmech 3c) while the E2 release still belongs "
-              "to the tick, like every other phase",
+              "the whole release burst rides the input's own instant, in "
+              "ArenaNet's order: [8 -> 0], then [59, agent, 0], then the "
+              "bare E2 -- 4 of 4 cancelled casts in the live capture "
+              "20260824T074002 (castmech 3f)",
               f"sent={[(hex(o), v) for o, v, _ in sent]}, "
               f"cancelled={state['pending_casts'][0].get('cancelled')}")
         sent.clear()
@@ -71,10 +73,9 @@ def section_move_cancels():
               f"busy in {state.get('cast_busy_until', 0) - time.time():.2f}s")
 
         authsrv.cast_tick(send, state, 0)
-        check([op for op, _, _ in sent] == [authsrv.GAME_SMSG_SKILL_REFUSED]
-              and sent[0][1] == [PLAYER, 42, 7],
-              "the tick releases with the bare 0x00E2 [agent, skill, copy] "
-              "-- the corpus's own terminated-cast shape",
+        check(sent == [],
+              "the tick announces NOTHING a second time -- the burst went "
+              "out with the input; the tick's remaining job is removal",
               f"{[(hex(o), v) for o, v, _ in sent]}")
         check(not state["pending_casts"],
               "the entry is gone", f"{state['pending_casts']}")
@@ -277,18 +278,20 @@ def section_cancel_action_door():
         check(state["pending_casts"][0].get("cancelled") == "cancel action"
               and [(op, v) for op, v, _ in sent] ==
               [(authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-                [authsrv.agents.GV_DISABLED, PLAYER, 0])],
-              "the request marks the cast and releases the hold the press "
-              "set -- [8 -> 0] and nothing else from this thread; the E2 "
-              "is the tick's",
+                [authsrv.agents.GV_DISABLED, PLAYER, 0]),
+               (authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                [authsrv.agents.GV_SKILL_STOPPED, PLAYER, 0]),
+               (authsrv.GAME_SMSG_SKILL_REFUSED, [PLAYER, 42, 7])],
+              "Esc gets the SAME burst as movement -- [8 -> 0, 59, E2] -- "
+              "which the capture shows too: its Esc cancel (t=88.946) is "
+              "byte-identical to the W one bar the movement grant",
               f"cancelled={state['pending_casts'][0].get('cancelled')}, "
               f"sent={[(hex(o), v) for o, v, _ in sent]}")
+        n = len(sent)
         authsrv.cast_tick(send, state, 0)
-        e2 = [v for op, v, _ in sent
-              if op == authsrv.GAME_SMSG_SKILL_REFUSED]
-        check(e2 == [[PLAYER, 42, 7]] and not state["pending_casts"],
-              "and the tick answers with the bare E2 -- no recharge, the "
-              "same release shape as the movement door", f"{e2}")
+        check(len(sent) == n and not state["pending_casts"],
+              "and the tick only removes the entry -- no second E2",
+              f"{[(hex(o), v) for o, v, _ in sent[n:]]}")
     finally:
         authsrv.skill_timing = saved
 
@@ -341,14 +344,16 @@ def section_cancel_action_door():
     authsrv.cancel_action(send, state, 0)
     pair = [(op, v) for op, v, _ in sent]
     check(pair == [(authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-                    [authsrv.agents.GV_DISABLED, PLAYER, 0]),
+                    [authsrv.agents.GV_ATTACK_STOPPED, PLAYER, 0]),
                    (authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-                    [authsrv.agents.GV_ATTACK_STOPPED, PLAYER, 0])]
+                    [authsrv.agents.GV_DISABLED, PLAYER, 0])]
           and state.get("attacking") is None
           and state.get("player_swing_cancel") == "cancel action",
-          "a live chain closes with the stop pair -- [8 -> 0] then "
-          "STOPPED, the t=16.578 adjacency -- and the attack order is "
-          "forgotten: Esc means stop, not pause",
+          "a live chain closes with the stop pair in the order measured at "
+          "THIS door -- [3] then [8 -> 0], the live Esc mid-windup "
+          "(t=119.425) and W mid-windup (t=114.641), 2 of 2. The press and "
+          "retarget bursts keep their own opposite order; neither is tidied "
+          "to match. And the attack order is forgotten: Esc means stop",
           f"{[(hex(o), v) for o, v in pair]}, "
           f"attacking={state.get('attacking')}")
 

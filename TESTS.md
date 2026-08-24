@@ -7652,7 +7652,14 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   arrived request is granted), leaves an aftercast holding and unmarked
   through this door too, and closes a live chain with the [8→0]-then-STOPPED
   pair while forgetting the attack order — Esc means stop, not pause.
-  Floor 20),
+  **Re-pinned 2026-08-24 to the live cancel-family capture**
+  (`20260824T074002`, sealed plan, both connections framed to the last byte):
+  the release burst is `[8→0, 59, E2]` in one instant, 4 of 4 cancelled casts
+  — property 59 is what stops the BODY, which is why a cancelled cast used to
+  keep animating — and the swing pair is `[3, 8→0]`, the opposite of the
+  press and retarget orders, each door keeping the order measured at it.
+  The tick now only removes a released entry; §1 asserts it announces nothing
+  a second time. Floor 20),
   `toolkit/authsrv/test_killwindow.py` (the kill window, checked against
   ArenaNet's own kills. Our server sent one message when an agent died —
   `0x00F1` with the death bit — where the real service sends three: status,
