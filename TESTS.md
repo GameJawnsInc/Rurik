@@ -974,6 +974,34 @@ Every one of these, in the order they were written:
   run died before the verdict, its `LEDGER.skip` had never executed once (one
   argument where it takes two), and the 30 the comment claimed was a number
   nobody had seen),
+  `toolkit/mapdata/test_propscan.py` (**what a donor's prop models ARE, measured
+  offline -- the catalogue `deploy.py` never had.** WORLDMAPS-W24 served an
+  authored place and the owner's second complaint was "the biome donor's model 0
+  is a monumental building, not a tree -- 32 of them scattered like shrubs loom
+  one-sided over the bowl": `deploy.py` wrote `prop_dep_ids =
+  [donor.prop_model_ids[0]]` with every prop at `model=0`, so an authored map
+  could place exactly ONE model, had no say in which, and nothing in the toolkit
+  could say what it was. §§1-2 check the arithmetic against synthetic geometry
+  with no archive -- bounding box, extent in 96-unit PLACEMENT CELLS (the
+  actionable unit, because `pick_tree_cells` places on that grid), aspect ratio,
+  and the report naming what it could not read rather than dropping it. The
+  check worth reading is `fits_pitch` answering **None** for an unmeasurable
+  model: "we could not read it" and "it fits" are different answers and only one
+  is a licence to place 32 copies. §3 runs it against the real donor: Pre-Searing
+  lists **229** models and all 229 decode, model 0 is **16.0 cells wide and 963
+  tall** (W24's building, as a number), and model 77 -- which `area.ashcoil` now
+  names -- fits the grid at 0.84 cells and is 7.6x taller than wide, both
+  properties checked against the archive rather than against the content row's
+  comment. **One check went RED on its first form and the correction is the
+  entry**: it compared the ten most-placed models against "the ten least-placed"
+  and concluded placement count carries no size signal, but 91 of the 229 are
+  placed exactly once, so which ten is a TIE-BREAK -- one arbitrary slice gives
+  mean 926, another 4163. Re-measured as a rank correlation over all 229 with no
+  ties to break: rho **-0.219**, a weak signal, and the median of the twenty
+  retail places ten-or-more times is still **7.3 cells** wide -- so choosing the
+  most POPULAR model would not have avoided W24 either. Floor 11 = §§1-2, the
+  mandatory core; §3 needs the study archive and declares a skip. A whole green
+  run is 18, ~30 s),
   `toolkit/mapdata/test_props.py` (the props chunk `0x10000004`, the last one
   `stripbuild` had to borrow and the one that mattered -- FINDINGS 34 makes it a
   hard gate, so while it was borrowed no map from this toolkit could hold a

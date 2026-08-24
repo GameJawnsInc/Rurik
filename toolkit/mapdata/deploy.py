@@ -86,6 +86,7 @@ import envchunk  # noqa: E402
 import gwenc  # noqa: E402  -- the compression-8 encoder
 import mapchunks  # noqa: E402
 import mapexport  # noqa: E402
+import propscan  # noqa: E402  -- measures the donor's prop models
 import mapfile as mfile  # noqa: E402
 import pathchunk  # noqa: E402
 import pathmap  # noqa: E402
@@ -529,6 +530,46 @@ def _donor_row(archive, area, what, id_key, row_key, default_row=None):
     return row
 
 
+def _prop_pitch_report(donor, want, n_props):
+    """One line per chosen model, and a warning for any that cannot fit.
+
+    THE CHECK WORLDMAPS-W24 DID NOT HAVE. `pick_tree_cells` places props on a
+    96-unit grid; a model whose horizontal extent exceeds that cannot sit on
+    adjacent cells without interpenetrating, and the owner's word for 32 copies
+    of a SIXTEEN-cell model was "looming". The number is measured off the
+    model's own vertex positions -- see `propscan.py`, which also records the
+    hypothesis it refuted (placement count does NOT track size).
+
+    Returns lines rather than raising: every area authored before this existed
+    places index 0, so a refusal here would wall off thirteen shipped areas
+    that are not being changed. The judgement stays with the author; what
+    changes is that the author is told.
+    """
+    try:
+        models = donor.prop_scan()
+    except Exception as exc:                                    # noqa: BLE001
+        return [f"could not measure the donor's prop models ({exc}) -- so "
+                f"nothing here says whether they fit the placement grid"]
+    lines = []
+    for i in want:
+        m = models[i] if i < len(models) else None
+        if m is None or m.cells is None:
+            lines.append(f"model {i}: UNMEASURABLE"
+                         + (f" ({m.error})" if m is not None and m.error
+                            else "") + " -- fit unknown")
+            continue
+        note = (f"fits the {propscan.PITCH:.0f}-unit placement grid"
+                if m.cells <= 1.0 else
+                f"*** {m.cells:.1f} PLACEMENT CELLS WIDE: {n_props} of these "
+                f"on a {propscan.PITCH:.0f}-unit grid INTERPENETRATE. This is "
+                f"WORLDMAPS-W24's second failure, measured before the run "
+                f"rather than after it ***")
+        lines.append(f"model {i} = 0x{m.file_id:X}: {m.cells:.2f} cells wide, "
+                     f"{m.height:.0f} tall, aspect {m.aspect:.1f}, retail "
+                     f"places it {m.placed}x -- {note}")
+    return lines
+
+
 def _stripped_of(archive, head_row, what):
     mi = mapchunks.MapIndex(archive)
     head = next((h for h, _p in mi.pairs if h.index == head_row), None)
@@ -569,6 +610,38 @@ class Donor:
         self.env = self._pair(ENV, ENV_DEPS)
         self.sound = self._pair(SOUND, SOUND_DEPS)
         self.prop_model_ids = self._prop_models()
+        # Kept so the prop models can be MEASURED at build time. Reading a
+        # model needs the archive the ids index into, and `assemble` only ever
+        # receives the Donor.
+        #
+        # THE PATH, not just the handle: `main` builds the Donor inside
+        # `with Archive(dat) as ar` and calls `assemble` AFTER the block, so by
+        # then the handle is closed and a scan through it raises "seek of
+        # closed file". The first version of this stored only the handle and
+        # the report said, correctly and uselessly, that it could not measure
+        # anything.
+        self.archive = archive
+        self.archive_path = getattr(archive, "path", None)
+        self._scan = None
+
+    def prop_scan(self):
+        """`propscan.scan` over this donor's prop models, measured once.
+
+        Reopens the archive by path if the handle it was built with has been
+        closed, which is the normal case by the time `assemble` runs.
+        """
+        if self._scan is None:
+            ar = self.archive
+            if getattr(ar, "fh", None) is None or ar.fh.closed:
+                if not self.archive_path:
+                    raise Refused("the donor's archive is closed and it kept "
+                                  "no path, so its prop models cannot be "
+                                  "measured")
+                with Archive(self.archive_path) as fresh:
+                    self._scan = propscan.scan(fresh, self.stripped)
+                return self._scan
+            self._scan = propscan.scan(ar, self.stripped)
+        return self._scan
 
     def _pair(self, cid, did):
         c, d = self.stripped.find(cid), self.stripped.find(did)
@@ -680,6 +753,33 @@ def assemble(area, heights, donor, dim, verbose=True):
         elif r:
             raise Refused(
                 f"unknown prop_outline_shape {shape!r}; known: square, L")
+        # WHICH MODEL(S). Until 2026-08-24 this was not a question the schema
+        # could ask: `prop_dep_ids = [donor.prop_model_ids[0]]` with every prop
+        # at `model=0`, so an authored map placed index 0 of whatever the donor
+        # happened to list and had no say in it. WORLDMAPS-W24 is what that
+        # cost -- Pre-Searing's index 0 is 1536x691x963 units, SIXTEEN
+        # placement cells wide, and the owner's verdict on 32 of them was
+        # "monumental buildings scattered like shrubs".
+        #
+        # `prop_models` is a list of indices into the donor's own dependency
+        # order, and props take them round-robin. ABSENT IT DEFAULTS TO [0],
+        # unchanged, on purpose: `area.plaza` is WORLDMAPS-W2's byte-identity
+        # witness and a new default would silently retire that comparison.
+        # `propscan.py` is how an author finds out what the indices ARE.
+        want = area.get("prop_models") or [0]
+        try:
+            want = [int(v) for v in want]
+        except (TypeError, ValueError):
+            raise Refused(f"prop_models must be a list of integers, got "
+                          f"{area.get('prop_models')!r}")
+        bad = [v for v in want if not 0 <= v < len(donor.prop_model_ids)]
+        if bad:
+            raise Refused(
+                f"prop_models {bad} out of range: the donor lists "
+                f"{len(donor.prop_model_ids)} models (0.."
+                f"{len(donor.prop_model_ids) - 1}). "
+                f"`python toolkit/mapdata/propscan.py --donor-row <row>` "
+                f"lists them with their measured sizes.")
         props = []
         for gx, gy in cells:
             z = float(heights[trn_mod.Terrain.index(gx, gy, dim)])
@@ -695,15 +795,26 @@ def assemble(area, heights, donor, dim, verbose=True):
             # before the caldera. The prop's world x/y must name the cell
             # the CLIENT renders this grid cell at.
             wy = (dim - 1 - gy) * 96.0 + 48.0
-            props.append(Prop(model=0, x=gx * 96.0 + 48.0, y=wy,
+            props.append(Prop(model=len(props) % len(want),
+                              x=gx * 96.0 + 48.0, y=wy,
                               z=z, rot=(0, 0, 0), scale=0x7F, flags=0,
                               outline=ring))
         kw["props"] = StrippedProps(props=props, refs4=[], refs6=None)
-        kw["prop_dep_ids"] = [donor.prop_model_ids[0]]
+        kw["prop_dep_ids"] = [donor.prop_model_ids[i] for i in want]
         if verbose:
             print(f"  props: {len(props)} at {cells}"
                   + (f", each with a {2 * r}x{2 * r} footprint "
                      f"({len(ring)} points)" if r else ", no footprint"))
+            print(f"  prop models: donor indices {want} -> "
+                  + ", ".join(f"0x{donor.prop_model_ids[i]:X}" for i in want))
+        # THE CHECK W24 DID NOT HAVE, and it is a report rather than a refusal
+        # BY DELIBERATE CHOICE. Every area authored before today places index
+        # 0, so refusing here would redden `plaza`, `vale` and eleven others
+        # that have shipped and been walked -- turning a finding into a wall
+        # across work that is not being changed. It prints on every build,
+        # loudly, with the number that matters.
+        for line in _prop_pitch_report(donor, want, n_trees):
+            print(f"  [PROPS] {line}")
 
     # The area may state the Map Parameters flags dword. Absent, it is 0 --
     # which is what every area before WORLDMAPS-W11 shipped. See

@@ -1112,3 +1112,85 @@ for exactly the right reason; Ashcoil owns map row 167 / file 0x5F0B2.
 content half (water, props, materials, minimap), and the gap is what a
 player hits in the first thirty seconds.** Run note with the full scoring:
 `vault/research/worldmaps/WORLDMAPS-W24-RUN.md` §RESULTS.
+
+## WORLDMAPS-W25 — the prop model was never chosen, and now it can be. 2026-08-24
+
+W24's second failure, closed at a desk with no client run: **"the biome
+donor's model 0 is a monumental building, not a tree — 32 of them scattered
+like shrubs loom one-sided over the bowl."**
+
+### It was not a bad default. It was the only one.
+
+`deploy.py` wrote `prop_dep_ids = [donor.prop_model_ids[0]]` and gave every
+prop `model=0`. An authored map could place **one** model, had no say in
+which, and **nothing in the toolkit could tell an author what it was.**
+
+Measured now (`propscan.py`, offline, from the models' own vertex positions):
+
+| | |
+|---|---|
+| models Pre-Searing lists | **229**, all 229 decodable |
+| horizontal extent across them | 27 → 17,145 units (0.3 → 178.6 placement cells) |
+| **model 0**, what every area ever authored placed | **1536 × 691 × 963 units = 16.0 cells wide**, aspect 0.63 |
+| times retail itself places model 0 | **3**, in a whole map |
+| times W24 placed it | **32** |
+| models ≤ 2 cells wide | 46 — none of them reachable |
+
+`pick_tree_cells` places on a 96-unit grid, so a 16-cell model on adjacent
+cells **interpenetrates by construction**. The owner's word was "looming"; the
+number is 16×.
+
+### The discriminator is ASPECT, not size
+
+Size alone does not separate the populations — a big landmark and a big tree
+are both big. Height ÷ horizontal does: model 0 is **0.63**, and the two
+extremes at the other end are **7.6**, 0.84 cells wide, 43 and 56 triangles.
+
+### ⚠ A hypothesis tested and then CORRECTED, twice
+
+**"Retail places its small props most often, so placement count names them."**
+First measurement: the ten most-placed average 836 units, the ten least-placed
+926 — no signal. **That was an artifact of the sort.** 91 of the 229 models are
+placed exactly once, so "the ten least-placed" is a tie-break; a different
+arbitrary slice of the same 91 gives **4163**. The test caught it by going red.
+
+Re-measured with no ties to break — Spearman rank correlation over all 229:
+**ρ = −0.219**. So there IS a weak signal, and it is nowhere near enough to
+select on: **the median of the twenty models retail places ten-or-more times
+is still 7.3 placement cells wide.** Choosing the most *popular* model would
+not have avoided W24 either. Only measuring the size does.
+
+### What changed
+
+- **`toolkit/mapdata/propscan.py`** — the catalogue. Per model: extent in
+  placement cells, aspect, height, vertex/triangle counts, and how often the
+  donor's own map places it. `fits_pitch` answers **None** for a model it could
+  not read, never True.
+- **`deploy.py` takes `prop_models`** — a list of indices into the donor's own
+  dependency order, props taking them round-robin. **Absent it defaults to
+  `[0]`, unchanged on purpose**: `area.plaza` is WORLDMAPS-W2's byte-identity
+  witness and a new default would have retired that comparison silently.
+- **Every build now prints the fit.** A report, not a refusal, and that is
+  deliberate — thirteen areas authored before today still name index 0, so
+  refusing would wall off shipped work that is not being changed. It fires on
+  `plaza` as loudly as on `ashcoil`, which is the finding: **every map this
+  toolkit ever authored placed the same 16-cell building**, and only W24 was
+  ever walked.
+- **`area.ashcoil` names model 77** (file `0x1B85C`): 0.84 cells, 619 tall,
+  aspect 7.6, 43 triangles, placed 12 times by the donor. It rebuilds clean —
+  `fits the 96-unit placement grid`.
+
+### What this does NOT claim, and it is the important line
+
+**That model 77 is a tree.** Nothing offline can say what a model *depicts* —
+tall-and-thin is a shape, not a species. The row is chosen on measurement and
+says so; it is **UNVERIFIED** until somebody looks at it in a client. W24's
+tree-placement y-flip stays **CONTESTED** for exactly the same reason: it could
+not be judged through an absurd model, and it cannot be judged through an
+unverified one either. Both resolve on the same future run, which is now worth
+making.
+
+### The other four W24 failures are untouched
+
+The mesh's narrow-gate clearance, water/shore emission, slope material
+variation and the authored minimap. This entry is one of five.

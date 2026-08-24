@@ -3031,6 +3031,40 @@ no minimap exists for created maps. **The engine half of the mod-platform
 framing is ahead of the content half, and the gap is what a player hits
 in the first thirty seconds.** Owner's call: not ready -- arc paused here.
 `vault/research/worldmaps/WORLDMAPS-W24-RUN.md` (predictions AND results).
+★ **W25 CLOSES ONE OF THE FIVE (2026-08-24), at a desk, no run: the prop
+model was never CHOSEN.** `deploy.py` wrote `prop_dep_ids =
+[donor.prop_model_ids[0]]` with every prop at `model=0`, so an authored map
+placed ONE model, had no say in which, and nothing in the toolkit could say
+what it was. Measured: Pre-Searing lists **229** prop models, all decodable,
+extents 27..17,145 units -- and **model 0 is 1536x691x963, SIXTEEN 96-unit
+placement cells wide, aspect 0.63, which retail itself places THREE times in a
+whole map** while W24 placed 32. `pick_tree_cells` places on a 96-unit grid, so
+that model interpenetrates by construction; the owner's "looming" is 16x, as a
+number. The discriminator is ASPECT, not size (a big landmark and a big tree
+are both big): model 0 is 0.63, the two at the other end are **7.6** at 0.84
+cells and 43 triangles. New `toolkit/mapdata/propscan.py` is the catalogue
+(extent in cells, aspect, height, tri counts, and how often the donor's own map
+places each), `fits_pitch` answers **None** for a model it could not read
+rather than True, `deploy.py` takes **`prop_models`** (indices into the donor's
+order, round-robin) and PRINTS the fit on every build. Default stays `[0]`
+deliberately -- `area.plaza` is W2's byte-identity witness. The report fires on
+plaza as loudly as on ashcoil, which is the finding: **every map this toolkit
+ever authored placed the same 16-cell building and only W24 was ever walked.**
+`area.ashcoil` now names model 77 (0x1B85C, 0.84 cells, 619 tall, aspect 7.6,
+placed 12x) and rebuilds clean. ⚠ A hypothesis was tested and CORRECTED TWICE:
+"placement count names the small props" first measured as no signal at all,
+from the ten most-placed against "the ten least-placed" -- but 91 of 229 are
+placed once, so that slice is a TIE-BREAK and another gives 4163 against 926.
+The test caught it by going red. Re-measured tie-free over all 229: Spearman
+**rho -0.219**, a WEAK signal, and the median of the twenty retail places
+ten-or-more times is still **7.3 cells** wide -- choosing the most popular
+model would not have avoided W24 either. **NOT CLAIMED: that model 77 is a
+tree.** Nothing offline says what a model depicts; the row is chosen on
+measurement and labelled UNVERIFIED, and W24's contested tree-placement y-flip
+stays contested until the same future run judges both. `test_propscan.py` 18
+checks (floor 11), `test_deploy` 233 and `test_props` 99 still green.
+`studies/worldmaps/FINDINGS.md` W25. **The other four W24 failures -- narrow-gate
+clearance, water/shore, slope materials, the authored minimap -- are untouched.**
 `studies/worldmaps/FINDINGS.md` W12,
 `vault/research/worldmaps/WORLDMAPS-W12-RUN.md`.
 

@@ -1037,6 +1037,25 @@ sun = true
 environment = true
 sound = true
 trees = 32
+# WORLDMAPS-W24's second failure, fixed: "the biome donor's model 0 is a
+# monumental building, not a tree -- 32 of them scattered like shrubs loom
+# one-sided over the bowl". Until 2026-08-24 no area COULD say which model;
+# `deploy.py` always placed index 0. Pre-Searing's index 0 measures
+# 1536 x 691 x 963 units -- SIXTEEN 96-unit placement cells wide, aspect 0.63,
+# and retail itself places it three times in the whole map.
+#
+# Index 77 (file 0x1B85C) is chosen ON MEASUREMENT, and the measurement is all
+# this row claims: 0.84 cells wide, 619 units tall, aspect 7.6, 43 triangles,
+# and the donor's own map places it 12 times. It is the only shape in the
+# donor's 229 that is both narrow enough to sit on adjacent placement cells
+# without interpenetrating AND many times taller than wide. `propscan.py` is
+# how those numbers are read; `deploy.py` prints them on every build.
+#
+# WHAT THIS ROW DOES NOT CLAIM: that it is a tree. Nothing offline can say
+# what a model DEPICTS -- tall-and-thin is a shape, not a species. UNVERIFIED
+# until somebody looks at it in a client, and W24's contested tree-placement
+# y-flip stays contested until then for exactly the same reason.
+prop_models = [77]
 map_flags = 0x02000001   # BOTH levers, and the top byte is REQUIRED, not taste:
                          # the design's legality-by-construction argument runs
                          # under the 10/45/40 set (top byte 2, WORLDMAPS-W17).
