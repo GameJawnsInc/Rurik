@@ -58,9 +58,22 @@ def JOIN(ls):
 # caller map and the CLEAR analyser landed the same day, then 71 for the
 # symmetric R4 window and 75 for S7's ordering check plus the second
 # costume-head row, 76 for S6 refusing to discriminate on one slot,
-# 79 for W1-W3 per-clear attribution, 80 for peak-not-final scoring.
+# 79 for W1-W3 per-clear attribution, 80 for peak-not-final scoring, and 93
+# on 2026-08-24 when §9's frame walk landed.
 # Set from the run every time; guessed low five times before that stuck.
-LEDGER = checks.Ledger("composite trap", floor=80)
+#
+# AND THE FLOOR IS NOW THE MANDATORY CORE, WHICH IS LOWER THAN 80 WAS.
+# A whole green run is 93. Four sections need something this machine may not
+# have and declare skips: §1 (6) and §2 (4) the pinned client, §5 (1) and §8
+# (12) the vault's content -- 23 in all, leaving 70 that always run. The old
+# 80 was set from a full run and sat ABOVE that core, so a machine without a
+# vault would have failed on the floor rather than reading four honest skips,
+# and the shortfall message would have named the wrong thing. `checks.py`'s
+# own guidance is "set the floor to its mandatory core and let the optional
+# sections declare skips", which is what `test_commandertrap.py` does; this
+# file was the outlier. Lowering it is deliberate and it loses nothing: the
+# skips are printed either way.
+LEDGER = checks.Ledger("composite trap", floor=70)
 check = checks.adopt(LEDGER)
 
 # ---------------------------------------------------------------- section 1
@@ -788,5 +801,111 @@ else:
               "ever agreed, the second row would be testing nothing",
               f"{t.HEAD_ROWS['costume_head']['component']} vs "
               f"{t.HEAD_ROWS['costume_head_second']['component']}")
+
+print("== 9. the frame walk, and the ordering scored per instance ==")
+# WHY. §9.13 captured ONE frame and got `CpsApi::SetSlotItem`, which forwards
+# its caller's slot verbatim -- so it names the messenger and can NEVER answer
+# "who chose the ordering", which is §9.11's open question. The path is two
+# frames further out. The whole hazard here is that a frame chain walked
+# through a function with no frame pointer yields a plausible wrong caller,
+# and this arc has already paid once for a capture that confidently answered
+# the wrong question (heroes §36.6). So the refusals are checked first.
+FRAMES = {0x1000: (0x2000, 0x0082D6F6),      # writer   -> SetSlotItem
+          0x2000: (0x3000, 0x004B1880),      #          -> the per-slot worker
+          0x3000: (0x4000, 0x004EE324),      #          -> GmDoll
+          0x4000: (0x0000, 0x00000000)}
+
+
+def framereader(frames):
+    def rd(addr, n):
+        if n == 8 and addr in frames:
+            return struct.pack("<2I", *frames[addr])
+        if n == 4 and (addr - 8) in frames:      # [ebp+8], the agent arg
+            return struct.pack("<I", 0x0BADF00D)
+        return None
+    return rd
+
+
+chain = t.walk_frames(framereader(FRAMES), 0x1000, depth=4)
+check(chain == (0x0082D6F6, 0x004B1880, 0x004EE324),
+      "the EBP chain walks THREE deep and reaches GmDoll -- the frame that "
+      "actually chose the slot ordering, which one frame could never name",
+      f"{[hex(x) for x in chain]}")
+check(t.walk_frames(lambda a, n: struct.pack("<2I", 0x0500, 0x004EE324)
+                    if n == 8 else None, 0x1000, depth=4) == (0x004EE324,),
+      "a frame pointer that moves DOWN ends the chain instead of following "
+      "it -- an unwinding stack walks up, and a descending link is the shape "
+      "a garbage read produces")
+check(t.walk_frames(lambda a, n: struct.pack("<2I", 0x9000, 0xDEADBEEF)
+                    if n == 8 else None, 0x1000, depth=4) == (),
+      "a return address outside the code window ends the chain and NAMES "
+      "NOBODY, rather than reporting a fabricated caller")
+check(t.walk_frames(framereader(FRAMES), 0x1002, depth=4) == (),
+      "and an unaligned frame pointer is refused at the first step")
+check(t.walk_frames(framereader(FRAMES), 0x1000, depth=2)
+      == (0x0082D6F6, 0x004B1880),
+      "depth is a real bound, not a suggestion -- the walk stops where it is "
+      "told even when more frames are readable")
+
+UP = {"stack (VAs)": ("0x0082D6F6", "0x004B1880", "0x004EE324"),
+      "upstream": "0x004EE324 " + t.UPSTREAM_CALLERS[0x004EE324],
+      "caller (VA)": 0x0082D6F6, "agent": 0x0BADF00D}
+lines, _ = t._analyse_cache(CSITES, chits(GOOD_ROWS, extra=(),
+                                          ids=GOOD_IDS))
+blob = "\n".join(lines)
+check("upstream NOT CAPTURED" in blob,
+      "an instance whose frame chain never reached the upstream SAYS SO -- "
+      "the field is absent, not empty, and a report that just omitted the "
+      "line would read as 'no upstream involved'")
+
+# The permuted (world) instance and an identity (equip-slot) one, scored.
+perm_hits = chits(GOOD_ROWS, ids=GOOD_IDS)
+for h in perm_hits:
+    h["cap"].update(UP)
+lines, _ = t._analyse_cache(CSITES, perm_hits)
+blob = "\n".join(lines)
+check("ordering: CpsBase (the permuted in-world order)" in blob,
+      "the world instance's m_slotItemId scores as the PERMUTED order",
+      blob[-700:])
+check("upstream 0x004EE324 GmDoll" in blob and "agent(s) 0x0BADF00D" in blob,
+      "and the upstream and the agent are both named on the instance line -- "
+      "the two fields that separate 'the doll dressed it' from 'the world "
+      "dressed it' without any interpretation at the desk")
+
+WIRE_IDS = [1, 0, 3, 4, 0, 6, 7, 0, 0]        # §9.17's measured instances
+wire_hits = chits({s: GOOD_ROWS[s] for s in (2, 3, 5, 6)}, ids=WIRE_IDS,
+                  cps=0x0AB01000)
+for h in wire_hits:
+    h["cap"].update(UP)
+lines, _ = t._analyse_cache(CSITES, wire_hits)
+blob = "\n".join(lines)
+check("ordering: EQUIP-SLOT (identity, our wire numbering)" in blob,
+      "and §9.17's OWN measured m_slotItemId scores as the EQUIP-SLOT order "
+      "-- the fixture is the client's reading, not a tidied one",
+      blob[-700:])
+# THE SABOTAGE. If both readings matched, the check would be scoring nothing.
+both = chits({0: GOOD_ROWS[0], 2: GOOD_ROWS[2]}, ids=[1, 0, 3, 0, 0, 0, 0,
+                                                      0, 0], cps=0x0AB02000)
+lines, _ = t._analyse_cache(CSITES, both)
+blob = "\n".join(lines)
+check("AMBIGUOUS -- too few slots to separate" in blob,
+      "an instance holding only slots 0 and 2 -- where the two orderings "
+      "AGREE -- is scored AMBIGUOUS rather than credited to either. Without "
+      "this, every short instance would read as confirming whichever "
+      "ordering the reader expected",
+      blob[-500:])
+lines, _ = t._analyse_cache(CSITES, chits({2: GOOD_ROWS[2]},
+                                          ids=[0, 0, 99, 0, 0, 0, 0, 0, 0],
+                                          cps=0x0AB03000))
+check("ordering: NEITHER" in "\n".join(lines),
+      "and an item id belonging to no slot in either ordering is NEITHER, "
+      "not silently absent")
+check(0x004EE324 in t.UPSTREAM_CALLERS and 0x00875BA8 in t.UPSTREAM_CALLERS
+      and len([k for k in t.UPSTREAM_CALLERS if 0x004B1800 <= k < 0x004B1A00])
+      == 7,
+      "the upstream map carries both callers of the per-slot worker AND all "
+      "seven of its own call sites, read from the image before the run so an "
+      "address means something the moment it arrives",
+      f"{sorted(hex(k) for k in t.UPSTREAM_CALLERS)}")
 
 sys.exit(LEDGER.verdict())

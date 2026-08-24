@@ -363,6 +363,43 @@ WRITER_CALLERS = {
     0x0082D6F6: "CpsApi::SetSlotItem -- slot is its own caller's",
 }
 
+#: The return address that means the write arrived through `CpsApi::SetSlotItem`
+#: -- the only caller whose frame we have READ and know to be standard
+#: (`0x0082D6A0: push ebp; mov ebp,esp`), which is what makes `[[ebp]+8]`
+#: safe to call the agent pointer rather than a guess.
+SETSLOTITEM_RET = 0x0082D6F6
+
+#: UPSTREAM of `SetSlotItem`, one and two frames further out. Read statically
+#: on 38797 before any run, so an address arriving here means something the
+#: moment it appears and an UNLISTED one is a result rather than a gap.
+#:
+#: `codescan --xrefs 0x0082D6A0` gives SetSlotItem 40 direct callers and **not
+#: one passes a literal slot above 1** -- the armour slots always arrive in a
+#: register, so the ordering is decided in a loop above. `0x004B1800` is the
+#: per-slot dress worker (it forwards its slot verbatim and indexes its
+#: caller's item array with the same value), and it has exactly TWO callers,
+#: both UI. `GmDoll` is the interesting one: it asserts `:660
+#: !m_compositeBasic`, `:661 !m_compositePlayer` and `:662 !m_model`, so it
+#: owns two composites and a model and creates them together -- which is the
+#: shape of §9.11's two-at-once and §9.17's three-at-once bursts.
+UPSTREAM_CALLERS = {
+    0x004B1847: "UiCharModel worker -> clear slot (hide flag)",
+    0x004B1880: "UiCharModel worker -> dress slot (armour path)",
+    0x004B18DE: "UiCharModel worker -> slot 1 (two-handed)",
+    0x004B18F8: "UiCharModel worker -> slot 0",
+    0x004B1924: "UiCharModel worker -> slot 1",
+    0x004B193B: "UiCharModel worker -> slot 1",
+    0x004B194A: "UiCharModel worker -> slot 0",
+    0x004EE324: "GmDoll -- the equipment PAPER DOLL",
+    0x00875BA8: "UiChInfo / UiChModel",
+}
+
+#: The window a captured return address must land in to be reported at all.
+#: NOT a claim about `.text`'s real bounds -- it is a junk filter, and its only
+#: job is that a frame which is not a frame SHORTENS the chain instead of
+#: printing a fabricated caller. Every address this arc has read sits inside it.
+TEXT_LO, TEXT_HI = 0x00401000, 0x00A00000
+
 #: authsrv.py's own numbering, MIRRORED here (a clientscan tool does not import
 #: the server) and cross-checked against that file's source by
 #: test_compositetrap §6, so drift goes red rather than quiet: equip slot ->
@@ -503,6 +540,40 @@ def _cap_record(ctx, reader):
     return out
 
 
+def walk_frames(reader, ebp, depth=3):
+    """Saved return addresses up the EBP chain, as VAs, outermost last.
+
+    §9.13 captured ONE frame and got `CpsApi::SetSlotItem` -- which forwards
+    its caller's slot verbatim, so it names the messenger and never the caller
+    who chose the ordering. The chosen ordering is the whole open question, and
+    it is two frames further out.
+
+    REFUSES rather than invents. A frame pointer must move UP and stay 4-byte
+    aligned, and its saved return address must land inside the code window; the
+    first frame that fails any of those ENDS the chain. A function compiled
+    without a frame pointer therefore yields a SHORT chain, which is readable,
+    instead of a plausible wrong caller, which is not -- and this arc has
+    already paid once for a capture that answered the wrong question
+    confidently (`caller(retaddr)` naming a wrapper, heroes §36.6).
+    """
+    out, prev = [], 0
+    for _ in range(depth):
+        if not ebp or ebp & 3 or ebp <= prev:
+            break
+        f = ct._dw(reader, ebp, 2)          # [ebp] = next ebp, [ebp+4] = ret
+        if not f:
+            break
+        ret = ct.unslide(f[1])
+        # `unslide` returns None for a pointer outside the image, and that is
+        # the common case for a junk frame -- so the None check comes FIRST or
+        # the comparison below raises instead of ending the chain.
+        if ret is None or not (TEXT_LO <= ret < TEXT_HI):
+            break
+        out.append(ret)
+        prev, ebp = ebp, f[0]
+    return tuple(out)
+
+
 def _cap_slotcache(ctx, reader):
     """The row the client just wrote, read back out of CpsBase itself.
 
@@ -534,12 +605,45 @@ def _cap_slotcache(ctx, reader):
     # vtable, which names the CLASS rather than the path.
     ret = ct._dw(reader, ctx.Ebp + 4, 1)
     vt = ct._dw(reader, cps, 1)
+    # AND TWO FRAMES FURTHER OUT. `SetSlotItem` forwards its caller's slot
+    # verbatim, so frame 1 names the messenger; the caller that CHOSE the
+    # ordering is at frame 2 or 3. See walk_frames for why a bad frame
+    # shortens the chain rather than naming somebody.
+    stack = walk_frames(reader, ctx.Ebp, depth=4)
+    agent = None
+    if ret and ct.unslide(ret[0]) == SETSLOTITEM_RET:
+        # ONLY here. `SetSlotItem`'s prologue is read and known standard, so
+        # [[ebp]+8] is its first argument -- the AGENT. For the re-dress
+        # callers the previous frame belongs to a function whose prologue we
+        # have NOT read, and `[ebp+8]` there is a slot, not an agent; reading
+        # it anyway would print a small integer under the label "agent".
+        outer = ct._dw(reader, ctx.Ebp, 1)
+        if outer and outer[0] and not (outer[0] & 3):
+            a = ct._dw(reader, outer[0] + 8, 1)
+            agent = a[0] if a else None
     if not row or not ids or not ovr:
         out["VERDICT"] = f"CpsBase 0x{cps:08X} unreadable"
         return out
     out["item id"] = args[1] if args else None
     if ret:
         out["caller (VA)"] = ct.unslide(ret[0])
+    if stack:
+        # Hex strings, not ints: this lands in a report a human reads and in
+        # `_report`'s census, which keys on the value. Decimal return
+        # addresses are unreadable and get skimmed past.
+        out["stack (VAs)"] = tuple(f"0x{v:08X}" for v in stack)
+        # The OUTERMOST frame we could justify, named if it is one of the two
+        # UI workers the static read found. An unlisted address here is the
+        # answer to §9.11's question just as much as a listed one is.
+        for va in reversed(stack):
+            if va in UPSTREAM_CALLERS:
+                out["upstream"] = f"0x{va:08X} {UPSTREAM_CALLERS[va]}"
+                break
+        else:
+            out["upstream"] = (f"0x{stack[-1]:08X} NOT in UPSTREAM_CALLERS "
+                               f"-- an unlisted path, which is a result")
+    if agent is not None:
+        out["agent"] = agent
     if vt:
         out["vtable (VA)"] = ct.unslide(vt[0])
     out["file id"] = row[0]
@@ -894,6 +998,37 @@ def _analyse_cache(sites, hits):
                 va, "<-- NOT one of the six direct callers")
             L.append(f"      from 0x{va:08X} x{len(slots)} slots {slots}"
                      f"  {who}")
+        # WHO CHOSE THE ORDERING. `caller (VA)` above is `SetSlotItem`, which
+        # forwards its caller's slot verbatim -- so on its own it can never
+        # answer §9.11's question. This is the frame beyond it.
+        up = sorted({c["upstream"] for c in cs if "upstream" in c})
+        for u in up:
+            L.append(f"      upstream {u}")
+        if not up:
+            L.append("      upstream NOT CAPTURED -- the frame chain stopped "
+                     "before it, so this instance says nothing about which "
+                     "path chose its slot ordering")
+        ag = sorted({c["agent"] for c in cs if c.get("agent")})
+        if ag:
+            L.append("      agent(s) "
+                     + ", ".join(f"0x{a:08X}" for a in ag)
+                     + ("  <-- one instance dressed for TWO agents"
+                        if len(ag) > 1 else ""))
+        # AND THE ORDERING ITSELF, scored per instance rather than only for
+        # the one the run picks as the world agent. This is the field §9.11
+        # and §9.17 read by hand out of the timeline both times.
+        got = {s: v for s, v in enumerate(cs[-1]["m_slotItemId"]) if v}
+        ident = all(OUR_SLOT_ITEM.get(s) == v for s, v in got.items())
+        perm = all(_by_cps(OUR_SLOT_ITEM).get(s) == v for s, v in got.items())
+        if got:
+            L.append(f"      ordering: "
+                     + ("EQUIP-SLOT (identity, our wire numbering)" if ident
+                        and not perm else
+                        "CpsBase (the permuted in-world order)" if perm
+                        and not ident else
+                        "AMBIGUOUS -- too few slots to separate the two"
+                        if ident and perm else
+                        "NEITHER -- matches no ordering this arc knows"))
 
     # Every table below is OURS, keyed by WIRE slot, re-keyed once into
     # CpsBase's own order. S2 is what licenses the re-key, so it is scored
