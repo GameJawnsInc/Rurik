@@ -242,9 +242,23 @@ the row being destroyed is still readable.
       which places §9.8's reset-arm fetches on the vtable notify at
       `0x0082EF4B` rather than on the cache being refilled.
 
-`cachesame` is dropped from this run's site list to make room: it has fired
-**zero times in five runs**, which is a measured zero and is why it can be
-spent rather than a reason to keep spending a debug register on it.
+⚠ **`cachesame` WAS dropped to make room, on the grounds that it had fired
+zero times in five runs — and that reasoning was WRONG.** Path A runs when a
+slot is re-set with the SAME item id, and no run had ever re-declared a worn
+item, so the zero was a ZERO-EXPOSURE null rather than a measured absence. The
+`armor_slots` probe re-declares item id **3** — which `STARTER_ARMOUR` already
+uses for `warrior_body` — as `warrior_boots`, and the first clear run duly
+found CpsBase slot 2's row holding record **90** where the login wrote **91**,
+with no `cache` write between. Not a third writer: path A, unwatched.
+
+  X1  `cachesame` FIRES on an `armor_slots` run, writing CpsBase slot 2 with
+      item id 3 and record 90, at the moment the probe re-declares item 3.
+  X2  So `m_slotItemData` has NO writer outside `0x0082EDA0`; the 91 → 90
+      change is path A and nothing else.
+  X3  And it is the reason record 91 never appears in a reset residue: by then
+      nothing holds 91. `getids` is dropped for this arm instead, and it is
+      the safer thing to drop — its P1/P2/P3/P5 have passed in every run,
+      while `clear` and `cache` firing is itself proof the instrument is live.
 
 THE TWO EXTRA INSTANCES: A TRIGGER, REGISTERED BEFORE THE RUN THAT TESTS IT
 --------------------------------------------------------------------------
