@@ -2362,7 +2362,9 @@ pair in `studies/minimap/FINDINGS.md` §6f.2 proved it (same archive, pair sent
 dialog's own frame walk lands on it (`BaseAddr 007D0000`, return `0x00923c9c`
 → `0x00553c9c`). Dialog:
 `vault/captures/harness/20260824T065948/crash-dialog.txt`. Operational rule:
-RUNBOOK failure table, the `key:m` row.
+RUNBOOK failure table, the `key:m` row — and later the same day the durable
+fix landed (`fogrle.py` + the load-sequence send, minimap FINDINGS §6i), so
+on continent-1 maps a stock run's M press no longer crashes.
 
 ### What is closed
 

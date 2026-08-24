@@ -4325,7 +4325,9 @@ def _knot(cx, cy):
 # instead: capture 20260807T143055, connection :64102, the largest of the eight.
 # Its declared byteCount is 38 and its band chain closes at EXACTLY 38 --
 # lengths (0, 22, 0, 0, 0, 0, 0, 0) over 128/16 = 8 bands -- which is the same
-# arithmetic S8 used and is re-checked in test_probes.py rather than trusted.
+# arithmetic S8 used and is re-checked in test_fogrle.py §1 rather than trusted.
+# (This line named "test_probes.py" from 2026-08-15 to 2026-08-24; no such file
+# was ever written, and the check it promised first existed when fogrle landed.)
 # Only the two trailing 0xCCCC padding dwords beyond the declared count are ours
 # to ignore; everything inside the count is verbatim ArenaNet.
 FOG_INIT_DIMS = (64, 128)                  # continent 1's block grid, 64 % 32 == 0

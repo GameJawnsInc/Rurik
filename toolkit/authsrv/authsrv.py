@@ -51,6 +51,7 @@ from vaultpath import vault_path  # noqa: E402
 import probes  # noqa: E402
 import labelrun  # noqa: E402
 import agents
+import fogrle  # noqa: E402
 import attribspend  # noqa: E402
 import origin  # noqa: E402
 import questdefs  # noqa: E402
@@ -878,6 +879,14 @@ GAME_SMSG_INSTANCE_LOAD_PLAYER_NAME = 0x017D
 GAME_SMSG_INSTANCE_PLAYER_DATA_START = 0x0186
 GAME_SMSG_INSTANCE_PLAYER_DATA_DONE = 0x018A
 GAME_SMSG_INSTANCE_LOAD_INFO = 0x0199
+# The exploration-init pair. Names are schema/overrides.json's (filed by minimap
+# rung S11, high confidence -- the binary's own tokens are accumMapInitDims/
+# accumMapInitData). Sent at load by default because the world map is UNOPENABLE
+# without them: the M press dies on GmMapView.cpp(1731) worldMapDims.x ==
+# mapDims.x * DXT_BLOCK_SIZE (studies/minimap/FINDINGS.md 6f.2, and the RUNBOOK
+# failure table's key:m row). See fog_init_for_map.
+GAME_SMSG_MAP_EXPLORATION_INIT_BEGIN = 0x008B
+GAME_SMSG_MAP_EXPLORATION_INIT_DATA = 0x008A
 GAME_SMSG_MAP_UPDATE_CURRENT = 0x0099
 GAME_SMSG_ITEM_STREAM_CREATE = 0x0144
 GAME_SMSG_INSTANCE_LOAD_SPAWN_POINT = 0x0195
@@ -2956,6 +2965,47 @@ def map_explorable(map_id):
     """
     cfg = MAP_STATIC_CONFIG.get(map_id)
     return bool(cfg[3]) if cfg and len(cfg) > 3 else False
+
+
+# The world map is unopenable until the exploration-init pair has been sent --
+# without it the M press kills the client on GmMapView.cpp(1731), which voided a
+# whole probe run on 2026-08-24 (studies/playercomposite/FINDINGS.md 9.22) before
+# the RUNBOOK failure table picked it up. Defaults ON; --no-fog-init restores the
+# pre-2026-08-24 baseline for experiments that need the client's no-init state
+# (e.g. anything measuring 0x008C, which is INERT without the pair and ACTIVE with
+# it -- smsgsweep's 108 historical 0x008C sends measured nothing for exactly this
+# reason, and a default-on server inverts that baseline).
+FOG_INIT = True
+FOG_REVEAL = False
+
+
+def fog_init_for_map(map_id, reveal=False):
+    """(dims, stream_bytes, note) for the fog-init pair, or (None, None, why not).
+
+    The dims are CONTINENT facts, and only observed ones are served: a wrong
+    pair is the same GmMapView crash the pair exists to prevent, because the
+    client checks the declared dims against its own compiled atlas
+    (worldMapDims == mapDims * 4). content/fog.toml carries the rows and their
+    provenance; refusing to guess here is why it can be a table.
+    """
+    cont_row = agents.WORLD.rows("map_continent").get(str(map_id))
+    if cont_row is None:
+        return None, None, (
+            f"map {map_id} has no map_continent row in content/fog.toml -- "
+            f"extract it from the client's area table (maprows.py) and add the "
+            f"row")
+    continent = int(cont_row["continent"])
+    dims_row = agents.WORLD.rows("fog_dims").get(str(continent))
+    if dims_row is None:
+        return None, None, (
+            f"continent {continent} has no fog_dims row -- its grid dims are "
+            f"only OBSERVED on continent 1 (every live 0x008B is (64, 128) "
+            f"there) and no derivation formula survives the data, so we refuse "
+            f"to guess. One retail capture on this continent settles it "
+            f"(content/fog.toml's header)")
+    dims = (int(dims_row["dims_x"]), int(dims_row["dims_y"]))
+    stream = fogrle.encode_uniform(dims, revealed=reveal)
+    return dims, stream, f"continent {continent}, {'REVEALED' if reveal else 'fogged'}"
 
 # Parsed navmeshes, keyed by map_file_id. Loading one costs about a second,
 # nearly all of it decompressing the map out of the archive, so it is worth
@@ -11971,6 +12021,35 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                  + (" [is_explorable=1, FORCED]" if EXPLORABLE else "")
                  + (" [is_explorable=0, FORCED OUTPOST]" if OUTPOST else ""))
 
+            # The exploration-init pair: without it mapDims stays 0 and the
+            # first M press kills the client on GmMapView.cpp(1731) -- see
+            # fog_init_for_map. Retail sends the pair once per instance at
+            # t = 0.58-0.73 s into the load (8 of 8 live captures, minimap
+            # FINDINGS 4.2), so right after INSTANCE_LOAD_INFO is its shape.
+            if FOG_INIT:
+                fog_dims, fog_stream, fog_note = fog_init_for_map(
+                    state["map_id"], reveal=FOG_REVEAL)
+                if fog_stream is None:
+                    print(f"[c{conn_id}] FOG INIT SKIPPED: {fog_note}. The "
+                          f"world map is UNOPENABLE in this instance -- an M "
+                          f"press kills the client on GmMapView.cpp(1731) and "
+                          f"its dialog then eats every later scripted key "
+                          f"(RUNBOOK failure table, the key:m row). Do not "
+                          f"script key:m against this map.", flush=True)
+                else:
+                    send(GAME_SMSG_MAP_EXPLORATION_INIT_BEGIN,
+                         [fog_dims[0], fog_dims[1], len(fog_stream)],
+                         f"MAP_EXPLORATION_INIT_BEGIN [{fog_note}, "
+                         f"{len(fog_stream)}B to follow; the M key is safe]")
+                    for chunk in fogrle.payload_dwords(fog_stream):
+                        send(GAME_SMSG_MAP_EXPLORATION_INIT_DATA, [chunk],
+                             "MAP_EXPLORATION_INIT_DATA")
+            else:
+                print(f"[c{conn_id}] FOG INIT OFF (--no-fog-init): the "
+                      f"pre-2026-08-24 baseline. 0x008C is inert, and an M "
+                      f"press kills the client on GmMapView.cpp(1731).",
+                      flush=True)
+
             spawn = MAP_STATIC_CONFIG.get(state["map_id"],
                                           MAP_STATIC_CONFIG[FALLBACK_MAP_ID])
             state["pos"], state["plane"], state["dest"] = spawn[1], spawn[2], None
@@ -15831,6 +15910,26 @@ def main():
                          "1 -> +0x58, studies/minimap/FINDINGS.md §3.3), so on a row "
                          "where those differ this is a real lever on the picture. "
                          "Refused together with --explorable: they contradict.")
+    ap.add_argument("--no-fog-init", action="store_true",
+                    help="Do NOT send the exploration-init pair (0x008B+0x008A) "
+                         "at map load. The pair is on by default since "
+                         "2026-08-24 because without it the world map is "
+                         "unopenable -- M kills the client on GmMapView.cpp"
+                         "(1731) (studies/minimap/FINDINGS.md 6f.2, RUNBOOK "
+                         "failure table). Pass this to restore the no-init "
+                         "baseline: experiments around 0x008C need it, because "
+                         "that opcode is INERT without the pair and ACTIVE "
+                         "with it, so a default-on server silently inverts any "
+                         "pre-2026-08-24 comparison.")
+    ap.add_argument("--fog-reveal", action="store_true",
+                    help="Send the init pair with an all-REVEALED stream "
+                         "instead of all-fogged, so the world map shows the "
+                         "whole continent picture. Carries fogrle.py's "
+                         "CONTESTED colour-start: if a run with this flag "
+                         "opens a fully FOGGED map, the static reading of the "
+                         "expander was right after all -- flip "
+                         "fogrle.FIRST_COLOUR and tell "
+                         "studies/minimap/FINDINGS.md 6i.")
     ap.add_argument("--henchman", default=None, metavar="NPC_KEY",
                     help="Add one henchman row to the party roster: send "
                          "GAME_SMSG 0x01BF inside the party build window "
@@ -17065,6 +17164,24 @@ def main():
         print("OUTPOST: forcing the 0x0199 map-type byte to 0 "
               "(MISSION_MAP_OUTPOST) regardless of what content/maps.toml says. "
               "The geometry is unchanged -- only the flag.")
+    if a.no_fog_init:
+        global FOG_INIT
+        FOG_INIT = False
+        print("FOG INIT OFF: the exploration-init pair will not be sent. "
+              "0x008C is inert again, and the M key kills the client "
+              "(GmMapView.cpp(1731)) -- the pre-2026-08-24 baseline.")
+    if a.fog_reveal:
+        if a.no_fog_init:
+            raise SystemExit("--fog-reveal and --no-fog-init contradict each "
+                             "other: one asks for a revealed init, the other "
+                             "for no init at all. Pass at most one.")
+        global FOG_REVEAL
+        FOG_REVEAL = True
+        print("FOG REVEAL: the init stream is all-revealed rather than "
+              "all-fogged. If the world map opens fully FOGGED under this "
+              "flag, fogrle.py's CONTESTED colour-start resolved the other "
+              "way -- flip fogrle.FIRST_COLOUR and record it in "
+              "studies/minimap/FINDINGS.md 6i.")
 
     GAME_SRV_HOST, GAME_SRV_PORT = a.game_host, a.game_port
     HOST_FIELD_ENCODING = a.host_encoding

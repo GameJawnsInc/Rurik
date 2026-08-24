@@ -1,0 +1,165 @@
+# Fog-of-war init: which exploration-grid dims each continent declares, and which
+# continent each served map sits on.
+#
+# WHY THIS TABLE EXISTS. The world map (M) sizes its texture from the dims the
+# exploration-init pair (GAME_SMSG 0x008B + 0x008A) carries, and a server that never
+# sends the pair leaves them 0 -- the first M press then kills the client on
+# GmMapView.cpp(1731). studies/minimap/FINDINGS.md 6f.2 proved it with a matched
+# pair; the RUNBOOK failure table's key:m row is the operational history. At map
+# load, authsrv.py joins map_continent -> fog_dims and sends the pair with a
+# synthetic all-fogged stream (toolkit/authsrv/fogrle.py). A map whose continent has
+# no fog_dims row gets NO init and a loud log -- the dims are continent-specific
+# facts we refuse to guess, because a wrong pair is the same crash wearing our
+# fingerprints: the client checks worldMapDims == mapDims * 4 against its own
+# compiled atlas.
+#
+# WHY ONLY CONTINENT 1 HAS DIMS. Every 0x008B in the live corpus is continent 1 and
+# carries (64, 128) -- 8 of 8, one archive of sessions, studies/minimap/FINDINGS.md
+# 4.2 -- and no formula deriving the dims from the client's atlas tables survives
+# the data (continent 3's footprint alone is 227 blocks wide against every
+# candidate small grid; studies/minimap/FINDINGS.md 6i). A future continent needs
+# one retail capture there, or the GmMapView constructor chase 6i scopes.
+
+[fog_dims.1]
+dims_x = 64
+dims_y = 128
+
+[fog_dims.1.provenance]
+source = "capture"
+capture = "20260807T143055"
+origin = "live"
+verified = """(64, 128) is what ArenaNet's own server declares for continent 1: every \
+0x008B in the live corpus carries it -- 8 of 8, all on continent-1 maps, with 64 % 32 \
+satisfying the client's own ChCliApi:77 assert in that slot where no other payload \
+value would (studies/minimap/FINDINGS.md 4.2, wire-settled independently of memory). \
+Corroborated by the crash frame this table exists to prevent: the 2026-08-24 dialog's \
+GmMapView caller carries worldMapDims (256, 512) = exactly these dims x DXT_BLOCK_SIZE \
+(vault/captures/harness/20260824T065948/crash-dialog.txt, BaseAddr-rebased)."""
+
+# ---------------------------------------------------------------------------------
+# map -> continent, read out of the client's own area table (s_missionClientData at
+# VA 0x0096DE38, 888 records, locate code-corroborated). One row per served map --
+# content/maps.toml's slots -- because that is the join authsrv.py performs at load.
+# The AUTHORED slots (143, 144, 165, 166, 167) repurpose retail map ids as labels,
+# so the continent here is the LABEL's: it is the atlas the client will crop for
+# that slot, which is exactly what the fog grid must match.
+
+[map_continent.148]
+continent = 1
+[map_continent.148.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/maprows.py"
+build = 38797
+verified = "s_missionClientData row 148, OFF_CONTINENT; extracted 2026-08-24."
+
+[map_continent.146]
+continent = 1
+[map_continent.146.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/maprows.py"
+build = 38797
+verified = "s_missionClientData row 146, OFF_CONTINENT; extracted 2026-08-24."
+
+[map_continent.143]
+continent = 1
+[map_continent.143.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/maprows.py"
+build = 38797
+verified = "s_missionClientData row 143, OFF_CONTINENT; extracted 2026-08-24."
+
+[map_continent.165]
+continent = 1
+[map_continent.165.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/maprows.py"
+build = 38797
+verified = "s_missionClientData row 165, OFF_CONTINENT; extracted 2026-08-24."
+
+[map_continent.166]
+continent = 1
+[map_continent.166.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/maprows.py"
+build = 38797
+verified = "s_missionClientData row 166, OFF_CONTINENT; extracted 2026-08-24."
+
+[map_continent.55]
+continent = 0
+[map_continent.55.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/maprows.py"
+build = 38797
+verified = "s_missionClientData row 55, OFF_CONTINENT; extracted 2026-08-24."
+
+[map_continent.90]
+continent = 0
+[map_continent.90.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/maprows.py"
+build = 38797
+verified = "s_missionClientData row 90, OFF_CONTINENT; extracted 2026-08-24."
+
+[map_continent.27]
+continent = 0
+[map_continent.27.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/maprows.py"
+build = 38797
+verified = "s_missionClientData row 27, OFF_CONTINENT; extracted 2026-08-24."
+
+[map_continent.558]
+continent = 0
+[map_continent.558.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/maprows.py"
+build = 38797
+verified = "s_missionClientData row 558, OFF_CONTINENT; extracted 2026-08-24."
+
+[map_continent.194]
+continent = 2
+[map_continent.194.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/maprows.py"
+build = 38797
+verified = "s_missionClientData row 194, OFF_CONTINENT; extracted 2026-08-24."
+
+[map_continent.144]
+continent = 2
+[map_continent.144.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/maprows.py"
+build = 38797
+verified = "s_missionClientData row 144, OFF_CONTINENT; extracted 2026-08-24."
+
+[map_continent.280]
+continent = 3
+[map_continent.280.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/maprows.py"
+build = 38797
+verified = "s_missionClientData row 280, OFF_CONTINENT; extracted 2026-08-24."
+
+[map_continent.167]
+continent = 3
+[map_continent.167.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/maprows.py"
+build = 38797
+verified = "s_missionClientData row 167, OFF_CONTINENT; extracted 2026-08-24."
+
+[map_continent.449]
+continent = 4
+[map_continent.449.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/maprows.py"
+build = 38797
+verified = "s_missionClientData row 449, OFF_CONTINENT; extracted 2026-08-24."
+
+[map_continent.474]
+continent = 5
+[map_continent.474.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/maprows.py"
+build = 38797
+verified = "s_missionClientData row 474, OFF_CONTINENT; extracted 2026-08-24."
