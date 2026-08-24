@@ -636,9 +636,11 @@ def _timeline(sites, hits, limit=80):
            f"({len(rows)}; a fetch well after the load burst is a REBUILD)"]
     for h in rows[:limit]:
         c = h["cap"]
-        out.append(f"  +{h.get('t', 0.0) - t0:7.2f}s  index "
+        ret = c.get("return address (VA)")
+        out.append(f"  +{h.get('t', 0.0) - t0:8.3f}s  index "
                    f"{c.get('index')!s:>5}  -> composite type "
-                   f"{c.get('composite type')}")
+                   f"{c.get('composite type')!s:>3}"
+                   + (f"   from 0x{ret:08X}" if ret else ""))
     if len(rows) > limit:
         out.append(f"  ... {len(rows) - limit} more not listed")
     return out
@@ -758,6 +760,65 @@ def _analyse_clear(sites, hits):
         r4 = ("NOT SEEN -- no record fetch near a clear, which contradicts "
               "§9.8's own timeline and would mean the two runs differ")
     L.append(f"R4 what the reset actually re-reads: {r4}")
+
+    # W1..W3 -- ATTRIBUTION PER CLEAR, which §9.14 could not do. Its window was
+    # per BURST, so it could say "five fetches then one" and not which clear
+    # produced which, and record 91's absence stayed unexplained. The notify
+    # (0x0082EF4B) runs three bytes before the trap point, so a clear's own
+    # fetches precede its hit: the window is [t - LOOK, t].
+    LOOK = 0.5
+    L.append("W  per-clear attribution (a clear's own fetches PRECEDE its "
+             f"hit by up to {LOOK}s, since the notify is three bytes earlier)")
+    # Each fetch goes to the EARLIEST clear at or after it, so nothing is
+    # double-counted. W1 is the leftover check: fetches that sit inside a
+    # burst's span but reach no clear are reported, never quietly dropped.
+    claimed, spans = set(), []
+    for b in burst:
+        lo = min(h.get("t", 0.0) for h in b) - LOOK
+        hi = max(h.get("t", 0.0) for h in b)
+        spans.append((lo, hi))
+        for h in b:
+            t = h.get("t", 0.0)
+            c = h["cap"]
+            mine = [r for r in recs
+                    if t - LOOK <= r.get("t", 0.0) <= t
+                    and id(r) not in claimed]
+            for r in mine:
+                claimed.add(id(r))
+            got = [(r["cap"].get("index"),
+                    r["cap"].get("return address (VA)")) for r in mine]
+            shown = ", ".join(
+                f"{i} from 0x{v:08X}" if v else str(i) for i, v in got)
+            L.append(f"   +{t - t0:8.3f}s  clear slot {c['slot']} (held "
+                     f"record {c['record']}) <- {len(got)} fetch(es)"
+                     + (f": {shown}" if got else ""))
+    inspan = [r for r in recs
+              if any(lo <= r.get("t", 0.0) <= hi for lo, hi in spans)]
+    orphan = [r for r in inspan if id(r) not in claimed]
+    L.append(f"W1 fetches inside a clear burst's span but reaching no clear: "
+             f"{len(orphan)} of {len(inspan)}"
+             + ("  (none -- every fetch in the window is attributed)"
+                if not orphan else
+                "  -- reported UNATTRIBUTED rather than assigned to the "
+                "nearest, because 'near' is not 'caused by'"))
+    # W3, the built-in control: a burst with ONE clear has only one possible
+    # answer, so it says whether the method works before W2 is believed.
+    solo = [b for b in burst if len(b) == 1]
+    if solo:
+        h = solo[0][0]
+        t, c = h.get("t", 0.0), h["cap"]
+        mine = [r for r in recs if t - LOOK <= r.get("t", 0.0) <= t]
+        idx = [r["cap"].get("index") for r in mine]
+        w3 = ("PASS -- it claims the record that slot HELD, so the rebuild "
+              "reads the row BEFORE the memset zeroes it"
+              if idx and all(i == c["record"] for i in idx) else
+              f"the single clear of slot {c['slot']} (held {c['record']}) "
+              f"claims {idx}")
+        L.append(f"W3 control, the one-clear burst: {w3}")
+    else:
+        L.append("W3 control: no single-clear burst in this run, so the "
+                 "attribution has no case with only one possible answer -- "
+                 "treat W2 as unvalidated")
     bad = bool(in_burst or (ids and ids != {0}))
     return L, (1 if bad else 0)
 

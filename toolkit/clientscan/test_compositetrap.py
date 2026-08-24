@@ -57,9 +57,10 @@ def JOIN(ls):
 # regression guard, the S2/S4/S8 restatements, S5's three readings, the
 # caller map and the CLEAR analyser landed the same day, then 71 for the
 # symmetric R4 window and 75 for S7's ordering check plus the second
-# costume-head row, 76 for S6 refusing to discriminate on one slot.
+# costume-head row, 76 for S6 refusing to discriminate on one slot,
+# 79 for W1-W3 per-clear attribution.
 # Set from the run every time; guessed low five times before that stuck.
-LEDGER = checks.Ledger("composite trap", floor=76)
+LEDGER = checks.Ledger("composite trap", floor=79)
 check = checks.adopt(LEDGER)
 
 # ---------------------------------------------------------------- section 1
@@ -618,6 +619,30 @@ lines, rc = t._analyse_clear(
 check(rc == 1 and "R3 a clear is not a write: REFUTED" in "\n".join(lines),
       "R3 SABOTAGE: a row write inside a clear burst refutes the static "
       "reading of the clear path, and must redden rather than be explained")
+
+# W1..W3 -- per-clear attribution, with the fetches placed where the real ones
+# are: just BEFORE their clear, because the notify runs three bytes earlier.
+# §9.14 could only say "five then one" per BURST, which is exactly why record
+# 91's absence stayed unexplained.
+lines, _rc = t._analyse_clear(
+    RSITES, rhits(GOOD_CLEAR, recs=[(18.59, 90), (18.595, 94), (29.59, 90)]))
+blob2 = JOIN(lines)
+check("clear slot 2 (held record 90) <- 2 fetch(es)" in blob2
+      and "clear slot 3 (held record 90) <- 0 fetch(es)" in blob2,
+      "W: each fetch goes to the EARLIEST clear at or after it, so both "
+      "fetches before the burst's first clear land on that clear and the "
+      "later clears get none -- a distinction §9.14's per-burst window could "
+      "not draw at all")
+check("W1 fetches inside a clear burst's span but reaching no clear: 0"
+      in blob2,
+      "W1 accounts for every fetch inside the span, and would report an "
+      "orphan as UNATTRIBUTED rather than assigning it to the nearest, "
+      "because 'near' is not 'caused by'")
+check("W3 control, the one-clear burst: PASS" in blob2,
+      "W3's built-in control: a burst with ONE clear has only one possible "
+      "answer, so it says whether the attribution works before W2 is "
+      "believed -- and it reads the record the slot HELD, which places the "
+      "rebuild before the memset that zeroes the row")
 
 lines, rc = t._analyse_clear(RSITES, rhits(GOOD_CLEAR))
 check("R4 what the reset actually re-reads: NOT SEEN" in "\n".join(lines),
