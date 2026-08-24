@@ -7852,9 +7852,24 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   high confidence, or the arm's mechanism story moved and the check goes
   red), the exact wire shape round-tripped through the real codec (6 bytes,
   `[0x0028, player]`, zero residual — "a wrong ANSWER SHAPE from the server
-  would be this file's"), and the source locks: ONE send site gated on
+  would be this file's"), and the source locks: the R6 send site gated on
   STOP_ANSWER, default None, main() routing the parsed MODE into the
-  composition matrix so the refusals cannot be dead letters. Floor 43),
+  composition matrix so the refusals cannot be dead letters. **Extended
+  2026-08-24 for R8's `--cast-stop`** (the F28 float-forward fix wired at
+  the cast start, CANCELWALK.md §8): §7 drives the four new composition
+  cells (no `--zero-lead`; with `--cancel-answer`; with `--stop-answer` —
+  the SAME opcode on two triggers gets its own cell naming it; with
+  `--arrival-carry` — the halt cuts short a leg the F1b queue modelled as
+  arriving), the pairwise-before-requires precedence, the allowed-with-note
+  combination, and then the burst DRIVEN rather than grepped:
+  `handle_skill_press` with the flag off (no 0x0028 — no diagnostic ships
+  on), on (exactly one 0x0028 `[player]`, the builder's payload, riding
+  FIRST — before the animation, which precedes the prop-8 hold), and on
+  with an attack skill (the burst goes out, proven by its own animation,
+  and carries no 0x0028 — the halt is scoped to spells). Source locks: one
+  gate carrying the spells-only scoping, one R8-labelled site, default
+  False, main() routing the flag into matrix and global. §6's two-site
+  count moved with the change in the same commit. Floor 58),
   `toolkit/authsrv/test_killwindow.py` (the kill window, checked against
   ArenaNet's own kills. Our server sent one message when an agent died —
   `0x00F1` with the death bit — where the real service sends three: status,
