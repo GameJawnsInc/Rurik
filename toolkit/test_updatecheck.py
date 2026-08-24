@@ -215,8 +215,8 @@ if exe:
     check(state["schema"]["messages.json"]["validated_against_build"] == pinned.BUILD,
           "the schema stamp is read from where it actually lives",
           "nested under `provenance`; the top level answers None")
-    check(len(state["pins"]) == 189,
-          "and the class-(a) census rides along, at 189",
+    check(len(state["pins"]) == 204,
+          "and the class-(a) census rides along, at 204",
           f"{len(state['pins'])} -- and it must agree with test_buildpins.py's own "
           f"literal, which is the same number asserted from the other side. Was 64 "
           f"until 2026-08-14, when this tooling was cherry-picked onto a `main` that "
@@ -271,7 +271,15 @@ if exe:
           f"green [PASS]. The other four pin the SEVER pass "
           f"(0x00604C56, 0x00604CBB, 0x00604CC2, 0x00604C49), which is "
           f"the real reason a chain cannot dangle into a recycled block "
-          f"and had never been written down anywhere. Both literals "
+          f"and had never been written down anywhere. 189 on 2026-08-22 "
+          f"(typenames.py 0 -> 32 from a parallel session, +1 for build "
+          f"38849's pinned row). 204 on 2026-08-23: +15 and a 19th file "
+          f"-- clientscan/compositetrap.py 0 -> 14, the composite arc's "
+          f"runtime instrument, plus commandertrap.py's `postcall` site. "
+          f"THIS PAIR WAS RED ON `main` BOTH TIMES, left by the arc that "
+          f"added the pins and paid by the next session to run the suite; "
+          f"three times in nine days now, so read a red here as a bill and "
+          f"not as a defect in your own change. Both literals "
           f"moved together, on purpose: a baseline that "
           f"quietly disagreed with the census it is a baseline OF is how an update "
           f"report goes green over the wrong tree")
