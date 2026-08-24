@@ -2277,3 +2277,86 @@ scored rather than eyeballed out of a timeline as it was in §9.11 and again in
 and *which* of the three panels the doll belongs to — all three keypresses
 produced one, so the answer is "at least three UI paths reach `GmDoll`", and
 separating them needs one press per run rather than three.
+
+## 9.22 WHICH PANEL: none of them — the trigger is a CHARACTER RENDER, and `GmDoll` is a shared widget (2026-08-24)
+
+§9.21 left one thing untested. All three keys it pressed opened panels that
+draw the character, so nothing separated **"opening any panel builds a
+composite"** from **"opening a panel that RENDERS THE CHARACTER builds one"**
+— and §9.21's control had no keypresses at all, so it could not exclude
+**"any keypress"** either. Three hypotheses, one observation.
+
+### The arms, named from the screenshots rather than from the hit count
+
+`0:play 40:key:l 20:key:j 20:key:i`, loopback 38797, map 148, `--hold 180`.
+Predictions N1–N4 registered before the run.
+
+| key | what it opened | character drawn | GmDoll composites |
+|---|---|---|---|
+| `l` | **Quest Log [L]** — a real panel, open for the rest of the run | **no** | **0** |
+| `j` | nothing visible | — | **0** |
+| `i` | **Inventory [I]**, the full equipment paper doll | yes | **2** (+86.69, +86.75) |
+
+Plus the world agent at +4.82, permuted, upstream `0x007F9F5F` (`AvChar`), in
+this run as in every other.
+
+**The positive control fired**: `i` produced exactly the two §9.21 predicted,
+upstream `0x004EEC34`, equip-slot ordered. That is what licenses reading `l`
+and `j` as nulls at all — N3 was pre-registered as the abort condition, and the
+first attempt at this run hit it (below).
+
+And the arms are separated by what they ARE, not by what they scored: **`l`
+opened a genuine panel that stayed open ~46 s and built nothing**, which is the
+discriminating arm; **`j` opened nothing**, which is the weaker but still
+useful "a keypress on its own does nothing" arm that §9.21 could not supply.
+
+### The answer, with the counts from both runs
+
+**It is not a panel. It is a character render.** `GmDoll` is a shared
+character-render widget, and every panel that draws the character builds a
+`CpsPlayer` composite on its own entity:
+
+| panel | what it draws | composites |
+|---|---|---|
+| Inventory `[I]` | the full equipment **paper doll** | **2** |
+| Hero `[H]` | a portrait bust | 1 |
+| Skills and Attributes `[K]` | a portrait bust | 1 |
+| Quest Log `[L]` | nothing of the character | **0** |
+
+**RECONSTRUCTION, and labelled as one**: the 2-vs-1 split lines up with
+`GmDoll`'s own two members — it asserts `:660 !m_compositeBasic` **and**
+`:661 !m_compositePlayer` before creating — so a full-body doll plausibly needs
+both where a portrait needs one. That is a reading of two numbers against two
+assert names, not a measurement; the frame walk names `m_compositePlayer`'s
+function for every instance and does not distinguish the members.
+
+So §9.21's "the equipment paper doll" was too narrow a name. The paper doll is
+one **consumer**; `GmDoll` is the widget, and the trigger is any UI that asks
+it to draw the character.
+
+### The run that had to be thrown away, and why it is recorded
+
+The first attempt was `40:key:m 20:key:l 20:key:i` and it scored **zero on
+every arm, including `i`**. `m` opens the world map, and on our archive the
+client dies on `worldMapDims.x == mapDims.x * DXT_BLOCK_SIZE`; the error dialog
+took focus at +40 s, so `l` and `i` were delivered to a modal dialog and never
+reached the game. Two nulls and a failed positive control, from arms that never
+happened.
+
+**It is recorded rather than quietly re-run** because the abort was
+pre-registered and fired exactly as written — N3 was declared the condition
+that voids the other two, and without it this run reads as *"a panel open does
+not build a composite"*, which is the opposite of the truth and is supported by
+the same zero. [[feedback-zero-exposure-is-not-a-null]] applied to a run that
+looked complete: three keypresses all logged `sent`, and the harness scored the
+run **PASS**.
+
+The world-map assert is a real and reproducible defect of our archive state,
+not of this arc: `vault/captures/harness/20260824T065948/crash-dialog.txt`.
+
+### What is closed
+
+The whole of §9.11's question. What the odd instances are (`GmDoll`'s), which
+path builds them (`0x004EEC34`, equip-slot order) against the world's
+(`0x007F9F5F` `AvChar`, permuted), what triggers them (a UI drawing the
+character), and what does NOT (a panel with no character; a bare keypress).

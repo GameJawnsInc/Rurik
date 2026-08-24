@@ -1844,11 +1844,33 @@ which read `GmDoll` as a style-conditional 6/7 caller (bit 0 of 6 = 0 -> type
 `ITEM_EQUIP_SLOTS`, which our numbering matches only because it was MEASURED
 off retail's `0x006F` writes. `test_compositetrap` 81 -> 96, floor 80 -> 70
 (lowered to the mandatory core on purpose; 80 sat above it).
+★ **AND IT IS NOT A PANEL, IT IS A CHARACTER RENDER (9.22).** The three keys
+9.21 pressed all opened panels that draw the character, so nothing separated
+"any panel" from "a panel that renders the character" -- and its control had no
+keypresses, so "any keypress" was open too. Arms named from SCREENSHOTS rather
+than from hit counts: **Quest Log `[L]` -- a real panel, open ~46 s, draws no
+character -- built ZERO**; a keypress that opened nothing built ZERO; and
+**Inventory `[I]`, the full paper doll, built TWO**, the pre-registered
+positive control. With 9.21's counts: Inventory 2, Hero `[H]` portrait 1,
+Skills `[K]` portrait 1, Quest Log 0. **`GmDoll` is a SHARED character-render
+widget and every UI that draws the character builds a `CpsPlayer` composite on
+its own entity**; "the equipment paper doll" was one consumer, not the thing.
+RECONSTRUCTION, labelled: the 2-vs-1 split lines up with GmDoll's own
+`:660 !m_compositeBasic` AND `:661 !m_compositePlayer`, which is two numbers
+read against two assert names rather than a measurement.
+**AND ONE RUN WAS THROWN AWAY, ON A PRE-REGISTERED ABORT.** The first attempt
+led with `key:m`; the world map dies on our archive
+(`worldMapDims.x == mapDims.x * DXT_BLOCK_SIZE`), the error dialog took focus
+at +40 s, and the two later keys went to a modal dialog. Zero on every arm
+INCLUDING the positive control -- three keypresses all logged `sent` and the
+harness scored the run **PASS**. Without N3 declared in advance as the
+condition that voids the others, that run reads as "a panel open does not build
+a composite", which is the opposite of the truth and rests on the same zero.
+The world-map assert is a real archive-state defect, not this arc's:
+`vault/captures/harness/20260824T065948/crash-dialog.txt`.
 **Still open**: `row+0x08`, still zero everywhere and sourced from item data
-`[eax+8]`; WHICH panel of the three (all three keypresses produced a doll, so
-at least three UI paths reach `GmDoll`, and separating them wants one press per
-run); and the THIRD kind of type-45 id -- record type 17 OUTSIDE any run (1887,
-3663 and 20 others), which is neither kind tested so far.
+`[eax+8]`; and the THIRD kind of type-45 id -- record type 17 OUTSIDE any run
+(1887, 3663 and 20 others), which is neither kind tested so far.
 Prior status follows.
 **BUILT AND ARMED 2026-08-23, RUN WAS BLOCKED**
 (`toolkit/clientscan/compositetrap.py`, `test_compositetrap.py` 18 checks,
