@@ -254,7 +254,7 @@ From a player's identity to the set of archive files the client loads. **Cold po
 3. ~~**`FILE_ID_RESERVED_BIT` (CpsData:484, 0x008334C5).**~~ **MEASURED 2026-08-22, §9.1 — bit 31, and it is a real second id namespace.**
 4. ~~**Whether the twenty type-1 shells and their component sets round-trip through our own writers.**~~ **ANSWERED 2026-08-23, §9.3 — they do, 180/180 by name** (`test_playerwrite.py`), and the premise was stale: the U6/U8 sweeps were archive-wide over flags=515, so every player file had already round-tripped anonymously. The delivery wall stands and now covers the whole set: all 180 rows are compression-8.
 5. **What group 3 is** — armour types 14–19 for all ten professions, no base identity, and unreachable from `CpsPlayer`'s `race < 3` (§1.24). Reserved, heroes, or a fourth armour campaign.
-6. **What component 7 / base type 9 is.** Never worn in 3,225 wear events, present in every home-group profession cell, and the sole occupant of the degenerate blits 2–5 (which declare a real 256×128 atlas for blit 2 and 0×0 for blits 3–5).
+6. ~~**What component 7 / base type 9 is.**~~ **ANSWERED 2026-08-23, §9.16 — it is the GUILD TABARD**, and no client was launched for it. The only call site pushing type 9 (`0x0083112B`) is unguarded at the head of `0x00831110`, whose two callers are `CpsApi` wrappers the client's own asserts name `teamColorId`/`composite`; one of them is `0x0082dbb0`, which `schema/overrides.json` already recorded as the function `0x0048 AGENT_SET_TABARD_VISIBLE` gates behind a **guild lookup**. Every observation below follows: it is not equipment, its 10 records serve all 44 profession cells, its atlas is emblem-sized, and our character has no guild — `authsrv.py` has said so in a comment since 2026-08-11. Original text: Never worn in 3,225 wear events, present in every home-group profession cell, and the sole occupant of the degenerate blits 2–5 (which declare a real 256×128 atlas for blit 2 and 0×0 for blits 3–5).
 7. **Component 0's sex asymmetry in blit1** (§1.9) — a face component with no female atlas rect needs explaining before the texture path is authored.
 8. **The five unnamed appearance bitfields** (widths 4, 5, 5, 5, 6). Needed for anything beyond a default face.
 9. **`ConstColorSkin`/`ConstColorHair` `s_colorInfo[race][prof]`** — static `.rdata`, never dumped, cheap.
@@ -1575,3 +1575,116 @@ What §9.11's two wire-ordered instances are (movement refuted); `row+0x08`,
 still zero everywhere; why record 91 never appears in the reset residue
 (§9.14); and the **third** kind of type-45 id — record type 17 *outside* any
 run (1887, 3663, and 20 others), which is neither of the two tested here.
+
+## 9.16 §4.6 is ANSWERED: component 7 / base type 9 is the GUILD TABARD, and our own server has been switching it off since 2026-08-11 (2026-08-23)
+
+§4.6 has been open since the arc began: *"What component 7 / base type 9 is.
+Never worn in 3,225 wear events, present in every home-group profession cell,
+and the sole occupant of the degenerate blits 2–5."* Four runs across two
+professions added a second negative — it is never *looked up* either. **No
+client was launched for this entry.** It is a read, and the answer joins two
+arcs of this repo that had never been pointed at each other.
+
+### The call site, and it is unguarded
+
+`codescan --xrefs 0x008332E0` gives the base lookup **14** direct callers.
+Exactly one pushes type 9:
+
+```
+00831110  push ebp / mov ebp,esp / sub esp,0x28 / push ebx
+00831117  mov ebx, ecx            ; this
+0083111C  push eax                ; out
+0083111D  push [ebx+0x3E8]        ; prof
+00831123  push [ebx+0x3F0]        ; race
+00831129  push 9                  ; <-- composite type 9
+0083112B  call 0x008332E0
+```
+
+There is no branch to satisfy: the type-9 lookup is the **first thing
+`0x00831110` does**. So "what condition asks for type 9" was never a question
+about a flag — it is a question about who calls that function.
+
+### Who calls it, and what the client calls them
+
+`0x00831110` has exactly **two** callers, both thin `CpsApi` wrappers that
+resolve the agent's `'comp'` component and forward. ArenaNet's own asserts
+name the family:
+
+| VA | assert |
+|---|---|
+| `0x0082DBBF` | `CpsApi:520  composite` |
+| `0x0082DC28` | `CpsApi:504  **teamColorId**` |
+| `0x0082DC4B` | `CpsApi:505  composite` |
+| `0x0082DBE7`, `0x0082DC80` | `CpsApi:103  ptr` |
+
+and `CpsTex:459` pairs `teamColorId || tabard`.
+
+Reached from **GmDoll** — the paperdoll UI, `GmDoll:725 m_compositePlayer`,
+three call sites — and once from the in-world agent dresser at `0x007F3C72`,
+behind two guards: a non-zero id, and that id resolving through `0x0083FEF0`
+to a record.
+
+### The join, and it was in our own repo
+
+`schema/overrides.json` already carries this, from the SMSG naming arc:
+
+> opcode 72 `AGENT_SET_TABARD_VISIBLE`, name_confidence medium — *"The flag
+> gates `0x0082dbb0`, whose arguments the client asserts as CpsApi:520
+> 'composite', CpsApi:504 'teamColorId' and :505 'composite', and CpsTex:459
+> pairs 'teamColorId || tabard'."*
+
+`0x0082dbb0` is wrapper A. That arc knew `0x0048` gates it and that the gated
+path does a **guild lookup and nothing else**. It did not know the gated path
+reaches a base-type-9 composite lookup. §4.6 knew type 9 existed and was never
+requested, and did not know what gated it. **They are the same thing.**
+
+**CONCLUSION (OBSERVED for the call chain, INFERRED for the noun):** composite
+type 9 / component 7 is the **guild tabard/cape** piece, and it is never
+requested on our wire because our character has no guild.
+
+### It explains every observation §4.6 made
+
+| §4.6 said | because |
+|---|---|
+| never worn in 3,225 wear events | it is not equipment; it comes from the guild, not the equip array |
+| present in every home-group profession cell | **44 cells** — all 4 groups × all 11 professions |
+| the sole occupant of the degenerate blits, a real 256×128 atlas for blit 2 and 0×0 for 3–5 | one emblem-sized texture and nothing else |
+| never requested on a plain load, across two professions | no guild id, so the lookup returns nothing |
+
+And a count that is hard to explain any other way: there are **10 records of
+type 9 in the whole 3,803-record table**, serving all 44 cells. Equipment
+records number in the thousands and are profession-specific; a component with
+ten records listed for every profession in every group is not armour. It is
+one piece of geometry that a *texture* personalises.
+
+### The sentence that was already there
+
+`authsrv.py`, beside `GAME_SMSG_AGENT_SET_TABARD_VISIBLE`, since 2026-08-11:
+
+> *"ArenaNet sends this after EVERY `0x006E`, 366 of 366 across both captures.
+> Zero makes the client skip a guild lookup on an id we never populated."*
+
+Our own server has been deliberately suppressing this component for twelve
+days, in a comment that says so, while §4.6 asked what the component was. The
+repo's own rule — grep before "never been tried" — applies to *open questions*
+as well as to refuted flags.
+
+### What a confirming run would cost, and why it did not happen here
+
+Firing it needs three things we do not have: a non-zero guild id in the
+character summary, whatever populates the client's guild table so `0x0083FEF0`
+resolves it, and `0x0048` sent with the enabling value. The schema names **no**
+guild opcode. So the run is a BUILD, not a probe, and it is priced rather than
+attempted. The static chain is unbroken without it; what a run would add is the
+noun — watching type 9 actually resolve is what would turn "tabard" from
+INFERRED into OBSERVED.
+
+### A promotion is now available, and it is the SMSG arc's call
+
+`AGENT_SET_TABARD_VISIBLE` is rated **medium** for a stated reason: *"no assert
+in the image says 'cape' or names this bit"*. This is a second witness of a
+different kind — the gated call reaches a composite lookup whose component owns
+an emblem-sized atlas that no equipment ever fills, and whose ten records serve
+every profession. `schema/overrides.json` is deliberately **not edited here**:
+another arc's confidence rating is not this arc's to raise, and the evidence is
+recorded so that arc can weigh it.

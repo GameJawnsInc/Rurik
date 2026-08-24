@@ -522,6 +522,19 @@ Reached: `AvApi.cpp`, `AvChar.cpp`, `CpsApi.cpp`, `GuCliApi.cpp`
 
 - CpsApi:520 `composite` — the assert on arg1 of 0x0082dbb0, the function the flag gates
 - CpsApi:504 `teamColorId`, CpsApi:505 `composite` — the same call's other arguments
+- **A SECOND WITNESS ARRIVED 2026-08-23 from the composite side**
+  ([studies/playercomposite §9.16](../playercomposite/FINDINGS.md)), and it is
+  a different KIND of evidence than anything here. `0x0082dbb0` — the call this
+  flag gates — reaches `0x00831110`, whose very first act is an UNGUARDED
+  lookup of composite **base type 9**; type 9 maps to **component 7**, which
+  owns the composite table's degenerate blits (one real 256×128 atlas, the rest
+  0×0) and is served by just **10 records for all 44 profession cells** across
+  four groups, where equipment records number in the thousands and are
+  profession-specific. An emblem-sized texture on one piece of profession-
+  agnostic geometry is what a guild tabard is. **This does not change the name
+  or its `medium` rating here** — that is this arc's call and the promotion is
+  merely available; it is recorded so the rating can be re-weighed on evidence
+  rather than re-argued from the same asserts.
 - CpsTex:459 `teamColorId || tabard` — the client pairs teamColorId with `tabard`, the same pair this call passes
 - AvApi.cpp block placement for the entry 0x007df3b0; AvChar.cpp block placement for the setter 0x007fc310
 

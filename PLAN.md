@@ -1652,6 +1652,32 @@ not decisive" was over-hedged -- the dye is copied FROM `m_slotItemData[7]`,
 every run writes slot 7's row BEFORE the body overrides, so "the source was
 never written" was never live and the ordering was in the timeline; the tool
 checks the order now instead of hedging. `test_compositetrap` 71 -> 76.
+**AND 4.6 -- THE ARC'S OLDEST OPEN QUESTION -- IS ANSWERED AT A DESK (9.16,
+no client launched): component 7 / base type 9 is the GUILD TABARD.** Of the
+base lookup's **14** callers exactly one pushes type 9, and it is UNGUARDED --
+the first thing `0x00831110` does. That function has two callers, both thin
+`CpsApi` wrappers whose family ArenaNet's own asserts name `CpsApi:504
+teamColorId` / `:505 composite` / `:520 composite`, with `CpsTex:459` pairing
+`teamColorId || tabard`; it is reached from **GmDoll** (`GmDoll:725
+m_compositePlayer`, three sites) and once from the in-world agent dresser
+behind a guild lookup. **The join was inside this repo**: `schema/overrides.json`
+already recorded that `0x0048 AGENT_SET_TABARD_VISIBLE` gates `0x0082dbb0` --
+wrapper A -- and that the gated path does a guild lookup and nothing else. That
+arc did not know the path reaches a type-9 composite lookup; 4.6 did not know
+what gated type 9. Same thing. It explains every observation 4.6 made: not
+equipment (never worn in 3,225 events), **10 records serving all 44 profession
+cells** across four groups where equipment numbers in the thousands and is
+profession-specific, an emblem-sized 256x128 atlas, and never requested because
+our character has no guild. **`authsrv.py` has said so in a comment since
+2026-08-11** -- "Zero makes the client skip a guild lookup on an id we never
+populated" -- so the server has been deliberately suppressing the component the
+study was asking about for twelve days. A confirming run is PRICED and was not
+attempted: it needs a guild id in the character summary, whatever populates the
+client's guild table, and `0x0048` enabling -- and the schema names no guild
+opcode, so it is a BUILD rather than a probe. A confidence promotion for
+`AGENT_SET_TABARD_VISIBLE` (medium, for want of an assert naming the bit) is now
+available on a second witness of a different kind; `overrides.json` is
+deliberately NOT edited, because another arc's rating is not this arc's to raise.
 **Still open**: what the two wire-ordered instances are (movement excluded,
 operator input the standing candidate), `row+0x08` which is still zero
 everywhere, why record 91 in particular never appears in the reset residue,
