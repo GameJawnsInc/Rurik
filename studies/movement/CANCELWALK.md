@@ -654,6 +654,86 @@ deliver R6's treatment at all. **Two ways forward, owner's call (§7.4b).**
   exposure condition right, and the standstill freeze already points at H5. This
   is the more decisive path and the one the owner offered.
 
+### 7.4c R5 RAN — the instrument earned itself: the WIRE criterion was about to score a WARP as a walk (2026-08-24)
+
+`movetap-20260824T141620` (451 samples, 50 Hz, 40 s) paired with gamesrv
+`authsrv-20260824T141556-c1`, shipped configuration (no diagnostic flag),
+walk-first protocol as registered. Three cancelled casts plus ordinary presses.
+Clocks aligned by trajectory fit — `server_t = async_clock/1000 + 1.16 s`,
+median report-to-track residual 14.1 u over 53 reports, and the same offset
+falls out of an independent nearest-position median (1.181), so the windows
+below are anchored rather than assumed.
+
+**CANCELWALK-F16 — OBSERVED, and it is the reason R5 was worth building. Two of
+the three mid-cast presses produced motion the §5 WIRE criterion would have
+scored as walks; the memory read says only ONE of them was a local walk.**
+Per press, reading the ASYNC (drawn) body:
+- **Cancel 1** (t=41.238, `planner` 0 at the press): nothing for ~190 ms, then
+  the body **JUMPS 182 u** to `[-6086.59, -2523.03]` — onto the SYNC copy,
+  `sep` collapsing 227.6 → 17.2 — and glides on with a baked velocity. A local
+  walk-start does not teleport the body. This is the grant regime driving it
+  (F7's click-order shape), and the client's own next report is 77.6 u from the
+  press point, which the wire criterion reads as "walked".
+- **Cancel 2** (t=50.747, `planner` **24** at the press): a genuine local
+  walk-start — `planner` 24→1, a velocity baked, **no position jump**, then a
+  smooth glide away from the granted point (which was zero-lead at the body's
+  own feet and could not have steered it). The press worked.
+- **Cancel 3** (t=56.536, `planner` 0 at the press): `planner`, `dir`,
+  `vel_raw` and the position **all unchanged for ~900 ms**. **Signature
+  ABSENT** — the canonical freeze, now read from the client's own memory.
+**The positive control passes and is what licenses the rest**: five ordinary
+presses in the same session all moved (17.5–170.5 u within 400 ms), so the
+instrument is reading the walking body.
+
+**CANCELWALK-F17 — OBSERVED (n=3, and the n is the point). The freeze is NOT
+deterministic under a held cast, which weakens H5's simplest form.** One
+mid-cast press ran the walk-start normally while two did not. Whatever
+suppresses the walk is therefore **not set by the cast hold alone** — H5 as
+written ("the cast hold sets the bit") predicts all three freeze. The one field
+that separates them is the async body's `planner` (`+0x50`) at the press
+instant: **0 on both non-starters, 24 on the one that walked.** Ordinary
+presses from `planner = 0` walk fine (5 of 5 above), so the condition is
+**COMPOUND** — a held cast AND `planner = 0` — not `planner` alone.
+
+**CANCELWALK-H8 (new) — RECONSTRUCTION, n=3, offered as the next thing to
+test, not as a finding.** Mid-cast, the local walk-start refuses on a body
+whose queued-move store is clear, and proceeds on a body that still carries a
+stale one — i.e. the gated path is *fresh walk-start* and a body with an armed
+planner resumes through a different door. Provenance of cancel 2's stale 24 is
+itself suggestive: it was left behind by the warp at async_clock 48449, where
+the body was snapped to a stop **without** its planner being cleared. *Refuted
+by:* a mid-cast press with `planner ≠ 0` that freezes, or one with
+`planner = 0` that walks. **This also predicts R6's null**: `--stop-answer=ack`
+CLEARS the queued move (that is what the `0x0028` handler does), so on H8 it
+could only ever push the client toward the freezing state — which is what 4 of
+4 did.
+
+**CANCELWALK-F18 — OBSERVED. The warp the operator reported is the DRAWN body
+being snapped onto the LAGGING SYNC copy, it is sub-gate-1, and it is NOT new.**
+Three events at 1,129 / 2,221 / 1,840 u/s against a 288 u/s cap, each landing on
+the sync copy (`sep` → 13.6 / 17.2 / **0.00 exactly**, the last one on our own
+granted point `(-5548.11, -2186.87)` from t=49.013 to the decimal). What it is
+**not**, each excluded rather than assumed: **not gate 1** (`gate1 = below` on
+all 451 samples, max `sep` 265.8 u against the 299.33 cut); **not `0x002C`**
+(the session sent 24 movement messages, all `0x0029`); **not gate-3 crowding**
+(the only other agent is 350–382 u from every landing, orders of magnitude
+outside a combined radius). **Not caused by this session's work either** — the
+same signature is present in the pre-existing corpus at far worse magnitudes
+(`20260822T161918`: 16 violations, max 81,179 u/s, `sep` max 5,472 u, 1,328
+gate-1-above samples), and **today's run is the mildest on record with any**
+(3 violations, `sep` max 265.8, zero gate-1-above). What made it visible *now*
+is the walk-first protocol R5 required: R6's standstill session could not
+produce it. **It does contradict REALFIX-O1's "the `0x0029` moves the sync copy
+and nothing else" at these instants** — the drawn body is arriving at the sync
+copy's position — and the mechanism is unread. Filed for the movement arc;
+a sub-gate-1 rubber-band class that the hard-jump bar has never counted.
+
+**Methodological note, and it generalises past this arc.** §5's readout rule —
+"the client's own reports move ≥ 30 u within 0.5 s" — is a WIRE test, and F16
+shows a warp satisfies it. Any future cancel scoring must either read the body
+(R5's fields) or check that the displacement is smooth and away from both the
+granted point and the sync copy. The wire cannot tell a walk from a yank.
+
 ### 7.5 Measured dead this round — do not retry
 
 - `0x0027`/speed-base as differentiator, trigger, or fix (F8/F13) — and the
@@ -667,4 +747,13 @@ deliver R6's treatment at all. **Two ways forward, owner's call (§7.4b).**
 - Press-time latch snap-clear (F11 scope note — R1 froze on zero bytes).
 - Value-carried wire state as the differentiator (F9 — parity verified by
   independent recount). What stays live on the wire side is exactly one thing:
-  the stop-closure HANDLER state, and R6 prices it.
+  the stop-closure HANDLER state, and R6 prices it — **and R6 ran it: VOID for
+  H6 on zero exposure (§7.4a), with H8 now predicting its null independently.**
+- **Scoring a cancel from the wire alone** (F16 — a 182 u warp satisfies §5's
+  ≥ 30 u criterion; read the body, or check the displacement is smooth and away
+  from both the granted point and the sync copy).
+- **Gate 3 / crowding, `0x002C`, and gate 1 as the warp mechanism** (F18 —
+  nearest agent 350+ u, none sent, `below` on all 451 samples). The sub-gate-1
+  warp class is OPEN, and it is the movement arc's, not this one's.
+- **"The cast hold alone sets the walk-suppress state"** — H5's simplest form
+  (F17 — one mid-cast press ran the walk-start normally).
