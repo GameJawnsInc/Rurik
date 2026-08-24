@@ -1915,3 +1915,80 @@ has closed the client — so it read `0 of 1, context unreadable`, a dead
 process rather than a coverage failure. It samples inside the CREATE_PROCESS
 event now, while the process is alive and frozen, and detach only samples if
 nothing did earlier.
+
+## 9.19 The DATA watchpoint is BUILT and its first client run is INCONCLUSIVE — recorded as inconclusive (2026-08-23)
+
+§9.18 priced the instrument that could name §9.17's writer and did not build it.
+It is built now, tested offline, and **not yet proven against the client**.
+
+### What it is
+
+Four pieces, each named in §9.18's pricing:
+
+1. **Per-slot R/W and LEN in DR7.** `dr7_for(n, kinds, sizes)` — R/W `01` for a
+   write watch, LEN `11` for four bytes, per slot. The function's original
+   sentence — *"a wrong R/W field does not fail, it silently becomes a DATA
+   breakpoint on the same address"* — now describes the deliberate case too,
+   and §1's check that an execute-only DR7 has bits 16+ zero still stands.
+2. **A dispatcher that resolves from DR6.** A data breakpoint traps *after* the
+   store, so EIP is the instruction FOLLOWING the write and is not one of our
+   addresses; the execute path would count it as somebody else's single-step
+   and hand it back to the client. The new branch reads DR6's B0–B3, accepts it
+   only if that slot is a live watch, and records the watched address as `addr`
+   while EIP becomes `writer (VA)`. Two distinct names, deliberately: conflating
+   them is how a watch reports its own target as its own caller.
+3. **Mid-run arming.** A row inside a heap object has no address until the
+   object exists, so `arm_watch(slot, address, size)` runs from an `on_hit`
+   handler, inside a debug event where the process is frozen. It **refuses an
+   unaligned address** rather than arming it — x86 wants a 4-byte watch on a
+   4-byte boundary, and a misaligned DR does not error, it watches the wrong
+   bytes and reports silence.
+4. **A watch `Site`** carrying `kind="w"`, no VA and no bytes. `verify_sites`
+   already reported that case as "unverified" rather than failed, so nothing
+   previously verified stops being verified.
+
+`compositetrap` gains `rowwatch`, armed on the first cache write to CpsBase
+slot 2 — the row §9.18 caught going 91 → 90 with both of `0x0082EDA0`'s exits
+armed on ten threads and both silent.
+
+### The first client run, and why it settles nothing
+
+`rowwatch 0` — on a run whose own timeline shows slot 2 written record **91**
+at +4.76 and the clear finding record **90** at +18.61, same instance
+`0x260B95A0`. Zero hits is precisely the answer this instrument exists to give,
+and there was no way to tell it from the instrument not being live: this
+module's own `armed_now` docstring says `SetThreadContext` can return TRUE on a
+WOW64 target and **discard** the values.
+
+So `arm_watch` now reads DR0–DR3/DR7 back per thread and requires the slot to
+hold the address, its enable bit *and* R/W = 01 before reporting success,
+failing loudly with *"VERIFIED on none — the debug registers did not take, so a
+zero hit count here would mean nothing"*. The state goes into the **report**,
+not just stdout, because a live console scrolls and this session lost two runs'
+live output to truncation.
+
+**The verifying re-run did not happen** — the owner closed the client and asked
+for no further launches, and the run in flight had already failed on input
+focus (`cache 0`, the character never reached the world). That run is still
+worth one line, because it exercised the new refusal correctly:
+
+```
+threads armed and VERIFIED     10 of 10
+WATCH: a write-watch site was armed but NEVER GIVEN AN ADDRESS
+       -- its zero hit count means nothing
+```
+
+Which is the instrument declining to be read as a finding. Coverage read
+**10 of 10** threads verified, so §9.18's fix is holding.
+
+### Status, stated plainly
+
+**BUILT and offline-tested; UNPROVEN against the client.** The one question a
+run must answer first is not "who wrote the row" but "was the watch live" —
+and the report now answers that on its own, before any interpretation. Until a
+run says `VERIFIED live on N` for N > 0, `rowwatch 0` means nothing and this
+entry does not claim otherwise.
+
+§9.17's writer outside `0x0082EDA0` therefore remains open, on the evidence
+§9.18 established: ten threads armed and verified, both write exits silent, the
+row changed anyway.

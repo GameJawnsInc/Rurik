@@ -1734,9 +1734,34 @@ store. The instrument for it is a DATA watchpoint -- DR R/W = 01, a dispatcher
 that resolves the slot from DR6 rather than EIP, and dynamic arming since the
 row address needs a live CpsBase. PRICED, not started.
 `test_commandertrap` 48 -> 52, floor 14 -> 18.
-**Still open**: the writer outside `0x0082EDA0` (the sharpest, and now
-properly witnessed), what TRIGGERS the wire-ordered instances (movement
-excluded), `row+0x08` which is
+**THE DATA WATCHPOINT IS BUILT (9.19) AND ITS FIRST CLIENT RUN IS
+INCONCLUSIVE, recorded as inconclusive.** All four pieces 9.18 priced:
+per-slot R/W and LEN in DR7 (`dr7_for(n, kinds, sizes)`, R/W 01 + LEN 11), a
+dispatcher that resolves the slot from **DR6** because a data trap's EIP is the
+instruction AFTER the store and the execute path would hand the hit back to the
+client as a foreign single-step, mid-run `arm_watch()` that REFUSES an
+unaligned address rather than watching the wrong bytes, and a `Site(kind="w")`
+with no VA and no bytes. `compositetrap` gains `rowwatch`, armed on the first
+cache write to CpsBase slot 2. **The first run read `rowwatch 0` on a row whose
+own timeline shows 91 at +4.76 and 90 at +18.61 on the same instance** -- and
+zero hits is exactly the answer the instrument exists to give, so it was
+indistinguishable from the instrument not being live (this module's own
+`armed_now` docstring: SetThreadContext can return TRUE on WOW64 and DISCARD
+the values). `arm_watch` now reads DR0-DR3/DR7 BACK and requires address +
+enable bit + R/W=01 before reporting success, failing loudly with "VERIFIED on
+none -- a zero hit count here would mean nothing", and the state goes in the
+REPORT rather than only stdout. **The verifying re-run did not happen** -- the
+owner closed the client and asked for no further launches; the run in flight
+had already failed on input focus. It still exercised the new refusal
+correctly: `threads armed and VERIFIED 10 of 10` and "a write-watch site was
+armed but NEVER GIVEN AN ADDRESS -- its zero hit count means nothing". Status:
+**BUILT and offline-tested, UNPROVEN against the client**; the first question a
+run must answer is "was the watch live", and the report now answers it before
+any interpretation. `test_commandertrap` 52 -> 61, floor 18 -> 27;
+`test_compositetrap` 80 -> 81.
+**Still open**: the writer outside `0x0082EDA0` (the sharpest, witnessed by
+9.18 and now with an instrument waiting on one run), what TRIGGERS the
+wire-ordered instances (movement excluded), `row+0x08` which is
 still zero everywhere, and the THIRD kind of type-45 id -- record type 17 OUTSIDE any run (1887,
 3663 and 20 others), which is neither kind tested so far.
 Prior status follows.
