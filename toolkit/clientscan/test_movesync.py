@@ -1426,13 +1426,15 @@ def main():
           "CHANGE across a frozen press, so an offset pointing one dword away "
           "-- or an async decode that silently re-read the sync block -- would "
           "produce a confident 'signature absent' from bytes nobody asked for")
-    _control(movetap, "A_PLANNER", 0x54, "_selftest_r5",
-             "the planner offset is load-bearing and a one-dword slip is "
+    _control(movetap, "A_REQ_TOKEN", 0x54, "_selftest_r5",
+             "the request-token offset is load-bearing and a one-dword slip is "
              "caught",
-             "+0x50 is the field the local walk-start writes and the halt "
-             "clears; reading +0x54 instead returns a confident number that "
-             "never changes, which is exactly what H5 predicts and would be "
-             "indistinguishable from it")
+             "+0x50 is the move-request correlation token the local applier "
+             "allocates per SUCCESSFUL walk-start call, so 0 -> N is the "
+             "detector that the applier ran rather than bailing at a gate; "
+             "reading +0x54 instead returns a confident number that never "
+             "changes, which reads as 'the walk-start never ran' and is "
+             "indistinguishable from a real freeze")
     _control(movetap, "A_DIR", 0xC4, "_selftest_r5",
              "and so is the facing offset",
              "+0xC4 is the movement MODE, an int; decoding it as the facing "

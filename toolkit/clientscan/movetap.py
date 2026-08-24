@@ -446,13 +446,35 @@ A_MODE = 0xC4              # movement mode; early-out A compares it as an INT
 # inside the AGENT_SPAN block every poll fetches for BOTH copies, so surfacing
 # them costs zero new cross-process reads. They exist to answer ONE question --
 # does the async (drawn) body's walk-start run at all at a frozen cancel press?
-A_PLANNER = 0x50           # the queued-move / planner store. WRITTEN by the
-                           # local walk-start (0x005FC8F0 `mov [esi+0x50],eax`,
-                           # from the 0x005FC8B0 async path) and CLEARED by the
-                           # halt 0x005FC5C0 -- so it is the walk-start's own
-                           # footprint, and the field s2c 0x0028's handler
-                           # cancels. UNVERIFIED as to what the stored value
-                           # MEANS; read as a change detector, not a quantity.
+A_REQ_TOKEN = 0x50         # the MOVE-REQUEST CORRELATION TOKEN, and the name
+                           # matters because this file called it "planner" for
+                           # one day and a hypothesis was built on the wrong
+                           # noun. It is NOT a planner, NOT a queued-move
+                           # store and NOT a path index. OBSERVED, three
+                           # witnesses: the local applier increments a counter
+                           # at `ChCliBase+0x68` (`0081ABD7 inc [ebx+0x68]`)
+                           # and passes it as arg5 to AgApi MoveToPoint
+                           # 0x005FC7A0, which stores it here (`005FC8ED mov
+                           # [esi+0x50],eax`); the server command dispatcher
+                           # 0x00606120 writes it from the message's own field
+                           # +8 on its STOP/MOVE cases; and every READ in the
+                           # image is the same payload push into the
+                           # completion notifier 0x00603D40 (`ff7650 push
+                           # [esi+0x50]`, guarded by `cmp [esi+0x24],1`), after
+                           # which it is zeroed. **NOTHING BRANCHES ON IT** --
+                           # zero cmp/test operands image-wide, and zero
+                           # accesses of any kind inside the walk-start
+                           # applier 0x0081A8F0's whole transitive closure
+                           # (131 functions, positive-controlled).
+                           # WHY IT IS STILL THE FIELD TO SAMPLE, and it is
+                           # now a BETTER instrument than the wrong name
+                           # implied: a fresh token is allocated on every
+                           # SUCCESSFUL walk-start call and on nothing else,
+                           # so `0 -> N` is direct evidence that the applier
+                           # reached 0x005FC7A0 rather than bailing at a gate.
+                           # It is a walk-start DETECTOR, never a cause.
+                           # Capture movetap-20260824T141620 predates the
+                           # rename and carries the old `planner` key.
 A_DIR = 0xBC               # the facing/heading cache pair (f32 x, f32 y),
                            # FINDINGS:1628's atan2 lazy-angle operand at
                            # 0x005FFA1D. Which side of the walk gates writes it
@@ -857,7 +879,7 @@ def early_outs(blk):
     }
 
 
-R5_KEYS = ("planner", "dir", "stop", "point_raw", "vel_raw")
+R5_KEYS = ("reqtoken", "dir", "stop", "point_raw", "vel_raw")
 
 GATE1_KEYS = ("sep", "gate1", "gate1_why", "async_ptr", "async_count",
               "async_id", "async_world", "sync_clock", "async_clock",
@@ -911,13 +933,15 @@ def _r5_fields(blk, prefix=""):
     fields (NOT `position_at`'s dead-reckoned reading, which moves on the world
     clock alone and would look like motion on a body that never moved), so a
     reader comparing two consecutive rows sees the client's own writes and
-    nothing else. `planner` is a u32 whose MEANING is unread -- it is a change
-    detector here, and any row printing it as a distance would be inventing.
+    nothing else. `reqtoken` is the move-request correlation token (see
+    A_REQ_TOKEN): a fresh value is allocated per SUCCESSFUL walk-start call, so
+    `0 -> N` is direct evidence the applier ran rather than bailing at a gate.
+    It is never a distance, an index, or a cause -- nothing branches on it.
     """
     if blk is None or len(blk) < AGENT_SPAN:
         return {prefix + k: None for k in R5_KEYS}
     return {
-        prefix + "planner": u32(blk, A_PLANNER),
+        prefix + "reqtoken": u32(blk, A_REQ_TOKEN),
         prefix + "dir": [round(f32(blk, A_DIR), 4),
                          round(f32(blk, A_DIR + 4), 4)],
         prefix + "stop": i32(blk, A_STOP),
@@ -1803,10 +1827,10 @@ def _selftest_fence_bytes():
 # --------------------------------------------------------------------------
 def _fake_agent(agent_id, world=0, point=(0.0, 0.0), plane=0, vel=(0.0, 0.0),
                 updated=0, stop=0, segment=(0.0, 0.0), seg_plane=0, mode=0,
-                point_bits=None, planner=0, direction=(0.0, 0.0)):
+                point_bits=None, reqtoken=0, direction=(0.0, 0.0)):
     """An AgAgent block. Every default is the zero the old two-argument form
     produced, so section 6's fixtures are byte-for-byte what they were --
-    including R5's `planner`/`direction`, whose defaults write the zeros those
+    including R5's `reqtoken`/`direction`, whose defaults write the zeros those
     offsets already held."""
     b = bytearray(AGENT_SPAN)
     struct.pack_into("<I", b, A_ID, agent_id)
@@ -1821,7 +1845,7 @@ def _fake_agent(agent_id, world=0, point=(0.0, 0.0), plane=0, vel=(0.0, 0.0),
     struct.pack_into("<ff", b, A_SEGMENT, *segment)
     struct.pack_into("<i", b, A_SEGMENT + 8, seg_plane)
     struct.pack_into("<i", b, A_MODE, mode)
-    struct.pack_into("<I", b, A_PLANNER, planner)
+    struct.pack_into("<I", b, A_REQ_TOKEN, reqtoken)
     struct.pack_into("<ff", b, A_DIR, *direction)
     return bytes(b)
 
@@ -3923,13 +3947,13 @@ def _selftest_r5():
 
     # THE OFFSETS, ASKED OF THE BYTES. Every value distinct and none of them
     # zero, so a decode that read a neighbouring dword names itself. This is
-    # the check that would catch A_PLANNER pointing at 0x54 -- the failure
+    # the check that would catch A_REQ_TOKEN pointing at 0x54 -- the failure
     # mode section 5's comment describes for the fence constants, in the one
     # place R5's verdict actually rests.
-    blk = _fake_agent(7, planner=0x1234ABCD, direction=(0.25, -0.75),
+    blk = _fake_agent(7, reqtoken=0x1234ABCD, direction=(0.25, -0.75),
                       point=(11.5, -22.25), vel=(3.5, -4.25), stop=4242)
     got = _r5_fields(blk)
-    for key, want in (("planner", 0x1234ABCD), ("dir", [0.25, -0.75]),
+    for key, want in (("reqtoken", 0x1234ABCD), ("dir", [0.25, -0.75]),
                       ("stop", 4242), ("point_raw", [11.5, -22.25]),
                       ("vel_raw", [3.5, -4.25])):
         ok = got[key] == want
@@ -3940,12 +3964,12 @@ def _selftest_r5():
               f"neighbouring dword cannot pass")
 
     # THE OFFSETS THEMSELVES, against the fields they must not collide with.
-    ok = (A_PLANNER == 0x50 and A_DIR == 0xBC
-          and A_PLANNER + 4 <= A_UPDATED and A_DIR + 8 <= A_MODE
+    ok = (A_REQ_TOKEN == 0x50 and A_DIR == 0xBC
+          and A_REQ_TOKEN + 4 <= A_UPDATED and A_DIR + 8 <= A_MODE
           and A_DIR + 8 <= AGENT_SPAN)
     bad += not ok
     ran += 1
-    print(f"   [{'PASS' if ok else 'FAIL'}] A_PLANNER {A_PLANNER:#x} and "
+    print(f"   [{'PASS' if ok else 'FAIL'}] A_REQ_TOKEN {A_REQ_TOKEN:#x} and "
           f"A_DIR {A_DIR:#x} sit where the client writes them and inside the "
           f"span already fetched -- R5 adds NO cross-process read")
 
@@ -3953,9 +3977,9 @@ def _selftest_r5():
     # decoded the sync block twice would look identical in one row and be
     # useless for the only question R5 asks.
     ARRAY, AG, ASYNC = 0x0A000000, 0x10000000, 0x0B000000
-    sync_blk = _fake_agent(7, planner=1, direction=(1.0, 0.0),
+    sync_blk = _fake_agent(7, reqtoken=1, direction=(1.0, 0.0),
                            point=(100.0, 0.0))
-    async_blk = _fake_agent(7, world=1, planner=2, direction=(0.0, 1.0),
+    async_blk = _fake_agent(7, world=1, reqtoken=2, direction=(0.0, 1.0),
                             point=(200.0, 0.0))
 
     def read(addr, n):
@@ -3971,12 +3995,12 @@ def _selftest_r5():
         return None
 
     g1 = gate1_read(read, AG, 7, sync_blk)
-    ok = (g1.get("async_planner") == 2 and g1.get("async_dir") == [0.0, 1.0]
+    ok = (g1.get("async_reqtoken") == 2 and g1.get("async_dir") == [0.0, 1.0]
           and g1.get("async_point_raw") == [200.0, 0.0])
     bad += not ok
     ran += 1
     print(f"   [{'PASS' if ok else 'FAIL'}] gate1_read surfaces the ASYNC "
-          f"copy's own values (planner={g1.get('async_planner')}, "
+          f"copy's own values (reqtoken={g1.get('async_reqtoken')}, "
           f"dir={g1.get('async_dir')}) -- not a second decode of the sync "
           f"block, which is the one substitution that would void the run")
 

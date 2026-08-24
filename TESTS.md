@@ -4018,21 +4018,27 @@ Every one of these, in the order they were written:
   proves it now lives in `movetap._selftest_chain`, which moves
   `HIST_MAX_NODES` and `HIST_SEP_GATE` on the module and calls without the
   argument. **§17 also wraps `movetap._selftest_r5` (9), CANCELWALK-R5's
-  decode-only field set** — `+0x50` the planner/queued-move store the local
-  walk-start writes and the halt clears, `+0xBC/+0xC0` the facing pair, plus
-  raw stop/point/velocity, on BOTH world copies, all decoded from bytes the
-  poll already fetches (zero new cross-process reads). Two controls redden it,
+  decode-only field set** — `+0x50` the MOVE-REQUEST CORRELATION TOKEN the
+  local applier allocates per successful walk-start call (**this entry and the
+  code both called it a "planner" for one day; the read that corrected it is
+  `studies/movement/CANCELWALK.md` §7.4d — nothing in the image branches on
+  the field, so `0 → N` is a walk-start DETECTOR and never a cause**),
+  `+0xBC/+0xC0` the facing pair, plus raw stop/point/velocity, on BOTH world
+  copies, all decoded from bytes the poll already fetches (zero new
+  cross-process reads). Two controls redden it,
   and they guard the failure mode that would VOID the run rather than break
-  it: `A_PLANNER` slipped one dword to `0x54` and `A_DIR` pointed at `0xC4`
+  it: `A_REQ_TOKEN` slipped one dword to `0x54` and `A_DIR` pointed at `0xC4`
   (the movement mode, an int) each return confident numbers that never
-  change — which is *exactly what H5 predicts*, so a wrong offset would be
-  indistinguishable from the finding. The section also asserts the ASYNC copy
+  change — which reads as "the walk-start never ran", so a wrong offset would
+  be indistinguishable from a real freeze. The section also asserts the ASYNC copy
   surfaces its own values rather than a second decode of the sync block (the
   one substitution that makes the whole readout meaningless) and that a
   refused twin read blanks every async key instead of leaving the previous
   row's numbers standing. Landing it also earned §20's uniqueness check its
   keep: R5's `stop` key collided with the one `sample()` already ships from
-  the same offset, where `**` would have let the splice silently win.
+  the same offset, where `**` would have let the splice silently win. The row
+  key is `reqtoken`/`async_reqtoken`; capture `movetap-20260824T141620`
+  predates the rename and carries the old `planner` spelling.
   **§21 also guards both modules' import lists** (`movetap.py` and
   `movesync.py`, asked of the syntax tree), a second witness beside movetap's
   own §3 so the guard cannot be deleted from one place quietly. No client. ~4 s),

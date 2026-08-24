@@ -511,7 +511,7 @@ per the §3g protocol; the poll is a fixed memory readout and agent-pilotable.
 movetap already fetches the full 0xD0-byte AgAgent block for BOTH copies every
 poll, so **Tier 1 is decode-only, zero new cross-process reads**: expose async
 `+0x48/+0x78/+0x7C/+0xB0/+0xB4/+0x9C/+0xC4`, plus `+0xBC/+0xC0` (facing cache)
-and `+0x50` (the planner's movement-type store, written at the walk-start,
+and `+0x50` (the move-request correlation token allocated at the walk-start,
 zeroed by the halt `0x005FC5C0`) on both copies. **Tier 2** (only if Tier 1
 leaves the ranking open): `clientControlled` = AgTrack record +0x00 — movetap
 already resolves AgTrack for its fence walk, check whether rec+0x00 is already
@@ -567,11 +567,11 @@ movetap. This separates H5's two bits from each other and from H7 directly.
 fields land in `movetap.sample()` as decode-only additions — every byte was
 already inside the `0xD0` block the poll fetches for **both** copies, so the
 read budget is unchanged (the check asserting that is in the section below).
-Row keys, per copy: `planner` (`+0x50`, the queued-move store the local
-walk-start writes at `0x005FC8F0` and the halt `0x005FC5C0` clears — the
-walk-start's own footprint, and the field `0x0028`'s handler cancels; its
-stored VALUE is UNVERIFIED, read it as a change detector, never as a
-quantity), `dir` (`+0xBC/+0xC0`, the facing pair), and raw `stop`/`point_raw`/
+Row keys, per copy: `reqtoken` (`+0x50` — **this doc called it `planner` for
+one day and the noun was WRONG; §7.4d has the corrected read**: it is the
+move-request correlation token the applier allocates per SUCCESSFUL walk-start
+call, so `0 → N` detects that the applier RAN and nothing branches on it),
+`dir` (`+0xBC/+0xC0`, the facing pair), and raw `stop`/`point_raw`/
 `vel_raw` — raw rather than dead-reckoned, because `position_at` advances on
 the world clock alone and would show motion on a body that never moved. The
 twin's are prefixed `async_` and come out of `gate1_read`, where its block is
@@ -582,10 +582,10 @@ never-changing number, which is exactly what H5 predicts.
 
 *The readout, and it is a DIFF across one press instant, not a level:* sample
 through a cancelled cast, then compare the row before the press with the rows
-after. **H5/H6 → signature ABSENT**: `async_planner`, `async_dir`,
+after. **H5/H6 → signature ABSENT**: `async_reqtoken`, `async_dir`,
 `async_vel_raw` and the async mode all unchanged across the frozen press (the
 applier bailed before any store). **H7 → signature PRESENT but degenerate**:
-`async_planner` takes a fresh value and/or `async_dir` turns to the press's
+`async_reqtoken` takes a fresh value and/or `async_dir` turns to the press's
 heading, yet `async_vel_raw` stays `[0, 0]` and no leg bakes. **The
 positive control is mandatory and interpretive, not confirmatory**: one
 ORDINARY press in the same session must move all of them within a poll — if
@@ -668,17 +668,17 @@ below are anchored rather than assumed.
 the three mid-cast presses produced motion the §5 WIRE criterion would have
 scored as walks; the memory read says only ONE of them was a local walk.**
 Per press, reading the ASYNC (drawn) body:
-- **Cancel 1** (t=41.238, `planner` 0 at the press): nothing for ~190 ms, then
+- **Cancel 1** (t=41.238, token 0 at the press) — **THIS BULLET IS CORRECTED AT §7.4d: the walk-start DID run (288.0 u/s in the pressed direction, token 0→4); what follows describes only the snap that rode with it.** Nothing for ~190 ms, then
   the body **JUMPS 182 u** to `[-6086.59, -2523.03]` — onto the SYNC copy,
   `sep` collapsing 227.6 → 17.2 — and glides on with a baked velocity. A local
   walk-start does not teleport the body. This is the grant regime driving it
   (F7's click-order shape), and the client's own next report is 77.6 u from the
   press point, which the wire criterion reads as "walked".
-- **Cancel 2** (t=50.747, `planner` **24** at the press): a genuine local
-  walk-start — `planner` 24→1, a velocity baked, **no position jump**, then a
+- **Cancel 2** (t=50.747, token **24** at the press): a genuine local
+  walk-start — token 24→1, a velocity baked, **no position jump**, then a
   smooth glide away from the granted point (which was zero-lead at the body's
   own feet and could not have steered it). The press worked.
-- **Cancel 3** (t=56.536, `planner` 0 at the press): `planner`, `dir`,
+- **Cancel 3** (t=56.536, token 0 at the press): token, `dir`,
   `vel_raw` and the position **all unchanged for ~900 ms**. **Signature
   ABSENT** — the canonical freeze, now read from the client's own memory.
 **The positive control passes and is what licenses the rest**: five ordinary
@@ -690,13 +690,20 @@ deterministic under a held cast, which weakens H5's simplest form.** One
 mid-cast press ran the walk-start normally while two did not. Whatever
 suppresses the walk is therefore **not set by the cast hold alone** — H5 as
 written ("the cast hold sets the bit") predicts all three freeze. The one field
-that separates them is the async body's `planner` (`+0x50`) at the press
+that separates them is the async body's request token (`+0x50`) at the press
 instant: **0 on both non-starters, 24 on the one that walked.** Ordinary
-presses from `planner = 0` walk fine (5 of 5 above), so the condition is
-**COMPOUND** — a held cast AND `planner = 0` — not `planner` alone.
+presses from token 0 walk fine (5 of 5 above), so the condition is
+**COMPOUND** — a held cast AND token 0 — not the token alone. **⚠ THIS WHOLE
+PARAGRAPH IS RETRACTED AT §7.4d**: cancel 1's token was also 0 and it DID run
+the walk-start, so the correlation does not exist and the field is not a
+planner. Left standing, struck, because a hypothesis is only honestly retired
+where it was raised.
 
-**CANCELWALK-H8 (new) — RECONSTRUCTION, n=3, offered as the next thing to
-test, not as a finding.** Mid-cast, the local walk-start refuses on a body
+**CANCELWALK-H8 — ⚠ REFUTED THE SAME DAY at §7.4d, before any run: `+0x50` is a
+move-request correlation token that NOTHING branches on, and cancel 1 walked
+with it at 0. The paragraph below is what was registered; read §7.4d for what
+killed it.** (RECONSTRUCTION, n=3, offered as the next thing to test, not as a
+finding.) Mid-cast, the local walk-start refuses on a body
 whose queued-move store is clear, and proceeds on a body that still carries a
 stale one — i.e. the gated path is *fresh walk-start* and a body with an armed
 planner resumes through a different door. Provenance of cancel 2's stale 24 is
@@ -734,6 +741,99 @@ shows a warp satisfies it. Any future cancel scoring must either read the body
 (R5's fields) or check that the displacement is smooth and away from both the
 granted point and the sync copy. The wire cannot tell a walk from a yank.
 
+### 7.4d H8 IS REFUTED, and TWO OF MY OWN §7.4c READINGS WITH IT (2026-08-24)
+
+H8 was minted, tested at a desk, and killed the same day — by the tape already
+on disk, before any client run. Three corrections, in the order they bite.
+
+**CORRECTION 1 — the clock alignment was avoidable and wrong.** §7.4c aligned
+the movetap and gamesrv captures by trajectory fit (offset 1.16 s, residual
+14.1 u). **Both files carry a unix wall clock**: movetap rows have `t`, the
+gamesrv origin row has `wall_unix`, so `server_t = movetap_t − 1787595356.470`
+is EXACT (residual 0.006 s against the fit's 0.150). The fitted windows happened
+to land within 48 ms and the qualitative readings survived, but the method was
+wrong and is retired: **align on the wall clock, never on the trajectory.**
+
+**CORRECTION 2 — cancel 1 DID run the walk-start; §7.4c's F16 says it did not,
+and F16 is wrong on that point.** Re-scored on the exact clock: at the press the
+async body's velocity is `[263.083, 117.18]` — magnitude **288.0 u/s exactly**,
+direction `(0.9135, 0.4069)` — and the press's own `vec2` is
+`[701.402, 312.412]`, direction `(0.9134, 0.4069)`. **The body walked at full
+run speed in the direction the operator pressed**, and a fresh request token was
+allocated (0 → 4). What ALSO happened, in the same instant, is a **182 u SNAP**
+onto the sync copy. So cancel 1 is *walk-start + warp*, not *warp instead of
+walk-start*. The corrected scoreboard is **2 of 3 mid-cast presses WALKED**
+(c1 token 0→4, c2 token 24→1) **and 1 FROZE** (c3, token 0→0, nothing for
+900 ms). F16's headline — that the wire criterion cannot tell a walk from a
+yank — **stands and is if anything sharper**: cancel 1 both walked AND warped,
+and the wire shows only a 77.6 u displacement that looks like neither.
+
+**CORRECTION 3 — `+0x50` is not a planner, and H8 has no mechanism.** The name
+was mine and it was wrong. **OBSERVED, three witnesses, positive-controlled:**
+`+0x50` is a **MOVE-REQUEST CORRELATION TOKEN**. The local applier increments a
+counter at `ChCliBase+0x68` (`0x0081ABD7 inc [ebx+0x68]`) and passes it as arg5
+to AgApi `MoveToPoint` `0x005FC7A0`, which stores it (`0x005FC8ED mov
+[esi+0x50],eax`); the server command dispatcher `0x00606120` writes it from the
+message's own field +8 on its STOP/MOVE cases; and **every read in the image is
+the same payload push** into the completion notifier `0x00603D40`
+(`ff7650 push [esi+0x50]`, guarded by `cmp [esi+0x24],1`), after which it is
+zeroed. Its one comparison site is `0x0081B58D cmp eax,[esi+0x68]` — a "is this
+completion for my latest request?" test on the COUNTER, not on the agent field.
+**Nothing branches on `+0x50`**: zero cmp/test operands image-wide, and zero
+accesses of any kind inside the applier `0x0081A8F0`'s entire transitive closure
+(131 functions, two independent enumerations, each positive-controlled by
+finding `+0x50` where it does exist and by reproducing the tree's known `+0x5C`
+readers). **So H8 — "the walk-start refuses on a cleared queued-move store" —
+names a mechanism that does not exist, and is REFUTED at the data too**: cancel
+1 had token 0 at the press and walked anyway.
+
+**CANCELWALK-F19 — OBSERVED. The field survives the rename as a BETTER
+instrument, and this is the one piece of R5 that gets stronger.** A fresh token
+is allocated on every SUCCESSFUL walk-start call and on nothing else, so
+`0 → N` is **direct evidence the applier reached `0x005FC7A0` rather than
+bailing at a gate** — a positive walk-start detector rather than the state
+variable it was mistaken for. `movetap` now names it `reqtoken`; capture
+`movetap-20260824T141620` predates the rename and carries the old `planner`
+key.
+
+**CANCELWALK-F20 — OBSERVED, and it is what the operator actually saw. The
+warp is a walk-start reconciliation, and its size is OUR separation.** Of the
+eight walk-starts-from-rest in the capture, **two snapped the drawn body onto
+the sync copy** (170.5 u and 182.1 u), and those two carry the largest
+pre-press separations in the run (194.9 u and 227.6 u); a third at 191.1 u did
+not snap, so the trigger is not a clean threshold at this n. The snapped body
+then walks the pressed direction at full speed. **The separation is the term
+the SERVER owns**: zero-lead grants at the client's own reported point, rate-
+limited to one per 0.5 s, let the sync copy fall 120–230 u behind (p50 122 u
+this run), and the reconciliation pays that debt in one frame. This is a
+REALFIX-shaped cost of the shipped policy, not a cancel-path defect, and it is
+filed there.
+
+**What survives all of this.** The freeze is **intermittent** (1 of 3 here,
+against 100% in every earlier run) and **nothing `movetap` samples
+distinguishes the cases.** The sharpest pair in the corpus makes that
+concrete: press `t=56.536` (FROZE) and press `t=58.138` (WALKED) report the
+**same position** `(-5292.289, -2536.575)`, 1.6 s apart, are answered with a
+**byte-identical** `0x0029` (`2900010000005062a5c534891ec500000000`), and every
+sampled field matches — token 0/0, velocity 0/0, `gate1 below`, fence `shut`,
+mode 1. **The one difference is that the first is mid-cast and the second is
+not**, which is the arc's original symptom restated, and it lives in state
+`movetap` cannot see (ChCliBase and the AgentView are different objects it does
+not resolve). The sampler's ~0.089 s median interval against a walk-start
+latency of 0.083–0.131 s means it can miss the decision entirely.
+
+**CANCELWALK-R7 is therefore the instrument, and it is now the ONLY one that
+can answer this**: a hardware-execute-breakpoint gate trace on the applier
+`0x0081A8F0` — Dr0–Dr3, no client code modified, the `trnhook` pattern already
+in this tree — reading GATE A (`[ChCliBase+0x10C] & 0x100`), GATE B
+(`byte[+0x64] & 1`) and the navmesh exit at the frozen press. The applier is
+**not** a per-frame function (one direct caller, `0x00816470`; it fired 8 times
+in 60 s here), so the trace is cheap. Useful detail for building it: the two
+failure exits differ in shape but **not** in return value — a gate bail
+(`0x0081AD0F`) calls `0x005FCA80` and returns 1, the navmesh-empty exit
+(`0x0081ACFA`) returns 0, and the success path also returns 1 — so a hook must
+read the gate operands, not the result.
+
 ### 7.5 Measured dead this round — do not retry
 
 - `0x0027`/speed-base as differentiator, trigger, or fix (F8/F13) — and the
@@ -757,3 +857,11 @@ granted point and the sync copy. The wire cannot tell a walk from a yank.
   warp class is OPEN, and it is the movement arc's, not this one's.
 - **"The cast hold alone sets the walk-suppress state"** — H5's simplest form
   (F17 — one mid-cast press ran the walk-start normally).
+- **CANCELWALK-H8 in every form** (§7.4d): `+0x50` is a move-request
+  correlation token, **nothing branches on it** anywhere in the applier's
+  131-function closure, and cancel 1 walked with the token at 0. Do not
+  re-mint a hypothesis on that field, and do not call it a planner.
+- **Aligning two captures by trajectory fit** when both carry a wall clock
+  (§7.4d correction 1 — `movetap.t` and the gamesrv origin's `wall_unix`).
+- **Reading a walk verdict off `+0x50`'s VALUE.** It detects that the applier
+  ran (`0 → N`); it is not a distance, an index, or a cause (F19).
