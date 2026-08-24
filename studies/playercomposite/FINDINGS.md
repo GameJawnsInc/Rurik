@@ -2337,7 +2337,7 @@ it to draw the character.
 ### The run that had to be thrown away, and why it is recorded
 
 The first attempt was `40:key:m 20:key:l 20:key:i` and it scored **zero on
-every arm, including `i`**. `m` opens the world map, and on our archive the
+every arm, including `i`**. `m` opens the world map, and on our server the
 client dies on `worldMapDims.x == mapDims.x * DXT_BLOCK_SIZE`; the error dialog
 took focus at +40 s, so `l` and `i` were delivered to a modal dialog and never
 reached the game. Two nulls and a failed positive control, from arms that never
@@ -2351,8 +2351,20 @@ the same zero. [[feedback-zero-exposure-is-not-a-null]] applied to a run that
 looked complete: three keypresses all logged `sent`, and the harness scored the
 run **PASS**.
 
-The world-map assert is a real and reproducible defect of our archive state,
-not of this arc: `vault/captures/harness/20260824T065948/crash-dialog.txt`.
+The world-map assert is real and reproducible, and it is a **SERVER gap, not
+archive state** — this sentence said "archive state" until 2026-08-24, and that
+mislabel sent the follow-up investigation toward diffing archive rows the crash
+never reads. `mapDims` is `charContext + 0x5B4`, written only by the fog-init
+pair `0x008B` + `0x008A`, which the plain server flow never sends; the matched
+pair in `studies/minimap/FINDINGS.md` §6f.2 proved it (same archive, pair sent
+→ the map opens; pair absent → this exact assert). Site rebased on 38797:
+`0x00553c8d`, the only `worldMapDims` site of 19,758, and the 2026-08-24
+dialog's own frame walk lands on it (`BaseAddr 007D0000`, return `0x00923c9c`
+→ `0x00553c9c`). Dialog:
+`vault/captures/harness/20260824T065948/crash-dialog.txt`. Operational rule:
+RUNBOOK failure table, the `key:m` row — and later the same day the durable
+fix landed (`fogrle.py` + the load-sequence send, minimap FINDINGS §6i), so
+on continent-1 maps a stock run's M press no longer crashes.
 
 ### What is closed
 

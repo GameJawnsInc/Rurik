@@ -5256,6 +5256,30 @@ Every one of these, in the order they were written:
   launch statement in the round body, with the guard deleted AND the guard moved one past
   the launch as controls, because a client that goes up and is stopped afterwards has
   already measured the wrong opcodes),
+  `toolkit/authsrv/test_fogrle.py` (the fog-init pair's SYNTHETIC stream — the
+  2026-08-24 durable fix for the M-key crash (`GmMapView.cpp(1731)`, minimap
+  FINDINGS 6f.2, the RUNBOOK failure table's `key:m` row), where `authsrv.py`
+  now sends 0x008B+0x008A at map load with an all-fogged RLE built by
+  `fogrle.py` instead of leaving `mapDims` 0. The referee is §1 and it is not
+  ours: the decoder runs over the VERBATIM ArenaNet payload the probes replay
+  and must reproduce the band chain `(0, 22, 0, 0, 0, 0, 0, 0)` closing at
+  exactly 38, the 1,004-bit run sum, AND the two block states the client
+  itself corroborated behaviourally in 6f.4 — (30,24) SET, (26,22) CLEAR.
+  Those two also pin the CONTESTED colour-start (the instruction trace of
+  expander 0x00817550 reads fog-first; only reveal-first satisfies the
+  client's demonstrated bitmap; FINDINGS 6i) from both sides: the behaviour
+  model passes, the static rival is required to INVERT both, so a silent flip
+  of `fogrle.FIRST_COLOUR` goes red. The all-fogged default is checked to be
+  all-fog under BOTH models — the crash fix does not wait on the contest.
+  Encoder properties (additive 0xFF run bytes with explicit terminators, full-
+  band coverage landing exactly on the dword flush), the client-derived
+  refusals (dims.x % 32 is ChCliApi:77's own assert), LE dword packing pinned
+  against 9 of the replay's 10 dwords, >64-dword chunking for the
+  accumulating handler, both messages' wire shape through the real codec, and
+  the `fog_init_for_map` content join — map 148 gets continent 1's observed
+  (64, 128), a continent with no observed dims is REFUSED by name rather than
+  guessed (a wrong pair is the same crash), FOG_INIT defaults ON. 41 checks,
+  floor 41, ~2 s),
   `toolkit/authsrv/test_shotlabel.py` (the SCREEN readout for the 239 SILENT opcodes,
   and the four defects it shipped with. `smsgsweep`'s `SILENT` means *no c2s reply*
   and is blind to anything the client DRAWS, so this joins a run's one send to the

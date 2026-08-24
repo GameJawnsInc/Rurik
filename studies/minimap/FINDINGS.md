@@ -783,6 +783,83 @@ Both discs show the authored region as a **bounded square with the fallback tile
 
 ---
 
+## 6i. The server sends the fog init at map load — 6f.2's gap CLOSED for continent 1, with one reading CONTESTED (2026-08-24, desk only)
+
+**What changed.** `authsrv.py` now sends `0x008B` + `0x008A` right after
+`INSTANCE_LOAD_INFO` (retail's own slot: t ≈ 0.58–0.73 s into the load, 8 of 8,
+§4.2), carrying a **synthetic all-fogged stream** built by
+`toolkit/authsrv/fogrle.py` rather than a replay of ArenaNet's bytes. Default
+ON; `--no-fog-init` restores the no-init baseline (and the log says which
+world the M key now lives in either way); `--fog-reveal` sends all-revealed.
+`test_fogrle.py` (41 checks) referees the encoder against the verbatim
+replayed payload. The trigger was the 2026-08-24 harness crash that voided a
+probe run (`studies/playercomposite/FINDINGS.md` §9.22; RUNBOOK failure
+table's `key:m` row) — build 38797 reproducing the §6f.2 control exactly, site
+`0x00553c8d` rebased from the dialog's own frame walk.
+
+**The expander, walked to the instruction this time** (`0x00817550..0x008176F7`;
+§4.2 named it, this walk pinned the edges — OBSERVED, static): band = 16
+block-rows, u16 byte-length header per band, next header at `+2+len` clamped
+to the declared total (`0x0081760C`), loop only while the next header fits
+(`0x008176E9`); runs are byte-sums with `0xFF` as an ADDITIVE continuation
+(`0x00817679..84`), alternating colour per run, zero-length runs toggling too
+(`0x008176C8`); bits land LSB-first and are written **only on a full-dword
+flush** (`0x008176A7`), so a band's trailing partial dword is DROPPED — the
+mechanism behind §6f.4's "do not trust the band tail", and why `dims.x % 32
+== 0` (ChCliApi:77, `0x00817564`) makes an exactly-covered band lossless.
+
+**CONTESTED: the starting colour.** The instruction trace reads FOG-first —
+`mov [ebp-0xc], edx` with edx = 0 initialises the colour (`0x00817655`, raw
+bytes re-read from the exe, not just the disassembler) and the emit's
+`neg/sbb` sets bits only when it is non-zero. But over the replayed payload,
+of the four (colour × x-mirror) candidate models **only reveal-first with a
+straight row-major mapping** reproduces the two block states the client
+itself demonstrated in §6f.4 — (30,24) SET / 0 px, (26,22) CLEAR / 1,059 px —
+and it alone fits the collateral: 947 of band 1's bits set matches §6f.2's
+"large revealed region", and 1,059 px is a few blocks' worth (5 of 9 clear in
+the mark's 3×3 under reveal-first; 4 of 9 under fog-first with the wrong two).
+Behaviour outranks a one-reader static trace, so `fogrle.FIRST_COLOUR = 1`,
+**labelled CONTESTED in the module**, and the arbiter costs nothing extra:
+the first `--fog-reveal` run that opens a fully FOGGED world map proves the
+static reading right — flip the constant, and `test_fogrle.py` §1 names
+everything else that must move. **The shipped default is immune**: an
+all-fogged stream (every band an empty header — the shape 7 of ArenaNet's own
+8 bands already have) means all-fog under every candidate model, and the test
+checks it under both.
+
+**A §6f.4 number is retracted until re-derived:** "68 of the footprint's
+blocks are clear" reproduces under NO model (reveal-first gives 21
+drop-included, fog-first 192). Its two per-block claims are
+client-corroborated and reproduce exactly; the 68 was decode-derived only.
+
+**Why the dims are a TABLE and not a formula** (`content/fog.toml`). The
+dims are continent facts (§4.2: the grid is continent-absolute) and the
+client re-checks them against its own compiled atlas at the M press
+(`GmMapView:1731`, `worldMapDims == mapDims * 4`) — a wrong pair is the same
+crash wearing our fingerprints. Continent 1's (64, 128) is OBSERVED 8 of 8 on
+the live wire and corroborated by the crash frame's own operands
+(`worldMapDims = (0x100, 0x200)` in the 2026-08-24 dialog = exactly ×4). For
+every other continent the dims are **NOT FOUND**: the obvious derivation
+(chunk-tier grid × 16, which lands (64,128) for world 1) is REFUTED by
+continent 3 alone — footprint extent 227 blocks wide over the 888 area rows,
+against every small candidate grid — so continent→world→scale has an
+indirection nobody has read. `fog_init_for_map` therefore serves continent 1
+(maps 148, 146, 143, 165, 166 of the 15 served slots) and **refuses by name**
+for continents 0/2/3/4/5 — including Ashcoil's slot 167 (continent 3), so
+W24's authored place still has no world map and its runs must not script
+`key:m`. One retail capture on a continent settles its row; the static route
+is the GmMapView constructor chase (the view's `+0x8/+0xC/+0x10` triple whose
+products the assert compares — located, caller `0x005513D2`, seeder NOT
+FOUND).
+
+**Consequences for old baselines, stated out loud:** with the pair sent by
+default, `0x008C` is ACTIVE in every ordinary session — `smsgsweep`'s
+historical "108 sends of 0x008C measured nothing" premise (§4.2) is inverted
+on any capture taken after 2026-08-24 unless the run passed `--no-fog-init`.
+The probes that send the pair themselves (`compass_draw`,
+`compass_fog_nomark`, `compass_fog_mark`) now re-init over the server's init;
+re-runs comparing against 2026-08-15 frames should use `--no-fog-init`.
+
 ## 7. Contradictions and open questions
 
 **Cross-report contradictions, surfaced rather than silently resolved:**
