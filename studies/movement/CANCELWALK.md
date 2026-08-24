@@ -535,6 +535,21 @@ H6 → the single mid-cast press now WALKS; H5-without-H6, H7, H4 → still
 freezes. A freeze here also retires F5's residual ("the one unread player-
 targeting pre-press delta") as a cancelwalk candidate. The same session can
 close F9's exposure confounder: complete one cast before the cancelled one.
+**BUILT same day: `--stop-answer=ack`** — s2c `0x0028 [player]` answering
+EVERY player `0x0047` (the server cannot know which stop precedes a cast, and
+the handler no-ops on a parked body, so every-stop is one-shot-equivalent at
+zero warp exposure; the schema's own handler read says the halt zeroes the
+queued-move store `agent+0x50`, the very field R5 samples). Refused without
+`--zero-lead` and with `--cancel-answer` (one lever per run); `repin` is
+**deliberately unbuilt and refuses with the reason** — answering ordinary
+stops with `[1.0,9]`+re-pin is the refuted `--stop-echo`'s wire effect, which
+R4 escaped only by scoping to an in-flight leg, and a pre-cast stop cannot be
+scoped that way; if ack freezes and the repin form is still wanted, it gets
+its own licensing paragraph here first. `test_cancelwalk.py` §6, floor 43.
+The run command, operator-driven:
+
+    python toolkit/harness/session.py --keep-open --enemy --game-args "--map 280
+      --explorable --practice-target --skills 105,153,322 --stop-answer=ack"
 
 **CANCELWALK-R7 · the flag read at the edge.** If R5 lands signature-absent and
 R6 freezes: read `[ChCliBase+0x10C]` bit8 and `[ChCliBase+0x64]` bit0 at a

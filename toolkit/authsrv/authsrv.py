@@ -1544,6 +1544,75 @@ CANCEL_LEAD = None     # None = retail's |vec2| + 0.5; else units along vec2
 # anybody even if the mechanism reading is wrong.
 CANCEL_STOP = False
 
+# --stop-answer. CANCELWALK-R6's arm (studies/movement/CANCELWALK.md §7.4),
+# OFF by default and DIAGNOSTIC ONLY, same licensing as --cancel-answer.
+#
+# THE HYPOTHESIS IT TESTS (CANCELWALK-H6, stop-closure prior state): retail's
+# client entered its cast with its last movement episode explicitly
+# server-closed -- the bare s2c 0x0028 at t=65.095 was the LAST movement-family
+# message it received before the casts (F9) -- while ours enters with its stops
+# answered by nothing, ever. The 0x0028 handler (schema GAME_SMSG "40") halts
+# both world copies via 0x602540 when in motion, ZEROING THE QUEUED-MOVE STORE
+# agent+0x50 -- a field the local walk-start path writes (F10/R5) -- and
+# no-ops on a parked body. If the walk-suppress state H5 names is fed by an
+# episode our server never closes, closing it retail's way un-freezes the
+# single press.
+#
+#   ack   -- answer EVERY player c2s 0x0047 stop report with s2c 0x0028
+#            [agent]. Every stop rather than one-shot, because the server
+#            cannot know which stop precedes a cast; retail itself answers
+#            stops variably (2 of 3 answered in the study capture). NOT a
+#            grant: no destination armed, no grant clock stamped, and the
+#            handler is a no-op on a body that already stopped itself -- so
+#            zero warp exposure, the R1-suppress cost class.
+#   repin -- REFUSED, deliberately unbuilt. Retail's OTHER stop answer
+#            (0x002B [1.0, 9] + a zero-distance 0x0029 re-pin) on ordinary
+#            stops IS the refuted --stop-echo's wire effect plus a prefix --
+#            a stop-arm 0x0029 on every stop, the exact shape
+#            zero_lead_composition() refuses by name. R4's `,stop` was
+#            licensed by SCOPING it to an in-flight cancel leg; an ordinary
+#            pre-cast stop cannot be scoped that way. If ack freezes and the
+#            arc still wants this form, it needs its own licensing paragraph
+#            first -- the parser refusal below is that decision, written
+#            where a cold session will trip over it.
+#
+# PREDICTIONS (registered at §7.4 before this code): H6 -> the single
+# mid-cast press WALKS. H5-without-H6, H7, H4 -> still FREEZES, and a freeze
+# also retires F5's residual ("the one unread player-targeting pre-press
+# delta") as a cancelwalk candidate. Protocol rider for the same run: complete
+# one cast before the cancelled one, closing F9's exposure confounder.
+STOP_ANSWER = None     # None | "ack"
+
+
+def parse_stop_answer(text):
+    """Pure: an --stop-answer argument -> (mode, refusal).
+
+    Returns (mode, refusal): mode None or "ack"; refusal None or the
+    SystemExit text. Same contract as parse_cancel_answer, for the same
+    reason: a mistyped arm must refuse loudly rather than run the shipped
+    default while the operator's log says an experiment was on.
+    """
+    if text is None:
+        return None, None
+    if text == "ack":
+        return "ack", None
+    if text == "repin":
+        return None, (
+            "--stop-answer=repin is DELIBERATELY UNBUILT. Answering ordinary "
+            "stops with 0x002B [1.0, 9] + a zero-distance 0x0029 is the "
+            "refuted --stop-echo's wire effect (a stop-arm 0x0029, "
+            "authsrv.py's ZERO_LEAD_REFUSED_ARMS) wearing R6's name -- R4's "
+            "`,stop` was licensed by scoping to an in-flight cancel leg, and "
+            "an ordinary pre-cast stop cannot be scoped that way. Run "
+            "--stop-answer=ack first (CANCELWALK-R6's registered arm); if it "
+            "freezes and the repin form is still wanted, it needs its own "
+            "licensing paragraph in studies/movement/CANCELWALK.md before "
+            "any code.")
+    return None, (
+        f"--stop-answer={text!r} names no arm. The one built arm is 'ack' "
+        f"(CANCELWALK-R6: s2c 0x0028 [agent] answering every player 0x0047) "
+        f"-- studies/movement/CANCELWALK.md sec.7.4.")
+
 
 def parse_cancel_answer(text):
     """Pure: an --cancel-answer argument -> (mode, lead, stop) or a refusal.
@@ -4127,7 +4196,7 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
                           client_endpoint=False, grant_suppress=False,
                           resync=False, stop_echo=False, click_sweep=False,
                           plane_carry=False, arrival_carry=False,
-                          cancel_answer=None):
+                          cancel_answer=None, stop_answer=None):
     """Pure: may these movement flags run together, and what must be said?
 
     Returns (refusal, notes). `refusal` is None or the text main() raises as a
@@ -4270,6 +4339,24 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
                 "a CANCELWALK arm was on, which is the inert-flag defect "
                 "--plane-carry's refusal documents. Pass --zero-lead (or "
                 "nothing: it is the default) with --cancel-answer."), []
+    if stop_answer and cancel_answer:
+        return ("--stop-answer and --cancel-answer cannot run together. "
+                "R6 exists to test whether closing the PRE-CAST stop "
+                "retail's way un-freezes the SHIPPED cancel-instant answer "
+                "-- its prediction is registered against the shipped "
+                "zero-lead cancel behaviour, and a run that also changes "
+                "the cancel-instant answer could attribute a walk (or a "
+                "freeze) to neither lever. One change per run is this "
+                "arc's own rule (CANCELWALK.md sec.5). Run "
+                "--stop-answer=ack alone."), []
+    if stop_answer and not zero_lead:
+        return ("--stop-answer requires --zero-lead. CANCELWALK-R6 is "
+                "pre-registered against the SHIPPED configuration -- the "
+                "freeze must reproduce for the readout to mean anything, "
+                "and the freeze is a zero-lead measurement (F6). Under any "
+                "other grant policy the run answers a question nobody "
+                "registered. Pass --zero-lead (or nothing: it is the "
+                "default) with --stop-answer."), []
     if not zero_lead:
         return None, []
     on_flags = {"--heading-grant": heading_grant,
@@ -4343,6 +4430,15 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
             f"ships from this flag directly -- a PASS licenses a candidate "
             f"for a separate audited step. Predictions and readout: "
             f"studies/movement/CANCELWALK.md 5.")
+    if stop_answer:
+        notes.append(
+            f"      + --stop-answer={stop_answer}: CANCELWALK-R6 arm, "
+            f"DIAGNOSTIC ONLY. Adds one s2c 0x0028 [player] answering every "
+            f"player 0x0047 stop report -- retail's own bare stop-ack, NOT a "
+            f"grant (no destination armed, no grant clock stamped), a no-op "
+            f"on a body that already stopped itself. The cancel-instant "
+            f"answer stays exactly as --zero-lead ships. Predictions and "
+            f"readout: studies/movement/CANCELWALK.md 7.4.")
     return None, notes
 
 
@@ -4979,6 +5075,19 @@ GAME_SMSG_AGENT_MOVE_DIRECTION = 0x0025
 # server's own sessions, where it is now sent and where the walk cycle was
 # confirmed by eye on 2026-08-11.
 GAME_SMSG_AGENT_UPDATE_SPEED = 0x002B
+# s2c 0x0028 -- a DIFFERENT message from GAME_CMSG_CANCEL_ACTION above, which
+# shares the number on the other direction. [agent], 6 bytes, named
+# AGENT_STOP_MOVING at high confidence (schema/overrides.json GAME_SMSG "40",
+# handler read attached there): the handler resolves BOTH world copies and
+# calls the halt 0x602540 gated on the in-motion flag ([agent+0x20] & 0x20000)
+# -- cancelling the queued move (agent+0x50 := 0) and re-running the movement
+# update -- and is a NO-OP on a parked body. Retail answers some player stops
+# with exactly this and nothing else (CANCELWALK-F5, t=65.095: the LAST
+# movement-family s2c its client received before the casts of the cancel
+# study, F9). Sent by this server only under --stop-answer=ack (CANCELWALK-R6,
+# diagnostic): it is NOT a grant -- no 0x0029, no destination armed, no grant
+# clock stamped -- which is what keeps it clear of the refused stop-arm family.
+GAME_SMSG_AGENT_STOP_MOVING = 0x0028
 # Absolute facing angle in radians + a turn rate in rad/s, BOTH marshalled u32.
 # Upstream called them rotation_cos/rotation_sin; sin^2+cos^2 over the live
 # corpus ranges 1.23-4.87 and is never 1, so that reading is refuted.
@@ -14318,6 +14427,25 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                  f"CANCELWALK STOP ({reported[0]:.0f},"
                                  f"{reported[1]:.0f}) plane {plane} -- "
                                  f"release mid-leg, zero-distance re-pin")
+                        # CANCELWALK R6 (--stop-answer=ack), and it is NOT
+                        # --stop-echo either: no 0x0029, no destination, no
+                        # grant clock -- one s2c 0x0028 [player], retail's
+                        # bare stop-ack (F5/F9: the LAST movement-family
+                        # message retail's client received before the casts
+                        # of the study capture, 36.8 ms after its own
+                        # 0x0047). EVERY player stop rather than one-shot,
+                        # because the server cannot know which stop precedes
+                        # a cast. The handler halts both copies via 0x602540
+                        # only when in motion -- zeroing the queued-move
+                        # store agent+0x50 -- and no-ops on a body that
+                        # already stopped itself, so this cannot move
+                        # anybody. H6's test: predictions in the flag's
+                        # comment block and CANCELWALK.md 7.4.
+                        if STOP_ANSWER == "ack":
+                            send(GAME_SMSG_AGENT_STOP_MOVING,
+                                 [PLAYER_AGENT_ID],
+                                 "AGENT_STOP_MOVING(player) [cancelwalk R6 "
+                                 "stop-ack]")
                         if STOP_ECHO:
                             # DISARM the destination the client is still
                             # holding. Zero-distance by construction -- the
@@ -16045,6 +16173,22 @@ def main():
                          "DIRECTLY; a PASS licenses a candidate for a "
                          "separate audited step, and the zero-lead policy "
                          "is untouched on every other report.")
+    ap.add_argument("--stop-answer", default=None, metavar="ARM",
+                    help="CANCELWALK-R6's stop-closure arm, DIAGNOSTIC "
+                         "ONLY, OFF by default, refused without --zero-lead "
+                         "and with --cancel-answer. 'ack' answers EVERY "
+                         "player 0x0047 stop report with s2c 0x0028 "
+                         "[agent] -- retail's bare stop-ack, the LAST "
+                         "movement-family message its client received "
+                         "before the study capture's casts (CANCELWALK-F5/"
+                         "F9). NOT a grant: no destination armed, no grant "
+                         "clock stamped, and the 0x0028 handler is a no-op "
+                         "on a body that already stopped itself. Tests "
+                         "CANCELWALK-H6 (stop-closure prior state): H6 "
+                         "predicts the single mid-cast press now WALKS; "
+                         "H5-without-H6/H7/H4 predict it still freezes. "
+                         "'repin' is deliberately unbuilt and refuses with "
+                         "the reason. studies/movement/CANCELWALK.md 7.4.")
     ap.add_argument("--resync", action="store_true",
                     help="SEVENTH candidate. Send GAME_SMSG 0x002C "
                          "AGENT_UPDATE_POSITION carrying the CLIENT'S OWN last "
@@ -16770,12 +16914,15 @@ def main():
         parse_cancel_answer(a.cancel_answer))
     if _cw_refusal:
         raise SystemExit(_cw_refusal)
+    _sa_mode, _sa_refusal = parse_stop_answer(a.stop_answer)
+    if _sa_refusal:
+        raise SystemExit(_sa_refusal)
     _zl_refusal, _zl_notes = zero_lead_composition(
         zero_lead=zero_lead, heading_grant=a.heading_grant,
         client_endpoint=a.client_endpoint, grant_suppress=grant_suppress,
         resync=a.resync, stop_echo=a.stop_echo, click_sweep=a.click_sweep,
         plane_carry=plane_carry, arrival_carry=a.arrival_carry,
-        cancel_answer=a.cancel_answer)
+        cancel_answer=a.cancel_answer, stop_answer=_sa_mode)
     if _zl_refusal and a.zero_lead is None:
         _zl_refusal += ("\n(--zero-lead is ON BY DEFAULT since 2026-08-22; "
                         "pass --no-zero-lead to run this arm without it.)")
@@ -16905,6 +17052,34 @@ def main():
               "casts, plus one with the camera rotated >= 90 deg first. "
               "Protocol and decision table: studies/movement/CANCELWALK.md "
               "sec.5.")
+
+    # CANCELWALK R6. Same house style: the prediction goes out BEFORE the
+    # run. ASCII only, as above.
+    if _sa_mode:
+        global STOP_ANSWER
+        STOP_ANSWER = _sa_mode
+        print(f"[map] --stop-answer={_sa_mode} ON. CANCELWALK R6 "
+              f"(stop-closure), DIAGNOSTIC ONLY -- no outcome ships from "
+              f"this run directly.")
+        print("      SENDS     one s2c 0x0028 AGENT_STOP_MOVING [player] "
+              "answering EVERY player 0x0047 stop report -- retail's bare "
+              "stop-ack, its client's LAST movement-family message before "
+              "the study capture's casts (F5/F9). The cancel-instant answer "
+              "is untouched: shipped zero-lead.")
+        print("      MECHANISM the 0x0028 handler halts both world copies "
+              "via 0x602540 only when IN MOTION -- zeroing the queued-move "
+              "store agent+0x50 -- and no-ops on a body that already "
+              "stopped itself (schema GAME_SMSG 40). Not a grant; zero warp "
+              "exposure.")
+        print("      PREDICTS  H6 (stop-closure prior state): the single "
+              "mid-cast press now WALKS. H5-without-H6, H7, H4: still "
+              "FREEZES -- and a freeze also retires F5's residual as a "
+              "cancelwalk candidate.")
+        print("      READOUT   the wire, per sec.5's criterion (>= 30 u "
+              "within 0.5 s = walk; <= 5 u = freeze), >= 3 cancelled "
+              "casts. Protocol rider: complete one cast BEFORE the "
+              "cancelled ones, closing F9's exposure confounder in the "
+              "same session. studies/movement/CANCELWALK.md sec.7.4.")
 
     # REALFIX-F1. Printed in the same house style and for the same reason: the
     # prediction goes out BEFORE the run so it cannot be rationalised after it.

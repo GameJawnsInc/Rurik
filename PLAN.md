@@ -1434,8 +1434,11 @@ walk-suppress bit set at the cancel edge (primary)**, H6 — stop-closure prior
 state (retail's `0x0028` / `[1.0,9]`+re-pin stop answers, the one lever a
 server owns), H7 weak, H4 residual. **Next: three pre-registered instruments
 await the operator** — R5 movetap state poll (Tier-1 decode-only field adds),
-R6 one-shot stop-closure run (cheapest; H6's direct test), R7 flag read at
-the edge (int3/trnhook). R4's ship candidate is unaffected; the ruling stays
+R6 stop-closure run (cheapest; H6's direct test — **BUILT same day as
+`--stop-answer=ack`**, refused without `--zero-lead` and with
+`--cancel-answer`, `repin` deliberately unbuilt with the refusal carrying the
+licensing decision; `test_cancelwalk.py` §6, floor 43), R7 flag read at the
+edge (int3/trnhook). R4's ship candidate is unaffected; the ruling stays
 the owner's.
 
 ### MODEL AUTHORING: the one-bit question is answered, and every player identity closes (2026-08-22)
