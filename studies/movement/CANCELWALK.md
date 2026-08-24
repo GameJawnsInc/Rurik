@@ -834,6 +834,91 @@ failure exits differ in shape but **not** in return value — a gate bail
 (`0x0081ACFA`) returns 0, and the success path also returns 1 — so a hook must
 read the gate operands, not the result.
 
+### 7.4e R7: BUILT, ADVERSARIALLY REVIEWED, AND THE REVIEW MOVED THE INSTRUMENT (2026-08-24)
+
+R7 was built as a hardware-breakpoint gate trace (`toolkit/clientscan/gatetrace.py`)
+and reviewed before it was ever pointed at a client. **The review found five
+BLOCKERS, each measured on a real WOW64 target with a positive control, and the
+first one would have KILLED THE OPERATOR'S CLIENT on the first breakpoint
+hit** — so the file now REFUSES to run and the arc took a cheaper instrument
+instead.
+
+**The blockers, kept because each is a reusable lesson:**
+1. A 64-bit debugger attached to a WOW64 target receives
+   `STATUS_WX86_SINGLE_STEP` (0x4000001E), **not** `EXCEPTION_SINGLE_STEP`
+   (0x80000004). The dispatch matched zero hits, handed every exception back to
+   a client with no handler, and killed it within one frame of arming, having
+   measured nothing (demonstrated: 266,734 events, all 0x4000001E, victim exit
+   0x4000001E). **This was a REGRESSION, not a discovery** —
+   `commandertrap.py`, in the same directory and already in the suite, defines
+   both WX86 constants and its header explains this exact failure. The file was
+   modelled on `trnhook/debugread.py`, which carries the same latent defect.
+   *Grep the directory before copying the nearest precedent.*
+2. `DebugSetProcessKillOnExit(False)` called BEFORE `DebugActiveProcess` fails
+   with ERROR_INVALID_HANDLE and does nothing, so kill-on-exit stays TRUE; with
+   no try/finally and a `keytap.read_at` that RAISES, any error takes the client
+   with it (measured both orderings: before → victim dead, after → victim alive).
+3. The debug registers were never cleared on detach, leaving the client carrying
+   four enabled breakpoints with no debugger to receive them.
+4. The control was disarmed through the WOW64 SHADOW while armed in the NATIVE
+   context — by the file's own thesis, a different register set.
+5. No `EFLAGS.RF`, so an execute breakpoint re-faults forever: 230,759 traps in
+   8 s against the 8 the victim's real executions warranted.
+
+**And the justification for building it was wrong on both halves.** §7.4d
+argued a breakpoint was needed because the operands "live on an object movetap
+does not resolve and are read and discarded inside one frame". Neither holds:
+they are **persistent object fields**, and the object is **two dereferences**
+from a `ctx` that `movetap.resolve()` already returns and both call sites
+already discard. MOVE-DISPATCH's own first instructions say so, read out of the
+image at 0x008163A7: `call 0x0047F660` / `mov eax,[eax+0x2C]` /
+`mov esi,[eax+0x680]` / `mov eax,[esi+0x10C]`.
+
+**CANCELWALK-R7 SHIPS AS A POLL, NOT A TRAP.** `movetap.controller_read()`
+walks `[[ctx+0x2C]+0x680]` and decodes both operands, adding four reads to a
+poll that already runs: rows now carry `ctrl_status`, `ctrl_flagbyte`,
+`gate_a`, `gate_b`, `gate_c` and `walk_suppressed`. Every failure is named
+(`no-ctx`, `ctrl-ctx-unreadable`, `controller-null`, `operands-unreadable`) and
+leaves the gates `None` — **never `False`, which is the value H5 predicts**, so
+a failed read cannot manufacture the finding. Guarded by 10 new checks in
+`movetap --selftest` (floor 240 → 250) driven over a fake memory.
+
+**What the trap would still buy, and it is the only thing:** a poll at ~11 Hz
+cannot see a bit SET and CLEARED inside one frame. If the poll shows the gates
+CLEAR at a frozen press, that residual is the remaining question — and reviving
+`gatetrace.py` then means fixing all five blockers by driving
+`commandertrap.py`'s `HwTrap` (which already has the WX86 codes, `EFLAGS.RF`, a
+runaway guard, disarm-all and a tested detach) rather than the hand-rolled loop.
+The pure half (`gate_verdict`/`reconcile`/`run_verdict`) and its guard are sound
+and kept; only the process half is unsafe, and `UNSAFE_TO_RUN` makes `trace()`
+raise rather than run, checked by calling it.
+
+**A guard defect the review also caught, worth its own line because it was
+false in five documents:** `test_gatetrace.py` declared floor 42 with section 1
+calling `LEDGER.skip(..., 9)` in the belief that a skip lowers the floor by its
+count. It does not — `Ledger.skip(label, why)` takes two strings and lowers
+nothing — so the file was RED on any machine without the vault snapshot while
+this document, TESTS.md, PLAN.md, the file's own comment and a commit message
+all claimed it "drops to 33 on a bare machine". Floors are now the
+bare-machine numbers and both configurations are green.
+
+**Predictions for the poll, unchanged from the trap's and still registered
+before any run:** H5 → at a FROZEN press `walk_suppressed` is true and
+`gate_a`/`gate_b` names which bit; at a WALKING press both clear. H7 → all
+three gates clear at a frozen press. Neither → gates clear and the refusal is
+downstream (the dedup at 0x0081AA5B, or ASYNC-MOVE-START). **GATE C should
+never be set at a press that reached the wire**, since MOVE-DISPATCH tests the
+same bit before sending `0x003D` — C reading set would falsify the READING, not
+a hypothesis.
+
+**The run, and it needs no elevation and no debugger:**
+
+    python toolkit/harness/session.py --keep-open --enemy --game-args "--map 280
+      --explorable --practice-target --skills 105,153,322"
+    python toolkit/clientscan/movetap.py --seconds 180
+
+Walk-first, ≥3 cancelled casts, ordinary presses as the in-session control.
+
 ### 7.5 Measured dead this round — do not retry
 
 - `0x0027`/speed-base as differentiator, trigger, or fix (F8/F13) — and the

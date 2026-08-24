@@ -224,6 +224,31 @@ OFF_CTX_IN_TLS = 0x08      # [tls_block + 8] -> ctx        (0x0047F660)
 OFF_AGBASE = 0x08          # [ctx + 8] -> AGBASE           (0x005FD8A1)
 OFF_CHCLI = 0x44           # [ctx + 0x44] -> ChCli ctx     (0x0084DCB5)
 OFF_CONTROLLED = 0x2AC     # [chcli + 0x2AC] -> agent ID   (0x0084DCB8)
+# --- CANCELWALK-R7's operands, reachable from the SAME `ctx` (2026-08-24) ----
+# The local walk-start applier 0x0081A8F0 gates on two fields of the
+# CONTROLLER, and MOVE-DISPATCH 0x008163A0 resolves that object in its own
+# first six instructions -- read out of the image at 0x008163A7:
+#     e8 b492c6ff   call 0x0047F660        the TLS ctx accessor this file
+#                                          already drives (OFF_CTX_IN_TLS)
+#     8b 40 2c      mov eax,[eax+0x2C]     <- OFF_CTRL_CTX
+#     8b b0 80060000 mov esi,[eax+0x680]   <- OFF_PLAYER_CONTROLLED
+#     85 f6 / 0f84  test esi,esi / je      the null guard, mirrored below
+#     8b 86 0c0100  mov eax,[esi+0x10C]    GATE A/C's operand
+# So the operands are TWO dereferences from a pointer resolve() already holds,
+# on an object whose identity the applier asserts for itself
+# (`this == context->playerControlledChar`, ChCliBase.cpp:164).
+# WHY THIS IS HERE AND NOT IN A DEBUGGER. An adversarial review of the
+# hardware-breakpoint version (CANCELWALK-R7, `gatetrace.py`) established that
+# the arc's stated reason for needing one was wrong on both halves: these are
+# PERSISTENT OBJECT FIELDS, not per-frame transients, and the object is not
+# unreachable. A poll sees them for as long as they are set. It cannot see a
+# bit set and cleared inside one frame -- that residual, and only that, is what
+# a breakpoint would still buy.
+OFF_CTRL_CTX = 0x2C        # [ctx + 0x2C] -> the controller's context
+OFF_PLAYER_CONTROLLED = 0x680   # [that + 0x680] -> playerControlledChar
+CTRL_STATUS = 0x10C        # dword; bit 0x100 = GATE A, bit 0x10 = GATE C
+CTRL_FLAGBYTE = 0x64       # byte;  bit 0x01   = GATE B
+CTRL_BIT_A, CTRL_BIT_B, CTRL_BIT_C = 0x100, 0x01, 0x10
 OFF_SYNC_ARRAY = 0xE8      # [AGBASE + 0xE8] -> AgAgent*[] (0x005FD8CE)
 OFF_SYNC_COUNT = 0xF0      # [AGBASE + 0xF0]               (0x005FD8B2, Array:587)
 OFF_WORLD_STRIDE = 0x64    # imul eax,[esi+0x24],0x64      (0x005FF896)
@@ -952,6 +977,60 @@ def _r5_fields(blk, prefix=""):
     }
 
 
+CTRL_KEYS = ("ctrl_ptr", "ctrl_status", "ctrl_flagbyte",
+             "gate_a", "gate_b", "gate_c", "walk_suppressed", "ctrl_why")
+
+
+def controller_read(read, ctx):
+    """CANCELWALK-R7's gate operands, polled instead of trapped.
+
+    `read(addr, n) -> bytes|None`, so this is drivable from a fake memory.
+    Walks `[[ctx+0x2C]+0x680]` -- MOVE-DISPATCH's own first six instructions --
+    and decodes the two fields the walk-start applier gates on.
+
+    EVERY FAILURE IS NAMED, on this file's standing rule: a controller that
+    could not be resolved must not read as "no gate set", because that is
+    precisely the value the arc's primary hypothesis predicts. `gate_*` stay
+    None unless the operands were really read, and `walk_suppressed` -- the
+    one-line answer -- is None rather than False.
+
+    The null guard mirrors the client's own (`test esi,esi / je` at
+    0x008163B5): a null controller is a real state, not a read failure, and it
+    gets its own reason.
+    """
+    blank = {k: None for k in CTRL_KEYS}
+    if not ctx:
+        blank["ctrl_why"] = "no-ctx"
+        return blank
+    raw = read(ctx + OFF_CTRL_CTX, 4)
+    if not raw or not u32(raw):
+        blank["ctrl_why"] = "ctrl-ctx-unreadable"
+        return blank
+    raw = read(u32(raw) + OFF_PLAYER_CONTROLLED, 4)
+    if not raw:
+        blank["ctrl_why"] = "controller-slot-unreadable"
+        return blank
+    ptr = u32(raw)
+    if not ptr:
+        blank["ctrl_ptr"], blank["ctrl_why"] = 0, "controller-null"
+        return blank
+    sw = read(ptr + CTRL_STATUS, 4)
+    fb = read(ptr + CTRL_FLAGBYTE, 1)
+    if not sw or not fb:
+        blank["ctrl_ptr"], blank["ctrl_why"] = ptr, "operands-unreadable"
+        return blank
+    status, flag = u32(sw), fb[0]
+    a = bool(status & CTRL_BIT_A)
+    b = bool(flag & CTRL_BIT_B)
+    c = bool(status & CTRL_BIT_C)
+    return {"ctrl_ptr": ptr, "ctrl_status": status, "ctrl_flagbyte": flag,
+            "gate_a": a, "gate_b": b, "gate_c": c,
+            # The applier bails on ANY of the three, so this is the answer the
+            # arc asks for -- but C is also tested by MOVE-DISPATCH before it
+            # sends 0x003D, so a press that reached the wire had C clear.
+            "walk_suppressed": (a or b or c), "ctrl_why": "ok"}
+
+
 def gate1_read(read, agbase, aid, agent_block):
     """Gate 1's own operands: the SYNC agent against its ASYNC twin.
 
@@ -1219,8 +1298,15 @@ def history_chain(read, rec, sep, async_ptr, agent_block, now,
     return out
 
 
-def sample(handle, agbase, agent_ptr, aid=None, hist_gate=None):
-    """One agent snapshot plus the world clock it must be read against."""
+def sample(handle, agbase, agent_ptr, aid=None, hist_gate=None, ctx=None):
+    """One agent snapshot plus the world clock it must be read against.
+
+    `ctx` is the TLS context `resolve()` already returns and both call sites
+    already discard; passing it adds CANCELWALK-R7's controller gate operands
+    to the row for four extra reads. A caller that does not pass it gets the
+    same named-blank treatment every other optional operand gets -- never a
+    silent False on the field the arc's primary hypothesis turns on.
+    """
     blk = keytap.read_handle(handle, agent_ptr, AGENT_SPAN)
     if not blk or len(blk) < AGENT_SPAN:
         return None
@@ -1280,6 +1366,10 @@ def sample(handle, agbase, agent_ptr, aid=None, hist_gate=None):
                    i32(blk, A_TARGET + 8)],
         "target_invalid": u32(blk, A_TARGET) == INVALID_POS,
         "vel": [round(vx, 2), round(vy, 2)],
+        # CANCELWALK-R7's operands, on the SAME "a caller who did not ask is a
+        # THIRD thing" rule as the fence and gate 1 above.
+        **(controller_read(rd, ctx) if ctx is not None
+           else {k: None for k in CTRL_KEYS} | {"ctrl_why": "no-ctx-passed"}),
         # CANCELWALK-R5, sync side. `point_raw`/`vel_raw` deliberately duplicate
         # values this dict already carries under other names, so a reader
         # diffing the two copies compares LIKE WITH LIKE (`point` is rounded and
@@ -1370,7 +1460,13 @@ def sample(handle, agbase, agent_ptr, aid=None, hist_gate=None):
 # it caught `stop` colliding with the key sample() already ships from the same
 # offset, which `**` would have let the splice silently win.
 # Read off the run, not predicted: 6+1+2+0+50+13+14+15+26+38+13+8+45+9.
-SELFTEST_FLOOR = 240
+# 240 -> 250 on 2026-08-24 with CANCELWALK-R7's controller operands, which an
+# adversarial review of the hardware-breakpoint version established were
+# POLLABLE all along -- two dereferences from a ctx `resolve()` already holds.
+# Ten checks: five gate combinations over a fake memory, the four named
+# refusals (none of which may read as "no gate set", the value the arc's
+# primary hypothesis predicts), and the sample() call check.
+SELFTEST_FLOOR = 250
 
 
 def _say_check(ok, text):
@@ -3317,19 +3413,21 @@ def _selftest_naming():
               # ships from the same offset. `stop` is filtered at the splice
               # rather than renamed, and this list records that decision where
               # the collision would be caught: this check is what found it.
-              "r5": [k for k in R5_KEYS if k != "stop"]}
+              "r5": [k for k in R5_KEYS if k != "stop"],
+              # CANCELWALK-R7's controller operands.
+              "ctrl": list(CTRL_KEYS)}
     seen, dupes = set(), set()
     for keys in groups.values():
         dupes |= seen & set(keys)
         dupes |= {k for k in keys if keys.count(k) > 1}
         seen |= set(keys)
-    ok = not dupes and sum(k is None for k in ret.value.keys) == 5
+    ok = not dupes and sum(k is None for k in ret.value.keys) == 6
     bad += not ok
     ran += 1
     print(f"   [{'PASS' if ok else 'FAIL'}] the {len(seen)} fields a row "
           f"carries are unique across all {len(groups)} groups "
           f"({', '.join(f'{g} {len(k)}' for g, k in groups.items())}) and "
-          f"sample() splices exactly 5 of them"
+          f"sample() splices exactly 6 of them"
           + (f" -- COLLIDING: {sorted(dupes)}" if dupes else ""))
 
     # AND THE SPLICE REALLY IS THE FUNCTION'S OWN. `sample()` calling
@@ -4032,6 +4130,69 @@ def _selftest_r5():
     print(f"   [{'PASS' if ok else 'FAIL'}] sample() CALLS _r5_fields for the "
           f"sync copy -- keys typed out by hand would drift from the decoder "
           f"the async side uses")
+
+    # --- CANCELWALK-R7's controller operands, polled not trapped ------------
+    # The two fields the walk-start applier gates on, reached from the SAME
+    # ctx resolve() already returns. Driven over a fake memory here, because
+    # the whole point of these being POLLABLE is that no debugger is needed.
+    CTX, CCTX, CTRL = 0x0C000000, 0x0D000000, 0x0E000000
+
+    def ctrl_mem(status, flag, ctrl_ptr=CTRL):
+        def read(addr, n):
+            if addr == CTX + OFF_CTRL_CTX:
+                return struct.pack("<I", CCTX)
+            if addr == CCTX + OFF_PLAYER_CONTROLLED:
+                return struct.pack("<I", ctrl_ptr)
+            if addr == ctrl_ptr + CTRL_STATUS:
+                return struct.pack("<I", status)
+            if addr == ctrl_ptr + CTRL_FLAGBYTE:
+                return bytes([flag])
+            return None
+        return read
+
+    for status, flag, wa, wb, wc in ((0, 0, False, False, False),
+                                     (CTRL_BIT_A, 0, True, False, False),
+                                     (0, CTRL_BIT_B, False, True, False),
+                                     (CTRL_BIT_C, 0, False, False, True),
+                                     (CTRL_BIT_A | CTRL_BIT_C, CTRL_BIT_B,
+                                      True, True, True)):
+        r = controller_read(ctrl_mem(status, flag), CTX)
+        ok = (r["gate_a"] == wa and r["gate_b"] == wb and r["gate_c"] == wc
+              and r["walk_suppressed"] == (wa or wb or wc)
+              and r["ctrl_why"] == "ok" and r["ctrl_ptr"] == CTRL)
+        bad += not ok
+        ran += 1
+        print(f"   [{'PASS' if ok else 'FAIL'}] controller status={status:#05x} "
+              f"flag={flag:#04x} -> A={r['gate_a']} B={r['gate_b']} "
+              f"C={r['gate_c']} suppressed={r['walk_suppressed']}")
+
+    # EVERY REFUSAL NAMED, and none of them reading as "no gate set" -- that
+    # value is exactly what the arc's primary hypothesis predicts, so a failed
+    # read that returned it would manufacture the finding.
+    for why, read, ctx_arg in (
+            ("no-ctx", ctrl_mem(0, 0), 0),
+            ("ctrl-ctx-unreadable", lambda a, n: None, CTX),
+            ("controller-null", ctrl_mem(0, 0, ctrl_ptr=0), CTX),
+            ("operands-unreadable",
+             lambda a, n: (struct.pack("<I", CCTX) if a == CTX + OFF_CTRL_CTX
+                           else struct.pack("<I", CTRL)
+                           if a == CCTX + OFF_PLAYER_CONTROLLED else None),
+             CTX)):
+        r = controller_read(read, ctx_arg)
+        ok = (r["ctrl_why"] == why and r["gate_a"] is None
+              and r["walk_suppressed"] is None)
+        bad += not ok
+        ran += 1
+        print(f"   [{'PASS' if ok else 'FAIL'}] a {why} read names itself and "
+              f"leaves every gate None -- never False, which is the value the "
+              f"hypothesis predicts", )
+
+    ok = "controller_read(rd, ctx)" in src
+    bad += not ok
+    ran += 1
+    print(f"   [{'PASS' if ok else 'FAIL'}] sample() CALLS controller_read -- "
+          f"eight blank ctrl_* keys spliced from nowhere look identical in the "
+          f"file, the same defect this section already caught once")
     return bad, ran
 
 
@@ -4233,7 +4394,7 @@ def main():
                     seq.append((round(time.time(), 4), REACH_UNRESOLVED))
                     time.sleep(period)
                     continue
-                s = sample(handle, agbase, ptr, aid)
+                s = sample(handle, agbase, ptr, aid, ctx=_ctx)
                 if s is None:
                     seq.append((round(time.time(), 4), REACH_DROPPED))
                     time.sleep(period)

@@ -4238,6 +4238,51 @@ Every one of these, in the order they were written:
   **85** with `captures/gamesrv` present; §7-§15 declare one `LEDGER.skip`
   without it. Reads only; sends nothing, and never imports `authsrv.py`. No
   client. ~7 s),
+  `toolkit/clientscan/test_gatetrace.py` (**A WRONG ADDRESS HERE DOES NOT
+  ERROR -- IT RETURNS THE FINDING.** The guard on
+  `toolkit/clientscan/gatetrace.py`, CANCELWALK-R7, which attaches a 64-bit
+  debugger to the loopback client, arms Dr0-Dr3 in the NATIVE context, and
+  reads the local walk-start applier's two gate operands
+  (`[controller+0x10C]`, `byte[+0x64]`) at the instant a movement key is
+  pressed. **§1 is the section that carries the file**: reading one dword away
+  returns a confident value that never changes, which is exactly what
+  "the walk-start never ran" looks like and would be indistinguishable from
+  R7's own hypothesis -- so the expected instruction bytes are **ENCODED FROM
+  the module constants** and matched against the pinned image (`OFF_STATUS`
+  builds `8b 83 <disp32>`, `BIT_GATE_A` builds `a9 <imm32>`, `OFF_FLAGBYTE`
+  and `BIT_GATE_B` together build `f6 43 64 01`, `BIT_GATE_C`'s bit index
+  builds `shr eax,4`), with a control that moves `OFF_STATUS` to `0x110` and
+  requires the match to break. Comparing a literal to a copy of itself would
+  pass forever. §2 drives all eight operand combinations and asserts the bail
+  list is in the client's own **test order** A,B,C -- a set would lose the only
+  thing that explains the frame -- and that an unread operand yields no verdict
+  rather than a plausible "no gates set". **§3 proves the file can contradict
+  itself**: the entry read predicts an exit and the exit breakpoints observe
+  one, so all three disagreement shapes are asserted to report `agrees=False`
+  loudly; a tool that could only agree with itself would be worthless. §4
+  enforces the control rule this route earned in `debugread.py` -- no
+  `PeekMessageW` hit is **rc 2 VOID, never a null**, because silence is this
+  route's own known failure mode (a WOW64 vectored handler never receives the
+  exception). §5 checks the ASLR math and that the three watched addresses are
+  distinct (two Dr slots on one address silently halves the trace). §6 bans
+  `WriteProcessMemory`/`VirtualProtectEx`/`CreateRemoteThread`/`VirtualAllocEx`
+  by name -- the whole licence for pointing this at a running client is that it
+  only reads. **§6 ALSO CHECKS THAT THE TOOL REFUSES TO RUN, by calling
+  `trace()` and requiring it to raise**: an adversarial review measured five
+  blockers in the process half on a real WOW64 target, the first of which kills
+  the client on the first breakpoint hit (it dispatches on
+  `EXCEPTION_SINGLE_STEP` where a 64-bit debugger attached to a WOW64 target
+  receives `STATUS_WX86_SINGLE_STEP` 0x4000001E -- a constant
+  `commandertrap.py` in the same directory already defines, with a header
+  explaining this exact failure). The refusal names both the blocker and the
+  poll that replaces it, because a docstring warning above a `main()` that
+  still runs is a file that gets run. Floor **35**, the BARE-MACHINE number; a
+  machine with the pinned snapshot executes 44. **That floor was wrong until
+  the same review caught it**: it declared 42 with §1 calling
+  `LEDGER.skip(..., 9)` in the belief that a skip lowers the floor by its
+  count -- `Ledger.skip(label, why)` takes two strings and lowers nothing, so
+  the file was RED on any machine without the vault snapshot while five
+  documents claimed it dropped to 33. No client needed. ~1 s),
   `toolkit/clientscan/test_grantsim.py` (**WOULD A DIFFERENT GRANT POLICY HAVE
   SNAPPED -- AND THE ANSWER IS THAT THIS FILE CANNOT TELL YOU, ON PURPOSE.** The
   guard on `toolkit/clientscan/grantsim.py`, which replays a capture's own c2s
