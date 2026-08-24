@@ -626,6 +626,11 @@ class HwTrap:
             # Attaching to a running client gave us exactly ONE.
             try:
                 self.adopt_existing_threads()
+                # AND SAMPLE COVERAGE HERE, while the process is alive and
+                # frozen. The detach-time sample reads a client that has
+                # already exited -- "0 of 1, context unreadable" -- which
+                # looks like a coverage failure and is only a dead process.
+                self.snapshot_coverage()
             except Exception:                                # noqa: BLE001
                 self.adopted = None
             if info.hFile:
@@ -743,10 +748,13 @@ class HwTrap:
         # the coverage question can be answered, and every consumer calls
         # detach() in a finally block, so putting it here means no run can
         # report hit counts without also reporting whether they were watchable.
-        try:
-            self.snapshot_coverage()
-        except Exception:                                    # noqa: BLE001
-            self.coverage = None
+        # Only if the live sample never happened. Re-sampling here would
+        # overwrite a good reading with a dead process's.
+        if self.coverage is None:
+            try:
+                self.snapshot_coverage()
+            except Exception:                                # noqa: BLE001
+                self.coverage = None
         try:
             self._disarm_all()
         except Exception:

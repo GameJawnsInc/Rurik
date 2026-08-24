@@ -1705,8 +1705,38 @@ the probe's resets it picked a five-slot wire-ordered instance over the
 eight-slot world one and printed "S2 REFUTED the other way" for a run whose
 world instance shows the permutation plainly; it scores the PEAK now.
 `test_compositetrap` 76 -> 80.
-**Still open**: the writer outside `0x0082EDA0` (new, and the sharpest), what
-TRIGGERS the wire-ordered instances (movement excluded), `row+0x08` which is
+**AND THE INSTRUMENT WAS WATCHING ONE THREAD OF TEN (9.18).** Before hunting
+9.17's writer I asked whether the trap was actually watching, and it was not:
+`armed_now()` had existed since commandertrap was written, was called only
+from its own test, and **no run had ever verified its own debug registers** --
+while `arm_failures == 0` counts only the threads the trap TRIED. The first
+live coverage sample read **`0 of 1`**. `DebugActiveProcess` on a running
+process does not hand the loop its pre-existing threads;
+`adopt_existing_threads()` enumerates them with Toolhelp32 and arms them from
+inside the frozen CREATE_PROCESS event, and the next run read **10 threads, 9
+adopted**. ★ **Re-running the identical probe with all ten armed changed
+NOTHING** -- record 64, cache 10, cachesame 0, clear 7, identical -- so the
+composite work IS single-threaded, every count this arc reported stands on
+evidence rather than luck, and **`cachesame`'s zero is real** (path A is the
+weapon-slot branch and armour never takes it). **And the writer survives**:
+slot 2 written 91 at +4.64, read as 90 at +18.543, no `cache` and no
+`cachesame` write on any of ten threads in between. What this qualifies, and
+the asymmetry is the point: every "fired zero times" in 9.6-9.17 was measured
+on one thread of ten and is UNWITNESSED rather than wrong, one run each to
+restore; every POSITIVE result is untouched, because an unarmed thread cannot
+manufacture a hit. That is feedback-zero-exposure-is-not-a-null applied to the
+instrument, and this session has now found three zeros needing a witness --
+this is the one that produced the other two. Two static routes to the writer
+were tried and missed (a byte scan for the row's address arithmetic finds only
+stride-48 walks; the item accessor's nine composite-module callers are eight
+known plus one CpsPlayer diagnostic), so the likely shape is a pointer-based
+store. The instrument for it is a DATA watchpoint -- DR R/W = 01, a dispatcher
+that resolves the slot from DR6 rather than EIP, and dynamic arming since the
+row address needs a live CpsBase. PRICED, not started.
+`test_commandertrap` 48 -> 52, floor 14 -> 18.
+**Still open**: the writer outside `0x0082EDA0` (the sharpest, and now
+properly witnessed), what TRIGGERS the wire-ordered instances (movement
+excluded), `row+0x08` which is
 still zero everywhere, and the THIRD kind of type-45 id -- record type 17 OUTSIDE any run (1887,
 3663 and 20 others), which is neither kind tested so far.
 Prior status follows.

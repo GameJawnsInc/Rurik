@@ -1802,3 +1802,116 @@ scores the **peak** now, and the test pins it. The permutation is not refuted.
 The writer outside `0x0082EDA0` (new, and the sharpest); what triggers the
 wire-ordered instances (movement refuted, still unnamed); `row+0x08`; and the
 third kind of type-45 id, which remains a weak experiment.
+
+## 9.18 The trap was watching ONE thread of ten — and the writer outside `0x0082EDA0` survives the correction (2026-08-23)
+
+§9.17 claimed `m_slotItemData` has a writer outside `0x0082EDA0`, on the
+strength of a row going **91 → 90** with both write exits armed and silent.
+Before hunting that writer I went looking for it statically, failed, and then
+asked the question that should have come first: **was the instrument actually
+watching?**
+
+### The answer was no, and it had never been asked
+
+`armed_now()` has existed since `commandertrap.py` was written and was called
+only from its own test. **No run had ever verified its own debug registers.**
+And `arm_failures == 0` counts only the threads the trap *tried* — a thread it
+never enumerated fails silently and looks exactly like a quiet one.
+
+`snapshot_coverage()` reads DR0–DR3/DR7 back per thread. Its first live run
+said:
+
+```
+threads armed and VERIFIED     0 of 1
+```
+
+**One thread.** Every hit this arc has ever recorded came from that one, which
+reads as "the composite work is single-threaded" and is equally consistent
+with "we watched one thread". A hardware breakpoint is per-THREAD state, so
+the other threads were blind spots.
+
+`DebugActiveProcess` on an already-running process does not hand the debug
+loop its pre-existing threads. `adopt_existing_threads()` enumerates the real
+list with Toolhelp32, opens what the loop missed with
+`GET_CONTEXT|SET_CONTEXT|QUERY_INFORMATION` and arms it, from inside the
+CREATE_PROCESS event where the process is frozen. On the next run:
+
+```
+threads the PROCESS had        10 (9 adopted beyond the debug loop's)
+```
+
+**Ten threads. Nine of them unwatched, for this entire arc.**
+
+### What ten-thread coverage changed: nothing, and that is the result
+
+Re-running the identical probe with all ten armed:
+
+| site | 1 thread | 10 threads |
+|---|---|---|
+| record | 64 | **64** |
+| cache | 10 | **10** |
+| cachesame | 0 | **0** |
+| clear | 7 | **7** |
+
+Identical. So the composite work *is* single-threaded, and every count this
+arc has reported stands — but it stands on evidence now rather than on luck.
+**`cachesame`'s zero is real**, witnessed across ten threads: path A is the
+weapon-slot branch (`test ebx,ebx` on the slot argument at `0x0082F081`) and
+armour never takes it.
+
+### And the writer survives
+
+With all ten threads armed, on CpsBase `0x25C7CC48`:
+
+```
++ 4.640s  cache  slot 2  item 3  record 91      the login writes the chest
++18.543s  clear  slot 2          record 90      ... and the clear finds boots
+```
+
+No `cache` write, no `cachesame` write, on any of ten threads, in the fourteen
+seconds between. **`m_slotItemData` has a writer outside `0x0082EDA0`.** §9.17
+said so on one thread's evidence; it is now said on the whole process's.
+
+**What this is NOT: the writer itself.** Two static routes were tried and both
+missed. A byte scan for the row's address arithmetic (`shl r,4; add r,0x24;
+add r,cps`) found three sites, and the two unknown ones are **stride-48**
+walks (`lea r,[n+n*2]; shl r,4` = ×48, the composite-record stride) rather than
+row writes. Following the item accessor `0x008451E0` into the composite
+modules found nine callers, eight already known and the ninth
+(`0x0082FB10`, asserts `CpsPlayer:1002 itemId` and `CpsPlayer:1006
+data.flags & ITEM_FLAG_COMPOSITE`) a diagnostic that formats a message and
+returns. A writer that computes the row pointer into a register and stores
+through it is invisible to both approaches, which is the likely shape.
+
+**The instrument for it is a DATA watchpoint** — DR R/W = 01 rather than 00,
+which `dr7_for()`'s own comment already describes as the failure mode of a
+wrong R/W field. That is a real build: per-slot R/W and LEN bits, a hit
+dispatcher that resolves the slot from DR6 instead of from EIP (a data trap's
+EIP is the instruction *after* the store, not a known site), and dynamic
+arming, because the row address is not known until a CpsBase exists. Priced,
+not started.
+
+### What this qualifies, and the asymmetry that matters
+
+Every "fired zero times" and "never requested" in §9.6–§9.17 was measured on
+one thread of ten. The re-run above restores the ones this probe exercises;
+the others are *unwitnessed rather than wrong*, and re-running any of them now
+costs one run each.
+
+**The POSITIVE results are untouched.** A hit is a hit: every prediction those
+runs CONFIRMED was confirmed by something firing, and an unarmed thread cannot
+manufacture a hit. Only the nulls needed the witness — which is exactly the
+distinction [[feedback-zero-exposure-is-not-a-null]] draws, applied to the
+instrument instead of to an experiment.
+
+This session has now found **three** zeros that needed a witness — `cachesame`
+twice, and the silent write exits — and this is the one that produced the
+other two.
+
+### A second timing bug, caught by its own output
+
+The first coverage sample ran at `detach()`, which happens after the harness
+has closed the client — so it read `0 of 1, context unreadable`, a dead
+process rather than a coverage failure. It samples inside the CREATE_PROCESS
+event now, while the process is alive and frozen, and detach only samples if
+nothing did earlier.
