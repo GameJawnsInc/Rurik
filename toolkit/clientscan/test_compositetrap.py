@@ -58,14 +58,15 @@ def JOIN(ls):
 # caller map and the CLEAR analyser landed the same day, then 71 for the
 # symmetric R4 window and 75 for S7's ordering check plus the second
 # costume-head row, 76 for S6 refusing to discriminate on one slot,
-# 79 for W1-W3 per-clear attribution, 80 for peak-not-final scoring, and 93
-# on 2026-08-24 when §9's frame walk landed.
+# 79 for W1-W3 per-clear attribution, 80 for peak-not-final scoring, 93
+# on 2026-08-24 when §9's frame walk landed, and 102 when S9 scored
+# row+0x08 against content in both directions.
 # Set from the run every time; guessed low five times before that stuck.
 #
 # AND THE FLOOR IS NOW THE MANDATORY CORE, WHICH IS LOWER THAN 80 WAS.
-# A whole green run is 93. Four sections need something this machine may not
+# A whole green run is 102. Four sections need something this machine may not
 # have and declare skips: §1 (6) and §2 (4) the pinned client, §5 (1) and §8
-# (12) the vault's content -- 23 in all, leaving 70 that always run. The old
+# (13) the vault's content -- 24 in all, leaving 78 that always run. The old
 # 80 was set from a full run and sat ABOVE that core, so a machine without a
 # vault would have failed on the floor rather than reading four honest skips,
 # and the shortfall message would have named the wrong thing. `checks.py`'s
@@ -73,7 +74,7 @@ def JOIN(ls):
 # sections declare skips", which is what `test_commandertrap.py` does; this
 # file was the outlier. Lowering it is deliberate and it loses nothing: the
 # skips are printed either way.
-LEDGER = checks.Ledger("composite trap", floor=70)
+LEDGER = checks.Ledger("composite trap", floor=78)
 check = checks.adopt(LEDGER)
 
 # ---------------------------------------------------------------- section 1
@@ -760,6 +761,14 @@ else:
               "lacked a mask bit this line reddens and somebody can drop the "
               "flag",
               f"{ {hex(v) for s, v in allflags.items() if s in t.OUR_SLOT_RECORD} }")
+        allvals = {s: r["value"] for s, r in rows.items()}
+        check(allvals == t.OUR_SLOT_VALUE,
+              "and OUR_SLOT_VALUE is the content's own `value` per slot -- "
+              "S9 scores row+0x08 against it, and every entry being 0 today "
+              "is exactly why the table has to come from content rather than "
+              "be written out: give one row a price and the prediction must "
+              "follow it, not stay at zero",
+              f"content says {allvals}, module says {t.OUR_SLOT_VALUE}")
         alltints = {s: r["dye_tint"] for s, r in rows.items()}
         check(alltints == t.OUR_SLOT_TINT,
               "and OUR_SLOT_TINT is the content's own dye_tint per slot -- "
@@ -846,6 +855,56 @@ check(t.walk_frames(framereader(FRAMES), 0x1000, depth=2)
       == (0x0082D6F6, 0x004B1880),
       "depth is a real bound, not a suggestion -- the walk stops where it is "
       "told even when more frames are readable")
+
+# ---- S9: row+0x08 is the item's `value` --------------------------------
+# The desk chain, for the record: `0x0082EFC0 mov ecx,[eax+8]` copies the item
+# record's third dword into the row; `ItemCliGetData` (0x008451E0) returns
+# item+0x1C, so that dword is item+0x24; and `0x008484DC mov [esi+0x24],eax`
+# fills it from CREATE_NAMED_ITEM's `value`. The same read maps five other
+# fields onto offsets 9.11 had already measured independently, which is what
+# makes it a closure rather than a guess.
+lines, rc = t._analyse_cache(CSITES, chits(GOOD_ROWS))
+blob = "\n".join(lines)
+check("S9 row+0x08 is the item's `value`: PASS" in blob and rc == 0,
+      "S9 passes on the predicted-good run -- every row+0x08 matches the "
+      "`value` content declares")
+check("WEAK BY CONSTRUCTION" in blob and "REGRESSION pin" in blob,
+      "and it says IN THE REPORT that it is weak, because every declared "
+      "value is 0 today and a field the client ignored entirely would score "
+      "identically. A check that cannot currently discriminate must say so "
+      "rather than be read as evidence the mapping is right",
+      blob[-600:])
+# BOTH DIRECTIONS. Left alone, S9 would be a check that cannot fail.
+priced = {**{s: 0 for s in t.OUR_SLOT_VALUE}, 6: 250}      # wire 6 = head
+_saved = t.OUR_SLOT_VALUE
+try:
+    t.OUR_SLOT_VALUE = priced
+    rowsv = {s: GOOD_ROWS[s] for s in GOOD_ROWS}
+    hitsv = chits(rowsv)
+    cps_head_slot = t.CPS_SLOT_OF_WIRE[6]
+    for h in hitsv:                       # the client carries the price
+        if h["cap"]["slot"] == cps_head_slot:
+            h["cap"]["row+8"] = 250
+    lines, rc = t._analyse_cache(CSITES, hitsv)
+    blob = "\n".join(lines)
+    check("PASS, and DECISIVELY" in blob and "S9 row+0x08" in blob,
+          "with a NON-ZERO value declared and the built row carrying it, S9 "
+          "reports itself DECISIVE instead of weak -- the same check, now "
+          "able to fail")
+    lines, rc = t._analyse_cache(CSITES, chits(rowsv))   # row+8 stays 0
+    blob = "\n".join(lines)
+    check("S9 row+0x08 is the item's `value`: REFUTED" in blob and rc == 1,
+          "and when the row does NOT carry the declared price it REFUTES and "
+          "reddens the run -- so the mapping is a claim the artifact can "
+          "break, not a label",
+          blob[-400:])
+    check(t.CPS_SLOT_OF_WIRE[6] != 6,
+          "and the sabotage exercises the RE-KEY: wire slot 6 is CpsBase "
+          "slot 4, so a value scored against the wire index would land on "
+          "the wrong row. With every value 0 that error is invisible",
+          f"wire 6 -> CpsBase {t.CPS_SLOT_OF_WIRE[6]}")
+finally:
+    t.OUR_SLOT_VALUE = _saved
 
 UP = {"stack (VAs)": ("0x0082D6F6", "0x004B1880", "0x004EE324"),
       "upstream": "0x004EE324 " + t.UPSTREAM_CALLERS[0x004EE324],

@@ -1868,8 +1868,33 @@ condition that voids the others, that run reads as "a panel open does not build
 a composite", which is the opposite of the truth and rests on the same zero.
 The world-map assert is a real archive-state defect, not this arc's:
 `vault/captures/harness/20260824T065948/crash-dialog.txt`.
-**Still open**: `row+0x08`, still zero everywhere and sourced from item data
-`[eax+8]`; and the THIRD kind of type-45 id -- record type 17 OUTSIDE any run
+★ **`row+0x08` IS THE ITEM'S `value`, AND ITS ZERO IS RETAIL'S (9.23).** The
+row's last unexplained field, closed at a DESK with no run. Three reads:
+`0x0082EFC0 mov ecx,[eax+8]` copies the item record's third dword;
+`ItemCliGetData` returns item+0x1C, so that dword is item+0x24; and
+`0x008484DC mov [esi+0x24],eax` fills it from CREATE_NAMED_ITEM's `value`.
+**It closes on SIX fields at once** -- the same function maps file id (with
+9.1's bit-31 mask), type, tint, colours and flags onto the offsets 9.11 had
+already measured independently, and every one agrees. ⚠ The obvious answer was
+WRONG and was registered before the read: `materials`/`unk1` are the only
+declared fields between `dye_colors` and `flags`, and they go to item+0x48 and
+item+0x4a -- OUTSIDE the sixteen bytes the row copies, so they are excluded by
+STRUCTURE rather than by absence. **The census, live corpus only**: 2,331
+declares across 20 captures, positive control 235 models / 26 types /
+1,021 non-zero values; composite armour (types 4/7/13/16/19) **445 declares,
+zero non-zero**; type 15 has 19 of 45 non-zero, but those are other hammer
+models -- **our exact weapon, model 1699 file id 0x80009B60, was declared NINE
+times by ArenaNet's own server with `value` 0.** So it is retail's number, not
+a gap in ours, and `test_armour.py` 3 had been pinning it as one of its nine
+fields all along. ⚠ One wrong mask cost a pass: `ITEM_FLAG_COMPOSITE` is
+**0x4** (`wearmap.py:52`), not the 0x1000 the BACKPACK also carries, and the
+wrong filter produced a plausible, specific, interesting non-zero that was a
+bag's 5 gold. `compositetrap` gains **S9**, which scores row+0x08 against
+content and says **"PASS, and WEAK BY CONSTRUCTION"** in the report because
+every declared value is 0 today -- broken both ways in the test, including a
+sabotage that catches the wire-vs-CpsBase re-key the all-zero table hides.
+`test_compositetrap` 96 -> 102, floor 70 -> 78.
+**Still open**: the THIRD kind of type-45 id -- record type 17 OUTSIDE any run
 (1887, 3663 and 20 others), which is neither kind tested so far.
 Prior status follows.
 **BUILT AND ARMED 2026-08-23, RUN WAS BLOCKED**
