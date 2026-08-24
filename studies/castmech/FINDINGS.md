@@ -442,6 +442,8 @@ Predictions, stated first:
   property rides beside the E2 is the question: 59 (structural), 45 (the
   queued precedent), 8→0, some combination, or none. No prediction is
   privileged; whatever appears gets wired verbatim.
+  > **ANSWERED §3f: `[8→0, 59, E2]`, 4 of 4.** 59 — the structural
+  > candidate. 45 does not appear at all. P8, P9 and P10 answered with it.
 - **CASTMECH-P8** — Esc mid-cast: the client sends `0x0028` (as ours does),
   retail answers it, and the answer's shape tells us what our `0x0028`
   grant is missing. If retail's client instead sends nothing and
@@ -451,6 +453,93 @@ Predictions, stated first:
   names why our client freezes for a press after a stopped swing.
 - **CASTMECH-P10** — the completion control re-witnesses the E5 burst
   (58, the 8-pulse) on a second account/build for free.
+
+---
+
+## 3f. The cancel-family capture RAN: property 59 is the missing message — 2026-08-24
+
+Live, operator-driven, secondary account, sealed plan
+(`vault/plans/cancel_family.txt`, sha256 `9e8a241c…`, 9 steps, 10 marks, all
+advanced). Capture `20260824T074002`: two game connections, **both frame to
+the last byte** (41,552/41,552 and 29,340/29,340). Marks carry `wire_t`, so
+every event below is on the capture clock with the tape rebased by `t0`.
+
+**THE ANSWER, and it is one property.** Every cancelled cast is answered in
+ONE batch, same order, **4 of 4** — W mid-cast, Esc, ground click, W again:
+
+```
+0x0029 [41, agent, pos, 0, 0]     the movement grant   <- only when MOVEMENT triggered it
+0x009F [159,  8, agent, 0]        the action hold releases
+0x009F [159, 59, agent, 0]        GV_SKILL_STOPPED
+0x00E2 [226, agent, skill, 0]     the pending entry releases
+```
+
+t = 81.660 (W), 88.946 (Esc — the three alone, no grant), 98.779 (click,
+grant + `0x002B` rate), 128.805 (W again). **Property 59 occurs at exactly
+those four instants in the whole capture and nowhere else**, so it is the
+cast family's stop rather than a general marker — and property 45, the
+queued-drop shape §3e flagged as the rival candidate, appears **zero** times.
+CASTMECH-P7 and P8 are ANSWERED and agree with each other.
+
+**Why our client played the animation out.** 59 is the one that reaches
+AgentView (`InterruptSkill`, `0x007E01B0`, `studies/skillcast` §6) — the
+layer that owns the body. We sent the hold release and the E2 and no 59:
+**the E2 settles the skill BAR, 59 stops the BODY.** The operator's
+2026-08-23 report — "the animation does stop visually when cancelled" for
+swings but not casts — is exactly that split, because the swing path already
+had its own stop (property 3).
+
+**The swing pair, and it is the OPPOSITE order** (CASTMECH-P9): W mid-windup
+t=114.641 and Esc mid-windup t=119.425, 2 of 2 —
+
+```
+0x009F [159, 3, agent, 0]         GV_ATTACK_STOPPED
+0x009F [159, 8, agent, 0]         then the hold releases
+```
+
+— where the press and retarget bursts carry `[8→0, then 3]` (§3c; the
+t=16.578 retarget). Both orders are measured at their own door and **neither
+is tidied to match the other**.
+
+**CASTMECH-P10, free:** the completion control re-witnesses §3c's E5 burst on
+a different account and build — E4/60/`8→1` … E5/58/`8→0`/`8→1` … E3/`8→0` …
+E6. One correction falls out of it: §3c said "the corpus's E3 instants never
+toggle property 8", and here **E3 carries `8→0`** (t=69.670). The older
+corpus's E3s did not; this one does. Recorded, not resolved — the hold's
+full state machine is still only partly read.
+
+### 3f-i. A claim of mine, REFUTED — §3d's central inference
+
+§3d said *"the client sends NO movement c2s while it holds a cast"*, and
+built the `0x0028` door on it. **Retail's client sends movement mid-cast**:
+`0x003D` at t=81.625 and t=128.774 (W), `0x003E` at t=98.743 (click).
+`0x0028` appears **twice**, and both are the **Esc** steps (t=88.916,
+119.380). So `0x0028` is Esc's message — the CANCEL_ACTION name survives —
+but it is *not* the only door, and the client was never mute.
+
+The inference was drawn from one loopback window where the operator's inputs
+happened to be Esc presses; re-reading run `20260823T102742` shows its first
+cancel **was** a `0x003D` (t=7.233), which our own movement door answered.
+The window was too small and I generalised from it. What the run really
+showed was the missing 59, which no amount of c2s reading would have found.
+
+**The double-press follows from the same gap** (the operator's stock
+comparison: one press cancels *and* moves). Our server granted the movement
+in the same instant — `0x0025`+`0x0029`, `grant_verdict fired` — but with no
+59 the client's action state never cleared, so it neither walked nor stopped
+animating until a second input. The re-run is the check.
+
+**Wired the same day**: `release_cancelled_cast()` sends `[8→0, 59, E2]`
+inline on the connection thread — retail answers the input in its own
+instant, and the tick keeps ownership of removal (`released`), so F10's
+single-writer rule is untouched. Both doors call it; the swing pair is
+reordered to `[3, 8→0]` at the two doors that measured it. `test_castcancel`
+20 checks, floor 20.
+
+**Still open:** we place the movement grant *before* our cancel burst on the
+click arm and *after* it on the keyboard arm; retail puts the grant first in
+both. Cosmetic against a client that acts on the properties, but unmeasured
+and therefore recorded.
 
 ---
 

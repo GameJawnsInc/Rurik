@@ -6207,27 +6207,78 @@ def cancel_on_move(send, state, conn_id):
     behind a ghost of the cancelled cast.
     """
     now = time.time()
-    # MOVEMENT RELEASES THE HOLD whether or not a stop goes with it: the
-    # corpus's movement instants carry [8, 31, 0] four times, twice with no
-    # STOPPED anywhere near (the chain was already idle), and where a stop
-    # does fire the ->0 PRECEDES it (castmech 3c). Transition-only, so a
-    # flag already 0 sends nothing here.
-    action_hold(send, state, 0, "the player moves")
     chain_live = (state.get("attacking") or state.get("player_swing")) \
         and not any(not c["e3_sent"]
                     for c in state.get("pending_casts") or ())
+    # THE SWING PAIR IS [3, then 8 -> 0], and that order is MEASURED on the
+    # movement door specifically: capture 20260824T074002, W mid-windup
+    # (t=114.641) and Esc mid-windup (t=119.425), 2 of 2. It is the OPPOSITE
+    # of the press and retarget bursts, which carry [8 -> 0, then 3] (3c, and
+    # the t=16.578 retarget) -- so each door keeps the order measured at IT,
+    # rather than one being tidied to match the other.
     if chain_live:
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
              [agents.GV_ATTACK_STOPPED, PLAYER_AGENT_ID, 0],
              "attack_stopped: the player moves")
         state["player_swing_cancel"] = "movement"
+    # MOVEMENT RELEASES THE HOLD whether or not a stop goes with it: the
+    # corpus's movement instants carry [8, 31, 0] four times, twice with no
+    # STOPPED anywhere near (the chain was already idle) (castmech 3c).
+    # Transition-only, so a flag already 0 sends nothing here -- which is also
+    # what keeps this from duplicating the release inside the cast burst below.
+    action_hold(send, state, 0, "the player moves")
     if state.get("attacking"):
         state["attacking"] = None
     dropped = _mark_cancelled(state, "movement", now, spare_mid_attack=True)
+    for cast in state.get("pending_casts") or ():
+        if cast.get("cancelled") == "movement" and not cast.get("released"):
+            release_cancelled_cast(send, state, cast, "movement", conn_id)
     if dropped:
         print(f"[c{conn_id}] movement cancels {dropped} pending cast(s); "
               f"no recharge, costs stay paid where a begin paid them",
               flush=True)
+
+
+def release_cancelled_cast(send, state, cast, reason, conn_id):
+    """The release burst for a cast cancelled mid-activation. MEASURED, 4 of 4.
+
+    Live capture `20260824T074002`, operator-driven against ArenaNet under a
+    sealed plan (`vault/plans/cancel_family.txt`, sha256 9e8a241c...): every
+    one of the four cancelled casts -- W, Esc, ground click, W again -- is
+    answered in ONE batch, in this order:
+
+        0x009F [8,  agent, 0]     the action hold releases
+        0x009F [59, agent, 0]     GV_SKILL_STOPPED
+        0x00E2 [agent, skill, 0]  the pending entry releases
+
+    plus, when MOVEMENT was the trigger, that same batch carries the movement
+    grant (0x0029, with 0x0025/0x002B as the input warrants) BEFORE the three.
+    Property 59 occurs exactly at those four instants in the whole capture and
+    nowhere else, so it is the cast family's stop rather than a general marker.
+
+    THIS IS WHAT OUR CLIENT WAS MISSING, and the symptom named it before the
+    capture did: on 2026-08-23 the operator reported a cancelled cast whose
+    animation played out to the end. We sent the hold release and the E2 and
+    no 59 -- and 59 is the one that reaches AgentView (`InterruptSkill`,
+    0x007E01B0, studies/skillcast 6), which is the layer that owns the
+    animation. The E2 settles the SKILL BAR; 59 stops the BODY.
+
+    Sent from the connection thread, inline, because retail answers the input
+    in the instant it arrives rather than a tick later. The tick keeps
+    ownership of REMOVAL -- `released` tells it the burst is already out --
+    so the single-writer rule that F10 closed is untouched.
+    """
+    action_hold(send, state, 0, f"{reason} cancels the cast")
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+         [agents.GV_SKILL_STOPPED, PLAYER_AGENT_ID, 0],
+         f"skill_stopped: {reason} cancels skill {cast['skill_id']}")
+    send(GAME_SMSG_SKILL_REFUSED,
+         [PLAYER_AGENT_ID, cast["skill_id"], cast["copy"]],
+         f"cast cancelled by {reason}: E2 releases skill "
+         f"{cast['skill_id']}, no recharge")
+    cast["released"] = True
+    print(f"[c{conn_id}] {reason} cancels skill {cast['skill_id']}: "
+          f"hold released, skill_stopped, E2 -- no recharge", flush=True)
 
 
 def _mark_cancelled(state, reason, now, spare_mid_attack):
@@ -6286,17 +6337,19 @@ def cancel_action(send, state, conn_id):
                     for c in state.get("pending_casts") or ())
     dropped = _mark_cancelled(state, "cancel action", now,
                               spare_mid_attack=False)
-    if chain_live or dropped:
-        # The release precedes the close -- the corpus's stop pair and the
-        # cancel instant agree on release-first (castmech 3b/3c; the live
-        # cancel's own release rode property 45, unnamed and unsent here,
-        # so the flag WE release is the one WE set).
-        action_hold(send, state, 0, "cancel action")
+    # SAME PAIR, SAME ORDER as the movement door, and measured at THIS one:
+    # the live Esc mid-windup (t=119.425) is [3, then 8 -> 0]. The cast burst
+    # below carries its own release, and `action_hold` is transition-only, so
+    # a run that cancels both a swing and a cast emits one 8 -> 0, here.
     if chain_live:
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
              [agents.GV_ATTACK_STOPPED, PLAYER_AGENT_ID, 0],
              "attack_stopped: cancel action")
         state["player_swing_cancel"] = "cancel action"
+        action_hold(send, state, 0, "cancel action")
+    for cast in state.get("pending_casts") or ():
+        if cast.get("cancelled") == "cancel action" and not cast.get("released"):
+            release_cancelled_cast(send, state, cast, "cancel action", conn_id)
     if state.get("attacking"):
         state["attacking"] = None
     if dropped:
@@ -8272,10 +8325,17 @@ def cast_tick(send, state, conn_id):
         # property 45 the corpus shows once and nothing names; it is left
         # unsent rather than guessed at (studies/castmech 3b).
         if cast.get("cancelled") and not cast["e5_sent"]:
-            send(GAME_SMSG_SKILL_REFUSED,
-                 [PLAYER_AGENT_ID, cast["skill_id"], cast["copy"]],
-                 f"cast cancelled by {cast['cancelled']}: E2 releases skill "
-                 f"{cast['skill_id']}, no recharge")
+            # THE BURST IS ALREADY OUT in the ordinary case: the door that
+            # cancelled it sent [8 -> 0, 59, E2] inline, in the instant the
+            # input arrived, which is where retail puts it (4 of 4,
+            # release_cancelled_cast's docstring). The tick still owns
+            # REMOVAL, so this is the entry leaving the list rather than a
+            # second announcement -- and the un-released branch below stays
+            # as the net for a mark that reached the list by some other
+            # route, so a silent mark can never strand an entry forever.
+            if not cast.get("released"):
+                release_cancelled_cast(send, state, cast, cast["cancelled"],
+                                       conn_id)
             finished.append(cast)
             continue
         # A QUEUED CAST BEGINS HERE: payment and animation at the instant
