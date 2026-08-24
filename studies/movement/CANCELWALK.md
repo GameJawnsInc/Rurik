@@ -1112,6 +1112,68 @@ would put the re-dispatch claim back on the bench.
   band (`0x0081BD02`/`0x0081BD14`) — property 8's case body, confirming F22
   from the writer side.
 
+### 7.8 THE WARP HAS A CAUSE, and it is our grant cadence meeting F25 (2026-08-24)
+
+Operator run `authsrv-20260824T182739-c1`, reported sequence *move → stop →
+turn camera → cast → move-to-cancel*, "and it warped me". **No `movetap` ran
+alongside, so this section says nothing about the gates** — it is a wire-only
+reading, and that limit is the reason it makes no claim about H10.
+
+**CANCELWALK-F27 — OBSERVED. The warp is the drawn body reconciling onto a sync
+copy our own grant cadence left a quarter of the map behind, and the arithmetic
+closes to 41 ms.** At the cancel press (t=16.088) the player reports
+`(-6058, -2530)`; 0.501 s later `(-6280, -2391)` — **261.9 u, i.e. 523 u/s
+against a 288 u/s run speed**, so walking cannot produce it. It decomposes
+exactly:
+- an instant **256.2 u snap** back onto the stale sync copy at `(-6314, -2519)`
+  — the point granted at t=13.537 and never updated since;
+- then a **132.4 u walk** in `(+0.257, +0.966)` ≈ the pressed north, which at
+  288 u/s takes **0.460 s** against the 0.501 s window. The 41 ms of slack is
+  the snap's own frame.
+
+**WHY THE COPY WAS 256 u STALE, and this is the part that is new.** Our
+zero-lead policy grants on c2s `0x003D` and on nothing else. **F25 says the
+client emits `0x003D` only when the movement DIRECTION CHANGES** — so a long
+straight leg produces **one** report, at its start. Here the player turned east
+at 13.536, we granted `(-6314, -2519)` (where they were *at that instant*), and
+they then walked 256 u east on that single report while the copy sat at the
+grant. The `0x0047` stop at 14.437 produced no grant either — the stop arm is
+deliberately silent (`--stop-echo` is REFUTED). So the copy was left behind by
+**the entire length of the last straight leg**, and the next walk-start paid it
+in one frame.
+
+**It is not rare, and it is now priced.** Staleness at every `0x0047` stop
+(player position vs the last granted point), four captures:
+
+| capture | stops | `0x003D` | staleness p50 | max | over ~190 u |
+|---|---|---|---|---|---|
+| `141556` | 7 | 46 | 73.7 u | 227.6 u | 3 of 7 |
+| `163550` | 13 | 55 | 24.8 u | 345.9 u | 1 of 13 |
+| `182739` | 4 | 8 | 12.7 u | 256.3 u | 1 of 4 |
+| `081335` | 4 | 8 | 89.5 u | 120.1 u | 0 of 4 |
+
+**5 of 28 stops leave the copy past the ~190–230 u band where F20 measured the
+snap firing** — about one stop in six, which is exactly the intermittency the
+operator reports. The `0x003D` column is the mechanism in miniature: 8 reports
+across a whole session of walking in `182739`, because the operator walked in
+straight lines.
+
+**This joins the arc's two loose ends into one statement.** F25 (the client
+reports on direction change) and F18/F20 (the drawn body snaps onto the copy at
+a walk-start when the gap is large) are the same story from two sides: **our
+re-pin trigger is hostage to a client reporting rule we only understood today,
+so the straighter the player walks, the further the copy falls behind, and the
+next walk-start snaps them back.** The freeze and the warp were never the same
+bug — the freeze is the action-hold race (§7.6/§7.7) and **the warp is a grant-
+cadence defect, which is REALFIX's, not this arc's.**
+
+**Candidates that would actually address it, none run, no recommendation
+made here:** `--resync` (REALFIX-P5, `0x002C`, hard-sets BOTH copies, built and
+never run, and its trigger is literally "our model has drifted N units") is the
+one whose refutation does not already stand; a stop-arm grant is `--stop-echo`
+and IS refuted; a time-based re-grant during a straight leg has no flag today.
+**Filed to the movement arc. The ruling on which, if any, is the owner's.**
+
 ### 7.5 Measured dead this round — do not retry
 
 - `0x0027`/speed-base as differentiator, trigger, or fix (F8/F13) — and the
