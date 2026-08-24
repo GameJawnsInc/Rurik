@@ -1412,9 +1412,15 @@ is measured. **R4 pre-registered and built the same day**
 (`--cancel-answer=lead:288,stop`): retail's own stop pair (`0x002B [1.0,
 9]` + zero-distance `0x0029`) answering a release **scoped to the in-flight
 cancel leg only** — the general stop arm stays silent, which is what
-separates it from the refuted `--stop-echo`. Awaiting its operator run;
-ship-time terms if it passes: clip the leg, and the audited-exception
-review.
+separates it from the refuted `--stop-echo`. **R4 PASSED the same day**
+(capture `20260824T103556`, CANCELWALK.md §5b): release-to-stop confirmed
+on the wire (the re-pin answers a +97.6 u mid-glide release and the body
+stays put — R2's unanswered release gliding to 768 is the control), and
+held presses park at +288.0 u exactly. **The licensed ship candidate is
+cancel-instant lead + scoped stop re-pin; shipping awaits an owner ruling**
+with four named terms: clip the leg (from the REPORTED point), choose the
+lead length, promote the flag out of the experiment namespace, and the
+audited-exception review against zero-lead's invariants.
 
 ### MODEL AUTHORING: the one-bit question is answered, and every player identity closes (2026-08-22)
 
