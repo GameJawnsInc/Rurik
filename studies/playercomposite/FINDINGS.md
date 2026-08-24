@@ -2360,3 +2360,117 @@ The whole of §9.11's question. What the odd instances are (`GmDoll`'s), which
 path builds them (`0x004EEC34`, equip-slot order) against the world's
 (`0x007F9F5F` `AvChar`, permuted), what triggers them (a UI drawing the
 character), and what does NOT (a panel with no character; a bare keypress).
+
+## 9.23 `row+0x08` is the item's `value` — and its zero is RETAIL'S, not ours (2026-08-24)
+
+The last open field of the composite row. §9.11 called it "always zero" and
+ten sections repeated it. It is named now, and answered at a desk: **no client
+run, and none needed.**
+
+### The chain, and it closes on six fields at once
+
+Three reads, each of which could have disagreed with the other two:
+
+```
+0x0082EFC0  mov ecx, [eax + 8]     ->  [ebp-0xc]  ->  row+0x08   (the writer)
+0x008451E0  ItemCliGetData: ... lea eax, [esi + 0x1c]; ret        (the accessor)
+0x008484DC  mov [esi + 0x24], eax  <-  [ebp+0x2c]                 (the builder)
+```
+
+The writer copies the item record's third dword. `ItemCliGetData` returns
+`item + 0x1C`, so that dword is **`item + 0x24`**. And `0x00848450` — the
+function `CREATE_NAMED_ITEM`'s handler calls with the decoded message — fills
+`item + 0x24` from its **tenth argument**, which the handler pushes from
+`[edi + 0x24]`: the wire's **`value`**.
+
+**What makes this a closure rather than a guess** is that the same function
+maps five other fields onto offsets §9.11 had already measured independently,
+and every one agrees:
+
+| stored at | from | §9.11 said |
+|---|---|---|
+| `item+0x1C` ← `[ebp+0x10] & 0x7FFFFFFF` | `file_id` | row `+0x00` file id, reserved bit masked (§9.1's bit 31) |
+| `item+0x20` byte 0 ← `[ebp+0x14]` | `item_type` | row `+0x04` byte 0 type |
+| `item+0x21` ← `[ebp+0x18]` | `dye_tint` | byte 1 dye tint |
+| `item+0x22` word ← `[ebp+0x1c]` | `dye_colors` | bytes 2–3 dye colours |
+| **`item+0x24`** ← `[ebp+0x2c]` | **`value`** | **row `+0x08`, unexplained** |
+| `item+0x28` ← `[ebp+0x28]` | `flags` | row `+0x0C` flags |
+
+Six for six. The one unexplained offset falls out of a mapping that was already
+right about the other five.
+
+### ⚠ And the obvious answer was WRONG
+
+I predicted (R8-1, registered before the read) that `+0x08` would be the pack
+of `materials` and `unk1` — the only two declared fields sitting between
+`dye_colors` and `flags` on the wire, in a mapping that is otherwise exactly
+positional. **REFUTED.** They go to `item+0x48` (as `materials - 1`, a word)
+and `item+0x4a` (a byte), both **outside** the sixteen bytes the composite row
+copies. So they are excluded by STRUCTURE — they could not reach the row — and
+not by having been observed absent, which is the stronger form of the answer.
+
+### Why it is always zero, and the census that settles whose fault that is
+
+Every item this arc wears declares `value = 0` in `content/items.toml` —
+hammer, all five armour pieces, both costumes. So the client was faithfully
+copying our zero, and the honest question is whether that is a **gap in our
+content** or **retail's own behaviour**.
+
+Census over the LIVE corpus (`vault/captures/live`, origin-selected, never
+pooled with ours): **20 captures, 2,331 `CREATE_NAMED_ITEM` declares.**
+
+- **Positive control**: 235 distinct `model_id`, 26 distinct `item_type`,
+  **1,021 of 2,331 declares carry a non-zero `value`** across 40 distinct
+  values. The census reads the field, so its zeros mean something.
+- **Composite armour** (types 4, 7, 13, 16, 19): **445 declares, 35 models,
+  `value` zero on every single one.**
+- **Type 15, the weapon class: 19 of 45 declares ARE non-zero** — 2, 5, 32,
+  35, 36 — which looked at first like a content gap on our hammer.
+- **It is not.** Those belong to other hammer models. **Our exact weapon —
+  model 1699, file id `0x80009B60` — was declared by ArenaNet's own server
+  NINE times across three captures, `value` 0 every time.** Models 3438, 3550
+  and 7759 are zero too; the priced ones (201, 202, 206, 214, 216, 222) are
+  sellable drops. A starter/customised weapon has no sale value.
+
+**So `row+0x08` is zero for us because it is zero in retail for everything we
+wear.** Not a gap. `test_armour.py` §3 had already been pinning this without
+anyone noticing what it meant: `value` is one of its nine fields, and it
+reports zero disagreements over every retail sighting of our five armour rows.
+
+### ⚠ A wrong mask, caught by its own control
+
+The first pass of the census filtered "wearable" on `flags & 0x1000` and
+reported *"only type 3 is non-zero, all 61 of them value 5"*. `0x1000` is not
+the composite flag — **`ITEM_FLAG_COMPOSITE` is `0x4`** (`wearmap.py:52`), and
+`0x1000` is a bit the **backpack** also carries (`flags 0x20001000`). So the
+"wearable" set included bags, and the single non-zero result in it was a bag's
+5 gold. Re-run with the operand read rather than assumed, the same set is 445
+declares and uniformly zero.
+[[feedback-verify-the-operand-not-just-the-predicate]], and it cost one pass
+because the wrong mask produced a *plausible, specific, interesting* answer.
+
+### The check, and it is honest about being weak
+
+`compositetrap` gains **S9**: `row+0x08` scored against `OUR_SLOT_VALUE`, which
+`test_compositetrap` §8 pins to `content/items.toml`'s own `value` per slot.
+The report says **"PASS, and WEAK BY CONSTRUCTION"** in those words — every
+declared value is 0 today, so a field the client ignored entirely would score
+identically, and a check that cannot currently discriminate must say so rather
+than be read as evidence. §9 drives it both ways: declare a non-zero price and
+S9 reports itself **DECISIVE**; withhold it from the built row and S9
+**REFUTES** and reddens the run.
+
+One thing that sabotage caught: the table is wire-keyed and `final` is
+CpsBase-keyed, so S9 needs the re-key. With every value 0 the two agree
+numerically and the error would have been invisible until the first priced
+row — the sabotage declares on wire slot 6 and asserts it lands on CpsBase
+slot 4.
+
+### The composite arc's row is now fully accounted for
+
+| offset | field | source |
+|---|---|---|
+| `+0x00` | file id (override replaces) | `item+0x1C`, reserved bit masked |
+| `+0x04` | type / dye tint / dye colours | `item+0x20..0x23` |
+| `+0x08` | **`value`** | `item+0x24` |
+| `+0x0C` | flags, OR-merged `0x20000006` | `item+0x28`, ORed by the writer |

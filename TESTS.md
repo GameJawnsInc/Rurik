@@ -6280,6 +6280,21 @@ Every one of these, in the order they were written:
   rather than on a blanket hedge -- the dye is copied from another slot's
   row, so "was the source written first" is a checkable question and both
   branches are exercised.
+  **§9 also carries S9, `row+0x08` = the item's `value`** -- the row's last
+  unexplained field (§9.23), and the interesting part of the check is that it
+  DECLARES ITSELF WEAK. Every `value` in `content/items.toml` is 0 today, so a
+  field the client ignored entirely would score identically, and the report
+  says **"PASS, and WEAK BY CONSTRUCTION ... a REGRESSION pin, not a
+  discriminating test"** in those words rather than letting a green line read
+  as evidence the mapping is right. It is broken BOTH ways: declare a non-zero
+  price and S9 reports itself DECISIVE; withhold it from the built row and S9
+  REFUTES and reddens the run. One sabotage exists purely for a latent bug the
+  all-zero table hides -- `OUR_SLOT_VALUE` is wire-keyed while the analyser's
+  rows are CpsBase-keyed, so with every value 0 a missing re-key is invisible;
+  the check declares on wire slot 6 and asserts it lands on CpsBase slot 4.
+  §8 pins the table to content's own `value` per slot, for the same reason the
+  other four tables are pinned there: give one row a price and the prediction
+  must follow it.
   **§9 is the FRAME WALK, and it exists because one frame was never going to
   be enough.** §9.13 captured `[ebp+4]` and got `CpsApi::SetSlotItem`, which
   forwards its caller's slot verbatim -- so it names the MESSENGER, and three
@@ -6307,7 +6322,7 @@ Every one of these, in the order they were written:
   in the map still reaches the report, or the one path nobody predicted would
   be the one path a run could not show.
   Needs the pinned exe for §§1-2/§6 and the vault for §5, all SKIP-declared;
-  a whole green run is 96 and the floor is **70**, its MANDATORY CORE --
+  a whole green run is 102 and the floor is **78**, its MANDATORY CORE --
   lowered from 76/80, which sat ABOVE it, so a machine without a vault would
   have failed on the floor instead of reading four honest skips and the
   shortfall would have named the wrong thing),

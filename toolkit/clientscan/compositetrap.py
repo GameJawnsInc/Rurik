@@ -419,6 +419,14 @@ OUR_SLOT_RECORD = {2: 91, 3: 90, 4: 94, 5: 92, 6: 93}
 OUR_SLOT_TYPE = {0: 15, 2: 7, 3: 4, 4: 19, 5: 13, 6: 16, 7: 44, 8: 45}
 #: ... and the declared dye tint, which S8 says an UNOVERRIDDEN slot keeps.
 OUR_SLOT_TINT = {0: 6, 2: 19, 3: 19, 4: 19, 5: 19, 6: 19, 7: 0, 8: 35}
+#: ... and the declared `value`, which S9 says lands verbatim in row+0x08.
+#: All zero, and that is RETAIL'S OWN NUMBER rather than a gap in ours:
+#: 445 composite-armour declares across 20 live captures carry `value` 0, and
+#: our exact starter weapon -- model 1699, file id 0x80009B60 -- was declared
+#: NINE times by ArenaNet's own server with `value` 0. The non-zero type-15
+#: values in that corpus (19 of 45) belong to other hammer models, which are
+#: sellable drops; a starter/customised weapon has no sale value.
+OUR_SLOT_VALUE = {0: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0}
 #: ... and the declared FLAGS, which S5 compares the built row against. Every
 #: armour row already contains COSTUME_FLAG_BITS, which is exactly why S5
 #: needs `--flags-clear` to say anything.
@@ -1044,6 +1052,7 @@ def _analyse_cache(sites, hits):
     cps_record = _by_cps(OUR_SLOT_RECORD)
     cps_type = _by_cps(OUR_SLOT_TYPE)
     cps_tint = _by_cps(OUR_SLOT_TINT)
+    cps_value = _by_cps(OUR_SLOT_VALUE)
     cps_head = CPS_SLOT_OF_WIRE[6]
 
     # The instance that wears OUR items. There can be two -- §9.6 saw the
@@ -1295,6 +1304,39 @@ def _analyse_cache(sites, hits):
               f"small and is said rather than smoothed")
     L.append(f"S8 the null control (unoverridden slots): {s8}")
 
+    # S9: row+0x08 is the item's VALUE, and it is scored rather than noted.
+    # MEASURED at the desk: `0x0082EFC0 mov ecx,[eax+8]` copies the item
+    # record's third dword into the row, `ItemCliGetData` returns item+0x1C,
+    # and `0x008484DC mov [esi+0x24], eax` fills that dword from the
+    # CREATE_NAMED_ITEM `value` field -- a mapping that closes on SIX
+    # independent fields at once, so it is not a guess. Every entry in
+    # OUR_SLOT_VALUE is currently 0, which is why this read "always zero" for
+    # ten sections; the check exists so that stops being an ASSUMPTION. Give
+    # any item a non-zero `value` in content and this scores it.
+    # RE-KEYED, like every other table here: OUR_SLOT_VALUE is wire-keyed and
+    # `final` is CpsBase-keyed. With every value 0 the two agree numerically,
+    # which is exactly the kind of latent error that surfaces years later --
+    # the first non-zero row would have been scored against the wrong slot.
+    val_bad = {s: (cps_value.get(s), c.get("row+8"))
+               for s, c in final.items()
+               if s in cps_value and c.get("row+8") != cps_value[s]}
+    declared = {s: v for s, v in cps_value.items() if v}
+    if val_bad:
+        s9 = (f"REFUTED -- row+0x08 is not the item's `value` on slot(s) "
+              f"{sorted(val_bad)}: (declared, built) {val_bad}")
+    elif not declared:
+        s9 = (f"PASS, and WEAK BY CONSTRUCTION -- every slot's row+0x08 "
+              f"matches the `value` our content declares, and all "
+              f"{len(OUR_SLOT_VALUE)} of those are 0, so a field the client "
+              f"ignored entirely would score the same. Retail agrees the zero "
+              f"is correct (445 armour declares, 9 sightings of our own "
+              f"weapon, all `value` 0), so this is a REGRESSION pin, not a "
+              f"discriminating test")
+    else:
+        s9 = (f"PASS, and DECISIVELY -- slot(s) {sorted(declared)} declare a "
+              f"NON-ZERO `value` and the built row carries it")
+    L.append(f"S9 row+0x08 is the item's `value`: {s9}")
+
     # The PRE-OVERRIDE row, free and reported rather than interpreted: the
     # armour goes in first on the OTHER branch (0x0082F01C), which ORs
     # 0x20000000 alone when [ebp+0x10] is non-zero. With --flags-clear it is
@@ -1308,7 +1350,7 @@ def _analyse_cache(sites, hits):
         L.append(f"   the PRE-override write on the same slots (the "
                  f"0x0082F01C branch), reported not interpreted: {pre}")
 
-    bad = bool(mis or bad3 or kept or bad4 or bad5 or bad8
+    bad = bool(mis or bad3 or kept or bad4 or bad5 or bad8 or val_bad
                or assign_seen or copy_seen
                or (head and tints.get(cps_head) != TINT_COSTUME_HEAD))
     return L, (1 if bad else 0)
