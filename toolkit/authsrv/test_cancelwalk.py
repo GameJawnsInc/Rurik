@@ -227,6 +227,14 @@ def section_stop_answer():
                               for n in notes),
           "allowed with --zero-lead, and the startup note names R6 and its "
           "diagnostic-only status", f"notes={notes}")
+    why, _ = authsrv.zero_lead_composition(zero_lead=False,
+                                           stop_answer="ack",
+                                           cancel_answer="suppress")
+    check(why is not None and "--stop-answer and --cancel-answer" in why,
+          "all three flags at once gets the PAIRWISE refusal, not "
+          "requires-zero-lead -- 'you passed two levers' is the more useful "
+          "thing to be told, the plane/arrival pair's own precedent",
+          f"{why!r}")
     # The constant, tied to the schema rather than restated beside it.
     check(authsrv.GAME_SMSG_AGENT_STOP_MOVING == 0x0028,
           "the constant is s2c 0x0028")
@@ -242,12 +250,31 @@ def section_stop_answer():
           "mechanism story moves with it and this check goes red",
           f"row name={row.get('name')!r}")
     # Wire shape. "A wrong ANSWER SHAPE from the server would be this
-    # file's" (module docstring) -- encode the exact send and decode it back.
+    # file's" (module docstring) -- encode THE BUILDER'S OWN OUTPUT, not a
+    # literal this file typed for itself: a mutation pass planted
+    # [PLAYER, 0] at the send site and a literal-encoding version of this
+    # check stayed green. The send routes through agents.agent_stop_moving,
+    # this check drives that same builder, and the source lock below pins
+    # the send to it -- so corrupting the payload now reddens one of the
+    # three.
+    import agents
+    body = agents.agent_stop_moving(PLAYER)
+    check(body == [PLAYER],
+          "the builder emits exactly [agent] -- one field, no destination, "
+          "no plane, no speed, which is the whole licensing argument",
+          f"{body}")
+    try:
+        agents.agent_stop_moving(0)
+        check(False, "agent id 0 must raise -- it resolves no agent and the "
+              "halt silently no-ops")
+    except ValueError:
+        check(True, "agent id 0 raises ValueError rather than building a "
+              "silent no-op")
     sys.path.insert(0, os.path.join(here, "..", "schema"))
     import codec
     c = codec.Codec(overrides=os.path.join(here, "..", "..", "schema",
                                            "overrides.json"))
-    wire = c.encode("GAME_SMSG", 0x0028, [PLAYER])
+    wire = c.encode("GAME_SMSG", 0x0028, body)
     check(len(wire) == 6,
           "the ack is 6 bytes -- header + one agent dword, nothing else",
           f"{wire.hex()}")
@@ -259,10 +286,12 @@ def section_stop_answer():
     # 0x0047 arm -- and the general stop arm stays otherwise silent.
     src = open(os.path.join(here, "authsrv.py"), encoding="utf-8").read()
     check(src.count('if STOP_ANSWER == "ack":') == 1
-          and src.count("send(GAME_SMSG_AGENT_STOP_MOVING,") == 1,
-          "ONE gate and ONE send call -- a gate with the send deleted would "
-          "grep green while answering nothing, and a second site would "
-          "answer stops twice")
+          and src.count("send(GAME_SMSG_AGENT_STOP_MOVING,") == 1
+          and src.count("agents.agent_stop_moving(PLAYER_AGENT_ID)") == 1,
+          "ONE gate, ONE send call, and the send's payload comes from the "
+          "builder the wire-shape check above drives -- a gate with the "
+          "send deleted, a second site, or a hand-built payload the check "
+          "never sees would each redden this")
     check("STOP_ANSWER = None" in src,
           "the global defaults to None -- defaults are an owner ruling in "
           "this repo and no diagnostic ships on")

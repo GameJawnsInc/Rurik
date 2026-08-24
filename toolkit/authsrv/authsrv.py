@@ -1554,14 +1554,16 @@ CANCEL_STOP = False
 # answered by nothing, ever. The 0x0028 handler (schema GAME_SMSG "40") halts
 # both world copies via 0x602540 when in motion, ZEROING THE QUEUED-MOVE STORE
 # agent+0x50 -- a field the local walk-start path writes (F10/R5) -- and
-# no-ops on a parked body. If the walk-suppress state H5 names is fed by an
-# episode our server never closes, closing it retail's way un-freezes the
-# single press.
+# no-ops on a parked body (the zero-write reading of "cancels" is
+# smsgnames'/F10's, not the row's own). If the walk-suppress state H5 names
+# is fed by an episode our server never closes, closing it retail's way
+# un-freezes the single press.
 #
 #   ack   -- answer EVERY player c2s 0x0047 stop report with s2c 0x0028
 #            [agent]. Every stop rather than one-shot, because the server
 #            cannot know which stop precedes a cast; retail itself answers
-#            stops variably (2 of 3 answered in the study capture). NOT a
+#            stops variably -- some get the bare 0x0028, some the [1.0, 9]
+#            + re-pin pair, and at least one got nothing (F5/F9). NOT a
 #            grant: no destination armed, no grant clock stamped, and the
 #            handler is a no-op on a body that already stopped itself -- so
 #            zero warp exposure, the R1-suppress cost class.
@@ -4329,6 +4331,20 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
                 "time; CANCELWALK's runs are pre-registered against the "
                 "shipped default (--zero-lead --plane-carry) and nothing "
                 "else."), []
+    if stop_answer and cancel_answer:
+        # Pairwise BEFORE either flag's requires-zero-lead check, for the
+        # reason the plane/arrival pair's docstring states: "you passed two
+        # experiment levers" is the more useful thing to be told when
+        # someone passes all three.
+        return ("--stop-answer and --cancel-answer cannot run together. "
+                "R6 exists to test whether closing the PRE-CAST stop "
+                "retail's way un-freezes the SHIPPED cancel-instant answer "
+                "-- its prediction is registered against the shipped "
+                "zero-lead cancel behaviour, and a run that also changes "
+                "the cancel-instant answer could attribute a walk (or a "
+                "freeze) to neither lever. One change per run is this "
+                "arc's own rule (CANCELWALK.md sec.5). Run "
+                "--stop-answer=ack alone."), []
     if cancel_answer and not zero_lead:
         return ("--cancel-answer requires --zero-lead. The CANCELWALK arms "
                 "are MODIFIERS on the zero-lead answer to the one report "
@@ -4339,16 +4355,6 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
                 "a CANCELWALK arm was on, which is the inert-flag defect "
                 "--plane-carry's refusal documents. Pass --zero-lead (or "
                 "nothing: it is the default) with --cancel-answer."), []
-    if stop_answer and cancel_answer:
-        return ("--stop-answer and --cancel-answer cannot run together. "
-                "R6 exists to test whether closing the PRE-CAST stop "
-                "retail's way un-freezes the SHIPPED cancel-instant answer "
-                "-- its prediction is registered against the shipped "
-                "zero-lead cancel behaviour, and a run that also changes "
-                "the cancel-instant answer could attribute a walk (or a "
-                "freeze) to neither lever. One change per run is this "
-                "arc's own rule (CANCELWALK.md sec.5). Run "
-                "--stop-answer=ack alone."), []
     if stop_answer and not zero_lead:
         return ("--stop-answer requires --zero-lead. CANCELWALK-R6 is "
                 "pre-registered against the SHIPPED configuration -- the "
@@ -5080,8 +5086,10 @@ GAME_SMSG_AGENT_UPDATE_SPEED = 0x002B
 # AGENT_STOP_MOVING at high confidence (schema/overrides.json GAME_SMSG "40",
 # handler read attached there): the handler resolves BOTH world copies and
 # calls the halt 0x602540 gated on the in-motion flag ([agent+0x20] & 0x20000)
-# -- cancelling the queued move (agent+0x50 := 0) and re-running the movement
-# update -- and is a NO-OP on a parked body. Retail answers some player stops
+# -- cancelling the queued move at agent+0x50 (the zero-write reading of
+# "cancels" is smsgnames'/F10's, not the row's own; F10 also names 0x005FC5C0
+# on the same halt path) and re-running the movement update -- and is a NO-OP
+# on a parked body. Retail answers some player stops
 # with exactly this and nothing else (CANCELWALK-F5, t=65.095: the LAST
 # movement-family s2c its client received before the casts of the cancel
 # study, F9). Sent by this server only under --stop-answer=ack (CANCELWALK-R6,
@@ -14443,7 +14451,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # comment block and CANCELWALK.md 7.4.
                         if STOP_ANSWER == "ack":
                             send(GAME_SMSG_AGENT_STOP_MOVING,
-                                 [PLAYER_AGENT_ID],
+                                 agents.agent_stop_moving(PLAYER_AGENT_ID),
                                  "AGENT_STOP_MOVING(player) [cancelwalk R6 "
                                  "stop-ack]")
                         if STOP_ECHO:
@@ -17067,10 +17075,10 @@ def main():
               "the study capture's casts (F5/F9). The cancel-instant answer "
               "is untouched: shipped zero-lead.")
         print("      MECHANISM the 0x0028 handler halts both world copies "
-              "via 0x602540 only when IN MOTION -- zeroing the queued-move "
-              "store agent+0x50 -- and no-ops on a body that already "
-              "stopped itself (schema GAME_SMSG 40). Not a grant; zero warp "
-              "exposure.")
+              "only when IN MOTION -- cancelling the queued move at "
+              "agent+0x50 -- and no-ops on a body that already stopped "
+              "itself (schema GAME_SMSG 40; the zero-write reading is "
+              "smsgnames'/F10's). Not a grant; zero warp exposure.")
         print("      PREDICTS  H6 (stop-closure prior state): the single "
               "mid-cast press now WALKS. H5-without-H6, H7, H4: still "
               "FREEZES -- and a freeze also retires F5's residual as a "

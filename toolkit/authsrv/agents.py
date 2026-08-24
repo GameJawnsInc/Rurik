@@ -317,6 +317,32 @@ def agent_update_speed(agent_id, speed, facing=FACING_FORWARD):
     return [agent_id, speed, facing]
 
 
+def agent_stop_moving(agent_id):
+    """GAME_SMSG 0x0028 -- halt one agent: the bare stop-ack (CANCELWALK-R6).
+
+    One field, the agent id, and nothing else -- no destination, no plane, no
+    speed, which is what keeps the message out of the refused stop-arm family
+    (a stop-arm 0x0029 is --stop-echo and is REFUTED; this arms nothing and
+    stamps no grant clock). The handler (schema/overrides.json GAME_SMSG "40",
+    OBSERVED with two witnesses and a confirmed refuter) resolves BOTH world
+    copies and calls the halt gated on the in-motion flag
+    ([agent+0x20] & 0x20000), cancelling the queued move at agent+0x50, and
+    NO-OPS on a parked body. Address bookkeeping: the row's read names the
+    halt 0x602540; CANCELWALK-F10's 0x00F1 edge-action read names 0x005FC5C0
+    on the same path -- both are on record, and the zero-write reading of
+    "cancels" (+0x50 := 0) is smsgnames'/F10's, corroborated at
+    studies/smsgnames/FINDINGS.md ("clears the queued event at agent+0x50"),
+    not a claim the schema row itself makes. Retail answers some player stops
+    with exactly this message and nothing else (CANCELWALK-F5/F9).
+    """
+    aid = int(agent_id)
+    if aid <= 0:
+        raise ValueError(f"agent_stop_moving: agent id must be a positive "
+                         f"int, got {agent_id!r} -- a zero or negative id "
+                         f"resolves no agent and the halt silently no-ops")
+    return [aid]
+
+
 def agent_update_rotation(agent_id, angle, rate):
     """GAME_SMSG 0x002E -- absolute facing angle, and how fast to turn to it.
 

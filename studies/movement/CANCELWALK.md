@@ -545,8 +545,14 @@ queued-move store `agent+0x50`, the very field R5 samples). Refused without
 stops with `[1.0,9]`+re-pin is the refuted `--stop-echo`'s wire effect, which
 R4 escaped only by scoping to an in-flight leg, and a pre-cast stop cannot be
 scoped that way; if ack freezes and the repin form is still wanted, it gets
-its own licensing paragraph here first. `test_cancelwalk.py` §6, floor 43.
-The run command, operator-driven:
+its own licensing paragraph here first. `test_cancelwalk.py` §6, floor 46
+after the adversarial review pass (two agents at f08d69a: the flag lattice
+enumerated and every illegal cell refused exactly once, the licensing
+argument verified at code level — 0x0028 is not in `_note_wire_move`'s
+opcode set, so no grant clock — and a five-mutation probe; its one REAL
+finding, a payload corruption the wire-shape check could not see, closed by
+routing the send through `agents.agent_stop_moving()` and driving that same
+builder from the test). The run command, operator-driven:
 
     python toolkit/harness/session.py --keep-open --enemy --game-args "--map 280
       --explorable --practice-target --skills 105,153,322 --stop-answer=ack"

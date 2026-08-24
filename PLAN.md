@@ -1437,7 +1437,8 @@ await the operator** — R5 movetap state poll (Tier-1 decode-only field adds),
 R6 stop-closure run (cheapest; H6's direct test — **BUILT same day as
 `--stop-answer=ack`**, refused without `--zero-lead` and with
 `--cancel-answer`, `repin` deliberately unbuilt with the refusal carrying the
-licensing decision; `test_cancelwalk.py` §6, floor 43), R7 flag read at the
+licensing decision; `test_cancelwalk.py` §6, floor 46 after an adversarial
+two-agent review + five-mutation probe closed its one REAL finding), R7 flag read at the
 edge (int3/trnhook). R4's ship candidate is unaffected; the ruling stays
 the owner's.
 
