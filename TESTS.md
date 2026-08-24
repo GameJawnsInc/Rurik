@@ -6139,8 +6139,18 @@ Every one of these, in the order they were written:
   rather than as armed, and `_report` prints **NOT SAMPLED -- a zero hit
   count from this run is not evidence of absence** when no snapshot
   exists. The four checks run against a fake trap with no process at all.
-  Floor 18 = the mandatory core (§1+§5+§6+§7); §§2-4 need the vault and a
-  32-bit Windows and SKIP with their reason; a whole green run is 43, ~6s),
+  **§8 is the DATA WATCHPOINT** -- DR R/W = 01 instead of 00, which §1's own
+  check calls out as the silent failure mode of a wrong R/W field, now made
+  the deliberate case. It pins the encoding per SLOT (a write watch in slot
+  1 must leave slot 0's fields at 00), requires an unknown kind or a
+  3-byte length to be refused BY NAME rather than encoded as something
+  else, and pins `arm_watch`'s two refusals -- a slot the processor does
+  not have, and **an unaligned address**, which is the important one: a
+  misaligned DR does not error, it watches the wrong bytes and reports
+  silence, the worst possible failure for an instrument whose job is to
+  catch a rare write. Floor 26 = the mandatory core (§1+§5+§6+§7+§8);
+  §§2-4 need the vault and a 32-bit Windows and SKIP with their reason; a
+  whole green run is 51, ~6s),
   `toolkit/clientscan/test_compositetrap.py` (**the composite pipeline's runtime
   instrument, checked without a client** — `compositetrap.py` is the probe for
   playercomposite §4.12 ("nothing here was checked against a running client"),

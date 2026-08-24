@@ -45,9 +45,9 @@ import checks                                                   # noqa: E402
 # which is `checks.py`'s own guidance -- "set the floor to its mandatory core and
 # let the optional sections declare skips."
 # Floor 14 = the mandatory core (§1+§5+§6); §§2-4 need the vault and a 32-bit
-# Windows and SKIP. §7's four coverage checks are process-free, so they raise
-# the mandatory floor to 18.
-LEDGER = checks.Ledger("commandertrap", floor=18)
+# Windows and SKIP. §7's four coverage checks and §8's eight watchpoint
+# checks are process-free, so they raise the mandatory floor to 26.
+LEDGER = checks.Ledger("commandertrap", floor=26)
 
 WOW64_CMD = r"C:\Windows\SysWOW64\cmd.exe"
 
@@ -359,6 +359,62 @@ def main():
     LEDGER.ok(cov["armed"] == 0 and cov["bad"][0][1] == "context unreadable",
               "a thread whose context cannot be read is reported unreadable "
               "rather than counted as armed")
+
+    # ------------------------------------------------- data watchpoints
+    print("== 8. the DATA watchpoint's encoding and its refusals ==")
+    LEDGER.ok(ct.dr7_for(2) == 0b0101 and ct.dr7_for(2) >> 16 == 0,
+              "execute-only DR7 is still exactly the enable bits -- the "
+              "watchpoint work must not have changed the default",
+              f"{ct.dr7_for(2):#b}")
+    w = ct.dr7_for(2, ["x", "w"], [4, 4])
+    LEDGER.ok((w & 0b1111) == 0b0101 and ((w >> 20) & 0b11) == 0b01
+              and ((w >> 22) & 0b11) == 0b11 and ((w >> 16) & 0b1111) == 0,
+              "a 4-byte WRITE watch in slot 1 sets R/W=01 and LEN=11 for that "
+              "slot and leaves slot 0's fields at 00 -- per-slot, not global",
+              f"{w:#x}")
+    for kinds, sizes, what in ((["w"], [3], "3-byte watch"),
+                               (["q"], [4], "unknown kind")):
+        try:
+            ct.dr7_for(1, kinds, sizes)
+            LEDGER.ok(False, f"{what} must be REFUSED")
+        except ct.TrapError as exc:
+            LEDGER.ok(True, f"{what} is refused by name, not silently "
+                            f"encoded as something else", str(exc))
+
+    class _ArmTrap:
+        """arm_watch with no process: only the bookkeeping and the refusals."""
+
+        def __init__(self):
+            self.addrs, self.kinds, self.sizes = [0, 0], ["x", "x"], [4, 4]
+            self.disarmed, self.threads = set(), {}
+            self.watching = {}
+
+        def _arm_all(self):
+            return 3
+
+        arm_watch = ct.HwTrap.arm_watch
+
+    tr = _ArmTrap()
+    ok, why = tr.arm_watch(1, 0x0AB00044, 4)
+    LEDGER.ok(ok and tr.kinds == ["x", "w"] and tr.addrs[1] == 0x0AB00044
+              and "3 thread" in why,
+              "arm_watch points one slot at an address discovered mid-run and "
+              "says how many threads took it", why)
+    ok, why = tr.arm_watch(1, 0x0AB00046, 4)
+    LEDGER.ok(not ok and "not 4-byte aligned" in why,
+              "and it REFUSES a misaligned address rather than arming it -- a "
+              "misaligned DR does not error, it watches the wrong bytes and "
+              "then reports silence, which is the worst possible failure for "
+              "an instrument whose whole job is to catch a rare write", why)
+    ok, why = tr.arm_watch(9, 0x0AB00044, 4)
+    LEDGER.ok(not ok and "outside DR0" in why,
+              "and refuses a slot the processor does not have")
+
+    LEDGER.ok(ct.Site("w", 0, None, "why", None, kind="w").code is None
+              and ct.Site("x", 1, b"\x90", "why").kind == "x",
+              "a watch Site carries kind='w' with no bytes, and an ordinary "
+              "Site still defaults to execute -- so nothing that was verified "
+              "before stops being verified")
 
     buf = io.StringIO()
     ct._report([], [], 0x00400000, out=buf,

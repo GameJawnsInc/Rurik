@@ -618,9 +618,22 @@ SITES = {
         "both. Trapped just before the memset, so the row it is destroying "
         "is still readable. This is §9.8's open question -- why a nine-zero "
         "0x006E re-reads records when it wears nothing.", _cap_clear),
+    "rowwatch": ct.Site(
+        "rowwatch", 0, None,
+        "a DATA WRITE watchpoint on one m_slotItemData row's file id -- armed "
+        "mid-run once a CpsBase exists, because the address is inside a heap "
+        "object. §9.18 measured a row going 91 -> 90 with both of "
+        "0x0082EDA0's exits armed on all ten threads and both silent, so "
+        "something else writes the array; this is the instrument that names "
+        "it. The hit's `writer (VA)` is the instruction AFTER the store, "
+        "because a data breakpoint traps once the write has completed.",
+        None, kind="w", size=4),
 }
 CACHE_SITES = ("cache", "cachesame")
 CLEAR_SITES = ("clear",)
+#: Which CpsBase slot's row to watch. Slot 2 is the chest on the world
+#: instance and is the row §9.18 caught changing under us.
+WATCH_SLOT = 2
 #: Vtable VA -> the class, named by ArenaNet's own asserts inside the virtual
 #: at +0x1C (`CpsPlayer:255 ptr`, `CpsPlayer:256 count`). Every instance our
 #: runs have scored carries 0xA96B5C, so the thing being dressed is a
@@ -1319,17 +1332,50 @@ def main(argv=None):
     def reader(addr, size):
         return ct.keytap.read_handle(reader_h, addr, size)
 
+    watch_slot = next((i for i, s in enumerate(sites) if s.kind == "w"), None)
+    armed_watch = {}
+
     def on_hit(trap, hit):
         site = sites[hit["slot"]]
         if site.capture and hit["ctx"] is not None:
             hit["cap"] = site.capture(hit["ctx"], reader)
+        if site.kind == "w":
+            # The writer. EIP is the instruction AFTER the store, so the
+            # store itself is a few bytes earlier -- reported as a VA the
+            # reader can disassemble, never as "the writer is exactly here".
+            va = hit.get("writer (VA)")
+            cur = ct._dw(reader, hit["addr"], 1)
+            print(f"  WATCH FIRED  row 0x{hit['addr']:08X} now "
+                  f"{cur[0] if cur else '?'}  <- store just before VA "
+                  f"0x{va:08X}", flush=True)
+            hit["cap"] = {"watched": hit["addr"],
+                          "value now": cur[0] if cur else None,
+                          "writer (VA)": va,
+                          "VERDICT": f"WRITE to the row from ~0x{va:08X}"}
+            return
+        # Arm the watch the moment a CpsBase exists and the slot we care
+        # about has been written once -- before that, there is no address.
+        if (watch_slot is not None and not armed_watch
+                and site.name in CACHE_SITES and hit.get("cap")
+                and hit["cap"].get("slot") == WATCH_SLOT):
+            cps = hit["cap"]["CpsBase"]
+            row = cps + CPS_ITEMDATA + WATCH_SLOT * CPS_ROW
+            ok, why = trap.arm_watch(watch_slot, row, 4)
+            armed_watch["ok"] = ok
+            armed_watch["why"] = why
+            armed_watch["row"] = row
+            print(f"  {'ARMED' if ok else 'REFUSED'} the row watch: {why}",
+                  flush=True)
         print(f"  HIT {site.name} (0x{site.va:08X})"
               + (f"  {hit['cap'].get('VERDICT', '')}" if hit.get("cap") else ""),
               flush=True)
 
     trap = ct.HwTrap(on_hit=on_hit)
     trap.max_hits = 400          # the base lookup runs per component
-    trap.addrs = [base + (s.va - IMAGE_BASE) for s in sites]
+    trap.addrs = [0 if s.kind == "w" else base + (s.va - IMAGE_BASE)
+                  for s in sites]
+    trap.kinds = [s.kind for s in sites]
+    trap.sizes = [s.size for s in sites]
     trap.attach(pid)
     print(f"attached; armed {len(sites)} execute breakpoints, holding "
           f"{a.seconds:.0f}s", flush=True)

@@ -353,21 +353,41 @@ class TrapError(Exception):
 # ---------------------------------------------------------------------------
 # DR7
 # ---------------------------------------------------------------------------
-def dr7_for(n_slots):
-    """DR7 with the low `n_slots` LOCAL enables set, each an EXECUTE breakpoint.
+#: R/W field values (DR7 bits 16+4i). 00 execute, 01 WRITE, 11 read-or-write.
+RW_BITS = {"x": 0b00, "w": 0b01, "rw": 0b11}
+#: LEN field values (DR7 bits 18+4i). A 4-byte watch needs a 4-ALIGNED address.
+LEN_BITS = {1: 0b00, 2: 0b01, 4: 0b11}
 
-    Per slot i: L(i) is bit 2i; the R/W field at bit 16+4i is 00 for
-    execute; the LEN field at bit 18+4i is 00, the only legal length for an
-    execute breakpoint. So an execute-only DR7 is exactly the enable bits and
-    nothing else -- written out because a wrong R/W field does not fail, it
-    silently becomes a DATA breakpoint on the same address and fires on the
-    instruction FETCH of whatever reads there.
+
+def dr7_for(n_slots, kinds=None, sizes=None):
+    """DR7 with the low `n_slots` LOCAL enables set.
+
+    Per slot i: L(i) is bit 2i; the R/W field at bit 16+4i selects execute
+    (00) or WRITE (01); the LEN field at bit 18+4i is 00 for execute -- the
+    only legal length -- and 11 for a four-byte watch. So an execute-only DR7
+    is exactly the enable bits and nothing else. That was written out because
+    a wrong R/W field does not fail, it silently becomes a DATA breakpoint on
+    the same address; `kinds` now makes that the deliberate case rather than
+    the accident, and the same sentence still names the failure mode.
     """
     if not 0 <= n_slots <= MAX_SLOTS:
         raise TrapError(f"{n_slots} breakpoints; the processor has {MAX_SLOTS}")
+    kinds = list(kinds or []) + ["x"] * n_slots
+    sizes = list(sizes or []) + [4] * n_slots
     v = 0
     for i in range(n_slots):
         v |= 1 << (2 * i)
+        k = kinds[i] or "x"
+        if k == "x":
+            continue                      # R/W = 00, LEN = 00
+        if k not in RW_BITS:
+            raise TrapError(f"unknown breakpoint kind {k!r}; "
+                            f"have {', '.join(sorted(RW_BITS))}")
+        sz = sizes[i]
+        if sz not in LEN_BITS:
+            raise TrapError(f"{sz}-byte watchpoint; x86 allows 1, 2 or 4")
+        v |= RW_BITS[k] << (16 + 4 * i)
+        v |= LEN_BITS[sz] << (18 + 4 * i)
     return v
 
 
@@ -420,6 +440,11 @@ class HwTrap:
         self.coverage = None
         self.adopted = None       # (threads the process had, newly armed)
         self._opened = []         # thread handles WE opened, ours to close
+        # Per slot, parallel to `addrs`: "x" execute, "w" write-watch; and the
+        # watch length in bytes. A watch's address is not known until the
+        # object it lives in exists, so `arm_watch` fills it mid-run.
+        self.kinds = []
+        self.sizes = []
         self._getctx = None
         self._setctx = None
 
@@ -485,15 +510,26 @@ class HwTrap:
         if ctx is None:
             return False
         slots = (list(self.addrs) + [0] * MAX_SLOTS)[:MAX_SLOTS]
+        kinds = (list(self.kinds) + ["x"] * MAX_SLOTS)[:MAX_SLOTS]
+        sizes = (list(self.sizes) + [4] * MAX_SLOTS)[:MAX_SLOTS]
         for i in self.disarmed:
             if i < MAX_SLOTS:
                 slots[i] = 0
         ctx.Dr0, ctx.Dr1, ctx.Dr2, ctx.Dr3 = slots
         ctx.Dr6 = 0
         ctx.Dr7 = 0
+        # Built per ENABLED slot rather than through dr7_for's contiguous
+        # n_slots, because a disarmed slot in the middle must stay off while
+        # the ones after it stay on. dr7_for keeps the encoding documented and
+        # tested; this is the same encoding applied to a sparse set.
         for i, a in enumerate(slots):
-            if a:
-                ctx.Dr7 |= 1 << (2 * i)      # execute, 1 byte: see dr7_for
+            if not a:
+                continue
+            k = kinds[i] or "x"
+            ctx.Dr7 |= 1 << (2 * i)
+            if k != "x":
+                ctx.Dr7 |= RW_BITS[k] << (16 + 4 * i)
+                ctx.Dr7 |= LEN_BITS[sizes[i]] << (18 + 4 * i)
         ctx.ContextFlags = CONTEXT_DEBUG_REGISTERS
         ok = bool(self._setctx(hthread, ctypes.byref(ctx)))
         if not ok:
@@ -514,6 +550,42 @@ class HwTrap:
         if ctx is None:
             return None
         return (ctx.Dr0, ctx.Dr1, ctx.Dr2, ctx.Dr3, ctx.Dr7)
+
+    def arm_watch(self, slot, address, size=4):
+        """Point `slot` at a DATA WRITE watchpoint on `address`, mid-run.
+
+        The address of a row inside a heap object cannot be known before the
+        object exists, so this is called from an `on_hit` handler -- where the
+        process is frozen inside a debug event and the contexts are safe to
+        write. Returns (ok, why).
+
+        REFUSES an unaligned address instead of arming it: x86 requires a
+        4-byte watch to sit on a 4-byte boundary, and a misaligned DR does not
+        fail, it watches the wrong bytes and reports silence.
+        """
+        if not 0 <= slot < MAX_SLOTS:
+            return False, f"slot {slot} outside DR0..DR{MAX_SLOTS - 1}"
+        if size not in LEN_BITS:
+            return False, f"{size}-byte watch; x86 allows 1, 2 or 4"
+        if address % size:
+            return False, (f"0x{address:08X} is not {size}-byte aligned -- a "
+                           f"misaligned watch reports silence, it does not "
+                           f"error")
+        while len(self.addrs) <= slot:
+            self.addrs.append(0)
+        while len(self.kinds) <= slot:
+            self.kinds.append("x")
+        while len(self.sizes) <= slot:
+            self.sizes.append(4)
+        self.addrs[slot] = address
+        self.kinds[slot] = "w"
+        self.sizes[slot] = size
+        self.disarmed.discard(slot)
+        n = self._arm_all()
+        self.watching = dict(getattr(self, "watching", {}))
+        self.watching[slot] = (address, size, n)
+        return True, (f"watching {size} bytes at 0x{address:08X} on {n} "
+                      f"thread(s)")
 
     def adopt_existing_threads(self):
         """Arm every thread the process ALREADY has, not just the ones the
@@ -688,13 +760,28 @@ class HwTrap:
         if rec.ExceptionCode not in SINGLE_STEPS:
             self.other_exceptions += 1
             return DBG_EXCEPTION_NOT_HANDLED
-        if addr not in self.addrs:
-            # Somebody else's single-step. Not ours to consume.
-            self.foreign_steps += 1
-            return DBG_EXCEPTION_NOT_HANDLED
         h = self.threads.get(ev.dwThreadId)
         ctx = self._get_context(h) if h else None
-        slot = self.addrs.index(addr)
+        slot = self.addrs.index(addr) if addr in self.addrs else None
+        if slot is None:
+            # A DATA watchpoint traps AFTER the store completes, so EIP is the
+            # instruction FOLLOWING the write and is not one of our addresses.
+            # DR6 is the only witness, and without this branch the hit would
+            # be counted as somebody else's single-step and handed back to the
+            # client -- which is what a naive port of the execute path does.
+            fired = None
+            if ctx is not None:
+                for i in range(MAX_SLOTS):
+                    if ctx.Dr6 & (1 << i):
+                        fired = i
+            if (fired is not None and fired < len(self.kinds)
+                    and self.kinds[fired] == "w"
+                    and fired not in self.disarmed):
+                slot = fired
+            else:
+                # Somebody else's single-step. Not ours to consume.
+                self.foreign_steps += 1
+                return DBG_EXCEPTION_NOT_HANDLED
         # DR6's low four bits say which slot the processor thinks fired. We
         # identify the site by EIP instead -- the sites are distinct addresses,
         # so EIP is unambiguous and needs no context WRITE to clear the sticky
@@ -704,11 +791,22 @@ class HwTrap:
             for i in range(MAX_SLOTS):
                 if ctx.Dr6 & (1 << i):
                     dr6_slot = i
-        hit = {"addr": addr, "slot": slot, "tid": ev.dwThreadId,
+        kind = self.kinds[slot] if slot < len(self.kinds) else "x"
+        # For a WATCH the hit's identity is the watched address, and `addr`
+        # (EIP) is the far more interesting field: the instruction after the
+        # store, i.e. the WRITER. Keeping both under distinct names is the
+        # whole point -- conflating them is how a watch reports its own
+        # target as its own caller.
+        hit = {"addr": self.addrs[slot] if kind == "w" else addr,
+               "slot": slot, "kind": kind, "tid": ev.dwThreadId,
                "t": time.time(), "ctx": ctx, "dr6_slot": dr6_slot,
                "dr6_agrees": dr6_slot == slot}
+        if kind == "w":
+            hit["eip"] = addr
+            hit["writer (VA)"] = unslide(addr)
         self.hits.append(hit)
-        n = self.hit_counts[addr] = self.hit_counts.get(addr, 0) + 1
+        key = self.addrs[slot]
+        n = self.hit_counts[key] = self.hit_counts.get(key, 0) + 1
         if self.on_hit:
             self.on_hit(self, hit)
         # RESUME PAST IT. See EFLAGS_RF: without this the same instruction
@@ -783,8 +881,15 @@ class Site:
     """
 
     def __init__(self, name, va, code, why, capture=None,
-                 arm_after=None, oneshot=False):
+                 arm_after=None, oneshot=False, kind="x", size=4):
+        # kind "w" is a DATA WRITE watchpoint rather than an execute
+        # breakpoint. Such a site has no fixed VA -- the address lives inside
+        # a heap object and is supplied mid-run by `HwTrap.arm_watch` -- and
+        # therefore no bytes to verify, which is why `code` may be None and
+        # `verify_sites` already reports that case as "unverified" rather than
+        # as a failure.
         self.name, self.va, self.code, self.why = name, va, code, why
+        self.kind, self.size = kind, size
         self.capture = capture
         # DEFERRED ARMING, and it is what makes a HOT site measurable at all.
         # `0x0064CA47` sits inside the raise that EVERY UI event in the client
@@ -1458,7 +1563,10 @@ def main(argv=None):
 
     trap = HwTrap(on_hit=on_hit, verbose=True)
     trap.max_hits = a.max_hits
-    trap.addrs = [base + (s.va - IMAGE_BASE) for s in sites]
+    trap.addrs = [0 if s.kind == "w" else base + (s.va - IMAGE_BASE)
+                  for s in sites]
+    trap.kinds = [s.kind for s in sites]
+    trap.sizes = [s.size for s in sites]
     for i, s in enumerate(sites):
         if s.oneshot:
             trap.oneshot.add(i)

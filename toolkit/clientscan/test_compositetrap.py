@@ -93,6 +93,14 @@ if data is not None:
         return None
 
     for name, site in sorted(t.SITES.items()):
+        if site.kind == "w":
+            # A DATA watchpoint has no fixed VA and no bytes: its address is
+            # inside a heap object and arrives mid-run. Checked below instead.
+            check(site.va == 0 and site.code is None and site.size == 4,
+                  f"{name}: a write-watch site carries NO va and NO bytes, so "
+                  f"nothing can verify the wrong thing and call it verified",
+                  f"va {site.va} code {site.code} size {site.size}")
+            continue
         got = at(site.va, len(site.code))
         check(got == site.code,
               f"{name}: 0x{site.va:08X} holds the recorded "
