@@ -1460,11 +1460,30 @@ prior run at once — R1's zero-byte freeze, R2–R4's leads only moving the bod
 by ORDERING it, R6's stop-ack being irrelevant — and it retires
 **GATE A** (word 0 in all 552 samples; the read-site census named the wrong one
 of two candidates) and **H7** (the applier never reached the navmesh query).
-**Next, and it is free**: `skillcast` §16.2 read property 8's value-0 path as
-scheduling a DEFERRED action (`0x0081C090` → state bit `+0x110`, due time
-`+0x114`, registered via `0x009217C0`). Retail's client re-walks when the hold
-clears (F3); if that deferred "return to ready" is what does it, reading it to
-depth lands the arc. **R7's poll is the instrument** (§7.4e). It was built as a
+**AND THE ARC LANDED THE SAME DAY, at a desk** (§7.7, two reads +
+adversarial verification, instruction-by-instruction). The deferred action is
+**not** a walk resume — `0x0081C090` arms a 250 ms timer (ms named by
+ArenaNet's own `AgTimer:122`) whose leaf `0x0081BA80` is a **re-face**
+(atan2 → turn-to-angle → c2s `0x0040`), which never touches the velocity pair
+and refuses to run unless the body is already stopped (**F24**). **The real
+answer is upstream: the movement input path is LEVEL-sampled per frame and
+dispatch is gated on the DIRECTION CHANGING** (evaluator `0x005355C0` →
+MOVE-CMD only past a threshold, 50 ms throttle; the key-down handler dispatches
+nothing) — **so a steady held key with a steady camera produces delta 0 and
+never re-enters the walk applier at all, which IS our freeze**, while a camera
+turn re-dispatches at up to 20 Hz through a site passing arg6 = 0 that sends
+**no c2s `0x003D`** and is invisible on the wire (**F25**). **Confirmed from
+retail's own tape** (**F26**): its three cancels each emit ONE `0x003D`
+carrying the latched north vec2 and then walk **+95.9 u north, +28.8 u due
+west, +23.9 u WNW** — two of three in directions the client never reported,
+with no second report and no `0x0040`. F3's "self-walks its live direction" is
+mechanised: retail's operator was turning the camera. **CANCELWALK-H10,
+registered**: on our build, hold a movement key mid-cast AND turn the camera →
+the player walks, the walk starting at the turn, with no second `0x003D`. If it
+walks, **the freeze was never a server defect** — it is the client's input
+model meeting a still camera. Corrections owed and filed at §7.7a (skillcast
+§16.2 four ways; F10 wrong on two points, incomplete on a third; `+0x64` bit 1
+is FLAG_CONTROLLED, so the measured 3/2 decompose exactly). It was built as a
 hardware-breakpoint gate trace and **adversarially reviewed before it ever
 touched a client — five BLOCKERS, each measured on a real WOW64 target, the
 first of which would have KILLED the client on the first breakpoint hit**

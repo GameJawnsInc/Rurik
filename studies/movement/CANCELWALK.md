@@ -1008,6 +1008,110 @@ presses**: the applier never reached the navmesh query, because a gate above it
 bailed. GATE C never set, as the reading predicted (it would have falsified the
 model, since the press reached the wire).
 
+### 7.7 THE ARC LANDS: the resume path is INPUT-CHANGE-triggered, and our runs never triggered it (2026-08-24)
+
+§7.6 left one question: retail walks on the single press, so something must
+re-start the walk when the hold clears. Two desk reads, adversarially verified
+instruction-by-instruction, answer it — and the answer is not the deferred
+action.
+
+**CANCELWALK-F24 — OBSERVED. Property 8's clear schedules a RE-FACE, not a
+walk resume.** `0x0081C090` arms a 250 ms timer (`0x006044E0` is
+`AgTimerMgr::GetTimeMs`, and ArenaNet names the unit itself — the assert at
+`0x00604487` is `AgTimer:122 (int)(timer->GetTargetMs() - m_time) >= 0`). The
+object is an AgTimer node; `ChCliBase`'s vtable at `.rdata 0x00A95428` has two
+slots and slot 1 (`0x0081B940`) is the callback, fired by `AgTimerMgr::Advance`
+`0x00603FE0` through `call [eax+4]`. Its leaf for this slot is `0x0081BA80`,
+and it is a **turn-to-angle**: `atan2` of the latched heading → AgApi
+`0x005FC900` → c2s `0x0040 ROTATE_PLAYER`. It writes `ChCliBase +0x104/+0x108`
+and AgAgent `+0x54/+0xB8/+0xC8/+0xCC`, **never the velocity pair
+`+0xB0/+0xB4`** (writer census: none of `0x00602CC0`, `0x005FF880`,
+`0x00601F70` touches it), and it **refuses to run unless the body is already
+standing still**. It cannot resume a walk. *The 250 ms had nothing to do with
+our freeze.*
+
+**CANCELWALK-F25 — OBSERVED, and this is the arc's answer. The movement input
+path is LEVEL-sampled per frame and dispatch is gated on the DIRECTION
+CHANGING — not on a key edge, and not on the hold.** The evaluator
+`0x005355C0` runs every frame from the GmView frame message (`0x004E28B0`,
+with a float dt). It calls MOVE-CMD `0x00535380` only when the movement
+direction differs by more than a threshold (`0x00535CF7` / `0x00535D7F` /
+`0x00535E7C`), behind a 50 ms throttle (`0x00535E21`); the key-down handler
+`0x00536120` dispatches nothing at all. So:
+- **A steady held key with a steady camera produces delta 0**, MOVE-CMD is
+  never called after the first frame, and the walk applier is never re-entered.
+  **That is our freeze**, and it is why the key being held 0.83–1.33 s past the
+  bit's clear (F23) changed nothing.
+- **A camera turn with the key held DOES re-dispatch**, at up to 20 Hz — and
+  the `0x00535E9F` site passes arg6 = 0, so those re-entries send **no c2s
+  `0x003D`** and are invisible on the wire.
+
+**CANCELWALK-F26 — OBSERVED, and it closes the retail comparison from retail's
+own tape.** If F25 is right, retail's walking cancels must show a walk whose
+direction differs from the only vec2 it ever reported. They do, checked in
+`20260824T074002`: each cancel press emits ONE `0x003D` carrying the latched
+`(+0.017, +1.000)` (north) and then nothing until the stop —
+- t=81.625 → stop at +95.9 u **north**, direction (+0.017, +1.000): matches the
+  report, the unmoved-camera case;
+- t=114.609 → stop at +28.8 u **due west**;
+- t=128.774 → stop at +23.9 u **WNW**.
+Two of three walked a direction the client **never sent**, with no second
+`0x003D` and no `0x0040` in the window. That is exactly F25's wire-invisible
+re-dispatch signature. **F3's "the client self-walks its own live direction"
+is now mechanised: the live direction arrived through re-dispatches the wire
+cannot see, and they happened because retail's operator was turning the camera
+while the key was down.**
+
+**THE COMPLETE MECHANISM, and nothing in it is a defect in our server.**
+1. Cast starts; our property 8 → 1 sets the hold (F22). Correct.
+2. The movement press re-dispatches once (direction changed from none to
+   something), the applier reads the hold still SET, bails. The press is spent.
+3. Our `[8→0, 59, E2]` clears the hold a round trip later (F22/F23).
+4. **Whether the body now walks depends entirely on whether the INPUT DIRECTION
+   changes again.** Holding a key with a still camera never does — no
+   re-dispatch, no walk, however long the key is held. Turning the camera does
+   — and the applier, now finding the hold clear, walks.
+5. A second key press is one way to produce a direction change. **A camera turn
+   is another, and it is the one retail's captures were doing.**
+
+**CANCELWALK-H10 — the prediction this makes, registered before any run.** On
+OUR build, unchanged, shipped configuration: press a movement key mid-cast
+**and turn the camera while holding it** → **the player walks**, with the walk
+beginning at the camera turn rather than at the press, and **no second `0x003D`
+on the wire**. If it walks, the arc is closed and the "freeze" is not a server
+bug at all but the client's own input model meeting a still camera. *Refuted
+by:* the body staying still through a camera turn with the key held, which
+would put the re-dispatch claim back on the bench.
+
+### 7.7a Corrections owed to earlier sections, none of them smoothed over
+
+- **`studies/skillcast/FINDINGS.md` §16.2** is incomplete in four ways, each
+  re-derived here: `0x0081C090` has **FOUR** gates, not three (the fourth,
+  `0x0081C0AD`, requires `+0x110` bit 0 CLEAR — an already-armed re-entrancy
+  guard, so a second property 8 → 0 before the timer fires is a NO-OP); the
+  state bit is **bit 0**; `0xFA` is **250 MILLISECONDS**, named by ArenaNet's
+  own `AgTimer:122`; and `0x009217C0` is not a register but a **min-recompute
+  and re-key with a cancel path** when the mask is zero. Also: §16.2's "the
+  value-1 path stores its float to `+0x100`" names the right field but an
+  **unreachable instruction** — the case body sets the bit *before* calling
+  `0x0081BE90`, whose own gate is therefore always taken, so the reachable
+  store is the bail's `fldz; fstp [esi+0x100]` at `0x0081C003`. And its summary
+  "everything is view-object-local, no gameplay state" is too strong: the
+  deferred action's terminal effect is a **c2s `0x0040`**.
+- **CANCELWALK-F10 is WRONG on two points and incomplete on a third.** The
+  `+inf` "no heading" sentinel lands in the **CONTEXT** `+0x694/+0x698`, not
+  the controller. The "5 key-edge sites plus a vtable slot" caller list is a
+  false positive — they are all **one function**, and the vtable word is not a
+  caller. And `+0x10C` **does** have a runtime setter (`0x0081C020`), so F10's
+  "no writer found, the suppress state is a local write we cannot trace" was
+  half an artifact of an incomplete search.
+- **`+0x64` bit 1 is FLAG_CONTROLLED**, named by ArenaNet
+  (`ChCliBase:521`/`578`). So §7.6's measured byte decomposes exactly:
+  **3 = FLAG_CONTROLLED | action-hold** during a cast, **2 = FLAG_CONTROLLED**
+  otherwise. And bit 0 has exactly **two writers image-wide** in the ChCliBase
+  band (`0x0081BD02`/`0x0081BD14`) — property 8's case body, confirming F22
+  from the writer side.
+
 ### 7.5 Measured dead this round — do not retry
 
 - `0x0027`/speed-base as differentiator, trigger, or fix (F8/F13) — and the
