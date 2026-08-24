@@ -21,6 +21,122 @@ rival hypotheses for the freeze. `CANCELWALK-R<n>` = pre-registered runs;
 their predictions are stated here before any run happens. Convention:
 [../idents/CONVENTION.md](../idents/CONVENTION.md).
 
+## 0. HANDOFF — read this before anything else (written 2026-08-24, end of session)
+
+**This document is long and its early sections are superseded. Read §0, then
+§7.6–§7.9. §2–§5 are the arc's history and several of their claims are
+corrected later — every correction is filed in place, but §0 is the only
+summary that is current.**
+
+### What the arc was, and that it is ANSWERED
+
+*Symptom:* a movement key pressed mid-cast cancels the cast but does not move
+the player; a second press is needed. **Cause, measured from the client's own
+memory and our wire (§7.6, §7.7):**
+
+1. At cast start our server sends generic-value **property 8 → 1**. That sets
+   `byte[ChCliBase+0x64]` bit 0 — **GATE B** of the local walk-start applier
+   `0x0081A8F0`. Correct behaviour: it is what an action hold is *for*.
+2. The movement press re-dispatches once, the applier reads the gate **still
+   set**, and bails at `0x0081AD0F`. The key edge is spent.
+3. Our `[8→0, 59, E2]` clears the gate ~a frame later — **but the client's
+   applier already ran, in its own frame, a full round trip earlier. No answer
+   content can win that race** (which is why R1's zero bytes froze, R2–R4's
+   leads only moved the body by *ordering* it, and R6 was irrelevant).
+4. **Nothing re-runs the walk-start**, because the movement input path is
+   **level-sampled per frame and gated on the DIRECTION CHANGING**
+   (evaluator `0x005355C0`, 50 ms throttle; the key-down handler dispatches
+   nothing). A steady held key with a steady camera = delta 0 = no
+   re-dispatch, however long you hold.
+5. A **second press** produces a direction change. So does a **camera turn** —
+   and that path passes `arg6 = 0`, sending **no c2s `0x003D`**, so it is
+   invisible on the wire. Retail's captures walk on the single press because
+   their operator was turning the camera (§7.7 F26: retail walks +28.8 u due
+   west and +23.9 u WNW while reporting only a stale *north* vec2).
+
+**Evidence strength:** gate B set at the press → freeze **4 of 4**; clear at
+the press → walk **3 of 3** (§7.9 F29). Property 8 drives the bit **5 of 5 and
+5 of 5** (§7.6 F22).
+
+### THE ONE ACTIONABLE ITEM, and its fix is already built
+
+**CANCELWALK-F28 — the FLOAT-FORWARD is a real defect in OUR server.** The
+action hold gates the walk-*start*; it does **not** stop a leg already in
+flight. Cast while running and the body glides at **288.0 u/s for the whole
+cast** (measured: ~690 u across one cast, velocity never below 288). Guild Wars
+stops you when you start casting; we never send anything that does.
+
+**The message that fixes it already exists in the tree** — s2c `0x0028`
+AGENT_STOP_MOVING, which **halts when in motion and no-ops when parked**
+(schema `GAME_SMSG "40"`). `agents.agent_stop_moving()` is the builder,
+`GAME_SMSG_AGENT_STOP_MOVING` the constant, both landed and tested
+(`test_cancelwalk.py` §6, floor 46). It was built for **R6** and was VOID there
+because it was fired at **stops**, where it can only no-op (§7.4a). **Fired at
+CAST START it is the right message for a real bug.**
+*To do:* wire it behind a diagnostic flag at the cast-start site, register a
+prediction, run it, then ship on an owner ruling. **Defaults are an owner
+ruling in this repo — do not ship it on.**
+
+### What is CLOSED — do not re-open without new evidence
+
+- Message **order**, answer **timing**, `0x002B`, `0x0025` presence, the
+  `0x0027`/speed-base family, property 59, the `≤1.0 u` short-circuit story,
+  the dedup gate, GATE A and GATE C (`+0x10C` read **0** in all 552 samples),
+  H8 (`+0x50` is a move-request correlation token; nothing branches on it),
+  and **any cancel-instant answer content as the fix**. §7.5 has the full list
+  with the measurement that killed each.
+
+### What MOVED to another arc
+
+- **The WARP is a grant-cadence defect and belongs to REALFIX, not here**
+  (§7.8 F27, §7.9 F30). Our zero-lead policy grants only on c2s `0x003D`, and
+  the client only *sends* `0x003D` on direction change — so a long straight leg
+  produces ONE report at its start and the sync copy is left behind by the
+  whole leg; stops grant nothing at all. The next walk-start reconciles the
+  drawn body onto the stale copy in one frame. **Magnitude tracks staleness
+  exactly**: 256 u stale → 256 u warp; 31 u stale → 31 u warp. Priced: 5 of 28
+  stops leave the copy past ~190 u. Candidates named at §7.8 (`--resync`,
+  REALFIX-P5, built and never run, is the only one whose refutation does not
+  already stand). **No recommendation made; the ruling is the owner's.**
+
+### Instruments, and which to use
+
+- **`toolkit/clientscan/movetap.py`** — the working instrument. Rows carry
+  `gate_a/gate_b/gate_c/walk_suppressed` (`controller_read()`, R7 as a poll),
+  the R5 field set (`reqtoken`, `dir`, raw stop/point/velocity, both copies),
+  and the fence/gate-1/history fields. Needs **no elevation**. Selftest floor
+  **250**.
+- **`toolkit/clientscan/gatetrace.py` — REFUSES TO RUN, and must stay that
+  way** until five measured blockers are fixed (§7.4e). The first would **kill
+  the client** on the first breakpoint hit. If a trap is ever genuinely needed,
+  rebuild it on `commandertrap.py`'s `HwTrap`, never on the hand-rolled loop.
+- `--cancel-answer=…` and `--stop-answer=ack` are diagnostics, off by default,
+  refused without `--zero-lead` and refused with each other.
+
+### The run recipe that works
+
+```
+python toolkit/harness/session.py --keep-open --enemy --hold 300 --game-args "--map 280
+  --explorable --practice-target --skills 105,153,322"
+python toolkit/clientscan/movetap.py --seconds 180
+```
+**Run both instruments.** A wire-only run cannot tell a walk from a warp
+(§7.4c F16) and cannot see the gates. **Walk before each cast** — a standstill
+session is zero-exposure for anything movement-shaped (§7.4a). Align the two
+captures on the **wall clock** both files carry (`movetap.t` and the gamesrv
+origin's `wall_unix`), never by trajectory fit (§7.4d correction 1).
+
+### Two open questions, both cheap
+
+1. **H10 is SUPPORTED, not confirmed** (§7.9 F29): both walks began 0.43–0.46 s
+   *after* the press with the gate already clear and no wire event to explain
+   them, which is the camera-turn re-dispatch's shape and no other candidate's.
+   To confirm: one run deliberately alternating *hold key + turn camera* against
+   *hold key + still camera* through frozen presses. Predicts walk vs freeze.
+2. **The float-forward fix** above.
+
+---
+
 ## 1. Method, and why order claims here are readings rather than inferences
 
 `cmsgstream.timed()` decodes both directions of the live game channel onto one

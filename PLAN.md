@@ -1369,166 +1369,59 @@ byte-identical on `main`, not this change.
 
 ## 8. Immediate next actions
 
-### CANCELWALK: R1–R4 scored, ship candidate licensed; the state-diff round closed the wire — R5/R6/R7 await the operator (2026-08-24)
+### CANCELWALK: ANSWERED — the freeze is an action-hold race we cannot win at the wire; one real bug remains, its fix already built (2026-08-24)
 
-Castmech §3g's handover (one press cancels the cast but does not move; retail
-moves on the single press) re-read at a desk from the two 2026-08-24 captures:
-[studies/movement/CANCELWALK.md](studies/movement/CANCELWALK.md), evidence
-reader `toolkit/authsrv/cancelwalk.py`. **Two of the handover's three
-questions closed without a run**: message ORDER is a non-question (§3f had
-retail's order backwards — the grant rides AFTER `[8→0, 59, E2]`, and ours
-already matches; correction filed at castmech §3g-i), and `0x002B` is
-movement-family bookkeeping, not a missing cancel message (retail's own W
-cancel walks without one; its `[0.66, 4]` backpedal row is incidentally the
-first wire witness for REALFIX-P1's contested FAMILY_RATE 4:0.66). **The
-handover's mechanism is refuted too**: retail's client does NOT walk to the
-granted point — grant north, walk WNW at t=128.805 — it self-walks its own
-live direction the moment the burst clears the hold, so the lead is not "a
-real destination", it is chase bookkeeping on a LATCHED stale vec2. What
-survives elimination (timing died on 25 frozen frames; every content delta
-died on retail's own variation) is exactly one universal delta — our
-cancel-instant `0x0029` grants the reported point, retail's grants strictly
-ahead — read narrowly as **CANCELWALK-H1: a zero-length grant answers the
-mid-hold movement request as "stay put"**. Three pre-registered loopback runs
-discriminate (CANCELWALK.md §5): R1 `--cancel-answer=suppress` (burst alone,
-zero risk), R2 `--cancel-answer=retail-lead` (the D1 tail verbatim,
-diagnostic only, warp cost pre-registered), R3 `lead:16` (the bisection).
-Arms built and refused into the composition matrix (`test_cancelwalk.py`;
-`test_position_trust` re-encodes its two AST locks and fixes a
-red-at-HEAD NameError the castmech door left in its arm extractor). **No arm
-ships from a run directly** — the lead family's refutation stands
-steady-state; a PASS licenses one audited exception at one instant.
-**R1–R3 RAN the same day** (CANCELWALK.md §5a, captures
-`20260824T095712/100352/100643`): R1 suppress **froze** (H2 refuted); R2/R3
-**walk the granted leg to the point exactly** — +768.1 and +16.0 u to the
-decimal — parking there, key state ignored, release ignored, straight
-through collision. **CANCELWALK-F7**: at the cancel instant our 38797
-client executes the answering `0x0029` as a **click-order** (zero-lead =
-"click where you stand" = the freeze), the mid-cast vec2 is live on our
-build, and the pre-registered warp never materialised (body and copy walk
-the leg together). Retail's 38849 self-walks instead — build drift or
-unread state, and for our pinned build it no longer matters: the contract
-is measured. **R4 pre-registered and built the same day**
-(`--cancel-answer=lead:288,stop`): retail's own stop pair (`0x002B [1.0,
-9]` + zero-distance `0x0029`) answering a release **scoped to the in-flight
-cancel leg only** — the general stop arm stays silent, which is what
-separates it from the refuted `--stop-echo`. **R4 PASSED the same day**
-(capture `20260824T103556`, CANCELWALK.md §5b): release-to-stop confirmed
-on the wire (the re-pin answers a +97.6 u mid-glide release and the body
-stays put — R2's unanswered release gliding to 768 is the control), and
-held presses park at +288.0 u exactly. **The licensed ship candidate is
-cancel-instant lead + scoped stop re-pin; shipping awaits an owner ruling**
-with four named terms: clip the leg (from the REPORTED point), choose the
-lead length, promote the flag out of the experiment namespace, and the
-audited-exception review against zero-lead's invariants.
+**Full handoff: [studies/movement/CANCELWALK.md](studies/movement/CANCELWALK.md)
+§0** — read that before the rest of the document, whose early sections are
+superseded and corrected in place.
 
-**The state-diff round ran the same day, desk-only** (CANCELWALK.md §7,
-F8–F15, twice-read binary + independently recounted wire diff): the `0x0027`
-lead is dead (Windborne Speed's 13 s buff clock, corpus-refuted), the wire is
-at value-parity at both press instants, and the `0x003D` emitter is read —
-one funnel (`0x009206D0` packer via MOVE-DISPATCH `0x008163A0`), send gated
-only by `+0x10C` bit4, local walk additionally gated by bit8 / `+0x64` bit0,
-whose writers are LOCAL (no wire message sets them). The dedup lever and the
-≤1 u short-circuit story are desk-refuted (F15/F14). Surviving: **H5 —
-walk-suppress bit set at the cancel edge (primary)**, H6 — stop-closure prior
-state (retail's `0x0028` / `[1.0,9]`+re-pin stop answers, the one lever a
-server owns), H7 weak, H4 residual. **Next: three pre-registered instruments
-await the operator** — R5 movetap state poll (Tier-1 decode-only field adds),
-R6 stop-closure run (H6's test — **BUILT and RAN** `--stop-answer=ack`,
-capture `20260824T135521`, CANCELWALK.md §7.4a: the arm fired (5 stop-acks)
-and all 4 movement cancels froze, but the run is **VOID for H6 — zero
-exposure**: the operator cast from a standstill, so every `0x0028` no-op'd on
-a parked body and the treatment never reached the client. Unconfounded bonus:
-the freeze reproduces from a pure standstill, which **weakens H6** — an
-unclosed movement episode is not necessary for the freeze — and **strengthens
-H5** (the cast hold alone sets the suppress state). R6 arm code +
-`test_cancelwalk.py` §6 floor 46 stand, adversarially reviewed), **R7 RAN AND THE ARC'S CENTRAL QUESTION IS ANSWERED** (§7.6, capture
-`movetap-20260824T163558` + gamesrv `163550`, 552/552 operand reads OK).
-**The walk-suppress gate is GATE B — `byte[controller+0x64]` bit 0 — and it is
-PROPERTY 8's BIT, which OUR SERVER SETS AND CLEARS**: five SET windows opening
-within 0.04–0.10 s of our prop8→1 and closing within 0.06 s of our prop8→0,
-5 of 5 and 5 of 5, joining the arc to `skillcast` §16.2's read of the same
-offset. At all three frozen presses the bit was still SET when the applier ran
-(body 0.0 u/s, position bit-identical) and cleared ~90 ms later; at the one
-walking press it was already clear and the body ran at 288.0 u/s in exactly the
-pressed direction. **The mechanism: the client's applier reads the bit on the
-key edge, in its own frame, a full round trip before our `[8→0, 59, E2]` can
-clear it — so the press is spent, and nothing re-runs the walk-start because a
-held key produces no new edge** (refuting "they were taps": the key was held
-0.83–1.33 s, ~0.75 s past the clear, with zero motion). This explains every
-prior run at once — R1's zero-byte freeze, R2–R4's leads only moving the body
-by ORDERING it, R6's stop-ack being irrelevant — and it retires
-**GATE A** (word 0 in all 552 samples; the read-site census named the wrong one
-of two candidates) and **H7** (the applier never reached the navmesh query).
-**AND THE ARC LANDED THE SAME DAY, at a desk** (§7.7, two reads +
-adversarial verification, instruction-by-instruction). The deferred action is
-**not** a walk resume — `0x0081C090` arms a 250 ms timer (ms named by
-ArenaNet's own `AgTimer:122`) whose leaf `0x0081BA80` is a **re-face**
-(atan2 → turn-to-angle → c2s `0x0040`), which never touches the velocity pair
-and refuses to run unless the body is already stopped (**F24**). **The real
-answer is upstream: the movement input path is LEVEL-sampled per frame and
-dispatch is gated on the DIRECTION CHANGING** (evaluator `0x005355C0` →
-MOVE-CMD only past a threshold, 50 ms throttle; the key-down handler dispatches
-nothing) — **so a steady held key with a steady camera produces delta 0 and
-never re-enters the walk applier at all, which IS our freeze**, while a camera
-turn re-dispatches at up to 20 Hz through a site passing arg6 = 0 that sends
-**no c2s `0x003D`** and is invisible on the wire (**F25**). **Confirmed from
-retail's own tape** (**F26**): its three cancels each emit ONE `0x003D`
-carrying the latched north vec2 and then walk **+95.9 u north, +28.8 u due
-west, +23.9 u WNW** — two of three in directions the client never reported,
-with no second report and no `0x0040`. F3's "self-walks its live direction" is
-mechanised: retail's operator was turning the camera. **CANCELWALK-H10,
-registered**: on our build, hold a movement key mid-cast AND turn the camera →
-the player walks, the walk starting at the turn, with no second `0x003D`. If it
-walks, **the freeze was never a server defect** — it is the client's input
-model meeting a still camera. Corrections owed and filed at §7.7a (skillcast
-§16.2 four ways; F10 wrong on two points, incomplete on a third; `+0x64` bit 1
-is FLAG_CONTROLLED, so the measured 3/2 decompose exactly). It was built as a
-hardware-breakpoint gate trace and **adversarially reviewed before it ever
-touched a client — five BLOCKERS, each measured on a real WOW64 target, the
-first of which would have KILLED the client on the first breakpoint hit**
-(dispatching on `EXCEPTION_SINGLE_STEP` where WOW64 delivers
-`STATUS_WX86_SINGLE_STEP`; a constant `commandertrap.py` in the same directory
-already defines — a regression, not a discovery). `gatetrace.py` now REFUSES to
-run (`UNSAFE_TO_RUN`, checked by calling it) and its pure half is kept.
-**The review also refuted the reason for building it**: the gate operands are
-persistent object fields two dereferences from a `ctx` `movetap.resolve()`
-already returns, so **`movetap.controller_read()` reads them with no debugger
-at all** — rows now carry `gate_a`/`gate_b`/`gate_c`/`walk_suppressed`, every
-failure named and never `False` (the value H5 predicts). movetap selftest
-240 → 250. **The run needs no elevation**; predictions are registered at §7.4e.
-Residual the poll cannot see: a bit set and cleared inside one frame, which is
-the only thing that would revive the trap — on `commandertrap`'s `HwTrap`. **R5 BUILT AND RAN** (Tier-1 decode-only field
-adds to `movetap`; capture `movetap-20260824T141620` + gamesrv `141556`,
-CANCELWALK.md §7.4c): the instrument paid for itself — **the §5 WIRE criterion
-was about to score a 182 u WARP as a walk** (F16), and the memory read says
-only 1 of 3 mid-cast presses ran a genuine local walk-start. **F17: the freeze
-is NOT deterministic** (one press walked normally), which kills H5's simplest
-form; the one field separating them is the async `planner` (+0x50) at the
-press — 0 on both non-starters, 24 on the walker, with ordinary presses from 0
-walking fine (5 of 5), so the condition is COMPOUND. **CANCELWALK-H8 was minted and REFUTED the same
-day, at a desk, before any run** (§7.4d): `+0x50` is not a planner but a
-MOVE-REQUEST CORRELATION TOKEN that **nothing in the image branches on** (zero
-cmp/test operands; zero accesses anywhere in the applier's 131-function
-closure, twice enumerated and positive-controlled), and re-scoring on the
-EXACT wall-clock alignment both captures carried shows **cancel 1 walked with
-the token at 0** — 288.0 u/s in the pressed direction. Two §7.4c readings are
-corrected with it: the scoreboard is **2 of 3 mid-cast presses WALKED**, and
-the freeze is **intermittent** (against 100% in every earlier run). The field
-survives as a better instrument than the wrong name implied (**F19**: a fresh
-token per successful walk-start call = a positive walk-start detector;
-`movetap` now names it `reqtoken`). **F20**: the warp is a walk-start
-RECONCILIATION — the drawn body snapping onto the sync copy, twice in eight
-walk-starts, at the run's two largest separations — so its size is the
-separation OUR grant policy allows (p50 122 u), a REALFIX-shaped cost. **F18: the
-operator-reported WARP is the drawn body snapping onto the lagging sync copy**,
-sub-gate-1 (max sep 265.8 vs the 299.33 cut), no `0x002C`, nearest agent 350+ u
-(gate 3 excluded) — **not new** (the 08-21/08-22 corpus carries it at up to
-81,179 u/s; today's is the mildest on record) and **not caused by this
-session**; the walk-first protocol is what exposed it. It contradicts
-REALFIX-O1's "sync copy and nothing else" at those instants and is filed to the
-movement arc as an OPEN sub-gate-1 rubber-band class. R4's ship candidate is
-unaffected; the ruling stays the owner's.
+**The answer.** At cast start we send generic-value **property 8 → 1**, which
+sets `byte[ChCliBase+0x64]` bit 0 — **GATE B** of the client's local walk-start
+applier `0x0081A8F0`. The movement press re-dispatches once, the applier reads
+the gate **still set**, and bails; the key edge is spent. Our `[8→0, 59, E2]`
+clears it a frame later, but **the client's applier already ran a full round
+trip earlier, so no answer content can win that race** — which retroactively
+explains R1 (zero bytes, froze), R2–R4 (leads moved the body only by *ordering*
+it) and R6 (irrelevant). Nothing then re-runs the walk-start, because the
+movement input path is **level-sampled and gated on DIRECTION CHANGE**
+(`0x005355C0`, 50 ms throttle): a steady held key with a steady camera never
+re-dispatches. A second press supplies that change — **and so does a camera
+turn**, through a site passing `arg6 = 0` that sends **no `0x003D`** and is
+invisible on the wire. Retail walks on the single press because its operator
+was turning the camera (F26: retail walks due west and WNW while reporting only
+a stale north vec2). Evidence: gate set → freeze **4 of 4**, clear → walk
+**3 of 3**; property 8 drives the bit **5 of 5** and **5 of 5**.
+
+**THE ONE ACTIONABLE ITEM — CANCELWALK-F28, and it is a real defect in our
+server.** The action hold gates the walk-*start* and does **not** stop a leg in
+flight, so casting while running leaves the body gliding at **288 u/s for the
+whole cast** (~690 u measured). **The fix is already in the tree**: s2c
+`0x0028` AGENT_STOP_MOVING halts when in motion and no-ops when parked —
+builder, constant and tests all landed for R6, where it was VOID only because
+it was fired at *stops*. **Fired at CAST START it is the right message.** Wire
+it behind a diagnostic flag, register the prediction, run it, ship on a ruling.
+Defaults are an owner ruling; do not ship it on.
+
+**Moved to REALFIX: the WARP.** Our zero-lead policy grants only on c2s
+`0x003D`, and the client only sends `0x003D` on direction change — so a long
+straight leg produces ONE report at its start, the sync copy is left behind by
+the whole leg, and stops grant nothing. The next walk-start reconciles the
+drawn body onto the stale copy in one frame, **magnitude tracking staleness
+exactly** (256 u → 256 u; 31 u → 31 u). Priced at 5 of 28 stops past ~190 u.
+Candidates at CANCELWALK.md §7.8; `--resync` (REALFIX-P5, built, never run) is
+the only one whose refutation does not already stand. No recommendation made.
+
+**Instruments.** `movetap.py` is the working one — rows now carry the gate
+operands (`controller_read`, R7 as a poll), needs no elevation, selftest floor
+250. **`gatetrace.py` REFUSES TO RUN and must stay that way**: five measured
+blockers, the first of which would kill the client on the first breakpoint hit;
+if a trap is ever needed, rebuild on `commandertrap.py`'s `HwTrap`.
+
+**Open, both cheap:** (1) **H10 is SUPPORTED, not confirmed** — both walks in
+the last run began 0.43–0.46 s *after* the press with the gate already clear
+and no wire event to explain them; one run alternating *hold + turn camera*
+against *hold + still camera* through frozen presses confirms or kills it.
+(2) The F28 fix above. **Nothing in this arc ships without an owner ruling.**
 
 ### MODEL AUTHORING: the one-bit question is answered, and every player identity closes (2026-08-22)
 
