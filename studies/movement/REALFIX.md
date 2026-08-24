@@ -127,7 +127,7 @@ No new code. P5 needs `RESYNC_MAX_REPORT_AGE = 100.0/288 = 0.347 s` (already at 
 
 ### REALFIX-P4 · `0x0027` re-arm — **DO NOT BUILD**
 
-New SMSG constant + new builder + new wire test, for a candidate the mechanism read grades FAILS provably (`0x00602910` rewrites `+0x78` to the runaway point) and the harness cannot score. If it is ever revisited, the schema row is `schema/overrides.json` GAME_SMSG `"39"`: `msg_header + dword(agent) + float(maxSpeed)`, `declared_unpack_size 10`, assert `AgAgent.cpp:2317 maxSpeed >= 0`.
+New SMSG constant + new builder + new wire test, for a candidate the mechanism read grades FAILS provably (`0x00602910` rewrites `+0x78` to the runaway point — attribution refined 2026-08-24, [CANCELWALK.md](CANCELWALK.md) §7 F13: the rewrite is the settle `0x005FF880` the setter calls, and it fires only while a leg is armed, `+0x48 ≠ 0`; the verdict is unchanged, and the elimination now also rests on store parity — both copies hold 288.0 from our own create) and the harness cannot score. If it is ever revisited, the schema row is `schema/overrides.json` GAME_SMSG `"39"`: `msg_header + dword(agent) + float(maxSpeed)`, `declared_unpack_size 10`, assert `AgAgent.cpp:2317 maxSpeed >= 0`.
 
 ---
 

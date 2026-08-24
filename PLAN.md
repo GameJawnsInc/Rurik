@@ -1369,7 +1369,7 @@ byte-identical on `main`, not this change.
 
 ## 8. Immediate next actions
 
-### CANCELWALK: the walk-on-cancel handover, desk phase CLOSED — three runs await the operator (2026-08-24)
+### CANCELWALK: R1–R4 scored, ship candidate licensed; the state-diff round closed the wire — R5/R6/R7 await the operator (2026-08-24)
 
 Castmech §3g's handover (one press cancels the cast but does not move; retail
 moves on the single press) re-read at a desk from the two 2026-08-24 captures:
@@ -1421,6 +1421,22 @@ cancel-instant lead + scoped stop re-pin; shipping awaits an owner ruling**
 with four named terms: clip the leg (from the REPORTED point), choose the
 lead length, promote the flag out of the experiment namespace, and the
 audited-exception review against zero-lead's invariants.
+
+**The state-diff round ran the same day, desk-only** (CANCELWALK.md §7,
+F8–F15, twice-read binary + independently recounted wire diff): the `0x0027`
+lead is dead (Windborne Speed's 13 s buff clock, corpus-refuted), the wire is
+at value-parity at both press instants, and the `0x003D` emitter is read —
+one funnel (`0x009206D0` packer via MOVE-DISPATCH `0x008163A0`), send gated
+only by `+0x10C` bit4, local walk additionally gated by bit8 / `+0x64` bit0,
+whose writers are LOCAL (no wire message sets them). The dedup lever and the
+≤1 u short-circuit story are desk-refuted (F15/F14). Surviving: **H5 —
+walk-suppress bit set at the cancel edge (primary)**, H6 — stop-closure prior
+state (retail's `0x0028` / `[1.0,9]`+re-pin stop answers, the one lever a
+server owns), H7 weak, H4 residual. **Next: three pre-registered instruments
+await the operator** — R5 movetap state poll (Tier-1 decode-only field adds),
+R6 one-shot stop-closure run (cheapest; H6's direct test), R7 flag read at
+the edge (int3/trnhook). R4's ship candidate is unaffected; the ruling stays
+the owner's.
 
 ### MODEL AUTHORING: the one-bit question is answered, and every player identity closes (2026-08-22)
 
