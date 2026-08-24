@@ -445,6 +445,8 @@ class HwTrap:
         # object it lives in exists, so `arm_watch` fills it mid-run.
         self.kinds = []
         self.sizes = []
+        # slot -> [still live, GONE], counted at every hit AFTER arming.
+        self.watch_recheck = {}
         self._getctx = None
         self._setctx = None
 
@@ -823,6 +825,21 @@ class HwTrap:
             hit["eip"] = addr
             hit["writer (VA)"] = unslide(addr)
         self.hits.append(hit)
+        # RE-VERIFY ANY WATCH, on this thread, on every hit. Arming-time
+        # verification says the registers took; it does NOT say they stayed.
+        # A watch that is live at t=4s and cleared by t=18s reports the same
+        # zero as one that was never written to, and this run cannot tell
+        # those apart without a sample AFTER the event of interest.
+        for wslot, st in list(getattr(self, "watching", {}).items()):
+            live = False
+            if ctx is not None:
+                dr = (ctx.Dr0, ctx.Dr1, ctx.Dr2, ctx.Dr3)[wslot]
+                live = (dr == st[0]
+                        and bool(ctx.Dr7 & (1 << (2 * wslot)))
+                        and ((ctx.Dr7 >> (16 + 4 * wslot)) & 0b11)
+                        == RW_BITS["w"])
+            self.watch_recheck.setdefault(wslot, [0, 0])
+            self.watch_recheck[wslot][0 if live else 1] += 1
         key = self.addrs[slot]
         n = self.hit_counts[key] = self.hit_counts.get(key, 0) + 1
         if self.on_hit:
@@ -1445,6 +1462,13 @@ def _report(sites, hits, base, out=sys.stdout, trap=None):
                 addr, size, armed, live = (list(st) + [None])[:4]
                 w(f"  WATCH slot {slot}: {size}B at 0x{addr:08X}, armed "
                   f"{armed} thread(s), VERIFIED live on {live}\n")
+                rc = getattr(trap, "watch_recheck", {}).get(slot)
+                if rc:
+                    w(f"      re-checked at later hits: still live {rc[0]}, "
+                      f"GONE {rc[1]}"
+                      + ("   <- the register did NOT survive, so this "
+                         "watch's zero means nothing" if rc[1] else "")
+                      + "\n")
         elif any(getattr(s, "kind", "x") == "w" for s in sites):
             w("  WATCH: a write-watch site was armed but NEVER GIVEN AN "
               "ADDRESS -- its zero hit count means nothing\n")
