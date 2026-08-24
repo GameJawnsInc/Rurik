@@ -23,8 +23,19 @@ sys.path.insert(0, os.path.join(os.path.dirname(HERE), "mapdata"))
 import checks       # noqa: E402
 import wearmap      # noqa: E402
 
-# Floor set from a real green run (36 checks, 2026-08-23).
-LEDGER = checks.Ledger("wear mapping", floor=36)
+# Floor set from a real green run: 36 on 2026-08-23, 40 on 2026-08-24 when
+# section 5's type-45 taxonomy landed.
+#
+# BUT THE FLOOR IS THE MANDATORY CORE, WHICH IS 16 + 4 = 20. Sections 3-5 all
+# need the vault, and the block above them `sys.exit`s with a declared skip
+# when it is absent -- so on a machine without one this run ends at 20 and a
+# floor of 36 or 40 would have failed it on the SHORTFALL, naming the wrong
+# thing entirely. `checks.py`'s guidance is to floor at the mandatory core and
+# let the optional sections declare skips; the same correction was made to
+# `test_compositetrap.py` the same day, which had the same latent bug for the
+# same reason -- a floor read off a full green run on a machine that always
+# has the vault.
+LEDGER = checks.Ledger("wear mapping", floor=20)
 check = checks.adopt(LEDGER)
 
 W = wearmap
@@ -132,6 +143,10 @@ flag_comp = collections.Counter()
 hand_wears = collections.Counter()      # attachable? -> n (slots 0/1)
 head_split = collections.Counter()      # composite? -> n (slot 6)
 armour_nocomp = 0                       # slots 2..5 without bit 2
+# Corpus-wide, because `items` below is per-CONNECTION and is reset for each
+# one: a census read off it after the loop sees only the last connection, and
+# the first version of section 5 skipped on "0 ids" for exactly that reason.
+t45_ids = set()
 starter_like = 0
 
 for stamp in sorted(os.listdir(live)):
@@ -149,6 +164,8 @@ for stamp in sorted(os.listdir(live)):
             if op in (LOW, HIGH) and len(v) > 9:
                 items[int(v[1])] = (int(v[3]), int(v[2]), int(v[8]))
                 declares += 1
+                if int(v[3]) == W.WIRE_TYPE_COSTUME_HEAD:
+                    t45_ids.add(int(v[2]) & MASK)
         for _t, op, v in msgs:
             worn = []
             if op == EQ_ALL and len(v) > 10:
@@ -250,5 +267,51 @@ if table is not None:
         W.check_wear(slot, row["item_type"], row["flags"], record_type=rt)
         check(True, f"{key}: slot {slot}, type {row['item_type']}, record "
                     f"type {rt} -- the served row passes the full check")
+
+    # ---------------------------------------------------------- section 5
+    print("== 5. the type-45 (costume head) taxonomy, and it has no third "
+          "kind ==")
+    # §9.10 sorted the costume-head ids into three kinds by how the RECORD
+    # sits in the composite table, and carried the third as an open item for
+    # weeks: "record type 17 OUTSIDE any run, and neither of the two tested".
+    # §9.24 closed it at a desk. These are the two facts the closure rests on,
+    # pinned so a rebuilt archive cannot quietly change them.
+    t45 = sorted(i for i in t45_ids if i < len(table.records))
+    if len(t45) < 20:
+        LEDGER.skip("the type-45 taxonomy", f"only {len(t45)} id(s) in the "
+                    f"corpus -- the census needs the whole vault")
+    else:
+        rtypes = {i: table.records[i].type for i in t45}
+        check(set(rtypes.values()) == {17, 19},
+              f"every one of the {len(t45)} type-45 records is record type "
+              f"17 or 19, and nothing else",
+              f"{sorted(set(rtypes.values()))}")
+        if t is not None:
+            comp = t["s_components"]
+            byty = {rt: {comp[table.records[i].type] for i in t45
+                         if rtypes[i] == rt} for rt in (17, 19)}
+            check(byty == {17: {2}, 19: {1}},
+                  "and the COMPONENT is a function of the record type alone "
+                  "-- 17 -> 2, 19 -> 1, with no exceptions. That is the whole "
+                  "closure: component comes from s_components[hdr>>22], a "
+                  "field of the record, so no property of the TABLE's layout "
+                  "(run membership included) can reach the dressing path",
+                  f"{byty}")
+        unresolved = [(i, sex) for i in t45 for sex in (0, 1)
+                      if table.records[i].base_file(sex) is None]
+        check(not unresolved,
+              f"and all {len(t45)} resolve geometry for BOTH sexes -- so none "
+              f"of them is a degenerate record that would have predicted a "
+              f"visible failure",
+              f"unresolvable: {unresolved[:6]}")
+        shared = [i for i in t45 if 0 not in table.records[i].files
+                  and 5 not in table.records[i].files]
+        check(shared,
+              f"including {len(shared)} that carry NO per-sex slot and "
+              f"resolve only through the SHARED slot {cpsdata.SHARED_SLOT} "
+              f"-- the shape that looked degenerate at a glance and is not. "
+              f"A census that found none of these would be reading a "
+              f"different archive",
+              f"{shared}")
 
 sys.exit(LEDGER.verdict())
