@@ -582,10 +582,28 @@ class HwTrap:
         self.sizes[slot] = size
         self.disarmed.discard(slot)
         n = self._arm_all()
+        # VERIFY, do not assume. This module's own `armed_now` docstring says
+        # SetThreadContext can return TRUE on a WOW64 target and discard the
+        # values -- so a watch that silently never took is indistinguishable
+        # from a write that never happened, which is the entire question.
+        live = 0
+        want_rw = RW_BITS["w"] << (16 + 4 * slot)
+        for h in self.threads.values():
+            got = self.armed_now(h)
+            if got is None:
+                continue
+            if got[slot] == address and (got[4] & (1 << (2 * slot))) \
+                    and (got[4] & (0b11 << (16 + 4 * slot))) == want_rw:
+                live += 1
         self.watching = dict(getattr(self, "watching", {}))
-        self.watching[slot] = (address, size, n)
-        return True, (f"watching {size} bytes at 0x{address:08X} on {n} "
-                      f"thread(s)")
+        self.watching[slot] = (address, size, n, live)
+        if not live:
+            return False, (f"armed {size} bytes at 0x{address:08X} on {n} "
+                           f"thread(s) but VERIFIED on none -- the debug "
+                           f"registers did not take, so a zero hit count "
+                           f"here would mean nothing")
+        return True, (f"watching {size} bytes at 0x{address:08X}: armed {n} "
+                      f"thread(s), VERIFIED live on {live}")
 
     def adopt_existing_threads(self):
         """Arm every thread the process ALREADY has, not just the ones the
@@ -1418,6 +1436,18 @@ def _report(sites, hits, base, out=sys.stdout, trap=None):
             if ad:
                 w(f"  threads the PROCESS had        {ad[0]} "
                   f"({ad[1]} adopted beyond the debug loop's)\n")
+        # WATCHPOINT STATE, in the report rather than only on stdout -- a
+        # live console scrolls and gets truncated, and "the watch never
+        # fired" is worth nothing without "the watch was verified live".
+        watching = getattr(trap, "watching", None)
+        if watching:
+            for slot, st in sorted(watching.items()):
+                addr, size, armed, live = (list(st) + [None])[:4]
+                w(f"  WATCH slot {slot}: {size}B at 0x{addr:08X}, armed "
+                  f"{armed} thread(s), VERIFIED live on {live}\n")
+        elif any(getattr(s, "kind", "x") == "w" for s in sites):
+            w("  WATCH: a write-watch site was armed but NEVER GIVEN AN "
+              "ADDRESS -- its zero hit count means nothing\n")
             for tid, why in cov["bad"][:8]:
                 w(f"      tid {tid}: {why}\n")
             if len(cov["bad"]) > 8:

@@ -46,8 +46,8 @@ import checks                                                   # noqa: E402
 # let the optional sections declare skips."
 # Floor 14 = the mandatory core (§1+§5+§6); §§2-4 need the vault and a 32-bit
 # Windows and SKIP. §7's four coverage checks and §8's eight watchpoint
-# checks are process-free, so they raise the mandatory floor to 26.
-LEDGER = checks.Ledger("commandertrap", floor=26)
+# checks are process-free, so they raise the mandatory floor to 27.
+LEDGER = checks.Ledger("commandertrap", floor=27)
 
 WOW64_CMD = r"C:\Windows\SysWOW64\cmd.exe"
 
@@ -386,20 +386,37 @@ def main():
 
         def __init__(self):
             self.addrs, self.kinds, self.sizes = [0, 0], ["x", "x"], [4, 4]
-            self.disarmed, self.threads = set(), {}
+            self.disarmed = set()
+            self.threads = {1: "a", 2: "b"}
             self.watching = {}
+            # DR7: L1 enabled (bit 2) and slot 1's R/W = 01 (bits 20-21).
+            self.dr = {"a": (0, 0x0AB00044, 0, 0, 0b100 | (0b01 << 20)),
+                       "b": (0, 0x0AB00044, 0, 0, 0b100 | (0b01 << 20))}
 
         def _arm_all(self):
-            return 3
+            return len(self.threads)
+
+        def armed_now(self, h):
+            return self.dr.get(h)
 
         arm_watch = ct.HwTrap.arm_watch
 
     tr = _ArmTrap()
     ok, why = tr.arm_watch(1, 0x0AB00044, 4)
     LEDGER.ok(ok and tr.kinds == ["x", "w"] and tr.addrs[1] == 0x0AB00044
-              and "3 thread" in why,
-              "arm_watch points one slot at an address discovered mid-run and "
-              "says how many threads took it", why)
+              and "VERIFIED live on 2" in why,
+              "arm_watch points one slot at an address discovered mid-run, "
+              "and VERIFIES by reading DR0-DR3/DR7 back rather than trusting "
+              "a SetThreadContext that returned TRUE", why)
+    blind = _ArmTrap()
+    blind.dr = {}                      # nothing reads back
+    ok, why = blind.arm_watch(1, 0x0AB00044, 4)
+    LEDGER.ok(not ok and "VERIFIED on none" in why
+              and "would mean nothing" in why,
+              "and when the registers do NOT take it fails LOUDLY -- a watch "
+              "that silently never armed is indistinguishable from a write "
+              "that never happened, which is the whole question it exists to "
+              "answer", why)
     ok, why = tr.arm_watch(1, 0x0AB00046, 4)
     LEDGER.ok(not ok and "not 4-byte aligned" in why,
               "and it REFUSES a misaligned address rather than arming it -- a "
