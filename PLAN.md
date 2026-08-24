@@ -1434,13 +1434,19 @@ walk-suppress bit set at the cancel edge (primary)**, H6 — stop-closure prior
 state (retail's `0x0028` / `[1.0,9]`+re-pin stop answers, the one lever a
 server owns), H7 weak, H4 residual. **Next: three pre-registered instruments
 await the operator** — R5 movetap state poll (Tier-1 decode-only field adds),
-R6 stop-closure run (cheapest; H6's direct test — **BUILT same day as
-`--stop-answer=ack`**, refused without `--zero-lead` and with
-`--cancel-answer`, `repin` deliberately unbuilt with the refusal carrying the
-licensing decision; `test_cancelwalk.py` §6, floor 46 after an adversarial
-two-agent review + five-mutation probe closed its one REAL finding), R7 flag read at the
-edge (int3/trnhook). R4's ship candidate is unaffected; the ruling stays
-the owner's.
+R6 stop-closure run (H6's test — **BUILT and RAN** `--stop-answer=ack`,
+capture `20260824T135521`, CANCELWALK.md §7.4a: the arm fired (5 stop-acks)
+and all 4 movement cancels froze, but the run is **VOID for H6 — zero
+exposure**: the operator cast from a standstill, so every `0x0028` no-op'd on
+a parked body and the treatment never reached the client. Unconfounded bonus:
+the freeze reproduces from a pure standstill, which **weakens H6** — an
+unclosed movement episode is not necessary for the freeze — and **strengthens
+H5** (the cast hold alone sets the suppress state). R6 arm code +
+`test_cancelwalk.py` §6 floor 46 stand, adversarially reviewed), R7 flag read
+at the edge (int3/trnhook). **Owner's call (§7.4b): re-run R6 with a walk-
+first exposure floor, or skip to R5** — the standstill freeze already points
+at H5 and R5 is the more decisive instrument. R4's ship candidate is
+unaffected; the ruling stays the owner's.
 
 ### MODEL AUTHORING: the one-bit question is answered, and every player identity closes (2026-08-22)
 
