@@ -1174,6 +1174,63 @@ one whose refutation does not already stand; a stop-arm grant is `--stop-echo`
 and IS refuted; a time-based re-grant during a straight leg has no flag today.
 **Filed to the movement arc. The ruling on which, if any, is the owner's.**
 
+### 7.9 A run with BOTH instruments: H10 supported, the mini-warp is F27 at small scale, and a REAL BUG falls out (2026-08-24)
+
+`movetap-20260824T183544` + `authsrv-20260824T183537-c1`, operator-driven, both
+instruments running. Three cancelled casts, plus — at the end, deliberately —
+**a cast started while running**.
+
+**CANCELWALK-F28 — OBSERVED, and it is a genuine defect in OUR server, not a
+client quirk. The action hold gates the walk-START; it does not stop a leg
+already in flight.** At t=38.268 the operator cast **while running east** (no
+`0x0047` before it; the last report is a moving one at 37.820). Our
+`prop8 → 1` lands at 38.269 and `gate_b` goes true at 38.31 — and the drawn
+body **keeps gliding at 288.0 u/s for the entire cast**, from `(-6167, -2493)`
+to `(-5488, -2617)`: **~690 u of travel while casting**, velocity never
+dropping below 288.0 in any sample. That is the operator's "float-forward". In
+Guild Wars, starting a spell while running stops you; ours does not, because
+the only thing we send is a hold that suppresses *starting* a walk.
+**THE FIX IS ALREADY BUILT AND ALREADY TESTED.** s2c `0x0028`
+AGENT_STOP_MOVING halts the agent **when in motion and no-ops on a parked
+body** (schema GAME_SMSG "40", handler read) — exactly the semantics required,
+and exactly the message built for R6, where it was VOID for the stop-closure
+hypothesis (§7.4a) because it was fired at stops, where it can only no-op.
+**Fired at CAST START it is the right message for a real bug.** `agents.py`
+already has the builder (`agent_stop_moving`), `authsrv.py` the constant.
+Sending it needs an owner ruling and its own registered run; nothing is
+proposed as a default here.
+
+**CANCELWALK-F29 — OBSERVED. The gate correlation is now 7 of 7 across two
+runs, and this run's walks support H10.** In this session: cancel 1 (15.830)
+had `gate_b` **SET** at the press and **froze** — zero velocity, position
+bit-identical, for the whole window; cancels 2 (25.071) and 3 (34.608) had
+`gate_b` **CLEAR** at the press and **walked**. With §7.6's four, that is
+**SET → freeze 4 of 4, CLEAR → walk 3 of 3.** And the two walks here did **not**
+begin at the press: velocity stays 0.0 for **0.46 s and 0.43 s** after it, then
+snaps to 288.0 with the gate already clear. **A press does not start a walk;
+something later does** — which is F25's re-dispatch, and the operator reports
+turning the camera. H10 is **SUPPORTED, not yet confirmed**: the poll cannot
+see the re-dispatch itself (arg6 = 0 sends no `0x003D`), so what it shows is a
+walk beginning ~0.45 s after the press with no wire event to explain it, which
+is the shape H10 predicts and no other candidate does.
+
+**CANCELWALK-F30 — OBSERVED. The "mini warp" is F27's mechanism at small
+scale, which is the best evidence yet that F27 is right.** Before cancel 3 the
+last grant (33.130) named `(-6138, -2527)`; the player then walked 31 u further
+and stopped at `(-6107, -2526)` — a stop that produces no grant, so the copy
+stayed 31 u behind. The poll shows the drawn body sitting at
+`(-6137.52, -2526.8)` **before** the press: it had already snapped back onto
+the stale copy during the cast. **A 31 u staleness produced a 31 u warp**,
+where §7.8's 256 u staleness produced a 256 u warp. Same mechanism, magnitude
+tracking staleness exactly — and it confirms the snap is not threshold-only:
+small gaps produce small, still-visible warps.
+
+**What this run leaves.** The freeze/walk question is answered and quantified
+(F29). The warp has a cause and a magnitude law (F27/F30) and belongs to
+REALFIX. **The float-forward is new, is ours, and has a message already sitting
+in the tree that does exactly what it needs** — the one built for a hypothesis
+it turned out not to serve.
+
 ### 7.5 Measured dead this round — do not retry
 
 - `0x0027`/speed-base as differentiator, trigger, or fix (F8/F13) — and the
