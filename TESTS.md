@@ -4017,7 +4017,23 @@ Every one of these, in the order they were written:
   is silently ignored under a signature default — and the control that actually
   proves it now lives in `movetap._selftest_chain`, which moves
   `HIST_MAX_NODES` and `HIST_SEP_GATE` on the module and calls without the
-  argument. **§21 also guards both modules' import lists** (`movetap.py` and
+  argument. **§17 also wraps `movetap._selftest_r5` (9), CANCELWALK-R5's
+  decode-only field set** — `+0x50` the planner/queued-move store the local
+  walk-start writes and the halt clears, `+0xBC/+0xC0` the facing pair, plus
+  raw stop/point/velocity, on BOTH world copies, all decoded from bytes the
+  poll already fetches (zero new cross-process reads). Two controls redden it,
+  and they guard the failure mode that would VOID the run rather than break
+  it: `A_PLANNER` slipped one dword to `0x54` and `A_DIR` pointed at `0xC4`
+  (the movement mode, an int) each return confident numbers that never
+  change — which is *exactly what H5 predicts*, so a wrong offset would be
+  indistinguishable from the finding. The section also asserts the ASYNC copy
+  surfaces its own values rather than a second decode of the sync block (the
+  one substitution that makes the whole readout meaningless) and that a
+  refused twin read blanks every async key instead of leaving the previous
+  row's numbers standing. Landing it also earned §20's uniqueness check its
+  keep: R5's `stop` key collided with the one `sample()` already ships from
+  the same offset, where `**` would have let the splice silently win.
+  **§21 also guards both modules' import lists** (`movetap.py` and
   `movesync.py`, asked of the syntax tree), a second witness beside movetap's
   own §3 so the guard cannot be deleted from one place quietly. No client. ~4 s),
   `toolkit/clientscan/test_resyncscore.py` (WHAT WOULD THE 0x002C RESYNC HAVE

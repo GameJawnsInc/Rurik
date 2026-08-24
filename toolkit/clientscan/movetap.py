@@ -442,6 +442,21 @@ A_VEL = 0xB0               # vx f, vy f, units/second
 A_MODE = 0xC4              # movement mode; early-out A compares it as an INT
                            # against 9 (0x0060563A), and 0x00602660's own switch
                            # runs 1..8, so 9 is outside the normal range
+# --- CANCELWALK-R5, added 2026-08-24. DECODE-ONLY: both offsets already lie
+# inside the AGENT_SPAN block every poll fetches for BOTH copies, so surfacing
+# them costs zero new cross-process reads. They exist to answer ONE question --
+# does the async (drawn) body's walk-start run at all at a frozen cancel press?
+A_PLANNER = 0x50           # the queued-move / planner store. WRITTEN by the
+                           # local walk-start (0x005FC8F0 `mov [esi+0x50],eax`,
+                           # from the 0x005FC8B0 async path) and CLEARED by the
+                           # halt 0x005FC5C0 -- so it is the walk-start's own
+                           # footprint, and the field s2c 0x0028's handler
+                           # cancels. UNVERIFIED as to what the stored value
+                           # MEANS; read as a change detector, not a quantity.
+A_DIR = 0xBC               # the facing/heading cache pair (f32 x, f32 y),
+                           # FINDINGS:1628's atan2 lazy-angle operand at
+                           # 0x005FFA1D. Which side of the walk gates writes it
+                           # is exactly what R5 classifies -- do not assume.
 AGENT_SPAN = 0xD0          # every field above lies inside; do NOT extend blind
 
 FLAG_IN_WORLD = 0x00020000
@@ -842,17 +857,28 @@ def early_outs(blk):
     }
 
 
+R5_KEYS = ("planner", "dir", "stop", "point_raw", "vel_raw")
+
 GATE1_KEYS = ("sep", "gate1", "gate1_why", "async_ptr", "async_count",
               "async_id", "async_world", "sync_clock", "async_clock",
-              "sync_at", "sync_branch", "async_at", "async_branch")
+              "sync_at", "sync_branch", "async_at", "async_branch",
+              # CANCELWALK-R5's async decodes ride here because this is where
+              # the twin's block is in hand. GENERATED from R5_KEYS rather
+              # than retyped: section 10 asserts every refusal carries the
+              # FULL key set, and two hand-kept lists of the same names is
+              # exactly the drift that makes such a check pass while the row
+              # it guards is ragged.
+              ) + tuple("async_" + k for k in R5_KEYS)
 
 
 def _gate1_blank(why):
-    return {"sep": None, "gate1": "unread:" + why, "gate1_why": None,
-            "async_ptr": None, "async_count": None, "async_id": None,
-            "async_world": None, "sync_clock": None, "async_clock": None,
-            "sync_at": None, "sync_branch": None,
-            "async_at": None, "async_branch": None}
+    blank = {"sep": None, "gate1": "unread:" + why, "gate1_why": None,
+             "async_ptr": None, "async_count": None, "async_id": None,
+             "async_world": None, "sync_clock": None, "async_clock": None,
+             "sync_at": None, "sync_branch": None,
+             "async_at": None, "async_branch": None}
+    blank.update({"async_" + k: None for k in R5_KEYS})
+    return blank
 
 
 def _gate1_refuse(out, why):
@@ -866,7 +892,40 @@ def _gate1_refuse(out, why):
     out.update({"sep": None, "gate1": "unread:" + why, "gate1_why": None,
                 "sync_at": None, "sync_branch": None,
                 "async_at": None, "async_branch": None})
+    # R5's async fields blank on the SAME rule as everything else computed from
+    # the twin: a refused read must not leave last row's numbers standing, and
+    # a missing key downstream is indistinguishable from a zero.
+    out.update({"async_" + k: None for k in R5_KEYS})
     return out
+
+
+def _r5_fields(blk, prefix=""):
+    """CANCELWALK-R5's decode-only field set, for either world copy.
+
+    `blk` is an AGENT_SPAN block already in hand -- this adds NO read. Returns
+    the five keys under `prefix` ("" for the sync copy, "async_" for the twin).
+
+    WHY RAW, and why every one of these is deliberately un-derived: R5 asks
+    whether the local walk-start RAN, and the answer is a CHANGE across one
+    press instant, not a quantity. `point_raw` and `vel_raw` are the stored
+    fields (NOT `position_at`'s dead-reckoned reading, which moves on the world
+    clock alone and would look like motion on a body that never moved), so a
+    reader comparing two consecutive rows sees the client's own writes and
+    nothing else. `planner` is a u32 whose MEANING is unread -- it is a change
+    detector here, and any row printing it as a distance would be inventing.
+    """
+    if blk is None or len(blk) < AGENT_SPAN:
+        return {prefix + k: None for k in R5_KEYS}
+    return {
+        prefix + "planner": u32(blk, A_PLANNER),
+        prefix + "dir": [round(f32(blk, A_DIR), 4),
+                         round(f32(blk, A_DIR + 4), 4)],
+        prefix + "stop": i32(blk, A_STOP),
+        prefix + "point_raw": [round(f32(blk, A_POINT), 2),
+                               round(f32(blk, A_POINT + 4), 2)],
+        prefix + "vel_raw": [round(f32(blk, A_VEL), 3),
+                             round(f32(blk, A_VEL + 4), 3)],
+    }
 
 
 def gate1_read(read, agbase, aid, agent_block):
@@ -943,6 +1002,13 @@ def gate1_read(read, agbase, aid, agent_block):
     out["sync_at"] = [round(sx, 2), round(sy, 2), sp]
     out["async_at"] = [round(ax, 2), round(ay, 2), ap]
     out["sync_branch"], out["async_branch"] = sbr, abr
+    # CANCELWALK-R5. The ASYNC block is the DRAWN body -- the one the operator
+    # watches fail to move -- and until now only its position came out of this
+    # 0xD0-byte read. These are decodes of bytes already in `ablk`: the
+    # walk-start's own footprint (+0x50), its leg state (+0x48/+0xB0), where
+    # the body actually is unclamped (+0x78) and the facing pair (+0xBC). A
+    # frozen press with all of them unchanged says the walk-start never ran.
+    out.update(_r5_fields(ablk, "async_"))
     # Classified on the value that gets STORED, not on the full-precision one,
     # so a reader can recompute `gate1` from the row and get the same answer. A
     # verdict that cannot be reproduced from the record it ships with is a
@@ -1190,6 +1256,17 @@ def sample(handle, agbase, agent_ptr, aid=None, hist_gate=None):
                    i32(blk, A_TARGET + 8)],
         "target_invalid": u32(blk, A_TARGET) == INVALID_POS,
         "vel": [round(vx, 2), round(vy, 2)],
+        # CANCELWALK-R5, sync side. `point_raw`/`vel_raw` deliberately duplicate
+        # values this dict already carries under other names, so a reader
+        # diffing the two copies compares LIKE WITH LIKE (`point` is rounded and
+        # carries a plane, `live` is dead-reckoned) instead of re-deriving the
+        # correspondence at read time and getting it wrong.
+        # `stop` is EXCLUDED and the exclusion is the point: this dict already
+        # ships `"stop"` from the same offset, and `**` would have let the
+        # splice silently win -- the exact clobber section 12's uniqueness check
+        # exists to catch, which is how this was found. The async side keeps its
+        # own `async_stop` because nothing else carries the twin's.
+        **{k: v for k, v in _r5_fields(blk).items() if k != "stop"},
     }
 
 
@@ -1260,7 +1337,16 @@ def sample(handle, agbase, agent_ptr, aid=None, hist_gate=None):
 # round was closing, reproduced inside the fix for it. A FIXED 400 ms case
 # pins the tolerance into [40, 400).
 # Read off the run, not predicted: 6+1+2+0+50+13+14+15+26+38+13+8+45.
-SELFTEST_FLOOR = 231
+# 231 -> 240 on 2026-08-24 with CANCELWALK-R5's decode-only field set: section
+# 14 is the new 9-check block (five offsets decoded from distinct non-zero
+# bytes, the offsets' own placement inside the already-fetched span, the ASYNC
+# copy surfacing its OWN values rather than a second decode of the sync block,
+# a refused twin blanking every async key, and sample() calling the shared
+# decoder). Section 12's uniqueness check earned its keep in the same commit:
+# it caught `stop` colliding with the key sample() already ships from the same
+# offset, which `**` would have let the splice silently win.
+# Read off the run, not predicted: 6+1+2+0+50+13+14+15+26+38+13+8+45+9.
+SELFTEST_FLOOR = 240
 
 
 def _say_check(ok, text):
@@ -1340,7 +1426,7 @@ def selftest():
                     _selftest_fence_verdict, _selftest_episodes,
                     _selftest_flip_denominator, _selftest_gate1,
                     _selftest_early_outs, _selftest_naming,
-                    _selftest_chain):
+                    _selftest_chain, _selftest_r5):
         got = section()
         bad += got[0]
         ran += got[1]
@@ -1717,9 +1803,11 @@ def _selftest_fence_bytes():
 # --------------------------------------------------------------------------
 def _fake_agent(agent_id, world=0, point=(0.0, 0.0), plane=0, vel=(0.0, 0.0),
                 updated=0, stop=0, segment=(0.0, 0.0), seg_plane=0, mode=0,
-                point_bits=None):
+                point_bits=None, planner=0, direction=(0.0, 0.0)):
     """An AgAgent block. Every default is the zero the old two-argument form
-    produced, so section 6's fixtures are byte-for-byte what they were."""
+    produced, so section 6's fixtures are byte-for-byte what they were --
+    including R5's `planner`/`direction`, whose defaults write the zeros those
+    offsets already held."""
     b = bytearray(AGENT_SPAN)
     struct.pack_into("<I", b, A_ID, agent_id)
     struct.pack_into("<i", b, A_WORLD, world)
@@ -1733,6 +1821,8 @@ def _fake_agent(agent_id, world=0, point=(0.0, 0.0), plane=0, vel=(0.0, 0.0),
     struct.pack_into("<ff", b, A_SEGMENT, *segment)
     struct.pack_into("<i", b, A_SEGMENT + 8, seg_plane)
     struct.pack_into("<i", b, A_MODE, mode)
+    struct.pack_into("<I", b, A_PLANNER, planner)
+    struct.pack_into("<ff", b, A_DIR, *direction)
     return bytes(b)
 
 
@@ -3198,19 +3288,24 @@ def _selftest_naming():
               # making: the fence already ships `hist_head`, so a chain key
               # spelled `hist_head` would have silently replaced the head
               # pointer with something else in every stored row.
-              "hist": list(HIST_KEYS)}
+              "hist": list(HIST_KEYS),
+              # CANCELWALK-R5's SYNC group, minus the one name sample() already
+              # ships from the same offset. `stop` is filtered at the splice
+              # rather than renamed, and this list records that decision where
+              # the collision would be caught: this check is what found it.
+              "r5": [k for k in R5_KEYS if k != "stop"]}
     seen, dupes = set(), set()
     for keys in groups.values():
         dupes |= seen & set(keys)
         dupes |= {k for k in keys if keys.count(k) > 1}
         seen |= set(keys)
-    ok = not dupes and sum(k is None for k in ret.value.keys) == 4
+    ok = not dupes and sum(k is None for k in ret.value.keys) == 5
     bad += not ok
     ran += 1
     print(f"   [{'PASS' if ok else 'FAIL'}] the {len(seen)} fields a row "
           f"carries are unique across all {len(groups)} groups "
           f"({', '.join(f'{g} {len(k)}' for g, k in groups.items())}) and "
-          f"sample() splices exactly 4 of them"
+          f"sample() splices exactly 5 of them"
           + (f" -- COLLIDING: {sorted(dupes)}" if dupes else ""))
 
     # AND THE SPLICE REALLY IS THE FUNCTION'S OWN. `sample()` calling
@@ -3817,6 +3912,102 @@ def _selftest_chain():
     print(f"   [{'PASS' if ok else 'FAIL'}] and the healthy walk really did "
           f"produce {good['hist_n']} nodes ending at t={tail} "
           f"-- a parser that refused everything would pass all the refusals")
+    return bad, ran
+
+
+def _selftest_r5():
+    """14. CANCELWALK-R5's fields: decoded from the right bytes, on BOTH copies,
+    and blanked rather than stale when the twin read refuses."""
+    print("\n14. CANCELWALK-R5: the walk-start footprint, both copies (H5/H7)")
+    bad = ran = 0
+
+    # THE OFFSETS, ASKED OF THE BYTES. Every value distinct and none of them
+    # zero, so a decode that read a neighbouring dword names itself. This is
+    # the check that would catch A_PLANNER pointing at 0x54 -- the failure
+    # mode section 5's comment describes for the fence constants, in the one
+    # place R5's verdict actually rests.
+    blk = _fake_agent(7, planner=0x1234ABCD, direction=(0.25, -0.75),
+                      point=(11.5, -22.25), vel=(3.5, -4.25), stop=4242)
+    got = _r5_fields(blk)
+    for key, want in (("planner", 0x1234ABCD), ("dir", [0.25, -0.75]),
+                      ("stop", 4242), ("point_raw", [11.5, -22.25]),
+                      ("vel_raw", [3.5, -4.25])):
+        ok = got[key] == want
+        bad += not ok
+        ran += 1
+        print(f"   [{'PASS' if ok else 'FAIL'}] {key:10} decodes to {want} "
+              f"(got {got[key]}) -- distinct non-zero values, so reading a "
+              f"neighbouring dword cannot pass")
+
+    # THE OFFSETS THEMSELVES, against the fields they must not collide with.
+    ok = (A_PLANNER == 0x50 and A_DIR == 0xBC
+          and A_PLANNER + 4 <= A_UPDATED and A_DIR + 8 <= A_MODE
+          and A_DIR + 8 <= AGENT_SPAN)
+    bad += not ok
+    ran += 1
+    print(f"   [{'PASS' if ok else 'FAIL'}] A_PLANNER {A_PLANNER:#x} and "
+          f"A_DIR {A_DIR:#x} sit where the client writes them and inside the "
+          f"span already fetched -- R5 adds NO cross-process read")
+
+    # BOTH COPIES, and the prefix really lands on the twin. A version that
+    # decoded the sync block twice would look identical in one row and be
+    # useless for the only question R5 asks.
+    ARRAY, AG, ASYNC = 0x0A000000, 0x10000000, 0x0B000000
+    sync_blk = _fake_agent(7, planner=1, direction=(1.0, 0.0),
+                           point=(100.0, 0.0))
+    async_blk = _fake_agent(7, world=1, planner=2, direction=(0.0, 1.0),
+                            point=(200.0, 0.0))
+
+    def read(addr, n):
+        if addr == AG + OFF_WORLD_CLOCK:
+            b = bytearray(GATE1_HDR_SPAN)
+            struct.pack_into("<I", b, OFF_ASYNC_ARRAY - OFF_WORLD_CLOCK, ARRAY)
+            struct.pack_into("<I", b, OFF_ASYNC_COUNT - OFF_WORLD_CLOCK, 64)
+            return bytes(b[:n])
+        if addr == ARRAY + 7 * 4:
+            return struct.pack("<I", ASYNC)
+        if addr == ASYNC:
+            return async_blk[:n]
+        return None
+
+    g1 = gate1_read(read, AG, 7, sync_blk)
+    ok = (g1.get("async_planner") == 2 and g1.get("async_dir") == [0.0, 1.0]
+          and g1.get("async_point_raw") == [200.0, 0.0])
+    bad += not ok
+    ran += 1
+    print(f"   [{'PASS' if ok else 'FAIL'}] gate1_read surfaces the ASYNC "
+          f"copy's own values (planner={g1.get('async_planner')}, "
+          f"dir={g1.get('async_dir')}) -- not a second decode of the sync "
+          f"block, which is the one substitution that would void the run")
+
+    # A REFUSED TWIN BLANKS THEM. Same rule the rest of gate1_read obeys: last
+    # row's numbers standing in a refused row is how a frozen press would get
+    # scored from stale bytes.
+    blanked = gate1_read(lambda a, n: None, AG, 7, sync_blk)
+    ok = (all(blanked.get("async_" + k) is None for k in R5_KEYS)
+          and blanked["gate1"].startswith("unread:"))
+    bad += not ok
+    ran += 1
+    print(f"   [{'PASS' if ok else 'FAIL'}] a refused twin read blanks every "
+          f"async R5 key rather than leaving the previous row's numbers "
+          f"standing ({blanked['gate1']})")
+
+    # AND sample() MUST CARRY THEM. The floor comment's own lesson: eight blank
+    # keys spliced from nowhere look identical in the file to eight real ones,
+    # so this asks the syntax tree that sample() calls the decoder rather than
+    # trusting that the keys appear.
+    import ast
+    src = open(os.path.abspath(__file__), encoding="utf-8").read()
+    fn = next(f for f in ast.walk(ast.parse(src))
+              if isinstance(f, ast.FunctionDef) and f.name == "sample")
+    calls = {n.func.id for n in ast.walk(fn)
+             if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
+    ok = "_r5_fields" in calls
+    bad += not ok
+    ran += 1
+    print(f"   [{'PASS' if ok else 'FAIL'}] sample() CALLS _r5_fields for the "
+          f"sync copy -- keys typed out by hand would drift from the decoder "
+          f"the async side uses")
     return bad, ran
 
 

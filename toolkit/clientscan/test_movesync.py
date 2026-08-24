@@ -219,6 +219,11 @@ MOVETAP_SECTIONS = (
     # hazard, the future tolerance's real ground, the read budget, and the
     # printer's OUTPUT rather than its call site.
     ("_selftest_chain", 45),
+    # CANCELWALK-R5's decode-only field set: five offsets read from distinct
+    # non-zero bytes, their placement inside the already-fetched span, the
+    # ASYNC copy surfacing its OWN values, a refused twin blanking every async
+    # key, and sample() calling the shared decoder.
+    ("_selftest_r5", 9),
 )
 MOVESYNC_SECTIONS = (
     ("_selftest_jump_tally", 14),
@@ -1413,6 +1418,26 @@ def main():
              "with no low bound a head of 0x400 -- inside the 64 KB "
              "null-guard region no Windows process ever maps -- reads as a "
              "node address rather than as garbage")
+
+    _wrap(movetap, "_selftest_r5",
+          "CANCELWALK-R5: the walk-start footprint is decoded from the right "
+          "bytes, on BOTH world copies",
+          "R5's whole verdict is whether the ASYNC body's walk-start fields "
+          "CHANGE across a frozen press, so an offset pointing one dword away "
+          "-- or an async decode that silently re-read the sync block -- would "
+          "produce a confident 'signature absent' from bytes nobody asked for")
+    _control(movetap, "A_PLANNER", 0x54, "_selftest_r5",
+             "the planner offset is load-bearing and a one-dword slip is "
+             "caught",
+             "+0x50 is the field the local walk-start writes and the halt "
+             "clears; reading +0x54 instead returns a confident number that "
+             "never changes, which is exactly what H5 predicts and would be "
+             "indistinguishable from it")
+    _control(movetap, "A_DIR", 0xC4, "_selftest_r5",
+             "and so is the facing offset",
+             "+0xC4 is the movement MODE, an int; decoding it as the facing "
+             "float pair would make the direction classifier read garbage "
+             "while still printing two plausible numbers")
 
     # ---------------------------------------------------------------------
     print("\n19. movesync's C4/C5/C9 sections, in the SUITE")

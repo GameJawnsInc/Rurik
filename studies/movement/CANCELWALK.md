@@ -563,6 +563,39 @@ frozen press — one-shot int3/trnhook at `0x0081A931`/`0x0081A93C` (arm before
 launch; the injection window is map-load), or plumb the controller object into
 movetap. This separates H5's two bits from each other and from H7 directly.
 
+**R5's Tier-1 instrument is BUILT (2026-08-24), owner's choice after R6.** The
+fields land in `movetap.sample()` as decode-only additions — every byte was
+already inside the `0xD0` block the poll fetches for **both** copies, so the
+read budget is unchanged (the check asserting that is in the section below).
+Row keys, per copy: `planner` (`+0x50`, the queued-move store the local
+walk-start writes at `0x005FC8F0` and the halt `0x005FC5C0` clears — the
+walk-start's own footprint, and the field `0x0028`'s handler cancels; its
+stored VALUE is UNVERIFIED, read it as a change detector, never as a
+quantity), `dir` (`+0xBC/+0xC0`, the facing pair), and raw `stop`/`point_raw`/
+`vel_raw` — raw rather than dead-reckoned, because `position_at` advances on
+the world clock alone and would show motion on a body that never moved. The
+twin's are prefixed `async_` and come out of `gate1_read`, where its block is
+already in hand. `test_movesync.py` §17 wraps the 9-check section with two
+controls that redden it on a one-dword offset slip — the failure that would
+**void** R5 rather than break it, since a wrong offset returns a confident
+never-changing number, which is exactly what H5 predicts.
+
+*The readout, and it is a DIFF across one press instant, not a level:* sample
+through a cancelled cast, then compare the row before the press with the rows
+after. **H5/H6 → signature ABSENT**: `async_planner`, `async_dir`,
+`async_vel_raw` and the async mode all unchanged across the frozen press (the
+applier bailed before any store). **H7 → signature PRESENT but degenerate**:
+`async_planner` takes a fresh value and/or `async_dir` turns to the press's
+heading, yet `async_vel_raw` stays `[0, 0]` and no leg bakes. **The
+positive control is mandatory and interpretive, not confirmatory**: one
+ORDINARY press in the same session must move all of them within a poll — if
+it does not, the instrument is not reading the walking body and the run is
+VOID, which is a control interpreting a null and has no authority over any
+positive. R6's own lesson applies to the protocol: **the operator must walk
+and stop before the cast**, so the session contains a real walk for that
+control and the pre-cast state matches the canonical freeze rather than
+R6's standstill.
+
 ### 7.4a R6 RAN — VOID for H6 (zero exposure), but a clean standstill freeze that weakens H6 (2026-08-24)
 
 `--stop-answer=ack`, capture `authsrv-20260824T135521-c1`, operator-driven, map
