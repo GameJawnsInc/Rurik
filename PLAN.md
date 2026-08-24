@@ -1759,9 +1759,37 @@ armed but NEVER GIVEN AN ADDRESS -- its zero hit count means nothing". Status:
 run must answer is "was the watch live", and the report now answers it before
 any interpretation. `test_commandertrap` 52 -> 61, floor 18 -> 27;
 `test_compositetrap` 80 -> 81.
-**Still open**: the writer outside `0x0082EDA0` (the sharpest, witnessed by
-9.18 and now with an instrument waiting on one run), what TRIGGERS the
-wire-ordered instances (movement excluded), `row+0x08` which is
+★★ **THE WRITER IS FOUND (9.20), and a bug in the trap had been hiding it.**
+Three watch runs read `rowwatch 0` on a row that demonstrably changed, and the
+re-verification said why: **`still live 0, GONE 50`, with `DR3=0 DR7=0x15`** --
+`L0|L1|L2`, exactly the three execute slots that existed BEFORE the watch was
+armed. `_exception` reads the thread context, calls `on_hit`, then writes that
+context BACK to set EFLAGS.RF and clear DR6 -- and `CONTEXT_FULL_READ` includes
+the debug registers, so it restored the pre-handler DRs over anything the
+handler armed, on the one thread doing all the composite work. `dr_state()` now
+computes the DRs from the currently armed set and the resume path RE-STAMPS
+from it. With that fixed: **`rowwatch 2`, `still live 52, GONE 0`.** Two writes
+caught -- `~0x005AFC82` zeroing the row (the clear's memset, independently
+corroborating 9.14) and **`~0x0082EB06` setting it to 90, the 91 -> 90 change
+9.17 chased**. The store is `mov [ebx+0x24], ecx` at **`0x0082EB03`**, inside
+**`0x0082EAA0`** which carries ArenaNet's own **`CpsBase:537 itemId`**: it walks
+the CpsBase registry at `[0x1087790]` and, for every slot whose `m_slotItemId`
+matches the item id, re-reads the item's CURRENT data, rewrites the whole
+16-byte row and re-applies `override[slot]`. Chain complete: the item module
+(`0x00848B9E`, after raising UI event 0x10000106) -> a bare CpsApi tail-jump
+thunk (`0x0082D660`, its only caller) -> `CpsBase::refresh(itemId)`. **So
+`m_slotItemData` has FIVE writing sites, not two** -- 0x0082EDA0's three (path
+A, path B, the clear's memset) plus these two -- and 9.11's "the writer" is the
+EQUIP writer. Every row-level reading in 9.11-9.16 stands; the array simply has
+a second owner. It also closes 9.17's chest question outright: the probe's
+re-declare of item id 3 reaches this refresh, which finds CpsBase slot 2 still
+wearing item 3 and rewrites its row from the item's NEW data (boots, record
+90), with no equip message involved -- which is why both equip exits were
+silent and why record 91 vanishes from the reset residue. **Why both static
+hunts missed it was PREDICTED in 9.18**: the row pointer is already in `ebx`,
+so the store is `89 4B 24` (ModRM rm=011, no SIB) and the byte scan required a
+SIB form. `test_commandertrap` 52 -> 63, floor 14 -> 29.
+**Still open**: what TRIGGERS the wire-ordered instances (movement excluded), `row+0x08` which is
 still zero everywhere, and the THIRD kind of type-45 id -- record type 17 OUTSIDE any run (1887,
 3663 and 20 others), which is neither kind tested so far.
 Prior status follows.

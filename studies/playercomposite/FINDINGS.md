@@ -1992,3 +1992,128 @@ entry does not claim otherwise.
 §9.17's writer outside `0x0082EDA0` therefore remains open, on the evidence
 §9.18 established: ten threads armed and verified, both write exits silent, the
 row changed anyway.
+
+## 9.20 THE WRITER IS FOUND — `CpsBase`'s per-item row refresh, caught by the watchpoint after a bug in the trap was hiding it (2026-08-23)
+
+§9.17 said `m_slotItemData` has a writer outside `0x0082EDA0`. §9.18 made that
+claim sound (ten threads armed and verified, both exits silent, the row changed
+anyway). §9.19 built the data watchpoint and could not get it to fire. This
+entry finds the bug that was hiding it, and then finds the writer.
+
+### The bug: the trap was switching its own watch off
+
+Three runs read `rowwatch 0` on a row that demonstrably changed. The
+re-verification added in §9.19 said why in one line:
+
+```
+re-checked at later hits: still live 0, GONE 50
+  x50    DR3=0x00000000 DR7=0x00000015  (address cleared too)
+```
+
+`DR7 = 0x15` is `L0|L1|L2` — **exactly the three execute slots that existed
+before the watch was armed.** The watch was not failing to fire; it was being
+switched off, fifty times out of fifty, on the one thread doing all the
+composite work.
+
+`_exception` reads the thread context, calls `on_hit`, then writes that
+context back to set `EFLAGS.RF` and clear `DR6`. **`CONTEXT_FULL_READ`
+includes the debug registers**, so writing the pre-handler context back
+*restores the pre-handler DRs* — and `arm_watch` runs inside `on_hit`.
+Anything a handler arms is undone by the trap's very next instruction. The
+existing deferred-arming path never hit this only because it re-arms *after*
+that write rather than during the handler.
+
+`dr_state()` now computes `(Dr0..Dr3, Dr7)` from the currently armed set,
+`_arm` uses it, and the resume path **re-stamps** from it instead of writing
+back whatever it read. With that fixed:
+
+```
+rowwatch  2
+WATCH slot 3: 4B at 0x25EC940C, armed 51 thread(s), VERIFIED live on 51
+    re-checked at later hits: still live 52, GONE 0
+```
+
+### The writer
+
+Two writes caught on the watched dword, and both are informative:
+
+| writer (VA) | row became | what it is |
+|---|---|---|
+| `~0x0082EB06` | **90** | the 91 → 90 change §9.17 chased |
+| `~0x005AFC82` | 0 | the clear's memset — independently corroborating §9.14 |
+
+The store is at **`0x0082EB03`**, inside a function at **`0x0082EAA0`** that
+carries ArenaNet's own **`CpsBase:537  itemId`**:
+
+```
+0082EAE0  xor edi, edi                     ; slot = 0
+0082EAE2  cmp [esi+edi*4+0xb4], ecx        ; m_slotItemId[slot] == itemId?
+0082EAE9  jne <next slot>
+0082EAF0  call 0x8451e0                    ; the item's CURRENT data
+0082EAF9  shl ebx, 4 / add ebx, esi        ; ebx = this + slot*16
+0082EB01  mov ecx, [edx]
+0082EB03  mov [ebx+0x24], ecx              ; <-- THE WRITE
+0082EB09  mov [ebx+0x28], eax              ; and the rest of the 16-byte row
+0082EB0F  mov [ebx+0x2c], eax
+0082EB15  mov [ebx+0x30], eax
+0082EB18  mov eax, [esi+edi*4+0xd8]        ; override[slot]
+0082EB27  mov [ebx+0x24], eax              ; the costume, re-applied
+```
+
+So it is **"refresh every slot wearing this item id"**: it walks the CpsBase
+registry at `[0x1087790]`, and for each slot whose `m_slotItemId` matches, it
+re-reads the item's data, rewrites the whole row, and re-applies the costume
+override. Exactly the mechanism §9.17 hypothesised and could not locate.
+
+The chain, complete:
+
+```
+0x00848B9E  the item module, after raising UI event 0x10000106
+0x0082D660  a bare CpsApi tail-jump thunk (its only caller)
+0x0082EAA0  CpsBase::refresh(itemId)   -- assert CpsBase:537 `itemId`
+0x0082EB03  mov [ebx+0x24], ecx        -- the write
+```
+
+### Why both static hunts missed it, and it was predicted
+
+§9.18 wrote that "a writer that computes the row pointer into a register and
+stores through it is invisible to both approaches, which is the likely shape."
+It is exactly that. The byte scan required `mov [base+index*scale+0x24], r32`
+(ModRM rm=100, a SIB byte); this is `mov [ebx+0x24], ecx` = `89 4B 24`, ModRM
+rm=011, **no SIB** — the row pointer was already in `ebx`. The item-accessor
+sweep missed it because `0x0082EAF0` *is* in that list of nine callers, and I
+read past it as one of the eight "already known" sites inside `0x0082EDA0`'s
+neighbourhood without checking which function it was actually in.
+
+### So `m_slotItemData` has FIVE writing sites, not two
+
+| VA | in | when |
+|---|---|---|
+| `0x0082F08A` | `0x0082EDA0` path A | a slot re-set with the same item (weapon only) |
+| `0x0082F0E0` | `0x0082EDA0` path B | a slot's item changed |
+| `0x0082EF5D` | `0x0082EDA0` clear | itemId 0 into a populated slot (memset) |
+| **`0x0082EB03`** | **`0x0082EAA0`** | **an item's data changed — refresh every slot wearing it** |
+| **`0x0082EB27`** | **`0x0082EAA0`** | **and re-apply that slot's costume override** |
+
+§9.11 called `0x0082EDA0` "the writer". It is the *equip* writer. Every
+row-level reading in §9.11–§9.16 stands — they are reads of rows at moments we
+watched — but the array has a second owner, and a run that only watches the
+equip path will see rows change under it.
+
+### And it closes §9.17's chest question completely
+
+The `armor_slots` probe re-declares item id **3**, which `STARTER_ARMOUR`
+already uses for `warrior_body`. That re-declare reaches `0x0082EAA0`, which
+finds CpsBase slot 2 still wearing item 3 and rewrites its row from the item's
+*new* data — boots, record 90. No equip message was involved, which is why
+both equip exits were silent and why record 91 vanishes from the reset residue.
+
+### What the instrument is now worth
+
+`rowwatch` is proven: it arms mid-run at an address that does not exist until a
+CpsBase does, stays live across a whole session, catches writes on any thread,
+and names the writing instruction. The report says `armed N, VERIFIED live on
+N` and `still live K, GONE M` every run, so a future zero is readable. It cost
+four runs to get there and three of those were the trap fighting itself —
+recorded because the next person to arm a watch from an `on_hit` handler would
+otherwise pay it again.
