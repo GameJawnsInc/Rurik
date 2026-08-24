@@ -7699,6 +7699,27 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   press and retarget orders, each door keeping the order measured at it.
   The tick now only removes a released entry; §1 asserts it announces nothing
   a second time. Floor 20),
+  `toolkit/authsrv/test_cancelwalk.py` (everything AROUND the CANCELWALK
+  runs — the walk-on-cancel experiment arms of `--cancel-answer`
+  (`studies/movement/CANCELWALK.md` §5), whose verdicts are operator runs and
+  deliberately not this file's. §1: `parse_cancel_answer` accepts exactly
+  `suppress`/`retail-lead`/`lead:<u>` and refuses everything else LOUDLY,
+  typos included — a mistyped experiment must not run the shipped default
+  under an experiment's name. §2 is the file's spine: `cancelwalk_lead_dest`
+  reproduces retail's own three cancel-instant granted points from the live
+  capture's reported+vec2 within 0.02 u (the D1 formula, `20260824T074002`
+  t=81.660/114.641/128.805), measures a fixed lead along the UNIT heading,
+  and grants the reported point on a degenerate one. §3: the composition
+  matrix refuses the arm without `--zero-lead` (the inert-flag defect) and
+  with `--arrival-carry` (the F1b queue would model the reported point while
+  the wire carried the led one), and notes the allowed combination as
+  DIAGNOSTIC ONLY. §4: `cancel_on_move` returns what the press hit —
+  `cast`/`swing`/None, once per entry — which is the return the 0x003D arm
+  keys the changed answer on. §5 greps the handler for the gates a run
+  depends on: the 0x0025 send and the walking latch both guarded on NOT
+  cw_suppress, ONE 0x0029 send site serving default and lead arms alike, and
+  the hit captured from the return value rather than a state latch the click
+  arm would leak through. Floor 24),
   `toolkit/authsrv/test_killwindow.py` (the kill window, checked against
   ArenaNet's own kills. Our server sent one message when an agent died —
   `0x00F1` with the death bit — where the real service sends three: status,

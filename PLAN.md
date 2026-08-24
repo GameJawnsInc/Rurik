@@ -1369,6 +1369,38 @@ byte-identical on `main`, not this change.
 
 ## 8. Immediate next actions
 
+### CANCELWALK: the walk-on-cancel handover, desk phase CLOSED — three runs await the operator (2026-08-24)
+
+Castmech §3g's handover (one press cancels the cast but does not move; retail
+moves on the single press) re-read at a desk from the two 2026-08-24 captures:
+[studies/movement/CANCELWALK.md](studies/movement/CANCELWALK.md), evidence
+reader `toolkit/authsrv/cancelwalk.py`. **Two of the handover's three
+questions closed without a run**: message ORDER is a non-question (§3f had
+retail's order backwards — the grant rides AFTER `[8→0, 59, E2]`, and ours
+already matches; correction filed at castmech §3g-i), and `0x002B` is
+movement-family bookkeeping, not a missing cancel message (retail's own W
+cancel walks without one; its `[0.66, 4]` backpedal row is incidentally the
+first wire witness for REALFIX-P1's contested FAMILY_RATE 4:0.66). **The
+handover's mechanism is refuted too**: retail's client does NOT walk to the
+granted point — grant north, walk WNW at t=128.805 — it self-walks its own
+live direction the moment the burst clears the hold, so the lead is not "a
+real destination", it is chase bookkeeping on a LATCHED stale vec2. What
+survives elimination (timing died on 25 frozen frames; every content delta
+died on retail's own variation) is exactly one universal delta — our
+cancel-instant `0x0029` grants the reported point, retail's grants strictly
+ahead — read narrowly as **CANCELWALK-H1: a zero-length grant answers the
+mid-hold movement request as "stay put"**. Three pre-registered loopback runs
+discriminate (CANCELWALK.md §5): R1 `--cancel-answer=suppress` (burst alone,
+zero risk), R2 `--cancel-answer=retail-lead` (the D1 tail verbatim,
+diagnostic only, warp cost pre-registered), R3 `lead:16` (the bisection).
+Arms built and refused into the composition matrix (`test_cancelwalk.py`, 24
+checks; `test_position_trust` re-encodes its two AST locks and fixes a
+red-at-HEAD NameError the castmech door left in its arm extractor). **No arm
+ships from a run directly** — the lead family's refutation stands
+steady-state; a PASS licenses one audited exception at one instant.
+**Operator-driven** (world-anchored casts): ≥3 cancelled casts per arm plus
+one camera-rotated direction-discriminator, wire readout only.
+
 ### MODEL AUTHORING: the one-bit question is answered, and every player identity closes (2026-08-22)
 
 The playercomposite rung landed end to end at a desk —

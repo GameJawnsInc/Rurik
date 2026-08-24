@@ -1837,8 +1837,12 @@ def main():
           f"per {floor:.2f}s, which is the bound the interval was derived for")
 
     # ---- the arm, EXECUTED --------------------------------------------
+    # `conn_id` joined the heading arm's free names on 2026-08-24, when the
+    # castmech arc landed `cancel_on_move(send, state, conn_id)` in the
+    # movement door -- without it every drive() below dies on a NameError
+    # before the first check runs (found red at HEAD by the CANCELWALK arc).
     arm = receive_arm("GAME_CMSG_TURN_TO_DIRECTION",
-                      ("values", "state", "rec", "send"))
+                      ("values", "state", "rec", "send", "conn_id"))
     HEAD = [1, [1000.5, 2000.25], 7, [766.0, 0.0], 1]
     SAME = [1, [1400.5, 2000.25], 7, [766.0, 0.0], 1]     # same heading, moved
 
@@ -1859,7 +1863,7 @@ def main():
         try:
             for v in reports:
                 w.now = time.time() - stamp_age
-                arm(v, st, r, w)
+                arm(v, st, r, w, 0)
         finally:
             authsrv.ZERO_LEAD = was
         return st, w, r
@@ -1942,7 +1946,7 @@ def main():
         was_j = authsrv.ZERO_LEAD
         authsrv.ZERO_LEAD = True
         try:
-            arm(JUMP, st_j, r_j, w_j)
+            arm(JUMP, st_j, r_j, w_j, 0)
         finally:
             authsrv.ZERO_LEAD = was_j
         return st_j, w_j, r_j
@@ -2131,14 +2135,36 @@ def main():
     zl_sends = [c for n in zl_send_blocks for c in ast.walk(n)
                 if isinstance(c, ast.Call) and isinstance(c.func, ast.Name)
                 and c.func.id == "send"]
-    check(len(zl_send_blocks) == 1 and len(zl_sends) == 1,
+
+    def _in_cw_guard(node, block):
+        """Is `node` inside the `if cw_dest is not None:` branch of `block`?
+
+        That guard is CANCELWALK's lead arm (2026-08-24): live only on the
+        report whose press cancelled a held action, and the one licence for
+        a second send (the 0x002B rate rider) inside the zero-lead block.
+        """
+        for n in ast.walk(block):
+            if (isinstance(n, ast.If) and isinstance(n.test, ast.Compare)
+                    and isinstance(n.test.left, ast.Name)
+                    and n.test.left.id == "cw_dest"
+                    and any(node is d for d in ast.walk(n))):
+                return True
+        return False
+
+    zl_default_sends = [c for c in zl_sends
+                        if not _in_cw_guard(c, zl_send_blocks[0])] \
+        if zl_send_blocks else []
+    check(len(zl_send_blocks) == 1 and len(zl_default_sends) == 1,
           "and exactly ONE `if ZERO_LEAD:` block in the file SENDS anything, "
-          "and it sends once",
+          "and outside CANCELWALK's cw_dest guard it sends exactly once",
           f"{len(zl_blocks)} ZERO_LEAD blocks of which {len(zl_send_blocks)} "
-          f"send, {len(zl_sends)} sends -- two send blocks would be two "
-          f"policies, which is how the heading arm once granted twice per "
-          f"report. (The second, sendless block is the verdict hoist that keeps "
-          f"the 0x0025 to one send site.)")
+          f"send, {len(zl_default_sends)} default-path sends of "
+          f"{len(zl_sends)} total -- two default sends would be two policies, "
+          f"which is how the heading arm once granted twice per report. The "
+          f"cw_dest guard is --cancel-answer's lead arm (diagnostic, off by "
+          f"default), whose 0x002B rider is the licensed extra. (The second, "
+          f"sendless block is the verdict hoist that keeps the 0x0025 to one "
+          f"send site.)")
     heading_arm_ast = arm_node("GAME_CMSG_TURN_TO_DIRECTION")
     stop_arm_ast = arm_node("GAME_CMSG_LAST_POS_BEFORE_MOVE_CANCELED")
     click_arm_ast = arm_node("GAME_CMSG_MOVE_TO_COORD")
@@ -2154,14 +2180,30 @@ def main():
           f"control: a matcher that finds ZERO_LEAD nowhere would pass the "
           f"other two halves for the wrong reason")
     zl = zl_send_blocks[0] if zl_send_blocks else None
-    payload = zl_sends[0].args[1].elts if zl_sends else []
+    payload = (zl_default_sends[0].args[1].elts
+               if zl_default_sends else [])
     dest_arg = payload[1] if len(payload) > 1 else None
-    check(isinstance(dest_arg, ast.Call) and isinstance(dest_arg.func, ast.Name)
-          and dest_arg.func.id == "list" and len(dest_arg.args) == 1
-          and isinstance(dest_arg.args[0], ast.Name)
-          and dest_arg.args[0].id == "reported",
-          "the source says `list(reported)` and nothing else",
-          f"{ast.dump(dest_arg) if dest_arg is not None else None}")
+    # The point is carried by `zl_point`, whose ONLY assignments in the block
+    # must be the default `list(reported)` and CANCELWALK's `cw_dest` -- so
+    # the shipped payload is still the reported position VERBATIM, provable
+    # from source, and the one other value is the diagnostic arm's.
+    zl_point_rhs = [n.value for n in ast.walk(zl)
+                    if isinstance(n, ast.Assign) and len(n.targets) == 1
+                    and isinstance(n.targets[0], ast.Name)
+                    and n.targets[0].id == "zl_point"] if zl else []
+    rhs_ok = (len(zl_point_rhs) == 2 and any(
+        isinstance(r, ast.Call) and isinstance(r.func, ast.Name)
+        and r.func.id == "list" and len(r.args) == 1
+        and isinstance(r.args[0], ast.Name) and r.args[0].id == "reported"
+        for r in zl_point_rhs) and any(
+        isinstance(r, ast.Name) and r.id == "cw_dest" for r in zl_point_rhs))
+    check(isinstance(dest_arg, ast.Name) and dest_arg.id == "zl_point"
+          and rhs_ok,
+          "the source grants `zl_point`, and its only values are "
+          "`list(reported)` (the shipped default) and `cw_dest` "
+          "(--cancel-answer's lead arm) -- nothing else",
+          f"dest={ast.dump(dest_arg) if dest_arg is not None else None} "
+          f"rhs={[ast.dump(r) for r in zl_point_rhs]}")
     zl_clipped = zl is not None and any(
         isinstance(c, ast.Call) and isinstance(c.func, ast.Name)
         and c.func.id == "clip_to_walkable" for c in ast.walk(zl))
@@ -2495,7 +2537,7 @@ def main():
                 st["grant_at"] = now - (10.0 if may else 0.0)
                 w.now = now - 10.0
                 try:
-                    arm(values, st, r, w)
+                    arm(values, st, r, w, 0)
                 except catch as exc:
                     w.raised.append(exc)
         finally:
@@ -3230,7 +3272,7 @@ def main():
             for values, may in steps:
                 st_["grant_at"] = clock.t - (10.0 if may else 0.0)
                 w_.now = clock.t
-                arm(values, st_, r_, w_)
+                arm(values, st_, r_, w_, 0)
                 clock.t += step_dt
         finally:
             authsrv.ZERO_LEAD, authsrv.PLANE_CARRY = was_zl, was_pc
@@ -3345,7 +3387,7 @@ def main():
         ac_dead_state["grant_at"] = now - 10.0
         dead.now = now - 10.0
         try:
-            arm(pc_report(1000.5, 7), ac_dead_state, FakeRec(), dead)
+            arm(pc_report(1000.5, 7), ac_dead_state, FakeRec(), dead, 0)
         except OSError:
             pass
     finally:

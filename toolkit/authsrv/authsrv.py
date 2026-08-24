@@ -1487,6 +1487,101 @@ PLANE_CARRY = False
 # either; what would settle it is repetition, three arms by three runs.
 ARRIVAL_CARRY = False
 
+# --cancel-answer. CANCELWALK's pre-registered experiment arms, OFF by
+# default, and DIAGNOSTIC ONLY -- no mode here is a shipping candidate until
+# its run PASSES and a separate audited step lands it
+# (studies/movement/CANCELWALK.md 5 is the ladder and the predictions,
+# registered before this code was written).
+#
+# THE SYMPTOM (castmech 3g's handover): a movement press that cancels a cast
+# does not move the player; a second press is needed. Retail moves on the
+# single press. The desk work eliminated order (ours already matches retail's
+# burst-then-movement-tail, CANCELWALK-F1), timing (the freeze survives ~25
+# client frames, F6), 0x0025 presence and 0x002B (retail walks with and
+# without each, F4) -- the one wire delta present against BOTH retail walking
+# cancels is the 0x0029's destination: retail leads by its stale vec2, we
+# grant the reported point verbatim. And the lead does NOT steer the body
+# (F3: the client walks its own live direction against the grant's), so the
+# surviving hypothesis is narrower than "give it somewhere to walk":
+# CANCELWALK-H1 reads the cancel-instant grant as PERMISSION/REFUSAL for a
+# mid-hold movement request -- a zero-length grant as "stay put".
+#
+# THE ARMS, one change per run, cancel instants only (the report whose
+# cancel_on_move released a cast or stopped a swing):
+#   suppress    -- the release burst alone: no 0x0025, no 0x0029 on that
+#                  report. Sends LESS; zero warp exposure. H2's arm.
+#   retail-lead -- retail's cancel-4 tail verbatim: 0x0025, 0x002B [1.0,
+#                  movementType], 0x0029 at reported + vec2 + 0.5*unit
+#                  (the D1 formula, confirmed at cancel instants 3 of 3,
+#                  CANCELWALK-F2). H1's arm. The copy bakes a <=768.5 u leg
+#                  along a STALE vector; nothing re-pins it until the next
+#                  report's zero-lead grant, so a +0x48 resync inside that
+#                  window may snap visibly. That cost is pre-registered and
+#                  lands AFTER the walk readout; it is why this arm can
+#                  never ship as-is.
+#   lead:<u>    -- the same tail with the lead cut to <u> units (R3's
+#                  bisection arm; 16 is the registered first rung). Only
+#                  meaningful after retail-lead walks and suppress froze.
+#
+# ZERO-LEAD STAYS THE POLICY. These arms modify ONE report's answer; every
+# other report is answered exactly as --zero-lead ships. REFUSED without
+# --zero-lead (an arm that modifies a send site that is not sending would be
+# inert while the run log said otherwise -- the --plane-carry lesson), and
+# the composition matrix in zero_lead_composition() is the check.
+CANCEL_ANSWER = None   # None | "suppress" | "lead"
+CANCEL_LEAD = None     # None = retail's |vec2| + 0.5; else units along vec2
+
+
+def parse_cancel_answer(text):
+    """Pure: an --cancel-answer argument -> (mode, lead) or a refusal.
+
+    Returns (mode, lead, refusal): mode in (None, "suppress", "lead"), lead
+    None or a positive float, refusal None or the SystemExit text. Refusals
+    are loud because a mistyped arm would otherwise run the shipped default
+    while the operator's log said an experiment was on -- the exact defect
+    zero_lead_composition() exists to refuse (an inert flag scored as a run).
+    """
+    if text is None:
+        return None, None, None
+    if text == "suppress":
+        return "suppress", None, None
+    if text == "retail-lead":
+        return "lead", None, None
+    if text.startswith("lead:"):
+        try:
+            lead = float(text[5:])
+        except ValueError:
+            lead = None
+        if lead is None or not (0.0 < lead <= 768.5):
+            return None, None, (
+                f"--cancel-answer={text}: the lead must be a number of units "
+                f"in (0, 768.5] -- 768.5 is retail's own |vec2| + 0.5 ceiling "
+                f"and 0 is the shipped zero-lead answer, which needs no flag.")
+        return "lead", lead, None
+    return None, None, (
+        f"--cancel-answer={text!r} names no arm. The arms are 'suppress', "
+        f"'retail-lead' and 'lead:<units>' -- studies/movement/CANCELWALK.md "
+        f"5 (R1, R2, R3).")
+
+
+def cancelwalk_lead_dest(reported, heading, lead=None):
+    """Pure: the cancel-instant destination for the lead arms.
+
+    `reported` and `heading` are the client's own 0x003D slots 1 and 3;
+    `lead` None means retail's expression -- the full vec2 plus 0.5 u along
+    it, which is REALFIX's D1 confirmed at cancel instants 3 of 3
+    (CANCELWALK-F2: granted y = reported y + vec2 y + 0.5*unit y, exact).
+    A degenerate heading returns the reported point: a zero vector names no
+    direction, and inventing one would put a fabricated leg on the wire.
+    """
+    mag = math.hypot(heading[0], heading[1])
+    if mag <= 1e-6:
+        return [float(reported[0]), float(reported[1])]
+    ux, uy = heading[0] / mag, heading[1] / mag
+    dist = (mag + 0.5) if lead is None else float(lead)
+    return [float(reported[0]) + dist * ux, float(reported[1]) + dist * uy]
+
+
 # The item id we hand the starter hammer. Any nonzero value the client has not
 # already seen would do; 1 is the first because the inventory is otherwise
 # empty. It is what goes in the weapon set's leadhand slot.
@@ -4007,7 +4102,8 @@ ZERO_LEAD_REFUSED_ARMS = (
 def zero_lead_composition(zero_lead=False, heading_grant=False,
                           client_endpoint=False, grant_suppress=False,
                           resync=False, stop_echo=False, click_sweep=False,
-                          plane_carry=False, arrival_carry=False):
+                          plane_carry=False, arrival_carry=False,
+                          cancel_answer=None):
     """Pure: may these movement flags run together, and what must be said?
 
     Returns (refusal, notes). `refusal` is None or the text main() raises as a
@@ -4129,6 +4225,27 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
                 "is the failure this function exists for. Pass "
                 "--zero-lead --plane-carry for the F1 arm, or --zero-lead "
                 "alone for the P2 arm it is measured against."), []
+    if cancel_answer and arrival_carry:
+        return ("--cancel-answer and --arrival-carry cannot run together. "
+                "The lead arms send a 0x0029 whose point is NOT the reported "
+                "position, while F1b's arrival queue models every zero-lead "
+                "grant as bound for the reported point -- so the copy's "
+                "modelled arrival would be a lie for exactly the instant the "
+                "experiment exists to read, and the suppress arm starves the "
+                "queue an entry it believes it armed. One diagnostic at a "
+                "time; CANCELWALK's runs are pre-registered against the "
+                "shipped default (--zero-lead --plane-carry) and nothing "
+                "else."), []
+    if cancel_answer and not zero_lead:
+        return ("--cancel-answer requires --zero-lead. The CANCELWALK arms "
+                "are MODIFIERS on the zero-lead answer to the one report "
+                "whose cancel_on_move released a held action -- suppress "
+                "withholds that answer, the lead arms change its point -- and "
+                "with --zero-lead off there is no such answer to modify. "
+                "Passed alone it would change NOTHING while the run log said "
+                "a CANCELWALK arm was on, which is the inert-flag defect "
+                "--plane-carry's refusal documents. Pass --zero-lead (or "
+                "nothing: it is the default) with --cancel-answer."), []
     if not zero_lead:
         return None, []
     on_flags = {"--heading-grant": heading_grant,
@@ -4193,6 +4310,15 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
             "stamp the shared grant clock and will starve the heading arm. "
             "REALFIX-L1 is CLICK-FREE by protocol, so this flag should be "
             "inert -- and if it is not inert, the run was not click-free.")
+    if cancel_answer:
+        notes.append(
+            f"      + --cancel-answer={cancel_answer}: CANCELWALK arm, "
+            f"DIAGNOSTIC ONLY. It changes the answer to the ONE report whose "
+            f"cancel_on_move released a cast or stopped a swing; every other "
+            f"report is answered exactly as --zero-lead ships. No outcome "
+            f"ships from this flag directly -- a PASS licenses a candidate "
+            f"for a separate audited step. Predictions and readout: "
+            f"studies/movement/CANCELWALK.md 5.")
     return None, notes
 
 
@@ -6287,6 +6413,14 @@ def cancel_on_move(send, state, conn_id):
         print(f"[c{conn_id}] movement cancels {dropped} pending cast(s); "
               f"no recharge, costs stay paid where a begin paid them",
               flush=True)
+    # WHAT THIS PRESS HIT, for the caller. The 0x003D arm reads it because
+    # the CANCELWALK experiment answers a movement press that cancelled a
+    # held action differently from an ordinary one (the freeze this names:
+    # studies/movement/CANCELWALK.md F6 -- the cancel press opens a movement
+    # episode that moves 0.0 u while an ordinary press walks). A return
+    # value, not state: the click arm calls this too and must not leak a
+    # latch into the next keyboard report.
+    return "cast" if dropped else ("swing" if chain_live else None)
 
 
 def release_cancelled_cast(send, state, cast, reason, conn_id):
@@ -6302,9 +6436,13 @@ def release_cancelled_cast(send, state, cast, reason, conn_id):
         0x00E2 [agent, skill, 0]  the pending entry releases
 
     plus, when MOVEMENT was the trigger, that same batch carries the movement
-    grant (0x0029, with 0x0025/0x002B as the input warrants) BEFORE the three.
-    Property 59 occurs exactly at those four instants in the whole capture and
-    nowhere else, so it is the cast family's stop rather than a general marker.
+    answer (0x0025/0x002B as the input warrants, then 0x0029) AFTER the three,
+    0x0029 last -- corrected 2026-08-24 by the movement arc's decode
+    (studies/movement/CANCELWALK.md F1; this docstring first said BEFORE, read
+    off the same capture wrongly, and the heading arm already matches retail's
+    order by sending its grant after this burst). Property 59 occurs exactly
+    at those four instants in the whole capture and nowhere else, so it is the
+    cast family's stop rather than a general marker.
 
     THIS IS WHAT OUR CLIENT WAS MISSING, and the symptom named it before the
     capture did: on 2026-08-23 the operator reported a cancelled cast whose
@@ -12970,6 +13108,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # ahead, which is why this worked at all.
                         plane, heading = values[2], values[3]
                         moving = values[4] if len(values) > 4 else 0
+                        cw_hit = None
                         if moving:
                             # Keyboard movement cancels the same things a
                             # click does. Guarded on the enum being set even
@@ -12977,7 +13116,11 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             # -- if a build ever sends a pure turn this way,
                             # a turn must not cancel a cast (WIKI: only
                             # movement does).
-                            cancel_on_move(send, state, conn_id)
+                            #
+                            # WHAT IT HIT feeds the CANCELWALK arms below:
+                            # a press that released a cast or stopped a swing
+                            # is the one instant whose answer they change.
+                            cw_hit = cancel_on_move(send, state, conn_id)
                         # NO `state["plane"] = plane` HERE. It used to sit on
                         # this line, unconditional, 28 lines above the position
                         # guard -- so a refused report left us holding the
@@ -13125,9 +13268,33 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                 now_z = time.time()
                                 zero_ok, zero_why, zero_since = (
                                     _heading_grant_ok(state, now_z))
-                            if legacy_dir:
+                            # CANCELWALK. Live only on the report whose
+                            # cancel_on_move released something (cw_hit), and
+                            # only under --cancel-answer. `suppress` answers
+                            # that report with the release burst ALONE -- the
+                            # 0x0025 and the grant are withheld and the
+                            # walking latch is left unwritten, so the NEXT
+                            # press is answered exactly as if this report had
+                            # not arrived (its 0x0025 must not be swallowed
+                            # by a walking=True this report never earned).
+                            # The refusal is recorded through the verdict row
+                            # below with its own reason, because a run whose
+                            # capture cannot say which arm produced it costs
+                            # a later session a reconstruction (REALFIX-Q8).
+                            # The lead arms change the DESTINATION at the one
+                            # send site further down and nothing here.
+                            cw_suppress = (cw_hit is not None
+                                           and CANCEL_ANSWER == "suppress")
+                            cw_lead_now = (cw_hit is not None
+                                           and CANCEL_ANSWER == "lead")
+                            cw_dest = (cancelwalk_lead_dest(reported, heading,
+                                                            CANCEL_LEAD)
+                                       if cw_lead_now else None)
+                            if cw_suppress and zero_ok:
+                                zero_ok, zero_why = False, "cancelwalk-suppress"
+                            if legacy_dir and not cw_suppress:
                                 state["walking"] = True
-                            if legacy_dir or zero_ok:
+                            if (legacy_dir or zero_ok) and not cw_suppress:
                                 # UNIT LENGTH. This field is a DIRECTION and we
                                 # were putting a DISPLACEMENT in it: `heading` is
                                 # the client's own 0x003D vec2, whose magnitude is
@@ -13484,8 +13651,24 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                                           else round(zero_since,
                                                                      3)),
                                               direction=dir_src,
-                                              dest=[float(reported[0]),
-                                                    float(reported[1])],
+                                              # THE POINT THAT WENT OUT. Under
+                                              # a CANCELWALK lead arm the wire
+                                              # carries cw_dest, and a row
+                                              # recording `reported` instead
+                                              # would score the run as the
+                                              # shipped default -- the
+                                              # unattributable-capture defect
+                                              # again. `cancelwalk` names the
+                                              # instant (cast/swing) so the
+                                              # arm's rows are selectable.
+                                              dest=(cw_dest
+                                                    if (cw_dest is not None
+                                                        and zero_ok)
+                                                    else [float(reported[0]),
+                                                          float(reported[1])]),
+                                              cancelwalk=(cw_hit
+                                                          if CANCEL_ANSWER
+                                                          else None),
                                               plane_carry=bool(PLANE_CARRY),
                                               plane_dest=(plane if zero_ok
                                                           else None),
@@ -13521,14 +13704,49 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                                            or not zero_ok)
                                                   else round(ac_dist, 1)))
                                 if zero_ok:
+                                    if cw_dest is not None:
+                                        # CANCELWALK's lead arms, this one
+                                        # report. Retail's cancel-4 tail:
+                                        # 0x002B [1.0, movementType] then the
+                                        # led 0x0029 -- the 0x0025 already
+                                        # went out above, so the whole batch
+                                        # is burst, 0x0025, 0x002B, 0x0029,
+                                        # which is the measured retail order
+                                        # (CANCELWALK-F1). The 0x0029 itself
+                                        # goes through the ONE send below with
+                                        # its point and label swapped; a
+                                        # second 0x0029 send site here would
+                                        # be the two-arms-one-clock defect the
+                                        # composition matrix refuses.
+                                        # DIAGNOSTIC ONLY; the flag's comment
+                                        # block carries the pre-registered
+                                        # cost.
+                                        send(GAME_SMSG_AGENT_UPDATE_SPEED,
+                                             agents.agent_update_speed(
+                                                 PLAYER_AGENT_ID, 1.0, moving),
+                                             f"AGENT_UPDATE_SPEED(player, 1.0,"
+                                             f" type {moving}) [cancelwalk]")
+                                        zl_point = cw_dest
+                                        zl_label = (
+                                            f"CANCELWALK LEAD "
+                                            f"({cw_dest[0]:.0f},"
+                                            f"{cw_dest[1]:.0f}) from "
+                                            f"({reported[0]:.0f},"
+                                            f"{reported[1]:.0f}) plane {plane}"
+                                            f" [{cw_hit}]")
+                                    else:
+                                        zl_point = list(reported)
+                                        zl_label = (
+                                            f"ZERO LEAD ({reported[0]:.0f},"
+                                            f"{reported[1]:.0f}) plane {plane}"
+                                            + (f" carry {zl_plane_cur}"
+                                               if zl_plane_cur != plane
+                                               else "")
+                                            + f" [dir {dir_src}]")
                                     send(GAME_SMSG_AGENT_MOVE_TO_POINT,
-                                         [PLAYER_AGENT_ID, list(reported),
+                                         [PLAYER_AGENT_ID, zl_point,
                                           plane, zl_plane_cur],
-                                         f"ZERO LEAD ({reported[0]:.0f},"
-                                         f"{reported[1]:.0f}) plane {plane}"
-                                         + (f" carry {zl_plane_cur}"
-                                            if zl_plane_cur != plane else "")
-                                         + f" [dir {dir_src}]")
+                                         zl_label)
                                     # AFTER THE SEND, and only after a send. See
                                     # the block above: this slot is the plane
                                     # that went out WITH the point the copy is
@@ -15723,6 +15941,31 @@ def main():
                          "own lead/lag shape. Its prediction is printed at "
                          "startup, and so is the fact that F1's event "
                          "reduction was NOT significant (Fisher p = 0.196).")
+    ap.add_argument("--cancel-answer", default=None, metavar="ARM",
+                    help="CANCELWALK's pre-registered experiment arms, "
+                         "DIAGNOSTIC ONLY, OFF by default, refused without "
+                         "--zero-lead and with --arrival-carry. Changes the "
+                         "answer to the ONE report whose movement press "
+                         "cancelled a held action (the freeze: that press "
+                         "opens a movement episode that moves 0.0 u while an "
+                         "ordinary press walks -- "
+                         "studies/movement/CANCELWALK.md F6, and 5 for the "
+                         "run ladder these arms exist for). 'suppress' (R1) "
+                         "answers with the release burst alone -- no 0x0025, "
+                         "no 0x0029, zero warp exposure. 'retail-lead' (R2) "
+                         "sends retail's cancel tail verbatim: 0x0025, "
+                         "0x002B [1.0, movementType], 0x0029 at reported + "
+                         "vec2 + 0.5u -- the D1 formula confirmed at cancel "
+                         "instants 3 of 3. Its pre-registered cost: the SYNC "
+                         "copy bakes a <=768.5 u leg along a STALE vector "
+                         "and a +0x48 resync before the next report's "
+                         "re-pin may snap visibly; that lands AFTER the walk "
+                         "readout and is why R2 can never ship as-is. "
+                         "'lead:<units>' (R3) is the bisection arm, 16 the "
+                         "registered first rung. NO ARM SHIPS FROM A RUN "
+                         "DIRECTLY; a PASS licenses a candidate for a "
+                         "separate audited step, and the zero-lead policy "
+                         "is untouched on every other report.")
     ap.add_argument("--resync", action="store_true",
                     help="SEVENTH candidate. Send GAME_SMSG 0x002C "
                          "AGENT_UPDATE_POSITION carrying the CLIENT'S OWN last "
@@ -16444,11 +16687,15 @@ def main():
     zero_lead = a.zero_lead if a.zero_lead is not None else True
     grant_suppress = a.grant_suppress if a.grant_suppress is not None else True
     plane_carry = a.plane_carry if a.plane_carry is not None else zero_lead
+    _cw_mode, _cw_lead, _cw_refusal = parse_cancel_answer(a.cancel_answer)
+    if _cw_refusal:
+        raise SystemExit(_cw_refusal)
     _zl_refusal, _zl_notes = zero_lead_composition(
         zero_lead=zero_lead, heading_grant=a.heading_grant,
         client_endpoint=a.client_endpoint, grant_suppress=grant_suppress,
         resync=a.resync, stop_echo=a.stop_echo, click_sweep=a.click_sweep,
-        plane_carry=plane_carry, arrival_carry=a.arrival_carry)
+        plane_carry=plane_carry, arrival_carry=a.arrival_carry,
+        cancel_answer=a.cancel_answer)
     if _zl_refusal and a.zero_lead is None:
         _zl_refusal += ("\n(--zero-lead is ON BY DEFAULT since 2026-08-22; "
                         "pass --no-zero-lead to run this arm without it.)")
@@ -16514,6 +16761,50 @@ def main():
                   "--wire-only   (state the denominator)")
         for _note in _zl_notes:
             print(_note)
+
+    # CANCELWALK. Same house style: the prediction goes out BEFORE the run so
+    # it cannot be rationalised after it. ASCII only (the --resync lesson).
+    if _cw_mode:
+        global CANCEL_ANSWER, CANCEL_LEAD
+        CANCEL_ANSWER, CANCEL_LEAD = _cw_mode, _cw_lead
+        _cw_name = ("R1 suppress" if _cw_mode == "suppress"
+                    else ("R2 retail-lead" if _cw_lead is None
+                          else f"R3 lead:{_cw_lead:g}"))
+        print(f"[map] --cancel-answer={a.cancel_answer} ON. CANCELWALK "
+              f"{_cw_name}, DIAGNOSTIC ONLY -- no outcome ships from this "
+              f"run directly.")
+        print("      CHANGES   the answer to the ONE report whose movement "
+              "press released a cast or stopped a swing; every other report "
+              "is answered exactly as the shipped default.")
+        if _cw_mode == "suppress":
+            print("      SENDS     the release burst alone on that report: no "
+                  "0x0025, no 0x0029, walking latch unwritten. Zero warp "
+                  "exposure -- this arm sends LESS.")
+            print("      PREDICTS  H1 (grant-as-permission): the press still "
+                  "FREEZES. H2 (0x0025-without-0x002B freezes it): the press "
+                  "WALKS. H3/H4: freezes.")
+        else:
+            print("      SENDS     retail's cancel tail on that report: "
+                  "0x0025, 0x002B [1.0, movementType], 0x0029 at reported + "
+                  + ("vec2 + 0.5u (the D1 formula, 3 of 3 at cancel instants)."
+                     if _cw_lead is None else
+                     f"{_cw_lead:g} u along the client's own vec2."))
+            print("      PREDICTS  H1: the single press WALKS, and the "
+                  "direction-discriminator cast walks the CLIENT's own way, "
+                  "not the grant's (CANCELWALK-F3 on our build). H3/H4: "
+                  "freezes.")
+            print("      COST, pre-registered: the SYNC copy bakes a leg "
+                  "along a STALE vector; nothing re-pins it until the next "
+                  "report's grant (rate floor 0.50 s), so a +0x48 resync "
+                  "inside that window may snap visibly. A warp AFTER the "
+                  "walk readout does not bear on the walk verdict; it is "
+                  "the known price of leads and why this arm cannot ship.")
+        print("      READOUT   the wire, not the screen: a cast PASSES if "
+              "the client's own reports move >= 30 u within 0.5 s of the "
+              "cancel press with no second press; <= 5 u is a freeze. >= 3 "
+              "casts, plus one with the camera rotated >= 90 deg first. "
+              "Protocol and decision table: studies/movement/CANCELWALK.md "
+              "sec.5.")
 
     # REALFIX-F1. Printed in the same house style and for the same reason: the
     # prediction goes out BEFORE the run so it cannot be rationalised after it.
