@@ -588,6 +588,34 @@ grant BEFORE `[8→0, 59, E2]` and we put it after (§3f's open item) — but th
 analysis above predicts order alone will not supply the missing destination,
 so it is worth one run and not worth a blind ship.
 
+### 3g-i. Three claims above, corrected by the movement arc's decode — 2026-08-24
+
+The movement arc re-read both captures message-by-message
+(`toolkit/authsrv/cancelwalk.py`;
+[../movement/CANCELWALK.md](../movement/CANCELWALK.md) is the write-up), and
+three claims in §3f/§3g do not survive it:
+
+- **The order claim was backwards.** Retail puts the movement answer AFTER
+  `[8→0, 59, E2]`, `0x0029` last, in all three movement-triggered cancels —
+  and our keyboard-arm answer already matches. §3f's "retail puts the grant
+  first in both" is wrong both ways, and §3g's order experiment is closed at
+  a desk: there is no order delta to run. (The click-arm half of §3f's open
+  item — ours grants before the burst THERE — remains a real, cosmetic-until-
+  shown-otherwise mismatch.)
+- **"Its `0x0029` carries a real destination" — the destination does not
+  steer the body.** The granted point is `reported + vec2 + 0.5·û` where vec2
+  is a LATCHED stale heading (bit-identical across presses 47 s apart), and
+  at t=128.805 the grant points north while the client walks WNW; at 114.641
+  north vs due west. Retail's client SELF-walks its own live direction the
+  moment the burst clears the hold. What our client is missing is therefore
+  not "somewhere to walk to" — CANCELWALK §4's elimination table says what
+  is still standing.
+- **`0x002B` is movement-family bookkeeping, not a cancel rider** — `[rate,
+  family]`, sent on family transitions (stop→move `[1.0, 1]`, move→stop
+  `[1.0, 9]`, backpedal `[0.66, 4]`), and the W cancel at 81.660 walks
+  without one. "It rides two of the four cancel bursts" was true and is now
+  explained; it is not a third message the cancel needs.
+
 ---
 
 ## 4. Canceling: three doors in, one wire shape out
