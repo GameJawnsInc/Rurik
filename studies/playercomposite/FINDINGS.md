@@ -1485,7 +1485,8 @@ CpsBase permutation from a third kind of event.
 
 ### Still open
 
-What §9.11's two wire-ordered instances are (movement refuted, operator input
+~~What §9.11's two wire-ordered instances are~~ **ANSWERED, §9.21 -- `GmDoll`,
+the equipment paper doll, on a panel open** (movement refuted, operator input
 the standing candidate); `row+0x08`, still zero everywhere; and why record 91
 in particular never appears in the reset residue, which this run reports
 rather than explains.
@@ -1578,7 +1579,7 @@ branches are exercised in the test.
 
 ### Still open
 
-What §9.11's two wire-ordered instances are (movement refuted); `row+0x08`,
+~~What §9.11's two wire-ordered instances are~~ **ANSWERED, §9.21**; `row+0x08`,
 still zero everywhere; why record 91 never appears in the reset residue
 (§9.14); and the **third** kind of type-45 id — record type 17 *outside* any
 run (1887, 3663, and 20 others), which is neither of the two tested here.
@@ -1800,7 +1801,9 @@ scores the **peak** now, and the test pins it. The permutation is not refuted.
 ### Still open
 
 The writer outside `0x0082EDA0` (new, and the sharpest); what triggers the
-wire-ordered instances (movement refuted, still unnamed); `row+0x08`; and the
+wire-ordered instances (movement refuted, still unnamed **-- ANSWERED in
+§9.21: they are `GmDoll`'s paper doll, triggered by a panel open**);
+`row+0x08`; and the
 third kind of type-45 id, which remains a weak experiment.
 
 ## 9.18 ~~The trap was watching ONE thread of ten~~ — and the writer outside `0x0082EDA0` survives the correction (2026-08-23)
@@ -2159,3 +2162,118 @@ N` and `still live K, GONE M` every run, so a future zero is readable. It cost
 four runs to get there and three of those were the trap fighting itself —
 recorded because the next person to arm a watch from an `on_hit` handler would
 otherwise pay it again.
+
+## 9.21 ★ ANSWERED: the equip-slot-ordered instances are the PAPER DOLL, and the trigger is opening its panel (2026-08-24)
+
+§9.11 found two CpsBase instances that index by a different slot order and
+ended on *"what those two are is NOT identified"*. §9.13 built the caller
+capture, refuted movement, and still could not name them. §9.17 reproduced
+them three-at-once and named their class and their immediate caller, and the
+trigger stayed open. **It is named now, from two runs and a control.**
+
+### First, the vocabulary — because there was never a "permutation" to find
+
+`ITEM_EQUIP_SLOTS` is **9**. `0x0082D4BA`'s `cmp ebx,9` guards ArenaNet's own
+`CpsApi:694 equipSlot < ITEM_EQUIP_SLOTS`, and `0x0082E5F0` bounds the same
+value at 9 before indexing `[edi + esi*4 + 0xB4]` — which is `m_slotItemId`.
+**CpsBase indexes its array BY the equip slot and applies no permutation of its
+own.** §9.11's "the ordering belongs to the CALLER" is therefore a statement
+about two callers using two different vocabularies, not about a mapping table
+somewhere.
+
+And there is no table. A contiguous nine-element forward or inverse mapping is
+absent from the image at u8, u16 and u32 width. **Positive control**:
+`s_format = [15,19,19,27,27,27]`, already read out of this image by §7, IS
+found — file offset `0x639EA8` — so the search has power and the negative means
+something. `CpsApi::SetSlotItem` has **40 callers and not one passes a literal
+slot above 1**; every armour slot arrives in a register, chosen by a loop above.
+
+### The instrument: one frame was never going to be enough
+
+§9.13 captured `[ebp+4]` and got `CpsApi::SetSlotItem` — which forwards its
+caller's slot verbatim. **It names the messenger and can never name who chose
+the ordering**, which was the whole question, and that is why three sections in
+a row reported the same non-answer.
+
+`walk_frames()` walks the EBP chain three deep and **refuses rather than
+invents**: a frame pointer must move up and stay aligned and its saved return
+address must land in the code window, or the chain ends. A function with no
+frame pointer yields a SHORT chain, which is readable, instead of a plausible
+wrong caller, which is not — heroes §36.6 is what that rule is paying for. The
+agent pointer `[[ebp]+8]` is read **only** when frame 1 is `SetSlotItem`, whose
+prologue has been read and is known standard; for the re-dress callers that
+slot holds a small integer and reading it anyway would print it as "agent".
+
+### The run, and its control
+
+Loopback, 38797 probe build, map 148, `--hold 170`.
+**Treatment** — three panel keypresses, `40:key:i 20:key:h 20:key:k`:
+
+| trap t | instance | slots | ordering | upstream |
+|---|---|---|---|---|
+| + 4.68s | `0x264107F0` | 6 | **CpsBase (permuted)** | `0x007F9F5F` |
+| **+44.59s** | `0x274CD0D8` | 5 | **equip-slot** | `0x004EEC34` |
+| **+44.65s** | `0x25B781D0` | 5 | **equip-slot** | `0x004EEC34` |
+| **+65.52s** | `0x25B785D8` | 5 | **equip-slot** | `0x004EEC34` |
+| **+86.43s** | `0x25B7B230` | 5 | **equip-slot** | `0x004EEC34` |
+
+The gaps are **39.9 s, 0.06 s, 20.9 s, 20.9 s** against an action script of
+40 / 20 / 20. **Control** — identical run, same 170 s, `--actions "0:play"`
+and nothing else: **one** instance, `0x25A875A0` at +4.71 s, permuted, upstream
+`0x007F9F5F`. **Zero** equip-slot instances in the same window.
+
+### The answer
+
+- **`0x004EEC34` is `GmDoll`** — its function asserts `GmDoll:725
+  m_compositePlayer` twice. That is the **equipment paper doll**, and it
+  dresses in **equip-slot order**.
+- **`0x007F9F5F` is `AvChar`** — the in-world agent view, and it dresses in
+  **CpsBase's permuted order**.
+
+So the two orderings are two SUBSYSTEMS, and the trigger for the odd ones is
+**opening a UI panel that builds the character's doll**. Each open builds a
+`CpsPlayer` composite on its own entity — all five agent pointers in the
+treatment run are distinct, and none is the world agent's. The first open built
+**two, 0.06 s apart**, which is exactly §9.11's pair and exactly §9.17's
+`+78.88 / +78.91`; §9.17's lone `+121.68` is a second open. `GmDoll` asserts
+`:660 !m_compositeBasic` and `:661 !m_compositePlayer` — two composites,
+created together.
+
+**And it explains why five runs could not reproduce them.** They need an input
+the harness was not sending. §9.13's C1 registered movement, exceeded its
+exposure floor and got nothing, and correctly recorded the standing candidate
+as *"operator input, most likely a click"* — right about the class, wrong about
+the act. Run `173517` had a human at the keyboard.
+
+### Three corrections this forces, and one corroboration
+
+1. ⚠ **§9.13's "they are full IN-WORLD composites, not the character-select
+   preview dolls §7 describes" is REFUTED as an inference.** The doll open at
+   `+44.589` fetches index **11 → composite type 1**, the animated shell, with
+   face 25, hair 1, base pieces 46–49 and all five armour records — the same
+   burst §9.13 read. Type 1 does not mean "not a doll". It means **the paper
+   doll builds an ANIMATED composite**, unlike character select, which builds
+   type 2 (both were caught in the same run: `[2, 2, 1, 1, 1, …]`).
+2. **That CORROBORATES §7 rather than contradicting it.** §7 read `GmDoll` as a
+   **style-conditional 6/7** caller, against `UiChModel`'s literal 3. Bit 0 of 6
+   is 0 → type 1; bit 0 of 7 is 1 → type 2. The run shows the 6 branch taken.
+   A static reading of a conditional, confirmed at runtime on the branch it
+   predicted.
+3. ⚠ **"Wire-ordered" was the wrong name and this entry retires it.** The
+   ordering is the client's own `ITEM_EQUIP_SLOTS`, which our server's
+   numbering matches because §"THE SLOTS ARE MEASURED, NOT CHOSEN" measured it
+   off retail's own `0x006F` writes. Nothing about it is a property of our
+   wire. The permuted one is CpsBase's, used by `AvChar`.
+
+### What is now closed, and what this leaves
+
+**CLOSED**: what the odd instances are, which path builds them, which path
+builds the world agent, and why the harness could not reproduce them. The
+report names all of it per instance now — upstream, agent, and the ordering
+scored rather than eyeballed out of a timeline as it was in §9.11 and again in
+§9.17.
+
+**Still open**: `row+0x08`, zero everywhere, sourced from item data `[eax+8]`;
+and *which* of the three panels the doll belongs to — all three keypresses
+produced one, so the answer is "at least three UI paths reach `GmDoll`", and
+separating them needs one press per run rather than three.

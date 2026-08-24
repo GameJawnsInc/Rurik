@@ -6280,8 +6280,37 @@ Every one of these, in the order they were written:
   rather than on a blanket hedge -- the dye is copied from another slot's
   row, so "was the source written first" is a checkable question and both
   branches are exercised.
+  **§9 is the FRAME WALK, and it exists because one frame was never going to
+  be enough.** §9.13 captured `[ebp+4]` and got `CpsApi::SetSlotItem`, which
+  forwards its caller's slot verbatim -- so it names the MESSENGER, and three
+  study sections in a row ended on "not identified" while the field that would
+  have answered was two frames further out. `walk_frames()` walks the EBP
+  chain, and every check here is about it REFUSING rather than inventing: a
+  frame pointer that moves DOWN ends the chain (an unwinding stack walks up,
+  and a descending link is the shape a garbage read makes); a return address
+  outside the code window ends it and NAMES NOBODY; an unaligned pointer is
+  refused at the first step; and `depth` is a real bound rather than a
+  suggestion. A function compiled without a frame pointer therefore yields a
+  SHORT chain, which is readable, instead of a plausible wrong caller, which
+  is not -- `studies/heroes` §36.6 is the entry that rule is paying for. The
+  ordering is now SCORED per instance rather than read by hand out of a
+  timeline as it was in §9.11 and again in §9.17, and the check that matters
+  is the AMBIGUOUS one: an instance holding only slots where the two orderings
+  AGREE is credited to neither, without which every short instance would read
+  as confirmation of whatever the reader expected. An item id belonging to no
+  slot in either ordering is NEITHER rather than silently absent, and an
+  instance whose chain never reached the upstream says **upstream NOT
+  CAPTURED** rather than omitting the line, which would read as "no upstream
+  involved". The two addresses the live run produced are pinned by name --
+  `0x004EEC34` GmDoll and `0x007F9F5F` AvChar (§9.21) -- next to a check that
+  the map is a NAMER and never a FILTER: an address in the code window but not
+  in the map still reaches the report, or the one path nobody predicted would
+  be the one path a run could not show.
   Needs the pinned exe for §§1-2/§6 and the vault for §5, all SKIP-declared;
-  floor 76),
+  a whole green run is 96 and the floor is **70**, its MANDATORY CORE --
+  lowered from 76/80, which sat ABOVE it, so a machine without a vault would
+  have failed on the floor instead of reading four honest skips and the
+  shortfall would have named the wrong thing),
   `toolkit/clientscan/test_msgshape.py` (the client's message-format tables,
   DERIVED from the image instead of remembered — `studies/crossbuild/PLAN.md` §3,
   and the reason that plan put this file first. `msgshape` underpins

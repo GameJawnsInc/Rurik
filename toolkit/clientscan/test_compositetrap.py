@@ -907,5 +907,21 @@ check(0x004EE324 in t.UPSTREAM_CALLERS and 0x00875BA8 in t.UPSTREAM_CALLERS
       "seven of its own call sites, read from the image before the run so an "
       "address means something the moment it arrives",
       f"{sorted(hex(k) for k in t.UPSTREAM_CALLERS)}")
+# THE TWO ADDRESSES THE RUN ACTUALLY PRODUCED, and they are the answer to
+# §9.11: 0x004EEC34 is GmDoll (the paper doll, EQUIP-SLOT order) and
+# 0x007F9F5F is AvChar (the in-world agent view, PERMUTED order). Pinned so a
+# rebase that moves either goes red HERE rather than silently printing
+# "an unlisted path" for the two paths this arc spent three sections naming.
+for va, want in ((0x004EEC34, "GmDoll"), (0x007F9F5F, "AvChar")):
+    check(want in t.UPSTREAM_CALLERS.get(va, ""),
+          f"0x{va:08X} is named as {want} -- MEASURED, not inferred",
+          f"{t.UPSTREAM_CALLERS.get(va)!r}")
+check(t.walk_frames(framereader({0x1000: (0x2000, 0x0082D6F6),
+                                 0x2000: (0x3000, 0x004B1880),
+                                 0x3000: (0x4000, 0x00600000)}),
+                    0x1000, depth=4)[-1] == 0x00600000,
+      "and an address in the code window but NOT in the map still reaches the "
+      "report -- the map is a NAMER, never a filter, or the one path nobody "
+      "predicted would be the one path the run could not show")
 
 sys.exit(LEDGER.verdict())

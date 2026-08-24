@@ -392,6 +392,13 @@ UPSTREAM_CALLERS = {
     0x004B194A: "UiCharModel worker -> slot 0",
     0x004EE324: "GmDoll -- the equipment PAPER DOLL",
     0x00875BA8: "UiChInfo / UiChModel",
+    # MEASURED 2026-08-24, and these two are the answer to §9.11's question.
+    # Neither was in the static list above, which is why that list prints an
+    # unlisted address as a RESULT rather than swallowing it.
+    0x004EEC34: "GmDoll (GmDoll:725 m_compositePlayer) -- THE PAPER DOLL, "
+                "and it dresses in EQUIP-SLOT order",
+    0x007F9F5F: "AvChar -- the in-world agent view, and it dresses in "
+                "CpsBase's PERMUTED order",
 }
 
 #: The window a captured return address must land in to be reported at all.

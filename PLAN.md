@@ -1808,8 +1808,46 @@ silent and why record 91 vanishes from the reset residue. **Why both static
 hunts missed it was PREDICTED in 9.18**: the row pointer is already in `ebx`,
 so the store is `89 4B 24` (ModRM rm=011, no SIB) and the byte scan required a
 SIB form. `test_commandertrap` 52 -> 63, floor 14 -> 29.
-**Still open**: what TRIGGERS the wire-ordered instances (movement excluded), `row+0x08` which is
-still zero everywhere, and the THIRD kind of type-45 id -- record type 17 OUTSIDE any run (1887,
+★★ **THE TRIGGER IS FOUND (9.21): the odd instances are the PAPER DOLL, built
+when a UI panel is opened.** Three sections ended on "not identified" because
+the capture named the wrong frame: `[ebp+4]` is `CpsApi::SetSlotItem`, which
+forwards its caller's slot verbatim, so it names the MESSENGER and could never
+name who chose the ordering. `walk_frames()` walks the EBP chain three deep and
+REFUSES rather than invents -- a frame pointer must move up and stay aligned
+and its return address must land in the code window, or the chain ENDS, so a
+function with no frame pointer gives a SHORT chain instead of a plausible wrong
+caller. **`0x004EEC34` is `GmDoll` (its function asserts `GmDoll:725
+m_compositePlayer`), the equipment paper doll, and it dresses in EQUIP-SLOT
+order; `0x007F9F5F` is `AvChar`, the in-world agent view, and it dresses in
+CpsBase's PERMUTED order.** Two subsystems, two vocabularies -- and there was
+never a permutation TABLE to find: `ITEM_EQUIP_SLOTS` is 9 (`CpsApi:694`), and
+`0x0082E5F0` indexes `m_slotItemId` by that value directly, so CpsBase permutes
+nothing. A contiguous 9-element mapping is absent from the image at every
+width, with `s_format` as the positive control that the search has power.
+**THE RUN AND ITS CONTROL.** Treatment (`40:key:i 20:key:h 20:key:k`): the
+world agent at +4.68 permuted, then equip-slot instances at **+44.59, +44.65,
++65.52, +86.43** -- gaps of 39.9 / 0.06 / 20.9 / 20.9 against a 40/20/20
+script, each on its OWN agent pointer, none of them the world agent's. Control,
+same 170 s with `0:play` and nothing else: **one** instance, the world agent,
+**zero** equip-slot ones. The first open builds TWO 0.06 s apart -- exactly
+9.11's pair, exactly 9.17's +78.88/+78.91 -- because `GmDoll` asserts
+`:660 !m_compositeBasic` AND `:661 !m_compositePlayer`. **Five runs could not
+reproduce them because they need an input the harness was not sending**; 9.13's
+C1 exceeded its movement exposure floor, got nothing, and recorded the standing
+candidate as "operator input" -- right about the class, wrong about the act.
+⚠ Two corrections: 9.13's "full IN-WORLD composites, NOT preview dolls" is
+REFUTED as an inference -- the doll open fetches index 11 -> **type 1**, the
+animated shell, so type 1 does not mean "not a doll"; and that CORROBORATES 7,
+which read `GmDoll` as a style-conditional 6/7 caller (bit 0 of 6 = 0 -> type
+1), a static conditional confirmed at runtime on the branch it predicted.
+"Wire-ordered" is retired as a name: the ordering is the client's own
+`ITEM_EQUIP_SLOTS`, which our numbering matches only because it was MEASURED
+off retail's `0x006F` writes. `test_compositetrap` 81 -> 96, floor 80 -> 70
+(lowered to the mandatory core on purpose; 80 sat above it).
+**Still open**: `row+0x08`, still zero everywhere and sourced from item data
+`[eax+8]`; WHICH panel of the three (all three keypresses produced a doll, so
+at least three UI paths reach `GmDoll`, and separating them wants one press per
+run); and the THIRD kind of type-45 id -- record type 17 OUTSIDE any run (1887,
 3663 and 20 others), which is neither kind tested so far.
 Prior status follows.
 **BUILT AND ARMED 2026-08-23, RUN WAS BLOCKED**
