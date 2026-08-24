@@ -543,6 +543,53 @@ and therefore recorded.
 
 ---
 
+## 3g. The cancel is DONE; the walk-on-cancel is a ZERO-LEAD interaction — 2026-08-24
+
+Loopback acceptance of §3f, map 280 (Isle of the Nameless — the first map
+this arc pinned that has a real spawn; map 90's is `0.0, 0.0` under its own
+"No spawn point known" note, which is why the run before it could not move
+at all). Capture `20260824T081335`.
+
+**The cancel half PASSES, on screen and on the wire.** Three cancelled casts
+— one by W, two by Esc — each answered `[8→0, 59, E2]` in the input's own
+instant, and the operator reports the casting animation now **stops**. That
+is §3f's measured burst reproducing at a client, and it closes what the
+2026-08-23 run failed: the missing property was 59.
+
+**What remains is one press producing no motion, and it is NOT the cancel
+path.** Isolated in this capture: the mid-cast W (t=5.417) cancels and the
+client's own next report (t=6.234) is the SAME coordinate; the next W
+(t=7.502), with nothing held, moves it (t=7.735, 7.953). Same grant shape
+both times — `0x0025` direction + `0x0029` **zero-lead** — so the grant is
+not what differs. What differs is whether an action was held.
+
+**The mechanism, INFERRED and cross-arc.** Under keyboard movement the CLIENT
+walks itself and our grant only keeps the sync copy honest; mid-cast the
+client is held, does not self-walk, and its key-down edge is spent on the
+cancel. Retail moves the player anyway because its grant carries a real
+destination — `0x0029` at **+768 u along the heading** (t=81.660: reported
+`(-5996.0, 1547.1)`, granted `(-5982.9, 2315.2)`), which is a server-
+authoritative move order. Ours grants the player's own position, so there is
+nothing to walk to.
+
+**AND THE OBVIOUS FIX IS THE DEAD FAMILY — do not "just add a lead."**
+`authsrv.py`'s zero-lead block (REALFIX-P2) records that **every** candidate
+granting a point AHEAD warped: `--heading-grant` at pos+vec2 clipped (766 u)
+and `--client-endpoint` at reported+vec2+0.5 u (766 u), both refuted by runs.
+Zero lead is the only setting satisfying the client's own desync invariant
+(O1/O3), because the client's history polyline extends only backwards while
+it holds no destination. Retail can lead because its server owns the true
+position; we cannot.
+
+So walk-on-cancel is a **movement-policy** question, not a cancel one, and it
+belongs to that arc with this capture as its evidence. Registered rather than
+patched here. The one no-warp experiment available is ORDER — retail puts the
+grant BEFORE `[8→0, 59, E2]` and we put it after (§3f's open item) — but the
+analysis above predicts order alone will not supply the missing destination,
+so it is worth one run and not worth a blind ship.
+
+---
+
 ## 4. Canceling: three doors in, one wire shape out
 
 **WIKI (GWW, "Cancel", rev. 2014-08-16).** During activation, a skill is
