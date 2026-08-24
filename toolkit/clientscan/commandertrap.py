@@ -447,6 +447,8 @@ class HwTrap:
         self.sizes = []
         # slot -> [still live, GONE], counted at every hit AFTER arming.
         self.watch_recheck = {}
+        # slot -> {(dr_value, dr7): n}, sampled when a watch reads as GONE
+        self.watch_seen = {}
         self._getctx = None
         self._setctx = None
 
@@ -840,6 +842,16 @@ class HwTrap:
                         == RW_BITS["w"])
             self.watch_recheck.setdefault(wslot, [0, 0])
             self.watch_recheck[wslot][0 if live else 1] += 1
+            # WHAT it found, not just whether. "The address survived and only
+            # R/W reverted" and "the whole register was cleared" are different
+            # diagnoses with different causes, and a boolean cannot tell them
+            # apart. A few distinct samples is enough and costs nothing.
+            if ctx is not None and not live:
+                dr = (ctx.Dr0, ctx.Dr1, ctx.Dr2, ctx.Dr3)[wslot]
+                seen = self.watch_seen.setdefault(wslot, {})
+                k = (dr, ctx.Dr7)
+                if len(seen) < 6 or k in seen:
+                    seen[k] = seen.get(k, 0) + 1
         key = self.addrs[slot]
         n = self.hit_counts[key] = self.hit_counts.get(key, 0) + 1
         if self.on_hit:
@@ -1469,6 +1481,14 @@ def _report(sites, hits, base, out=sys.stdout, trap=None):
                       + ("   <- the register did NOT survive, so this "
                          "watch's zero means nothing" if rc[1] else "")
                       + "\n")
+                    for (dr, dr7), n in sorted(
+                            getattr(trap, "watch_seen", {})
+                            .get(slot, {}).items(), key=lambda kv: -kv[1]):
+                        w(f"        x{n:<5} DR{slot}=0x{dr:08X} "
+                          f"DR7=0x{dr7:08X}"
+                          + ("  (address SURVIVED, R/W reverted)"
+                             if dr == addr else "  (address cleared too)")
+                          + "\n")
         elif any(getattr(s, "kind", "x") == "w" for s in sites):
             w("  WATCH: a write-watch site was armed but NEVER GIVEN AN "
               "ADDRESS -- its zero hit count means nothing\n")
