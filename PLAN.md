@@ -1395,12 +1395,16 @@ a stale north vec2). Evidence: gate set → freeze **4 of 4**, clear → walk
 **THE ONE ACTIONABLE ITEM — CANCELWALK-F28, and it is a real defect in our
 server.** The action hold gates the walk-*start* and does **not** stop a leg in
 flight, so casting while running leaves the body gliding at **288 u/s for the
-whole cast** (~690 u measured). **The fix is already in the tree**: s2c
-`0x0028` AGENT_STOP_MOVING halts when in motion and no-ops when parked —
-builder, constant and tests all landed for R6, where it was VOID only because
-it was fired at *stops*. **Fired at CAST START it is the right message.** Wire
-it behind a diagnostic flag, register the prediction, run it, ship on a ruling.
-Defaults are an owner ruling; do not ship it on.
+whole cast** (~690 u measured). **The fix is WIRED as of 2026-08-24**: s2c
+`0x0028` AGENT_STOP_MOVING (halts when in motion, no-ops when parked; built for
+R6, where it was VOID only because it was fired at *stops*) now goes out at the
+free-caster non-attack cast start behind **`--cast-stop`** — CANCELWALK-R8,
+refused without `--zero-lead` and with any other CANCELWALK lever, prediction
+registered at CANCELWALK.md §8 before any run, `test_cancelwalk.py` §7 (floor
+59) driving the lattice and the burst, the whole change adversarially reviewed
+(three agents, 6-of-6 mutation catch; §8.1 carries the three named residuals
+it yielded). The run is the owner's; defaults are an owner ruling; it ships
+OFF.
 
 **Moved to REALFIX: the WARP.** Our zero-lead policy grants only on c2s
 `0x003D`, and the client only sends `0x003D` on direction change — so a long
@@ -1417,11 +1421,15 @@ operands (`controller_read`, R7 as a poll), needs no elevation, selftest floor
 blockers, the first of which would kill the client on the first breakpoint hit;
 if a trap is ever needed, rebuild on `commandertrap.py`'s `HwTrap`.
 
-**Open, both cheap:** (1) **H10 is SUPPORTED, not confirmed** — both walks in
-the last run began 0.43–0.46 s *after* the press with the gate already clear
-and no wire event to explain them; one run alternating *hold + turn camera*
-against *hold + still camera* through frozen presses confirms or kills it.
-(2) The F28 fix above. **Nothing in this arc ships without an owner ruling.**
+**Open: two owner-driven runs, both REGISTERED with predictions and exposure
+floors at CANCELWALK.md §8 (2026-08-24).** (1) **CANCELWALK-R8 `--cast-stop`**
+— cast while running halts within ~0.15 s instead of gliding ~690 u; a
+standstill cast is a no-op; the freeze stays a freeze; readout is movetap
+(the glide is wire-invisible: a straight leg emits no `0x003D`). (2)
+**CANCELWALK-R9**, H10's confirmation, no new code — alternate *hold + turn
+camera* against *hold + still camera* through frozen presses; a press counts
+only if `gate_b` was SET at it, ≥2 per arm or the arm is VOID. **Nothing in
+this arc ships without an owner ruling.**
 
 ### MODEL AUTHORING: the one-bit question is answered, and every player identity closes (2026-08-22)
 

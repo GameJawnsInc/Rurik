@@ -19,9 +19,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
 import checks  # noqa: E402
 
-# FLOOR 43, from the green run of 2026-08-24 that landed R6's --stop-answer
-# section (29 with R1-R4's arms alone; 24 when the file carried R1-R3).
-LEDGER = checks.Ledger("cancelwalk arms", floor=43)
+# FLOOR 59, from the green run of 2026-08-24 that landed the adversarial
+# review pass over R8's --cast-stop section (58 when the section landed;
+# 43 with R1-R6's arms; 29 with R1-R4's alone; 24 with R1-R3).
+LEDGER = checks.Ledger("cancelwalk arms", floor=59)
 check = LEDGER.ok
 
 PLAYER = 1
@@ -286,20 +287,153 @@ def section_stop_answer():
     # 0x0047 arm -- and the general stop arm stays otherwise silent.
     src = open(os.path.join(here, "authsrv.py"), encoding="utf-8").read()
     check(src.count('if STOP_ANSWER == "ack":') == 1
-          and src.count("send(GAME_SMSG_AGENT_STOP_MOVING,") == 1
-          and src.count("agents.agent_stop_moving(PLAYER_AGENT_ID)") == 1,
-          "ONE gate, ONE send call, and the send's payload comes from the "
-          "builder the wire-shape check above drives -- a gate with the "
-          "send deleted, a second site, or a hand-built payload the check "
-          "never sees would each redden this")
+          and src.count("[cancelwalk R6 ") == 1
+          and src.count("send(GAME_SMSG_AGENT_STOP_MOVING,") == 2
+          and src.count("agents.agent_stop_moving(PLAYER_AGENT_ID)") == 2,
+          "ONE R6 gate, ONE R6-labelled send, and exactly TWO 0x0028 send "
+          "sites in the file (R6's stop-ack and R8's cast-stop, each behind "
+          "its own gate), every payload from the builder the wire-shape "
+          "check above drives -- a gate with the send deleted, a third "
+          "site, or a hand-built payload would each redden this")
     check("STOP_ANSWER = None" in src,
           "the global defaults to None -- defaults are an owner ruling in "
           "this repo and no diagnostic ships on")
     check("_sa_mode, _sa_refusal = parse_stop_answer(a.stop_answer)" in src
-          and "stop_answer=_sa_mode)" in src,
-          "main() parses the flag through the pure parser and hands the "
-          "MODE to the composition matrix -- the refusals above cannot fire "
-          "on a flag main() never routes")
+          and "stop_answer=_sa_mode" in src
+          and "STOP_ANSWER = _sa_mode" in src,
+          "main() parses the flag through the pure parser, hands the MODE "
+          "to the composition matrix, AND arms the global -- the refusals "
+          "above cannot fire on a flag main() never routes, and the arm "
+          "cannot regress to a banner-only inert flag (the R8 review "
+          "found this arming pin missing HERE too)")
+
+
+def section_cast_stop():
+    import authsrv
+    import agents
+
+    print("7. R8 --cast-stop: composition, the burst, both scoping branches")
+    # Composition. R8 is registered against the SHIPPED configuration and
+    # against ONE lever per run -- and it shares an opcode with R6, so that
+    # pair gets its own cell.
+    why, _ = authsrv.zero_lead_composition(zero_lead=False, cast_stop=True)
+    check(why is not None and "--cast-stop requires --zero-lead" in why,
+          "without --zero-lead the run answers a question nobody "
+          "registered -- refused", f"{why!r}")
+    why, _ = authsrv.zero_lead_composition(zero_lead=True, cast_stop=True,
+                                           cancel_answer="suppress")
+    check(why is not None and "--cast-stop and --cancel-answer" in why,
+          "with --cancel-answer the run changes two levers -- refused",
+          f"{why!r}")
+    why, _ = authsrv.zero_lead_composition(zero_lead=True, cast_stop=True,
+                                           stop_answer="ack")
+    check(why is not None and "--cast-stop and --stop-answer" in why
+          and "SAME opcode" in why,
+          "with --stop-answer BOTH levers send 0x0028 on different "
+          "triggers, so no halt could be attributed -- refused, and the "
+          "refusal names the shared opcode", f"{why!r}")
+    why, _ = authsrv.zero_lead_composition(zero_lead=True, cast_stop=True,
+                                           arrival_carry=True)
+    check(why is not None and "--cast-stop and --arrival-carry" in why,
+          "with --arrival-carry the F1b queue would model an arrival the "
+          "halt cut short -- refused", f"{why!r}")
+    why, _ = authsrv.zero_lead_composition(zero_lead=False, cast_stop=True,
+                                           arrival_carry=True)
+    check(why is not None and "--cast-stop and --arrival-carry" in why,
+          "and WITHOUT --zero-lead the same PAIRWISE cell fires, not "
+          "arrival-requires-zero-lead -- placed low, that check handed out "
+          "advice (--zero-lead --arrival-carry) the pairwise cell then "
+          "refused on the next restart, which the adversarial pass caught "
+          "live", f"{why!r}")
+    why, _ = authsrv.zero_lead_composition(zero_lead=False, cast_stop=True,
+                                           stop_answer="ack")
+    check(why is not None and "--cast-stop and --stop-answer" in why,
+          "all the levers at once gets the PAIRWISE refusal, not "
+          "requires-zero-lead -- 'you passed two levers' is the more "
+          "useful thing to be told, the plane/arrival pair's own "
+          "precedent", f"{why!r}")
+    why, notes = authsrv.zero_lead_composition(zero_lead=True, cast_stop=True)
+    check(why is None and any("R8" in n and "DIAGNOSTIC" in n
+                              for n in notes),
+          "allowed with --zero-lead, and the startup note names R8 and its "
+          "diagnostic-only status", f"notes={notes}")
+    # The burst, driven -- not grepped. handle_skill_press with the flag
+    # OFF (the default), ON (a spell), and ON (an attack skill): the halt
+    # appears exactly on the middle one, first in the tail, before the
+    # animation and the prop-8 hold.
+    saved_timing = authsrv.skill_timing
+    saved_attack = authsrv._is_attack_skill
+    saved_flag = authsrv.CAST_STOP
+    authsrv.skill_timing = lambda sid: (2.0, 0.75, 8.0)
+    try:
+        def burst(flag, attack):
+            authsrv.CAST_STOP = flag
+            authsrv._is_attack_skill = lambda sid: attack
+            sent = []
+            send = lambda op, vals, label="", quiet=False: \
+                sent.append((op, vals))
+            authsrv.handle_skill_press([0, 42, 7, 0], send, {"agents": {}},
+                                       0, authsrv.GAME_CMSG_USE_SKILL)
+            return sent
+        stops = lambda sent: [i for i, (op, _) in enumerate(sent)
+                              if op == authsrv.GAME_SMSG_AGENT_STOP_MOVING]
+        off = burst(False, False)
+        check(stops(off) == [],
+              "flag OFF (the default): a spell press sends no 0x0028 -- "
+              "no diagnostic ships on", f"{off}")
+        on = burst(True, False)
+        check(len(stops(on)) == 1
+              and on[stops(on)[0]][1] == [PLAYER],
+              "flag ON: a spell press sends exactly one 0x0028 [player], "
+              "the builder's own payload", f"{on}")
+        anim = [i for i, (op, vals) in enumerate(on)
+                if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
+                and vals[0] == agents.GV_SKILL_ACTIVATED]
+        hold = [i for i, (op, vals) in enumerate(on)
+                if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
+                and vals[0] == agents.GV_DISABLED and vals[2] == 1]
+        check(len(anim) == 1 and len(hold) == 1
+              and stops(on)[0] < anim[0] < hold[0],
+              "and it rides first in the cast-begin TAIL: before the cast "
+              "animation, which precedes the prop-8 hold -- the movement "
+              "family closes before the action family opens (the E4 and "
+              "the debits legitimately precede it; 'first in the burst' "
+              "was the review-corrected overstatement)",
+              f"stop={stops(on)}, anim={anim}, hold={hold}")
+        atk = burst(True, True)
+        atk_anim = [i for i, (op, vals) in enumerate(atk)
+                    if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
+                    and vals[0] == agents.GV_ATTACK_SKILL_ACTIVATED]
+        check(stops(atk) == [] and len(atk_anim) == 1,
+              "flag ON, ATTACK skill: the burst goes out (its own "
+              "animation proves the press was not refused) and carries no "
+              "0x0028 -- the halt is scoped to NON-ATTACK casts (spells "
+              "are the measured family; the flag block names the "
+              "instant-skill and adrenal residuals); an attack skill's "
+              "start drives chase movement a halt would fight",
+              f"{atk}")
+    finally:
+        authsrv.skill_timing = saved_timing
+        authsrv._is_attack_skill = saved_attack
+        authsrv.CAST_STOP = saved_flag
+    # Source locks: one gate, one labelled site, default off, and main()
+    # routes the flag into the composition matrix and the global.
+    here = os.path.dirname(os.path.abspath(authsrv.__file__))
+    src = open(os.path.join(here, "authsrv.py"), encoding="utf-8").read()
+    check(src.count("if CAST_STOP and not is_attack:") == 1
+          and src.count("cancelwalk R8 cast-stop") == 1,
+          "ONE gate carrying the spells-only scoping, ONE R8-labelled "
+          "send site")
+    check(src.count("CAST_STOP = False") == 1
+          and src.count("CAST_STOP = True") == 1
+          and "cast_stop=a.cast_stop" in src
+          and "global CAST_STOP" in src,
+          "the global defaults to False (defaults are an owner ruling), "
+          "main() routes the flag into both the composition matrix and "
+          "the global, AND the arming assignment itself is pinned -- with "
+          "'CAST_STOP = True' deleted the flag would print R8's full "
+          "banner and send NOTHING, the inert-flag defect on a readout "
+          "the wire cannot even see (the adversarial pass's finding)")
 
 
 def main():
@@ -309,6 +443,7 @@ def main():
     section_hit_kind()
     section_handler_wiring()
     section_stop_answer()
+    section_cast_stop()
     return LEDGER.verdict()
 
 

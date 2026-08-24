@@ -24,9 +24,9 @@ their predictions are stated here before any run happens. Convention:
 ## 0. HANDOFF — read this before anything else (written 2026-08-24, end of session)
 
 **This document is long and its early sections are superseded. Read §0, then
-§7.6–§7.9. §2–§5 are the arc's history and several of their claims are
-corrected later — every correction is filed in place, but §0 is the only
-summary that is current.**
+§7.6–§7.9, then §8 (the two registered, unrun items). §2–§5 are the arc's
+history and several of their claims are corrected later — every correction is
+filed in place, but §0 is the only summary that is current.**
 
 ### What the arc was, and that it is ANSWERED
 
@@ -73,9 +73,15 @@ AGENT_STOP_MOVING, which **halts when in motion and no-ops when parked**
 (`test_cancelwalk.py` §6, floor 46). It was built for **R6** and was VOID there
 because it was fired at **stops**, where it can only no-op (§7.4a). **Fired at
 CAST START it is the right message for a real bug.**
-*To do:* wire it behind a diagnostic flag at the cast-start site, register a
-prediction, run it, then ship on an owner ruling. **Defaults are an owner
-ruling in this repo — do not ship it on.**
+*Wired 2026-08-24:* **`--cast-stop` (CANCELWALK-R8, §8)** sends it at the
+free-caster non-attack cast start, first in the cast-begin tail (the E4 and
+the debits precede it) — refused without `--zero-lead` and with
+`--cancel-answer`, `--stop-answer` or `--arrival-carry`;
+`test_cancelwalk.py` §7 drives the lattice, the burst order and both scoping
+branches, and the change survived a three-agent adversarial review (§8.1's
+residual list is that review's yield). The prediction is registered at §8;
+the run is the owner's, and shipping stays a separate audited step.
+**Defaults are an owner ruling in this repo — do not ship it on.**
 
 ### What is CLOSED — do not re-open without new evidence
 
@@ -111,7 +117,9 @@ ruling in this repo — do not ship it on.**
   the client** on the first breakpoint hit. If a trap is ever genuinely needed,
   rebuild it on `commandertrap.py`'s `HwTrap`, never on the hand-rolled loop.
 - `--cancel-answer=…` and `--stop-answer=ack` are diagnostics, off by default,
-  refused without `--zero-lead` and refused with each other.
+  refused without `--zero-lead` and refused with each other. `--cast-stop`
+  (R8, §8) joins them under the same licensing, refused with either — and it
+  shares R6's opcode, so that pair has its own refusal cell.
 
 ### The run recipe that works
 
@@ -126,14 +134,16 @@ session is zero-exposure for anything movement-shaped (§7.4a). Align the two
 captures on the **wall clock** both files carry (`movetap.t` and the gamesrv
 origin's `wall_unix`), never by trajectory fit (§7.4d correction 1).
 
-### Two open questions, both cheap
+### Two open items, both REGISTERED and awaiting owner-driven runs (§8)
 
-1. **H10 is SUPPORTED, not confirmed** (§7.9 F29): both walks began 0.43–0.46 s
-   *after* the press with the gate already clear and no wire event to explain
-   them, which is the camera-turn re-dispatch's shape and no other candidate's.
-   To confirm: one run deliberately alternating *hold key + turn camera* against
-   *hold key + still camera* through frozen presses. Predicts walk vs freeze.
-2. **The float-forward fix** above.
+1. **CANCELWALK-R9** — H10's confirmation (H10 is SUPPORTED, not confirmed,
+   §7.9 F29: both walks began 0.43–0.46 s *after* the press with the gate
+   already clear and no wire event to explain them, the camera-turn
+   re-dispatch's shape and no other candidate's). One run alternating *hold
+   key + turn camera* against *hold key + still camera* through frozen
+   presses; no new code. Full registration, exposure floors included: §8.
+2. **CANCELWALK-R8** — the float-forward fix above, wired behind
+   `--cast-stop`. Full registration: §8.
 
 ---
 
@@ -1378,3 +1388,136 @@ it turned out not to serve.
   (§7.4d correction 1 — `movetap.t` and the gamesrv origin's `wall_unix`).
 - **Reading a walk verdict off `+0x50`'s VALUE.** It detects that the applier
   ran (`0 → N`); it is not a distance, an index, or a cause (F19).
+
+## 8. R8 and R9 — registered before their runs, both owner-driven (2026-08-24)
+
+Written at a desk after §7.9; neither has run. Both use §0's recipe — both
+instruments, walk-first, wall-clock alignment — and both are owner-driven:
+the input is held keys, camera turns and mid-stride skill presses, the §3g
+protocol's class. Each registration carries its own exposure floor, because
+§7.4a is what a registration without one costs.
+
+### 8.1 CANCELWALK-R8 · `--cast-stop` — the F28 float-forward fix, wired and unrun
+
+**The code is in the tree (2026-08-24):** `--cast-stop` sends one s2c
+`0x0028` AGENT_STOP_MOVING `[player]` at every free-caster **non-attack**
+cast start, **first in the cast-begin TAIL** — before the animation and the
+prop-8 hold; the E4 press-ack and the debits precede it, so do not score
+"not first in the burst" as a misfire when reading the capture. Details
+that are choices, named as such: the tail SLOT is unwitnessed (retail
+never captured a cast-while-running start) and chosen so the movement
+family closes before the action family opens; the scoping is NON-ATTACK
+(`not is_attack` — spells are the measured family, and an attack skill's
+start drives chase movement a halt would fight). Refused without
+`--zero-lead` and with `--cancel-answer`, `--stop-answer` (same opcode,
+two triggers — its own cell) or `--arrival-carry` (the halt cuts short a
+leg the F1b queue modelled as arriving); all three pairwise cells sit
+ABOVE the requires-zero-lead checks, pairwise-first. `test_cancelwalk.py`
+§7 drives the lattice, the burst order and both scoping branches; floor 59.
+
+**The change was adversarially reviewed the same day** (three agents:
+lattice driven live through 16 cells and real argv, send-site semantics
+re-derived at code level, and a 6-mutation probe — 6 of 6 caught, tree
+restored clean). Its findings are fixed in the follow-up commit, and three
+of them survive as **NAMED residuals, each zero-exposure in this run's
+spell-only protocol and each a ship-time term**:
+1. **Instant non-attack skills** (shouts, stances, signets) also take the
+   halt under this gate — a divergence from retail, which does not stop a
+   runner for them.
+2. **A non-attack ADRENAL skill's halt** lands between its `0x00D2` and
+   the naming property, breaking a measured 39-of-39 adjacency.
+3. **The queued begin sends nothing**, and its "body already stopped at
+   the first cast's start" premise fails two ways: a spell queued behind
+   an attack-headed chain, and a spell queued during an aftercast whose
+   hold a movement press already released (`cancel_on_move` releases the
+   hold but cannot cancel an aftercast entry or roll back the busy
+   window, so a camera-turn walk can be in flight at the begin).
+The review also verified the licensing claims at code level: `grant_at` is
+written only by `_note_wire_move`, which `send()` consults only for
+`0x0029`/`0x002A`/`0x002C` — the halt cannot stamp the grant clock; and
+the R8 send is reachable from exactly one site (the free-caster player
+burst), with `begin_cast`, the aftercast pulse, the swing sites and every
+replay path excluded by read. One transport note: `send()` writes each
+message with its own `sendall`, so in-burst ORDER is guaranteed by
+same-thread sequencing over one TCP stream, one-segment delivery is not —
+nothing in R8 rests on segmentation.
+
+*Protocol:* ≥3 casts started WHILE RUNNING — press the skill mid-stride
+with no stop first, F28's own shape (the last pre-cast report is a MOVING
+one, no `0x0047` before the cast) — plus ≥1 cast from standstill (the
+no-op control) and ≥1 ordinary cancelled cast (the freeze must stay a
+freeze). Both instruments; **the wire alone is blind to the entire
+question** — a straight glide emits no `0x003D` (F25), so neither the
+defect nor the fix appears on it.
+
+*Predictions, registered before any run:*
+- Cast while running → the drawn body HALTS within ~0.15 s of the cast
+  start: movetap velocity 288 → 0 and the position parks through the
+  activation, against F28's measured ~690 u glide. The sync copy halts
+  too (the handler stops both), so `sep` does not grow during the cast.
+- Cast from standstill → no change in any sampled field — the handler's
+  no-op half, the licensing claim measured on our own build for the first
+  time.
+- The cancel-instant freeze is UNTOUCHED in both arms: gate-B correlation
+  (F29) holds at every press, because the flag changes nothing at the
+  cancel instant.
+- Whether the halt makes the client REPORT (`0x0047` at the halt point) is
+  unmeasured and both outcomes are compatible — recorded so the run notes
+  it rather than being surprised by it. Either way the general stop arm
+  stays silent.
+
+*Exposure floor (the §7.4a lesson):* a cast counts for the treatment arm
+only if the body was IN MOTION at the `prop8 → 1` send (movetap velocity
+> 0 at the last sample before it); fewer than 3 such casts is a VOID arm,
+not a null.
+
+*Decision:* halts as predicted → the candidate is licensed; shipping (and
+whether the default flips) is an owner ruling after a REALFIX-style
+composition audit, and nothing here ships on. Does NOT halt → the
+`0x0028`-halts-in-motion reading (schema GAME_SMSG "40", handler read) is
+wrong on our build for this instant, and the fix moves to a client read
+before any other message is tried.
+
+### 8.2 CANCELWALK-R9 · H10's confirmation — camera-turn vs still-camera through frozen presses
+
+No new code; shipped configuration, both instruments. H10 (§7.7): after
+the hold clears, the walk is started by an INPUT-DIRECTION CHANGE, not by
+the key or by the clear — and a camera turn with the key held re-dispatches
+wire-invisibly (the `0x00535E9F` site passes arg6 = 0: no `0x003D`).
+
+*Protocol:* ≥4 cancelled casts alternating two arms. **Arm A (turn):**
+press W mid-cast and keep it held while turning the camera continuously
+≳90° — continuously, because a turn finished before our clear lands is
+spent on a still-set gate, and continued turning re-dispatches at up to
+20 Hz. **Arm B (still):** press W mid-cast and hold ≥1.5 s with the camera
+untouched (no right-drag, no turn keys). Walk-first before each cast so
+the pre-cast state matches the canonical freeze; ≥1 ordinary press that
+walks as the in-session positive control (fails ⇒ the run is VOID, and a
+void control interprets a null only — it has no authority over a
+positive).
+
+*Exposure floor:* a press counts for either arm only if `gate_b` was SET
+at the press (the freeze occurred, F29's condition); ≥2 counted presses
+per arm or that arm is VOID, not a null.
+
+*Predictions, registered before any run:*
+- H10 → every counted arm-A press WALKS: the walk begins once the gate is
+  clear while the turn continues (within ~0.15 s of the clear: the 50 ms
+  throttle plus a frame or two), in the camera's live direction at that
+  instant, with NO second `0x003D` and no `0x0040` in the window. Every
+  counted arm-B press stays frozen — velocity 0, position bit-identical —
+  for the full hold.
+- Refuted → a counted arm-A press still frozen through the turn (the
+  re-dispatch claim goes back on the bench), or a counted arm-B press that
+  walks with no camera input and no wire event (something else
+  re-dispatches, and F29's 0.43–0.46 s onsets need a new explanation).
+- Either way the gate correlation (SET → freeze, CLEAR → walk, 7 of 7)
+  is predicted to hold at every counted press; a violation outranks H10
+  and reopens §7.6.
+
+*Decision:* H10 confirmed → §0's "the freeze is not a server bug at all"
+is promoted from SUPPORTED to OBSERVED and the freeze half of the arc
+CLOSES, leaving R8 as the arc's only open item. H10 refuted → §7.7's F25
+mechanism is incomplete for our build, and the residual goes back to a
+desk read of the evaluator `0x005355C0`'s other dispatch conditions before
+any further run.

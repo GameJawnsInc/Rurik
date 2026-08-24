@@ -1585,6 +1585,59 @@ CANCEL_STOP = False
 # one cast before the cancelled one, closing F9's exposure confounder.
 STOP_ANSWER = None     # None | "ack"
 
+# --cast-stop. CANCELWALK-R8's arm (studies/movement/CANCELWALK.md §8), OFF
+# by default and DIAGNOSTIC ONLY, same licensing as the two flags above --
+# and unlike them it is a FIX CANDIDATE for a measured defect in OUR server,
+# not a probe of the client's freeze.
+#
+# THE DEFECT (CANCELWALK-F28, measured 20260824T183544/183537): our
+# cast-start burst sends property 8 -> 1, which sets GATE B and suppresses
+# the local walk-START -- but nothing we send stops a leg already IN FLIGHT,
+# so a cast begun while running leaves the drawn body gliding at 288 u/s for
+# the whole cast (~690 u measured across one cast, velocity never below
+# 288). Retail stops you when you start casting; we never send anything
+# that does.
+#
+# THE ARM: at the free-caster cast burst (the `not queued` branch), send
+# one s2c 0x0028 AGENT_STOP_MOVING [player] first in the cast-begin TAIL
+# -- before the animation and the prop-8 hold. NOT first in the burst: the
+# E4 press-ack and the debits precede it, and a capture reviewer expecting
+# the halt at the burst head would mis-score valid exposure. NON-ATTACK
+# CASTS ONLY (`not is_attack`): the float-forward was measured on spell
+# casts, and an attack skill's start drives chase movement a halt would
+# fight. Three NAMED residuals, each zero-exposure in R8's spell-only
+# protocol and each a ship-time term (§8.1), found by the adversarial
+# review pass rather than smoothed over:
+#   (1) instant non-attack skills -- shouts, stances, signets -- also take
+#       the halt under this gate, a divergence from retail, which does not
+#       stop a runner for them;
+#   (2) a NON-ATTACK ADRENAL skill's halt lands between its 0x00D2 and the
+#       naming property, breaking a measured 39-of-39 adjacency;
+#   (3) the queued begin sends nothing, and its "body already stopped at
+#       the first cast's start" premise fails two ways: a spell queued
+#       behind an attack-headed chain, and a spell queued during an
+#       aftercast whose hold a movement press already released
+#       (cancel_on_move releases the hold but cannot cancel an aftercast
+#       entry or roll back the busy window, so a camera-turn walk can be
+#       in flight at the begin).
+#
+# WHY THIS MESSAGE: the 0x0028 handler halts both world copies via 0x602540
+# only when IN MOTION and no-ops on a parked body (schema GAME_SMSG "40" --
+# the semantics R6 already relied on), so a standstill cast is untouched.
+# NOT a grant: no destination armed, no grant clock stamped (0x0028 is not
+# in _note_wire_move's opcode set), zero warp exposure.
+#
+# PREDICTIONS (registered at §8 before this code ran anywhere): cast while
+# RUNNING -> the drawn body halts within ~0.15 s of the cast start instead
+# of gliding, and movetap is the readout -- the glide is WIRE-INVISIBLE,
+# because a straight leg emits no 0x003D (F25). Cast from STANDSTILL -> no
+# change in any sampled field (the no-op half, the licensing claim measured
+# on our own build for the first time). The cancel-instant freeze is
+# UNTOUCHED either way -- it is the client's input model (F25/F29), not
+# this send. Defaults are an owner ruling in this repo; this ships OFF and
+# stays off until the run passes and a ruling lands.
+CAST_STOP = False
+
 
 def parse_stop_answer(text):
     """Pure: an --stop-answer argument -> (mode, refusal).
@@ -4198,7 +4251,8 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
                           client_endpoint=False, grant_suppress=False,
                           resync=False, stop_echo=False, click_sweep=False,
                           plane_carry=False, arrival_carry=False,
-                          cancel_answer=None, stop_answer=None):
+                          cancel_answer=None, stop_answer=None,
+                          cast_stop=False):
     """Pure: may these movement flags run together, and what must be said?
 
     Returns (refusal, notes). `refusal` is None or the text main() raises as a
@@ -4292,6 +4346,37 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
                 "stay clean. Pass --zero-lead --plane-carry for the F1 arm, "
                 "--zero-lead --arrival-carry for the F1b arm, or --zero-lead "
                 "alone for the P2 control both are measured against."), []
+    # The cast_stop pairwise cells sit ABOVE the requires-zero-lead checks,
+    # like the plane/arrival pair and for its reason: "you passed two
+    # levers" is the more useful thing to be told, and a requires-zero-lead
+    # refusal here would hand out advice (--zero-lead --arrival-carry) that
+    # the pairwise cell below would then refuse on the next restart -- an
+    # adversarial pass caught exactly that with the arrival cell placed low.
+    if cast_stop and cancel_answer:
+        return ("--cast-stop and --cancel-answer cannot run together. R8's "
+                "readout is the body's motion across the CAST START and the "
+                "cancel arms change the answer at the CANCEL instant -- two "
+                "levers in one run, and a halt (or a walk, or a freeze) "
+                "could be attributed to neither. One change per run is this "
+                "arc's own rule (CANCELWALK.md sec.5). Run --cast-stop "
+                "alone."), []
+    if cast_stop and stop_answer:
+        return ("--cast-stop and --stop-answer cannot run together. Both "
+                "send the SAME opcode (s2c 0x0028 AGENT_STOP_MOVING) on "
+                "different triggers -- every free-caster non-attack cast "
+                "start vs every player 0x0047 stop -- so the capture could "
+                "not attribute any halt, or any freeze/walk change, to one "
+                "lever. One change per run (CANCELWALK.md sec.5). Run them "
+                "in separate sessions."), []
+    if cast_stop and arrival_carry:
+        return ("--cast-stop and --arrival-carry cannot run together. The "
+                "cast-start 0x0028 halts BOTH world copies mid-leg when the "
+                "body is in motion, so a grant the F1b queue modelled as "
+                "arriving never arrives -- the queue would carry an arrival "
+                "plane for a leg the halt cut short, and a snap it caused "
+                "would be attributed to the wrong arm. One diagnostic at a "
+                "time; R8 is pre-registered against the shipped default "
+                "(--zero-lead --plane-carry) and nothing else."), []
     if arrival_carry and not zero_lead:
         return ("--arrival-carry requires --zero-lead. REALFIX-F1b is a "
                 "MODIFIER on the zero-lead grant, not a policy of its own: it "
@@ -4363,6 +4448,13 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
                 "other grant policy the run answers a question nobody "
                 "registered. Pass --zero-lead (or nothing: it is the "
                 "default) with --stop-answer."), []
+    if cast_stop and not zero_lead:
+        return ("--cast-stop requires --zero-lead. CANCELWALK-R8 is "
+                "pre-registered against the SHIPPED configuration -- F28's "
+                "float-forward was measured under it, and under any other "
+                "grant policy the run answers a question nobody registered. "
+                "Pass --zero-lead (or nothing: it is the default) with "
+                "--cast-stop."), []
     if not zero_lead:
         return None, []
     on_flags = {"--heading-grant": heading_grant,
@@ -4445,6 +4537,16 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
             f"on a body that already stopped itself. The cancel-instant "
             f"answer stays exactly as --zero-lead ships. Predictions and "
             f"readout: studies/movement/CANCELWALK.md 7.4.")
+    if cast_stop:
+        notes.append(
+            "      + --cast-stop: CANCELWALK-R8 arm, DIAGNOSTIC ONLY. Adds "
+            "one s2c 0x0028 [player] at every free-caster non-attack cast "
+            "start -- halts a body still in flight (F28's float-forward), "
+            "no-ops "
+            "on a parked one. NOT a grant: no destination armed, no grant "
+            "clock stamped. Every grant and every cancel-instant answer "
+            "stays exactly as --zero-lead ships. Predictions and readout: "
+            "studies/movement/CANCELWALK.md 8.")
     return None, notes
 
 
@@ -8459,6 +8561,26 @@ def handle_skill_press(values, send, state, conn_id, opcode):
     # always until 2026-08-22 -- early, for a queued cast, by the rest of
     # the previous cast's aftercast.)
     if not queued:
+        # CANCELWALK R8 (--cast-stop): halt a body still in flight before
+        # the cast opens. The hold below suppresses the walk-START (gate B,
+        # F22) and does nothing to a leg already executing, so a cast begun
+        # while running glides at 288 u/s for its whole activation (F28,
+        # ~690 u measured). The message's SLOT in the burst is unwitnessed
+        # -- retail never captured a cast-while-running start -- and chosen:
+        # the movement family closes before the action family opens, the
+        # adjacency retail's cancel bursts use in the other direction
+        # ([8->0] before the movement tail, F1). NON-ATTACK ONLY (spells
+        # are the measured family; the flag block names the instant-skill
+        # and adrenal-adjacency residuals): an attack skill's start drives
+        # chase movement a halt would fight. The
+        # handler no-ops on a parked body (schema GAME_SMSG "40"), so a
+        # standstill cast is untouched -- not a grant, no grant clock,
+        # zero warp exposure. Predictions: the flag's comment block and
+        # CANCELWALK.md 8.
+        if CAST_STOP and not is_attack:
+            send(GAME_SMSG_AGENT_STOP_MOVING,
+                 agents.agent_stop_moving(PLAYER_AGENT_ID),
+                 "AGENT_STOP_MOVING(player) [cancelwalk R8 cast-stop]")
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
              [agents.GV_ATTACK_SKILL_ACTIVATED if is_attack
               else agents.GV_SKILL_ACTIVATED,
@@ -16197,6 +16319,27 @@ def main():
                          "H5-without-H6/H7/H4 predict it still freezes. "
                          "'repin' is deliberately unbuilt and refuses with "
                          "the reason. studies/movement/CANCELWALK.md 7.4.")
+    ap.add_argument("--cast-stop", action="store_true",
+                    help="CANCELWALK-R8's cast-start halt, DIAGNOSTIC ONLY, "
+                         "OFF by default, refused without --zero-lead and "
+                         "with --cancel-answer, --stop-answer or "
+                         "--arrival-carry. Sends one s2c 0x0028 "
+                         "AGENT_STOP_MOVING [player] at every free-caster "
+                         "NON-ATTACK cast start, first in the cast-begin "
+                         "tail (before the animation and the prop-8 hold; "
+                         "the E4 press-ack and the debits precede it). FIX "
+                         "CANDIDATE for CANCELWALK-F28 (the float-forward): "
+                         "our prop-8 hold suppresses the walk-START but "
+                         "stops nothing in flight, so a cast begun while "
+                         "running glides at 288 u/s for the whole cast "
+                         "(~690 u measured). The 0x0028 handler halts both "
+                         "copies only when IN MOTION and no-ops parked "
+                         "(schema GAME_SMSG 40) -- not a grant, no grant "
+                         "clock, zero warp exposure. Readout is movetap, "
+                         "not the wire: a straight glide emits no 0x003D. "
+                         "No outcome ships from a run directly; defaults "
+                         "are an owner ruling. "
+                         "studies/movement/CANCELWALK.md 8.")
     ap.add_argument("--resync", action="store_true",
                     help="SEVENTH candidate. Send GAME_SMSG 0x002C "
                          "AGENT_UPDATE_POSITION carrying the CLIENT'S OWN last "
@@ -16930,7 +17073,8 @@ def main():
         client_endpoint=a.client_endpoint, grant_suppress=grant_suppress,
         resync=a.resync, stop_echo=a.stop_echo, click_sweep=a.click_sweep,
         plane_carry=plane_carry, arrival_carry=a.arrival_carry,
-        cancel_answer=a.cancel_answer, stop_answer=_sa_mode)
+        cancel_answer=a.cancel_answer, stop_answer=_sa_mode,
+        cast_stop=a.cast_stop)
     if _zl_refusal and a.zero_lead is None:
         _zl_refusal += ("\n(--zero-lead is ON BY DEFAULT since 2026-08-22; "
                         "pass --no-zero-lead to run this arm without it.)")
@@ -17088,6 +17232,38 @@ def main():
               "casts. Protocol rider: complete one cast BEFORE the "
               "cancelled ones, closing F9's exposure confounder in the "
               "same session. studies/movement/CANCELWALK.md sec.7.4.")
+
+    # CANCELWALK R8. Same house style: the prediction goes out BEFORE the
+    # run. ASCII only, as above.
+    if a.cast_stop:
+        global CAST_STOP
+        CAST_STOP = True
+        print("[map] --cast-stop ON. CANCELWALK R8 (cast-start halt), "
+              "DIAGNOSTIC ONLY -- no outcome ships from this run directly.")
+        print("      SENDS     one s2c 0x0028 AGENT_STOP_MOVING [player] at "
+              "every free-caster NON-ATTACK cast start, first in the "
+              "cast-begin tail: before the animation and the prop-8 hold "
+              "(the E4 press-ack and the debits PRECEDE it -- do not score "
+              "'not first in the burst' as a misfire). Attack skills, "
+              "queued casts and every grant are untouched.")
+        print("      FIXES     CANCELWALK-F28 if it works: the hold gates "
+              "the walk-START and stops nothing in flight, so a cast begun "
+              "while running glides at 288 u/s for the whole cast (~690 u "
+              "measured, 20260824T183544). Retail stops you; we never sent "
+              "anything that does.")
+        print("      PREDICTS  cast while RUNNING: the drawn body halts "
+              "within ~0.15 s of the cast start -- movetap velocity 288 -> "
+              "0, position parked through the activation. Cast from "
+              "STANDSTILL: no-op, nothing changes in any sampled field. "
+              "The cancel-instant freeze is UNTOUCHED either way (it is "
+              "the client's input model, F25/F29, not this send).")
+        print("      READOUT   movetap, NOT the wire: a straight glide "
+              "emits no 0x003D (F25), so the wire is blind to both the "
+              "defect and the fix. Run both instruments, walk-first, "
+              "align on the wall clock. Exposure floor: a cast counts "
+              "only if the body was IN MOTION at the prop8->1 send; "
+              "fewer than 3 such casts is a VOID arm, not a null. "
+              "Protocol: studies/movement/CANCELWALK.md sec.8.")
 
     # REALFIX-F1. Printed in the same house style and for the same reason: the
     # prediction goes out BEFORE the run so it cannot be rationalised after it.
