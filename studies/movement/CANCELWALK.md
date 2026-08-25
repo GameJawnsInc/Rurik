@@ -143,9 +143,12 @@ at the end of this section.**
   the client** on the first breakpoint hit. If a trap is ever genuinely needed,
   rebuild it on `commandertrap.py`'s `HwTrap`, never on the hand-rolled loop.
 - `--cancel-answer=…` and `--stop-answer=ack` are diagnostics, off by default,
-  refused without `--zero-lead` and refused with each other. `--cast-stop`
-  (R8, §8) joins them under the same licensing, refused with either — and it
-  shares R6's opcode, so that pair has its own refusal cell.
+  refused without `--zero-lead` and refused with each other. An EXPLICIT
+  `--cast-stop` (R8, §8) joins them under the same licensing, refused with
+  either — and it shares R6's opcode, so that pair has its own refusal
+  cell. The `pin` arm itself is no longer a diagnostic: it is the SHIPPED
+  DEFAULT since 2026-08-25 (§8.3g), and the bare default YIELDS to those
+  levers with a printed note rather than refusing.
 
 ### The run recipe that works
 
@@ -165,7 +168,7 @@ session is zero-exposure for anything movement-shaped (§7.4a). Align the two
 captures on the **wall clock** both files carry (`movetap.t` and the gamesrv
 origin's `wall_unix`), never by trajectory fit (§7.4d correction 1).
 
-### R8 and R9 RAN and are ruled on; what remains is R10's run (§8.3)
+### R8, R9 and R10 ALL RAN and are ruled on (R10 twice — §8.3d, §8.3f — then SHIPPED, §8.3g)
 
 1. **CANCELWALK-R9 RAN — H10 CONFIRMED 6 of 6 (§8.2a F32).** The freeze
    half of the arc is **CLOSED**. Bonus yield: gate 1 caught firing for
@@ -190,11 +193,11 @@ origin's `wall_unix`), never by trajectory fit (§7.4d correction 1).
    "no-ops when parked" holds only when the COPY is parked too.
    **FIXED the same day (§8.3e): PIN-OR-NOTHING** — the pair fires
    whole or not at all, a bare `0x0028` never fires, refusals print
-   their door to the console. What remains is the **completion run,
-   three reps, §8.3e**: the stop-then-cast F34 regression rep, the
-   second-cast rep (forgotten in R10's run), and a 3+ s dead-straight
-   leg cast (THIN in R10's run — reports flowed to within 0.97 s of
-   every reckoned cast).
+   their door to the console. ~~What remains is the **completion run,
+   three reps, §8.3e**.~~ **The completion run RAN the same day and
+   the owner RULED (§8.3f/§8.3g): the arm clean everywhere it acts,
+   pin SHIPPED as the default, F28 CLOSED. Nothing remains in this
+   arc; the follow-on gaps are the handoff below.**
 
 ### Session handoff, 2026-08-25 — where to pick this up
 
