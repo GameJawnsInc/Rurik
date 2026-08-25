@@ -1421,15 +1421,23 @@ operands (`controller_read`, R7 as a poll), needs no elevation, selftest floor
 blockers, the first of which would kill the client on the first breakpoint hit;
 if a trap is ever needed, rebuild on `commandertrap.py`'s `HwTrap`.
 
-**Open: two owner-driven runs, both REGISTERED with predictions and exposure
-floors at CANCELWALK.md §8 (2026-08-24).** (1) **CANCELWALK-R8 `--cast-stop`**
-— cast while running halts within ~0.15 s instead of gliding ~690 u; a
-standstill cast is a no-op; the freeze stays a freeze; readout is movetap
-(the glide is wire-invisible: a straight leg emits no `0x003D`). (2)
-**CANCELWALK-R9**, H10's confirmation, no new code — alternate *hold + turn
-camera* against *hold + still camera* through frozen presses; a press counts
-only if `gate_b` was SET at it, ≥2 per arm or the arm is VOID. **Nothing in
-this arc ships without an owner ruling.**
+**BOTH RUNS RAN 2026-08-24 evening, each adversarially recounted from the
+raw captures (CANCELWALK.md §8.1a/§8.2a).** (1) **R9: H10 CONFIRMED 6 of
+6 — the freeze half of the arc is CLOSED.** Hold + camera-turn self-walks
+3 of 3, beginning at the gate clear and before any wire event; hold +
+still camera never self-walks (its visible "~300 u walk then stop" is our
+own zero-lead grant executing after a gate-1 snap). Bonus: **gate 1
+caught FIRING for the first time (F33, 7 of 7 snaps at the above→below
+transition)** — sep reached 346–555 u at ordinary presses, the worst
+staleness on record, filed to REALFIX with F27. (2) **R8: `--cast-stop`
+halts the float-forward 3 of 3** (288 → 0.0 by the first sample, zero
+drift through the cast; standstill/Esc no-ops 2 of 2; the halt is never
+client-reported) — **with cost F31: the halt lands the body on the SYNC
+COPY, a backward snap equal to the copy's staleness (110–207 u here),
+not a stop-in-place.** The candidate is LICENSED with that named cost.
+**Open: the owner's ship ruling on `--cast-stop`** — as-is, paired with
+REALFIX staleness work (`--resync`/P5 is the unrefuted candidate), or
+held. It stays OFF until a ruling lands.
 
 ### MODEL AUTHORING: the one-bit question is answered, and every player identity closes (2026-08-22)
 
