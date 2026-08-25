@@ -89,10 +89,13 @@ yield). ***R8 RAN the same evening (§8.1a): the halt works 3 of 3*** —
 speed 288 → 0.0 by the first sample after the burst, zero drift through
 the whole cast, standstill/Esc no-ops 2 of 2 — ***but F31: the halt lands
 the body on the SYNC COPY's position, a backward snap equal to the copy's
-staleness (110–207 u here), not a stop-in-place.*** The candidate is
-LICENSED with that named cost; the serious form pairs it with REALFIX's
-staleness work. **Shipping is an owner ruling — it stays OFF until one
-lands.**
+staleness (110–207 u here), not a stop-in-place.*** **RULED 2026-08-25
+(PLAN §7 Q10): REFUSED as a ship — "the stock game doesn't warp."** The
+halt arm stays runnable as R10's control; the no-warp successor is
+**`--cast-stop=pin` (CANCELWALK-R10, §8.3, wired 2026-08-25)**: a
+dead-reckoned `0x002C` hard-set at the body's true position first, then
+the halt, which then lands on co-located copies and cannot snap.
+**R10 awaits its owner-driven run; nothing ships without a ruling.**
 
 ### What is CLOSED — do not re-open without new evidence
 
@@ -149,18 +152,21 @@ session is zero-exposure for anything movement-shaped (§7.4a). Align the two
 captures on the **wall clock** both files carry (`movetap.t` and the gamesrv
 origin's `wall_unix`), never by trajectory fit (§7.4d correction 1).
 
-### Both runs RAN 2026-08-24 evening — what remains is ONE owner ruling
+### R8 and R9 RAN and are ruled on; what remains is R10's run (§8.3)
 
 1. **CANCELWALK-R9 RAN — H10 CONFIRMED 6 of 6 (§8.2a F32).** The freeze
    half of the arc is **CLOSED**. Bonus yield: gate 1 caught firing for
    the first time (F33), explaining the operator's "warps" as F27
    staleness (sep 346–555 u measured) meeting the client's own
    reconcile — filed to REALFIX.
-2. **CANCELWALK-R8 RAN — the `--cast-stop` fix halts the float-forward
-   3 of 3 (§8.1a), with cost F31**: the halt lands the body on the sync
-   copy (backward snap = staleness, 110–207 u here). **Open: the owner's
-   ship ruling** — as-is, paired with REALFIX staleness work, or held.
-   Nothing ships on by default.
+2. **CANCELWALK-R8 RAN — the halt works 3 of 3 with cost F31 (§8.1a),
+   and the owner REFUSED it as a ship (2026-08-25, PLAN §7 Q10: "the
+   stock game doesn't warp").** The successor is wired:
+   **`--cast-stop=pin` (CANCELWALK-R10, §8.3)** — dead-reckoned `0x002C`
+   re-pin at the body's true position, then the halt; predicted residual
+   ≤ ~35 u forward, zero backward. **Open: R10's owner-driven run**, R8's
+   protocol plus one cast deep into a long straight leg. Nothing ships
+   without a ruling.
 
 ---
 
@@ -1568,6 +1574,12 @@ serious fix pairs it with staleness reduction — REALFIX's ground
 (`--resync`/P5, or cadence work). **The ruling is the owner's; nothing
 ships on by default.**
 
+**RULED 2026-08-25 (PLAN §7 Q10): REFUSED AS A SHIP.** *"The stock game
+doesn't warp, i am not going to accept a fix that still warps."* The bare
+halt stays runnable (`--cast-stop=halt`) as a measured diagnostic and as
+R10's control arm; the no-warp successor is **`--cast-stop=pin`,
+registered at §8.3**.
+
 ### 8.2 CANCELWALK-R9 · H10's confirmation — does turning the camera un-freeze a held key?
 
 (Rewritten for the operator the same day it was registered — the first
@@ -1661,6 +1673,9 @@ mechanism is incomplete for our build, and the residual goes back to a
 desk read of the evaluator `0x005355C0`'s other dispatch conditions before
 any further run.
 
+*(§8.3, the R10 registration, is filed after §8.2a — it exists because of
+§8.1a's F31 and the owner's ruling on it.)*
+
 ### 8.2a R9 RAN — H10 CONFIRMED 6 of 6, and gate 1 is caught FIRING for the first time (2026-08-24)
 
 Captures `authsrv-20260824T213927-c1` + `movetap-20260824T213933`, shipped
@@ -1744,3 +1759,81 @@ forward, stop", and below it like the classic freeze. The staleness
 measurements here (sep 346–555 at ordinary presses) are the worst on
 record and are **filed to REALFIX with F27**, where the cadence question
 already lives.
+
+### 8.3 CANCELWALK-R10 · `--cast-stop=pin` — the no-warp halt, wired and registered before its run (2026-08-25)
+
+**Why it exists:** R8's halt works (§8.1a) and was **REFUSED as a ship by
+owner ruling** (PLAN §7 Q10: *"the stock game doesn't warp"*) because of
+F31 — the `0x0028` lands the body on the sync copy, a backward warp equal
+to the copy's staleness. Retail never warps because retail's regime keeps
+its copy continuously current (F9's led/re-grant cadence). The no-warp
+form must therefore bring the copy to the BODY before halting.
+
+**The mechanism, wired 2026-08-25:** at the same cast-start site, before
+the `0x0028`, the server **dead-reckons the player's true position** —
+`last accepted report + unit(vec2) × rate × 288 u/s × dt` — and sends one
+s2c `0x002C` AGENT_UPDATE_POSITION there. The `0x002C` hard-sets **both**
+copies, zeroes velocity and kills any leg (the decoded
+`0x00602B20`/`0x006020B0` behaviour `_note_wire_move` already models; no
+grant clock stamped), so the `0x0028` that follows lands on co-located
+copies and **cannot snap**. What makes the reckoning honest:
+- **Straight legs are exactly the legs that never report** (F25), so the
+  extrapolation is exact where F31's 110–207 u cases live; F27's own
+  arithmetic closed this model to 41 ms.
+- **Rates are OBSERVED where used:** mt 1 = 288.0 (everywhere) and
+  mt 4 = 0.66 × 288 = 190.1 (R8's own tape: the mt=4 press's walk-onset
+  speed). Other families default 1.0, UNVERIFIED and labelled.
+- **The extrapolated segment is navmesh-clipped** (the `pm.clip`
+  primitive, with `clip_to_walkable`'s standing-outside suspension).
+- **Every refusal door is named and scorable from the capture** — the
+  `0x0028`'s label carries the reckon verdict (`pin:reckoned`,
+  `pin:parked`, `pin:pinned-parked`, `pin:report-refused`, …):
+  believed-parked sends no `0x002C` (retail sends nothing at standstill
+  casts either); a pin newer than the last report refuses (the halt is
+  never client-reported, so a second cast would otherwise extrapolate a
+  leg the body never walked — R8's second-cast trap); `pos_rejects > 0`
+  refuses (`_resync_verdict`'s refused-report hole, guarded here for the
+  same reason: a hard-set computed from a pre-refusal point is the warp
+  through a new door). A refused reckon degrades to R8's measured halt —
+  a snap, never F28's glide.
+
+**Lattice:** same refusals as `halt` (requires `--zero-lead`; refused
+with `--cancel-answer`, `--stop-answer`, `--arrival-carry`) **plus
+`--resync`** — two `0x002C` policies whose position models fight (the pin
+extrapolates PAST the last report; the resync teleports BACK to it).
+`test_cancelwalk.py` §7 drives the parser, every reckon door, the pin
+burst (0x002C-then-0x0028 order, payload, labels, the second-cast guard
+live) and the lattice; floor 82.
+
+*Protocol:* identical to R8's (§8.1) — ≥3 casts started WHILE RUNNING
+mid-stride, ≥1 from standstill, ≥1 ordinary cancelled cast, both
+instruments, walk-first, wall-clock alignment. Same exposure floor: ≥3
+in-motion casts or the arm is VOID. One addition: **at least one running
+cast pressed ~3+ s into a long straight leg** — the high-staleness case
+where F31's warp was largest and the reckoning earns its keep.
+
+*Predictions, registered before any run:*
+- Cast while running → the body halts within ~0.15 s **with no backward
+  component > 20 u and total across-halt displacement ≤ ~35 u** (one
+  poll of forward travel at 288); the `0x002C`'s own labelled point lies
+  within ~32 u of the movetap body position at the send; `sep` ≈ 0
+  through the cast. F31's 110–207 u backward snap does not reproduce.
+- Cast from standstill → the reckon refuses (`pin:parked`), no `0x002C`
+  goes out, the `0x0028` no-ops: nothing changes in any sampled field.
+- A second cast with no report between → `pin:pinned-parked`, no
+  `0x002C` (the guard observed live, not just in the test).
+- The cancel-instant freeze and the gate-B correlation are untouched
+  throughout.
+- *Failure signatures, pre-registered:* a backward snap > 20 u at a
+  `pin:reckoned` cast means the reckon aimed at the wrong point — read
+  the `0x002C` label for where, and the movetap track for where the body
+  actually was (the delta names the model error: rate, clip, or a
+  mid-leg camera curve). A forward TELEPORT ≫ 35 u means a stale
+  moving-belief slipped the guards, and the guard set is incomplete.
+
+*Decision:* pin meets the no-warp bar → it is the ship candidate for the
+owner's ruling, and F28 closes with it. Pin fails backward → the
+reckoning model is wrong somewhere the failure signature localises; fix
+and re-run before any other message is tried. Pin fails forward → the
+belief guards gain the missing door first. **Defaults are an owner
+ruling; nothing ships on from this run.**

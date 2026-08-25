@@ -19,10 +19,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
 import checks  # noqa: E402
 
-# FLOOR 59, from the green run of 2026-08-24 that landed the adversarial
-# review pass over R8's --cast-stop section (58 when the section landed;
-# 43 with R1-R6's arms; 29 with R1-R4's alone; 24 with R1-R3).
-LEDGER = checks.Ledger("cancelwalk arms", floor=59)
+# FLOOR 82, from the green run of 2026-08-25 that landed R10's
+# --cast-stop=pin arm (59 after the R8 review pass; 58 when R8's section
+# landed; 43 with R1-R6's arms; 29 with R1-R4's alone; 24 with R1-R3).
+LEDGER = checks.Ledger("cancelwalk arms", floor=82)
 check = LEDGER.ok
 
 PLAYER = 1
@@ -312,32 +312,51 @@ def section_cast_stop():
     import authsrv
     import agents
 
-    print("7. R8 --cast-stop: composition, the burst, both scoping branches")
-    # Composition. R8 is registered against the SHIPPED configuration and
-    # against ONE lever per run -- and it shares an opcode with R6, so that
-    # pair gets its own cell.
-    why, _ = authsrv.zero_lead_composition(zero_lead=False, cast_stop=True)
-    check(why is not None and "--cast-stop requires --zero-lead" in why,
-          "without --zero-lead the run answers a question nobody "
-          "registered -- refused", f"{why!r}")
-    why, _ = authsrv.zero_lead_composition(zero_lead=True, cast_stop=True,
-                                           cancel_answer="suppress")
-    check(why is not None and "--cast-stop and --cancel-answer" in why,
-          "with --cancel-answer the run changes two levers -- refused",
-          f"{why!r}")
-    why, _ = authsrv.zero_lead_composition(zero_lead=True, cast_stop=True,
+    print("7. R8/R10 --cast-stop: parse, reckon, composition, the burst")
+    # Parse. Bare --cast-stop is 'halt' via argparse const; the parser
+    # sees the two arm names and refuses everything else LOUDLY, the
+    # refusal carrying the owner's ruling on the halt arm.
+    check(authsrv.parse_cast_stop(None) == (None, None),
+          "no flag parses to no arm, no refusal")
+    check(authsrv.parse_cast_stop("halt") == ("halt", None),
+          "R8: halt (also what bare --cast-stop parses to via const)")
+    check(authsrv.parse_cast_stop("pin") == ("pin", None),
+          "R10: pin")
+    m, why = authsrv.parse_cast_stop("halr")
+    check(m is None and why is not None and "pin" in why
+          and "owner ruling 2026-08-25" in why,
+          "a typo'd arm is refused LOUDLY, the refusal names both real "
+          "arms AND the ruling that refused halt as a ship -- where a "
+          "cold session trips over it", f"{why!r}")
+    # Composition. Both arms are registered against the SHIPPED
+    # configuration and against ONE lever per run; halt shares an opcode
+    # with R6 and pin shares one with --resync, so each pair gets its own
+    # cell.
+    for mode in ("halt", "pin"):
+        why, _ = authsrv.zero_lead_composition(zero_lead=False,
+                                               cast_stop=mode)
+        check(why is not None and "--cast-stop requires --zero-lead" in why,
+              f"{mode}: without --zero-lead the run answers a question "
+              f"nobody registered -- refused", f"{why!r}")
+        why, _ = authsrv.zero_lead_composition(zero_lead=True,
+                                               cast_stop=mode,
+                                               cancel_answer="suppress")
+        check(why is not None and "--cast-stop and --cancel-answer" in why,
+              f"{mode}: with --cancel-answer the run changes two levers -- "
+              f"refused", f"{why!r}")
+    why, _ = authsrv.zero_lead_composition(zero_lead=True, cast_stop="halt",
                                            stop_answer="ack")
     check(why is not None and "--cast-stop and --stop-answer" in why
           and "SAME opcode" in why,
           "with --stop-answer BOTH levers send 0x0028 on different "
           "triggers, so no halt could be attributed -- refused, and the "
           "refusal names the shared opcode", f"{why!r}")
-    why, _ = authsrv.zero_lead_composition(zero_lead=True, cast_stop=True,
+    why, _ = authsrv.zero_lead_composition(zero_lead=True, cast_stop="halt",
                                            arrival_carry=True)
     check(why is not None and "--cast-stop and --arrival-carry" in why,
           "with --arrival-carry the F1b queue would model an arrival the "
           "halt cut short -- refused", f"{why!r}")
-    why, _ = authsrv.zero_lead_composition(zero_lead=False, cast_stop=True,
+    why, _ = authsrv.zero_lead_composition(zero_lead=False, cast_stop="halt",
                                            arrival_carry=True)
     check(why is not None and "--cast-stop and --arrival-carry" in why,
           "and WITHOUT --zero-lead the same PAIRWISE cell fires, not "
@@ -345,51 +364,130 @@ def section_cast_stop():
           "advice (--zero-lead --arrival-carry) the pairwise cell then "
           "refused on the next restart, which the adversarial pass caught "
           "live", f"{why!r}")
-    why, _ = authsrv.zero_lead_composition(zero_lead=False, cast_stop=True,
+    why, _ = authsrv.zero_lead_composition(zero_lead=False, cast_stop="halt",
                                            stop_answer="ack")
     check(why is not None and "--cast-stop and --stop-answer" in why,
           "all the levers at once gets the PAIRWISE refusal, not "
           "requires-zero-lead -- 'you passed two levers' is the more "
           "useful thing to be told, the plane/arrival pair's own "
           "precedent", f"{why!r}")
-    why, notes = authsrv.zero_lead_composition(zero_lead=True, cast_stop=True)
-    check(why is None and any("R8" in n and "DIAGNOSTIC" in n
+    why, _ = authsrv.zero_lead_composition(zero_lead=True, cast_stop="pin",
+                                           resync=True)
+    check(why is not None and "--cast-stop=pin and --resync" in why
+          and "SAME opcode" in why,
+          "pin with --resync: TWO 0x002C policies whose position models "
+          "fight (extrapolate past vs teleport back to the report) -- "
+          "refused, naming the shared opcode", f"{why!r}")
+    why, notes = authsrv.zero_lead_composition(zero_lead=True,
+                                               cast_stop="halt", resync=True)
+    check(why is None and any("REFUSED AS A SHIP" in n for n in notes),
+          "halt with --resync still composes (different opcodes), and "
+          "halt's note now carries the owner's ruling", f"notes={notes}")
+    why, notes = authsrv.zero_lead_composition(zero_lead=True,
+                                               cast_stop="pin")
+    check(why is None and any("R10" in n and "DIAGNOSTIC" in n
                               for n in notes),
-          "allowed with --zero-lead, and the startup note names R8 and its "
-          "diagnostic-only status", f"notes={notes}")
-    # The burst, driven -- not grepped. handle_skill_press with the flag
-    # OFF (the default), ON (a spell), and ON (an attack skill): the halt
-    # appears exactly on the middle one, first in the tail, before the
-    # animation and the prop-8 hold.
+          "pin allowed with --zero-lead, and the startup note names R10 "
+          "and its diagnostic-only status", f"notes={notes}")
+    # The reckon, driven as a pure function -- the arithmetic the 0x002C
+    # aims with, and every refusal door.
+    def motion(**over):
+        base = {"client_pos": (1000.0, -500.0), "client_pos_at": 100.0,
+                "client_plane": 0, "kbd_moving_at": 100.0,
+                "heading": (766.0, 0.0), "heading_mt": 1}
+        base.update(over)
+        return base
+    pt, pl, why = authsrv.cast_stop_reckon(motion(), 101.5)
+    check(pt is not None and abs(pt[0] - 1432.0) < 1e-6
+          and abs(pt[1] - (-500.0)) < 1e-6 and pl == 0
+          and why == "reckoned",
+          "a straight run reckons pos + unit(vec2) x 288 x dt exactly "
+          "(1.5 s at 288 = 432 u east)", f"({pt}, {pl}, {why})")
+    pt, _, _ = authsrv.cast_stop_reckon(motion(heading_mt=4), 101.0)
+    check(pt is not None and abs(pt[0] - (1000.0 + 0.66 * 288.0)) < 1e-6,
+          "mt 4 backpedals at 0.66 x 288 = 190.08 u/s -- the rate R8's "
+          "own tape measured (190.1 at the mt=4 press)", f"{pt}")
+    _, _, why = authsrv.cast_stop_reckon(motion(kbd_moving_at=None), 101.0)
+    check(why == "parked",
+          "kbd_moving_at cleared (the 0x0047 arm's stop) refuses: a "
+          "parked body needs no pin")
+    _, _, why = authsrv.cast_stop_reckon({}, 101.0)
+    check(why == "no-report", "nothing heard yet refuses")
+    _, _, why = authsrv.cast_stop_reckon(motion(pos_rejects=1), 101.0)
+    check(why == "report-refused",
+          "a refused newest report refuses the reckon -- _resync_verdict's "
+          "own hole, guarded here too: a hard-set computed from a "
+          "pre-refusal point is the warp through a new door")
+    _, _, why = authsrv.cast_stop_reckon(
+        motion(cast_stop_pin=(105.0, (9.0, 9.0))), 106.0)
+    check(why == "pinned-parked",
+          "a pin NEWER than the last report refuses: WE parked the body "
+          "and the client never reports the halt -- the R8 second-cast "
+          "trap, guarded")
+    pt, _, why = authsrv.cast_stop_reckon(
+        motion(cast_stop_pin=(99.0, (9.0, 9.0))), 101.0)
+    check(pt is not None and why == "reckoned",
+          "but a REPORT newer than the pin re-opens the reckon -- the "
+          "client has spoken since we parked it")
+    _, _, why = authsrv.cast_stop_reckon(motion(client_pos_at=200.0), 101.0)
+    check(why == "future-report", "a future-dated report refuses")
+
+    class _FakePM:
+        def __init__(self, ok, stop_at):
+            self._ok, self._stop = ok, stop_at
+        def walkable(self, x, y):
+            return self._ok
+        def clip(self, x0, y0, x1, y1, step=None):
+            return self._stop
+    pt, _, why = authsrv.cast_stop_reckon(
+        motion(pathmap=_FakePM(True, (1100.0, -500.0))), 101.5)
+    check(pt == (1100.0, -500.0) and why == "reckoned:clipped",
+          "the navmesh clips the EXTRAPOLATED leg and the why says so",
+          f"({pt}, {why})")
+    pt, _, why = authsrv.cast_stop_reckon(
+        motion(pathmap=_FakePM(False, (0.0, 0.0))), 101.5)
+    check(pt is not None and abs(pt[0] - 1432.0) < 1e-6
+          and why == "reckoned",
+          "standing OUTSIDE the mesh suspends the clip rather than "
+          "freezing the reckon -- clip_to_walkable's own rule", f"{pt}")
+    # The burst, driven -- not grepped. handle_skill_press per mode and
+    # per seeded motion state; labels recorded, because the pin arm's
+    # refusal telemetry IS the 0x0028's label.
     saved_timing = authsrv.skill_timing
     saved_attack = authsrv._is_attack_skill
     saved_flag = authsrv.CAST_STOP
     authsrv.skill_timing = lambda sid: (2.0, 0.75, 8.0)
     try:
-        def burst(flag, attack):
+        def burst(flag, attack, seed=None):
             authsrv.CAST_STOP = flag
             authsrv._is_attack_skill = lambda sid: attack
+            st = {"agents": {}}
+            st.update(seed or {})
             sent = []
             send = lambda op, vals, label="", quiet=False: \
-                sent.append((op, vals))
-            authsrv.handle_skill_press([0, 42, 7, 0], send, {"agents": {}},
+                sent.append((op, vals, label))
+            authsrv.handle_skill_press([0, 42, 7, 0], send, st,
                                        0, authsrv.GAME_CMSG_USE_SKILL)
-            return sent
-        stops = lambda sent: [i for i, (op, _) in enumerate(sent)
+            return sent, st
+        stops = lambda sent: [i for i, (op, _, _) in enumerate(sent)
                               if op == authsrv.GAME_SMSG_AGENT_STOP_MOVING]
-        off = burst(False, False)
-        check(stops(off) == [],
-              "flag OFF (the default): a spell press sends no 0x0028 -- "
-              "no diagnostic ships on", f"{off}")
-        on = burst(True, False)
+        pins = lambda sent: [i for i, (op, _, _) in enumerate(sent)
+                             if op == authsrv.GAME_SMSG_AGENT_UPDATE_POSITION]
+        off, _ = burst(None, False)
+        check(stops(off) == [] and pins(off) == [],
+              "flag OFF (the default): a spell press sends no 0x0028 and "
+              "no 0x002C -- no diagnostic ships on", f"{off}")
+        on, _ = burst("halt", False)
         check(len(stops(on)) == 1
-              and on[stops(on)[0]][1] == [PLAYER],
-              "flag ON: a spell press sends exactly one 0x0028 [player], "
-              "the builder's own payload", f"{on}")
-        anim = [i for i, (op, vals) in enumerate(on)
+              and on[stops(on)[0]][1] == [PLAYER]
+              and pins(on) == []
+              and "cancelwalk R8 cast-stop" in on[stops(on)[0]][2],
+              "halt: a spell press sends exactly one 0x0028 [player], the "
+              "builder's own payload, R8-labelled, and NO 0x002C", f"{on}")
+        anim = [i for i, (op, vals, _) in enumerate(on)
                 if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
                 and vals[0] == agents.GV_SKILL_ACTIVATED]
-        hold = [i for i, (op, vals) in enumerate(on)
+        hold = [i for i, (op, vals, _) in enumerate(on)
                 if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
                 and vals[0] == agents.GV_DISABLED and vals[2] == 1]
         check(len(anim) == 1 and len(hold) == 1
@@ -400,40 +498,82 @@ def section_cast_stop():
               "the debits legitimately precede it; 'first in the burst' "
               "was the review-corrected overstatement)",
               f"stop={stops(on)}, anim={anim}, hold={hold}")
-        atk = burst(True, True)
-        atk_anim = [i for i, (op, vals) in enumerate(atk)
+        atk, _ = burst("pin", True,
+                       seed={"client_pos": (0.0, 0.0), "client_pos_at": 0.0,
+                             "client_plane": 0, "kbd_moving_at": 0.0,
+                             "heading": (766.0, 0.0), "heading_mt": 1})
+        atk_anim = [i for i, (op, vals, _) in enumerate(atk)
                     if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
                     and vals[0] == agents.GV_ATTACK_SKILL_ACTIVATED]
-        check(stops(atk) == [] and len(atk_anim) == 1,
-              "flag ON, ATTACK skill: the burst goes out (its own "
-              "animation proves the press was not refused) and carries no "
-              "0x0028 -- the halt is scoped to NON-ATTACK casts (spells "
-              "are the measured family; the flag block names the "
-              "instant-skill and adrenal residuals); an attack skill's "
-              "start drives chase movement a halt would fight",
-              f"{atk}")
+        check(stops(atk) == [] and pins(atk) == [] and len(atk_anim) == 1,
+              "ATTACK skill under pin, even with a moving belief seeded: "
+              "the burst goes out (its own animation proves the press was "
+              "not refused) and carries neither message -- both arms are "
+              "scoped to NON-ATTACK casts", f"{atk}")
+        # Pin, moving belief: 0x002C at the reckoned point, then the
+        # 0x0028, in that order, and the pin note lands in state.
+        import time as _time
+        seed = {"client_pos": (1000.0, -500.0),
+                "client_pos_at": _time.time() - 1.0, "client_plane": 0,
+                "kbd_moving_at": _time.time() - 1.0,
+                "heading": (766.0, 0.0), "heading_mt": 1}
+        pon, pst = burst("pin", False, seed=dict(seed))
+        check(len(pins(pon)) == 1 and len(stops(pon)) == 1
+              and pins(pon)[0] < stops(pon)[0],
+              "pin, moving: exactly one 0x002C then one 0x0028, hard-set "
+              "before halt", f"{pon}")
+        pvals = pon[pins(pon)[0]][1]
+        check(pvals[0] == PLAYER and pvals[2] == 0
+              and 1250.0 < pvals[1][0] < 1330.0
+              and abs(pvals[1][1] - (-500.0)) < 1e-6,
+              "the 0x002C payload is [player, reckoned point, plane] -- "
+              "~288 u east of a report ~1 s old", f"{pvals}")
+        check("pin:reckoned" in pon[stops(pon)[0]][2]
+              and isinstance(pst.get("cast_stop_pin"), tuple),
+              "the 0x0028's label carries the fired reckon verdict and "
+              "the pin note lands in state for the second-cast guard",
+              f"label={pon[stops(pon)[0]][2]!r}")
+        # Pin, second cast, no report since: the guard refuses the
+        # 0x002C and the label says why.
+        p2, _ = burst("pin", False, seed=dict(seed,
+                      cast_stop_pin=pst["cast_stop_pin"]))
+        check(pins(p2) == [] and len(stops(p2)) == 1
+              and "pin:pinned-parked" in p2[stops(p2)[0]][2],
+              "pin, second cast with no report between: NO second 0x002C "
+              "(the R8 second-cast trap guarded live) and the 0x0028's "
+              "label names the refusal", f"{p2[stops(p2)[0]][2]!r}")
+        # Pin, parked belief: no 0x002C, the 0x0028 no-ops at the client.
+        pk, _ = burst("pin", False, seed=dict(seed, kbd_moving_at=None))
+        check(pins(pk) == [] and len(stops(pk)) == 1
+              and "pin:parked" in pk[stops(pk)[0]][2],
+              "pin, parked belief: no 0x002C, and the label says "
+              "'parked'", f"{pk[stops(pk)[0]][2]!r}")
     finally:
         authsrv.skill_timing = saved_timing
         authsrv._is_attack_skill = saved_attack
         authsrv.CAST_STOP = saved_flag
-    # Source locks: one gate, one labelled site, default off, and main()
-    # routes the flag into the composition matrix and the global.
+    # Source locks: one gate, one site per opcode, default None, and
+    # main() routes the PARSED mode into the composition matrix and the
+    # global.
     here = os.path.dirname(os.path.abspath(authsrv.__file__))
     src = open(os.path.join(here, "authsrv.py"), encoding="utf-8").read()
     check(src.count("if CAST_STOP and not is_attack:") == 1
-          and src.count("cancelwalk R8 cast-stop") == 1,
-          "ONE gate carrying the spells-only scoping, ONE R8-labelled "
-          "send site")
-    check(src.count("CAST_STOP = False") == 1
-          and src.count("CAST_STOP = True") == 1
-          and "cast_stop=a.cast_stop" in src
+          and src.count("cancelwalk R8 cast-stop") == 1
+          and src.count("CAST-STOP PIN 0x002C") == 1
+          and src.count("cancelwalk R10") >= 1,
+          "ONE gate carrying the non-attack scoping, ONE R8-labelled "
+          "0x0028 site, ONE R10 0x002C site")
+    check(src.count("CAST_STOP = None") == 1
+          and src.count("CAST_STOP = _cs_mode") == 1
+          and "cast_stop=_cs_mode" in src
+          and "_cs_mode, _cs_refusal = parse_cast_stop(a.cast_stop)" in src
           and "global CAST_STOP" in src,
-          "the global defaults to False (defaults are an owner ruling), "
-          "main() routes the flag into both the composition matrix and "
-          "the global, AND the arming assignment itself is pinned -- with "
-          "'CAST_STOP = True' deleted the flag would print R8's full "
-          "banner and send NOTHING, the inert-flag defect on a readout "
-          "the wire cannot even see (the adversarial pass's finding)")
+          "the global defaults to None (defaults are an owner ruling), "
+          "main() parses through the pure parser and routes the MODE into "
+          "both the composition matrix and the global, AND the arming "
+          "assignment itself is pinned -- with 'CAST_STOP = _cs_mode' "
+          "deleted the flag would print a full banner and send NOTHING, "
+          "the inert-flag defect on a readout the wire cannot even see")
 
 
 def main():

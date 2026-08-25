@@ -1643,10 +1643,114 @@ STOP_ANSWER = None     # None | "ack"
 # reports the halt). ONE COST, CANCELWALK-F31: the 0x0028 halt lands the
 # drawn body on the SYNC COPY's current position -- an exactly-backward
 # snap equal to the copy's staleness (110-207 u measured), not a
-# stop-in-place. The candidate is LICENSED with that named cost; the
-# ship ruling (as-is / paired with REALFIX staleness work / held) is the
-# owner's and has not been made.
-CAST_STOP = False
+# stop-in-place.
+#
+# OWNER RULING 2026-08-25 (PLAN.md §7 Q7): "the stock game doesn't warp,
+# i am not going to accept a fix that still warps." The bare halt is
+# REFUSED as a ship. It stays runnable as `halt` -- it is a measured
+# diagnostic and R10's control arm -- and the ship candidate is `pin`
+# (CANCELWALK-R10, §8.3): bring the copy to the BODY before halting.
+#
+# THE PIN ARM: at the same cast-start site, dead-reckon the player's true
+# position from the last movement report -- pos + unit(vec2) x rate x
+# 288 x dt, the model F27's own arithmetic closed to 41 ms, exact on
+# straight legs BECAUSE straight legs are precisely the ones that never
+# report (F25) -- clip the extrapolated segment against our navmesh, send
+# one 0x002C AGENT_UPDATE_POSITION at that point (hard-sets BOTH copies,
+# zeroes velocity, kills any leg: the decoded 0x00602B20/0x006020B0
+# behaviour _note_wire_move already models), then the 0x0028 as before,
+# which now lands on co-located copies and cannot snap. The residual warp
+# is the dead-reckoning error, ~0 on the straight unobstructed legs that
+# caused F31's 110-207 u. cast_stop_reckon() below is the pure half;
+# rates: mt 1 = 288.0 and mt 4 = 0.66x288 = 190.1 are both OBSERVED on
+# our own tape (movetap 213708: full-speed run, and the mt=4 press whose
+# walk onset was 190.1 u/s); other mt families default 1.0, UNVERIFIED.
+CAST_STOP = None   # None | "halt" | "pin"
+
+
+def parse_cast_stop(text):
+    """Pure: a --cast-stop argument -> (mode, refusal).
+
+    Same contract as parse_stop_answer, for the same reason: a mistyped
+    arm must refuse loudly rather than run the shipped default while the
+    operator's log says an experiment was on. Bare --cast-stop parses as
+    'halt' (argparse const): R8's measured form, kept as R10's control.
+    """
+    if text is None:
+        return None, None
+    if text in ("halt", "pin"):
+        return text, None
+    return None, (
+        f"--cast-stop={text!r} names no arm. The arms are 'halt' (bare "
+        f"--cast-stop; CANCELWALK-R8's measured cast-start 0x0028, which "
+        f"WARPS by the copy's staleness, F31, and is REFUSED as a ship by "
+        f"owner ruling 2026-08-25) and 'pin' (CANCELWALK-R10: a "
+        f"dead-reckoned 0x002C re-pin, then the 0x0028) -- "
+        f"studies/movement/CANCELWALK.md sec.8.")
+
+
+def cast_stop_reckon(state, now):
+    """Pure: where is the player RIGHT NOW, by dead reckoning? -> (point, plane, why).
+
+    Returns (None, None, why) when there is nothing to reckon -- the body
+    is believed parked, or nothing trustworthy is in hand. The caller
+    sends the 0x002C only on a point; the 0x0028 goes out either way, so
+    a wrong 'parked' belief degrades to R8's measured halt (a snap), never
+    to F28's glide.
+
+    THE BELIEFS, each with its owner named:
+    - client_pos/client_pos_at/client_plane: the last ACCEPTED report
+      (_take_client_position). Advance only on the accept path, so the
+      refused-report hole _resync_verdict documents applies here too and
+      gets the same guard: pos_rejects > 0 refuses the reckon -- a
+      hard-set computed from a pre-refusal point is "the warp the player
+      described" through a new door.
+    - kbd_moving_at: the locally-driving latch, armed by the 0x003D arm
+      and cleared by the 0x0047 arm, touched in no third place -- READ
+      here, never written.
+    - heading/heading_mt: the last report's vec2 and movementType.
+    - cast_stop_pin: OUR OWN note, written at each pin send. A pin newer
+      than the last report means WE parked the body and the client has
+      said nothing since (the halt is never reported, R8) -- reckoning
+      from the stale pre-pin report would extrapolate a leg the body
+      never walked, which is exactly R8's second-cast trap.
+    """
+    pos, at = state.get("client_pos"), state.get("client_pos_at")
+    plane = state.get("client_plane")
+    if pos is None or at is None or not isinstance(plane, int):
+        return None, None, "no-report"
+    if state.get("pos_rejects", 0) > 0:
+        return None, None, "report-refused"
+    pin = state.get("cast_stop_pin")
+    if pin is not None and pin[0] >= at:
+        return None, None, "pinned-parked"
+    if state.get("kbd_moving_at") is None:
+        return None, None, "parked"
+    heading = state.get("heading")
+    if heading is None:
+        return None, None, "no-heading"
+    mag = math.hypot(heading[0], heading[1])
+    if mag <= 0.0:
+        return None, None, "degenerate-heading"
+    dt = now - at
+    if dt < 0.0:
+        return None, None, "future-report"
+    rate = 0.66 if state.get("heading_mt") == 4 else 1.0
+    dist = rate * 288.0 * dt
+    est = (pos[0] + heading[0] / mag * dist,
+           pos[1] + heading[1] / mag * dist)
+    # Clip the EXTRAPOLATED segment, from the reported point, against our
+    # navmesh -- clip_to_walkable clips from state["pos"] (the blend) and
+    # this leg starts at the report, so the primitive is used directly,
+    # with the same standing-outside suspension it applies.
+    pm = state.get("pathmap")
+    why = "reckoned"
+    if pm is not None and dist > 0.0 and pm.walkable(pos[0], pos[1]):
+        clipped = pm.clip(pos[0], pos[1], est[0], est[1],
+                          step=COLLISION_STEP)
+        if clipped != est:
+            est, why = clipped, "reckoned:clipped"
+    return est, plane, why
 
 
 def parse_stop_answer(text):
@@ -4385,8 +4489,19 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
                 "arriving never arrives -- the queue would carry an arrival "
                 "plane for a leg the halt cut short, and a snap it caused "
                 "would be attributed to the wrong arm. One diagnostic at a "
-                "time; R8 is pre-registered against the shipped default "
+                "time; R8/R10 are pre-registered against the shipped default "
                 "(--zero-lead --plane-carry) and nothing else."), []
+    if cast_stop == "pin" and resync:
+        return ("--cast-stop=pin and --resync cannot run together. Both "
+                "send the SAME opcode (s2c 0x002C AGENT_UPDATE_POSITION, "
+                "the hard-set of both copies) under two different policies "
+                "-- the pin's dead-reckoned cast-start re-pin vs the "
+                "drift-triggered resync of the client's own report -- so "
+                "any hard-set in the capture could be attributed to "
+                "neither, and their position models would fight (the pin "
+                "extrapolates PAST the last report; the resync teleports "
+                "BACK to it). One 0x002C policy per run. --cast-stop=halt "
+                "composes with --resync as before (different opcodes)."), []
     if arrival_carry and not zero_lead:
         return ("--arrival-carry requires --zero-lead. REALFIX-F1b is a "
                 "MODIFIER on the zero-lead grant, not a policy of its own: it "
@@ -4547,16 +4662,27 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
             f"on a body that already stopped itself. The cancel-instant "
             f"answer stays exactly as --zero-lead ships. Predictions and "
             f"readout: studies/movement/CANCELWALK.md 7.4.")
-    if cast_stop:
+    if cast_stop == "halt":
         notes.append(
-            "      + --cast-stop: CANCELWALK-R8 arm, DIAGNOSTIC ONLY. Adds "
-            "one s2c 0x0028 [player] at every free-caster non-attack cast "
-            "start -- halts a body still in flight (F28's float-forward), "
-            "no-ops "
-            "on a parked one. NOT a grant: no destination armed, no grant "
-            "clock stamped. Every grant and every cancel-instant answer "
-            "stays exactly as --zero-lead ships. Predictions and readout: "
-            "studies/movement/CANCELWALK.md 8.")
+            "      + --cast-stop=halt: CANCELWALK-R8 arm, DIAGNOSTIC ONLY "
+            "and REFUSED AS A SHIP (owner ruling 2026-08-25: it WARPS -- "
+            "F31, the halt lands the body on the sync copy, 110-207 u "
+            "measured). Kept runnable as R10's control. Adds one s2c "
+            "0x0028 [player] at every free-caster non-attack cast start. "
+            "NOT a grant: no destination armed, no grant clock stamped. "
+            "Predictions and results: studies/movement/CANCELWALK.md 8.")
+    elif cast_stop == "pin":
+        notes.append(
+            "      + --cast-stop=pin: CANCELWALK-R10 arm, DIAGNOSTIC ONLY. "
+            "At every free-caster non-attack cast start: one s2c 0x002C "
+            "hard-set at the DEAD-RECKONED player position (last report + "
+            "unit(vec2) x rate x 288 x dt, navmesh-clipped; skipped with "
+            "the reason in the 0x0028's label when the body is believed "
+            "parked/pinned or the last report was refused), then the "
+            "0x0028 halt, which now lands on co-located copies and cannot "
+            "snap. The 0x002C stamps the sync model but NOT the grant "
+            "clock. Predictions and readout: "
+            "studies/movement/CANCELWALK.md 8.3.")
     return None, notes
 
 
@@ -8588,9 +8714,34 @@ def handle_skill_press(values, send, state, conn_id, opcode):
         # zero warp exposure. Predictions: the flag's comment block and
         # CANCELWALK.md 8.
         if CAST_STOP and not is_attack:
+            # The PIN half (R10, --cast-stop=pin): bring the copy to the
+            # BODY before the halt. F31 measured the bare halt landing the
+            # body on the sync copy -- a backward warp of the copy's
+            # staleness -- and the owner refused any fix that warps
+            # (ruling 2026-08-25). The 0x002C hard-sets both copies at the
+            # dead-reckoned position, so the 0x0028 below lands on
+            # co-located copies and cannot snap. When the reckon refuses
+            # (parked, pinned, refused-report...), the 0x0028 goes out
+            # alone -- degrading to R8's measured behaviour, never to
+            # F28's glide -- and the label carries the reason so the
+            # capture can score every path.
+            _cs_label = "AGENT_STOP_MOVING(player) [cancelwalk R8 cast-stop]"
+            if CAST_STOP == "pin":
+                _cs_now = time.time()
+                _cs_est, _cs_plane, _cs_why = cast_stop_reckon(state, _cs_now)
+                if _cs_est is not None:
+                    send(GAME_SMSG_AGENT_UPDATE_POSITION,
+                         [PLAYER_AGENT_ID,
+                          [float(_cs_est[0]), float(_cs_est[1])], _cs_plane],
+                         f"CAST-STOP PIN 0x002C at ({_cs_est[0]:.0f},"
+                         f"{_cs_est[1]:.0f}) plane {_cs_plane} -- {_cs_why} "
+                         f"[cancelwalk R10]")
+                    state["cast_stop_pin"] = (_cs_now, _cs_est)
+                _cs_label = (f"AGENT_STOP_MOVING(player) [cancelwalk R10 "
+                             f"pin:{_cs_why}]")
             send(GAME_SMSG_AGENT_STOP_MOVING,
                  agents.agent_stop_moving(PLAYER_AGENT_ID),
-                 "AGENT_STOP_MOVING(player) [cancelwalk R8 cast-stop]")
+                 _cs_label)
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
              [agents.GV_ATTACK_SKILL_ACTIVATED if is_attack
               else agents.GV_SKILL_ACTIVATED,
@@ -13507,6 +13658,11 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                 # cos(5 degrees); mags is never 0 here in practice
                                 turned = mags <= 0 or dot < 0.996 * mags
                             state["heading"] = tuple(heading)
+                            # The movementType rides beside its vec2 for
+                            # cast_stop_reckon's rate pick (mt 4 backpedals
+                            # at 0.66x). Read only there; kbd_moving_at is
+                            # the moving/parked belief, not this.
+                            state["heading_mt"] = moving
                             # Our own position model still walks a clipped leg, so
                             # the server keeps an opinion that respects walls. It
                             # goes nowhere near the wire.
@@ -16329,26 +16485,28 @@ def main():
                          "H5-without-H6/H7/H4 predict it still freezes. "
                          "'repin' is deliberately unbuilt and refuses with "
                          "the reason. studies/movement/CANCELWALK.md 7.4.")
-    ap.add_argument("--cast-stop", action="store_true",
-                    help="CANCELWALK-R8's cast-start halt, DIAGNOSTIC ONLY, "
-                         "OFF by default, refused without --zero-lead and "
-                         "with --cancel-answer, --stop-answer or "
-                         "--arrival-carry. Sends one s2c 0x0028 "
-                         "AGENT_STOP_MOVING [player] at every free-caster "
-                         "NON-ATTACK cast start, first in the cast-begin "
-                         "tail (before the animation and the prop-8 hold; "
-                         "the E4 press-ack and the debits precede it). FIX "
-                         "CANDIDATE for CANCELWALK-F28 (the float-forward): "
-                         "our prop-8 hold suppresses the walk-START but "
-                         "stops nothing in flight, so a cast begun while "
-                         "running glides at 288 u/s for the whole cast "
-                         "(~690 u measured). The 0x0028 handler halts both "
-                         "copies only when IN MOTION and no-ops parked "
-                         "(schema GAME_SMSG 40) -- not a grant, no grant "
-                         "clock, zero warp exposure. Readout is movetap, "
-                         "not the wire: a straight glide emits no 0x003D. "
-                         "No outcome ships from a run directly; defaults "
-                         "are an owner ruling. "
+    ap.add_argument("--cast-stop", nargs="?", const="halt", default=None,
+                    metavar="ARM",
+                    help="CANCELWALK's cast-start halt arms, DIAGNOSTIC "
+                         "ONLY, OFF by default, refused without --zero-lead "
+                         "and with --cancel-answer, --stop-answer or "
+                         "--arrival-carry; 'pin' also refused with "
+                         "--resync. Fix candidates for CANCELWALK-F28 (the "
+                         "float-forward: our prop-8 hold suppresses the "
+                         "walk-START but stops nothing in flight, ~690 u "
+                         "of glide measured). 'halt' (also bare "
+                         "--cast-stop; R8, RAN 2026-08-24): one s2c 0x0028 "
+                         "at every free-caster NON-ATTACK cast start -- "
+                         "halts 3 of 3 but WARPS the body onto the sync "
+                         "copy (F31, 110-207 u), REFUSED as a ship by "
+                         "owner ruling 2026-08-25; kept as R10's control. "
+                         "'pin' (R10): a 0x002C hard-set at the "
+                         "DEAD-RECKONED player position first, then the "
+                         "0x0028 -- the halt lands on co-located copies, "
+                         "predicted residual ~0 on straight legs. Readout "
+                         "is movetap, not the wire: a straight glide "
+                         "emits no 0x003D. No outcome ships from a run "
+                         "directly; defaults are an owner ruling. "
                          "studies/movement/CANCELWALK.md 8.")
     ap.add_argument("--resync", action="store_true",
                     help="SEVENTH candidate. Send GAME_SMSG 0x002C "
@@ -17078,13 +17236,16 @@ def main():
     _sa_mode, _sa_refusal = parse_stop_answer(a.stop_answer)
     if _sa_refusal:
         raise SystemExit(_sa_refusal)
+    _cs_mode, _cs_refusal = parse_cast_stop(a.cast_stop)
+    if _cs_refusal:
+        raise SystemExit(_cs_refusal)
     _zl_refusal, _zl_notes = zero_lead_composition(
         zero_lead=zero_lead, heading_grant=a.heading_grant,
         client_endpoint=a.client_endpoint, grant_suppress=grant_suppress,
         resync=a.resync, stop_echo=a.stop_echo, click_sweep=a.click_sweep,
         plane_carry=plane_carry, arrival_carry=a.arrival_carry,
         cancel_answer=a.cancel_answer, stop_answer=_sa_mode,
-        cast_stop=a.cast_stop)
+        cast_stop=_cs_mode)
     if _zl_refusal and a.zero_lead is None:
         _zl_refusal += ("\n(--zero-lead is ON BY DEFAULT since 2026-08-22; "
                         "pass --no-zero-lead to run this arm without it.)")
@@ -17243,42 +17404,67 @@ def main():
               "cancelled ones, closing F9's exposure confounder in the "
               "same session. studies/movement/CANCELWALK.md sec.7.4.")
 
-    # CANCELWALK R8. Same house style: the prediction goes out BEFORE the
-    # run. ASCII only, as above.
-    if a.cast_stop:
+    # CANCELWALK R8/R10. Same house style: the prediction goes out BEFORE
+    # the run. ASCII only, as above.
+    if _cs_mode:
         global CAST_STOP
-        CAST_STOP = True
-        print("[map] --cast-stop ON. CANCELWALK R8 (cast-start halt), "
-              "DIAGNOSTIC ONLY -- no outcome ships from this run directly.")
-        print("      SENDS     one s2c 0x0028 AGENT_STOP_MOVING [player] at "
-              "every free-caster NON-ATTACK cast start, first in the "
-              "cast-begin tail: before the animation and the prop-8 hold "
-              "(the E4 press-ack and the debits PRECEDE it -- do not score "
-              "'not first in the burst' as a misfire). Attack skills, "
-              "queued casts and every grant are untouched.")
-        print("      FIXES     CANCELWALK-F28 if it works: the hold gates "
-              "the walk-START and stops nothing in flight, so a cast begun "
-              "while running glides at 288 u/s for the whole cast (~690 u "
-              "measured, 20260824T183544). Retail stops you; we never sent "
-              "anything that does.")
-        print("      PREDICTS  cast while RUNNING: the drawn body halts "
-              "within ~0.15 s of the cast start -- movetap velocity 288 -> "
-              "0, position parked through the activation. Cast from "
-              "STANDSTILL: no-op, nothing changes in any sampled field. "
-              "The cancel-instant freeze is UNTOUCHED either way (it is "
-              "the client's input model, F25/F29, not this send).")
-        print("      READOUT   movetap, NOT the wire: a straight glide "
-              "emits no 0x003D (F25), so the wire is blind to both the "
-              "defect and the fix. Run both instruments, walk-first, "
-              "align on the wall clock. Exposure floor: a cast counts "
-              "only if the body was IN MOTION at the prop8->1 send; "
-              "fewer than 3 such casts is a VOID arm, not a null. "
-              "Protocol: studies/movement/CANCELWALK.md sec.8.")
-        print("      MEASURED  2026-08-24 (sec.8.1a): halts 3 of 3, "
-              "no-ops 2 of 2 -- and CANCELWALK-F31: the halt lands the "
-              "body on the SYNC COPY (backward snap = staleness, "
-              "110-207 u), not in place. LICENSED with that cost; the "
-              "ship ruling is the owner's and has not been made.")
+        CAST_STOP = _cs_mode
+        if _cs_mode == "halt":
+            print("[map] --cast-stop=halt ON. CANCELWALK R8 (bare "
+                  "cast-start halt), DIAGNOSTIC ONLY -- and REFUSED AS A "
+                  "SHIP by owner ruling 2026-08-25: it WARPS. Runnable as "
+                  "R10's control arm.")
+            print("      SENDS     one s2c 0x0028 AGENT_STOP_MOVING "
+                  "[player] at every free-caster NON-ATTACK cast start, "
+                  "first in the cast-begin tail (the E4 press-ack and the "
+                  "debits PRECEDE it). Attack skills, queued casts and "
+                  "every grant are untouched.")
+            print("      MEASURED  2026-08-24 (sec.8.1a): halts 3 of 3 "
+                  "(288 -> 0.0 by the first sample, zero drift through "
+                  "the cast), standstill/Esc no-ops 2 of 2, the halt "
+                  "never client-reported -- and CANCELWALK-F31: the halt "
+                  "lands the body on the SYNC COPY (backward snap = the "
+                  "copy's staleness, 110-207 u), not in place. That warp "
+                  "is what the ruling refused; --cast-stop=pin is the "
+                  "no-warp candidate.")
+        else:
+            print("[map] --cast-stop=pin ON. CANCELWALK R10 (dead-reckoned "
+                  "re-pin + halt), DIAGNOSTIC ONLY -- no outcome ships "
+                  "from this run directly.")
+            print("      SENDS     at every free-caster NON-ATTACK cast "
+                  "start: one s2c 0x002C AGENT_UPDATE_POSITION at the "
+                  "DEAD-RECKONED player position (last accepted report + "
+                  "unit(vec2) x rate x 288 u/s x dt; rate 0.66 for mt 4, "
+                  "both OBSERVED on our tape; navmesh-clipped), then the "
+                  "0x0028 halt. When the reckon refuses -- believed "
+                  "parked, pinned by a previous cast, refused report -- "
+                  "the 0x0028 goes out ALONE and its label names the "
+                  "reason, so every path is scorable from the capture.")
+            print("      FIXES     F28 without F31 if it works: the 0x002C "
+                  "hard-sets BOTH copies at the body's true position "
+                  "(exact on straight legs -- the legs that never report, "
+                  "F25 -- which are F31's own 110-207 u cases), so the "
+                  "halt lands on co-located copies and cannot snap.")
+            print("      PREDICTS  cast while RUNNING: halts within "
+                  "~0.15 s with NO backward component > 20 u and total "
+                  "across-halt displacement <= ~35 u (one poll of forward "
+                  "travel); the halt point within ~32 u of the movetap "
+                  "body position at the send; sep ~0 after. Cast from "
+                  "STANDSTILL: the reckon refuses ('parked'), no 0x002C, "
+                  "the 0x0028 no-ops -- nothing changes. Second cast "
+                  "after a pin with no report between: 'pinned-parked', "
+                  "no 0x002C (the R8 second-cast trap, guarded). The "
+                  "cancel-instant freeze is UNTOUCHED throughout.")
+            print("      READOUT   movetap, NOT the wire (a straight "
+                  "glide emits no 0x003D). Both instruments, walk-first, "
+                  "wall-clock alignment. Exposure floor: >=3 casts with "
+                  "the body IN MOTION at the prop8->1 send, else VOID. "
+                  "FAILURE SIGNATURE, pre-registered: a backward snap "
+                  "> 20 u at a pinned cast means the reckon named the "
+                  "wrong point (read the 0x002C's own label for where it "
+                  "aimed); a forward TELEPORT >> 35 u means a stale "
+                  "moving-belief slipped the guards. Protocol: "
+                  "studies/movement/CANCELWALK.md sec.8.3.")
 
     # REALFIX-F1. Printed in the same house style and for the same reason: the
     # prediction goes out BEFORE the run so it cannot be rationalised after it.
