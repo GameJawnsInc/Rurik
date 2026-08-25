@@ -17431,6 +17431,16 @@ def main():
             print("[map] --cast-stop=pin ON. CANCELWALK R10 (dead-reckoned "
                   "re-pin + halt), DIAGNOSTIC ONLY -- no outcome ships "
                   "from this run directly.")
+            print("      *** DO NOT SCORE A RUN OF THIS ARM YET. The "
+                  "adversarial review of 2026-08-25 found TWO BLOCKERS "
+                  "and did not finish (CANCELWALK.md sec.8.3a): "
+                  "(B1) a cast during a CLICK-walk still warps -- "
+                  "kbd_moving_at is keyboard-only, so the reckon refuses "
+                  "'parked' while the 0x0028 still fires on a moving "
+                  "body, landing it on a copy up to ~1,164 u behind; "
+                  "(B2) mt 5-8 (strafe/back-diagonal) reckon at 288 u/s "
+                  "against a measured 188-215, a FORWARD miss past the "
+                  "35 u bar. Fix both, then re-register. ***")
             print("      SENDS     at every free-caster NON-ATTACK cast "
                   "start: one s2c 0x002C AGENT_UPDATE_POSITION at the "
                   "DEAD-RECKONED player position (last accepted report + "

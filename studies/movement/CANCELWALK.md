@@ -163,10 +163,36 @@ origin's `wall_unix`), never by trajectory fit (§7.4d correction 1).
    and the owner REFUSED it as a ship (2026-08-25, PLAN §7 Q10: "the
    stock game doesn't warp").** The successor is wired:
    **`--cast-stop=pin` (CANCELWALK-R10, §8.3)** — dead-reckoned `0x002C`
-   re-pin at the body's true position, then the halt; predicted residual
-   ≤ ~35 u forward, zero backward. **Open: R10's owner-driven run**, R8's
-   protocol plus one cast deep into a long straight leg. Nothing ships
-   without a ruling.
+   re-pin at the body's true position, then the halt.
+   **⚠ DO NOT RUN IT YET: §8.3a's adversarial review found TWO BLOCKERS
+   (a click-walk cast still warps, by up to ~1,164 u; mt 5–8 reckon at
+   the wrong rate) and the review itself did not finish.** Fix both,
+   re-run the two dead review agents, then re-register the run.
+
+### Session handoff, 2026-08-25 — where to pick this up
+
+**Branch `claude/cancelwalk-movement-arc-1fff44`, worktree
+`.claude/worktrees/cancelwalk-movement-arc-1fff44`.** Everything through
+the R10 wiring is committed and merged to `main` except where noted in
+`PLAN.md` §8. Next actions, in order:
+
+1. **Fix §8.3a's B1 and B2** (both are warps, both fail the owner's
+   bar), then the three REALs — plane at `est`, off-mesh refusal, park
+   the server's model. Each has a fix direction written at §8.3a.
+2. **Re-run the two review agents that died on a usage limit** — the
+   lattice/routing skeptic and the 7-mutation prober. The mutation list
+   is in the workflow script under the session's
+   `workflows/scripts/review-cast-stop-pin-*.js`; the prober never
+   started, so nothing was mutated and the tree was verified clean.
+3. **Re-register R10's predictions** (§8.3) against the fixed arm — the
+   current failure-signature text would misattribute a B2 rate miss —
+   and add a **click-walk cast** to the protocol, which B1 shows the
+   registration is blind to.
+4. Only then: the owner-driven run.
+
+Standing constraints for whoever continues: `test_cancelwalk.py` floor
+is **82**; the flag ships OFF and its default is an owner ruling; the
+`halt` arm stays runnable as R10's control and is REFUSED as a ship.
 
 ---
 
@@ -1837,3 +1863,93 @@ reckoning model is wrong somewhere the failure signature localises; fix
 and re-run before any other message is tried. Pin fails forward → the
 belief guards gain the missing door first. **Defaults are an owner
 ruling; nothing ships on from this run.**
+
+### 8.3a ⚠ DO NOT RUN R10 YET — the adversarial review found TWO BLOCKERS, and it did not finish (2026-08-25)
+
+**Status: the review pass over `b14aa1e` is INCOMPLETE.** Of three agents,
+one finished (the reckon/send-site skeptic, verdict below); the lattice/
+routing reviewer and the 7-mutation prober both **died mid-run on an
+account usage limit**, having applied nothing (the prober never started;
+the tree was verified clean afterwards). **Re-running those two is part of
+the next session's work.** What follows is the finished agent's yield,
+recorded before its fixes because a finding that lives only in a
+transcript is a finding that dies with the session.
+
+**Both blockers say the same thing in two voices: the pin arm can still
+warp the player, so R10 as wired does not yet meet the owner's bar.**
+
+- **CANCELWALK-B1 (BLOCKER) — a cast during a CLICK-to-move walk warps
+  backward by up to the whole click leg, and the arm scores it
+  `pin:parked`.** `kbd_moving_at` is armed only by the `0x003D` arm, and
+  click movement never arms it (nor does the client report position while
+  click-walking — this file's own click-arm comments measure 37 s of
+  silence, and the resync block 12.9 s). So the reckon refuses
+  (`parked`, or `no-heading` when the click interrupted a keyboard leg)
+  **while the `0x0028` still fires on a moving body** — landing it on a
+  sync copy that under the shipped `--grant-suppress` sits parked at the
+  leg's start (corpus separation p50 **1,164 u**, max 3,648 u). That is
+  strictly worse than the 110–207 u F31 warp the owner refused, and
+  §8.3's prediction table scores it "nothing changes". *Fix direction:*
+  a click-in-flight belief armed in the `0x003E` arm; when live,
+  **suppress the `0x0028` itself** (degrading to F28's glide, which is
+  not a warp) or refuse the whole cast-stop with a `click-walk` label.
+  Either way R10's protocol gains a click-walk cast and a
+  `pin:parked`-with-motion failure signature.
+- **CANCELWALK-B2 (BLOCKER) — the rate table covers only mt 1 and mt 4,
+  so a kiting or strafing cast hard-sets the player FORWARD past the
+  registered ≤ 35 u bar.** This file's own census gives forward {1,2,3}
+  284.96 u/s, backward {4,5,6} 187.89, side {7,8} ~215, with mt 5–8 at
+  3.2% of 7,988 corpus records; `rate = 0.66 if heading_mt == 4 else
+  1.0` reckons all of them at 288. Overshoot ~45 u typical, 130–180 u at
+  the straight-leg report-gap mode, and the pre-registered
+  forward-teleport signature would **misattribute it to a stale belief
+  rather than to a fresh rate error**. *Fix direction:* use the census
+  family rates ({1,2,3} 1.0, {4,5,6} 0.652 — both OBSERVED — and {7,8}
+  0.75 labelled), or refuse with an `unverified-rate` label for mt
+  outside {1,2,3,4}, degrading to the halt like every other door.
+
+**Three REAL findings, none of which is a warp but each of which is a
+real defect:**
+1. **The `0x002C` pairs an extrapolated POSITION with the last report's
+   stale PLANE**, splitting a "position and plane are one fact"
+   invariant that `--resync` never breaks (its payload is the report
+   itself). The hard-set's slot 2 becomes the client's *reached* plane
+   (`agent+0x80`), and the click arm already documents a stale value
+   there as active corruption with fall-through-under-stairs as the
+   symptom. `pm.plane_at(est, prefer=client_plane)` exists
+   (`toolkit/mapdata/pathmap.py`, 189/198 agreement measured) and is not
+   consulted. *Fix:* resolve the plane at `est`; refuse (new label,
+   degrade to halt) when it returns None.
+2. **The standing-outside suspension puts an UNCLIPPED extrapolation on
+   the wire.** `clip_to_walkable`'s "off the mesh ⇒ suspend the check"
+   rule is safe there because its output feeds only `state["dest"]`, the
+   server's private model; here the same rule ships a raw ray — up to
+   ~3.7 k u — into a hard-set of both copies, from exactly the positions
+   (5.5% of stops, mesh edges) where our trapezoids are known-wrong.
+   *Fix:* for a wire consumer the honest degradation is refusal —
+   `(None, None, "off-mesh")`.
+3. **The pin leaves the server's own integrator gliding.**
+   `state["pos"]`/`state["dest"]` are untouched, so the 20 Hz tick walks
+   the blend up to ~765 u past the pinned body for the cast's duration,
+   and every `state["pos"]` consumer (enemy AI, the click arm's
+   freshness checks) acts on a phantom. Survivable — nothing broadcasts
+   from the tick, and the next report is still inside the 900 u trust
+   budget because `est` and `dest` lie on the same ray — but wrong.
+   *Fix:* park the model at the pin (`state["dest"] = None`, and
+   defensibly `state["pos"] = est`).
+
+**What the review CONFIRMED, so the next session need not re-derive it:**
+the arithmetic core is sound (heading normalised via `hypot`, `dt` sign
+guarded, `pm.clip`'s signature and tuple-return contract match the call
+site); the `0x002C` routes through `send()`'s `_note_wire_move` hook,
+leaving the sync model coherently parked at `est` with `ac_queue`
+dropped and **no** `grant_at` stamp; belief coherence holds within the
+keyboard regime (heading/`heading_mt`/`client_pos_at` all written from
+the same `0x003D`; refused reports masked by the `pos_rejects` guard;
+first-cast-of-session refuses `no-report`; the cancelling report itself
+correctly re-opens the pin guard; **the R8 second-cast trap is genuinely
+closed** by `pinned-parked`); the next `0x003D` after a pin is accepted;
+and the burst order matches R8's measured slot. Also INFO: the measured
+39-of-39 `0x00D2`→naming adjacency is untouched in every measured case
+(all attack skills, which the scoping excludes); the pin widens the
+unmeasured adrenal-non-attack insertion from one message to two.
