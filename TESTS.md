@@ -7946,7 +7946,20 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   a source lock pins the `_cs_send_stop` gate's three sites — armed
   once, disarmed once (the refusal branch), consulted once — because
   with the gate deleted the bare 0x0028 returns and F34's warp with
-  it. Floor 102),
+  it. **Extended 2026-08-25 evening for the §8.3g SHIP ruling** (“pin
+  it” — pin becomes the shipped default, wired zero-lead-style): §7
+  drives `resolve_cast_stop_default` cell by cell — bare startup →
+  pin/'default'; `--no-cast-stop` → off; under `--no-zero-lead` the
+  default follows the regime it modifies instead of stranding on the
+  requires-refusal; each of the four explicit experiment levers makes
+  the DEFAULT yield with a `lever:<flag>` provenance (while the
+  matrix still refuses the EXPLICIT pair — both halves pinned); an
+  explicit mode passes through untouched; `--no-cast-stop` plus an
+  explicit `--cast-stop` refuses as a contradiction; and the default
+  never resolves to halt (the control is explicit-only, REFUSED as a
+  ship). Source locks: the resolver called once in main(),
+  `--no-cast-stop` registered, the default-on banner keyed on the
+  resolver's own provenance. Floor 113),
   `toolkit/authsrv/test_killwindow.py` (the kill window, checked against
   ArenaNet's own kills. Our server sent one message when an agent died —
   `0x00F1` with the death bit — where the real service sends three: status,

@@ -1591,9 +1591,11 @@ CANCEL_STOP = False
 STOP_ANSWER = None     # None | "ack"
 
 # --cast-stop. CANCELWALK-R8's arm (studies/movement/CANCELWALK.md §8), OFF
-# by default and DIAGNOSTIC ONLY, same licensing as the two flags above --
-# and unlike them it is a FIX CANDIDATE for a measured defect in OUR server,
-# not a probe of the client's freeze.
+# by default and DIAGNOSTIC ONLY when written, same licensing as the two
+# flags above -- and unlike them a FIX CANDIDATE for a measured defect in
+# OUR server, not a probe of the client's freeze. SINCE RULED: `pin` is
+# the SHIPPED DEFAULT (2026-08-25, sec.8.3g below in this block's tail),
+# `halt` stays the explicit-only diagnostic control.
 #
 # THE DEFECT (CANCELWALK-F28, measured 20260824T183544/183537): our
 # cast-start burst sends property 8 -> 1, which sets GATE B and suppresses
@@ -1644,8 +1646,9 @@ STOP_ANSWER = None     # None | "ack"
 # change in any sampled field (the no-op half, the licensing claim measured
 # on our own build for the first time). The cancel-instant freeze is
 # UNTOUCHED either way -- it is the client's input model (F25/F29), not
-# this send. Defaults are an owner ruling in this repo; this ships OFF and
-# stays off until the run passes and a ruling lands.
+# this send. Defaults are an owner ruling in this repo; this shipped OFF
+# until the run passed and a ruling landed -- which both happened: the
+# ruling is at the end of this block (2026-08-25, pin ON by default).
 #
 # R8 RAN 2026-08-24 (§8.1a, adversarially recounted): the halt works
 # 3 of 3 (288 -> 0.0 by the first sample after the burst, zero drift
@@ -1720,8 +1723,22 @@ STOP_ANSWER = None     # None | "ack"
 # fires whole or not at all; a wrong belief now degrades to F28's glide
 # in every regime, which is the direction Q10 prices (the glide is a
 # defect, the warp is refused). Re-registered at sec.8.3e; the
-# completion run needs the stop-then-cast rep, the second-cast rep and
-# a 3+ s straight-leg cast.
+# completion run RAN the same day (sec.8.3f): the arm clean everywhere
+# it acts (F31 refuted 6 of 6 cumulative, pinned-parked 0.0000 u, wire
+# silence 3 of 3), the long-leg rep RETIRED as mis-derived (the ~512 u
+# 0x003D chord caps keyboard report gaps at ~1.8 s at cruise), and one
+# yield: CANCELWALK-F35, a wire-silent 177.4 u warp at the
+# stop-then-cast rep -- the client's +0x48 arrival teleport firing on
+# the shipped zero-lead grant's stale armed destination, a mechanism
+# that predates and outlives any cast. Filed to REALFIX; not the arm's.
+#
+# RULED 2026-08-25, sec.8.3g: "pin it." F28 CLOSES; `pin` is the
+# SHIPPED DEFAULT -- main()'s argparse layer arms it (the --zero-lead
+# precedent: --no-cast-stop reverts, the global below stays None so the
+# pure surface is unchanged), resolve_cast_stop_default() above decides
+# mode and provenance, and the DEFAULT yields to --no-zero-lead and to
+# any explicit experiment lever so those runs keep one variable.
+# `halt` stays the explicit-only diagnostic control, REFUSED as a ship.
 CAST_STOP = None   # None | "halt" | "pin"
 
 
@@ -1742,8 +1759,55 @@ def parse_cast_stop(text):
         f"--cast-stop; CANCELWALK-R8's measured cast-start 0x0028, which "
         f"WARPS by the copy's staleness, F31, and is REFUSED as a ship by "
         f"owner ruling 2026-08-25) and 'pin' (CANCELWALK-R10: a "
-        f"dead-reckoned 0x002C re-pin, then the 0x0028) -- "
+        f"dead-reckoned 0x002C re-pin, then the 0x0028 -- the SHIPPED "
+        f"DEFAULT since 2026-08-25, so bare startup already runs it and "
+        f"--no-cast-stop turns it off) -- "
         f"studies/movement/CANCELWALK.md sec.8.")
+
+
+def resolve_cast_stop_default(explicit, no_flag, zero_lead, cancel_answer,
+                              stop_answer, arrival_carry, resync):
+    """Pure: what mode does the cast-stop actually run in? -> (mode, why, refusal).
+
+    SHIPPED ON BY DEFAULT since 2026-08-25 -- owner's ruling on 8.3f's
+    framed decision ("pin it", CANCELWALK.md 8.3g) after two clean
+    owner runs -- following --zero-lead's own 2026-08-22 precedent: the
+    argparse layer arms it, --no-cast-stop reverts, the module global
+    stays None so the pure surface is unchanged.
+
+    `why` is the resolution's provenance, printed at startup so the log
+    always says WHY the arm is on or off: 'explicit' (the operator
+    named a mode -- the composition matrix rules it, exactly as
+    before), 'off' (--no-cast-stop), 'no-zero-lead' (the default
+    follows the zero-lead regime it modifies -- without this,
+    --no-zero-lead alone would strand the operator on the
+    requires-zero-lead refusal), 'lever:<flag>' (the default YIELDS to
+    an explicitly armed experiment lever so that run keeps ONE variable
+    -- "one change per run" applied to a shipped default; an EXPLICIT
+    --cast-stop with that lever still refuses through the matrix), or
+    'default' (pin). `refusal` fires on the one contradiction:
+    --no-cast-stop alongside an explicit --cast-stop.
+    """
+    if explicit is not None and no_flag:
+        return None, None, (
+            "--no-cast-stop and --cast-stop=" + str(explicit) + " contradict "
+            "each other. Drop one: bare startup runs the shipped default "
+            "(pin, owner's ruling 2026-08-25, CANCELWALK.md 8.3g); "
+            "--no-cast-stop runs without any cast-stop; an explicit "
+            "--cast-stop names its arm.")
+    if explicit is not None:
+        return explicit, "explicit", None
+    if no_flag:
+        return None, "off", None
+    if not zero_lead:
+        return None, "no-zero-lead", None
+    for lever, name in ((cancel_answer, "--cancel-answer"),
+                        (stop_answer, "--stop-answer"),
+                        (arrival_carry, "--arrival-carry"),
+                        (resync, "--resync")):
+        if lever:
+            return None, "lever:" + name, None
+    return "pin", "default", None
 
 
 def cast_stop_reckon(state, now):
@@ -4823,7 +4887,9 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
             "Predictions and results: studies/movement/CANCELWALK.md 8.")
     elif cast_stop == "pin":
         notes.append(
-            "      + --cast-stop=pin: CANCELWALK-R10 arm, DIAGNOSTIC ONLY. "
+            "      + --cast-stop=pin: CANCELWALK-R10 arm, the SHIPPED DEFAULT "
+            "since 2026-08-25 (owner's ruling, 8.3g; --no-cast-stop "
+            "reverts). "
             "PIN-OR-NOTHING (F34, 8.3d): at a free-caster non-attack cast "
             "start, EITHER one s2c 0x002C hard-set at the DEAD-RECKONED "
             "player position (last report + unit(vec2) x census-family "
@@ -16733,27 +16799,33 @@ def main():
                          "the reason. studies/movement/CANCELWALK.md 7.4.")
     ap.add_argument("--cast-stop", nargs="?", const="halt", default=None,
                     metavar="ARM",
-                    help="CANCELWALK's cast-start halt arms, DIAGNOSTIC "
-                         "ONLY, OFF by default, refused without --zero-lead "
+                    help="CANCELWALK's cast-start halt. 'pin' is the "
+                         "SHIPPED DEFAULT since 2026-08-25 (owner's "
+                         "ruling, CANCELWALK.md 8.3g, after two clean "
+                         "runs; --no-cast-stop reverts): the F28 fix -- "
+                         "at a free-caster NON-ATTACK cast start, a "
+                         "0x002C hard-set at the DEAD-RECKONED player "
+                         "position then the 0x0028 halt on co-located "
+                         "copies, or NOTHING when any belief door "
+                         "refuses (pin-or-nothing, F34; the console "
+                         "line names the door). Backward 0.00 u on 6 "
+                         "of 6 measured casts. 'halt' (also bare "
+                         "--cast-stop; R8): the diagnostic control -- "
+                         "one bare 0x0028, which WARPS onto the sync "
+                         "copy (F31 110-207 u; F34 167.6 u even "
+                         "parked), REFUSED as a ship; explicit only. "
+                         "Explicit arms are refused without --zero-lead "
                          "and with --cancel-answer, --stop-answer or "
-                         "--arrival-carry; 'pin' also refused with "
-                         "--resync. Fix candidates for CANCELWALK-F28 (the "
-                         "float-forward: our prop-8 hold suppresses the "
-                         "walk-START but stops nothing in flight, ~690 u "
-                         "of glide measured). 'halt' (also bare "
-                         "--cast-stop; R8, RAN 2026-08-24): one s2c 0x0028 "
-                         "at every free-caster NON-ATTACK cast start -- "
-                         "halts 3 of 3 but WARPS the body onto the sync "
-                         "copy (F31, 110-207 u), REFUSED as a ship by "
-                         "owner ruling 2026-08-25; kept as R10's control. "
-                         "'pin' (R10): a 0x002C hard-set at the "
-                         "DEAD-RECKONED player position first, then the "
-                         "0x0028 -- the halt lands on co-located copies, "
-                         "predicted residual ~0 on straight legs. Readout "
-                         "is movetap, not the wire: a straight glide "
-                         "emits no 0x003D. No outcome ships from a run "
-                         "directly; defaults are an owner ruling. "
+                         "--arrival-carry ('pin' also with --resync); "
+                         "the DEFAULT instead yields to those levers "
+                         "with a printed note. "
                          "studies/movement/CANCELWALK.md 8.")
+    ap.add_argument("--no-cast-stop", action="store_true",
+                    help="Turn OFF the shipped cast-stop default "
+                         "(--cast-stop=pin, ON by default since "
+                         "2026-08-25 -- owner's ruling, CANCELWALK.md "
+                         "8.3g). Contradicts an explicit --cast-stop "
+                         "and is refused alongside one.")
     ap.add_argument("--resync", action="store_true",
                     help="SEVENTH candidate. Send GAME_SMSG 0x002C "
                          "AGENT_UPDATE_POSITION carrying the CLIENT'S OWN last "
@@ -17485,6 +17557,17 @@ def main():
     _cs_mode, _cs_refusal = parse_cast_stop(a.cast_stop)
     if _cs_refusal:
         raise SystemExit(_cs_refusal)
+    # SHIPPED ON BY DEFAULT since 2026-08-25 (owner's ruling, CANCELWALK.md
+    # 8.3g) -- the pure resolver decides the mode and WHY, so the cell
+    # table is tested rather than described. An explicit mode passes
+    # through untouched and the composition matrix below rules it exactly
+    # as before; only the DEFAULT yields (to --no-zero-lead and to the
+    # explicit experiment levers, each with its note printed further down).
+    _cs_mode, _cs_why, _cs_refusal = resolve_cast_stop_default(
+        _cs_mode, a.no_cast_stop, zero_lead, a.cancel_answer, _sa_mode,
+        a.arrival_carry, a.resync)
+    if _cs_refusal:
+        raise SystemExit(_cs_refusal)
     _zl_refusal, _zl_notes = zero_lead_composition(
         zero_lead=zero_lead, heading_grant=a.heading_grant,
         client_endpoint=a.client_endpoint, grant_suppress=grant_suppress,
@@ -17666,7 +17749,13 @@ def main():
     if _cs_mode:
         global CAST_STOP
         CAST_STOP = _cs_mode
-        if _cs_mode == "halt":
+        if _cs_why == "default":
+            print("[map] --cast-stop=pin ON by default -- owner's ruling "
+                  "2026-08-25 (CANCELWALK.md 8.3g) after two clean runs; "
+                  "the F28 fix, backward 0.00 u on 6 of 6 measured casts. "
+                  "--no-cast-stop reverts; pass --cast-stop=pin explicitly "
+                  "for the full banner.")
+        elif _cs_mode == "halt":
             print("[map] --cast-stop=halt ON. CANCELWALK R8 (bare "
                   "cast-start halt), DIAGNOSTIC ONLY -- and REFUSED AS A "
                   "SHIP by owner ruling 2026-08-25: it WARPS. Runnable as "
@@ -17694,9 +17783,10 @@ def main():
                   "(167.6 u measured) -- this control's snaps include "
                   "parked-body warps.")
         else:
-            print("[map] --cast-stop=pin ON. CANCELWALK R10 (dead-reckoned "
-                  "re-pin + halt), DIAGNOSTIC ONLY -- no outcome ships "
-                  "from this run directly.")
+            print("[map] --cast-stop=pin ON (explicit). CANCELWALK R10 "
+                  "(dead-reckoned re-pin + halt) -- the SHIPPED DEFAULT "
+                  "since 2026-08-25 (owner's ruling, 8.3g), named here "
+                  "for the full banner.")
             print("      REVIEWED  twice and RUN once, 2026-08-25 "
                   "(CANCELWALK.md sec.8.3a-8.3d): the review's five "
                   "findings were fixed and re-reviewed clean, and the "
@@ -17770,6 +17860,20 @@ def main():
                   "other than click-walk while movetap shows motion "
                   "is a belief hole of the B1 class. Protocol: "
                   "studies/movement/CANCELWALK.md sec.8.3e-8.3f.")
+    elif _cs_why == "off":
+        print("[map] cast-stop OFF (--no-cast-stop). The shipped default "
+              "is --cast-stop=pin -- owner's ruling 2026-08-25, "
+              "CANCELWALK.md 8.3g.")
+    elif _cs_why == "no-zero-lead":
+        print("[map] cast-stop default NOT armed: it modifies the "
+              "zero-lead regime and --no-zero-lead is set. Pass "
+              "--cast-stop=pin explicitly to insist (which then refuses "
+              "without --zero-lead, naming why).")
+    elif _cs_why and _cs_why.startswith("lever:"):
+        print("[map] cast-stop default YIELDS to the explicit experiment "
+              "lever " + _cs_why[6:] + " so that run keeps ONE variable. "
+              "Pass --cast-stop explicitly to insist -- the composition "
+              "matrix then rules the pair.")
 
     # REALFIX-F1. Printed in the same house style and for the same reason: the
     # prediction goes out BEFORE the run so it cannot be rationalised after it.

@@ -1376,15 +1376,18 @@ regardless of what it fixes. Consequences: `--cast-stop=halt` stays runnable
 as a measured diagnostic and R10's control arm, REFUSED as a ship;
 `--cast-stop=pin` (CANCELWALK-R10, wired 2026-08-25) is the no-warp
 candidate — a dead-reckoned `0x002C` hard-set at the body's true position
-before the halt; and the grant-cadence staleness itself (F27/F33, sep to
-555 u measured) is the standing debt this ruling prices for REALFIX too:
+before the halt — **and it MET the bar: after two clean owner runs the
+owner ruled the same day (2026-08-25, CANCELWALK.md §8.3g, “pin it”) —
+pin is the SHIPPED DEFAULT (`--no-cast-stop` reverts) and F28 CLOSES**;
+and the grant-cadence staleness itself (F27/F33/F35, sep to 864 u
+measured) is the standing debt this ruling prices for REALFIX too:
 any candidate there that expresses staleness as a snap fails the same bar.
 
 ---
 
 ## 8. Immediate next actions
 
-### CANCELWALK: ANSWERED — the freeze is an action-hold race we cannot win at the wire; one real bug remains, its fix already built (2026-08-24)
+### CANCELWALK: CLOSED — the freeze answered (R9), the float-forward fixed and SHIPPED (R10, ruling 2026-08-25); follow-on gaps filed (2026-08-25)
 
 **Full handoff: [studies/movement/CANCELWALK.md](studies/movement/CANCELWALK.md)
 §0** — read that before the rest of the document, whose early sections are
@@ -1463,9 +1466,14 @@ R10's run, §8.3d): no backward component > 20 u, total across-halt
 suppressed with nothing sent and no warp. `test_cancelwalk.py` §7
 floor 102.
 
-**R10 RAN TWICE 2026-08-25 (CANCELWALK.md §8.3d, §8.3f) — the pin arm
-has met every bar it controls across both runs, and the arc's live
-next action is the OWNER'S SHIP RULING (§8.3f's closing paragraph).**
+**R10 RAN TWICE 2026-08-25 (CANCELWALK.md §8.3d, §8.3f), met every bar
+it controls across both runs, and the owner RULED the same evening
+(§8.3g: “pin it”) — `--cast-stop=pin` is the SHIPPED DEFAULT
+(`--no-cast-stop` reverts, wired zero-lead-style through a pure,
+cell-tested resolver; floor 113), CANCELWALK-F28 CLOSES, and THE ARC
+IS CLOSED on both halves. The follow-on gaps — REALFIX's three-way
+staleness debt (F27/F33/F35) and the accepted residuals — are listed
+in CANCELWALK.md §0's “Session handoff for the follow-on gaps”.**
 The completion run (§8.3f): both reckoned casts clean (F31 refuted
 6 of 6 cumulative), both pinned-parked reps at 0.0000 u with the
 guard held across a full 6 s recharge, wire silence 3 of 3 suppressed

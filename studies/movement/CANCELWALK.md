@@ -97,7 +97,13 @@ halt arm stays runnable as R10's control; the no-warp successor is
 **`--cast-stop=pin` (CANCELWALK-R10, §8.3, wired 2026-08-25)**: a
 dead-reckoned `0x002C` hard-set at the body's true position first, then
 the halt, which then lands on co-located copies and cannot snap.
-**R10 RAN 2026-08-25 (§8.3d): every bar passed at the reckoned casts, its yield CANCELWALK-F34 is fixed as PIN-OR-NOTHING (§8.3e), and what remains is the §8.3e completion run; nothing ships without a ruling.**
+**R10 RAN TWICE 2026-08-25 (§8.3d, §8.3f) — every bar it controls
+passed across both runs — and the owner RULED the same day (§8.3g:
+“pin it”): `--cast-stop=pin` is the SHIPPED DEFAULT (`--no-cast-stop`
+reverts), F28 CLOSES, and the ARC's both halves are settled — the
+freeze answered and closed (R9), the float-forward fixed and shipped
+(R10). What remains is follow-on work, listed in the session handoff
+at the end of this section.**
 
 ### What is CLOSED — do not re-open without new evidence
 
@@ -148,6 +154,11 @@ python toolkit/harness/session.py --keep-open --enemy --hold 300 --game-args "--
   --explorable --practice-target --skills 105,153,322"
 python toolkit/clientscan/movetap.py --seconds 180
 ```
+
+**Since 2026-08-25 the gamesrv in that recipe runs `--cast-stop=pin`
+BY DEFAULT** (§8.3g); add `--no-cast-stop` to the game-args for a
+pre-ship-behaviour control run.
+
 **Run both instruments.** A wire-only run cannot tell a walk from a warp
 (§7.4c F16) and cannot see the gates. **Walk before each cast** — a standstill
 session is zero-exposure for anything movement-shaped (§7.4a). Align the two
@@ -224,18 +235,77 @@ review agents → re-register → run) is **done through its third item,
    expression **filed to REALFIX** with the retail 70-of-88 stop-ack
    observation as its candidate and the `--stop-echo` refutation as
    its caution.
-6. **NEXT: the owner's ship ruling on `--cast-stop=pin` (§8.3f's
-   closing paragraph).** The arm has met every bar it controls across
-   two runs; the residuals are named; the remaining warps near it are
-   F33/F35 — shipped-default debt that fires with the flag OFF.
-   Accept as F28's fix, or hold behind REALFIX. (For REALFIX,
-   whoever picks it up: F35's no-cast counterfactual is one
-   desk-run — walk, stop, stand still ~2 s, no cast — and is
-   UNVERIFIED until run.)
+6. ~~The owner's ship ruling on `--cast-stop=pin`.~~ **RULED the same
+   evening — §8.3g: “pin it.” F28 CLOSES; pin is the SHIPPED DEFAULT
+   (`--no-cast-stop` reverts, wired zero-lead-style through the pure
+   `resolve_cast_stop_default`, every cell tested; the default yields
+   to `--no-zero-lead` and to explicit experiment levers so those runs
+   keep one variable).**
 
-Standing constraints for whoever continues: `test_cancelwalk.py` floor
-is **102**; the flag ships OFF and its default is an owner ruling; the
-`halt` arm stays runnable as R10's control and is REFUSED as a ship.
+**THE ARC IS CLOSED, both halves** — the freeze answered and closed
+(R9, §8.2a), the float-forward fixed and shipped (R10, §8.3g).
+Standing constraints: `test_cancelwalk.py` floor is **113**; the
+`halt` arm stays runnable as R10's explicit-only control and is
+REFUSED as a ship; `--cast-stop=pin` is ON by default and
+`--no-cast-stop` is the owner's off-switch.
+
+### Session handoff for the follow-on gaps (written 2026-08-25 evening, arc closed)
+
+The remaining work is NOT this arc's ladder — it is the debt and the
+residuals this arc measured and named. In rough value order:
+
+1. **REALFIX — the grant-cadence staleness, now THREE measured
+   expressions of one debt** (this is the big one; it warps players in
+   ordinary play with every flag at its default):
+   - **F27**: the walk-start snap onto a stale copy, magnitude =
+     staleness (§7.8; 5 of 28 stops past ~190 u).
+   - **F33**: reconcile-on-answer above gate 1's ~299 u cut (§8.2a)
+     — SHARPENED by R10's scoring: an in-walk answer at sep
+     505–519 u did NOT snap, a walk-START answer at 864 u did, so
+     answer-arrival alone is not the trigger (§8.3d).
+   - **F35**: the `+0x48` arrival teleport firing on a stale armed
+     zero-lead grant destination, wire-silent, 177.4 u measured; the
+     movetap `target` field shows arm → fire → `[inf, inf]`
+     (§8.3f). **First step, 30 seconds of owner time: the no-cast
+     counterfactual** — walk, stop, stand still ~2 s — UNVERIFIED
+     until run; if it fires castless (predicted), F35 is fully
+     REALFIX's and the quiet-window nuance drops out.
+   Candidates: `--resync` (REALFIX-P5, built, NEVER RUN — the only
+   candidate whose refutation does not already stand); the retail
+   stop-ack re-pin (70 of 88 live `0x0047`s answered with a `0x0029`
+   at the reported stop point — it would have zeroed F35's snap)
+   RECONCILED against the `--stop-echo` refutation of 2026-08-19
+   (whose record says the echo ADDED a destination rather than
+   overwriting — measured in the pre-grant-suppress, full-lead-click
+   era; re-examine whether it still holds under today's regime).
+2. **CANCELWALK's accepted-at-ship residuals** (§8.3f/§8.1), each
+   small and independently attackable:
+   - **Instant-skill divergence** (§8.1 residual 1): shouts, stances,
+     signets take the pin under the non-attack gate; retail does not
+     stop a runner for them. Likely fix: gate the cast-stop on
+     activation time > 0 — needs a registered run.
+   - **Adrenal adjacency** (residual 2): a non-attack adrenal skill's
+     pin pair lands between its `0x00D2` and the naming property,
+     widening an unmeasured insertion; measure before worrying.
+   - **Queued begins** (residual 3): a queued cast's begin sends no
+     cast-stop and can have a leg in flight (spell queued behind an
+     attack chain; aftercast-released camera-turn walk).
+   - **The click-leg death** (§8.3d/§8.3f): a cast during a
+     click-walk kills the leg at cast end, ~890 u short, wire-silent
+     — mechanism UNVERIFIED; and whether retail resumes a click after
+     a cast is wiki-checkable (browse-gw-wiki skill).
+   - **The slow-plateau rate regime** (§8.3c): sustained ½/⅓-cruise
+     plateaus, 27% of forward moving time, no constant models it —
+     bounded but unexplained; the reckon's forward-miss signature
+     names it first for a reason.
+3. **R6's nonzero warp exposure** (§8.3e's re-review + F34): the
+   `--stop-answer=ack` diagnostic's bare `0x0028` warps a
+   mid-convergence stop; annotated everywhere, but if R6 is ever run
+   again its protocol needs the converged-copy precondition.
+4. **Bookkeeping**: `test_replay.py` was not re-run after the default
+   flip (the module surface is unchanged — `CAST_STOP` stays `None`
+   outside `main()` — so it should be untouched; the full suite's
+   ~40 min run will confirm on the owner's next sweep).
 
 ---
 
@@ -2529,4 +2599,36 @@ there by design); the slow-plateau rate regime (bounded, §8.3c); the
 observation (§8.3d); the instant-skill and adrenal-adjacency
 residuals (§8.1, unchanged). The decision is Q10's shape: accept
 `--cast-stop=pin` as F28's fix with those residuals named, or hold it
-behind REALFIX's staleness work. The flag stays OFF either way.
+behind REALFIX's staleness work. ~~The flag stays OFF either way.~~
+**RULED the same day — §8.3g: pin ships.**
+
+### 8.3g RULED: PIN SHIPS (2026-08-25) — F28 CLOSES; the default flips ON, zero-lead-style
+
+**Owner's ruling, 2026-08-25, on §8.3f's framed decision: "pin it."**
+`--cast-stop=pin` is accepted as CANCELWALK-F28's fix, with §8.3f's
+residuals named and accepted as-is. **CANCELWALK-F28 — the arc's one
+actionable item — CLOSES.**
+
+**What shipping means, following the `--zero-lead` precedent exactly
+(its 2026-08-22 default flip):** the argparse layer arms `pin` ON BY
+DEFAULT; `--no-cast-stop` reverts; the module global still defaults
+`None` so the pure surface is unchanged. Three semantics wired with
+the flip, each with its reason:
+- **The default follows the zero-lead regime it modifies:** under
+  `--no-zero-lead` the cast-stop default yields silently (with a
+  printed note) instead of stranding the operator on the
+  requires-zero-lead refusal — the same courtesy the F1 modifiers get.
+- **The default yields to any explicit experiment lever**
+  (`--cancel-answer`, `--stop-answer`, `--arrival-carry`,
+  `--resync`), with a printed note, so an experiment run keeps ONE
+  variable — "one change per run" applied to a shipped default. An
+  EXPLICIT `--cast-stop` alongside those levers still refuses through
+  the composition matrix exactly as before; the matrix is untouched.
+- **`--cast-stop=halt` stays what it was:** R10's control arm,
+  explicit-only, REFUSED as a ship (Q10, F31/F34) — the default never
+  resolves to it.
+
+The resolution lives in a pure function (`resolve_cast_stop_default`)
+so every cell is drivable by `test_cancelwalk.py` §7 rather than
+described; `--no-cast-stop` with an explicit `--cast-stop` refuses
+loudly as a contradiction.

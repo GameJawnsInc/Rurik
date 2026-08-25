@@ -19,16 +19,18 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
 import checks  # noqa: E402
 
-# FLOOR 102, from the green run of 2026-08-25 that landed F34's
-# pin-or-nothing fix after R10's owner run measured the bare 0x0028
-# warping a parked body onto a converging copy (100 with the re-review's
+# FLOOR 113, from the green run of 2026-08-25 that landed the 8.3g SHIP
+# ruling ("pin it") -- the resolve_cast_stop_default cell table and its
+# source locks (102 with F34's pin-or-nothing fix after R10's owner run
+# measured the bare 0x0028 warping a parked body onto a converging copy;
+# 100 with the re-review's
 # yield: the wire-plane burst, the legacy-bool refusal, the M7 subscript
 # hardening; 98 with the 8.3a review fixes: B1's click-walk latch, B2's
 # census rate families, and the plane-at-est / off-mesh-refusal /
 # model-park REALs; 82 when R10's --cast-stop=pin arm landed; 59 after
 # the R8 review pass; 58 when R8's section landed; 43 with R1-R6's arms;
 # 29 with R1-R4's alone; 24 with R1-R3).
-LEDGER = checks.Ledger("cancelwalk arms", floor=102)
+LEDGER = checks.Ledger("cancelwalk arms", floor=113)
 check = LEDGER.ok
 
 PLAYER = 1
@@ -391,10 +393,11 @@ def section_cast_stop():
           "halt's note now carries the owner's ruling", f"notes={notes}")
     why, notes = authsrv.zero_lead_composition(zero_lead=True,
                                                cast_stop="pin")
-    check(why is None and any("R10" in n and "DIAGNOSTIC" in n
-                              for n in notes),
+    check(why is None and any("R10" in n and "SHIPPED DEFAULT" in n
+                              and "8.3g" in n for n in notes),
           "pin allowed with --zero-lead, and the startup note names R10 "
-          "and its diagnostic-only status", f"notes={notes}")
+          "and its SHIPPED-DEFAULT status with the 8.3g ruling (it "
+          "said DIAGNOSTIC ONLY until the owner ruled)", f"notes={notes}")
     # The legacy bool, refused loudly at entry (re-review 2026-08-25):
     # cast_stop=True armed every shared refusal cell on truthiness while
     # matching neither mode -- no startup note, the pin-x-resync cell
@@ -408,6 +411,49 @@ def section_cast_stop():
           "cast_stop=True (the pre-R10 bool) raises a loud ValueError "
           "naming both real modes -- never an on-but-unnamed arm",
           f"{legacy!r}")
+    # The shipped-default resolver (8.3g: "pin it" -- the owner's ship
+    # ruling, wired zero-lead-style), driven cell by cell. The DEFAULT
+    # yields where an explicit mode refuses, so both halves are pinned:
+    # yield here, the matrix's refusals above.
+    R = authsrv.resolve_cast_stop_default
+    check(R(None, False, True, None, None, False, False)
+          == ("pin", "default", None),
+          "bare startup runs pin -- the shipped default, owner's ruling "
+          "2026-08-25 (8.3g), F28's fix")
+    check(R(None, True, True, None, None, False, False)
+          == (None, "off", None),
+          "--no-cast-stop reverts the default")
+    check(R(None, False, False, None, None, False, False)
+          == (None, "no-zero-lead", None),
+          "under --no-zero-lead the default follows the regime it "
+          "modifies -- silently off with a note, never stranded on the "
+          "requires-zero-lead refusal")
+    for lever_args, name in (
+            (("suppress", None, False, False), "--cancel-answer"),
+            ((None, "ack", False, False), "--stop-answer"),
+            ((None, None, True, False), "--arrival-carry"),
+            ((None, None, False, True), "--resync")):
+        got = R(None, False, True, *lever_args)
+        check(got == (None, "lever:" + name, None),
+              "the default YIELDS to an explicit " + name + " so that "
+              "run keeps ONE variable -- the matrix still refuses the "
+              "EXPLICIT pair", str(got))
+    check(R("halt", False, True, None, None, False, False)
+          == ("halt", "explicit", None)
+          and R("pin", False, False, None, None, False, False)
+          == ("pin", "explicit", None),
+          "an explicit mode passes through untouched -- even without "
+          "zero-lead, because the composition matrix owns that refusal "
+          "and its message names the fix")
+    m, w, why = R("pin", True, True, None, None, False, False)
+    check(m is None and why is not None and "--no-cast-stop" in why
+          and "contradict" in why,
+          "--no-cast-stop alongside an explicit --cast-stop refuses "
+          "loudly as a contradiction", repr(why))
+    check(R(None, False, True, None, None, False, False)[0] != "halt",
+          "and the default NEVER resolves to halt -- the control arm "
+          "is explicit-only, REFUSED as a ship (Q10, F31/F34)")
+
     # The reckon, driven as a pure function -- the arithmetic the 0x002C
     # aims with, and every refusal door. The mesh is REQUIRED since the
     # 8.3a review (R2), so the base motion state carries a permissive
@@ -736,6 +782,14 @@ def section_cast_stop():
           "(the 0x003D and 0x0047 arms -- the client speaking again), "
           "and the send site consults it before EITHER arm, printing the "
           "click-walk label the capture scores")
+    check(src.count("_cs_mode, _cs_why, _cs_refusal = resolve_cast_stop_default(") == 1
+          and '"--no-cast-stop", action="store_true"' in src
+          and 'if _cs_why == "default":' in src
+          and "ON by default -- owner's ruling" in src,
+          "the shipped default is wired through the PURE resolver -- "
+          "called once in main(), --no-cast-stop registered, and the "
+          "default-on short banner keyed on the resolver's own "
+          "provenance, so the log always says WHY the arm is on")
     check(src.count("CAST_STOP = None") == 1
           and src.count("CAST_STOP = _cs_mode") == 1
           and "cast_stop=_cs_mode" in src
