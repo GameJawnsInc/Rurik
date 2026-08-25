@@ -1383,6 +1383,30 @@ and the grant-cadence staleness itself (F27/F33/F35, sep to 864 u
 measured) is the standing debt this ruling prices for REALFIX too:
 any candidate there that expresses staleness as a snap fails the same bar.
 
+**Q11. Which `RESYNC_SEPARATION` — 100.0 or 299.33?** ✅ **CLOSED 2026-08-25,
+delegated by the owner ("reconcile RESYNC_SEPARATION") and ruled in-session:
+100.0, everywhere.** The tree held two defaults for one dial — `authsrv.py`
+100.0 (the client's own "close enough" radius, 3× under gate 1), 
+`resyncscore.py` 299.332591 (gate 1's cut, argued as "the last moment at
+which a snap is not already earned") — and the follow-on recon flagged that
+under HOLE B **the threshold IS the residual snap magnitude**, i.e. the thing
+Q10 judges. The fence lost on the decisive measurement of the **differential
+band [100, 299.33)**: 120 of 157 shipped-regime fires sit in it (p50
+143.7 u), every one refused at the fence, each leaving a HOLE-B residual —
+and the fence's fire set is a strict subset of 100's (fence-only fires 0 of
+558), so the band is pure addition. (The ruling's first draft argued from
+F35's drag magnitudes — "the fence never fires" — and was refuted by its own
+adversarial review the same day: the fence fires at F35's 512.9 u arming
+report and the short-circuit turns that into prevention; the verdict fires
+on arming-report staleness, never on drag size. The conclusion survived on
+the band.) Its supports were also measured off-target — "no coverage lost"
+was over hard jumps only (and reverses on `182652`: the 100 u cell covers
+13/13 vs the fence's 12/13), and the retail-rate argument prices traffic the
+rule never runs on. Wired and tested the same day: both files at 100.0,
+`test_resyncscore.py` §0 pins their agreement, §13 pins both threshold cells.
+Full record: `studies/movement/followon-notes/p5-resync-disarm.md` §4.2a's
+ruling block.
+
 ---
 
 ## 8. Immediate next actions
@@ -1432,7 +1456,9 @@ straight leg produces ONE report at its start, the sync copy is left behind by
 the whole leg, and stops grant nothing. The next walk-start reconciles the
 drawn body onto the stale copy in one frame, **magnitude tracking staleness
 exactly** (256 u → 256 u; 31 u → 31 u). Priced at 5 of 28 stops past ~190 u.
-Candidates at CANCELWALK.md §7.8; `--resync` (REALFIX-P5, built, never run) is
+Candidates at CANCELWALK.md §7.8; `--resync` (REALFIX-P5, built, ~~never run~~
+*run once 2026-08-20 with ZERO grants — not a disarm test; the real run is
+STAGED, below*) is
 the only one whose refutation does not already stand. No recommendation made.
 
 **Instruments.** `movetap.py` is the working one — rows now carry the gate
@@ -1519,6 +1545,29 @@ The completion run's reps: the stop-then-cast F34 regression, the
 second-cast rep (forgotten), and a 3+ s dead-straight-leg cast (THIN —
 reports flowed to within 0.97 s of every reckoned cast). The flag
 stays OFF regardless; defaults are an owner ruling.
+
+**THE `--resync` DISARM RUN IS STAGED (2026-08-25) — next owner run.**
+The follow-on recon (`studies/movement/followon-notes/README.md`, merged
+to `main` the same day) answered F35's counterfactual from tape (castless,
+54.2 u), corrected its framing (8 of 586 arrival fires drag the body), and
+found the 2026-08-20 `--resync` run sent ZERO grants — so the disarm has
+never been tested. Now in place, all cell-tested: **`RESYNC_SEPARATION`
+reconciled to 100.0 in both files (§7 Q11)**, **HOLE D's loud
+first-verdict assertion** (an unseeded sync model prints `SYNC MODEL NOT
+SEEDED` once instead
+of silently refusing every verdict — the zero-exposure-null guard, and its
+loudness is itself checked after the review's mutation pass), and
+**P8's negative-control lever** (`--resync-separation 2000`, refused
+without `--resync`, its main() rebind source-locked). Protocol and eight
+registered predictions:
+`followon-notes/p5-resync-disarm.md` §8 — shipped defaults plus
+`--resync` (the pin default YIELDS to it; `--no-cast-stop` not needed),
+movetap attached, 5× walk-a-chord-then-stand reps, a `--no-resync`
+control arm, and the P8 rep. Expected shape: P5 **bounds** the snap at
+100 u rather than removing it (HOLE B); the Q10 pricing of that residual
+is the owner's call after the run. Tests: `test_resyncscore` 116
+(floor 50 bare), `test_cancelwalk` 121, `test_position_trust` 219 (211
+bare), all green 2026-08-25, floors from the runs.
 
 ### MODEL AUTHORING: the one-bit question is answered, and every player identity closes (2026-08-22)
 

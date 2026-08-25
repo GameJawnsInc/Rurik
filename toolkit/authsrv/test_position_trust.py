@@ -73,7 +73,9 @@ documented as inert, because inert is how a fix gets credited with a null it
 never earned.
 """
 import ast
+import contextlib
 import inspect
+import io
 import json
 import math
 import os
@@ -200,8 +202,17 @@ import grantsim   # noqa: E402
 # rest of 16 (the constant is a module literal; grantsim opens nothing at import),
 # so both floors move by the same 1: 208 bare and 216 vaulted, each read off a
 # real green run of its own configuration.
-FLOOR_BARE = 208
-FLOOR_FULL = 216
+# 2026-08-25, the --resync run staging review: section 11 gained 3
+# fixture-free checks -- HOLE D's SYNC MODEL NOT SEEDED print asserted to
+# fire exactly once on an unseeded state, its refusals asserted to still
+# land in the telemetry, and the seeded negative -- because the review's
+# mutation pass showed the guard had zero coverage (condition inverted,
+# every suite green). Both floors move by the same 3: 211 bare and 219
+# vaulted, each read off a real green console run of its own configuration
+# (219 from a normal run, 211 with RURIK_VAULT at an empty directory,
+# which also printed its 2 declared skips).
+FLOOR_BARE = 211
+FLOOR_FULL = 219
 LEDGER = checks.Ledger("the position-trust policy: refuse, but never latch",
                        floor=FLOOR_BARE)
 check = checks.adopt(LEDGER)
@@ -872,6 +883,50 @@ def main():
               "and the refusal is in the event log, not just absent from it",
               f"{rec.of('resync')} -- a resync log holding only its own "
               f"successes cannot be used to score the flag")
+
+        # HOLE D MADE LOUD, AND THE LOUDNESS IS CHECKED. The 2026-08-25
+        # review's mutation (d) -- the no-sync-model condition inverted, the
+        # once-latch inverted, or the print deleted outright -- survived
+        # every test in the tree until this block, and a guard nobody has
+        # seen fire is a wish. A state carrying an ACCEPTED report but no
+        # sync seed is the permanently-inert regime the p5 recon reproduced
+        # by accident (`no-sync-model` x 14, zero fires, a silent
+        # zero-exposure null): the guard must say so on the console, ONCE
+        # per connection, and never on a seeded state.
+        unseeded = {"pos": (5000.0, 5000.0), "plane": 0, "pos_seen": 1000.0,
+                    "client_pos": (1000.0, 0.0), "client_pos_at": 1000.0,
+                    "client_plane": 0}
+        wire, rec = Wire(unseeded), FakeRec()
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            f1 = authsrv._maybe_resync(wire, unseeded, rec, now=1000.0)
+            f2 = authsrv._maybe_resync(wire, unseeded, rec, now=1000.1)
+        prints = buf.getvalue().count("SYNC MODEL NOT SEEDED")
+        check(f1 is False and f2 is False and wire.sent == [] and prints == 1
+              and authsrv._resync_verdict(unseeded, 1000.0)[1]
+              == "no-sync-model",
+              "an unseeded sync model prints SYNC MODEL NOT SEEDED exactly "
+              "once across repeated verdicts, and still sends nothing",
+              f"prints={prints}, verdict "
+              f"{authsrv._resync_verdict(unseeded, 1000.0)[1]!r} -- HOLE D "
+              f"(followon-notes/p5-resync-disarm.md sec.3.5): without the "
+              f"line, a session that skipped the placement seed runs the "
+              f"whole flag as a silent zero-exposure null")
+        check(len(rec.of("resync")) == 2
+              and all(r["reason"] == "no-sync-model"
+                      for r in rec.of("resync")),
+              "both refusals still land in the event log -- the print is an "
+              "addition to the telemetry, never a substitute",
+              f"{rec.of('resync')}")
+        seeded = armed(client=(1000.0, 0.0), ours=(1234.0, 567.0))
+        wire, rec = Wire(seeded), FakeRec()
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            authsrv._maybe_resync(wire, seeded, rec, now=1000.0)
+        check("SYNC MODEL NOT SEEDED" not in buf.getvalue(),
+              "and a seeded state never prints it",
+              "the negative half: a warning that fires on healthy sessions "
+              "trains the operator to ignore it, which un-louds the guard")
 
         # REFUSES A STALE PAYLOAD, at the bound and past it.
         st = armed(at=1000.0)

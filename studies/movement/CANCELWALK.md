@@ -124,7 +124,13 @@ at the end of this section.**
   drawn body onto the stale copy in one frame. **Magnitude tracks staleness
   exactly**: 256 u stale → 256 u warp; 31 u stale → 31 u warp. Priced: 5 of 28
   stops leave the copy past ~190 u. Candidates named at §7.8 (`--resync`,
-  REALFIX-P5, built and never run, is the only one whose refutation does not
+  REALFIX-P5, built ~~and never run~~ *["never run" corrected 2026-08-25:
+  run once on 2026-08-20 with ZERO grants sent, so the disarm was never
+  tested — `followon-notes/README.md` §2.3 and
+  `followon-notes/refute-lens-empirical.md` §1.3; the real run is
+  registered at `followon-notes/p5-resync-disarm.md` §8 and STAGED, with
+  `RESYNC_SEPARATION` reconciled to
+  100.0 the same day]*, is the only one whose refutation does not
   already stand). **No recommendation made; the ruling is the owner's.**
   *R9's session sharpened the price (§8.2a F33): sep reached 346–555 u at
   ordinary presses — the worst on record — and above gate 1's ~299 u cut
@@ -236,8 +242,12 @@ review agents → re-register → run) is **done through its third item,
    shipped zero-lead grant's STALE armed destination (the movetap
    `target` field shows arm → fire → `[inf, inf]`), a third staleness
    expression **filed to REALFIX** with the retail 70-of-88 stop-ack
-   observation as its candidate and the `--stop-echo` refutation as
-   its caution.
+   observation *(denominator corrected 2026-08-25: 70 of 114 by the study's
+   own correction, 134 of 172 by the wider re-derivation — quote the
+   denominator; `followon-notes/p5-resync-disarm.md` §5.1/§5.2)* as its candidate
+   and the `--stop-echo` refutation as its caution *(reconciled the same
+   day: the refutation is of baking a long leg from a far copy and does
+   NOT transfer to `--resync` — p5 note §5.5)*.
 6. ~~The owner's ship ruling on `--cast-stop=pin`.~~ **RULED the same
    evening — §8.3g: “pin it.” F28 CLOSES; pin is the SHIPPED DEFAULT
    (`--no-cast-stop` reverts, wired zero-lead-style through the pure

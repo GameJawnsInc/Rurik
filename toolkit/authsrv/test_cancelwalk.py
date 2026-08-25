@@ -19,9 +19,15 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
 import checks  # noqa: E402
 
-# FLOOR 113, from the green run of 2026-08-25 that landed the 8.3g SHIP
+# FLOOR 121, from the green run of 2026-08-25 that landed the
+# --resync-separation lever (P8's negative-control dial: refused alone,
+# refused non-positive/non-finite, allowed with --resync with the override
+# named in the note, the pin-x-resync cell still outranking it, and -- after
+# the review's mutation pass showed the rebind unpinned -- the main()
+# assignment source-locked by name, CAST_STOP-style.
+# 113 with the 8.3g SHIP
 # ruling ("pin it") -- the resolve_cast_stop_default cell table and its
-# source locks (102 with F34's pin-or-nothing fix after R10's owner run
+# source locks; 102 with F34's pin-or-nothing fix after R10's owner run
 # measured the bare 0x0028 warping a parked body onto a converging copy;
 # 100 with the re-review's
 # yield: the wire-plane burst, the legacy-bool refusal, the M7 subscript
@@ -30,7 +36,7 @@ import checks  # noqa: E402
 # model-park REALs; 82 when R10's --cast-stop=pin arm landed; 59 after
 # the R8 review pass; 58 when R8's section landed; 43 with R1-R6's arms;
 # 29 with R1-R4's alone; 24 with R1-R3).
-LEDGER = checks.Ledger("cancelwalk arms", floor=113)
+LEDGER = checks.Ledger("cancelwalk arms", floor=121)
 check = LEDGER.ok
 
 PLAYER = 1
@@ -398,6 +404,38 @@ def section_cast_stop():
           "pin allowed with --zero-lead, and the startup note names R10 "
           "and its SHIPPED-DEFAULT status with the 8.3g ruling (it "
           "said DIAGNOSTIC ONLY until the owner ruled)", f"notes={notes}")
+    # --resync-separation (2026-08-25, the P8 lever): a MODIFIER on the
+    # resync verdict's one distance dial, wired for the registered negative
+    # control (p5-resync-disarm.md sec.8 P8: raise it to 2000 so nothing
+    # fires and the F35 snap must RETURN). Refused alone -- the inert-flag
+    # defect --plane-carry's cell documents -- and refused non-positive or
+    # non-finite; allowed with --resync, with the note naming the override
+    # so a run log cannot claim the shipped cell it did not run.
+    why, _ = authsrv.zero_lead_composition(zero_lead=True,
+                                           resync_separation=2000.0)
+    check(why is not None and "--resync-separation requires --resync" in why
+          and "P8" in why,
+          "--resync-separation alone: refused, naming its base flag and "
+          "its registered use", f"{why!r}")
+    for bad in (0.0, -100.0, float("nan"), float("inf")):
+        why, _ = authsrv.zero_lead_composition(zero_lead=True, resync=True,
+                                               resync_separation=bad)
+        check(why is not None and "not a separation" in why,
+              f"--resync-separation {bad!r}: refused as not a separation",
+              f"{why!r}")
+    why, notes = authsrv.zero_lead_composition(zero_lead=True, resync=True,
+                                               resync_separation=2000.0)
+    check(why is None and any("THRESHOLD OVERRIDDEN" in n and "2000.0" in n
+                              for n in notes),
+          "--resync --resync-separation 2000: ALLOWED, and the note names "
+          "the override and the P8 protocol", f"notes={notes}")
+    why, _ = authsrv.zero_lead_composition(zero_lead=True, cast_stop="pin",
+                                           resync=True,
+                                           resync_separation=2000.0)
+    check(why is not None and "--cast-stop=pin and --resync" in why,
+          "and the pin-x-resync cell still outranks the modifier: two "
+          "0x002C policies stay refused whatever the threshold",
+          f"{why!r}")
     # The legacy bool, refused loudly at entry (re-review 2026-08-25):
     # cast_stop=True armed every shared refusal cell on truthiness while
     # matching neither mode -- no startup note, the pin-x-resync cell
@@ -801,6 +839,24 @@ def section_cast_stop():
           "assignment itself is pinned -- with 'CAST_STOP = _cs_mode' "
           "deleted the flag would print a full banner and send NOTHING, "
           "the inert-flag defect on a readout the wire cannot even see")
+    # The --resync-separation rebind, pinned the same way and for the same
+    # reason (the 2026-08-25 review's mutation (c) survived every test in
+    # the tree until this check): the rebind in main() is the lever's ONLY
+    # action, so with it deleted `--resync --resync-separation 2000` would
+    # print THRESHOLD OVERRIDDEN on the composition note AND the RULE tail
+    # while _resync_verdict fired at the shipped 100.0 -- P8's
+    # nothing-fires control firing ~5.6/min under a console that claims
+    # the 2000 u cell. That is the inert-flag defect the lever's own
+    # refusal text documents, on the lever itself.
+    check(src.count("RESYNC_SEPARATION = a.resync_separation") == 1
+          and src.count("if a.resync_separation is not None:") >= 1
+          and "resync_separation=a.resync_separation" in src
+          and src.count("global RESYNC, RESYNC_SEPARATION") == 1,
+          "the override rebind is pinned by name: threaded into the "
+          "composition call, guarded on the flag being passed, and "
+          "assigned through the declared global exactly once -- with the "
+          "assignment deleted the console would claim a threshold the "
+          "verdict does not run")
 
 
 def main():

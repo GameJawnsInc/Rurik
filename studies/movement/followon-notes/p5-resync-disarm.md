@@ -567,6 +567,31 @@ tree, both justify their number, and the flag will run at 100. Under §3.5's HOL
 threshold IS the residual snap magnitude**, so this is not a cosmetic disagreement: it is the
 difference between a bounded-100 u residual and a bounded-299 u one. Someone has to rule.
 
+> **RULED 2026-08-25 (owner-delegated, in-session): 100.0, everywhere.** Grounds, in
+> strength order — *as corrected by the ruling's own adversarial review the same day; the
+> first ground originally argued from F35's drag magnitudes ("the fence never fires") and
+> was **refuted by replay**: the fence fires 5 of 20 on F35's own capture, including at
+> the 512.9 u ARMING report, which the ≤1.0 u short-circuit turns into prevention — the
+> drag magnitudes are a red herring for both cells, since the verdict fires on
+> arming-report staleness, never on drag size*: **(1) the differential band
+> [100, 299.33)** — over the shipped-regime corpus (558 reports), 120 of 157 fires sit in
+> it, p50 143.7 u / max 290.5, every one refused `in-agreement` at the fence, each leaving
+> a HOLE-B residual leg; §3.2's replay of F35's flagship stop-fire (sep 177.4 u, 1.098 s
+> before the arrival matured) is one of them; and the fence's fire set is a **strict
+> subset** of 100's (fence-only fires 0 of 558, structurally impossible under zero-lead
+> inside the 0.5 s rate-limit shadow), so the band is pure addition; **(2)** HOLE B
+> makes the threshold the residual snap magnitude and Q10 judges the residual; **(3)** the
+> fence paragraph's supports measured hard-jump coverage (>520 u, silent on the band)
+> and retail-shaped rates (traffic the rule never runs on, fidelity conceded at
+> birth — retail sends `0x002C` to the player's own agent 5 times ever), while its own
+> frequency-not-magnitude measurement names frequency as the cheap axis. Wired the same
+> day: `resyncscore.py` now defaults 100.0 (GATE1_UNITS stays as the measured client
+> constant; `test_resyncscore.py` §0 pins the cross-file agreement, §13 pins BOTH cells —
+> and the shipped cell **gains** a covered hard jump on `182652`, 13/13 vs the fence's
+> 12/13, the miss being `below-threshold` at sep 269.3, inside the band — so "no coverage
+> either way" was true of the shipped capture, not the corpus).
+> The rulings live on both constants' comment blocks.
+
 **(b) The yank bracket DOES cover the stop regime — and at the stop the true yank is
 structurally 0.** Broken out of my pooled replay by report source (**OBSERVED**):
 
@@ -785,7 +810,8 @@ what `0x002C` does not do.
 5. The orchestrator's *"writes `+0x9c` (syncPoint) at `0x0060216D`"* should read *"erases
    `+0x9c` to the `+inf` sentinel at `0x0060216D`"*. (§1.3)
 6. `RESYNC_SEPARATION` is **100.0** in `authsrv.py` and **299.332591** in `resyncscore.py`,
-   with the latter arguing explicitly against the former. Unreconciled. (§4.2a)
+   with the latter arguing explicitly against the former. ~~Unreconciled.~~ **RULED
+   2026-08-25: 100.0 everywhere — see the ruling block at §4.2a.** (§4.2a)
 7. The flag's own projected rate (*25.4/min, 42.2% of reports*) over-states today's build by
    ~4.5× — measured 5.60/min, 27.8%. (§3.6)
 
@@ -867,6 +893,12 @@ chord (~512 u, ~1.8 s), release, and stand still for 2 s.* Repeat 5×. Then a co
 8. **P8 — the negative control that makes the whole thing readable.** Run one rep with
    `--resync` and a deliberately raised `RESYNC_SEPARATION` (e.g. 2000 u) so nothing fires.
    The snap must return. If it does not, the treated arm's zero was not caused by the resync.
+   *(Wired 2026-08-25: `--resync --resync-separation 2000`. The lever is refused without
+   `--resync` and refused non-positive/non-finite — `zero_lead_composition`, cells in
+   `test_cancelwalk.py` — and the startup note names the override so the run log cannot
+   claim the shipped cell. HOLE D also got its assertion the same day: `_maybe_resync`
+   prints `SYNC MODEL NOT SEEDED` once, loudly, if the placement seed never ran, so P2's
+   "build bug, not a result" arm now announces itself on the console.)*
 
 **Decision shape:** P1+P2+P3 all land ⇒ F35 is closed by P5 and the stop arm meets Q10.
 P5 (the prediction) shows a bounded residual ⇒ the owner is choosing a *threshold*, not a

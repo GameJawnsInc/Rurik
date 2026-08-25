@@ -121,9 +121,26 @@ send(0x0029, [PLAYER_AGENT_ID, list(dest), dest_plane, state["plane"]])   # S3, 
 
 **Four-variable delta from `--client-endpoint`. Do not run before the lead family; a bad result names none of the four.**
 
-### REALFIX-P5 · `--resync` (built, never run) · REALFIX-P6 · `--grant-suppress` (built, run once) · REALFIX-P0 (shipped)
+### REALFIX-P5 · `--resync` (built, ~~never run~~ run once WITHOUT grants — see below) · REALFIX-P6 · `--grant-suppress` (built, run once) · REALFIX-P0 (shipped)
 
 No new code. P5 needs `RESYNC_MAX_REPORT_AGE = 100.0/288 = 0.347 s` (already at `:2665`) and the plane refusal already present; score it on `resyncscore`'s yank column, never on the hard bar.
+
+**P5 status, 2026-08-25 — STAGED for the disarm run.** The "never run" above was
+corrected by the follow-on recon (`followon-notes/README.md` §2.3,
+`followon-notes/refute-lens-empirical.md` §1.3): a
+2026-08-20 run fired 18 `0x002C`s but sent **zero grants**, so it never armed an
+arrival and tested nothing about the disarm. What is now in place, all tested:
+**`RESYNC_SEPARATION` reconciled to 100.0** in both files (owner-delegated ruling,
+§4.2a's block in the p5 note; the fence value 299.33 lost on the [100, 299.33)
+differential band — 120 of 157 shipped-regime fires sit in it, all refused at the
+fence, and the fence's fire set is a strict subset of 100's), **HOLE D's
+first-verdict assertion** (`SYNC MODEL NOT SEEDED` prints
+loudly once if the placement seed never ran — a silent-inert flag was the p5 note's
+reproduced failure), and **P8's lever** (`--resync-separation 2000`, the registered
+nothing-fires negative control; refused without `--resync`). The run protocol and
+its eight registered predictions are `followon-notes/p5-resync-disarm.md` §8; the
+run is the owner's, and P5 is expected to **bound** the snap at 100 u, not remove
+it (HOLE B) — the Q10 conversation after the run should price that residual.
 
 ### REALFIX-P4 · `0x0027` re-arm — **DO NOT BUILD**
 
