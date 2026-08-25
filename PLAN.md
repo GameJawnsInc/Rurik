@@ -1456,36 +1456,44 @@ not a stop-in-place.** **RULED 2026-08-25 (§7 Q10): REFUSED as a ship —
 a dead-reckoned `0x002C` hard-set at the body's true position (last
 report + unit(vec2) × rate × 288 × dt, navmesh-clipped, every refusal
 door labelled in the capture), then the halt, which lands on co-located
-copies and cannot snap. Registered predictions (as re-registered at
-§8.3c after the review fixes): no backward component > 20 u, total
-across-halt ≤ ~35 u, standstill silent, second-cast guard observed
-live, a click-walk cast suppressed with nothing sent and no warp.
-`test_cancelwalk.py` §7 floor 100.
+copies and cannot snap — and, since F34's fix, sends NOTHING at all on
+any refused reckon (pin-or-nothing, §8.3e). Registered bars (met in
+R10's run, §8.3d): no backward component > 20 u, total across-halt
+≤ ~35 u, refused casts silent and motionless, a click-walk cast
+suppressed with nothing sent and no warp. `test_cancelwalk.py` §7
+floor 102.
 
-**R10 IS RUNNABLE as of 2026-08-25 evening, under CANCELWALK.md §8.3c's
-re-registration and no other — the owner-driven run is the arc's live
-next action.** The 2026-08-25 adversarial review (§8.3a) had found
-**two BLOCKERS — both warps, both failing Q10's bar** (B1: a cast
-during a CLICK-to-move walk warped onto a copy up to **1,164 u** behind
-while every belief said "parked"; B2: mt 5–8 reckoned at 288 u/s
-against a measured 188–215, a forward miss past the 35 u bar) plus
-three REALs (stale plane on the `0x002C`; the off-mesh case shipping an
-unclipped ray; the server's own integrator left gliding past the pin) —
-and the review itself died two agents short. **All five are FIXED
-(§8.3b, `ce1746b`)**: a click-in-flight latch suppresses the whole
-cast-stop on both arms (degrading to F28's glide — a defect, not a
-warp), the census family rates replace the mt-4-alone table, the plane
-is resolved at the extrapolated point, off-mesh refuses, and a sent pin
-parks the model. **The two dead agents were re-run against the fixed
-arm: no blocker** — the 13-mutation probe went 13 of 13 RED (the
-registered M1–M7 plus six over the fixes), and the lattice/routing
-skeptic's yield (3 REALs, 2 NITs — stale banners, a wire-plane test
-gap, doc staleness, the legacy-bool hole, an unfollowable refusal hint)
-is fixed in place. `test_cancelwalk.py` §7 floor **100**. **§8.3c
-re-registers the run**: the protocol gains a required click-walk cast
-and a recommended backpedal cast, and the forward-miss signature
-separates rate-regime error from a stale belief before any guard is
-blamed. The flag stays OFF regardless; defaults are an owner ruling.
+**R10 RAN 2026-08-25 (CANCELWALK.md §8.3d) — the pin mechanism WORKS,
+its run yielded ONE new warp finding, that finding is FIXED, and the
+arc's live next action is the §8.3e COMPLETION RUN (three short
+reps).** The path there, all one day: §8.3a's review had found two
+BLOCKERS (B1 click-walk warp to 1,164 u; B2's rate table) plus three
+REALs — **fixed at §8.3b (`ce1746b`)**; the two review agents that died
+were re-run against the fixed arm and found **no blocker** (13-of-13
+mutation catch; the lattice sweep's 3 REALs + 2 NITs fixed in place);
+§8.3c re-registered; **the owner ran it**. Scored from both tapes by
+four agents with the crux re-checked by hand: **every registered bar
+PASSED at the four reckoned casts** — 0x002C-vs-body 4.1–8.2 u,
+across-halt 4.1–8.2 u with backward **0.00** on every cast (F31 does
+not reproduce), at rest by 0.06 s, sep 0.00 through every cast, the
+backpedal reckoned at 0.652 exactly (rate-1.0 would have overshot
++53.7 u), model residual −0.1 u. The click-walk suppression fired on
+the wire with no warp at the cast; the operator's warp 11 s later is
+**F33's reconcile-on-answer** meeting 864.5 u of click-silence
+staleness — REALFIX's filed debt, settled by two BLIND skeptics from
+rival ends (and sharpened: an in-walk answer at sep 505–519 u did NOT
+snap, so answer-arrival alone is not the trigger). **The yield,
+CANCELWALK-F34:** the then-wired bare `0x0028` on a refused reckon
+warped a genuinely PARKED body 167.6 u backward onto a
+still-converging sync copy at a stop-then-cast — "no-ops when parked"
+holds only when the COPY is parked too. **Fixed the same day
+(§8.3e): PIN-OR-NOTHING** — the pin pair fires whole or not at all, a
+bare `0x0028` never fires, every refusal prints its door to the
+console (the scorable record). `test_cancelwalk.py` §7 floor **102**.
+The completion run's reps: the stop-then-cast F34 regression, the
+second-cast rep (forgotten), and a 3+ s dead-straight-leg cast (THIN —
+reports flowed to within 0.97 s of every reckoned cast). The flag
+stays OFF regardless; defaults are an owner ruling.
 
 ### MODEL AUTHORING: the one-bit question is answered, and every player identity closes (2026-08-22)
 

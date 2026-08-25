@@ -7932,7 +7932,21 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   neither mode — is asserted to raise a loud ValueError naming both real
   arms; and the second-cast seed reads the pin note with `.get` so the
   M7 mutation (note never written) fails as a named check instead of
-  aborting the section on a KeyError. Floor 100),
+  aborting the section on a KeyError. **Extended a third time the same
+  day for F34's pin-or-nothing fix** (R10's owner run measured the bare
+  refusal-path 0x0028 warping a genuinely PARKED body 167.6 u backward
+  onto a still-converging sync copy — CANCELWALK.md §8.3d — so the pin
+  pair now fires whole or not at all): the burst driver captures the
+  gamesrv console (the refusal label rides the print now, not a
+  0x0028, so a test that cannot see stdout cannot protect the
+  telemetry), the parked and pinned-parked casts are driven to WIRE
+  SILENCE with their `pin:parked`/`pin:pinned-parked` labels asserted
+  on the console line and the cast's own animation proving the press
+  survived, the click-walk checks gain the same console assertion, and
+  a source lock pins the `_cs_send_stop` gate's three sites — armed
+  once, disarmed once (the refusal branch), consulted once — because
+  with the gate deleted the bare 0x0028 returns and F34's warp with
+  it. Floor 102),
   `toolkit/authsrv/test_killwindow.py` (the kill window, checked against
   ArenaNet's own kills. Our server sent one message when an agent died —
   `0x00F1` with the death bit — where the real service sends three: status,

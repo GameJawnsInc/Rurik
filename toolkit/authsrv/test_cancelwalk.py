@@ -19,14 +19,16 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
 import checks  # noqa: E402
 
-# FLOOR 100, from the green run of 2026-08-25 that landed the re-review's
-# yield -- the wire-plane burst, the legacy-bool refusal, the M7 subscript
-# hardening (98 with the 8.3a review fixes: B1's click-walk latch, B2's
+# FLOOR 102, from the green run of 2026-08-25 that landed F34's
+# pin-or-nothing fix after R10's owner run measured the bare 0x0028
+# warping a parked body onto a converging copy (100 with the re-review's
+# yield: the wire-plane burst, the legacy-bool refusal, the M7 subscript
+# hardening; 98 with the 8.3a review fixes: B1's click-walk latch, B2's
 # census rate families, and the plane-at-est / off-mesh-refusal /
 # model-park REALs; 82 when R10's --cast-stop=pin arm landed; 59 after
 # the R8 review pass; 58 when R8's section landed; 43 with R1-R6's arms;
 # 29 with R1-R4's alone; 24 with R1-R3).
-LEDGER = checks.Ledger("cancelwalk arms", floor=100)
+LEDGER = checks.Ledger("cancelwalk arms", floor=102)
 check = LEDGER.ok
 
 PLAYER = 1
@@ -541,6 +543,9 @@ def section_cast_stop():
     saved_flag = authsrv.CAST_STOP
     authsrv.skill_timing = lambda sid: (2.0, 0.75, 8.0)
     try:
+        import contextlib
+        import io
+
         def burst(flag, attack, seed=None):
             authsrv.CAST_STOP = flag
             authsrv._is_attack_skill = lambda sid: attack
@@ -549,8 +554,15 @@ def section_cast_stop():
             sent = []
             send = lambda op, vals, label="", quiet=False: \
                 sent.append((op, vals, label))
-            authsrv.handle_skill_press([0, 42, 7, 0], send, st,
-                                       0, authsrv.GAME_CMSG_USE_SKILL)
+            # The console is captured because under pin-or-nothing (F34,
+            # 8.3d) a REFUSED cast's label rides the print, not a 0x0028
+            # -- the console line IS the scorable record, so a test that
+            # cannot see it cannot protect the telemetry.
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                authsrv.handle_skill_press([0, 42, 7, 0], send, st,
+                                           0, authsrv.GAME_CMSG_USE_SKILL)
+            st["_console"] = buf.getvalue()
             return sent, st
         stops = lambda sent: [i for i, (op, _, _) in enumerate(sent)
                               if op == authsrv.GAME_SMSG_AGENT_STOP_MOVING]
@@ -645,31 +657,47 @@ def section_cast_stop():
         # KeyError'd here and ABORTED the section, so every later check
         # ran as a traceback instead of a named FAIL -- the weaker
         # guard, caught by the re-run mutation probe.
-        p2, _ = burst("pin", False, seed=dict(seed,
-                      cast_stop_pin=pst.get("cast_stop_pin")))
-        check(pins(p2) == [] and len(stops(p2)) == 1
-              and "pin:pinned-parked" in p2[stops(p2)[0]][2],
-              "pin, second cast with no report between: NO second 0x002C "
-              "(the R8 second-cast trap guarded live) and the 0x0028's "
-              "label names the refusal", f"{p2[stops(p2)[0]][2]!r}")
-        # Pin, parked belief: no 0x002C, the 0x0028 no-ops at the client.
-        pk, _ = burst("pin", False, seed=dict(seed, kbd_moving_at=None))
-        check(pins(pk) == [] and len(stops(pk)) == 1
-              and "pin:parked" in pk[stops(pk)[0]][2],
-              "pin, parked belief: no 0x002C, and the label says "
-              "'parked'", f"{pk[stops(pk)[0]][2]!r}")
+        p2, p2st = burst("pin", False, seed=dict(seed,
+                         cast_stop_pin=pst.get("cast_stop_pin")))
+        check(pins(p2) == [] and stops(p2) == []
+              and "[cancelwalk pin:pinned-parked]" in p2st["_console"],
+              "pin, second cast with no report between: NOTHING goes out "
+              "-- pin-or-nothing (F34) -- the R8 second-cast trap "
+              "guarded live, the refusal named on the console line",
+              f"{p2st['_console']!r}")
+        # Pin, parked belief: NOTHING goes out. Until 8.3d the 0x0028
+        # went alone here, licensed by 'no-ops on a parked body' --
+        # REFUTED by R10's run (F34): with the SYNC COPY still
+        # converging it warped a genuinely parked body 167.6 u backward
+        # onto the copy. The handler answers for the copy, not the
+        # drawn body, so the only send that cannot warp is none.
+        pk, pkst = burst("pin", False, seed=dict(seed, kbd_moving_at=None))
+        check(pins(pk) == [] and stops(pk) == []
+              and "[cancelwalk pin:parked]" in pkst["_console"]
+              and "pin-or-nothing" in pkst["_console"],
+              "pin, parked belief: NO 0x002C and NO 0x0028 -- the F34 "
+              "regime (parked body, converging copy) gets no message to "
+              "warp with -- and the console line carries the label",
+              f"{pkst['_console']!r}")
+        pk_anim = [i for i, (op, vals, _) in enumerate(pk)
+                   if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
+                   and vals[0] == agents.GV_SKILL_ACTIVATED]
+        check(len(pk_anim) == 1,
+              "and the cast itself still goes out -- the suppression is "
+              "the cast-stop's, not the cast's", f"{pk}")
         # B1 (review 2026-08-25): a click-walk suppresses the WHOLE
         # cast-stop -- both arms, both messages. The seed keeps the
         # moving keyboard belief armed, so without the click latch this
         # is exactly the burst that fired both messages above.
         for mode in ("pin", "halt"):
-            ck, _ = burst(mode, False,
-                          seed=dict(seed, click_moving_at=_time.time()))
+            ck, ckst = burst(mode, False,
+                             seed=dict(seed, click_moving_at=_time.time()))
             ck_anim = [
                 i for i, (op, vals, _) in enumerate(ck)
                 if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
                 and vals[0] == agents.GV_SKILL_ACTIVATED]
-            check(stops(ck) == [] and pins(ck) == [] and len(ck_anim) == 1,
+            check(stops(ck) == [] and pins(ck) == [] and len(ck_anim) == 1
+                  and "[cancelwalk pin:click-walk]" in ckst["_console"],
                   f"{mode}, click-walk in flight: NO 0x0028 and NO 0x002C "
                   f"-- a click-walking body is one no belief can place, "
                   f"and the 0x0028 alone is the B1 warp (sync copy parked "
@@ -692,6 +720,13 @@ def section_cast_stop():
           and src.count("cancelwalk R10") >= 1,
           "ONE gate carrying the non-attack scoping, ONE R8-labelled "
           "0x0028 site, ONE R10 0x002C site")
+    check(src.count("if _cs_send_stop:") == 1
+          and src.count("_cs_send_stop = False") == 1
+          and src.count("_cs_send_stop = True") == 1,
+          "pin-or-nothing (F34) is wired as ONE gate on the 0x0028 send: "
+          "armed once (halt's default), disarmed once (the pin refusal "
+          "branch), consulted once -- with the gate deleted the bare "
+          "0x0028 returns and F34's 167.6 u parked-body warp with it")
     check(src.count('state["click_moving_at"] = time.time()') == 1
           and src.count('state["click_moving_at"] = None') == 2
           and src.count('_cs_click = state.get("click_moving_at")') == 1
