@@ -68,15 +68,17 @@ import origin       # noqa: E402
 import resyncscore  # noqa: E402
 import vaultpath    # noqa: E402
 
-# MEASURED from a real green run on 2026-08-20: 98 checks with the whole vault
-# present, 47 with `RURIK_VAULT` pointed at an empty directory (2 declared
-# skips). Sections 1-12 need no fixture; 13-14 replay `captures/gamesrv`,
-# 15-17 `captures/live`, and 18-19 need BOTH plus `captures/movetap`, and each
-# group declares its own skip. 47 is the bare-machine subset and is the floor --
-# read off the run, never off a count in anybody's head, which is the slip
-# `test_movesync` records against itself.
+# MEASURED from a real green run on 2026-08-25 (the RESYNC_SEPARATION
+# reconciliation: section 0's cross-file pins, section 13's second table at
+# the shipped 100.0 cell): 116 checks with the whole vault present, 50 with
+# `RURIK_VAULT` pointed at an empty directory (2 declared skips; 98/47 before
+# the reconciliation, measured 2026-08-20). Sections 0-12 need no fixture;
+# 13-14 replay `captures/gamesrv`, 15-17 `captures/live`, and 18-19 need BOTH
+# plus `captures/movetap`, and each group declares its own skip. 50 is the
+# bare-machine subset and is the floor -- read off the run, never off a count
+# in anybody's head, which is the slip `test_movesync` records against itself.
 LEDGER = checks.Ledger("the 0x002C resync, priced against captures we have",
-                       floor=47)
+                       floor=50)
 check = checks.adopt(LEDGER)
 
 R = resyncscore
@@ -112,6 +114,33 @@ def walk(n, x0=0.0, dt=0.25, speed=movesync.RUN_SPEED, y=0.0):
 
 
 def main():
+    # ---------------------------------------------------------------- 0
+    print("0. the ONE threshold: this file and the server agree, pinned")
+    # RECONCILED 2026-08-25. Until then authsrv.py shipped 100.0 while this
+    # module's default was GATE1_UNITS = 299.332591, each with its own
+    # argument -- two numbers for one dial, and the flag ran at whichever
+    # file the reader trusted (followon-notes/p5-resync-disarm.md sec.4.2a
+    # called it out; the ruling is recorded on both constants). This check
+    # is the reconciliation's enforcement: a rule nothing checks is a wish.
+    import authsrv    # the header's sys.path already names the authsrv dir
+    check(R.RESYNC_SEPARATION == authsrv.RESYNC_SEPARATION == 100.0,
+          f"resyncscore.RESYNC_SEPARATION ({R.RESYNC_SEPARATION}) == "
+          f"authsrv.RESYNC_SEPARATION ({authsrv.RESYNC_SEPARATION}) == 100.0",
+          "the threshold IS the residual snap magnitude (HOLE B), so a "
+          "drifted default here means every table this tool prints prices "
+          "a rule the server does not run")
+    check(R.GATE1_UNITS == 299.332591 and R.RESYNC_SEPARATION < R.GATE1_UNITS,
+          f"and GATE1_UNITS stays the measured client constant "
+          f"({R.GATE1_UNITS}), above the shipped threshold",
+          "gate 1's cut is a fact about the binary, not a policy dial; the "
+          "gap between the two is the headroom the SYNC model gets to be "
+          "wrong in before the client's own reconcile is earned")
+    check(100.0 in R.THRESH_SWEEP,
+          "and the sweep prices the shipped cell",
+          "until 2026-08-25 THRESH_SWEEP did not contain the value the "
+          "server actually runs, so every printed sweep skipped the one "
+          "cell that ships")
+
     # ---------------------------------------------------------------- 1
     print("1. leg_distance is the SEGMENT distance, not the line's")
     # `movesync.on_segment` gives the perpendicular to the INFINITE line. Past
@@ -246,8 +275,11 @@ def main():
               "does nothing, and it is swept in every table this tool prints")
 
     print("\n7. raising the THRESHOLD can only remove firings")
+    # sorted(), since 2026-08-25: GATE is now 100.0, which sits BELOW the
+    # 150.0 that used to follow it, and a monotonicity check over an
+    # unsorted axis refutes the axis rather than the rule.
     counts = [len(R.fires(tr6, th, 0.0, R.RULE_A))
-              for th in (0.0, 150.0, GATE, 600.0, 1200.0)]
+              for th in sorted((0.0, 150.0, GATE, 600.0, 1200.0))]
     check(counts[0] > 0, f"the sweep produced counts {counts}",
           "asserted FIRST")
     check(all(counts[i] >= counts[i + 1] for i in range(len(counts) - 1)),
@@ -428,10 +460,19 @@ def main():
                     f"the arc's captures are not reachable here ({exc})")
 
     if paths:
-        print("\n13. the vault replay, pinned at the default cell")
-        # PINNED so a change to the rule cannot pass unnoticed. Measured from a
-        # real run on 2026-08-20 at threshold 299.332591 u, cooldown 0.0, and
-        # they are the numbers the write-up quotes.
+        print("\n13. the vault replay, pinned at BOTH threshold cells")
+        # PINNED so a change to the rule cannot pass unnoticed. The first
+        # table was measured from a real run on 2026-08-20 at threshold
+        # 299.332591 u (GATE1_UNITS), cooldown 0.0, and they are the numbers
+        # the write-up quotes -- it names its cell EXPLICITLY since the
+        # 2026-08-25 reconciliation moved the default to 100.0: a pin that
+        # silently floats with a default is not a pin. The second table is
+        # the SHIPPED cell (100.0), measured 2026-08-25 over the same three
+        # captures. One row of the comparison is itself a finding: on
+        # 182652, Rule E at 100.0 covers 13 of 13 hard jumps where the
+        # fence cell covered 12 -- the lower threshold GAINS a jump, so
+        # "raising costs NO coverage (7/7 either way)" was true of the
+        # shipped capture and not of the corpus.
         want = {
             "20260819T145717": {R.RULE_A: (116, 3), R.RULE_B: (85, 1),
                                 R.RULE_C: (38, 5), R.RULE_D: (4, 2),
@@ -443,16 +484,30 @@ def main():
                                 R.RULE_C: (318, 13), R.RULE_D: (0, 0),
                                 R.RULE_E: (40, 12)},
         }
-        for stamp, cells in want.items():
-            tr = R.track_from_capture(paths[stamp])
-            for rule, (n, cov) in cells.items():
-                s = R.score(tr, GATE, 0.0, rule)
-                check(s["n"] == n and len(s["covered"]) == cov,
-                      f"{stamp} {rule}: {s['n']} firing(s), "
-                      f"{len(s['covered'])}/{s['hard_n']} covered",
-                      f"expected {n} and {cov} -- pinned from the 2026-08-20 "
-                      f"run so a rule change shows up here rather than in a "
-                      f"quoted number nobody re-derived")
+        want_ship = {
+            "20260819T145717": {R.RULE_A: (117, 3), R.RULE_B: (154, 5),
+                                R.RULE_C: (39, 5), R.RULE_D: (4, 2),
+                                R.RULE_E: (244, 7)},
+            "20260819T171153": {R.RULE_A: (2, 1), R.RULE_B: (11, 0),
+                                R.RULE_C: (726, 20), R.RULE_D: (2, 1),
+                                R.RULE_E: (234, 20)},
+            "20260819T182652": {R.RULE_A: (1, 0), R.RULE_B: (5, 0),
+                                R.RULE_C: (320, 13), R.RULE_D: (1, 0),
+                                R.RULE_E: (110, 13)},
+        }
+        for thresh, label, table in ((R.GATE1_UNITS, "fence", want),
+                                     (100.0, "shipped", want_ship)):
+            for stamp, cells in table.items():
+                tr = R.track_from_capture(paths[stamp])
+                for rule, (n, cov) in cells.items():
+                    s = R.score(tr, thresh, 0.0, rule)
+                    check(s["n"] == n and len(s["covered"]) == cov,
+                          f"{stamp} {rule} @{label}: {s['n']} firing(s), "
+                          f"{len(s['covered'])}/{s['hard_n']} covered",
+                          f"expected {n} and {cov} -- pinned from a real "
+                          f"run (2026-08-20 fence / 2026-08-25 shipped) so "
+                          f"a rule change shows up here rather than in a "
+                          f"quoted number nobody re-derived")
 
         ship = R.track_from_capture(paths[R.SHIPPED])
         check(len(ship["hard_idx"]) == 7 and ship["sent_0x2c"] == 0,
@@ -764,14 +819,27 @@ def main():
               "adopted report, so firing more often costs frequency and not "
               "magnitude -- which is the asymmetry the whole proposal rests "
               "on")
-        lo = R.score(ship, 100.0, 0.0, R.RULE_E)
-        check(len(lo["covered"]) == len(by_cd[0.0]["covered"])
-              and lo["n"] > by_cd[0.0]["n"],
-              f"and dropping the threshold to 100 u buys NO coverage "
-              f"({len(lo['covered'])} vs {len(by_cd[0.0]['covered'])}) for "
-              f"{lo['n'] - by_cd[0.0]['n']} extra firing(s)",
-              "so the threshold trades specificity against nothing here, and "
-              "section 17 shows what it costs on retail")
+        # Until 2026-08-25 this cell read "dropping the threshold to 100 u
+        # buys NO coverage ... so the threshold trades specificity against
+        # nothing here" -- with GATE at the fence, the 100 u arm was the
+        # counterfactual. The reconciliation made 100.0 the default (the
+        # ruling is on both constants), so the comparison now runs the other
+        # way and its finding is restated with the ruling's own framing:
+        # hard-jump coverage was NEVER the dial's job (F35's sub-299 family
+        # is), it is EQUAL on this capture, the corpus GAINS one jump at the
+        # shipped cell (182652: 13 vs 12, pinned in section 13), and the
+        # extra firings are the frequency cost the ruling accepted as the
+        # cheap axis -- the yank check above is why it is cheap.
+        hi = R.score(ship, R.GATE1_UNITS, 0.0, R.RULE_E)
+        check(len(by_cd[0.0]["covered"]) == len(hi["covered"])
+              and by_cd[0.0]["n"] > hi["n"],
+              f"and the shipped 100 u cell holds the fence cell's coverage "
+              f"({len(by_cd[0.0]['covered'])} vs {len(hi['covered'])}) at "
+              f"{by_cd[0.0]['n'] - hi['n']} extra firing(s) on this capture",
+              "coverage equal here, +1 on 182652 (section 13); the extra "
+              "firings are frequency, the measured-cheap axis, while the "
+              "threshold bounds HOLE B's residual snap -- the thing Q10 "
+              "judges")
 
     return LEDGER.verdict()
 

@@ -276,7 +276,13 @@ still warps."*
   ~299 u snap. **That fails a literal reading of Q10.**
 - **The threshold is unreconciled between two files**: `authsrv.py` uses
   **100.0**; `resyncscore.py` uses **299.332591** and argues explicitly against
-  100. It *is* the residual magnitude, so this is not cosmetic.
+  100. It *is* the residual magnitude, so this is not cosmetic. **RULED
+  2026-08-25 (owner-delegated): 100.0 everywhere — the decisive measurement
+  is the [100, 299.33) differential band: 120 of 157 shipped-regime fires
+  sit in it, all refused at the fence, each a HOLE-B residual, and the
+  fence's fire set is a strict subset of 100's (fence-only fires 0 of 558).
+  Full grounds, including the review's correction of the ruling's first
+  draft: [p5-resync-disarm.md](p5-resync-disarm.md) §4.2a's ruling block.**
 - **The payload-provenance argument is inert as written.** Over all 18 fires of
   the 2026-08-20 run, `|payload − state["pos"]| ≤ 0.0064 u`, because
   `_take_client_position` writes `state["pos"]` three lines above
@@ -357,11 +363,20 @@ wrong.
    Predictions registered in [p5-resync-disarm.md](p5-resync-disarm.md) §8.
    **Recipe note, checked in code:** `--resync` alone is enough — the shipped
    `--cast-stop=pin` default **yields** to it (`resolve_cast_stop_default`
-   returns `lever:--resync`, `authsrv.py:1807`) and prints the provenance, so
+   returns `lever:--resync`, `authsrv.py:1808`) and prints the provenance, so
    `--no-cast-stop` is *not* needed. An **explicit** `--cast-stop=pin` with
-   `--resync` is refused outright (`:4701`) — one `0x002C` policy per run.
-2. **Reconcile `RESYNC_SEPARATION`** (100.0 vs 299.332591) before that run —
-   it sets the residual snap magnitude, i.e. the thing Q10 judges.
+   `--resync` is refused outright (`:4811` as of the staging commit) — one
+   `0x002C` policy per run.
+   ***STAGED 2026-08-25**: P8's lever wired (`--resync-separation 2000`,
+   refused without `--resync`), HOLE D's first-verdict assertion in place
+   (`SYNC MODEL NOT SEEDED` prints once, loudly, at the first inert verdict),
+   the stale EXPECT banner
+   corrected to the 5.60/min regime. The run itself is the owner's.*
+2. ~~**Reconcile `RESYNC_SEPARATION`** (100.0 vs 299.332591) before that run —
+   it sets the residual snap magnitude, i.e. the thing Q10 judges.~~ **DONE
+   2026-08-25 — ruled 100.0 everywhere ([p5-resync-disarm.md](p5-resync-disarm.md)
+   §4.2a's ruling block); `resyncscore.py` flipped, `test_resyncscore.py` §0
+   pins the cross-file agreement and §13 pins both threshold cells.**
 3. **The instant-skill gate** — a one-line change plus a registered run.
 4. **Queued begins** — needs plumbing, then a run.
 5. **What gates the 8-in-586 drag** (§1.2) — the highest-value unknown left in

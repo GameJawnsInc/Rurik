@@ -3601,7 +3601,13 @@ Every one of these, in the order they were written:
   f-string that Python builds *before* `check()` runs, so deleting either
   refusal raised `TypeError` on `None`, killed the section mid-run and left nine
   checks and the ledger's floor unevaluated — caught by exit code, naming
-  nothing. Floors **208** bare and **216** vaulted, both re-measured; §16 is
+  nothing. Floors **211** bare and **219** vaulted, both re-measured
+  (**Extended 2026-08-25 for the --resync staging review**: §11 gains three
+  fixture-free checks driving HOLE D's `SYNC MODEL NOT SEEDED` guard — the
+  print fires exactly ONCE on an unseeded state across repeated verdicts,
+  its refusals still land in the telemetry, and a seeded state never prints
+  it — because the review's mutation pass showed the guard had zero
+  coverage: condition inverted, every suite green); §16 is
   fixture-free like §14 and §15, so all 33 of its checks land in both. No
   client. ~2 s),
   `toolkit/clientscan/test_movesync.py` (SEPARATION -- the quantity that
@@ -4055,16 +4061,22 @@ Every one of these, in the order they were written:
   `denominator`, `per_minute` -- and adds no decoder of its own, because a
   second reader is a second chance to disagree about what the client said.
   **A counterfactual has three ways to lie and there is a section for each.**
+  §0 (added by the 2026-08-25 reconciliation) pins the ONE threshold: this
+  file's `RESYNC_SEPARATION` equals `authsrv.py`'s equals 100.0, GATE1_UNITS
+  stays the measured client constant above it, and THRESH_SWEEP prices the
+  shipped cell -- until the reconciliation the tool's default was the fence
+  (299.33) and every bare invocation priced a rule the server does not run.
   §15 is the load-bearing one: ArenaNet's own traffic scores **0 hard jumps**
   over 35 usable game connections and 2,739 self-reports, so a rule that fires
   on retail as often as on our defective build is reading the wire, not the
   defect -- and it **currently fails for two of the five rules**, which is
-  PINNED rather than tolerated. Rule C (`0x002C` before every player grant)
-  has the best coverage of the four cheap rules, 5 of 7 hard jumps, and fires
-  **4.13x more per minute on retail than on the build we ship**; Rule D
-  (C plus an arrival model on the previous leg) fires 0.816x. Rules A and B
-  separate at 0.024x and 0.026x, and **Rule E -- a forward model of the sync
-  copy -- gets both halves: 7 of 7 covered at 0.228x**. A session that
+  PINNED rather than tolerated. At the shipped 100.0 cell (re-measured
+  2026-08-25; the fence-cell figures of 4.13x/0.816x/0.024x/0.026x/0.228x
+  stand as the 2026-08-20 write-up's): Rule C (`0x002C` before every player
+  grant) fires **4.54x more per minute on retail than on the build we ship**;
+  Rule D (C plus an arrival model on the previous leg) fires 1.50x. Rules A
+  and B separate at 0.036x and 0.028x, and **Rule E -- a forward model of the
+  sync copy -- gets both halves: 7 of 7 covered at 0.345x**. A session that
   "improves" C without re-running the control turns §15 red, and moving the
   comparison's reference from the SHIPPED build to our worst capture -- which
   makes C read as 0.101x and "separating" -- reddens six checks. **§18 is the
@@ -4088,8 +4100,11 @@ Every one of these, in the order they were written:
   COOLDOWN is where the coverage goes, not the threshold -- Rule E covers 7/7 at
   cooldown 0.00 s, 3/7 at 0.50 s and 2/7 at 2.50 s, while the yank stays p50
   0.08 u at all three, because the payload is always the client's freshest
-  adopted report; and dropping the threshold from 299.33 u to 100 u buys **no**
-  coverage for 31 extra firings. §1-§2 pin `leg_distance` as the SEGMENT
+  adopted report; and the shipped 100 u cell holds the fence cell's 7/7
+  coverage at 31 extra firings on the shipped capture (restated 2026-08-25
+  from "dropping to 100 buys no coverage" -- the default IS 100 now, and the
+  corpus gains a covered jump there: §13's second table, `182652` 13 vs 12).
+  §1-§2 pin `leg_distance` as the SEGMENT
   distance and prove it is a lower bound on separation against a 201-position
   sweep of the granted leg, the row count asserted first. §3 gates the arrival
   model in both directions on a 2,000 u leg (t_park = 6.944 s): 32 firings, none
@@ -4117,11 +4132,20 @@ Every one of these, in the order they were written:
   cannot pass), PARKED at t=12.0 s and t=14.5 s, and re-aimed by a fresh grant
   from where the MODEL has it rather than from the client's report -- which is
   what the client's own bake does, reading the sync agent's `+0x78`.
-  §13 pins the vault replay cell by cell, 15 cells:
-  `20260819T145717` reads 116/85/38/4/213 firings and 3/1/5/2/7 covered of 7 for
-  rules A/B/C/D/E, `171153` 1/7/702/1/66, `182652` 0/3/318/0/40. It also
+  §13 pins the vault replay cell by cell at BOTH threshold cells, 30 cells
+  since 2026-08-25: the FENCE cell (299.33, named explicitly -- the 2026-08-20
+  write-up's numbers, no longer the default) reads `20260819T145717`
+  116/85/38/4/213 firings and 3/1/5/2/7 covered of 7 for rules A/B/C/D/E,
+  `171153` 1/7/702/1/66, `182652` 0/3/318/0/40; the SHIPPED cell (100.0,
+  measured 2026-08-25) reads 117/154/39/4/244, 2/11/726/2/234 and
+  1/5/320/1/110 -- where Rule E covers **13 of 13** on `182652` against the
+  fence's 12, the row that shows "raising costs no coverage" was true of one
+  capture and not the corpus. It also
   re-measures the
-  census -- **0 x 0x002C sent, every run** -- and pins THE FINDING: all four
+  census -- **0 x 0x002C sent, every run** (true of these 2026-08-19
+  captures; corpus-wide the claim died 2026-08-20 with the `--resync` run's
+  18 sends, joined by the pin's 6 -- total 24) -- and pins
+  THE FINDING: all four
   jumps Rule A cannot reach are missed for `not-parked`, i.e. blocked by the
   arrival model rather than by a threshold or a cooldown, so **no parameter
   reaches them**. §14 exists because the prompt this arc was handed called
@@ -7959,7 +7983,20 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   never resolves to halt (the control is explicit-only, REFUSED as a
   ship). Source locks: the resolver called once in main(),
   `--no-cast-stop` registered, the default-on banner keyed on the
-  resolver's own provenance. Floor 113),
+  resolver's own provenance. **Extended 2026-08-25 for the
+  `--resync-separation` lever** (P8 of
+  `studies/movement/followon-notes/p5-resync-disarm.md` §8 — the
+  raised-threshold negative control staged for the `--resync` disarm
+  run): refused without `--resync` naming its base flag and its
+  registered use, refused non-positive AND non-finite (0.0, -100,
+  nan, inf — a zero threshold is an unregistered 2 Hz 0x002C stream,
+  a nan one an inert flag with an on-looking log), allowed with
+  `--resync` with the note naming the OVERRIDE and the P8 protocol so
+  the run log cannot claim the shipped cell, the pin×resync
+  pairwise cell asserted to outrank the modifier, and -- after the
+  review's mutation pass showed the main() rebind unpinned -- the
+  `RESYNC_SEPARATION = a.resync_separation` assignment source-locked
+  by name, CAST_STOP-style. Floor 121),
   `toolkit/authsrv/test_killwindow.py` (the kill window, checked against
   ArenaNet's own kills. Our server sent one message when an agent died —
   `0x00F1` with the death bit — where the real service sends three: status,

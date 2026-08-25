@@ -3942,6 +3942,55 @@ RESYNC = False
 # it does not model the 20 Hz integrator, and the captures were produced by
 # several configurations including two refuted ones -- so treat it as a
 # magnitude, not a score. The score is `movesync.py` on a watched run.
+#
+# *** RECONCILED 2026-08-25 (delegated by the owner, ruled in-session).
+# `resyncscore.py` carried 299.332591 -- gate 1's cut -- as ITS default for
+# this same name, with a paragraph arguing "raise the threshold, drop the
+# cooldown", so the tree held two numbers for one dial and a run would use
+# whichever file the reader trusted. THE SHIPPED VALUE IS 100.0 AND THE FENCE
+# NUMBER LOST, on three grounds (full record:
+# studies/movement/followon-notes/p5-resync-disarm.md sec.4.2a):
+#   (1) THE DIFFERENTIAL BAND [100, 299.33) IS WHERE THE DEFECT LIVES.
+#       Replayed over the shipped-regime corpus (2026-08-24/25, 558
+#       reports), 120 of 157 fires sit in that band -- p50 143.7 u, max
+#       290.5 -- every one refused `in-agreement` at the fence, each
+#       leaving a HOLE-B residual leg; F35's flagship stop-fire (sep
+#       177.4 u, 1.098 s before the arrival matured) is one of them. The
+#       fence is NOT worthless against F35 -- on F35's own capture it
+#       fires at the 512.9 u ARMING report, which the <=1.0 u
+#       short-circuit turns into prevention -- but its fire set is a
+#       STRICT SUBSET of 100's (fence-only fires: 0 of 558, and
+#       structurally impossible under zero-lead: within the 0.5 s
+#       rate-limit shadow of any fire the model-client divergence is at
+#       most 2 x 288 x 0.5 = 288 u < 299.33), so everything the fence
+#       prevents, 100 prevents, and the band is what 100 adds. (The drag
+#       magnitudes themselves, 26-177 u, are a red herring for BOTH
+#       cells: the verdict fires on arming-report staleness, never on
+#       drag size -- an earlier wording here argued from the magnitudes
+#       and was refuted by the review's replay, 2026-08-25.)
+#   (2) HOLE B (p5 note sec.3.5): staleness UNDER the threshold still bakes
+#       a real leg, so the threshold IS the residual snap magnitude -- and
+#       Q10 (PLAN.md sec.7) judges exactly that residual. Bounded-100
+#       against bounded-299 is the ruling's whole substance.
+#   (3) The fence paragraph's own supports do not govern this dial: "raising
+#       costs NO coverage" was measured over the 7 HARD jumps (>520 u) and
+#       says nothing about the sub-299 family where F35 lives; the
+#       retail-rate half prices the rule on traffic it never runs on (origin
+#       pooling is refused, and retail sends 0x002C to the player's own
+#       agent 5 times in the whole live corpus -- fidelity was conceded when
+#       the flag was built); and resyncscore's own measurement -- "firing
+#       more often costs FREQUENCY and not MAGNITUDE" -- names frequency as
+#       the cheap axis. What 100.0 keeps that the fence gives up: 3x of
+#       headroom under gate 1 for the SYNC model to be wrong in, per the
+#       paragraph above.
+# `resyncscore.py` now carries 100.0 too (GATE1_UNITS stays, as the measured
+# client constant it is), and `test_resyncscore.py` pins the two files'
+# agreement so they cannot drift apart again.
+# *** AND THE RATE PROJECTION ABOVE IS SUPERSEDED for today's regime
+# (2026-08-25, p5 note sec.3.6): replayed over 16 shipped-default captures
+# (2026-08-24/25, 558 reports, 1,662 s) this verdict fires 5.60/min = 27.8%
+# of reports -- ~4.5x under the 66-capture figure, which pooled two refuted
+# configurations. Its own caveat ("a magnitude, not a score") held. ***
 RESYNC_SEPARATION = 100.0
 # NOT PICKED -- a ceiling with a derivation. Two copies moving directly apart
 # separate at no more than DEFAULT_RUN_SPEED each way, so the shortest time in
@@ -4182,6 +4231,26 @@ def _maybe_resync(send, state, rec, now=None):
                   sync=(None if sync is None
                         else [round(v, 2) for v in sync]),
                   ours=[round(v, 2) for v in state["pos"]])
+    if reason == "no-sync-model" and not state.get("resync_unseeded_said"):
+        # HOLE D, made loud (p5-resync-disarm.md sec.3.5). The model is
+        # seeded in exactly one place -- character placement -- and a grant
+        # can never seed it (_note_wire_move starts the glide from
+        # _sync_position, which is None while unseeded, and deliberately so).
+        # Any path to a live session that skips the placement block therefore
+        # leaves this flag PERMANENTLY INERT behind a green console: every
+        # verdict refuses `no-sync-model`, nothing ever fires, and a run
+        # scored over it publishes a null the flag never earned. The p5
+        # recon reproduced exactly that by accident: `no-sync-model` x 14,
+        # zero fires, across the whole F35 window. This fires once per
+        # connection, at the first such refusal -- on a session that placed
+        # a character it should never print at all.
+        state["resync_unseeded_said"] = True
+        print("[resync] SYNC MODEL NOT SEEDED at the first verdict. If this "
+              "session placed a character, the placement seed did not run "
+              "and every verdict from here on is an inert `no-sync-model` "
+              "refusal -- the run is a ZERO-EXPOSURE NULL, not a result "
+              "(HOLE D, studies/movement/followon-notes/"
+              "p5-resync-disarm.md sec.3.5).", flush=True)
     if not fire:
         return False
     state["resync_at"] = now
@@ -4601,7 +4670,7 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
                           resync=False, stop_echo=False, click_sweep=False,
                           plane_carry=False, arrival_carry=False,
                           cancel_answer=None, stop_answer=None,
-                          cast_stop=False):
+                          cast_stop=False, resync_separation=None):
     """Pure: may these movement flags run together, and what must be said?
 
     Returns (refusal, notes). `refusal` is None or the text main() raises as a
@@ -4827,6 +4896,27 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
                 "grant policy the run answers a question nobody registered. "
                 "Pass --zero-lead (or nothing: it is the default) with "
                 "--cast-stop."), []
+    if resync_separation is not None and not resync:
+        return ("--resync-separation requires --resync. It is a MODIFIER on "
+                "the resync verdict's one distance dial (the modelled "
+                "SYNC-vs-client separation at which a 0x002C fires) and has "
+                "no send site of its own -- passed alone it changes NOTHING "
+                "while the run log says a threshold arm was on, which is the "
+                "inert-flag defect --plane-carry's refusal documents. Its "
+                "registered use is P8 of studies/movement/followon-notes/"
+                "p5-resync-disarm.md sec.8: --resync --resync-separation "
+                "2000, the nothing-fires negative control whose job is to "
+                "make the snap RETURN. Pass both."), []
+    if resync_separation is not None and (
+            not math.isfinite(resync_separation) or resync_separation <= 0.0):
+        return (f"--resync-separation {resync_separation!r} is not a "
+                f"separation. The dial is a distance in units compared >= "
+                f"against the modelled SYNC-vs-client gap: zero or less "
+                f"fires on EVERY accepted report (a 2 Hz 0x002C stream "
+                f"nobody registered), and a non-finite value never fires "
+                f"while the log says the flag was on. Pass a positive "
+                f"number of units -- {RESYNC_SEPARATION:.1f} is the shipped "
+                f"default, 2000.0 the registered P8 control."), []
     if not zero_lead:
         return None, []
     on_flags = {"--heading-grant": heading_grant,
@@ -4880,7 +4970,14 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
                "clears the arrival tick at 0x006021E6, so the outstanding "
                "grant never arrives and its entry would otherwise come due on "
                "a leg the client abandoned. _note_wire_move drops the queue "
-               "and takes the hard set's own plane as the reached one."))
+               "and takes the hard set's own plane as the reached one.")
+            + ("" if resync_separation is None else
+               f" THRESHOLD OVERRIDDEN: this run fires at "
+               f"{resync_separation:.1f} u, not the shipped "
+               f"{RESYNC_SEPARATION:.1f} u. At 2000.0 this is P8, the "
+               f"registered negative control (p5-resync-disarm.md sec.8): "
+               f"nothing should fire, and the F35 snap should RETURN -- if "
+               f"it does not, a treated arm's zero was never the resync's."))
     if click_sweep:
         notes.append(
             "      + --click-sweep: ALLOWED -- a CLICK-arm diagnostic, not a "
@@ -16884,6 +16981,17 @@ def main():
                          "sends the client's own figure and refuses to send "
                          "anything else. OFF by default; independent of "
                          "--heading-grant and --client-endpoint, both REFUTED.")
+    ap.add_argument("--resync-separation", type=float, default=None,
+                    metavar="UNITS",
+                    help="Override RESYNC_SEPARATION (shipped 100.0 u -- "
+                         "reconciled 2026-08-25, the ruling is on the "
+                         "constant) for ONE run. Requires --resync; refused "
+                         "alone, and refused non-positive or non-finite. "
+                         "Registered use: P8 of studies/movement/"
+                         "followon-notes/p5-resync-disarm.md sec.8 -- "
+                         "--resync --resync-separation 2000, the negative "
+                         "control under which nothing fires and the F35 "
+                         "snap must RETURN.")
     ap.add_argument("--refusal-silent", action="store_true",
                     help="answer a refused skill press with NOTHING, which is "
                          "what this server did until 2026-08-22. It is an A/B "
@@ -17614,7 +17722,7 @@ def main():
         resync=a.resync, stop_echo=a.stop_echo, click_sweep=a.click_sweep,
         plane_carry=plane_carry, arrival_carry=a.arrival_carry,
         cancel_answer=a.cancel_answer, stop_answer=_sa_mode,
-        cast_stop=_cs_mode)
+        cast_stop=_cs_mode, resync_separation=a.resync_separation)
     # The default-flip hint rides ONLY the refusal family it can actually
     # fix: "--zero-lead cannot be combined with X". On a PAIRWISE cell
     # (--cast-stop with --stop-answer, pin with --resync...) the advice is
@@ -18125,23 +18233,36 @@ def main():
               "this policy, and the calibration gate it had to pass first)")
 
     if a.resync:
-        global RESYNC
+        global RESYNC, RESYNC_SEPARATION
         RESYNC = True
+        if a.resync_separation is not None:
+            RESYNC_SEPARATION = a.resync_separation
         print("[map] --resync ON. 0x002C AGENT_UPDATE_POSITION, payload = the "
               "CLIENT's own last accepted report.")
         print(f"      RULE      fire when modelled SYNC-vs-client separation "
               f"reaches {RESYNC_SEPARATION:.0f} u, at most once per "
               f"{RESYNC_MIN_INTERVAL:.2f} s, only on a report no older than "
-              f"{RESYNC_MAX_REPORT_AGE * 1000:.0f} ms.")
+              f"{RESYNC_MAX_REPORT_AGE * 1000:.0f} ms."
+              + ("" if a.resync_separation is None else
+                 " THE THRESHOLD IS AN OVERRIDE (--resync-separation), not "
+                 "the shipped 100.0 u -- p5-resync-disarm.md sec.8 P8."))
         print(f"      HARM      a fire yanks the RENDERED copy backwards by at "
               f"most {DEFAULT_RUN_SPEED * RESYNC_MAX_REPORT_AGE:.0f} u "
               f"(speed x age), against the hard jumps it replaces: p50 "
               f"569-1,969 u, max 3,405 u.")
-        print("      EXPECT    ~25 fires per minute of span (42% of the "
-              "client's reports), at separations p50 183 u / p90 514 / max "
-              "4,633 -- replayed over 66 corpus captures, 4,712 s. If the "
-              "console shows far fewer, the SYNC model is not being fed; far "
-              "more is not reachable, the rate limit caps it at 2 Hz.")
+        print("      EXPECT    ~20-35% of the client's position reports draw "
+              "a fire (27.8% replayed over the shipped-default regime, 558 "
+              "reports of 2026-08-24/25 -- the share is the "
+              "denominator-robust figure; per minute the same replay reads "
+              "5.60 over capture span but ~14.6 over report span, and the "
+              "one live --resync run, 2026-08-20 grantless, measured 22.75 "
+              "over its active span -- so judge the SHARE, not the rate. "
+              "The old 66-capture ~25/min projection pooled two refuted "
+              "configurations; followon-notes/p5-resync-disarm.md sec.3.6 "
+              "and refute-lens-empirical.md sec.1.4). NEAR-ZERO fires -- "
+              "and especially the SYNC MODEL NOT SEEDED line -- means the "
+              "model is not being fed; a flood is not reachable, the rate "
+              "limit caps it at 2 Hz.")
         print("      PREDICTION, stated before the run, in BOTH units because "
               "the last candidate bounded size while the harm arrived as "
               "frequency:")

@@ -29,7 +29,14 @@ the client-controlled agent (`0x005FD5D3`). Separation grows unwatched to
 catalogued primitive that calls `AgTrack::Clear` first (`0x005FDA78`) and then
 SetPositions BOTH copies with no gate on either arm. Our server has sent it
 ZERO times in this corpus -- re-measured here, 0 of the `sent` records in all
-three arc captures. Full derivation: `studies/movement/FINDINGS.md`, sections
+three arc captures. *** STALE SINCE 2026-08-20 as a statement about the
+server: the `--resync` run `authsrv-20260820T182119-c1.jsonl` sent 18 (zero
+grants, so not a disarm test), and `--cast-stop=pin` (shipped 2026-08-25)
+has added 6 co-timed with movetap, no warp observed -- corpus total 24
+(studies/movement/followon-notes/refute-lens-empirical.md sec.1.1/sec.8.2,
+README sec.2.1). Still TRUE of the three
+2026-08-19 arc captures this file's pinned cells replay, which predate
+both senders. *** Full derivation: `studies/movement/FINDINGS.md`, sections
 dated 2026-08-19 round 3 and 2026-08-20 rounds 1-3.
 
 ------------------------------------------------------------------------------
@@ -155,6 +162,29 @@ TWO THINGS THAT PRICE THE PARAMETERS, both measured here:
     to 299.33 u costs NO coverage on our corpus (7/7 either way) and halves the
     retail rate. Raise the threshold, drop the cooldown.
 
+    *** RULED AGAINST, 2026-08-25 (owner-delegated; the full record is
+    studies/movement/followon-notes/p5-resync-disarm.md sec.4.2a and the
+    ruling block on `authsrv.py`'s RESYNC_SEPARATION). The shipped threshold
+    stays 100.0 and THIS FILE'S DEFAULT NOW AGREES. The decisive measurement
+    is the DIFFERENTIAL BAND [100, 299.33): over the shipped-regime corpus
+    (558 reports) 120 of 157 fires sit in it -- p50 143.7 u -- every one
+    refused `in-agreement` at the fence, each leaving a HOLE-B residual leg
+    (p5 note sec.3.5: the threshold IS the residual snap magnitude, and Q10
+    judges the residual). The fence's fire set is a strict SUBSET of 100's
+    (fence-only fires 0 of 558, and structurally impossible under zero-lead
+    inside the 0.5 s rate-limit shadow: 2 x 288 x 0.5 = 288 u < 299.33), so
+    the band is pure addition; and on `182652` the 100 cell covers 13 of 13
+    hard jumps against the fence's 12 -- the miss is `below-threshold` at
+    sep 269.3, inside the band -- so this paragraph's "costs NO coverage
+    (7/7 either way)" was true of the shipped capture, not of the corpus.
+    The retail-rate half prices the rule on traffic it never runs on
+    (origins are never pooled, and retail sends 0x002C to the player's own
+    agent 5 times in the whole live corpus -- fidelity was conceded at
+    birth), and the first bullet's own finding -- firing more often costs
+    FREQUENCY and not MAGNITUDE -- is the cheap-axis half of the same
+    ruling. GATE1_UNITS below is untouched: it is a measured client
+    constant and the gate-1 proxy still needs it. ***
+
 THE THRESHOLD DEFAULT IS MEASURED, THE COOLDOWN DEFAULT IS NOT, and they are
 labelled accordingly below.
 
@@ -251,7 +281,12 @@ import vaultpath  # noqa: E402
 # deliberately the least aggressive defensible default: it is the last moment at
 # which a snap is not already earned.
 GATE1_UNITS = 299.332591
-RESYNC_SEPARATION = GATE1_UNITS
+# RECONCILED 2026-08-25: the shipped constant, agreeing with `authsrv.py`'s
+# (test_resyncscore pins the agreement). This file's default was GATE1_UNITS
+# until the ruling recorded in the header paragraph above; the pinned replay
+# cells measured at that fence keep naming GATE1_UNITS explicitly, because a
+# pin that silently floats with a default is not a pin.
+RESYNC_SEPARATION = 100.0
 # CHOSEN, NOT MEASURED, and it is the one free parameter in the rule. Nothing in
 # the binary or the corpus names a re-fire interval; the client's own report
 # cadence is ~0.25 s, so 0.0 means "on every qualifying report" and anything
@@ -260,9 +295,11 @@ RESYNC_SEPARATION = GATE1_UNITS
 # without the sweep -- the same rule `movesync` applies to its active-time
 # threshold.
 RESYNC_COOLDOWN = 1.0
-# The sweep axes. THRESH_SWEEP brackets the measured fence from both sides;
+# The sweep axes. THRESH_SWEEP brackets the measured fence from both sides
+# AND names the shipped default (100.0 -- absent until the 2026-08-25
+# reconciliation, which meant the tool never priced the value that ships);
 # COOLDOWN_SWEEP runs from "every report" to "twice a minute".
-THRESH_SWEEP = (150.0, GATE1_UNITS, 600.0, 1200.0)
+THRESH_SWEEP = (100.0, 150.0, GATE1_UNITS, 600.0, 1200.0)
 COOLDOWN_SWEEP = (0.0, 0.25, 1.0, 2.5, 5.0)
 
 RULE_A = "A:parked"
