@@ -13,6 +13,7 @@ numbered by candidate. `REALFIX-H<n>` = harness builds. `REALFIX-L<n>` = live ru
 `REALFIX-E` = the admissible event definition. `REALFIX-X<n>` = L2 protocol cells.
 `REALFIX-W<n>` = L2's measured walk facts. `REALFIX-T<n>` = timing/tooling deltas.
 `REALFIX-I<n>` = instrument changes. `REALFIX-F<n>` = fix candidates.
+`REALFIX-A<n>` = accuracy-campaign rungs (minted 2026-08-25, §0 below).
 Minted 2026-08-22/23: **`REALFIX-I2`** = a click-arm exemption from rule 2,
 priced and DEFERRED (L9's pre-registration ruling 1; mandatory only if a run
 aborts on exposure a fourth time). **`REALFIX-I3`** = sending `GAME_SMSG 0x0023`,
@@ -28,11 +29,111 @@ Convention: [studies/idents/CONVENTION.md](../idents/CONVENTION.md).
 
 **Status, and this banner used to read "NOTHING HERE HAS BEEN BUILT OR RUN" after two things here had been built.** As of 2026-08-21: **REALFIX-C0 and REALFIX-H1 are BUILT** (§4 items 1-2), and **REALFIX-P2 `--zero-lead` is BUILT and unrun** — the flag, its `_heading_grant_ok` predicate and its composition refusals are in `authsrv.py`, locked by `test_position_trust.py` §14, with its prediction printed at startup. **NOTHING HERE HAS BEEN RUN AT A CLIENT.** Every number cited is from the round-5 research draft above and traces to a lane or a FINDINGS line, except where a later dated line re-measures it. Origins are marked; `ours` and `live` are never pooled.
 
-**Read this first, or you will rebuild a refuted thing:** `--stop-echo`, `--heading-grant` and `--client-endpoint` are all built, run and REFUTED (`authsrv.py:1004-1023`, `:1049-1075`, `:1090-1099`). A stop-arm `0x0029` **is** `--stop-echo`. A heading grant at the client's own unclipped endpoint **is** `--client-endpoint`. Neither is a fresh idea.
+**Read this first, or you will rebuild a refuted thing:** `--stop-echo`, `--heading-grant` and `--client-endpoint` are all built, run and REFUTED (`authsrv.py:1004-1023`, `:1049-1075`, `:1090-1099` — *line refs drifted by 2026-08-25 edits; the blocks now sit near `:1071`/`:1154`/`:1201`*). A stop-arm `0x0029` **is** `--stop-echo`. A heading grant at the client's own unclipped endpoint **is** `--client-endpoint`. Neither is a fresh idea. *But read §0's era analysis before treating any of the three as a verdict on a retail-shaped policy: all three kills date to 2026-08-19, the full-lead-click era, and the 2026-08-25 recon found only three refutations in the whole graveyard that transfer policy-independently (`0x0027` re-arm, the direction/backward guard, "+0.500 u as the fix").*
 
 ---
 
-## 1. Candidates
+## 0. THE ACCURACY CAMPAIGN (opened 2026-08-25, owner's re-scope: "we need to get it very accurate")
+
+**The re-scope.** The owner ended the checkpoint-shipping mode the evening the
+`--resync` disarm run was scored: no default flips, no incremental ship rulings —
+movement gets fixed to retail accuracy, and this campaign is the ladder. Grounded by a
+four-lane recon (refutation graveyard / retail contract / defect ledger / client
+constraints) over this tree at `92a3c93`; every claim below carries its lane's label.
+
+### 0.1 The diagnosis — one debt, four expressions, and scaffolding all the way down
+
+The open movement defects are ONE structural debt: **our grant policy diverges from
+retail's in shape, cadence and speed-truth**, and the client — whose every granted
+destination arms a scheduled hard arrival (bit 18 cleared on all our grants; the
+arrival is a teleport onto `m_targetPoint` at exact tick equality) — expresses that
+divergence as the staleness family. The ledger (OBSERVED magnitudes):
+**F27** walk-start snap (magnitude = staleness, 18 of 96 owner stops past 190 u, max
+748 u); **F33** reconcile-on-answer (346–864 u, gate 1 at 299.33 u); **F35** arrival
+drags (8 of 586 fires, 26–3,437 u, ~1 per 2.6 min owner-era, wire-silent); the
+**click-leg death** (the client's own click-armed `+0x48` times out because we send
+nothing mid-leg, 864 u measured). Everything shipped so far — `--zero-lead`,
+`--grant-suppress`, `--cast-stop=pin`'s dead-reckoner, opt-in `--resync` — **bounds**
+the divergence; none removes it, and the pin×resync one-`0x002C`-policy conflict plus
+the instant-skill divergence (retail does NOT stop a runner for 30 of 30 live shout
+presses; our shipped pin does) are costs of the scaffolding itself.
+
+**Retail's contract, measured** (the target; OBSERVED at wire level unless noted):
+grants carry the client's own proposed endpoint `reported + vec2 + 0.500·unit(vec2)`
+(|vec2| 765–768 u hard-ceilinged), ~31% world-truncated short ALONG the ray to a
+median 348 u by a boundary whose navmesh identity is RECONSTRUCTION (Q7); burst
+grammar `0x0025 → 0x002B → 0x0029`, `0x0029` always last (3,023 of 3,071); essentially
+every `0x003D` answered at one RTT, inter-grant p50 0.490 s, 88.5% of arms superseded
+before maturity; stops re-pinned by a zero-distance `0x0029` echo (134 of 172); cast
+starts halted by a bare `0x0028` after the `0x00E4` (4 of 4); `0x002C` to the player
+essentially never (5 in the whole live corpus); copies' separation p50 83 u with zero
+snaps (model-derived). **Why retail survives its own +766 u leads while both our lead
+arms warped: speed truth** — `--client-endpoint` met the payload and cadence terms and
+warped MORE (14.6 jumps/min), and its record blames the one term it lacked: the player
+moved at a median 111.7 u/s while every grant asserted 288. Retail is "safe at all of
+its leads only because its v_player ≈ S" (RECONSTRUCTION), and retail ships the two
+levers we never have: the `0x002B` family float (backpedal 0.66 witnessed on the wire)
+and the D2 clip mixture.
+
+### 0.2 The load-bearing unknowns, in dependency order
+
+1. **REALFIX-Q6 / SPEED TRUTH (the term that killed every lead arm): does a wire
+   `0x002B` float steer the SYNC copy's reckoning speed (`+0x5C`/`+0x60`)?** We send
+   moveSpeed 1.0 in 621 of 621; the drawn body backpedals at ~189.8 u/s anyway
+   (client-side family logic), so during any non-forward or snared movement the copy
+   out-reckons the body — the `--client-endpoint` failure mechanism. The decider has
+   been named three times and never run: **movetap on `+0x5C`/`+0x60` during sustained
+   backpedalling while the server sends `0x002B` floats.** Movetap already reads both
+   fields. If the wire CAN set the copy's speed, speed truth is one sender away; if it
+   cannot, speed truth must come through lead scaling (retail's harm law
+   `L·(S−v)/S`, and its clip mixture may BE that scaling).
+2. **The sign-of-lead protection (UNVERIFIED, the campaign's central hypothesis):**
+   does a forward-pointing lead make arrival maturation a no-op (the arrival lands
+   where the reckoning already is — assert 0x486's own invariant), converting HOLE A's
+   wire-silent windows from hazard to irrelevance? Retail's 11.5% matured arms with
+   zero snaps say yes by model; nothing of ours has measured it.
+3. **REALFIX-Q7 / the D2 clip boundary**: is retail's truncation our walkable navmesh?
+   Cheapest: one loopback capture scored against our own `clip_to_walkable`.
+4. **Collision-blindness**: the bake is collision-blind (OBSERVED), so must a lead be
+   clipped to walkable, or does the arrival teleport make wall-adjacent leads harmful?
+   Unmeasured either way.
+
+### 0.3 The rungs
+
+- **REALFIX-A1 — the speed-truth probe (small build + ~10 min owner run).** A
+  diagnostic sender (checksum-probe pattern: off by default, its own lattice cells)
+  that puts `0x002B [rate, family]` on the wire per the FAMILY_RATE table at report
+  cadence, plus the registered run: sustained backpedal and strafe legs, movetap
+  watching `+0x5C`/`+0x60`. **Prediction, registered here first: if the fields move
+  off 288.0/1.0 in step with the sent floats, Q6 resolves WIRE-STEERABLE and A2's arm
+  carries the float; if they hold 288.0/1.0 (the corpus's only observed values), Q6
+  resolves CLIENT-SIDE-ONLY and A2's lead must scale by predicted speed instead.**
+  Settles FAMILY_RATE (CONTESTED, one wire witness) as a side effect.
+- **REALFIX-A2 — the lead-mechanism probe (build + ~15 min owner run).** A NEW
+  diagnostic flag (not the refuted arms; new composition cells; audited against the
+  zero-lead invariants): D1-shaped forward lead sized by A1's answer, granted at
+  report cadence, zero-distance stop-ack at `0x0047`s — the minimal retail shape.
+  Scored with movetap + movesync on: arrival continuity at maturation (unknown 2),
+  F27 stop staleness, F33 exposure, and the movesync hard bar. This is the
+  sign-of-lead experiment; its predictions get registered at build time, one rung
+  after A1 answers the speed question.
+- **REALFIX-A3 — the full contract, incrementally**: S1/S2/S3 burst grammar, the D2
+  clip (per Q7's answer), mid-leg re-grants on click legs (closing the click-leg
+  death and HOLE A's 12.9 s silence), the bare-`0x0028` cast start replacing the
+  pin's dead-reckoner (retiring the pin×resync conflict and the instant-skill
+  divergence at once — gate on activation > 0 per the ledger). Each lever lands with
+  registered predictions and its own run; order decided by what A2 measures.
+- **REALFIX-A4 — acceptance**: our loopback tapes must be indistinguishable from
+  retail under the standing instruments — the movesync hard bar (retail scores ZERO
+  of 2,747 intervals over 400 u/s; ours must too), the resyncscore retail-control
+  table, arrival-continuity at maturation, and a re-test of every ledger entry (F27
+  stops, F33, F35, click-leg, cast-while-running, shouts NOT stopping a runner).
+
+**Interim state (unchanged until the campaign lands):** today's defaults stand —
+`--zero-lead`, `--grant-suppress`, `--cast-stop=pin`; `--resync` stays opt-in (its
+run record: mechanism confirmed at 0.000 u fire cost, 8-of-8 known drags preventable —
+`followon-notes/p5-resync-disarm.md` §9). No ship rulings are pending; the scaffolding
+retires piece by piece as A3's levers make it redundant.
 
 Attachment points are lines in `toolkit/authsrv/authsrv.py` in this tree.
 

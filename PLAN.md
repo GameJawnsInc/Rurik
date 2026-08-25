@@ -1568,9 +1568,24 @@ Q11's ground. Residuals P5 still does not reach: HOLE B's sub-100 u tail
 (26–54 u) and HOLE A's wire-silent windows. The operator's "jittery"
 control note found NO
 objective correlate and stays UNVERIFIED (movetap delivers only ~9–12 Hz
-effective on this machine, an instrument floor now on record). The ship
+effective on this machine, an instrument floor now on record). ~~The ship
 ruling on `--resync` — bounded residual vs measured 0.000 u fire cost —
-is the owner's next call.
+is the owner's next call.~~ **SUPERSEDED the same evening — the owner
+re-scoped: no checkpoint shipping; movement gets fixed to retail accuracy.
+THE ACCURACY CAMPAIGN is `studies/movement/REALFIX.md` §0** (opened
+2026-08-25 from a four-lane recon: refutation graveyard, retail contract,
+defect ledger, client constraints): one debt, four expressions
+(F27/F33/F35/click-leg death), all tracing to the grant policy's shape,
+cadence and missing SPEED TRUTH — the term whose absence killed both old
+lead arms and which retail supplies via the `0x002B` family float and its
+clip mixture. Rungs: **A1** the speed-truth probe (does a wire `0x002B`
+float steer the sync copy's `+0x5C`/`+0x60`? — the thrice-named,
+never-run decider; ~10 min owner time), **A2** the minimal
+forward-lead/stop-ack probe testing the sign-of-lead hypothesis, **A3**
+the full retail contract incrementally (retiring the pin, the pin×resync
+conflict and the instant-skill divergence as it lands), **A4** acceptance
+= indistinguishable from retail under the standing instruments. Defaults
+unchanged until the campaign lands; `--resync` stays opt-in.
 *The staging block that preceded the run, kept for the record:*
 The follow-on recon (`studies/movement/followon-notes/README.md`, merged
 to `main` the same day) answered F35's counterfactual from tape (castless,
