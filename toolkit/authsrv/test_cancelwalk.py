@@ -19,10 +19,14 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
 import checks  # noqa: E402
 
-# FLOOR 82, from the green run of 2026-08-25 that landed R10's
-# --cast-stop=pin arm (59 after the R8 review pass; 58 when R8's section
-# landed; 43 with R1-R6's arms; 29 with R1-R4's alone; 24 with R1-R3).
-LEDGER = checks.Ledger("cancelwalk arms", floor=82)
+# FLOOR 100, from the green run of 2026-08-25 that landed the re-review's
+# yield -- the wire-plane burst, the legacy-bool refusal, the M7 subscript
+# hardening (98 with the 8.3a review fixes: B1's click-walk latch, B2's
+# census rate families, and the plane-at-est / off-mesh-refusal /
+# model-park REALs; 82 when R10's --cast-stop=pin arm landed; 59 after
+# the R8 review pass; 58 when R8's section landed; 43 with R1-R6's arms;
+# 29 with R1-R4's alone; 24 with R1-R3).
+LEDGER = checks.Ledger("cancelwalk arms", floor=100)
 check = LEDGER.ok
 
 PLAYER = 1
@@ -389,12 +393,39 @@ def section_cast_stop():
                               for n in notes),
           "pin allowed with --zero-lead, and the startup note names R10 "
           "and its diagnostic-only status", f"notes={notes}")
+    # The legacy bool, refused loudly at entry (re-review 2026-08-25):
+    # cast_stop=True armed every shared refusal cell on truthiness while
+    # matching neither mode -- no startup note, the pin-x-resync cell
+    # dead, an on-but-unnamed arm for any API caller.
+    try:
+        authsrv.zero_lead_composition(zero_lead=True, cast_stop=True)
+        legacy = None
+    except ValueError as e:
+        legacy = str(e)
+    check(legacy is not None and "halt" in legacy and "pin" in legacy,
+          "cast_stop=True (the pre-R10 bool) raises a loud ValueError "
+          "naming both real modes -- never an on-but-unnamed arm",
+          f"{legacy!r}")
     # The reckon, driven as a pure function -- the arithmetic the 0x002C
-    # aims with, and every refusal door.
+    # aims with, and every refusal door. The mesh is REQUIRED since the
+    # 8.3a review (R2), so the base motion state carries a permissive
+    # fake: walkable everywhere, clips nothing, resolves every plane to
+    # the preferred one -- each door then closes it one way on purpose.
+    class _FakePM:
+        def __init__(self, ok=True, stop_at=None, plane="prefer"):
+            self._ok, self._stop, self._plane = ok, stop_at, plane
+        def walkable(self, x, y):
+            return self._ok
+        def clip(self, x0, y0, x1, y1, step=None):
+            return self._stop if self._stop is not None else (x1, y1)
+        def plane_at(self, x, y, prefer=None):
+            return prefer if self._plane == "prefer" else self._plane
+
     def motion(**over):
         base = {"client_pos": (1000.0, -500.0), "client_pos_at": 100.0,
                 "client_plane": 0, "kbd_moving_at": 100.0,
-                "heading": (766.0, 0.0), "heading_mt": 1}
+                "heading": (766.0, 0.0), "heading_mt": 1,
+                "pathmap": _FakePM()}
         base.update(over)
         return base
     pt, pl, why = authsrv.cast_stop_reckon(motion(), 101.5)
@@ -403,10 +434,45 @@ def section_cast_stop():
           and why == "reckoned",
           "a straight run reckons pos + unit(vec2) x 288 x dt exactly "
           "(1.5 s at 288 = 432 u east)", f"({pt}, {pl}, {why})")
-    pt, _, _ = authsrv.cast_stop_reckon(motion(heading_mt=4), 101.0)
-    check(pt is not None and abs(pt[0] - (1000.0 + 0.66 * 288.0)) < 1e-6,
-          "mt 4 backpedals at 0.66 x 288 = 190.08 u/s -- the rate R8's "
-          "own tape measured (190.1 at the mt=4 press)", f"{pt}")
+    # B2 (review 2026-08-25): the rate is the census FAMILY's. The old
+    # table (mt 4 = 0.66, everything else 1.0) reckoned a kiting or
+    # strafing cast at 288 and hard-set the body FORWARD past the
+    # registered 35 u bar.
+    for mt in (2, 3):
+        pt, _, _ = authsrv.cast_stop_reckon(motion(heading_mt=mt), 101.0)
+        check(pt is not None and abs(pt[0] - 1288.0) < 1e-6,
+              f"mt {mt} rides the forward family at 1.0 x 288", f"{pt}")
+    for mt in (4, 5, 6):
+        pt, _, _ = authsrv.cast_stop_reckon(motion(heading_mt=mt), 101.0)
+        check(pt is not None
+              and abs(pt[0] - (1000.0 + 0.652 * 288.0)) < 1e-6,
+              f"mt {mt} rides the backward family at 0.652 x 288 = 187.8 "
+              f"-- the census's OBSERVED 187.89, which R8's own mt=4 tape "
+              f"corroborates at 190.1 (the old 0.66-for-mt-4-alone table "
+              f"was B2)", f"{pt}")
+    for mt in (7, 8):
+        pt, _, _ = authsrv.cast_stop_reckon(motion(heading_mt=mt), 101.0)
+        check(pt is not None
+              and abs(pt[0] - (1000.0 + 0.75 * 288.0)) < 1e-6,
+              f"mt {mt} rides the side family at 0.75 x 288 = 216 -- the "
+              f"census's ~215, the weak row, LABELLED", f"{pt}")
+    _, _, why = authsrv.cast_stop_reckon(motion(heading_mt=9), 101.0)
+    check(why == "unverified-rate",
+          "an mt outside the census's 1..8 has no observed rate and "
+          "REFUSES instead of guessing -- the future-build door")
+    # B1 (review 2026-08-25): the click-walk door, and its PRECEDENCE.
+    _, _, why = authsrv.cast_stop_reckon(motion(click_moving_at=100.5),
+                                         101.0)
+    check(why == "click-walk",
+          "a click in flight refuses as click-walk, not as parked or "
+          "no-heading -- the label the send site suppresses the whole "
+          "cast-stop on")
+    _, _, why = authsrv.cast_stop_reckon({"click_moving_at": 1.0}, 101.0)
+    check(why == "click-walk",
+          "and it outranks no-report: a first-ever movement that is a "
+          "click must not fire the halt through another door -- the "
+          "0x0028 alone on a click-walking body is the B1 warp (corpus "
+          "p50 1,164 u)")
     _, _, why = authsrv.cast_stop_reckon(motion(kbd_moving_at=None), 101.0)
     check(why == "parked",
           "kbd_moving_at cleared (the 0x0047 arm's stop) refuses: a "
@@ -431,25 +497,42 @@ def section_cast_stop():
           "client has spoken since we parked it")
     _, _, why = authsrv.cast_stop_reckon(motion(client_pos_at=200.0), 101.0)
     check(why == "future-report", "a future-dated report refuses")
-
-    class _FakePM:
-        def __init__(self, ok, stop_at):
-            self._ok, self._stop = ok, stop_at
-        def walkable(self, x, y):
-            return self._ok
-        def clip(self, x0, y0, x1, y1, step=None):
-            return self._stop
     pt, _, why = authsrv.cast_stop_reckon(
-        motion(pathmap=_FakePM(True, (1100.0, -500.0))), 101.5)
+        motion(pathmap=_FakePM(stop_at=(1100.0, -500.0))), 101.5)
     check(pt == (1100.0, -500.0) and why == "reckoned:clipped",
           "the navmesh clips the EXTRAPOLATED leg and the why says so",
           f"({pt}, {why})")
-    pt, _, why = authsrv.cast_stop_reckon(
-        motion(pathmap=_FakePM(False, (0.0, 0.0))), 101.5)
-    check(pt is not None and abs(pt[0] - 1432.0) < 1e-6
-          and why == "reckoned",
-          "standing OUTSIDE the mesh suspends the clip rather than "
-          "freezing the reckon -- clip_to_walkable's own rule", f"{pt}")
+    # R2 (review 2026-08-25): a wire consumer gets NO standing-outside
+    # suspension. This check used to assert the OPPOSITE -- that an
+    # off-mesh start suspends the clip and reckons raw, clip_to_walkable's
+    # own rule -- which shipped an unclipped ray of up to ~3.7 k u into a
+    # hard-set of both copies from exactly the positions (5.5% of stops,
+    # mesh edges) where our trapezoids are known-wrong.
+    _, _, why = authsrv.cast_stop_reckon(
+        motion(pathmap=_FakePM(ok=False)), 101.5)
+    check(why == "off-mesh",
+          "a reported point the mesh cannot vouch for REFUSES the reckon "
+          "-- the honest degradation for a hard-set is the bare halt, "
+          "never a raw ray")
+    _, _, why = authsrv.cast_stop_reckon(motion(pathmap=None), 101.5)
+    check(why == "no-mesh",
+          "and no mesh in hand refuses the same way -- nothing can vouch "
+          "for any point of the extrapolation")
+    # R1 (review 2026-08-25): the plane is resolved AT the extrapolated
+    # point, never copied from the report.
+    pt, pl, why = authsrv.cast_stop_reckon(
+        motion(client_plane=12, pathmap=_FakePM(plane=5)), 101.5)
+    check(pt is not None and pl == 5 and why == "reckoned",
+          "the 0x002C's plane comes from plane_at(est), not from the "
+          "report -- slot 2 becomes the client's own current plane "
+          "(agent+0x80), and a stale value there is the click arm's "
+          "measured fall-through-under-stairs corruption", f"pl={pl}")
+    _, _, why = authsrv.cast_stop_reckon(
+        motion(pathmap=_FakePM(plane=None)), 101.5)
+    check(why == "no-plane",
+          "and where the geometry cannot say (plane_at None -- 'say "
+          "nothing, never a guess'), the reckon refuses like every other "
+          "door")
     # The burst, driven -- not grepped. handle_skill_press per mode and
     # per seeded motion state; labels recorded, because the pin arm's
     # refusal telemetry IS the 0x0028's label.
@@ -501,7 +584,8 @@ def section_cast_stop():
         atk, _ = burst("pin", True,
                        seed={"client_pos": (0.0, 0.0), "client_pos_at": 0.0,
                              "client_plane": 0, "kbd_moving_at": 0.0,
-                             "heading": (766.0, 0.0), "heading_mt": 1})
+                             "heading": (766.0, 0.0), "heading_mt": 1,
+                             "pathmap": _FakePM()})
         atk_anim = [i for i, (op, vals, _) in enumerate(atk)
                     if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
                     and vals[0] == agents.GV_ATTACK_SKILL_ACTIVATED]
@@ -516,7 +600,9 @@ def section_cast_stop():
         seed = {"client_pos": (1000.0, -500.0),
                 "client_pos_at": _time.time() - 1.0, "client_plane": 0,
                 "kbd_moving_at": _time.time() - 1.0,
-                "heading": (766.0, 0.0), "heading_mt": 1}
+                "heading": (766.0, 0.0), "heading_mt": 1,
+                "pathmap": _FakePM(), "pos": (700.0, -500.0),
+                "dest": (9999.0, -500.0)}
         pon, pst = burst("pin", False, seed=dict(seed))
         check(len(pins(pon)) == 1 and len(stops(pon)) == 1
               and pins(pon)[0] < stops(pon)[0],
@@ -533,10 +619,34 @@ def section_cast_stop():
               "the 0x0028's label carries the fired reckon verdict and "
               "the pin note lands in state for the second-cast guard",
               f"label={pon[stops(pon)[0]][2]!r}")
+        # R3 (review 2026-08-25): a SENT pin parks the server's own
+        # integrator, not just the client's two copies.
+        check(pst.get("dest") is None
+              and pst.get("pos") == (pvals[1][0], pvals[1][1]),
+              "the sent pin parks the model at the pin -- dest dropped, "
+              "pos hard-set to the 0x002C's own point, so the 20 Hz tick "
+              "stops walking a phantom past the pinned body",
+              f"pos={pst.get('pos')}, dest={pst.get('dest')}")
+        # R1 on the WIRE, not just at the pure reckon: the re-review's
+        # lattice pass caught that every burst seed had client_plane=0
+        # with a prefer-echoing fake mesh, so a mutation shipping the
+        # REPORT's plane in the 0x002C payload stayed green. Report 12,
+        # mesh 5: the sent plane must be the mesh's.
+        pw, _ = burst("pin", False, seed=dict(seed, client_plane=12,
+                                              pathmap=_FakePM(plane=5)))
+        check(len(pins(pw)) == 1 and pw[pins(pw)[0]][1][2] == 5,
+              "the SENT 0x002C carries plane_at(est)'s answer, not the "
+              "report's: report says 12, the mesh says 5, the wire says "
+              "5 -- the stale-plane fall-through corruption cannot ride "
+              "the payload", f"{pw[pins(pw)[0]][1]}")
         # Pin, second cast, no report since: the guard refuses the
-        # 0x002C and the label says why.
+        # 0x002C and the label says why. `.get`, not a subscript: under
+        # the M7 mutation (the pin note never written) a subscript
+        # KeyError'd here and ABORTED the section, so every later check
+        # ran as a traceback instead of a named FAIL -- the weaker
+        # guard, caught by the re-run mutation probe.
         p2, _ = burst("pin", False, seed=dict(seed,
-                      cast_stop_pin=pst["cast_stop_pin"]))
+                      cast_stop_pin=pst.get("cast_stop_pin")))
         check(pins(p2) == [] and len(stops(p2)) == 1
               and "pin:pinned-parked" in p2[stops(p2)[0]][2],
               "pin, second cast with no report between: NO second 0x002C "
@@ -548,6 +658,25 @@ def section_cast_stop():
               and "pin:parked" in pk[stops(pk)[0]][2],
               "pin, parked belief: no 0x002C, and the label says "
               "'parked'", f"{pk[stops(pk)[0]][2]!r}")
+        # B1 (review 2026-08-25): a click-walk suppresses the WHOLE
+        # cast-stop -- both arms, both messages. The seed keeps the
+        # moving keyboard belief armed, so without the click latch this
+        # is exactly the burst that fired both messages above.
+        for mode in ("pin", "halt"):
+            ck, _ = burst(mode, False,
+                          seed=dict(seed, click_moving_at=_time.time()))
+            ck_anim = [
+                i for i, (op, vals, _) in enumerate(ck)
+                if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
+                and vals[0] == agents.GV_SKILL_ACTIVATED]
+            check(stops(ck) == [] and pins(ck) == [] and len(ck_anim) == 1,
+                  f"{mode}, click-walk in flight: NO 0x0028 and NO 0x002C "
+                  f"-- a click-walking body is one no belief can place, "
+                  f"and the 0x0028 alone is the B1 warp (sync copy parked "
+                  f"at the leg's start, corpus p50 1,164 u); the burst "
+                  f"itself still goes out (the animation proves the press "
+                  f"was not refused) and the cast glides -- F28, a defect "
+                  f"but not a warp", f"{ck}")
     finally:
         authsrv.skill_timing = saved_timing
         authsrv._is_attack_skill = saved_attack
@@ -563,6 +692,15 @@ def section_cast_stop():
           and src.count("cancelwalk R10") >= 1,
           "ONE gate carrying the non-attack scoping, ONE R8-labelled "
           "0x0028 site, ONE R10 0x002C site")
+    check(src.count('state["click_moving_at"] = time.time()') == 1
+          and src.count('state["click_moving_at"] = None') == 2
+          and src.count('_cs_click = state.get("click_moving_at")') == 1
+          and "pin:click-walk" in src,
+          "B1's latch is wired where the review said it must be: armed "
+          "in ONE place (the 0x003E arm, every click), cleared in TWO "
+          "(the 0x003D and 0x0047 arms -- the client speaking again), "
+          "and the send site consults it before EITHER arm, printing the "
+          "click-walk label the capture scores")
     check(src.count("CAST_STOP = None") == 1
           and src.count("CAST_STOP = _cs_mode") == 1
           and "cast_stop=_cs_mode" in src

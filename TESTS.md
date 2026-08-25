@@ -7882,23 +7882,57 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   bare halt — F31 warps — PLAN §7 Q10): §7 now also drives
   `parse_cast_stop` (halt/pin in, typos refused naming both arms AND the
   ruling), `cast_stop_reckon` as a pure function — the straight-leg
-  arithmetic exactly (1.5 s at 288 = 432 u), the OBSERVED mt-4 backpedal
-  rate 0.66×288, and every refusal door: `parked`, `no-report`,
-  `report-refused` (`_resync_verdict`'s refused-report hole, guarded
-  here too), `pinned-parked` (the R8 second-cast trap) with its
+  arithmetic exactly (1.5 s at 288 = 432 u), the rate table, and every
+  refusal door: `parked`, `no-report`, `report-refused`
+  (`_resync_verdict`'s refused-report hole, guarded here too),
+  `pinned-parked` (the R8 second-cast trap) with its
   report-newer-than-pin reopen, `future-report`, plus the navmesh clip
-  (`reckoned:clipped`) and the standing-outside suspension via a fake
-  pathmap — then the pin BURST driven with seeded motion state: one
-  0x002C `[player, reckoned point, plane]` BEFORE the 0x0028, the
-  0x0028's label carrying the reckon verdict (the refusal telemetry IS
-  the label), the `cast_stop_pin` state note landing, the second-cast
-  guard refusing a second 0x002C live, the parked belief sending none,
-  and an attack skill under pin with a moving belief seeded sending
-  neither message. New lattice cells: pin×`--resync` refused naming the
-  shared 0x002C (halt×resync still composes, its note now carrying the
-  ruling), both modes through the shared cells. Source locks: one 0x002C
-  site (`CAST-STOP PIN`), default None, the parsed MODE routed. Floor
-  82),
+  (`reckoned:clipped`) via a fake pathmap — then the pin BURST driven
+  with seeded motion state: one 0x002C `[player, reckoned point, plane]`
+  BEFORE the 0x0028, the 0x0028's label carrying the reckon verdict (the
+  refusal telemetry IS the label), the `cast_stop_pin` state note
+  landing, the second-cast guard refusing a second 0x002C live, the
+  parked belief sending none, and an attack skill under pin with a
+  moving belief seeded sending neither message. New lattice cells:
+  pin×`--resync` refused naming the shared 0x002C (halt×resync still
+  composes, its note now carrying the ruling), both modes through the
+  shared cells. Source locks: one 0x002C site (`CAST-STOP PIN`), default
+  None, the parsed MODE routed. **Extended 2026-08-25 again for the
+  §8.3a review fixes** (two BLOCKERs — both warps, both failing PLAN §7
+  Q10's bar — and three REALs, from the adversarial pass over the wired
+  pin): §7's reckon drive now asserts B1's `click-walk` door — a click
+  in flight refuses AND outranks `no-report`, because it is the one
+  label the send site suppresses the whole cast-stop on (the 0x0028
+  alone on a silently-pathing body warps onto a sync copy parked at the
+  click leg's start, corpus p50 1,164 u) — with the BURST driven both
+  arms under a click seed (no 0x0028, no 0x002C, the animation proving
+  the press was not refused) and source locks pinning the latch's
+  wiring (armed once in the 0x003E arm, cleared twice — 0x003D and
+  0x0047 — consulted at the send site before EITHER arm); B2's census
+  family rates ({1,2,3} 1.0 and {4,5,6} 0.652 driven per-mt, both
+  OBSERVED; {7,8} 0.75 LABELLED, the weak row; mt 9 refused
+  `unverified-rate` — the old mt-4-alone 0.66 table hard-set a strafing
+  cast forward past the registered 35 u bar); R1's plane resolved AT the
+  extrapolated point (`plane_at(est, prefer=report)` — a fake pathmap
+  answering 5 against a report saying 12 proves the report never rides
+  the wire — and `no-plane` refusing where the geometry cannot say);
+  R2's off-mesh REFUSAL (the check that used to assert the
+  standing-outside suspension now asserts its opposite — a wire hard-set
+  gets no suspension, `off-mesh`/`no-mesh` refuse rather than ship a raw
+  ray); and R3's model park (a SENT pin drops `state["dest"]` and
+  hard-sets `state["pos"]` to the 0x002C's own point, driven, so the
+  20 Hz tick stops walking a phantom). **Extended once more the same
+  day for the re-run review's yield** (13-of-13 mutation catch, no
+  blocker; CANCELWALK.md §8.3b's re-review block): the R1 plane proof
+  moved to the WIRE — a burst seeded report-plane 12 against a mesh
+  answering 5 asserts the sent 0x002C's plane field is 5, closing the
+  gap where every burst seed had plane 0 and a prefer-echoing mesh so a
+  payload mutation stayed green; `zero_lead_composition(cast_stop=True)`
+  — the legacy bool that armed every shared refusal cell while matching
+  neither mode — is asserted to raise a loud ValueError naming both real
+  arms; and the second-cast seed reads the pin note with `.get` so the
+  M7 mutation (note never written) fails as a named check instead of
+  aborting the section on a KeyError. Floor 100),
   `toolkit/authsrv/test_killwindow.py` (the kill window, checked against
   ArenaNet's own kills. Our server sent one message when an agent died —
   `0x00F1` with the death bit — where the real service sends three: status,

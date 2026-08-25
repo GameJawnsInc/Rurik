@@ -1662,9 +1662,35 @@ STOP_ANSWER = None     # None | "ack"
 # which now lands on co-located copies and cannot snap. The residual warp
 # is the dead-reckoning error, ~0 on the straight unobstructed legs that
 # caused F31's 110-207 u. cast_stop_reckon() below is the pure half;
-# rates: mt 1 = 288.0 and mt 4 = 0.66x288 = 190.1 are both OBSERVED on
-# our own tape (movetap 213708: full-speed run, and the mt=4 press whose
-# walk onset was 190.1 u/s); other mt families default 1.0, UNVERIFIED.
+# rates: the census families (movement FINDINGS.md, n=184/114/48) --
+# forward {1,2,3} 1.0, backward {4,5,6} 0.652, both OBSERVED (R8's own
+# tape corroborates: movetap 213708's mt=4 press walked on at 190.1
+# against 0.652 x 288 = 187.8), side {7,8} 0.75 LABELLED (the weak row)
+# -- and any other mt refuses `unverified-rate`.
+#
+# REVIEWED 2026-08-25 (CANCELWALK.md sec.8.3a) and RE-CUT before any
+# run: the review's finished agent found the wired pin could still warp
+# two ways, and both blockers plus its three REAL findings are fixed in
+# place. B1: a cast during a CLICK-walk is the one case where refusing
+# the reckon is NOT enough -- the 0x0028 alone lands a silently-pathing
+# body on a sync copy parked at the click leg's start (corpus p50
+# 1,164 u, worse than the F31 warp the ruling refused) while every
+# belief says "parked" -- so a click-in-flight latch
+# (state["click_moving_at"]: armed in the 0x003E arm on every click,
+# cleared by the next report of either kind) suppresses the WHOLE
+# cast-stop, both arms, degrading to F28's glide, which is a defect and
+# not a warp. B2 is the census rate table above -- the old "mt 4 =
+# 0.66, everything else 1.0" hard-set a kiting or strafing cast FORWARD
+# past the registered 35 u bar, and the forward-teleport failure
+# signature would have blamed a stale belief for a fresh rate error.
+# The REALs: the 0x002C's plane is resolved AT the extrapolated point
+# (pm.plane_at, prefer = the report's plane), never copied stale from
+# the report; an off-mesh start REFUSES rather than shipping
+# clip_to_walkable's standing-outside suspension -- a raw unclipped ray
+# -- into a hard-set of both copies; and a sent pin PARKS the server's
+# own integrator (state["pos"] = est, state["dest"] = None), so the
+# 20 Hz tick stops walking a phantom that enemy AI and the click arm's
+# freshness checks would otherwise act on.
 CAST_STOP = None   # None | "halt" | "pin"
 
 
@@ -1694,11 +1720,16 @@ def cast_stop_reckon(state, now):
 
     Returns (None, None, why) when there is nothing to reckon -- the body
     is believed parked, or nothing trustworthy is in hand. The caller
-    sends the 0x002C only on a point; the 0x0028 goes out either way, so
-    a wrong 'parked' belief degrades to R8's measured halt (a snap), never
-    to F28's glide.
+    sends the 0x002C only on a point; the 0x0028 goes out either way
+    EXCEPT on 'click-walk' (B1, below), so a wrong 'parked' belief
+    degrades to R8's measured halt (a snap), never to F28's glide.
 
     THE BELIEFS, each with its owner named:
+    - click_moving_at: the click-in-flight latch (CANCELWALK-B1, review
+      2026-08-25), armed by the 0x003E arm on EVERY click -- answered or
+      refused alike, the client paths it itself either way -- and cleared
+      by the next report of either kind (the 0x003D and 0x0047 arms).
+      READ here, never written.
     - client_pos/client_pos_at/client_plane: the last ACCEPTED report
       (_take_client_position). Advance only on the accept path, so the
       refused-report hole _resync_verdict documents applies here too and
@@ -1715,6 +1746,23 @@ def cast_stop_reckon(state, now):
       from the stale pre-pin report would extrapolate a leg the body
       never walked, which is exactly R8's second-cast trap.
     """
+    # B1's door, FIRST -- ahead even of "no-report" -- because it is the
+    # one refusal the caller treats differently: every other
+    # (None, None, why) degrades to the bare 0x0028, safe on a body our
+    # beliefs call parked or keyboard-placed, but a click-walk is a
+    # MOVING body nothing can place (the client paths it and reports NO
+    # position while doing so -- measured silences to 37 s), and under
+    # --grant-suppress its sync copy sits parked at the click leg's
+    # start (corpus separation p50 1,164 u, max 3,648 u). A 0x0028 there
+    # out-warps the F31 snap the owner refused, so the caller suppresses
+    # the whole cast-stop on this label. Checked first so no other door
+    # can shadow it: a first-ever movement that is a click would
+    # otherwise fire the halt through "no-report". The live send site
+    # consults the same latch before EITHER arm and never reaches this
+    # door; it exists so an offline replay of the pure policy scores a
+    # click-walk cast the way the wire behaved.
+    if state.get("click_moving_at") is not None:
+        return None, None, "click-walk"
     pos, at = state.get("client_pos"), state.get("client_pos_at")
     plane = state.get("client_plane")
     if pos is None or at is None or not isinstance(plane, int):
@@ -1735,22 +1783,71 @@ def cast_stop_reckon(state, now):
     dt = now - at
     if dt < 0.0:
         return None, None, "future-report"
-    rate = 0.66 if state.get("heading_mt") == 4 else 1.0
+    # B2 (review 2026-08-25): the rate is the CENSUS FAMILY's, not mt 4's
+    # alone. Forward {1,2,3} 284.96 u/s and backward {4,5,6} 187.89 are
+    # OBSERVED (movement FINDINGS.md, n=184 and n=114; R8's own mt=4
+    # tape read 190.1 at the walk onset, corroborating 0.652 x 288 =
+    # 187.8); side {7,8} ~215 u/s is the census's weak row (n=48) and
+    # 0.75 is LABELLED, not OBSERVED. The table this replaces -- mt 4 =
+    # 0.66, everything else 1.0 -- reckoned a kiting or strafing cast at
+    # 288 and hard-set the body FORWARD past the registered 35 u bar
+    # (overshoot ~45 u typical, 130-180 u at the straight-leg report-gap
+    # mode), and the registered forward-teleport signature would have
+    # blamed a stale belief for a fresh rate error. An mt outside the
+    # census's 1..8 has NO observed rate and refuses instead of guessing
+    # -- the census says 0 and 9 never appear over 7,988 records, so
+    # this door is about a future build, not this one.
+    mt = state.get("heading_mt")
+    if mt in (1, 2, 3):
+        rate = 1.0
+    elif mt in (4, 5, 6):
+        rate = 0.652
+    elif mt in (7, 8):
+        rate = 0.75
+    else:
+        return None, None, "unverified-rate"
     dist = rate * 288.0 * dt
     est = (pos[0] + heading[0] / mag * dist,
            pos[1] + heading[1] / mag * dist)
     # Clip the EXTRAPOLATED segment, from the reported point, against our
     # navmesh -- clip_to_walkable clips from state["pos"] (the blend) and
-    # this leg starts at the report, so the primitive is used directly,
-    # with the same standing-outside suspension it applies.
+    # this leg starts at the report, so the primitive is used directly.
+    #
+    # R2 (review 2026-08-25): a wire consumer gets NO standing-outside
+    # suspension. clip_to_walkable may keep integrating when the start is
+    # off the mesh because its output feeds only state["dest"], the
+    # server's private model; here the same suspension would ship a raw
+    # unclipped ray -- up to ~3.7 k u -- into a hard-set of BOTH copies,
+    # from exactly the positions (5.5% of stops, mesh edges) where our
+    # trapezoids are known-wrong. The honest degradation for a hard-set
+    # is refusal: no mesh in hand, or a reported point the mesh cannot
+    # vouch for, sends no 0x002C.
     pm = state.get("pathmap")
+    if pm is None:
+        return None, None, "no-mesh"
+    if not pm.walkable(pos[0], pos[1]):
+        return None, None, "off-mesh"
     why = "reckoned"
-    if pm is not None and dist > 0.0 and pm.walkable(pos[0], pos[1]):
+    if dist > 0.0:
         clipped = pm.clip(pos[0], pos[1], est[0], est[1],
                           step=COLLISION_STEP)
         if clipped != est:
             est, why = clipped, "reckoned:clipped"
-    return est, plane, why
+    # R1 (review 2026-08-25): the plane is resolved AT the extrapolated
+    # point, never copied from the report. The 0x002C's slot 2 becomes
+    # the client's own current plane (agent+0x80), and pairing a reckoned
+    # position with the plane of a point up to a report-gap behind it
+    # splits a "position and plane are one fact" invariant that --resync
+    # never breaks (its payload is the report itself); the click arm
+    # documents a stale value in that slot as active corruption, with
+    # fall-through-under-stairs as the symptom. plane_at prefers the
+    # reported plane where the trapezoids allow it (189 of 198 reports
+    # agree with the geometry) and returns None where it cannot say --
+    # which refuses, like every other door.
+    resolved = pm.plane_at(est[0], est[1], prefer=plane)
+    if resolved is None:
+        return None, None, "no-plane"
+    return est, resolved, why
 
 
 def parse_stop_answer(text):
@@ -4444,6 +4541,18 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
     own, and an inert flag whose run log says "F1b arm" would publish a null
     against F1b's prediction that the fix never earned.
     """
+    # cast_stop is a MODE STRING or off -- never the legacy bool. True (the
+    # pre-R10 form) armed every shared refusal cell on truthiness while
+    # matching neither mode: no startup note, and the pin-x-resync cell
+    # dead -- an on-but-unnamed arm, the same defect this function refuses
+    # everywhere else. main() cannot produce True (parse_cast_stop yields
+    # only None/'halt'/'pin'); this guard is for every OTHER caller. Found
+    # by the 2026-08-25 re-review's lattice sweep.
+    if cast_stop not in (None, False, "halt", "pin"):
+        raise ValueError(
+            f"cast_stop={cast_stop!r}: pass 'halt', 'pin', or None/False. "
+            f"A truthy non-mode value arms the shared refusal cells while "
+            f"matching neither mode's note nor the pin-specific cell.")
     if plane_carry and arrival_carry:
         return ("--plane-carry and --arrival-carry cannot run together. They "
                 "are TWO POLICIES FOR ONE WIRE FIELD -- field 4 of the "
@@ -4668,21 +4777,28 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
             "and REFUSED AS A SHIP (owner ruling 2026-08-25: it WARPS -- "
             "F31, the halt lands the body on the sync copy, 110-207 u "
             "measured). Kept runnable as R10's control. Adds one s2c "
-            "0x0028 [player] at every free-caster non-attack cast start. "
+            "0x0028 [player] at a free-caster non-attack cast start -- "
+            "EXCEPT during a click-walk, where the B1 latch suppresses "
+            "the halt too (a click-walking body would out-warp F31; the "
+            "console's pin:click-walk line is the record -- 8.3b). "
             "NOT a grant: no destination armed, no grant clock stamped. "
             "Predictions and results: studies/movement/CANCELWALK.md 8.")
     elif cast_stop == "pin":
         notes.append(
             "      + --cast-stop=pin: CANCELWALK-R10 arm, DIAGNOSTIC ONLY. "
-            "At every free-caster non-attack cast start: one s2c 0x002C "
+            "At a free-caster non-attack cast start: one s2c 0x002C "
             "hard-set at the DEAD-RECKONED player position (last report + "
-            "unit(vec2) x rate x 288 x dt, navmesh-clipped; skipped with "
-            "the reason in the 0x0028's label when the body is believed "
-            "parked/pinned or the last report was refused), then the "
-            "0x0028 halt, which now lands on co-located copies and cannot "
-            "snap. The 0x002C stamps the sync model but NOT the grant "
-            "clock. Predictions and readout: "
-            "studies/movement/CANCELWALK.md 8.3.")
+            "unit(vec2) x census-family rate x 288 x dt, navmesh-clipped, "
+            "plane resolved AT the point; skipped with the reason in the "
+            "0x0028's label when the body is believed parked/pinned, the "
+            "last report was refused, the mesh cannot vouch for the "
+            "point, or the mt has no observed rate), then the 0x0028 "
+            "halt, which now lands on co-located copies and cannot snap. "
+            "EXCEPTION: a click-walk in flight suppresses BOTH messages "
+            "-- the console's pin:click-walk line, not the wire, is the "
+            "record (8.3b). The 0x002C stamps the sync model but NOT the "
+            "grant clock. Predictions and readout: "
+            "studies/movement/CANCELWALK.md 8.3c.")
     return None, notes
 
 
@@ -8714,34 +8830,68 @@ def handle_skill_press(values, send, state, conn_id, opcode):
         # zero warp exposure. Predictions: the flag's comment block and
         # CANCELWALK.md 8.
         if CAST_STOP and not is_attack:
-            # The PIN half (R10, --cast-stop=pin): bring the copy to the
-            # BODY before the halt. F31 measured the bare halt landing the
-            # body on the sync copy -- a backward warp of the copy's
-            # staleness -- and the owner refused any fix that warps
-            # (ruling 2026-08-25). The 0x002C hard-sets both copies at the
-            # dead-reckoned position, so the 0x0028 below lands on
-            # co-located copies and cannot snap. When the reckon refuses
-            # (parked, pinned, refused-report...), the 0x0028 goes out
-            # alone -- degrading to R8's measured behaviour, never to
-            # F28's glide -- and the label carries the reason so the
-            # capture can score every path.
-            _cs_label = "AGENT_STOP_MOVING(player) [cancelwalk R8 cast-stop]"
-            if CAST_STOP == "pin":
-                _cs_now = time.time()
-                _cs_est, _cs_plane, _cs_why = cast_stop_reckon(state, _cs_now)
-                if _cs_est is not None:
-                    send(GAME_SMSG_AGENT_UPDATE_POSITION,
-                         [PLAYER_AGENT_ID,
-                          [float(_cs_est[0]), float(_cs_est[1])], _cs_plane],
-                         f"CAST-STOP PIN 0x002C at ({_cs_est[0]:.0f},"
-                         f"{_cs_est[1]:.0f}) plane {_cs_plane} -- {_cs_why} "
-                         f"[cancelwalk R10]")
-                    state["cast_stop_pin"] = (_cs_now, _cs_est)
-                _cs_label = (f"AGENT_STOP_MOVING(player) [cancelwalk R10 "
-                             f"pin:{_cs_why}]")
-            send(GAME_SMSG_AGENT_STOP_MOVING,
-                 agents.agent_stop_moving(PLAYER_AGENT_ID),
-                 _cs_label)
+            # B1 (review 2026-08-25), and it gates BOTH arms: a cast
+            # during a CLICK-walk suppresses the whole cast-stop. The
+            # client paths a click itself and reports NO position while
+            # doing it, so no belief can place the body -- and the 0x0028
+            # alone would land it on a sync copy parked at the click
+            # leg's start under --grant-suppress (corpus separation p50
+            # 1,164 u, max 3,648 u), out-warping the F31 snap the owner
+            # refused. Sending nothing degrades to F28's glide, a defect
+            # but not a warp. The label normally rides the 0x0028; with
+            # the 0x0028 suppressed, this print IS the scorable record.
+            _cs_click = state.get("click_moving_at")
+            if _cs_click is not None:
+                print(f"[c{conn_id}] cast-stop SUPPRESSED: click-walk in "
+                      f"flight ({time.time() - _cs_click:.1f}s since the "
+                      f"click; the client paths it silently, so no belief "
+                      f"can place the body) -- no 0x002C, no 0x0028, the "
+                      f"cast glides (F28) [cancelwalk pin:click-walk]",
+                      flush=True)
+            else:
+                # The PIN half (R10, --cast-stop=pin): bring the copy to
+                # the BODY before the halt. F31 measured the bare halt
+                # landing the body on the sync copy -- a backward warp of
+                # the copy's staleness -- and the owner refused any fix
+                # that warps (ruling 2026-08-25). The 0x002C hard-sets
+                # both copies at the dead-reckoned position, so the 0x0028
+                # below lands on co-located copies and cannot snap. When
+                # the reckon refuses (parked, pinned, refused-report,
+                # off-mesh, no-plane, unverified-rate...), the 0x0028 goes
+                # out alone -- degrading to R8's measured behaviour, never
+                # to F28's glide -- and the label carries the reason so
+                # the capture can score every path.
+                _cs_label = "AGENT_STOP_MOVING(player) [cancelwalk R8 cast-stop]"
+                if CAST_STOP == "pin":
+                    _cs_now = time.time()
+                    _cs_est, _cs_plane, _cs_why = cast_stop_reckon(state,
+                                                                   _cs_now)
+                    if _cs_est is not None:
+                        send(GAME_SMSG_AGENT_UPDATE_POSITION,
+                             [PLAYER_AGENT_ID,
+                              [float(_cs_est[0]), float(_cs_est[1])],
+                              _cs_plane],
+                             f"CAST-STOP PIN 0x002C at ({_cs_est[0]:.0f},"
+                             f"{_cs_est[1]:.0f}) plane {_cs_plane} -- "
+                             f"{_cs_why} [cancelwalk R10]")
+                        state["cast_stop_pin"] = (_cs_now, _cs_est)
+                        # R3 (review 2026-08-25): park the server's OWN
+                        # integrator at the pin. The 0x002C parks both of
+                        # the client's copies, but state["pos"]/
+                        # state["dest"] would keep the 20 Hz tick walking
+                        # the blend up to ~765 u past the pinned body for
+                        # the cast's duration -- a phantom that enemy AI
+                        # and the click arm's freshness checks then act
+                        # on. Nothing broadcasts from the tick, so this
+                        # was survivable; it was still a model asserting
+                        # motion the wire just denied.
+                        state["pos"] = (float(_cs_est[0]), float(_cs_est[1]))
+                        state["dest"] = None
+                    _cs_label = (f"AGENT_STOP_MOVING(player) [cancelwalk R10 "
+                                 f"pin:{_cs_why}]")
+                send(GAME_SMSG_AGENT_STOP_MOVING,
+                     agents.agent_stop_moving(PLAYER_AGENT_ID),
+                     _cs_label)
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
              [agents.GV_ATTACK_SKILL_ACTIVATED if is_attack
               else agents.GV_SKILL_ACTIVATED,
@@ -13605,6 +13755,14 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # that whether or not we believed the coordinates it
                         # attached -- a refused report is still a report.
                         state["kbd_moving_at"] = time.time() if moving else None
+                        # And the click-in-flight latch CLEARS on any
+                        # 0x003D, moving or not: MEASURED, the client
+                        # reports nothing at all while click-walking, so
+                        # a report of either kind means the click leg is
+                        # over and the keyboard regime owns the body.
+                        # Armed in the 0x003E arm; read by the cast-stop
+                        # site and cast_stop_reckon (CANCELWALK-B1).
+                        state["click_moving_at"] = None
                         _take_client_position(state, reported, plane, rec,
                                               "0x003D")
                         # ONE OF THE TWO CALL SITES, and both route through the
@@ -14354,6 +14512,25 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # treated as a fresh direction, not compared against one
                         # from before the click.
                         state["walking"], state["heading"] = False, None
+                        # THE CLICK-IN-FLIGHT LATCH (CANCELWALK-B1, review
+                        # 2026-08-25). Armed on EVERY click -- answered or
+                        # refused alike, because the client paths the click
+                        # itself either way (5 of 5, cos 0.994-1.000, on the
+                        # capture where we answered nothing) and reports NO
+                        # position while doing it (measured silences to
+                        # 37 s). Cleared by the next report of either kind
+                        # (the 0x003D and 0x0047 arms): the client speaking
+                        # again is the only honest end of a leg it walks
+                        # silently -- and a latch left stale by a completed
+                        # click costs nothing, because the body it guards is
+                        # then parked, where the suppressed 0x0028 was a
+                        # no-op anyway. Read by the cast-stop send site and
+                        # cast_stop_reckon, which must refuse rather than
+                        # halt or pin a body nothing can place: under
+                        # --grant-suppress the sync copy sits parked at the
+                        # click leg's start (corpus separation p50 1,164 u),
+                        # so a 0x0028 here out-warps F31 by an order.
+                        state["click_moving_at"] = time.time()
                         # Grant the click exactly as asked. Nothing here second
                         # guesses the player.
                         #
@@ -14620,6 +14797,11 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # there while refusing 196 of 196 in the reproduction.
                         # GRANT_LOCAL_WINDOW never had to decide any of them.
                         state["kbd_moving_at"] = None
+                        # The click-in-flight latch clears here too: a
+                        # stop report ends whatever leg was running,
+                        # click legs included -- arrival is a stop
+                        # (CANCELWALK-B1; armed in the 0x003E arm).
+                        state["click_moving_at"] = None
                         was_clipped = state.get("clipped")
                         state["clipped"] = False
                         pm = state.get("pathmap")
@@ -17246,7 +17428,14 @@ def main():
         plane_carry=plane_carry, arrival_carry=a.arrival_carry,
         cancel_answer=a.cancel_answer, stop_answer=_sa_mode,
         cast_stop=_cs_mode)
-    if _zl_refusal and a.zero_lead is None:
+    # The default-flip hint rides ONLY the refusal family it can actually
+    # fix: "--zero-lead cannot be combined with X". On a PAIRWISE cell
+    # (--cast-stop with --stop-answer, pin with --resync...) the advice is
+    # unfollowable -- those arms REQUIRE --zero-lead, so --no-zero-lead
+    # leads straight to the requires-refusal on the next restart, one
+    # wasted run. Found by the 2026-08-25 re-review's routing sweep.
+    if (_zl_refusal and a.zero_lead is None
+            and "--zero-lead cannot be combined" in _zl_refusal):
         _zl_refusal += ("\n(--zero-lead is ON BY DEFAULT since 2026-08-22; "
                         "pass --no-zero-lead to run this arm without it.)")
     if _zl_refusal:
@@ -17415,10 +17604,14 @@ def main():
                   "SHIP by owner ruling 2026-08-25: it WARPS. Runnable as "
                   "R10's control arm.")
             print("      SENDS     one s2c 0x0028 AGENT_STOP_MOVING "
-                  "[player] at every free-caster NON-ATTACK cast start, "
+                  "[player] at a free-caster NON-ATTACK cast start, "
                   "first in the cast-begin tail (the E4 press-ack and the "
-                  "debits PRECEDE it). Attack skills, queued casts and "
-                  "every grant are untouched.")
+                  "debits PRECEDE it) -- EXCEPT during a click-walk, "
+                  "where the B1 latch suppresses the halt too (sec.8.3b: "
+                  "a click-walking body would land on a copy parked at "
+                  "the leg's start, out-warping F31; the console's "
+                  "pin:click-walk line is the record). Attack skills, "
+                  "queued casts and every grant are untouched.")
             print("      MEASURED  2026-08-24 (sec.8.1a): halts 3 of 3 "
                   "(288 -> 0.0 by the first sample, zero drift through "
                   "the cast), standstill/Esc no-ops 2 of 2, the halt "
@@ -17431,25 +17624,29 @@ def main():
             print("[map] --cast-stop=pin ON. CANCELWALK R10 (dead-reckoned "
                   "re-pin + halt), DIAGNOSTIC ONLY -- no outcome ships "
                   "from this run directly.")
-            print("      *** DO NOT SCORE A RUN OF THIS ARM YET. The "
-                  "adversarial review of 2026-08-25 found TWO BLOCKERS "
-                  "and did not finish (CANCELWALK.md sec.8.3a): "
-                  "(B1) a cast during a CLICK-walk still warps -- "
-                  "kbd_moving_at is keyboard-only, so the reckon refuses "
-                  "'parked' while the 0x0028 still fires on a moving "
-                  "body, landing it on a copy up to ~1,164 u behind; "
-                  "(B2) mt 5-8 (strafe/back-diagonal) reckon at 288 u/s "
-                  "against a measured 188-215, a FORWARD miss past the "
-                  "35 u bar. Fix both, then re-register. ***")
-            print("      SENDS     at every free-caster NON-ATTACK cast "
+            print("      REVIEWED  twice, 2026-08-25 (CANCELWALK.md "
+                  "sec.8.3a/8.3b): the first adversarial pass found two "
+                  "BLOCKERS (B1 click-walk warp, B2 rate table) and "
+                  "three REALs -- ALL FIVE ARE FIXED in this build -- "
+                  "and the re-run pass (lattice sweep + 13-mutation "
+                  "probe, 13 of 13 RED) found no blocker. Score the run "
+                  "against sec.8.3c's re-registration, not sec.8.3's.")
+            print("      SENDS     at a free-caster NON-ATTACK cast "
                   "start: one s2c 0x002C AGENT_UPDATE_POSITION at the "
                   "DEAD-RECKONED player position (last accepted report + "
-                  "unit(vec2) x rate x 288 u/s x dt; rate 0.66 for mt 4, "
-                  "both OBSERVED on our tape; navmesh-clipped), then the "
-                  "0x0028 halt. When the reckon refuses -- believed "
-                  "parked, pinned by a previous cast, refused report -- "
-                  "the 0x0028 goes out ALONE and its label names the "
-                  "reason, so every path is scorable from the capture.")
+                  "unit(vec2) x rate x 288 u/s x dt; census family "
+                  "rates {1,2,3} 1.0 and {4,5,6} 0.652 OBSERVED, {7,8} "
+                  "0.75 LABELLED; navmesh-clipped, plane resolved AT the "
+                  "point), then the 0x0028 halt. When the reckon refuses "
+                  "-- believed parked, pinned by a previous cast, "
+                  "refused report, off-mesh, unresolved plane, "
+                  "unverified rate -- the 0x0028 goes out ALONE and its "
+                  "label names the reason. EXCEPTION: a CLICK-walk in "
+                  "flight suppresses BOTH messages (no belief can place "
+                  "a silently-pathing body; the 0x0028 alone is the B1 "
+                  "warp) and prints pin:click-walk to this console -- "
+                  "that line, not the wire, is the scorable record; the "
+                  "cast then glides (F28), a defect but not a warp.")
             print("      FIXES     F28 without F31 if it works: the 0x002C "
                   "hard-sets BOTH copies at the body's true position "
                   "(exact on straight legs -- the legs that never report, "
@@ -17463,18 +17660,28 @@ def main():
                   "STANDSTILL: the reckon refuses ('parked'), no 0x002C, "
                   "the 0x0028 no-ops -- nothing changes. Second cast "
                   "after a pin with no report between: 'pinned-parked', "
-                  "no 0x002C (the R8 second-cast trap, guarded). The "
-                  "cancel-instant freeze is UNTOUCHED throughout.")
+                  "no 0x002C (the R8 second-cast trap, guarded). Cast "
+                  "during a CLICK-WALK: pin:click-walk printed, nothing "
+                  "sent, the body keeps click-walking and does NOT warp. "
+                  "The cancel-instant freeze is UNTOUCHED throughout.")
             print("      READOUT   movetap, NOT the wire (a straight "
                   "glide emits no 0x003D). Both instruments, walk-first, "
                   "wall-clock alignment. Exposure floor: >=3 casts with "
-                  "the body IN MOTION at the prop8->1 send, else VOID. "
-                  "FAILURE SIGNATURE, pre-registered: a backward snap "
-                  "> 20 u at a pinned cast means the reckon named the "
-                  "wrong point (read the 0x002C's own label for where it "
-                  "aimed); a forward TELEPORT >> 35 u means a stale "
-                  "moving-belief slipped the guards. Protocol: "
-                  "studies/movement/CANCELWALK.md sec.8.3.")
+                  "the body IN MOTION at the prop8->1 send, else VOID -- "
+                  "plus >=1 cast pressed DURING a click-walk (B1's "
+                  "blind spot). FAILURE SIGNATURES, pre-registered "
+                  "(sec.8.3c): a backward snap > 20 u at a pinned cast "
+                  "means the reckon named the wrong point (read the "
+                  "0x002C's own label for where it aimed); a forward "
+                  "miss >> 35 u separates TWO causes IN ORDER -- first "
+                  "rate-regime (movetap's measured speed vs the label's "
+                  "family rate; the known slow-plateau regime is a "
+                  "bounded residual, not a guard hole), then stale "
+                  "belief (speed matched the rate and the pin still "
+                  "landed long -- only THAT adds a guard); and ANY "
+                  "refusal label other than click-walk while movetap "
+                  "shows motion is a belief hole of the B1 class. "
+                  "Protocol: studies/movement/CANCELWALK.md sec.8.3c.")
 
     # REALFIX-F1. Printed in the same house style and for the same reason: the
     # prediction goes out BEFORE the run so it cannot be rationalised after it.

@@ -164,34 +164,44 @@ origin's `wall_unix`), never by trajectory fit (§7.4d correction 1).
    stock game doesn't warp").** The successor is wired:
    **`--cast-stop=pin` (CANCELWALK-R10, §8.3)** — dead-reckoned `0x002C`
    re-pin at the body's true position, then the halt.
-   **⚠ DO NOT RUN IT YET: §8.3a's adversarial review found TWO BLOCKERS
-   (a click-walk cast still warps, by up to ~1,164 u; mt 5–8 reckon at
-   the wrong rate) and the review itself did not finish.** Fix both,
-   re-run the two dead review agents, then re-register the run.
+   **R10 IS RUNNABLE as of 2026-08-25 evening, under §8.3c's
+   re-registration and no other.** §8.3a's review found TWO BLOCKERS
+   (a click-walk cast warped by up to ~1,164 u; mt 5–8 reckoned at the
+   wrong rate) plus three REALs — **all five FIXED at §8.3b** — and the
+   two review agents that died were re-run against the fixed arm:
+   **no blocker survived** (13-of-13 mutation catch; the lattice sweep
+   clean; its 3 REALs + 2 NITs, all operator-facing text and test
+   gaps, fixed in place). What remains is the owner-driven run —
+   §8.3c's protocol now includes a **click-walk cast** (B1's blind
+   spot) and separates rate-regime from stale-belief in the
+   forward-miss signature.
 
 ### Session handoff, 2026-08-25 — where to pick this up
 
 **Branch `claude/cancelwalk-movement-arc-1fff44`, worktree
-`.claude/worktrees/cancelwalk-movement-arc-1fff44`.** Everything through
-the R10 wiring is committed and merged to `main` except where noted in
-`PLAN.md` §8. Next actions, in order:
+`.claude/worktrees/cancelwalk-movement-arc-1fff44`.** The 2026-08-24
+list that stood here (fix §8.3a's five findings → re-run the two dead
+review agents → re-register → run) is **done through its third item,
+2026-08-25 evening**:
 
-1. **Fix §8.3a's B1 and B2** (both are warps, both fail the owner's
-   bar), then the three REALs — plane at `est`, off-mesh refusal, park
-   the server's model. Each has a fix direction written at §8.3a.
-2. **Re-run the two review agents that died on a usage limit** — the
-   lattice/routing skeptic and the 7-mutation prober. The mutation list
-   is in the workflow script under the session's
-   `workflows/scripts/review-cast-stop-pin-*.js`; the prober never
-   started, so nothing was mutated and the tree was verified clean.
-3. **Re-register R10's predictions** (§8.3) against the fixed arm — the
-   current failure-signature text would misattribute a B2 rate miss —
-   and add a **click-walk cast** to the protocol, which B1 shows the
-   registration is blind to.
-4. Only then: the owner-driven run.
+1. ~~Fix §8.3a's B1 and B2, then the three REALs.~~ **DONE — §8.3b**,
+   with the fixes driven by `test_cancelwalk.py` (floor 82 → 98).
+2. ~~Re-run the two review agents that died on a usage limit.~~
+   **DONE — §8.3b's re-review block**: the mutation probe went 13 of
+   13 RED (the registered M1–M7 plus six over the fixes themselves);
+   the lattice/routing skeptic found no blocker, and its 3 REALs +
+   2 NITs (banners, a wire-plane test gap, doc staleness, the
+   legacy-bool hole, an unfollowable hint) are fixed (floor → 100).
+3. ~~Re-register R10's predictions and add a click-walk cast.~~
+   **DONE — §8.3c**, which supersedes §8.3's protocol, predictions
+   and failure signatures. Score any run against §8.3c only.
+4. **NEXT: the owner-driven run** — §8.3c's protocol, both
+   instruments, walk-first, wall-clock alignment; the required new
+   exposure is ≥1 cast pressed DURING a click-to-move walk, and one
+   backpedal cast is recommended so B2's family rate is measured.
 
 Standing constraints for whoever continues: `test_cancelwalk.py` floor
-is **82**; the flag ships OFF and its default is an owner ruling; the
+is **100**; the flag ships OFF and its default is an owner ruling; the
 `halt` arm stays runnable as R10's control and is REFUSED as a ship.
 
 ---
@@ -1806,11 +1816,20 @@ copies and **cannot snap**. What makes the reckoning honest:
 - **Straight legs are exactly the legs that never report** (F25), so the
   extrapolation is exact where F31's 110–207 u cases live; F27's own
   arithmetic closed this model to 41 ms.
-- **Rates are OBSERVED where used:** mt 1 = 288.0 (everywhere) and
+- ~~**Rates are OBSERVED where used:** mt 1 = 288.0 (everywhere) and
   mt 4 = 0.66 × 288 = 190.1 (R8's own tape: the mt=4 press's walk-onset
-  speed). Other families default 1.0, UNVERIFIED and labelled.
-- **The extrapolated segment is navmesh-clipped** (the `pm.clip`
-  primitive, with `clip_to_walkable`'s standing-outside suspension).
+  speed). Other families default 1.0, UNVERIFIED and labelled.~~
+  **SUPERSEDED by §8.3a's B2 and fixed at §8.3b:** the rates are the
+  census families — {1,2,3} 1.0 and {4,5,6} 0.652 OBSERVED, {7,8} 0.75
+  LABELLED, anything else refused `unverified-rate`. The struck table
+  reckoned a kiting or strafing cast at 288 and hard-set it forward.
+- ~~**The extrapolated segment is navmesh-clipped** (the `pm.clip`
+  primitive, with `clip_to_walkable`'s standing-outside suspension).~~
+  **SUPERSEDED by §8.3a's REAL 2 and fixed at §8.3b:** the clip stands,
+  the suspension does not — a wire hard-set gets no standing-outside
+  pass; `off-mesh`/`no-mesh` refuse. The struck clause would have
+  shipped a raw ray of up to ~3.7 k u from exactly the positions where
+  our trapezoids are known-wrong.
 - **Every refusal door is named and scorable from the capture** — the
   `0x0028`'s label carries the reckon verdict (`pin:reckoned`,
   `pin:parked`, `pin:pinned-parked`, `pin:report-refused`, …):
@@ -1829,7 +1848,15 @@ with `--cancel-answer`, `--stop-answer`, `--arrival-carry`) **plus
 extrapolates PAST the last report; the resync teleports BACK to it).
 `test_cancelwalk.py` §7 drives the parser, every reckon door, the pin
 burst (0x002C-then-0x0028 order, payload, labels, the second-cast guard
-live) and the lattice; floor 82.
+live) and the lattice; floor 82 *(now 100 — §8.3b's fixes took it to 98
+and the re-review's yield to 100)*.
+
+**⚠ The protocol, predictions and failure signatures below are
+SUPERSEDED by §8.3c** — the re-registration against the §8.3b-fixed arm.
+They stand as the record of what was registered before §8.3a's review;
+score no run against them (the old forward-teleport signature would
+misattribute a rate-regime miss, and the protocol is blind to the
+click-walk cast B1 was about).
 
 *Protocol:* identical to R8's (§8.1) — ≥3 casts started WHILE RUNNING
 mid-stride, ≥1 from standstill, ≥1 ordinary cancelled cast, both
@@ -1953,3 +1980,184 @@ and the burst order matches R8's measured slot. Also INFO: the measured
 39-of-39 `0x00D2`→naming adjacency is untouched in every measured case
 (all attack skills, which the scoping excludes); the pin widens the
 unmeasured adrenal-non-attack insertion from one message to two.
+
+### 8.3b The five findings FIXED, before any run (2026-08-25)
+
+**All five of §8.3a's findings are fixed in place; `test_cancelwalk.py`
+drives each fix and the floor rises 82 → 98.** The re-registration of
+R10's predictions (§8.3c) waits on the two re-run review agents, because
+a registration written before the review finishes would be the same
+mistake §8.3a exists to prevent.
+
+- **B1 fixed — the click-in-flight latch, and it gates BOTH arms.**
+  `state["click_moving_at"]`: armed in the `0x003E` arm on EVERY click,
+  answered or refused alike (the client paths it itself either way — 5
+  of 5, cos 0.994–1.000, on the capture where we answered nothing);
+  cleared by the next report of either kind (the `0x003D` and `0x0047`
+  arms — the client speaking again is the only honest end of a leg it
+  walks silently). A latch left stale by a completed click costs
+  nothing: the body it guards is then parked, where the suppressed
+  `0x0028` was a no-op anyway. When the latch is live the send site
+  suppresses the WHOLE cast-stop — no `0x002C`, no `0x0028`, for `pin`
+  and `halt` alike — degrading to F28's glide, a defect but not a warp,
+  and prints the scorable `pin:click-walk` line (the label normally
+  rides the `0x0028`; with it suppressed, the gamesrv log line IS the
+  record). The halt arm is deliberately inside the gate: R8's measured
+  3-of-3 was keyboard casts, so no measured control behaviour is lost,
+  and a runnable diagnostic that can throw the body 3,648 u serves
+  nothing. `cast_stop_reckon` gains the same door as its FIRST check,
+  outranking even `no-report` — a first-ever movement that is a click
+  must not fire the halt through another label — so an offline replay
+  of the pure policy scores a click cast the way the wire behaved.
+- **B2 fixed — the census family rates.** `{1,2,3}` 1.0 and `{4,5,6}`
+  0.652 (both OBSERVED — FINDINGS.md's 284.96/187.89 at n=184/114;
+  R8's own mt=4 tape corroborates at 190.1 against 0.652×288 = 187.8),
+  `{7,8}` 0.75 (the census's ~215, n=48, the weak row — LABELLED). An
+  mt outside 1..8 refuses `unverified-rate` and degrades to the halt
+  like every other door: the census says 0 and 9 never appear over
+  7,988 records, so that door is about a future build.
+- **REAL 1 fixed — the plane is resolved AT `est`.**
+  `pm.plane_at(est, prefer=client_plane)`, never the report's plane
+  copied forward; `None` refuses (`no-plane`). The test proves the
+  report's plane never rides the wire: a fake mesh answering 5 against
+  a report saying 12 sends 5. *(As first written this was proven only
+  at the pure reckon — the burst seeds all had plane 0 with a
+  prefer-echoing mesh, so a payload mutation would have stayed green.
+  The re-run review caught the gap and the report-12/mesh-5 case now
+  runs at the BURST too, asserting the sent `0x002C`'s plane field.)*
+- **REAL 2 fixed — no standing-outside suspension on the wire.** The
+  reckon now REQUIRES the mesh and a walkable start: `no-mesh` and
+  `off-mesh` refuse rather than ship a raw unclipped ray into a
+  hard-set of both copies. The test that used to assert the suspension
+  now asserts its opposite, with the reversal recorded at the check.
+- **REAL 3 fixed — a sent pin parks the server's own model.**
+  `state["pos"] = est`, `state["dest"] = None`, written at the pin
+  send, so the 20 Hz tick stops walking a phantom up to ~765 u past
+  the pinned body for the cast's duration.
+
+**What did NOT change:** the lattice (all §8.3 refusal cells stand),
+`parse_cast_stop`, the burst order (0x002C → 0x0028 → animation →
+hold), the second-cast guard, and every belief the reckon already
+read. The flag still ships OFF; defaults are an owner ruling.
+
+**The re-run review pass — the two dead agents, re-run against the
+fixed arm (2026-08-25, later the same day): NO BLOCKER.**
+- **The 13-mutation probe: 13 of 13 RED, 0 MISSED**, in a disposable
+  worktree, tree verified clean after. The registered M1–M7 (M5 adapted
+  to the census table) all caught; six new mutations covering the §8.3b
+  fixes themselves — the click gate deleted (both arms' wire checks
+  red), the click door demoted below `no-report`, the report's plane
+  shipped, the suspension restored, the park deleted, the
+  `unverified-rate` door deleted — all caught. One weaker-guard note:
+  under M7 the named check fired but a direct `cast_stop_pin` subscript
+  then aborted the section, so its tail ran as a traceback; hardened to
+  `.get()` so a missing pin note is a named FAIL.
+- **The lattice/routing/test skeptic: 0 BLOCKERs, 3 REAL, 2 NIT — the
+  warp-relevant surface survived every refutation attempt.** Verified
+  clean live: the full composition sweep (every `cast_stop` cell against
+  every lever, refusal order intact, pin×resync pairwise-first both
+  ways; the B1 gate needs no lattice cell — the suppression is
+  unconditional on `--grant-suppress`, and `--click-sweep` cannot
+  co-fire with a pin on the same cast because any click suppresses the
+  whole cast-stop); the argparse routing (`nargs='?'` swallows nothing,
+  refusals fire before any socket binds); and the test's checks all
+  capable of failing. The REALs were all operator-facing text, fixed in
+  place: **both startup banners and the composition pin-note were never
+  re-cut at the fix commit** (an armed run would have printed the
+  superseded registration — rates, the do-not-run blocker text, and "the
+  0x0028 goes out ALONE ... every path is scorable from the capture",
+  false for click-walk where the console line is the record); **the R1
+  wire-plane test gap** (above); and **the §0/§8.3/PLAN §8 staleness**
+  (floors, "fix both" as if pending) — all refreshed. The NITs, both
+  taken: `zero_lead_composition(cast_stop=True)` — the legacy bool —
+  now raises a loud ValueError instead of arming every shared cell
+  while matching neither mode's note, and the `--no-zero-lead`
+  default-flip hint no longer rides pairwise refusals where following
+  it costs a wasted restart. Floor 98 → **100**.
+
+### 8.3c R10 RE-REGISTERED against the fixed arm (2026-08-25) — supersedes §8.3's protocol, predictions and failure signatures where they conflict
+
+**Why re-registered:** §8.3's registration was written against the arm
+§8.3a's review then found two warps in. The fixes are §8.3b's; this
+section is the registration the owner-driven run actually runs under.
+Everything §8.3 registered that survives is restated by reference, not
+re-derived.
+
+*Protocol — §8.3's stands in full* (≥3 casts started WHILE RUNNING
+mid-stride, ≥1 from standstill, ≥1 ordinary cancelled cast, ≥1 running
+cast ~3+ s into a long straight leg, both instruments, walk before each
+cast, wall-clock alignment; exposure floor ≥3 in-motion casts or the arm
+is VOID) *plus:*
+- **NEW, required (B1): at least one cast pressed DURING a
+  click-to-move walk** — click a distant point, press the skill
+  mid-leg. This is the case §8.3a proved the old registration was blind
+  to; without it the B1 fix goes unmeasured and the arm's no-warp claim
+  is untested in its worst measured regime (corpus sep p50 1,164 u).
+- **Recommended (B2 exposure): make one of the ≥3 running casts a
+  backpedal (S-held) cast**, so the 0.652 family rate is measured. The
+  arm is not VOID without it, but B2's fix then goes unmeasured and the
+  §8.3a overshoot case stays theoretical either way — say so in the
+  scoring rather than letting the gap pass silently.
+
+*Predictions, registered before any run:*
+- **Keyboard running cast → unchanged from §8.3:** halt within ~0.15 s,
+  no backward component > 20 u, total across-halt displacement ≤ ~35 u,
+  the `0x002C`'s labelled point within ~32 u of the movetap body
+  position at the send, `sep` ≈ 0 through the cast; F31's 110–207 u
+  snap does not reproduce.
+- **Backpedal cast (if performed):** same bars, the reckon riding
+  0.652 × 288 = 187.8 u/s; the old table's ~45–180 u forward miss does
+  not occur.
+- **Standstill → `pin:parked`,** no `0x002C`, the `0x0028` no-ops,
+  nothing changes in any sampled field (unchanged).
+- **Second cast with no report between → `pin:pinned-parked`,** no
+  `0x002C` (unchanged).
+- **Click-walk cast (NEW):** the gamesrv log prints the
+  `pin:click-walk` suppression line; **NO `0x002C` and NO `0x0028` go
+  out**; the body does NOT halt — it keeps click-walking through the
+  cast (F28's glide, deliberately unfixed in this regime because no
+  belief can place the body); **no warp at the cast or its end
+  attributable to the cast-stop**; movetap shows continuous motion
+  through the press; the cast/cancel machinery is otherwise untouched.
+- The cancel-instant freeze and the gate-B correlation are untouched
+  throughout (unchanged).
+
+*Failure signatures, re-registered — these SUPERSEDE §8.3's:*
+- **Backward snap > 20 u at `pin:reckoned`** → the reckon aimed at the
+  wrong point; the `0x002C` label says where it aimed, the movetap
+  track says where the body was, and the delta names the model error
+  (unchanged from §8.3).
+- **Forward miss ≫ 35 u at `pin:reckoned` now has TWO named causes,
+  separated in this order BEFORE blaming the guards.** (1) **Rate-regime
+  error:** compare movetap's measured speed over the report gap with
+  the label's family rate. The unexplained slow regime (sustained
+  plateaus at ½ and ⅓ of each family's cruise, 27% of forward moving
+  time — movement FINDINGS.md) means the body can genuinely travel
+  slower than any constant; a miss ≈ (family rate − measured speed) ×
+  gap is that residual — bounded, known, NOT a guard hole. (2) **Stale
+  belief:** movetap's speed matched the family rate and the pin still
+  landed long — a belief slipped the guards and the guard set is
+  incomplete. §8.3's signature attributed every forward miss to (2),
+  which §8.3a showed would misattribute a B2-class rate miss; B2 is
+  fixed, but (1) remains physically possible and must not be scored
+  as (2).
+- **NEW (the B1 class): any refusal label OTHER than `click-walk`
+  printed while movetap shows the body MOVING at the press** —
+  `pin:parked` with motion, `pin:no-report` with motion — is a belief
+  hole: a motion regime our beliefs cannot see. Name the regime before
+  any re-run.
+- **A `pin:click-walk` suppression while movetap shows the body
+  PARKED** is the stale-latch case. It costs nothing at that cast (the
+  `0x0028` would have no-opped), but score it: a frequent stale latch
+  means the clear sites are wrong.
+- **`no-plane` / `off-mesh` / `no-mesh` / `unverified-rate`** degrade
+  to the bare halt (a snap bounded by the copy's staleness); expected
+  rare in the test map's interior; each is scorable from the `0x0028`'s
+  label, so count them rather than inferring they never fired.
+
+*Decision — unchanged from §8.3:* pin meets the no-warp bar → it is the
+ship candidate for the owner's ruling, and F28 closes with it. Fails
+backward → the model error the signature localises; fix and re-run
+before any other message is tried. Fails forward → separate rate-regime
+from belief per the signature FIRST; only a belief miss adds a guard.
+**Defaults are an owner ruling; nothing ships on from this run.**
