@@ -1365,6 +1365,21 @@ green with its three banner anchors taught the resolved-local shape;
 `test_handshake`'s residual red is the pre-existing build-38849 vault drift,
 byte-identical on `main`, not this change.
 
+**Q10. Is a movement fix that warps acceptable?** ✅ **CLOSED 2026-08-25, by the
+owner: NO — "the stock game doesn't warp, i am not going to accept a fix that
+still warps."** Asked implicitly by CANCELWALK-R8's result (the `--cast-stop`
+halt fixes F28's float-forward 3 of 3 but lands the body on the sync copy — a
+backward warp equal to the copy's staleness, F31, 110–207 u measured), and
+ruled the day it was reported. The ruling is general in shape: retail's bar is
+stop-IN-PLACE, and a candidate whose visible cost is a warp is refused
+regardless of what it fixes. Consequences: `--cast-stop=halt` stays runnable
+as a measured diagnostic and R10's control arm, REFUSED as a ship;
+`--cast-stop=pin` (CANCELWALK-R10, wired 2026-08-25) is the no-warp
+candidate — a dead-reckoned `0x002C` hard-set at the body's true position
+before the halt; and the grant-cadence staleness itself (F27/F33, sep to
+555 u measured) is the standing debt this ruling prices for REALFIX too:
+any candidate there that expresses staleness as a snap fails the same bar.
+
 ---
 
 ## 8. Immediate next actions
@@ -1434,10 +1449,37 @@ halts the float-forward 3 of 3** (288 → 0.0 by the first sample, zero
 drift through the cast; standstill/Esc no-ops 2 of 2; the halt is never
 client-reported) — **with cost F31: the halt lands the body on the SYNC
 COPY, a backward snap equal to the copy's staleness (110–207 u here),
-not a stop-in-place.** The candidate is LICENSED with that named cost.
-**Open: the owner's ship ruling on `--cast-stop`** — as-is, paired with
-REALFIX staleness work (`--resync`/P5 is the unrefuted candidate), or
-held. It stays OFF until a ruling lands.
+not a stop-in-place.** **RULED 2026-08-25 (§7 Q10): REFUSED as a ship —
+"the stock game doesn't warp."** The halt stays runnable
+(`--cast-stop=halt`) as R10's control; the successor is wired:
+**`--cast-stop=pin` (CANCELWALK-R10, CANCELWALK.md §8.3, 2026-08-25)** —
+a dead-reckoned `0x002C` hard-set at the body's true position (last
+report + unit(vec2) × rate × 288 × dt, navmesh-clipped, every refusal
+door labelled in the capture), then the halt, which lands on co-located
+copies and cannot snap. Registered predictions: no backward component
+> 20 u, total across-halt ≤ ~35 u, standstill silent, second-cast guard
+observed live. `test_cancelwalk.py` §7 floor 82.
+
+**⚠ R10 IS NOT RUNNABLE YET, and this is the arc's live next action
+(CANCELWALK.md §8.3a).** Its adversarial review found **two BLOCKERS —
+both of them warps, so both fail Q10's bar** — and then **did not
+finish**: two of three agents died on an account usage limit (nothing
+was mutated; the tree was verified clean). **B1:** a cast during a
+CLICK-to-move walk still warps, because `kbd_moving_at` is
+keyboard-only — the reckon refuses `parked` while the `0x0028` fires on
+a moving body and lands it on a copy up to **1,164 u** behind (worse
+than the F31 warp the ruling refused), and §8.3's prediction table
+scores it "nothing changes". **B2:** mt 5–8 (strafe, back-diagonal;
+3.2% of corpus movement) reckon at 288 u/s against a measured
+188–215 — a FORWARD miss past the registered 35 u bar that the
+pre-registered failure signature would misattribute. Three REALs
+besides: the `0x002C` pairs an extrapolated position with the last
+report's stale plane (the documented fall-through corruption mode); the
+off-mesh case ships an unclipped extrapolation; and the pin leaves the
+server's own integrator gliding ~765 u past the pinned body. Fix
+directions for all five are written at §8.3a. **Order: fix → re-run the
+two dead review agents → re-register (adding a click-walk cast) → then
+the owner-driven run.** The flag stays OFF regardless.
 
 ### MODEL AUTHORING: the one-bit question is answered, and every player identity closes (2026-08-22)
 

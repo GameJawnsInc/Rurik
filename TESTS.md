@@ -7871,15 +7871,34 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   debits legitimately precede it), and on with an attack skill (the burst
   goes out, proven by its own animation, and carries no 0x0028 — the halt
   is scoped to NON-ATTACK casts). Source locks: one gate carrying the
-  scoping, one R8-labelled site, default False, main() routing the flag
-  into matrix and global, and — the review's other REAL finding — the
-  arming assignment `CAST_STOP = True` pinned (deleted, the flag would
-  print R8's full banner and send NOTHING, an inert arm on a readout the
-  wire cannot see; §6 gained the same pin for R6's `STOP_ANSWER =
-  _sa_mode`). §6's two-site count moved with the change in the same
-  commit. A 6-mutation probe (payload literal, scoping deleted, order
-  swap, refusal cell deleted, default flipped, flag unrouted) went 6 of 6
-  RED. Floor 59),
+  scoping, one R8-labelled site, default off, main() routing the flag
+  into matrix and global with the arming assignment itself pinned
+  (deleted, the flag would print a full banner and send NOTHING, an
+  inert arm on a readout the wire cannot see; §6 gained the same pin for
+  R6's `STOP_ANSWER = _sa_mode`). A 6-mutation probe (payload literal,
+  scoping deleted, order swap, refusal cell deleted, default flipped,
+  flag unrouted) went 6 of 6 RED. **Extended 2026-08-25 for R10's
+  `--cast-stop=pin`** (the no-warp successor after the owner refused the
+  bare halt — F31 warps — PLAN §7 Q10): §7 now also drives
+  `parse_cast_stop` (halt/pin in, typos refused naming both arms AND the
+  ruling), `cast_stop_reckon` as a pure function — the straight-leg
+  arithmetic exactly (1.5 s at 288 = 432 u), the OBSERVED mt-4 backpedal
+  rate 0.66×288, and every refusal door: `parked`, `no-report`,
+  `report-refused` (`_resync_verdict`'s refused-report hole, guarded
+  here too), `pinned-parked` (the R8 second-cast trap) with its
+  report-newer-than-pin reopen, `future-report`, plus the navmesh clip
+  (`reckoned:clipped`) and the standing-outside suspension via a fake
+  pathmap — then the pin BURST driven with seeded motion state: one
+  0x002C `[player, reckoned point, plane]` BEFORE the 0x0028, the
+  0x0028's label carrying the reckon verdict (the refusal telemetry IS
+  the label), the `cast_stop_pin` state note landing, the second-cast
+  guard refusing a second 0x002C live, the parked belief sending none,
+  and an attack skill under pin with a moving belief seeded sending
+  neither message. New lattice cells: pin×`--resync` refused naming the
+  shared 0x002C (halt×resync still composes, its note now carrying the
+  ruling), both modes through the shared cells. Source locks: one 0x002C
+  site (`CAST-STOP PIN`), default None, the parsed MODE routed. Floor
+  82),
   `toolkit/authsrv/test_killwindow.py` (the kill window, checked against
   ArenaNet's own kills. Our server sent one message when an agent died —
   `0x00F1` with the death bit — where the real service sends three: status,
