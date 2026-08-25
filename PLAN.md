@@ -1463,10 +1463,25 @@ R10's run, §8.3d): no backward component > 20 u, total across-halt
 suppressed with nothing sent and no warp. `test_cancelwalk.py` §7
 floor 102.
 
-**R10 RAN 2026-08-25 (CANCELWALK.md §8.3d) — the pin mechanism WORKS,
-its run yielded ONE new warp finding, that finding is FIXED, and the
-arc's live next action is the §8.3e COMPLETION RUN (three short
-reps).** The path there, all one day: §8.3a's review had found two
+**R10 RAN TWICE 2026-08-25 (CANCELWALK.md §8.3d, §8.3f) — the pin arm
+has met every bar it controls across both runs, and the arc's live
+next action is the OWNER'S SHIP RULING (§8.3f's closing paragraph).**
+The completion run (§8.3f): both reckoned casts clean (F31 refuted
+6 of 6 cumulative), both pinned-parked reps at 0.0000 u with the
+guard held across a full 6 s recharge, wire silence 3 of 3 suppressed
+casts, labels 5 of 5. Its yields: the long-leg rep RETIRED as
+mis-derived (the ~512 u `0x003D` chord caps keyboard report gaps at
+~1.8 s at cruise; the reckon stands tested to 277 u, bounded ~524 u),
+and **CANCELWALK-F35** — the F34-regression rep reproduced its regime,
+the suppression held, and the body still warped 177.408 u with the
+wire silent: the client's `+0x48` arrival teleport firing on the
+shipped zero-lead grant's stale armed destination (movetap's `target`
+field shows arm → fire → `[inf,inf]`; the landing is bit-identical to
+the `0x0029` point granted 1.0 s before the cast). A third staleness
+expression, **filed to REALFIX** beside F27/F33, with retail's
+70-of-88 stop-ack re-pin as the candidate and the `--stop-echo`
+refutation as the caution; its no-cast counterfactual (stand still
+~2 s after a stop, no cast) is one desk-run, UNVERIFIED. The path there, all one day: §8.3a's review had found two
 BLOCKERS (B1 click-walk warp to 1,164 u; B2's rate table) plus three
 REALs — **fixed at §8.3b (`ce1746b`)**; the two review agents that died
 were re-run against the fixed arm and found **no blocker** (13-of-13
