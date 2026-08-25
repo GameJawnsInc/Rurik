@@ -1478,37 +1478,86 @@ composition audit, and nothing here ships on. Does NOT halt → the
 wrong on our build for this instant, and the fix moves to a client read
 before any other message is tried.
 
-### 8.2 CANCELWALK-R9 · H10's confirmation — camera-turn vs still-camera through frozen presses
+### 8.2 CANCELWALK-R9 · H10's confirmation — does turning the camera un-freeze a held key?
 
-No new code; shipped configuration, both instruments. H10 (§7.7): after
-the hold clears, the walk is started by an INPUT-DIRECTION CHANGE, not by
-the key or by the clear — and a camera turn with the key held re-dispatches
-wire-invisibly (the `0x00535E9F` site passes arg6 = 0: no `0x003D`).
+(Rewritten for the operator the same day it was registered — the first
+version was analyst-facing and the owner said so. The predictions and
+floors are unchanged in substance; no run had happened.)
 
-*Protocol:* ≥4 cancelled casts alternating two arms. **Arm A (turn):**
-press W mid-cast and keep it held while turning the camera continuously
-≳90° — continuously, because a turn finished before our clear lands is
-spent on a still-set gate, and continued turning re-dispatches at up to
-20 Hz. **Arm B (still):** press W mid-cast and hold ≥1.5 s with the camera
-untouched (no right-drag, no turn keys). Walk-first before each cast so
-the pre-cast state matches the canonical freeze; ≥1 ordinary press that
-walks as the in-session positive control (fails ⇒ the run is VOID, and a
-void control interprets a null only — it has no authority over a
-positive).
+**The question, plainly.** When a movement press cancels a cast and then
+freezes you, the arc's answer says why: the press arrived while the
+cast-hold bit was still set, so the client threw it away — and holding the
+key afterwards does nothing, because the client only acts on movement
+input when the DIRECTION CHANGES, and a held key with a still camera is a
+direction that never changes. Turning the camera changes it (W means
+"camera-forward"), so the same held key should start walking the moment
+you turn — and this particular walk-start is invisible on the wire, since
+that input path sends no `0x003D`. We believe this because retail's own
+tape shows it (F26: retail walked west while its client had only ever
+reported north) and because our own two walks in §7.9 began 0.43–0.46 s
+after the press with nothing on the wire to explain them — but nobody has
+done it ON PURPOSE on our build. R9 is that: freeze yourself deliberately,
+then turn the camera with the key still held, and see whether the turn
+alone un-freezes you. No new code; this is the shipped server.
 
-*Exposure floor:* a press counts for either arm only if `gate_b` was SET
-at the press (the freeze occurred, F29's condition); ≥2 counted presses
-per arm or that arm is VOID, not a null.
+**Operator script.** Two terminals:
+
+    python toolkit/harness/session.py --keep-open --enemy --hold 300 --game-args "--map 280
+      --explorable --practice-target --skills 105,153,322"
+    python toolkit/clientscan/movetap.py --seconds 300
+
+Then, in the game:
+
+1. **Warm-up:** press W, walk a couple of seconds, release. (Scoring
+   needs one ordinary walk to prove the instrument is reading you.)
+2. **A "turn" rep:** walk a few steps, release W, wait until you have
+   fully stopped. Cast any skill on the bar. When the cast bar is about
+   halfway, **press W and KEEP IT HELD** — the cast cancels. Immediately
+   hold RIGHT-MOUSE and **drag the camera around — a quarter turn or
+   more — and keep dragging for about 2 seconds** with W still held.
+   Then release everything. Keep dragging rather than one quick flick:
+   a flick that finishes before the server's un-hold reaches the client
+   is spent while the gate is still shut, but continuous turning retries
+   many times a second.
+3. **A "still" rep:** same walk → stop → cast → press-W-at-half-bar and
+   keep it held — but now **touch nothing else for about 2 seconds**: no
+   mouse drag, no other keys. Just the held W. Then release.
+4. Alternate steps 2 and 3 until you have **at least 3 of each**.
+   (Scoring discards reps where the freeze never actually occurred —
+   some presses land after the hold already cleared and walk normally —
+   so 3–4 per arm is what survives the floor of 2.)
+5. One more ordinary walk press at the end, then let the session close.
+
+Two things to avoid in BOTH kinds of rep: don't turn with A/D (keyboard
+turning is a different input path than the one under test and
+contaminates the arm), and don't press W a second time (a second press
+un-freezes by the known route and the rep measures nothing).
+
+**What it should feel like if H10 is right:** in the turn reps you start
+walking WHILE you drag, roughly half a second after the press, in
+whatever direction the camera is facing at that moment; in the still reps
+you stay planted for the whole two seconds — the familiar freeze.
+
+**Scoring — the analyst's job after the run; none of it is visible at the
+keyboard.** Align the two captures on the wall clock both carry (§7.4d
+correction 1). A rep COUNTS only if movetap shows `gate_b` SET at the
+press — the freeze actually occurred (F29's condition); a press that
+landed after the gate cleared is an ordinary press wearing a rep's
+clothes, not exposure. **≥2 counted reps per arm, or that arm is VOID
+rather than a null** (§7.4a). The warm-up walks must move every movetap
+field within a poll, or the instrument was not reading the walking body
+and the run is VOID — a failed control voids a null; it has no authority
+over a positive.
 
 *Predictions, registered before any run:*
-- H10 → every counted arm-A press WALKS: the walk begins once the gate is
+- H10 → every counted turn rep WALKS: the walk begins once the gate is
   clear while the turn continues (within ~0.15 s of the clear: the 50 ms
-  throttle plus a frame or two), in the camera's live direction at that
-  instant, with NO second `0x003D` and no `0x0040` in the window. Every
-  counted arm-B press stays frozen — velocity 0, position bit-identical —
-  for the full hold.
-- Refuted → a counted arm-A press still frozen through the turn (the
-  re-dispatch claim goes back on the bench), or a counted arm-B press that
+  input throttle plus a frame or two), in the camera's live direction at
+  that instant, with NO second `0x003D` and no `0x0040` in the window.
+  Every counted still rep stays frozen — velocity 0, position
+  bit-identical — for the full hold.
+- Refuted → a counted turn rep still frozen through the drag (the
+  re-dispatch claim goes back on the bench), or a counted still rep that
   walks with no camera input and no wire event (something else
   re-dispatches, and F29's 0.43–0.46 s onsets need a new explanation).
 - Either way the gate correlation (SET → freeze, CLEAR → walk, 7 of 7)
