@@ -1421,8 +1421,10 @@ refused without `--zero-lead` and with any other CANCELWALK lever, prediction
 registered at CANCELWALK.md §8 before any run, `test_cancelwalk.py` §7 (floor
 59) driving the lattice and the burst, the whole change adversarially reviewed
 (three agents, 6-of-6 mutation catch; §8.1 carries the three named residuals
-it yielded). The run is the owner's; defaults are an owner ruling; it ships
-OFF.
+it yielded). The run is the owner's; defaults are an owner ruling; it
+shipped OFF — *until the 2026-08-25 ruling: `pin`, the no-warp successor,
+is now the DEFAULT (below); `halt`, this paragraph's own arm, stays
+explicit-only and refused as a ship.*
 
 **Moved to REALFIX: the WARP.** Our zero-lead policy grants only on c2s
 `0x003D`, and the client only sends `0x003D` on direction change — so a long
