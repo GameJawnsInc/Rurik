@@ -1105,6 +1105,41 @@ TRACE_MOVE = False
 # teleport: 2,844 u onto a point we granted 11.594 s earlier, bit-exact,
 # recorded on video with the character standing still.
 #
+# *** CORRECTIONS, 2026-08-25 (desk session, three agents on the pinned
+# 38797 image; studies/movement/followon-notes/README.md sec.2). Four
+# sentences above are wrong, and the last one is why --stop-echo failed. ***
+#   (a) "+0x9c ... syncPoint" -- it is m_targetPoint (ArenaNet assert
+#       AgAgent:1144; movetap.py:459-465). The wrong name collides with the
+#       SYNC/ASYNC copy distinction, which is load-bearing here -- see (d).
+#   (b) "finds no clear anywhere except that arrival" -- WRONG AS WRITTEN.
+#       0x00602AB0 is a non-arrival writer of +0x9c. (+0x48 does have exactly
+#       one clear, 0x006021E6, and that part stands: 4 stores in AgAgent, three
+#       arms plus that clear.)
+#   (c) 0x006020B0 is NOT "the teleport primitive" in the operand sense. It is
+#       an operand-neutral HardSetPosition(p): it writes +0x78 from its OWN
+#       four stack args (0x00602132/../0x0060214F, callee `ret 0x10`), erases
+#       +0x88/+0x8c/+0x9c/+0xa0 to the +inf sentinel at [0x948654], and clears
+#       +0x48. It is the CALLER that decides the operand -- the movement tick's
+#       0x0060032E site passes +0x9c (`lea ebx,[esi+0x9c]` at 0x00600267), and
+#       THAT site is CANCELWALK-F35. A 0x002C reaches the same primitive with
+#       the packet's own point, so it disarms WITHOUT warping. Measured six
+#       times under the shipped --cast-stop=pin: both copies land on the
+#       payload to 0.004-0.006 u, target -> [inf,inf], +0x48 -> 0.
+#   (d) THE OPERATOR'S "it ADDS a SECOND destination" IS UNSUPPORTABLE as a
+#       mechanism. Re-arm is overwrite, not addition: the leg state is
+#       single-valued scalars and 0x00602A40 overwrites the destination ABOVE
+#       the bake's <=1.0 u branch, so every 0x0029 overwrites unconditionally.
+#       What actually happened: 0x0029 is SYNC-ONLY, and the two arrival ticks
+#       are independent (movetap `stop` vs `async_stop`; sync parked while
+#       async armed in 3 of 6 measured events). The harm is the WALK, whose
+#       length is |D - the sync copy's settled +0x78| -- reconstructed at
+#       ~1,286 u for the 2026-08-19 echo, against a ~60 u p50 for retail's own
+#       stop-ack, which is MECHANICALLY THE SAME MESSAGE. Same shape, two
+#       orders of magnitude of harm.
+#   => The refutation below is a refutation of BAKING A LONG LEG FROM A FAR
+#      COPY. It does NOT transfer to --resync (0x002C), which hard-sets both
+#      copies and tears the leg down instead of walking it.
+#
 # WHY IT IS ATTESTED: 70 of ArenaNet's 88 replies to a live 0x0047 are exactly
 # this -- a 0x0029 whose destination equals the position the client reported, to
 # 0.000 u. We answer with nothing at all.
@@ -1148,6 +1183,11 @@ STOP_ECHO = False
 # THE DEFECT IT TARGETS, measured in the client's memory rather than argued.
 # agent+0x48 (m_timeStopMovement) is set once when a grant lands and is NEVER
 # re-armed; at that exact millisecond the client snaps to the granted point.
+# *** "NEVER re-armed" is REFUTED by the binary, 2026-08-25: BOTH bake arms
+# write +0x48 on EVERY grant (0x005FEAD6 the <=1.0 u short-circuit at now+1,
+# 0x005FEB46 the full bake), and 0x00602A40 overwrites the destination above
+# both. The rest of this paragraph -- the snap fires at the tick, on the
+# granted point -- stands. studies/movement/followon-notes/README.md sec.2. ***
 # Seven arrivals were observed directly -- 98u, 680u, 803u, 2129u, 2743u, 3393u
 # and 5238u -- every one landing on m_targetPoint and firing within one 20 ms
 # sample of schedule. The snap is not a bug: it is how the client completes

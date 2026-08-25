@@ -254,6 +254,36 @@ REFUSED as a ship; `--cast-stop=pin` is ON by default and
 
 ### Session handoff for the follow-on gaps (written 2026-08-25 evening, arc closed)
 
+> **⚠ WORKED, 2026-08-25 (desk session, no client run) — read
+> [followon-notes/README.md](followon-notes/README.md) BEFORE this list.**
+> Much of what follows is now ANSWERED, and three of its premises are
+> wrong. In brief:
+> - **F35's no-cast counterfactual is ANSWERED FROM TAPE** — it fires
+>   castless (`movetap-20260821T124010` L1785, zero `0x0046` frames,
+>   8.58 s of server silence). **The 30-second owner run below is not
+>   needed.**
+> - **But F35's framing was over-read**: 586 arrival fires in the
+>   corpus, **only 8 drag the body**, and what gates the drag could not
+>   be determined. §8.3f is right about its instance and is not a rule.
+> - **`--resync` is NOT "never run"** — `authsrv-20260820T182119-c1`
+>   holds 52 verdict rows and 18 `0x002C` sends. It sent **zero
+>   `0x0029`** though, so it never armed an arrival and is **not** a
+>   test of the disarm.
+> - **The `--stop-echo` reconciliation is SETTLED**, and its refutation
+>   does **not** transfer to `--resync`: a `0x0029` makes the SYNC copy
+>   *walk* (harm = leg length, ~1,286 u in the 2026-08-19 run, ~60 u
+>   p50 in retail); a `0x002C` hard-sets **both** copies and tears the
+>   leg down. "The echo ADDS a second destination" is **unsupportable** —
+>   the two destinations were on two different copies.
+> - **Residuals: two STRUCK** (adrenal adjacency; click-leg death,
+>   re-filed to REALFIX with its mechanism found), **the slow plateau is
+>   not a rate regime at all** (collision sliding, 94.0 u/s floor), and
+>   the `test_replay.py` bookkeeping is **CLEAN and run**.
+> - Doc corrections the notes ask for are listed at
+>   [followon-notes/README.md](followon-notes/README.md) §6, including
+>   `authsrv.py:1149` (refuted by the binary) and "70 of 88" (stale
+>   denominator).
+
 The remaining work is NOT this arc's ladder — it is the debt and the
 residuals this arc measured and named. In rough value order:
 
