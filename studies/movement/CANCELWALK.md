@@ -75,7 +75,9 @@ stops you when you start casting; we never send anything that does.
 
 **The message that fixes it already exists in the tree** — s2c `0x0028`
 AGENT_STOP_MOVING, which **halts when in motion and no-ops when parked**
-(schema `GAME_SMSG "40"`). `agents.agent_stop_moving()` is the builder,
+(schema `GAME_SMSG "40"`; **conditional since F34, §8.3d** — the handler
+answers for the SYNC COPY, so "parked" means *the copy too*: with the
+copy still converging the same message warped a parked body 167.6 u). `agents.agent_stop_moving()` is the builder,
 `GAME_SMSG_AGENT_STOP_MOVING` the constant, both landed and tested
 (`test_cancelwalk.py` §6, floor 46). It was built for **R6** and was VOID there
 because it was fired at **stops**, where it can only no-op (§7.4a). **Fired at
@@ -95,7 +97,7 @@ halt arm stays runnable as R10's control; the no-warp successor is
 **`--cast-stop=pin` (CANCELWALK-R10, §8.3, wired 2026-08-25)**: a
 dead-reckoned `0x002C` hard-set at the body's true position first, then
 the halt, which then lands on co-located copies and cannot snap.
-**R10 awaits its owner-driven run; nothing ships without a ruling.**
+**R10 RAN 2026-08-25 (§8.3d): every bar passed at the reckoned casts, its yield CANCELWALK-F34 is fixed as PIN-OR-NOTHING (§8.3e), and what remains is the §8.3e completion run; nothing ships without a ruling.**
 
 ### What is CLOSED — do not re-open without new evidence
 
@@ -164,17 +166,24 @@ origin's `wall_unix`), never by trajectory fit (§7.4d correction 1).
    stock game doesn't warp").** The successor is wired:
    **`--cast-stop=pin` (CANCELWALK-R10, §8.3)** — dead-reckoned `0x002C`
    re-pin at the body's true position, then the halt.
-   **R10 IS RUNNABLE as of 2026-08-25 evening, under §8.3c's
-   re-registration and no other.** §8.3a's review found TWO BLOCKERS
-   (a click-walk cast warped by up to ~1,164 u; mt 5–8 reckoned at the
-   wrong rate) plus three REALs — **all five FIXED at §8.3b** — and the
-   two review agents that died were re-run against the fixed arm:
-   **no blocker survived** (13-of-13 mutation catch; the lattice sweep
-   clean; its 3 REALs + 2 NITs, all operator-facing text and test
-   gaps, fixed in place). What remains is the owner-driven run —
-   §8.3c's protocol now includes a **click-walk cast** (B1's blind
-   spot) and separates rate-regime from stale-belief in the
-   forward-miss signature.
+   **R10 RAN 2026-08-25 (§8.3d) and the mechanism WORKS**: every
+   registered bar passed at the four reckoned casts (backward 0.00 on
+   all four — F31 dead; the backpedal reckoned at 0.652 exactly; model
+   residual −0.1 u), the click-walk suppression fired with no warp at
+   the cast, and the operator's warp 11 s later is **F33's
+   reconcile-on-answer** meeting 864.5 u of click-silence staleness
+   (REALFIX's debt — settled by two blind skeptics from rival ends).
+   **The run's own yield is CANCELWALK-F34**: the then-wired bare
+   `0x0028` on a refused reckon warped a genuinely PARKED body 167.6 u
+   backward onto a still-converging sync copy at a stop-then-cast —
+   "no-ops when parked" holds only when the COPY is parked too.
+   **FIXED the same day (§8.3e): PIN-OR-NOTHING** — the pair fires
+   whole or not at all, a bare `0x0028` never fires, refusals print
+   their door to the console. What remains is the **completion run,
+   three reps, §8.3e**: the stop-then-cast F34 regression rep, the
+   second-cast rep (forgotten in R10's run), and a 3+ s dead-straight
+   leg cast (THIN in R10's run — reports flowed to within 0.97 s of
+   every reckoned cast).
 
 ### Session handoff, 2026-08-25 — where to pick this up
 
@@ -193,15 +202,20 @@ review agents → re-register → run) is **done through its third item,
    2 NITs (banners, a wire-plane test gap, doc staleness, the
    legacy-bool hole, an unfollowable hint) are fixed (floor → 100).
 3. ~~Re-register R10's predictions and add a click-walk cast.~~
-   **DONE — §8.3c**, which supersedes §8.3's protocol, predictions
-   and failure signatures. Score any run against §8.3c only.
-4. **NEXT: the owner-driven run** — §8.3c's protocol, both
-   instruments, walk-first, wall-clock alignment; the required new
-   exposure is ≥1 cast pressed DURING a click-to-move walk, and one
-   backpedal cast is recommended so B2's family rate is measured.
+   **DONE — §8.3c.**
+4. ~~The owner-driven run.~~ **RAN 2026-08-25, scored at §8.3d** —
+   every bar passed at the reckoned casts, and the run yielded
+   **CANCELWALK-F34** (the bare `0x0028` on a refused reckon warped a
+   parked body 167.6 u onto a converging copy), **fixed the same day
+   as PIN-OR-NOTHING (§8.3e)**.
+5. **NEXT: the completion run — three short reps, §8.3e**: the
+   stop-then-cast F34 regression rep, the second-cast rep, and one
+   cast 3+ s into a dead-straight leg. Score against §8.3e; the
+   refusal labels now live on the gamesrv console line, so keep that
+   terminal's scrollback (or its log) with the two tapes.
 
 Standing constraints for whoever continues: `test_cancelwalk.py` floor
-is **100**; the flag ships OFF and its default is an owner ruling; the
+is **102**; the flag ships OFF and its default is an owner ruling; the
 `halt` arm stays runnable as R10's control and is REFUSED as a ship.
 
 ---
@@ -723,7 +737,9 @@ close F9's exposure confounder: complete one cast before the cancelled one.
 **BUILT same day: `--stop-answer=ack`** — s2c `0x0028 [player]` answering
 EVERY player `0x0047` (the server cannot know which stop precedes a cast, and
 the handler no-ops on a parked body, so every-stop is one-shot-equivalent at
-zero warp exposure; the schema's own handler read says the halt zeroes the
+zero warp exposure — **a claim F34 has since REFUTED (§8.3d): the no-op is
+conditional on the SYNC COPY being parked too, and a stop mid-convergence
+gets warped onto the copy, so R6's warp exposure is nonzero**; the schema's own handler read says the halt zeroes the
 queued-move store `agent+0x50`, the very field R5 samples). Refused without
 `--zero-lead` and with `--cancel-answer` (one lever per run); `repin` is
 **deliberately unbuilt and refuses with the reason** — answering ordinary
@@ -1585,7 +1601,10 @@ teleports the player that far backward. Retail stops you where you are.
 **Controls: CONFIRMED 2 of 2, and the report question answered.** The
 standstill cast and the Esc-cancelled cast changed nothing in any sampled
 field (0.0 u across and during; the no-op half of the licensing claim,
-now measured on our own build). The client **never reports the
+now measured on our own build — **and SCOPED by F34, §8.3d: both were
+long parks with converged copies. The no-op is conditional on the SYNC
+COPY being parked too; a stop-then-cast mid-convergence warped 167.6 u,
+so the halt arm's snaps include parked-body warps**). The client **never reports the
 server-ordered halt** — the sole post-halt `0x0047` in the tape is the
 Esc release's own, reporting a long-held standstill point. Two knock-ons
 recorded: the server's wire-side picture of the player stays "moving"
@@ -2108,10 +2127,14 @@ is VOID) *plus:*
 - **Backpedal cast (if performed):** same bars, the reckon riding
   0.652 × 288 = 187.8 u/s; the old table's ~45–180 u forward miss does
   not occur.
-- **Standstill → `pin:parked`,** no `0x002C`, the `0x0028` no-ops,
-  nothing changes in any sampled field (unchanged).
-- **Second cast with no report between → `pin:pinned-parked`,** no
-  `0x002C` (unchanged).
+- ~~**Standstill → `pin:parked`,** no `0x002C`, the `0x0028` no-ops,
+  nothing changes in any sampled field (unchanged).~~ **SUPERSEDED by
+  §8.3e (F34):** nothing goes out at all — the "no-op" 0x0028 this
+  bullet licensed is the message that warped 167.6 u at R10's
+  stop-then-cast.
+- ~~**Second cast with no report between → `pin:pinned-parked`,** no
+  `0x002C` (unchanged).~~ **SUPERSEDED by §8.3e (F34):** the label
+  rides the console line and no `0x0028` goes out either.
 - **Click-walk cast (NEW):** the gamesrv log prints the
   `pin:click-walk` suppression line; **NO `0x002C` and NO `0x0028` go
   out**; the body does NOT halt — it keeps click-walking through the
@@ -2150,10 +2173,14 @@ is VOID) *plus:*
   PARKED** is the stale-latch case. It costs nothing at that cast (the
   `0x0028` would have no-opped), but score it: a frequent stale latch
   means the clear sites are wrong.
-- **`no-plane` / `off-mesh` / `no-mesh` / `unverified-rate`** degrade
+- ~~**`no-plane` / `off-mesh` / `no-mesh` / `unverified-rate`** degrade
   to the bare halt (a snap bounded by the copy's staleness); expected
   rare in the test map's interior; each is scorable from the `0x0028`'s
-  label, so count them rather than inferring they never fired.
+  label, so count them rather than inferring they never fired.~~
+  **SUPERSEDED by §8.3e (F34):** every refusal now suppresses the whole
+  cast-stop — no bare halt exists — and the label rides the console
+  line instead of a `0x0028`. Count the console lines. (R10's run
+  counted zero of these doors firing.)
 
 *Decision — unchanged from §8.3:* pin meets the no-warp bar → it is the
 ship candidate for the owner's ruling, and F28 closes with it. Fails
@@ -2161,3 +2188,212 @@ backward → the model error the signature localises; fix and re-run
 before any other message is tried. Fails forward → separate rate-regime
 from belief per the signature FIRST; only a belief miss adds a guard.
 **Defaults are an owner ruling; nothing ships on from this run.**
+
+### 8.3d R10 RAN — every §8.3c bar PASSES where exposed, F31 is dead at the reckon, and the run's own yield is a NEW warp through the parked door (2026-08-25)
+
+**The run:** owner-driven, 2026-08-25 ~13:09. Tapes:
+`vault/captures/movetap/movetap-20260825T130918.jsonl` (1,143 rows) +
+`vault/captures/gamesrv/authsrv-20260825T130906-c1.jsonl` (2,657 rows),
+wall-clock aligned (epoch spread 3.3 ms). Scored by four agents — a
+pinned-cast scorer, TWO BLIND warp-attribution skeptics given rival
+hypotheses with each other's answers withheld, and an exposure auditor
+— and the decisive numbers re-checked by hand at row level.
+
+**Headline: the pin mechanism WORKS — but the arm as wired still fails
+the no-warp bar, through a door §8.3c scored as "nothing changes".**
+
+**The four `pin:reckoned` casts — every bar PASSES:**
+
+| cast (t) | 0x002C vs body | across-halt | backward | at rest by | sep thru cast |
+|---|---|---|---|---|---|
+| 24.7 (mt 1) | 8.10 u | 8.09 u | 0.00 u | +0.059 s | 0.00 |
+| 34.0 (mt 1) | 6.66 u | 6.66 u | 0.00 u | +0.027 s | 0.00 |
+| 43.3 (mt 1) | 8.19 u | 8.20 u | 0.00 u | +0.050 s | 0.00 |
+| 52.0 (mt 4) | 4.12 u | 4.12 u | 0.00 u | +0.047 s | 0.00 |
+
+Bars: ≤32 / ≤35 / ≤20 u / ~0.15 s / ≈0. Pre-cast sep 218–260 u
+collapses to 0.00 at every pin — the pin co-locates the copies —
+**F31's 110–207 u backward snap does not reproduce, 4 of 4.** Burst
+order and plane field correct on all four; motion resumes cleanly
+after every cast (worst post-cast excursion 6.4 u over one frame).
+**B2 is measured working:** cast 4 is the backpedal by three
+independent witnesses (wire mt=4; pre-cast speed 187.8 u/s =
+0.652 × 288 exactly; async_dir opposite travel), its pin error 4.12 u
+where the old rate-1.0 table would have overshot **+53.7 u forward**;
+the reckon's model residual is **−0.1 u on all four casts** (gaps
+0.535–0.968 s).
+
+**B1 is measured working, and the warp the operator saw is NOT the
+cast-stop's.** The click (`0x003E`, t=85.245) armed the latch; the
+cast at t=86.281 went out as animation + hold with **no 0x0028 and no
+0x002C** (consecutive seqs 1981–1984 — nothing was elided), and the
+`pin:click-walk` suppression line is in the gamesrv console log
+(line 400). The body glided at ~288 u/s through the whole cast — the
+registered F28 degradation — with **no warp at the cast**. The warp
+came 11 s later, and the blind pair closed it from both ends:
+- *Nothing-sent skeptic:* zero movement-capable sends between the
+  click and the first post-warp report (t=97.409); the whole tape
+  holds exactly four `0x002C`, all at the reckoned casts, all pre-t=70.
+- *Mechanism skeptic:* the jump is 836.2 u between two client reports
+  32 ms apart, landing on the body→copy line to 0.0000 u against a
+  copy staleness of 864.5 u (96.7% — R9's F33 shape, which paired at
+  94.3%). **F27's walk-start snap is REFUTED for this event** (the
+  body sat pre-snap ≥29.3 ms AFTER the press; the landing point
+  misses the parked copy by 28.2 u and matches the ANSWER-advanced
+  copy to 0.45 u): **this is F33's reconcile-on-answer**, fired when
+  our zero-lead answer to the first post-silence report arrived with
+  sep 864.5 u above gate 1's cut. The sync copy had sat bit-still for
+  26.04 s (321 identical samples) because the click was
+  geometry-refused (stale) and click legs never report — F25/F27's
+  regime, REALFIX's filed debt expressing through click silence.
+- *Filed to REALFIX, a sharpening:* answer-arrival is NOT sufficient
+  for the F33 snap — an in-walk answer at sep 505–519 u converged
+  without snapping (widening R9's known non-fire from ~312 u), while
+  this walk-START answer at 864.5 u snapped. The trigger looks like
+  the walk-start reconcile meeting an arriving answer, not any answer.
+
+**Also observed, unregistered: the click leg DIED at the cast.** The
+body glided ~600 u through cast + aftercast, froze at exactly
+(−4196, −2348) within 24 ms of the cast-end machinery, ~890 u into a
+~4,600 u leg, and never resumed — wire-silent and parked 9.0 s, which
+is what parked the staleness at 864.5 u for the F33 snap to spend.
+Mechanism UNVERIFIED (client-side; nothing we sent names that point).
+Retail stops a caster at cast START, so the ~890 u of travel is our
+F28 divergence, but "the leg does not resume after a cast" may itself
+be retail-like — unmeasured either way.
+
+**Exposure audit:** in-motion casts 4/3 ✓; standstill ×2 clean ✓; the
+t=70.2 cast confirmed cancelled by a W tap ✓; click-walk cast ✓;
+backpedal recommendation ✓. **THIN:** the ≥3 s straight-leg case never
+met the reckon — reports flowed to within 0.97 s of every reckoned
+cast, so the worst tested extrapolation is ~277 u (it landed 4.2 u
+off; F31's own regime was 110–207 u, so the magnitude that mattered IS
+covered — what is untested is a multi-second gap). **NO-EXPOSURE:**
+the second-cast `pin:pinned-parked` rep (forgotten; and it needs a
+reckoned cast first — a parked cast leaves no pin to refuse).
+**B1-class signature check: all three `pin:parked` labels were
+CORRECT** — the body was genuinely parked at each press (3.97 s /
+13.45 s / 0.30 s), no belief hole.
+
+**CANCELWALK-F34 — the run's blocker-class yield: the `pin:parked`
+door's bare `0x0028` WARPED a parked body 167.6 u backward onto a
+still-converging sync copy (t=98.793, 1 of 3 parked casts).**
+Row-level, re-checked by hand: the body parks at (−5325.1, −2453.8)
+at its own 0x0047 stop (report 0.30 s fresh, belief CORRECT) while
+the sync copy is still walking in from the post-F33 leg (sep 240.5 →
+167.6 over four samples, `gate1=below` throughout — not a gate-1
+event); between the rows bracketing the 0x0028 send the body jumps
+167.6 u east — against its walk direction — onto the copy's exact
+position (sep → 0.00), ~2,100 u/s, a teleport. **So "halts when in
+motion, no-ops when parked" is refuted in this regime: the handler's
+motion test evidently answers for the SYNC COPY, not the drawn body.**
+R8's standstill no-ops (2 of 2) and this run's other two parked casts
+(0.00 u drift) were all long parks with converged copies — the no-op
+claim held only where the copies already agreed. The regime is
+ordinary play, not an artifact: **stop-then-cast inside the copy's
+convergence window** — the kite-stop-cast pattern — needs only a cast
+within ~a second of a stop that followed any leg the copy lagged.
+
+*Fix direction — PIN-OR-NOTHING, and why the alternatives lose:*
+every reckon refusal should SUPPRESS the `0x0028` (send nothing),
+exactly as `click-walk` already does — the pin pair fires whole or
+not at all. (a) *Keep the bare halt* (current): warps by the copy's
+lag through the parked door — measured, 167.6 u, fails Q10. (b) *Pin
+at the last report when parked:* fixes THIS case (the report was
+0.30 s fresh and exactly right) but hard-sets a stale point in the
+camera-turn regime — a walk that sends no 0x003D (F26) under a
+parked belief — which is the warp through yet another door. (c)
+*Suppress:* never warps in ANY regime; the cost is that a WRONG
+parked belief now degrades to F28's glide instead of a snap — and
+Q10's own text prices that trade: the glide is a defect, the warp is
+refused. The safety-net rationale for the bare halt ("a wrong parked
+belief degrades to a snap, never a glide") is Q10-inverted and dies
+here. The halt arm (R8's control) is untouched — it exists to snap.
+
+### 8.3e F34 FIXED — PIN-OR-NOTHING — and the COMPLETION RUN registered (2026-08-25)
+
+**The fix, wired the same day:** every reckon refusal now suppresses
+the whole cast-stop, exactly as `click-walk` already did — **the pin
+pair fires whole or not at all, and a bare `0x0028` never fires.** The
+refusal's label rides the gamesrv console line (`pin:<door>`), which is
+the scorable record; `test_cancelwalk.py` captures the console in the
+burst driver and asserts the label there, drives the parked and
+pinned-parked casts to wire silence, and pins the gate's three sites
+(armed/disarmed/consulted once each) — floor 100 → **102**. The halt
+arm (R8's control) is untouched: it exists to snap. §8.3c/§8.3d
+sentences that promised "degrade to the bare halt" are superseded by
+this section wherever they conflict.
+
+**Why suppression and not a parked-pin, restated from §8.3d:** a pin
+at the last report fixes the measured case (the report was 0.30 s
+fresh) but hard-sets a stale point under a camera-turn walk (F26's
+wire-invisible regime) — the warp through another door. Suppression
+never warps in any regime; its cost is that a WRONG parked belief now
+glides (F28) instead of snapping, and Q10 prices that trade: the glide
+is a defect, the warp is refused.
+
+**The completion run — three reps, registered before any run.** The
+§8.3c bars stand for anything repeated; new exposure:
+
+1. **The F34 regression rep (required):** walk a few seconds, release,
+   and cast within ~1 s of stopping — the stop-then-cast inside the
+   copy's convergence window. *Predicted:* the console prints
+   `pin:parked`, NOTHING goes on the wire, and the body does not move
+   by our hand — movetap shows zero displacement bracketing the cast
+   while the sync copy finishes converging on its own. (This exact
+   sequence warped 167.6 u under the previous wiring.)
+2. **The second-cast rep (required, forgotten in R10's run):** cast
+   while running (a reckoned pin fires), let the halt land, then cast
+   AGAIN quickly without moving. *Predicted:* `pin:pinned-parked` on
+   the console, nothing sent — the R8 second-cast trap observed live
+   at last.
+3. **The long-leg rep (required, THIN in R10's run):** run a
+   dead-straight line for 3+ s — no camera drift, no strafing — and
+   cast mid-stride. Straight cruise is what silences `0x003D` (the
+   1.80 s chord mode; maneuvering wakes the ~0.5 s heartbeat), so
+   arc-free running is the point of the rep. *Predicted:* the same
+   §8.3c bars at a report gap ≥ 2 s — the reckon's extrapolation
+   earning its keep past the 277 u it has been tested to.
+
+*Failure signatures:* **any body displacement bracketing a REFUSED
+cast is a regression of F34's fix** — read the console for which door
+and movetap for the magnitude; the §8.3c signatures (backward =
+model error; forward = rate-regime FIRST, then belief; a non-click
+refusal label with motion = a B1-class belief hole) carry over
+unchanged for pinned casts.
+
+*Decision:* all three reps land as predicted → the pin arm has met the
+no-warp bar in every measured regime, and it goes to the owner as the
+ship candidate for F28, with the known residuals named (refusal-path
+casts glide; the click-leg-death observation; the slow-plateau rate
+residual). Any rep fails → its signature localises the error; fix and
+re-run. **Defaults are an owner ruling; nothing ships on from this
+run.**
+
+**The F34 fix's own adversarial pass (same day, over `c44930c`): NO
+BLOCKER.** The 5-mutation probe went 5 of 5 RED with named FAILs and no
+tracebacks (gate deleted, refusal branch deleted, gate inverted, the
+console label dropped — telemetry is itself asserted — and the pair
+broken the other way, 0x002C with no halt). The degradation-matrix
+skeptic refuted nothing structural: no refusal-door × body-state cell
+where suppression is worse than the old snap in an unpriced way (the
+refusal branch writes NO state, so a refused cast leaves the model
+tracking the true body — the old wiring halted the client while the
+server model kept walking); the pinned-parked cell is equal-or-better
+in every state; and the console record is preserved UNCONDITIONALLY —
+`session.py` pumps gamesrv stdout to
+`vault/captures/harness/<stamp>/gamesrv.log` with a per-line
+write+flush, no flag involved, which is how R10's scoring could quote
+line 400. Its yield — 3 REALs + 2 NITs, every one a stale
+"zero warp exposure"/"no-ops when parked" claim standing where F34 had
+refuted it (the study head's status line and F28 paragraph, §8.1a's
+controls, R8's flag block and both banners, the shared send-site
+comment, the door lists, §8.3c's unstruck bullets) — is annotated in
+place. **One knock-on worth its own line: F34 refutes CANCELWALK-R6's
+licensing claim too.** `--stop-answer=ack` answers EVERY player stop
+with the same bare `0x0028`, including a stop whose copy is still
+converging — exactly F34's regime, arriving even sooner after the stop
+— so R6's warp exposure is NONZERO, and its flag block, banner and
+composition note now say so. (R6 stays runnable as a diagnostic; its
+7.4a run, like R8's controls, measured only long parks with converged
+copies.)
