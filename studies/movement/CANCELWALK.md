@@ -1953,3 +1953,58 @@ and the burst order matches R8's measured slot. Also INFO: the measured
 39-of-39 `0x00D2`→naming adjacency is untouched in every measured case
 (all attack skills, which the scoping excludes); the pin widens the
 unmeasured adrenal-non-attack insertion from one message to two.
+
+### 8.3b The five findings FIXED, before any run (2026-08-25)
+
+**All five of §8.3a's findings are fixed in place; `test_cancelwalk.py`
+drives each fix and the floor rises 82 → 98.** The re-registration of
+R10's predictions (§8.3c) waits on the two re-run review agents, because
+a registration written before the review finishes would be the same
+mistake §8.3a exists to prevent.
+
+- **B1 fixed — the click-in-flight latch, and it gates BOTH arms.**
+  `state["click_moving_at"]`: armed in the `0x003E` arm on EVERY click,
+  answered or refused alike (the client paths it itself either way — 5
+  of 5, cos 0.994–1.000, on the capture where we answered nothing);
+  cleared by the next report of either kind (the `0x003D` and `0x0047`
+  arms — the client speaking again is the only honest end of a leg it
+  walks silently). A latch left stale by a completed click costs
+  nothing: the body it guards is then parked, where the suppressed
+  `0x0028` was a no-op anyway. When the latch is live the send site
+  suppresses the WHOLE cast-stop — no `0x002C`, no `0x0028`, for `pin`
+  and `halt` alike — degrading to F28's glide, a defect but not a warp,
+  and prints the scorable `pin:click-walk` line (the label normally
+  rides the `0x0028`; with it suppressed, the gamesrv log line IS the
+  record). The halt arm is deliberately inside the gate: R8's measured
+  3-of-3 was keyboard casts, so no measured control behaviour is lost,
+  and a runnable diagnostic that can throw the body 3,648 u serves
+  nothing. `cast_stop_reckon` gains the same door as its FIRST check,
+  outranking even `no-report` — a first-ever movement that is a click
+  must not fire the halt through another label — so an offline replay
+  of the pure policy scores a click cast the way the wire behaved.
+- **B2 fixed — the census family rates.** `{1,2,3}` 1.0 and `{4,5,6}`
+  0.652 (both OBSERVED — FINDINGS.md's 284.96/187.89 at n=184/114;
+  R8's own mt=4 tape corroborates at 190.1 against 0.652×288 = 187.8),
+  `{7,8}` 0.75 (the census's ~215, n=48, the weak row — LABELLED). An
+  mt outside 1..8 refuses `unverified-rate` and degrades to the halt
+  like every other door: the census says 0 and 9 never appear over
+  7,988 records, so that door is about a future build.
+- **REAL 1 fixed — the plane is resolved AT `est`.**
+  `pm.plane_at(est, prefer=client_plane)`, never the report's plane
+  copied forward; `None` refuses (`no-plane`). The test proves the
+  report's plane never rides the wire: a fake mesh answering 5 against
+  a report saying 12 sends 5.
+- **REAL 2 fixed — no standing-outside suspension on the wire.** The
+  reckon now REQUIRES the mesh and a walkable start: `no-mesh` and
+  `off-mesh` refuse rather than ship a raw unclipped ray into a
+  hard-set of both copies. The test that used to assert the suspension
+  now asserts its opposite, with the reversal recorded at the check.
+- **REAL 3 fixed — a sent pin parks the server's own model.**
+  `state["pos"] = est`, `state["dest"] = None`, written at the pin
+  send, so the 20 Hz tick stops walking a phantom up to ~765 u past
+  the pinned body for the cast's duration.
+
+**What did NOT change:** the lattice (all §8.3 refusal cells stand),
+`parse_cast_stop`, the burst order (0x002C → 0x0028 → animation →
+hold), the second-cast guard, and every belief the reckon already
+read. The flag still ships OFF; defaults are an owner ruling.
