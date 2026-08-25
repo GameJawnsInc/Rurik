@@ -24,7 +24,7 @@ their predictions are stated here before any run happens. Convention:
 ## 0. HANDOFF — read this before anything else (written 2026-08-24, end of session)
 
 **This document is long and its early sections are superseded. Read §0, then
-§7.6–§7.9, then §8 (the two registered, unrun items). §2–§5 are the arc's
+§7.6–§7.9, then §8 (both runs, scored at §8.1a/§8.2a). §2–§5 are the arc's
 history and several of their claims are corrected later — every correction is
 filed in place, but §0 is the only summary that is current.**
 
@@ -56,7 +56,14 @@ memory and our wire (§7.6, §7.7):**
 
 **Evidence strength:** gate B set at the press → freeze **4 of 4**; clear at
 the press → walk **3 of 3** (§7.9 F29). Property 8 drives the bit **5 of 5 and
-5 of 5** (§7.6 F22).
+5 of 5** (§7.6 F22). **And H10 is CONFIRMED by its deliberate run (R9,
+§8.2a F32): hold + camera-turn → self-walk 3 of 3, beginning at the gate
+clear and BEFORE any wire event; hold + still camera → no self-walk 3 of 3.
+The freeze half of the arc is CLOSED, and "not a server bug" is OBSERVED,
+not merely supported.** One vocabulary update from the same run: above
+gate 1's ~299 u cut the freeze *looks* like "warp back, walk forward,
+stop" — that is F27's staleness plus our own grant executing (§8.2a
+F32/F33), not a new mechanism.
 
 ### THE ONE ACTIONABLE ITEM, and its fix is already built
 
@@ -74,14 +81,18 @@ AGENT_STOP_MOVING, which **halts when in motion and no-ops when parked**
 because it was fired at **stops**, where it can only no-op (§7.4a). **Fired at
 CAST START it is the right message for a real bug.**
 *Wired 2026-08-24:* **`--cast-stop` (CANCELWALK-R8, §8)** sends it at the
-free-caster non-attack cast start, first in the cast-begin tail (the E4 and
-the debits precede it) — refused without `--zero-lead` and with
-`--cancel-answer`, `--stop-answer` or `--arrival-carry`;
-`test_cancelwalk.py` §7 drives the lattice, the burst order and both scoping
-branches, and the change survived a three-agent adversarial review (§8.1's
-residual list is that review's yield). The prediction is registered at §8;
-the run is the owner's, and shipping stays a separate audited step.
-**Defaults are an owner ruling in this repo — do not ship it on.**
+free-caster non-attack cast start, first in the cast-begin tail — refused
+without `--zero-lead` and with any other CANCELWALK lever;
+`test_cancelwalk.py` §7 drives the lattice and the burst, and the change
+survived a three-agent adversarial review (§8.1's residual list is its
+yield). ***R8 RAN the same evening (§8.1a): the halt works 3 of 3*** —
+speed 288 → 0.0 by the first sample after the burst, zero drift through
+the whole cast, standstill/Esc no-ops 2 of 2 — ***but F31: the halt lands
+the body on the SYNC COPY's position, a backward snap equal to the copy's
+staleness (110–207 u here), not a stop-in-place.*** The candidate is
+LICENSED with that named cost; the serious form pairs it with REALFIX's
+staleness work. **Shipping is an owner ruling — it stays OFF until one
+lands.**
 
 ### What is CLOSED — do not re-open without new evidence
 
@@ -104,6 +115,10 @@ the run is the owner's, and shipping stays a separate audited step.
   stops leave the copy past ~190 u. Candidates named at §7.8 (`--resync`,
   REALFIX-P5, built and never run, is the only one whose refutation does not
   already stand). **No recommendation made; the ruling is the owner's.**
+  *R9's session sharpened the price (§8.2a F33): sep reached 346–555 u at
+  ordinary presses — the worst on record — and above gate 1's ~299 u cut
+  the client's own reconcile FIRES (observed 7 of 7), so the staleness is
+  no longer only a walk-start snap: it detonates on grant arrival too.*
 
 ### Instruments, and which to use
 
@@ -134,16 +149,18 @@ session is zero-exposure for anything movement-shaped (§7.4a). Align the two
 captures on the **wall clock** both files carry (`movetap.t` and the gamesrv
 origin's `wall_unix`), never by trajectory fit (§7.4d correction 1).
 
-### Two open items, both REGISTERED and awaiting owner-driven runs (§8)
+### Both runs RAN 2026-08-24 evening — what remains is ONE owner ruling
 
-1. **CANCELWALK-R9** — H10's confirmation (H10 is SUPPORTED, not confirmed,
-   §7.9 F29: both walks began 0.43–0.46 s *after* the press with the gate
-   already clear and no wire event to explain them, the camera-turn
-   re-dispatch's shape and no other candidate's). One run alternating *hold
-   key + turn camera* against *hold key + still camera* through frozen
-   presses; no new code. Full registration, exposure floors included: §8.
-2. **CANCELWALK-R8** — the float-forward fix above, wired behind
-   `--cast-stop`. Full registration: §8.
+1. **CANCELWALK-R9 RAN — H10 CONFIRMED 6 of 6 (§8.2a F32).** The freeze
+   half of the arc is **CLOSED**. Bonus yield: gate 1 caught firing for
+   the first time (F33), explaining the operator's "warps" as F27
+   staleness (sep 346–555 u measured) meeting the client's own
+   reconcile — filed to REALFIX.
+2. **CANCELWALK-R8 RAN — the `--cast-stop` fix halts the float-forward
+   3 of 3 (§8.1a), with cost F31**: the halt lands the body on the sync
+   copy (backward snap = staleness, 110–207 u here). **Open: the owner's
+   ship ruling** — as-is, paired with REALFIX staleness work, or held.
+   Nothing ships on by default.
 
 ---
 
@@ -1391,11 +1408,12 @@ it turned out not to serve.
 
 ## 8. R8 and R9 — registered before their runs, both owner-driven (2026-08-24)
 
-Written at a desk after §7.9; neither has run. Both use §0's recipe — both
-instruments, walk-first, wall-clock alignment — and both are owner-driven:
-the input is held keys, camera turns and mid-stride skill presses, the §3g
-protocol's class. Each registration carries its own exposure floor, because
-§7.4a is what a registration without one costs.
+Written at a desk after §7.9. **Both runs RAN the same evening — §8.1a and
+§8.2a are the scored results, each adversarially recounted by an
+independent agent from the raw captures before a word was written here.**
+Both used §0's recipe — both instruments, walk-first, wall-clock
+alignment — and both were owner-driven. Each registration carries its own
+exposure floor, because §7.4a is what a registration without one costs.
 
 ### 8.1 CANCELWALK-R8 · `--cast-stop` — the F28 float-forward fix, wired and unrun
 
@@ -1455,6 +1473,8 @@ defect nor the fix appears on it.
   start: movetap velocity 288 → 0 and the position parks through the
   activation, against F28's measured ~690 u glide. The sync copy halts
   too (the handler stops both), so `sep` does not grow during the cast.
+  *(RAN: the halt confirmed exactly — but "parks" happens ON THE SYNC
+  COPY, not in place; §8.1a F31.)*
 - Cast from standstill → no change in any sampled field — the handler's
   no-op half, the licensing claim measured on our own build for the first
   time.
@@ -1477,6 +1497,76 @@ composition audit, and nothing here ships on. Does NOT halt → the
 `0x0028`-halts-in-motion reading (schema GAME_SMSG "40", handler read) is
 wrong on our build for this instant, and the fix moves to a client read
 before any other message is tried.
+
+### 8.1a R8 RAN — the halt works 3 of 3, and it lands the body ON THE SYNC COPY (2026-08-24)
+
+Captures `authsrv-20260824T213701-c1` + `movetap-20260824T213708`
+(operator: 3 walk casts, 1 normal, 1 Esc-cancelled — all five identified
+in the tape, each cast's burst carrying exactly one R8 `0x0028`, sent
+0.2–0.9 ms before its prop-8 hold row; observed burst order E4 → debit →
+`0x0028` → animation → hold, the wired slot). Every number below was
+independently recounted by an adversarial verifier writing its own
+reader; both alternative explanations it was ordered to attempt are
+refuted in the data.
+
+**The halt: CONFIRMED, 3 of 3, exposure floor met exactly.** All three
+treatment casts qualify on both prongs (movetap 288.0 u/s into the cast
+AND the last wire event a moving `0x003D` at −0.12/−0.43/−0.80 s, no
+`0x0047` since — W was down, F28's exact glide state). Speed is **0.0 by
+the first sample after the burst** (+0.03/+0.03/+0.06 s) and stays 0.00 u
+of drift through the full ~2 s hold. F28's ~690 u float-forward is gone.
+*Killed alternatives:* "the client stopped itself" — no `0x0047` exists
+between the last moving report and any cast, and a key-release stop halts
+in place, which this does not (next paragraph); "a later press's
+walk-start reconciliation" — the snap sits inside the burst's own sample
+window with the `USE_SKILL` the only c2s anywhere near it, and the body
+then sits motionless for 2 s.
+
+**CANCELWALK-F31 — OBSERVED, adversarially recounted. The `0x0028` halt
+does not stop the body where it is: it lands it on the SYNC COPY's
+current integrated position.** All three halts are an exactly-backward
+snap (cos vs pre-velocity = −1.000): **156.9 / 110.1 / 207.1 u**, each
+landing at `sep` 0.00. The magnitude equals the pre-cast separation when
+the copy is parked (156.9 = 156.9, 207.1 = 207.1 exactly) and is less
+when the copy was still integrating a fresh grant (110.1 vs 138.5 — the
+copy advanced 28.8 u meanwhile, and the body landed on its LIVE
+position). `gate1` reads `below` on **all 471 samples** (max sep 280.8,
+under the 299.33 cut), so this is **not** gate 1 firing — it is the
+`0x0028` handler's own behaviour: halt = adopt the server-authoritative
+copy's state. The schema-"40" reading ("halts both copies") was right and
+incomplete; where the drawn body ends up was never in it.
+**Consequence, and it is the fix's price: the visible quality of
+`--cast-stop` is hostage to grant-cadence staleness (F27).** With the
+copy 100–200 u behind (ordinary straight-leg running), every running cast
+teleports the player that far backward. Retail stops you where you are.
+
+**Controls: CONFIRMED 2 of 2, and the report question answered.** The
+standstill cast and the Esc-cancelled cast changed nothing in any sampled
+field (0.0 u across and during; the no-op half of the licensing claim,
+now measured on our own build). The client **never reports the
+server-ordered halt** — the sole post-halt `0x0047` in the tape is the
+Esc release's own, reporting a long-held standstill point. Two knock-ons
+recorded: the server's wire-side picture of the player stays "moving"
+indefinitely after a halted running cast (11–20 s here) until the next
+direction change; and the next walk restarts FROM the snapped-to point,
+whose reports the zero-lead arm then re-grants — the snap coherently
+becomes the new truth.
+
+**Freeze untouched: CONFIRMED.** The two between-rep presses that landed
+during aftercast holds found gate B set and froze until a second edge —
+F29's behaviour, unchanged under the flag. `gate_b` mirrors the prop-8
+envelope on 471/471 samples with zero mismatches (F22 as state
+mirroring; the ~1 ms release→re-hold flip pairs at cast boundaries are
+invisible at the 107 ms poll and produce no observable edge).
+
+**Verdict per the registered decision table: the candidate is LICENSED,
+with F31 as a named cost.** The halt semantics are exactly as licensed;
+where the body lands is the sync copy, so shipping this as-is trades
+F28's forward glide (~690 u, every running cast) for a backward warp
+equal to the copy's staleness (~100–200 u typical, F27's term). The
+serious fix pairs it with staleness reduction — REALFIX's ground
+(`--resync`/P5, or cadence work). **The ruling is the owner's; nothing
+ships on by default.**
 
 ### 8.2 CANCELWALK-R9 · H10's confirmation — does turning the camera un-freeze a held key?
 
@@ -1570,3 +1660,87 @@ CLOSES, leaving R8 as the arc's only open item. H10 refuted → §7.7's F25
 mechanism is incomplete for our build, and the residual goes back to a
 desk read of the evaluator `0x005355C0`'s other dispatch conditions before
 any further run.
+
+### 8.2a R9 RAN — H10 CONFIRMED 6 of 6, and gate 1 is caught FIRING for the first time (2026-08-24)
+
+Captures `authsrv-20260824T213927-c1` + `movetap-20260824T213933`, shipped
+server (zero `0x0028` sends, verified). Operator report: "turn rep warped
+me, still rep only with W holds forward walk for ~300 u then stops" —
+**both phenomena are fully explained below, and neither is what it looks
+like.** Every claim was adversarially recounted by an independent agent
+from the raw files; all three alternative readings it was ordered to
+attempt are refuted.
+
+**Exposure: 6 of 6, both floors met.** Six cancelled casts (3 turn, 3
+still — the classification is exact on the wire: turn reps have 5/2/8
+further `0x003D` in their windows, still reps have zero). Every cast was
+preceded 0.17–0.40 s by the client's OWN `0x0047` (the operator released
+W; the client stopped itself, in place), every press is a single `0x003D`
+coincident with the cancel release, and `gate_b` was SET at the last
+sample before **all six** presses. The in-session ordinary walks moved
+every sampled field — the instrument control passes.
+
+**CANCELWALK-F32 — OBSERVED. H10 is CONFIRMED: the walk restart is the
+input-direction change, and the restart itself puts nothing on the
+wire.**
+- **Turn reps, 3 of 3: a genuine self-walk.** The drawn body reaches
+  288.0 u/s at +0.04/+0.16/+0.04 s after the press — at or immediately
+  after the gate-B clear (+0.06/+0.05/+0.04 s) — and **before the first
+  further `0x003D`** (+0.25/+0.50/+0.25 s), with zero c2s of any kind
+  between press and onset. The walk then curves continuously with the
+  camera, passes through in-rep grant points at full speed without
+  pausing, and ends beyond the last grant. *Killed alternatives:*
+  chained click-orders (motion is continuous through and past every
+  grant), and walk-caused-by-the-further-report (onset precedes it,
+  3 of 3).
+- **Still reps, 3 of 3: NO self-walk, ever.** The motion the operator saw
+  is OUR OWN ANSWER executing: the press's zero-lead grant drives the
+  body (snapped onto the copy, next finding) back along the stale leg and
+  **parks it 0.5/0.6/0.6 u from the granted point** at +1.2/+1.4/+1.7 s,
+  where it stays while W is still held; the client reports the park only
+  on the eventual release (+2.7–3.1 s). *Killed alternative:* a held-W
+  self-walk would overrun the grant by 400+ u in that time. One trap for
+  future readers: the park path is exactly collinear with the press
+  heading (the copy sits behind the body along the last pre-cast leg), so
+  grant-driven parking **masquerades as a facing-direction walk** — the
+  exact stop at the granted point is the discriminator.
+- **Wire-invisibility, refined:** the RESTART is wire-silent (3 of 3), as
+  F25/H10 claim; sustained turned walking then reports `0x003D` on
+  direction change at 0.25–0.5 s cadence. No tension with F26 — retail's
+  walking cancels lasted 0.08–0.33 s, too short to reach a report window.
+
+**CANCELWALK-F33 — OBSERVED, 7 of 7. GATE 1 FIRES, for the first time in
+this arc's instrumented history, and it is what the operator called "the
+warp".** Every snap in the session — the five press-time snaps
+(305–453 u), cast 3's mid-cast snap (365.5 u, gate B still set), and rep
+1's mid-walk snap (523.7 u at sep 555.3, coincident with an ordinary
+report→grant exchange) — fires exactly at a `gate1` **above → below**
+transition: sep 346–555 with `gate1: above` in the samples before, sep
+~0–26 with `below` after. 206 of 1,248 samples sat above the 299.33 cut
+in this session, against **zero** in R8's (max sep 280.8) and zero in
+F18's (max 265.8) — which is why no earlier run ever saw one fire. The
+press snap is **universal, not still-rep-specific**: turn reps 1 and 5
+snapped 445.3/332.1 u before self-walking (rep 3 skipped it only because
+the mid-cast snap had already zeroed its sep). Two sub-details left
+open, labelled: the exact trigger site of the mid-cast firing is unread
+(no grant lands in its window; the sync copy's own click-order arrival is
+the candidate), and one in-walk grant at sep ~312 — barely above the
+cut — did not snap, so the firing condition is near but not exactly the
+bare sep threshold.
+
+**What this changes.** (1) The freeze half of the arc **CLOSES**: per the
+registered decision table, §0's "the freeze is not a server bug at all"
+is promoted from SUPPORTED to OBSERVED — the double-press symptom is the
+client's input model meeting a still camera, end to end. (2) The
+registered still-arm prediction ("position bit-identical") was **wrong as
+written**: no self-walk occurred (the H10-relevant content holds), but
+the body moved under our own grant after a gate-1 snap — the registered
+refutation arm ("walks with no wire event") does not fire, because the
+motion has a wire cause we sent. (3) **What a player actually experiences
+at a cancel press under the shipped configuration is dominated by F27's
+staleness, not by the freeze**: above the gate-1 cut (~300 u of straight
+walking — easy to reach) a cancel press LOOKS like "warp back, walk
+forward, stop", and below it like the classic freeze. The staleness
+measurements here (sep 346–555 at ordinary presses) are the worst on
+record and are **filed to REALFIX with F27**, where the cadence question
+already lives.

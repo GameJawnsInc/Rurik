@@ -1636,6 +1636,16 @@ STOP_ANSWER = None     # None | "ack"
 # UNTOUCHED either way -- it is the client's input model (F25/F29), not
 # this send. Defaults are an owner ruling in this repo; this ships OFF and
 # stays off until the run passes and a ruling lands.
+#
+# R8 RAN 2026-08-24 (§8.1a, adversarially recounted): the halt works
+# 3 of 3 (288 -> 0.0 by the first sample after the burst, zero drift
+# through the cast; standstill/Esc no-ops 2 of 2; the client never
+# reports the halt). ONE COST, CANCELWALK-F31: the 0x0028 halt lands the
+# drawn body on the SYNC COPY's current position -- an exactly-backward
+# snap equal to the copy's staleness (110-207 u measured), not a
+# stop-in-place. The candidate is LICENSED with that named cost; the
+# ship ruling (as-is / paired with REALFIX staleness work / held) is the
+# owner's and has not been made.
 CAST_STOP = False
 
 
@@ -17264,6 +17274,11 @@ def main():
               "only if the body was IN MOTION at the prop8->1 send; "
               "fewer than 3 such casts is a VOID arm, not a null. "
               "Protocol: studies/movement/CANCELWALK.md sec.8.")
+        print("      MEASURED  2026-08-24 (sec.8.1a): halts 3 of 3, "
+              "no-ops 2 of 2 -- and CANCELWALK-F31: the halt lands the "
+              "body on the SYNC COPY (backward snap = staleness, "
+              "110-207 u), not in place. LICENSED with that cost; the "
+              "ship ruling is the owner's and has not been made.")
 
     # REALFIX-F1. Printed in the same house style and for the same reason: the
     # prediction goes out BEFORE the run so it cannot be rationalised after it.
