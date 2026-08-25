@@ -1562,8 +1562,11 @@ without `--resync`, its main() rebind source-locked). Protocol and eight
 registered predictions:
 `followon-notes/p5-resync-disarm.md` §8 — shipped defaults plus
 `--resync` (the pin default YIELDS to it; `--no-cast-stop` not needed),
-movetap attached, 5× walk-a-chord-then-stand reps, a `--no-resync`
-control arm, and the P8 rep. Expected shape: P5 **bounds** the snap at
+movetap attached, 5× walk-a-chord-then-stand reps, a control arm with
+`--resync` simply OMITTED (no `--no-resync` flag exists — the flag is
+opt-in, so the control IS the bare shipped default; the protocol's
+original wording named the phantom flag and hit the argparse error at
+the owner's terminal), and the P8 rep. Expected shape: P5 **bounds** the snap at
 100 u rather than removing it (HOLE B); the Q10 pricing of that residual
 is the owner's call after the run. Tests: `test_resyncscore` 116
 (floor 50 bare), `test_cancelwalk` 121, `test_position_trust` 219 (211

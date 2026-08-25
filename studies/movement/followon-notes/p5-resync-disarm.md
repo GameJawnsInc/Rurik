@@ -855,7 +855,10 @@ Stated before any run, in measurable terms, with the instrument for each.
 `--resync`**, one movetap tape and one gamesrv tape on the same clock. The rep that matters
 is F35's own, and it needs **no cast**: *walk a straight leg of at least one full `0x003D`
 chord (~512 u, ~1.8 s), release, and stand still for 2 s.* Repeat 5×. Then a control arm with
-`--no-resync`, same input.
+~~`--no-resync`~~ **the flag simply OMITTED** *(corrected 2026-08-25 when the recipe was
+first typed at a terminal: no `--no-resync` flag exists and none should — `--resync` is
+opt-in, OFF by default, so the control arm IS the bare shipped default, and an off-switch
+for an off-by-default flag would be the inert-flag defect with a new face)*, same input.
 
 1. **P1 — F35 goes to zero.** With `--resync`, in every rep, `movetap` shows **no `async_at`
    step > 5 u** in the 2 s after the stop. Control arm reproduces the snap:
