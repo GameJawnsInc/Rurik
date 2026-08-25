@@ -1566,7 +1566,12 @@ CANCEL_STOP = False
 #            + re-pin pair, and at least one got nothing (F5/F9). NOT a
 #            grant: no destination armed, no grant clock stamped, and the
 #            handler is a no-op on a body that already stopped itself -- so
-#            zero warp exposure, the R1-suppress cost class.
+#            zero warp exposure, the R1-suppress cost class. (F34, measured
+#            2026-08-25 sec.8.3d, REFUTES that last clause: the handler
+#            answers for the SYNC COPY, so the no-op is conditional on the
+#            copy being parked too. A stop mid-copy-convergence -- exactly
+#            when this arm's ack arrives -- gets warped onto the copy;
+#            167.6 u measured. R6's warp exposure is NONZERO.)
 #   repin -- REFUSED, deliberately unbuilt. Retail's OTHER stop answer
 #            (0x002B [1.0, 9] + a zero-distance 0x0029 re-pin) on ordinary
 #            stops IS the refuted --stop-echo's wire effect plus a prefix --
@@ -1625,7 +1630,12 @@ STOP_ANSWER = None     # None | "ack"
 # only when IN MOTION and no-ops on a parked body (schema GAME_SMSG "40" --
 # the semantics R6 already relied on), so a standstill cast is untouched.
 # NOT a grant: no destination armed, no grant clock stamped (0x0028 is not
-# in _note_wire_move's opcode set), zero warp exposure.
+# in _note_wire_move's opcode set), zero warp exposure. (F34, sec.8.3d,
+# CONDITIONS both claims: "in motion"/"parked" is answered for the SYNC
+# COPY, so a parked body under a converging copy is NOT untouched -- it
+# warps onto the copy, 167.6 u measured at a stop-then-cast. The halt
+# arm's snaps therefore include parked-body warps; the pin arm stopped
+# sending bare 0x0028s entirely, sec.8.3e.)
 #
 # PREDICTIONS (registered at §8 before this code ran anywhere): cast while
 # RUNNING -> the drawn body halts within ~0.15 s of the cast start instead
@@ -4792,7 +4802,11 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
             f"DIAGNOSTIC ONLY. Adds one s2c 0x0028 [player] answering every "
             f"player 0x0047 stop report -- retail's own bare stop-ack, NOT a "
             f"grant (no destination armed, no grant clock stamped), a no-op "
-            f"on a body that already stopped itself. The cancel-instant "
+            f"on a body that already stopped itself ONLY while the sync "
+            f"copy is parked too -- F34 (CANCELWALK.md 8.3d) measured "
+            f"the same message warping a parked body 167.6 u onto a "
+            f"still-converging copy, so this arm's warp exposure is "
+            f"nonzero. The cancel-instant "
             f"answer stays exactly as --zero-lead ships. Predictions and "
             f"readout: studies/movement/CANCELWALK.md 7.4.")
     if cast_stop == "halt":
@@ -4817,7 +4831,8 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
             "point) followed by the 0x0028 halt on the now co-located "
             "copies -- OR nothing at all, when any door refuses "
             "(click-walk, parked, pinned, refused report, off-mesh, "
-            "unresolved plane, unverified rate), with the reason on the "
+            "no mesh, unresolved plane, unverified rate, no report, "
+            "no/degenerate heading, future report), with the reason on the "
             "console line. A bare 0x0028 never fires: its no-op claim "
             "held only when the SYNC COPY was parked too, and R10's run "
             "measured it warping a parked body 167.6 u onto a converging "
@@ -8850,10 +8865,12 @@ def handle_skill_press(values, send, state, conn_id, opcode):
         # are the measured family; the flag block names the instant-skill
         # and adrenal-adjacency residuals): an attack skill's start drives
         # chase movement a halt would fight. The
-        # handler no-ops on a parked body (schema GAME_SMSG "40"), so a
-        # standstill cast is untouched -- not a grant, no grant clock,
-        # zero warp exposure. Predictions: the flag's comment block and
-        # CANCELWALK.md 8.
+        # handler no-ops on a parked body (schema GAME_SMSG "40") ONLY
+        # when the SYNC COPY is parked too (F34, sec.8.3d: a converging
+        # copy warped a parked body 167.6 u) -- which is why the pin arm
+        # below never sends it bare, and why the halt arm's snaps
+        # include parked-body warps. Not a grant, no grant clock.
+        # Predictions: the flag's comment block and CANCELWALK.md 8.
         if CAST_STOP and not is_attack:
             # B1 (review 2026-08-25), and it gates BOTH arms: a cast
             # during a CLICK-walk suppresses the whole cast-stop. The
@@ -17629,7 +17646,11 @@ def main():
               "only when IN MOTION -- cancelling the queued move at "
               "agent+0x50 -- and no-ops on a body that already stopped "
               "itself (schema GAME_SMSG 40; the zero-write reading is "
-              "smsgnames'/F10's). Not a grant; zero warp exposure.")
+              "smsgnames'/F10's). Not a grant. CAVEAT (F34, 8.3d): "
+              "the no-op is CONDITIONAL -- the handler answers for the "
+              "SYNC COPY, and a stop whose copy is still converging "
+              "gets warped onto it (167.6 u measured), so this arm's "
+              "warp exposure is NONZERO.")
         print("      PREDICTS  H6 (stop-closure prior state): the single "
               "mid-cast press now WALKS. H5-without-H6, H7, H4: still "
               "FREEZES -- and a freeze also retires F5's residual as a "
@@ -17666,7 +17687,12 @@ def main():
                   "lands the body on the SYNC COPY (backward snap = the "
                   "copy's staleness, 110-207 u), not in place. That warp "
                   "is what the ruling refused; --cast-stop=pin is the "
-                  "no-warp candidate.")
+                  "no-warp candidate. CAVEAT (F34, 8.3d): the 2-of-2 "
+                  "no-op was measured on long parks with CONVERGED "
+                  "copies; the handler answers for the sync copy, so a "
+                  "stop-then-cast mid-convergence WARPS a parked body "
+                  "(167.6 u measured) -- this control's snaps include "
+                  "parked-body warps.")
         else:
             print("[map] --cast-stop=pin ON. CANCELWALK R10 (dead-reckoned "
                   "re-pin + halt), DIAGNOSTIC ONLY -- no outcome ships "
@@ -17691,7 +17717,9 @@ def main():
                   "the 0x0028 halt on the now co-located copies. "
                   "NOTHING: when any door refuses -- click-walk, parked, "
                   "pinned by a previous cast, refused report, off-mesh, "
-                  "unresolved plane, unverified rate -- with the reason "
+                  "no mesh, unresolved plane, unverified rate, no "
+                  "report, no/degenerate heading, future report -- with "
+                  "the reason "
                   "printed to this console as pin:<door>; that line, not "
                   "the wire, is the scorable record. A bare 0x0028 "
                   "never fires (F34: it lands the body on the sync copy "

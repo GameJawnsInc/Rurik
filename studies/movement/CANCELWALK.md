@@ -75,7 +75,9 @@ stops you when you start casting; we never send anything that does.
 
 **The message that fixes it already exists in the tree** — s2c `0x0028`
 AGENT_STOP_MOVING, which **halts when in motion and no-ops when parked**
-(schema `GAME_SMSG "40"`). `agents.agent_stop_moving()` is the builder,
+(schema `GAME_SMSG "40"`; **conditional since F34, §8.3d** — the handler
+answers for the SYNC COPY, so "parked" means *the copy too*: with the
+copy still converging the same message warped a parked body 167.6 u). `agents.agent_stop_moving()` is the builder,
 `GAME_SMSG_AGENT_STOP_MOVING` the constant, both landed and tested
 (`test_cancelwalk.py` §6, floor 46). It was built for **R6** and was VOID there
 because it was fired at **stops**, where it can only no-op (§7.4a). **Fired at
@@ -95,7 +97,7 @@ halt arm stays runnable as R10's control; the no-warp successor is
 **`--cast-stop=pin` (CANCELWALK-R10, §8.3, wired 2026-08-25)**: a
 dead-reckoned `0x002C` hard-set at the body's true position first, then
 the halt, which then lands on co-located copies and cannot snap.
-**R10 awaits its owner-driven run; nothing ships without a ruling.**
+**R10 RAN 2026-08-25 (§8.3d): every bar passed at the reckoned casts, its yield CANCELWALK-F34 is fixed as PIN-OR-NOTHING (§8.3e), and what remains is the §8.3e completion run; nothing ships without a ruling.**
 
 ### What is CLOSED — do not re-open without new evidence
 
@@ -735,7 +737,9 @@ close F9's exposure confounder: complete one cast before the cancelled one.
 **BUILT same day: `--stop-answer=ack`** — s2c `0x0028 [player]` answering
 EVERY player `0x0047` (the server cannot know which stop precedes a cast, and
 the handler no-ops on a parked body, so every-stop is one-shot-equivalent at
-zero warp exposure; the schema's own handler read says the halt zeroes the
+zero warp exposure — **a claim F34 has since REFUTED (§8.3d): the no-op is
+conditional on the SYNC COPY being parked too, and a stop mid-convergence
+gets warped onto the copy, so R6's warp exposure is nonzero**; the schema's own handler read says the halt zeroes the
 queued-move store `agent+0x50`, the very field R5 samples). Refused without
 `--zero-lead` and with `--cancel-answer` (one lever per run); `repin` is
 **deliberately unbuilt and refuses with the reason** — answering ordinary
@@ -1597,7 +1601,10 @@ teleports the player that far backward. Retail stops you where you are.
 **Controls: CONFIRMED 2 of 2, and the report question answered.** The
 standstill cast and the Esc-cancelled cast changed nothing in any sampled
 field (0.0 u across and during; the no-op half of the licensing claim,
-now measured on our own build). The client **never reports the
+now measured on our own build — **and SCOPED by F34, §8.3d: both were
+long parks with converged copies. The no-op is conditional on the SYNC
+COPY being parked too; a stop-then-cast mid-convergence warped 167.6 u,
+so the halt arm's snaps include parked-body warps**). The client **never reports the
 server-ordered halt** — the sole post-halt `0x0047` in the tape is the
 Esc release's own, reporting a long-held standstill point. Two knock-ons
 recorded: the server's wire-side picture of the player stays "moving"
@@ -2120,10 +2127,14 @@ is VOID) *plus:*
 - **Backpedal cast (if performed):** same bars, the reckon riding
   0.652 × 288 = 187.8 u/s; the old table's ~45–180 u forward miss does
   not occur.
-- **Standstill → `pin:parked`,** no `0x002C`, the `0x0028` no-ops,
-  nothing changes in any sampled field (unchanged).
-- **Second cast with no report between → `pin:pinned-parked`,** no
-  `0x002C` (unchanged).
+- ~~**Standstill → `pin:parked`,** no `0x002C`, the `0x0028` no-ops,
+  nothing changes in any sampled field (unchanged).~~ **SUPERSEDED by
+  §8.3e (F34):** nothing goes out at all — the "no-op" 0x0028 this
+  bullet licensed is the message that warped 167.6 u at R10's
+  stop-then-cast.
+- ~~**Second cast with no report between → `pin:pinned-parked`,** no
+  `0x002C` (unchanged).~~ **SUPERSEDED by §8.3e (F34):** the label
+  rides the console line and no `0x0028` goes out either.
 - **Click-walk cast (NEW):** the gamesrv log prints the
   `pin:click-walk` suppression line; **NO `0x002C` and NO `0x0028` go
   out**; the body does NOT halt — it keeps click-walking through the
@@ -2358,3 +2369,31 @@ casts glide; the click-leg-death observation; the slow-plateau rate
 residual). Any rep fails → its signature localises the error; fix and
 re-run. **Defaults are an owner ruling; nothing ships on from this
 run.**
+
+**The F34 fix's own adversarial pass (same day, over `c44930c`): NO
+BLOCKER.** The 5-mutation probe went 5 of 5 RED with named FAILs and no
+tracebacks (gate deleted, refusal branch deleted, gate inverted, the
+console label dropped — telemetry is itself asserted — and the pair
+broken the other way, 0x002C with no halt). The degradation-matrix
+skeptic refuted nothing structural: no refusal-door × body-state cell
+where suppression is worse than the old snap in an unpriced way (the
+refusal branch writes NO state, so a refused cast leaves the model
+tracking the true body — the old wiring halted the client while the
+server model kept walking); the pinned-parked cell is equal-or-better
+in every state; and the console record is preserved UNCONDITIONALLY —
+`session.py` pumps gamesrv stdout to
+`vault/captures/harness/<stamp>/gamesrv.log` with a per-line
+write+flush, no flag involved, which is how R10's scoring could quote
+line 400. Its yield — 3 REALs + 2 NITs, every one a stale
+"zero warp exposure"/"no-ops when parked" claim standing where F34 had
+refuted it (the study head's status line and F28 paragraph, §8.1a's
+controls, R8's flag block and both banners, the shared send-site
+comment, the door lists, §8.3c's unstruck bullets) — is annotated in
+place. **One knock-on worth its own line: F34 refutes CANCELWALK-R6's
+licensing claim too.** `--stop-answer=ack` answers EVERY player stop
+with the same bare `0x0028`, including a stop whose copy is still
+converging — exactly F34's regime, arriving even sooner after the stop
+— so R6's warp exposure is NONZERO, and its flag block, banner and
+composition note now say so. (R6 stays runnable as a diagnostic; its
+7.4a run, like R8's controls, measured only long parks with converged
+copies.)
