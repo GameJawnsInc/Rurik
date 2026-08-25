@@ -1546,7 +1546,32 @@ second-cast rep (forgotten), and a 3+ s dead-straight-leg cast (THIN —
 reports flowed to within 0.97 s of every reckoned cast). The flag
 stays OFF regardless; defaults are an owner ruling.
 
-**THE `--resync` DISARM RUN IS STAGED (2026-08-25) — next owner run.**
+**THE `--resync` DISARM RUN RAN THE SAME EVENING (~17:42–17:53) AND IS
+SCORED — `followon-notes/p5-resync-disarm.md` §9 is the record.** Three
+arms, all clearing the exposure floor, scored by four lanes plus two blind
+skeptics. **The mechanism is CONFIRMED with a dose-response nobody
+registered** (stale-armed samples 0 treated / 40 control / 53 P8; matured
+stale arrivals 0 / 9 / 10; every fire cost 0.000 u rendered — Q10's axis
+stayed clean), and **HOLE D was affirmatively absent. But the F35 rendered
+snap appeared in NO arm** — P8's own pre-registered clause fired, both
+skeptics returned REFUTED on "the treated zero was caused by the resync,"
+and the failure is the REGISTRATION's: its ≥2-of-5 control floor assumed a
+drag rate ~15× the 8-of-586 (~1.4%) correction the same note carries, so
+zero snaps was the modal outcome of every arm. **The rendered-level
+question was then ANSWERED FROM THE CORPUS the same evening (§9.5): the
+shipped verdict, replayed through authsrv's own functions against all 8
+known drag events, prevents 8 of 8** — 3 by an in-window fire (margins
+0.32/1.18/7.12 s), 5 by the at-arm fire alone, whose separations
+(101.7–297.5 u) all sit inside the [100, 299.33) band — so at the refuted
+fence threshold the count drops to 3 of 8, a per-event corroboration of
+Q11's ground. Residuals P5 still does not reach: HOLE B's sub-100 u tail
+(26–54 u) and HOLE A's wire-silent windows. The operator's "jittery"
+control note found NO
+objective correlate and stays UNVERIFIED (movetap delivers only ~9–12 Hz
+effective on this machine, an instrument floor now on record). The ship
+ruling on `--resync` — bounded residual vs measured 0.000 u fire cost —
+is the owner's next call.
+*The staging block that preceded the run, kept for the record:*
 The follow-on recon (`studies/movement/followon-notes/README.md`, merged
 to `main` the same day) answered F35's counterfactual from tape (castless,
 54.2 u), corrected its framing (8 of 586 arrival fires drag the body), and

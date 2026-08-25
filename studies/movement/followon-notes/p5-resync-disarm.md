@@ -908,3 +908,165 @@ P5 (the prediction) shows a bounded residual ⇒ the owner is choosing a *thresh
 *fix*, and §4.2a's 100-vs-299.33 disagreement has to be ruled before shipping. Any of P1-P3
 fails ⇒ the failure names its own door: `reason` on the record, then the movetap `target`
 field, then `+0x48` vs `+0x58`.
+
+---
+
+## 9. THE RUN — 2026-08-25 evening, scored
+
+**Three arms, owner-driven, ~17:42–17:53.** Scored by four independent lanes over the
+paired tapes plus two blind skeptics told to refute the headline claims; every number
+below reproduced from the raw captures, wall-clock aligned, with detector positive
+controls (a synthetic +150 u shift is caught; the known 2026-08-21 F35 event is caught
+by the same detector that finds nothing here). **Arms identified from the tapes, not
+the launch order:**
+
+| Arm | gamesrv × movetap | Identification | Exposure |
+|---|---|---|---|
+| TREATED (`--resync`) | `authsrv-20260825T174230-c1` × `movetap-174353` | 15 resync evals, 6 fired | **6 reps** (legs 502–513 u, stands 1.83–2.59 s) |
+| CONTROL (bare default) | `authsrv-20260825T174840-c1` × `movetap-174900` | zero resync records | **5 reps** (legs 525–673 u), after an untapped wander phase |
+| P8 (`--resync-separation 2000`) | `authsrv-20260825T175029-c1` × `movetap-175045` | 24 evals, 0 fired, all `in-agreement` | **5 reps** (legs 544–719 u), windowed to the restarted movetap; the discarded click attempt (`movetap-175035`) verified excluded and non-leaking (the click was never even granted) |
+
+All arms clear the 3-rep exposure floor; each movetap is provably its own session's
+tape (fire payloads land bit-identical in the movetap within 1–2 samples). Protocol
+clean: zero casts, zero in-window clicks, all grants ZERO LEAD.
+
+### 9.1 Cell verdicts
+
+| Cell | Verdict | The number |
+|---|---|---|
+| **P1 treated** (no async step > 5 u post-stop) | **PASS** (OBSERVED) | 0 snap-shaped steps; 0 backward steps in 362 samples; max step anywhere 28.5 u = one ~80 ms walking poll |
+| **P1 control** (≥ 2 of 5 reps snap 100–500 u) | **FAIL** (OBSERVED) | **0 of 5 snapped**; largest step anywhere 44.4 u at walking speed — see §9.2 |
+| **P2** (fire AT each 0x0047, sep 100–550) | **PARTIAL** (OBSERVED) | 3 of 6 fires at stops (seps 502–511), 3 at mid-walk chord reports 0.075–0.271 s earlier (seps 511–513) — **the fire site is a race the ~512 u leg makes a coin flip**; every stop instant read sep 0.00, so coverage was functionally 6/6 |
+| **P3** (fire yank ≤ 2 u, median 0) | **PASS** (OBSERVED) | 0.000 u net displacement after all 6 fires; the three stop-fires exactly 0.000 |
+| **P4** (post-fire grant short-circuits) | **PARTIAL** (SUPPORTED) | L216 caught bit-for-bit on 2 of 9 grants (the ~1 ms armed state is below the sampler); the refutation shape is absent — **no row in the whole treated tape shows stop−updated > 1**, i.e. no real leg ever baked after a fire |
+| **P5 bound** (no step > 100 u) | **PASS** (OBSERVED) | zero steps > 100 u anywhere; detector proven on an injected +150 u control |
+| **P5 visibility** (residual steps < 100 u visible) | **FAIL** (OBSERVED) | no residual visible at all above the ~8 u sampler floor — the arm BEAT the prediction; the "is visible" clause predates the 8-of-586 correction |
+| **P6 rate** (4–10/min) | **FAIL** (OBSERVED) | 3.21/min of capture span (74% idle) but 16.2–23.9/min of walking/active time — no denominator lands in the band; composition, not mechanism |
+| **P6 share** (20–35% of reports) | **FAIL** (OBSERVED) | 6/15 = 40.0%; this protocol emits the minimal report mix (one full-separation report per 2.5), concentrating the share. The verdict logic itself was exact: every sep ≥ 100 fired, every sep < 100 refused |
+| **P7** (no fire clears 520 u) | **PASS** (OBSERVED) | max rendered step 28.5 u vs the 520 bar. *Flag: fired separations 502–513 u sit 7–18 u under 520 on the sync side — the margin is protocol-thin (sep = leg length here), not structural* |
+| **P8 wire** (nothing fires at 2000) | **PASS** (OBSERVED) | 0 of 15 in-window evals fired, 13 at seps 126–516 u the shipped cell would have engaged — the raised threshold provably in force (behaviourally bounded > 515.8 u; no capture record names the configured value) |
+| **P8 rendered** (the snap RETURNS) | **FAIL** (OBSERVED) | 10 of 10 armed arrivals matured onto grant points (target → `[inf,inf]`) — and **0 rendered drags** |
+
+### 9.2 THE HEADLINE — P8's own refutation clause fired, and it refutes the registration, not the mechanism
+
+**The F35 rendered snap appeared in NO arm of this run.** Not in the treated arm (as
+predicted), and not in the control or P8 arms (against the registration): 19 matured
+stale arrivals across the two counterfactual arms (landing staleness 9–516 u, six inside
+the registered 100–500 u band), 93 stale-armed samples — **zero drags**. Both blind
+skeptics, working independently from the raw tapes with positive-controlled detectors,
+returned REFUTED (high confidence) on "the treated arm's zero was caused by the resync":
+the pre-registered clause — *"The snap must return. If it does not, the treated arm's
+zero was not caused by the resync"* — fired.
+
+**The calibration was wrong by this note's own §1.2.** P1-control's ≥ 2-of-5 floor
+implicitly assumed a per-arrival drag rate ~15× the corpus rate this same document
+corrected F35 to (8 of 586 arrival fires, ~1.4%): at the corrected rate, P(0 drags) ≈
+0.77 over all 19 counterfactual exposures — **zero snaps was the modal outcome of every
+arm**, treated or not. The registration conflated the mechanism's precondition with its
+~1.4% expression, one section after measuring the difference. Recorded plainly, because
+the registration was mine.
+
+### 9.3 What the run DID establish — the mechanism, dose-responsive, at zero cost
+
+- **The disarm/prevention works exactly as decoded, with a cross-arm dose-response the
+  predictions never registered** (the cleanest readout in the run): stale-armed samples
+  **0** (treated) vs **40** (control) vs **53** (P8); matured stale arrivals **0 vs 9 vs
+  10**. Each fire hard-set the sync copy onto the reported point, so the next zero-lead
+  grant baked a ~1 ms self-leg instead of a ~1.78 s one and the far-armed state never
+  formed. Raising the threshold to 2000 restored the hazard population to control level.
+  OBSERVED.
+- **The fires cost nothing at the rendered level**: 0.000 u net displacement after every
+  fire, zero backward steps, zero hard jumps — Q10's own axis stayed clean under 6 fires.
+  OBSERVED.
+- **HOLE D affirmatively absent** (0 `no-sync-model` in 39 evals across both resync
+  arms), and telemetry exists for every evaluation. The staleness and rate-limit gates
+  never engaged (all ages ≤ 0.2 ms, min fire spacing 3.67 s) — this run exercised the
+  three-constant policy on exactly one axis, separation.
+- **What it did NOT establish**: that emptying the precondition removes the ~1.4%
+  rendered drag. 19 exposures cannot see a 1.4% event; ~200+ exposures would be needed
+  to expect even ~3 — or the corpus can answer it, see §9.5.
+
+### 9.4 The operator's "jittery" control arm — no objective correlate; UNVERIFIED
+
+Exhaustive anomaly census over all three rendered traces (over-speed, parked ghost
+steps, reversals, oscillation triples, F35-shape at any magnitude): **zero hits in every
+class, every arm**. The control's rendered trace is textbook-smooth — its two largest
+steps (44.4/43.2 u) sit on its two longest sampler gaps at walking speed. The only
+channel that differs in the control is the *invisible* sync copy (separation swinging to
+527 u with event-jumps at arrivals). Whatever the operator felt is sub-sample
+(the control had the coarsest effective sampler, p50 115 ms), in a channel movetap does
+not watch (camera/compass/UI), in the untapped first 14 s, or not position at all.
+Per the house rule, the perceptual claim stays **UNVERIFIED** — a follow-up needs an
+unmistakable signal change, not a rerun of the same instrument.
+
+**Instrument yield:** movetap delivered 8.7–12.4 Hz effective against 50 Hz requested on
+this machine — a capability floor to budget for; it was enough here only because every
+scored phenomenon is > 8 u or wire-side. And the gamesrv capture records no config row
+naming the active `RESYNC_SEPARATION` — the P8 cell was provable only behaviourally;
+worth a capture-side config record before the next parameterized run.
+
+### 9.5 The question the run could not answer, answered from the corpus
+
+Whether the resync prevents the *actual* drags cannot be sampled live at ~1.4% per
+arrival — but the corpus already holds the population: the 8 known drag events among
+586 arrival fires. The desk replay of the shipped `_resync_verdict` against each of the
+8 (driving **authsrv's own functions** — `_resync_verdict`/`_sync_position`/
+`_note_wire_move` — with only the take-path state mirror reimplemented; both positive
+controls green: the 586/89-parked census reproduces exactly, and the flagship replay
+reproduces §3.2's 8-of-20 fires with the 177.41 u stop-fire to 0.01 u) answers
+per-event whether a fire lands before the arrival matures:
+
+| # | drag | window (arm→maturity) | in-window fire? | at-arm fire? | verdict |
+|---|---|---|---|---|---|
+| 1 | 26.08 u (`082702` ~L1196) | 1.62 s, zero reports | no — HOLE A | **yes, sep 109.8** | PREVENTED-AT-ARM |
+| 2 | 28.76 u (`082702` ~L1645) | 0.67 s, zero reports | no — HOLE A | **yes, sep 101.7** | PREVENTED-AT-ARM |
+| 3 | 54.20 u (`124010` ~L1785, the castless flagship) | 0.86 s, zero reports | no — HOLE A | **yes, sep 255.9** | PREVENTED-AT-ARM |
+| 4 | 35.96 u (`124010` ~L1912) | 1.00 s, zero reports | no — HOLE A | **yes, sep 297.5** | PREVENTED-AT-ARM |
+| 5 | 3437.26 u (`210152` ~L717, click-walk) | 10.02 s, 6 reports | **yes — sep 1306.7, margin 7.12 s** (plus 3 more behind it) | n/a | **PREVENTED** |
+| 6 | 30.53 u (`183544` ~L297) | 0.48 s, one report | no — HOLE B (refused sep 30.5) | **yes, sep 140.8** | PREVENTED-AT-ARM |
+| 7 | 167.60 u (`130918` ~L1084) | 0.87 s | **yes — sep 154.1, margin 0.32 s** | yes, sep 979.9 | **PREVENTED** |
+| 8 | 177.41 u (`140548` L111, §8.3f's F35) | 1.81 s | **yes — sep 177.41, margin 1.18 s** | yes, sep 512.9 | **PREVENTED** |
+
+**Aggregate: 8 of 8 prevented under the shipped semantics** — 3 by a fire strictly
+inside the (arm, maturity) window, 5 by the **at-arm fire**: the shipped call order is
+take → `_maybe_resync` → grant, so the verdict fires at the arming report *in the same
+handler breath, before the grant goes out*; the `0x002C` hard-sets both copies to the
+reported point and the immediately following zero-lead grant (same point) takes the
+≤ 1.0 u short-circuit — the stale leg never forms (SUPPORTED, resting on the decode +
+the in-corpus L216 observation; the in-window fires are OBSERVED replays). Under the
+strict a-fire-after-arming reading, 3 of 8; the five misses' doors are 4× HOLE A
+(wire-silent window) and 1× HOLE B, with residuals 26.1–54.2 u — all under the 100 u
+bound, exactly as HOLE B prices.
+
+**Per-event corroboration of §4.2a's ruling:** all five at-arm preventive separations
+(101.7, 109.8, 140.8, 255.9, 297.5 u) sit inside the differential band **[100, 299.33)**
+— at the refuted fence value none of them fires, and the prevention count drops to
+**3 of 8** (SUPPORTED via the strict-subset property, not a fresh fence replay). Two of
+the eight clear the 100.0 threshold by only 1.7 and 9.8 u of separation — the shipped
+value has thin margin on the smallest drags, which is an argument *against* raising it,
+not for.
+
+**Three secondary yields of the replay, filed:**
+1. *Census inconsistency in this note's own source*: drag #7 (`130918`, 167.6 u) lands
+   **13.53 u** off its armed point — outside `fires.py`'s own 5 u landing tolerance, so
+   the published "8 of 586" used a looser criterion for that one event; and the 8th
+   magnitude the README's list omits is **3437.26 u** (the click-walk outlier). The set
+   itself is confirmed three ways and stands.
+2. *Replay hygiene, HOLE D's cousin*: the sync model must be seeded from the session's
+   **actual placement** (its first report), not today's `MAP_STATIC_CONFIG` spawn — the
+   08-24/25 sessions placed ~19,000 u from the map's current configured spawn and a
+   config-seeded replay mints 2 spurious fires. Seed provenance matters.
+3. *Counterfactual validity is UNVERIFIED where it matters least*: the replay holds the
+   recorded client stream fixed while injecting fires — cleanest where the payload is
+   the just-reported point (yank ≈ 288 × send delay, sub-unit on loopback), weakest for
+   #5, whose mid-click-walk fire would cancel the player's click-ordered walk and
+   diverge downstream traffic; its 7.1 s margin and four independent in-window fires
+   survive any plausible divergence.
+
+**Net for the ship conversation:** the live run proved the mechanism dose-responsively
+at zero rendered cost (§9.3); this replay shows the same shipped verdict landing a
+preventive fire for **every known expression of the defect**, 5 of 8 of which only the
+ruled 100.0 threshold reaches. What P5 still does not do is remove HOLE B's sub-100 u
+residual (the five smallest drags recur at 26–54 u if the at-arm ordering is ever lost)
+or reach a wire-silent window (HOLE A). The Q10 pricing of that residual — against the
+measured 0.000 u cost of the fires — is the owner's call.
