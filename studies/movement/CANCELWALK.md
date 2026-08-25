@@ -208,11 +208,30 @@ review agents → re-register → run) is **done through its third item,
    **CANCELWALK-F34** (the bare `0x0028` on a refused reckon warped a
    parked body 167.6 u onto a converging copy), **fixed the same day
    as PIN-OR-NOTHING (§8.3e)**.
-5. **NEXT: the completion run — three short reps, §8.3e**: the
-   stop-then-cast F34 regression rep, the second-cast rep, and one
-   cast 3+ s into a dead-straight leg. Score against §8.3e; the
-   refusal labels now live on the gamesrv console line, so keep that
-   terminal's scrollback (or its log) with the two tapes.
+5. ~~The completion run — three short reps, §8.3e.~~ **RAN 2026-08-25
+   ~14:05, scored at §8.3f.** The ARM passed everything it controls:
+   both reckoned casts clean (F31 refuted 6 of 6 cumulative), both
+   pinned-parked reps at 0.0000 u with the guard held across the full
+   6 s recharge, wire silence 3 of 3, labels 5 of 5. Two yields: the
+   long-leg rep is **RETIRED as mis-derived** (the ~512 u `0x003D`
+   chord caps the report gap at ~1.8 s at cruise — the 3 s gap cannot
+   exist; the reckon stands tested to 277 u, bounded ~524 u), and
+   **CANCELWALK-F35**: the F34-regression rep reproduced its regime,
+   the suppression held, and the body warped 177.408 u anyway, wire
+   silent — the client's `+0x48` arrival teleport firing on the
+   shipped zero-lead grant's STALE armed destination (the movetap
+   `target` field shows arm → fire → `[inf, inf]`), a third staleness
+   expression **filed to REALFIX** with the retail 70-of-88 stop-ack
+   observation as its candidate and the `--stop-echo` refutation as
+   its caution.
+6. **NEXT: the owner's ship ruling on `--cast-stop=pin` (§8.3f's
+   closing paragraph).** The arm has met every bar it controls across
+   two runs; the residuals are named; the remaining warps near it are
+   F33/F35 — shipped-default debt that fires with the flag OFF.
+   Accept as F28's fix, or hold behind REALFIX. (For REALFIX,
+   whoever picks it up: F35's no-cast counterfactual is one
+   desk-run — walk, stop, stand still ~2 s, no cast — and is
+   UNVERIFIED until run.)
 
 Standing constraints for whoever continues: `test_cancelwalk.py` floor
 is **102**; the flag ships OFF and its default is an owner ruling; the
@@ -2339,8 +2358,14 @@ is a defect, the warp is refused.
    and cast within ~1 s of stopping — the stop-then-cast inside the
    copy's convergence window. *Predicted:* the console prints
    `pin:parked`, NOTHING goes on the wire, and the body does not move
-   by our hand — movetap shows zero displacement bracketing the cast
-   while the sync copy finishes converging on its own. (This exact
+   by our hand — ~~movetap shows zero displacement bracketing the cast
+   while the sync copy finishes converging on its own~~ **(that half of
+   the prediction FAILED as written and is corrected at §8.3f: the
+   suppression held and nothing was sent, but the copy converges to its
+   armed GRANT TARGET, not to the body, and the client's arrival
+   teleport snapped the body 177.408 u onto it — CANCELWALK-F35, the
+   shipped default's debt, filed to REALFIX. The bar conflated "our arm
+   moves nothing" — true, held — with "nothing moves").** (This exact
    sequence warped 167.6 u under the previous wiring.)
 2. **The second-cast rep (required, forgotten in R10's run):** cast
    while running (a reckoned pin fires), let the halt land, then cast
@@ -2357,7 +2382,10 @@ is a defect, the warp is refused.
 
 *Failure signatures:* **any body displacement bracketing a REFUSED
 cast is a regression of F34's fix** — read the console for which door
-and movetap for the magnitude; the §8.3c signatures (backward =
+and movetap for the magnitude — **amended by §8.3f: check the landing
+point against the LAST ARMED GRANT DESTINATION first; bit-identical
+means F35 (the client's arrival teleport on a stale zero-lead dest,
+REALFIX's), not a regression**; the §8.3c signatures (backward =
 model error; forward = rate-regime FIRST, then belief; a non-click
 refusal label with motion = a B1-class belief hole) carry over
 unchanged for pinned casts.
@@ -2397,3 +2425,108 @@ converging — exactly F34's regime, arriving even sooner after the stop
 composition note now say so. (R6 stays runnable as a diagnostic; its
 7.4a run, like R8's controls, measured only long parks with converged
 copies.)
+
+### 8.3f The COMPLETION RUN scored — the arm is clean everywhere it acts, and the rep that reproduced F34's trigger unmasked a THIRD warp mechanism with nothing sent at all (2026-08-25)
+
+**The run:** owner-driven, ~14:05. Tapes:
+`vault/captures/movetap/movetap-20260825T140548.jsonl` +
+`vault/captures/gamesrv/authsrv-20260825T140517-c1.jsonl` +
+`vault/captures/harness/20260825T140440/gamesrv.log` (the console
+record). Scored by three agents, the crux re-checked by hand at row
+level. Five casts, five correct labels, console-vs-wire exactly clean,
+zero clicks.
+
+**Everything the ARM controls passed, in both halves:**
+- **The two `pin:reckoned` casts** (t=52.581, 77.022): pin-vs-body
+  6.50 / 2.96 u; across-halt 9.86 / 25.43 u, **backward 0.00 on
+  both** (F31's snap now refuted **6 of 6** across the two runs); at
+  rest +0.053 / +0.084 s; pre-pin sep 508–521 u (gate1=above, the
+  F31/F33 magnitude class) collapsing to **0.00** at both pins; burst
+  order and plane correct.
+- **Both `pin:pinned-parked` reps are perfect**: 0.0000 u max
+  inter-row step over [−1 s, +2.5 s], the body parked exactly on its
+  own pin point for 8.17 / 8.09 s, ZERO movement reports across each
+  interval — **and the guard held across the full 6 s recharge**
+  (recast 0.184 / 0.147 s after SKILL_RECHARGED, still refused). The
+  operator's recharge question is answered with rows: the condition is
+  no-report-between, not speed, and the wait costs nothing.
+- **Wire silence 3 of 3 suppressed casts** (seqs continuous, the whole
+  tape holds exactly two `0x0028` and two `0x002C`, all at the
+  reckoned casts); every refusal label was a correct belief.
+
+**CANCELWALK-F35 — rep 1 reproduced F34's trigger, the suppression
+HELD, and the body warped anyway: 177.408 u backward, wire silent.**
+The rep was genuine (stop `0x0047` t=38.800, cast +0.367 s, sep
+416.16 u, copy converging at 288 u/s — F34's exact regime, where the
+old wiring's own `0x0028` warped 167.6 u; this build sent NOTHING).
+At press+0.88 s, inside the cast window, the drawn body snapped from
+its true stop onto the sync copy in one 77 ms sample — and the
+movetap `target` field convicts the mechanism outright: rows L107–110
+show the armed destination **bit-identical to the ZERO LEAD `0x0029`
+grant point of t=38.169** (the last accepted `0x003D`'s reported
+point, armed a full second BEFORE the cast, by the SHIPPED default),
+the copy walking to it while the body sits parked 177.4 u past it
+(the leg's report-overrun); at L111 the copy arrives, the target
+flips to `[inf, inf]` — fired — and the body teleports onto it in
+the same row. This is the **`+0x48` armed-destination arrival
+teleport** decoded long ago in the `--stop-echo` block ("a
+destination we grant is armed until it fires... cancelling does not
+disarm it"), caught in the act with arm/fire/disarm visible. The
+client's own next reports name the post-snap point; our server
+absorbed the 177.41 u drift as in-budget.
+
+**Attribution, and what is ours vs REALFIX's:** the cast-stop sent
+nothing and the destination predates the cast — the warp is the
+zero-lead grant machinery's, the F27/F33 staleness family's **third
+expression** (walk-start snap; reconcile-on-answer; now
+arrival-teleport-on-copy-stop), and it is **filed to REALFIX**. The
+cast's contribution is the QUIET WINDOW: the freeze holds the player
+parked so no post-stop `0x003D` re-aims the copy (the re-aim pattern
+is visible elsewhere in this same tape). RECONSTRUCTION, UNVERIFIED:
+the same snap should fire on any stop where the player simply stands
+~1 s — a standing player emits nothing, so the armed destination
+fires regardless of any cast; one desk-run with no cast decides it.
+Two REALFIX pointers recorded with it: retail answers **70 of 88**
+live `0x0047`s with a `0x0029` re-pin at the reported stop point —
+which would have re-aimed the armed destination onto the TRUE stop
+and made F35's snap 0 u — while `--stop-echo` (the naive form of
+exactly that) is REFUTED on the 2026-08-19 run, whose record says the
+echo ADDED a destination rather than overwriting. Reconciling those
+two measurements is REALFIX's question, not this arc's. Also
+re-scored for the next registration: **the exposure scales with
+report-overrun** — how far a leg outruns its last accepted report
+before an unanswered stop — which the `0x003D` chord bounds (below).
+
+**The long-leg rep is RETIRED AS MIS-DERIVED, not re-chased.** The
+operator ran it exactly as registered — 5.66 s dead-straight east,
+1,607 u, constant heading — and the ≥2 s gap NEVER CAME: `0x003D` is
+distance-triggered at the ~512 u chord, so at 288 u/s cruise the
+inter-report gap is capped at ~1.8 s (measured here: 1.802 / 1.818 /
+1.802 s), and "3+ s into a leg" cannot produce a 3 s REPORT GAP at
+cruise, ever. The reckon's practical worst case at a keyboard cast is
+bounded by the chord — ≤ ~524 u of staleness (this run's sep max:
+524.45 u) — and it is tested to 277 u with a −0.1 u residual (R10)
+plus 67.2 u clean here. The untested band (277–524 u) closes only by
+a cast landing at a chord boundary; the bound, not the gap, is the
+fact worth keeping.
+
+**Zero exposure this run** (covered in R10's run, not re-required):
+backpedal/B2, a cancelled cast, click-walk. Both reckons rode
+family {1,2,3} at ~287 u/s.
+
+**Where this leaves R10, for the owner's ruling — nothing ships
+without it.** The pin arm has now met every registered bar IT
+controls, across two runs: F28's float-forward is fixed at every
+reckoned cast with zero backward component 6 of 6; every refusal is
+silent, motionless by our hand, and correctly labelled; F34 cannot
+recur (no bare `0x0028` exists). The displacements remaining in the
+arm's vicinity are F33 and F35 — the shipped default's grant-cadence
+staleness, which fires with the flag OFF (F35's no-cast counterfactual
+UNVERIFIED but its destination is armed before any cast exists).
+Named residuals if it ships: refusal-path casts glide (F28 persists
+there by design); the slow-plateau rate regime (bounded, §8.3c); the
+277–524 u reckon band (bounded by the chord); the click-leg-death
+observation (§8.3d); the instant-skill and adrenal-adjacency
+residuals (§8.1, unchanged). The decision is Q10's shape: accept
+`--cast-stop=pin` as F28's fix with those residuals named, or hold it
+behind REALFIX's staleness work. The flag stays OFF either way.
