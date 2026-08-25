@@ -7921,7 +7921,18 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   gets no suspension, `off-mesh`/`no-mesh` refuse rather than ship a raw
   ray); and R3's model park (a SENT pin drops `state["dest"]` and
   hard-sets `state["pos"]` to the 0x002C's own point, driven, so the
-  20 Hz tick stops walking a phantom). Floor 98),
+  20 Hz tick stops walking a phantom). **Extended once more the same
+  day for the re-run review's yield** (13-of-13 mutation catch, no
+  blocker; CANCELWALK.md §8.3b's re-review block): the R1 plane proof
+  moved to the WIRE — a burst seeded report-plane 12 against a mesh
+  answering 5 asserts the sent 0x002C's plane field is 5, closing the
+  gap where every burst seed had plane 0 and a prefer-echoing mesh so a
+  payload mutation stayed green; `zero_lead_composition(cast_stop=True)`
+  — the legacy bool that armed every shared refusal cell while matching
+  neither mode — is asserted to raise a loud ValueError naming both real
+  arms; and the second-cast seed reads the pin note with `.get` so the
+  M7 mutation (note never written) fails as a named check instead of
+  aborting the section on a KeyError. Floor 100),
   `toolkit/authsrv/test_killwindow.py` (the kill window, checked against
   ArenaNet's own kills. Our server sent one message when an agent died —
   `0x00F1` with the death bit — where the real service sends three: status,

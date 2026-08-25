@@ -19,13 +19,14 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
 import checks  # noqa: E402
 
-# FLOOR 98, from the green run of 2026-08-25 that landed the 8.3a review
-# fixes -- B1's click-walk latch, B2's census rate families, and the
-# plane-at-est / off-mesh-refusal / model-park REALs (82 when R10's
-# --cast-stop=pin arm landed; 59 after the R8 review pass; 58 when R8's
-# section landed; 43 with R1-R6's arms; 29 with R1-R4's alone; 24 with
-# R1-R3).
-LEDGER = checks.Ledger("cancelwalk arms", floor=98)
+# FLOOR 100, from the green run of 2026-08-25 that landed the re-review's
+# yield -- the wire-plane burst, the legacy-bool refusal, the M7 subscript
+# hardening (98 with the 8.3a review fixes: B1's click-walk latch, B2's
+# census rate families, and the plane-at-est / off-mesh-refusal /
+# model-park REALs; 82 when R10's --cast-stop=pin arm landed; 59 after
+# the R8 review pass; 58 when R8's section landed; 43 with R1-R6's arms;
+# 29 with R1-R4's alone; 24 with R1-R3).
+LEDGER = checks.Ledger("cancelwalk arms", floor=100)
 check = LEDGER.ok
 
 PLAYER = 1
@@ -392,6 +393,19 @@ def section_cast_stop():
                               for n in notes),
           "pin allowed with --zero-lead, and the startup note names R10 "
           "and its diagnostic-only status", f"notes={notes}")
+    # The legacy bool, refused loudly at entry (re-review 2026-08-25):
+    # cast_stop=True armed every shared refusal cell on truthiness while
+    # matching neither mode -- no startup note, the pin-x-resync cell
+    # dead, an on-but-unnamed arm for any API caller.
+    try:
+        authsrv.zero_lead_composition(zero_lead=True, cast_stop=True)
+        legacy = None
+    except ValueError as e:
+        legacy = str(e)
+    check(legacy is not None and "halt" in legacy and "pin" in legacy,
+          "cast_stop=True (the pre-R10 bool) raises a loud ValueError "
+          "naming both real modes -- never an on-but-unnamed arm",
+          f"{legacy!r}")
     # The reckon, driven as a pure function -- the arithmetic the 0x002C
     # aims with, and every refusal door. The mesh is REQUIRED since the
     # 8.3a review (R2), so the base motion state carries a permissive
@@ -613,10 +627,26 @@ def section_cast_stop():
               "pos hard-set to the 0x002C's own point, so the 20 Hz tick "
               "stops walking a phantom past the pinned body",
               f"pos={pst.get('pos')}, dest={pst.get('dest')}")
+        # R1 on the WIRE, not just at the pure reckon: the re-review's
+        # lattice pass caught that every burst seed had client_plane=0
+        # with a prefer-echoing fake mesh, so a mutation shipping the
+        # REPORT's plane in the 0x002C payload stayed green. Report 12,
+        # mesh 5: the sent plane must be the mesh's.
+        pw, _ = burst("pin", False, seed=dict(seed, client_plane=12,
+                                              pathmap=_FakePM(plane=5)))
+        check(len(pins(pw)) == 1 and pw[pins(pw)[0]][1][2] == 5,
+              "the SENT 0x002C carries plane_at(est)'s answer, not the "
+              "report's: report says 12, the mesh says 5, the wire says "
+              "5 -- the stale-plane fall-through corruption cannot ride "
+              "the payload", f"{pw[pins(pw)[0]][1]}")
         # Pin, second cast, no report since: the guard refuses the
-        # 0x002C and the label says why.
+        # 0x002C and the label says why. `.get`, not a subscript: under
+        # the M7 mutation (the pin note never written) a subscript
+        # KeyError'd here and ABORTED the section, so every later check
+        # ran as a traceback instead of a named FAIL -- the weaker
+        # guard, caught by the re-run mutation probe.
         p2, _ = burst("pin", False, seed=dict(seed,
-                      cast_stop_pin=pst["cast_stop_pin"]))
+                      cast_stop_pin=pst.get("cast_stop_pin")))
         check(pins(p2) == [] and len(stops(p2)) == 1
               and "pin:pinned-parked" in p2[stops(p2)[0]][2],
               "pin, second cast with no report between: NO second 0x002C "

@@ -1456,30 +1456,36 @@ not a stop-in-place.** **RULED 2026-08-25 (§7 Q10): REFUSED as a ship —
 a dead-reckoned `0x002C` hard-set at the body's true position (last
 report + unit(vec2) × rate × 288 × dt, navmesh-clipped, every refusal
 door labelled in the capture), then the halt, which lands on co-located
-copies and cannot snap. Registered predictions: no backward component
-> 20 u, total across-halt ≤ ~35 u, standstill silent, second-cast guard
-observed live. `test_cancelwalk.py` §7 floor 82.
+copies and cannot snap. Registered predictions (as re-registered at
+§8.3c after the review fixes): no backward component > 20 u, total
+across-halt ≤ ~35 u, standstill silent, second-cast guard observed
+live, a click-walk cast suppressed with nothing sent and no warp.
+`test_cancelwalk.py` §7 floor 100.
 
-**⚠ R10 IS NOT RUNNABLE YET, and this is the arc's live next action
-(CANCELWALK.md §8.3a).** Its adversarial review found **two BLOCKERS —
-both of them warps, so both fail Q10's bar** — and then **did not
-finish**: two of three agents died on an account usage limit (nothing
-was mutated; the tree was verified clean). **B1:** a cast during a
-CLICK-to-move walk still warps, because `kbd_moving_at` is
-keyboard-only — the reckon refuses `parked` while the `0x0028` fires on
-a moving body and lands it on a copy up to **1,164 u** behind (worse
-than the F31 warp the ruling refused), and §8.3's prediction table
-scores it "nothing changes". **B2:** mt 5–8 (strafe, back-diagonal;
-3.2% of corpus movement) reckon at 288 u/s against a measured
-188–215 — a FORWARD miss past the registered 35 u bar that the
-pre-registered failure signature would misattribute. Three REALs
-besides: the `0x002C` pairs an extrapolated position with the last
-report's stale plane (the documented fall-through corruption mode); the
-off-mesh case ships an unclipped extrapolation; and the pin leaves the
-server's own integrator gliding ~765 u past the pinned body. Fix
-directions for all five are written at §8.3a. **Order: fix → re-run the
-two dead review agents → re-register (adding a click-walk cast) → then
-the owner-driven run.** The flag stays OFF regardless.
+**R10 IS RUNNABLE as of 2026-08-25 evening, under CANCELWALK.md §8.3c's
+re-registration and no other — the owner-driven run is the arc's live
+next action.** The 2026-08-25 adversarial review (§8.3a) had found
+**two BLOCKERS — both warps, both failing Q10's bar** (B1: a cast
+during a CLICK-to-move walk warped onto a copy up to **1,164 u** behind
+while every belief said "parked"; B2: mt 5–8 reckoned at 288 u/s
+against a measured 188–215, a forward miss past the 35 u bar) plus
+three REALs (stale plane on the `0x002C`; the off-mesh case shipping an
+unclipped ray; the server's own integrator left gliding past the pin) —
+and the review itself died two agents short. **All five are FIXED
+(§8.3b, `ce1746b`)**: a click-in-flight latch suppresses the whole
+cast-stop on both arms (degrading to F28's glide — a defect, not a
+warp), the census family rates replace the mt-4-alone table, the plane
+is resolved at the extrapolated point, off-mesh refuses, and a sent pin
+parks the model. **The two dead agents were re-run against the fixed
+arm: no blocker** — the 13-mutation probe went 13 of 13 RED (the
+registered M1–M7 plus six over the fixes), and the lattice/routing
+skeptic's yield (3 REALs, 2 NITs — stale banners, a wire-plane test
+gap, doc staleness, the legacy-bool hole, an unfollowable refusal hint)
+is fixed in place. `test_cancelwalk.py` §7 floor **100**. **§8.3c
+re-registers the run**: the protocol gains a required click-walk cast
+and a recommended backpedal cast, and the forward-miss signature
+separates rate-regime error from a stale belief before any guard is
+blamed. The flag stays OFF regardless; defaults are an owner ruling.
 
 ### MODEL AUTHORING: the one-bit question is answered, and every player identity closes (2026-08-22)
 
