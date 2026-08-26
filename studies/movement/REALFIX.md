@@ -763,13 +763,16 @@ on the granted dest to 0.0001 u after 8.2 s. The mechanism stack, three layers:
    *processed key edge* ends it. 30 of 31 legs got their edge within a fraction of
    the leg. This is CANCELWALK-F7's one-report mechanism running on every heading
    grant — the known cost of granting far points, now measured at scale.
-2. **The missing edge (RECONSTRUCTION, best-fit):** the operator's own **Ctrl+C on
-   movetap at t=170.222 — 2.08 s into the leg** — is a documented focus shift; a
-   keyup delivered to the console leaves S logically stuck down, and "pressing W
-   and releasing fell back to backpedaling" is verbatim stuck-key behaviour. The
-   S-release `0x0047` is absent from the ENTIRE remaining session, not just the
-   gap. Discriminator (~2 min, whenever next at the client): repeat a backpedal
-   release in-focus vs with a deliberate console click mid-leg.
+2. ~~**The missing edge (RECONSTRUCTION, best-fit):** the operator's own Ctrl+C on
+   movetap at t=170.222…~~ **REFUTED within the hour by the owner's own repro**
+   (2026-08-26 ~07:36, `movetap-20260826T073617`): the lock reproduces **without
+   ever leaving the game client** — strafe ~3 s onto the stairs, park 6 s, strafe
+   off, park 6 s, then any movement press locks into that movement for ~500 u
+   (S locks backpedal, W locks running — so key EDGES are not missing; each edge
+   spawns a fresh locked walk). The focus-shift story is dead; the armer is
+   something in the STAIRS-STOP → PARK → STAIRS-STOP → PARK wire prefix, which
+   both the original incident and the repro share. Decode in flight; §0.11 will
+   carry it.
 3. **The server compounded it (OBSERVED, the run's one real server defect):** the
    owner's recovery CLICK at t=175.297 — the session's only `0x003E` — was
    **silently refused as stale** (`pos_seen` 7.15 s old, because the missing
