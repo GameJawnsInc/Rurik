@@ -1386,6 +1386,57 @@ green at their floors (position_trust 219, cancelwalk 121, familyrate 26,
 pcspoof 23). Both changes are D1-gated; the shipped default remains
 byte-identical.
 
+### 0.18 The P-17 run REFUTES the pair in place, the owner orders the drawing board, and the regime is measured — 2026-08-26 evening
+
+**Run:** `authsrv-20260826T143111-c1.jsonl` (~701 s) +
+`movetap-20260826T143120/143431/143555.jsonl`. Owner-reported and
+census-scored the same evening. **P-17 outcomes, honestly:**
+- **P-17-1 REFUTED.** The click-side walks persist ("phasing through the
+  ground or walking directly to place"). Deeper than the registered
+  prediction: the whole click-answer channel is the engine while `click-d1`
+  fires under a held key — see the regime numbers below.
+- **P-17-2 REFUTED.** A cross-floor route click produced a felt warp. Zero
+  XY jumps exist on the live track — the event is VERTICAL and invisible to
+  every instrument we run (no Z anywhere; the agent struct has none to
+  read).
+- **P-17-3 PARTIAL, then REFUTED through the fix's own door.** Six leads
+  clipped AT the plaza wall (the D2 mechanism visibly working, the body
+  held) — then the client's reported position penetrated the mesh edge by
+  ~0.25 u (t=289.41/289.92, exact floats walkable=False against walkable
+  neighbors a quarter-unit away), the **off-mesh-origin door** (inherited
+  from `clip_to_walkable`) disabled the clip, and two unclipped 766 u leads
+  ordered the through-wall walk; the watchdog confirmed at the far side.
+  The registered REFUTED-IF fired on its named row signature
+  (`lead_clipped=false` on the ordering grant) but via the DOOR, not the
+  predicted prop-class band.
+- **P-17-4 NOT RUN** (owner aborted the protocol — zero exposure, not
+  scored). The owner's ruling instead: **drawing board — better instruments
+  (owner's chosen priority), rethink whether the plan wraps something
+  simpler, review the mistakes. No further policy code.**
+**The run's structural finding:** the client sent ~zero position reports for
+~490 s of click play (all 12 early reports sit inside the 5 s wall press), so
+Rule 1 never armed (56 click answers fired under the held key, zero
+`locally-moving` drops in the span), the answer-outstanding hold never
+engaged, the void never ran — **every report-triggered guard inert for the
+session, the failure mode suppressing the guards' own signal.**
+**The drawing-board pass ran the same evening** (three lanes + a scripted
+skeptic; every number re-derived): retail's own client is report-silent
+during click-walks (zero counterexamples corpus-wide; clean evidence n≈6
+walk-exposed specimens per the skeptic's trim) while keyboard-lead walks
+report at baseline cadence (0.463 s vs 0.500 s, n=649) — reproduced exactly
+on our own logs (zero-lead 0.352 s vs `click-d1` **166 s** median
+next-report). One mechanism: **a fired 0x0029 starts an autonomous
+straight-line order-walk that ends only at the next processed key edge**;
+our held-key click cell starves itself of the ending edge (retail exercises
+that cell in 1 of 23 live clicks). `mode` decoded as a locomotion-speed
+enum, NOT a regime flag (1=288 run spanning every context, 4=190.1 backpedal
+— the a2 floor constant to 0.01%, 8=216, 9=early-out/idle); bit 18
+teleport-armed in 3,510/3,511 samples. Full record, the mistakes review
+(incl. the ledger's missing L-series — L5/L6 had measured "this regime needs
+a CLICK-ARM lever" the day before F1 shipped as default), the retained
+method, and the ranked instrument program: **[RETHINK.md](RETHINK.md), the
+campaign's entry point until superseded.**
+
 ### REALFIX-P2 · `--zero-lead`
 
 Attachment: heading arm `:9625-9878`, as a third named block after `:9843`. **Stop arm `:10235` untouched. Click arm `:9879` untouched.**
