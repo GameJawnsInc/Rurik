@@ -11,8 +11,14 @@ the heading-arm gate and slot, the dest swap, the verdict row's arm key, and
 the stop-repin's position inside the 0x0047 handler.
 
 What this file deliberately does NOT claim: that the lead is safe (that is
-P-1..P-5's job), or that retail's D2 clip is modelled (it is not -- Q7 open,
-the lead ships UNCLIPPED by design).
+P-1..P-5's job). The lead no longer ships unclipped: sec.0.17's D2 clip
+(a2_clip_lead, the wall-phase fix) trims a d1 lead's ray to the navmesh --
+Q7's desk check found retail's own clip landing ON our mesh edges to <=3u
+for the terrain-edge subset, and the 113833 run's through-wall walk was an
+unclipped lead the mesh had refused (10 of 10 final-phase leads
+mesh-blocked). What is STILL not modelled: retail's prop-class clips (the
+corridor's five bit-identical coordinates sit inside our walkable mesh --
+we carry no prop geometry, so those clips stay retail-only).
 """
 import contextlib
 import io
@@ -44,9 +50,13 @@ import checks      # noqa: E402
 # -> 70; sec.0.14's F-A (click-held + the eager void) -> 72; sec.0.15
 # DELETING both click rewrites and their rate gate (each refuted within
 # the day -- the checks now assert the absences and the empty gap) -> 70;
-# the outstanding-answer hold (the double-click stomp fix) -> 72.
+# the outstanding-answer hold (the double-click stomp fix) -> 72;
+# sec.0.17's pair -- the leg-bounded hold at the immediate site (R-3's
+# residual hole; the gap lock evolving from empty-gap to refuse-only-hold,
+# plus the leg-bound pin) and the D2 lead clip (the 2d pure cells + four
+# locks) -> 81.
 # Each floor re-read off its own green run.)
-LEDGER = checks.Ledger("the REALFIX-A2 d1-lead bundle", floor=72)
+LEDGER = checks.Ledger("the REALFIX-A2 d1-lead bundle", floor=81)
 check = checks.adopt(LEDGER)
 
 
@@ -254,6 +264,62 @@ def main():
           "resurrection path without re-litigating sec.0.15")
 
     # ---------------------------------------------------------------- 3
+    print("\n2d. the D2 lead clip's pure cells (sec.0.17)")
+
+    class StubPM:
+        """The pathmap contract a2_clip_lead relies on, in miniature:
+        walkable everywhere except the band 100 < x < 200 (a wall with
+        legal ground on BOTH sides -- the wall-phase geometry), and
+        clip() returning (x1, y1) EXACTLY when unobstructed, which is
+        what makes the != detection in a2_clip_lead exact (verified
+        against pathmap.PathingMap.clip's own last iteration, f = 1.0)."""
+
+        def walkable(self, x, y):
+            return not (100.0 < x < 200.0)
+
+        def clip(self, x0, y0, x1, y1, step=16.0):
+            dx, dy = x1 - x0, y1 - y0
+            dist = (dx * dx + dy * dy) ** 0.5
+            if dist <= 0.0:
+                return (x0, y0)
+            n = max(1, int(dist / step))
+            last = (x0, y0)
+            for i in range(1, n + 1):
+                f = i / n
+                px, py = x0 + dx * f, y0 + dy * f
+                if not self.walkable(px, py):
+                    return last
+                last = (px, py)
+            return (x1, y1)
+
+    clipf = authsrv.a2_clip_lead
+    st = {"pathmap": StubPM()}
+    d, was = clipf(st, [0.0, 0.0], [766.5, 0.0])
+    check(was is True and 0.0 <= d[0] <= 100.0 and d[1] == 0.0,
+          "a lead aimed across a blocked band onto legal far ground is "
+          "clipped to the NEAR side -- the wall-phase cell itself",
+          "the 113833 run's final leg: origin and dest both walkable, "
+          "the band between them not -- walkable(dest) alone would have "
+          "passed it, which is why the clip must walk the RAY")
+    d, was = clipf(st, [0.0, 0.0], [90.0, 0.0])
+    check(was is False and d == [90.0, 0.0],
+          "a clear ray comes back untouched, clipped=False bit-exact",
+          "a clip that perturbs unblocked leads rewrites every healthy "
+          "grant by epsilon and the 222/222 word doctrine starts "
+          "matching floats that no longer equal the client's")
+    d, was = clipf({"pathmap": None}, [0.0, 0.0], [766.5, 0.0])
+    check(was is False and d == [766.5, 0.0],
+          "no mesh: the clip disables rather than freezes (the "
+          "clip_to_walkable door, same reasoning)",
+          "a map without a mesh must not lose the lead bundle; failing "
+          "toward the pre-sec.0.17 behavior is the calibrated risk")
+    d, was = clipf({"pathmap": StubPM()}, [150.0, 0.0], [916.5, 0.0])
+    check(was is False and d == [916.5, 0.0],
+          "an off-mesh ORIGIN disables the clip too, exactly like "
+          "clip_to_walkable's off-mesh door",
+          "our spawn coverage is only as good as the mesh; refusing "
+          "every lead from uncovered ground would read as an input lock")
+
     print("\n3. composition cells: the lattice around the bundle")
     comp = authsrv.zero_lead_composition
     for kw, frag in [
@@ -344,6 +410,36 @@ def main():
           "the verdict row carries lead_src (d1/fallback/null)",
           "the census key for P-1..P-5's scoring; null on a refusal like "
           "every field-4 fact")
+    # -- sec.0.17: the D2 clip's locks -----------------------------------
+    check(src.count("a2_clip_lead(") == 2
+          and src.count("def a2_clip_lead(state, reported, dest)") == 1,
+          "the D2 clip has its def and ONE call site, and the call is "
+          "anchored on the REPORT in hand, verbatim",
+          "state['pos']-anchored is --heading-grant's graveyard (R2-1): "
+          "a ray from the model's belief aims the lead from somewhere "
+          "the client is not -- a warp with a plausible destination")
+    i_clip = src.index("a2_clip_lead(state, reported,", i_d1)
+    check(i_d1 < i_clip < i_verdict
+          and 'if a2_src == "d1":' in src[i_d1:i_clip + 80],
+          "the clip sits AFTER the dest compute, BEFORE the verdict row, "
+          "gated on a REAL d1 lead",
+          "clipping a fallback second-guesses the client's own reported "
+          "point; clipping below the row logs the through-wall dest "
+          "while the wire carries the clipped one -- the unattributable-"
+          "capture defect, again")
+    check("lead_clipped=(a2_lead_clipped" in src,
+          "and the row carries lead_clipped, sec.0.17's census key",
+          "the next owner run's wall-phase REFUTED-IF needs the clipped "
+          "rows selectable from the capture, not reconstructed against "
+          "the mesh by a later session")
+    check(authsrv.A2_LEAD_CLIP_STEP == 2.0
+          and authsrv.A2_LEAD_CLIP_STEP < authsrv.COLLISION_STEP,
+          "the clip's sampling step is pinned at 2.0u, finer than the "
+          "walk integrator's COLLISION_STEP",
+          "the Q7 desk check reproduced retail's world-anchored clip "
+          "coordinates on our mesh to <=3u only at a fine step -- at "
+          "16u the landing quantizes ~9u short of the edge retail names "
+          "exactly (p05 went 14.6u -> 2.0u when the step dropped)")
     check(src.count("a2_matched_field4(") == 6,
           "the matched-words helper has exactly its def and FIVE call "
           "sites -- the heading arm, the stop-repin, the ETA watchdog's "
@@ -381,19 +477,18 @@ def main():
           "outrank the click they threw while moving -- exactly "
           "retail's press-anchored behavior")
     check(src.count('state["a2_click_answered_at"]') == 2
-          and src.count('a2_click_answered_at") or 0.0)') == 1,
+          and src.count('a2_click_answered_at") or 0.0)') == 2,
           "the outstanding-answer stamp is written at BOTH click send "
-          "sites and read at ONE hold site in the flush (or-0.0 "
-          "discipline)",
-          "sec.0.15's double-click fix: a <=0.5s-late grant onto a "
-          "mid-click-walk client is the railing stomp; retail holds the "
-          "newer click until the interference quiets or lets it expire "
-          "unanswered. A missing stamp re-opens the stomp; a raw read "
-          "re-opens REV-1")
+          "sites and read at BOTH hold sites -- the flush AND the "
+          "immediate site (or-0.0 discipline at each)",
+          "sec.0.15's double-click fix, completed by sec.0.17: the flush "
+          "hold alone left the immediate site as the one unguarded door, "
+          "and the 113833 run walked click 2 through it (R-3 REFUTED). "
+          "A missing stamp re-opens the stomp; a raw read re-opens REV-1")
     i_hold = src.index('a2_click_answered_at") or 0.0)')
     i_gv_flush = src.index("grant, why, kage, since = _grant_verdict(")
     check(i_hold < i_gv_flush,
-          "and the hold sits BEFORE the flush's verdict call",
+          "and the flush's hold sits BEFORE the flush's verdict call",
           "after it, a keyboard-quiet flush tick would fire the held "
           "click into the silent click-walk the hold exists to protect")
     i_take = src.index("a2_pos_taken = _take_client_position(")
@@ -433,14 +528,33 @@ def main():
     i_gv_call = src.index("may_grant, why_g, kage, since = _grant_verdict(")
     i_row = src.index('rec.event("grant_verdict", fired=may_grant,')
     between = src[i_gv_call:i_row]
-    check("why_g = " not in between.replace(
-              "may_grant, why_g, kage, since = _grant_verdict(", ""),
-          "and NOTHING rewrites the click verdict between _grant_verdict "
-          "and its row -- the row records the shipped predicate's own "
-          "answer, verbatim",
+    between_stripped = between.replace(
+        "may_grant, why_g, kage, since = _grant_verdict(", "")
+    check(between_stripped.count("why_g = ")
+          == between_stripped.count(
+              'may_grant, why_g = False, "answer-outstanding"') == 1
+          and 'a2_click_answered_at") or 0.0)' in between,
+          "and the ONLY thing between _grant_verdict and its row is "
+          "sec.0.17's outstanding-answer hold -- refuse-only (False, "
+          "never True), self-naming in the row, or-0.0 disciplined",
           "both F-B's and F-A's rewrites lived exactly here and each "
-          "made the row lie about a policy that was then refuted; an "
-          "empty gap is sec.0.15's whole click-arm claim")
+          "made the row lie about a policy that was then refuted -- and "
+          "BOTH resurrected refused clicks (the True direction). The "
+          "sec.0.17 hold is the opposite move: it only ever REFUSES, and "
+          "the row records the refusal under its own reason, so the "
+          "capture stays attributable (Q8). A second rewrite in the gap, "
+          "or any True rewrite, is the graveyard reopening")
+    check('state.get("dest") is not None' in between,
+          "and the immediate hold carries the LEG BOUND -- it refuses "
+          "only while the server's copy is still walking a leg, never on "
+          "bare silence",
+          "the client reports NOTHING during a click-walk (41.2s in the "
+          "113833 run), so the flush's bare answered_at > pos_seen "
+          "predicate is a SILENCE detector at this site: lane A's "
+          "offline counterfactual showed it suppressing 22 of 24 real "
+          "staircase fires (92%). Dropping the dest conjunct 'to match "
+          "the flush' re-creates exactly that -- the two sites ask "
+          "DIFFERENT questions and the asymmetry is the design")
     check('d1_passthrough=bool(D1_LEAD)' in src
           and src.count('rec.event("click_verdict"') == 1,
           "the geometry branch writes its click_verdict row (the soak's "

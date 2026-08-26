@@ -4497,8 +4497,19 @@ def pc_spoof_field4(spoof, since_last, carried):
 # proved they must: (1) the LEAD -- the one zero-lead 0x0029's point becomes
 # reported + vec2 + 0.5*unit(vec2), the client's OWN proposed endpoint
 # (re-verified bit-exact on 3,532 fresh live pairs, residuals to 0.0001 u),
-# UNCLIPPED (--heading-grant died of our navmesh's clip) and anchored to the
-# report in hand (never a model belief); (2) SPEED TRUTH -- the A1-proven
+# anchored to the report in hand (never a model belief), and since sec.0.17
+# D2-CLIPPED to the navmesh along that same ray (a2_clip_lead). This term
+# shipped UNCLIPPED through sec.0.16 on --heading-grant's epitaph ("died of
+# our navmesh's clip") -- but that arm died of a state["pos"]-anchored clip
+# SUPPLEMENTING a client that walked its own path; under the bundle the
+# client ADOPTS the granted target (+0.096 s, measured), retail's own lead
+# is clipped (34.5% of live leads land short at world-anchored coordinates
+# that reproduce on OUR mesh to <=3 u -- the Q7 desk check), and the
+# unclipped lead walked the 113833 body through the plaza wall twice.
+# UNVERIFIED remainder: ~5.7% of retail-unclipped rays clip >20 u on our
+# mesh (false clips -- possible phantom walls), and retail's prop-class
+# clips have no mesh here at all; both are P-17's registered watch items.
+# (2) SPEED TRUTH -- the A1-proven
 # 0x002B family float promoted from probe to policy, EDGE-TRIGGERED (retail
 # sends it on family CHANGE: 97.6% of change bursts vs 11.5% same-family);
 # (3) PLANE TRUTH -- --plane-carry unchanged, because the 306-crossing census
@@ -4549,6 +4560,47 @@ def d1_lead_dest(reported, vec2):
         return [float(reported[0]), float(reported[1])], "fallback"
     return ([float(reported[0]) + vx + 0.5 * vx / mag,
              float(reported[1]) + vy + 0.5 * vy / mag], "d1")
+
+
+# The D2 clip's sampling interval, and it is deliberately FINER than
+# COLLISION_STEP's 16 u: the Q7 desk check (sec.0.17) reproduced retail's
+# clipped destinations on our own mesh to <=3 u only at a fine step -- at
+# 16 u the landing quantizes ~9 u short of the edge retail names exactly.
+# Cost is bounded by the report cadence: <=4 leads/s x ~385 walkable()
+# samples = 0.15 ms/call measured on the 0x287B3 mesh, invisible next to
+# the recv loop's own work.
+A2_LEAD_CLIP_STEP = 2.0
+
+
+def a2_clip_lead(state, reported, dest):
+    """Clip a D1 lead's endpoint to the navmesh along the REPORT's own ray.
+
+    (dest, clipped). Retail's D2 term, measured twice over: ~34.5% of live
+    leads land short of the D1 band at world-anchored coordinates
+    (sec.0.15 S2-3), and the Q7 desk check reproduced those coordinates on
+    OUR mesh to <=3 u for the terrain-edge subset -- the boundary IS our
+    navmesh there (the corridor's five prop-class points are the named
+    remainder; we carry no prop geometry, so those clips stay retail-only).
+    The ray is anchored at the REPORT in hand, never state["pos"]
+    (--heading-grant's graveyard, R2-1): the lead must aim from the point
+    the client actually named. The doors mirror clip_to_walkable's: no
+    mesh, or an off-mesh origin, disables clipping rather than freezing
+    the lead -- and a fallback lead is never clipped at all (it IS the
+    report; clipping it would second-guess the client's own point).
+    Without this term a lead's ray crosses any blocked band narrower than
+    its 769 u reach onto legal ground beyond -- the wall-phase specimen:
+    all 10 final-phase leads of the 113833 run were mesh-blocked 200-768 u
+    short, and the ETA watchdog then re-pinned AT the through-wall dest
+    the unclipped leg had named (sec.0.17).
+    """
+    pm = state.get("pathmap")
+    if pm is None or not pm.walkable(reported[0], reported[1]):
+        return dest, False
+    stopped = pm.clip(float(reported[0]), float(reported[1]),
+                      float(dest[0]), float(dest[1]),
+                      step=A2_LEAD_CLIP_STEP)
+    clipped = (stopped[0] != dest[0]) or (stopped[1] != dest[1])
+    return [float(stopped[0]), float(stopped[1])], clipped
 
 
 def _a2_family_rate(send, state, mt):
@@ -4690,6 +4742,14 @@ def _a2_watchdog(send, state, rec, now=None):
     answering the click model until a real report clears it. In a healthy
     run this fires ZERO times -- every fire is a caught anomaly, logged as
     its own row so the soak can count them.
+
+    sec.0.17's decode addendum: silence-past-ETA can also be ORDER
+    EXECUTION -- a client walking a granted lead reports nothing, and this
+    floor-speed ETA is pessimistic against an actual 288 u/s walk, so the
+    113833 fire landed 2.5 s AFTER a quiet arrival at the dest (repin
+    0.003 u off: harmless, and the model exactly right). With the lead now
+    D2-clipped the repin can no longer name ground past a wall; a fire at
+    a clipped dest with the client parked on it is the benign shape.
     """
     if now is None:
         now = time.time()
@@ -5522,7 +5582,9 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
         notes.append(
             "      + --d1-lead: ALLOWED -- REALFIX-A2, THE BUNDLE (sec.0.9): "
             "D1 lead (reported + vec2 + 0.5*unit, the client's own proposed "
-            "endpoint, unclipped), edge-triggered 0x002B speed truth, "
+            "endpoint, D2-clipped to the navmesh along the report's ray "
+            "since sec.0.17 -- the wall-phase fix), edge-triggered 0x002B "
+            "speed truth, "
             "plane-carry plane truth, and the retail stop-repin (0x002B "
             "[1.0,9] + zero-distance 0x0029 at every 0x0047, floor-bypassed "
             "as an ack but stamping the one grant clock). Protocol is "
@@ -15151,6 +15213,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                 # costs a later session a reconstruction).
                                 a2_dest, a2_src = None, None
                                 a2_matched = False
+                                a2_lead_clipped = False
                                 if D1_LEAD:
                                     # sec.0.11's armer-kill, BEFORE the
                                     # verdict row so plane_cur records what
@@ -15161,6 +15224,16 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                                           zl_plane_cur))
                                     a2_dest, a2_src = d1_lead_dest(
                                         reported, heading)
+                                    # sec.0.17: the D2 clip -- the
+                                    # wall-phase fix, BEFORE the verdict
+                                    # row so the row records the wire
+                                    # point (the Q8 doctrine, again).
+                                    # Real d1 leads only: a fallback
+                                    # already IS the report.
+                                    if a2_src == "d1":
+                                        a2_dest, a2_lead_clipped = (
+                                            a2_clip_lead(state, reported,
+                                                         a2_dest))
                                 if rec is not None:
                                     # EVERY evaluation, fired or refused, on the
                                     # SAME channel the click arm uses -- a log
@@ -15236,6 +15309,12 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                               # above -- nothing went out.
                                               lead_src=(a2_src if zero_ok
                                                         else None),
+                                              # sec.0.17's census key: true
+                                              # on rows where the D2 clip
+                                              # shortened the wire point.
+                                              lead_clipped=(a2_lead_clipped
+                                                            if zero_ok
+                                                            else None),
                                               # sec.0.11's verification key:
                                               # true on the rows where the
                                               # matched-words override
@@ -15778,6 +15857,45 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         now_g = time.time()
                         may_grant, why_g, kage, since = _grant_verdict(state,
                                                                        now_g)
+                        # sec.0.17: the outstanding-answer hold at the
+                        # immediate site -- R-3's residual hole, verified
+                        # from the 113833 tape before this was built (all
+                        # 24 fires came through HERE; the flush fired
+                        # zero). A re-click >=0.5s into a click-walk
+                        # cleared the floor and fired onto a mid-route
+                        # silent client -- the railing stomp through the
+                        # one unguarded door. HELD, not dropped, BEFORE
+                        # the verdict row so the row records the refusal.
+                        #
+                        # DELIBERATELY NOT the flush's bare predicate.
+                        # The client reports NOTHING during a click-walk
+                        # (41.2s in the 113833 run), so bare
+                        # answered_at > pos_seen is a SILENCE detector:
+                        # lane A's offline counterfactual showed it
+                        # suppressing 22 of 24 real staircase fires
+                        # (92%). The bound is the server's own leg model
+                        # -- state["dest"] is set by every click fire and
+                        # consumed by the world tick's arrival, a stop,
+                        # or a cast pin -- the same the-leg-explains-the-
+                        # silence doctrine as sec.0.12. Mid-leg re-clicks
+                        # divert; post-arrival staircase clicks keep
+                        # their immediate answers. A diverted click then
+                        # resolves through the flush: an arrival stop
+                        # advances pos_seen WITHOUT voiding (the eager
+                        # void is 0x003D-only, verified) so the next
+                        # flush tick fires it -- retail's wins-late
+                        # branch -- and the 1.0s expiry supplies retail's
+                        # goes-unanswered branch. The flush KEEPS the
+                        # bare predicate: its question is "may this HELD
+                        # click fire late", answered only by the client
+                        # speaking or the expiry; this site's question is
+                        # "may THIS click answer now", bounded by the
+                        # in-flight leg.
+                        if (may_grant and D1_LEAD
+                                and state.get("dest") is not None and
+                                (state.get("a2_click_answered_at") or 0.0)
+                                > (state.get("pos_seen") or 0.0)):
+                            may_grant, why_g = False, "answer-outstanding"
                         # sec.0.15: NO mid-keyboard click rewrite. F-B
                         # answered these immediately (refuted: the copy
                         # raced through props); F-A held them for the flush
@@ -15842,19 +15960,32 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                     "plane_first": plane_first,
                                     "plane_second": plane_second,
                                     "at": now_g}
-                                # `since` is None on a click-held (Rule-1)
-                                # hold -- only the rate-limited hold measured
-                                # a gap. Guard the format (the REV-1 lesson's
-                                # cousin: a print can kill a session too).
+                                # The message keys on why_g, not on
+                                # `since` -- sec.0.17's answer-outstanding
+                                # hold arrives here with `since` PRESENT
+                                # (the floor already reopened; that is the
+                                # hole), so the old since-based pick would
+                                # print "under the floor" for a hold that
+                                # is not about the floor. Guard the format
+                                # (the REV-1 lesson's cousin: a print can
+                                # kill a session too).
                                 print(f"[c{conn_id}] click to ({dest[0]:.0f}, "
                                       f"{dest[1]:.0f}): "
                                       + (f"{since:.2f}s since the last "
                                          f"grant, under the "
                                          f"{GRANT_MIN_INTERVAL:.2f}s floor"
-                                         if since is not None else
-                                         "held while the keyboard drives -- "
-                                         "the next accepted report voids it, "
-                                         "a release lets it fire")
+                                         if why_g == "rate-limited"
+                                         and since is not None else
+                                         ("a click answer is outstanding "
+                                          "-- the next report fires it, "
+                                          f"the {GRANT_PENDING_MAX_AGE:.1f}s "
+                                          "expiry drops it"
+                                          if why_g == "answer-outstanding"
+                                          else
+                                          "held while the keyboard drives "
+                                          "-- the next accepted report "
+                                          "voids it, a release lets it "
+                                          "fire"))
                                       + " -- holding the NEWEST destination "
                                         "and dropping any older one",
                                       flush=True)

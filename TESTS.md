@@ -3363,9 +3363,25 @@ Every one of these, in the order they were written:
   row EMPTY (both refuted rewrites lived exactly there and each made the
   row lie). Added: the outstanding-answer hold's three locks (the stamp at
   both click send sites, the or-0.0 read at one flush site BEFORE the
-  verdict call — the double-click stomp fix). Floor 72 re-measured (70 after
-  the deletions, 72 with the hold locks); `test_grantsim.py` green at 86
-  beside it. Landing note: this test's arrival forced two deliberate
+  verdict call — the double-click stomp fix). §0.17 completes the pair and
+  half-closes Q7: the gap lock EVOLVES from empty-gap to refuse-only-hold
+  (exactly ONE rewrite permitted in the gap, the literal `may_grant, why_g
+  = False, "answer-outstanding"` — refuse-only, never the graveyard's True
+  direction — with the LEG BOUND separately pinned: `state.get("dest") is
+  not None`, because the flush's bare predicate at this site is a SILENCE
+  detector that the 113833 offline counterfactual showed suppressing 22 of
+  24 real staircase fires), the outstanding-stamp read census goes 1→2
+  (both hold sites), and the D2 lead clip lands with §2d's four pure cells
+  (a blocked-band ray clipped to the NEAR side — the wall-phase cell
+  itself, where walkable(dest) alone would pass it; a clear ray untouched
+  bit-exact; the no-mesh and off-mesh-origin doors mirroring
+  clip_to_walkable's) plus four locks: def + ONE call site anchored on
+  `reported` verbatim (R2-1's graveyard), ordered dest-compute → clip →
+  verdict row, the row's `lead_clipped` census key, and A2_LEAD_CLIP_STEP
+  pinned at 2.0 < COLLISION_STEP (the Q7 desk check reproduced retail's
+  world-anchored clip coordinates on our own mesh only at a fine step).
+  Floor 81 re-measured (72 → 80 with the pair, 81 with the leg-bound pin);
+  `test_grantsim.py` green at 86 beside it. Landing note: this test's arrival forced two deliberate
   lock extensions in the same commit -- test_familyrate §6's sender census
   went 2→3 appearances (the def, A1's call, A2's edge-wrapper call; the
   matrix refuses the two flags together so at most one is live), and
