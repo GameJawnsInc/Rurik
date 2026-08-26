@@ -716,6 +716,80 @@ scoring, not a failure; **(c)** at plane crossings our wire shows field3≠field
 inherited shape, recorded here so a later crossing-comparison doesn't read it as
 new.
 
+### 0.10 REALFIX-A2 RAN — 2026-08-26 ~06:35, scored: the headline held, three registered bounds fall, and the one incident decodes to a focus-shift keyup inside the lead's click-walk regime
+
+**The run** (`authsrv-20260826T063459-c1` × `movetap-20260826T063524` R1 /
+`movetap-20260826T063658` R2/3): 31 D1 leads, 26 stops all repinned, 26 family
+edge-sends, zero fallbacks. Scored by two lanes plus a skeptic who re-derived every
+load-bearing number with independent scripts; lane B's headline ("8.2 s of zero c2s
+traffic") was itself refuted by the skeptic — the window holds a keepalive and a
+click — which is the review layer earning its keep twice in one week.
+
+**P-1 — the warp A/B: outcome CONFIRMED, mechanism clause REFUTED.** Zero snaps in
+538 samples on a positive-control-validated census (the C1 detector reproduces its
+4/4 known jumps at both endpoints), 4 genuine seam-crossing episodes ≥ the floor.
+But separation did NOT stay ≤ 150 u — it peaked **479.8–513.7 u**, and in 2 of 4
+episodes the same-plane gate-1 predicate read `above` for ~9 consecutive samples.
+The save correlates perfectly with something the registration never named:
+**18/18 `above` samples also read `early_out_a` true** (SYNC `+0x48` armed AND
+mode 9 — the D1 lead keeps the arrival timer armed through active legs, and mode 9
+is the very sentinel the stop shape writes). A state-sampler correlation, NOT an
+execution trace — filed RECONCILED/CONTESTED, and it invites a suspicion worth its
+own desk pass: **retail's `[1.0, mt 9]` stop sentinel may be a snap-shield state,
+which would be WHY retail ships it.**
+**P-2 — REFUTED as registered, intent achieved:** the repin is a client *walk-home*
+at 288 u/s from up to ~500 u, so 4 fully-exposed mid-episode stops read 35–266 u at
+the 1.0 s mark against the registered ≤ 5 u — but every one converges and zero
+persistent parks exist. The bound was mis-set for the D1 regime (under zero-lead the
+copy was already at the body; under D1 it walks home). Re-registered: convergence to
+≤ 5 u within `sep/288 + 0.5 s`, zero persistent parks.
+**P-3 — CONFIRMED** (10/11 edge-sends expressed, the 11th a sub-poll timing
+artifact; maxspeed 288.0 × 538; zero `0x0027`).
+**P-4 — REFUTED, marginally:** 1 of 74 hard-bar intervals at 404.7 u/s against the
+400.0 bar (excess 23.3 u), registered zero. Real, small, and it rides the incident
+leg's regime — score it again after the watchdog lands.
+**P-5 — CONFIRMED, floor exceeded, and the campaign's central hypothesis holds:**
+13 witnessed arm maturations (floor 5), drag p50 0.0 u, max 23.9 u — **arrivals land
+where the reckoning already is.** The incident is the 14th and largest test: the
+drawn body was **WALKED to the granted point beside the sync copy** (coupled motion
+on the tape, sep 0.57 u at tape end), not dragged, not snapped, across 725 samples.
+The sign-of-lead premise is SUPPORTED.
+
+**The incident, decoded (B lanes + skeptic):** of 31 leads, exactly one — #29, the
+t=168.146 backpedal reversal — ran uninterrupted to its own full completion, landing
+on the granted dest to 0.0001 u after 8.2 s. The mechanism stack, three layers:
+1. **The lead's click-walk regime (OBSERVED, F7 generalized):** every D1 grant
+   starts a click-order walk the client executes with key state ignored; the next
+   *processed key edge* ends it. 30 of 31 legs got their edge within a fraction of
+   the leg. This is CANCELWALK-F7's one-report mechanism running on every heading
+   grant — the known cost of granting far points, now measured at scale.
+2. **The missing edge (RECONSTRUCTION, best-fit):** the operator's own **Ctrl+C on
+   movetap at t=170.222 — 2.08 s into the leg** — is a documented focus shift; a
+   keyup delivered to the console leaves S logically stuck down, and "pressing W
+   and releasing fell back to backpedaling" is verbatim stuck-key behaviour. The
+   S-release `0x0047` is absent from the ENTIRE remaining session, not just the
+   gap. Discriminator (~2 min, whenever next at the client): repeat a backpedal
+   release in-focus vs with a deliberate console click mid-leg.
+3. **The server compounded it (OBSERVED, the run's one real server defect):** the
+   owner's recovery CLICK at t=175.297 — the session's only `0x003E` — was
+   **silently refused as stale** (`pos_seen` 7.15 s old, because the missing
+   `0x0047` froze the freshness clock), logged only to console. The server knew
+   the granted dest and the leg's ETA and still scored its own model as too stale
+   to act on.
+
+**What lands next, in order:** (a) **model-aware freshness** — a click arriving
+while a granted leg is in flight is answerable from the model (dest + ETA), not
+refusable on report staleness the leg itself explains; (b) **the ETA watchdog** —
+silence past a lead-leg's own ETA + slack, with no click in flight, sends the
+retail stop shape at the granted dest (the model says the client stands exactly
+there — the §0.8 parked-immunity result makes it safe); (c) re-registered P-2/P-4
+bounds above; (d) the cheap discriminator rerun and a retail corpus census for the
+same stuck shape (prediction: zero — retail's client stops on release; 38,849-era
+clients may differ from our pin, noted). **The lead itself stays untouched:** the
+headline zero-snap result stands on a 4/4-baseline recipe, and nothing in the
+incident implicates the lead's shape — it implicates what happens when NO edge and
+NO report ever follows one.
+
 ### REALFIX-P2 · `--zero-lead`
 
 Attachment: heading arm `:9625-9878`, as a third named block after `:9843`. **Stop arm `:10235` untouched. Click arm `:9879` untouched.**

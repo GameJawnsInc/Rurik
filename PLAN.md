@@ -1648,10 +1648,25 @@ wire shape rebuilt on stated era-audit ground). Adversarially reviewed
 (zero REAL code defects; the one surviving mutation — the stop arm's
 send order — now pinned). Predictions P-1..P-5 registered pre-build;
 **P-1 is the A/B: the C1 warp recipe, 4/4 baseline, predicts ZERO under
-the flag.** Next: **(i)** the A2 owner run (§0.9 protocol, ~10 min);
-**(ii)** *optional*, the mid-walk spoof cell (§0.8) — a small trigger
-variant testing bogus-label veto-kill AND gate-2 plane-keying (warp A's
-residual).
+the flag.**
+**A2 RAN AND IS SCORED the same morning (§0.10):** P-1 outcome
+CONFIRMED — zero snaps on the 4/4-baseline recipe — with the mechanism
+clause refuted (sep peaked 480–514 u; the save correlates 18/18 with
+`early_out_a`: mode 9 + the lead's own armed timer — possibly WHY
+retail ships the [1.0,9] stop sentinel, desk pass queued); P-3 and
+**P-5 CONFIRMED — 13 maturations, drag p50 0.0 u: the sign-of-lead
+hypothesis, the campaign's central premise, HOLDS**; P-2/P-4 refuted
+as mis-registered bounds (re-registered in place). The run's one
+incident (a stuck backpedal) decodes to a three-layer stack: the
+lead's click-walk regime (F7 generalized, 30/31 legs edge-terminated
+cleanly), a focus-shift keyup swallowed by the operator's own movetap
+Ctrl+C (RECONSTRUCTION, ~2-min discriminator registered), and the one
+real server defect — the recovery click refused as stale because the
+missing 0x0047 froze the freshness clock. Next, in order: **(i)**
+model-aware click freshness + the ETA watchdog (the two fixes §0.10
+specs); **(ii)** the discriminator rerun + retail stuck-shape census;
+**(iii)** *optional*, the mid-walk spoof cell (§0.8) and the
+early-out-A/mode-9 desk pass.
 *The staging block that preceded the run, kept for the record:*
 The follow-on recon (`studies/movement/followon-notes/README.md`, merged
 to `main` the same day) answered F35's counterfactual from tape (castless,
