@@ -1437,6 +1437,100 @@ a CLICK-ARM lever" the day before F1 shipped as default), the retained
 method, and the ranked instrument program: **[RETHINK.md](RETHINK.md), the
 campaign's entry point until superseded.**
 
+### 0.19 The RETHINK builds land (instruments #1–3), the desk checks run, and retail's click answer turns out to be A PATHFINDER'S OUTPUT — 2026-08-26 night
+
+**Owner's ruling: build RETHINK #1–3 and run the two desk checks. Done, all
+green, still zero policy deltas.**
+
+**BUILT #1 — the five gamesrv rows** (logging only): the flush hold's refusal
+row (once per held item, `hold_logged`-latched — the one guard branch with no
+row), `kbd_age` on every position_report row, the `a2_leg` arm/clear
+lifecycle, `a2_watchdog_due` reason-transition rows, and `lead_clip_why`
+(`no-mesh` / `origin-unwalkable` / `clear` / `clipped` / `fallback`) beside
+`lead_clipped`. `test_d1lead.py` **floor 86**.
+
+**BUILT #2 — `toolkit/authsrv/livewire.py`** (+ test, floor 12): the S2
+live-decode recipe committed. Validation is a number with INDEPENDENT
+provenance — the 62994 connection's 432 s2c `0x0029` rows, counted by the
+drawing-board skeptic's own script before the module existed, reproduced
+exactly; all 8 rung-7 connections close byte-exact.
+
+**BUILT #3 — `toolkit/clientscan/policyreplay.py`** (+ test, floor 14): the
+offline policy bench. Fidelity gate PASSES on both real logs under their own
+policies (113824+sec015: 24 fires/7 expiries; 143111+sec017: 64/9), goes RED
+under a perturbed floor, and the bare-hold negative control reproduces its
+fatal 2-of-24. **The gate's first discovery: the click GEOMETRY branch
+executes `state["dest"] = None` before falling through (:15853), so the
+sec.0.17 leg-bounded hold is VOID for every geometry-flagged click — 126 of
+the P-17 log's 179 (87/87 in the cells the owner played).** The hold never
+stood a chance by CODE PATH; sec.0.18's "inert because reports were silent"
+is corrected to this sharper mechanism. RETHINK-H1 strengthens accordingly.
+
+**RETHINK-QA (the wall classes) — run, skeptic-confirmed with new positive
+controls.** WALL-2 (the 113833 plaza wall) is **PROP-anchored bit-exactly**:
+blocking trapezoid #1305's corner ≡ prop #392's outline vertex
+`(-5053.0, 7591.0)` to the float, and the trapezoid edge reproduces our
+clip's stop point; map-wide, **276 of 4,945 pathing-mesh corners are
+bit-exact prop ring vertices** — prop outlines are baked into the pathing
+mesh systematically. WALL-1 (the P-17 wall) is **neither prop nor terrain at
+the edge** (flat −533.0 across the band; nearest prop 160 u with the same
+test finding 276 exact matches elsewhere — a controlled negative): an
+authored plane-0 boundary of unresolved origin, resolving ~50 u east into a
+genuine plane-0→plane-46 seam. **sec.0.15's clause "prop collision bypassed
+WHILE TERRAIN HOLDS" does not survive as worded** — the defensible
+restatement: *the client's navmesh-walkability boundary, whatever authored
+it, holds under free input and is bypassed by an order-walk.* (Aside on
+record: the client reports plane 34 where our decode's plane 34 is a
+disconnected patch elsewhere — plane-index correspondence diverges at
+specific locations, `pathmap.py`'s own 189/198 caveat made concrete.)
+
+**RETHINK-QB (waypoint sequences) — run, and the skeptic's re-derivation
+UNIFIED it into the campaign's biggest retail-contract correction:**
+- **Every one of 29 live clicks was answered within 0.007–0.065 s** — 16
+  with the verbatim point, **13 with a PART-WAY FIRST WAYPOINT**. The
+  "unanswered click" class dissolves: all 8 had instant part-way grants
+  whose chains were SUPERSEDED (re-clicks, keyboard resume, an
+  interaction) before the exact point was reached.
+- **The chain cadence is decoded: grant(n+1) fires at leg completion at run
+  speed** (63805's eight legs: 277–328 u/s, six within ±4% of 288; a
+  cross-capture leg reproduces 287.1/288.8). The final grant is the
+  bit-exact clicked point. The cleanest specimen: ONE click, **zero further
+  c2s input of any kind** (all-opcode dump), NINE grants over 8.58 s,
+  along-fraction monotone 0.076→1.000 exact.
+- **The distance threshold dissolves**: chaining is the uniform contract —
+  visible whenever the server path has corners and nothing supersedes it.
+- **Wire-to-archive identity (the cross-lane piece): four of that chain's
+  interior waypoints are bit-exact prop outline vertices in OUR archive
+  decode** (props #392/#396 — the same #392 that authored WALL-2's
+  boundary). Retail's server pathfinds over the same geometry we decode and
+  corners ON it.
+- Corrections filed: lane-retail-clicks C3's "exactly ONE grant burst per
+  click" is REFUTED (the nine-grant chain); S2-1's keyboard-leg explanation
+  of that very window is corrected (the wire is input-silent); sec.0.13's
+  "answered ~100% verbatim" refines to "answered ~100% within one RTT, to
+  the first waypoint — verbatim exactly when one leg away"; the
+  "62994 t=128.631 part-way + late echo" specimen conflated two clicks; and
+  QB's own first-pass join manufactured 11 false chains before its own
+  correction (recorded — the join trap is real).
+
+**THE UNIFIED RETAIL CONTRACT (RECONSTRUCTION over the numbers above):**
+a click answer is the first leg of a server-computed route over the
+walkability mesh; further legs are granted at leg-completion cadence; new
+input abandons the chain. Composed with sec.0.18's regime measurement, the
+whole campaign's damage story closes: **retail grants only legal legs into
+the order-walk regime, so the regime is harmless there; we grant straight
+lines and 766 u rays, so the same regime phases walls.** The D2 clip is the
+zero-corner approximation of retail's router; the click echo is its
+one-leg special case. What a retail-faithful click policy would be — a
+router over our own mesh at leg-completion cadence — is now MEASURABLE
+SPEC, not design taste. **It stays unbuilt: policy remains frozen until the
+owner rules on RETHINK.**
+
+Floors at section end: test_d1lead 86, test_livewire 12, test_policyreplay
+14, grantsim 86, position_trust 219, cancelwalk 121, familyrate 26, pcspoof
+23, checks 14, srclint 22, provlint 19. Lane records: `qa-wallclass.md`,
+`qb-waypoints.md`, `desk-skeptic.md` + scripts in the session scratchpad.
+
 ### REALFIX-P2 · `--zero-lead`
 
 Attachment: heading arm `:9625-9878`, as a third named block after `:9843`. **Stop arm `:10235` untouched. Click arm `:9879` untouched.**

@@ -54,9 +54,11 @@ import checks      # noqa: E402
 # sec.0.17's pair -- the leg-bounded hold at the immediate site (R-3's
 # residual hole; the gap lock evolving from empty-gap to refuse-only-hold,
 # plus the leg-bound pin) and the D2 lead clip (the 2d pure cells + four
-# locks) -> 81.
+# locks) -> 81; sec.0.19's RETHINK instrument-#1 rows (clip why strings in
+# the 2d cells, five row locks: lead_clip_why, the flush-hold row,
+# kbd_age, the a2_leg lifecycle, the watchdog-due transition) -> 86.
 # Each floor re-read off its own green run.)
-LEDGER = checks.Ledger("the REALFIX-A2 d1-lead bundle", floor=81)
+LEDGER = checks.Ledger("the REALFIX-A2 d1-lead bundle", floor=86)
 check = checks.adopt(LEDGER)
 
 
@@ -294,31 +296,38 @@ def main():
 
     clipf = authsrv.a2_clip_lead
     st = {"pathmap": StubPM()}
-    d, was = clipf(st, [0.0, 0.0], [766.5, 0.0])
-    check(was is True and 0.0 <= d[0] <= 100.0 and d[1] == 0.0,
+    d, was, why = clipf(st, [0.0, 0.0], [766.5, 0.0])
+    check(was is True and 0.0 <= d[0] <= 100.0 and d[1] == 0.0
+          and why == "clipped",
           "a lead aimed across a blocked band onto legal far ground is "
-          "clipped to the NEAR side -- the wall-phase cell itself",
+          "clipped to the NEAR side, why='clipped' -- the wall-phase "
+          "cell itself",
           "the 113833 run's final leg: origin and dest both walkable, "
           "the band between them not -- walkable(dest) alone would have "
           "passed it, which is why the clip must walk the RAY")
-    d, was = clipf(st, [0.0, 0.0], [90.0, 0.0])
-    check(was is False and d == [90.0, 0.0],
-          "a clear ray comes back untouched, clipped=False bit-exact",
+    d, was, why = clipf(st, [0.0, 0.0], [90.0, 0.0])
+    check(was is False and d == [90.0, 0.0] and why == "clear",
+          "a clear ray comes back untouched, clipped=False bit-exact, "
+          "why='clear'",
           "a clip that perturbs unblocked leads rewrites every healthy "
           "grant by epsilon and the 222/222 word doctrine starts "
           "matching floats that no longer equal the client's")
-    d, was = clipf({"pathmap": None}, [0.0, 0.0], [766.5, 0.0])
-    check(was is False and d == [766.5, 0.0],
-          "no mesh: the clip disables rather than freezes (the "
-          "clip_to_walkable door, same reasoning)",
+    d, was, why = clipf({"pathmap": None}, [0.0, 0.0], [766.5, 0.0])
+    check(was is False and d == [766.5, 0.0] and why == "no-mesh",
+          "no mesh: the clip disables rather than freezes and the row "
+          "will SAY no-mesh (the clip_to_walkable door, now named)",
           "a map without a mesh must not lose the lead bundle; failing "
           "toward the pre-sec.0.17 behavior is the calibrated risk")
-    d, was = clipf({"pathmap": StubPM()}, [150.0, 0.0], [916.5, 0.0])
-    check(was is False and d == [916.5, 0.0],
-          "an off-mesh ORIGIN disables the clip too, exactly like "
-          "clip_to_walkable's off-mesh door",
-          "our spawn coverage is only as good as the mesh; refusing "
-          "every lead from uncovered ground would read as an input lock")
+    d, was, why = clipf({"pathmap": StubPM()}, [150.0, 0.0], [916.5, 0.0])
+    check(was is False and d == [916.5, 0.0]
+          and why == "origin-unwalkable",
+          "an off-mesh ORIGIN disables the clip with its OWN why -- the "
+          "P-17 escape door, distinguishable from no-mesh at last",
+          "the P-17 wall press pushed the reported position ~0.25u past "
+          "the mesh edge and this door opened; the run's decode had to "
+          "prove WHICH door by re-scoring exact floats against the mesh "
+          "by hand (sec.0.18) -- the why field is that reconstruction, "
+          "pre-paid")
 
     print("\n3. composition cells: the lattice around the bundle")
     comp = authsrv.zero_lead_composition
@@ -432,6 +441,48 @@ def main():
           "the next owner run's wall-phase REFUTED-IF needs the clipped "
           "rows selectable from the capture, not reconstructed against "
           "the mesh by a later session")
+    # -- sec.0.19: the RETHINK instrument-#1 rows ------------------------
+    check("lead_clip_why=(a2_clip_why" in src
+          and 'a2_clip_why = "fallback"' in src,
+          "the lead row names WHICH clip door decided (lead_clip_why: "
+          "no-mesh / origin-unwalkable / clear / clipped / fallback)",
+          "the P-17 escape (origin-unwalkable at a 0.25u mesh-edge "
+          "penetration) was reconstructable only by re-scoring exact "
+          "floats against the mesh by hand; a boolean cannot say which "
+          "door opened")
+    check(src.count('reason="answer-outstanding", arm="click-d1",') == 1
+          and src.count('pending.get("hold_logged")') == 1
+          and src.count('pending["hold_logged"] = True') == 1,
+          "the FLUSH hold's refusal is a row now -- once per held item, "
+          "latched by hold_logged",
+          "this branch was the one guard in the click channel with no "
+          "row: the P-17 decode had to prove the hold's inertness by "
+          "absence. Per-poll rows would drown the log (the flush rides "
+          "every quiet tick); once per item is the whole story a held "
+          "click has")
+    check("kbd_age=(None if _kbd_at is None" in src,
+          "position_report rows carry the Rule-1 latch's age (or-None "
+          "discipline)",
+          "the latch's whole trajectory across a click-free stretch was "
+          "invisible -- P-17's ~490s of never-armed had to be inferred "
+          "from the absence of drops. A latch age on every report row "
+          "makes guard inertness a readable column")
+    check(src.count('"a2_leg", act="arm"') == 1
+          and src.count('act="clear", src="0x003D"') == 1
+          and src.count('act="clear", src="0x0047"') == 1,
+          "the leg model's lifecycle is rows: ONE arm site, TWO clears "
+          "(the same two pops the read-not-pop lock already pins), "
+          "clears logged only when a leg existed",
+          "only watchdog FIRES were visible; a run's trajectory through "
+          "'is a leg armed' was unrecoverable after the fact (REV-3's "
+          "decode rule had to re-derive it per incident)")
+    check(src.count('rec.event("a2_watchdog_due", why=why)') == 1
+          and 'why != state.get("a2_wd_why")' in src,
+          "the watchdog's due-predicate logs on reason TRANSITION only",
+          "the poll rides every ~1s quiet tick -- per-poll rows would "
+          "restate no-leg all session; silent refusals made 'why hasn't "
+          "it fired' unrecoverable. A transition row is the derivative, "
+          "which is the readable part")
     check(authsrv.A2_LEAD_CLIP_STEP == 2.0
           and authsrv.A2_LEAD_CLIP_STEP < authsrv.COLLISION_STEP,
           "the clip's sampling step is pinned at 2.0u, finer than the "
