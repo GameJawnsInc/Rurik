@@ -527,8 +527,14 @@ def score_specimen(pm, origin, click_pt, retail_grants):
     # route() waypoints exclude nothing: [origin, corners..., click].
     out["n_wp_ours"] = max(0, len(route) - 1)
     out["terminal_is_click"] = (route[-1] == (click_pt[0], click_pt[1]))
+    # At step=2.0, NOT the default: route()'s own final gate already
+    # requires the default-16u clip to pass, so re-running it here could
+    # never fail (review F2 -- a check that cannot fail is not a check).
+    # The 2.0 step is 8x finer than the gate, matches the wiring's own
+    # pre-send re-clip, and can genuinely catch a sub-16u sliver route()
+    # stepped over.
     out["legs_clean"] = all(
-        pm.clip(a[0], a[1], b[0], b[1]) == (b[0], b[1])
+        pm.clip(a[0], a[1], b[0], b[1], step=2.0) == (b[0], b[1])
         for a, b in zip(route, route[1:]))
     out["len_ours"] = sum(dist(a, b) for a, b in zip(route, route[1:]))
     if retail_grants:

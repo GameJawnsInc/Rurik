@@ -8936,8 +8936,12 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   immutable anchor connections (63805: 506/297/209/65; 62994: 98/89/9/8) —
   the corpus-wide map-280 aggregate independently reproduces Q7's 248/701.
   Section 4 scores `pathmap.route()` against retail's own answers and gates
-  only the hard invariants: every routed specimen's legs clip-clean, every
-  terminal exactly the click, and ALL 13 scoreable retail-verbatim clicks
+  only the hard invariants: every routed specimen's legs clip-clean **at
+  step 2.0, 8x finer than route()'s own 16u gate** (the review caught the
+  default-step version re-running the gate's exact check — a check that
+  cannot fail; at 2.0 it can), every terminal exactly the click (a
+  pathmap-contract regression lock — route() appends the goal on both
+  return paths), and ALL 13 scoreable retail-verbatim clicks
   reproduced as our one-leg case bit-identically (corpus-level counts are
   ≥-floors because the live corpus grows; bit-exact locks stay on the
   anchor files). Floor 48 from the green run. ~15 s warm),
@@ -8967,5 +8971,9 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   game-gated, the dynamic timeout clamped to [0.05, 1.0], both report
   handlers abandoning, the keyboard drop latch-read, the no-route path
   never sending the raw dest, DEFAULT_RUN_SPEED the only speed constant,
-  and all seven composition refusals present. Floor 51 from the green run.
-  ~1 s).
+  and all nine composition refusals present (the review round added
+  --interact-walk and --move-speed-effects). The review round also added
+  the sampling-gate pair — a stub route whose leg crosses the wall (as
+  route()'s 16u gate could pass over a sub-sample sliver) must be demoted
+  to the clip-fallback by the 2.0u pre-send re-clip — and two fine-step
+  source locks. Floor 57 from the green run (51 at the B2 landing). ~1 s).

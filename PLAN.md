@@ -1835,7 +1835,8 @@ integrator's position, never the last raw report). ROUTER-B2,
 byte-identical): route-answered clicks — first leg within the
 click's own handling, further legs at leg-completion ETA (recv
 timeout shrunk to the ETA while a chain lives), one 0x002B per
-chain, matched per-waypoint planes, abandon on any new input,
+chain, matched per-waypoint planes, abandon on 0x003D/0x003E/0x0047
+(interaction/cast abandonment is ROUTER-Q8, not yet shipped),
 clip-fallback or LOGGED refusal where no route exists (the P-17
 pass-through door does not exist on this path); routed clicks bypass
 the hold/void/rate tower, Rule 1's keyboard drop kept. ROUTER-P1..P4

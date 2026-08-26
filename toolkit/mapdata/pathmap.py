@@ -85,13 +85,15 @@ ground and wrong under a bridge. Said plainly because it will matter later --
 and it is exactly why an (x, y) overlap rule for cross-plane links is dangerous:
 a bridge and the ground beneath it overlap perfectly.
 
-THE TAIL, AND WHY IT MATTERS BEFORE THERE IS A CALL SITE. route() has zero
-callers in the server today -- `enemy_move_tick` walks a straight line and stops
-at the first wall -- but it is the substrate the monster AI needs, and the world
-runs on ONE thread with a 50 ms tick. So its worst case is not a nicety: a route
-that takes six tick periods is six ticks in which nothing in the world moves,
-and an intermittent whole-world freeze is the hardest kind of failure to
-attribute to anything.
+THE TAIL, AND WHY IT MATTERS. This paragraph was written when route() had zero
+callers; its first production consumer landed 2026-08-26 -- the player-click
+router (`authsrv.py --router`, ROUTER-B2, studies/movement/ROUTER.md), which
+answers clicks on the recv thread. `enemy_move_tick` still walks a straight
+line and stops at the first wall -- the monster AI remains the staged second
+consumer -- and the world runs on ONE thread with a 50 ms tick. So the worst
+case is not a nicety: a route that takes six tick periods is six ticks in
+which nothing in the world moves, and an intermittent whole-world freeze is
+the hardest kind of failure to attribute to anything.
 
 MEASURED on Pre-Searing (file id 0x1B97D, 6,120 trapezoids), 1,500 routes whose
 endpoints are 150 to 1,200 units apart -- the band `enemy_move_tick` actually
@@ -583,13 +585,16 @@ class PathingMap:
         list of points beginning at the start and ending at the goal; walking
         it in straight segments never leaves the navmesh.
 
-        SAME PLANE ONLY, and it says None rather than guessing otherwise.
-        Crossing planes needs a rule for pairing a portal's trapezoids with its
-        neighbour's, and the field that would most obviously carry it is the one
-        the Portal class records as refuted. There is also no height in this
-        file, so a wrong cross-plane link would route a player through a bridge
-        rather than over it -- a silent, plausible-looking error of exactly the
-        kind this project refuses to ship.
+        CROSSES PLANES via the portal-pair links (this paragraph used to say
+        SAME PLANE ONLY, written before `pair_id` was decoded -- stale from
+        the moment _build_cross_links shipped, caught by the 2026-08-26
+        router review). adjacent() walks the cross links, _shared_edge
+        delegates portal crossings to _overlap_point, and the residual
+        hazard the old warning was about is real but HANDLED DOWNSTREAM:
+        there is no height in this file, so a cross-plane step whose
+        trapezoids do not (x,y)-overlap gets a fallback waypoint that can
+        leave the mesh -- which the final per-segment clip() gate below
+        catches, returning None rather than a path through a bridge.
 
         THIS RUNS ON THE WORLD THREAD, so its worst case is a budget and not a
         curiosity: MEASURED on Pre-Searing over 1,500 routes in the chase band,

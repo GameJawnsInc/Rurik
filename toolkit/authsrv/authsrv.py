@@ -4823,7 +4823,10 @@ def _a2_watchdog(send, state, rec, now=None):
 # a per-segment clip() that returns None rather than a path through a wall
 # -- computes the legs, the first is granted in the click's own handling,
 # the rest ride `router_chain_tick` at per-leg ETAs. Every granted leg is
-# walkable end to end BY CONSTRUCTION, which is the whole point: sec.0.18
+# walkable end to end AT A 2.0u SAMPLING RESOLUTION (route()'s own 16u
+# gate, then the answer site's A2_LEAD_CLIP_STEP re-clip -- review F1:
+# "by construction" was an overclaim, clip() is a sampler and says so),
+# which is the whole point: sec.0.18
 # measured that a fired 0x0029 starts an autonomous collision-bypassing
 # order-walk the client ends only at its next processed key edge, so the
 # only safe grant is a legal leg -- retail's regime is harmless because
@@ -4967,6 +4970,22 @@ def router_answer_click(send, state, conn_id, rec, dest, dest_plane,
     origin = (float(pos[0]), float(pos[1]))
     t0 = time.perf_counter()
     wps = pm.route(origin[0], origin[1], dx, dy)
+    # THE SAMPLING GATE (review F1, 2026-08-26): route()'s own final gate
+    # and its string-pull sightline sample at 16 u, and clip()'s docstring
+    # says what that means -- "a gap narrower than `step` can be stepped
+    # over". So "legal by construction" is legal AT A RESOLUTION, and the
+    # resolution this campaign has calibrated is A2_LEAD_CLIP_STEP = 2.0
+    # (Q7 reproduced retail's clip boundaries at <=3u only at the fine
+    # step). Every leg is re-clipped here at 2.0 before anything goes on
+    # the wire; a route that survives 16 u but fails 2.0 crossed a
+    # sub-sample sliver and is treated as no route at all. Cost: one
+    # walkable() per 2 u of route (~1.2us each), well under a millisecond
+    # on any click this corpus has seen.
+    if wps is not None and not all(
+            pm.clip(a[0], a[1], b[0], b[1],
+                    step=A2_LEAD_CLIP_STEP) == (b[0], b[1])
+            for a, b in zip(wps, wps[1:])):
+        wps = None
     ms = (time.perf_counter() - t0) * 1000.0
     if wps is None:
         # No route. Attribute the refusal (the P-17 lesson: name which
@@ -4981,7 +5000,13 @@ def router_answer_click(send, state, conn_id, rec, dest, dest_plane,
             reason = "dest-off-mesh"
         else:
             reason = "no-path-or-gate"
-        stop = pm.clip(origin[0], origin[1], dx, dy, step=COLLISION_STEP)
+        # The fallback samples at the FINE step too (review F1): this is
+        # the one path that grants across ground route() never vetted, so
+        # it gets the sharpest ray this repo owns. The moved-threshold
+        # stays COLLISION_STEP -- a leg under 16 u is a refusal, not a
+        # grant.
+        stop = pm.clip(origin[0], origin[1], dx, dy,
+                       step=A2_LEAD_CLIP_STEP)
         moved = math.hypot(stop[0] - origin[0],
                            stop[1] - origin[1]) > COLLISION_STEP
         if moved and reason != "origin-off-mesh":
@@ -5390,7 +5415,8 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
                           cancel_answer=None, stop_answer=None,
                           cast_stop=False, resync_separation=None,
                           family_rate_probe=False, checksum_probe=None,
-                          pc_spoof=None, d1_lead=False, router=False):
+                          pc_spoof=None, d1_lead=False, router=False,
+                          interact_walk=False, move_speed_effects=False):
     """Pure: may these movement flags run together, and what must be said?
 
     Returns (refusal, notes). `refusal` is None or the text main() raises as a
@@ -5730,6 +5756,26 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
                 "(per-waypoint planes, matched) -- a warp in such a run "
                 "could attribute to either. Run the spoof's cell alone, as "
                 "its record already says."), []
+    if router and interact_walk:
+        return ("--router and --interact-walk cannot run together (review "
+                "F2, 2026-08-26). An interact on an out-of-range NPC sends "
+                "a 0x002A straight-line walk order while a live chain "
+                "keeps granting 0x0029 legs at cadence -- two movement "
+                "orders fighting for one body, the client re-aimed at the "
+                "stale route within a second. The interact walk's own "
+                "banner already calls it broken; a chain makes it a "
+                "two-sender fight besides."), []
+    if router and move_speed_effects:
+        return ("--router and --move-speed-effects cannot run together "
+                "(review F7, 2026-08-26). Chain ETAs are computed at "
+                "DEFAULT_RUN_SPEED; an effect episode changes the client's "
+                "real speed mid-chain, so a snared client receives leg n+1 "
+                "MID-LEG and turns onto a straight line to the next "
+                "waypoint that no clip ever sampled -- corner-cutting "
+                "across unvetted ground, the F1 shape without the thin "
+                "wall. A boosted client parks at every waypoint instead, "
+                "which would read as the cadence model failing. Route or "
+                "dose speed; not both."), []
     if cancel_answer and not zero_lead:
         return ("--cancel-answer requires --zero-lead. The CANCELWALK arms "
                 "are MODIFIERS on the zero-lead answer to the one report "
@@ -19296,7 +19342,9 @@ def main():
         cast_stop=_cs_mode, resync_separation=a.resync_separation,
         family_rate_probe=a.family_rate_probe,
         checksum_probe=a.checksum_probe,
-        pc_spoof=a.pc_spoof, d1_lead=a.d1_lead, router=a.router)
+        pc_spoof=a.pc_spoof, d1_lead=a.d1_lead, router=a.router,
+        interact_walk=a.interact_walk,
+        move_speed_effects=a.move_speed_effects)
     # The default-flip hint rides ONLY the refusal family it can actually
     # fix: "--zero-lead cannot be combined with X". On a PAIRWISE cell
     # (--cast-stop with --stop-answer, pin with --resync...) the advice is
@@ -20004,8 +20052,16 @@ def main():
         ROUTER = True
         print("[map] --router ON (ROUTER-B2, studies/movement/ROUTER.md -- "
               "the owner's ruling on RETHINK-H3). Clicks are answered by a "
-              "route over our own mesh; every granted leg is walkable end "
-              "to end by construction.")
+              "route over our own mesh; every granted leg is re-clipped at "
+              "the 2.0u step before it goes on the wire.")
+        if a.tape:
+            print("      INERT UNDER --tape: the tape dispatch never "
+                  "reaches the click arm, no chain can form, and tape "
+                  "state has no mesh -- this flag changes NOTHING in this "
+                  "run. The predictions below are NOT being exercised "
+                  "(the --map-under-tape precedent; an inert flag with a "
+                  "live banner is the defect the composition matrix "
+                  "documents).")
         print("      READOUT    router_route rows (verdict per click: "
               "verbatim/routed/clip-fallback/refused/kbd-drop, with the "
               "refusal reason and route compute ms) and router_leg rows "
@@ -20020,19 +20076,22 @@ def main():
               "matched planes.")
         print("      PREDICTION, registered before the first run "
               "(ROUTER.md sec.5): P-1 zero wall/prop phasing on click "
-              "routes -- every granted leg clip-clean by construction; "
-              "P-2 a cross-floor click routes legally or refuses with the "
-              "reason logged, never a straight-line cross-floor grant; "
-              "P-3 chains walk without rubber-banding, grants landing at "
-              "leg completion; P-4 the P-17 wall-press cell yields "
-              "refused (origin-off-mesh) or legal routes -- the unclipped "
-              "pass-through door is closed.")
-        print("      REFUTED IF a clip-clean granted leg still phases "
-              "geometry (mesh-vs-client walkability divergence -- "
-              "campaign-level news, not a router bug); or the client "
-              "rubber-bands on chain grants (the cadence model is wrong); "
-              "or routed clicks measurably lag one RTT (route() cost "
-              "moved on a real map).")
+              "routes -- every granted leg 2.0u-clip-clean before "
+              "sending; P-2 a cross-floor click routes legally or "
+              "refuses with the reason logged, never a straight-line "
+              "cross-floor grant; P-3 chains walk without rubber-banding, "
+              "grants landing at leg completion; P-4 the P-17 wall-press "
+              "cell yields refused (origin-off-mesh) or legal routes -- "
+              "the unclipped pass-through door is closed. Exposure "
+              "floors: >=10 free clicks, >=3 re-clicks, >=3 wall-press, "
+              ">=1 cross-floor, else the cell is VOID not null.")
+        print("      REFUTED IF a 2.0u-clip-clean granted leg still "
+              "phases geometry -- score the SAMPLER first (a sub-2u "
+              "sliver is our resolution, not the mesh), THEN "
+              "mesh-vs-client divergence (campaign-level news, not a "
+              "router bug); or the client rubber-bands on chain grants "
+              "(the cadence model is wrong); or routed clicks measurably "
+              "lag one RTT (route() cost moved on a real map).")
     if a.pc_spoof is not None:
         global PC_SPOOF
         PC_SPOOF = int(a.pc_spoof)

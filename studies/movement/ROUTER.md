@@ -13,20 +13,29 @@ verification run.
 ## 1. The spec (OBSERVED; REALFIX §0.19 / RETHINK-H2, desk-skeptic-confirmed)
 
 Retail's click answer is a pathfinder's output. The measured contract, over
-29 live clicks across six captures:
+29 attributed live clicks across six captures (a METHOD-bounded count: the
+op61-heading-vote cannot attribute a click-only session, and the one it
+skips — connection 49545, zero op61 rows — holds 3 more clicks, each
+answered with a bit-equal verbatim echo within 32 ms by click-echo
+attribution; the excluded data confirms the contract, review 2026-08-26):
 
 1. **First answer within one RTT** (observed 0.007–0.065 s): the verbatim
-   clicked point when one leg suffices (16/29), otherwise a part-way FIRST
-   waypoint (13/29).
+   clicked point when one leg suffices (16/29, every one bit-equal),
+   otherwise a part-way FIRST waypoint (13/29).
 2. **Further legs at leg-completion cadence at run speed** — grant(n+1)
-   lands when the client completes leg n at 288 u/s (63805's eight legs:
-   277–328 u/s, six within ±4%).
+   lands when the client completes leg n at 288 u/s (63805's eight legs
+   through the committed pipeline: 277.8–325.9 u/s, six within ±4%).
 3. **The terminal grant is the bit-exact clicked point** (every completed
    chain).
-4. **Any new c2s input silently abandons the chain** — a re-click (6), a
-   keyboard resume (2 by our assembly; the skeptic's abort census read one
-   of those as click-caused — same 8 total), an op57 interaction (1).
-   "Unanswered" and "wins-late" were always this.
+4. **Any new c2s input silently abandons the chain** — a re-click (5 by
+   our assembly; the skeptic's census read one keyboard abort as
+   click-caused, 6/1/1 — same 8 total), a keyboard resume (2), an op57
+   interaction (1 — a single AMBIGUOUS specimen: a bit-identical re-grant
+   lands 30 ms after the op57 and fits both "chain aborted, the interact's
+   own route answered" and "chain continued, second leg never earned";
+   n=1, labeled as such). "Unanswered" and "wins-late" were always this.
+   Rotate/skill/attack opcodes never fired mid-chain in this corpus, so
+   whether they abort is UNMEASURED (zero exposure — the L8 rule).
 
 Wire grammar (OBSERVED from the 63805 specimen, probe 2026-08-26): a chain
 is **one op43 speed row (1.0) at chain start**, then bare op41 grants —
@@ -50,11 +59,16 @@ this router's zero-corner approximation; the verbatim echo its one-leg case.
   smoothing, and a final per-segment `clip()` gate that returns `None`
   rather than a path through a wall. MEASURED p50 0.185 ms / max 16.6 ms on
   the biggest mesh. Zero production callers before this arc — the module's
-  own header stages it for exactly this consumer.
+  own header staged it for the monster AI; this arc made it the first
+  consumer (the monster AI remains the staged second).
 - **`livewire.py`** (RETHINK #2) — the committed decode recipe the bench
   reads captures through, origin-gated to LIVE.
-- The click handler's own comments ("we cannot route", authsrv.py ~15730,
-  ~15765) predate `route()` and are stale; the wiring build retires them.
+- The click handler's two "we cannot route" comments predated `route()`
+  and were retired in place by the wiring build; the same staleness in
+  pathmap.py's own header ("zero callers") and `route()`'s docstring
+  ("SAME PLANE ONLY", written before `pair_id` was decoded) was caught by
+  the review round and fixed. `studies/enemy/PLAN.md` still carries the
+  expired premise ("the server cannot route") — noted there.
 
 ## 3. ROUTER-B1 — the bench (`toolkit/clientscan/routerbench.py`), BUILT, green
 
@@ -82,7 +96,10 @@ Anchor locks in the test: 63805 (506 pairs / 297 exact / 209 clipped / 65
 instance load (OBSERVED: 146, 280, 148 across the corpus); the coverage
 census is a verification with a 0.60 floor, not a selector — two candidate
 meshes both scored 1.00 on one connection and the tie broke lexically
-before this was found. The Q7 wrong-mesh trap, now code.
+before this was found. The Q7 wrong-mesh trap, now code. (The review
+explained the tie: content maps 146 and 148 share pathing file 113021 —
+the same city's outpost and explorable — so the tie was structural, and
+wire-first is still the right selector.)
 
 **Section B — `route()` vs retail's 29 answers** (26 scored; 3 on maps not
 in content, 1 connection unattributable):
@@ -115,19 +132,68 @@ in content, 1 connection unattributable):
   our clip and our route detours 9 corners; fresh origin, so not a
   staleness artifact. One specimen; prop-class remainder candidate.
 - **ROUTER-Q3** — 62994 t=146.434/148.319 (map 146): retail's corridor runs
-  ~1.2km from ours at 0.35–0.4× our length; its observed fragment is
+  ~1.2km from ours at 0.34–0.41× our length; its observed fragment is
   clip-clean on our mesh. Superseded before revealing its full path.
   Two-legal-corridors tie-breaking, or a shorter corridor our mesh blocks
   further along — undecidable from the tape.
 - **ROUTER-Q4** — retail grants shorter legs than corner-to-corner (grants
   at ~300–1000u spacing on straight stretches; a part-way first waypoint
-  can sit ON the straight line, e.g. 1233.471's, 3.1u off ours). Mechanism
+  can sit ON the straight line, e.g. 1233.471's, 1.3u off ours). Mechanism
   unmeasured (leg cap? LOS budget?). Our router grants corner waypoints
   only; the client walks long straight legs happily (our own 766u leads),
   so this is cadence cosmetics, not legality. Not implemented; registered.
 - **ROUTER-Q5** — no specimen clicks an unwalkable/off-mesh destination
   (all 29 dests are on-mesh; the GW client raycasts clicks onto ground).
   Retail's rule for such clicks is unmeasured.
+
+### 3.1 The review round (2026-08-26, three adversarial lanes before merge)
+
+**The bench's four headline claims were independently re-derived and ALL
+REPRODUCED bit-for-bit** — own attribution, own chain assembly, own
+point-to-polyline and D1 math, routerbench's functions run only afterwards
+for comparison (row-for-row identical). The re-derivation is the
+independence check the fidelity gate cannot be (the gate certifies
+transcription of the skeptic's numbers; this lane re-earned them). Also
+verified by adversarial rerun: swapping the dead-reckoned origin for the
+raw last report degrades exactly the specimens §3 says it degrades.
+
+Findings absorbed:
+
+- **The sampling overclaim (wiring F1), FIXED in code**: "legal by
+  construction" was legal at clip()'s 16 u sampling — a sub-sample sliver
+  passes, sharpest on the clip-fallback. Every leg is now re-clipped at
+  `A2_LEAD_CLIP_STEP` (2.0 u — the step Q7 itself calibrated) before
+  anything goes on the wire, and the fallback's own clip runs at 2.0 u
+  too; a route that survives 16 u but fails 2.0 is treated as no route.
+  The bench's `legs_clean` likewise moved to step 2.0 (review F2: at the
+  default step it re-ran route()'s own gate and could never fail).
+- **The 13/13 is model-conditional for one specimen (bench F3)**: at a
+  dead-reckon speed of 277 u/s (the low end of retail's own leg band) the
+  62994@135.655 origin lands off-mesh and route() refuses; at ≥280 it is
+  the bit-identical verbatim reproduction. 288 is the committed constant
+  and the right one (the 63805 legs cluster on it), but the claim is
+  "13/13 under the 288 u/s origin model," not model-free.
+- **Two new composition refusals (wiring F2/F7)**: `--interact-walk`
+  (0x002A straight-line order vs live chain — two movement orders for one
+  body) and `--move-speed-effects` (chain ETAs assume 288; a snared
+  client gets leg n+1 mid-leg and corner-cuts unvetted ground).
+- **`--router --tape` prints a loud INERT notice** (wiring F5): under a
+  tape no click can be routed; the banner now says so instead of printing
+  predictions for a run that cannot exercise them.
+- **ROUTER-Q9 (wiring F3), registered not fixed**: world_tick's unlocked
+  `dest` read→clear can clobber a freshly granted leg's dest in a ~µs
+  window per 50 ms tick; the router makes the two writers time-correlated
+  (the chain grants at the exact ETA the integrator arrives). Worst case
+  is model staleness on the terminal grant (pos frozen one waypoint
+  short, report-silent). The identical window pre-exists at the shipped
+  click fire; recorded with sizing rather than half-locked.
+- The pre-batch owed-leg grant outruns an abandon in the same batch by at
+  most the 0.05 s timeout floor (wiring F4) — comparable to retail's own
+  one-RTT race; the bound comes from the floor, verified.
+- `--cast-stop` composes and its click-walk suppression clause fires on
+  every mid-chain cast (wiring F6) — conservative and warp-free, but its
+  "no belief can place the body" justification is false under a chain
+  (the dead-reckoning places it); folded into ROUTER-Q8's cast question.
 
 ## 4. ROUTER-B2 — the wiring (authsrv `--router`) — BUILT 2026-08-26, tests green
 
@@ -137,33 +203,45 @@ branch (0x003E) becomes:
 1. Origin = `state["pos"]` (the 20 Hz integrator; B1's origin result).
    Clicks under active keyboard authority stay DROPPED (retail's own
    contract, §0.15 — rule 1 unchanged).
-2. `route(origin → click)` on `state["pathmap"]`:
+2. `route(origin → click)` on `state["pathmap"]`, then **every leg
+   re-clipped at `A2_LEAD_CLIP_STEP` (2.0 u) before anything is sent**
+   (the review's sampling gate — a route that survives route()'s own 16 u
+   gate but fails 2.0 is treated as no route):
    - **Routed, one leg** → grant the verbatim click point (identical wire
      bytes to today's echo).
    - **Routed, multi-leg** → grant waypoint 1 now (speed row first, once);
      queue the rest with per-leg ETAs at 288 u/s; grant leg n+1 at leg n's
      completion; terminal grant is the exact click point.
-   - **`route()` returns None** → fall back to the ONE-LEG CLIP: grant
-     `clip(origin → click)`'s stop point if it moves the client, else
-     refuse with a logged reason. This is NOT the tombstoned F-B clip (that
-     replaced retail's echo for ALL geometry-flagged clicks; this fires
-     only where no route exists — ROUTER-Q1's cross-component case — and
-     every grant it emits is still a legal leg). A refusal is logged
-     `router_refused`, never silent.
-3. **Abandon on new input**: any 0x003D, new 0x003E (new route), 0x0047,
-   or cancel-on-move interaction clears the chain (logged with cause).
-4. **Planes**: per-waypoint `plane_first` via `plane_at(wp, prefer=carry)`;
-   `plane_second` = previous grant's plane (the one-grant-lag model already
-   in the codebase).
+   - **No route (or the re-clip demoted one)** → fall back to the ONE-LEG
+     CLIP at the same 2.0 u step: grant its stop point if it moves the
+     client by more than COLLISION_STEP and the origin is on-mesh, else
+     refuse. This is NOT the tombstoned F-B clip (that replaced retail's
+     echo for ALL geometry-flagged clicks; this fires only where no legal
+     route exists — ROUTER-Q1's cross-component case — and its one grant
+     is still a 2.0 u-sampled legal leg). A refusal is a `router_route`
+     row with `verdict="refused"` and the reason named, never silent.
+3. **Abandon on movement input**: any 0x003D, new 0x003E (new route), or
+   0x0047 clears the chain (logged with cause). Interaction and cast
+   opcodes do NOT abandon in v1 — that is ROUTER-Q8, not a shipped
+   behavior (`--interact-walk` is refused in the composition matrix for
+   exactly this reason).
+4. **Planes**: per-waypoint `plane_first` via `plane_at(wp, prefer=carry)`
+   with the carry as the refuse-to-guess fallback; `plane_second` is
+   **matched to `plane_first`** via `a2_matched_field4` (§0.11's
+   protection) — NOT retail's one-grant-lag half-zero pattern, a recorded
+   deviation (ROUTER-Q7). The terminal grant's `plane_first` is the
+   client's own click plane.
 5. **Scheduler**: rides the recv loop — the 1.0 s timeout poll and the
    pre-batch flush site — with the socket timeout shortened to the next
    leg ETA (clamped to [0.05, 1.0]) only while a chain is live, so chain
    grants land at leg completion, not up to 1 s late. `policyreplay`'s
    `QUIET_TICK=1.0` stays correct for every log it gates (no old log has a
    chain).
-6. **Observability** (instrument-#1 discipline): `router_route` per click
-   (origin, dest, waypoint count, verdict, compute ms), `router_leg` per
-   grant/abandon/done with cause.
+6. **Observability** (instrument-#1 discipline): a `router_route` row per
+   click carrying the verdict plus the fields that verdict earns (routed
+   and refused rows carry origin + compute ms; verbatim carries dest + ms;
+   kbd-drop carries the keyboard age), and `router_leg` rows per
+   grant/abandon with cause, the terminal grant marked.
 7. Under `--router`, a click never arms `grant_pending` and never consults
    the rate floor — retail answers every click within one RTT (29/29), and
    the hold/void/freshness tower exists to police a regime the router no
@@ -187,11 +265,15 @@ name the router's new call sites; `test_grantsim.py` 86, `test_policyreplay.py`
 - The recv socket timeout shrinks to the next leg ETA (clamped
   [0.05, 1.0] s) only while a chain is live; `policyreplay.QUIET_TICK=1.0`
   stays true for every log its gate rules on (no old log holds a chain).
-- Plane pairs are **matched everywhere** (`a2_matched_field4`, §0.11's own
-  protection); the interior field-3 is `plane_at(wp, prefer=carry)` with
-  the carry as the refuse-to-guess fallback, the terminal field-3 is the
-  client's own click plane. ROUTER-Q7 records the deviation from retail's
-  half-zero lag pairs.
+- Plane pairs are **matched everywhere with one named carve-out**
+  (`a2_matched_field4`, §0.11's own protection): the one-leg verbatim
+  answer matches field 4 only under `--d1-lead`, because it promises wire
+  bytes identical to the shipped echo and the shipped echo is
+  D1-conditional there — without the flag it sends the client's raw
+  `(dest_plane, cur_plane)`, exactly as the echo does. Interior field-3 is
+  `plane_at(wp, prefer=carry)` with the carry as the refuse-to-guess
+  fallback, the terminal field-3 is the client's own click plane.
+  ROUTER-Q7 records the deviation from retail's half-zero lag pairs.
 - Composition: refused with the seven probe/diagnostic arms
   (`click-sweep`, `arrival-carry`, `cancel-answer`, `stop-answer`,
   `family-rate-probe`, `checksum-probe`, `pc-spoof`); composes with
@@ -202,9 +284,13 @@ name the router's new call sites; `test_grantsim.py` 86, `test_policyreplay.py`
   build the snap only if the owner run shows the refusal firing on real
   play. **ROUTER-Q7** — matched plane pairs vs retail's one-grant-lag
   half-zero pairs (above). **ROUTER-Q8** — only 0x003D/0x003E/0x0047
-  abandon a chain; retail also aborted on an op57 interaction, and our
-  interaction/cast opcodes do not yet abandon (the cast path's own
-  cancel-on-move interplay is unmeasured under chains).
+  abandon a chain; retail also aborted on an op57 interaction (n=1,
+  ambiguous — §1 clause 4), and our interaction/cast opcodes do not yet
+  abandon. The cast path composes conservatively (cast-stop's click-walk
+  suppression fires on every mid-chain cast — warp-free, but its stated
+  justification is false under a chain, §3.1); `--interact-walk` is
+  refused outright. **ROUTER-Q9** — the world-tick dest-clobber µs race,
+  registered with sizing in §3.1.
 
 ## 5. ROUTER-P — pre-registered predictions for the owner's verification run
 
@@ -214,9 +300,11 @@ plus ordinary play: free clicks, mid-route re-clicks, the wall press with
 clicks, a cross-floor click, keyboard interleave.
 
 - **ROUTER-P1 — zero wall/prop phasing on click routes.** Every granted
-  leg is clip-clean by construction; movetap shows no body passing
-  geometry on a click answer. REFUTED IF a clip-clean granted leg still
-  phases — that is mesh-vs-client walkability divergence, campaign-level
+  leg is clip-clean at the 2.0 u sampling step before it is sent; movetap
+  shows no body passing geometry on a click answer. REFUTED IF a
+  2.0 u-clean granted leg still phases — score the SAMPLER first (a
+  sub-2 u sliver is our resolution limit, not the mesh being wrong), and
+  only then mesh-vs-client walkability divergence, which is campaign-level
   news scored against the mesh, not the router.
 - **ROUTER-P2 — the cross-floor click** (the 143431 warp case) **routes
   legally or refuses with the reason logged.** No straight-line

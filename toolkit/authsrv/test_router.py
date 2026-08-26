@@ -22,8 +22,10 @@ sys.path.insert(0, os.path.dirname(HERE))                      # toolkit/
 import checks                                                  # noqa: E402
 import authsrv                                                 # noqa: E402
 
-# Floor from the 2026-08-26 green run: 51 checks, all unconditional.
-LEDGER = checks.Ledger("router wiring", floor=51)
+# Floor from the 2026-08-26 green run: 57 checks, all unconditional
+# (51 at the B2 landing; +6 from the review round: the sampling-gate pair,
+# the two new composition refusals, the two fine-step source locks).
+LEDGER = checks.Ledger("router wiring", floor=57)
 check = checks.adopt_named(LEDGER)
 
 SPEED_OP = authsrv.GAME_SMSG_AGENT_UPDATE_SPEED
@@ -83,7 +85,9 @@ class StubPM:
             return None
         if self.clip(x0, y0, x1, y1) == (x1, y1):
             return [(x0, y0), (x1, y1)]
-        return [(x0, y0), (150.0, 500.0), (x1, y1)]
+        # A genuinely clean detour over this mesh: up the x<=100 side,
+        # across the y>400 shelf, down past the wall.
+        return [(x0, y0), (100.0, 500.0), (200.0, 500.0), (x1, y1)]
 
 
 def base_state(pm=None, pos=(0.0, 0.0)):
@@ -126,16 +130,33 @@ def main():
     check("blocked line is handled", handled)
     check("routed sends speed ONCE then the first leg only",
           [op for op, _p, _l in sent] == [SPEED_OP, MOVE_OP]
-          and sent[1][1][1] == [150.0, 500.0])
+          and sent[1][1][1] == [100.0, 500.0])
     chain = st.get("router_chain")
     check("the chain is armed with the remaining legs",
-          chain is not None and chain["queue"] == [(300.0, 0.0)]
-          and chain["i"] == 1 and chain["n"] == 2)
+          chain is not None
+          and chain["queue"] == [(200.0, 500.0), (300.0, 0.0)]
+          and chain["i"] == 1 and chain["n"] == 3)
     check("routed row names the leg count",
           any(r["kind"] == "router_route" and r["verdict"] == "routed"
-              and r["n_wp"] == 2 for r in rows))
+              and r["n_wp"] == 3 for r in rows))
     check("first leg's planes are matched (field4 == field3)",
           sent[1][1][2] == sent[1][1][3] == 3)
+
+    # THE SAMPLING GATE (review F1): a route whose leg crosses the wall --
+    # as route()'s 16u gate could pass over a sub-sample sliver -- must
+    # NOT be granted; the 2.0u pre-send re-clip demotes it to no-route
+    # and the clip-fallback answers instead.
+    st = base_state(StubPM(route_result=[(0.0, 0.0), (150.0, 300.0),
+                                         (300.0, 0.0)]))
+    handled, sent, rows = answer(st, (300.0, 0.0))
+    check("a wall-crossing route is refused by the pre-send re-clip",
+          handled
+          and any(r["kind"] == "router_route"
+                  and r["verdict"] == "clip-fallback"
+                  and r["reason"] == "no-path-or-gate" for r in rows))
+    check("what fires instead is the fallback's own clean stop",
+          sent[-1][1][1][0] <= 100.0 + 1e-6
+          and st.get("router_chain") is None)
 
     # kbd-drop: active keyboard authority.
     st = base_state()
@@ -285,11 +306,17 @@ def main():
           src.count("/ DEFAULT_RUN_SPEED") >= 1
           and "ROUTER_SPEED" not in src)
     for pair in ("click_sweep", "arrival_carry", "cancel_answer",
-                 "stop_answer", "family_rate_probe", "checksum_probe"):
+                 "stop_answer", "family_rate_probe", "checksum_probe",
+                 "interact_walk", "move_speed_effects"):
         check(f"composition refuses --router with {pair.replace('_', '-')}",
               f"if router and {pair}" in src)
     check("composition refuses --router with pc-spoof",
           "if router and pc_spoof is not None" in src)
+    check("the pre-send re-clip exists at the fine step, once",
+          src.count("step=A2_LEAD_CLIP_STEP) == (b[0], b[1])") == 1)
+    check("the clip-fallback samples at the fine step too",
+          src.count("stop = pm.clip(origin[0], origin[1], dx, dy,\n"
+                    "                       step=A2_LEAD_CLIP_STEP)") == 1)
     return LEDGER.verdict()
 
 
