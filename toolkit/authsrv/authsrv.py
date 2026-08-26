@@ -5101,10 +5101,15 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
             "own burst slot. HAZARD, priced: the shipped CLICK grant sites "
             "also send a player 0x002B and hardcode [1.0, 1], overwriting "
             "the probe's float -- inert on A1's click-free protocol "
-            "(--grant-suppress already refuses keyboard-mid clicks), and a "
-            "[1.0, 1] between probe sends in the tape means the run was "
-            "NOT click-free and its movespeed rows are confounded from "
-            "that instant.")
+            "(--grant-suppress already refuses keyboard-mid clicks). "
+            "Distinguish by LABEL, not payload: the probe's own forward "
+            "sends carry [1.0, 1] too (mt 1 is keyboard-forward -- A1's "
+            "run proved it on a click-free c2s census), so the click "
+            "signature is a [1.0, 1] send WITHOUT the FAMILY-RATE PROBE "
+            "label prefix; one of those between probe sends means the run "
+            "was NOT click-free and its movespeed rows are confounded "
+            "from that instant. The definitive check is the c2s census: "
+            "zero 0x003E rows.")
     if click_sweep:
         notes.append(
             "      + --click-sweep: ALLOWED -- a CLICK-arm diagnostic, not a "
@@ -18550,8 +18555,11 @@ def main():
               "truth some other way.")
         print("      HAZARD     the shipped CLICK grant sites send [1.0, 1] "
               "to the player and overwrite the probe's float. Run "
-              "CLICK-FREE; a [1.0, 1] between probe sends in the tape "
-              "means the run was not, from that instant.")
+              "CLICK-FREE. The probe's own forward sends also carry "
+              "[1.0, 1] (mt 1 is keyboard-forward), so tell them apart by "
+              "LABEL -- a [1.0, 1] send without the FAMILY-RATE PROBE "
+              "prefix is a click; the definitive check is the c2s census "
+              "(zero 0x003E rows).")
     if grant_suppress:
         global GRANT_SUPPRESS
         GRANT_SUPPRESS = True

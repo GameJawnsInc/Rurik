@@ -166,6 +166,77 @@ and the D2 clip mixture.
   table, arrival-continuity at maturation, and a re-test of every ledger entry (F27
   stops, F33, F35, click-leg, cast-while-running, shouts NOT stopping a runner).
 
+### 0.4 REALFIX-A1 RAN — 2026-08-25 ~20:23, scored: Q6 CLOSED (wire-steerable), and the run's warp decoded F27's gate
+
+**The run** (`authsrv-20260825T202330-c1` × `movetap-20260825T202345`, 641 samples /
+51.1 s, wall-clock joined with two millisecond-exact apply-tick pins): the owner mixed
+~3 s forward/backpedal/strafe legs with ~1 s releases, click-free (c2s census: 23×
+`0x003D`, 15× `0x0047`, nothing else movement-shaped). Scored by two lanes plus a
+skeptic who re-derived every load-bearing number from the raw rows (NOT refuted, high
+confidence).
+
+**REALFIX-Q6 / SPEED TRUTH: CLOSED — WIRE-STEERABLE, dose-responsively.** All
+OBSERVED: 22 of 22 probe sends expressed in sync `+0x60` at the first movetap sample
+(17–76 ms); the store held across 931 checks with zero violations (once for 7.3 s
+across a pause, nothing client-side reverts it); every one of the tape's 12 movespeed
+transitions is probe-attributed; `maxspeed` 288.0 in 641/641 with zero `0x0027`. The
+copy CONSUMES the float at the same burst's bake: cached velocity bit-exact
+**190.08 = float32(0.66)×288** (a client-side ⅔ table would read 192.0 — the operand
+is OUR wire float, discriminated), 216.00, 288.00 — and all 21 distinct armed `+0x48`
+stops in the tape fit the floated formula `dist·1000/(288×float)` while the 288-flat
+formula misses every non-1.0 cell by 193–914 ms: a three-family dose-response.
+**Registration bonus: the two in-code tables reconcile** — FAMILY_RATE's 0.66 is what
+the client STORES from the wire; `cast_stop_reckon`'s 0.652 is what the body DOES
+(body-truth p50 188.1 u/s, measured in the same tape). One registration correction:
+**mt 1 is keyboard-forward** — `[1.0, 1]` is not a click signature; click sends are
+distinguished by LABEL, and the definitive click-free check is the c2s census.
+The family-edge carry prediction got ZERO exposure (the ~1 s pauses cleared the grant
+floor 12 of 12) — untested, not refuted.
+
+**The owner's warp (strafe E ~3 s → release ~1 s → strafe Q ⇒ warp at the press),
+decoded bit-level — both events are the F27 walk-start reconcile, and F27 turns out
+to be GATED:**
+
+- **Shape (OBSERVED):** at the Q press the drawn body **hard-copies the SYNC copy's
+  whole movement block** — landing 11.9/18.2 u from the copy, `async_stop` going 0 →
+  the copy's stop tick BIT-EQUAL (42331/61984), velocity and target copied — on **no
+  granted destination** (nearest dest 70.7/172.2 u away), then **walks BACK against
+  the held key** for 0.9/1.65 s to the old granted point. The visible symptom is
+  jump-plus-rubber-band, not a teleport. F35's signature is absent (both arms
+  superseded before maturity, target never `[inf,inf]`, 0 drags in 22 armed grants —
+  and three arms that matured inside key-released pauses were no-ops ≤0.1 u:
+  maturity-in-pause is inert; the warp is a PRESS event).
+- **The gate (OBSERVED, 15/15 press split):** the reconcile fires iff the copy is
+  **MID-WALK at the press** AND **the copy's plane mismatches the body's** (sync
+  plane 0 vs body 26 at both warps). Six presses at sep 350–509 u — including a
+  180° forward→backpedal reversal with the copy proven mid-walk on equal planes —
+  did NOT snap. **The old F27 framing ("snap at every walk-start, magnitude =
+  staleness") is TOO BROAD**; strafe-specificity was geography (the E-legs crossed
+  the plane-0/26 boundary), not strafe mechanics. A rival gate formulation fits
+  22/22 grants — **grant `plane_cur` ≠ copy plane** — and OUR OWN plane-carry is
+  load-bearing either way: the mid-leg grant carried `dest=26/cur=0`, planting the
+  copy on stale plane-0 ground. The cell separating the two formulations (copy idle
+  AND `pc` ≠ copy plane) never occurred in this run.
+- **Snap magnitude = the reversal grant's own bake distance** (212.4/379.5 u): the
+  zero-lead grant to the body's own feet is what teleports the body away from them.
+- **Old defect, not minted — but the float enlarges it (SUPPORTED):** the
+  movespeed-1.0 counterfactual, computed with floor-exact integer arithmetic and
+  robust parked-preconditions, still fires both warps (~100.6 u and ~322 u), so the
+  mechanism predates the probe; the 0.75 float widened warp A's vulnerable press
+  window 3.5× (832 vs 236 ms) and added ~89 u (1.9×). The flip side is a campaign
+  lesson: 1.0-everywhere made one sep-388 u reversal safe BY ACCIDENT (the copy
+  out-ran the body and parked before the press). **Speed truth without fixing the
+  copy-pinning/chase policy converts accidental safety into more reconcile
+  exposure — A2 must carry both.**
+
+**What settles the residuals** (the skeptic's list): (1) a no-probe repeat of the
+recipe across the plane boundary — converts the counterfactual to OBSERVED and tests
+warp A's thin 236 ms margin (~5 min owner time); (2) a leg engineered to leave the
+copy PARKED with grant `plane_cur` ≠ copy plane — the cell separating the two gate
+formulations (~5 min); (3) a static read of the client's walk-start reconcile
+predicate to NAME the gate (desk, no owner time) — the `0x005355C0`/`0x006055E0`
+family FINDINGS already maps.
+
 **Interim state (unchanged until the campaign lands):** today's defaults stand —
 `--zero-lead`, `--grant-suppress`, `--cast-stop=pin`; `--resync` stays opt-in (its
 run record: mechanism confirmed at 0.000 u fire cost, 8-of-8 known drags preventable —

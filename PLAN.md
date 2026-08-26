@@ -1586,6 +1586,23 @@ the full retail contract incrementally (retiring the pin, the pin×resync
 conflict and the instant-skill divergence as it lands), **A4** acceptance
 = indistinguishable from retail under the standing instruments. Defaults
 unchanged until the campaign lands; `--resync` stays opt-in.
+**A1 WIRED AND RAN THE SAME EVENING (~20:23) — Q6 CLOSED:
+WIRE-STEERABLE, 22/22 doses, bit-exact** (190.08 = float32(0.66)×288
+discriminates the wire operand from any client-side table; all 21 armed
+stops fit the floated bake formula; REALFIX.md §0.4 is the scored
+record). The run's bonus was the owner finding a clean warp repro
+(strafe E → 1 s release → strafe Q), decoded by two lanes + a skeptic to
+**F27's GATE — the walk-start reconcile fires iff the copy is MID-WALK
+at the press AND planes mismatch (15/15 split; rival formulation: grant
+`plane_cur` ≠ copy plane, 22/22; our own plane-carry's `cur=0` word is
+load-bearing). The old "snap at every walk-start" framing is TOO BROAD;
+six presses at sep 350–509 u did not snap.** Old defect, not minted by
+the probe (1.0-counterfactual still fires both, SUPPORTED), but the
+float widened the vulnerable window 3.5× — and 1.0-everywhere made one
+reversal safe by accident, so **A2 must carry speed truth AND the
+copy-pinning fix together**. Next: the reconcile-predicate static read
+(desk), then the two 5-min residual cells (no-probe repro; parked +
+`pc`-mismatch), then A2's design.
 *The staging block that preceded the run, kept for the record:*
 The follow-on recon (`studies/movement/followon-notes/README.md`, merged
 to `main` the same day) answered F35's counterfactual from tape (castless,
