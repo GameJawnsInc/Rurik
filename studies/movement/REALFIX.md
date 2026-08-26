@@ -893,6 +893,68 @@ recipe, matched words, no lock. `--d1-lead` now holds every §0.9 headline
 (P-1 zero warps, P-5 sign-of-lead) with the lock closed; the ETA watchdog and
 model-aware click freshness remain queued as containment.
 
+### 0.12 The containment pair — built 2026-08-26, registered before the soak
+
+**What landed (same flag, no new levers):** the two §0.10 fixes, both D1-gated so
+the shipped default is untouched:
+1. **The leg model + ETA watchdog.** Every fired d1 grant arms an `a2_leg` record
+   (origin, dest, plane, the FAMILY speed the copy actually walks at, send
+   instant); any c2s report or click clears it (the click *captures* it — see 2).
+   The watchdog rides the recv loop's 1 s quiet ticks and re-pins a client silent
+   past its own leg's ETA **computed at the slowest family speed (190.08 u/s) plus
+   1.0 s slack — it can only be late, never early** — at the granted dest, where
+   the model says the client stands (the incident: 0.0001 u off) and where §0.8's
+   parked immunity makes a re-pin provably snap-safe. Five-clause due-predicate
+   (leg armed / not yet fired / no click since the leg's t0 — a click-walking
+   client is silent LEGITIMATELY and the containment must never recreate the
+   defect it contains / ETA passed), once per leg, every fire its own
+   `a2_watchdog` row.
+2. **Model-aware click freshness.** A click arriving while (or after) a lead leg
+   is in flight is answered from the leg's own position model — interpolated at
+   the family speed, clamped at the dest — instead of refused on report staleness
+   the leg itself explains. The placement and clip checks read the model position;
+   the incident's refused recovery click (7.15 s "stale", player standing exactly
+   at the granted dest) is the registered exemplar this closes.
+
+**Registered predictions for the ordinary-play soak (the §0.10 P-2/P-4
+re-registered bounds want n; run whenever convenient, ~10–15 min of normal
+movement, seams and stairs welcome, clicks now ALLOWED in a soak):**
+- **S-1:** the watchdog fires **ZERO times** — every `a2_watchdog` row is a caught
+  anomaly to decode, not routine. (If the §0.11 lock somehow recurs, the watchdog
+  caps it at ETA+slack instead of 8.2 s and the row names it.)
+- **S-2:** every click during or after a lead leg is ANSWERED (the console's
+  "leaving it to the client's own pathing" line with a staleness reason should
+  appear zero times for leg-explained staleness).
+- **S-3:** the §0.10 re-registered bounds hold at n: post-stop convergence to
+  ≤ 5 u within `sep/288 + 0.5 s`, zero persistent parks; hard-bar steps 0 (the
+  one 404.7 u/s marginal from §0.10 rode the incident leg's regime — with the
+  lock closed it should not recur).
+- **REFUTED IF** a watchdog fire coincides with an in-focus, actively-reporting
+  client (that is the watchdog mis-firing, not containing), or a model-answered
+  click lands the player visibly off its true position (the model's speed term is
+  wrong).
+
+**Review record (same day, before commit — and it earned its keep hard):** the
+code lane found **one REAL, demonstrated: the watchdog's click clause would have
+KILLED the session on its first quiet second** — the click latch is cleared by
+assignment to `None` in both report arms, `.get`'s default never fires on a
+present-but-None key, and the TypeError escaped the recv loop's except clauses.
+Fixed with the `or 0.0` is-not-None discipline the file's other latch readers
+already use, plus the regression cell. The mutation lane ran 10, caught 8, and
+its two survivors are now pinned: the speed floor as a VALUE with a 20 ms ETA
+boundary bracket (a floor quietly raised to 288 flips both cells), and the
+`a2_src == "d1"` arming guard (without it, fallback grants arm phantom legs that
+repin one second after every degenerate vec2). REV-2 changed the click capture to
+a READ — a popped leg would answer only the first click and re-refuse the rest of
+a double-click on staleness the lead still explains. REV-3 stands as the soak's
+**decode-first rule: any `a2_watchdog` row is checked against the
+collision-shortened-lead case before anything else** — the lead ships unclipped
+and whether granted walks phase is the file's own open question (:15493), so an
+obstructed leg parking the client short is the likeliest real cause of
+silence-past-ETA, and a repin then names a dest the client never reached. REV-4's
+watchdog-vs-report race is bounded and self-healing (one 0.5 s grant-floor cycle),
+accepted. `test_d1lead.py` floor 60.
+
 ### REALFIX-P2 · `--zero-lead`
 
 Attachment: heading arm `:9625-9878`, as a third named block after `:9843`. **Stop arm `:10235` untouched. Click arm `:9879` untouched.**

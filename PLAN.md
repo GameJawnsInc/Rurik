@@ -1669,13 +1669,18 @@ re-armer never runs; the zero-lead era recovers 3/3). The armer-kill:
 2026-08-26 ~08:22: no lock — zero fence transitions in 865 samples,
 18/18 stops answered, all 4 crossing exposures overridden** (exposure
 key corrected in place: `pc_matched` rows + `matched`-marked repins).
-`--d1-lead` holds every §0.9 headline with the lock closed. Next, in
-order: **(i)** the ETA watchdog + model-aware click freshness
-(containment, §0.10); **(ii)** a longer ordinary-play A2 soak (the
-P-2/P-4 re-registered bounds want n); **(iii)** *optional*, the
-mid-walk spoof cell (§0.8) — note §0.11's open question: the arming
-snap fired at 14–17 u, below every known gate, possibly gate-2
-plane-keying answering itself — and the early-out-A/mode-9 desk pass.
+`--d1-lead` holds every §0.9 headline with the lock closed.
+**The containment pair is BUILT (§0.12, registered before the soak):**
+the a2_leg model + ETA watchdog (fires only past the leg's own ETA at
+the 190.08 u/s floor speed — late, never early; once per leg; every
+fire a caught-anomaly row) and model-aware click freshness (the
+incident's refused recovery click is the registered exemplar). Both
+D1-gated; test_d1lead floor 56. Next, in order: **(i)** the
+ordinary-play A2 soak (§0.12's S-1..S-3 registered; ~10–15 min, clicks
+allowed); **(ii)** *optional*, the mid-walk spoof cell (§0.8) — note
+§0.11's open question: the arming snap fired at 14–17 u, below every
+known gate, possibly gate-2 plane-keying answering itself — and the
+early-out-A/mode-9 desk pass.
 *The staging block that preceded the run, kept for the record:*
 The follow-on recon (`studies/movement/followon-notes/README.md`, merged
 to `main` the same day) answered F35's counterfactual from tape (castless,

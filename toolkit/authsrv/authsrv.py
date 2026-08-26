@@ -4591,6 +4591,130 @@ def a2_matched_field4(plane, carried):
     return carried, False
 
 
+# The watchdog's speed floor: the SLOWEST family the client walks a lead at
+# (0.66 x 288 = 190.08 u/s, the backpedal float A1 proved wire-steerable), so
+# an ETA computed with it can only be LATE, never early -- a watchdog that
+# fires mid-leg would supersede a walk the client is legitimately making.
+A2_WATCHDOG_SPEED_FLOOR = 0.66 * 288.0
+A2_WATCHDOG_SLACK = 1.0
+
+
+def a2_leg_note(reported, dest, plane, mt, now):
+    """The a2_leg record armed at each fired d1 grant. Pure constructor.
+
+    Everything the containment pair needs to answer for a silent client:
+    origin, dest, the plane the report named, the family speed the copy
+    will actually walk at (for the position model), and the send instant.
+    `wd_fired` marks the watchdog's once-per-leg latch.
+    """
+    rate = FAMILY_RATE.get(mt, 1.0)
+    return {"x0": float(reported[0]), "y0": float(reported[1]),
+            "dest": (float(dest[0]), float(dest[1])), "plane": plane,
+            "t0": now, "speed": rate * 288.0, "wd_fired": False}
+
+
+def a2_leg_position(leg, now):
+    """(x, y, plane) the model puts the player at, mid- or post-lead-leg.
+
+    The client walks a granted lead like a click, key state ignored, and
+    reports NOTHING until its next key edge (sec.0.11) -- so during and
+    after such a leg the report-staleness clock measures our own grant's
+    known effect, not ignorance. Position = along-leg interpolation at the
+    leg's own family speed, CLAMPED at the dest (after arrival the client
+    parks there -- the incident's recovery-click case: 7.15 s "stale" with
+    the player standing exactly where the model said). Pure; returns None
+    only for a missing leg.
+    """
+    if not leg:
+        return None
+    dx = leg["dest"][0] - leg["x0"]
+    dy = leg["dest"][1] - leg["y0"]
+    dist = math.hypot(dx, dy)
+    if dist <= 1.0:
+        return leg["dest"][0], leg["dest"][1], leg["plane"]
+    frac = min(1.0, max(0.0, (now - leg["t0"]) * leg["speed"] / dist))
+    return (leg["x0"] + dx * frac, leg["y0"] + dy * frac, leg["plane"])
+
+
+def a2_watchdog_due(state, now):
+    """(due, why) -- should the ETA watchdog re-pin a silent client? Pure.
+
+    Fires ONCE per leg, only when every clause holds: a d1 leg is armed;
+    the leg's ETA at the SLOWEST family speed plus slack has passed (so the
+    walk has surely completed -- a mid-leg re-pin would supersede a walk
+    the client is making); no click has arrived since the leg was granted
+    (a click-walking client is silent LEGITIMATELY, and a re-pin would
+    stamp on its path -- the containment must never recreate the defect it
+    contains). Refusal reasons are returned for the log, because a
+    watchdog nobody can see not-firing is a wish.
+    """
+    leg = state.get("a2_leg")
+    if not leg:
+        return False, "no-leg"
+    if leg["wd_fired"]:
+        return False, "already-fired"
+    # `or 0.0`, NOT a .get default: the click latch is cleared by ASSIGNMENT
+    # to None (both report arms), so the key is present and holding None on
+    # every ordinary connection -- .get's default never fires, and a bare
+    # comparison TypeErrors past the recv loop's except clauses, killing the
+    # session on its first quiet second. The 2026-08-26 containment review's
+    # one REAL (REV-1), demonstrated before it ever ran live; the readers at
+    # cast_stop_reckon already use this is-not-None discipline.
+    if (state.get("click_moving_at") or 0.0) > leg["t0"]:
+        return False, "click-in-flight"
+    dist = math.hypot(leg["dest"][0] - leg["x0"], leg["dest"][1] - leg["y0"])
+    eta = leg["t0"] + dist / A2_WATCHDOG_SPEED_FLOOR + A2_WATCHDOG_SLACK
+    if now < eta:
+        return False, "pre-eta"
+    return True, "eta-passed"
+
+
+def _a2_watchdog(send, state, rec, now=None):
+    """Check-and-fire: the ETA watchdog's one impure half. Returns fired.
+
+    Runs from the recv loop's 1 s timeout path (D1-gated at the call site),
+    so it gets a check roughly every second while the client is silent.
+    When a2_watchdog_due says the leg has surely completed and nothing
+    legitimate explains the silence, it sends the retail stop shape AT THE
+    GRANTED DEST -- the model says the client stands exactly there (the
+    incident: landed 0.0001 u off), and sec.0.8's parked-immunity result
+    makes a re-pin at the player's own feet provably snap-safe. The leg is
+    KEPT (marked fired) rather than popped: its clamped position keeps
+    answering the click model until a real report clears it. In a healthy
+    run this fires ZERO times -- every fire is a caught anomaly, logged as
+    its own row so the soak can count them.
+    """
+    if now is None:
+        now = time.time()
+    due, why = a2_watchdog_due(state, now)
+    if not due:
+        return False
+    leg = state["a2_leg"]
+    leg["wd_fired"] = True
+    dx, dy = leg["dest"]
+    plane = leg["plane"]
+    send(GAME_SMSG_AGENT_UPDATE_SPEED,
+         agents.agent_update_speed(PLAYER_AGENT_ID, 1.0, 9),
+         "AGENT_UPDATE_SPEED(player, 1.0, type 9) [a2-watchdog]")
+    wd_pc, wd_matched = a2_matched_field4(
+        plane, state.get("zl_last_grant_plane", plane))
+    send(GAME_SMSG_AGENT_MOVE_TO_POINT,
+         [PLAYER_AGENT_ID, [dx, dy], plane, wd_pc],
+         f"A2 WATCHDOG-REPIN ({dx:.0f},{dy:.0f}) plane {plane}"
+         + (" matched" if wd_matched else "")
+         + f" -- silent past ETA, leg t0+{now - leg['t0']:.1f}s")
+    state["zl_last_grant_plane"] = plane
+    state["a2_family_sent"] = None
+    if rec is not None:
+        rec.event("a2_watchdog", dest=[dx, dy], plane=plane,
+                  silent_s=round(now - leg["t0"], 3), why=why)
+    print(f"[a2-watchdog] client silent {now - leg['t0']:.1f}s past a "
+          f"{math.hypot(dx - leg['x0'], dy - leg['y0']):.0f}u lead's ETA -- "
+          f"re-pinned at the granted dest. In a healthy run this NEVER "
+          f"fires; this row is a caught anomaly, not routine.", flush=True)
+    return True
+
+
 # RULE 1'S WINDOW -- how long the "the player is driving locally" latch survives
 # on its window alone.
 #
@@ -13750,6 +13874,12 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
             except socket.timeout:
                 if time.time() - last > 120:
                     break
+                # sec.0.11 containment: the ETA watchdog rides the quiet
+                # ticks. D1-gated; a2_watchdog_due's clauses (leg armed,
+                # ETA at the slowest family speed passed, no click in
+                # flight, once per leg) do the real refusing.
+                if D1_LEAD and kind == "game":
+                    _a2_watchdog(send, state, rec)
                 continue
             if not chunk:
                 break
@@ -14431,6 +14561,11 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # client moves itself now, which is precisely what makes
                         # its report worth having.
                         reported = tuple(values[1])
+                        # A report of either kind means the client is SPEAKING
+                        # -- the a2_leg silence model no longer applies, and
+                        # the ETA watchdog stands down (sec.0.11 containment;
+                        # the leg re-arms at the next fired d1 grant below).
+                        state.pop("a2_leg", None)
                         # THE LOCALLY-DRIVING LATCH, armed here and cleared in
                         # the 0x0047 arm below, and touched in NO third place.
                         # See _grant_verdict for what reads it and why it is
@@ -15153,6 +15288,15 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                     # now bound for, so it advances when a grant
                                     # does and stays put when one is refused.
                                     state["zl_last_grant_plane"] = plane
+                                    # sec.0.11 containment: arm the leg record
+                                    # the ETA watchdog and the click model
+                                    # read. Only a REAL d1 lead arms it -- a
+                                    # fallback grant is zero-length and models
+                                    # nothing.
+                                    if a2_src == "d1":
+                                        state["a2_leg"] = a2_leg_note(
+                                            reported, zl_point, plane,
+                                            moving, now_z)
                                     # REALFIX-F1b's queue, on the same rule and
                                     # for the same reason. CONSUME what arrived,
                                     # DISCARD the leg this grant just superseded
@@ -15329,6 +15473,20 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # click leg's start (corpus separation p50 1,164 u),
                         # so a 0x0028 here out-warps F31 by an order.
                         state["click_moving_at"] = time.time()
+                        # A click ALSO stands the watchdog down -- via the
+                        # click-in-flight clause reading the latch above, NOT
+                        # by consuming the leg. READ, not popped (the review's
+                        # REV-2): a popped leg would answer only the FIRST
+                        # click and re-refuse every later one on staleness the
+                        # lead still explains -- the double-click case, and
+                        # the client reports nothing between clicks (measured
+                        # silences to 37 s). The leg stays until a real report
+                        # clears it, exactly as the watchdog's keep-design
+                        # already documents; the freshness gate below is where
+                        # its position model earns its keep (the incident's
+                        # recovery click: refused as 7.15 s stale while the
+                        # model knew the player stood at the granted dest).
+                        a2_click_leg = state.get("a2_leg")
                         # Grant the click exactly as asked. Nothing here second
                         # guesses the player.
                         #
@@ -15397,6 +15555,26 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # still reported -- a warp near stairs, and being thrown
                         # back towards where the player set off from.
                         fresh = (time.time() - state.get("pos_seen", 0.0)) <= 1.0
+                        # MODEL-AWARE FRESHNESS (sec.0.11 containment): a
+                        # report-staleness the in-flight lead itself explains
+                        # is not ignorance -- the client walks a granted lead
+                        # click-style and reports NOTHING until its next key
+                        # edge, so during and after such a leg the model
+                        # (origin, dest, family speed, send instant) places
+                        # the player better than the frozen report does. The
+                        # click is then answered from the MODEL's position.
+                        # D1-gated: under the shipped default a2_click_leg is
+                        # never armed and this block is inert.
+                        a2_click_pos = None
+                        if not fresh and D1_LEAD and a2_click_leg:
+                            a2_click_pos = a2_leg_position(a2_click_leg,
+                                                           time.time())
+                            if a2_click_pos is not None:
+                                fresh = True
+                        click_px, click_py = (
+                            (a2_click_pos[0], a2_click_pos[1])
+                            if a2_click_pos is not None else
+                            (state["pos"][0], state["pos"][1]))
                         pm_c = state.get("pathmap")
                         # And only when the geometry can actually place the
                         # player: on the mesh, on exactly one plane, and that
@@ -15413,14 +15591,23 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # reports the line CLEAR, so the server was answering
                         # confidently from positions whose geometry it knew
                         # nothing about.
+                        # Every placement/clip read below uses click_px/py --
+                        # the model position when model-fresh, the reported
+                        # one otherwise -- and the plane to place against is
+                        # the model's own when the model supplied the point
+                        # (state["plane"] is frozen at the leg's start, which
+                        # is the exact staleness being corrected).
+                        a2_place_plane = (a2_click_pos[2]
+                                          if a2_click_pos is not None
+                                          else cur_plane)
                         here = set()
                         if pm_c is not None:
                             here = {t.plane for t in
-                                    pm_c.containing(state["pos"][0], state["pos"][1])}
-                        placed = here == {cur_plane}
+                                    pm_c.containing(click_px, click_py)}
+                        placed = here == {a2_place_plane}
                         blocked = not (fresh and placed)
                         if fresh and placed:
-                            stop_at = pm_c.clip(state["pos"][0], state["pos"][1],
+                            stop_at = pm_c.clip(click_px, click_py,
                                                 dest[0], dest[1],
                                                 step=COLLISION_STEP)
                             blocked = (math.hypot(stop_at[0] - dest[0],
@@ -15435,8 +15622,8 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                 why = ("we last saw the player "
                                        f"{time.time() - state.get('pos_seen', 0.0):.1f}s ago")
                             elif not placed:
-                                why = (f"cannot place them -- client says plane "
-                                       f"{cur_plane}, geometry says "
+                                why = (f"cannot place them -- expected plane "
+                                       f"{a2_place_plane}, geometry says "
                                        f"{sorted(here) if here else 'off-mesh'}")
                             else:
                                 why = "not a straight shot"
@@ -15556,6 +15743,10 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         if sweep_note:
                             print(sweep_note, flush=True)
                     elif opcode == GAME_CMSG_LAST_POS_BEFORE_MOVE_CANCELED:
+                        # The client is speaking: the a2_leg silence model no
+                        # longer applies (sec.0.11 containment, same clear as
+                        # the 0x003D arm).
+                        state.pop("a2_leg", None)
                         # Stop where WE say it is, not where the client last
                         # believed. Echoing the client's figure back pinned it to
                         # the spawn point: it reported "still at spawn" because
@@ -19030,6 +19221,13 @@ def main():
               "not just this flag); or movespeed fails to track an edge "
               "send; or P-1 fires with sep <= 150 u at the press (gate "
               "2/3 news -- warp-A relevant either way).")
+        print("      CONTAINMENT (sec.0.11): the ETA watchdog re-pins a "
+              "client silent past its own lead's ETA at the slowest family "
+              "speed (fires ZERO times in a healthy run -- every "
+              "a2_watchdog row is a caught anomaly), and clicks arriving "
+              "mid- or post-leg are answered from the leg's own position "
+              "model instead of refused on report staleness the leg "
+              "explains.")
         print("      HAZARD     the stop-repin is --stop-echo's wire shape "
               "rebuilt on stated era-audit ground (the D1_LEAD comment "
               "block). A warp AT A STOP scores against that ground FIRST. "

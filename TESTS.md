@@ -3307,8 +3307,29 @@ Every one of these, in the order they were written:
   heading-arm override ordered carry/spoof → override → dest-compute →
   verdict row, the row's `pc_matched` verification key, and the repin
   label's "matched" marker (the stale word was the lock's 28/28 detector --
-  the marker keeps its trace under the fix). Floor 42, read off the real
-  green run after those additions. Landing note: this test's arrival forced two deliberate
+  the marker keeps its trace under the fix). The §0.12 containment pair adds
+  §2b's truth tables -- the leg model (a2_leg_note records the FAMILY speed,
+  a2_leg_position interpolates at it and CLAMPS at the dest: the incident's
+  recovery-click case) and the watchdog's five-clause due-predicate (no-leg /
+  pre-ETA at the 190.08 u/s floor speed so it can only be late / eta-passed /
+  click-in-flight stands it down / once per leg) -- plus site locks: the leg's
+  three pops (two discards where the client spoke, the click arm's CAPTURE),
+  ONE arming site in the post-send bookkeeping, ONE watchdog call site gated
+  D1-and-game-channel on the recv loop's quiet ticks with its one speed send
+  and one matched repin, and the click arm's placement AND clip both reading
+  the model-or-reported position through one computation site (a half-fixed
+  placement read would place the player at the leg's START -- the exact
+  staleness being corrected). The matched-words census went 3→4 appearances
+  (the watchdog's repin is the third caller). The containment review's fixes
+  add four more pins: the REV-1 None-latch regression cell (the one REAL --
+  the watchdog's click clause would have crashed the session on a
+  present-but-None `click_moving_at`; `or 0.0`, not a .get default), the
+  MUT-1 floor-value pin plus a 20 ms ETA-boundary bracket (768/190.08+1.0 =
+  t0+5.0404 s -- a 288-flat floor flips both cells), the MUT-7 `a2_src ==
+  "d1"` arming-guard lock (phantom legs on fallback grants otherwise), and
+  REV-2's read-not-pop capture lock (a popped leg answers only the FIRST of
+  a double-click). Floor 60, read off the real green run after those
+  additions. Landing note: this test's arrival forced two deliberate
   lock extensions in the same commit -- test_familyrate §6's sender census
   went 2→3 appearances (the def, A1's call, A2's edge-wrapper call; the
   matrix refuses the two flags together so at most one is live), and

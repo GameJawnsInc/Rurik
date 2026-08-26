@@ -33,9 +33,13 @@ import checks      # noqa: E402
 # said 36 -- the same defect test_familyrate's and test_pcspoof's headers
 # record, three for three now. Count from the run, never the head. The
 # review pass then added the MUT-7 stop-order pin -> 37; the sec.0.11
-# matched-words armer-kill added its truth table and four locks -> 42,
-# each re-read off its own green run.)
-LEDGER = checks.Ledger("the REALFIX-A2 d1-lead bundle", floor=42)
+# matched-words armer-kill added its truth table and four locks -> 42;
+# the sec.0.12 containment pair (leg model + watchdog + click freshness)
+# added its truth tables and site locks -> 56; its review's fixes (the
+# REV-1 None regression pin, the MUT-1 floor-value and ETA-boundary pins,
+# the MUT-7 guard lock, the REV-2 read-not-pop lock) -> 60. Each floor
+# re-read off its own green run.)
+LEDGER = checks.Ledger("the REALFIX-A2 d1-lead bundle", floor=60)
 check = checks.adopt(LEDGER)
 
 
@@ -155,6 +159,82 @@ def main():
           "and the fence shuts); retail's nonzero pairs are bit-identical "
           "222/222, so matched IS the retail contract")
 
+    print("\n2b. the containment pair's pure halves (sec.0.11)")
+    leg = authsrv.a2_leg_note([0.0, 0.0], [768.0, 0.0], 5, 4, 100.0)
+    check(leg["speed"] == 0.66 * 288.0 and leg["dest"] == (768.0, 0.0)
+          and leg["wd_fired"] is False,
+          "a2_leg_note records origin, dest, plane, the FAMILY speed "
+          "(0.66x288 for a backpedal leg) and the send instant",
+          "the model must walk at the speed the copy actually walks -- a "
+          "288-flat model puts the player past the dest while the client "
+          "is still mid-leg")
+    check(authsrv.a2_leg_position(leg, 101.0) == (190.08, 0.0, 5),
+          "mid-leg the model interpolates at the leg's own speed",
+          "1 s into a backpedal leg is 190.08 u, not 288")
+    check(authsrv.a2_leg_position(leg, 200.0) == (768.0, 0.0, 5),
+          "post-arrival the model CLAMPS at the dest",
+          "the incident's recovery click: 7.15 s 'stale' with the player "
+          "standing exactly at the granted dest -- the clamp is the case "
+          "the whole fix exists for")
+    check(authsrv.a2_leg_position(None, 100.0) is None,
+          "and a missing leg models nothing",
+          "None, never a guess")
+    check(authsrv.a2_watchdog_due({}, 999.0) == (False, "no-leg"),
+          "watchdog: no leg, not due",
+          "the watchdog only answers silence a lead explains")
+    check(authsrv.a2_watchdog_due({"a2_leg": leg}, 102.0)
+          == (False, "pre-eta"),
+          "pre-ETA (768u at the 190.08 floor + 1.0s slack = t0+5.04s), "
+          "not due",
+          "a mid-leg re-pin would supersede a walk the client is "
+          "legitimately making -- the floor speed makes the ETA late, "
+          "never early")
+    check(authsrv.a2_watchdog_due({"a2_leg": leg}, 106.0)
+          == (True, "eta-passed"),
+          "past the ETA with no other clause, DUE",
+          "this is the incident's t=168 leg: silence past completion "
+          "with nothing legitimate explaining it")
+    check(authsrv.a2_watchdog_due(
+              {"a2_leg": leg, "click_moving_at": 101.0}, 106.0)
+          == (False, "click-in-flight"),
+          "a click after the leg's t0 stands the watchdog down",
+          "a click-walking client is silent LEGITIMATELY; a re-pin would "
+          "stamp on its path -- the containment must never recreate the "
+          "defect it contains")
+    check(authsrv.a2_watchdog_due(
+              {"a2_leg": leg, "click_moving_at": None}, 106.0)
+          == (True, "eta-passed"),
+          "and click_moving_at holding None -- the latch's CLEARED state, "
+          "written by assignment in both report arms -- does not raise",
+          "the containment review's one REAL (REV-1): .get's default "
+          "never fires on a present-but-None key, and the TypeError "
+          "escaped the recv loop's except clauses -- the containment "
+          "would have KILLED the session on its first quiet second. This "
+          "cell is the regression pin")
+    check(authsrv.A2_WATCHDOG_SPEED_FLOOR == 0.66 * 288.0
+          and authsrv.A2_WATCHDOG_SLACK == 1.0,
+          "the speed floor is 0.66x288 = 190.08 (the slowest family) and "
+          "the slack 1.0 s -- pinned as VALUES",
+          "the mutation lane's MUT-1: a floor quietly raised to 288 "
+          "fires mid-backpedal-leg and supersedes a walk the client is "
+          "legitimately making, and only boolean far-from-boundary cells "
+          "stayed green")
+    check(authsrv.a2_watchdog_due({"a2_leg": leg}, 105.03)
+          == (False, "pre-eta")
+          and authsrv.a2_watchdog_due({"a2_leg": leg}, 105.05)
+          == (True, "eta-passed"),
+          "the ETA boundary sits where THE FLOOR puts it: 768u/190.08 + "
+          "1.0s = t0+5.0404s, bracketed to 20 ms",
+          "a boundary this tight is sensitive to the exact floor value -- "
+          "at 288 flat the ETA would be t0+3.667s and both cells flip; "
+          "the far-from-boundary cells alone let MUT-1 survive")
+    leg2 = dict(leg, wd_fired=True)
+    check(authsrv.a2_watchdog_due({"a2_leg": leg2}, 106.0)
+          == (False, "already-fired"),
+          "and it fires ONCE per leg",
+          "a 1 Hz re-pin stream at the same dest is a policy nobody "
+          "registered")
+
     # ---------------------------------------------------------------- 3
     print("\n3. composition cells: the lattice around the bundle")
     comp = authsrv.zero_lead_composition
@@ -246,13 +326,14 @@ def main():
           "the verdict row carries lead_src (d1/fallback/null)",
           "the census key for P-1..P-5's scoring; null on a refusal like "
           "every field-4 fact")
-    check(src.count("a2_matched_field4(") == 3,
-          "the matched-words helper has exactly its def and TWO call "
-          "sites -- the heading arm and the stop-repin",
-          "a third caller would rewrite another arm's field 4 under a "
+    check(src.count("a2_matched_field4(") == 4,
+          "the matched-words helper has exactly its def and THREE call "
+          "sites -- the heading arm, the stop-repin, and the ETA "
+          "watchdog's repin (every 0x0029 the bundle sends is matched)",
+          "an extra caller would rewrite another arm's field 4 under a "
           "flag whose charter is the d1 bundle; a missing caller leaves "
-          "one of the two send paths carrying the stale word the lock "
-          "needs")
+          "one of the bundle's send paths carrying the stale word the "
+          "lock needs")
     i_match = src.index("zl_plane_cur, a2_matched = (")
     check(i_spoof < i_match < i_d1 < i_verdict,
           "the heading-arm override sits AFTER the carry/spoof "
@@ -271,6 +352,55 @@ def main():
           "the repin's stale word was the lock's perfect DETECTOR "
           "(28/28); the marker preserves that detector's trace under "
           "the fix")
+    check(src.count('state.pop("a2_leg", None)') == 2
+          and src.count('a2_click_leg = state.get("a2_leg")') == 1,
+          "the leg is DISCARDED only where the client spoke (the 0x003D "
+          "and 0x0047 arms, two pops) and READ -- never popped -- by the "
+          "click arm",
+          "the review's REV-2: a click-arm pop answers only the FIRST "
+          "click and re-refuses every later one on staleness the lead "
+          "still explains (the client reports nothing between clicks, "
+          "silences to 37 s); the watchdog stands down via the click "
+          "latch, not by consuming the model")
+    check('if a2_src == "d1":' in src
+          and src.index('if a2_src == "d1":')
+          < src.index('state["a2_leg"] = a2_leg_note('),
+          "the arming site is guarded on a REAL d1 lead, verbatim, the "
+          "guard above the arm",
+          "the mutation lane's MUT-7: with the guard gone, fallback "
+          "grants (zero-length) arm phantom legs whose ETA is t0+1.0s -- "
+          "a watchdog repin one second after every degenerate-vec2 "
+          "grant, and all 56 checks stayed green")
+    check(src.count('state["a2_leg"] = a2_leg_note(') == 1,
+          "ONE arming site, at the fired d1 grant",
+          "a second armer would model legs that never went on the wire")
+    i_zllast = src.index('state["zl_last_grant_plane"] = plane\n'
+                         '                                    # sec.0.11')
+    i_arm = src.index('state["a2_leg"] = a2_leg_note(')
+    check(i_zllast < i_arm,
+          "and it sits in the post-send bookkeeping, after the "
+          "plane-slot advance",
+          "armed before the send, a refused grant would leave a phantom "
+          "leg for the watchdog to answer")
+    check(src.count("_a2_watchdog(send, state, rec)") == 1
+          and src.count('if D1_LEAD and kind == "game":') == 1
+          and src.count("[a2-watchdog]") == 2
+          and src.count("A2 WATCHDOG-REPIN (") == 1,
+          "ONE watchdog call site, D1- and game-channel-gated, with ONE "
+          "speed send and ONE repin send (the [a2-watchdog] tag's second "
+          "appearance is the fire's own console line), labelled",
+          "the watchdog is a grant on the shared clock riding the recv "
+          "loop's quiet ticks; a second site or an auth-channel call is "
+          "a send nobody audited")
+    check(src.count("a2_click_pos = a2_leg_position(a2_click_leg,") == 1
+          and "pm_c.containing(click_px, click_py)" in src
+          and "pm_c.clip(click_px, click_py," in src,
+          "the click arm's placement and clip both read the model-or-"
+          "reported position through click_px/click_py, computed at ONE "
+          "site",
+          "a placement read left on state['pos'] while the freshness "
+          "gate passes on the model would place the player at the leg's "
+          "START -- the exact staleness being corrected, half-fixed")
     check("zl_point = (a2_dest" in src
           and "plane, zl_plane_cur]," in src,
           "the ONE 0x0029 send consumes a2_dest through zl_point and its "
