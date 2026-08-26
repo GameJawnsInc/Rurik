@@ -3345,9 +3345,17 @@ Every one of these, in the order they were written:
   (REV-4), and the flush's three call sites with the world-tick one gated
   OFF under the bundle (REV-2's cross-thread clock race -- recv-thread-only
   sending, pre-batch ordering giving held clicks first claim on each floor:
-  REV-3's starvation closed by the same move). Floor 70, read off the real
-  green run after those additions; `test_grantsim.py` green at 86 beside
-  it. Landing note: this test's arrival forced two deliberate
+  REV-3's starvation closed by the same move). §0.14's F-A supersedes F-B's
+  immediate mid-keyboard answer (its premise refuted: retail never
+  verbatim-echoes DISTANT mid-keyboard clicks; 21 through-geometry snaps,
+  20/21 grant-edge-triggered): the locks now assert the immediate bypass is
+  GONE (count 0, the check telling its own inversion story), `click-held` at
+  one site ordered above the verdict row, the eager void at one site gated
+  on the report being ACCEPTED (a rejected report must not cancel the
+  player's click), and the flush's `d1-click` fire remaining as the ONLY
+  answer path for release-clicks. Floor 72, read off the real green run
+  after those additions; `test_grantsim.py` green at 86 beside it. Landing
+  note: this test's arrival forced two deliberate
   lock extensions in the same commit -- test_familyrate §6's sender census
   went 2→3 appearances (the def, A1's call, A2's edge-wrapper call; the
   matrix refuses the two flags together so at most one is live), and

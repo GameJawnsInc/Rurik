@@ -997,6 +997,58 @@ only if F-B's verification shows the echo yanking the client off its own path.
   V-3's fence-snap count does NOT fall (the snaps were never click-fed and the
   attribution is wrong).
 
+### 0.14 The through-geometry pull decoded, F-B's premise refuted in its one load-bearing cell, and F-A shipped — 2026-08-26
+
+**The owner's verification run turned into the decisive experiment** (log
+`authsrv-20260826T095804-c1` × `movetap-20260826T095811`, 155 s, the key held for
+all 253 reports, ≥20 deliberate cross-elevation held-key clicks): the F-B target
+case (long click + W) is fixed — V-1 **97.9%**, V-2 pass-by-construction — but
+**V-3 is REFUTED on its own second disjunct: 21 real sep-collapse snaps (2.7× the
+soak's RATE, not the predicted fall), every one inside a dense answered-click
+window, 20/21 sitting 15–122 ms after a click-d1 grant — the snap is
+GRANT-EDGE-TRIGGERED.** Mechanism (RECONCILED, one new OBSERVED link): F-B's
+immediate mid-keyboard answers aimed the collision-blind sync copy at clicked
+points a median 1,021 u away every floor opening; the held key kept the body on
+its real path; separation crossed the 299.33 cut (38 `gate1: above` samples, all
+in pre-snap build-ups); the client's reconcile snapped the drawn body onto the
+copy's through-the-prop line. 13/21 snaps were same-nominal-plane (planes are
+walkable regions, not floors) — the cross-plane carve was never viable. The
+zero-exposure cells are named honestly: no key-released clicks exist in this tape
+at all.
+
+**The retail cell that kills F-B's premise (V-RETAIL-2, OBSERVED):** of the live
+corpus's 7 mid-keyboard clicks, only the two SHORT ones (72/149 u) were echoed
+verbatim immediately; **all four distant ones (1,387–6,919 u) got PART-WAY points
+along the click direction** — routed legs, with intermediate plane words — and
+every one of n=14 post-click movement answers anchors on the press's own fresh
+position. Retail is a pathing server doing the thing this file said we cannot do;
+verbatim-echo-everything was never its mid-keyboard contract. (Cross-plane
+answered clicks: zero live exposure, 0/31 — that table does not exist.)
+
+**F-A, shipped (§0.13's own registered promotion — its trigger fired):**
+1. A locally-moving click is **HELD, never answered immediately and never
+   dropped** (`click-held`).
+2. **The eager void:** the next ACCEPTED report voids the held click
+   (`voided-by-report` row, no rate clock consumed) — the player's hands,
+   speaking now, outrank the click they threw while moving, which is what
+   retail's press-anchored answers amount to when you cannot path.
+3. A click the player **released** for — no further reports — fires from the
+   flush within the floor (the `d1-click`/`deferred-d1-click` path, now
+   reachable only there). Pure clicks keep the verbatim echo; stops keep the
+   repin; the keyboard side is untouched.
+
+**Registered (P-F-A-1..5):** sep-collapse snaps 21→0 (hard bar ≤2, none
+cross-plane); `gate1: above` samples 38→0 with held-key separation < 299 u
+throughout; `voided-by-report` becomes the modal click verdict and zero-lead
+heading fires rise from 41; V-1 restated with voided counted stays ≥95%; the
+long-click + W case stays fixed. **REFUTED IF** a sep-collapse snap fires with no
+grant of any arm in the prior 0.2 s (the edge-trigger reading is wrong), or **the
+pure-click staircase cell snaps** — the zero-exposure risk cell, in which case
+the geometry veto returns for blocked pure clicks. **Verification (~10 min):**
+repeat this run's recipe (≥20 held-key cross-elevation clicks) PLUS **≥5
+pure-click staircase reps with the key RELEASED**, movetap running; scored by the
+pre-registered `sk_pull_verify*` thresholds.
+
 **F-B's review record (same day, before commit):** two REALs, both fixed in the
 same commit. **REV-1 (OBSERVED, 2/2 offline):** grantsim's C3 replay re-decides
 unfiltered `grant_verdict` rows with the shipped click predicate, so a

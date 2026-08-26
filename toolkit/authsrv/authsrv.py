@@ -14646,8 +14646,28 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # Armed in the 0x003E arm; read by the cast-stop
                         # site and cast_stop_reckon (CANCELWALK-B1).
                         state["click_moving_at"] = None
-                        _take_client_position(state, reported, plane, rec,
-                                              "0x003D")
+                        a2_pos_taken = _take_client_position(
+                            state, reported, plane, rec, "0x003D")
+                        # F-A's EAGER VOID (sec.0.14, the through-floor fix's
+                        # core): a newer ACCEPTED report voids any held click
+                        # -- the player's hands, speaking now, outrank the
+                        # click they threw while moving, which is exactly how
+                        # retail behaves at mid-keyboard clicks (n=14
+                        # unanimous: every post-click movement answer anchors
+                        # on the press's own position; the four distant
+                        # mid-keyboard clicks were never verbatim-echoed).
+                        # The held click that ISN'T voided -- the player
+                        # released and reported nothing further -- fires from
+                        # the flush within the floor.
+                        if (D1_LEAD and a2_pos_taken
+                                and state.get("grant_pending") is not None):
+                            a2_voided = state["grant_pending"]
+                            state["grant_pending"] = None
+                            if rec is not None:
+                                rec.event("grant_verdict", fired=False,
+                                          reason="voided-by-report",
+                                          arm="click-d1", deferred=True,
+                                          dest=list(a2_voided["dest"]))
                         # ONE OF THE TWO CALL SITES, and both route through the
                         # single policy in _maybe_resync. OFF unless --resync.
                         # It sits AFTER the take so the payload is the report in
@@ -15758,22 +15778,24 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         now_g = time.time()
                         may_grant, why_g, kage, since = _grant_verdict(state,
                                                                        now_g)
-                        # F-B's Rule-1 bypass (sec.0.13), ABOVE the verdict
-                        # row so the row records what actually happened:
-                        # retail answers clicks thrown MID-KEYBOARD too
-                        # (~100%, V-W2C), so under the bundle a
-                        # locally-moving click is re-gated on the RATE ALONE
-                        # -- the shared clock, read-only -- and answered or
-                        # held, never dropped. The soak's 108 locally-moving
-                        # drops were the second-largest staleness source
-                        # after the geometry branch.
+                        # F-A (sec.0.14, superseding F-B's immediate-answer
+                        # bypass whose premise the through-floor decode
+                        # REFUTED -- retail never verbatim-echoes DISTANT
+                        # mid-keyboard clicks; its answers anchor on the
+                        # press, n=14 unanimous): a locally-moving click is
+                        # HELD, never answered immediately and never
+                        # dropped. The next ACCEPTED report VOIDS it (the
+                        # eager void in the 0x003D arm); a click the player
+                        # RELEASED for -- no further reports -- fires from
+                        # the flush within the floor. This is what kills
+                        # the through-geometry pull: the copy is never
+                        # raced 1,000u toward a click while the held key
+                        # walks the body elsewhere (21 snaps, every one
+                        # inside a dense answered-click window, 20/21
+                        # grant-edge-triggered).
                         if (not may_grant and D1_LEAD
                                 and why_g == "locally-moving"):
-                            rate_ok, since = a2_click_rate_ok(state, now_g)
-                            if rate_ok:
-                                may_grant, why_g = True, "d1-click"
-                            else:
-                                why_g = "rate-limited"
+                            why_g = "click-held"
                         if rec is not None:
                             # EVERY evaluation, granted or not -- the same rule
                             # the resync log follows, and for the same reason:
@@ -15821,12 +15843,22 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                     "plane_first": plane_first,
                                     "plane_second": plane_second,
                                     "at": now_g}
+                                # `since` is None on a click-held (Rule-1)
+                                # hold -- only the rate-limited hold measured
+                                # a gap. Guard the format (the REV-1 lesson's
+                                # cousin: a print can kill a session too).
                                 print(f"[c{conn_id}] click to ({dest[0]:.0f}, "
-                                      f"{dest[1]:.0f}): {since:.2f}s since the "
-                                      f"last grant, under the "
-                                      f"{GRANT_MIN_INTERVAL:.2f}s floor -- "
-                                      f"holding the NEWEST destination and "
-                                      f"dropping any older one", flush=True)
+                                      f"{dest[1]:.0f}): "
+                                      + (f"{since:.2f}s since the last "
+                                         f"grant, under the "
+                                         f"{GRANT_MIN_INTERVAL:.2f}s floor"
+                                         if since is not None else
+                                         "held while the keyboard drives -- "
+                                         "the next accepted report voids it, "
+                                         "a release lets it fire")
+                                      + " -- holding the NEWEST destination "
+                                        "and dropping any older one",
+                                      flush=True)
                             continue
                         # A click we ARE answering supersedes anything held.
                         state["grant_pending"] = None

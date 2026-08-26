@@ -41,8 +41,10 @@ import checks      # noqa: E402
 # F-B click contract (rate gate truth table, matched/family-reset censuses,
 # both bypass sites, row ordering, the geometry row) -> 67; its review's
 # fixes (the grantsim skip, the arm fields, the recv-thread flush move)
-# -> 70. Each floor re-read off its own green run.)
-LEDGER = checks.Ledger("the REALFIX-A2 d1-lead bundle", floor=70)
+# -> 70; sec.0.14's F-A (click-held + the eager void, superseding F-B's
+# immediate bypass whose premise the through-floor decode refuted) -> 72.
+# Each floor re-read off its own green run.)
+LEDGER = checks.Ledger("the REALFIX-A2 d1-lead bundle", floor=72)
 check = checks.adopt(LEDGER)
 
 
@@ -360,16 +362,35 @@ def main():
           "each of those sends puts 1.0 in sync +0x60; a site without "
           "the reset leaves the next same-family leg reckoning at 288 "
           "flat -- the exact --client-endpoint failure term")
-    check(src.count('may_grant, why_g = True, "d1-click"') == 1
+    check(src.count('may_grant, why_g = True, "d1-click"') == 0
+          and src.count('why_g = "click-held"') == 1
           and src.count('grant, why = True, "d1-click"') == 1,
-          "the Rule-1 bypass exists at BOTH click paths (immediate and "
-          "deferred), each rewriting the verdict to d1-click",
-          "one path without the bypass re-creates half the soak's 108 "
-          "locally-moving drops. (This check's first draft claimed the "
-          "new reason word left grantsim's filters 'untouched' -- the "
-          "F-B review's REV-1 demonstrated untouched was the DEFECT: "
-          "C3's replay re-decides unfiltered rows and scores retail-"
-          "contract answers as policy mismatches, 2/2 offline)")
+          "F-A's shape (sec.0.14): the IMMEDIATE mid-keyboard answer is "
+          "GONE -- a locally-moving click is HELD (click-held), and only "
+          "the flush's d1-click fire remains, for release-clicks no "
+          "report voided",
+          "the through-floor decode refuted F-B's premise in its one "
+          "load-bearing cell (retail never verbatim-echoes DISTANT "
+          "mid-keyboard clicks; n=14 answers all anchor on the press): "
+          "an immediate answer races the copy 1,000u through geometry "
+          "while the held key walks the body -- 21 snaps, 20/21 "
+          "grant-edge-triggered. (This check's F-B draft asserted the "
+          "immediate bypass EXISTS; the fix inverted it, and the "
+          "grantsim-filters lesson from that draft's own history "
+          "stands.)")
+    check(src.count('reason="voided-by-report"') == 1,
+          "the eager void exists at ONE site",
+          "the void is F-A's core: the player's hands, speaking now, "
+          "outrank the click they threw while moving -- exactly "
+          "retail's press-anchored behavior")
+    i_take = src.index("a2_pos_taken = _take_client_position(")
+    i_void = src.index('reason="voided-by-report"')
+    check(i_take < i_void
+          and "if (D1_LEAD and a2_pos_taken" in src,
+          "and it sits after the position adoption, gated on the report "
+          "being ACCEPTED",
+          "voiding on a REJECTED report would let a position the trust "
+          "policy refused cancel the player's own click")
     gsim = open(os.path.join(os.path.dirname(HERE), "clientscan",
                              "grantsim.py"), encoding="utf-8").read()
     check('"zero-lead", "click-d1"' in gsim,
@@ -397,13 +418,13 @@ def main():
           "and pre-batch ordering gives the held click first claim on "
           "each floor opening (REV-3's starvation, same fix)")
     i_gv_call = src.index("may_grant, why_g, kage, since = _grant_verdict(")
-    i_bypass = src.index('may_grant, why_g = True, "d1-click"')
+    i_bypass = src.index('why_g = "click-held"')
     i_row = src.index('rec.event("grant_verdict", fired=may_grant,')
     check(i_gv_call < i_bypass < i_row,
-          "and the immediate-path bypass sits ABOVE the verdict row -- "
-          "the row records what actually happened",
-          "below the row, the log says locally-moving-refused for a "
-          "click that then went out -- the unattributable-capture defect")
+          "and the click-held rewrite sits ABOVE the verdict row -- the "
+          "row records what actually happened",
+          "below the row, the log says locally-moving for a click that "
+          "was actually held -- the unattributable-capture defect")
     check('d1_passthrough=bool(D1_LEAD)' in src
           and src.count('rec.event("click_verdict"') == 1,
           "the geometry branch writes its click_verdict row (the soak's "

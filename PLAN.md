@@ -1683,6 +1683,19 @@ falls through, Rule 1 bypassed at both paths on the shared clock alone,
 matched words + family re-arm at both click sites; F-A (press-after-
 click repin) registered in reserve. V-1..V-4 registered before the
 verification roam (§0.13).
+**The verification run REFUTED F-B's premise and F-A SHIPPED (§0.14):**
+the F-B target case is fixed (V-1 97.9%) but 21 through-geometry snaps
+fired at 2.7× the soak's rate — every one grant-edge-triggered inside a
+dense answered-click window: the immediate mid-keyboard answers raced
+the collision-blind copy 1,021 u (median) through props while the held
+key walked the body, and the live corpus shows retail NEVER
+verbatim-echoes distant mid-keyboard clicks (part-way routed points,
+n=4; all n=14 post-click answers anchor on the press). F-A: mid-
+keyboard clicks are HELD, the next accepted report VOIDS them
+(`voided-by-report`), release-clicks fire within the floor, pure
+clicks keep the echo. P-F-A-1..5 registered; the ~10-min verification
+MUST include ≥5 pure-click staircase reps with the key RELEASED (the
+zero-exposure risk cell). test_d1lead floor 72.
 **The containment pair is BUILT (§0.12, registered before the soak):**
 the a2_leg model + ETA watchdog (fires only past the leg's own ETA at
 the 190.08 u/s floor speed — late, never early; once per leg; every
