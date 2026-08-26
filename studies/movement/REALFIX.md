@@ -100,15 +100,52 @@ and the D2 clip mixture.
 
 ### 0.3 The rungs
 
-- **REALFIX-A1 — the speed-truth probe (small build + ~10 min owner run).** A
-  diagnostic sender (checksum-probe pattern: off by default, its own lattice cells)
-  that puts `0x002B [rate, family]` on the wire per the FAMILY_RATE table at report
-  cadence, plus the registered run: sustained backpedal and strafe legs, movetap
-  watching `+0x5C`/`+0x60`. **Prediction, registered here first: if the fields move
-  off 288.0/1.0 in step with the sent floats, Q6 resolves WIRE-STEERABLE and A2's arm
-  carries the float; if they hold 288.0/1.0 (the corpus's only observed values), Q6
-  resolves CLIENT-SIDE-ONLY and A2's lead must scale by predicted speed instead.**
-  Settles FAMILY_RATE (CONTESTED, one wire witness) as a side effect.
+- **REALFIX-A1 — the speed-truth probe. WIRED 2026-08-25 (`--family-rate-probe`),
+  the owner run is next.** The pre-build recon SHARPENED the question: the client's
+  `0x002B` handler is already statically decoded (`0x005FD9D0` → setter `0x00602990`,
+  FINDINGS Q1/Q2) as a **pure store to sync `+0x60` (moveSpeed) and `+0xC4`** — it
+  never writes `+0x5C`, arms nothing, and the speed is consumed only at the **next
+  grant's bake** as `[+0x60] × [+0x5C]`. So the probe is the dynamic CONFIRMATION
+  (verbatim-first) plus the measurement statics can't make. **Prediction, registered
+  before the run, ANCHORED TO THE TAPE'S SENT ROWS (the review's correction — never
+  to the key the operator holds): (a) movetap `movespeed` reads each probe send's
+  float within 1–2 samples of that send and holds UNTIL THE NEXT SEND OF A DIFFERENT
+  FAMILY — the store persists, and 64.5% of family-edge reports arrive inside the
+  0.5 s grant floor (measured over 18 captures), so the previous family's float
+  carried ~0.5–0.7 s into a new leg is the mechanism working, not a refutation;
+  (b) `maxspeed` holds 288.0 THROUGHOUT — a `maxspeed` move would implicate `0x0027`,
+  which nothing sends; (c) reckoned velocity changes at the `0x0029` that follows the
+  probe in the same burst — effectively immediate at the readout's ~10 Hz. REFUTED IF
+  `movespeed` holds 1.0 across ≥3 backpedal-family sends (tape's `sent` rows checked
+  first for dose) — that dynamically refutes the static handler decode.** Wiring: the
+  send rides retail's own burst slot (after the `0x0025`, before the `0x0029` —
+  `0x0029` last in every catalogued shape containing it, 3,023 of 3,071 bursts
+  catalogued, and no catalogued shape is bare-`0x002B`; the ~1.6% uncatalogued
+  remainder is the claim's bound), gated on the zero-lead verdict. Dose, MEASURED by
+  replaying the rate policy over 18 recent captures: **~0.9 sends/s on sustained
+  backpedal legs, ~0.6/s strafe** (the driver is the client's own report cadence
+  thinned by the 0.5 s floor — the first draft's "~2/s" quoted the cap as a cadence),
+  and sub-2 s legs can earn ZERO sends — the ~3 s protocol legs avoid that, and one
+  send per leg suffices because the store persists. Refused without `--zero-lead`,
+  pairwise with `--cancel-answer` (rival `[1.0, mt]` on the same field, cell ordering
+  itself tested) and pairwise with `--checksum-probe` (the review's find: its `0x0023`
+  rode the same breath ungated — an opcode retail sends zero times — and no matrix
+  cell had ever met it); unknown movementTypes skip LOUDLY (census: mt strictly 1..8 —
+  re-scanned 2026-08-25, 9,463 reports over 146 captures, extending the in-code
+  2026-08-19 census of 7,988/119); the send slot and the mt operand are source-locked
+  by ORDER and VERBATIM TEXT after the review showed string counts alone let both
+  drift; `_note_wire_move` ignores `0x002B` twice over, so the probe cannot touch the
+  resync model or the grant clock. `test_familyrate.py`, floor 26 from the green run.
+  Settles FAMILY_RATE (CONTESTED — now TWO wire witnesses: `[0.66, 4]` CANCELWALK-F4
+  to the player and `[0.75, 8]` to agent 1019, same capture) as a side effect.
+  **Run recipe:** click-free, no casts —
+  `python toolkit/harness/session.py --keep-open --hold 300 --game-args "--map 280
+  --explorable --family-rate-probe"` plus `python toolkit/clientscan/movetap.py
+  --seconds 180`; alternate ~3 s legs of forward / backpedal (S) / strafe (Q or E),
+  ~4 reps each, **releasing all keys for ~1 s between legs** (measured: that clears
+  the 0.5 s grant floor so the family-edge send fires at leg start instead of ~0.6 s
+  in); the readout is movetap's `movespeed` beside `maxspeed`, joined to the gamesrv
+  tape's `sent` rows on the wall clock.
 - **REALFIX-A2 — the lead-mechanism probe (build + ~15 min owner run).** A NEW
   diagnostic flag (not the refuted arms; new composition cells; audited against the
   zero-lead invariants): D1-shaped forward lead sized by A1's answer, granted at
@@ -218,7 +255,7 @@ send(0x0029, [PLAYER_AGENT_ID, list(dest), dest_plane, state["plane"]])   # S3, 
 #                         lag p50 2.58 s). Do NOT build an unsolicited-grant channel.
 ```
 
-**Planes are `(dest_plane, cur_plane)`, never `(0, 0)`** — field 3 = destination plane, field 4 = current plane, closed from the binary three times (`FINDINGS:3364`, `:3428`, `studies/smsg/FINDINGS.md:130-135`); forcing 0 writes a wrong map index into `agent+0x80`. `authsrv.py:9987` already orders them correctly. `FAMILY_RATE` is **CONTESTED**; the decider is `movetap.py` on `agent+0x5C`/`+0x60` during sustained backpedalling, not the wire — though the wire now carries one row's witness: `0x002B [0.66, 4]` answers the backpedal press at `20260824T074002` t=108.376 ([CANCELWALK.md](CANCELWALK.md) F4), agreeing with the table's 4:0.66. **And the stop arm's "NEVER `0x0028`" gained a caveat 2026-08-24**: right about the c2s side, but retail's s2c stop answer has a second form — a bare s2c `0x0028 [agent]` with no re-pin at t=65.095 of the same capture, selector unread (CANCELWALK-F5).
+**Planes are `(dest_plane, cur_plane)`, never `(0, 0)`** — field 3 = destination plane, field 4 = current plane, closed from the binary three times (`FINDINGS:3364`, `:3428`, `studies/smsg/FINDINGS.md:130-135`); forcing 0 writes a wrong map index into `agent+0x80`. `authsrv.py:9987` already orders them correctly *(:9987 at its writing — the send now sits near :14700 at HEAD; line refs in this document drift and the structure, not the number, is the anchor)*. `FAMILY_RATE` is **CONTESTED**; the decider is `movetap.py` on `agent+0x5C`/`+0x60` during sustained backpedalling, not the wire — though the wire now carries ~~one row's witness~~ **two rows' witnesses** *(second found 2026-08-25)*: `0x002B [0.66, 4]` answers the backpedal press at `20260824T074002` t=108.376 ([CANCELWALK.md](CANCELWALK.md) F4), agreeing with the table's 4:0.66, and `[0.75, 8]` to agent 1019 at t=43.262 of the same capture agrees with 8:0.75. *That decider is now BUILT: `--family-rate-probe`, REALFIX-A1 (§0.3), floor-22 tested; the owner run is next.* **And the stop arm's "NEVER `0x0028`" gained a caveat 2026-08-24**: right about the c2s side, but retail's s2c stop answer has a second form — a bare s2c `0x0028 [agent]` with no re-pin at t=65.095 of the same capture, selector unread (CANCELWALK-F5).
 
 **Four-variable delta from `--client-endpoint`. Do not run before the lead family; a bad result names none of the four.**
 

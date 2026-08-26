@@ -4204,6 +4204,35 @@ def _send_position_checksum(send, state, reported, plane):
          f"vel ({vel[0]:.1f},{vel[1]:.1f})")
 
 
+def _send_family_rate(send, state, mt):
+    """One REALFIX-A1 probe 0x002B for this report's family, or a loud skip.
+
+    Returns whether a send happened. The builder's own facing mask (0xF)
+    would pass an unknown mt 9..15 SILENTLY, and a bare FAMILY_RATE[mt]
+    would kill the connection handler on a KeyError -- so table membership
+    is the gate, and a miss prints ONCE per session rather than guessing:
+    the corpus says mt is strictly 1..8 (9,463 of 9,463 decoded reports),
+    so a miss here is itself a finding, not noise to swallow.
+    """
+    rate = FAMILY_RATE.get(mt)
+    if rate is None:
+        if not state.get("frp_unknown_said"):
+            state["frp_unknown_said"] = True
+            print(f"[family-rate-probe] UNKNOWN movementType {mt!r} -- no "
+                  f"0x002B sent for it, this prints once. The corpus has "
+                  f"never produced an mt outside 1..8 (9,463 decoded "
+                  f"reports), so either the census is stale or the report "
+                  f"is malformed; the run's probe coverage now excludes "
+                  f"this family and the tape's sent rows are the record.",
+                  flush=True)
+        return False
+    send(GAME_SMSG_AGENT_UPDATE_SPEED,
+         agents.agent_update_speed(PLAYER_AGENT_ID, rate, mt),
+         f"FAMILY-RATE PROBE 0x002B [{rate}, {mt}] -- REALFIX-A1: does the "
+         f"wire float steer sync +0x60? movetap `movespeed` is the readout")
+    return True
+
+
 def _maybe_resync(send, state, rec, now=None):
     """Send one 0x002C if the policy says so. Returns whether it did.
 
@@ -4357,6 +4386,51 @@ CHECKSUM_PROBE = None
 #: non-zero dword does; this one is legible in a log and in a hexdump, and the
 #: point of the arm is that its prediction cannot come true by accident.
 CHECKSUM_WRONG_SENTINEL = 0x5EED0FF5
+# --family-rate-probe (REALFIX-A1, the accuracy campaign's first rung --
+# studies/movement/REALFIX.md sec.0.3). Sends GAME_SMSG 0x002B
+# AGENT_UPDATE_SPEED [player, FAMILY_RATE[mt], mt] on each reported movement
+# family, in the burst slot retail uses (after the 0x0025, before the 0x0029
+# -- 0x0029 is last in 3,023 of 3,071 retail bursts), gated on the same
+# zero-lead verdict as the grant so every probe send sits inside a witnessed
+# burst shape. THE QUESTION (SPEED TRUTH): does the wire float steer the SYNC
+# copy's reckoning speed? The static decode already says the handler
+# 0x005FD9D0 -> setter 0x00602990 is a PURE STORE to sync +0x60 (moveSpeed)
+# and +0xC4 (facing) -- never +0x5C, no tick, no velocity; speed is consumed
+# only at the NEXT grant's bake as [+0x60] x [+0x5C]
+# (studies/movement/FINDINGS.md Q1/Q2). This probe is the dynamic
+# confirmation (verbatim-first: movetap reads the same SYNC block the handler
+# writes) and the measurement statics cannot make: whether the copy's
+# post-bake reckoning then matches the body on non-forward legs. Off by
+# default; requires --zero-lead (the gate below is the zero-lead verdict, so
+# under --no-zero-lead it would be an inert flag with an on-looking log);
+# refused with --cancel-answer (its lead arms hardcode a rival [1.0, mt]
+# 0x002B at cancel instants -- two policies for one client field).
+FAMILY_RATE_PROBE = False
+# REALFIX-P1's speed table: movementType -> the fraction of run speed retail
+# is believed to assert for that family. CONTESTED, and THIS PROBE IS THE
+# DECIDER. Evidence for: wire attribution over n=1,049 retail player 0x002Bs
+# is 70.5-72.0% modal per family (forward 1.0 x648/900, backward 0.66
+# x46/64, side 0.75 x55/78 -- FINDINGS SP1); TWO live single-frame
+# witnesses, [0.66, 4] to the player at 20260824T074002 t=108.376
+# (CANCELWALK-F4) and [0.75, 8] to agent 1019 (the other connection's
+# agent) at t=43.262 of the same capture (found 2026-08-25); the
+# displacement ratio 0.6584-0.6614 measured across 12 files. Evidence
+# against a clean table: 214 distinct floats corpus-wide -- the same field
+# also carries SLOWS (through a [0.01, 1.0]-asserted field only slows can
+# ride; "buffs" was loose, agents.py's own comment refutes it), so
+# per-family attribution cannot be settled from the wire alone. A SECOND
+# family table exists in this file and diverges on purpose:
+# cast_stop_reckon's inline rates carry backward 0.652 (a DISPLACEMENT
+# census) against this table's 0.66 (the wire-modal float) -- reconcile
+# the pair once this probe's run decides which the client actually stores.
+# mt census: 1..8 only, 0 and 9+ NEVER appear -- re-scanned 2026-08-25
+# (9,463 decoded reports over 146 captures, ad hoc over the vault),
+# extending the 0x003D arm's own in-code census of 2026-08-19 (7,988
+# records over 119 captures, same conclusion). An unknown mt is skipped
+# LOUDLY by the sender, never guessed at and never KeyError'd past.
+FAMILY_RATE = {1: 1.00, 2: 1.00, 3: 1.00,
+               4: 0.66, 5: 0.66, 6: 0.66,
+               7: 0.75, 8: 0.75}
 # RULE 1'S WINDOW -- how long the "the player is driving locally" latch survives
 # on its window alone.
 #
@@ -4670,7 +4744,8 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
                           resync=False, stop_echo=False, click_sweep=False,
                           plane_carry=False, arrival_carry=False,
                           cancel_answer=None, stop_answer=None,
-                          cast_stop=False, resync_separation=None):
+                          cast_stop=False, resync_separation=None,
+                          family_rate_probe=False, checksum_probe=None):
     """Pure: may these movement flags run together, and what must be said?
 
     Returns (refusal, notes). `refusal` is None or the text main() raises as a
@@ -4871,6 +4946,37 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
                 "freeze) to neither lever. One change per run is this "
                 "arc's own rule (CANCELWALK.md sec.5). Run "
                 "--stop-answer=ack alone."), []
+    if family_rate_probe and cancel_answer:
+        # Pairwise BEFORE the requires-zero-lead cells, per the plane/arrival
+        # precedent: "you passed two levers" is the more useful refusal --
+        # and test_familyrate.py sec.5 drives exactly this ordering, because
+        # the first draft placed this cell below cancel-answer's requires
+        # cell and the wrong refusal fired.
+        return ("--family-rate-probe and --cancel-answer cannot run "
+                "together. The cancel lead arms send their own 0x002B "
+                "hardcoding [1.0, movementType] at the cancel instant, "
+                "against the probe's FAMILY_RATE float on the same report "
+                "stream -- TWO POLICIES FOR ONE CLIENT FIELD (sync +0x60), "
+                "and a movetap row could attribute its movespeed to "
+                "neither. The suppress arm sends no 0x002B but is one "
+                "experiment lever too many for a probe run: one change per "
+                "run (CANCELWALK.md sec.5). REALFIX-A1's protocol is the "
+                "probe alone on shipped defaults."), []
+    if family_rate_probe and checksum_probe:
+        # The 2026-08-25 review's find: --checksum-probe was never in this
+        # matrix (correct for a flag whose handler logs and returns 1), so
+        # the pair ran unrefused and put an 0x0023 -- an opcode retail
+        # sends ZERO times in 137 live files -- into the probe's burst,
+        # breaking the witnessed-shape ground the slot was chosen for.
+        return ("--family-rate-probe and --checksum-probe cannot run "
+                "together. The checksum's 0x0023 rides the same report "
+                "breath ungated on the zero-lead verdict, so the burst "
+                "becomes 0x0023+0x0025+0x002B+0x0029 -- a shape retail "
+                "has never produced (0x0023 appears zero times in 137 "
+                "live files). It cannot touch the movespeed readout, but "
+                "one diagnostic per run is the arc's own rule, and A1's "
+                "burst-shape claim is part of its registration. Run them "
+                "in separate sessions."), []
     if cancel_answer and not zero_lead:
         return ("--cancel-answer requires --zero-lead. The CANCELWALK arms "
                 "are MODIFIERS on the zero-lead answer to the one report "
@@ -4896,6 +5002,16 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
                 "grant policy the run answers a question nobody registered. "
                 "Pass --zero-lead (or nothing: it is the default) with "
                 "--cast-stop."), []
+    if family_rate_probe and not zero_lead:
+        return ("--family-rate-probe requires --zero-lead. The probe's send "
+                "is gated on the zero-lead grant verdict so every 0x002B "
+                "lands inside a witnessed retail burst shape (0x0029 last, "
+                "3,023 of 3,071) -- with --no-zero-lead that verdict never "
+                "fires and the probe would send NOTHING while the run log "
+                "said REALFIX-A1 was armed, publishing a null the probe "
+                "never earned: the inert-flag defect --plane-carry's "
+                "refusal documents. Pass --zero-lead (or nothing: it is "
+                "the default) with --family-rate-probe."), []
     if resync_separation is not None and not resync:
         return ("--resync-separation requires --resync. It is a MODIFIER on "
                 "the resync verdict's one distance dial (the modelled "
@@ -4978,6 +5094,17 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
                f"registered negative control (p5-resync-disarm.md sec.8): "
                f"nothing should fire, and the F35 snap should RETURN -- if "
                f"it does not, a treated arm's zero was never the resync's."))
+    if family_rate_probe:
+        notes.append(
+            "      + --family-rate-probe: ALLOWED -- REALFIX-A1, a 0x002B "
+            "[FAMILY_RATE[mt], mt] rides each granted report in retail's "
+            "own burst slot. HAZARD, priced: the shipped CLICK grant sites "
+            "also send a player 0x002B and hardcode [1.0, 1], overwriting "
+            "the probe's float -- inert on A1's click-free protocol "
+            "(--grant-suppress already refuses keyboard-mid clicks), and a "
+            "[1.0, 1] between probe sends in the tape means the run was "
+            "NOT click-free and its movespeed rows are confounded from "
+            "that instant.")
     if click_sweep:
         notes.append(
             "      + --click-sweep: ALLOWED -- a CLICK-arm diagnostic, not a "
@@ -14208,6 +14335,34 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                      f"({unit[0]:.3f},{unit[1]:.3f} "
                                      f"type {moving})"
                                      + (f" [{dir_src}]" if ZERO_LEAD else ""))
+                            # REALFIX-A1: the family-rate probe rides HERE --
+                            # after the 0x0025, before every 0x0029 block --
+                            # because that is retail's witnessed slot for a
+                            # 0x002B: 0x0029 is last in every catalogued
+                            # shape containing it (3,023 of 3,071 bursts
+                            # catalogued, FINDINGS 3781) and no catalogued
+                            # shape is bare-0x002B (the ~1.6% uncatalogued
+                            # remainder is where one could hide -- the
+                            # claim is about the catalog). Gated on the
+                            # SAME zero-lead verdict as the grant that
+                            # follows unconditionally in this breath, so
+                            # every probe send sits inside a
+                            # 0x0025+0x002B+0x0029 shape. Dose, MEASURED by
+                            # replaying the rate policy over 18 recent
+                            # captures (2026-08-25 review): ~0.9 sends/s on
+                            # sustained backpedal legs, ~0.6/s strafe --
+                            # the driver is the client's own report cadence
+                            # thinned by the 0.5 s grant floor, and sub-2 s
+                            # legs can earn ZERO sends. That dose is ample
+                            # anyway because the handler's store PERSISTS
+                            # until the next 0x002B overwrites it: one send
+                            # per leg holds the field for movetap's ~10 Hz.
+                            # _note_wire_move ignores 0x002B (not in its
+                            # opcode tuple, and slot 1 is a float, not a
+                            # point), so the probe cannot touch the resync
+                            # model or the grant clock.
+                            if FAMILY_RATE_PROBE and zero_ok:
+                                _send_family_rate(send, state, moving)
                             if HEADING_GRANT:
                                 # REFRESH THE CLIENT'S ARMED DESTINATION. It is
                                 # the only thing that stops a stale one maturing
@@ -17048,6 +17203,28 @@ def main():
                          "to fire too: the compare is integer equality over "
                          "float bits, and our velocity model is not the "
                          "client's bake. Off by default; needs no other flag.")
+    ap.add_argument("--family-rate-probe", action="store_true",
+                    help="REALFIX-A1, the accuracy campaign's first rung: "
+                         "send GAME_SMSG 0x002B AGENT_UPDATE_SPEED "
+                         "[player, FAMILY_RATE[mt], mt] alongside each "
+                         "granted 0x003D report, in retail's own burst slot "
+                         "(before the 0x0029 -- last in 3,023 of 3,071 "
+                         "retail bursts). THE QUESTION is SPEED TRUTH: does "
+                         "the wire float steer the SYNC copy's reckoning "
+                         "speed? The static decode says the handler is a "
+                         "pure store to sync +0x60 (moveSpeed) -- never "
+                         "+0x5C -- consumed only at the NEXT grant's bake; "
+                         "this probe is the dynamic confirmation, read in "
+                         "movetap's `movespeed` column (the same SYNC block "
+                         "the handler writes; `maxspeed` must hold 288.0). "
+                         "All 42,784 corpus samples read movespeed 1.0 with "
+                         "1.0 the only float we ever sent, so any movement "
+                         "off 1.0 under the probe is the probe's. Off by "
+                         "default; requires --zero-lead; refused with "
+                         "--cancel-answer (its lead arms hardcode a rival "
+                         "0x002B). Run recipe: sustained backpedal and "
+                         "strafe legs, click-free, movetap attached -- "
+                         "studies/movement/REALFIX.md sec.0.3.")
     ap.add_argument("--no-grant-suppress", action="store_false",
                     dest="grant_suppress",
                     help="Revert --grant-suppress: click grants go out while "
@@ -17722,7 +17899,9 @@ def main():
         resync=a.resync, stop_echo=a.stop_echo, click_sweep=a.click_sweep,
         plane_carry=plane_carry, arrival_carry=a.arrival_carry,
         cancel_answer=a.cancel_answer, stop_answer=_sa_mode,
-        cast_stop=_cs_mode, resync_separation=a.resync_separation)
+        cast_stop=_cs_mode, resync_separation=a.resync_separation,
+        family_rate_probe=a.family_rate_probe,
+        checksum_probe=a.checksum_probe)
     # The default-flip hint rides ONLY the refusal family it can actually
     # fix: "--zero-lead cannot be combined with X". On a PAIRWISE cell
     # (--cast-stop with --stop-answer, pin with --resync...) the advice is
@@ -18333,6 +18512,46 @@ def main():
         print("      RECONSTRUCTION: retail sends 0x0023 zero times in our "
               "live corpus (137 files), so what a real server puts in field 2 "
               "is inferred from the client's compare, not observed.")
+    if a.family_rate_probe:
+        global FAMILY_RATE_PROBE
+        FAMILY_RATE_PROBE = True
+        print("[map] --family-rate-probe ON (REALFIX-A1). One 0x002B "
+              "[FAMILY_RATE[mt], mt] rides each granted 0x003D report, in "
+              "retail's burst slot before the 0x0029.")
+        print("      READOUT    movetap's `movespeed` column (sync +0x60; "
+              "the sampled block IS the block the handler writes) beside "
+              "`maxspeed` (+0x5C). The tape's own `sent` rows are the dose "
+              "record. There is no async movespeed column -- the readout "
+              "is sync-side by design.")
+        print("      MECHANISM  handler 0x005FD9D0 resolves the SYNC agent "
+              "only; setter 0x00602990 is three asserts then three stores "
+              "-- flags bit, facing +0xC4, moveSpeed +0x60 -- ret 8. No "
+              "tick, no velocity, no position; speed is consumed at the "
+              "NEXT grant's bake as [+0x60] x [+0x5C] "
+              "(FINDINGS.md Q1/Q2, static, pinned 38797 image).")
+        print("      PREDICTION, stated before the run and ANCHORED TO THE "
+              "TAPE'S SENT ROWS, not to the key the operator holds: "
+              "movespeed reads each probe send's float within 1-2 movetap "
+              "samples of that send and HOLDS UNTIL THE NEXT PROBE SEND OF "
+              "A DIFFERENT FAMILY -- the store persists, so 64.5% of "
+              "family edges (measured: edge reports arriving inside the "
+              "0.5 s grant floor) will show the PREVIOUS family's float "
+              "carried ~0.5-0.7 s into the new leg, and that is the "
+              "mechanism working, not a refutation. maxspeed reads 288.0 "
+              "THROUGHOUT (a maxspeed move would implicate 0x0027, which "
+              "nothing here sends). Reckoned velocity |+0xB0/+0xB4| "
+              "changes at the 0x0029 that follows the probe IN THE SAME "
+              "BURST -- effectively immediate at the readout's ~10 Hz, "
+              "not one report-interval later.")
+        print("      REFUTED IF movespeed holds 1.0 across 3+ backpedal-"
+              "family probe sends (check the tape's sent rows FIRST -- no "
+              "dose, no verdict): that dynamically refutes the static "
+              "handler decode, and REALFIX-A2's lead must carry speed "
+              "truth some other way.")
+        print("      HAZARD     the shipped CLICK grant sites send [1.0, 1] "
+              "to the player and overwrite the probe's float. Run "
+              "CLICK-FREE; a [1.0, 1] between probe sends in the tape "
+              "means the run was not, from that instant.")
     if grant_suppress:
         global GRANT_SUPPRESS
         GRANT_SUPPRESS = True

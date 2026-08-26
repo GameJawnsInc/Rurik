@@ -3183,6 +3183,49 @@ Every one of these, in the order they were written:
   or that the client agrees with us, which needs a client and is what the probe
   run is for. Floor 20, read off a real green run and set AT it, zero headroom.
   No vault, no client. ~1 s),
+  `toolkit/authsrv/test_familyrate.py` (REALFIX-A1's family-rate probe --
+  **the accuracy campaign's first rung, whose whole verdict lives in an owner
+  run this file cannot perform**: whether a wire 0x002B float steers the SYNC
+  copy's +0x60. What it CAN refuse to let rot, section by section: §1 the
+  CONTESTED FAMILY_RATE table's shape -- domain exactly mt 1..8 (the census
+  is 9,463 of 9,463 decoded reports inside that range), forward rows 1.00,
+  and the two rows with live single-frame witnesses pinned to them (4 ->
+  0.66, CANCELWALK-F4; 8 -> 0.75, found 2026-08-25 in the same capture),
+  every value inside the client's own asserted [0.01, 1.0]. §2 the builder
+  passes the table through as [player, rate, mt] (the facing byte IS the
+  movementType, retail's own encoding) and refuses a units/s 288.0 -- the
+  0x0027-confusion the client's assert exists for. §3 the sender: one send
+  per known family with the label naming the rung and the readout column,
+  and an unknown movementType sends NOTHING and prints ONCE -- driven twice
+  with stdout captured, because a bare FAMILY_RATE[mt] would KeyError a live
+  connection and a silent skip would let the census go stale unnoticed. §4
+  the codec round-trip: the builder's fields encode to the schema's 11 bytes
+  and decode back to [43, 1, ~0.66, 4]. §5 the composition cells: refused
+  without --zero-lead (the gate is the zero-lead verdict -- inert-flag
+  defect otherwise), refused pairwise with --cancel-answer in BOTH its modes
+  (the lead arms hardcode a rival [1.0, mt] on the same client field), the
+  pairwise cell asserted to OUTRANK requires-zero-lead (the first draft had
+  it below and this check went red -- kept as the record), allowed with
+  --zero-lead with the note pricing the click-site hazard by its exact
+  [1.0, 1] signature, and composing with --resync (different opcode, no
+  mechanism for a refusal). §6 source locks, the 2026-08-25 review's
+  lesson twice over: the global defaults False and is rebound exactly once,
+  ONE gate (`if FAMILY_RATE_PROBE and zero_ok:`) and ONE call site -- and,
+  after the probe's own review showed two mutations surviving the string
+  counts, the gate's POSITION is pinned by src.index ordering (strictly
+  between the 0x0025 send and the first grant block -- relocated below the
+  0x0029 every count stays green while the wire shows a shape retail never
+  produced) and the call's mt OPERAND is pinned verbatim (hardcoded, every
+  send becomes [1.0, 1], the exact click-confound signature, and no count
+  reddens). §7 the checksum pairwise cell, the same review's burst-purity
+  find: --checksum-probe had never been in the composition matrix (correct
+  for its own solo runs -- the handler logs and returns 1), so the pair ran
+  unrefused with an 0x0023 riding the probe's burst; now refused pairwise,
+  while checksum alone stays unrefused. Floor 26, read off a real green
+  run -- the first draft declared 26 from a head-count, the ledger went red
+  on the 22 that ran, and the review's added checks landed the measured
+  count back on 26 by coincidence; the history is in the floor comment.
+  No vault, no client. ~1 s),
   `toolkit/authsrv/test_position_trust.py` (the position-trust policy: it may
   refuse a client-reported position, but it may never **latch**. The old
   `_adopt_client_position` refused anything more than `900 u` from
