@@ -8911,4 +8911,33 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   covers was invisible to every fake: two overlay arms owning one row resolved
   cleanly, played the first to a finished verdict, then hard-refused the second
   for "neither retail nor 'beta'". Seventeen sabotages measured,
-  26/6/4/4/3/3/2/2/2/1×8 red, every one at full coverage. Floor 120).
+  26/6/4/4/3/3/2/2/2/1×8 red, every one at full coverage. Floor 120),
+  `toolkit/clientscan/test_routerbench.py` (ROUTER-B1, the committed
+  RETHINK-QB analysis layer — the retail click→chain census whose numbers
+  REALFIX §0.19 quotes lived in scratchpad scripts sys.path'd at a deleted
+  worktree, mistakes-review class 8 made literal one session later. Guards
+  `toolkit/clientscan/routerbench.py`. Section 1 is bare-machine synthetic:
+  the op61-heading-vote attribution, chain assembly with its three endings
+  (terminal / superseded-with-the-opcode-named / open), the leg-cadence math
+  fed the 63805 chain's own transcribed grants and required to return the
+  desk-skeptic's committed speeds (288.5, 282.8, six of eight within ±4% of
+  288), monotone along-fraction to exactly 1.0, the dead-reckoned origin
+  model (mid-leg at run speed, arrival clamp, chained legs, report reset,
+  refusal with no position source), the polyline distance, op409 map-id
+  read, and the heading-clip mesh check on a stub mesh with a wall
+  (exact-D1 counted, agreeing truncation ≤3u, phantom truncation
+  disagreeing). Sections 2–4 need the vault + `dat_study` and skip loudly
+  without them. Section 2 is the FIDELITY GATE: census() must reproduce the
+  committed QB numbers from the same tapes — ≥29 clicks all answered within
+  one RTT, ≥16 verbatim / ≥13 part-way, zero surviving "unanswered", ≥8
+  superseded, and the 63805 anchor bit-exact (nine grants, first answer
+  ≤0.065 s, along-fraction monotone, terminal == click to the float).
+  Section 3 locks the heading-clip mesh-identity numbers on the two
+  immutable anchor connections (63805: 506/297/209/65; 62994: 98/89/9/8) —
+  the corpus-wide map-280 aggregate independently reproduces Q7's 248/701.
+  Section 4 scores `pathmap.route()` against retail's own answers and gates
+  only the hard invariants: every routed specimen's legs clip-clean, every
+  terminal exactly the click, and ALL 13 scoreable retail-verbatim clicks
+  reproduced as our one-leg case bit-identically (corpus-level counts are
+  ≥-floors because the live corpus grows; bit-exact locks stay on the
+  anchor files). Floor 48 from the green run. ~15 s warm).
