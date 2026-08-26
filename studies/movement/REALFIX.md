@@ -295,7 +295,10 @@ are the survivors of both.
    **no code compares `pc` against the copy's previous plane**.
 5. **Both empirical formulations are proxies for this (fit skeptic):** F1's "MID-WALK"
    term is **emergent** — a parked copy's chain holds its arrival node where the copy
-   stands (dist 0.0 on a same-plane segment), so parked copies **self-veto**; F1
+   stands (dist 0.0 on a same-plane segment), so parked copies **self-veto** *(§0.8,
+   2026-08-26: byte-grounded and STRONGER than written here — the self-veto rides
+   seg_match's degenerate arm, which reads no plane word at all, so it holds even
+   against a deliberately mismatched stamp; plane-proof, exercised live 8/8)*; F1
    mispredicts two cells when applied beyond presses, REFUTED as mechanism. F2
    (grant `pc` ≠ copy plane, 22/22) is the better proxy because the `pc` stamp rewrites
    the query's plane **ahead of the veto** — but the seam geometry is load-bearing (the
@@ -352,7 +355,10 @@ are the survivors of both.
     → the veto fails but no distance gate fires at parked separations → **predicts NO
     snap** (this is the cell where the mechanism and F2-as-proxy separate); *no-probe
     warp repro* → **predicts both warps fire** (converts the 1.0-counterfactual to
-    OBSERVED).
+    OBSERVED). *(Both RAN the same night — §0.8: no-snap outcome CONFIRMED but this
+    cell's premise REFUTED — the veto does not fail on a parked copy, it holds
+    plane-free on the degenerate arm; and the warp repro converted the B-shape only,
+    A-shape unexposed.)*
 
 ### 0.6 The fallback-half follow-up — same night: the span was never undecoded, the appender is IDENTIFIED, and warp A narrows to gate 2 ∨ gate 3
 
@@ -401,7 +407,10 @@ had already killed the veto, **warp A fired via gate 2 (`pathCount == 0`, `je` a
 disjunction CONFIRMED from bytes plus tape. Promoting it to a single gate needs
 `0x005FF820`'s plane propagation (do the baked query points carry the stamped plane
 word?) and gate 2's start-resolver plane-keying — neither disassembled yet, and
-neither blocks A2.
+neither blocks A2. *(§0.8, 2026-08-26: `0x005FF820` is now decoded — position_at,
+two arms, plane from `+0x90` when arrived and `+0x80` otherwise; the gate-2
+plane-keying half stays open and its test cell is the mid-walk spoof registered
+there.)*
 
 **Byte bonuses:** gate 2's `maxDist` is not a fresh constant load — it consumes **gate
 1's leftover 300.0 riding the x87 stack** (`fstp st(1)` at `0x006057E5` leaves it;
@@ -479,6 +488,107 @@ bridge); a rep standing on plane-26 ground is VOID (`plane_differs: false`) — 
 census scores it out. **Exposure rule and floor unchanged: ≥3 reps with
 `pc_spoofed` AND `plane_differs` both true, else ABORT.** Prediction unchanged, both
 outcomes registered above.
+
+### 0.8 The night scored — 2026-08-25 ~23:12 → 26 ~00:00: three runs, two workflows, and the plane story rewritten by a degenerate segment
+
+**Run shape:** the three owner runs (`authsrv-20260825T231037-c1` covering
+`movetap-20260825T231250` C1 and `movetap-20260825T231718` C2-geography;
+`authsrv-20260825T233109-c1` × `movetap-20260825T233125` the `--pc-spoof` lever run)
+scored by two workflows totalling six agents; every load-bearing number below was
+re-derived from raw rows by a skeptic, and every load-bearing byte re-disassembled
+from the pinned pristine 38797. (One fit lane died mid-run returning a stub; the
+skeptic re-did its work from scratch — its numbers are the ones cited.)
+
+**C1 — the no-probe warp repro (§0.7 cell 1): the B-shaped warp is OBSERVED at
+movespeed 1.0; the A-shaped stays unexposed.** Exactly 4 snaps (owner reported 4),
+full hard-copy signature: `async_stop` → bit-equal with the sync stop tick, press-to-
+snap 16.8–41.6 ms (A1's band), landing 15.0–26.8 u off the copy, jump 314.7–334.6 u,
+back-walk 1.10–1.24 s landing **0.00 u on the triggering press's own granted dest**.
+All four at sep 351.2–374.4 u — above the 299.3326 cut. **The 1.0-counterfactual is
+CONVERTED to OBSERVED for the B-shape (4/4, reliable)**; zero A-shaped exposure
+occurred (no below-cut flip press ever happened — checked at press level, not just
+fire level), so warp A's counterfactual stays SUPPORTED per the zero-exposure rule.
+The window's 13 plane-flip grants split 4 fires / 9 saves on a clean press-level
+pattern reconciling §0.5–0.6. One CONTESTED flag kept honest: the four landing
+points sit 7.6–27.7 u from one ~46–92 s-stale spawn-area grant — noted as
+coincidence, not asserted as targeting.
+
+**C2-geography (§0.7 cell 2 as originally staged): the letter of the exposure rule
+was MET — and the rule's proxy was broken.** 12 presses, 12/12 parked, 3 with
+`plane_differs` true — **exactly the floor**, so "zero-exposure ABORT" was wrong at
+the letter. But `plane_differs` compares the carried word against the REPORT's
+plane, not against the copy's stamped word, and at mechanism level the true
+pc-vs-copy-word flip count was **0 of 8** — the discriminating condition was never
+staged, the no-snap null is UNTESTED there, and retiring the geography design was
+right for a different reason than registered. The geography itself is now mapped:
+**the seam is y = −2884.0 ± 3.9 u; the dominant plank crosses at x ∈ [−6124, −6081],
+core ~40–60 u wide** — against the 576 u a 2 s strafe covers. The recipe asked for a
+tightrope walk.
+
+**The `--pc-spoof` run: outcome CONFIRMED, reasoning REFUTED — and the refutation is
+the finding.** 9/9 spoofed grants exposed by the registered key (8 in-tape; movetap
+attached ~6 s late, again), all with the copy parked, park gaps 7.9–12.4 s.
+**Zero snaps.** But 7 of 8 presses fired at sep 378–494 u — ABOVE the gate-1 cut,
+fence open, `gate_reach: test-runs`, no early-out — so had the veto died, gate 1
+must have fired. It did not, and §0.7's registered reasoning ("the veto fails but
+no gate fires at parked separations") is **refuted on both clauses**: the
+separations were not small, and **the veto did not fail — it HELD**.
+
+**Why it held — byte-grounded, and it closes the operand question:**
+1. **q's plane IS the stamped word (Story A, OBSERVED).** The snap test builds its
+   query at `0x00605643`–`0x00605663` as a raw 4-dword copy of `source+0x78..0x84`
+   — `q.plane = +0x80`, unconditional, unbaked, no branch. And the stamp provably
+   precedes the test **in the same message**: setter `0x00602A74` stamps, then
+   `0x00602AD3` → bake `0x005FE950` → `0x005FEBEB` → dispatcher `0x00605FC0` →
+   `0x0060601C call 0x006055E0`; the tape corroborates (`point[2]` flips to 26
+   within 55–96 ms of every spoofed grant). q was 26 at all 8 presses. The rival
+   "query rides the destination plane" story is REFUTED at the bytes.
+2. **The veto held on seg_match's DEGENERATE arm, which is plane-FREE.** A parked
+   copy's chain holds a degenerate covering segment at distance ~0 from q, and the
+   degenerate arm (FINDINGS.md:2722-2724: `a == b` → pure 2D distance, strict `>`)
+   **reads no plane word and calls no pathfind**. The spoofed label was never
+   consulted. **A parked copy's self-veto is PLANE-PROOF — `--pc-spoof` cannot
+   ever warp a parked copy**, because it plants a label without moving the body
+   onto disconnected geometry. (§0.5 item 5's emergent self-veto: CONFIRMED and
+   extended to the mismatched-stamp case; §0.5 item 10c's parked-cell premise:
+   REFUTED.)
+3. **The bake family is now decoded (the §0.6 "optional" item, done):**
+   `0x005FF820` = `position_at(this, out*, when)`, two arms on the agent's own
+   `+0x48` — ARRIVED copies `+0x88..0x94` verbatim (plane = **field 3**, `+0x90`);
+   otherwise the extrapolator `0x005FFB40` reckons x/y and copies plane from
+   **`+0x80`** (`0x005FFBD7`). Neither writes back. Six callers, two newly found:
+   the **history appender bakes each node it pushes** (`0x006058BF`, same agent) —
+   so a node's plane is an append-time snapshot through the same two arms — and
+   the staleness sweep (`0x00604916`). `0x005FF880` is the distinct settle that
+   DOES write back `+0x78..0x84`. movetap's `position_at()` model matches the
+   bytes field-for-field; the ARRIVED arm has never been observed live
+   (0 of 4,115 corpus samples).
+
+**What the whole night does to the mechanism statement:** the plane term enters the
+snap decision in exactly ONE place — the **non-degenerate** arm's
+mismatch-→-pathfind route — so the discriminator behind every observed fire/save is
+**degenerate-vs-non-degenerate covering segment, and real-disconnect-vs-fake-label**,
+not any single wire field. F2 ("grant `pc` ≠ copy plane") is re-refuted as a literal
+predicate by this same night's C1 tape (two mid-walk flip grants at sep 301.9/355.1
+with no snap; five instants with copy-word ≠ `pc` and no snap). Parked players
+cannot be warped by plane garbage; **the entire danger surface is a MID-WALK copy
+whose covering segment crosses a label mismatch.**
+
+**The one cell left, registered here:** a **MID-WALK spoof over flat connected
+ground** — the only configuration that makes the operand observable in behaviour
+and the only remaining probe of whether `0x00721A30`'s pathfind fails on a bogus
+label over connected (x,y) (statically unproven either way). It doubles as the
+gate-2 plane-keying test (warp A's §0.6 residual). The current lever cannot stage
+it (parked-first trigger by design); it needs a small trigger variant (fire the
+spoof on a mid-leg grant). **Not built tonight — nothing in A2's design blocks on
+it**; A2's plane-truth requirement (§0.5 item 10a) stands on the setter decode
+alone.
+
+**Instrument flags, for the file:** movetap ends far short of `--seconds` (60.9 s /
+81.4 s / 77.5 s against 240 across the night's three tapes, and A1's was 51 s —
+systematic, unattributed); C1 showed `fence_state: shut` in 14.9% of samples while
+C2 showed none under identical args (unattributed, flagged); the late-attach cost
+one press of the lever run's nine.
 
 ### REALFIX-P2 · `--zero-lead`
 

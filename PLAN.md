@@ -1621,12 +1621,25 @@ open-stretch appender is IDENTIFIED** (unconditional armed world-1
 append at `0x0060610B` into the cross-world-shared record, plus a
 fence-independent 3333-tick staleness sweep at `0x00604B2A`), and
 **warp A narrows to gate 2 ∨ gate 3** with gate 1 byte-excluded.
-Next, in order: **(i)** the two 5-min owner cells, with registered
-mechanism predictions (§0.5 item 10c: parked + `pc`-flip → predicts NO
-snap; no-probe repro → predicts both warps fire); **(ii)** A2's design —
-speed truth + **plane truth** + copy-pinning together; *(optional desk:
-`0x005FF820` plane propagation, promoting warp A's gate to a single
-name — blocks nothing).*
+**Both owner cells RAN the same night (~23:12–00:00, three tapes, six
+scoring/verification agents — REALFIX.md §0.8):** the no-probe repro
+converted the **B-shaped warp to OBSERVED at movespeed 1.0** (4/4, full
+signature; A-shape zero exposure, stays SUPPORTED); the parked+flip
+lever run (`--pc-spoof`, built that night after the seam turned out to
+be a ~40–60 u plank at y=−2884/x∈[−6124,−6081] — geography retired)
+went **0/8 snaps with 7 presses ABOVE the gate-1 cut**, refuting the
+registered reasoning in the most informative way: **the parked
+self-veto rides seg_match's DEGENERATE arm, which reads no plane word
+— parked copies are plane-proof**, and the operand question closed at
+the bytes (q.plane = `+0x80` raw at `0x0060565A`; `0x005FF820` =
+position_at decoded, two arms, appender bakes each node at append
+time). F2-as-literal-predicate re-refuted; the danger surface is
+exclusively a MID-WALK copy crossing a label mismatch.
+Next, in order: **(i)** **A2's design** — speed truth + **plane truth**
++ copy-pinning together; nothing blocks it; **(ii)** *optional*, the
+one remaining cell (§0.8): a mid-walk spoof over connected ground —
+needs a small trigger variant, tests whether a bogus label alone kills
+the veto AND gate-2 plane-keying (warp A's residual) in one ~5-min run.
 *The staging block that preceded the run, kept for the record:*
 The follow-on recon (`studies/movement/followon-notes/README.md`, merged
 to `main` the same day) answered F35's counterfactual from tape (castless,

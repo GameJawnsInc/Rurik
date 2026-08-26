@@ -2763,6 +2763,13 @@ re-derived that independently; a second write anywhere would have refuted it.
 > empirical-fit skeptic derived the rolling-`prev` segment walk and the node-plane
 > inheritance from the tape alone before reconciling with this section — the
 > decode and the tape now witness each other independently.
+> **2026-08-26 addendum: the DEGENERATE arm's plane-freeness is now exercised
+> live and load-bearing** (REALFIX.md §0.8): eight `--pc-spoof` grants stamped a
+> parked copy's `+0x80` to a bogus plane at separations up to 494 u with the
+> snap test provably running, and the veto held every time — the parked copy's
+> dist-0 covering segment takes the `a == b` arm above, which reads no plane
+> word and calls no pathfind. A parked copy's self-veto is plane-proof; the
+> plane term is confined to the non-degenerate mismatch→pathfind route.
 
 ### The two operands — and this is where the arc's framing died
 
