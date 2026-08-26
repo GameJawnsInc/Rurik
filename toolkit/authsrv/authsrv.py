@@ -4431,6 +4431,54 @@ FAMILY_RATE_PROBE = False
 FAMILY_RATE = {1: 1.00, 2: 1.00, 3: 1.00,
                4: 0.66, 5: 0.66, 6: 0.66,
                7: 0.75, 8: 0.75}
+# --pc-spoof (REALFIX sec.0.7 cell 2's lever). The parked+pc-flip cell could
+# not be staged by geography -- the owner's 2026-08-25 run found the plane
+# seam is a bridge too narrow to strafe, and under --plane-carry the
+# flip-at-parked needs a plane crossing inside a leg too short to fire a
+# second grant. This flag makes the flip a server decision so the cell runs
+# ANYWHERE: when set to an integer plane id, the FIRST fired zero-lead grant
+# after >= PC_SPOOF_GAP s of grant silence (a park, by construction) sends
+# THAT id as wire field 4 instead of the carry value, once per park. The
+# client-side stamp is total either way -- 0x00602A74 writes field 4 raw
+# into the SYNC copy's +0x80, no compare (REALFIX sec.0.5 item 1) -- so what
+# this changes is only WHICH value goes out: the copy's plane word flips
+# while the copy stands parked at the body's feet. REGISTERED PREDICTION
+# (sec.0.7): NO snap -- the 100u veto dies (cross-plane q against the parked
+# chain -> the pathfind's range+1.0 sentinel) but no distance gate fires at
+# parked separations; a snap instead means gate 2 is plane-keyed, and warp
+# A's attribution (sec.0.6: gate 2 OR gate 3) firms to gate 2. Off by
+# default; requires --zero-lead (the trigger reads the zero-lead verdict's
+# own gap clock, so alone it would be an inert flag with an on-looking log
+# -- --plane-carry's refusal documents that defect); negative ids refused
+# (plane words are non-negative dwords in every decoded report); spoofing
+# the ground plane you stand on is legal but VOID -- plane_differs stays
+# false and the census scores the rep out.
+PC_SPOOF = None
+# The park threshold. A1's fired-grant gaps during continuous play top out
+# at 3.054 s (leg cadence with ~1 s releases, measured in
+# authsrv-20260825T202330-c1); the cell's parks are >= 6 s by recipe. 4.0
+# sits above the one and below the other with margin on both sides. A
+# constant rather than a flag: the cell has one registered shape.
+PC_SPOOF_GAP = 4.0
+
+
+def pc_spoof_field4(spoof, since_last, carried):
+    """Field 4 for one FIRED zero-lead grant: (value, spoofed).
+
+    Pure -- the trigger derives entirely from `since_last` (the same gap the
+    verdict row records: seconds since the previous FIRED grant), so refused
+    evaluations consume nothing and the spoof re-arms exactly when a park
+    does. `spoof is None` is the flag off; `since_last is None` is the first
+    grant of a connection, which is a park by definition (the copy spawned
+    parked).
+    """
+    if spoof is None:
+        return carried, False
+    if since_last is None or since_last >= PC_SPOOF_GAP:
+        return int(spoof), True
+    return carried, False
+
+
 # RULE 1'S WINDOW -- how long the "the player is driving locally" latch survives
 # on its window alone.
 #
@@ -4745,7 +4793,8 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
                           plane_carry=False, arrival_carry=False,
                           cancel_answer=None, stop_answer=None,
                           cast_stop=False, resync_separation=None,
-                          family_rate_probe=False, checksum_probe=None):
+                          family_rate_probe=False, checksum_probe=None,
+                          pc_spoof=None):
     """Pure: may these movement flags run together, and what must be said?
 
     Returns (refusal, notes). `refusal` is None or the text main() raises as a
@@ -4977,6 +5026,17 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
                 "one diagnostic per run is the arc's own rule, and A1's "
                 "burst-shape claim is part of its registration. Run them "
                 "in separate sessions."), []
+    if pc_spoof is not None and cancel_answer:
+        # Pairwise BEFORE the requires-zero-lead cells, same precedent as the
+        # family-rate pair above.
+        return ("--pc-spoof and --cancel-answer cannot run together. The "
+                "cancel lead arms ride the SAME single 0x0029 send site "
+                "whose field 4 the spoof rewrites, so a lead grant fired "
+                "past the park gap would go out with a spoofed plane AND a "
+                "led point -- a two-variable instant in a cell registered "
+                "for one (REALFIX sec.0.7: the press's own grant, a PARKED "
+                "copy, one flipped word). Run the cell click-free and "
+                "cancel-free."), []
     if cancel_answer and not zero_lead:
         return ("--cancel-answer requires --zero-lead. The CANCELWALK arms "
                 "are MODIFIERS on the zero-lead answer to the one report "
@@ -5012,6 +5072,24 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
                 "never earned: the inert-flag defect --plane-carry's "
                 "refusal documents. Pass --zero-lead (or nothing: it is "
                 "the default) with --family-rate-probe."), []
+    if pc_spoof is not None and not zero_lead:
+        return ("--pc-spoof requires --zero-lead. The spoof rides the "
+                "zero-lead grant's own field 4 and its trigger reads that "
+                "verdict's gap clock (since_last) -- with --no-zero-lead "
+                "there is no send site and no clock, so the flag would "
+                "change NOTHING while the run log said the cell was armed: "
+                "the inert-flag defect --plane-carry's refusal documents. "
+                "Pass --zero-lead (or nothing: it is the default) with "
+                "--pc-spoof."), []
+    if pc_spoof is not None and pc_spoof < 0:
+        return (f"--pc-spoof {pc_spoof!r} is not a plane. Plane words are "
+                f"non-negative dwords in every decoded report, and the "
+                f"client stamps field 4 raw at +0x80 (0x00602A74, no "
+                f"compare) -- a negative id puts the copy on ground no "
+                f"chain node or navmesh island can name, which answers no "
+                f"registered question. Pass the plane id to spoof: 26 while "
+                f"standing on plane-0 ground is REALFIX sec.0.7's "
+                f"registered cell."), []
     if resync_separation is not None and not resync:
         return ("--resync-separation requires --resync. It is a MODIFIER on "
                 "the resync verdict's one distance dial (the modelled "
@@ -5110,6 +5188,18 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
             "was NOT click-free and its movespeed rows are confounded "
             "from that instant. The definitive check is the c2s census: "
             "zero 0x003E rows.")
+    if pc_spoof is not None:
+        notes.append(
+            f"      + --pc-spoof {pc_spoof}: ALLOWED -- REALFIX sec.0.7 "
+            f"cell 2's lever. The first fired grant after >= "
+            f"{PC_SPOOF_GAP:.1f}s of grant silence sends field 4 = "
+            f"{pc_spoof} instead of the carry value, once per park; the "
+            f"verdict row marks it pc_spoofed and the wire label appends "
+            f"PC-SPOOF. Stand on ground whose plane DIFFERS from the "
+            f"spoof or the rep is void (plane_differs false -- the census "
+            f"scores it out). One probe per run: prefer this WITHOUT "
+            f"--family-rate-probe, so a snap, if one fires, attributes to "
+            f"the plane word alone.")
     if click_sweep:
         notes.append(
             "      + --click-sweep: ALLOWED -- a CLICK-arm diagnostic, not a "
@@ -14617,6 +14707,17 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                     ac_arrival, ac_dist = arrival_carry_leg(
                                         state, now_z, reported)
                                     zl_carry = "arrival-carry"
+                                # REALFIX sec.0.7 cell 2's lever, LAST so it
+                                # outranks either carry on the exposed grant
+                                # -- the cell is "one flipped word on the
+                                # first press after a park", whatever policy
+                                # would have filled the field. Pure read of
+                                # `zero_since`; a refusal below sends nothing
+                                # and consumes nothing.
+                                pcs_fired = False
+                                if PC_SPOOF is not None:
+                                    zl_plane_cur, pcs_fired = pc_spoof_field4(
+                                        PC_SPOOF, zero_since, zl_plane_cur)
                                 if rec is not None:
                                     # EVERY evaluation, fired or refused, on the
                                     # SAME channel the click arm uses -- a log
@@ -14716,7 +14817,14 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                               carry_dist=(
                                                   None if (ac_dist is None
                                                            or not zero_ok)
-                                                  else round(ac_dist, 1)))
+                                                  else round(ac_dist, 1)),
+                                              # sec.0.7's census key. NULL on
+                                              # a refusal like every field-4
+                                              # fact above: nothing went on
+                                              # the wire.
+                                              pc_spoofed=(pcs_fired
+                                                          if zero_ok
+                                                          else None))
                                 if zero_ok:
                                     if cw_dest is not None:
                                         # CANCELWALK's lead arms, this one
@@ -14755,6 +14863,8 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                             f"{reported[1]:.0f}) plane {plane}"
                                             + (f" carry {zl_plane_cur}"
                                                if zl_plane_cur != plane
+                                               else "")
+                                            + (" PC-SPOOF" if pcs_fired
                                                else "")
                                             + f" [dir {dir_src}]")
                                     send(GAME_SMSG_AGENT_MOVE_TO_POINT,
@@ -17208,6 +17318,20 @@ def main():
                          "to fire too: the compare is integer equality over "
                          "float bits, and our velocity model is not the "
                          "client's bake. Off by default; needs no other flag.")
+    ap.add_argument("--pc-spoof", type=int, default=None, metavar="PLANE",
+                    help="REALFIX sec.0.7 cell 2's lever (the parked+pc-flip "
+                         "cell -- the seam is a bridge too narrow to stage it "
+                         "by geography). The FIRST fired zero-lead grant "
+                         "after >= 4.0s of grant silence sends THIS plane id "
+                         "as wire field 4 instead of the carry value, once "
+                         "per park; the client stamps it raw at +0x80 "
+                         "(0x00602A74, no compare), flipping the parked "
+                         "copy's plane word. Registered prediction: NO snap; "
+                         "a snap means gate 2 is plane-keyed. Requires "
+                         "--zero-lead; refused negative; refused with "
+                         "--cancel-answer. Stand on ground whose plane "
+                         "differs from the value (26 on plane-0 ground is "
+                         "the registered cell).")
     ap.add_argument("--family-rate-probe", action="store_true",
                     help="REALFIX-A1, the accuracy campaign's first rung: "
                          "send GAME_SMSG 0x002B AGENT_UPDATE_SPEED "
@@ -17906,7 +18030,8 @@ def main():
         cancel_answer=a.cancel_answer, stop_answer=_sa_mode,
         cast_stop=_cs_mode, resync_separation=a.resync_separation,
         family_rate_probe=a.family_rate_probe,
-        checksum_probe=a.checksum_probe)
+        checksum_probe=a.checksum_probe,
+        pc_spoof=a.pc_spoof)
     # The default-flip hint rides ONLY the refusal family it can actually
     # fix: "--zero-lead cannot be combined with X". On a PAIRWISE cell
     # (--cast-stop with --stop-answer, pin with --resync...) the advice is
@@ -18560,6 +18685,35 @@ def main():
               "LABEL -- a [1.0, 1] send without the FAMILY-RATE PROBE "
               "prefix is a click; the definitive check is the c2s census "
               "(zero 0x003E rows).")
+    if a.pc_spoof is not None:
+        global PC_SPOOF
+        PC_SPOOF = int(a.pc_spoof)
+        print(f"[map] --pc-spoof {PC_SPOOF} ON (REALFIX sec.0.7 cell 2). "
+              f"The first fired grant after >= {PC_SPOOF_GAP:.1f}s of grant "
+              f"silence sends field 4 = {PC_SPOOF}, once per park.")
+        print("      READOUT    the grant_verdict rows: pc_spoofed true "
+              "names each exposed grant, plane_differs true confirms the "
+              "flip was real (spoof != the ground plane -- a rep where it "
+              "is false is VOID, not a null). movetap beside it shows "
+              "whether the copy was parked and whether anything snapped.")
+        print("      MECHANISM  0x00602A74 stamps field 4 raw into sync "
+              "+0x80, no compare (sec.0.5 item 1). The 100u history veto "
+              "then walks a parked chain whose covering segment is "
+              "same-plane-with-itself but cross-plane against the stamped "
+              "query -> the 0x00709990 mismatch route -> pathfind -> "
+              "range+1.0 sentinel -> veto dead (sec.0.5 item 3).")
+        print("      PREDICTION, stated before the run: NO snap on every "
+              "exposed press -- the veto dies but no distance gate fires "
+              "at parked separations (gate 1 needs > 299.33u; the copy is "
+              "parked at the body's feet). Floor: 3 exposed reps "
+              "(pc_spoofed AND plane_differs both true) or the cell "
+              "ABORTS as zero-exposure.")
+        print("      REFUTED IF an exposed press snaps: then gate 2 is "
+              "plane-keyed (pathfind start resolved on the spoofed plane "
+              "finds no island -> pathCount 0 -> SNAP), warp A's "
+              "attribution (sec.0.6: gate 2 OR 3) firms to gate 2, and "
+              "the NO-snap registration is wrong in the most informative "
+              "way available.")
     if grant_suppress:
         global GRANT_SUPPRESS
         GRANT_SUPPRESS = True

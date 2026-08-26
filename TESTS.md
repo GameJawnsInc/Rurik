@@ -3226,6 +3226,40 @@ Every one of these, in the order they were written:
   on the 22 that ran, and the review's added checks landed the measured
   count back on 26 by coincidence; the history is in the floor comment.
   No vault, no client. ~1 s),
+  `toolkit/authsrv/test_pcspoof.py` (REALFIX §0.7 cell 2's lever, --pc-spoof --
+  **the parked+`pc`-flip cell the owner could not stage by geography** (the
+  plane seam is a bridge too narrow to strafe, run of 2026-08-25 ~23:17), so
+  the flip became a server decision: the first fired zero-lead grant after
+  ≥4.0 s of grant silence sends the flag's plane id as wire field 4, once per
+  park. The cell's verdict -- does the flip snap a PARKED copy? -- lives in an
+  owner run this file cannot perform; both outcomes are registered (§0.7: NO
+  snap predicted; a snap means gate 2 is plane-keyed). What it CAN refuse to
+  let rot: §1 the pure trigger's truth table -- off is a pass-through, first
+  grant (since_last None) spoofs, the ≥ boundary at PC_SPOOF_GAP exactly, leg
+  cadence is safe (the A1 tape's own 3.054 s maximum gap asserted NOT to
+  spoof, because the constant is sized off that measurement), int coercion,
+  and plane 0 spoofable (an `if spoof:` truthiness bug would exempt the one
+  plane every map uses). §2 the composition cells: refused without
+  --zero-lead (no send site, no gap clock -- the inert-flag defect), refused
+  negative (not a plane), refused pairwise with --cancel-answer (the lead
+  arms ride the SAME 0x0029 send whose field 4 the spoof rewrites), the
+  pairwise cell asserted to OUTRANK requires-zero-lead per the family-rate
+  precedent, allowed in its registered shape with the note naming the armed
+  value and the ground-plane-void warning, and allowed beside
+  --family-rate-probe (different wire fields). §3 source locks: exactly ONE
+  rebind site routes zl_plane_cur through the helper, its POSITION pinned by
+  src.index ordering strictly between the arrival-carry assignment and the
+  send path's own grant_verdict row (the verdict anchor searched FROM the
+  rebind, because its first file-wide occurrence is matrix prose at ~:5299 --
+  above the carries the carry would silently overwrite the spoof; below the
+  verdict the row would log a value the wire did not carry), the row's
+  pc_spoofed census key, the PC-SPOOF wire-label marker, and the send site
+  still reading field 4 from zl_plane_cur verbatim (the lever works by
+  REBINDING that name -- an independent field-4 expression at the send would
+  strand it inert while every count stayed green). Floor 23, read off the
+  real green run -- the first draft declared 21 from a head-count and the
+  run said 23; the history is in the floor comment. No vault, no client.
+  ~1 s),
   `toolkit/authsrv/test_position_trust.py` (the position-trust policy: it may
   refuse a client-reported position, but it may never **latch**. The old
   `_adopt_client_position` refused anything more than `900 u` from

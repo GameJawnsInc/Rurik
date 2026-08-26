@@ -425,8 +425,11 @@ python toolkit/harness/session.py --keep-open --hold 600 --game-args "--map 280 
 python toolkit/clientscan/movetap.py --seconds 240        # start once in the map; once per cell
 ```
 
-(The §0.3 A1 recipe line abbreviated the game-args — the tape, not that line, is the
-config authority. Same map, same seam area as A1: the y≈−2884 plane-0/26 boundary the
+(~~The §0.3 A1 recipe line abbreviated the game-args~~ — CORRECTED same night:
+`--zero-lead` and `--plane-carry` **default ON** since the 2026-08-22 three-state flip
+(authsrv.py's default block), so §0.3's line was complete and the explicit flags above
+are redundant-but-harmless, kept for legibility. The tape remains the config authority
+either way. Same map, same seam area as A1: the y≈−2884 plane-0/26 boundary the
 E-strafes crossed.)
 
 **CELL 1 — no-probe warp repro** (first movetap): the A1 warp recipe, ≥3 attempts —
@@ -454,6 +457,28 @@ zero-exposure** and the follow-up is a server-side lever, not a re-run.
 **PREDICTION (registered §0.5 item 10c): NO snap** — the veto fails but no distance
 gate fires at parked separations. **If it snaps anyway, gate 2 is plane-keyed** and
 warp A's attribution firms toward gate 2 — either outcome is a finding.
+
+**CELL 2 REVISED — 2026-08-25 ~23:17: the geography design is RETIRED.** The owner
+ran it and could not stage the condition — the seam is a **bridge too narrow to
+strafe**, and the tap-across choreography never produced the flip. Per the
+pre-registration above, the follow-up is a **server-side lever, not a re-run**:
+`--pc-spoof` (built the same night, `test_pcspoof.py` floor 23 — the first fired
+grant after ≥4.0 s of grant silence sends the flag's plane id as field 4, once per
+park; `PC_SPOOF_GAP` sized above A1's 3.054 s leg-cadence maximum and below the
+recipe's parks). The cell now runs ANYWHERE on ordinary plane-0 ground:
+
+```
+python toolkit/harness/session.py --keep-open --hold 420 --game-args "--map 280 --explorable --pc-spoof 26"
+python toolkit/clientscan/movetap.py --seconds 240
+```
+
+Per rep, 6 reps: **hands off ≥6 s** (the copy parks; the gap re-arms the spoof) →
+**hold a strafe ~2 s** (the press's grant goes out `field4=26`, `pc_spoofed: true`)
+→ release. Stay on plane-0 ground (A1 read plane 0 in 641/641 samples away from the
+bridge); a rep standing on plane-26 ground is VOID (`plane_differs: false`) — the
+census scores it out. **Exposure rule and floor unchanged: ≥3 reps with
+`pc_spoofed` AND `plane_differs` both true, else ABORT.** Prediction unchanged, both
+outcomes registered above.
 
 ### REALFIX-P2 · `--zero-lead`
 
