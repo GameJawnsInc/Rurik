@@ -414,6 +414,47 @@ other side.
 **Ladder impact: none.** A2's design consequences (§0.5 item 10) stand as written;
 the owner cells' registered predictions are unchanged.
 
+### 0.7 The two owner cells — run recipe (registered 2026-08-25, before the run)
+
+**One session covers both.** The A1 argv is pinned from the tape itself (`grant_verdict`
+rows: `plane_carry: true`, arm `zero-lead`; probe rows present; nothing else surfaced in
+1,490 sent rows), so the minimal pair drops exactly one flag:
+
+```
+python toolkit/harness/session.py --keep-open --hold 600 --game-args "--map 280 --explorable --zero-lead --plane-carry"
+python toolkit/clientscan/movetap.py --seconds 240        # start once in the map; once per cell
+```
+
+(The §0.3 A1 recipe line abbreviated the game-args — the tape, not that line, is the
+config authority. Same map, same seam area as A1: the y≈−2884 plane-0/26 boundary the
+E-strafes crossed.)
+
+**CELL 1 — no-probe warp repro** (first movetap): the A1 warp recipe, ≥3 attempts —
+strafe **E ~3 s crossing the seam → release ~1 s → strafe Q**; one extra attempt with a
+~2 s release. **PREDICTION (registered §0.5 item 10c): both warps still fire at
+movespeed 1.0** (converts the counterfactual to OBSERVED). Warp A's press window is the
+thin one (236 ms at 1.0) — an A-shaped miss on one attempt is expected noise, which is
+why ≥3 reps; a B-shaped (large-sep) warp should fire reliably.
+
+**CELL 2 — parked + `pc`-flip** (second movetap). Under `--plane-carry`, field 4 lags
+one grant — so the flip-at-parked is engineered by making a plane crossing happen inside
+a leg too short to fire its own second grant:
+1. Stand ~100 u NORTH of the seam (plane-0 side). Hands off **~5 s** (copy parks).
+2. ONE quick tap toward the seam (≤0.5 s) that carries the body ACROSS onto plane 26.
+   (If a single tap doesn't cross, park closer and retry — the tap's only grant fires at
+   its start, dest still plane 0, so the copy stays on plane-0 ground.)
+3. Hands off **~5 s** again (copy parked, stamped plane 0).
+4. Press and hold strafe (Q or E) **~2 s** — this press is the cell: its grant should
+   carry `plane_dest=26 / plane_cur=0` with the copy parked. Release ~2 s.
+5. Repeat 4–6 times; include 2 mirror reps (south→north).
+**EXPOSURE (pre-registered, the zero-exposure rule):** a press counts only if its
+`grant_verdict` row shows `plane_differs: true` AND movetap shows the copy parked (arm
+0, velocity 0) at the press. **Floor: ≥3 exposed presses, else the cell ABORTS as
+zero-exposure** and the follow-up is a server-side lever, not a re-run.
+**PREDICTION (registered §0.5 item 10c): NO snap** — the veto fails but no distance
+gate fires at parked separations. **If it snaps anyway, gate 2 is plane-keyed** and
+warp A's attribution firms toward gate 2 — either outcome is a finding.
+
 ### REALFIX-P2 · `--zero-lead`
 
 Attachment: heading arm `:9625-9878`, as a third named block after `:9843`. **Stop arm `:10235` untouched. Click arm `:9879` untouched.**
