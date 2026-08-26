@@ -491,18 +491,24 @@ def main():
           "coordinates on our mesh to <=3u only at a fine step -- at "
           "16u the landing quantizes ~9u short of the edge retail names "
           "exactly (p05 went 14.6u -> 2.0u when the step dropped)")
-    check(src.count("a2_matched_field4(") == 6,
-          "the matched-words helper has exactly its def and FIVE call "
+    check(src.count("a2_matched_field4(") == 10,
+          "the matched-words helper has exactly its def and NINE call "
           "sites -- the heading arm, the stop-repin, the ETA watchdog's "
-          "repin, and the two click-answer sites (immediate + deferred): "
-          "every 0x0029 the bundle sends is matched",
+          "repin, the two click-answer sites (immediate + deferred), and "
+          "ROUTER-B2's four (chain tick, clip-fallback, one-leg verbatim, "
+          "first leg of a chain): every 0x0029 the bundle OR the router "
+          "sends is matched",
           "an extra caller would rewrite another arm's field 4 under a "
-          "flag whose charter is the d1 bundle; a missing caller leaves "
-          "one of the bundle's send paths carrying the stale word the "
-          "lock needs")
-    check(src.count('state["a2_family_sent"] = None') == 4,
-          "the family edge re-arms at all FOUR [1.0]-overwriting sends: "
-          "the stop arm, the watchdog, and both click-answer sites",
+          "flag whose charter does not cover it; a missing caller leaves "
+          "one send path carrying the stale word the lock needs. The "
+          "router's four were added deliberately (ROUTER.md sec.4 item 4: "
+          "matched pairs everywhere, sec.0.11's own protection)")
+    check(src.count('state["a2_family_sent"] = None') == 6,
+          "the family edge re-arms at all SIX [1.0]-overwriting sends: "
+          "the stop arm, the watchdog, both click-answer sites, and "
+          "ROUTER-B2's two speed-sending answers (clip-fallback and the "
+          "routed/verbatim block -- chains send speed ONCE, at the first "
+          "leg only, retail's own grammar)",
           "each of those sends puts 1.0 in sync +0x60; a site without "
           "the reset leaves the next same-family leg reckoning at 288 "
           "flat -- the exact --client-endpoint failure term")
@@ -527,15 +533,19 @@ def main():
           "the void is F-A's core: the player's hands, speaking now, "
           "outrank the click they threw while moving -- exactly "
           "retail's press-anchored behavior")
-    check(src.count('state["a2_click_answered_at"]') == 2
+    check(src.count('state["a2_click_answered_at"]') == 4
           and src.count('a2_click_answered_at") or 0.0)') == 2,
-          "the outstanding-answer stamp is written at BOTH click send "
-          "sites and read at BOTH hold sites -- the flush AND the "
-          "immediate site (or-0.0 discipline at each)",
+          "the outstanding-answer stamp is written at the two legacy "
+          "click send sites plus ROUTER-B2's two answering blocks, and "
+          "read at BOTH hold sites -- the flush AND the immediate site "
+          "(or-0.0 discipline at each)",
           "sec.0.15's double-click fix, completed by sec.0.17: the flush "
           "hold alone left the immediate site as the one unguarded door, "
           "and the 113833 run walked click 2 through it (R-3 REFUTED). "
-          "A missing stamp re-opens the stomp; a raw read re-opens REV-1")
+          "A missing stamp re-opens the stomp; a raw read re-opens REV-1. "
+          "The router stamps for observability although its clicks never "
+          "arm the hold (they bypass the tower by design, ROUTER.md "
+          "sec.4 item 7)")
     i_hold = src.index('a2_click_answered_at") or 0.0)')
     i_gv_flush = src.index("grant, why, kage, since = _grant_verdict(")
     check(i_hold < i_gv_flush,

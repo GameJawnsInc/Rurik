@@ -1531,6 +1531,33 @@ Floors at section end: test_d1lead 86, test_livewire 12, test_policyreplay
 23, checks 14, srclint 22, provlint 19. Lane records: `qa-wallclass.md`,
 `qb-waypoints.md`, `desk-skeptic.md` + scripts in the session scratchpad.
 
+### 0.20 The ROUTER arc — the owner rules on RETHINK-H3, the bench lands green, the wiring ships opt-in — 2026-08-26
+
+**Owner's ruling: build the router.** The arc's record is
+[ROUTER.md](ROUTER.md) — this entry is the pointer, not the record.
+Headlines: **ROUTER-B1** (`toolkit/clientscan/routerbench.py`, floor 48)
+commits the QB analysis layer with a fidelity gate that reproduced every
+committed number from the tapes on its first run, reproduces Q7's 248/701
+independently (231/647), proves content's map-146 mesh right (73%
+heading-clip agreement), and scores `pathmap.route()` against retail's 29
+answers: **all 13 scoreable retail-verbatim clicks reproduce
+bit-identically as the one-leg case**, the chained specimens run the same
+corridors (≤120 u), and a registered origin prediction (dead-reckon granted
+legs at 288 u/s — the client is report-silent mid-chain) held, collapsing
+every stale-origin anomaly. **ROUTER-B2** (`--router`, off by default,
+`test_router.py` floor 51): clicks answered by `route()` — first leg in
+the click's handling, further legs at leg-completion ETA off the recv
+loop (timeout shrunk to the ETA while a chain lives), one 0x002B per
+chain, matched per-waypoint planes, abandon on 0x003D/0x003E/0x0047,
+clip-fallback or LOGGED refusal where no route exists — never the
+unclipped point, so the P-17 phasing door does not exist on this path.
+Routed clicks bypass the hold/void/rate tower; Rule 1's keyboard drop is
+kept, read straight off the latch. ROUTER-P1..P4 + exposure floors are
+pre-registered in ROUTER.md §5 for the owner's verification run.
+test_d1lead's three source-census locks were updated to name the router's
+new call sites (10/6/4). Floors: router 51, routerbench 48, d1lead 86,
+grantsim 86, policyreplay 14, srclint 22, provlint 19.
+
 ### REALFIX-P2 · `--zero-lead`
 
 Attachment: heading arm `:9625-9878`, as a third named block after `:9843`. **Stop arm `:10235` untouched. Click arm `:9879` untouched.**

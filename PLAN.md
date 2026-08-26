@@ -1818,6 +1818,32 @@ input; four interior waypoints of the cleanest chain are bit-exact
 prop outline vertices in OUR archive decode. The retail-faithful
 click policy is now a measurable spec (a router over our own mesh);
 building it is the owner's call on RETHINK.md.
+**§0.20 — THE OWNER RULED: BUILD THE ROUTER (RETHINK-H3), 2026-08-26.
+Both halves BUILT and green; the arc record is
+[studies/movement/ROUTER.md](studies/movement/ROUTER.md).**
+ROUTER-B1, `toolkit/clientscan/routerbench.py` (floor 48): the QB
+analysis layer committed (mistakes class 8 closed for the click
+contract), fidelity gate green on first run, Q7's 248/701 reproduced
+independently (231/647 ≤3u on map 280), content's map-146 mesh
+verified right (73% heading-clip agreement), and `pathmap.route()`
+scored against retail's 29 answers — **all 13 scoreable
+retail-verbatim clicks reproduce bit-identically as the one-leg
+case**, chained specimens run the same corridors (≤120 u), and the
+registered dead-reckoned-origin prediction HELD (route from the
+integrator's position, never the last raw report). ROUTER-B2,
+`--router` in authsrv (floor 51, OFF by default, shipped default
+byte-identical): route-answered clicks — first leg within the
+click's own handling, further legs at leg-completion ETA (recv
+timeout shrunk to the ETA while a chain lives), one 0x002B per
+chain, matched per-waypoint planes, abandon on 0x003D/0x003E/0x0047
+(interaction/cast abandonment is ROUTER-Q8, not yet shipped),
+clip-fallback or LOGGED refusal where no route exists (the P-17
+pass-through door does not exist on this path); routed clicks bypass
+the hold/void/rate tower, Rule 1's keyboard drop kept. ROUTER-P1..P4
++ exposure floors pre-registered in ROUTER.md §5. **Next: the
+owner's verification run under `--d1-lead --router`** (the P-17
+script plus ordinary play; ROUTER.md §5 is the protocol and the
+predictions). Open: ROUTER-Q1..Q8 in the doc.
 *The staging block that preceded the run, kept for the record:*
 The follow-on recon (`studies/movement/followon-notes/README.md`, merged
 to `main` the same day) answered F35's counterfactual from tape (castless,

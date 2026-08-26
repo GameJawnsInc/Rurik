@@ -242,9 +242,15 @@ as the cross-check neither lane could see alone.
 ## 5. Standing state
 
 - `--d1-lead` remains OPT-IN with §0.17's clip + hold in place; the shipped
-  default is byte-identical to pre-campaign. **Policy remains frozen** —
-  RETHINK-H1 (delete the held-key click cell) and RETHINK-H3 (the router)
-  are measured specs awaiting the owner's ruling on this document.
+  default is byte-identical to pre-campaign. **The owner ruled on this
+  document 2026-08-26: BUILD THE ROUTER (RETHINK-H3).** The arc's record
+  is [ROUTER.md](ROUTER.md) (REALFIX §0.20 the pointer): the bench landed
+  green with 13/13 retail-verbatim clicks reproduced bit-identically by
+  `pathmap.route()`, and `--router` ships opt-in with ROUTER-P1..P4
+  pre-registered for the verification run. RETHINK-H1's cell is
+  substantially mooted on the router path (routed clicks bypass the
+  hold/void/rate tower; the keyboard drop stays) — its final disposition
+  rides the router run. The shipped default remains byte-identical.
 - **Instruments #1–3 are BUILT and green (2026-08-26 night, REALFIX
   §0.19)**: the five gamesrv rows (test_d1lead floor 86), `livewire.py`
   (floor 12), `policyreplay.py` (floor 14). Both desk checks are answered.

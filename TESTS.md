@@ -8911,4 +8911,69 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   covers was invisible to every fake: two overlay arms owning one row resolved
   cleanly, played the first to a finished verdict, then hard-refused the second
   for "neither retail nor 'beta'". Seventeen sabotages measured,
-  26/6/4/4/3/3/2/2/2/1×8 red, every one at full coverage. Floor 120).
+  26/6/4/4/3/3/2/2/2/1×8 red, every one at full coverage. Floor 120),
+  `toolkit/clientscan/test_routerbench.py` (ROUTER-B1, the committed
+  RETHINK-QB analysis layer — the retail click→chain census whose numbers
+  REALFIX §0.19 quotes lived in scratchpad scripts sys.path'd at a deleted
+  worktree, mistakes-review class 8 made literal one session later. Guards
+  `toolkit/clientscan/routerbench.py`. Section 1 is bare-machine synthetic:
+  the op61-heading-vote attribution, chain assembly with its three endings
+  (terminal / superseded-with-the-opcode-named / open), the leg-cadence math
+  fed the 63805 chain's own transcribed grants and required to return the
+  desk-skeptic's committed speeds (288.5, 282.8, six of eight within ±4% of
+  288), monotone along-fraction to exactly 1.0, the dead-reckoned origin
+  model (mid-leg at run speed, arrival clamp, chained legs, report reset,
+  refusal with no position source), the polyline distance, op409 map-id
+  read, and the heading-clip mesh check on a stub mesh with a wall
+  (exact-D1 counted, agreeing truncation ≤3u, phantom truncation
+  disagreeing). Sections 2–4 need the vault + `dat_study` and skip loudly
+  without them. Section 2 is the FIDELITY GATE: census() must reproduce the
+  committed QB numbers from the same tapes — ≥29 clicks all answered within
+  one RTT, ≥16 verbatim / ≥13 part-way, zero surviving "unanswered", ≥8
+  superseded, and the 63805 anchor bit-exact (nine grants, first answer
+  ≤0.065 s, along-fraction monotone, terminal == click to the float).
+  Section 3 locks the heading-clip mesh-identity numbers on the two
+  immutable anchor connections (63805: 506/297/209/65; 62994: 98/89/9/8) —
+  the corpus-wide map-280 aggregate independently reproduces Q7's 248/701.
+  Section 4 scores `pathmap.route()` against retail's own answers and gates
+  only the hard invariants: every routed specimen's legs clip-clean **at
+  step 2.0, 8x finer than route()'s own 16u gate** (the review caught the
+  default-step version re-running the gate's exact check — a check that
+  cannot fail; at 2.0 it can), every terminal exactly the click (a
+  pathmap-contract regression lock — route() appends the goal on both
+  return paths), and ALL 13 scoreable retail-verbatim clicks
+  reproduced as our one-leg case bit-identically (corpus-level counts are
+  ≥-floors because the live corpus grows; bit-exact locks stay on the
+  anchor files). Floor 48 from the green run. ~15 s warm),
+  `toolkit/authsrv/test_router.py` (ROUTER-B2, the `--router` click policy —
+  the wiring's own checks, bare-machine (no vault, no client, no sockets;
+  routerbench validates the pathfinder against retail, THIS file validates
+  the plumbing). Section 1 drives `router_answer_click` on a stub mesh with
+  one wall through all five verdicts: verbatim (speed-then-move, exact
+  point, no chain, held click superseded, integrator armed), routed (speed
+  ONCE then the first leg, chain armed with the remaining legs, matched
+  plane pair), kbd-drop (nothing sent — retail's own contract, read off
+  Rule 1's latch directly so it survives --no-grant-suppress), refused
+  (origin-off-mesh — the P-17 wall-press door CLOSED: nothing sent, dest
+  dropped, reason named in the row) and clip-fallback (the stop lands short
+  of the wall, never past it; the route-refusal reason rides the row), plus
+  the no-mesh fallthrough and new-click chain abandonment. Section 2 is the
+  scheduler: due = grant + dist/288, nothing mid-leg, a bare grant at
+  completion (no speed row — retail's chain grammar), interior planes via
+  plane_at matched, the terminal grant carrying the client-named dest plane
+  and clearing the chain, and the late-poll cell that CAUGHT this file's
+  own first wrong expectation: a late poll grants ONE leg (the client was
+  parked — it cannot walk a leg nobody granted; cadence restarts at the
+  grant instant), never the drained queue. Section 3: abandon pops, logs
+  the cause and remaining count, and is silent with no chain. Section 4
+  locks the wiring in source: the handler branches to the router exactly
+  once and BEFORE the freshness gate, both recv-loop attach points
+  game-gated, the dynamic timeout clamped to [0.05, 1.0], both report
+  handlers abandoning, the keyboard drop latch-read, the no-route path
+  never sending the raw dest, DEFAULT_RUN_SPEED the only speed constant,
+  and all nine composition refusals present (the review round added
+  --interact-walk and --move-speed-effects). The review round also added
+  the sampling-gate pair — a stub route whose leg crosses the wall (as
+  route()'s 16u gate could pass over a sub-sample sliver) must be demoted
+  to the clip-fallback by the 2.0u pre-send re-clip — and two fine-step
+  source locks. Floor 57 from the green run (51 at the B2 landing). ~1 s).

@@ -50,10 +50,16 @@ matter more to this arc than any protocol detail:
   truth and its output must go on the wire. This is the one place where the
   movement arc's hard-won conclusion inverts, and it is worth writing down before
   someone "fixes" the new broadcast back out again.
-- **The server cannot route.** The pathfinding graph is decoded only as far as
-  its sub-record sizes ([studies/mapdata/FORMAT.md](../mapdata/FORMAT.md)).
-  Collision works. A monster can walk straight lines and be stopped by walls; it
-  cannot walk around a building.
+- ~~**The server cannot route.** The pathfinding graph is decoded only as far as
+  its sub-record sizes ([studies/mapdata/FORMAT.md](../mapdata/FORMAT.md)).~~
+  **EXPIRED 2026-08-26** (caught by the ROUTER arc's review): `pathmap.route()`
+  decodes and searches the graph, and the player-click router
+  (`--router`, [studies/movement/ROUTER.md](../movement/ROUTER.md)) is its
+  first production consumer. What is still true for THIS arc:
+  `enemy_move_tick` does not call it — a monster can walk straight lines and
+  be stopped by walls; it cannot yet walk around a building. Wiring route()
+  into the enemy tick is the staged second consumer, budget already measured
+  (pathmap.py's header).
 - **Only Kamadan's geometry is wired up.** `MAP_STATIC_CONFIG`
   (`authsrv.py:259-266`) carries OpenTyria's six maps. §5 changes this
   materially.
