@@ -1670,6 +1670,19 @@ re-armer never runs; the zero-lead era recovers 3/3). The armer-kill:
 18/18 stops answered, all 4 crossing exposures overridden** (exposure
 key corrected in place: `pc_matched` rows + `matched`-marked repins).
 `--d1-lead` holds every §0.9 headline with the lock closed.
+**The mixed-input soak RAN and is SCORED (§0.13):** 18 warps, 17 on
+named mechanisms — the armer-kill held 100% (fence-snaps now
+self-healing, still click-fed), and the one new specimen is the
+click-staleness family: the copy parked 44.5 s at the last ANSWERED
+click through 5 unanswered ones (10/260 answered — the census's whole
+story). **The retail click contract is MEASURED** (skeptic-corrected:
+~100% answered, verbatim echo 23/23 bit-exact, ONE burst per click,
+interrupts granted from fresh position 13/13) **and F-B is BUILT**:
+under the bundle clicks are answered verbatim — geometry logs and
+falls through, Rule 1 bypassed at both paths on the shared clock alone,
+matched words + family re-arm at both click sites; F-A (press-after-
+click repin) registered in reserve. V-1..V-4 registered before the
+verification roam (§0.13).
 **The containment pair is BUILT (§0.12, registered before the soak):**
 the a2_leg model + ETA watchdog (fires only past the leg's own ETA at
 the 190.08 u/s floor speed — late, never early; once per leg; every

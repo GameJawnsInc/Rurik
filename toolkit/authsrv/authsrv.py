@@ -4669,6 +4669,22 @@ def a2_watchdog_due(state, now):
     return True, "eta-passed"
 
 
+def a2_click_rate_ok(state, now):
+    """(ok, since) -- the F-B click path's RATE-ONLY gate. Pure.
+
+    Retail answers essentially every click (the 2026-08-26 soak review's
+    V-W2C: the 8 'unanswered' live clicks all got a same-agent 0x0029
+    within 31-57 ms), including clicks thrown mid-keyboard -- so under
+    --d1-lead, Rule 1 (locally-moving) does not gate clicks; only the
+    shared-clock floor does. This reads the ONE grant clock (grant_at,
+    stamped in _note_wire_move for every player 0x0029 whatever sent it)
+    read-only, so the one-clock invariant holds: a click answered here
+    delays the next heading grant exactly as a heading grant would.
+    """
+    since = now - (state.get("grant_at") or 0.0)
+    return since >= GRANT_MIN_INTERVAL, since
+
+
 def _a2_watchdog(send, state, rec, now=None):
     """Check-and-fire: the ETA watchdog's one impure half. Returns fired.
 
@@ -5624,6 +5640,15 @@ def grant_flush_tick(send, state, conn_id, rec=None, now=None):
                       deferred=True, age=round(age, 3), dest=list(dest))
         return False
     grant, why, kage, since = _grant_verdict(state, now)
+    if not grant and D1_LEAD and why == "locally-moving":
+        # F-B (sec.0.13): retail answers mid-keyboard clicks, so a held
+        # click is not superseded by the player's hands -- it fires as soon
+        # as the shared-clock floor allows, or keeps holding.
+        rate_ok, since = a2_click_rate_ok(state, now)
+        if rate_ok:
+            grant, why = True, "d1-click"
+        else:
+            return False            # inside the floor; keep holding it
     if not grant:
         if why == "rate-limited":
             return False            # still inside the floor; keep holding it
@@ -5643,20 +5668,31 @@ def grant_flush_tick(send, state, conn_id, rec=None, now=None):
     state["grant_pending"] = None
     state["dest"], state["clipped"] = dest, False
     if rec is not None:
-        rec.event("grant_verdict", fired=True, reason="deferred-grant",
+        rec.event("grant_verdict", fired=True,
+                  # REV-4: a bypassed fire keeps its marker instead of
+                  # hiding inside "deferred-grant"; REV-1: the arm names
+                  # the policy for grantsim's skip.
+                  reason=("deferred-d1-click" if why == "d1-click"
+                          else "deferred-grant"),
+                  arm=("click-d1" if D1_LEAD else "click"),
                   deferred=True, age=round(age, 3),
                   since_last=(None if since is None else round(since, 3)),
                   dest=list(dest))
     # The same pair the click arm sends, in the same order and for the same
     # reason -- ArenaNet pairs the rate with the MOVE, not with the spawn.
+    d_plane2 = pending["plane_second"]
+    if D1_LEAD:
+        # sec.0.13: matched words + the family re-arm, same as the
+        # immediate click site.
+        d_plane2, _dm = a2_matched_field4(pending["plane_first"], d_plane2)
+        state["a2_family_sent"] = None
     send(GAME_SMSG_AGENT_UPDATE_SPEED,
          agents.agent_update_speed(PLAYER_AGENT_ID, 1.0),
          "AGENT_UPDATE_SPEED(player, 1.0 = 288 u/s)")
     send(GAME_SMSG_AGENT_MOVE_TO_POINT,
-         [PLAYER_AGENT_ID, list(dest), pending["plane_first"],
-          pending["plane_second"]],
+         [PLAYER_AGENT_ID, list(dest), pending["plane_first"], d_plane2],
          f"DEFERRED CLICK GRANT ({dest[0]:.0f},{dest[1]:.0f}) plane "
-         f"{pending['plane_second']}->{pending['plane_first']}, held "
+         f"{d_plane2}->{pending['plane_first']}, held "
          f"{age * 1000:.0f} ms for the {GRANT_MIN_INTERVAL:.2f}s floor")
     return True
 
@@ -13751,7 +13787,19 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # that could carry it, and a timer thread would be a
                         # second sender racing this one for the send lock.
                         # No-op with the flag off and with nothing pending.
-                        grant_flush_tick(send, state, conn_id, rec)
+                        # NOT under --d1-lead (REV-2, the F-B review): the
+                        # Rule-1 bypass makes the flush fire mid-keyboard,
+                        # concurrent with the recv thread's heading grants
+                        # on the same lock-free grant clock -- two 0x0029
+                        # inside one floor, and the click's 0x002B/0x0029
+                        # pair splittable. Under the bundle the flush runs
+                        # on the RECV thread instead (before each message
+                        # batch and on the quiet ticks), which serializes
+                        # every player-grant sender by construction and
+                        # gives the held click first claim on each floor
+                        # opening (REV-3's starvation, same fix).
+                        if not D1_LEAD:
+                            grant_flush_tick(send, state, conn_id, rec)
                         # The timed three quarters of every skill cycle
                         # (E5/E3/E6), before the swings so a cast completing
                         # this tick is visible to everything after it.
@@ -13877,9 +13925,12 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                 # sec.0.11 containment: the ETA watchdog rides the quiet
                 # ticks. D1-gated; a2_watchdog_due's clauses (leg armed,
                 # ETA at the slowest family speed passed, no click in
-                # flight, once per leg) do the real refusing.
+                # flight, once per leg) do the real refusing. The deferred
+                # click flush rides the same ticks under the bundle
+                # (REV-2: recv-thread-only sending).
                 if D1_LEAD and kind == "game":
                     _a2_watchdog(send, state, rec)
+                    grant_flush_tick(send, state, conn_id, rec)
                 continue
             if not chunk:
                 break
@@ -13898,6 +13949,14 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
             # so the framing is identical -- only the catalog differs.
             msgs, pending, desync_err = frame_pending(
                 codec, cmsg, pending, AUTH_CMSG_MASK)
+
+            # REV-2/REV-3 (the F-B review): under the bundle the deferred
+            # click flush runs HERE, on the recv thread, BEFORE the batch --
+            # a held click gets first claim on each floor opening, ahead of
+            # the report that would otherwise stamp the clock past it, and
+            # every player-grant sender is serialized on this one thread.
+            if D1_LEAD and kind == "game" and msgs:
+                grant_flush_tick(send, state, conn_id, rec)
 
             for opcode, values in msgs:
                 # No semantic names exist for GAME_CMSG in this repo yet; the
@@ -15627,10 +15686,34 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                        f"{sorted(here) if here else 'off-mesh'}")
                             else:
                                 why = "not a straight shot"
-                            print(f"[c{conn_id}] click to ({dest[0]:.0f}, "
-                                  f"{dest[1]:.0f}): {why} -- leaving it to the "
-                                  f"client's own pathing", flush=True)
-                            continue
+                            # THE ROW THE SOAK COULDN'T SEE (sec.0.13): 138 of
+                            # 260 clicks died on this branch with no trace but
+                            # a console line -- the census had to be
+                            # reconstructed by subtraction. Every geometry
+                            # refusal is a row now, both modes.
+                            if rec is not None:
+                                rec.event("click_verdict", fired=False,
+                                          reason=("geo-stale" if not fresh
+                                                  else "geo-unplaced"
+                                                  if not placed
+                                                  else "geo-blocked"),
+                                          dest=[float(dest[0]),
+                                                float(dest[1])],
+                                          d1_passthrough=bool(D1_LEAD))
+                            if not D1_LEAD:
+                                print(f"[c{conn_id}] click to ({dest[0]:.0f}, "
+                                      f"{dest[1]:.0f}): {why} -- leaving it to "
+                                      f"the client's own pathing", flush=True)
+                                continue
+                            # F-B (sec.0.13): under the bundle, geometry does
+                            # NOT refuse a click, because the answer is a
+                            # VERBATIM ECHO of the client's own chosen point
+                            # -- retail's contract, 23/23 bit-exact -- and an
+                            # echo invents nothing for our navmesh to be wrong
+                            # about. The railing graveyard was about clipped
+                            # and invented answers; the clicked dest is the
+                            # MEETING POINT the copy and the client both walk
+                            # to. Fall through to the rate gate.
                         if TRACE_MOVE:
                             # THE HYPOTHESIS THIS FLAG EXISTED TO TEST, AND ITS
                             # ANSWER. The worry was that `clip_to_walkable` casts
@@ -15675,6 +15758,22 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         now_g = time.time()
                         may_grant, why_g, kage, since = _grant_verdict(state,
                                                                        now_g)
+                        # F-B's Rule-1 bypass (sec.0.13), ABOVE the verdict
+                        # row so the row records what actually happened:
+                        # retail answers clicks thrown MID-KEYBOARD too
+                        # (~100%, V-W2C), so under the bundle a
+                        # locally-moving click is re-gated on the RATE ALONE
+                        # -- the shared clock, read-only -- and answered or
+                        # held, never dropped. The soak's 108 locally-moving
+                        # drops were the second-largest staleness source
+                        # after the geometry branch.
+                        if (not may_grant and D1_LEAD
+                                and why_g == "locally-moving"):
+                            rate_ok, since = a2_click_rate_ok(state, now_g)
+                            if rate_ok:
+                                may_grant, why_g = True, "d1-click"
+                            else:
+                                why_g = "rate-limited"
                         if rec is not None:
                             # EVERY evaluation, granted or not -- the same rule
                             # the resync log follows, and for the same reason:
@@ -15682,6 +15781,16 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             # the flag against the storm it exists to stop.
                             rec.event("grant_verdict", fired=may_grant,
                                       reason=why_g, deferred=False,
+                                      # The row NAMES its policy (REV-1):
+                                      # grantsim's C3 replay skips
+                                      # "click-d1" rows the way it skips
+                                      # the heading arm's -- re-deciding a
+                                      # retail-contract answer with the
+                                      # shipped click predicate compares
+                                      # two policies and calls the
+                                      # disagreement a defect.
+                                      arm=("click-d1" if D1_LEAD
+                                           else "click"),
                                       keyboard_age=(None if kage is None
                                                     else round(kage, 3)),
                                       since_last=(None if since is None
@@ -15733,6 +15842,15 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # loading screen faded -- whether that was the cause is
                         # UNVERIFIED, but the placement was wrong either way and
                         # the corpus said so before a line of it was written.
+                        if D1_LEAD:
+                            # sec.0.13: matched words on the click answer too
+                            # (the 222/222 doctrine covers every bundle
+                            # 0x0029), and the [1.0] just below overwrites
+                            # sync +0x60, so the family edge re-arms exactly
+                            # as at a stop.
+                            plane_second, _click_matched = a2_matched_field4(
+                                plane_first, plane_second)
+                            state["a2_family_sent"] = None
                         send(GAME_SMSG_AGENT_UPDATE_SPEED,
                              agents.agent_update_speed(PLAYER_AGENT_ID, 1.0),
                              "AGENT_UPDATE_SPEED(player, 1.0 = 288 u/s)")

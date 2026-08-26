@@ -37,9 +37,12 @@ import checks      # noqa: E402
 # the sec.0.12 containment pair (leg model + watchdog + click freshness)
 # added its truth tables and site locks -> 56; its review's fixes (the
 # REV-1 None regression pin, the MUT-1 floor-value and ETA-boundary pins,
-# the MUT-7 guard lock, the REV-2 read-not-pop lock) -> 60. Each floor
-# re-read off its own green run.)
-LEDGER = checks.Ledger("the REALFIX-A2 d1-lead bundle", floor=60)
+# the MUT-7 guard lock, the REV-2 read-not-pop lock) -> 60; the sec.0.13
+# F-B click contract (rate gate truth table, matched/family-reset censuses,
+# both bypass sites, row ordering, the geometry row) -> 67; its review's
+# fixes (the grantsim skip, the arm fields, the recv-thread flush move)
+# -> 70. Each floor re-read off its own green run.)
+LEDGER = checks.Ledger("the REALFIX-A2 d1-lead bundle", floor=70)
 check = checks.adopt(LEDGER)
 
 
@@ -235,6 +238,22 @@ def main():
           "a 1 Hz re-pin stream at the same dest is a policy nobody "
           "registered")
 
+    print("\n2c. the F-B click rate gate (sec.0.13)")
+    ok, since = authsrv.a2_click_rate_ok({"grant_at": 100.0}, 100.2)
+    check(ok is False and abs(since - 0.2) < 1e-9,
+          "inside the shared-clock floor: not ok, since reported",
+          "the one grant clock gates clicks exactly as it gates heading "
+          "grants -- Rule 1 is bypassed under the bundle, Rule 2 never is")
+    check(authsrv.a2_click_rate_ok({"grant_at": 100.0}, 100.5)[0] is True,
+          "at the floor exactly: ok (>= boundary)",
+          "retail's own click-answer latency is ~1 RTT; the floor is our "
+          "only added delay and an off-by-boundary halves the dose")
+    check(authsrv.a2_click_rate_ok({}, 100.0)[0] is True
+          and authsrv.a2_click_rate_ok({"grant_at": None}, 100.0)[0] is True,
+          "a missing OR None grant_at reads as ancient -- ok, no raise",
+          "the REV-1 lesson generalized: latches in this file clear by "
+          "None-assignment, so every reader takes the or-0.0 discipline")
+
     # ---------------------------------------------------------------- 3
     print("\n3. composition cells: the lattice around the bundle")
     comp = authsrv.zero_lead_composition
@@ -326,14 +345,72 @@ def main():
           "the verdict row carries lead_src (d1/fallback/null)",
           "the census key for P-1..P-5's scoring; null on a refusal like "
           "every field-4 fact")
-    check(src.count("a2_matched_field4(") == 4,
-          "the matched-words helper has exactly its def and THREE call "
-          "sites -- the heading arm, the stop-repin, and the ETA "
-          "watchdog's repin (every 0x0029 the bundle sends is matched)",
+    check(src.count("a2_matched_field4(") == 6,
+          "the matched-words helper has exactly its def and FIVE call "
+          "sites -- the heading arm, the stop-repin, the ETA watchdog's "
+          "repin, and the two click-answer sites (immediate + deferred): "
+          "every 0x0029 the bundle sends is matched",
           "an extra caller would rewrite another arm's field 4 under a "
           "flag whose charter is the d1 bundle; a missing caller leaves "
           "one of the bundle's send paths carrying the stale word the "
           "lock needs")
+    check(src.count('state["a2_family_sent"] = None') == 4,
+          "the family edge re-arms at all FOUR [1.0]-overwriting sends: "
+          "the stop arm, the watchdog, and both click-answer sites",
+          "each of those sends puts 1.0 in sync +0x60; a site without "
+          "the reset leaves the next same-family leg reckoning at 288 "
+          "flat -- the exact --client-endpoint failure term")
+    check(src.count('may_grant, why_g = True, "d1-click"') == 1
+          and src.count('grant, why = True, "d1-click"') == 1,
+          "the Rule-1 bypass exists at BOTH click paths (immediate and "
+          "deferred), each rewriting the verdict to d1-click",
+          "one path without the bypass re-creates half the soak's 108 "
+          "locally-moving drops. (This check's first draft claimed the "
+          "new reason word left grantsim's filters 'untouched' -- the "
+          "F-B review's REV-1 demonstrated untouched was the DEFECT: "
+          "C3's replay re-decides unfiltered rows and scores retail-"
+          "contract answers as policy mismatches, 2/2 offline)")
+    gsim = open(os.path.join(os.path.dirname(HERE), "clientscan",
+                             "grantsim.py"), encoding="utf-8").read()
+    check('"zero-lead", "click-d1"' in gsim,
+          "grantsim's C3 replay skips arm=click-d1 rows, the same "
+          "preemptive filter the heading arm got",
+          "REV-1: without the skip, the first --d1-lead capture reddens "
+          "C3 on every answered click -- condemning correct behavior")
+    check(src.count('arm=("click-d1" if D1_LEAD') == 2
+          and '"deferred-d1-click" if why == "d1-click"' in src,
+          "both click rows NAME their policy in an arm field, and a "
+          "bypassed deferred fire keeps its marker instead of hiding "
+          "inside deferred-grant",
+          "REV-4: a capture that cannot say which policy produced a row "
+          "costs a later session a reconstruction (REALFIX-Q8, again)")
+    check(src.count("grant_flush_tick(send, state, conn_id, rec)") == 3
+          and "if not D1_LEAD:\n                            "
+              "grant_flush_tick(" in src,
+          "the flush has exactly three call sites -- the world tick "
+          "(gated OFF under the bundle) and the two recv-thread sites "
+          "(pre-batch and quiet-tick)",
+          "REV-2: F-B made the world-tick flush race the recv thread's "
+          "heading arm on the lock-free grant clock -- two 0x0029 inside "
+          "one floor, the click's own pair splittable. Recv-thread-only "
+          "sending serializes every player-grant sender by construction, "
+          "and pre-batch ordering gives the held click first claim on "
+          "each floor opening (REV-3's starvation, same fix)")
+    i_gv_call = src.index("may_grant, why_g, kage, since = _grant_verdict(")
+    i_bypass = src.index('may_grant, why_g = True, "d1-click"')
+    i_row = src.index('rec.event("grant_verdict", fired=may_grant,')
+    check(i_gv_call < i_bypass < i_row,
+          "and the immediate-path bypass sits ABOVE the verdict row -- "
+          "the row records what actually happened",
+          "below the row, the log says locally-moving-refused for a "
+          "click that then went out -- the unattributable-capture defect")
+    check('d1_passthrough=bool(D1_LEAD)' in src
+          and src.count('rec.event("click_verdict"') == 1,
+          "the geometry branch writes its click_verdict row (the soak's "
+          "138 no-trace clicks) and marks the D1 fall-through",
+          "a refusal branch with no row makes the census a subtraction "
+          "exercise; the marker separates answered-despite-geometry from "
+          "refused")
     i_match = src.index("zl_plane_cur, a2_matched = (")
     check(i_spoof < i_match < i_d1 < i_verdict,
           "the heading-arm override sits AFTER the carry/spoof "

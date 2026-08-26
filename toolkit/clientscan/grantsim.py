@@ -880,7 +880,14 @@ def replay_verdicts(path, suppress):
             # two different policies and call the disagreement a defect. No
             # capture in the vault has such a row yet; the filter is here so the
             # first REALFIX-L1 capture does not silently redden C3.
-            if (r.get("arm") == "zero-lead"
+            # And the F-B click rows (arm="click-d1", 2026-08-26): under
+            # --d1-lead the click arm answers per RETAIL's contract (Rule 1
+            # bypassed, rate-only), so re-deciding its rows with the shipped
+            # click predicate compares two different policies -- the same
+            # ground as the zero-lead filter above, added the same way:
+            # BEFORE the first such capture reddens C3 (the F-B review's
+            # REV-1, demonstrated 2/2 offline before a capture existed).
+            if (r.get("arm") in ("zero-lead", "click-d1")
                     or r.get("reason") in HEADING_REASONS):
                 continue
             fired, why, age, since = grant_verdict(state, t, suppress)

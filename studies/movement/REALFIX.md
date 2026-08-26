@@ -934,7 +934,94 @@ movement, seams and stairs welcome, clicks now ALLOWED in a soak):**
   click lands the player visibly off its true position (the model's speed term is
   wrong).
 
-**Review record (same day, before commit — and it earned its keep hard):** the
+### 0.13 The mixed-input soak scored, the retail click contract measured, and F-B built — 2026-08-26
+
+**The soak** (`authsrv-20260826T085401-c1` × `movetap-20260826T085418`, 255 s, the
+first run ever to allow clicks: 260 clicks / 214 presses / 35 stops / 113 D1
+leads): **18 warps in 3,130 intervals, 17 riding already-named mechanisms** —
+13 §0.11 fence-snaps (now SELF-HEALING: the armer-kill held 100%, `plane_differs`
+0/113, longest shut stretch 9.36 s vs the pre-fix permanent lock — but they still
+FIRE, fed by click-era separation), 2 F35 arrivals, 1 clean plane-crossing warp
+(2,279.6 u, the census's largest — trigger 1's core), and **1 decisive
+click-staleness specimen (trigger 3): the sync copy sat parked 44.5 s at the LAST
+ANSWERED click's granted dest** — corrected from "the click's start"; at a 3.8%
+answer rate they differ by many clicks — **through 5 unanswered clicks, then the
+first keyboard press warped the body 526.6 u toward the stale park.** One row
+stays CONTESTED (a plane-17/0 anomaly), and trigger 2 (S-hold spam-click tinies)
+is UNVERIFIED — not isolable at 13 Hz. **S-verdicts:** S-1 PASS (0 watchdog fires,
+0 wrong stand-downs by full replay); S-2 PASS as registered but aimed at the
+wrong source (the two lead-leg-stale clicks were model-rescued exactly as
+designed — the real family is 27 CLICK-leg staleness refusals the fix never
+covered); S-3 REFUTED at the letter (20 hard-bar hits — every one decoded to a
+named mechanism, zero unexplained; the 24/35 "convergence fails" were
+zero-exposure cells, interrupted inside their own budget).
+
+**The retail click contract (21-stamp live corpus, skeptic-corrected):** retail
+answers **~100% of clicks** — the W2 lane's "26% unanswered" was refuted by its
+own raw output (all 8 got same-agent `0x0029`s within 31–57 ms: route waypoints
+or pin+stop) — with a **verbatim echo of the clicked dest, bit-exact 23/23**,
+bimodal latency (78% one RTT; 22% held 2.2–8.6 s, still verbatim), **exactly ONE
+grant burst per click** then silence until the client's next report (tested to
+124 s — the keyboard re-arm cadence does NOT extend to click legs), and
+interrupting presses granted from the press's own fresh position 13/13, zero
+snap-back geometry. Our soak against that: 10/260 answered; 138 clicks died on
+the un-instrumented geometry branch, 108 dropped "locally-moving", and 4 of our
+10 deferred answers were stale by delivery. **The clicked dest is the meeting
+point** — the copy walks the straight line, the client walks its own path, both
+converge — which is why verbatim answering IS the copy-pinning fix and why the
+railing graveyard (about our invented clips) does not re-open.
+
+**F-B BUILT (the retail click contract under the bundle, D1-gated):** the
+geometry gate no longer refuses clicks (it logs its new `click_verdict` row —
+the 138 no-trace clicks — and falls through: an echo invents nothing for our
+navmesh to be wrong about); Rule 1 is bypassed for clicks at BOTH paths
+(immediate and deferred), re-gated on the shared clock alone (`a2_click_rate_ok`,
+read-only on `grant_at`, reason word `d1-click` — new, additive vocabulary);
+matched plane words and the family-edge re-arm land at both click send sites
+(the `[1.0]` overwrites sync `+0x60` exactly as at stops). **F-A (the
+press-after-click repin) is registered and HELD IN RESERVE** — it becomes primary
+only if F-B's verification shows the echo yanking the client off its own path.
+
+**Verification registration (~10 min, mixed-input roam, before the run):**
+- **V-1:** ≥95% of clicks answered or superseded-by-a-newer-click within 1.0 s
+  (the census reads `click_verdict` + `grant_verdict` rows — no more
+  subtraction).
+- **V-2:** the trigger-3 recipe — long click, interrupt with W — produces ZERO
+  snap-backs over ≥5 reps (the exposure floor).
+- **V-3:** the click-staleness warp family reads zero; fence-snap count falls
+  materially (< 5 vs 13 — they fed on click-era separation, which answered
+  clicks collapse).
+- **V-4:** keyboard-only stretches unchanged (the §0.9–0.11 headlines stand).
+- **REFUTED IF** a verbatim echo visibly yanks the client off its own routed
+  path (the railing worry materializing — then F-A replaces F-B as primary), or
+  V-3's fence-snap count does NOT fall (the snaps were never click-fed and the
+  attribution is wrong).
+
+**F-B's review record (same day, before commit):** two REALs, both fixed in the
+same commit. **REV-1 (OBSERVED, 2/2 offline):** grantsim's C3 replay re-decides
+unfiltered `grant_verdict` rows with the shipped click predicate, so a
+`--d1-lead` capture's retail-contract answers would all score as policy
+mismatches — and the new test lock's own text claimed "grantsim's filters are
+untouched" as if that were a virtue; untouched was the defect. Fixed the way the
+heading arm's own precedent was: the click rows now NAME their policy
+(`arm: click-d1`, and a bypassed deferred fire keeps its `deferred-d1-click`
+marker instead of hiding — REV-4), and C3 skips them preemptively, before the
+first such capture exists. **REV-2 (PLAUSIBLE, fixed by construction):** the
+Rule-1 bypass made the world-tick's deferred flush fire mid-keyboard, concurrent
+with the recv thread's heading grants on the lock-free shared clock — two
+`0x0029` could land inside one floor and the click's `0x002B`/`0x0029` pair was
+splittable, a burst shape retail has zero witnesses for. Under the bundle the
+flush now runs on the RECV thread only (before each message batch and on the
+quiet ticks), which serializes every player-grant sender AND gives a held click
+first claim on each floor opening — closing REV-3's starvation (a click expiring
+at 1.0 s while heading grants win consecutive floors) with the same move. REV-5
+noted for V-1's scorer: `click_verdict` rows are passthrough markers, not
+terminal verdicts — join against the subsequent `grant_verdict` row.
+`test_d1lead.py` floor 70; `test_grantsim.py` green at 86.
+
+**§0.12's review record (filed here after §0.13's insertion displaced it — it
+belongs to the CONTAINMENT build above, not to F-B; same day, before commit —
+and it earned its keep hard):** the
 code lane found **one REAL, demonstrated: the watchdog's click clause would have
 KILLED the session on its first quiet second** — the click latch is cleared by
 assignment to `None` in both report arms, `.get`'s default never fires on a

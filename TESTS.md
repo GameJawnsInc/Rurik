@@ -3328,8 +3328,26 @@ Every one of these, in the order they were written:
   t0+5.0404 s -- a 288-flat floor flips both cells), the MUT-7 `a2_src ==
   "d1"` arming-guard lock (phantom legs on fallback grants otherwise), and
   REV-2's read-not-pop capture lock (a popped leg answers only the FIRST of
-  a double-click). Floor 60, read off the real green run after those
-  additions. Landing note: this test's arrival forced two deliberate
+  a double-click). The §0.13 F-B click contract adds §2c's rate-gate truth
+  table (`a2_click_rate_ok`: the shared clock alone gates clicks under the
+  bundle, ≥-boundary at the floor, and missing-OR-None `grant_at` reads as
+  ancient without raising — the REV-1 lesson generalized) plus five locks:
+  the matched-words census 4→6 (both click-answer sites now match), the
+  family-re-arm census at 4 (all four `[1.0]`-overwriting sends), BOTH
+  Rule-1 bypass sites rewriting to the additive `d1-click` reason, the
+  immediate bypass ordered ABOVE the verdict row (the row records what
+  happened), and the geometry branch's new `click_verdict` row with its
+  `d1_passthrough` marker (the soak's 138 no-trace clicks). The F-B review's
+  fixes add four more: the grantsim C3 skip for `arm=click-d1` rows (REV-1 --
+  the first draft's own lock text called the filters "untouched" as a virtue;
+  untouched was the defect, and the check now tells that story), both click
+  rows naming their policy with the `deferred-d1-click` marker preserved
+  (REV-4), and the flush's three call sites with the world-tick one gated
+  OFF under the bundle (REV-2's cross-thread clock race -- recv-thread-only
+  sending, pre-batch ordering giving held clicks first claim on each floor:
+  REV-3's starvation closed by the same move). Floor 70, read off the real
+  green run after those additions; `test_grantsim.py` green at 86 beside
+  it. Landing note: this test's arrival forced two deliberate
   lock extensions in the same commit -- test_familyrate §6's sender census
   went 2→3 appearances (the def, A1's call, A2's edge-wrapper call; the
   matrix refuses the two flags together so at most one is live), and
