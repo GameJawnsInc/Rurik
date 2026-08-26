@@ -3,9 +3,12 @@
 > **2026-08-26, second session — this file is now HISTORICAL.** Items 1–3
 > below all landed as `REALFIX.md` **§0.17** (the wall-phase decoded to the
 > unclipped lead, Q7 half-closed, the D2 clip + the leg-bounded immediate
-> hold built; the literal item-1 candidate was REFUTED offline first). Status
-> lives in `PLAN.md` §3/§8, per the house rule this file has no business
-> duplicating.
+> hold built; the literal item-1 candidate was REFUTED offline first). The
+> same evening's P-17 run then refuted the pair in place and the owner
+> ordered the drawing board — **the campaign's entry point is now
+> `studies/movement/RETHINK.md`** (REALFIX §0.18 is the scoring of record).
+> Status lives in `PLAN.md` §3/§8, per the house rule this file has no
+> business duplicating.
 
 **Entry point for a cold session.** Read in this order: `CLAUDE.md` (house rules
 — the provenance boundary, the worktree rule, the label vocabulary, floors set

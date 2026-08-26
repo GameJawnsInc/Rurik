@@ -1772,6 +1772,30 @@ byte-identical; test_d1lead floor 81, grantsim 86, neighbors green at
 floors. Instrument corrections filed in §0.17 (movetap `t` IS
 wall_unix; decoded op 62=click/64=rotate; the Grep `-o` order trap;
 the subagent worktree-guard shell block).
+**§0.18 — THE P-17 RUN REFUTES THE PAIR AND THE OWNER ORDERS THE
+DRAWING BOARD, 2026-08-26 evening.** P-17-1/2 REFUTED, P-17-3 partial
+then refuted through the clip's own off-mesh door (the client's wall
+press penetrated the mesh edge ~0.25u, walkable(origin) flipped, two
+unclipped 766u leads phased the wall); the run's structural finding is
+~490s of client report silence during click play that left EVERY
+report-triggered guard inert. **Owner's ruling: no more policy fixes —
+instruments first, rethink the plan, review the mistakes.** The
+drawing-board pass ran the same evening (3 lanes + scripted skeptic):
+retail's own client is report-silent during click-walks (zero
+counterexamples) while keyboard-lead walks report at baseline cadence
+— one mechanism, "a fired 0x0029 starts an autonomous straight-line
+order-walk that ends only at the next processed key edge," with our
+held-key click-d1 cell starving itself of the edge (166s median
+next-report vs zero-lead's 0.35s). The mistakes review surfaced the
+ledger's missing L-series — **L5/L6 had measured "this regime needs a
+CLICK-ARM lever" the day before F1 shipped as default.** The full
+rethink, the retained method, and the ranked instrument program (five
+gamesrv logging rows; commit the S2 live-decode recipe; promote the
+offline policy bench; report-gap scoring; reqtoken validation;
+height_at with an ambiguity flag; conformance scorer; breakpoint tap
+last) are **[studies/movement/RETHINK.md](studies/movement/RETHINK.md)
+— the campaign's entry point until superseded.** Next owner run is an
+INSTRUMENT run: same play, new readouts, zero policy deltas.
 *The staging block that preceded the run, kept for the record:*
 The follow-on recon (`studies/movement/followon-notes/README.md`, merged
 to `main` the same day) answered F35's counterfactual from tape (castless,
