@@ -123,6 +123,22 @@ appending on an open-fence NO SNAP, and calling `Clear` first on a SNAP. Therefo
 the 100 u history veto **cannot fire**, and whenever the fence is open the fallback always
 runs and the exits above fully decide. This is why the old H3 was retired (below).
 
+> **⚠ CORRECTED 2026-08-25 — the bolded conclusion is REFUTED for the A1 regime**
+> (`movetap-20260825T202345`, scored in REALFIX.md §0.5): the chain was **alive in
+> 617/641 samples, up to 8 nodes**, appending at grants, stops and seam-crossings
+> **with the fence open**. So the 100 u veto RUNS with live data on world 0, and it —
+> not the fallback exits — decided every high-separation no-snap press in that tape
+> (sep 351–509 u held because the copy stood at dist 0.0 ON a same-plane chain
+> segment). The static reasoning above was sound for the appenders it knew (the
+> caller's tail genuinely appends only on the world1/shut branches — re-verified);
+> what it missed is **another appender running during open stretches**, prime suspect
+> the still-undecoded fallback half of `0x006055E0` (`0x00605753`–`0x0060583D`).
+> Duty-cycle conclusions built on "the veto cannot fire" need re-reading against
+> this — starting with H3's withdrawal below, which was grounded ON (a)
+> ("unobservable by construction") and is now overturned in both ground and
+> content: the A1 tape shows the match veto observable, operating, and DECIDING
+> the "above the cut, no snap" population. H3 was right.
+
 **(b) The loopback fence is not the retail fence.** `AgTrack::Clear` has three call sites
 (`--xrefs 0x00605F70` returns **exactly 3**, re-checked today). Two are ours to reason
 about (`0x005FCA94`, `0x0060602E`). The third, `0x005FDA78`, sits in a function with **zero
@@ -151,6 +167,12 @@ stuck **open**, this is the first explanation to reach for.
 a check that cannot fail, wearing the costume of a refutation. Its content did not
 disappear, it collapsed: H2 now carries the "above the cut, no snap survives" population,
 and the two early-outs are the concrete mechanisms that would produce it.
+
+> **⚠ REVERSED 2026-08-25 — H3 was right.** The withdrawal above stood on §(a),
+> which the A1 tape refuted (see the correction there): the chain is live during
+> open stretches, the match veto runs, and it is what held every high-separation
+> no-snap press in `movetap-20260825T202345` — the early-outs were inert in that
+> run. REALFIX.md §0.5 is the decoded mechanism.
 
 ### The collision audit, done before the run because that is the point
 

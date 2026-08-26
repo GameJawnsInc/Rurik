@@ -2717,6 +2717,11 @@ def agtrack_ok(mgr, state, source):        # 0x006055E0, __thiscall, ret 8
         lastMatch.next = None              # 0x00605746 — truncate, dropping the OLDER tail
         return 1                           # -> caller does nothing
     return fallback_half()                 # 0x00605753..0x0060583D — UNDECODED, can ALSO return 1
+                                           # ^ 2026-08-25: now the top desk item (REALFIX.md
+                                           #   §0.5 item 10b) — it holds warp A's unattributed
+                                           #   distance gate AND is the prime suspect for the
+                                           #   open-stretch history appender that refuted
+                                           #   PROBE-GATEFIRE §(a).
 
 def seg_match(q, a, b, r):                 # 0x00605AF0, ret 0x10, 1 direct caller (a floor)
     if a.x == b.x and a.y == b.y:                    # degenerate-segment guard
@@ -2741,6 +2746,17 @@ radius is written exactly once (`0x00605B7B fstp qword`), and the squaring at
 `0x00605B87` is `fmul st(0),st(0)` on a register copy that is never written back,
 so the tail really does compare against 100 and not 10,000. Two skeptics
 re-derived that independently; a second write anywhere would have refuted it.
+
+> **2026-08-25 — this pseudocode was exercised on live data and held, and its
+> plane line turned out to be load-bearing.** REALFIX.md §0.5: `c.plane = a.plane`
+> (the node's plane, `0x00605BD5` above) is what hands the chain's plane words to
+> `map_path_len`, whose mismatch route is a real navmesh pathfind (`0x00721A30` at
+> `0x00709B99`; no path → exactly `range+1.0`). In `movetap-20260825T202345` a
+> cross-plane covering segment failed the veto that way (→ both observed warps),
+> while same-plane covering segments held it at separations up to 509 u. An
+> empirical-fit skeptic derived the rolling-`prev` segment walk and the node-plane
+> inheritance from the tape alone before reconciling with this section — the
+> decode and the tape now witness each other independently.
 
 ### The two operands — and this is where the arc's framing died
 

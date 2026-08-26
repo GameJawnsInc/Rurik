@@ -198,7 +198,9 @@ decoded bit-level — both events are the F27 walk-start reconcile, and F27 turn
 to be GATED:**
 
 - **Shape (OBSERVED):** at the Q press the drawn body **hard-copies the SYNC copy's
-  whole movement block** — landing 11.9/18.2 u from the copy, `async_stop` going 0 →
+  whole movement block** (§0.5 item 7 names the copy site: `0x006022B0` from the snap
+  caller's sweep — no struct copy exists inside `0x006055E0`/`0x00605840` itself) —
+  landing 11.9/18.2 u from the copy, `async_stop` going 0 →
   the copy's stop tick BIT-EQUAL (42331/61984), velocity and target copied — on **no
   granted destination** (nearest dest 70.7/172.2 u away), then **walks BACK against
   the held key** for 0.9/1.65 s to the old granted point. The visible symptom is
@@ -235,7 +237,9 @@ warp A's thin 236 ms margin (~5 min owner time); (2) a leg engineered to leave t
 copy PARKED with grant `plane_cur` ≠ copy plane — the cell separating the two gate
 formulations (~5 min); (3) a static read of the client's walk-start reconcile
 predicate to NAME the gate (desk, no owner time) — the `0x005355C0`/`0x006055E0`
-family FINDINGS already maps.
+family FINDINGS already maps. **(3) RAN the same evening — §0.5 is the record: the
+gate is named, both formulations above are proxies, and the two owner cells now
+carry registered mechanism predictions there.**
 
 **Interim state (unchanged until the campaign lands):** today's defaults stand —
 `--zero-lead`, `--grant-suppress`, `--cast-stop=pin`; `--resync` stays opt-in (its
@@ -244,6 +248,104 @@ run record: mechanism confirmed at 0.000 u fire cost, 8-of-8 known drags prevent
 retires piece by piece as A3's levers make it redundant.
 
 Attachment points are lines in `toolkit/authsrv/authsrv.py` in this tree.
+
+### 0.5 The static read RAN — 2026-08-25 evening: the gate is NAMED, and it is not a walk-start predicate. It is a plane-stamped history veto.
+
+**Run shape:** five agents against the pinned pristine 38797 — three decode lanes, then a
+byte skeptic (re-disassembled every load-bearing VA with three xref positive controls;
+24 of 26 checked claims CONFIRMED byte-for-byte, the two refutations non-load-bearing
+operand attributions) and an empirical-fit skeptic (replayed the composed predicate
+against the A1 tape: **15/15 presses and 22/22 fired grants reproduced**). Labels below
+are the survivors of both.
+
+**The mechanism, end to end (OBSERVED unless marked):**
+
+1. **The plane stamp.** The `0x0029` handler (`0x005FD890`) passes wire **field 4
+   (`plane_cur`)** to setter `0x00602A40`, which writes it **raw and unconditionally**
+   into the SYNC copy's own `m_point.plane` at `agent+0x80` — one instruction,
+   `0x00602A74 mov [ebx+0x80],eax` — skipped only on the `-1` sentinel (`0x00602A6F`),
+   which a u16 wire field cannot produce (client-internal callers do use it — see 7).
+   Field 3 (dest plane) lands in A_SEGMENT `+0x90` and A_TARGET `+0xa4`, never `+0x80`
+   on an ordinary grant; the two destination-side exceptions that do reach `+0x80` are
+   the ≤1.0-distSq short-circuit (`0x005FEAA0`) and arrival's commit of the destination
+   point (tape sample [482] — the `0x00602B20` thread, live). **Nothing compares the
+   incoming `pc` to anything: from the setter on, "grant `pc`" IS "copy plane".** Our
+   mid-leg `cur=0` carry planted plane 0; the press grant's `pc=26` constituted the flip.
+2. **Gate 1 is provably plane-blind.** It calls `0x00709990` with `straightOnly=1`
+   (`push 1` at `0x006057C8`, range 300.0 from `[0x946564]`), and `0x00709B3F` reroutes
+   both the plane-mismatch and the same-plane-too-far bailouts to the **same raw 2D
+   Euclid** already on the FPU stack. No plane word is ever an FPU operand in that
+   function — planes appear only in `mov`/`cmp`.
+3. **The plane is operative in exactly one place: the 100 u history veto.**
+   `seg_match`'s walkable conjunct calls `0x00709990` with `straightOnly=0`
+   (`push 0` at `0x00605C40`): the cheap shortcut needs **matching planes AND
+   dist²≤1.0** (`cmp` at `0x00709AD1`); anything else goes to a **real navmesh
+   pathfind** (`0x00721A30`, called at `0x00709B99`); `pathCount==0` returns exactly
+   the **`range+1.0` no-path sentinel** (decoded to the instruction) → no match → the
+   veto fails. Both of the fit-skeptic's queued static discriminators were **already
+   answered by FINDINGS' 2026-08-20 pseudocode** (FINDINGS.md:2707-2743, RECONCILED):
+   the walk is segment-based with a rolling `prev` (`0x0060571A`), and the constructed
+   closest point **inherits the node's plane** (`c.plane = a.plane`, w forced 0 at
+   `0x00605BD5`) — which is what hands the chain's plane words to the pathfind.
+4. **So the decoded decision at every grant is:** SNAP iff *(no history segment within
+   100 u whose plane connects to the copy's stamped plane)* AND *(a distance gate
+   fires)*. **No code term reads "mid-walk" into the snap decision** (the only `+0x48`
+   read in `0x006055E0` is Early-Out A, requiring mode==9 — inert in this run; the
+   `+0x48` read at `0x006058D6` only selects the new history node's seed vertex), and
+   **no code compares `pc` against the copy's previous plane**.
+5. **Both empirical formulations are proxies for this (fit skeptic):** F1's "MID-WALK"
+   term is **emergent** — a parked copy's chain holds its arrival node where the copy
+   stands (dist 0.0 on a same-plane segment), so parked copies **self-veto**; F1
+   mispredicts two cells when applied beyond presses, REFUTED as mechanism. F2
+   (grant `pc` ≠ copy plane, 22/22) is the better proxy because the `pc` stamp rewrites
+   the query's plane **ahead of the veto** — but the seam geometry is load-bearing (the
+   trail segment straddling the measured y≈−2884 plane-0/26 boundary, islands the
+   pathfind cannot connect), so it is not the literal predicate either. The lane's own
+   rival hypothesis that plane-mismatch merely proxies a large coordinate delta is
+   **REFUTED by the tape**: the correlation is mechanism.
+6. **The warps replayed exactly (fit skeptic, on the decoded semantics):** the press
+   grant's `pc=26` re-stamps the copy while it stands ON a seam-crossing trail segment
+   → cross-plane covering segment fails the veto via the pathfind sentinel → warp B
+   (sep 379.5 > 299.33) snaps through **plane-blind gate 1**; the six no-snap presses
+   at sep 351–509 u were saved by the **veto** (min node distance 130.9/131.6 u — only
+   the segment construction with the copy at dist 0.0 on a same-plane segment explains
+   them; gate 1 alone cannot). **Warp A (sep 212–223, below the cut) is the one
+   unclosed attribution**: it needs the still-UNDECODED fallback half of `0x006055E0`
+   (`0x00605753`–`0x0060583D`) — gate 2 implicated by geometry (RECONSTRUCTION).
+7. **The copy site, closed (byte skeptic's bonus):** no struct-to-struct copy exists
+   anywhere in `0x006055E0`/`0x00605840` (FINDINGS.md:3176-3230 already said so — the
+   §0.4 phrase "hard-copies the movement block" is tape-observed but the copy rides
+   elsewhere): the reconcile that moves the body is **`0x006022B0`**, reached from
+   `0x00605FC0`'s tail sweep — `+0x48`-gated dead-reckon via `0x005FF880`, position set
+   via `0x00602540`→`0x00600B70`, then **re-issues `0x00602A40` with `field4=-1`** (the
+   sentinel skip is intentional API: the reconcile deliberately leaves the plane word
+   alone). Also closes the KNOWN MAP's third `0x00605FC0` caller: `0x00602BBD` sits in
+   `0x00602B20`'s idle branch.
+8. **The press path is clean — and has a door.** An ordinary press sets the facing
+   triple, arms the fence, sends `0x003D`, and touches no position/velocity/target
+   field (RECONCILED with CANCELWALK.md); every reconcile in the tape is
+   grant-synchronous, so "warp at the press" is the reply grant 17–76 ms later. NEW:
+   a conditionally-gated fallback exists — `0x008163A0` → `0x0081BDB0` → `0x005FCAA0`
+   (**Q5's "gate-free reseed", now decoded**: a 3-instruction trampoline) →
+   `0x00605E40` (an instruction-for-instruction twin of `0x00605FC0`'s sweep) →
+   `0x006022B0`. Unexercised in this run; whether an ordinary press can reach it is
+   open (static gating: only when the primary applier AND `0x0070a170` both fail).
+9. **One prior claim REFUTED by the tape** (correction filed in PROBE-GATEFIRE.md
+   §(a)): `hist_head` is NOT identically 0 through open stretches on world 0 — the
+   chain was alive in **617/641 samples, up to 8 nodes**, appending at grants, stops
+   and seam-crossings with the fence open. The 100 u veto **runs with live data**, and
+   it — not gate 1 — decided every high-sep no-snap press. Who appends on open
+   stretches is the open thread; prime suspect: the same undecoded fallback half.
+10. **Design consequences for A2:** (a) **plane truth joins speed truth** — the `pc`
+    word we send re-stamps the copy raw, so A2's grants must carry the agent's true
+    current plane, never an echo of a stale word and never 0; (b) the **fallback-half
+    decode (`0x00605753`–`0x0060583D`) is the next desk item** — it is warp A's gate
+    attribution and the likely open-stretch appender, one read closing both; (c) the
+    two owner cells now carry **registered mechanism predictions**: *parked + `pc`-flip*
+    → the veto fails but no distance gate fires at parked separations → **predicts NO
+    snap** (this is the cell where the mechanism and F2-as-proxy separate); *no-probe
+    warp repro* → **predicts both warps fire** (converts the 1.0-counterfactual to
+    OBSERVED).
 
 ### REALFIX-P2 · `--zero-lead`
 

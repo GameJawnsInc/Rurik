@@ -1600,9 +1600,27 @@ six presses at sep 350–509 u did not snap.** Old defect, not minted by
 the probe (1.0-counterfactual still fires both, SUPPORTED), but the
 float widened the vulnerable window 3.5× — and 1.0-everywhere made one
 reversal safe by accident, so **A2 must carry speed truth AND the
-copy-pinning fix together**. Next: the reconcile-predicate static read
-(desk), then the two 5-min residual cells (no-probe repro; parked +
-`pc`-mismatch), then A2's design.
+copy-pinning fix together**.
+**The static read RAN the same evening (5-agent workflow: 3 decode lanes
++ byte skeptic + empirical-fit skeptic; REALFIX.md §0.5 is the record) —
+THE GATE IS NAMED, and it is not a walk-start predicate: it is a
+plane-stamped history veto.** Wire `plane_cur` re-stamps the copy's
+`+0x80` raw (`0x00602A74`, no compare); gate 1 is provably plane-blind;
+the plane is operative only in the 100 u history veto, where a
+cross-plane covering segment fails via a real navmesh pathfind's no-path
+sentinel. Both empirical formulations are proxies (mid-walk is emergent
+— parked copies self-veto on their own arrival node). Fallout: **H3 was
+right** and PROBE-GATEFIRE §(a) is refuted (the chain is live on open
+stretches — corrections filed in place); the §0.4 "hard-copy" rides
+`0x006022B0`, not the snap-test chain; Q5's "gate-free reseed" is
+decoded (press-side door to the same reconcile, unexercised). Next, in
+order: **(i)** desk — decode `0x006055E0`'s fallback half
+(`0x00605753`–`0x0060583D`): warp A's unattributed gate and the likely
+open-stretch appender, one read closes both; **(ii)** the two 5-min
+owner cells, now with registered mechanism predictions (§0.5 item 10c:
+parked + `pc`-flip → predicts NO snap; no-probe repro → predicts both
+warps fire); **(iii)** A2's design — speed truth + **plane truth** +
+copy-pinning together.
 *The staging block that preceded the run, kept for the record:*
 The follow-on recon (`studies/movement/followon-notes/README.md`, merged
 to `main` the same day) answered F35's counterfactual from tape (castless,
