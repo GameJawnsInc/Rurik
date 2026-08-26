@@ -3381,7 +3381,18 @@ Every one of these, in the order they were written:
   pinned at 2.0 < COLLISION_STEP (the Q7 desk check reproduced retail's
   world-anchored clip coordinates on our own mesh only at a fine step).
   Floor 81 re-measured (72 → 80 with the pair, 81 with the leg-bound pin);
-  `test_grantsim.py` green at 86 beside it. Landing note: this test's arrival forced two deliberate
+  `test_grantsim.py` green at 86 beside it. §0.19 (the RETHINK instrument-#1
+  build, logging only, zero policy deltas) extends the 2d cells to the
+  clip's new `(dest, clipped, why)` arity — the four why strings each
+  pinned, `origin-unwalkable` carrying the P-17 escape-door story — and
+  adds five row locks: `lead_clip_why` on the lead row (with the
+  `fallback` branch), the FLUSH hold's refusal row (once per held item,
+  latched by `hold_logged` — the one guard branch that had no row, whose
+  inertness the P-17 decode had to prove by absence), `kbd_age` on every
+  position_report row (or-None discipline), the `a2_leg` lifecycle (ONE
+  arm site, TWO clears riding the same pops the read-not-pop lock pins),
+  and the watchdog-due reason-TRANSITION row. Floor 86 re-measured.
+  Landing note: this test's arrival forced two deliberate
   lock extensions in the same commit -- test_familyrate §6's sender census
   went 2→3 appearances (the def, A1's call, A2's edge-wrapper call; the
   matrix refuses the two flags together so at most one is live), and
@@ -3389,6 +3400,21 @@ Every one of these, in the order they were written:
   the moment the A2 edit landed (the lock working) and now admits exactly
   the audited IfExp whose else-branch is still `list(reported)`. No vault,
   no client. ~1 s),
+  `toolkit/authsrv/test_livewire.py` (the committed retail-decode recipe,
+  RETHINK instrument #2 — the campaign's referee moved out of a deletable
+  scratchpad. Guards `toolkit/authsrv/livewire.py`: the no-vault doors
+  (missing dir → empty list; no wire.jsonl → origin None, never a default
+  to either origin), the LIVE-origin gate passing ≥20 captures while
+  excluding at least one non-live directory (a gate that passes everything
+  is not a gate), and — the module's whole reason to exist — a NUMBER WITH
+  INDEPENDENT PROVENANCE: the 62994 connection's 432 s2c `0x0029` rows,
+  counted by the 2026-08-26 drawing-board skeptic's own script before this
+  module existed, reproduced exactly by the committed recipe, alongside
+  its 12 clicks / 99 heading reports / 2821 total / time-ordering, and the
+  rung-7 capture's 8 game connections ALL decoding with full byte closure
+  (a partial decode reported as full is the suite's oldest defect class).
+  Vault sections skip loudly on a bare machine. Floor 12 from the green
+  run. ~50 s),
   `toolkit/authsrv/test_position_trust.py` (the position-trust policy: it may
   refuse a client-reported position, but it may never **latch**. The old
   `_adopt_client_position` refused anything more than `900 u` from
@@ -4513,6 +4539,28 @@ Every one of these, in the order they were written:
   count -- `Ledger.skip(label, why)` takes two strings and lowers nothing, so
   the file was RED on any machine without the vault snapshot while five
   documents claimed it dropped to 33. No client needed. ~1 s),
+  `toolkit/clientscan/test_policyreplay.py` (the offline policy bench,
+  RETHINK instrument #3 — the promoted form of the scratchpad sim whose one
+  offline counterfactual (the sec.0.16 literal candidate: 2 of 24 fires
+  survive) out-earned every live refutation that week. Guards
+  `toolkit/clientscan/policyreplay.py`: the engine's cells on a synthetic
+  log authored to the shipped semantics (fire / rate-hold-then-expire at
+  held+1.0 s exactly / late-fire off the flush after an `0x0047` that
+  clears WITHOUT voiding / `0x003D` void / newest-wins overwrite / the
+  shared grant clock a zero-lead fire advances / the geometry-flag
+  pairing), the FIDELITY GATE passing there and on BOTH real 2026-08-26
+  logs under the policies they actually shipped with (113824+sec015:
+  24 fires, 7 expiries; 143111+sec017: 64 fires, 9 expiries — **a PASS
+  that required modelling the geometry branch's `state["dest"]=None`
+  clear at authsrv :15853, a shipped-code fact the gate itself DISCOVERED:
+  the sec.0.17 leg bound is void for every geometry-flagged click, 126 of
+  the P-17 log's 179**), the gate going RED under a perturbed rate floor
+  (a gate that cannot fail is not a gate — grantsim's C3 lesson) and under
+  the wrong policy, and the negative control: bare-hold still suppresses
+  22 of 24 on 113824, the number that killed it. NEVER a ranker, by the
+  same C5 discipline as its neighbor below. Synthetic section bare-machine;
+  real-log sections skip loudly. Floor 14 from the green run — the header
+  records its own head-count-vs-run defect (declared 16, ran 14). ~15 s),
   `toolkit/clientscan/test_grantsim.py` (**WOULD A DIFFERENT GRANT POLICY HAVE
   SNAPPED -- AND THE ANSWER IS THAT THIS FILE CANNOT TELL YOU, ON PURPOSE.** The
   guard on `toolkit/clientscan/grantsim.py`, which replays a capture's own c2s

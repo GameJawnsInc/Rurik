@@ -55,12 +55,17 @@ server-side trigger that hands it a bad destination. The components, each now
 measured:
 
 - **During the order-walk:** the client walks the granted segment at the
-  granted speed, collision that blocks its own free input is bypassed
-  (P-17(a): the same wall that held free-input penetration to 0.25 u was
-  crossed 766 u under an order — n=1; whether that wall is prop- or
-  terrain-class is UNRESOLVED, see RETHINK-QA), Z and plane are unconsidered, and
-  the teleport branch is armed — **bit 18 clear in 3,510 of 3,511 samples
-  across four tapes** (R2b). Key state is ignored; no reports are sent.
+  granted speed, and **the client's navmesh-walkability boundary — whatever
+  authored it — holds under free input and is bypassed by the order-walk**
+  (RETHINK-QA, run 2026-08-26 night, skeptic-confirmed: WALL-2 is
+  PROP-anchored bit-exactly — trapezoid corner ≡ prop #392 ring vertex to
+  the float, and 276 of 4,945 mesh corners map-wide are prop ring vertices;
+  WALL-1 is NEITHER prop nor terrain at its edge — an authored plane
+  boundary, partly a plane-0→plane-46 seam. §0.15's "prop collision
+  bypassed while terrain holds" is retired in favor of this restatement).
+  Z and plane are unconsidered, and the teleport branch is armed — **bit 18
+  clear in 3,510 of 3,511 samples across four tapes** (R2b). Key state is
+  ignored; no reports are sent.
 - **Keyboard-lead grants are benign because the held key keeps supplying
   edges.** Retail: median next-report after an answered heading grant
   **0.463 s** ≈ the unconditioned baseline 0.500 s (n=649). Ours: 0.352 s
@@ -98,22 +103,35 @@ occasions one at a time is what the last four days were; the occasions are
 unbounded because every grant is a potential occasion while the order-walk is
 what it is.
 
-**What this means for the plan (hypotheses to make measurable, NOT builds):**
+**What this means for the plan (hypotheses → now largely measured;
+REALFIX §0.19 is the record):**
 
-- **RETHINK-H1:** the held-key click-answer cell (`click-d1`) should not
-  exist — retail has no such cell, and it is the 166 s order factory. Its
-  deletion is a policy change and waits on the owner.
-- **RETHINK-H2:** retail's long-click answers are **part-way routed**
-  (OBSERVED n=4 + the skeptic's fifth: an answer 2,068 u short followed by
-  the verbatim echo 4.56 s later). Retail may never grant a segment the
-  client couldn't legally walk — the "route waypoints" shape. Whether long
-  answers arrive as SEQUENCES of short grants is measurable from the live
-  corpus (RETHINK-QB) and would explain how retail lives with a teleport-armed,
-  collision-bypassing order-walk: it never orders one across geometry.
-- **RETHINK-H3:** with 1+2 in place, the remaining tower (holds, voids,
-  freshness, watchdog) may shrink to: echo real clicks retail's way, lead
-  keyboard reports retail's way (clipped), and model the silence instead of
-  guarding against it. Not evaluable until the instruments below exist.
+- **RETHINK-H1 — STRENGTHENED TWICE, still a policy call for the owner:**
+  the held-key click-answer cell (`click-d1`) has no retail counterpart and
+  is the 166 s order factory; and policyreplay's fidelity gate discovered
+  that the shipped sec.0.17 hold is VOID for every geometry-flagged click
+  (the geometry branch clears `state["dest"]` before falling through,
+  authsrv :15853 — 126 of the P-17 log's 179 clicks). The cell's guard
+  never existed in practice.
+- **RETHINK-H2 — CONFIRMED AND UPGRADED (RETHINK-QB + the desk skeptic,
+  2026-08-26 night): retail's click answer IS a pathfinder's output.**
+  29/29 live clicks answered within 0.007–0.065 s — 16 verbatim, 13 to a
+  part-way FIRST WAYPOINT; further waypoints granted at leg completion at
+  run speed (±4% of 288 on six of eight legs of the cleanest chain — one
+  click, zero further input, NINE grants, along-fraction monotone
+  0.076→1.000 exact); the final grant is the bit-exact clicked point; any
+  new input silently abandons the chain (which is where "unanswered" and
+  "wins-late" both came from). Wire-to-archive identity: four interior
+  waypoints are bit-exact prop outline vertices in OUR archive decode —
+  retail pathfinds over the same geometry we hold. The distance threshold
+  dissolved; chaining is the uniform contract.
+- **RETHINK-H3 — REFINED INTO A MEASURABLE SPEC, deliberately unbuilt:**
+  the retail-faithful click policy is a ROUTER over our own walkability
+  mesh answering within one RTT with the first leg, granting further legs
+  at leg-completion cadence, abandoning on new input. The D2 clip is its
+  zero-corner approximation; the verbatim echo its one-leg special case.
+  Whether to build it — and retire the hold/void/freshness tower it would
+  obsolete — is the owner's ruling to make on this document.
 
 ---
 
@@ -198,9 +216,9 @@ terrain mesh.
 
 | # | Build | Cost | What it closes | Caveat |
 |---|---|---|---|---|
-| 1 | **Five gamesrv `rec.event` additions**: the flush-hold's refusal row (today a bare `return False` — its engagement is invisible regardless of truth), `kbd_latch_age` on position_report rows, `a2_leg` arm/clear events, `a2_watchdog_due` refusal transitions, and **`clip_why`** on the lead row (`no-mesh` / `origin-unwalkable` / `fallback` / `clipped`) | S each | Guard inertness becomes visible IN the log instead of by absence; `clip_why=origin-unwalkable` would have named P-17(a) directly. Same pattern this file has already shipped three times | none — append-only rows |
-| 2 | **Commit the S2 live-decode recipe** as a tested module (`toolkit/authsrv/livewire.py`): the `tape._segments` + `codec` + `origin` loader the retail ground truth depends on | M | Mistake class 8; prerequisite for #6 | validate by reproducing the original S2 numbers on the original tapes |
-| 3 | **Promote the offline policy bench** (`skeptic_sim.py` → `toolkit/clientscan/policyreplay.py`): replay any gamesrv log's event stream through a candidate policy, replay-fidelity check first (the shipped policy must reproduce the log's own fires 1:1), survive/suppress/new output, never a ranking | M | Every future policy hypothesis gets the check that killed the §0.16 candidate pre-ship, as standing equipment | fidelity gate before any counterfactual is quoted |
+| 1 | **BUILT 2026-08-26 evening (owner-ordered, REALFIX §0.19).** Five gamesrv `rec.event` additions: the flush-hold's refusal row (once per held item), `kbd_age` on every position_report row, `a2_leg` arm/clear events, `a2_watchdog_due` reason-transition rows, and **`lead_clip_why`** on the lead row (`no-mesh` / `origin-unwalkable` / `clear` / `clipped` / `fallback`). Logging only, zero policy deltas; `test_d1lead.py` floor 86 | S each | Guard inertness becomes visible IN the log instead of by absence; `lead_clip_why=origin-unwalkable` would have named P-17(a) directly | none — append-only rows |
+| 2 | **BUILT 2026-08-26 evening.** `toolkit/authsrv/livewire.py` + `test_livewire.py` (floor 12): the committed S2 decode recipe, validated by reproducing an INDEPENDENT-provenance number (the 62994 connection's 432 s2c 0x0029 rows, counted by the drawing-board skeptic's own script before the module existed) plus full byte closure on all 8 rung-7 connections | M | Mistake class 8 closed; prerequisite for #7 met | — |
+| 3 | **BUILT 2026-08-26 evening.** `toolkit/clientscan/policyreplay.py` + `test_policyreplay.py` (floor 14): fidelity gate PASSES on both real logs under their shipped policies (113824+sec015: 24 fires/7 expiries; 143111+sec017: 64/9), goes RED under a perturbed floor, and the bare-hold negative control reproduces its fatal 2-of-24. **The gate's first discovery, free of charge: the click GEOMETRY branch clears `state["dest"]` before falling through (authsrv :15853), so the shipped §0.17 leg-bounded hold is VOID for every geometry-flagged click — 126 of the P-17 log's 179.** The hold never stood a chance in that run by code path, not circumstance — which sharpens RETHINK-H1: the whole held-key click channel, hold included, is dead policy weight | M | Standing equipment now | fidelity gate before any counterfactual is quoted |
 | 4 | **`--live-track-report-gaps`** scoring pass on movetap tapes: per silence >1 s, did `dir` change without a wire report | S | Distinguishes F25's steady-direction silence from order-regime suppression, per episode | **skeptic-flagged**: `dir`'s writer-side semantics are validated only in press contexts — validate against a labeled click-walk episode FIRST or this ships the next point-column trap |
 | 5 | **`reqtoken`-stall validation** as the order-following readout (already sampled every row; the §0.11 fence-lock fingerprint generalized) | M | A per-sample IS-ORDER-FOLLOWING flag with zero new plumbing, IF it generalizes | needs 2–3 labeled click-walk episodes outside the input-lock arc |
 | 6 | **`height_at()` over our terrain mesh** + a movetap post-hoc join: geometry residuals for reported/segment points | M | The Z/floor blindness — names "through the ground" as a residual instead of a screenshot | **skeptic-flagged**: must be a multi-valued query with an ambiguity flag — a single-valued 2D→Z join is silently wrong exactly at stacked floors, the target case |
@@ -211,23 +229,30 @@ terrain mesh.
 tightened 2 s window (R2d refuter #5) — it hardens the regime numbers this
 whole document leans on, from data already on disk.
 
-**Desk checks needing no build and no owner time:** **RETHINK-QA** — is the P-17
-plaza wall prop-class or terrain-class in the map data? (Decides whether
-§0.15's "prop collision bypassed WHILE TERRAIN HOLDS" clause survives the n=1
-crossing of a barrier that had just blocked free input.) **RETHINK-QB** — do
-retail's long-click answers arrive as sequences of short grants? (The
-part-way/waypoint contract, n=5 so far; decides RETHINK-H2.) Both run from
-the existing corpus.
+**Desk checks — BOTH RUN 2026-08-26 night, skeptic-confirmed (REALFIX
+§0.19):** **RETHINK-QA** answered — WALL-2 prop-anchored bit-exactly, WALL-1
+neither prop nor terrain (an authored plane boundary, partly a real plane
+seam); §0.15's clause retired for the navmesh-boundary restatement now in
+§2. **RETHINK-QB** answered beyond its question — the unified waypoint
+contract under RETHINK-H2 above, with the wire-to-archive vertex identity
+as the cross-check neither lane could see alone.
 
 ---
 
 ## 5. Standing state
 
 - `--d1-lead` remains OPT-IN with §0.17's clip + hold in place; the shipped
-  default is byte-identical to pre-campaign. Nothing further ships until the
-  owner rules on this document.
-- The P-17 scoring of record is REALFIX.md §0.18. The a2-campaign-handoff
-  file is historical; **this document is the campaign's entry point** until
-  superseded.
+  default is byte-identical to pre-campaign. **Policy remains frozen** —
+  RETHINK-H1 (delete the held-key click cell) and RETHINK-H3 (the router)
+  are measured specs awaiting the owner's ruling on this document.
+- **Instruments #1–3 are BUILT and green (2026-08-26 night, REALFIX
+  §0.19)**: the five gamesrv rows (test_d1lead floor 86), `livewire.py`
+  (floor 12), `policyreplay.py` (floor 14). Both desk checks are answered.
+  Items #4–8 of the table remain unbuilt, re-rankable against the new
+  facts.
+- The P-17 scoring of record is REALFIX.md §0.18; the builds and desk
+  checks are §0.19. The a2-campaign-handoff file is historical; **this
+  document is the campaign's entry point** until superseded.
 - The next owner run, whenever it happens, is an INSTRUMENT run: same play,
-  new readouts, zero policy deltas.
+  new readouts (`lead_clip_why`, `kbd_age`, the leg lifecycle, the flush
+  row), zero policy deltas.

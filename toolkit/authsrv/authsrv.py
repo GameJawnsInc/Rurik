@@ -3827,13 +3827,22 @@ def _take_client_position(state, reported, plane, rec, source, now=None,
     # the old question: test_movement_fidelity.py's floors were calibrated on
     # stops and it now filters to them.
     if rec is not None:
+        # sec.0.19 (RETHINK instrument #1b): the Rule-1 latch's age rides
+        # EVERY report row, not only the grant_verdict rows a click happens
+        # to produce -- the P-17 run's whole guard-inertness story (latch
+        # never armed across ~490s) was reconstructable only by absence.
+        # `or 0.0`-style is-not-None discipline (the REV-1 lesson): the
+        # latch is cleared by assignment to None.
+        _kbd_at = state.get("kbd_moving_at")
         rec.event("position_report", drift=round(jump, 2), accepted=accept,
                   reason=reason, source=source,
                   budget=(None if budget == float("inf") else round(budget, 2)),
                   streak=state.get("pos_rejects", 0),
                   reported=list(reported), ours=[px, py], plane=plane,
                   server_plane=state["plane"], clipped=clipped,
-                  on_mesh=on_mesh)
+                  on_mesh=on_mesh,
+                  kbd_age=(None if _kbd_at is None
+                           else round(now - _kbd_at, 3)))
     return accept
 
 
@@ -4575,7 +4584,15 @@ A2_LEAD_CLIP_STEP = 2.0
 def a2_clip_lead(state, reported, dest):
     """Clip a D1 lead's endpoint to the navmesh along the REPORT's own ray.
 
-    (dest, clipped). Retail's D2 term, measured twice over: ~34.5% of live
+    (dest, clipped, why) -- why is one of "no-mesh" / "origin-unwalkable" /
+    "clear" / "clipped", and it exists because of the P-17 run
+    (sec.0.18): the wall press pushed the client's reported position
+    ~0.25 u past the mesh edge, the off-mesh door opened, and the ONLY
+    trace was `lead_clipped=false` on a row whose ray a later session had
+    to re-score against the mesh by hand to learn WHICH door had opened.
+    The row now names it (RETHINK instrument #1e).
+
+    Retail's D2 term, measured twice over: ~34.5% of live
     leads land short of the D1 band at world-anchored coordinates
     (sec.0.15 S2-3), and the Q7 desk check reproduced those coordinates on
     OUR mesh to <=3 u for the terrain-edge subset -- the boundary IS our
@@ -4594,13 +4611,16 @@ def a2_clip_lead(state, reported, dest):
     the unclipped leg had named (sec.0.17).
     """
     pm = state.get("pathmap")
-    if pm is None or not pm.walkable(reported[0], reported[1]):
-        return dest, False
+    if pm is None:
+        return dest, False, "no-mesh"
+    if not pm.walkable(reported[0], reported[1]):
+        return dest, False, "origin-unwalkable"
     stopped = pm.clip(float(reported[0]), float(reported[1]),
                       float(dest[0]), float(dest[1]),
                       step=A2_LEAD_CLIP_STEP)
     clipped = (stopped[0] != dest[0]) or (stopped[1] != dest[1])
-    return [float(stopped[0]), float(stopped[1])], clipped
+    return ([float(stopped[0]), float(stopped[1])], clipped,
+            "clipped" if clipped else "clear")
 
 
 def _a2_family_rate(send, state, mt):
@@ -4754,6 +4774,15 @@ def _a2_watchdog(send, state, rec, now=None):
     if now is None:
         now = time.time()
     due, why = a2_watchdog_due(state, now)
+    # sec.0.19 (RETHINK #1d): the due-predicate's refusals used to return in
+    # silence -- only FIRES were rows, so "why hasn't the watchdog fired"
+    # was unrecoverable from a capture. Logged on REASON TRANSITION only
+    # (the poll rides every ~1s quiet tick and every batch; per-poll rows
+    # would drown the log restating "no-leg" all session).
+    if why != state.get("a2_wd_why"):
+        state["a2_wd_why"] = why
+        if rec is not None:
+            rec.event("a2_watchdog_due", why=why)
     if not due:
         return False
     leg = state["a2_leg"]
@@ -5703,6 +5732,18 @@ def grant_flush_tick(send, state, conn_id, rec=None, now=None):
     # 'unanswered' branch; a report arriving supplies the 'quiets' one.
     if D1_LEAD and ((state.get("a2_click_answered_at") or 0.0)
                     > (state.get("pos_seen") or 0.0)):
+        # sec.0.19 (RETHINK instrument #1a): this refusal used to be a bare
+        # return -- the ONE guard branch in the click channel with no row,
+        # so "0 rows" could not be told from "never logged" (the P-17
+        # decode had to prove the hold's inertness by absence). Logged ONCE
+        # per held item, not per poll: the flush runs pre-batch and on
+        # every quiet tick, and a held click lives <=1.0s, so per-poll rows
+        # would say nothing new after the first.
+        if rec is not None and not pending.get("hold_logged"):
+            pending["hold_logged"] = True
+            rec.event("grant_verdict", fired=False,
+                      reason="answer-outstanding", arm="click-d1",
+                      deferred=True, age=round(age, 3), dest=list(dest))
         return False
     grant, why, kage, since = _grant_verdict(state, now)
     # sec.0.15: NO D1 resurrection here. F-B/F-A's rate-only re-verdict for
@@ -14686,7 +14727,14 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # -- the a2_leg silence model no longer applies, and
                         # the ETA watchdog stands down (sec.0.11 containment;
                         # the leg re-arms at the next fired d1 grant below).
-                        state.pop("a2_leg", None)
+                        _old_leg = state.pop("a2_leg", None)
+                        # sec.0.19 (RETHINK #1c): the clear half of the
+                        # leg's lifecycle, logged only when a leg existed.
+                        if _old_leg is not None and rec is not None:
+                            rec.event("a2_leg", act="clear", src="0x003D",
+                                      age=round(time.time()
+                                                - _old_leg["t0"], 3),
+                                      wd_fired=_old_leg["wd_fired"])
                         # THE LOCALLY-DRIVING LATCH, armed here and cleared in
                         # the 0x0047 arm below, and touched in NO third place.
                         # See _grant_verdict for what reads it and why it is
@@ -15214,6 +15262,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                 a2_dest, a2_src = None, None
                                 a2_matched = False
                                 a2_lead_clipped = False
+                                a2_clip_why = None
                                 if D1_LEAD:
                                     # sec.0.11's armer-kill, BEFORE the
                                     # verdict row so plane_cur records what
@@ -15231,9 +15280,12 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                     # Real d1 leads only: a fallback
                                     # already IS the report.
                                     if a2_src == "d1":
-                                        a2_dest, a2_lead_clipped = (
+                                        (a2_dest, a2_lead_clipped,
+                                         a2_clip_why) = (
                                             a2_clip_lead(state, reported,
                                                          a2_dest))
+                                    elif a2_src == "fallback":
+                                        a2_clip_why = "fallback"
                                 if rec is not None:
                                     # EVERY evaluation, fired or refused, on the
                                     # SAME channel the click arm uses -- a log
@@ -15315,6 +15367,16 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                               lead_clipped=(a2_lead_clipped
                                                             if zero_ok
                                                             else None),
+                                              # sec.0.19 (RETHINK #1e):
+                                              # WHICH door decided --
+                                              # no-mesh / origin-unwalkable
+                                              # / clear / clipped /
+                                              # fallback. The P-17 escape
+                                              # was reconstructable only
+                                              # by hand without this.
+                                              lead_clip_why=(a2_clip_why
+                                                             if zero_ok
+                                                             else None),
                                               # sec.0.11's verification key:
                                               # true on the rows where the
                                               # matched-words override
@@ -15455,6 +15517,19 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                         state["a2_leg"] = a2_leg_note(
                                             reported, zl_point, plane,
                                             moving, now_z)
+                                        # sec.0.19 (RETHINK #1c): the leg
+                                        # model's lifecycle as rows -- a
+                                        # run's trajectory through "is a
+                                        # leg armed" was unrecoverable
+                                        # after the fact (only watchdog
+                                        # FIRES were visible).
+                                        if rec is not None:
+                                            _lg = state["a2_leg"]
+                                            rec.event(
+                                                "a2_leg", act="arm",
+                                                dest=list(_lg["dest"]),
+                                                speed=_lg["speed"],
+                                                plane=_lg["plane"])
                                     # REALFIX-F1b's queue, on the same rule and
                                     # for the same reason. CONSUME what arrived,
                                     # DISCARD the leg this grant just superseded
@@ -16029,7 +16104,13 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # The client is speaking: the a2_leg silence model no
                         # longer applies (sec.0.11 containment, same clear as
                         # the 0x003D arm).
-                        state.pop("a2_leg", None)
+                        _old_leg = state.pop("a2_leg", None)
+                        # sec.0.19 (RETHINK #1c), the stop-arm clear.
+                        if _old_leg is not None and rec is not None:
+                            rec.event("a2_leg", act="clear", src="0x0047",
+                                      age=round(time.time()
+                                                - _old_leg["t0"], 3),
+                                      wd_fired=_old_leg["wd_fired"])
                         # Stop where WE say it is, not where the client last
                         # believed. Echoing the client's figure back pinned it to
                         # the spawn point: it reported "still at spawn" because

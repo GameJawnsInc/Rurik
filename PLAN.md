@@ -1796,6 +1796,28 @@ height_at with an ambiguity flag; conformance scorer; breakpoint tap
 last) are **[studies/movement/RETHINK.md](studies/movement/RETHINK.md)
 — the campaign's entry point until superseded.** Next owner run is an
 INSTRUMENT run: same play, new readouts, zero policy deltas.
+**§0.19 — RETHINK #1–3 BUILT AND THE DESK CHECKS ANSWERED, 2026-08-26
+night (owner-ordered; policy still frozen).** The five gamesrv rows
+(test_d1lead floor 86), `livewire.py` (floor 12, validated on an
+independent-provenance count), `policyreplay.py` (floor 14, fidelity
+gate green on both real logs, red under perturbation; its first
+discovery: the click GEOMETRY branch clears state["dest"] before
+falling through, so §0.17's leg-bounded hold was VOID for every
+geometry-flagged click — 126/179 in the P-17 log). RETHINK-QA:
+WALL-2 prop-anchored BIT-EXACTLY (trapezoid corner ≡ prop ring
+vertex; 276/4,945 mesh corners are prop vertices map-wide); WALL-1
+neither prop nor terrain — §0.15's "prop collision bypassed while
+terrain holds" retired for "the navmesh-walkability boundary holds
+under free input and is bypassed by an order-walk." RETHINK-QB, the
+campaign's biggest retail-contract correction: **retail's click
+answer is A PATHFINDER'S OUTPUT** — 29/29 live clicks answered
+within one RTT (16 verbatim, 13 part-way first waypoints), further
+waypoints granted at leg-completion cadence at 288 u/s, the final
+grant the bit-exact clicked point, chains silently abandoned on new
+input; four interior waypoints of the cleanest chain are bit-exact
+prop outline vertices in OUR archive decode. The retail-faithful
+click policy is now a measurable spec (a router over our own mesh);
+building it is the owner's call on RETHINK.md.
 *The staging block that preceded the run, kept for the record:*
 The follow-on recon (`studies/movement/followon-notes/README.md`, merged
 to `main` the same day) answered F35's counterfactual from tape (castless,
