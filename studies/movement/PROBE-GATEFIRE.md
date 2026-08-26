@@ -131,8 +131,13 @@ runs and the exits above fully decide. This is why the old H3 was retired (below
 > (sep 351–509 u held because the copy stood at dist 0.0 ON a same-plane chain
 > segment). The static reasoning above was sound for the appenders it knew (the
 > caller's tail genuinely appends only on the world1/shut branches — re-verified);
-> what it missed is **another appender running during open stretches**, prime suspect
-> the still-undecoded fallback half of `0x006055E0` (`0x00605753`–`0x0060583D`).
+> what it missed is **another appender running during open stretches** — identified
+> the same night (REALFIX.md §0.6): the append at `0x0060610B` runs unconditionally
+> on every ARMED world-1 dispatch, and the per-id record is **shared across worlds**,
+> so async dispatches feed the very `hist_head` the world-0 test walks; a periodic
+> staleness sweep (`0x00604B2A`, > 3333 ticks, fence-independent) appends too. The
+> fallback half of `0x006055E0` appends on **no** branch — and it was never
+> undecoded (FINDINGS' round-2 section had it since 2026-08-20).
 > Duty-cycle conclusions built on "the veto cannot fire" need re-reading against
 > this — starting with H3's withdrawal below, which was grounded ON (a)
 > ("unobservable by construction") and is now overturned in both ground and

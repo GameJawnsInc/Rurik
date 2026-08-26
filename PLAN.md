@@ -1613,14 +1613,20 @@ sentinel. Both empirical formulations are proxies (mid-walk is emergent
 right** and PROBE-GATEFIRE §(a) is refuted (the chain is live on open
 stretches — corrections filed in place); the §0.4 "hard-copy" rides
 `0x006022B0`, not the snap-test chain; Q5's "gate-free reseed" is
-decoded (press-side door to the same reconcile, unexercised). Next, in
-order: **(i)** desk — decode `0x006055E0`'s fallback half
-(`0x00605753`–`0x0060583D`): warp A's unattributed gate and the likely
-open-stretch appender, one read closes both; **(ii)** the two 5-min
-owner cells, now with registered mechanism predictions (§0.5 item 10c:
-parked + `pc`-flip → predicts NO snap; no-probe repro → predicts both
-warps fire); **(iii)** A2's design — speed truth + **plane truth** +
-copy-pinning together.
+decoded (press-side door to the same reconcile, unexercised).
+**The fallback-half follow-up RAN the same night (REALFIX.md §0.6, zero
+refutations): the span was never undecoded** (FINDINGS' round-2 had it
+since 2026-08-20 — the stale label is fixed in place), **the
+open-stretch appender is IDENTIFIED** (unconditional armed world-1
+append at `0x0060610B` into the cross-world-shared record, plus a
+fence-independent 3333-tick staleness sweep at `0x00604B2A`), and
+**warp A narrows to gate 2 ∨ gate 3** with gate 1 byte-excluded.
+Next, in order: **(i)** the two 5-min owner cells, with registered
+mechanism predictions (§0.5 item 10c: parked + `pc`-flip → predicts NO
+snap; no-probe repro → predicts both warps fire); **(ii)** A2's design —
+speed truth + **plane truth** + copy-pinning together; *(optional desk:
+`0x005FF820` plane propagation, promoting warp A's gate to a single
+name — blocks nothing).*
 *The staging block that preceded the run, kept for the record:*
 The follow-on recon (`studies/movement/followon-notes/README.md`, merged
 to `main` the same day) answered F35's counterfactual from tape (castless,

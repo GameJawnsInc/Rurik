@@ -2716,12 +2716,18 @@ def agtrack_ok(mgr, state, source):        # 0x006055E0, __thiscall, ret 8
     if lastMatch is not None:
         lastMatch.next = None              # 0x00605746 — truncate, dropping the OLDER tail
         return 1                           # -> caller does nothing
-    return fallback_half()                 # 0x00605753..0x0060583D — UNDECODED, can ALSO return 1
-                                           # ^ 2026-08-25: now the top desk item (REALFIX.md
-                                           #   §0.5 item 10b) — it holds warp A's unattributed
-                                           #   distance gate AND is the prime suspect for the
-                                           #   open-stretch history appender that refuted
-                                           #   PROBE-GATEFIRE §(a).
+    return fallback_half()                 # 0x00605753..0x0060583D — DECODED in "round 2"
+                                           #   below (§ "THE FALLBACK HALF IS DECODED",
+                                           #   :3073), can ALSO return 1.
+                                           # ^ this comment said UNDECODED for five days while
+                                           #   the decode sat 350 lines down in the same file —
+                                           #   and on 2026-08-25 a session carried the stale
+                                           #   label into REALFIX §0.5 before a re-read caught
+                                           #   it (§0.6). Verified byte-for-byte that night:
+                                           #   the span appends to the history chain on NO
+                                           #   branch (appender exonerated; the real
+                                           #   open-stretch appenders are named in §0.6), and
+                                           #   warp A = gate 2 OR gate 3, gate 1 byte-excluded.
 
 def seg_match(q, a, b, r):                 # 0x00605AF0, ret 0x10, 1 direct caller (a floor)
     if a.x == b.x and a.y == b.y:                    # degenerate-segment guard

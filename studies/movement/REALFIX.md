@@ -309,9 +309,12 @@ are the survivors of both.
    (sep 379.5 > 299.33) snaps through **plane-blind gate 1**; the six no-snap presses
    at sep 351–509 u were saved by the **veto** (min node distance 130.9/131.6 u — only
    the segment construction with the copy at dist 0.0 on a same-plane segment explains
-   them; gate 1 alone cannot). **Warp A (sep 212–223, below the cut) is the one
-   unclosed attribution**: it needs the still-UNDECODED fallback half of `0x006055E0`
-   (`0x00605753`–`0x0060583D`) — gate 2 implicated by geometry (RECONSTRUCTION).
+   them; gate 1 alone cannot). **Warp A (sep 212–223, below the cut) was the one
+   unclosed attribution — narrowed the same night, §0.6:** gate 1 is EXCLUDED at byte
+   level, so warp A fired via **gate 2 OR gate 3** (the disjunction CONFIRMED); the
+   single-gate pick stays RECONSTRUCTION pending `0x005FF820`'s plane propagation.
+   (This sentence originally said the fallback half was "still-UNDECODED" — it was
+   not; see §0.6's first paragraph.)
 7. **The copy site, closed (byte skeptic's bonus):** no struct-to-struct copy exists
    anywhere in `0x006055E0`/`0x00605840` (FINDINGS.md:3176-3230 already said so — the
    §0.4 phrase "hard-copies the movement block" is tape-observed but the copy rides
@@ -335,17 +338,81 @@ are the survivors of both.
    chain was alive in **617/641 samples, up to 8 nodes**, appending at grants, stops
    and seam-crossings with the fence open. The 100 u veto **runs with live data**, and
    it — not gate 1 — decided every high-sep no-snap press. Who appends on open
-   stretches is the open thread; prime suspect: the same undecoded fallback half.
+   stretches ~~is the open thread; prime suspect: the same undecoded fallback half~~
+   — **CLOSED the same night, §0.6: two routes, and the fallback half is exonerated
+   (it appends on no branch).**
 10. **Design consequences for A2:** (a) **plane truth joins speed truth** — the `pc`
     word we send re-stamps the copy raw, so A2's grants must carry the agent's true
-    current plane, never an echo of a stale word and never 0; (b) the **fallback-half
-    decode (`0x00605753`–`0x0060583D`) is the next desk item** — it is warp A's gate
-    attribution and the likely open-stretch appender, one read closing both; (c) the
+    current plane, never an echo of a stale word and never 0; (b) ~~the fallback-half
+    decode is the next desk item~~ — **RAN the same night, §0.6** (the span was already
+    decoded 2026-08-20; the follow-up verified it byte-for-byte and closed the
+    appender question); the remaining *optional* desk item is `0x005FF820`'s plane
+    propagation, which would promote warp A's gate from a disjunction to a name; (c) the
     two owner cells now carry **registered mechanism predictions**: *parked + `pc`-flip*
     → the veto fails but no distance gate fires at parked separations → **predicts NO
     snap** (this is the cell where the mechanism and F2-as-proxy separate); *no-probe
     warp repro* → **predicts both warps fire** (converts the 1.0-counterfactual to
     OBSERVED).
+
+### 0.6 The fallback-half follow-up — same night: the span was never undecoded, the appender is IDENTIFIED, and warp A narrows to gate 2 ∨ gate 3
+
+**Run shape:** one decode lane + one high-effort skeptic, both re-disassembling from
+the pinned pristine 38797; the skeptic ran its xref census with positive controls
+(known call sites found before new ones were trusted). **Zero refutations.**
+
+**First, the correction this section exists to file (FB-0, CONTESTED → resolved):
+§0.5 called `0x00605753`–`0x0060583D` "still-UNDECODED". It was decoded five days
+earlier** — FINDINGS.md's own round-2 section (":3073, THE FALLBACK HALF IS DECODED",
+2026-08-20) maps it in full, and both agents' fresh byte reads reproduce it
+instruction-for-instruction (57 instructions, same jcc bytes, same three writes to
+the `edi` return accumulator). The stale label came from the pseudocode comment at
+FINDINGS:2719, which contradicted its own file 350 lines down; `followon-notes/
+f33-trigger.md` (2026-08-25) had also independently reached most of this and was not
+yet reconciled into §0.5. The comment is fixed in place. *Process lesson, the
+grep-before-"never-tried" rule in its nastiest form: the label at the definition
+site can contradict the record below it in the same file — grep the file for the
+address before calling anything undecoded.*
+
+**The appender question, CLOSED (all OBSERVED, skeptic-confirmed):**
+`0x00605840` has exactly **3 direct callers** and its node allocator (`0x00604BB0`)
+has exactly one, inside the appender's own body. **The fallback half calls neither on
+any branch** (its only calls: two asserts, two `0x005FF820` position bakes, the three
+gates, the stack cookie). Open-stretch chain growth is carried by:
+1. **Dispatcher path B1** — the append at `0x0060610B` runs **unconditionally on
+   every ARMED world-1 dispatch** (`je` at `0x00606016`: `clientControlled != 0 AND
+   world == 1` skips the snap test entirely and appends). The per-id AgTrack record
+   is **shared across worlds**, so async dispatches feed the very `hist_head` the
+   world-0 test walks — the inference PROBE-GATEFIRE §(a) missed. (The same physical
+   call is also reached by `clientControlled == 0 AND world == 0`, the ordinary
+   unarmed sync append; no route appends on `world == 0 AND clientControlled != 0` —
+   that combination reaches the snap test instead.)
+2. **A periodic staleness sweep** — caller `0x00604B2A` inside a per-record loop
+   (`0x00604880`, stride 0x1c, two callers `0x005FC110`/`0x005FC24A`), gated on
+   `hist_head` non-null and **> 0xd05 = 3333 ticks** since the head node's stamp,
+   fence-INDEPENDENT; `clientControlled` only selects which world's array it samples.
+Only the per-event mapping of the tape's appends onto these two routes remains
+UNVERIFIED — nothing rests on it.
+
+**Warp A, narrowed (V-WARP-A):** gate 1 is **EXCLUDED at byte level** — sep 212–223 u
+is below the 299.3326 effective cut and the LUT sqrt errs only high, so the `jne` at
+`0x006057EA` cannot fire — therefore, on §0.5's premise that the cross-plane sentinel
+had already killed the veto, **warp A fired via gate 2 (`pathCount == 0`, `je` at
+`0x0060580D`) OR gate 3 (`0x005FEF70` returns 0, `je` at `0x00605820`)** — the
+disjunction CONFIRMED from bytes plus tape. Promoting it to a single gate needs
+`0x005FF820`'s plane propagation (do the baked query points carry the stamped plane
+word?) and gate 2's start-resolver plane-keying — neither disassembled yet, and
+neither blocks A2.
+
+**Byte bonuses:** gate 2's `maxDist` is not a fresh constant load — it consumes **gate
+1's leftover 300.0 riding the x87 stack** (`fstp st(1)` at `0x006057E5` leaves it;
+`fstp dword [esp]` at `0x006057FA` spends it), one literal serving two gates. The
+span reads **zero plane words** (the lone `-0x80` displacement is a world-array
+container field off a spilled manager pointer, corroborated at three independent
+sites) and **writes zero agent/record fields** — re-confirming §0.5 item 7 from the
+other side.
+
+**Ladder impact: none.** A2's design consequences (§0.5 item 10) stand as written;
+the owner cells' registered predictions are unchanged.
 
 ### REALFIX-P2 · `--zero-lead`
 
