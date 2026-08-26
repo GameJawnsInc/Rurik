@@ -872,6 +872,27 @@ repin lands, the fence never shuts. **REFUTED IF a lock arms with matched words 
 every crossing grant** — that acquits the server-side story entirely and convicts
 the plane-22 geometry (the one unbroken confound), reopening L2-3b.
 
+**V-8 RAN — 2026-08-26 ~08:22 (`authsrv-20260826T082204-c1` ×
+`movetap-20260826T082230`): NO LOCK — the prediction held.** Flat-ground control
+leg plus the golden stairs recipe ×2: **zero fence transitions in 865 samples**
+(the arming fingerprint never appeared), `async_reqtoken` cycling 0→1→2 normally
+(the walk-start applier alive throughout), **18 of 18 stops answered** with their
+`0x0047` → repin pairs, and zero full-lead silent walks (one candidate gap
+dissolved on inspection: the release's `0x0047` landed 34 ms after its crossing
+grant — a clean stop, then a park with keepalive). **Exposure: the crossing
+stale-word state arose 4 times and the override killed it all 4** — once on a
+grant (`pc_matched: true` at t=57.872, the up-the-stairs crossing) and three
+times on repins (`matched`-marked labels). The registered floor's LETTER (≥2
+grant-level `pc_matched` rows) under-counted by construction — at a crossing the
+stop usually arrives before the next grant can fire, so the override expresses on
+the REPIN — the floor's intent (≥2 crossing exposures) is met at double.
+Corrected here rather than silently passed: the exposure key for future runs is
+`pc_matched` rows PLUS `matched`-marked repins. **The armer-kill is verified; the
+plane-22-geometry rival (L2-3b) loses its last support** — same stairs, same
+recipe, matched words, no lock. `--d1-lead` now holds every §0.9 headline
+(P-1 zero warps, P-5 sign-of-lead) with the lock closed; the ETA watchdog and
+model-aware click freshness remain queued as containment.
+
 ### REALFIX-P2 · `--zero-lead`
 
 Attachment: heading arm `:9625-9878`, as a third named block after `:9843`. **Stop arm `:10235` untouched. Click arm `:9879` untouched.**

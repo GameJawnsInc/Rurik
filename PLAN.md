@@ -1657,16 +1657,25 @@ retail ships the [1.0,9] stop sentinel, desk pass queued); P-3 and
 **P-5 CONFIRMED — 13 maturations, drag p50 0.0 u: the sign-of-lead
 hypothesis, the campaign's central premise, HOLDS**; P-2/P-4 refuted
 as mis-registered bounds (re-registered in place). The run's one
-incident (a stuck backpedal) decodes to a three-layer stack: the
-lead's click-walk regime (F7 generalized, 30/31 legs edge-terminated
-cleanly), a focus-shift keyup swallowed by the operator's own movetap
-Ctrl+C (RECONSTRUCTION, ~2-min discriminator registered), and the one
-real server defect — the recovery click refused as stale because the
-missing 0x0047 froze the freshness clock. Next, in order: **(i)**
-model-aware click freshness + the ETA watchdog (the two fixes §0.10
-specs); **(ii)** the discriminator rerun + retail stuck-shape census;
-**(iii)** *optional*, the mid-walk spoof cell (§0.8) and the
-early-out-A/mode-9 desk pass.
+incident (a stuck backpedal) — first mis-attributed to a focus-shift
+keyup, REFUTED by the owner's in-game repro — **decoded fully in
+§0.11 and FIXED the same morning:** plane-carry's stale word across a
+seam + a mid-flight crossing snap shuts the AgTrack fence (65–220 ms
+BEFORE our repin — the repin is the 28/28 detector, not the weapon),
+and the lead's click-walk regime keeps it shut (the only fence
+re-armer never runs; the zero-lead era recovers 3/3). The armer-kill:
+`a2_matched_field4` — under `--d1-lead` field 4 always matches field 3
+(retail's own 222/222 census), grants and repins both. **V-8 VERIFIED
+2026-08-26 ~08:22: no lock — zero fence transitions in 865 samples,
+18/18 stops answered, all 4 crossing exposures overridden** (exposure
+key corrected in place: `pc_matched` rows + `matched`-marked repins).
+`--d1-lead` holds every §0.9 headline with the lock closed. Next, in
+order: **(i)** the ETA watchdog + model-aware click freshness
+(containment, §0.10); **(ii)** a longer ordinary-play A2 soak (the
+P-2/P-4 re-registered bounds want n); **(iii)** *optional*, the
+mid-walk spoof cell (§0.8) — note §0.11's open question: the arming
+snap fired at 14–17 u, below every known gate, possibly gate-2
+plane-keying answering itself — and the early-out-A/mode-9 desk pass.
 *The staging block that preceded the run, kept for the record:*
 The follow-on recon (`studies/movement/followon-notes/README.md`, merged
 to `main` the same day) answered F35's counterfactual from tape (castless,
