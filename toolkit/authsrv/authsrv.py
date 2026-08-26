@@ -4811,6 +4811,270 @@ def _a2_watchdog(send, state, rec, now=None):
     return True
 
 
+# =========================================================================
+# THE ROUTER (`--router`, ROUTER-B2 -- studies/movement/ROUTER.md; the
+# owner's 2026-08-26 ruling on RETHINK-H3). Retail's click answer is a
+# PATHFINDER'S OUTPUT (measured, 29/29: first leg within one RTT -- the
+# verbatim point exactly when one leg suffices -- further legs granted at
+# leg-completion cadence at run speed, the terminal grant the bit-exact
+# clicked point, any new input abandoning the chain). Under this flag the
+# click channel answers the same way, over OUR mesh: `pathmap.route()` --
+# A* over the file's own trapezoid adjacency, string-pulled, and gated by
+# a per-segment clip() that returns None rather than a path through a wall
+# -- computes the legs, the first is granted in the click's own handling,
+# the rest ride `router_chain_tick` at per-leg ETAs. Every granted leg is
+# walkable end to end BY CONSTRUCTION, which is the whole point: sec.0.18
+# measured that a fired 0x0029 starts an autonomous collision-bypassing
+# order-walk the client ends only at its next processed key edge, so the
+# only safe grant is a legal leg -- retail's regime is harmless because
+# retail grants only legal legs, and ours phased walls because we granted
+# straight lines. The hold/void/freshness tower polices exactly that
+# hazard, so ROUTER clicks bypass it: no grant_pending, no rate floor
+# (retail answers every processed click within one RTT), Rule 1's
+# keyboard drop KEPT (a click under active keyboard authority is dropped
+# outright -- retail's own contract, sec.0.15).
+#
+# Where route() cannot answer, nothing is invented: a clip-fallback single
+# leg when the straight line moves the client (ROUTER-Q1's cross-component
+# case), a LOGGED refusal otherwise. This is not the tombstoned F-B clip
+# (that replaced retail's echo wholesale; this fires only where no route
+# exists, and its one grant is still a legal leg).
+#
+# Wire grammar per the decoded retail chain (ROUTER.md sec.1): ONE 0x002B
+# speed row at chain start, then bare 0x0029 grants; per-waypoint plane in
+# field 3 with field 4 reconciled to match (a2_matched_field4's sec.0.11
+# protection -- retail's own both-nonzero pairs are bit-identical 222/222;
+# its one-grant-lag pattern on half-zero pairs is a recorded approximation
+# we do NOT reproduce, ROUTER-Q7).
+# =========================================================================
+ROUTER = False
+
+
+def router_next_due(state):
+    """When the live chain's current leg completes, or None. Pure."""
+    chain = state.get("router_chain")
+    if not chain:
+        return None
+    leg = math.hypot(chain["cur"][0] - chain["prev"][0],
+                     chain["cur"][1] - chain["prev"][1])
+    return chain["granted_at"] + leg / DEFAULT_RUN_SPEED
+
+
+def router_abandon(state, rec, cause, now=None):
+    """Drop the live chain, naming why. Retail's contract: new input
+    silently abandons the remainder; the log row is ours, not the wire's."""
+    chain = state.pop("router_chain", None)
+    if chain is None:
+        return
+    if rec is not None:
+        rec.event("router_leg", act="abandon", cause=cause,
+                  i=chain["i"], n=chain["n"], left=len(chain["queue"]))
+
+
+def _router_plane(pm, wp, carry):
+    """Field-3 plane for an interior waypoint: the mesh's own answer,
+    disambiguated toward the carry (plane_at returns None rather than
+    guess; the carry is then the only honest fallback)."""
+    p = pm.plane_at(wp[0], wp[1], prefer=carry) if pm is not None else None
+    return carry if p is None else p
+
+
+def router_chain_tick(send, state, conn_id, rec, now=None):
+    """Grant the next leg of the live chain when the current one completes.
+
+    Rides the recv loop (quiet-tick and pre-batch, REV-2's recv-thread-only
+    sending), with the socket timeout shortened to the next ETA while a
+    chain is live so a leg grant lands at completion, not up to 1 s late.
+    Leg completion is TIMED (distance / DEFAULT_RUN_SPEED) because the
+    client is report-silent during click-walks -- the same ETA arithmetic
+    a2_watchdog_due already uses, and the cadence retail itself grants at
+    (ROUTER.md sec.1: grant(n+1) lands at leg n's completion at 288 u/s).
+    """
+    chain = state.get("router_chain")
+    if chain is None:
+        return
+    if now is None:
+        now = time.time()
+    pm = state.get("pathmap")
+    while chain is not None:
+        due = router_next_due(state)
+        if due is None or now + 1e-9 < due:
+            return
+        nxt = chain["queue"].pop(0)
+        chain["i"] += 1
+        terminal = not chain["queue"]
+        pf = (chain["click_plane"] if terminal
+              else _router_plane(pm, nxt, chain["carry"]))
+        ps, _matched = a2_matched_field4(pf, chain["carry"])
+        state["dest"], state["clipped"] = (nxt[0], nxt[1]), False
+        send(GAME_SMSG_AGENT_MOVE_TO_POINT,
+             [PLAYER_AGENT_ID, [nxt[0], nxt[1]], pf, ps],
+             f"ROUTER leg {chain['i']}/{chain['n']} "
+             f"({nxt[0]:.0f},{nxt[1]:.0f})"
+             + (" terminal" if terminal else ""))
+        state["zl_last_grant_plane"] = pf
+        if rec is not None:
+            rec.event("router_leg", act="grant", i=chain["i"],
+                      n=chain["n"], dest=[nxt[0], nxt[1]], plane=pf,
+                      terminal=terminal)
+        if terminal:
+            state.pop("router_chain", None)
+            chain = None
+        else:
+            chain["prev"], chain["cur"] = chain["cur"], nxt
+            chain["granted_at"] = now
+            chain["carry"] = pf
+
+
+def router_answer_click(send, state, conn_id, rec, dest, dest_plane,
+                        cur_plane, plane_first, plane_second):
+    """Answer one click the way retail does: route, grant the first leg.
+
+    Returns True when the click was handled here (fired, dropped or
+    refused); False falls through to the shipped path -- taken only when
+    the connection has no mesh or no position belief, where the router has
+    nothing to route over and the shipped refusals are the honest answer.
+    """
+    pm = state.get("pathmap")
+    pos = state.get("pos")
+    if pm is None or pos is None:
+        return False
+    now = time.time()
+    router_abandon(state, rec, "new-click", now)
+    dx, dy = float(dest[0]), float(dest[1])
+    kbd_at = state.get("kbd_moving_at")
+    kage = None if kbd_at is None else now - kbd_at
+    if kage is not None and kage <= GRANT_LOCAL_WINDOW:
+        # Retail's contract (sec.0.15): a click under an ACTIVE KEYBOARD
+        # authority is DROPPED OUTRIGHT. Read straight off Rule 1's latch
+        # (same arithmetic, negative age counts as armed) rather than
+        # through _grant_verdict, because the drop is retail's measured
+        # behaviour and must not evaporate under --no-grant-suppress. The
+        # rate floor is deliberately NOT consulted -- retail answers every
+        # processed click within one RTT (29/29, ROUTER.md sec.1), and the
+        # floor's hazard (a grant onto a silent mid-walk client) is gone
+        # when every grant is a legal leg.
+        state["grant_pending"] = None
+        if rec is not None:
+            rec.event("router_route", verdict="kbd-drop",
+                      dest=[dx, dy],
+                      keyboard_age=(None if kage is None
+                                    else round(kage, 3)))
+        print(f"[c{conn_id}] ROUTER click to ({dx:.0f}, {dy:.0f}): the "
+              f"player is driving with the keyboard -- dropped, retail's "
+              f"own contract", flush=True)
+        return True
+    origin = (float(pos[0]), float(pos[1]))
+    t0 = time.perf_counter()
+    wps = pm.route(origin[0], origin[1], dx, dy)
+    ms = (time.perf_counter() - t0) * 1000.0
+    if wps is None:
+        # No route. Attribute the refusal (the P-17 lesson: name which
+        # door decided), then the one honest fallback: the straight
+        # line's own clip, granted only when it actually moves the
+        # client -- a legal leg toward the click, ROUTER-Q1's
+        # cross-component case. NEVER the unclipped point: that is the
+        # phasing door this flag exists to close.
+        if not pm.containing(origin[0], origin[1]):
+            reason = "origin-off-mesh"
+        elif not pm.containing(dx, dy):
+            reason = "dest-off-mesh"
+        else:
+            reason = "no-path-or-gate"
+        stop = pm.clip(origin[0], origin[1], dx, dy, step=COLLISION_STEP)
+        moved = math.hypot(stop[0] - origin[0],
+                           stop[1] - origin[1]) > COLLISION_STEP
+        if moved and reason != "origin-off-mesh":
+            state["grant_pending"] = None
+            state["dest"], state["clipped"] = (float(stop[0]),
+                                               float(stop[1])), False
+            pf = _router_plane(pm, stop, cur_plane)
+            ps, _m = a2_matched_field4(pf, cur_plane)
+            if D1_LEAD:
+                state["a2_family_sent"] = None
+                state["a2_click_answered_at"] = now
+            send(GAME_SMSG_AGENT_UPDATE_SPEED,
+                 agents.agent_update_speed(PLAYER_AGENT_ID, 1.0),
+                 "AGENT_UPDATE_SPEED(player, 1.0 = 288 u/s)")
+            send(GAME_SMSG_AGENT_MOVE_TO_POINT,
+                 [PLAYER_AGENT_ID, [float(stop[0]), float(stop[1])],
+                  pf, ps],
+                 f"ROUTER clip-fallback ({stop[0]:.0f},{stop[1]:.0f}) "
+                 f"toward unroutable ({dx:.0f},{dy:.0f})")
+            state["zl_last_grant_plane"] = pf
+            if rec is not None:
+                rec.event("router_route", verdict="clip-fallback",
+                          reason=reason, dest=[dx, dy],
+                          stop=[float(stop[0]), float(stop[1])],
+                          ms=round(ms, 2))
+            return True
+        state["dest"], state["clipped"] = None, True
+        if rec is not None:
+            rec.event("router_route", verdict="refused", reason=reason,
+                      dest=[dx, dy], origin=[origin[0], origin[1]],
+                      ms=round(ms, 2))
+        print(f"[c{conn_id}] ROUTER click to ({dx:.0f}, {dy:.0f}): "
+              f"REFUSED ({reason}) -- no legal leg exists from "
+              f"({origin[0]:.0f}, {origin[1]:.0f}); nothing sent",
+              flush=True)
+        return True
+    legs = [(float(x), float(y)) for x, y in wps[1:]]
+    legs = [p for i, p in enumerate(legs)
+            if i == 0 or math.hypot(p[0] - legs[i - 1][0],
+                                    p[1] - legs[i - 1][1]) > 1e-9]
+    state["grant_pending"] = None
+    if D1_LEAD:
+        state["a2_family_sent"] = None
+        state["a2_click_answered_at"] = now
+    if len(legs) <= 1:
+        # One leg suffices: the verbatim echo, retail's own dominant
+        # class (16/29 live; ALL 13 scoreable reproduced bit-identically
+        # by route() on our meshes, ROUTER.md sec.3). Wire-identical to
+        # the shipped clear-line fire, planes included.
+        pf, ps = plane_first, plane_second
+        if D1_LEAD:
+            ps, _m = a2_matched_field4(pf, ps)
+        state["dest"], state["clipped"] = (dx, dy), False
+        send(GAME_SMSG_AGENT_UPDATE_SPEED,
+             agents.agent_update_speed(PLAYER_AGENT_ID, 1.0),
+             "AGENT_UPDATE_SPEED(player, 1.0 = 288 u/s)")
+        send(GAME_SMSG_AGENT_MOVE_TO_POINT,
+             [PLAYER_AGENT_ID, [dx, dy], pf, ps],
+             f"AGENT_MOVE_TO_POINT({dx:.0f},{dy:.0f}"
+             f" on plane {cur_plane}->{dest_plane}, ROUTER one leg)")
+        if rec is not None:
+            rec.event("router_route", verdict="verbatim", n_wp=1,
+                      dest=[dx, dy], ms=round(ms, 2))
+        return True
+    first_wp = legs[0]
+    pf = _router_plane(pm, first_wp, cur_plane)
+    ps, _m = a2_matched_field4(pf, cur_plane)
+    state["dest"], state["clipped"] = first_wp, False
+    send(GAME_SMSG_AGENT_UPDATE_SPEED,
+         agents.agent_update_speed(PLAYER_AGENT_ID, 1.0),
+         "AGENT_UPDATE_SPEED(player, 1.0 = 288 u/s)")
+    send(GAME_SMSG_AGENT_MOVE_TO_POINT,
+         [PLAYER_AGENT_ID, [first_wp[0], first_wp[1]], pf, ps],
+         f"ROUTER leg 1/{len(legs)} ({first_wp[0]:.0f},{first_wp[1]:.0f})"
+         f" toward ({dx:.0f},{dy:.0f})")
+    state["zl_last_grant_plane"] = pf
+    state["router_chain"] = {
+        "queue": legs[1:], "prev": origin, "cur": first_wp,
+        "granted_at": now, "carry": pf, "click_plane": dest_plane,
+        "i": 1, "n": len(legs)}
+    if rec is not None:
+        rec.event("router_route", verdict="routed", n_wp=len(legs),
+                  dest=[dx, dy], origin=[origin[0], origin[1]],
+                  ms=round(ms, 2))
+        rec.event("router_leg", act="grant", i=1, n=len(legs),
+                  dest=[first_wp[0], first_wp[1]], plane=pf,
+                  terminal=False)
+    print(f"[c{conn_id}] ROUTER click to ({dx:.0f}, {dy:.0f}): routed, "
+          f"{len(legs)} legs, first ({first_wp[0]:.0f}, {first_wp[1]:.0f})"
+          f" [{ms:.1f}ms]", flush=True)
+    return True
+
+
 # RULE 1'S WINDOW -- how long the "the player is driving locally" latch survives
 # on its window alone.
 #
@@ -5126,7 +5390,7 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
                           cancel_answer=None, stop_answer=None,
                           cast_stop=False, resync_separation=None,
                           family_rate_probe=False, checksum_probe=None,
-                          pc_spoof=None, d1_lead=False):
+                          pc_spoof=None, d1_lead=False, router=False):
     """Pure: may these movement flags run together, and what must be said?
 
     Returns (refusal, notes). `refusal` is None or the text main() raises as a
@@ -5423,6 +5687,49 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
                 "click grants stamp the shared grant clock -- a wrong "
                 "plane word inside A2's plane-truth run un-attributes any "
                 "snap, and A2's protocol is click-free besides."), []
+    if router and click_sweep:
+        return ("--router and --click-sweep cannot run together. The sweep "
+                "deliberately sends wrong plane words through the click "
+                "channel the router now owns -- two plane policies for one "
+                "send site, and the sweep's diagnostic question (which "
+                "plane pair the client accepts) is unanswerable when a "
+                "chain interleaves its own grants."), []
+    if router and arrival_carry:
+        return ("--router and --arrival-carry cannot run together. Both "
+                "write wire field 4 on click answers -- arrival-carry from "
+                "its arrival queue, the router from per-waypoint plane_at "
+                "-- and a chain of grants would drain the carry queue "
+                "against destinations it never modelled."), []
+    if router and cancel_answer:
+        return ("--router and --cancel-answer cannot run together. The "
+                "cancel lead arms swap points at the one 0x0029 send site "
+                "mid-experiment, and the router's chain grants add 0x0029s "
+                "of their own -- a warp in such a run could attribute to "
+                "either. Run the CANCELWALK arms click-free, as their own "
+                "protocol already says."), []
+    if router and stop_answer:
+        return ("--router and --stop-answer cannot run together. The stop "
+                "experiments are pre-registered against the SHIPPED click "
+                "regime and a chain changes what a stop interrupts -- the "
+                "readout would answer a question nobody registered."), []
+    if router and family_rate_probe:
+        return ("--router and --family-rate-probe cannot run together. The "
+                "probe doses 0x002B on every granted report; the router's "
+                "chain grammar is ONE 0x002B per chain (retail's own, "
+                "ROUTER.md sec.1) -- two dosing policies for one client "
+                "field (sync +0x60)."), []
+    if router and checksum_probe:
+        return ("--router and --checksum-probe cannot run together. The "
+                "checksum's 0x0023 rides the report breath ungated and a "
+                "chain's burst shape (one 0x002B, then bare 0x0029s at leg "
+                "cadence) is the thing the router run exists to exhibit -- "
+                "same burst-purity ground as the A1/A2 cells."), []
+    if router and pc_spoof is not None:
+        return ("--router and --pc-spoof cannot run together. The spoof is "
+                "a field-4 EXPERIMENT inside what is now a field-4 POLICY "
+                "(per-waypoint planes, matched) -- a warp in such a run "
+                "could attribute to either. Run the spoof's cell alone, as "
+                "its record already says."), []
     if cancel_answer and not zero_lead:
         return ("--cancel-answer requires --zero-lead. The CANCELWALK arms "
                 "are MODIFIERS on the zero-lead answer to the one report "
@@ -5686,6 +5993,18 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
             "copy. The 0x002C stamps the sync model but NOT the grant "
             "clock. Predictions and readout: "
             "studies/movement/CANCELWALK.md 8.3e.")
+    if router:
+        notes.append(
+            "      + --router: ROUTER-B2 (studies/movement/ROUTER.md). "
+            "Clicks are answered by pathmap.route() -- first leg within "
+            "the click's own handling, further legs at leg-completion "
+            "cadence, abandon on any 0x003D/0x003E/0x0047 -- and BYPASS "
+            "the click tower (no grant_pending, no rate floor; Rule 1's "
+            "keyboard drop kept, read straight off the latch). The "
+            "keyboard channel (zero-lead, D1 leads, clip, watchdog) is "
+            "untouched; with --d1-lead the two compose as the live-run "
+            "bundle. Falls back to the shipped click path only where "
+            "there is no mesh or no position belief.")
     return None, notes
 
 
@@ -14020,6 +14339,18 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
         desynced = False       # set when an unframeable opcode ends the connection
         last = time.time()
         while not stop.is_set():
+            # ROUTER-B2: while a chain is live the recv timeout shrinks to
+            # the next leg's ETA (floor 0.05 s), so chain grants land at
+            # leg completion instead of up to 1 s late -- retail's own
+            # cadence is leg-exact (±4%). With no chain the timeout is the
+            # same 1.0 s literal policyreplay.py models as QUIET_TICK; no
+            # log that gate replays can hold a chain, so its constant
+            # stays true for every log it rules on.
+            if ROUTER and kind == "game":
+                _rt_due = router_next_due(state)
+                sock.settimeout(1.0 if _rt_due is None else
+                                max(0.05, min(1.0,
+                                              _rt_due - time.time())))
             try:
                 chunk = sock.recv(65536)
             except socket.timeout:
@@ -14034,6 +14365,10 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                 if D1_LEAD and kind == "game":
                     _a2_watchdog(send, state, rec)
                     grant_flush_tick(send, state, conn_id, rec)
+                # ROUTER-B2: the chain scheduler rides the same quiet
+                # ticks (recv-thread-only sending, same as the flush).
+                if ROUTER and kind == "game":
+                    router_chain_tick(send, state, conn_id, rec)
                 continue
             if not chunk:
                 break
@@ -14060,6 +14395,11 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
             # every player-grant sender is serialized on this one thread.
             if D1_LEAD and kind == "game" and msgs:
                 grant_flush_tick(send, state, conn_id, rec)
+            # ROUTER-B2: a due leg gets the same pre-batch claim -- the
+            # batch may carry the very input that abandons the chain, and
+            # a leg whose ETA passed before that input arrived was owed.
+            if ROUTER and kind == "game" and msgs:
+                router_chain_tick(send, state, conn_id, rec)
 
             for opcode, values in msgs:
                 # No semantic names exist for GAME_CMSG in this repo yet; the
@@ -14735,6 +15075,12 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                       age=round(time.time()
                                                 - _old_leg["t0"], 3),
                                       wd_fired=_old_leg["wd_fired"])
+                        # ROUTER-B2: any keyboard report abandons the
+                        # click chain -- retail's own supersession rule
+                        # (ROUTER.md sec.1 clause 4), and the same
+                        # client-is-speaking ground as the a2_leg pop.
+                        if ROUTER:
+                            router_abandon(state, rec, "0x003D")
                         # THE LOCALLY-DRIVING LATCH, armed here and cleared in
                         # the 0x0047 arm below, and touched in NO third place.
                         # See _grant_verdict for what reads it and why it is
@@ -15720,6 +16066,22 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # recovery click: refused as 7.15 s stale while the
                         # model knew the player stood at the granted dest).
                         a2_click_leg = state.get("a2_leg")
+                        # ROUTER-B2 (studies/movement/ROUTER.md): under
+                        # --router the click is answered the way retail
+                        # answers it -- a route over our own mesh, first
+                        # leg now, the rest at leg-completion cadence --
+                        # and the freshness/geometry/hold machinery below
+                        # never runs for it (the tower polices unclipped
+                        # grants; a routed leg is legal by construction).
+                        # Falls through ONLY when the connection has no
+                        # mesh or no position belief.
+                        if ROUTER and router_answer_click(
+                                send, state, conn_id, rec, dest,
+                                dest_plane, cur_plane, plane_first,
+                                plane_second):
+                            if sweep_note:
+                                print(sweep_note, flush=True)
+                            continue
                         # Grant the click exactly as asked. Nothing here second
                         # guesses the player.
                         #
@@ -15729,10 +16091,15 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # produced "click past a wall and end up at some spot
                         # near where the navmesh stops", which is not how the
                         # game behaves. A real server ROUTES you around the
-                        # obstacle. We cannot do that -- the pathfinding graph in
-                        # the map file is not decoded -- and between two things
-                        # we cannot do, the honest one is the one that does not
-                        # invent a destination the player never chose.
+                        # obstacle. When this was written we could not -- the
+                        # pathfinding graph in the map file was not decoded --
+                        # and between two things we could not do, the honest
+                        # one was the one that does not invent a destination
+                        # the player never chose. THAT PREMISE HAS EXPIRED:
+                        # pathmap.route() decodes and searches that graph now,
+                        # and --router (ROUTER-B2, the block above) answers
+                        # clicks with its legs. This shipped path remains the
+                        # no-flag and no-mesh behaviour.
                         #
                         # Whether this phases through walls is now an OPEN
                         # question rather than a settled one. The test that
@@ -15763,11 +16130,16 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # not going to take.
                         #
                         # A real server owns pathing and would send the legs of
-                        # the route. We cannot: the pathfinding graph in the map
-                        # file is decoded only as far as its sub-record sizes. The
-                        # honest substitute is to stay out of the way when the
-                        # client has real work to do, and confirm only the trivial
-                        # case where the straight line IS the route.
+                        # the route -- which is now MEASURED as exactly what
+                        # retail does (ROUTER.md sec.1: waypoint chains at
+                        # leg-completion cadence), and what --router sends.
+                        # When this paragraph was written the pathfinding
+                        # graph was decoded only as far as its sub-record
+                        # sizes; pathmap.route() has since closed that. Under
+                        # no flag, the honest substitute is still to stay out
+                        # of the way when the client has real work to do, and
+                        # confirm only the trivial case where the straight
+                        # line IS the route.
                         # AND ONLY WHEN WE KNOW WHERE THE PLAYER IS.
                         #
                         # The second plane field is written straight into the
@@ -16105,6 +16477,11 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # longer applies (sec.0.11 containment, same clear as
                         # the 0x003D arm).
                         _old_leg = state.pop("a2_leg", None)
+                        # ROUTER-B2: a stop report abandons the click
+                        # chain too (retail's supersession rule; arrival
+                        # is a stop).
+                        if ROUTER:
+                            router_abandon(state, rec, "0x0047")
                         # sec.0.19 (RETHINK #1c), the stop-arm clear.
                         if _old_leg is not None and rec is not None:
                             rec.event("a2_leg", act="clear", src="0x0047",
@@ -18186,6 +18563,26 @@ def main():
                          "zero-distance 0x0029). Requires --zero-lead and "
                          "--plane-carry; refused with the probe/diagnostic "
                          "arms. Protocol: click-free, cast-free.")
+    ap.add_argument("--router", action="store_true",
+                    help="ROUTER-B2 (studies/movement/ROUTER.md; the "
+                         "owner's 2026-08-26 ruling on RETHINK-H3): answer "
+                         "clicks the way retail measurably does -- a route "
+                         "over OUR navmesh (pathmap.route(): A* + "
+                         "string-pull + a clip gate that refuses paths "
+                         "through walls), first leg within the click's own "
+                         "handling, further legs granted at leg-completion "
+                         "cadence at 288 u/s, terminal grant the bit-exact "
+                         "clicked point, chain abandoned on any new input. "
+                         "One 0x002B per chain (retail's grammar), "
+                         "per-waypoint planes matched. Routed clicks "
+                         "bypass the hold/void/rate tower (Rule 1's "
+                         "keyboard drop stays); no-route clicks get a "
+                         "clip-fallback leg or a LOGGED refusal, never the "
+                         "unclipped point. Off by default; composes with "
+                         "--d1-lead; refused with the probe/diagnostic "
+                         "arms. Bench: toolkit/clientscan/routerbench.py "
+                         "(13/13 retail-verbatim clicks reproduced "
+                         "bit-identically offline before this shipped).")
     ap.add_argument("--pc-spoof", type=int, default=None, metavar="PLANE",
                     help="REALFIX sec.0.7 cell 2's lever (the parked+pc-flip "
                          "cell -- the seam is a bridge too narrow to stage it "
@@ -18899,7 +19296,7 @@ def main():
         cast_stop=_cs_mode, resync_separation=a.resync_separation,
         family_rate_probe=a.family_rate_probe,
         checksum_probe=a.checksum_probe,
-        pc_spoof=a.pc_spoof, d1_lead=a.d1_lead)
+        pc_spoof=a.pc_spoof, d1_lead=a.d1_lead, router=a.router)
     # The default-flip hint rides ONLY the refusal family it can actually
     # fix: "--zero-lead cannot be combined with X". On a PAIRWISE cell
     # (--cast-stop with --stop-answer, pin with --resync...) the advice is
@@ -19602,6 +19999,40 @@ def main():
               "change or stop. A same-family stretch after a click reads "
               "as a P-3 failure when it is a protocol violation; the c2s "
               "census (zero 0x003E) is the definitive guard.")
+    if a.router:
+        global ROUTER
+        ROUTER = True
+        print("[map] --router ON (ROUTER-B2, studies/movement/ROUTER.md -- "
+              "the owner's ruling on RETHINK-H3). Clicks are answered by a "
+              "route over our own mesh; every granted leg is walkable end "
+              "to end by construction.")
+        print("      READOUT    router_route rows (verdict per click: "
+              "verbatim/routed/clip-fallback/refused/kbd-drop, with the "
+              "refusal reason and route compute ms) and router_leg rows "
+              "(grant/abandon per leg, abandon cause named). movetap "
+              "beside them scores the body.")
+        print("      MECHANISM  pathmap.route() -- A* over the pathing "
+              "chunk's own trapezoid adjacency + portal pairs, "
+              "string-pulled, clip-gated (p50 0.185ms). First leg in the "
+              "click's handling; further legs at leg-completion ETA "
+              "(dist/288) off the recv loop, timeout shortened to the ETA "
+              "while a chain is live. One 0x002B per chain, per-waypoint "
+              "matched planes.")
+        print("      PREDICTION, registered before the first run "
+              "(ROUTER.md sec.5): P-1 zero wall/prop phasing on click "
+              "routes -- every granted leg clip-clean by construction; "
+              "P-2 a cross-floor click routes legally or refuses with the "
+              "reason logged, never a straight-line cross-floor grant; "
+              "P-3 chains walk without rubber-banding, grants landing at "
+              "leg completion; P-4 the P-17 wall-press cell yields "
+              "refused (origin-off-mesh) or legal routes -- the unclipped "
+              "pass-through door is closed.")
+        print("      REFUTED IF a clip-clean granted leg still phases "
+              "geometry (mesh-vs-client walkability divergence -- "
+              "campaign-level news, not a router bug); or the client "
+              "rubber-bands on chain grants (the cadence model is wrong); "
+              "or routed clicks measurably lag one RTT (route() cost "
+              "moved on a real map).")
     if a.pc_spoof is not None:
         global PC_SPOOF
         PC_SPOOF = int(a.pc_spoof)

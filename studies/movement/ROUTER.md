@@ -129,7 +129,7 @@ in content, 1 connection unattributable):
   (all 29 dests are on-mesh; the GW client raycasts clicks onto ground).
   Retail's rule for such clicks is unmeasured.
 
-## 4. ROUTER-B2 — the wiring (authsrv `--router`) — spec
+## 4. ROUTER-B2 — the wiring (authsrv `--router`) — BUILT 2026-08-26, tests green
 
 Opt-in flag, shipped default byte-identical. Under `--router`, the click
 branch (0x003E) becomes:
@@ -170,7 +170,69 @@ branch (0x003E) becomes:
    longer enters. The keyboard channel (D1 leads, clip, watchdog) is
    untouched; `--router` composes with `--d1-lead`.
 
-## 5. ROUTER-P — pre-registered predictions (to fill at wiring landing,
-before the owner's verification run)
+Build notes beyond the spec above, all tested (`test_router.py`, floor 51;
+`test_d1lead.py` floor 86 with its three source-census locks updated to
+name the router's new call sites; `test_grantsim.py` 86, `test_policyreplay.py`
+14, `test_srclint.py` 22 all green):
 
-(reserved)
+- The keyboard drop reads Rule 1's latch **directly** (same arithmetic,
+  negative age counts as armed) rather than through `_grant_verdict` — the
+  drop is retail's measured contract and must not evaporate under
+  `--no-grant-suppress`.
+- The scheduler grants **one leg per tick even when late**: the client has
+  been parked at the current waypoint since the leg completed (it cannot
+  walk a leg nobody granted), so cadence restarts at the grant instant.
+  The first draft of the test asserted queue-draining and the reasoning
+  above refuted it — recorded because the wrong version looks efficient.
+- The recv socket timeout shrinks to the next leg ETA (clamped
+  [0.05, 1.0] s) only while a chain is live; `policyreplay.QUIET_TICK=1.0`
+  stays true for every log its gate rules on (no old log holds a chain).
+- Plane pairs are **matched everywhere** (`a2_matched_field4`, §0.11's own
+  protection); the interior field-3 is `plane_at(wp, prefer=carry)` with
+  the carry as the refuse-to-guess fallback, the terminal field-3 is the
+  client's own click plane. ROUTER-Q7 records the deviation from retail's
+  half-zero lag pairs.
+- Composition: refused with the seven probe/diagnostic arms
+  (`click-sweep`, `arrival-carry`, `cancel-answer`, `stop-answer`,
+  `family-rate-probe`, `checksum-probe`, `pc-spoof`); composes with
+  `--d1-lead` (the live-run bundle) and both `--grant-suppress` states.
+- New open items: **ROUTER-Q6** — no origin-snap in v1: a wall-pressed
+  origin that penetrates the mesh (P-17 observed ~0.25 u) refuses with
+  `origin-off-mesh` logged rather than snapping to the nearest trapezoid;
+  build the snap only if the owner run shows the refusal firing on real
+  play. **ROUTER-Q7** — matched plane pairs vs retail's one-grant-lag
+  half-zero pairs (above). **ROUTER-Q8** — only 0x003D/0x003E/0x0047
+  abandon a chain; retail also aborted on an op57 interaction, and our
+  interaction/cast opcodes do not yet abandon (the cast path's own
+  cancel-on-move interplay is unmeasured under chains).
+
+## 5. ROUTER-P — pre-registered predictions for the owner's verification run
+
+Registered 2026-08-26, before any live run under `--router` (the flag's
+startup banner prints the same list). The run protocol is the P-17 script
+plus ordinary play: free clicks, mid-route re-clicks, the wall press with
+clicks, a cross-floor click, keyboard interleave.
+
+- **ROUTER-P1 — zero wall/prop phasing on click routes.** Every granted
+  leg is clip-clean by construction; movetap shows no body passing
+  geometry on a click answer. REFUTED IF a clip-clean granted leg still
+  phases — that is mesh-vs-client walkability divergence, campaign-level
+  news scored against the mesh, not the router.
+- **ROUTER-P2 — the cross-floor click** (the 143431 warp case) **routes
+  legally or refuses with the reason logged.** No straight-line
+  cross-floor grant exists in the log. REFUTED IF a `router_route` row
+  shows verbatim/clip-fallback across planes where route() should have
+  cornered.
+- **ROUTER-P3 — chains walk without rubber-banding**, grants landing at
+  leg completion (movetap dir/point continuous through waypoints; no
+  0x002C resync storm). REFUTED IF the client visibly snaps at leg
+  boundaries — the cadence model or the parked-client model is wrong.
+- **ROUTER-P4 — the P-17 wall-press cell yields only refusals or legal
+  routes.** `lead_clip_why`-class visibility: every wall-press click
+  produces a `router_route` row reading `refused (origin-off-mesh)` or a
+  routed answer whose legs are legal; the unclipped pass-through door no
+  longer exists on the click channel. REFUTED IF any wall-press click
+  produces a grant whose leg crosses the boundary.
+- **Exposure floors**: ≥10 free clicks, ≥3 mid-route re-clicks, ≥3
+  wall-press clicks, ≥1 cross-floor click, else the affected cell is
+  VOID, not a null (the L8 rule).

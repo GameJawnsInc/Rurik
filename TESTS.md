@@ -8940,4 +8940,32 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   terminal exactly the click, and ALL 13 scoreable retail-verbatim clicks
   reproduced as our one-leg case bit-identically (corpus-level counts are
   ≥-floors because the live corpus grows; bit-exact locks stay on the
-  anchor files). Floor 48 from the green run. ~15 s warm).
+  anchor files). Floor 48 from the green run. ~15 s warm),
+  `toolkit/authsrv/test_router.py` (ROUTER-B2, the `--router` click policy —
+  the wiring's own checks, bare-machine (no vault, no client, no sockets;
+  routerbench validates the pathfinder against retail, THIS file validates
+  the plumbing). Section 1 drives `router_answer_click` on a stub mesh with
+  one wall through all five verdicts: verbatim (speed-then-move, exact
+  point, no chain, held click superseded, integrator armed), routed (speed
+  ONCE then the first leg, chain armed with the remaining legs, matched
+  plane pair), kbd-drop (nothing sent — retail's own contract, read off
+  Rule 1's latch directly so it survives --no-grant-suppress), refused
+  (origin-off-mesh — the P-17 wall-press door CLOSED: nothing sent, dest
+  dropped, reason named in the row) and clip-fallback (the stop lands short
+  of the wall, never past it; the route-refusal reason rides the row), plus
+  the no-mesh fallthrough and new-click chain abandonment. Section 2 is the
+  scheduler: due = grant + dist/288, nothing mid-leg, a bare grant at
+  completion (no speed row — retail's chain grammar), interior planes via
+  plane_at matched, the terminal grant carrying the client-named dest plane
+  and clearing the chain, and the late-poll cell that CAUGHT this file's
+  own first wrong expectation: a late poll grants ONE leg (the client was
+  parked — it cannot walk a leg nobody granted; cadence restarts at the
+  grant instant), never the drained queue. Section 3: abandon pops, logs
+  the cause and remaining count, and is silent with no chain. Section 4
+  locks the wiring in source: the handler branches to the router exactly
+  once and BEFORE the freshness gate, both recv-loop attach points
+  game-gated, the dynamic timeout clamped to [0.05, 1.0], both report
+  handlers abandoning, the keyboard drop latch-read, the no-route path
+  never sending the raw dest, DEFAULT_RUN_SPEED the only speed constant,
+  and all seven composition refusals present. Floor 51 from the green run.
+  ~1 s).
