@@ -1840,10 +1840,21 @@ chain, matched per-waypoint planes, abandon on 0x003D/0x003E/0x0047
 clip-fallback or LOGGED refusal where no route exists (the P-17
 pass-through door does not exist on this path); routed clicks bypass
 the hold/void/rate tower, Rule 1's keyboard drop kept. ROUTER-P1..P4
-+ exposure floors pre-registered in ROUTER.md §5. **Next: the
-owner's verification run under `--d1-lead --router`** (the P-17
-script plus ordinary play; ROUTER.md §5 is the protocol and the
-predictions). Open: ROUTER-Q1..Q8 in the doc.
++ exposure floors pre-registered in ROUTER.md §5.
+**The verification run happened same night (20260826T192724, ROUTER.md
+§6): THE ROUTER HELD** — 24 answered clicks all legal, zero teleports
+and zero wall-crossings on the tape, drags correctly dropped — and the
+owner's "still warping" decoded to the KEYBOARD channel:
+`a2_clip_lead`'s origin-unwalkable door passed 19 of 99 fired leads as
+full unclipped 766u rays, and 11 of the tape's 12 off-mesh episodes
+start on exactly those grants. **ROUTER-B3 closed it** (an off-mesh
+origin now gets a zero-distance lead — no walk ordered from ground the
+mesh cannot place; test_d1lead's cell flipped from pinning the door
+open to pinning it closed). **Next: re-run under the same flags** —
+registered prediction: the drag-phase phasing episodes lose their ray
+injections; what remains is mesh-edge residual, not server-ordered.
+Open: ROUTER-Q1..Q9 in the doc; P-2 (cross-floor) still VOID for
+exposure.
 *The staging block that preceded the run, kept for the record:*
 The follow-on recon (`studies/movement/followon-notes/README.md`, merged
 to `main` the same day) answered F35's counterfactual from tape (castless,

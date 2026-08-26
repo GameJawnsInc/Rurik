@@ -4600,21 +4600,36 @@ def a2_clip_lead(state, reported, dest):
     remainder; we carry no prop geometry, so those clips stay retail-only).
     The ray is anchored at the REPORT in hand, never state["pos"]
     (--heading-grant's graveyard, R2-1): the lead must aim from the point
-    the client actually named. The doors mirror clip_to_walkable's: no
-    mesh, or an off-mesh origin, disables clipping rather than freezing
-    the lead -- and a fallback lead is never clipped at all (it IS the
-    report; clipping it would second-guess the client's own point).
-    Without this term a lead's ray crosses any blocked band narrower than
-    its 769 u reach onto legal ground beyond -- the wall-phase specimen:
-    all 10 final-phase leads of the 113833 run were mesh-blocked 200-768 u
-    short, and the ETA watchdog then re-pinned AT the through-wall dest
-    the unclipped leg had named (sec.0.17).
+    the client actually named. The no-mesh door disables clipping rather
+    than freezing the lead -- and a fallback lead is never clipped at all
+    (it IS the report; clipping it would second-guess the client's own
+    point). Without this term a lead's ray crosses any blocked band
+    narrower than its 769 u reach onto legal ground beyond -- the
+    wall-phase specimen: all 10 final-phase leads of the 113833 run were
+    mesh-blocked 200-768 u short, and the ETA watchdog then re-pinned AT
+    the through-wall dest the unclipped leg had named (sec.0.17).
+
+    THE ORIGIN-UNWALKABLE DOOR IS CLOSED (ROUTER-B3, run
+    20260826T192724 scored against the map-280 mesh): this branch used to
+    return dest UNCHANGED -- pass the full unclipped ray -- and that was
+    the last phasing engine standing after the router closed the click
+    channel. In the verification run 19 of 99 fired keyboard leads went
+    out through it, and 11 of the tape's 12 off-mesh episodes (the
+    longest 9.6 s) start on exactly those grants, all during drag
+    movement, where the client's reported position rides the mesh edge.
+    An off-mesh origin now receives a ZERO-DISTANCE lead -- the granted
+    point is the report itself, the shipped zero-lead answer shape for
+    that row -- which orders no walk at all and leaves the client
+    authoritative exactly where our mesh has nothing to say. Same
+    doctrine as the router's origin-off-mesh refusal: an origin the mesh
+    cannot place never receives a walk order.
     """
     pm = state.get("pathmap")
     if pm is None:
         return dest, False, "no-mesh"
     if not pm.walkable(reported[0], reported[1]):
-        return dest, False, "origin-unwalkable"
+        return ([float(reported[0]), float(reported[1])], True,
+                "origin-unwalkable")
     stopped = pm.clip(float(reported[0]), float(reported[1]),
                       float(dest[0]), float(dest[1]),
                       step=A2_LEAD_CLIP_STEP)
