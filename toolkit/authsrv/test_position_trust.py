@@ -2239,24 +2239,45 @@ def main():
                if zl_default_sends else [])
     dest_arg = payload[1] if len(payload) > 1 else None
     # The point is carried by `zl_point`, whose ONLY assignments in the block
-    # must be the default `list(reported)` and CANCELWALK's `cw_dest` -- so
-    # the shipped payload is still the reported position VERBATIM, provable
-    # from source, and the one other value is the diagnostic arm's.
+    # must be CANCELWALK's `cw_dest` and the default branch's IfExp
+    # `a2_dest if a2_dest is not None else list(reported)` -- so the shipped
+    # payload is still the reported position VERBATIM when --d1-lead is off
+    # (a2_dest is None unless that flag armed it, and the flag is
+    # default-False with its own lattice), and the two other values are the
+    # two AUDITED arms: --cancel-answer's lead (diagnostic) and REALFIX-A2's
+    # d1 lead (the bundle, REALFIX.md sec.0.9, its own cells and locks in
+    # test_d1lead.py). EXTENDED 2026-08-26 for A2: this check originally
+    # admitted only list(reported)|cw_dest, and it went red the moment the
+    # A2 edit landed -- which is this lock doing its job; the extension is
+    # deliberate and names the new value, not a loosening to "anything".
+    def _is_list_reported(r):
+        return (isinstance(r, ast.Call) and isinstance(r.func, ast.Name)
+                and r.func.id == "list" and len(r.args) == 1
+                and isinstance(r.args[0], ast.Name)
+                and r.args[0].id == "reported")
+
+    def _is_a2_ifexp(r):
+        return (isinstance(r, ast.IfExp)
+                and isinstance(r.body, ast.Name) and r.body.id == "a2_dest"
+                and _is_list_reported(r.orelse)
+                and isinstance(r.test, ast.Compare)
+                and isinstance(r.test.left, ast.Name)
+                and r.test.left.id == "a2_dest")
+
     zl_point_rhs = [n.value for n in ast.walk(zl)
                     if isinstance(n, ast.Assign) and len(n.targets) == 1
                     and isinstance(n.targets[0], ast.Name)
                     and n.targets[0].id == "zl_point"] if zl else []
     rhs_ok = (len(zl_point_rhs) == 2 and any(
-        isinstance(r, ast.Call) and isinstance(r.func, ast.Name)
-        and r.func.id == "list" and len(r.args) == 1
-        and isinstance(r.args[0], ast.Name) and r.args[0].id == "reported"
-        for r in zl_point_rhs) and any(
+        _is_a2_ifexp(r) for r in zl_point_rhs) and any(
         isinstance(r, ast.Name) and r.id == "cw_dest" for r in zl_point_rhs))
     check(isinstance(dest_arg, ast.Name) and dest_arg.id == "zl_point"
           and rhs_ok,
-          "the source grants `zl_point`, and its only values are "
-          "`list(reported)` (the shipped default) and `cw_dest` "
-          "(--cancel-answer's lead arm) -- nothing else",
+          "the source grants `zl_point`, and its only values are `cw_dest` "
+          "(--cancel-answer's lead arm) and the A2 IfExp whose else-branch "
+          "is `list(reported)` -- the shipped default is still the "
+          "reported position verbatim, provable from source, with "
+          "--d1-lead's a2_dest as the one other audited value",
           f"dest={ast.dump(dest_arg) if dest_arg is not None else None} "
           f"rhs={[ast.dump(r) for r in zl_point_rhs]}")
     zl_clipped = zl is not None and any(

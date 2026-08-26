@@ -590,6 +590,132 @@ systematic, unattributed); C1 showed `fence_state: shut` in 14.9% of samples whi
 C2 showed none under identical args (unattributed, flagged); the late-attach cost
 one press of the lever run's nine.
 
+### 0.9 REALFIX-A2 — `--d1-lead`, the bundle: D1 lead + speed truth + plane truth + retail stop-acks. Designed and registered 2026-08-26, before the build.
+
+**Grounding:** a two-lane recon over this tree at `c09a27d` — a 21-stamp live-corpus
+census (lane R1, scripts in the session scratchpad; every number live-origin only,
+`toolkit/origin.py` verified, 0 pooled) and a 25-claim tree constraint sheet (lane R2).
+The new corpus facts A2 is built on, all OBSERVED:
+- **Field-4 policy: retail does what `--plane-carry` already does.** At 306 observed
+  plane-crossing grants, field 4 traces to a real recently-relevant plane in 305/306
+  (one-grant lag the dominant pattern, 79.7%; the client's own last-reported plane,
+  90.2%); retail is never observed to fake-label. When both fields are nonzero they are
+  bit-identical 222/222. (A side-find first flagged CONTESTED then reconciled: the
+  old "14 of 987 (1.4%)" differ-rate is one capture's — FINDINGS' own corpus
+  correction at its §"Retail corrections" block already says 12.8%, and the recount's
+  15.6% on the 9-stamp subset corroborates it; both recounts now sit beside that
+  correction.)
+- **The stop-ack, byte-exact and NEW:** the companion `0x002B` at retail stop echoes is
+  **`[1.0, movementType 9]` in 131/131** — mt 9 is a server-only sentinel the client's
+  own reports never carry (census: c2s mt strictly 1..8) — then the zero-distance
+  `0x0029`. The 38/172 non-echoes decompose into capture-tail truncation and
+  mis-attributed leftover heading grants: **there is no second retail stop policy.**
+  And the shape already exists in this tree, scoped: `CANCEL_STOP`'s re-pin sends
+  exactly `0x002B [1.0, 9]` + zero-distance `0x0029`, gated to one cancelwalk leg.
+- **Burst grammar sharpened:** `0x0025` rides heading-triggered bursts (79.3%), not
+  stop bursts (14.4%); **`0x002B` is a family-CHANGE signal** — present in 97.6% of
+  family-change bursts vs 11.5% of same-family ones (reconciling FINDINGS' two
+  previously-disagreeing figures). A1's every-granted-report dosing overshoots retail;
+  the policy form is edge-triggered.
+- **D1 re-verified bit-exact** on 3,532 fresh pairs: dest = `reported + vec2 +
+  0.5·unit(vec2)`, `vec2` = the client's own c2s `0x003D` wire field (|vec2|
+  765.0175–768.0000), residuals to 0.0001 u on unclipped rows; the large residuals are
+  the known D2 clip (~31%, unmodelled — Q7 stays open and A2 does NOT clip).
+
+**The design — ONE flag, `--d1-lead`, four terms that deliberately travel together**
+(the A1 lesson is the charter: speed truth without copy-pinning converts accidental
+safety into exposure, and `--client-endpoint` is what the lead term looks like alone):
+1. **Lead:** at the one zero-lead `0x0029` send site, `zl_point` becomes
+   `reported + vec2 + 0.5·unit(vec2)` — the client's own proposed endpoint, verbatim,
+   UNCLIPPED (the `--heading-grant` graveyard: our navmesh's clip is what killed it),
+   anchored to the report in hand, never a model belief. The lead applies only inside
+   the **verified proposal band |vec2| ∈ [700.0, 769.0]** (measured 765.02–768.00,
+   slack both sides; the formula was bit-verified only there) — anything outside,
+   including the corpus's one mid-magnitude outlier (|v|=1.997, 1 of 15,285 c2s rows,
+   the build review's census), falls back to the zero-lead dest for that grant,
+   recorded in the verdict row (`lead_src`), never guessed and never clamped.
+   Cadence and rate policy inherited unchanged: `_heading_grant_ok`, the shared grant
+   clock, the 0.5 s floor — retail's own p50 is 0.490 s.
+2. **Speed truth:** `_send_family_rate`'s wire shape promoted from probe to policy,
+   **edge-triggered** (send on family change, not every grant — the corpus's 97.6/11.5
+   split), riding the same witnessed burst slot, and **re-armed after every stop**
+   (the stop-ack's `[1.0, 9]` overwrites sync `+0x60`, so the next leg must re-send
+   its family even unchanged — a state reset the probe never needed).
+3. **Plane truth:** `--plane-carry`, unchanged — the corpus says the one-grant lag IS
+   retail's dominant field-4 pattern. A2 refuses `--arrival-carry` (the bundle chose
+   F1) and refuses to run with plane-carry off.
+4. **Stop-ack:** on EVERY `0x0047`: `0x002B [1.0, 9]` then the zero-distance `0x0029`
+   at the reported point (field 4 via the same plane-carry), generalizing
+   `CANCEL_STOP`'s scoped code to ordinary stops. **This is the wire shape
+   `--stop-echo` sends, and the era-audit ground for building it anyway is explicit:**
+   stop-echo's 2026-08-19 kill was a far-copy interaction (the echo baked a 1,286 u
+   walk from a copy a NOW-DEAD full-lead policy had stranded); the era-audit names
+   three refutations that transfer policy-independently and stop-echo is not one;
+   under A2's regime the copy tracks the body at ≤ one report of lag, and §0.8's
+   byte-proven result — a copy parked at the body's feet is plane-proof-immune —
+   is precisely what the re-pin buys at every stop. The re-pin bypasses the 0.5 s
+   floor deliberately (it is an ack to a self-limiting event, near-zero distance by
+   construction) but still routes through `send()` so the one grant clock sees it.
+
+**Composition:** requires `--zero-lead` and `--plane-carry`; refused pairwise with
+`--cancel-answer` (same `zl_point` swap and same stop site), `--family-rate-probe`
+(two dosing policies for sync `+0x60`), `--checksum-probe` (burst purity),
+`--pc-spoof` (a field-4 experiment inside a policy run), `--stop-answer` (two stop
+replies), `--arrival-carry`, `--click-sweep`; allowed with `--grant-suppress` (note),
+`--resync` (note: second variable), `--cast-stop` (note: protocol is cast-free).
+
+**Registered predictions — phrased ONLY against readouts that exist (movetap columns,
+movesync's hard bar and separation, the gamesrv verdict rows), and explicitly SILENT
+on grantsim's offline snap model, which predates the §0.5–0.8 veto decode (R2-24:
+gate-1-only, no history veto — offline numbers from it are not A2 evidence):**
+- **P-1, the headline A/B (the C1 warp recipe, same plank):** strafe across the seam
+  ~3 s → release ~1 s → opposite strafe, ≥4 reps. Under `--d1-lead`: **zero snaps**
+  (C1 baseline: 4/4 fired), because separation at the press stays ≤ 150 u (one report
+  of lag + the paralleling lead) so no distance gate can fire even where the veto
+  dies. Movetap `sep` is the witness.
+- **P-2, stop pinning:** after every acked stop, separation ≤ 5 u within 1.0 s
+  (baseline: parks at 60–494 u all night), and every parked press is then §0.8-immune
+  by mechanism. The verdict rows' stop-repin sends are the dose record.
+- **P-3, speed truth in policy:** `movespeed` tracks the family edge-sends (store
+  persists per A1); `maxspeed` 288.0 throughout; zero `0x0027`.
+- **P-4, the movesync hard bar:** zero steps over the bar across the whole run
+  (retail's own figure: 0 of 2,747 intervals).
+- **P-5, maturation (unknown 2, the sign-of-lead question):** exposure floor **5
+  matured arms** (movetap `+0x48` reaching maturity). If exposure clears the floor:
+  each maturation moves the drawn body ≤ 25 u p50 (the arrival lands where the
+  reckoning already is). If the floor is NOT met because supersession + stop-acks
+  never let an arm mature — that is itself the sign-of-lead answer by the other road
+  (retail's 88.5% supersession), recorded as such, not as a null.
+- **REFUTED IF:** any snap with the copy mid-leg on a D1 lead (that refutes the
+  campaign's central hypothesis, not just the flag); or `movespeed` failing to track
+  a family edge-send (refutes the A1 mechanism in policy form); or P-1 firing even
+  once with `sep ≤ 150 u` at the press (a gate below the cut fired — gate 2/3 news,
+  warp-A relevant).
+**Protocol:** click-free, cast-free; ~3 s legs with ~1 s releases; ≥4 seam-crossing
+warp-recipe reps (P-1); ≥6 ordinary stops with ≥6 s parks (P-2, and each park is a
+free §0.8 immunity rep); movetap attached before the first leg.
+
+**Build + review record (2026-08-26, same day as the spec):** built as specced —
+`d1_lead_dest` / `_a2_family_rate` / the one-site dest swap / the stop arm between
+`CANCEL_STOP` and R6 — with `test_d1lead.py` (floor from the green run) plus two
+deliberate lock extensions that went red the moment the edit landed (the locks
+working): test_familyrate's sender census 2→3, test_position_trust's `zl_point` AST
+lock admitting exactly the audited IfExp. The adversarial review (high-effort code
+lane + a 10-mutation lane against the locks): **zero REAL code defects; one REAL
+test gap** — MUT-7, the stop arm's two-send ORDER survived every lock — now pinned
+(`0x002B` before the `0x0029`, retail's 131/131 stop grammar); one MINOR — the d1
+band was [1, 769] against a formula verified only at 765–768 — now [700, 769] with
+the outlier row in the test; and three scoring caveats worth carrying into the run's
+analysis: **(a)** a mid-run click leaves the float wrong until the next family
+change or stop (the A2 edge HOLDS where A1's probe re-dosed — the banner's HAZARD
+line says so; c2s census is the guard); **(b)** the first ~0.5 s of a leg after a
+stop reckons at 288 (the `[1.0,9]` holds until the first granted report clears the
+floor) — copy ahead of the body, the veto-safe direction, expected in P-2/P-3
+scoring, not a failure; **(c)** at plane crossings our wire shows field3≠field4
+(plane-carry's lag) where retail's nonzero pairs read bit-identical 222/222 — an
+inherited shape, recorded here so a later crossing-comparison doesn't read it as
+new.
+
 ### REALFIX-P2 · `--zero-lead`
 
 Attachment: heading arm `:9625-9878`, as a third named block after `:9843`. **Stop arm `:10235` untouched. Click arm `:9879` untouched.**

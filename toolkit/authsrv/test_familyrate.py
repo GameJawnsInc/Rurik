@@ -215,12 +215,17 @@ def main():
           "every test while the console claims an arm the server is not "
           "running")
     check(src.count("if FAMILY_RATE_PROBE and zero_ok:") == 1
-          and src.count("_send_family_rate(") == 2,
-          "ONE gate, on the zero-lead verdict, and ONE call site plus the "
-          "def",
-          "a second send site would double the dose invisibly; a gate not "
-          "on zero_ok could put a bare 0x002B outside every witnessed "
-          "retail burst shape")
+          and src.count("_send_family_rate(") == 3,
+          "ONE gate, on the zero-lead verdict, and THREE named appearances "
+          "of the sender -- the def, A1's probe call, and A2's "
+          "edge-wrapper call inside _a2_family_rate (added 2026-08-26 with "
+          "--d1-lead; the composition matrix refuses the two flags "
+          "together, so at most one caller is live in any run)",
+          "a second LIVE send site would double the dose invisibly; a gate "
+          "not on zero_ok could put a bare 0x002B outside every witnessed "
+          "retail burst shape. This count is the census of callers -- a "
+          "fourth appearance means somebody added a sender this lock does "
+          "not know about")
     # The 2026-08-25 review's REAL: string COUNTS pin neither position nor
     # operand -- relocating the gate below the 0x0029 send (wire becomes
     # 0x0025, 0x0029, 0x002B: a shape retail never produced) or hardcoding

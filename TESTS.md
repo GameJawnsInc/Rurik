@@ -3260,6 +3260,54 @@ Every one of these, in the order they were written:
   real green run -- the first draft declared 21 from a head-count and the
   run said 23; the history is in the floor comment. No vault, no client.
   ~1 s),
+  `toolkit/authsrv/test_d1lead.py` (REALFIX-A2's `--d1-lead` bundle -- **the
+  accuracy campaign's lead rung, whose whole verdict lives in an owner run
+  this file cannot perform** (the registered predictions P-1..P-5 and the
+  REFUTED-IF lines are REALFIX.md §0.9 and the startup banner; P-1 is the
+  C1-warp-recipe A/B, zero snaps against a 4/4 baseline). What it CAN refuse
+  to let rot, section by section: §1 `d1_lead_dest`'s formula exactness --
+  the +0.5·unit term whole on an axis AND on a diagonal (a wrong
+  normalization reads plausibly axis-aligned and only the diagonal catches
+  it), and the refuse-don't-clamp fallback: zero/tiny/over-ceiling
+  (769.0 inclusive, measured max 768.0 plus slack)/NaN/malformed vec2 all
+  fall back to the zero-lead point rather than clamping or raising (a
+  TypeError in the connection handler kills the session for one bad
+  report). §2 the family edge's whole truth table: first family sends under
+  the A2 label (not the A1 probe label -- the unattributable-capture
+  defect), same family holds, change sends, an unknown mt loud-skips
+  WITHOUT advancing the edge, and the stop-reset (`a2_family_sent = None`)
+  re-sends the SAME family -- the one transition the A1 probe never needed,
+  because the stop-ack's [1.0, 9] overwrites sync +0x60. §3 the lattice:
+  seven pairwise refusals (cancel-answer, family-rate-probe,
+  checksum-probe, pc-spoof, stop-answer, arrival-carry -- reachable only
+  with plane-carry off, since the older plane-vs-arrival cell correctly
+  preempts it otherwise -- and click-sweep), the two requires cells
+  (zero-lead, plane-carry), pairwise-outranks-requires per the family-rate
+  precedent, and the allowed shape's note naming the bundle and the
+  stop-repin's era-audit ground. §4 source locks, position-pinned per the
+  house pattern: the global/rebind/threading triple; ONE speed-truth gate
+  (`if D1_LEAD and zero_ok:`) sitting in the witnessed burst slot AFTER
+  the A1 gate and BEFORE `if HEADING_GRANT:`; the edge call's mt operand
+  verbatim; ONE dest-computation site ordered after the pc-spoof rebind
+  and before the verdict row (so the row records the point that goes out);
+  the row's `lead_src` key; the ONE 0x0029 send consuming `a2_dest`
+  through `zl_point` with field 4 still `zl_plane_cur` verbatim; and the
+  stop-repin -- one site, one [a2-stop] speed send, positioned between
+  CANCEL_STOP's scoped re-pin and R6's bare ack inside the 0x0047 handler,
+  with the family-edge reset inside its own block AND its two sends'
+  ORDER pinned (0x002B before the 0x0029 -- the build review's one
+  surviving mutation, MUT-7, now caught; retail's stop grammar is 131/131
+  companion-first). The d1 band is [700, 769] with both edges pinned and
+  the corpus's one mid-magnitude outlier (|v|=1.997) asserted to fall
+  back -- the review's MINOR. Floor 37, read off the real green run after
+  the review's additions. Landing note: this test's arrival forced two deliberate
+  lock extensions in the same commit -- test_familyrate §6's sender census
+  went 2→3 appearances (the def, A1's call, A2's edge-wrapper call; the
+  matrix refuses the two flags together so at most one is live), and
+  test_position_trust's AST lock on `zl_point`'s permitted values went red
+  the moment the A2 edit landed (the lock working) and now admits exactly
+  the audited IfExp whose else-branch is still `list(reported)`. No vault,
+  no client. ~1 s),
   `toolkit/authsrv/test_position_trust.py` (the position-trust policy: it may
   refuse a client-reported position, but it may never **latch**. The old
   `_adopt_client_position` refused anything more than `900 u` from

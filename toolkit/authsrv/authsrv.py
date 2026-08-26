@@ -4204,8 +4204,8 @@ def _send_position_checksum(send, state, reported, plane):
          f"vel ({vel[0]:.1f},{vel[1]:.1f})")
 
 
-def _send_family_rate(send, state, mt):
-    """One REALFIX-A1 probe 0x002B for this report's family, or a loud skip.
+def _send_family_rate(send, state, mt, tag=None):
+    """One family-rate 0x002B for this report's family, or a loud skip.
 
     Returns whether a send happened. The builder's own facing mask (0xF)
     would pass an unknown mt 9..15 SILENTLY, and a bare FAMILY_RATE[mt]
@@ -4213,6 +4213,13 @@ def _send_family_rate(send, state, mt):
     is the gate, and a miss prints ONCE per session rather than guessing:
     the corpus says mt is strictly 1..8 (9,463 of 9,463 decoded reports),
     so a miss here is itself a finding, not noise to swallow.
+
+    `tag` names the ARM in the wire label (default: the A1 probe), because
+    the same helper now serves two policies -- A1's every-granted-report
+    probe and A2's edge-triggered policy send -- and a capture whose rows
+    cannot say which arm produced them costs a later session a
+    reconstruction (REALFIX-Q8). The label is the only difference; the
+    bytes are identical by design.
     """
     rate = FAMILY_RATE.get(mt)
     if rate is None:
@@ -4226,10 +4233,15 @@ def _send_family_rate(send, state, mt):
                   f"this family and the tape's sent rows are the record.",
                   flush=True)
         return False
+    if tag is None:
+        tag = (f"FAMILY-RATE PROBE 0x002B [{rate}, {mt}] -- REALFIX-A1: "
+               f"does the wire float steer sync +0x60? movetap `movespeed` "
+               f"is the readout")
+    else:
+        tag = f"{tag} 0x002B [{rate}, {mt}]"
     send(GAME_SMSG_AGENT_UPDATE_SPEED,
          agents.agent_update_speed(PLAYER_AGENT_ID, rate, mt),
-         f"FAMILY-RATE PROBE 0x002B [{rate}, {mt}] -- REALFIX-A1: does the "
-         f"wire float steer sync +0x60? movetap `movespeed` is the readout")
+         tag)
     return True
 
 
@@ -4477,6 +4489,84 @@ def pc_spoof_field4(spoof, since_last, carried):
     if since_last is None or since_last >= PC_SPOOF_GAP:
         return int(spoof), True
     return carried, False
+
+
+# --d1-lead (REALFIX-A2, the accuracy campaign's lead rung -- the full spec and
+# every registered prediction: studies/movement/REALFIX.md sec.0.9). THE
+# BUNDLE, deliberately -- four terms that travel together because the A1 run
+# proved they must: (1) the LEAD -- the one zero-lead 0x0029's point becomes
+# reported + vec2 + 0.5*unit(vec2), the client's OWN proposed endpoint
+# (re-verified bit-exact on 3,532 fresh live pairs, residuals to 0.0001 u),
+# UNCLIPPED (--heading-grant died of our navmesh's clip) and anchored to the
+# report in hand (never a model belief); (2) SPEED TRUTH -- the A1-proven
+# 0x002B family float promoted from probe to policy, EDGE-TRIGGERED (retail
+# sends it on family CHANGE: 97.6% of change bursts vs 11.5% same-family);
+# (3) PLANE TRUTH -- --plane-carry unchanged, because the 306-crossing census
+# says the one-grant lag IS retail's dominant field-4 pattern (79.7%, never
+# observed fake-labelling); (4) the STOP-ACK -- 0x002B [1.0, 9] (mt 9 is a
+# server-only sentinel, 131/131 live stop echoes) + a zero-distance 0x0029 at
+# every ordinary 0x0047, generalizing CANCEL_STOP's scoped shape. That is the
+# wire shape --stop-echo sends, and building it anyway is REASONED, not
+# amnesia: stop-echo's kill was a far-copy bake (1,286 u) under a now-dead
+# full-lead policy; under this bundle the copy tracks at <= one report of
+# lag, and sec.0.8's byte-proven result -- a copy parked at the body's feet
+# is plane-proof immune -- is exactly what the re-pin buys at every stop.
+# Off by default; requires --zero-lead AND --plane-carry; the pairwise cells
+# are in zero_lead_composition. Registered predictions and the REFUTED-IF
+# lines: sec.0.9 and the startup banner.
+D1_LEAD = False
+# The d1 band: |vec2| measured 765.0175..768.0000 in every live 0x003D
+# across 21 stamps -- and the formula's bit-exact verification covers ONLY
+# that regime. 769.0 is the ceiling plus slack; 700.0 is the floor, far
+# below the proposal band and far above the one mid-magnitude outlier our
+# own corpus has ever produced (1 of 15,285 c2s rows, |v|=1.997 -- the
+# 2026-08-26 review's census). A vec2 outside the band is refused
+# (fallback, recorded), never clamped: a clamped wrong vector is still a
+# wrong destination, and a short lead nobody registered is still a policy
+# nobody registered.
+D1_VEC2_CEILING = 769.0
+D1_VEC2_FLOOR = 700.0
+
+
+def d1_lead_dest(reported, vec2):
+    """REALFIX-A2's D1 endpoint: (dest, src) for one heading report.
+
+    dest = reported + vec2 + 0.5*unit(vec2) -- retail's formula verbatim
+    (FINDINGS' D1 adjudication; re-verified 2026-08-26 to 0.0001 u). Pure.
+    src is "d1" when |vec2| sits in the verified proposal band
+    [D1_VEC2_FLOOR, D1_VEC2_CEILING]; anything else -- degenerate, mid-
+    magnitude, non-finite, over-ceiling, malformed -- is "fallback": the
+    grant carries the zero-lead point, the verdict row records which, and
+    nothing is guessed.
+    """
+    try:
+        vx, vy = float(vec2[0]), float(vec2[1])
+    except (TypeError, ValueError, IndexError):
+        return [float(reported[0]), float(reported[1])], "fallback"
+    mag = math.hypot(vx, vy)
+    if (not math.isfinite(mag) or mag < D1_VEC2_FLOOR
+            or mag > D1_VEC2_CEILING):
+        return [float(reported[0]), float(reported[1])], "fallback"
+    return ([float(reported[0]) + vx + 0.5 * vx / mag,
+             float(reported[1]) + vy + 0.5 * vy / mag], "d1")
+
+
+def _a2_family_rate(send, state, mt):
+    """Edge-triggered speed truth: one 0x002B per family CHANGE, plus re-arm.
+
+    Retail's 0x002B is a change signal (97.6% of family-change bursts vs
+    11.5% same-family), and A1 proved the store PERSISTS -- so same-family
+    re-sends are dose without information. The edge advances only on a send
+    that actually went out (_send_family_rate's loud-skip on an unknown mt
+    returns False and must NOT advance it), and the stop arm RESETS it to
+    None: the stop-ack's [1.0, 9] overwrites sync +0x60, so the next leg
+    re-sends its family even when unchanged -- the one state transition the
+    A1 probe never needed.
+    """
+    if state.get("a2_family_sent") == mt:
+        return
+    if _send_family_rate(send, state, mt, tag="A2 FAMILY-RATE"):
+        state["a2_family_sent"] = mt
 
 
 # RULE 1'S WINDOW -- how long the "the player is driving locally" latch survives
@@ -4794,7 +4884,7 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
                           cancel_answer=None, stop_answer=None,
                           cast_stop=False, resync_separation=None,
                           family_rate_probe=False, checksum_probe=None,
-                          pc_spoof=None):
+                          pc_spoof=None, d1_lead=False):
     """Pure: may these movement flags run together, and what must be said?
 
     Returns (refusal, notes). `refusal` is None or the text main() raises as a
@@ -5037,6 +5127,60 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
                 "for one (REALFIX sec.0.7: the press's own grant, a PARKED "
                 "copy, one flipped word). Run the cell click-free and "
                 "cancel-free."), []
+    if d1_lead and cancel_answer:
+        # A2's pairwise cells, all BEFORE the requires-zero-lead family,
+        # per the ordering precedent test_familyrate sec.5 drives.
+        return ("--d1-lead and --cancel-answer cannot run together. The "
+                "cancel lead arms swap the point at the SAME single 0x0029 "
+                "send site A2's lead patches, and the `,stop` modifier "
+                "fires the SAME stop-repin shape at the SAME 0x0047 site "
+                "A2 generalizes -- two policies for one destination and "
+                "two for one stop reply. A2's protocol is cancel-free "
+                "(REALFIX.md sec.0.9)."), []
+    if d1_lead and family_rate_probe:
+        return ("--d1-lead and --family-rate-probe cannot run together. "
+                "A2 embeds the family-rate send as POLICY (edge-triggered, "
+                "one 0x002B per family change) and the probe doses it on "
+                "every granted report -- two dosing policies for one "
+                "client field (sync +0x60), and a movetap row could "
+                "attribute its movespeed to neither. A1's probe run is "
+                "complete (Q6 CLOSED); run A2 alone."), []
+    if d1_lead and checksum_probe:
+        return ("--d1-lead and --checksum-probe cannot run together. The "
+                "checksum's 0x0023 rides the report breath ungated and "
+                "breaks the witnessed burst shape A2's registration "
+                "depends on (0x0025 -> 0x002B -> 0x0029, 0x0029 last in "
+                "3,023 of 3,071) -- the same burst-purity ground as the "
+                "A1 pairwise cell. Separate sessions."), []
+    if d1_lead and pc_spoof is not None:
+        return ("--d1-lead and --pc-spoof cannot run together. The spoof "
+                "is a field-4 EXPERIMENT (a deliberately wrong plane word "
+                "once per park) inside the field-4 POLICY A2 ships "
+                "(plane-carry, retail's own one-grant-lag pattern) -- a "
+                "warp in such a run could attribute to either. The spoof's "
+                "own cell record is REALFIX sec.0.8; run it alone."), []
+    if d1_lead and stop_answer:
+        return ("--d1-lead and --stop-answer cannot run together. Both "
+                "answer the SAME 0x0047: A2 with retail's dominant reply "
+                "(0x002B [1.0,9] + zero-distance 0x0029, 134/172 live "
+                "stops), --stop-answer=ack with the minority bare 0x0028 "
+                "(6.1%) that F34 measured warping a parked body 167.6 u "
+                "mid-convergence -- exactly the copy-mid-leg state A2's "
+                "lead creates more of. Two stop replies cannot share a "
+                "run."), []
+    if d1_lead and arrival_carry:
+        return ("--d1-lead and --arrival-carry cannot run together. A2's "
+                "plane-truth term IS --plane-carry (the 306-crossing "
+                "census: retail's field 4 shows the one-grant lag, 79.7% "
+                "dominant), and plane-carry and arrival-carry are already "
+                "mutually exclusive -- they write the same wire field. "
+                "The bundle chose F1; F1b stays a separate arm."), []
+    if d1_lead and click_sweep:
+        return ("--d1-lead and --click-sweep cannot run together. The "
+                "sweep deliberately sends WRONG plane assignments and its "
+                "click grants stamp the shared grant clock -- a wrong "
+                "plane word inside A2's plane-truth run un-attributes any "
+                "snap, and A2's protocol is click-free besides."), []
     if cancel_answer and not zero_lead:
         return ("--cancel-answer requires --zero-lead. The CANCELWALK arms "
                 "are MODIFIERS on the zero-lead answer to the one report "
@@ -5081,6 +5225,27 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
                 "the inert-flag defect --plane-carry's refusal documents. "
                 "Pass --zero-lead (or nothing: it is the default) with "
                 "--pc-spoof."), []
+    if d1_lead and not zero_lead:
+        return ("--d1-lead requires --zero-lead. A2 is a MODIFIER on the "
+                "zero-lead heading arm -- its lead swaps the point at that "
+                "arm's one send site, its speed truth rides that arm's "
+                "burst slot, and its stop-repin generalizes that regime's "
+                "stop handling. With --no-zero-lead there is no site, no "
+                "slot and no verdict gate: the flag would change NOTHING "
+                "while the run log said REALFIX-A2 was armed -- the "
+                "inert-flag defect --plane-carry's refusal documents. Pass "
+                "--zero-lead (or nothing: it is the default) with "
+                "--d1-lead."), []
+    if d1_lead and not plane_carry:
+        return ("--d1-lead requires --plane-carry. Plane truth is term 3 "
+                "of the bundle (REALFIX.md sec.0.9): the 306-crossing live "
+                "census shows retail's field 4 IS the one-grant-lag "
+                "pattern plane-carry ships, and running the lead without "
+                "it re-creates the fake-label hazard sec.0.5-0.8 decoded "
+                "(a stamped plane whose island does not contain the "
+                "copy's ground kills the 100u veto mid-walk). plane-carry "
+                "defaults ON with zero-lead; only an explicit "
+                "--no-plane-carry lands here, and it should."), []
     if pc_spoof is not None and pc_spoof < 0:
         return (f"--pc-spoof {pc_spoof!r} is not a plane. Plane words are "
                 f"non-negative dwords in every decoded report, and the "
@@ -5200,6 +5365,19 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
             f"scores it out). One probe per run: prefer this WITHOUT "
             f"--family-rate-probe, so a snap, if one fires, attributes to "
             f"the plane word alone.")
+    if d1_lead:
+        notes.append(
+            "      + --d1-lead: ALLOWED -- REALFIX-A2, THE BUNDLE (sec.0.9): "
+            "D1 lead (reported + vec2 + 0.5*unit, the client's own proposed "
+            "endpoint, unclipped), edge-triggered 0x002B speed truth, "
+            "plane-carry plane truth, and the retail stop-repin (0x002B "
+            "[1.0,9] + zero-distance 0x0029 at every 0x0047, floor-bypassed "
+            "as an ack but stamping the one grant clock). Protocol is "
+            "CLICK-FREE and CAST-FREE; the registered predictions and "
+            "REFUTED-IF lines are in sec.0.9 and on the banner. The "
+            "stop-repin is --stop-echo's wire shape rebuilt with its "
+            "era-audit ground stated -- if this run warps at a stop, score "
+            "it against that ground first.")
     if click_sweep:
         notes.append(
             "      + --click-sweep: ALLOWED -- a CLICK-arm diagnostic, not a "
@@ -14458,6 +14636,16 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             # model or the grant clock.
                             if FAMILY_RATE_PROBE and zero_ok:
                                 _send_family_rate(send, state, moving)
+                            # REALFIX-A2's speed truth: same witnessed burst
+                            # slot as the A1 probe above (after the 0x0025,
+                            # before the 0x0029), same zero-lead verdict
+                            # gate, EDGE-TRIGGERED inside the helper. The
+                            # composition matrix refuses the pair, so at
+                            # most one of these two gates is live in any
+                            # run; both sit here because the SLOT is the
+                            # invariant, not the flag.
+                            if D1_LEAD and zero_ok:
+                                _a2_family_rate(send, state, moving)
                             if HEADING_GRANT:
                                 # REFRESH THE CLIENT'S ARMED DESTINATION. It is
                                 # the only thing that stops a stale one maturing
@@ -14718,6 +14906,17 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                 if PC_SPOOF is not None:
                                     zl_plane_cur, pcs_fired = pc_spoof_field4(
                                         PC_SPOOF, zero_since, zl_plane_cur)
+                                # REALFIX-A2's lead, computed HERE -- pure,
+                                # from the report in hand (never a model
+                                # belief: --heading-grant's graveyard), and
+                                # ABOVE the verdict row so the row records
+                                # the point that actually goes out
+                                # (REALFIX-Q8: an unattributable capture
+                                # costs a later session a reconstruction).
+                                a2_dest, a2_src = None, None
+                                if D1_LEAD:
+                                    a2_dest, a2_src = d1_lead_dest(
+                                        reported, heading)
                                 if rec is not None:
                                     # EVERY evaluation, fired or refused, on the
                                     # SAME channel the click arm uses -- a log
@@ -14779,8 +14978,20 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                               dest=(cw_dest
                                                     if (cw_dest is not None
                                                         and zero_ok)
-                                                    else [float(reported[0]),
-                                                          float(reported[1])]),
+                                                    else (a2_dest
+                                                          if (a2_dest
+                                                              is not None
+                                                              and zero_ok)
+                                                          else [float(
+                                                              reported[0]),
+                                                              float(
+                                                              reported[1])])),
+                                              # REALFIX-A2's arm key: "d1" /
+                                              # "fallback" / null. Null on a
+                                              # refusal like every field
+                                              # above -- nothing went out.
+                                              lead_src=(a2_src if zero_ok
+                                                        else None),
                                               cancelwalk=(cw_hit
                                                           if CANCEL_ANSWER
                                                           else None),
@@ -14857,10 +15068,23 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                             f"{reported[1]:.0f}) plane {plane}"
                                             f" [{cw_hit}]")
                                     else:
-                                        zl_point = list(reported)
-                                        zl_label = (
+                                        zl_point = (a2_dest
+                                                    if a2_dest is not None
+                                                    else list(reported))
+                                        zl_head = (
+                                            f"D1 LEAD ({zl_point[0]:.0f},"
+                                            f"{zl_point[1]:.0f}) from "
+                                            f"({reported[0]:.0f},"
+                                            f"{reported[1]:.0f})"
+                                            if a2_src == "d1" else
                                             f"ZERO LEAD ({reported[0]:.0f},"
-                                            f"{reported[1]:.0f}) plane {plane}"
+                                            f"{reported[1]:.0f})"
+                                            + (" [d1-fallback]"
+                                               if a2_src == "fallback"
+                                               else ""))
+                                        zl_label = (
+                                            zl_head
+                                            + f" plane {plane}"
                                             + (f" carry {zl_plane_cur}"
                                                if zl_plane_cur != plane
                                                else "")
@@ -15442,6 +15666,44 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                  f"CANCELWALK STOP ({reported[0]:.0f},"
                                  f"{reported[1]:.0f}) plane {plane} -- "
                                  f"release mid-leg, zero-distance re-pin")
+                        # REALFIX-A2's stop arm (REALFIX.md sec.0.9 term 4):
+                        # the CANCEL_STOP shape above, GENERALIZED to every
+                        # ordinary stop -- retail's own dominant stop reply
+                        # (0x002B [1.0, 9], the server-only sentinel family,
+                        # 131/131 live echoes; then the zero-distance 0x0029,
+                        # 134/172 stops with the 38 residuals decomposed to
+                        # artifacts). This is the wire shape --stop-echo also
+                        # sends; the era-audit ground for building it anyway
+                        # is in the D1_LEAD comment block and sec.0.9 -- the
+                        # short version: stop-echo died of a 1,286 u far-copy
+                        # bake under a dead full-lead policy, and under this
+                        # bundle the copy tracks at <= one report of lag, so
+                        # the re-pin's leg is near-zero by construction and
+                        # what it buys is sec.0.8's byte-proven parked
+                        # immunity at every stop. Field 4 rides the same
+                        # plane-carry the heading arm uses; the send goes
+                        # through send() so the ONE grant clock sees it
+                        # (deliberately: the ack stamps grant_at, and the
+                        # next heading grant waits its floor); and the
+                        # family edge RESETS because [1.0, 9] just
+                        # overwrote sync +0x60.
+                        if D1_LEAD:
+                            send(GAME_SMSG_AGENT_UPDATE_SPEED,
+                                 agents.agent_update_speed(
+                                     PLAYER_AGENT_ID, 1.0, 9),
+                                 "AGENT_UPDATE_SPEED(player, 1.0, type 9) "
+                                 "[a2-stop]")
+                            a2_stop_pc = state.get(
+                                "zl_last_grant_plane", plane)
+                            send(GAME_SMSG_AGENT_MOVE_TO_POINT,
+                                 [PLAYER_AGENT_ID, list(reported),
+                                  plane, a2_stop_pc],
+                                 f"A2 STOP-REPIN ({reported[0]:.0f},"
+                                 f"{reported[1]:.0f}) plane {plane}"
+                                 + (f" carry {a2_stop_pc}"
+                                    if a2_stop_pc != plane else ""))
+                            state["zl_last_grant_plane"] = plane
+                            state["a2_family_sent"] = None
                         # CANCELWALK R6 (--stop-answer=ack), and it is NOT
                         # --stop-echo either: no 0x0029, no destination, no
                         # grant clock -- one s2c 0x0028 [player], retail's
@@ -17318,6 +17580,20 @@ def main():
                          "to fire too: the compare is integer equality over "
                          "float bits, and our velocity model is not the "
                          "client's bake. Off by default; needs no other flag.")
+    ap.add_argument("--d1-lead", action="store_true",
+                    help="REALFIX-A2, the accuracy campaign's lead rung -- "
+                         "THE BUNDLE (REALFIX.md sec.0.9): the zero-lead "
+                         "grant's point becomes the client's own proposed "
+                         "endpoint (reported + vec2 + 0.5*unit(vec2), "
+                         "unclipped, fallback-on-garbage recorded per row); "
+                         "the A1-proven 0x002B family float rides the burst "
+                         "as edge-triggered POLICY; plane truth stays "
+                         "--plane-carry (retail's own one-grant-lag "
+                         "pattern, 306-crossing census); and every 0x0047 "
+                         "gets retail's stop reply (0x002B [1.0,9] + "
+                         "zero-distance 0x0029). Requires --zero-lead and "
+                         "--plane-carry; refused with the probe/diagnostic "
+                         "arms. Protocol: click-free, cast-free.")
     ap.add_argument("--pc-spoof", type=int, default=None, metavar="PLANE",
                     help="REALFIX sec.0.7 cell 2's lever (the parked+pc-flip "
                          "cell -- the seam is a bridge too narrow to stage it "
@@ -18031,7 +18307,7 @@ def main():
         cast_stop=_cs_mode, resync_separation=a.resync_separation,
         family_rate_probe=a.family_rate_probe,
         checksum_probe=a.checksum_probe,
-        pc_spoof=a.pc_spoof)
+        pc_spoof=a.pc_spoof, d1_lead=a.d1_lead)
     # The default-flip hint rides ONLY the refusal family it can actually
     # fix: "--zero-lead cannot be combined with X". On a PAIRWISE cell
     # (--cast-stop with --stop-answer, pin with --resync...) the advice is
@@ -18685,6 +18961,48 @@ def main():
               "LABEL -- a [1.0, 1] send without the FAMILY-RATE PROBE "
               "prefix is a click; the definitive check is the c2s census "
               "(zero 0x003E rows).")
+    if a.d1_lead:
+        global D1_LEAD
+        D1_LEAD = True
+        print("[map] --d1-lead ON (REALFIX-A2, the bundle -- sec.0.9). "
+              "Lead + speed truth + plane truth + stop-repin, together by "
+              "charter: the A1 lesson is that any one alone converts "
+              "accidental safety into exposure.")
+        print("      READOUT    movetap sep/movespeed/async_stop beside the "
+              "gamesrv verdict rows' lead_src (d1/fallback per grant) and "
+              "the A2 STOP-REPIN / A2 FAMILY-RATE labels; movesync's hard "
+              "bar scores the run.")
+        print("      MECHANISM  the copy walks the client's own proposed "
+              "endpoint at the client's own family speed, superseded each "
+              "report (retail p50 0.490s), re-pinned at every stop -- so "
+              "separation stays at one report of lag and a parked copy "
+              "sits at the body's feet, which sec.0.8 proved plane-proof "
+              "immune.")
+        print("      PREDICTION, registered before the build (sec.0.9): "
+              "P-1 the C1 warp recipe on the plank fires ZERO snaps "
+              "(baseline 4/4) with sep <= 150 u at every press; P-2 "
+              "post-stop separation <= 5 u within 1.0 s of every acked "
+              "stop; P-3 movespeed tracks the family edge-sends, maxspeed "
+              "288.0 throughout, zero 0x0027; P-4 zero movesync hard-bar "
+              "steps; P-5 matured arms move the body <= 25 u p50, floor 5 "
+              "matured arms (an unmet floor from supersession+stop-acks "
+              "is the sign-of-lead answer by the other road, recorded as "
+              "such).")
+        print("      REFUTED IF a snap fires with the copy mid-leg on a d1 "
+              "lead (that is the campaign's central hypothesis failing, "
+              "not just this flag); or movespeed fails to track an edge "
+              "send; or P-1 fires with sep <= 150 u at the press (gate "
+              "2/3 news -- warp-A relevant either way).")
+        print("      HAZARD     the stop-repin is --stop-echo's wire shape "
+              "rebuilt on stated era-audit ground (the D1_LEAD comment "
+              "block). A warp AT A STOP scores against that ground FIRST. "
+              "Protocol is click-free and cast-free; a click's [1.0, 1] "
+              "0x002B overwrites the family float AND -- unlike A1, whose "
+              "probe re-doses on the next granted report -- the A2 edge "
+              "HOLDS, so the float stays wrong until the next family "
+              "change or stop. A same-family stretch after a click reads "
+              "as a P-3 failure when it is a protocol violation; the c2s "
+              "census (zero 0x003E) is the definitive guard.")
     if a.pc_spoof is not None:
         global PC_SPOOF
         PC_SPOOF = int(a.pc_spoof)

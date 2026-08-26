@@ -1635,11 +1635,23 @@ the bytes (q.plane = `+0x80` raw at `0x0060565A`; `0x005FF820` =
 position_at decoded, two arms, appender bakes each node at append
 time). F2-as-literal-predicate re-refuted; the danger surface is
 exclusively a MID-WALK copy crossing a label mismatch.
-Next, in order: **(i)** **A2's design** — speed truth + **plane truth**
-+ copy-pinning together; nothing blocks it; **(ii)** *optional*, the
-one remaining cell (§0.8): a mid-walk spoof over connected ground —
-needs a small trigger variant, tests whether a bogus label alone kills
-the veto AND gate-2 plane-keying (warp A's residual) in one ~5-min run.
+**A2 DESIGNED, REGISTERED AND WIRED 2026-08-26 (`--d1-lead`,
+REALFIX.md §0.9):** grounded by a two-lane recon (21-stamp live census:
+retail's field-4 policy IS plane-carry's one-grant lag 79.7%; the
+stop-ack companion is `0x002B [1.0, mt 9]` 131/131 — a server-only
+sentinel no study doc had; `0x002B` is a family-CHANGE signal 97.6/11.5;
+D1 re-verified bit-exact on 3,532 pairs). One flag, four terms by
+charter: the client's own D1 endpoint (band [700,769], refuse-don't-
+clamp), edge-triggered speed truth with a stop re-arm, plane-carry
+unchanged, and the retail stop-repin at every 0x0047 (--stop-echo's
+wire shape rebuilt on stated era-audit ground). Adversarially reviewed
+(zero REAL code defects; the one surviving mutation — the stop arm's
+send order — now pinned). Predictions P-1..P-5 registered pre-build;
+**P-1 is the A/B: the C1 warp recipe, 4/4 baseline, predicts ZERO under
+the flag.** Next: **(i)** the A2 owner run (§0.9 protocol, ~10 min);
+**(ii)** *optional*, the mid-walk spoof cell (§0.8) — a small trigger
+variant testing bogus-label veto-kill AND gate-2 plane-keying (warp A's
+residual).
 *The staging block that preceded the run, kept for the record:*
 The follow-on recon (`studies/movement/followon-notes/README.md`, merged
 to `main` the same day) answered F35's counterfactual from tape (castless,

@@ -4230,7 +4230,13 @@ X1/X2a/X2b are its first real test.
 - **Corpus correction, carry everywhere:** the "14 of 987 (1.4%)" differing-plane
   rate at `FINDINGS:3407`/`:3790` is ONE capture's rate. Over the live corpus:
   **1,245 of 9,733 (12.8%), per-capture 1.4%–30.2%, with `20260817T231139`
-  supplying 51% of the differing rows.**
+  supplying 51% of the differing rows.** *(Corroborated 2026-08-26 by the A2
+  recon's independent recount — 495 of 3,170 (15.6%) on the 9-stamp subset —
+  which flagged the 1.4% as CONTESTED before finding this correction; the two
+  recounts agree and the 1.4% must not be quoted as a corpus rate. The same
+  recon adds the crossing-level census the rate alone lacks: at 306 plane-
+  crossing grants, field 4 traces to a real recently-relevant plane in 305/306
+  — one-grant lag dominant at 79.7% — retail never observed fake-labelling.)*
 - **Retail's field order** (agent-internal, so identification-free): dest_plane
   **leads** — the agent's cur_plane becomes it afterwards in 939 of 1,245 (75.4%,
   delay p50 0.64 s; 83.6% under a symmetric ±3 s window). ⚠ Measured over the
