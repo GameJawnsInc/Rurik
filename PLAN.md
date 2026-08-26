@@ -1735,6 +1735,43 @@ allowed); **(ii)** *optional*, the mid-walk spoof cell (§0.8) — note
 §0.11's open question: the arming snap fired at 14–17 u, below every
 known gate, possibly gate-2 plane-keying answering itself — and the
 early-out-A/mode-9 desk pass.
+**§0.17 — THE 113833 TAPE SCORED AND THE sec.0.16 PAIR BUILT,
+2026-08-26 second session** (three lanes + two script-armed skeptics;
+every lane number survived skeptic replay). **The wall-phase is
+DECODED: the UNCLIPPED D1 LEAD ordered the through-wall walk
+directly** — the client adopted the granted target +0.096 s, walked
+768 u at 288 u/s across a band our own navmesh refuses, and parked
+under the plaza 2.5 s BEFORE the watchdog fired (the repin named the
+point the client already stood on, 0.003 u off — the watchdog and the
+clicks are both acquitted; 24 of the run's 36 leads aimed across
+mesh-refused ground, and the crossing happened twice). **Q7
+half-closed at the desk: retail's D2 boundary IS our navmesh at
+terrain edges** — on the RIGHT mesh (the live corpus is map 280 /
+0x287B3, NOT 148; the first pass ran on the wrong mesh and is a
+recorded trap) 248/701 clipped live rays land ≤3 u from retail's
+bit-identical dests; the corridor five are prop-class geometry we
+don't extract (the named remainder). **BUILT #1: the D2 lead clip**
+(`a2_clip_lead`, report-anchored per R2-1, step 2.0, `lead_clipped`
+row key; the leg model arms clipped so the watchdog can never again
+name ground past a wall). **The R-3 census renamed the hole's
+population**: a true double-click's second click NEVER reached the
+unguarded site (the floor + §0.15 flush hold already suppress all
+five deliberate reps); the fires are SLOW MID-ROUTE RE-CLICKS — and
+the literal §0.16 candidate hold was REFUTED OFFLINE before it
+shipped (event-driven counterfactual, lane + skeptic identical: only
+2/24 real fires survive; the bare predicate is a silence detector).
+**BUILT #2: the LEG-BOUNDED hold at the immediate site** (refuse only
+while an answer is outstanding AND the server copy is mid-leg —
+sec.0.12's leg-explains-the-silence doctrine; post-arrival staircase
+clicks keep immediate answers; all four named hole fires caught).
+P-17-1..4 + REFUTED-IF registered in §0.17 for the next owner run
+(R-3 reps, staircase, wall press, open-field — watch: phantom walls
+at the 5.7% false-clip rate, and prop-class crossings with
+`lead_clipped=false`). Both changes D1-gated, shipped default
+byte-identical; test_d1lead floor 81, grantsim 86, neighbors green at
+floors. Instrument corrections filed in §0.17 (movetap `t` IS
+wall_unix; decoded op 62=click/64=rotate; the Grep `-o` order trap;
+the subagent worktree-guard shell block).
 *The staging block that preceded the run, kept for the record:*
 The follow-on recon (`studies/movement/followon-notes/README.md`, merged
 to `main` the same day) answered F35's counterfactual from tape (castless,

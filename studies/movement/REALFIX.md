@@ -1202,6 +1202,190 @@ silence-past-ETA, and a repin then names a dest the client never reached. REV-4'
 watchdog-vs-report race is bounded and self-healing (one 0.5 s grant-floor cycle),
 accepted. `test_d1lead.py` floor 60.
 
+### 0.17 The 113833 tape scored, the wall-phase decoded to the UNCLIPPED LEAD, Q7 half-closed at the desk, and the sec.0.16 pair built — 2026-08-26, second session
+
+**Instruments:** three recon lanes + two skeptics over
+`movetap-20260826T113833.jsonl` + `authsrv-20260826T113824-c1.jsonl`, plus the
+orchestrator's own reconstructions. Both skeptics ran full scripts and
+re-derived every load-bearing number independently (`skeptic_census.py`,
+`skeptic_sim.py`, `skeptic_main.py` in the session scratchpad, with lane files
+beside them); lanes A/B/C were shell-blocked by a worktree-guard defect (below)
+and worked Grep/Read-only — **and their hand-derived numbers survived skeptic
+replay in full** (lane A: every list identical, conservation 7/7).
+
+**THE WALL-PHASE, DECODED (sec.0.16 item 3) — the unclipped D1 lead did it
+directly; the watchdog and the clicks are both acquitted.** Three independent
+reconstructions (lane B Grep-only, skeptic-BC scripted, orchestrator scripted)
+converge on one timeline, all scored on the dead-reckoned `live` track
+(the sec.0.15 instrument rule):
+- The final lead armed at t=122.420 off the run's LAST accepted report
+  (`[-5605.96, 7952.88]` plane 34, a mid-held-key `0x003D`): dest
+  `(-4940.05, 7569.58)`, leg 768.3 u — in-band, unremarkable. The client
+  adopted the granted target **+0.096 s** after the send, walked the leg at
+  288 u/s in a straight line — **across a band our own navmesh refuses** — and
+  parked at the dest 2.518 s BEFORE the watchdog fired (kinematic prediction
+  matches arrival to one 100 ms sample). Zero live-track jumps whole-tape: the
+  body WALKED through the wall; nothing snapped.
+- **The watchdog is the confirmer, not the mover:** its repin named the point
+  the client was already standing on (0.003 u off — the sec.0.12 model
+  exactly right), and its one real effect was flipping the client mode 1→9,
+  parked, to tape end. **REV-3's decode rule gains a second case:
+  silence-past-ETA can be ORDER EXECUTION** — a client walking a granted lead
+  reports nothing, and the 190.08 floor ETA is pessimistic against an actual
+  288 u/s walk, so the watchdog fired 2.5 s after a quiet arrival. Its
+  eta-silence premise mis-read this fire; the fire itself was harmless.
+- **Clicks acquitted entirely:** the spam-click burst sits at t=92.2–97.9, all
+  refused `locally-moving`; the log's last click is t=100.46 (also refused);
+  the last stop-repin t=93.57. Only MOVE_DIRECTION + D1 LEAD pairs exist in
+  the final 15 s.
+- The crossing happened **twice**: the t=101.08 lead had already walked the
+  body 116 u PAST the final dest (report t=105.99, drift 522.5, ACCEPTED
+  in-budget) and the t=106.0 lead walked it back through. **Every one of the
+  10 leads in the final 30 s — and 24 of the run's 36 scoreable leads — aims
+  across ground `pm.clip` refuses** (shortfalls 72–768 u, p50 377 u). The
+  whole end-phase is the lead-grant loop: a held key produces edge reports,
+  each report draws a ~767 u lead, the client walks each granted order with
+  collision bypassed, ping-ponging through walls.
+- sec.0.16's stuck-at-wall hypothesis: **REFUTED in mechanism, confirmed in
+  culprit.** A real 3.36 s wall-press EXISTS (t≈820.9–824.3 wall clock, at
+  `(-5659.05, 7636.33)` — itself the t=113.63 lead's dest — vel 0, facing
+  rotating against geometry, both copies frozen) but it ended 2.65 s before
+  the final leg armed, broken BY a lead; the crossing needed no stuck state
+  and no maturing arrival. The culprit is the lead itself, unclipped.
+
+**Q7, HALF-CLOSED AT THE DESK (sec.0.16 item 2's gate) — retail's D2 boundary
+IS our navmesh at terrain edges, and is NOT our navmesh at props; and the live
+corpus is map 280, not 148.** The desk check drove `pm.clip` along all 972
+clipped live rays from sec.0.15's S2-3 extraction (`s2_d2_results.pkl`,
+recovered from the dead session's scratchpad) and compared landings to
+retail's granted dests:
+- **The first pass ran on the WRONG MESH and is itself a recorded trap:** map
+  148's file 0x1B97D covers only 56% of the live origins. Model selection
+  across every mesh we have put the live tracks on **map 280, file 0x287B3**
+  (72% origin cover, and see next line) — the same map our loopback runs play
+  (`--map` remaps the client's requested 148; the spawn row matches the tape's
+  first sample exactly). Never desk-check retail geometry against a mesh the
+  coverage census hasn't selected first.
+- On 0x287B3 at step 2.0: **248 of 701 scoreable clipped rays (35%) land
+  within ≤3 u of retail's bit-identical dest** (p05 = 0.3 u) — coordinate
+  identity, not correlation. False-clip control: 5.7% of retail-UNCLIPPED
+  rays clip >20 u on our mesh. **The terrain-edge subset of retail's D2 is
+  our navmesh boundary, exactly.**
+- The corridor's five repeating y-values (x∈[−6060,−5980]) reproduce on NO
+  mesh of ours — our clip sails 150–570 u past them. **Those are prop-class
+  geometry inside the walkable mesh** (fences/structures we do not extract).
+  Q7's remainder is exactly that class; the wall-phase event needs none of it
+  — the plaza band is refused by the navmesh itself (10/10 final leads).
+
+**BUILT #1 — the D2 lead clip (`a2_clip_lead`, D1-gated):** a real d1 lead's
+dest is clipped along the REPORT-anchored ray (`reported` verbatim — the
+--heading-grant graveyard, R2-1) with `pm.clip` at `A2_LEAD_CLIP_STEP = 2.0`
+(retail's edge coordinates reproduce only at a fine step; 0.15 ms/call
+measured), BEFORE the verdict row, which now carries **`lead_clipped`** as the
+census key. Fallback leads are never clipped (they ARE the report); the
+no-mesh and off-mesh-origin doors mirror `clip_to_walkable`. The leg model
+arms with the clipped dest, so the watchdog now repins AT the wall's near
+side, never through it. Counterfactual on this tape: all 10 final-phase
+through-wall leads die; whole-run 24/36 shorten (p50 377 u). Expected visible
+change in wall play: the body runs to the wall and parks there — retail's own
+measured corridor shape (the repeating clip coordinates ARE retail doing
+this).
+
+**THE R-3 CENSUS (sec.0.16 item 2's verify-first) — the site confirmed, the
+population renamed, and the LITERAL candidate hold REFUTED OFFLINE before it
+shipped.** Lane A + skeptic-A, numbers identical:
+- All 24 fired click answers came through the IMMEDIATE site; the flush fired
+  zero and its 7 held clicks all expired — **the sec.0.15 flush hold is
+  observably working** (for all 7, the outstanding check was independently
+  true past the floor).
+- **A true double-click's second click NEVER reached the unguarded site:** it
+  lands ~0.13 s after the first, inside the 0.5 s floor, held, and expired
+  under sec.0.15. The owner's five deliberate reps are exactly the five
+  0.11–0.14 s pairs in the log, all five correctly suppressed. **The hole's
+  real population is SLOW MID-ROUTE RE-CLICKS** — fires ≥0.5 s into a silent
+  click-walk, landing on the mid-route client: F9 (+1.22 s, 74.7 u from the
+  prior dest), F20 (+3.35 s), F22 (+1.47 s), F24 (+0.85 s), plus each rep's
+  own FIRST click thrown while already pathing. 22 of 24 fires happened with
+  a click answer outstanding — but that number is a SILENCE artifact: the
+  client reports nothing for whole click-walk phases (23.6 s and 41.2 s in
+  this run), so bare `answered_at > pos_seen` marks everything.
+- **The literal sec.0.16 candidate (copy the flush's predicate to the
+  immediate site) is REFUTED by full event-driven counterfactual replay**
+  (lane A by hand, skeptic-A scripted, identical lists): only 2 of 24 real
+  fires survive (8.3%); net answered clicks in the 41 s window = ZERO; 20 of
+  24 are legitimate navigation re-aims dropped outright. Recv-order fact
+  (source-verified): the flush polls BEFORE each batch, and the eager void is
+  0x003D-only — so a 0x003D that clears the hold voids the pending click
+  ("void wins"), while a 0x0047 stop clears WITHOUT voiding, which is the
+  fires-late path. Shipping the literal hold would have been the F-A class of
+  mistake with the counterfactual already in hand.
+
+**BUILT #2 — the LEG-BOUNDED outstanding-answer hold at the immediate site:**
+refuse (HELD, reason `answer-outstanding`, before the verdict row so the row
+records it) only while a click answer is unacknowledged **AND the server's
+copy is still walking a leg** (`state["dest"]` set by every click fire,
+consumed by the world tick's arrival / a stop / a cast pin) — the
+leg-explains-the-silence doctrine of sec.0.12 applied to the hold itself.
+Post-arrival staircase clicks keep their immediate answers (F6's shape:
+dest cleared → fires); mid-leg re-clicks divert and resolve through the flush
+(a 0x0047 arrival fires them late — retail's wins-late branch — or the 1.0 s
+expiry drops them — retail's goes-unanswered branch). All four named hole
+fires (F9, F20, F22, F24) are mid-leg under the chained-dest model and are
+caught; the flush KEEPS its bare predicate deliberately — the two sites ask
+different questions and the asymmetry is pinned by lock. Residual, named: our
+straight-line 288 u/s model under-estimates a detouring client's own path, so
+a fire can still land on a client that is mid-route client-side — see
+REFUTED-IF.
+
+**Instrument corrections, filed:** decoded c2s opcode 62 = MOVE_TO_COORD (the
+click), 64 = ROTATE_PLAYER (camera, no destination) — the orchestrator's lane
+brief had them backwards and lane A/C caught it from the log's own `name`
+field; movetap samples carry `t` = wall_unix DIRECTLY (no anchor fit needed —
+skeptic-BC; lane B's affine fit validated against it to the digit, and the
+client `now` clock runs ~1.36% slow vs wall); a bulk Grep `-o` extraction of
+movetap's `t` column returns rows OUT OF ORDER (lane B, cause unisolated —
+pull `t` by direct line read); lane B's "zero sustained >317 u/s" census
+claim is false as stated (3–4-sample runs at 318–350 exist; sampling jitter
+around 288, not warps — skeptic-BC); and the subagent worktree guard refused
+ALL shell for cwd-pinned lanes while the skeptics found `python` runs fine
+from the session worktree cwd against absolute vault paths — pin future lanes
+to the WORKTREE path, not `C:/gd/Rurik`.
+
+**Registered for the next owner run (before it, as always):**
+- **P-17-1 (R-3 again, ≥5 deliberate double-click-while-pathing reps + slow
+  re-clicks while pathing):** the straight-line terrain walk is GONE; the
+  tape shows `answer-outstanding` rows at the immediate site for mid-leg
+  re-clicks, resolving flush-fire-on-stop or expiry; no fired click grant
+  lands while a click answer is outstanding and the model mid-leg.
+- **P-17-2 (pure-click staircase, the sec.0.16 PASS cell):** still PASSES,
+  and immediate fires still occur during report silences (the bound's whole
+  point — the unbounded predicate would have zeroed them).
+- **P-17-3 (held-key wall press at the plaza, with and without spam
+  clicks):** no through-wall walk; `lead_clipped=true` rows at the wall with
+  dests on the NEAR side; the body runs to the wall and parks; any
+  `a2_watchdog` fire names the clipped dest the client actually reached.
+- **P-17-4 (open-field roam):** `lead_clipped=false` on effectively all
+  open-ground leads; R-1 (yank census) and R-2 (drag feel) do not regress.
+- **REFUTED IF:** the double-click/re-click walk persists with the ordering
+  fire logged post-model-arrival (the bound under-estimates the client's
+  path — add a client-model term: family-speed or path-length inflation); or
+  the staircase degrades to ignored-feeling clicks (the bound is still too
+  wide — the blast radius argument returns); or a wall repro crosses with
+  `lead_clipped=false` on the ordering grant (a prop-class band our mesh
+  lacks — the Q7 remainder, and the fix moves to prop extraction, not to
+  this clip); or roaming hits PHANTOM WALLS — the body parking short of
+  visibly-open ground with `lead_clipped=true` — the 5.7% false-clip rate
+  made player-feelable, and the fix is the mesh's error sites or a clip
+  floor, never un-clipping.
+
+Locks and floors: `test_d1lead.py` **floor 81** (the gap lock evolved
+empty-gap → refuse-only-hold with the leg bound separately pinned; the D2
+clip's four pure cells + four locks; the read census 1→2), `test_grantsim.py`
+green at 86 (C3 skips heading rows — the clip cannot redden it), neighbors
+green at their floors (position_trust 219, cancelwalk 121, familyrate 26,
+pcspoof 23). Both changes are D1-gated; the shipped default remains
+byte-identical.
+
 ### REALFIX-P2 · `--zero-lead`
 
 Attachment: heading arm `:9625-9878`, as a third named block after `:9843`. **Stop arm `:10235` untouched. Click arm `:9879` untouched.**
