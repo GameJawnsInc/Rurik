@@ -319,15 +319,19 @@ def main():
           "a map without a mesh must not lose the lead bundle; failing "
           "toward the pre-sec.0.17 behavior is the calibrated risk")
     d, was, why = clipf({"pathmap": StubPM()}, [150.0, 0.0], [916.5, 0.0])
-    check(was is False and d == [916.5, 0.0]
+    check(was is True and d == [150.0, 0.0]
           and why == "origin-unwalkable",
-          "an off-mesh ORIGIN disables the clip with its OWN why -- the "
-          "P-17 escape door, distinguishable from no-mesh at last",
-          "the P-17 wall press pushed the reported position ~0.25u past "
-          "the mesh edge and this door opened; the run's decode had to "
-          "prove WHICH door by re-scoring exact floats against the mesh "
-          "by hand (sec.0.18) -- the why field is that reconstruction, "
-          "pre-paid")
+          "an off-mesh ORIGIN demotes the lead to ZERO DISTANCE -- the "
+          "granted point is the report itself, never the unclipped ray "
+          "(ROUTER-B3: the P-17 escape door, CLOSED)",
+          "this cell used to assert the door OPEN (dest passed through "
+          "unchanged) and the 20260826T192724 verification run showed "
+          "what that cost: 19 of 99 fired keyboard leads left through "
+          "it as full 766u rays, and 11 of the tape's 12 off-mesh "
+          "episodes start on exactly those grants. A zero-distance "
+          "answer orders no walk and leaves the client authoritative "
+          "where our mesh has nothing to say -- the router's own "
+          "origin-off-mesh doctrine, applied to the keyboard channel")
 
     print("\n3. composition cells: the lattice around the bundle")
     comp = authsrv.zero_lead_composition

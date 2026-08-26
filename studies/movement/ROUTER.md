@@ -324,3 +324,58 @@ clicks, a cross-floor click, keyboard interleave.
 - **Exposure floors**: ≥10 free clicks, ≥3 mid-route re-clicks, ≥3
   wall-press clicks, ≥1 cross-floor click, else the affected cell is
   VOID, not a null (the L8 rule).
+
+## 6. The verification run — 20260826T192724, scored (OBSERVED)
+
+The owner played the Isle (map 280) under `--d1-lead --router`: 233 s,
+254 clicks, drag-steering heavy. Tape `movetap-20260826T192742` scored
+against the 280 mesh (91.2% of samples on-mesh). Owner's report: "still
+warping."
+
+**Map authority trap, caught mid-scoring**: the client's game version
+header carries the character's SAVED map (148 here), not the loaded one —
+the first scoring pass ran against Pre-Searing's mesh (23% coverage)
+before the server's own `MAP_UPDATE_CURRENT` send (0x0118 = 280) and the
+spawn coordinates settled it. On OUR captures the map authority is the
+server's send; the wire-first rule for LIVE captures (op409) is
+unaffected.
+
+**The router held.** 24 clicks answered (12 routed chains at n_wp 2–4 and
+0.9–14.7 ms compute, 10 verbatim, 2 clip-fallbacks on clicks at
+unwalkable spots), 230 dropped under keyboard authority — the 6–7 Hz
+click-trains with smoothly curving destinations are DRAG movement, which
+emits 0x003E streams alongside 0x003D; the drops are retail's own
+contract. Zero teleports on the tape (max per-sample step 44.9 u, run
+speed), zero wall-crossings between on-mesh samples, zero watchdog fires,
+three chains abandoned by re-click. **P-1: one blemish** — a 0.3 s /
+5-sample off-mesh graze mid-leg on one chain (the body's own line runs
+beside our clipped leg line — mesh-edge class, ~86 u of travel).
+**P-3: pass** (no rubber-band signal). **P-4: pass as drops** — the
+wall-press clicks arrived under keyboard authority and were dropped; no
+unclipped pass-through exists on the click path. **P-2: VOID** — no
+cross-floor click identified (that cell's exposure floor unmet).
+
+**The remaining warp engine was the KEYBOARD channel, and it is what the
+owner saw**: 99 fired D1 leads — 61 clipped, 19 clear, and **19 through
+`a2_clip_lead`'s origin-unwalkable door as full unclipped 766 u rays**.
+Eleven of the tape's twelve off-mesh episodes (~21 s total, longest
+9.6 s) begin on exactly those grants, all during drags, where the
+reported position rides our mesh edge. The router had closed this door's
+twin on the click channel; the keyboard channel still had it open —
+P-17(a), by the other road.
+
+**ROUTER-B3 — the door closed** (same commit as this section): an
+off-mesh origin now receives a ZERO-DISTANCE lead — the granted point is
+the report itself, the shipped zero-lead answer shape for that row — so
+no walk is ever ordered from ground our mesh cannot place, and the
+client stays authoritative exactly where our decode has nothing to say
+(which is also what the long `clipped`-grant episodes want: the client
+walking real ground our mesh lacks now gets no orders fighting it).
+One-line change in `a2_clip_lead`; the test cell that used to PIN the
+door open now pins it closed, with the run's 19/99 as the why.
+**Re-run prediction, registered**: the drag-phase off-mesh episodes lose
+their 766 u ray injections — a phasing episode that still occurs under
+free drag input is then a pure mesh-fidelity residual (client-vs-decode
+edge disagreement), not a server-ordered walk. REFUTED IF a post-B3 tape
+shows an off-mesh episode beginning at a fired lead whose row says
+origin-unwalkable.
