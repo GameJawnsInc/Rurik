@@ -1712,6 +1712,18 @@ WORLD-ANCHORED (bit-identical clip coords across sessions); the
 our-navmesh identity check is a queued desk script. R-1..R-3 registered
 for the next roam; the D2 clip stays secondary behind the Q7 check.
 test_d1lead floor 72.
+**SESSION END 2026-08-26 ~11:45 — §0.16 + the handoff.** The final
+owner run (owner-reported, census pending): pure staircase clicks PASS
+(the risk cell cleared); **R-3 REFUTED — the double-click terrain walk
+persists, residual hole NAMED** (the outstanding-answer hold gates only
+the flush; the immediate site is unguarded — ~3-line candidate fix,
+verify-then-build); **NEW undecoded specimen: held-key spam-click
+phases through a wall** (tape movetap-20260826T113833; the D1 lead in
+the stuck-at-wall cell is prime suspect, which would promote the D2
+clip from secondary). **The cold-session entry point is
+[studies/movement/followon-notes/a2-campaign-handoff.md](studies/movement/followon-notes/a2-campaign-handoff.md)**
+— open items in priority order, the refuted-policy graveyard, the
+instrument traps, and the scratchpad path with the Q7 coordinates.
 **The containment pair is BUILT (§0.12, registered before the soak):**
 the a2_leg model + ETA watchdog (fires only past the leg's own ETA at
 the 190.08 u/s floor speed — late, never early; once per leg; every

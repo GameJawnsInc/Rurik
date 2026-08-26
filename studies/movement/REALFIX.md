@@ -1130,6 +1130,33 @@ carry the ≥5 pure-click reps again). **The D2 clip stays SECONDARY**, gated on
 the Q7 coordinate desk check — the no-clip walks joined click grants, not
 leads, so the lead is acquitted pending that check.
 
+### 0.16 The §0.15 verification run — owner-reported, session end 2026-08-26: pure clicks PASS, R-3 REFUTED with the residual hole NAMED, and a new wall-phase specimen
+
+**Run:** `movetap-20260826T113833.jsonl` + its gamesrv log (~11:38). Owner-reported,
+census NOT yet run — the next session's first scoring target.
+1. **Pure staircase clicks work** — the §0.14/§0.15 risk cell (the verbatim echo
+   itself) PASSES on owner report. The geometry passthrough survives its accusation.
+2. **R-3 REFUTED: the double-click-while-pathing terrain walk persists.** The
+   residual hole is NAMED but UNVERIFIED against this tape: **the
+   outstanding-answer hold gates only the FLUSH** — the IMMEDIATE answer site has
+   no `a2_click_answered_at > pos_seen` check, so click 2 of a pure double-click
+   fires immediately whenever the floor has reopened (≥0.5 s after click 1's
+   answer, Rule 1 passing — no keyboard), landing on the mid-route client: the
+   railing stomp through the unguarded door. **Candidate fix (~3 lines, UNBUILT):
+   the same hold at the immediate site (hold, let the flush/expiry resolve it).
+   VERIFY FIRST from this tape that the click-2 fires came through the immediate
+   site — do not build on the pattern-match.**
+3. **NEW SPECIMEN, undecoded: held-key + spam-click phases the body through a
+   WALL** (screenshot: standing under the plaza). With keyboard active, clicks
+   DROP under §0.15 — so what granted the through-wall walk? Prime suspect: the
+   §0.15-acquitted D1 lead in the STUCK-AT-WALL cell (the client pinned against
+   prop collision while leads keep re-aiming 766 u beyond the wall — an arrival
+   maturing while stuck would order the through-wall walk; the §0.8 granted-order
+   prop-collision bypass does the rest). If that holds, **the D2 clip stops being
+   secondary** — it is exactly the term that keeps lead rays out of walls, and the
+   Q7 desk check (our-navmesh identity, exact world-anchored coordinates from
+   §0.15's S2-3) becomes the gate to building it.
+
 **F-B's review record (same day, before commit):** two REALs, both fixed in the
 same commit. **REV-1 (OBSERVED, 2/2 offline):** grantsim's C3 replay re-decides
 unfiltered `grant_verdict` rows with the shipped click predicate, so a
