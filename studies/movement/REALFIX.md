@@ -793,6 +793,85 @@ headline zero-snap result stands on a 4/4-baseline recipe, and nothing in the
 incident implicates the lead's shape — it implicates what happens when NO edge and
 NO report ever follows one.
 
+### 0.11 The input-lock, decoded — 2026-08-26: plane-carry's stale word + a mid-flight crossing snap shuts the fence, and the lead's click-walk regime keeps it shut
+
+**Run shape:** two lanes over the golden repro (`authsrv-20260826T073609-c1` ×
+`movetap-20260826T073617`) plus both prior A2 sessions and the zero-lead era as
+control, then a skeptic who re-derived every table AND corrected both lanes with a
+timing exclusion. The owner's in-game repro had already refuted the focus-shift
+story (§0.10's struck layer 2); this section replaces it.
+
+**The client-state fingerprint (L1, OBSERVED):** in each locking session the AgTrack
+**fence flips open→shut exactly once — at the sample where the DRAWN body's plane
+word catches up to the SYNC copy's** (a ~15 u position snap rides the same sample,
+both `+0x48` ticks synchronize, and `async_reqtoken` — the keyboard walk-start
+applier's own token — resets to 0) — **and it never re-arms** (351/325 subsequent
+samples, 14 subsequent presses, reqtoken pinned at 0 while mode/speed/stop all
+re-arm normally). `mode` is acquitted (clears from 9 on every press); the R7
+controller gates are acquitted (bit-constant across 1,783 samples).
+
+**The wire discriminator (L2, OBSERVED, 28/28):** a stop ARMS the lock iff it lands
+**mid-flight** (before its own triggering lead's arrival timer would mature) AND its
+repin carries **a stale plane word** (`carry ≠ plane`). 2 TP / 0 FP / 26 TN / 0 FN;
+every single-field candidate produces false positives (mid-flight alone: 18 FP).
+One confound survives, CONTESTED: `repin_pdiffers AND plane==22` ties with zero
+cross-cases — the race and the stairwell geometry are perfectly confounded in this
+corpus. Structurally the lock needs a stop-PAIR: the carry defaults to the current
+plane on a cold read, so only a second crossing stop can show a stale word.
+
+**The correction that names the armer (skeptic, V-3 timing exclusion):** the armed
+state is established **65–220 ms BEFORE the server sent the repin or the `[1.0,9]`
+sentinel** — both are acquitted as weapons (and the sentinel again at the parks:
+`early_out_a` reads False there). The repin's stale word is the perfect *detector*
+because it shares a cause, not because it shoots. **THE ARMER (V-6, RECONCILED),
+two stages:**
+1. **Plane-carry's one-grant lag leaves the SYNC copy stamped with the OLD plane
+   across a seam** while the drawn body has crossed; a same-direction crossing
+   re-report fires a full 768 u lead with `pd ≠ pc`, and within ~80 ms — mid-flight
+   — the client's plane-mismatch reconcile **snaps the drawn body onto the sync
+   copy at ~15 u separation** (far below every known gate — see the open question)
+   **and the snap's dispatcher clears `clientControlled`: fence shut.** Observed in
+   the drawn-body-behind direction only (2/2 vs 0/2).
+2. **Under the lead, every press acquires a fresh click-order (F7)** — releases are
+   ignored, no `0x0047` is emitted, and the **keyboard walk-start applier — the
+   only fence re-armer — never runs.** Self-sustaining. The zero-lead control era
+   shows the same snaps RECOVERING (3/3 fence re-arm cycles ~2 s later): without
+   leads, the next press runs the applier and re-arms. The lock is the snap AND the
+   click-walk regime composed; neither alone suffices.
+
+**Why retail survives the identical wire:** retail's nonzero plane pairs are
+**bit-identical 222/222** (§0.9's census) — retail never sends `pd ≠ pc`, so the
+stale-stamped sync copy that stage 1 needs never exists. The mismatch is OUR
+carry's invention, not part of retail's contract.
+
+**The fix ladder (V-7):** *(a)* repin-race-hold and *(b)* matched-words-on-the-
+repin-alone — REJECTED as armer-kills (timing exclusion; the 7 clean mismatched
+repins were inert; (b) alone would delete the best detector and keep the lock).
+*(c)* dropping `[1.0,9]` — REJECTED (retail ships it 131/131; acquitted twice).
+**The armer-kill is (e2): under `--d1-lead`, field 4 always MATCHES field 3** — on
+grants AND on the stop-repin — so the sync copy's plane word reconciles AT the
+crossing and the cross-plane state never exists; grounded in retail's own 222/222.
+(e1), demoting crossing grants to zero-lead dest, held in reserve. *(d)* the ETA
+watchdog + model-aware click freshness stay queued as containment regardless —
+they catch whatever this analysis missed.
+
+**Open question, connected (L1-6, UNVERIFIED):** the arming snap fired at **14–17 u
+separation** — below every known distance gate — during plane-mismatch resolution.
+If that is the mismatch→pathfind branch killing the veto AND gate 2 firing on
+`pathCount==0` regardless of distance, it is the §0.8 mid-walk-spoof cell's
+question answering itself and warp A's gate-2 attribution firming — but a ~13 Hz
+sampler cannot prove a branch; the spoof cell or a hook read stays the decider.
+
+**Verification (V-8, ~5 min owner, registered):** one flat-ground control leg
+(expect `lead_src=d1`, `0x0047` on release, clean repin), then the golden stairs
+recipe ×2 (strafe ~3 s onto the stairs, park 6 s, strafe off, park 6 s, press S
+~1 s, release; press W, release). **Exposure floor: ≥2 crossing grants whose
+verdict rows show the matched-words override fired** (`pc_matched: true`), else
+abort as unexposed. PREDICTION: no lock — every release emits its `0x0047`, every
+repin lands, the fence never shuts. **REFUTED IF a lock arms with matched words on
+every crossing grant** — that acquits the server-side story entirely and convicts
+the plane-22 geometry (the one unbroken confound), reopening L2-3b.
+
 ### REALFIX-P2 · `--zero-lead`
 
 Attachment: heading arm `:9625-9878`, as a third named block after `:9843`. **Stop arm `:10235` untouched. Click arm `:9879` untouched.**

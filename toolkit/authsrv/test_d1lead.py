@@ -32,9 +32,10 @@ import checks      # noqa: E402
 # (History: the author declared 34 from a head-count before running, the run
 # said 36 -- the same defect test_familyrate's and test_pcspoof's headers
 # record, three for three now. Count from the run, never the head. The
-# review pass then added the MUT-7 stop-order pin and the measured count
-# moved to 37, re-read off that run.)
-LEDGER = checks.Ledger("the REALFIX-A2 d1-lead bundle", floor=37)
+# review pass then added the MUT-7 stop-order pin -> 37; the sec.0.11
+# matched-words armer-kill added its truth table and four locks -> 42,
+# each re-read off its own green run.)
+LEDGER = checks.Ledger("the REALFIX-A2 d1-lead bundle", floor=42)
 check = checks.adopt(LEDGER)
 
 
@@ -143,6 +144,16 @@ def main():
           "leg must re-assert its family even unchanged -- the one "
           "transition the A1 probe never needed, and the reason the "
           "stop arm writes None")
+    check(authsrv.a2_matched_field4(22, 22) == (22, False)
+          and authsrv.a2_matched_field4(22, 0) == (22, True)
+          and authsrv.a2_matched_field4(0, 26) == (0, True),
+          "the matched-words override (sec.0.11's armer-kill): equal "
+          "words pass through unmarked, a differing carry is REPLACED by "
+          "the ground plane and marked",
+          "plane-carry's stale word across a seam is stage 1 of the "
+          "input lock (the drawn body snaps onto the stale-stamped copy "
+          "and the fence shuts); retail's nonzero pairs are bit-identical "
+          "222/222, so matched IS the retail contract")
 
     # ---------------------------------------------------------------- 3
     print("\n3. composition cells: the lattice around the bundle")
@@ -235,6 +246,31 @@ def main():
           "the verdict row carries lead_src (d1/fallback/null)",
           "the census key for P-1..P-5's scoring; null on a refusal like "
           "every field-4 fact")
+    check(src.count("a2_matched_field4(") == 3,
+          "the matched-words helper has exactly its def and TWO call "
+          "sites -- the heading arm and the stop-repin",
+          "a third caller would rewrite another arm's field 4 under a "
+          "flag whose charter is the d1 bundle; a missing caller leaves "
+          "one of the two send paths carrying the stale word the lock "
+          "needs")
+    i_match = src.index("zl_plane_cur, a2_matched = (")
+    check(i_spoof < i_match < i_d1 < i_verdict,
+          "the heading-arm override sits AFTER the carry/spoof "
+          "resolution, BEFORE the dest compute and the verdict row -- "
+          "the row records the matched word that actually goes out",
+          "above the carry it would be overwritten back to stale; below "
+          "the row, plane_cur would log the stale word while the wire "
+          "carried the match -- the unattributable-capture defect")
+    check("pc_matched=(a2_matched" in src,
+          "and the row carries pc_matched, sec.0.11's verification key",
+          "the V-8 run's exposure floor counts these rows; without the "
+          "key, exposure is reconstructed from a policy someone assumes "
+          "was running")
+    check('+ (" matched" if a2_stop_matched else "")' in src,
+          "the stop-repin label marks its own overrides",
+          "the repin's stale word was the lock's perfect DETECTOR "
+          "(28/28); the marker preserves that detector's trace under "
+          "the fix")
     check("zl_point = (a2_dest" in src
           and "plane, zl_plane_cur]," in src,
           "the ONE 0x0029 send consumes a2_dest through zl_point and its "

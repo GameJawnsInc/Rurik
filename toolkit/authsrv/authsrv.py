@@ -4569,6 +4569,28 @@ def _a2_family_rate(send, state, mt):
         state["a2_family_sent"] = mt
 
 
+def a2_matched_field4(plane, carried):
+    """(field4, matched) for one --d1-lead send: field 4 MATCHES field 3.
+
+    The 2026-08-26 input-lock decode (REALFIX.md sec.0.11): plane-carry's
+    one-grant lag leaves the SYNC copy stamped with the OLD plane across a
+    seam, and a mid-flight crossing grant with pd != pc snaps the drawn body
+    onto that stale copy at ~15 u AND shuts the AgTrack fence -- which the
+    lead's click-walk regime then keeps shut (no 0x0047, no walk-start, no
+    re-arm: the self-sustaining input lock the owner reproduced). Retail
+    never creates the cross-plane state at all: its nonzero plane pairs are
+    bit-identical 222/222 (the sec.0.9 census). So under --d1-lead the
+    carry's value is OVERRIDDEN to match whenever it differs -- the sync
+    copy's plane word reconciles AT the crossing. Pure; `matched` marks the
+    rows where the override actually changed the wire (the census key for
+    sec.0.11's verification run). The carry machinery itself is untouched
+    for every other arm.
+    """
+    if carried != plane:
+        return plane, True
+    return carried, False
+
+
 # RULE 1'S WINDOW -- how long the "the player is driving locally" latch survives
 # on its window alone.
 #
@@ -14914,7 +14936,15 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                 # (REALFIX-Q8: an unattributable capture
                                 # costs a later session a reconstruction).
                                 a2_dest, a2_src = None, None
+                                a2_matched = False
                                 if D1_LEAD:
+                                    # sec.0.11's armer-kill, BEFORE the
+                                    # verdict row so plane_cur records what
+                                    # went out and pc_matched records that
+                                    # the override fired.
+                                    zl_plane_cur, a2_matched = (
+                                        a2_matched_field4(plane,
+                                                          zl_plane_cur))
                                     a2_dest, a2_src = d1_lead_dest(
                                         reported, heading)
                                 if rec is not None:
@@ -14992,6 +15022,13 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                               # above -- nothing went out.
                                               lead_src=(a2_src if zero_ok
                                                         else None),
+                                              # sec.0.11's verification key:
+                                              # true on the rows where the
+                                              # matched-words override
+                                              # changed the wire.
+                                              pc_matched=(a2_matched
+                                                          if zero_ok
+                                                          else None),
                                               cancelwalk=(cw_hit
                                                           if CANCEL_ANSWER
                                                           else None),
@@ -15693,15 +15730,15 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                      PLAYER_AGENT_ID, 1.0, 9),
                                  "AGENT_UPDATE_SPEED(player, 1.0, type 9) "
                                  "[a2-stop]")
-                            a2_stop_pc = state.get(
-                                "zl_last_grant_plane", plane)
+                            a2_stop_pc, a2_stop_matched = a2_matched_field4(
+                                plane, state.get(
+                                    "zl_last_grant_plane", plane))
                             send(GAME_SMSG_AGENT_MOVE_TO_POINT,
                                  [PLAYER_AGENT_ID, list(reported),
                                   plane, a2_stop_pc],
                                  f"A2 STOP-REPIN ({reported[0]:.0f},"
                                  f"{reported[1]:.0f}) plane {plane}"
-                                 + (f" carry {a2_stop_pc}"
-                                    if a2_stop_pc != plane else ""))
+                                 + (" matched" if a2_stop_matched else ""))
                             state["zl_last_grant_plane"] = plane
                             state["a2_family_sent"] = None
                         # CANCELWALK R6 (--stop-answer=ack), and it is NOT

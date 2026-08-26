@@ -3299,8 +3299,16 @@ Every one of these, in the order they were written:
   surviving mutation, MUT-7, now caught; retail's stop grammar is 131/131
   companion-first). The d1 band is [700, 769] with both edges pinned and
   the corpus's one mid-magnitude outlier (|v|=1.997) asserted to fall
-  back -- the review's MINOR. Floor 37, read off the real green run after
-  the review's additions. Landing note: this test's arrival forced two deliberate
+  back -- the review's MINOR. The §0.11 armer-kill (matched plane words under
+  the bundle: `a2_matched_field4`, field 4 always matches field 3 -- retail's
+  222/222 -- so the stale-carry seam state that shut the AgTrack fence and
+  locked the owner's input can never exist) adds its truth table plus four
+  locks: def + exactly TWO call sites (heading arm and stop-repin), the
+  heading-arm override ordered carry/spoof → override → dest-compute →
+  verdict row, the row's `pc_matched` verification key, and the repin
+  label's "matched" marker (the stale word was the lock's 28/28 detector --
+  the marker keeps its trace under the fix). Floor 42, read off the real
+  green run after those additions. Landing note: this test's arrival forced two deliberate
   lock extensions in the same commit -- test_familyrate §6's sender census
   went 2→3 appearances (the def, A1's call, A2's edge-wrapper call; the
   matrix refuses the two flags together so at most one is live), and
