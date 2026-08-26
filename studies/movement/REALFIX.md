@@ -1014,7 +1014,11 @@ in pre-snap build-ups); the client's reconcile snapped the drawn body onto the
 copy's through-the-prop line. 13/21 snaps were same-nominal-plane (planes are
 walkable regions, not floors) — the cross-plane carve was never viable. The
 zero-exposure cells are named honestly: no key-released clicks exist in this tape
-at all.
+at all. *(§0.15 CORRECTION: the "snapped the drawn body" half of this mechanism
+is RETRACTED — the snap census was movetap's sample-and-hold `point` column, and
+the drawn body never teleported; the sep collapses were the copy re-seating.
+The separation build-ups, the grant-edge timing, and the through-prop WALKS were
+real; the felt disturbances are §0.15's direction yanks.)*
 
 **The retail cell that kills F-B's premise (V-RETAIL-2, OBSERVED):** of the live
 corpus's 7 mid-keyboard clicks, only the two SHORT ones (72/149 u) were echoed
@@ -1048,6 +1052,83 @@ the geometry veto returns for blocked pure clicks. **Verification (~10 min):**
 repeat this run's recipe (≥20 held-key cross-elevation clicks) PLUS **≥5
 pure-click staircase reps with the key RELEASED**, movetap running; scored by the
 pre-registered `sk_pull_verify*` thresholds.
+
+### 0.15 The F-A run scored — the snap narrative RETRACTED (an instrument artifact), the jitter named, retail's re-click contract measured, and the click policy rebuilt as deletion — 2026-08-26
+
+**THE RETRACTION FIRST, because two sections above lean on it:** the skeptic
+re-derived both lanes and found the snap censuses — this run's AND §0.14's own
+"21 real sep-collapse snaps" — were built on **movetap's `point` column, which is
+raw `m_point`: sample-and-hold, dated to `m_timeUpdated`, whose own docstring
+warns it makes glides look like teleports.** Scored against the dead-reckoned
+live path: **the drawn body never teleported in EITHER run** — zero
+excess-displacement events, zero backward yanks, 137/137 "jumps" landing within
+60 u of the live path with jump ≈ 288 × freeze-duration to ~2%. The sep
+collapses were the **ASYNC copy re-seating onto the body** — bookkeeping, not
+player motion. §0.14's mechanism prose ("the client's reconcile snapped the
+drawn body onto the copy's line") is CORRECTED to: the copy re-seated; the
+body's real disturbances are named below. The owner's felt symptoms were always
+real — they were just not teleports:
+- **The jitter = DIRECTION YANKS:** 44/50 sharp one-tick velocity turns sit
+  ≤0.25 s after a fired grant — 35 of them F-A's flush firing held clicks a
+  median 583 u off the body's aim. The "382 clicks" are **~21 held mouse-drags**
+  re-issuing `0x003E` every ~0.155 s; the flush was stomping a drag with its own
+  half-second-stale ticks. (H3's "small nudges": REFUTED — no such population.)
+- **The W-held no-clip walking = answered CLICK-'grant' legs walked WITHOUT prop
+  collision** (targets join the fired grant dests at 0.0 u — these are the 11
+  channel-clear immediate answers, not D1 leads, which stand acquitted here).
+  **The owner's prop theory is CONFIRMED in refined form: a granted order is
+  walked with prop collision bypassed while terrain holds.** No snap involved —
+  the walk itself is the phenomenon.
+- **V-STARVE (new):** 241/293 reports refused `heading-rate` during click
+  regimes — mixed W+click rides stale click lines for seconds, the inverse of
+  retail's precedence.
+
+**P-F-A rescored:** P-3/P-4 CONFIRMED; **P-5 CONFIRMED at 99.2%** (the
+pre-registered scorer `sk_pull_verify3.py` existed — the S1 lane's "no tool"
+claim was wrong); P-1/P-2 REFUTED on their letter but **vacated in substance** —
+the metrics measured copy bookkeeping, and the REFUTED-IF's two no-grant
+"snaps" are re-seats. The registrations were aimed at an instrument artifact;
+that is recorded as a registration defect, not waved off.
+
+**Retail's re-click contract (S2, the fix's ground):** channel-clear rapid
+pairs — BOTH answered independently in 30–60 ms, including a 0.150 s drag-tick
+pair; **keyboard-occupied — the older click DROPPED OUTRIGHT** (the both-dropped
+instance shows the keyboard leg's own leads refreshing straight through two
+clicks); a click-grant-occupied channel — the newer click wins late once the
+interference quiets **or goes unanswered**; and retail's five LATE answers
+(2.2–8.6 s) never yank — every one landed under another active authority, no
+`0x002C`, which acquits lateness alone and convicts *stale-aim* fires.
+**Q7, half-settled as a bonus (S2-3):** the D2 clip boundary is
+**world-anchored** — bit-identical clip coordinates (to 3 u) repeat across up to
+6 independent sessions a week apart, position-independently, which no distance
+leash can produce; 34.5%/347.3 u reproduces FINDINGS' 31%/348. Whether the
+boundary equals OUR navmesh is now a cheap desk check against those exact
+coordinates (queued).
+
+**The 0.15 rebuild — mostly deletion:** both click rewrites and their rate gate
+are **GONE** (F-B's immediate answer raced the copy through props; F-A's
+held-then-flush fires were the yank engine; each refuted within a day — the
+locks now assert the absences and the empty gap between `_grant_verdict` and
+its row). Keyboard-shadowed clicks take the shipped Rule-1 drop — retail's own
+contract. Channel-clear clicks answer through the shipped grant/hold/flush path.
+**One addition: the outstanding-answer hold** — while a click grant we sent is
+unacknowledged by any report, a newer held click cannot fire (retail's
+wins-late-or-unanswered branch; the 1.0 s pending expiry supplies "unanswered")
+— this is the double-click straight-line stomp's fix. Retained from
+0.13/0.14: the geometry passthrough, matched words, the family re-arm, the
+eager void (now the no-resurrection backstop), the recv-thread flush, all
+labels/rows. `test_d1lead.py` floor 72.
+
+**Registered for the next roam (R-1..R-3):** R-1 the direction-yank census
+collapses (44 → ≤10 turns >25° within 0.25 s of a fired grant, none >120° after
+a click fire); R-2 mouse-drags feel continuous (drag ticks answer or supersede,
+never stomp); R-3 the double-click-while-pathing straight-line walk is GONE
+(≥5 deliberate reps). **REFUTED IF** yanks persist at the same rate with the
+flush quiet (the attribution is wrong), or a pure first-click staircase walk
+misroutes (the echo itself, still standing accused from §0.14's risk cell —
+carry the ≥5 pure-click reps again). **The D2 clip stays SECONDARY**, gated on
+the Q7 coordinate desk check — the no-clip walks joined click grants, not
+leads, so the lead is acquitted pending that check.
 
 **F-B's review record (same day, before commit):** two REALs, both fixed in the
 same commit. **REV-1 (OBSERVED, 2/2 offline):** grantsim's C3 replay re-decides

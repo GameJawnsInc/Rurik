@@ -3353,9 +3353,19 @@ Every one of these, in the order they were written:
   one site ordered above the verdict row, the eager void at one site gated
   on the report being ACCEPTED (a rejected report must not cancel the
   player's click), and the flush's `d1-click` fire remaining as the ONLY
-  answer path for release-clicks. Floor 72, read off the real green run
-  after those additions; `test_grantsim.py` green at 86 beside it. Landing
-  note: this test's arrival forced two deliberate
+  answer path for release-clicks. §0.15 then DELETED both click rewrites and
+  their rate gate (each refuted within the day — F-B's immediate answers
+  raced the copy through props, F-A's flush fires were the direction-yank
+  engine at 35/44 sharp turns) and the checks INVERTED to assert the
+  absences: no rewrite strings at either site, a2_click_rate_ok gone as an
+  attribute (a helper with no callers coming back means the resurrection
+  path re-opened un-litigated), and the gap between _grant_verdict and its
+  row EMPTY (both refuted rewrites lived exactly there and each made the
+  row lie). Added: the outstanding-answer hold's three locks (the stamp at
+  both click send sites, the or-0.0 read at one flush site BEFORE the
+  verdict call — the double-click stomp fix). Floor 72 re-measured (70 after
+  the deletions, 72 with the hold locks); `test_grantsim.py` green at 86
+  beside it. Landing note: this test's arrival forced two deliberate
   lock extensions in the same commit -- test_familyrate §6's sender census
   went 2→3 appearances (the def, A1's call, A2's edge-wrapper call; the
   matrix refuses the two flags together so at most one is live), and

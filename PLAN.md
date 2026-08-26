@@ -1696,6 +1696,22 @@ keyboard clicks are HELD, the next accepted report VOIDS them
 clicks keep the echo. P-F-A-1..5 registered; the ~10-min verification
 MUST include ≥5 pure-click staircase reps with the key RELEASED (the
 zero-exposure risk cell). test_d1lead floor 72.
+**The F-A run scored and the snap narrative RETRACTED (§0.15):** the
+skeptic caught both snap censuses (incl. §0.14's 21) riding movetap's
+sample-and-hold `point` column — **the drawn body never teleported in
+either run**; the felt jitter is DIRECTION YANKS (35/44 sharp turns =
+F-A's flush stomping ~21 mouse-drags with half-second-stale ticks) and
+the no-clip walking is answered click grants walked with prop collision
+bypassed (the owner's theory CONFIRMED refined; terrain holds; no snap
+involved). P-F-A rescored 3 CONFIRMED (V-1 99.2%)/2 vacated. Retail's
+re-click contract measured (drop-under-keyboard, wins-late-or-
+unanswered under a click grant, late answers never yank) and the click
+policy REBUILT AS DELETION plus the outstanding-answer hold (the
+double-click stomp fix). Q7 half-settled free: the D2 boundary is
+WORLD-ANCHORED (bit-identical clip coords across sessions); the
+our-navmesh identity check is a queued desk script. R-1..R-3 registered
+for the next roam; the D2 clip stays secondary behind the Q7 check.
+test_d1lead floor 72.
 **The containment pair is BUILT (§0.12, registered before the soak):**
 the a2_leg model + ETA watchdog (fires only past the leg's own ETA at
 the 190.08 u/s floor speed — late, never early; once per leg; every

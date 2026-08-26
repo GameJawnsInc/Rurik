@@ -4669,20 +4669,11 @@ def a2_watchdog_due(state, now):
     return True, "eta-passed"
 
 
-def a2_click_rate_ok(state, now):
-    """(ok, since) -- the F-B click path's RATE-ONLY gate. Pure.
-
-    Retail answers essentially every click (the 2026-08-26 soak review's
-    V-W2C: the 8 'unanswered' live clicks all got a same-agent 0x0029
-    within 31-57 ms), including clicks thrown mid-keyboard -- so under
-    --d1-lead, Rule 1 (locally-moving) does not gate clicks; only the
-    shared-clock floor does. This reads the ONE grant clock (grant_at,
-    stamped in _note_wire_move for every player 0x0029 whatever sent it)
-    read-only, so the one-clock invariant holds: a click answered here
-    delays the next heading grant exactly as a heading grant would.
-    """
-    since = now - (state.get("grant_at") or 0.0)
-    return since >= GRANT_MIN_INTERVAL, since
+# (a2_click_rate_ok lived here for one day -- F-B/F-A's rate-only click
+# gate, sec.0.13-0.14. Deleted with its two callers by sec.0.15: the
+# rate-only resurrection of keyboard-shadowed clicks WAS the direction-yank
+# engine, and retail's measured contract needs no gate the shipped
+# _grant_verdict does not already provide.)
 
 
 def _a2_watchdog(send, state, rec, now=None):
@@ -5639,16 +5630,23 @@ def grant_flush_tick(send, state, conn_id, rec=None, now=None):
             rec.event("grant_verdict", fired=False, reason="pending-expired",
                       deferred=True, age=round(age, 3), dest=list(dest))
         return False
+    # sec.0.15's outstanding-answer hold, BEFORE the verdict: while a click
+    # grant we sent is unacknowledged by any report (the client is walking
+    # it, silently), a newer held click must NOT fire -- a <=0.5s-late
+    # grant onto a mid-route client is the railing stomp, and retail's
+    # measured re-click contract holds the newer click until the
+    # interference quiets or lets it expire unanswered (S2-2a: "the newer
+    # either wins late once the interference quiets or also goes
+    # unanswered"). The 1.0s pending expiry supplies the retail
+    # 'unanswered' branch; a report arriving supplies the 'quiets' one.
+    if D1_LEAD and ((state.get("a2_click_answered_at") or 0.0)
+                    > (state.get("pos_seen") or 0.0)):
+        return False
     grant, why, kage, since = _grant_verdict(state, now)
-    if not grant and D1_LEAD and why == "locally-moving":
-        # F-B (sec.0.13): retail answers mid-keyboard clicks, so a held
-        # click is not superseded by the player's hands -- it fires as soon
-        # as the shared-clock floor allows, or keeps holding.
-        rate_ok, since = a2_click_rate_ok(state, now)
-        if rate_ok:
-            grant, why = True, "d1-click"
-        else:
-            return False            # inside the floor; keep holding it
+    # sec.0.15: NO D1 resurrection here. F-B/F-A's rate-only re-verdict for
+    # locally-moving holds was the direction-yank engine (100 stale fires,
+    # median 583u off the body's aim); retail drops keyboard-shadowed
+    # clicks outright, and so do we again -- the shipped path below.
     if not grant:
         if why == "rate-limited":
             return False            # still inside the floor; keep holding it
@@ -5683,9 +5681,11 @@ def grant_flush_tick(send, state, conn_id, rec=None, now=None):
     d_plane2 = pending["plane_second"]
     if D1_LEAD:
         # sec.0.13: matched words + the family re-arm, same as the
-        # immediate click site.
+        # immediate click site. sec.0.15: this fire arms the
+        # outstanding-answer hold too.
         d_plane2, _dm = a2_matched_field4(pending["plane_first"], d_plane2)
         state["a2_family_sent"] = None
+        state["a2_click_answered_at"] = now
     send(GAME_SMSG_AGENT_UPDATE_SPEED,
          agents.agent_update_speed(PLAYER_AGENT_ID, 1.0),
          "AGENT_UPDATE_SPEED(player, 1.0 = 288 u/s)")
@@ -15778,24 +15778,23 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         now_g = time.time()
                         may_grant, why_g, kage, since = _grant_verdict(state,
                                                                        now_g)
-                        # F-A (sec.0.14, superseding F-B's immediate-answer
-                        # bypass whose premise the through-floor decode
-                        # REFUTED -- retail never verbatim-echoes DISTANT
-                        # mid-keyboard clicks; its answers anchor on the
-                        # press, n=14 unanimous): a locally-moving click is
-                        # HELD, never answered immediately and never
-                        # dropped. The next ACCEPTED report VOIDS it (the
-                        # eager void in the 0x003D arm); a click the player
-                        # RELEASED for -- no further reports -- fires from
-                        # the flush within the floor. This is what kills
-                        # the through-geometry pull: the copy is never
-                        # raced 1,000u toward a click while the held key
-                        # walks the body elsewhere (21 snaps, every one
-                        # inside a dense answered-click window, 20/21
-                        # grant-edge-triggered).
-                        if (not may_grant and D1_LEAD
-                                and why_g == "locally-moving"):
-                            why_g = "click-held"
+                        # sec.0.15: NO mid-keyboard click rewrite. F-B
+                        # answered these immediately (refuted: the copy
+                        # raced through props); F-A held them for the flush
+                        # (refuted: the flush's stale drag-echoes were the
+                        # run's direction-yank engine, 35 of 44 sharp turns,
+                        # median 583u off-aim). Retail's measured contract
+                        # (n=7 re-click pairs + the both-dropped keyboard
+                        # instance): a click under an ACTIVE KEYBOARD
+                        # authority is DROPPED OUTRIGHT -- the shipped Rule 1
+                        # behavior, which now stands under the bundle too.
+                        # Channel-clear clicks flow through the shipped
+                        # grant/hold/flush path and answer at the floor,
+                        # newest wins, drag ticks coalescing -- also
+                        # retail's shape. The bundle's click deltas are ONLY
+                        # the geometry passthrough (the echo invents
+                        # nothing), matched words, the family re-arm, and
+                        # the eager void as the no-resurrection backstop.
                         if rec is not None:
                             # EVERY evaluation, granted or not -- the same rule
                             # the resync log follows, and for the same reason:
@@ -15879,10 +15878,13 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             # (the 222/222 doctrine covers every bundle
                             # 0x0029), and the [1.0] just below overwrites
                             # sync +0x60, so the family edge re-arms exactly
-                            # as at a stop.
+                            # as at a stop. sec.0.15: the answer stamp arms
+                            # the outstanding-answer hold in the flush -- no
+                            # further click fires until the client speaks.
                             plane_second, _click_matched = a2_matched_field4(
                                 plane_first, plane_second)
                             state["a2_family_sent"] = None
+                            state["a2_click_answered_at"] = time.time()
                         send(GAME_SMSG_AGENT_UPDATE_SPEED,
                              agents.agent_update_speed(PLAYER_AGENT_ID, 1.0),
                              "AGENT_UPDATE_SPEED(player, 1.0 = 288 u/s)")

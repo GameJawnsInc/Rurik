@@ -41,8 +41,10 @@ import checks      # noqa: E402
 # F-B click contract (rate gate truth table, matched/family-reset censuses,
 # both bypass sites, row ordering, the geometry row) -> 67; its review's
 # fixes (the grantsim skip, the arm fields, the recv-thread flush move)
-# -> 70; sec.0.14's F-A (click-held + the eager void, superseding F-B's
-# immediate bypass whose premise the through-floor decode refuted) -> 72.
+# -> 70; sec.0.14's F-A (click-held + the eager void) -> 72; sec.0.15
+# DELETING both click rewrites and their rate gate (each refuted within
+# the day -- the checks now assert the absences and the empty gap) -> 70;
+# the outstanding-answer hold (the double-click stomp fix) -> 72.
 # Each floor re-read off its own green run.)
 LEDGER = checks.Ledger("the REALFIX-A2 d1-lead bundle", floor=72)
 check = checks.adopt(LEDGER)
@@ -240,21 +242,16 @@ def main():
           "a 1 Hz re-pin stream at the same dest is a policy nobody "
           "registered")
 
-    print("\n2c. the F-B click rate gate (sec.0.13)")
-    ok, since = authsrv.a2_click_rate_ok({"grant_at": 100.0}, 100.2)
-    check(ok is False and abs(since - 0.2) < 1e-9,
-          "inside the shared-clock floor: not ok, since reported",
-          "the one grant clock gates clicks exactly as it gates heading "
-          "grants -- Rule 1 is bypassed under the bundle, Rule 2 never is")
-    check(authsrv.a2_click_rate_ok({"grant_at": 100.0}, 100.5)[0] is True,
-          "at the floor exactly: ok (>= boundary)",
-          "retail's own click-answer latency is ~1 RTT; the floor is our "
-          "only added delay and an off-by-boundary halves the dose")
-    check(authsrv.a2_click_rate_ok({}, 100.0)[0] is True
-          and authsrv.a2_click_rate_ok({"grant_at": None}, 100.0)[0] is True,
-          "a missing OR None grant_at reads as ancient -- ok, no raise",
-          "the REV-1 lesson generalized: latches in this file clear by "
-          "None-assignment, so every reader takes the or-0.0 discipline")
+    print("\n2c. the click rate gate is GONE (sec.0.15)")
+    check(not hasattr(authsrv, "a2_click_rate_ok"),
+          "a2_click_rate_ok no longer exists -- the rate-only click "
+          "resurrection was deleted with both its callers",
+          "F-B answered keyboard-shadowed clicks immediately (copy raced "
+          "through props); F-A held them for the flush (the flush's stale "
+          "drag-echoes were the direction-yank engine, 35/44 sharp turns, "
+          "median 583u off-aim). Retail drops them outright; a helper "
+          "with no callers coming back would mean somebody re-opened the "
+          "resurrection path without re-litigating sec.0.15")
 
     # ---------------------------------------------------------------- 3
     print("\n3. composition cells: the lattice around the bundle")
@@ -363,26 +360,42 @@ def main():
           "the reset leaves the next same-family leg reckoning at 288 "
           "flat -- the exact --client-endpoint failure term")
     check(src.count('may_grant, why_g = True, "d1-click"') == 0
-          and src.count('why_g = "click-held"') == 1
-          and src.count('grant, why = True, "d1-click"') == 1,
-          "F-A's shape (sec.0.14): the IMMEDIATE mid-keyboard answer is "
-          "GONE -- a locally-moving click is HELD (click-held), and only "
-          "the flush's d1-click fire remains, for release-clicks no "
-          "report voided",
-          "the through-floor decode refuted F-B's premise in its one "
-          "load-bearing cell (retail never verbatim-echoes DISTANT "
-          "mid-keyboard clicks; n=14 answers all anchor on the press): "
-          "an immediate answer races the copy 1,000u through geometry "
-          "while the held key walks the body -- 21 snaps, 20/21 "
-          "grant-edge-triggered. (This check's F-B draft asserted the "
-          "immediate bypass EXISTS; the fix inverted it, and the "
-          "grantsim-filters lesson from that draft's own history "
-          "stands.)")
+          and src.count('why_g = "click-held"') == 0
+          and src.count('grant, why = True, "d1-click"') == 0,
+          "sec.0.15's shape: NO mid-keyboard click rewrite exists at "
+          "either site -- not F-B's immediate answer, not F-A's hold, not "
+          "the flush's rate-fire. Keyboard-shadowed clicks take the "
+          "shipped Rule-1 drop, retail's own measured contract (the "
+          "both-dropped keyboard instance; older-dropped-outright under "
+          "an active authority)",
+          "each rewrite was tried and refuted within the day: F-B's "
+          "immediate answers raced the copy through props (21 copy "
+          "re-seats, 2.7x rate); F-A's held-then-flush fires were the "
+          "direction-yank engine (35/44 sharp turns, median 583u "
+          "off-aim). This check's own history IS the record: it asserted "
+          "the bypass EXISTS (F-B draft), then the hold EXISTS (F-A "
+          "draft), and now asserts them GONE")
     check(src.count('reason="voided-by-report"') == 1,
           "the eager void exists at ONE site",
           "the void is F-A's core: the player's hands, speaking now, "
           "outrank the click they threw while moving -- exactly "
           "retail's press-anchored behavior")
+    check(src.count('state["a2_click_answered_at"]') == 2
+          and src.count('a2_click_answered_at") or 0.0)') == 1,
+          "the outstanding-answer stamp is written at BOTH click send "
+          "sites and read at ONE hold site in the flush (or-0.0 "
+          "discipline)",
+          "sec.0.15's double-click fix: a <=0.5s-late grant onto a "
+          "mid-click-walk client is the railing stomp; retail holds the "
+          "newer click until the interference quiets or lets it expire "
+          "unanswered. A missing stamp re-opens the stomp; a raw read "
+          "re-opens REV-1")
+    i_hold = src.index('a2_click_answered_at") or 0.0)')
+    i_gv_flush = src.index("grant, why, kage, since = _grant_verdict(")
+    check(i_hold < i_gv_flush,
+          "and the hold sits BEFORE the flush's verdict call",
+          "after it, a keyboard-quiet flush tick would fire the held "
+          "click into the silent click-walk the hold exists to protect")
     i_take = src.index("a2_pos_taken = _take_client_position(")
     i_void = src.index('reason="voided-by-report"')
     check(i_take < i_void
@@ -418,13 +431,16 @@ def main():
           "and pre-batch ordering gives the held click first claim on "
           "each floor opening (REV-3's starvation, same fix)")
     i_gv_call = src.index("may_grant, why_g, kage, since = _grant_verdict(")
-    i_bypass = src.index('why_g = "click-held"')
     i_row = src.index('rec.event("grant_verdict", fired=may_grant,')
-    check(i_gv_call < i_bypass < i_row,
-          "and the click-held rewrite sits ABOVE the verdict row -- the "
-          "row records what actually happened",
-          "below the row, the log says locally-moving for a click that "
-          "was actually held -- the unattributable-capture defect")
+    between = src[i_gv_call:i_row]
+    check("why_g = " not in between.replace(
+              "may_grant, why_g, kage, since = _grant_verdict(", ""),
+          "and NOTHING rewrites the click verdict between _grant_verdict "
+          "and its row -- the row records the shipped predicate's own "
+          "answer, verbatim",
+          "both F-B's and F-A's rewrites lived exactly here and each "
+          "made the row lie about a policy that was then refuted; an "
+          "empty gap is sec.0.15's whole click-arm claim")
     check('d1_passthrough=bool(D1_LEAD)' in src
           and src.count('rec.event("click_verdict"') == 1,
           "the geometry branch writes its click_verdict row (the soak's "
