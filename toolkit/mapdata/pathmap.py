@@ -577,13 +577,35 @@ class PathingMap:
                     parent[rj] = ri
         return [find(i) for i in range(n)]
 
-    def route(self, x0, y0, x1, y1):
+    def route(self, x0, y0, x1, y1, start_plane=None, goal_plane=None,
+              with_planes=False):
         """A walkable path from start to goal, or None if there is not one.
 
         A* over the trapezoid adjacency graph, then a string-pulling pass that
         drops any waypoint the previous one can already see. The result is a
         list of points beginning at the start and ending at the goal; walking
         it in straight segments never leaves the navmesh.
+
+        PLANE PREFERENCE (ROUTER-B4, 2026-08-26 run 2): `start_plane` /
+        `goal_plane` restrict the containing-trapezoid candidates to the
+        named plane WHEN a candidate on it exists -- prefer semantics, the
+        same contract as plane_at(prefer=): a preference that nothing
+        matches falls back to every candidate rather than refusing. This
+        exists because endpoint selection used to take containing()[0]
+        blind, and on stacked geometry (a prop top over terrain, a bridge
+        over ground -- THERE IS NO HEIGHT in this file) that picked an
+        arbitrary surface: the verification run's owner watched a click
+        with a known plane route 12 waypoints around the island to the
+        wrong stack level. The caller that knows the planes (the click
+        carries the clicked surface's plane; the server tracks the
+        player's) can now say so.
+
+        `with_planes=True` returns (path, planes) with planes[i] the plane
+        of the trapezoid path[i] enters (the start trapezoid's plane for
+        path[0], the goal trapezoid's for the terminal) -- the corridor's
+        own answer to "which plane word does this waypoint's grant carry",
+        replacing per-point plane_at() guesses that are wrong exactly on
+        the stacked geometry the route is threading.
 
         CROSSES PLANES via the portal-pair links (this paragraph used to say
         SAME PLANE ONLY, written before `pair_id` was decoded -- stale from
@@ -607,11 +629,20 @@ class PathingMap:
         goals = self.containing(x1, y1)
         if not starts or not goals:
             return None
+        if start_plane is not None:
+            pref = [t for t in starts if t.plane == start_plane]
+            starts = pref or starts
+        if goal_plane is not None:
+            pref = [t for t in goals if t.plane == goal_plane]
+            goals = pref or goals
         goal_set = {self._flat_index(g) for g in goals}
         start = starts[0]
         si = self._flat_index(start)
         if si in goal_set:
-            return [(x0, y0), (x1, y1)]
+            path = [(x0, y0), (x1, y1)]
+            if with_planes:
+                return path, [start.plane, start.plane]
+            return path
         # A goal in another component is the A*'s WORST case, not a cheap miss:
         # it pops every trapezoid it can reach before giving up, which on
         # Pre-Searing is ~5,100 of them and was the entire remaining tail once
@@ -668,10 +699,13 @@ class PathingMap:
         # before this was fixed. A point on the edge they share is inside both
         # by construction.
         pts = [(x0, y0)]
+        pls = [self.trapezoids[si].plane]
         for a, b in zip(chain, chain[1:]):
             pts.append(self._shared_edge(self.trapezoids[a],
                                          self.trapezoids[b]))
+            pls.append(self.trapezoids[b].plane)
         pts.append((x1, y1))
+        pls.append(self.trapezoids[gi].plane)
         path = self._string_pull(pts)
         # Last gate, and it is not belt-and-braces. A cross-plane step joins two
         # trapezoids that the file says share a crossing; where they do not also
@@ -682,6 +716,17 @@ class PathingMap:
         for a, b in zip(path, path[1:]):
             if self.clip(*a, *b) != b:
                 return None
+        if with_planes:
+            # The pull returns an ordered subset of pts; walk a pointer to
+            # recover each survivor's plane. Value-matching is exact: every
+            # element of `path` IS an element of `pts`, in order.
+            planes, j = [], 0
+            for p in path:
+                while pts[j] != p:
+                    j += 1
+                planes.append(pls[j])
+                j += 1
+            return path, planes
         return path
 
     def _shared_edge(self, a, b):

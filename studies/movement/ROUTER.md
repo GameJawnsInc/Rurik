@@ -364,7 +364,7 @@ reported position rides our mesh edge. The router had closed this door's
 twin on the click channel; the keyboard channel still had it open —
 P-17(a), by the other road.
 
-**ROUTER-B3 — the door closed** (same commit as this section): an
+**ROUTER-B3 — the door closed** (same commit as §6): an
 off-mesh origin now receives a ZERO-DISTANCE lead — the granted point is
 the report itself, the shipped zero-lead answer shape for that row — so
 no walk is ever ordered from ground our mesh cannot place, and the
@@ -379,3 +379,60 @@ free drag input is then a pure mesh-fidelity residual (client-vs-decode
 edge disagreement), not a server-ordered walk. REFUTED IF a post-B3 tape
 shows an off-mesh episode beginning at a fired lead whose row says
 origin-unwalkable.
+
+## 7. Run 2 — 20260826T194505, scored, and ROUTER-B4 (OBSERVED)
+
+**B3's registered prediction HELD**: 68 fired keyboard leads, the 14
+`origin-unwalkable` rows now zero-distance demotions; the tape's off-mesh
+episodes collapsed from a 9.6 s worst case to ≤3.5 s (14 short episodes,
+all in one drag phase — the predicted mesh-edge residual). Wall-press
+clicks "seem stable now" per the owner. Zero teleports again (whole-run
+census, >600 u/s cut).
+
+**What the owner reported next, decoded from the rows:**
+
+- *"Third click did atrocious pathing all the way around to terrain below
+  a prop"* — the t=49.257 click: a 1,020 u click answered with a
+  **twelve-waypoint ~12,000 u island tour** (46 s of walking, corridor
+  passing planes 20 and 23). *"All of them bugged around corners / stupid
+  paths"* and *"walking under stairs / pathing to terrain under props"* —
+  endpoint selection took `containing()[0]` blind on stacked geometry
+  (the review's F9 "fidelity nit", promoted by this run), and grant plane
+  words came from per-point `plane_at` re-guesses.
+- *"The cross-floor click warped me back"* — t=311.099: a 560 u click
+  answered by a 5-leg ~4,300 u loop that crossed a plane-29 ramp,
+  **overshot the destination by 900 u and walked back** (the tape shows
+  continuous 288 u/s walking, no snap — the "warp" is the route's shape,
+  not a teleport).
+- *Mid-route re-clicks fine except elevation* — consistent: the defect
+  class is stacked-plane endpoint selection, exactly where elevation is.
+
+**ROUTER-B4 — plane-aware routing + the tour cap** (same commit):
+
+1. `pathmap.route()` gains `start_plane`/`goal_plane` (prefer semantics —
+   an unmatched preference falls back rather than refusing) and
+   `with_planes=True`, returning the corridor's own per-waypoint planes
+   from the A*'s trapezoid chain. test_pathmap §11 proves preference
+   selects each surface of a real stacked point ((-6854,13008), planes
+   {0,36}) and that the plain call's paths are untouched (floor 65).
+2. The wiring passes `cur_plane`/`dest_plane`, and chain grants carry
+   **corridor-true planes** instead of `plane_at` guesses (terminal keeps
+   the client's named click plane — the shipped stairs doctrine).
+3. **The tour cap**: a route longer than `4.0 × direct + 800 u` is
+   refused as a route (both run-2 specimens trip it at 11.8× and 7.7×;
+   the largest bench-legitimate ratio is 2.93×; the SLACK term protects
+   short-range cornering) and demotes to the clip-fallback — walk
+   straight toward the click, stop at the geometry, which is what the
+   owner expected at both specimens. Constants measured-bounded, named
+   `ROUTER_TOUR_CAP`/`ROUTER_TOUR_SLACK`.
+
+**Registered for run 3**: the island tours are gone (no `router_route`
+row with a route length over the cap fires as routed); stacked-geometry
+clicks resolve to the clicked surface (no more terrain-under-prop
+terminals when the click named the prop's plane); cross-floor clicks
+either route sanely (≤4×+800 u) or stop at the geometry. REFUTED IF a
+tour-shaped chain still fires, or a click whose plane our mesh carries
+at the dest still terminates on the other stack level. Open: the
+route-shape quality inside the cap (corner-hugging wide swings from
+edge-midpoint waypoints) is unaddressed — ROUTER-Q10 if the owner still
+sees it.

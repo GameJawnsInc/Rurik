@@ -14,6 +14,7 @@ from drifting. Bare-machine: no vault, no client, no sockets.
 import math
 import os
 import sys
+import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -22,10 +23,12 @@ sys.path.insert(0, os.path.dirname(HERE))                      # toolkit/
 import checks                                                  # noqa: E402
 import authsrv                                                 # noqa: E402
 
-# Floor from the 2026-08-26 green run: 57 checks, all unconditional
-# (51 at the B2 landing; +6 from the review round: the sampling-gate pair,
-# the two new composition refusals, the two fine-step source locks).
-LEDGER = checks.Ledger("router wiring", floor=57)
+# Floor from the 2026-08-26 green run: 64 checks, all unconditional
+# (51 at the B2 landing; +6 review round: the sampling-gate pair, two new
+# composition refusals, two fine-step source locks; +7 ROUTER-B4: planes
+# through route(), corridor planes on the grants, the tour cap and its
+# SLACK control).
+LEDGER = checks.Ledger("router wiring", floor=64)
 check = checks.adopt_named(LEDGER)
 
 SPEED_OP = authsrv.GAME_SMSG_AGENT_UPDATE_SPEED
@@ -54,8 +57,10 @@ class StubPM:
     cross it detour through (150.0, 500.0); everything else is a straight
     line. plane 3 everywhere."""
 
-    def __init__(self, route_result="auto"):
+    def __init__(self, route_result="auto", route_planes=None):
         self.route_result = route_result
+        self.route_planes = route_planes
+        self.last_planes = None
 
     def walkable(self, x, y):
         return not (100.0 < x < 200.0) or y > 400.0
@@ -78,7 +83,19 @@ class StubPM:
             best = p
         return (x1, y1)
 
-    def route(self, x0, y0, x1, y1):
+    def route(self, x0, y0, x1, y1, start_plane=None, goal_plane=None,
+              with_planes=False):
+        self.last_planes = (start_plane, goal_plane)
+        pts = self._route(x0, y0, x1, y1)
+        if pts is None:
+            return None
+        if with_planes:
+            planes = (self.route_planes if self.route_planes is not None
+                      else [3] * len(pts))
+            return pts, planes
+        return pts
+
+    def _route(self, x0, y0, x1, y1):
         if self.route_result != "auto":
             return self.route_result
         if not self.walkable(x0, y0) or not self.walkable(x1, y1):
@@ -157,6 +174,61 @@ def main():
     check("what fires instead is the fallback's own clean stop",
           sent[-1][1][1][0] <= 100.0 + 1e-6
           and st.get("router_chain") is None)
+
+    print("== 1b: ROUTER-B4 -- planes through, tours capped ==")
+
+    # The click's planes reach route(): the wiring must pass the
+    # player's plane and the clicked surface's plane (run 2's twelve-
+    # waypoint island tour was plane-blind endpoint selection).
+    st = base_state()
+    pm = st["pathmap"]
+    answer(st, (50.0, 50.0), dest_plane=7, cur_plane=3)
+    check("route() receives start_plane and goal_plane",
+          pm.last_planes == (3, 7))
+
+    # Corridor-true planes ride the grants: a multi-leg route whose
+    # corridor names planes [3, 5, 9, 7] must send 5 on leg 1, 9 on leg
+    # 2, and the CLIENT's named plane on the terminal.
+    pm = StubPM(route_result=[(0.0, 0.0), (50.0, 500.0), (250.0, 500.0),
+                              (300.0, 0.0)],
+                route_planes=[3, 5, 9, 7])
+    st = base_state(pm)
+    handled, sent, rows = answer(st, (300.0, 0.0), dest_plane=8)
+    check("first leg carries the corridor's plane, matched",
+          sent[-1][1][2] == 5 and sent[-1][1][3] == 5)
+    chain = st.get("router_chain")
+    check("the chain queues the corridor planes",
+          chain is not None and chain["planes"] == [9, 7])
+    send2, rec2 = FakeSend(), FakeRec()
+    authsrv.router_chain_tick(send2, st, 1, rec2, now=time.time() + 999.0)
+    authsrv.router_chain_tick(send2, st, 1, rec2, now=time.time() + 9999.0)
+    mids = [p for _op, p, _l in send2.sent]
+    check("interior leg sends its corridor plane, terminal the client's",
+          len(mids) == 2 and mids[0][2] == 9 and mids[1][2] == 8)
+
+    # The tour cap: a route 4x+800u longer than the straight line is not
+    # an answer, it is the run-2 island tour (11.8x and 7.7x observed);
+    # it demotes to the clip-fallback with its own named reason.
+    tour = [(0.0, 0.0), (0.0, 3000.0), (300.0, 3000.0), (300.0, 0.0)]
+    st = base_state(StubPM(route_result=tour))
+    handled, sent, rows = answer(st, (300.0, 0.0))
+    check("an island tour is refused as a route",
+          any(r["kind"] == "router_route"
+              and r.get("reason") == "tour-capped" for r in rows))
+    check("the capped click gets the fallback's stop, not the tour",
+          st.get("router_chain") is None
+          and sent and sent[-1][1][1][0] <= 100.0 + 1e-6)
+    # ...and a legitimate short-range corner detour does NOT trip the
+    # cap: ratio ~4.9x on a 112u click, but the excess (~440u) sits
+    # under the SLACK term, which exists exactly so close-range
+    # cornering is never mistaken for an island tour.
+    st = base_state(StubPM(route_result=[(0.0, 0.0), (0.0, 250.0),
+                                         (100.0, 250.0), (100.0, 50.0)]))
+    handled, sent, rows = answer(st, (100.0, 50.0))
+    check("a short corner detour survives the cap",
+          any(r["kind"] == "router_route" and r.get("verdict") == "routed"
+              for r in rows)
+          and not any(r.get("reason") == "tour-capped" for r in rows))
 
     # kbd-drop: active keyboard authority.
     st = base_state()

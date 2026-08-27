@@ -1956,7 +1956,17 @@ Every one of these, in the order they were written:
   SAMPLE SIZE and was the only red in a sabotage that broke nothing, and the latency
   assertion re-times its candidates best-of-5 because the first version read 17.9 ms
   green and 52.4 ms red on identical code while four other agents' suites ran in the
-  same worktree. Floor 62 against a green 64; ~105 s, `--routes` shrinks section 10),
+  same worktree. Section 11 (2026-08-26, ROUTER-B4) covers `route()`'s
+plane preference and `with_planes` corridor planes: twenty routed pairs
+prove the aux planes are a decoration (identical paths), the endpoint
+planes belong to trapezoids actually containing the points, a REAL
+stacked point on Pre-Searing ((-6854,13008), planes {0,36}) has each of
+its surfaces selectable by preference, and an unmatchable preference
+falls back rather than refusing — the run-2 twelve-waypoint island tour
+was blind `containing()[0]` endpoint selection, and this section is its
+regression. Floor 65 against a green 69 (two archive-conditional §6
+checks and the stacked-point pair may skip-declare); ~105 s, `--routes`
+shrinks section 10),
   `toolkit/mapdata/test_deploy.py` (rung G's one command, `deploy.py`, which
   takes an area row in `content/areas.toml` from geometry to a map the retail
   client compiles. It is an ORCHESTRATOR -- nearly every line it runs belongs to
@@ -8976,4 +8986,11 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   the sampling-gate pair — a stub route whose leg crosses the wall (as
   route()'s 16u gate could pass over a sub-sample sliver) must be demoted
   to the clip-fallback by the 2.0u pre-send re-clip — and two fine-step
-  source locks. Floor 57 from the green run (51 at the B2 landing). ~1 s).
+  source locks. ROUTER-B4 (run 2) added seven more: route() receives the
+  click's planes, corridor-true planes ride the grants (interior legs the
+  corridor's, terminal the client's named plane), the tour cap refuses an
+  island-tour route (the run's 11.8x specimen shape) into the
+  clip-fallback with reason=tour-capped, and a short corner detour under
+  the SLACK term survives the cap — the control that keeps the cap from
+  eating ordinary cornering. Floor 64 from the green run (51 at the B2
+  landing, 57 after the review round). ~1 s).

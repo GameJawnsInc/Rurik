@@ -4867,6 +4867,21 @@ def _a2_watchdog(send, state, rec, now=None):
 # =========================================================================
 ROUTER = False
 
+# THE TOUR CAP (ROUTER-B4, verification run 2, 20260826T194505): a route is
+# refused as a route when its length exceeds CAP x the direct distance plus
+# SLACK. Plane-blind endpoint selection plus mesh connectivity produced two
+# island tours the owner watched in real time -- a 1,020u click answered
+# with a ~12,000u twelve-waypoint chain (11.8x, 46 seconds of walking) and
+# a 560u cross-floor click answered with a ~4,300u loop that overshot the
+# destination by 900u and walked back (7.7x). The largest LEGITIMATE ratio
+# the bench ever measured is 2.93x (ROUTER-Q3's corridor pair), and the
+# SLACK term keeps the cap off short-range wall detours, where a 5x ratio
+# on a 100u click is ordinary cornering. A capped route demotes to the
+# clip-fallback: walk straight toward the click and stop at the geometry --
+# which is what the owner expected to happen at both specimens.
+ROUTER_TOUR_CAP = 4.0
+ROUTER_TOUR_SLACK = 800.0
+
 
 def router_next_due(state):
     """When the live chain's current leg completes, or None. Pure."""
@@ -4913,16 +4928,18 @@ def router_chain_tick(send, state, conn_id, rec, now=None):
         return
     if now is None:
         now = time.time()
-    pm = state.get("pathmap")
     while chain is not None:
         due = router_next_due(state)
         if due is None or now + 1e-9 < due:
             return
         nxt = chain["queue"].pop(0)
+        nxt_plane = (chain["planes"].pop(0) if chain.get("planes")
+                     else chain["carry"])
         chain["i"] += 1
         terminal = not chain["queue"]
-        pf = (chain["click_plane"] if terminal
-              else _router_plane(pm, nxt, chain["carry"]))
+        # Corridor-true plane per waypoint (ROUTER-B4); the terminal grant
+        # keeps the client's own named click plane, the shipped doctrine.
+        pf = chain["click_plane"] if terminal else nxt_plane
         ps, _matched = a2_matched_field4(pf, chain["carry"])
         state["dest"], state["clipped"] = (nxt[0], nxt[1]), False
         send(GAME_SMSG_AGENT_MOVE_TO_POINT,
@@ -4984,7 +5001,22 @@ def router_answer_click(send, state, conn_id, rec, dest, dest_plane,
         return True
     origin = (float(pos[0]), float(pos[1]))
     t0 = time.perf_counter()
-    wps = pm.route(origin[0], origin[1], dx, dy)
+    # Plane-aware (ROUTER-B4): the click names the clicked surface's plane
+    # and the server tracks the player's -- both are passed so stacked
+    # geometry (a prop top over terrain) resolves to the surface the
+    # player actually chose, and the corridor's own per-waypoint planes
+    # come back for the grants' plane words.
+    _routed = pm.route(origin[0], origin[1], dx, dy,
+                       start_plane=cur_plane, goal_plane=dest_plane,
+                       with_planes=True)
+    wps, wpls = _routed if _routed is not None else (None, None)
+    tour_reason = None
+    if wps is not None:
+        direct = math.hypot(dx - origin[0], dy - origin[1])
+        length = sum(math.hypot(b[0] - a[0], b[1] - a[1])
+                     for a, b in zip(wps, wps[1:]))
+        if length > ROUTER_TOUR_CAP * direct + ROUTER_TOUR_SLACK:
+            wps, tour_reason = None, "tour-capped"
     # THE SAMPLING GATE (review F1, 2026-08-26): route()'s own final gate
     # and its string-pull sightline sample at 16 u, and clip()'s docstring
     # says what that means -- "a gap narrower than `step` can be stepped
@@ -5007,9 +5039,12 @@ def router_answer_click(send, state, conn_id, rec, dest, dest_plane,
         # door decided), then the one honest fallback: the straight
         # line's own clip, granted only when it actually moves the
         # client -- a legal leg toward the click, ROUTER-Q1's
-        # cross-component case. NEVER the unclipped point: that is the
-        # phasing door this flag exists to close.
-        if not pm.containing(origin[0], origin[1]):
+        # cross-component case, and ROUTER-B4's capped tours. NEVER the
+        # unclipped point: that is the phasing door this flag exists to
+        # close.
+        if tour_reason is not None:
+            reason = tour_reason
+        elif not pm.containing(origin[0], origin[1]):
             reason = "origin-off-mesh"
         elif not pm.containing(dx, dy):
             reason = "dest-off-mesh"
@@ -5059,9 +5094,12 @@ def router_answer_click(send, state, conn_id, rec, dest, dest_plane,
               flush=True)
         return True
     legs = [(float(x), float(y)) for x, y in wps[1:]]
-    legs = [p for i, p in enumerate(legs)
-            if i == 0 or math.hypot(p[0] - legs[i - 1][0],
-                                    p[1] - legs[i - 1][1]) > 1e-9]
+    leg_planes = list(wpls[1:])
+    _keep = [i for i, p in enumerate(legs)
+             if i == 0 or math.hypot(p[0] - legs[i - 1][0],
+                                     p[1] - legs[i - 1][1]) > 1e-9]
+    legs = [legs[i] for i in _keep]
+    leg_planes = [leg_planes[i] for i in _keep]
     state["grant_pending"] = None
     if D1_LEAD:
         state["a2_family_sent"] = None
@@ -5087,7 +5125,10 @@ def router_answer_click(send, state, conn_id, rec, dest, dest_plane,
                       dest=[dx, dy], ms=round(ms, 2))
         return True
     first_wp = legs[0]
-    pf = _router_plane(pm, first_wp, cur_plane)
+    # Corridor-true plane (ROUTER-B4): the route's own trapezoid chain
+    # names each waypoint's plane; plane_at() re-guessing was wrong
+    # exactly on the stacked geometry the corridor threads.
+    pf = leg_planes[0]
     ps, _m = a2_matched_field4(pf, cur_plane)
     state["dest"], state["clipped"] = first_wp, False
     send(GAME_SMSG_AGENT_UPDATE_SPEED,
@@ -5099,7 +5140,8 @@ def router_answer_click(send, state, conn_id, rec, dest, dest_plane,
          f" toward ({dx:.0f},{dy:.0f})")
     state["zl_last_grant_plane"] = pf
     state["router_chain"] = {
-        "queue": legs[1:], "prev": origin, "cur": first_wp,
+        "queue": legs[1:], "planes": leg_planes[1:],
+        "prev": origin, "cur": first_wp,
         "granted_at": now, "carry": pf, "click_plane": dest_plane,
         "i": 1, "n": len(legs)}
     if rec is not None:
