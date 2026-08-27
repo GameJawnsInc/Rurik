@@ -137,7 +137,13 @@ EXE_BYTES = 10_483_904
 # §10. Both floors are MEASURED on a real green run rather than computed by adding
 # §11's count to the old pair -- a floor computed from a floor is how a section
 # quietly stops running, which is the lesson the retired comment here already carried.
-FLOOR_WITH_CAPSTONE = 116
+# 2026-08-26: §12 (`--bit`, `--upto`, the phantom filter -- the MOVECODE-B1
+# instrument) adds 19 checks with capstone and declares ONE skip without it,
+# every claim in it needing a disassembler. So the capstone floor moves 116 ->
+# 135 and the stdlib floor does NOT move: `skip()` lowers a floor by zero, which
+# a session once lost a day to believing otherwise. Both MEASURED on a green run
+# of this file against the pinned pristine 38797, never computed by addition.
+FLOOR_WITH_CAPSTONE = 135
 FLOOR_STDLIB_ONLY = 45
 
 LEDGER = checks.Ledger(
@@ -868,6 +874,95 @@ def section_11():
           f"a match rather than searched for")
 
 
+def section_12(img):
+    """`--bit`, `--upto` and the phantom filter, against MOVECODE-B1's controls.
+
+    WHY THIS SECTION CAN GO RED IN BOTH DIRECTIONS, which is the property the
+    house rule about checks that cannot fail is asking for. The phantom filter
+    is scored on eight addresses whose truth was established by hand against
+    the real instruction stream: three that are NOT instructions (they sit
+    inside `d9 5c 24 04`, `fstp dword ptr [esp+4]`, whose trailing two bytes
+    decode alone as `and al, 4`) and five that are. A filter that got lazy and
+    called everything real fails on the first three; one that got greedy and
+    called everything phantom fails on the last five. The first run of
+    `bit_access` reported all three phantoms as reads of bit 18, next to the
+    one real site and indistinguishable from it.
+
+    The bit-18 census itself is the other half: on build 38797 there is
+    EXACTLY ONE `or dword [reg+0x20], 0x40000` in the whole 5.4 MB .text
+    section, and it is 0x005FE56C. That is a strong, cheap, falsifiable pin --
+    if a future change to the anchoring drops it, or invents a second, this
+    goes red and names which.
+    """
+    if img is None:
+        LEDGER.skip("12. --bit, --upto and the phantom filter", NO_CAPSTONE)
+        return
+
+    # -- the narrowed-view derivation, which is the whole point of `--bit` ---
+    # Bit 18 of the dword at +0x20 is bit 2 of the BYTE at +0x22. A scan that
+    # does not derive this cannot see `or byte [esi+0x22], 4` and reports a
+    # confident zero -- the fourth arrival of studies/enemy §6o's failure.
+    views = CS.Image.bit_views(0x20, 18)
+    eq(views, [(1, 0x22, 0x04, 2), (2, 0x22, 0x04, 2), (4, 0x20, 0x40000, 18)],
+       "12a. bit 18 of +0x20 derives the byte and word views at +0x22")
+    eq(CS.Image.bit_views(0x20, 3), [(1, 0x20, 0x08, 3), (2, 0x20, 0x08, 3),
+                                     (4, 0x20, 0x08, 3)],
+       "12a. a bit inside byte 0 leaves the displacement alone")
+
+    # -- the phantom filter, both directions ------------------------------
+    PHANTOM = (0x00600FD4, 0x00601974, 0x00602526)
+    REAL = (0x005FE56C, 0x0060029F, 0x005FEA1E, 0x005FEA3B, 0x005FEA49)
+    for va in PHANTOM:
+        eq(img.boundary_status(va), "phantom",
+           f"12b. 0x{va:08X} is mid-instruction, not a bit-18 site")
+    for va in REAL:
+        eq(img.boundary_status(va), "confirmed",
+           f"12b. 0x{va:08X} is a real instruction boundary")
+
+    # -- `--upto` reproduces two call sites read by hand -------------------
+    # Both were mis-read by a guessed `--dis va-0x20` start before `dis_upto`
+    # existed, so these pin the alignment search rather than the disassembler.
+    for va, want_va, want_text in (
+            (0x00600B0A, 0x00600B02, "push 1"),
+            (0x006002B5, 0x006002B0, "push 0"),
+            (0x00602AD3, 0x00602A7F, "push 0")):
+        stream = img.dis_upto(va, count=24)
+        got = {i.address: f"{i.mnemonic} {i.op_str}".strip() for i in stream}
+        check(got.get(want_va) == want_text,
+              f"12c. --upto 0x{va:08X} recovers 0x{want_va:08X} {want_text}",
+              f"got {got.get(want_va)!r}; stream starts "
+              f"0x{stream[0].address:08X}" if stream else "empty stream")
+
+    # -- the census: one memory-form SET in the whole image ----------------
+    rows, (searched, blind) = img.bit_access(0x20, 18)
+    mem_set = [r for r in rows
+               if r.effect == "SET" and r.form.startswith("memory")]
+    eq([r.va for r in mem_set], [0x005FE56C],
+       "12d. exactly one `or dword [reg+0x20], 0x40000` in the whole image")
+    mem_test = [r for r in rows if r.effect == "TEST"
+                and r.form.startswith("memory [reg+0x20]")]
+    check(0x0060029F in [r.va for r in mem_test],
+          "12d. the glide-vs-teleport branch is among the memory-form tests",
+          f"got {[hex(r.va) for r in mem_test]}")
+
+    # The classifier's two measured bugs, pinned so they cannot come back.
+    # `test dword [edi+0x20], 0x10000` tests bit SIXTEEN and `and dword
+    # [edi+0x20], 0xfffdffff` PRESERVES bit 18 while clearing 17; the first
+    # run called both bit-18 TESTs.
+    by_va = {r.va: r for r in rows}
+    for va, why in ((0x005FE694, "tests bit 16, not 18"),
+                    (0x005FF737, "clears bit 17 and preserves 18")):
+        r = by_va.get(va)
+        check(r is not None and r.effect == "NEIGHBOUR",
+              f"12e. 0x{va:08X} is a NEIGHBOUR ({why})",
+              f"got {r.effect if r else 'absent'}")
+
+    check(any("byte" in d or "8-bit" in d for _n, d in searched),
+          "12f. the scope statement names the narrowed views it searched")
+    check(any("register" in n for n, _d in blind),
+          "12f. and names the mask-held-in-a-register blind spot")
+
+
 def main():
     # The build guard. `pinned` is stdlib -- `CS.find_exe` is literally
     # `pinned.find` -- so which client we are reading gets said out loud even on a
@@ -894,6 +989,7 @@ def main():
     section_9(exe, img)
     section_10(exe, img)
     section_11()
+    section_12(img)
 
     return LEDGER.verdict()
 

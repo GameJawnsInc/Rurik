@@ -251,6 +251,123 @@ class Image:
         return list(self.md.disasm(self.read(va, nbytes or max(16 * (count or 8), 64)),
                                    va, count))
 
+    def dis_upto(self, va, count=16, search=96):
+        """Disassemble the `count` instructions ENDING at `va`, aligned onto it.
+
+        `--dis va-0x20` is a guess, and on x86 a wrong guess is not a near
+        miss: starting one byte off decodes a different instruction stream
+        that stays wrong for a while and can produce nothing recognisable at
+        all. Reading five call sites for their pushed arguments, two came back
+        as garbage (`add byte ptr [ebx - 0x7c76fbbf], cl`) purely because the
+        chosen start was mid-instruction -- and a reader who does not notice
+        will take the operands seriously.
+
+        So this searches instead of guessing: try every start in
+        `[va - search, va)`, decode forward, and keep the streams that land
+        EXACTLY on `va`. The longest such stream is the one that has been in
+        sync the longest, and is returned. Returns [] when nothing aligns,
+        which is itself informative -- it means `va` is not an instruction
+        boundary in any nearby decode, i.e. a phantom.
+
+        CONSENSUS, NOT LENGTH, decides which candidate is real -- and the
+        difference is not cosmetic. x86 re-synchronises within a few
+        instructions, so a start that lands mid-instruction produces garbage
+        for a while and then joins the true stream, reaching `va` exactly like
+        a good start does. Taking the LONGEST such stream therefore prefers
+        the one that started earliest, garbage and all: reading the shared
+        setter's call site that way returned
+        `add byte ptr [ebx - 0x7c76f3bf], cl` for what is really a run of
+        `mov dword ptr [ebx+0xNN], eax`.
+
+        So every start that reaches `va` votes on where the instruction
+        boundaries are, and a stream is scored by its WEAKEST boundary. The
+        true stream's boundaries are agreed by nearly every candidate, because
+        they all converge onto it; a garbage prefix is agreed by almost none.
+
+        VOTES ARE NORMALISED BY ELIGIBILITY, which a first cut got wrong. A
+        boundary 90 bytes back can only be voted for by the candidates that
+        start at least that far back, so raw vote counts punish exactly the
+        long streams this function exists to produce -- scoring on the raw
+        minimum returned two instructions where fourteen were available. What
+        matters is the FRACTION of candidates that could have agreed and did.
+        """
+        # The function's own start, when the int3 padding gives one, beats any
+        # amount of voting: a linear decode from a true boundary is in sync by
+        # construction. Best effort, so it is checked rather than trusted --
+        # it wins only if its stream actually contains `va`.
+        fs = self.func_start(va)
+        if fs is not None and 0 < va - fs <= search * 4:
+            ins = self.dis(fs, count=(va - fs), nbytes=(va - fs) + 16)
+            hit = next((i for i, x in enumerate(ins) if x.address == va), None)
+            if hit is not None:
+                return ins[max(0, hit - count):hit + 1]
+
+        cands, votes, eligible = [], collections.Counter(), collections.Counter()
+        for k in range(1, search + 1):
+            start = va - k
+            ins = self.dis(start, count=count * 2 + 8,
+                           nbytes=k + 16 * (count + 2))
+            hit = next((i for i, x in enumerate(ins) if x.address == va), None)
+            if hit is None:
+                continue
+            stream = ins[max(0, hit - count):hit + 1]
+            cands.append((start, stream))
+            votes.update(x.address for x in stream)
+        if not cands:
+            return []
+        for start, _ in cands:
+            for a in set(votes):
+                if a >= start:
+                    eligible[a] += 1
+
+        def agreement(stream):
+            return min(votes[x.address] / max(1, eligible[x.address])
+                       for x in stream)
+
+        # THRESHOLD, THEN LENGTH -- not `max((agreement, length))`, which is
+        # still the short-stream bug wearing a normalised coat: any long stream
+        # with one merely-good boundary loses to a two-instruction stream with
+        # two perfect ones, and the positive control came back as two
+        # instructions when six were available and known correct. A boundary
+        # agreed by three quarters of the candidates that could see it is
+        # real; among the streams built only of those, longest wins.
+        good = [c for c in cands if agreement(c[1]) >= 0.75]
+        if good:
+            return max(good, key=lambda c: len(c[1]))[1]
+        return max(cands, key=lambda c: (agreement(c[1]), len(c[1])))[1]
+
+    def boundary_status(self, va):
+        """"confirmed" | "phantom" | "unknown" -- is `va` a real instruction?
+
+        The phantom filter. A one-byte anchor -- the mask 0x04, a shift count,
+        a disp8 -- matches roughly every 256th byte of the section, and some of
+        those bytes are in the MIDDLE of a longer instruction. MEASURED on
+        build 38797: `d9 5c 24 04` is `fstp dword ptr [esp+4]` at 0x00600FD2,
+        and its last two bytes decode on their own as `and al, 4` -- which put
+        three phantom "reads of bit 18" at 0x00600FD4, 0x00601974 and
+        0x00602526 into the first run of `bit_access`, indistinguishable in the
+        output from the one real site.
+
+        ANCHORED ON THE FUNCTION'S OWN START, not on whether SOME decode
+        reaches `va`. Searching 96 starts, something almost always aligns:
+        0x00600FD4 -- a phantom confirmed by hand against the true stream --
+        aligns from 0x00600FCE as `or cl, bl / inc ebp / rcr cl, 1 / pop esp`,
+        four plausible instructions of pure coincidence. Only a decode from a
+        REAL boundary settles it, and the int3 padding before a function is the
+        one real boundary available for free.
+
+        Returns "unknown" rather than guessing when no padding is found or the
+        function is too long to walk -- an honest third answer, because
+        treating "unknown" as "phantom" would silently drop real sites.
+        """
+        fs = self.func_start(va)
+        if fs is None or not 0 < va - fs <= 0x800:
+            return "unknown"
+        ins = self.dis(fs, count=(va - fs), nbytes=(va - fs) + 16)
+        if not ins or ins[-1].address < va - 16:
+            return "unknown"          # decode died early; says nothing
+        return "confirmed" if any(x.address == va for x in ins) else "phantom"
+
     def func_start(self, va, back=0x800):
         """Best-effort walk back to the int3 padding before a function.
 
@@ -500,6 +617,362 @@ class Image:
             out = [r for r in out if lo <= r.va <= hi]
         return sorted(out)
 
+    # -- one bit of one field -------------------------------------------
+    #
+    # WHY THIS IS NOT `--field` WITH A FILTER, and it is the same lesson this
+    # module already learned twice above. `--field 0x20` on build 38797 returns
+    # thousands of rows, because +0x20 is a displacement every third structure
+    # in the image happens to use; and the thing that distinguishes a bit-18
+    # site from the rest is the IMMEDIATE, which `--field` never looks at.
+    # Filtering `--field`'s rows for `0x40000` finds the dword spellings and
+    # reports a confident zero for the rest, because:
+    #
+    #   **BIT 18 OF THE DWORD AT +0x20 IS ALSO BIT 2 OF THE BYTE AT +0x22.**
+    #
+    # MSVC narrows `flags |= 0x40000` to `or byte [esi+0x22], 4` and
+    # `flags &= ~0x40000` to `and byte [esi+0x22], 0xFB` as a matter of routine.
+    # Those instructions carry neither 0x20 nor 0x40000 anywhere in their bytes.
+    # A sweep that does not DERIVE the narrowed views cannot see them, and it
+    # will not say so -- it will return a short, clean, wrong list. That is the
+    # exact failure shape of studies/enemy/PLAN.md §6o, of the disp8 hole, and
+    # of the `add ecx, 0x6bc` hole, arriving for a fourth time by a new road.
+    #
+    # So `bit_access` enumerates every WIDTH the bit can be addressed at, and
+    # every displacement each width implies, and sweeps them all -- and then
+    # says which forms it searched and which it is blind to, the same way
+    # `--field` and `--xrefs` do.
+
+    # What an instruction does to the bits under test.
+    #
+    #   SET/CLEAR/TOGGLE  the bit is written
+    #   TEST              the bit is read and nothing is written
+    #   LOAD/STORE        the whole word moves; the bit goes with it, and what
+    #                     happens to it happens somewhere else
+    #   SHIFT             a bit-extraction idiom (`shr eax, 18`) -- a candidate
+    #                     read whose target bit is implied by the shift count
+    #   OTHER             carries the constant, does something else with it
+    BitAccess = collections.namedtuple(
+        "BitAccess", "va effect text hexbytes form width note")
+
+    # Instructions whose immediate is a MASK over the destination.
+    _MASK_OPS = ("test", "and", "or", "xor", "cmp")
+    # Instructions whose immediate is a BIT INDEX into the destination.
+    _BIT_OPS = {"bt": "TEST", "bts": "SET", "btr": "CLEAR", "btc": "TOGGLE"}
+    # Instructions whose immediate is a SHIFT COUNT. Only two counts extract a
+    # given bit and the count DEPENDS ON WHICH -- `shr eax, 18` brings bit 18
+    # down to bit 0, and `shl eax, 13` drives it up to the sign bit for a `js`.
+    # An earlier draft accepted any shift by the bit's index, which made every
+    # `shl edx, 2` in the image a candidate read of bit 2; a multiply by four is
+    # not a bit test, and three such rows were in the first run's output.
+    _SHIFT_DOWN = ("shr", "sar")
+    _SHIFT_UP = ("shl", "sal")
+
+    @staticmethod
+    def bit_views(disp, bit):
+        """Every (width, displacement, mask, bit_index) that addresses this bit.
+
+        THE POINT OF THE WHOLE FUNCTION. A bit in a dword field can be spelled
+        at four widths, and three of them move the displacement:
+
+            bit 18 of dword [esi+0x20]
+              = bit  2 of byte  [esi+0x22]     (byte 2 of the dword)
+              = bit  2 of word  [esi+0x22]     (word 1 of the dword)
+              = bit 18 of dword [esi+0x20]
+
+        Returned little-endian, which is what x86 is: byte `k` of the dword
+        lives at `disp + k`, so the narrowed displacement is `disp + bit//8`
+        for a byte view and `disp + 2*(bit//16)` for a word view.
+        """
+        views = []
+        b_off = bit // 8
+        views.append((1, disp + b_off, 1 << (bit % 8), bit % 8))
+        w_off = 2 * (bit // 16)
+        views.append((2, disp + w_off, 1 << (bit % 16), bit % 16))
+        views.append((4, disp, 1 << bit, bit))
+        return views
+
+    def _anchored(self, needle, width, kind, lo=None, hi=None):
+        """Decodes where capstone puts a `kind` field of `width` bytes on `needle`.
+
+        The shared primitive under both halves of `bit_access`, and the same
+        exactness rule `field_access` uses: a candidate decode is kept only when
+        capstone's own encoding record puts the field we are anchoring on
+        precisely at the bytes we found it at. `kind` is "disp" or "imm".
+        """
+        blob, tva = self.tdata, self.tva
+        blo = 0 if lo is None else max(0, lo - tva)
+        bhi = len(blob) if hi is None else min(len(blob), hi - tva + 16)
+        seen = set()
+        p = blob.find(needle, blo, bhi)
+        while p != -1:
+            for back in range(1, 12):
+                start = p - back
+                if start < 0:
+                    continue
+                ins = next(iter(self.md.disasm(blob[start:start + 24],
+                                               tva + start, 1)), None)
+                if ins is None or ins.address in seen:
+                    continue
+                enc = ins.encoding
+                size = enc.disp_size if kind == "disp" else enc.imm_size
+                off = enc.disp_offset if kind == "disp" else enc.imm_offset
+                if size == width and start + off == p:
+                    seen.add(ins.address)
+                    yield ins
+            p = blob.find(needle, p + 1, bhi)
+
+    @staticmethod
+    def _bit_effect(ins, mask, bit_index, width):
+        """(effect, note) for what `ins` does to `mask` in an operand of `width`.
+
+        `mask` is the bit's mask WITHIN this instruction's operand width -- 0x04
+        for a byte view of bit 18, 0x40000 for the dword view. Everything below
+        compares in that width, because `and eax, 0xFFFFFFFB` and
+        `and al, 0xFB` are the same clear at two sizes and capstone reports
+        their immediates differently (the first sign-extends an imm8).
+        """
+        full = (1 << (width * 8)) - 1
+        m = ins.mnemonic
+        ops = ins.operands
+        imm = next((o.imm & full for o in ops
+                    if o.type == capstone.x86.X86_OP_IMM), None)
+        dst = ops[0] if ops else None
+        dst_is_mem = dst is not None and dst.type == capstone.x86.X86_OP_MEM
+
+        if m in Image._BIT_OPS and imm is not None:
+            # `bt/bts/btr/btc r/m, imm8` -- the immediate is a bit NUMBER, and
+            # the hardware masks it to the operand width.
+            if (imm % (width * 8)) == bit_index:
+                return Image._BIT_OPS[m], "bit-number form"
+            return None, None
+
+        if imm is not None and (m in Image._SHIFT_DOWN or m in Image._SHIFT_UP):
+            if m in Image._SHIFT_DOWN and imm == bit_index:
+                return "SHIFT", (f"shift right by {imm} brings bit {bit_index} "
+                                 f"down to bit 0 -- the `(f >> {bit_index}) & 1` "
+                                 f"idiom")
+            if m in Image._SHIFT_UP and imm == (width * 8 - 1 - bit_index):
+                return "SHIFT", (f"shift left by {imm} drives bit {bit_index} "
+                                 f"into the sign bit of a {width * 8}-bit "
+                                 f"operand -- the `if ((int)(f << {imm}) < 0)` "
+                                 f"idiom, usually followed by `js`")
+            return None, None
+
+        if m in Image._MASK_OPS and imm is not None:
+            # THE BIT MUST ACTUALLY BE IN THE MASK. The first run of this
+            # scanner reported `test dword [edi+0x20], 0x10000` as a bit-18
+            # site: it was found because it touches the right displacement, and
+            # classified TEST because it is a `test` with an immediate. It
+            # tests bit SIXTEEN. Every branch below now decides on `hits`, and
+            # what does not cover the bit is reported as a NEIGHBOUR rather
+            # than dropped -- a quiet filter is the defect this module exists
+            # to stop making, and the neighbouring bits of a flags word are
+            # exactly what tells you whether it is one field or several.
+            hits = bool(imm & mask)
+            others = (imm if m in ("or", "xor", "test", "cmp")
+                      else (~imm) & full) & ~mask & full
+            def neighbour(verb):
+                bits = [i for i in range(width * 8) if others >> i & 1]
+                which = (", ".join(str(b) for b in bits) if len(bits) <= 6
+                         else f"{len(bits)} bits")
+                return "NEIGHBOUR", (f"{verb} 0x{imm:X}: NOT bit {bit_index}. "
+                                     f"Touches bit(s) {which} of the same field")
+            if m == "or":
+                return ("SET", "") if hits else neighbour("sets")
+            if m == "xor":
+                return ("TOGGLE", "") if hits else neighbour("toggles")
+            if m == "and":
+                # `and dst, m` CLEARS bit b when m's bit b is 0 and PRESERVES it
+                # when it is 1. So a hit here means the instruction leaves our
+                # bit alone -- the opposite of every other mnemonic in this
+                # block, and the second bug the first run exposed
+                # (`and [edi+0x20], 0xfffdffff` clears bit 17, preserves 18,
+                # and was reported as a bit-18 TEST).
+                if not hits:
+                    return "CLEAR", ""
+                if imm == mask:
+                    # Isolating the bit. Into memory that is a destructive
+                    # write of every other bit -- vanishingly rare and worth
+                    # flagging rather than calling a read.
+                    return ("OTHER" if dst_is_mem else "TEST",
+                            "isolates the bit"
+                            + (" -- and CLEARS every other bit of the field, "
+                               "which is a write" if dst_is_mem else ""))
+                return neighbour("clears the complement of")
+            if m in ("test", "cmp"):
+                if not hits:
+                    return neighbour("tests")
+                return "TEST", ("" if imm == mask
+                                else f"masks 0x{imm:X}, which covers the bit")
+            return None, None
+
+        # No immediate relating to the bit: this is the whole word moving.
+        if m.startswith("mov") or m in ("push", "lea"):
+            if dst_is_mem:
+                return "STORE", "the whole field is written; the bit goes with it"
+            return "LOAD", ("the whole field is read into a register -- any "
+                            "test of the bit happens at another instruction")
+        return "OTHER", ""
+
+    def bit_access(self, disp, bit, lo=None, hi=None):
+        """Every instruction that reads or writes bit `bit` of the field at `disp`.
+
+        Returns (rows, scope) where scope is (searched, blind), each a list of
+        (name, detail) exactly like `field_encodings`.
+
+        TWO SWEEPS, because the bit is reachable two ways and neither sweep can
+        see the other's half:
+
+          * **Memory sweep** -- anchored on the DISPLACEMENT of each view from
+            `bit_views`, filtered to instructions whose memory operand really is
+            that width. This finds `test dword [esi+0x20], 0x40000` and
+            `or byte [esi+0x22], 4` alike, and it finds the `mov` that loads the
+            field without touching the bit, which is the head of the second
+            form.
+          * **Immediate sweep** -- anchored on the MASK and its complement, at
+            each width. This finds `test eax, 0x40000` and `and eax, 0xFFFBFFFF`
+            operating on a register some earlier instruction loaded. Those rows
+            are CANDIDATES, not sites: nothing here proves the register holds
+            THIS field, and the caller must trace the load. They are reported in
+            their own class and labelled, never merged into the memory rows.
+        """
+        rows, seen = [], set()
+
+        # What sweep 2 is allowed to report. An instruction is only a CANDIDATE
+        # bit site if it MANIPULATES the bit; carrying the constant is not
+        # enough. `mov dl, 4` matched the 8-bit mask in the first run and was
+        # classified LOAD, putting a byte-register initialisation in a list of
+        # bit-18 accesses. The one exception is `mov r32, mask`, which is the
+        # visible head of this scan's widest blind spot -- the mask about to be
+        # held in a register, where the instruction that USES it carries no
+        # constant at all -- so that one is kept and labelled as such.
+        _SWEEP2_OK = ("SET", "CLEAR", "TOGGLE", "TEST", "SHIFT")
+
+        def add(ins, form, width, mask, bit_index, klass, sweep=1):
+            if ins.address in seen:
+                return
+            effect, note = Image._bit_effect(ins, mask, bit_index, width)
+            if effect is None:
+                return
+            if sweep == 2 and effect not in _SWEEP2_OK:
+                if not (effect == "LOAD" and width == 4
+                        and ins.mnemonic.startswith("mov")):
+                    return
+                effect = "OTHER"
+                note = ("the mask itself is materialised in a register here. "
+                        "Whatever TESTS or WRITES the bit with it carries no "
+                        "constant and is invisible to this scan -- this row is "
+                        "the only trace of it")
+            seen.add(ins.address)
+            rows.append(Image.BitAccess(
+                ins.address, effect, f"{ins.mnemonic} {ins.op_str}",
+                ins.bytes.hex(), form, width,
+                (note + (" " if note else "") + klass).strip()))
+
+        views = Image.bit_views(disp, bit)
+
+        # -- sweep 1: the field's own displacement, at each width -------
+        for width, vdisp, mask, bidx in views:
+            needles = [(struct.pack("<I", vdisp), 4)]
+            if 0 <= vdisp <= 0x7F:
+                needles.append((bytes([vdisp]), 1))
+            for needle, nwidth in needles:
+                for ins in self._anchored(needle, nwidth, "disp", lo, hi):
+                    mem = next((o for o in ins.operands
+                                if o.type == capstone.x86.X86_OP_MEM
+                                and o.mem.disp == vdisp), None)
+                    if mem is None or mem.size != width:
+                        continue
+                    add(ins, f"memory [reg+0x{vdisp:X}] as {width * 8}-bit",
+                        width, mask, bidx, "")
+
+        # -- sweep 2: the mask and its complement as an immediate -------
+        for width, _vdisp, mask, bidx in views:
+            full = (1 << (width * 8)) - 1
+            for value in (mask, (~mask) & full):
+                for nwidth in (1, 2, 4):
+                    if value > (1 << (nwidth * 8)) - 1:
+                        continue
+                    needle = value.to_bytes(nwidth, "little")
+                    for ins in self._anchored(needle, nwidth, "imm", lo, hi):
+                        if any(o.type == capstone.x86.X86_OP_MEM
+                               and o.mem.disp in (v[1] for v in views)
+                               for o in ins.operands):
+                            continue      # already a sweep-1 row
+                        if not any(o.type == capstone.x86.X86_OP_REG
+                                   and o.size == width for o in ins.operands):
+                            continue
+                        # TWO VERY DIFFERENT STRENGTHS OF CANDIDATE, and
+                        # collapsing them is how a reader gets misled. At 32
+                        # bits, `or eax, 0x40000` names bit 18 unambiguously
+                        # and only the FIELD is open. At 8 bits, `test al, 4`
+                        # names bit 2 of *some* byte: it is bit 18 of this
+                        # field only if that byte came from +0x22, and after
+                        # the far more common `mov eax, [esi+0x20]` the same
+                        # instruction tests bit TWO. The first run of this
+                        # scanner put three such rows next to the real site
+                        # with the same label.
+                        if width == 4:
+                            warn = ("[CANDIDATE -- the BIT is certain, the "
+                                    "FIELD is not: trace the register's load]")
+                        else:
+                            warn = (f"[WEAK CANDIDATE -- this is bit {bidx} of "
+                                    f"an {width * 8}-bit register. It is bit "
+                                    f"{bit} of THIS field only if that register "
+                                    f"was loaded from +0x{disp + bit // 8:X}; "
+                                    f"after a load of the whole field from "
+                                    f"+0x{disp:X} it is bit {bidx}, a different "
+                                    f"bit entirely]")
+                        add(ins, f"immediate 0x{value:X} on a {width * 8}-bit "
+                                 f"register", width, mask, bidx, warn, sweep=2)
+            # The bit-number and shift-count forms carry an INDEX, not the mask,
+            # and the index differs per form: `bt` and `shr` take the bit's own
+            # number, `shl` takes the distance to the sign bit.
+            counts = {bidx: "bit-number / shift-right count",
+                      width * 8 - 1 - bidx: "shift-left-to-sign count"}
+            for count, what in counts.items():
+                if not 0 <= count <= 0xFF:
+                    continue
+                for ins in self._anchored(bytes([count]), 1, "imm", lo, hi):
+                    if (ins.mnemonic in Image._BIT_OPS
+                            or ins.mnemonic in Image._SHIFT_DOWN
+                            or ins.mnemonic in Image._SHIFT_UP):
+                        add(ins, f"{what} {count}, {width * 8}-bit view",
+                            width, mask, bidx, "[CANDIDATE -- trace the operand]",
+                            sweep=2)
+
+        searched = [
+            ("the field's own displacement at every width the bit has a view "
+             "at", ", ".join(f"{w * 8}-bit [reg+0x{d:X}] mask 0x{m:X}"
+                             for w, d, m, _ in views)),
+            ("the mask and its complement as an immediate on a register",
+             "finds `test eax, 0x40000` after a load -- reported as CANDIDATE, "
+             "because nothing here proves the register holds this field"),
+            ("the bit-number forms", "bt / bts / btr / btc with an imm8 equal "
+                                     "to the bit's index in that view"),
+            ("the shift-count forms", "shr / sar / shl / rol / ror by the "
+                                      "bit's index -- the `(f >> 18) & 1` idiom"),
+        ]
+        blind = [
+            ("the mask held in a register",
+             f"`mov eax, 0x{1 << bit:X}` then `test ecx, eax` puts the constant "
+             f"in a row above and the TEST nowhere. Nothing anchored can see it"),
+            ("a mask covering the bit that is neither it nor its complement",
+             "a compound test like `and eax, 0x60000` IS found (the mask covers "
+             "the bit) only when its own bytes are swept -- which happens only "
+             "if it equals the mask or the complement. A wider compound mask is "
+             "NOT searched"),
+            ("the field reached through a biased `this`",
+             f"where the code holds a pointer to a subobject, the same bit is "
+             f"spelled at a smaller displacement and 0x{disp:X} never appears. "
+             f"Re-run at disp-4 and disp+4 when an answer looks too small "
+             f"(studies/pvpui/FINDINGS.md 21.2)"),
+            ("a displacement of zero",
+             "mod=00 `[reg]` writes no displacement bytes, so a bit of the "
+             "field at +0x0 has nothing to anchor on") if disp == 0 else None,
+        ]
+        return sorted(rows), (searched, [b for b in blind if b])
+
     # -- cross references -----------------------------------------------
     def carrier(self, va, value):
         """The .text instruction whose own operand is the four bytes at `va`.
@@ -662,8 +1135,19 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--exe", default=None)
     ap.add_argument("--field", help="struct displacement, e.g. 0xEC")
+    ap.add_argument("--bit", metavar="DISP:N",
+                    help="one BIT of one field, e.g. 0x20:18 -- every "
+                         "instruction that sets, clears, tests or moves it, "
+                         "including the narrowed byte/word spellings")
     ap.add_argument("--xrefs", help="VA: every call/jmp and data word to it")
     ap.add_argument("--dis", help="VA: disassemble from here")
+    ap.add_argument("--upto", help="VA: disassemble the instructions ENDING "
+                                   "at this VA, aligned onto it by search "
+                                   "rather than by a guessed start")
+    ap.add_argument("--phantoms", action="store_true",
+                    help="--bit: keep rows whose VA is not on any nearby "
+                         "instruction boundary. Off by default; the count of "
+                         "what was dropped is printed either way.")
     ap.add_argument("--bounds", help="module name: its address range")
     ap.add_argument("--in", dest="module",
                     help="restrict --field to one ArenaNet module, e.g. AvChar")
@@ -762,6 +1246,79 @@ def main():
             print(f"NOT searched: {n} -- {d}")
         return 0
 
+    if a.bit:
+        if ":" not in a.bit:
+            ap.error("--bit takes DISP:N, e.g. --bit 0x20:18")
+        dpart, bpart = a.bit.split(":", 1)
+        disp, bit = int(dpart, 0), int(bpart, 0)
+        lo = hi = None
+        where = "the whole .text section"
+        if a.module:
+            b = module_bounds(a.module, exe)
+            if not b:
+                return print(f"cannot bound {a.module}: it has no asserts.")
+            lo, hi, n = b
+            where = f"{a.module} 0x{lo:08X}..0x{hi:08X} ({n} assert sites)"
+            for line in bounds_note(a.module, exe):
+                print(line)
+        rows, (searched, blind) = img.bit_access(disp, bit, lo, hi)
+        # The phantom pass. Rows found by a ONE-BYTE anchor can sit mid-
+        # instruction (see `on_boundary`), and those are indistinguishable from
+        # real sites in the listing. Dropped by default and COUNTED out loud --
+        # never silently, which is this module's standing rule. Rows from a
+        # four-byte anchor are left alone: a false four-byte alignment is rare
+        # enough that paying a boundary search for every one of 11,504
+        # image-wide rows is not worth the minutes.
+        phantoms = []
+        if not a.phantoms:
+            keep = []
+            for r in rows:
+                narrow = len(r.hexbytes) // 2 <= 4
+                if narrow and img.boundary_status(r.va) == "phantom":
+                    phantoms.append(r)
+                else:
+                    keep.append(r)
+            rows = keep
+        views = Image.bit_views(disp, bit)
+        print(f"bit {bit} (mask 0x{1 << bit:X}) of the field at +0x{disp:X}, "
+              f"in {where}")
+        print("the same bit, spelled at each width:")
+        for w, d, m, bi in views:
+            print(f"  {w * 8:2}-bit  [reg+0x{d:X}]  mask 0x{m:X}  "
+                  f"(bit {bi} of that operand)")
+        effects = collections.Counter(r.effect for r in rows)
+        tally = ", ".join(f"{n} {e}" for e, n in sorted(effects.items()))
+        print(f"\n{len(rows)} instruction(s)" + (f": {tally}" if rows else ""))
+        # Grouped by what they DO, because the question `--bit` exists to answer
+        # is "what sets this and what reads it", and a flat address-sorted list
+        # buries a single SET among forty LOADs.
+        for eff in ("SET", "CLEAR", "TOGGLE", "TEST", "SHIFT", "STORE",
+                    "LOAD", "OTHER", "NEIGHBOUR"):
+            group = [r for r in rows if r.effect == eff]
+            if not group:
+                continue
+            print(f"\n{eff}  ({len(group)})")
+            for r in group:
+                print(f"  {r.va:08X}  {r.text:<38} {r.hexbytes:<20} "
+                      f"{r.form}")
+                if r.note:
+                    print(f"            {r.note}")
+        if not rows:
+            print("  -- none. That is a statement about the range and the "
+                  "forms below, and nothing wider.")
+        if phantoms:
+            print(f"\ndropped {len(phantoms)} row(s) whose VA is not on any "
+                  f"instruction boundary within 64 bytes -- a one-byte anchor "
+                  f"landing mid-instruction. `--phantoms` keeps them:")
+            for r in phantoms:
+                print(f"  {r.va:08X}  {r.text:<38} {r.hexbytes}")
+        print("\nforms searched: ")
+        for n, d in searched:
+            print(f"  {n} -- {d}")
+        for n, d in blind:
+            print(f"NOT searched: {n} -- {d}")
+        return 0
+
     if a.xrefs:
         t = int(a.xrefs, 0)
         calls, words = img.xrefs(t)
@@ -784,6 +1341,23 @@ def main():
               "'nothing reaches it'.")
         return 0
 
+    if a.upto:
+        va = int(a.upto, 0)
+        stream = img.dis_upto(va, count=a.count)
+        if not stream:
+            print(f"0x{va:08X} is not on an instruction boundary in any decode "
+                  f"starting within 96 bytes before it. That is the signature "
+                  f"of a PHANTOM -- an anchor that landed inside a longer "
+                  f"instruction.")
+            return 0
+        print(f"the {len(stream)} instruction(s) ending at 0x{va:08X}, aligned "
+              f"by search from 0x{stream[0].address:08X}:")
+        for ins in stream:
+            mark = "->" if ins.address == va else "  "
+            print(f"{mark} {ins.address:08X}  {ins.bytes.hex():<16} "
+                  f"{ins.mnemonic} {ins.op_str}")
+        return 0
+
     if a.dis:
         va = int(a.dis, 0)
         start = img.func_start(va)
@@ -795,7 +1369,7 @@ def main():
                   f"{ins.mnemonic} {ins.op_str}")
         return 0
 
-    ap.error("give --field, --xrefs, --dis or --bounds")
+    ap.error("give --field, --bit, --xrefs, --dis, --upto or --bounds")
 
 
 if __name__ == "__main__":

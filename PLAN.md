@@ -1915,7 +1915,28 @@ which clears `m_flags` bit 18, and `0x0060029F` reads bit-18-clear as
 a scheduled hard arrival, invisible while the body is gliding to it and
 a warp the moment the body is elsewhere. Bit 18 has **two unreconciled
 readings** on record; reconciling them (MOVECODE-B1, static, no client
-run) is the first move and may reprice the whole arc. Then `movehook`
+run) is the first move and may reprice the whole arc.
+
+**MOVECODE-B1 IS DONE, 2026-08-26 —
+[studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1, and read
+it before quoting the paragraph above.** Q1 is answered and the two
+readings were never in contradiction: bit 18 is one bit meaning *"this
+leg does not end at the final destination"*, which is what
+`m_segmentPoint != m_targetPoint` computes and what `isWaypoint` means.
+**The hoped-for one-field fix does not exist** — bit 18 is wire-reachable
+only at agent creation (`0x0020`), and `0x0026`'s masked merge
+(`& 0x3f0000`) makes it *provably* unsettable afterwards. **But the sweep
+moved the arc's critical path onto Q2.** The client re-bakes with
+`isWaypoint=1` from its OWN obstacle avoidance (`0x00600840`, assert
+`AgAgent:1352 obstacleCenter`) and its OWN priority-queue path solver
+(`0x006011F0`, `PriQ.h`), both of which the shared setter calls on
+straight-line code right after baking our grant. So the teleport is the
+client's precision landing at the end of a leg **it computed itself**,
+and our warps are the distance between its solution and ours — the same
+conclusion ROUTER §10 reached from the wire, reached again from the code.
+Three corrections to the arc doc's own §2.1 are in FINDINGS §2, and
+`MOVECODE-Q3`'s premise ("no reader was ever traced" for `agent+0x98`) is
+**REFUTED** — there are 7 reads in AgAgent alone. Then `movehook`
 (B2) — extending the PROVEN `trnblock.c` persistent-int3 pattern — taps
 the glide-vs-teleport branch, the AgTrack dispatch and the match test;
 and B3 hooks the client's own `MapFindPath` for a per-query differential
