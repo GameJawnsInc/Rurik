@@ -1876,10 +1876,23 @@ is not safe-by-inaction. **ROUTER-B5 shipped**: pathmap.nearest_walkable
 + a 16u origin snap (twice the worst measured penetration) so
 edge-penetrated stands get ANSWERED, plus a refusal-streak counter on
 every row with a console tripwire (pathmap floor 69, router floor 68).
-**Next: run 4, same flags** — registered: no refusal streak ≥10 on
-ordinary ground, no W-press reconcile snap absent a streak.
-Open: ROUTER-Q1..Q11 in the doc; P-2 (cross-floor) still to re-score
-on a clean run.
+**Run 4 (20260826T211820, ROUTER.md §9): THE ROUTER PATH IS CLEAN** —
+zero tape steps >450 u/s (fourth run with no server-ordered teleport),
+the tour cap fired 12 times on genuine 5.7–11.0× tours, B5's streak
+tripwire fired once as designed, and the `dest-off-mesh` refusals were
+clicks 138–146 u past a real decode gap (Q11's class, now with
+coordinates). **Both remaining warps are `--d1-lead` KEYBOARD-LEAD
+events** — 664 u at t=40.8 and 331 u at t=139.3, each in the client's
+own consecutive reports, each bracketed by an op61 report and a fired
+D1 lead, none involving a click, chain or router row. That is
+REALFIX-A2's channel, untouched by this arc, and it explains run 3's
+"middle went fine — no WASD". **Next: run 5, `--router` ALONE (drop
+`--d1-lead`)** — the attribution test, prediction ZERO warps in both
+witnesses; if it holds, the shippable configuration is router-without-
+lead and the lead channel goes back on the bench. If it fails, the
+warp engine is elsewhere and client-side instrumentation (a movement-
+code hook DLL, CLAUDE.md carve-out 3) is the next instrument.
+Open: ROUTER-Q1..Q11 in the doc.
 *The staging block that preceded the run, kept for the record:*
 The follow-on recon (`studies/movement/followon-notes/README.md`, merged
 to `main` the same day) answered F35's counterfactual from tape (castless,
