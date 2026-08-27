@@ -7011,7 +7011,42 @@ shrinks section 10),
   `add al, 0xe` at 0x00479BC8 is decoded and proved to exist before the check
   that it is excluded. Three sabotages built and run, three redden. 106 checks
   with capstone (was 83) and 35 without — §10 needs a disassembler for every
-  claim and declares one skip, so the stdlib floor is unmoved),
+  claim and declares one skip, so the stdlib floor is unmoved.
+  **§12 (2026-08-26) is the defect a FOURTH time, and this one arrives by a new
+  road: not "which encoding of the constant" but "which WIDTH of the field".**
+  `--bit DISP:N` exists because bit 18 of the dword at `+0x20` **is also bit 2
+  of the byte at `+0x22`**, and MSVC narrows `flags |= 0x40000` to
+  `or byte [esi+0x22], 4` as a matter of routine — an instruction carrying
+  neither `0x20` nor `0x40000` anywhere in its bytes. §12a pins the derivation
+  (`bit_views`) rather than the search, because the derivation is the part that
+  makes a zero honest. §12d is the census that the MOVECODE arc rests on:
+  **exactly one `or dword [reg+0x20], 0x40000` in the whole 5.4 MB .text
+  section**, at 0x005FE56C, with the glide-vs-teleport branch 0x0060029F among
+  the memory-form reads — a pin that reddens if a future anchoring change drops
+  the site or invents a second. §12e pins two classifier bugs the instrument's
+  own first run produced and that a filter-shaped `--field` would have produced
+  too: `test dword [edi+0x20], 0x10000` tests bit **sixteen** and
+  `and dword [edi+0x20], 0xfffdffff` **preserves** bit 18 while clearing 17, and
+  both were reported as bit-18 sites until every branch was made to decide on
+  whether the mask actually covers the bit. Non-covering rows are now reported
+  as NEIGHBOUR rather than dropped, which is what named bits 16/17/19 of the
+  same word. §12b is the falsifiable half and goes red in BOTH directions: the
+  phantom filter is scored on eight addresses established by hand, three of
+  which are **not instructions at all** — `d9 5c 24 04` is
+  `fstp dword ptr [esp+4]` and its trailing two bytes decode alone as
+  `and al, 4`, which put three phantom "reads of bit 18" into the first run
+  indistinguishable from the one real site. A filter that calls everything real
+  fails the first three; one that calls everything phantom fails the other five.
+  It is anchored on a decode from the function's own `int3` boundary, because
+  merely asking whether SOME nearby decode reaches the address is not enough —
+  searching 96 starts, 0x00600FD4 aligns from 0x00600FCE as four plausible
+  instructions of pure coincidence. §12c pins `--upto`, which recovers the
+  instructions ENDING at a VA by consensus search instead of a guessed start;
+  a guessed `--dis va-0x20` returned confident garbage
+  (`add byte ptr [ebx - 0x7c76f3bf], cl`) for two of five call sites being read
+  for their pushed arguments, and the `push 0` it recovers at 0x00602A7F is the
+  hardcoded `isWaypoint` the whole arc turns on. 135 checks with capstone (was
+  116) and 45 without — §12 declares one skip, so the stdlib floor is unmoved),
   `toolkit/clientscan/test_consttable.py` (the `Gw\Const\*.cpp` table locator, and
   the correction it made to the recon that commissioned it. MSVC emits a translation
   unit's static data and its string literals in source order, so every one of these
