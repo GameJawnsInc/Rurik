@@ -455,6 +455,13 @@ and it is now the most interesting open question in the arc.
 
 `0x00600333` is the return of `0x0060032E call 0x6020b0` — **the bit-18-CLEAR arm
 of the branch at `0x0060029F`**, precisely as `PLAN.md` §2.1 decoded it statically.
+
+> **⚠ CORRECTED in §1d.3 — read that before quoting the table above.**
+> `0x006025AB` is a **halt-in-place**, not a jump: it teleports the agent to its own
+> current position, so its 28 rows measure `m_point` against a stale `m_targetPoint`
+> and mean nothing. The "75 over 100 u" below OVER-COUNTS; the honest figure is
+> `0x00600333`'s **53**.
+
 75 teleports moved the body over 100 u. The operator's own report of the trigger
 matches the model exactly: *"clicking somewhere far/cornered and pressing a
 directional key mid-walk"* — the grant arms a hard arrival, the player walks off
@@ -574,6 +581,117 @@ cause is unknown and nothing here bears on it.
 from `[ebp+8..0x14]`, after walking an array at `[ebx+0x28]` with count `[ebx+0x30]`.
 Carried or attached agents is the obvious guess and is not evidence.
 
+
+---
+
+## 1d. The static recon that followed run 1 — three answers and two of my own errors
+
+**OBSERVED unless marked. Build 38797, 2026-08-27.** Full lane notes in
+[review/](review/); the load-bearing addresses below were re-verified by hand.
+
+### 1d.1 §1c.7 was right but incomplete — here is the whole loop
+
+`agapi_setdest` (`0x005FC7A0`, `AgApi.cpp`) is not called once per gesture. The
+sequence is:
+
+1. One user gesture — a key (`chcli_dir` `0x0081A8F0`, whose caller decodes two
+   signed axes into an 8-way octant, from `GmWalk.cpp`) or a click (`chcli_point`
+   `0x0081ADB0`) — runs **the client's own pathfinder for up to 9 waypoints**.
+2. **Waypoint 0** goes straight to `agapi_setdest`.
+3. **The rest are parked in `ChCliBase::m_path`** — `this+0x70`, 8 entries × 16 B,
+   bounded by `ChCliBase:154 index < arrsize(m_path)`, and padded with
+   `AGENT_INVALID_POSITION` to mark the end.
+4. On arrival, **the client's own agent simulation raises a notification** (`push 5`
+   at `0x00600342` and `0x006017E3`, each carrying `agent+0x50`), which lands on
+   case 5 of the jump table at `0x0081B568` and calls **`chcli_advance`
+   `0x0081B580`** — which pops `m_path[0]`, bumps the sequence, re-issues that one
+   waypoint, and shifts the array down.
+
+**So one gesture yields up to ~9 `agapi_setdest` calls, and that is run 1's 525.**
+Both begin-move paths assert they run only for the local player (`ChCliBase:164`,
+`ChCliBase:248`), and **nothing from the wire enters the loop**: our `0x0029`
+reaches the shared setter directly from `0x005FD913` and never touches `m_path`.
+
+`agent+0x50` is the sequence number, and it is the loop's own interlock —
+`chcli_advance` compares its copy at `0x0081B58D` and ignores a stale advance.
+
+### 1d.2 MY ERROR: `chcli_advance` was committed at the WRONG ADDRESS
+
+The row first said `0x0081B220`, which I took from `codescan --dis`'s *"nearest
+earlier int3 padding"* line. **That line says, in the tool's own words, "best effort,
+not proof of a function boundary."** MSVC did not pad between `0x0081B220`'s function
+and `0x0081B580`, so `func_start` walked straight past the real entry. `0x0081B580`
+has its own `55 8b ec` prologue and its own single xref (`0x0081B548`); `0x0081B220`
+is a different function holding the notify dispatcher.
+
+**§4.3 of this document already records this trap** — from the other direction, where
+`func_start` returned `None` and a lane read that as evidence. It returns a *wrong
+value* just as readily. Fixed in the row, with the reasoning kept there.
+
+### 1d.3 MY ERROR: §1c.3's per-caller teleport distances conflate two different things
+
+§1c.3 reports `0x006025AB` with *"p50 579.1, max 4525.9"* alongside the main path's
+116 u, presenting all 131 as comparable jumps. **They are not.** `0x006025A6` sits in
+`0x00602540`, a **halt-in-place** method: it extrapolates `m_point` to now
+(`0x00602580`), then teleports the agent **to its own current position**
+(`0x006025A4 mov ecx, esi` — the destination is `esi+0x78`). Its telling caller is
+`0x006022D8`: *if `m_timeStopMovement` is set, stop it here first.*
+
+So for those 28 records the "distance" I computed is `m_point` against a **stale
+`m_targetPoint`**, which measures nothing. Only `0x00600333`'s 102 are displacements.
+**The headline "75 over 100 u" is therefore over-counted** and the honest figure is
+the 53 from `0x00600333` alone.
+
+### 1d.4 Why the character stayed pinned — the teleport is a FULL STOP
+
+Withdrawn in §1c.6 as "NOT DETERMINED"; the mechanism is now OBSERVED, and I
+verified the two load-bearing stores by hand rather than taking them from the lane:
+
+| what | VA | effect |
+|---|---|---|
+| velocity `+0xB0/+0xB4` ← 0.0 | `0x0060210E`, `0x00602117` | no speed |
+| **`m_timeStopMovement` `+0x48` ← 0** | **`0x006021E6`** | **the gate** |
+| `m_targetPoint` ← `+inf` | `0x0060216D`, `0x00602179` | no destination |
+
+And the extrapolator `0x005FF880` opens with `cmp dword ptr [esi+0x48], 0` /
+`je` (`0x005FF89A`, `0x005FF8A8`) — **so with `+0x48` zeroed it skips extrapolation
+forever.** Every teleport ends the agent's movement authority until something
+re-arms it. That is exactly the observed state: pinned at one coordinate, movement
+events stopped, our server re-granting the same position into an agent that will not
+move on its own initiative.
+
+### 1d.5 Nothing checks collision on a teleport destination
+
+The teleport does call a spatial query — `0x006021B2 call 0x0070A150` → `0x00722B90`,
+whose neighbourhood carries `PathObstacle:176 "radius >= 0"`. But its result feeds
+**only** `+0x68..+0x74` and only when non-zero (`0x006021BC je`). **`+0x78` is written
+before the call and is never corrected by it.** The destination itself comes from
+uncollided linear extrapolation whose only clamp is the world rectangle
+(`0x005FFC24`), and the plane is **copied, never re-resolved** (`0x005FFD7`… →
+`out->plane = [esi+0x80]`).
+
+Sharpest of all: `AgAgent:978`
+*"!m_timeStopMovement || ((int)(m_timeStopMovement - time) >= 0)"* — an extrapolation
+that over-runs the stop time **asserts and then performs the extrapolation anyway**
+(the assert call falls through to `0x005FFBAD`).
+
+**SUPPORTED:** every mechanism needed to land inside geometry is present and none of
+the machinery to prevent it is. **NOT SUPPORTED:** that this is what happened at
+t=243.5 s, or what set plane 29. That needs a trace, not the image.
+
+### 1d.6 `MapFindPath`'s caller 1 IS the snap's gate 2
+
+`PLAN.md` §2.2 described gate 2 as *"`MapFindPath` returning `pathCount == 0`"* by
+inference. It is now located: `0x00605802 call 0x709e90` inside `0x006055E0`, with
+the test at `0x0060580A cmp [ebp-0x60], edi` / `0x0060580D je` and `edi` provably 0
+on every reaching path. It asks with **`maxCount = 4`** and **`range = 300.0f`** —
+the same 300 the separation gate uses. The only other caller is `chcli_point`'s
+`0x0081AF51`, asking `maxCount = 9`, `range = 10000.0f`.
+
+**`arg4 = maxCount` is confirmed by an argument that cannot be forced true:** both
+callers' output buffers close *exactly* on the stack-cookie slot — caller 1 reserves
+4 × 16 at `[ebp-0x44]`, caller 2 reserves 9 × 16 at `[ebp-0x94]`, and both end at
+`[ebp-0x04]`. Two capacities, two frame sizes, both to the byte.
 
 ---
 

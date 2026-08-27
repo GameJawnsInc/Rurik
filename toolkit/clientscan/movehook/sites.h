@@ -26,9 +26,9 @@ static const site_t SITES[NSITES] = {
     { 0x001FC7A0u, "agapi_setdest", 0, 2, 0 },   /* 0x005FC7A0 */
     { 0x00205FC0u, "agtrack", 0, 0, 0 },   /* 0x00605FC0 */
     { 0x001FE950u, "bake", 1, 0, 0 },   /* 0x005FE950 */
-    { 0x0041A8F0u, "chcli_a", 0, 0, 0 },   /* 0x0081A8F0 */
-    { 0x0041ADB0u, "chcli_b", 0, 0, 0 },   /* 0x0081ADB0 */
-    { 0x0041B220u, "chcli_c", 0, 0, 0 },   /* 0x0081B220 */
+    { 0x0041B580u, "chcli_advance", 0, 0, 0 },   /* 0x0081B580 */
+    { 0x0041A8F0u, "chcli_dir", 0, 0, 0 },   /* 0x0081A8F0 */
+    { 0x0041ADB0u, "chcli_point", 0, 0, 0 },   /* 0x0081ADB0 */
     { 0x00309E90u, "mapfindpath", 0, 1, 2 },   /* 0x00709E90 */
     { 0x00202A40u, "setter", 1, 0, 0 },   /* 0x00602A40 */
     { 0x002020B0u, "teleport", 1, 0, 0 },   /* 0x006020B0 */
@@ -38,9 +38,12 @@ static const site_t SITES[NSITES] = {
 #define A_FLAGS                0x20u   /* m_flags */
 #define A_ID                   0x10u   /* agent id */
 #define A_POINT                0x78u   /* m_point */
+#define A_POINT_TIME           0x58u   /* timestamp of m_point */
 #define A_SEGMENT_POINT        0x88u   /* m_segmentPoint */
+#define A_SEQ                  0x50u   /* move sequence / queued timer handle */
 #define A_TARGET_POINT         0x9Cu   /* m_targetPoint */
 #define A_TIME_STOP_MOVEMENT   0x48u   /* m_timeStopMovement */
+#define A_VELOCITY             0xB0u   /* velocity x, y */
 #define A_X98                  0x98u   /* unnamed scalar */
 
 #endif /* MOVEHOOK_SITES_H */

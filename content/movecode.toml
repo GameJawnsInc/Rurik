@@ -175,14 +175,14 @@ deref_agent = false
 # capture time, guarded by readable(). 0 = none.
 deref_arg_a = 1
 deref_arg_b = 2
-what = "the client's own navmesh query. __cdecl, SIX dword args, and NO meaningful return value -- all four exits are a bare `ret` and eax is leftover scratch. arg1 = from (point*), arg2 = to (point*, 16 B: float x, float y, int plane, int), arg3 = float range, arg4 = opaque dword forwarded to the backends, arg5 = int* outCount, arg6 = point* outPath with a 16-byte stride."
+what = "the client's own navmesh query. __cdecl, SIX dword args, and NO meaningful return value -- all four exits are a bare `ret` and eax is leftover scratch. arg1 = from (point*), arg2 = to (point*, 16 B: float x, float y, int plane, int), arg3 = float range, arg4 = maxCount (an int, CONFIRMED by buffer arithmetic on both callers), arg5 = int* outCount, arg6 = point* outPath with a 16-byte stride."
 why_hooked = "MOVECODE-Q2 and the whole of B3. Run 5 of the router arc found our pathmap decode reads open ground as a pocket; capturing every query the client makes and replaying it through our own route() turns that from an inference into a per-query measurement."
 limits = "AN ENTRY HOOK CAPTURES THE QUESTION, NOT THE ANSWER. arg5 and arg6 point at UNINITIALISED caller memory at entry -- the results are written by the backends during the call. Scoring our route against the CLIENT's needs a second tap at the four `ret` sites (0x00709F0F, 0x00709F44, 0x0070A0AD, 0x0070A0D4). Replaying our own router over the captured queries needs only this."
 [hook_site.mapfindpath.provenance]
 source = "client-table"
 extractor = "toolkit/clientscan/codescan.py"
 build = 38797
-verified = "--dis 0x00709E90 shows `55 push ebp`. Signature read from the body 2026-08-27: ecx is never read at entry (first use 0x00709EE7 WRITES it from arg6), all exits are bare `ret`, and no access to [ebp+0x20] or beyond. Point stride 16 from `shl edi,4` at 0x00709FDF indexing outPath."
+verified = "--dis 0x00709E90 shows `55 push ebp`. Exactly 2 direct callers: 0x00605802 -- which IS the snap gate 2, whose pathCount==0 test is the `cmp [ebp-0x60],edi` / `je` at 0x0060580A-0x0060580D with edi provably 0 -- and 0x0081AF51 (click-to-move). arg4 = maxCount is confirmed by the out-buffer sizes closing exactly to the stack-cookie slot in BOTH frames: caller 1 asks 4 and reserves 4x16 at [ebp-0x44], caller 2 asks 9 and reserves 9x16 at [ebp-0x94], both ending at [ebp-0x04]. Two capacities, two frame sizes, both exact. Coordinates are the same world floats as m_point: the args come from 0x005FF820, which copies agent+0x88.. or recomputes from +0x78/+0x7C under assert AgAgent:974. Signature read from the body 2026-08-27: ecx is never read at entry (first use 0x00709EE7 WRITES it from arg6), all exits are bare `ret`, and no access to [ebp+0x20] or beyond. Point stride 16 from `shl edi,4` at 0x00709FDF indexing outPath."
 
 [hook_site.agapi_setdest]
 va = 0x005FC7A0
@@ -203,44 +203,80 @@ extractor = "toolkit/clientscan/codescan.py"
 build = 38797
 verified = "--dis 0x005FC7A0 shows `55 push ebp`. Module and parameter NAMES are ArenaNet's own, from asserts inside the body: AgApi.cpp:1041 `targetPoint.position != AGENT_INVALID_POSITION` at 0x005FC7CD and AgApi.cpp:1043 `moveSpeed <= AGENT_MAX_MOVE_SPEED` at 0x005FC81D. deref_agent is false because arg1 is an agent ID, not a pointer, and ecx is not `this`."
 
-[hook_site.chcli_a]
+[hook_site.chcli_dir]
 va = 0x0081A8F0
 rva = 0x0041A8F0
 first_byte = 0x55
 thiscall = false
 deref_agent = false
-what = "one of exactly three callers of agapi_setdest. In ChCliBase.cpp, the client's own character layer."
-why_hooked = "to name what DRIVES the 525 re-issues -- a forwarder names the messenger, so the answer is one frame further out than agapi_setdest."
-[hook_site.chcli_a.provenance]
+what = "the DIRECTIONAL begin-move: keyboard walking. Takes the agent's CURRENT position, traces the client's own navmesh along a requested heading for up to 9 waypoints, issues waypoint 0 and parks the rest in ChCliBase::m_path (this+0x70, 8 entries x 16 B). Its caller decodes two signed input axes into an 8-way octant."
+why_hooked = "to name what DRIVES the 525 re-issues -- a forwarder names the messenger, so the answer is one frame further out than agapi_setdest. Asserted to run only for the local player (ChCliBase:164)."
+[hook_site.chcli_dir.provenance]
 source = "client-table"
 extractor = "toolkit/clientscan/codescan.py"
 build = 38797
 verified = "--dis 0x0081A8F0 shows `55 push ebp`; calls agapi_setdest at 0x0081AC0F. Module from asserts inside 0x0081A8F0..0x0081ADB0: ChCliBase.cpp:154 `index < arrsize(m_path)` at 0x0081AC3D and ChCliBase.cpp:164 `this == context->playerControlledChar` at 0x0081AD27."
 
-[hook_site.chcli_b]
+[hook_site.chcli_point]
 va = 0x0081ADB0
 rva = 0x0041ADB0
 first_byte = 0x55
 thiscall = false
 deref_agent = false
-what = "the second of three callers of agapi_setdest, in ChCliBase.cpp."
-why_hooked = "same as chcli_a."
-[hook_site.chcli_b.provenance]
+what = "the POINT begin-move: click-to-move. Calls MapFindPath (0x0081AF51) with maxCount = 9 and range = 10000.0f, prunes leading waypoints, issues waypoint 0 and parks the rest in m_path. Asserted to run only for the local player (ChCliBase:248)."
+why_hooked = "this is where a click BECOMES a path. Pairing it with the mapfindpath site shows the query and the legs that came out of it in one capture."
+[hook_site.chcli_point.provenance]
 source = "client-table"
 extractor = "toolkit/clientscan/codescan.py"
 build = 38797
 verified = "--dis 0x0081ADB0 shows `55 push ebp`; calls agapi_setdest at 0x0081B04F. 2026-08-27."
 
-[hook_site.chcli_c]
-va = 0x0081B220
-rva = 0x0041B220
+[hook_site.chcli_advance]
+va = 0x0081B580
+rva = 0x0041B580
 first_byte = 0x55
 thiscall = false
 deref_agent = false
-what = "the third of three callers of agapi_setdest, in ChCliBase.cpp."
-why_hooked = "same as chcli_a."
-[hook_site.chcli_c.provenance]
+what = "THE 11x MULTIPLIER. A waypoint-advance routine: it pops m_path[0], bumps the sequence at agent+0x50, re-issues that one waypoint through agapi_setdest, and shifts m_path down a slot. Reached from case 5 of the ChCliBase notify jump table at 0x0081B568, which the client's OWN agent simulation raises on arrival."
+why_hooked = "one user gesture solves up to 9 waypoints and this feeds them out ONE AT A TIME, which is where run 1's 525-vs-49 ratio comes from. Hooking it turns the ratio into a per-gesture count."
+[hook_site.chcli_advance.provenance]
 source = "client-table"
 extractor = "toolkit/clientscan/codescan.py"
 build = 38797
-verified = "--dis 0x0081B220 shows `55 push ebp`; calls agapi_setdest at 0x0081B69A. 2026-08-27."
+verified = """--dis 0x0081B580 shows `55 push ebp`; --xrefs gives exactly one caller, 0x0081B548, which is case 5 of the jump table at 0x0081B568. Its call to agapi_setdest is 0x0081B69A.
+
+CORRECTED 2026-08-27, and the error is one this repo has already written down. This row first said 0x0081B220, taken from `codescan --dis 0x0081B69A`'s "nearest earlier int3 padding" line -- which that tool labels **best effort, not proof of a function boundary**. MSVC did not pad between 0x0081B220's function and this one, so func_start walked straight past the real entry. 0x0081B580 is a genuine `55 8b ec` prologue with its own xref; 0x0081B220 is a different function (it holds the notify dispatcher). studies/movecode/FINDINGS.md sec 4.3 records the same trap from the other direction, where func_start returned None."""
+
+# Fields named 2026-08-27 by matching ArenaNet's own assert operands. These are
+# read by the extrapolator and written by the teleport, and together they are why
+# a teleport is a full stop rather than a jump.
+
+[agent_offset.seq]
+offset = 0x50
+width = 4
+name = "move sequence / queued timer handle"
+[agent_offset.seq.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/codescan.py"
+build = 38797
+verified = "The ONLY writer that puts a caller's value here is 0x005FC8ED inside agapi_setdest; AgAgent otherwise only clears or re-arms it. The arrival notification the client raises for itself pushes it as the notify payload (0x00600339 and 0x006017DB, each immediately before `push 5`), and chcli_advance compares its own copy against it at 0x0081B58D to ignore a stale advance. Our name, not ArenaNet's."
+
+[agent_offset.point_time]
+offset = 0x58
+width = 4
+name = "timestamp of m_point"
+[agent_offset.point_time.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/codescan.py"
+build = 38797
+verified = "The dead-reckoning extrapolator 0x005FFB40 computes dt as `time - [esi+0x58]` at 0x005FFBB3 and multiplies it by 0.001 (the double at 0xA53748, bytes fc a9 f1 d2 4d 62 50 3f) before scaling velocity -- so it is a millisecond stamp for the position at +0x78. Our name, not ArenaNet's."
+
+[agent_offset.velocity]
+offset = 0xB0
+width = 8
+name = "velocity x, y"
+[agent_offset.velocity.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/codescan.py"
+build = 38797
+verified = "Read as vx/vy by the extrapolator at 0x005FFBAD and applied as `out.x = [esi+0x78] + vx*dt` (0x005FFC19) / `out.y = [esi+0x7c] + vy*dt` (0x005FFC21). The teleport zeroes both at 0x0060210E and 0x00602117. Our name, not ArenaNet's."
