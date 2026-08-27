@@ -4882,6 +4882,20 @@ ROUTER = False
 ROUTER_TOUR_CAP = 4.0
 ROUTER_TOUR_SLACK = 800.0
 
+# THE ORIGIN SNAP (ROUTER-B5, verification run 3, 20260826T205658): a
+# client can STAND a few units outside our decode -- measured penetrations
+# 0.25u (P-17's wall press) and 8.0u (run 3's parked stop beside a
+# plane-44 structure). Run 3 proved that refusing such origins is NOT
+# safe-by-inaction: 85 consecutive origin-off-mesh refusals over 218
+# seconds left the client's server-fed copy parked while the player's own
+# client pathed ~4km of clicks, and the first keyboard press snapped the
+# body 3.2km back onto the parked copy -- the client's OWN reconcile, in
+# its own consecutive reports, doing the warping our silence armed. The
+# routing origin therefore snaps to the nearest on-mesh point within this
+# radius (16 = COLLISION_STEP, twice the worst observed penetration);
+# only a true hole deeper than it still refuses.
+ROUTER_ORIGIN_SNAP = 16.0
+
 
 def router_next_due(state):
     """When the live chain's current leg completes, or None. Pure."""
@@ -5000,6 +5014,13 @@ def router_answer_click(send, state, conn_id, rec, dest, dest_plane,
               f"own contract", flush=True)
         return True
     origin = (float(pos[0]), float(pos[1]))
+    snapped_d = None
+    if not pm.walkable(origin[0], origin[1]):
+        _near = pm.nearest_walkable(origin[0], origin[1],
+                                    ROUTER_ORIGIN_SNAP)
+        if _near is not None:
+            origin = (float(_near[0]), float(_near[1]))
+            snapped_d = round(_near[2], 2)
     t0 = time.perf_counter()
     # Plane-aware (ROUTER-B4): the click names the clicked surface's plane
     # and the server tracks the player's -- both are passed so stacked
@@ -5077,21 +5098,34 @@ def router_answer_click(send, state, conn_id, rec, dest, dest_plane,
                  f"ROUTER clip-fallback ({stop[0]:.0f},{stop[1]:.0f}) "
                  f"toward unroutable ({dx:.0f},{dy:.0f})")
             state["zl_last_grant_plane"] = pf
+            state["router_refusal_streak"] = 0
             if rec is not None:
                 rec.event("router_route", verdict="clip-fallback",
                           reason=reason, dest=[dx, dy],
                           stop=[float(stop[0]), float(stop[1])],
-                          ms=round(ms, 2))
+                          snapped=snapped_d, ms=round(ms, 2))
             return True
         state["dest"], state["clipped"] = None, True
+        # Run 3's lesson in one counter: a refusal STREAK is the arming of
+        # the client's own reconcile snap (218s of silence -> 3.2km
+        # self-snap at the next key edge), so streaks are counted, logged
+        # on every row, and shouted at the console periodically.
+        streak = state.get("router_refusal_streak", 0) + 1
+        state["router_refusal_streak"] = streak
         if rec is not None:
             rec.event("router_route", verdict="refused", reason=reason,
                       dest=[dx, dy], origin=[origin[0], origin[1]],
-                      ms=round(ms, 2))
+                      snapped=snapped_d, streak=streak, ms=round(ms, 2))
         print(f"[c{conn_id}] ROUTER click to ({dx:.0f}, {dy:.0f}): "
               f"REFUSED ({reason}) -- no legal leg exists from "
               f"({origin[0]:.0f}, {origin[1]:.0f}); nothing sent",
               flush=True)
+        if streak and streak % 10 == 0:
+            print(f"[c{conn_id}] ROUTER WARNING: {streak} consecutive "
+                  f"refusals -- the client is self-pathing ungranted and "
+                  f"its server-fed copy is parked; the next keyboard edge "
+                  f"may snap the body back (run-3 mechanism, ROUTER.md "
+                  f"sec.8)", flush=True)
         return True
     legs = [(float(x), float(y)) for x, y in wps[1:]]
     leg_planes = list(wpls[1:])
@@ -5120,9 +5154,10 @@ def router_answer_click(send, state, conn_id, rec, dest, dest_plane,
              [PLAYER_AGENT_ID, [dx, dy], pf, ps],
              f"AGENT_MOVE_TO_POINT({dx:.0f},{dy:.0f}"
              f" on plane {cur_plane}->{dest_plane}, ROUTER one leg)")
+        state["router_refusal_streak"] = 0
         if rec is not None:
             rec.event("router_route", verdict="verbatim", n_wp=1,
-                      dest=[dx, dy], ms=round(ms, 2))
+                      dest=[dx, dy], snapped=snapped_d, ms=round(ms, 2))
         return True
     first_wp = legs[0]
     # Corridor-true plane (ROUTER-B4): the route's own trapezoid chain
@@ -5144,10 +5179,11 @@ def router_answer_click(send, state, conn_id, rec, dest, dest_plane,
         "prev": origin, "cur": first_wp,
         "granted_at": now, "carry": pf, "click_plane": dest_plane,
         "i": 1, "n": len(legs)}
+    state["router_refusal_streak"] = 0
     if rec is not None:
         rec.event("router_route", verdict="routed", n_wp=len(legs),
                   dest=[dx, dy], origin=[origin[0], origin[1]],
-                  ms=round(ms, 2))
+                  snapped=snapped_d, ms=round(ms, 2))
         rec.event("router_leg", act="grant", i=1, n=len(legs),
                   dest=[first_wp[0], first_wp[1]], plane=pf,
                   terminal=False)

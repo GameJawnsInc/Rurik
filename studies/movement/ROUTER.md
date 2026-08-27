@@ -436,3 +436,58 @@ at the dest still terminates on the other stack level. Open: the
 route-shape quality inside the cap (corner-hugging wide swings from
 edge-midpoint waypoints) is unaddressed — ROUTER-Q10 if the owner still
 sees it.
+
+## 8. Run 3 — 20260826T205658: the refusal lock-in, and ROUTER-B5 (OBSERVED)
+
+Tour cap and plane-awareness held (zero routed rows ≥8 waypoints, 2
+tour-caps fired, zero teleports on the tape a third time). The owner's
+report — "weird at first, middle went fine with long far clicks over
+props/stairs, warped when I eventually hit W" — decodes to a NEW
+mechanism, and the owner's own hypothesis ("maybe the server wasn't
+actually tracking my movement") is exactly right:
+
+- At t≈97 the client stopped at (-4896.4, 1324.6) beside a plane-44
+  structure — **8.0 u outside our mesh decode** (nearest walkable 8 u).
+  The stop report was accepted; `state["pos"]` froze there.
+- **Every one of the next 85 clicks was refused `origin-off-mesh`** —
+  218 seconds of server silence. The client self-pathed all of them
+  (CANCELWALK-B1's own finding — the client paths clicks regardless),
+  walking ~4 km across the map; the click coordinates trace the whole
+  journey. That was the "middle going fine": pure client-side pathing
+  over props and stairs, with the server mute.
+- With zero grants, the client's server-fed copy stayed parked the
+  whole time. The first keyboard press ended it in the client's OWN
+  consecutive reports: **(-7772, -127) at t=314.582, then (-4934, 1286)
+  at t=314.837 — a 3.2 km self-snap back onto the parked copy.** The
+  warp, in the client's handwriting; nothing the server sent moved
+  anybody.
+
+**The lesson, stated for the record: a refusal is not safe-by-inaction.
+Mute long enough and the client's reconcile does the warping for us.**
+The refusal path exists for holes we truly cannot cover, not for the
+edge-penetrated stands players actually produce (0.25 u at P-17's wall,
+8.0 u here).
+
+**ROUTER-B5** (same commit): `pathmap.nearest_walkable(x, y, radius)` —
+per-candidate clamp with every returned point verified `walkable()` —
+and the wiring snaps an off-mesh routing origin to the nearest covered
+point within `ROUTER_ORIGIN_SNAP` (16 u = COLLISION_STEP, twice the
+worst observed penetration) before routing; the `snapped` distance rides
+every `router_route` row. A stand deeper than the radius still refuses —
+and refusals now count a **streak** (on every row, with a console
+warning every 10) so a lock-in can never again be silent. test_pathmap
+§12 (floor 69) proves a real 12 u penetration returns to a walkable
+point 0.12 u off the edge; test_router (floor 68) proves the 8 u
+run-3 stand is now ANSWERED verbatim and the streak counts on true
+holes. **ROUTER-Q11**: stands deeper than 16 u over true decode holes
+(e.g. ON an undecoded structure) still refuse and still build the
+divergence; the streak warning is the tripwire, a resync-class answer
+is the unbuilt candidate if the owner's maps hit it.
+
+**Registered for run 4**: no origin-off-mesh refusal streak reaches 10
+on ordinary ground (the snap absorbs edge penetrations); wall-press and
+prop-adjacent stands get answered clicks; the W-press reconcile snap
+does not recur absent a streak. REFUTED IF a streak ≥10 occurs at a
+stand within 16 u of our mesh (the snap failed its own case), or a
+kilometre-class self-snap appears in the client's reports without a
+preceding refusal streak (the divergence has another engine).

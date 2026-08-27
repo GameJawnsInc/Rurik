@@ -1865,10 +1865,21 @@ per-waypoint planes (test_pathmap §11, floor 65, proven on a real
 stacked point), the wiring passes the click's own planes and sends the
 corridor's plane words, and a TOUR CAP (4×direct+800u,
 measured-bounded) demotes island tours to the clip-fallback stop.
-**Next: run 3, same flags** — registered: tours gone, stacked clicks
-resolve to the clicked surface, cross-floor routes sane-or-stop.
-Open: ROUTER-Q1..Q10 in the doc; P-2 (cross-floor) exercised in run 2
-but scored against a defect since fixed — re-score in run 3.
+**Run 3 (20260826T205658, ROUTER.md §8): B4 held** (zero tours, 2
+tour-caps, zero teleports third run running) — and the owner's "warped
+when I eventually hit W" decoded to THE REFUSAL LOCK-IN: a stop 8u
+outside our decode froze state["pos"], 85 consecutive origin-off-mesh
+refusals left the server mute for 218s while the client self-pathed
+~4km, and the first keyboard press snapped the body 3.2km back onto the
+server-parked copy IN THE CLIENT'S OWN CONSECUTIVE REPORTS. A refusal
+is not safe-by-inaction. **ROUTER-B5 shipped**: pathmap.nearest_walkable
++ a 16u origin snap (twice the worst measured penetration) so
+edge-penetrated stands get ANSWERED, plus a refusal-streak counter on
+every row with a console tripwire (pathmap floor 69, router floor 68).
+**Next: run 4, same flags** — registered: no refusal streak ≥10 on
+ordinary ground, no W-press reconcile snap absent a streak.
+Open: ROUTER-Q1..Q11 in the doc; P-2 (cross-floor) still to re-score
+on a clean run.
 *The staging block that preceded the run, kept for the record:*
 The follow-on recon (`studies/movement/followon-notes/README.md`, merged
 to `main` the same day) answered F35's counterfactual from tape (castless,
