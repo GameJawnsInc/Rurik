@@ -5477,9 +5477,26 @@ shrinks section 10),
   25 is the GAIN PER STRIKE and not the quantum of the bar, which is why
   `pools.AdrenalinePool` holds RAW UNITS; the control is that eight other costs *are*
   multiples, because an all-off-grid column is what a wrong offset also produces. **§§4–7
-  are the corpus oracle**, `test_pools` §2's shape over all 20 live captures: 918 / 27 /
-  **0** / 40 across 59 connections and 143,408 messages framed with zero errors (663 /
-  22 / 0 / 39 over 49 connections when this entry was first written, at 14 captures). The zero
+  are the corpus oracle**, `test_pools` §2's shape over the live captures: **at least**
+  918 / 27 / **exactly 0** / 40 across 59 connections and 143,408 messages framed with
+  zero errors (663 / 22 / 0 / 39 over 49 connections when this entry was first written,
+  at 14 captures; 921 / 28 / 0 / 40 over 61 connections and 146,660 messages on
+  2026-08-27). **THOSE ARE FLOORS SINCE 2026-08-27, AND THE FILE WENT RED ON MAIN TO
+  EARN THEM.** They were equalities, so a corpus that grew reddened this file on evidence
+  that CONFIRMS every claim it makes — 207 went 918→921, 208 went 27→28, the 25s went
+  886→889, and not one reading moved. It was the *second* such re-pin (14→20 captures was
+  the first), which is what says the shape was wrong rather than the numbers. A floor is
+  also what the original comment actually asked for: *"A corpus that shrank is a vault
+  that moved, and every count below would quietly get easier."* Shrinkage is the defect;
+  growth is the campaign working. **What stayed exact is what is actually claimed**: 209
+  is `== 0`, no 207 exceeds 25 units, the sub-25 tail is still the same multiset (stable
+  across two corpus growths, which is itself the interesting fact), and §12's armed side
+  carries the *whole* family — that last one now compared against **§4's measured census
+  rather than a third frozen copy of it**, so the "two queries agreeing" it advertises is
+  finally two queries and not both agreeing with a constant. A new check carries the
+  durable form of the strike count: 25 is the *overwhelming* mode, >20× the tail, which a
+  re-pin could never paper over. Six deliberate breaks all redden it, including a shrunk
+  corpus and a nonzero 209. The zero
   is the one to read — **209 is a fully wired handler retail never sends**, the same shape
   as energy property 33, with its three neighbours (724) as the positive control that
   makes a null mean something. §4b splits 207's amount into **886 at exactly 25 and a

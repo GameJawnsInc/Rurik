@@ -161,9 +161,24 @@ PROP_ATTACK_SKILL_ACTIVATED = 50    # the one §7 finds behind every spend
 # light hits TAKEN, to put a sample under 1% of maximum health and settle the
 # rounding boundary `pools.damage_units` extrapolates. None arrived; the boundary
 # is still extrapolated.
+#
+# RE-PINNED AGAIN 2026-08-27 -- 20 captures -> 21 -- AND THAT IS THE SECOND TIME,
+# which is the tell that the SHAPE was wrong rather than the numbers. These were
+# equalities, so this file went RED on `main` on evidence that CONFIRMS every
+# claim it makes: the corpus grew, 207 went 918 -> 921, 208 went 27 -> 28, the
+# 25s went 886 -> 889, and the reading did not move an inch. An equality here was
+# pinning THE SIZE OF THE VAULT, which nothing in this file measures.
+#
+# They are FLOORS now, and the floor is what the original comment actually asked
+# for: "A corpus that shrank is a vault that moved, and every count below would
+# quietly get easier." A shrink is the defect; growth is the instrument working.
+# The claims that are NOT counts stay exact -- 209 is still zero, no 207 exceeds
+# 25, the sub-25 tail is still the same multiset, and the armed side still
+# carries the whole family -- and those are what this file is for.
 CORPUS_CAPTURES = 20
 CORPUS_CONNECTIONS = 59
 CORPUS_MESSAGES = 143408
+# Floors, not a census. SET stays EXACT because zero is the claim.
 CENSUS = {SMSG_ADRENALINE_CHARGE: 918, SMSG_ADRENALINE_CLEAR: 27,
           SMSG_ADRENALINE_SET: 0, SMSG_ADRENALINE_SPEND: 40}
 
@@ -532,23 +547,26 @@ def scan_corpus():
 def section_census(agg):
     """THE CENSUS, and 209 is the live handler retail never uses."""
     print("\n4. the census: 114,985 messages of ArenaNet's own wire")
-    LEDGER.ok(agg["captures"] == CORPUS_CAPTURES
-              and agg["connections"] == CORPUS_CONNECTIONS
-              and agg["messages"] == CORPUS_MESSAGES,
-              f"the corpus is still {agg['messages']} messages over "
-              f"{agg['connections']} connections in {agg['captures']} captures",
-              f"{CORPUS_MESSAGES}/{CORPUS_CONNECTIONS}/{CORPUS_CAPTURES} when "
-              f"this was written, decoded with ZERO framing errors. One "
-              f"capture (20260817T175358) has no wire.jsonl and contributes no "
-              f"connections, which is why the two counts are pinned "
-              f"separately. A corpus that shrank is a vault that moved, and "
-              f"every count below would quietly get easier")
+    LEDGER.ok(agg["captures"] >= CORPUS_CAPTURES
+              and agg["connections"] >= CORPUS_CONNECTIONS
+              and agg["messages"] >= CORPUS_MESSAGES,
+              f"the corpus is at least {CORPUS_MESSAGES} messages over "
+              f"{CORPUS_CONNECTIONS} connections in {CORPUS_CAPTURES} captures",
+              f"{agg['messages']}/{agg['connections']}/{agg['captures']} today, "
+              f"decoded with ZERO framing errors. One capture "
+              f"(20260817T175358) has no wire.jsonl and contributes no "
+              f"connections, which is why the two are floored separately. A "
+              f"corpus that SHRANK is a vault that moved and every count below "
+              f"would quietly get easier -- that is what this refuses. Growth "
+              f"is the campaign working and must not redden a thing")
 
     for op in (SMSG_ADRENALINE_CHARGE, SMSG_ADRENALINE_CLEAR,
                SMSG_ADRENALINE_SPEND):
-        LEDGER.ok(agg["census"][op] == CENSUS[op],
-                  f"opcode {op} appears {agg['census'][op]} times",
-                  f"expected {CENSUS[op]}")
+        LEDGER.ok(agg["census"][op] >= CENSUS[op],
+                  f"opcode {op} appears at least {CENSUS[op]} times",
+                  f"{agg['census'][op]} today. A floor: more captures mean more "
+                  f"of these and that is not a regression. What a shortfall "
+                  f"would mean is that the decoder stopped seeing them")
 
     LEDGER.ok(agg["census"][SMSG_ADRENALINE_SET] == 0,
               f"and opcode {SMSG_ADRENALINE_SET} appears 0 times in "
@@ -575,14 +593,28 @@ def section_populations(agg):
     """TWO POPULATIONS in 207's amount, and the strike rule's own signature."""
     print("\n4b. what a 207 carries: 25, or something under it")
     amounts = agg["amounts"]
-    LEDGER.ok(amounts[STRIKE_UNITS] == STRIKE_COUNT,
-              f"{amounts[STRIKE_UNITS]} of the {sum(amounts.values())} carry "
+    # THE COUNT IS A FLOOR AND THE DOMINANCE IS THE CLAIM. Every gain the
+    # corpus has added since this was first pinned carried exactly 25, twice
+    # over (886 -> 889 here, 631 -> 886 at the previous re-pin), so the
+    # equality reddened on the very evidence that strengthens the reading.
+    # What cannot move without meaning something is the SHARE: the sub-25 tail
+    # is a small ragged minority and 25 is the overwhelming mode.
+    tail_total = sum(n for a, n in amounts.items() if a < STRIKE_UNITS)
+    LEDGER.ok(amounts[STRIKE_UNITS] >= STRIKE_COUNT,
+              f"at least {STRIKE_COUNT} of the {sum(amounts.values())} carry "
               f"exactly {STRIKE_UNITS}",
-              f"expected {STRIKE_COUNT}. WIKI (GWW, 'Adrenaline', rev. "
+              f"{amounts[STRIKE_UNITS]} today. WIKI (GWW, 'Adrenaline', rev. "
               f"2026-07-02): one successful weapon hit is 25 units. OBSERVED "
               f"as a value; that it is one strike per landed hit is the "
               f"reading, and it is the reading `pools.on_hit_landed` already "
               f"implements")
+    LEDGER.ok(amounts[STRIKE_UNITS] > 20 * tail_total,
+              f"and {STRIKE_UNITS} is the overwhelming mode, not merely the "
+              f"commonest",
+              f"{amounts[STRIKE_UNITS]} at 25 against {tail_total} below it. "
+              f"THIS is the durable form of the count above: a tail that grew "
+              f"to rival the strikes would mean the 1%-of-health rule fires far "
+              f"more often than a landed hit, and no re-pinning would hide it")
     tail = {a: n for a, n in amounts.items() if a < STRIKE_UNITS}
     LEDGER.ok(tail == SUB_STRIKE,
               f"and {sum(tail.values())} carry less, as {dict(sorted(tail.items()))}",
@@ -621,10 +653,17 @@ def section_self_scope(agg):
     """
     print("\n5. WHOSE bar -- and the control that makes it a finding")
     rows = agg["self_scope"]
-    LEDGER.ok(len(rows) == SELF_SCOPED_CONNECTIONS,
-              f"{len(rows)} connections carry a 207 at all",
-              f"expected {SELF_SCOPED_CONNECTIONS}, out of "
-              f"{agg['connections']}")
+    # A floor, for the reason the constant block gives: this counts how much
+    # corpus there is, not what 207 does. The finding is the check BELOW -- every
+    # one of these connections names exactly one agent -- and that is an `all()`
+    # over whatever rows exist, so it gets sharper as the corpus grows while this
+    # number simply gets bigger. It reddened at 11 -> 12 with nothing changed.
+    LEDGER.ok(len(rows) >= SELF_SCOPED_CONNECTIONS,
+              f"at least {SELF_SCOPED_CONNECTIONS} connections carry a 207 at "
+              f"all",
+              f"{len(rows)} of {agg['connections']} today. The floor is a "
+              f"vacuity guard: the one-agent check below is an all() and would "
+              f"pass an empty set")
     multi = [(s, a) for s, a, _b in rows if len(a) != 1]
     LEDGER.ok(not multi,
               f"and every one of them names EXACTLY ONE agent, {len(rows)} of "
@@ -1115,7 +1154,7 @@ def section_arenanet_words(img):
 # ---------------------------------------------------------------------------
 
 
-def section_bar_gate():
+def section_bar_gate(agg):
     """THE FAMILY IS DARK FOR A BAR THAT CANNOT HOLD ADRENALINE.
 
     The most refutable claim here, and the one that matters most to the sender.
@@ -1144,10 +1183,10 @@ def section_bar_gate():
     stats, rows, skipped = adrenjoin.scan()
     armed, dark = stats["arms"]["armed"], stats["arms"]["dark"]
 
-    LEDGER.ok(armed["connections"] == ARMED_CONNECTIONS
-              and dark["connections"] == DARK_CONNECTIONS,
-              f"the split is {armed['connections']} armed / "
-              f"{dark['connections']} dark connections",
+    LEDGER.ok(armed["connections"] >= ARMED_CONNECTIONS
+              and dark["connections"] >= DARK_CONNECTIONS,
+              f"the split is at least {ARMED_CONNECTIONS} armed / "
+              f"{DARK_CONNECTIONS} dark connections",
               f"expected {ARMED_CONNECTIONS}/{DARK_CONNECTIONS}. The variable "
               f"is the observer's own SKILLBAR_UPDATE against content's "
               f"`adrenaline_units` column -- nothing about adrenaline TRAFFIC "
@@ -1164,16 +1203,26 @@ def section_bar_gate():
               f"clears and spends included, which is self-consistent: no gain "
               f"means no 25-second clock means nothing to clear")
 
-    LEDGER.ok(all(armed[k] == ARMED_FAMILY[op] for op, k in
-                  ((SMSG_ADRENALINE_CHARGE, "gain"),
-                   (SMSG_ADRENALINE_CLEAR, "clear"),
-                   (SMSG_ADRENALINE_SPEND, "spend"))),
+    # AGAINST SECTION 4'S MEASURED CENSUS, not against a frozen copy of it.
+    # `ARMED_FAMILY` used to be a third literal holding the same three numbers,
+    # so the "two queries agreeing" this check advertises was really both
+    # queries agreeing with a constant -- and when the corpus grew, both moved
+    # together and the constant reddened them both. Comparing the two
+    # MEASUREMENTS is the cross-check the comment always claimed, it is
+    # strictly stronger, and it cannot go stale.
+    census = agg["census"]
+    pairs = ((SMSG_ADRENALINE_CHARGE, "gain"), (SMSG_ADRENALINE_CLEAR, "clear"),
+             (SMSG_ADRENALINE_SPEND, "spend"))
+    LEDGER.ok(all(armed[k] == census[op] for op, k in pairs),
               f"and the armed side carries ALL of it: "
               f"{armed['gain']}/{armed['clear']}/{armed['spend']}",
-              f"expected {ARMED_FAMILY}. THIS IS ALSO A CROSS-CHECK ON 4: "
-              f"the census there counts opcodes over the whole corpus and this "
-              f"counts them per connection after a skillbar join, so the two "
-              f"agreeing is two queries and not one number read twice")
+              f"section 4's census reads "
+              f"{ {hex(o): census[o] for o, _ in pairs} } over the whole corpus "
+              f"and this counts per connection after a skillbar join -- TWO "
+              f"QUERIES agreeing, which is what this check was always for. "
+              f"Floors would not do here: the whole point is that the dark side "
+              f"carries none of it, so the armed side must carry every single "
+              f"one")
 
     LEDGER.ok(dark["hits_landed"] >= DARK_HITS_LANDED
               and dark["melee_finished"] >= DARK_MELEE_FINISHED,
@@ -1377,7 +1426,7 @@ def main():
         section_self_scope(agg)
         section_spend_join(agg)
         section_order(agg)
-        section_bar_gate()
+        section_bar_gate(agg)
 
     try:
         img = Image()
