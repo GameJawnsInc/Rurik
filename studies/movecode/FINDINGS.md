@@ -990,6 +990,13 @@ rate. 70 desync tests → 14 reseeds → **2 actual displacements**. §1g's 18
 "unexplained jumps" were measured without agent attribution, exactly as §1g.3 warned;
 this supersedes them.
 
+> **CORRECTED by §1i.1.** The "d(before)" figures in this subsection were computed
+> by following each reseed to the next record carrying **agent id 1**, and id 1 names
+> TWO objects (the two world copies), not one body. That walk crosses between two
+> agents 940 u apart and scores the crossing as a displacement. The 2-of-14 headline
+> happens to survive re-scoring by address, but it survives for a different reason
+> than the one given here — read §1i.6.
+
 ### 1h.3 What the two real warps ARE: a ROLLBACK
 
 Both are the same shape, and it is visible in the coordinates:
@@ -1004,6 +1011,13 @@ and the correction pulls the player back to it.** The player walks away, the syn
 twin does not follow, and the next correction rolls the player back to where the twin
 still thinks it is. That is the warp the operator has been seeing, and it is a
 **rollback to a stale sync position**, not a jump to a new one.
+
+> **"STALE" IS WITHDRAWN — §1i.2.** The sync copy is not holding still. It walks, at
+> 288 u/s, over 52 distinct positions spanning 10,368 u, every one of them within
+> 0.00 u of ground the player really covered. What it does is **idle 100.2 s of a
+> 207.6 s run against the local copy's 37.8 s**, in 18 stalls of median 4.85 s,
+> because our server grants it a destination only 51 times. The rollback is real;
+> the cause is STARVATION, not staleness, and it is ours.
 
 ### 1h.4 MOVECODE-Q2 finally bites — and §1f.3's refutation was an n=7 artifact
 
@@ -1026,6 +1040,179 @@ Router run 5's pocket may yet be a decode failure after all.
 
 **9 of 618 bakes glided (1.5%)**, all from `0x00600B0F`, matching run 3's 1.2% on the
 same input style. Three runs, 1,943 bakes, still no unknown bake caller — Q4 holds.
+
+---
+
+## 1i. CHASING THE STALE SYNC TWIN — it is not stale, it is STARVED, and the starver is ours
+
+**OBSERVED, 2026-08-27**, from the run 5 capture
+(`vault/research/movecode/run5-2026-08-27-v5/`) re-scored after a method defect, and
+from the matching server-side log
+(`vault/captures/gamesrv/authsrv-20260827T180821-c1.jsonl`, 5,098 rows, 218.5 s).
+No new client run was needed: both artifacts already existed.
+
+### 1i.1 THE METHOD DEFECT — one agent id names TWO objects, and §1h.2 rode on it
+
+`GAME_SMSG_WORLD_CREATE_AGENT` runs its handler body **twice** with the agent array
+base advanced `0x64`; `AgAgent.cpp:312` names the two `m_world` 0 and 1. So **agent
+id 1 is two objects**, and every per-agent trajectory this arc has computed —
+including §1h.2's warp rate — filtered on `id == 1` and treated the result as one
+body.
+
+It is not one body. Keyed on `ecx` (the object's address) the run 5 capture holds:
+
+| object | records | sites | what drives it |
+|---|---|---|---|
+| `0x21E20128` | 1,209 | bake 567, setter 557, teleport 71, reseed 14 (as `this`) | the client's own path solver |
+| `0x21E208D8` | 124 | setter 51, bake 51, teleport 22 | **the wire, and only the wire** |
+| `0x060C9B6C` | 70 | snaptest 70 | **not an agent at all** (§1h.1's ecx) |
+
+The two copies sit **940 u apart** at reseed `#22`. An id-filtered walk crosses
+between them and reports the crossing as a displacement — 940 u **inside a single
+15 ms `GetTickCount` tick**, which is not a motion any client could produce. That is
+the artifact §1h.2 measured.
+
+`0x21E208D8` is the **`WORLD_SYNC`** copy, and this is read off the record rather
+than assumed: it is the agent passed as the source argument at every one of the 84
+`reseed`/`snaptest` observations, and the client asserts that argument's world itself
+— `AgTrack.cpp:458` `source.GetWorld() == WORLD_SYNC`.
+
+`readhook.py` now censuses world copies by address, names the sync side from
+`reseed`'s source argument, and **raises when an id is ambiguous** — a census that
+silently merged the copies would read exactly as clean as a correct one
+(`test_movehook.py` §12, both directions, commit `09b1b1a`).
+
+### 1i.2 The twin is NOT frozen — §1h.3's "stale" is withdrawn
+
+§1h.3 said the sync twin "holds a position the player occupied earlier" and "does not
+follow". The first half is true; **the second is wrong**. The twin has 52 distinct
+positions spanning 10,368 u, 70 distinct position timestamps and 52 distinct
+velocities. It walks, at exactly 288 u/s, and **52 of its 52 distinct positions are
+within 0.00 u of a position the player actually occupied** — it is not on an
+independent path, it is behind on a shared one.
+
+What it is, measured over the same 207.6 s clock window, from each agent's own
+declared `[ptime, stop]` legs (union, so the ~10× sampling difference between the two
+copies cannot manufacture the result):
+
+| | in motion | idle |
+|---|---|---|
+| local copy `0x21E20128` | **169.8 s** | 37.8 s |
+| sync copy `0x21E208D8` | **107.4 s** | **100.2 s** |
+
+The twin spends **62 extra seconds standing still**, in **18 stalls, p50 4.85 s, max
+9.03 s**. At 288 u/s that is ~18,000 u of lost path progress, and it matches the
+measured path gap (49,378 u against 27,160 u) directly. During the longest stalls the
+local copy was still receiving destinations and walking.
+
+**The correct word is STARVED, not stale.**
+
+### 1i.3 The twin's ONLY destination source is our server, proven 1:1
+
+Our server sent **51** `0x0029 AGENT_MOVE_TO_POINT` in that session. The twin took
+**51** setter calls. Equal counts are weak evidence, so the pairing was tested where
+it can fail: **inter-event gap sequences**, which need no clock alignment between the
+server log's `t` and the hook's `GetTickCount`.
+
+**All 50 gaps agree — median residual 2 ms, maximum 15 ms**, both spans 185.0 s. The
+pairing is exact.
+
+The negative control is the local copy: it took **557** setter calls against 51 grants
+ever sent, so its destinations cannot be coming from our wire. That is §1e.5 ("our
+server granted nothing and the client still moved 26 legs") seen from the inside — the
+client path-solves for the local copy and the wire drives the sync copy, and the two
+are separate.
+
+### 1i.4 Against retail: the twin is granted more sparsely than ANY of 118 live agents
+
+Grants per second is not comparable — across 37 live connections it ranges 0.086/s to
+9.142/s purely with how much the operator was moving. Normalising by **path walked**
+removes the free parameter (`0x0029` field 2 is the destination, SOURCED by four
+`worldDims` asserts).
+
+| | grants per 1000 u |
+|---|---|
+| retail, 118 agents, 3.1 M u of path | min **1.70**, p10 2.47, **p50 4.30**, p90 10.27, max 21.79 |
+| our sync copy | **1.65** |
+| our local copy | 11.39 |
+
+**The twin sits below retail's minimum — the 0th percentile of 118 agents**, at 2.6×
+under retail's median. (Ticks are not the shortfall: we send `0x001E` at 19.65/s
+against retail's 5.822/s.)
+
+### 1i.5 WHY our server under-grants — and it is the SAME defect as MOVECODE-Q2
+
+The server log records its own refusals, and they account for the gap:
+
+* **17 movement clicks refused outright** — `geo-stale` 13, `geo-blocked` 3,
+  `geo-unplaced` 1. Every one `fired: false`.
+* **13 of 64 grant verdicts refused** on `heading-rate`.
+
+So **30 of 81 movement-authority events were suppressed (37%)**, against 51 granted.
+
+The branch is `authsrv.py:16453`, and its comment states the intent plainly: *"Something
+is in the way, so the client is pathing around it and knows more than we do. Say
+nothing, and drop our own destination rather than integrate along a line the player is
+not walking."*
+
+**The silence is not free**, and that is the finding. The client is not "left to its
+own pathing" — it is left to walk the local copy away from a sync copy that receives
+nothing, until the client's own desync test fires and rolls the player back.
+
+**And these are Q2's coordinates.** Two of the 17 refusals are *exactly* §1h.4's two
+OFF-MESH `MapFindPath` goals, and the server's own reason code matches which end
+§1h.4 found off-mesh:
+
+| refused click | server's reason | §1h.4's verdict |
+|---|---|---|
+| `(−4705.9, 7670.4)` t=170.4 | `geo-unplaced` — "cannot place **them**" | **start** off mesh |
+| `(−4284.3, 8482.0)` t=178.7 | `geo-blocked` — "not a straight shot" | **goal** off mesh |
+
+11 of the 17 refusals sit at y > 5000, the same north-east region §1h.4 named. **The
+navmesh hole and the twin starvation are one defect seen from two sides**: our decode
+of map 280 is wrong in the north-east, the server therefore refuses to grant there,
+and the client warps.
+
+### 1i.6 What the warp actually IS, at the byte level
+
+§1h.2's "2 of 14 displaced the player" survives re-scoring, but the signature is
+sharper than a distance. Per object, counting steps where `m_point` moved but `+0x58`
+— the stamp saying when `m_point` was valid — **did not advance at all**:
+
+* local copy: **10** such steps out of 1,208
+* sync copy: **0** out of 123
+
+A walk always advances both. **The sync copy is never discontinuously repositioned;
+only the local copy is.** At both real warps the local copy's post-warp position is
+*exactly* the twin's teleport **target** — `(−7871.4, 1804.5)` and `(−6027.3, 6632.3)`
+— and the `reseed` leaves it halted, `m_targetPoint` `(inf, inf)`, velocity 0, stop 0,
+which is the state §1c.6 established the teleport writes.
+
+This also retracts a claim I made mid-analysis: scored in each agent's own frame
+**neither** object ever exceeds 312 u/s, which looks like "nothing ever teleports". That
+was an artifact of computing speed only where the clock delta was non-zero — the filter
+discarded exactly the ten steps that matter. `readhook` now counts them instead.
+
+### 1i.7 Status and what is NOT settled
+
+* **MOVECODE-Q2 is no longer only a decode question.** It has a measured server-side
+  consequence and a measured cost in grants.
+* **The existing candidate fix is already in the tree and is OFF.** `D1_LEAD`
+  (`authsrv.py:4595`, REALFIX-A2) makes geometry *not* refuse a click, because the
+  answer is a verbatim echo of the client's own point — "retail's contract, 23/23
+  bit-exact". Every one of the 17 refusals recorded `d1_passthrough: false`. It is a
+  four-term bundle with its own registered predictions
+  (`studies/movement/REALFIX.md` §0.9) and requires `--zero-lead` and `--plane-carry`;
+  **turning it on is a decision for the owner, not a consequence of this section.**
+* **NOT DETERMINED: which instruction writes `m_point` at the reseed.** The hook is an
+  entry hook, so it reads the local copy at its OLD position and the next record
+  carrying that object is 1.4–2.4 s later. That the new position equals the twin's
+  target is OBSERVED; that `reseed` itself performs the write is RECONSTRUCTION.
+* **NOT DETERMINED: what `heading-rate` costs.** 13 refusals is a sixth of our grant
+  budget and no measurement here separates its effect from the geometry refusals'.
+* The `+0x24` world field is **not captured** — the sync side is currently identified
+  from `reseed`'s source argument, which works but is indirect. Capturing `+0x24`
+  would make it direct and is one row in `content/movecode.toml`.
 
 ---
 
