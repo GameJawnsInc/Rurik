@@ -140,8 +140,21 @@ an earlier draft of this paragraph had 35,593 for the scale count, which
 reproduces under no population and was wrong): `scale` is 0x7F on 135,079 of
 285,670 props; all three rot bytes are zero on 46,371; rot[0]==rot[1]==0
 (pure yaw) on 180,391; both together on 30,174.
-The `value` u16 of tags 4 and 6 recurs across maps,
-so those are ids rather than per-map hashes -- not measured. The u16 at +0x00 is
+~~The `value` u16 of tags 4 and 6 recurs across maps,
+so those are ids rather than per-map hashes -- not measured.~~ MEASURED
+2026-08-27 over all 349 maps (`refscan.py`, `test_refscan.py`), and that
+reading is RIGHT FOR TAG 4 AND WRONG FOR TAG 6. Recurrence cannot separate
+them -- small indices collide across maps for the same reason small integers
+do -- and the BOUND can: tag 6's `value` is under `len(props)` on 10,647 of
+10,647 rows, tag 4's on 212 of 6,355 (max 65,521). **So for tag 6 BOTH words
+of the PropRef index the prop array**, not just `prop`, and the entry is a
+prop-to-prop relation; tag 4's is a wide cross-map id namespace. The bound is
+not an accident of scale: `max(value)/(len(props)-1)` has a median of 0.939
+with 90 of 149 maps over 0.9 and 7 landing on the last index exactly, and
+re-scoring each map's values against a DIFFERENT map's prop count puts 32.2%
+out of range. WHAT IT IS NOT: proof that the array indexed is the prop array
+rather than another per-map array of equal length, and it says nothing about
+what the relation MEANS. Ten tag-6 rows are self-references. The u16 at +0x00 is
 NOT an index into tag 4 (measured, both ways: 209,960 of 285,670 land outside).
 
 NOTHING DECLARED IS STORED. Every count and every point total is re-derived on

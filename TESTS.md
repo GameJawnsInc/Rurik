@@ -1044,6 +1044,43 @@ Every one of these, in the order they were written:
   was tracing, whose `0x00712200` parses the BLOATED chunk with five-byte
   headers -- confirmed it and settled the one thing the corpus could not, that
   tag 4's count is a u16),
+  `toolkit/mapdata/test_refscan.py` (**what the tag-4 and tag-6 `value` words ARE**,
+  `refscan.py`, over all 349 maps — 17 checks, floor 17). It closes
+  `studies/customarea/FINDINGS.md`'s UNVERIFIED item 1 and the same sentence in
+  `props.py`'s own header: *"The `value` u16 of tags 4 and 6 recurs across maps, so
+  those are ids rather than per-map hashes — not measured."* **That reading is right
+  for tag 4 and wrong for tag 6, and the argument it rested on could never have told
+  them apart** — small indices collide across maps for the same reason small integers
+  do, so "recurs across maps" is equally true of a local index and a global id. The
+  BOUND separates them at once: tag 6's `value` is under `len(props)` on **10,647 of
+  10,647** rows in 149 maps; tag 4's on **212 of 6,355**, with values to 65,521. A
+  `PropRef` is `{u16 value, u16 prop}` and `props.py` documents only `prop` as an
+  index — for tag 6 **both** words index the prop array (10,647 of 10,647 each), so
+  the entry is a prop-to-prop relation. **THE 10,647 OF 10,647 IS NOT THE CHECK**, and
+  that is the whole design of this file: an inequality over small numbers can hold by
+  construction, so §2 asserts TIGHTNESS — `max(value)/(len(props)-1)` at a median of
+  **0.939**, p75 0.981, **90 of 149 maps individually over 0.9** (a median can be
+  carried by half a corpus, so that one is asserted separately), and **7 maps landing
+  on `len(props)-1` exactly**, which a bound with slack in it would never do. §3 is
+  the control that can embarrass the claim: re-score each map's values against a
+  DIFFERENT map's prop count and **32.2%** fall out of range, so the ceiling is a fact
+  about *this* map rather than about integers. It is asserted from **both** sides —
+  a floor, because near-zero would make the whole reading vacuous, and a ceiling,
+  because 100% would mean the prop counts share no scale and the control would prove
+  less than it appears. §4 requires the two tags not to converge, since one decoder
+  reads both from one file. §5 pins the **ten tag-6 self-references** (`value == prop`)
+  against tag 4's zero — a 40-map sample had reported none, which is how a rare row
+  vanishes, and any account of what the relation means has to survive them. **Stated
+  limits, in the module header and not only here:** this does NOT show the indexed
+  array is the prop array rather than another per-map array of equal length — bounds
+  and saturation cannot separate those, only a consumer read can — and it says nothing
+  about what the relation MEANS (parent, group leader, LOD substitute, sort key are
+  all still open). Tag 4 is shown to be a wide cross-map namespace, not what it
+  indexes; `studies/customarea` names the deps chunk / MFT as the join candidate and
+  it is untested. Six deliberate breaks redden it, the load-bearing one being the
+  shuffle control neutered to score against each map's own count. Archive only — no
+  vault, no client, no run — and it declares one skip without an archive rather than
+  passing on no data.
   `toolkit/mapdata/test_modelexport.py` (the MODEL interchange, rung M3: a
   decoded prop mesh split into typed per-field arrays in `vault/exports/
   models/`. **The structural check is the RE-INTERLEAVE and it is the reason

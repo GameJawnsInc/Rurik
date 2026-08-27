@@ -4997,3 +4997,174 @@ exactly right, which is luckier than it should have been.
   **UNVERIFIED**, and it is the one candidate that could still make a slot
   appear to stop on its own.
 
+
+---
+
+## 39. SKILLS-A1 — the enemy's skill damage ignores armour, and that is CORRECT for the bar it ships with
+
+**A filed defect, REFUTED at a desk before it was built.** Reviewed 2026-08-27.
+No client launched.
+
+### 39.1 The asymmetry is real
+
+`land_swing` scales incoming melee by the player's armour
+(`authsrv.py:12133-12137` — `roll_hit_location`, `player_armour_at`,
+`dealt *= armour_multiplier(armour)`). `land_skill` does not: it computes
+`dealt = float(damage[0])` (`:12347`) and goes straight to `taker_damage`.
+`armour_multiplier` has exactly two references in the whole server — its
+definition and that one swing site.
+
+Read alone, that looks like a hole with a one-line fix, and it was filed as one.
+**Applying an armour term to skill damage would have made this server WRONG.**
+
+### 39.2 What GW1 actually does — WIKI, and it is the opposite of the obvious guess
+
+> **WIKI (GWW, "Damage" §Properties, rev. 2020-08-11):** "Skills dealing shadow
+> damage, holy damage and damage without a specified type (skills with
+> descriptions that state *"&lt;number&gt; damage"* or *"+&lt;number&gt;
+> damage"*), ignore the target's armor and the skill deals exactly its stated
+> amount of damage." And: *"+&lt;number&gt; damage"* always comes in addition to
+> regular, armor-respecting, damage.
+
+Corroborated on a second page, with a refinement that matters here:
+
+> **WIKI (GWW, "Armor-ignoring damage" §Sources, rev. 2020-03-28):** typeless
+> damage; shadow damage; **most holy damage** — "however, holy damage from
+> **weapons** does not ignore armor (e.g. from wands, staves, or any weapon
+> enchanted to deal holy damage)"; **bonus damage from attack skills**.
+
+So armour-ignoring is a property of the DAMAGE TYPE and the source, not of
+"skill versus swing". A blanket multiplier over `land_skill` would have applied
+armour to three of the four kinds that must not have it.
+
+### 39.3 Scored against our own content — 3 of 5 rows are already right
+
+`content/world.toml` carries 20 `skill_effect` rows; five are damage-bearing,
+and the type lives in the wiki-sourced `scale_means` prose:
+
+| skill | `scale_means` | GW1 rule | our behaviour |
+|---|---|---|---|
+| 194 (Flare) | `Fire damage` | armour **applies** | **missing armour — the real gap** |
+| 431 | `Fire damage` | armour **applies** | **missing armour — the real gap** |
+| 312 | `Holy damage` | armour **ignored** (skill, not weapon) | ignores it — **CORRECT** |
+| 322 | `+ Damage` | armour **ignored** (attack-skill bonus) | ignores it — **CORRECT** |
+| 323 | `+ Damage` | armour **ignored** (attack-skill bonus) | ignores it — **CORRECT** |
+
+**And the live scope is smaller still.** `land_skill` is the ENEMY's path, and
+the default `ENEMY_SKILL_BAR` is `276, 253, 312, 289` (`authsrv.py:8210`). Of
+those only **312** is damage-bearing, and 312 is one of the three that is
+already correct. **On the shipped configuration the omission is not a defect at
+all.** Flare reaches `land_skill` only when an operator passes
+`--enemy-skills 194`.
+
+### 39.4 CORRECTION to my own first pass — the structure already exists
+
+The paragraph that stood here said the damage type "does not exist in a
+structured form" and that a fix would need a new content column. **That is
+wrong, and it understates what this server already models.**
+`authsrv.py:2443` carries `SCALE_MEANS_DAMAGE`, which maps the wiki-sourced
+prose key to a resolution mode:
+
+```
+SCALE_MEANS_DAMAGE = {"Holy damage": "standalone",
+                      "Fire damage": "standalone",
+                      "+ Damage":    "additive"}
+```
+
+And the `additive` half is **already right for the reason GWW gives**. An
+attack-skill bonus rides its weapon swing — `cast_tick` calls
+`hit_enemy(..., bonus_damage=bonus)` (`:10658`), so the swing under it takes the
+normal armour-respecting path and only the bonus is added, which is exactly
+GWW's *"+&lt;number&gt; damage always comes in addition to regular,
+armor-respecting, damage."* The `standalone` half calls
+`hit_enemy(..., exact=..., swing=False)`, and the parameter is named `exact`
+precisely because it means "the stated amount, unscaled".
+
+So the gap is **one missing distinction inside `standalone`**, not a missing
+column: `Holy damage` is armour-ignoring and `Fire damage` is not, and the map
+gives them the same value.
+
+### 39.5 What is actually open, and the two directions differ
+
+Verified by calling the server's own resolver at `ENEMY_SKILL_RANK = 12`:
+
+```
+default bar 276 -> None   253 -> None   312 -> (46, 'standalone')   289 -> None
+194 -> (56, 'standalone')   431 -> None   322/323 -> (34, 'additive')
+```
+
+Two corrections to §39.3 fall out. **Skill 431 is not reachable as damage at
+all** — it resolves to `None` despite carrying `scale_means = "Fire damage"` —
+so the gap is **Flare (194) alone**, not two skills. And 312's 46 is the number
+a filed report read as "the player took 46 a hit through AR 45": that is holy
+damage correctly ignoring armour, not a defect.
+
+**INCOMING (`land_skill`, the enemy casting at the player) is fixable.**
+`player_armour_at` exists and `land_swing` already uses it, so a `Fire damage`
+cast can be scaled. Reachable only under `--enemy-skills 194`.
+
+**OUTGOING (`hit_enemy(exact=...)`, the player casting Flare at a creature) is
+NOT, and the reason is a measurement rather than an oversight.**
+[studies/presearing/R4C2-FEASIBILITY.md](../presearing/R4C2-FEASIBILITY.md)
+records that **armour has no property id in any channel across 22,524 messages**
+and rules that it be *struck, not deferred*. There is no creature armour value
+to apply, so the outgoing side must stay unscaled until one exists — and writing
+one from the wiki would close the loop on itself, since wiki armour is
+back-computed from observed damage.
+
+Three traps for whoever does it, all visible from the table above:
+
+1. **Do not key on "is it a skill".** The rule is the damage type plus the
+   source; `land_skill` is the wrong place to hang a blanket decision.
+2. **`+ Damage` is not simply armour-ignoring** — the bonus ignores armour and
+   the weapon hit under it does not. Our two rows model only the bonus, so they
+   are right today; a future row that models the whole attack is not.
+3. **Holy damage splits by SOURCE, not by type** — skill holy ignores armour,
+   weapon holy does not. A column called `damage_type` alone cannot express that.
+
+**Status: the filed item is REFUTED as filed.** What replaces it is narrower,
+needs a content column rather than a code change, and is not on the default
+path. `ARMOUR_TERM` and `armour_multiplier` are untouched and remain correct for
+the swing path, which is where `studies/isle` rung 7 measured them.
+
+### 39.6 Why the Flare fix is NOT made here — the armour VALUE is unsettled
+
+The type question is settled (§39.2): Fire is armour-respecting. **Which armour
+number a spell scales against is not**, and GWW is genuinely ambiguous on it.
+
+> **WIKI (GWW, "Armor rating", rev. as fetched 2026-08-27):** "Armor-respecting
+> damage includes all damage from attacks and most spells dealing elemental
+> damage. Exact armor depends on the damage type, but also in the player's and
+> heroes' case, **on the piece of the armor that is hit**." — and then the
+> per-location odds table is introduced as the chance "to be hit" by an
+> **attack**, while a separate sentence says "the damage multiplier can also be
+> found for ***non attack*** skills" via a formula that names no location.
+
+So a spell may roll a body location like a swing, or may resolve against a
+single rating. `land_swing` rolls one; copying that into `land_skill` would be
+**inventing the answer**, and this project's rule is that an unmeasured choice
+does not get made silently. Left unfixed, deliberately, with the residual
+recorded rather than papered over.
+
+**What would settle it, cheapest first.** One caged loopback run with
+`--enemy-skills 194` and a DELIBERATELY LOPSIDED armour set — a very low head
+piece against high everything else — casting Flare repeatedly. If the damage is
+single-valued the spell resolves against one rating; if it comes in five
+buckets in the 3/2/1/1/1 proportion, it rolls a location like a swing. That is
+a HUD/number readout, not a model-appearance verdict, so it is agent-drivable.
+
+### 39.7 What DID get confirmed: all three armour constants match the wiki
+
+Checked while answering the above, and worth recording because it is the kind of
+agreement nobody re-verifies:
+
+| constant | ours | WIKI (GWW, "Armor rating") |
+|---|---|---|
+| `HIT_LOCATION_ODDS` | chest 3, legs 2, feet 1, hands 1, head 1 (of 8) | chest 3/8, legs 2/8, feet 1/8, hands 1/8, head 1/8 |
+| `ARMOR_BASELINE` | `60.0` | "Having 60 armor rating is regarded as the baseline" |
+| `ARMOUR_DIVISOR` | `40.0` | "every gain of 40 points of armor rating cuts 50%" |
+
+And the divisor is independently CORROBORATED rather than merely copied:
+`studies/isle` rung 7 fitted it from retail damage at **39.5, 95% CI
+[37.30, 42.00]**, containing 40. Wiki and a measurement of our own agreeing,
+from sources that share nothing.
