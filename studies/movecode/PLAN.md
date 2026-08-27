@@ -45,6 +45,15 @@ reported 650 u west in 217 ms (2,995 u/s) landing within ~40 u of our model.
 
 ---
 
+> **B1 IS DONE (2026-08-26) AND §2.1 BELOW IS PARTLY WRONG. Read
+> [FINDINGS.md](FINDINGS.md) §1 first.** The setter row's *conclusion* holds —
+> bit 18 ends CLEAR on every wire-driven grant — but its *mechanism* names the
+> wrong instruction twice, and §2.1's reading of what that means is too strong:
+> the client re-bakes waypoints from its own path solver on the same grant.
+> MOVECODE-Q1 is answered, Q3's premise is refuted, and the critical path has
+> moved to Q2. Corrections are FINDINGS §2; the questions below are otherwise
+> still live.
+
 ## 2. READ THIS FIRST: most of the mechanism is already decoded
 
 **The single most important fact for the first session: the campaign has already
@@ -120,15 +129,20 @@ not.
 
 | # | Question | Closes | Answerable by |
 |---|---|---|---|
-| **Q1** | Is `m_flags` bit 18 one bit doing double duty ("isWaypoint" *and* "is moving"), or two readings of the same mask that were never reconciled? Is there **any** wire path that sets it? | The teleport-on-every-grant mechanism — potentially the whole warp class | **Static**, first |
+| ~~**Q1**~~ **ANSWERED 2026-08-26, [FINDINGS.md](FINDINGS.md) §1** | One bit, one meaning ("this leg does not end at the final destination"); the two readings are two writers of the same predicate and never conflicted. Wire-reachable **only** at agent create (`0x0020`); `0x0026` provably cannot set it. | Not the warp class — but it moved the critical path to **Q2** | *done, static* |
 | **Q2** | Does our `pathmap` decode agree with the client's own navmesh resolution? Specifically: is run 5's "pocket" a decode bug, a missing layer, or real geometry the client also refuses? | Q-B (mesh fidelity), ROUTER-Q1/Q11's `dest-off-mesh` gaps, the tour-shaped routes | **Hook** on `0x00709E90` + differential vs `pathmap.route()` |
-| **Q3** | What does `agent+0x98` do? (`0x002A`'s one extra wire field writes it; two internal re-issuers preserve it across a re-grant; **no reader was ever traced**.) | Whether `0x002A` is a better grant primitive than `0x0029` — "the one untried lead" | **Static**, then hook to confirm |
+| **Q3** | What does `agent+0x98` do? **Its premise is REFUTED (FINDINGS §2.2): there are 7 reads in AgAgent alone.** Write side settled too — `+0x98` is the shared setter's arg2, hardcoded `0` by `0x0029` and taken from wire dword `[edi+0x18]` by `0x002A`; that one field is the whole difference between the opcodes. What it **means** is still open. | Whether `0x002A` is a better grant primitive than `0x0029` — "the one untried lead" | Hook the 7 readers |
 | **Q4** | Is the "exactly 3 callers of `0x00605FC0`" claim complete for *indirect* calls? Every xref count in the record came from `codescan --xrefs`, **direct branches only**. | Whether the snap really is message-only (a load-bearing assumption of the whole model) | **Hook** on entry, long session |
 | **Q5** | Does `0x0027` (UPDATE_SPEED_BASE) re-aim a stale in-flight destination as the record claims — the only lever that re-issues a grant without naming a new point? | A possible cancel/re-aim primitive we have never used | Static + a labelled probe |
 | **Q6** | What is the client's own arrival test *for the player's own input-driven walk* (not a granted leg)? | How a stock server's grants interleave with local input without fighting | Hook on `0x005355C0`/`0x00535380` |
 | **Q7** | `facing == 9` — legal under the mask, no jump-table entry, and one half of a no-snap early-out. Genuine state or sentinel? | A no-snap condition we may be able to hold deliberately | Hook logging writes to `agent+0xC4` with call stacks |
 
-Q1 and Q2 are the arc's critical path. Q3–Q7 are real but secondary.
+~~Q1 and Q2 are the arc's critical path.~~ **Q1 is done and Q2 is now the critical
+path on its own, with a stronger reason than the one it was ranked on**: the client
+runs its OWN priority-queue path solver (`0x006011F0`) over every destination we
+grant, and re-aims at its own intermediate waypoints. Our warps are the distance
+between its route and ours, so the differential in B3 is the measurement that
+matters. Q3–Q7 are real but secondary.
 
 ---
 
