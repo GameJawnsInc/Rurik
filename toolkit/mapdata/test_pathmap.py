@@ -90,7 +90,19 @@ PRESEARING_PLANES = 58
 PRESEARING_TRAPEZOIDS = 6120
 NORTHLANDS_FILE_ID = 0x1C539
 NORTHLANDS_ROW = 20118
+# BIT-31 REGISTRATION IS A PROPERTY OF THE ARCHIVE GENERATION, and it stopped.
+# MEASURED 2026-08-27 over four archives: 38519 and 38797 each register 25
+# bit-31 ids, every one paired with its masked twin; 38833 and 38849 register
+# ZERO. ArenaNet dropped the dual registration between 38797 and 38833, and the
+# two map heads that carried it -- Pre-Searing and The Northlands -- were both
+# rewritten in that patch, their replacement rows named by a single id.
+#
+# So this is not a constant, it is a per-generation expectation, and a run must
+# land on one of the two KNOWN states rather than on any number. An archive that
+# registered, say, 7 would be a third thing nobody has seen and is worth a red.
 HIGH_BIT_IDS = 25
+HIGH_BIT_IDS_38833 = 0
+KNOWN_HIGH_BIT_CENSUS = (HIGH_BIT_IDS, HIGH_BIT_IDS_38833)
 MEASURED_ENTRY_COUNT = 177342
 
 ROUTE_SAMPLE = 60
@@ -307,7 +319,17 @@ def all_valid(pm, paths):
 # added five checks, two behind a stacked-point search that may
 # skip-declare; section 12 (ROUTER-B5 nearest_walkable) added four --
 # green run 73, floor 69.
-LEDGER = checks.Ledger("pathing map", floor=69)
+# MEASURED 2026-08-27 in BOTH archive generations: 73 checks on 38797, 68 on
+# 38833. The base is the LEANER one and section 6 raises it by hand when the
+# richer configuration applies -- the same shape test_archive.py uses for its
+# reference rows. A flat 69 was set when only 38797 existed and called a
+# perfectly healthy 38833 run "incomplete".
+#
+# What makes 38833 leaner is not a missing check but a MISSING SUBJECT:
+# ArenaNet stopped registering bit-31 file ids after 38797 (25 -> 0), so the
+# three checks about raw/masked pairing have nothing to be about. They are
+# declared skips there, not silent absences.
+LEDGER = checks.Ledger("pathing map", floor=68)
 check = checks.adopt(LEDGER)
 
 
@@ -428,13 +450,29 @@ def main():
             f"<{(len(ar.read(ar.entries[1])) // 8) * 2}I", ar.read(ar.entries[1]))
         stored = {raw[i * 2] for i in range(len(raw) // 2)}
         high = {f for f in stored if f & FILE_ID_HIGH_BIT}
-        check(len(high) == HIGH_BIT_IDS, "the high-bit id census is unchanged",
-              f"{len(high)} ids")
+        # THE FLOOR RISES WITH THE SUBJECT. On a generation that registers
+        # bit-31 ids there are three more checks to run -- the collision
+        # invariant and the two raw/masked agreements -- so requiring them is
+        # what stops a 38797 run from quietly losing them.
+        if high:
+            LEDGER.floor += 3
+        check(len(high) in KNOWN_HIGH_BIT_CENSUS,
+              "the high-bit id census is one of the two states we have seen",
+              f"{len(high)} ids -- 25 on 38519/38797, 0 on 38833/38849. A third "
+              f"number is a format change nobody has looked at and is worth "
+              f"stopping for")
         # The invariant the mask-on-miss lookup depends on: no bit-31 id's
-        # masked form is also a real id, so the two can never compete.
+        # masked form is also a real id, so the two can never compete. Vacuous
+        # on an archive with no bit-31 ids at all, which is why it says so.
         shadowed = {f & ~FILE_ID_HIGH_BIT for f in high} & stored
-        check(not shadowed, "no masked form collides with a real file id",
-              f"{len(shadowed)} collision(s)")
+        if high:
+            check(not shadowed, "no masked form collides with a real file id",
+                  f"{len(shadowed)} collision(s) over {len(high)} high ids")
+        else:
+            LEDGER.skip("the masked-form collision invariant",
+                        "this archive registers NO bit-31 ids (38833 and later),"
+                        " so there is nothing for a masked form to collide with"
+                        " -- the mask-on-miss lookup is simply never reached")
 
         for label, fid, want_row in (
                 ("Pre-Searing", PRESEARING_FILE_ID, PRESEARING_ROW),
@@ -444,8 +482,17 @@ def main():
                   f"0x{fid:X} -> {got}")
             if got is None:
                 continue
-            check(table.get(fid | FILE_ID_HIGH_BIT) == got,
-                  f"{label} raw and masked ids agree")
+            # ONLY MEANINGFUL WHERE THE TWIN EXISTS. On 38833+ the raw id is
+            # registered alone, so `table.get(fid | BIT31)` is None and this
+            # would fail on an archive that is perfectly well formed -- the
+            # functional requirement is the check above (the id RESOLVES), and
+            # this one is about the pairing that older generations carried.
+            if high:
+                check(table.get(fid | FILE_ID_HIGH_BIT) == got,
+                      f"{label} raw and masked ids agree")
+            else:
+                LEDGER.skip(f"{label} raw/masked agreement",
+                            "no bit-31 twin is registered on this generation")
             e = next(x for x in ar.entries if x.index == got)
             check(e.flags == MAP_FLAGS, f"{label} row carries map flags",
                   f"flags {e.flags}")
