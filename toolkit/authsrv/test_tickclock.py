@@ -60,9 +60,22 @@ print("== 1. coverage ==")
 check(len(meas) >= 54,
       "the sweep measured the whole live corpus (>= 54 connections)",
       f"{len(meas)} measurable, {short} with too few ticks")
-check(short <= 6,
-      "the too-short remainder stays small and is COUNTED, never dropped",
-      f"{short} connection(s) -- short town hops with 0-1 ticks")
+# A SHARE, NOT A COUNT. This was `short <= 6` against 5 in the corpus, and it
+# caps an ABSOLUTE number over a corpus that grows: every live session brings its
+# own short town hops, so the sixth one reddens a check whose own sentence says
+# "stays small". Small is a proportion, and the count is what the campaign is
+# supposed to increase. Found 2026-08-27 by doubling the live corpus with
+# IDENTICAL content -- 5 -> 10 reddened the old form having changed nothing.
+# The share is flat across that same doubling (8.5% -> 8.5%), which is what says
+# it is measuring the sweep rather than the vault.
+frac = short / len(live) if live else 1.0
+check(len(live) > 0 and frac <= 0.15,
+      "the too-short remainder stays a small SHARE and is COUNTED, never dropped",
+      f"{short} of {len(live)} = {frac:.1%} -- short town hops with 0-1 ticks. "
+      f"The count is REPORTED, not asserted: it rises with the corpus and that "
+      f"is the capture campaign working. What would mean something is the share "
+      f"climbing, i.e. the sweep starting to find most connections unmeasurable "
+      f"-- the cap is a little under 2x today's share")
 
 print("== 2. the breakage guard: bounds real damage, passes honest jitter ==")
 over = [(s, c, r["final_ms"]) for s, c, r in meas
