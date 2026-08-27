@@ -1074,8 +1074,8 @@ the artifact §1h.2 measured.
 
 `0x21E208D8` is the **`WORLD_SYNC`** copy, and this is read off the record rather
 than assumed: it is the agent passed as the source argument at every one of the 84
-`reseed`/`snaptest` observations, and the client asserts that argument's world itself
-— `AgTrack.cpp:458` `source.GetWorld() == WORLD_SYNC`.
+`reseed`/`snaptest` observations, and the client asserts that argument's world itself, at
+`AgTrack.cpp:458` — the expression and its polarity are read out in §1j.1.
 
 `readhook.py` now censuses world copies by address, names the sync side from
 `reseed`'s source argument, and **raises when an id is ambiguous** — a census that
@@ -1101,9 +1101,15 @@ copies cannot manufacture the result):
 | sync copy `0x21E208D8` | **107.4 s** | **100.2 s** |
 
 The twin spends **62 extra seconds standing still**, in **18 stalls, p50 4.85 s, max
-9.03 s**. At 288 u/s that is ~18,000 u of lost path progress, and it matches the
-measured path gap (49,378 u against 27,160 u) directly. During the longest stalls the
-local copy was still receiving destinations and walking.
+9.03 s**. At 288 u/s that is **~18,000 u of lost path progress** (48,913 u against
+30,920 u implied). During the longest stalls the local copy was still receiving
+destinations and walking.
+
+*Use the union-derived figures, not the summed ones.* Summing consecutive sampled
+positions gives 49,378 u and 27,160 u, but the hook fires on the twin only at
+`snaptest` and `reseed` — p50 **1281 ms** apart — so its chord sum under-reads a
+curved path far more than the local copy's does. The interval union is insensitive to
+that; the raw sums are quoted only to show they do not disagree.
 
 **The correct word is STARVED, not stale.**
 
@@ -1259,6 +1265,164 @@ discarded exactly the ten steps that matter. `readhook` now counts them instead.
 * The `+0x24` world field is **not captured** — the sync side is currently identified
   from `reseed`'s source argument, which works but is indirect. Capturing `+0x24`
   would make it direct and is one row in `content/movecode.toml`.
+
+---
+
+## 1j. THE CLIENT SIDE OF THE SAME MECHANISM — read out of the binary
+
+**2026-08-27.** Four independent static/capture lanes with an adversarial refutation
+pass over each load-bearing claim (three were REFUTED and are recorded as such below).
+Build 38797 throughout. This closes three things §1i left NOT DETERMINED.
+
+### 1j.1 WORLD_SYNC == 0, and the direction is proven from the bytes
+
+`AgTrack:458` `source.GetWorld() == WORLD_SYNC` compiles at `0x0060561A` as
+`cmp dword ptr [ebx+0x24], 0` / `je` (skip the failure report). **The assert body runs
+when the world field is NON-zero, so the passing value — `WORLD_SYNC` — is the literal
+0.** Two independent polarity controls were run against ArenaNet's own asserts at
+**`AgTrack:457`** and **`AgAgent:2211`**, either of which could have come out the other
+way: the first tests a truthy condition and the second an explicit equality, and BOTH
+compile to the same skip-on-pass shape as the assert above. So the polarity is anchored
+against two known-sign neighbours rather than assumed from one. **OBSERVED.**
+
+At both — and only — direct call sites of `reseed` (`0x00605EF1`, `0x006060E2`):
+
+* **`this` (ecx) = `world[1].agentArray[i]`** — the local/display copy
+* **`arg1` = `world[0].agentArray[i]`** — the **sync** copy, same index `i`
+
+The two array descriptors are `0x64` apart, exactly the world stride. **OBSERVED.**
+
+**State flows arg1 → this.** Within `reseed`'s 191 instructions
+(`0x006022B0..0x0060253C`, `ret 8`) there are **ZERO stores whose destination base is
+edi (arg1)**: all sixteen `[edi+…]` operands are 15 reads plus one address-take
+(`0x00602438 lea eax,[edi+0x9c]`), while the body's agent-object stores all go through
+esi (`this`). **OBSERVED, and it settles §1i's open question in the direction §1i
+guessed: the player is rolled back to the twin, never the twin caught up to the
+player.**
+
+**One honest amendment the refutation pass forced, because the first draft of this
+claim over-reached.** "Read-only" holds for `reseed`'s own body, **not** for its whole
+call graph. `reseed` passes `arg1` as a `this`-pointer at **two** sites, not one:
+`0x00602323 mov ecx,edi → 0x005FFB40` (verified pure), and
+`0x006024BE mov ecx,edi → 0x005FF9F0`, which **does** store into `arg1` at
+`0x005FFA2E fst dword ptr [esi+0xb8]`. That write is a **lazy cache fill, not a state
+transfer**: it fires only when `[arg1+0xB8]` already holds the `+INF` sentinel at
+`0x948654`, and the value stored is derived **solely from `arg1`'s own** `+0xBC`/`+0xC0`
+via `0x005BCA00`. `+0xB8` is a cached facing angle, and `reseed` then writes that same
+angle *into* the destination agent at `0x006024CB` — which is itself arg1 → this flow.
+So the direction stands; the blanket phrase "arg1 is never written" would not have.
+(One further limit recorded rather than papered over: the setter `0x00602A40` forwards
+the `edi+0x9c` pointer on to `0x005FE950`, which is store-free through it at depth 2;
+**depth 3 is NOT DETERMINED**.)
+
+### 1j.2 WHICH instruction writes `m_point` — §1i.7's first open item, ANSWERED
+
+`reseed` writes `m_point` (+0x78), the position stamp (+0x58), velocity
+(+0xB0/+0xB4), `m_segmentPoint` (+0x88) and `m_targetPoint` (+0x9C) on the world-1
+agent **through callees, not directly**. The unconditional path is
+`0x00602369 call 0x00602B20` (every branch above it converges there), which either
+
+* calls the teleport `0x006020B0` when `this->+0x48 != 0` — and the teleport **zeroes
+  velocity** at `0x0060210E`/`0x00602117`, which is exactly the halted `(inf, inf)`,
+  `|v| = 0`, `stop = 0` state §1i.6 measured at both real warps; or
+* writes the sync point straight into `m_point` — `0x00602B7B mov [edi], eax` with
+  `edi = lea edi,[ebx+0x78]`, plus +0x7C/+0x80/+0x84.
+
+So §1i.6's "the local copy lands exactly on the twin's teleport target" is no longer
+an inference from coincidence: **`reseed` installs the sync agent's point and the
+teleport is one of its two arms.** **OBSERVED.**
+
+### 1j.3 WHY the twin falls behind — a HARD PIN, and this refines §1i.2
+
+**This is the finding that explains §1i.2's oddest number** — that 52 of 52 twin
+positions are within 0.00 u of ground the player really covered.
+
+`Agent::GetPointAt` at `0x005FF820`:
+
+```
+0x005FF829  mov ecx,[edx+0x48]      ; m_timeStopMovement
+0x005FF82C  test ecx,ecx
+0x005FF82E  je  0x005FF861          ; no stop time -> extrapolate
+0x005FF832  sub eax,ecx             ; time - m_timeStopMovement
+0x005FF834  js  0x005FF861          ; still before the stop -> extrapolate
+            ... copies [edx+0x88..0x94] (m_segmentPoint, 16 bytes) to out
+```
+
+**Past its stop time an agent's reported position is `m_segmentPoint` VERBATIM — the
+endpoint of its last granted segment — and does not advance at all.** The lane found
+its own falsifiable control and it held: the extrapolator carries assert
+`AgAgent:978` `!m_timeStopMovement || ((int)(m_timeStopMovement - time) >= 0)`, the
+exact complement of this branch, so an inverted reading would have been caught.
+**OBSERVED.**
+
+That is why the twin's positions are always positions the player occupied: **the twin
+is pinned at the endpoint of the last destination our server granted**, and our server
+grants only destinations the client itself chose (51 of 51 bit-identical echoes,
+§1j.5). The twin is not "following slowly" — between grants it is **not moving at
+all**, and §1i.2's 18 stalls of median 4.85 s are that pin.
+
+**REFUTED, and it corrects a claim I made in §1i:** "the sync agent moves only when
+the server grants" is wrong *as a statement about simulation*. The advance routine
+`0x005FF880` is **world-generic by construction** — it indexes both its clock
+(`+0x148 + world*0x64`) and its spatial grid by the agent's own `+0x24`, with no
+compare and no branch on the world, and none of its 8 direct callers gates on world.
+`INTERNAL_FLAG_IN_WORLD` (m_flags bit 17, `0x20000`) is the precondition, not the
+world field. Of 8 sites in AgAgent that *do* branch on `+0x24`, **all 8 gate
+timer-queue bookkeeping and none gates the position advance.** So the sync agent is
+simulated locally like any other; what is wire-only is its **destinations**, and what
+freezes it is the pin above. **OBSERVED.**
+
+### 1j.4 Two more open items closed, and one capture claim REFUTED
+
+* **`snaptest`'s `ecx` is the AgTrack object at `context+0x1CC`** — not an agent, which
+  is why §1h.1's deref produced ids like 574588536. `agtrack 0x00605FC0` does
+  `mov esi, ecx` and calls `snaptest` with `mov ecx, esi`; agtrack's `this` is
+  `context+0x1CC` via `0x00602BB7 add ecx, 0x1cc`. Its `arg1` is a 0x1C-byte
+  per-agent-id state record whose first dword is `clientControlled`. **OBSERVED —
+  §1h.1's "NOT DETERMINED" is now determined.**
+* **The reseed loop is not targeted.** `agtrack` diverts world-1 agents away entirely
+  (`cmp edx, 1` / `je`), runs `snaptest` only for a sync-world agent, and **on a zero
+  return reseeds EVERY world-1 agent**, not just the one that failed. **OBSERVED.**
+* **REFUTED — the twin's big position steps are a SAMPLING artifact, not storage and
+  not a wire jump.** A lane proposed both; the refutation pass killed both. The hook
+  fires on the twin only at `snaptest` (70) and `reseed` (14), **p50 1281 ms apart**,
+  and 288 u/s × 1.281 s = **368.9 u**, matching the observed p50 step of 368.6 u
+  almost exactly. **The twin really is walking between our samples.** The seeding rule
+  survives in amended form: when a new leg is installed, base `m_point` equals the
+  previous leg extrapolated to the new `+0x58` — 34 of 34 sampled transitions across
+  runs 4 and 5 agreeing to under 3e-4 u.
+* **REFUTED — "`m_point` has exactly three stores in AgAgent".** There are at least
+  **six**: `0x005FE46F`, `0x005FEA92`, `0x00602C28` (visible to `--field 0x78`) plus
+  `0x005FF8B9`, `0x00602B7B`, `0x00602132` spelled in forms that filter misses. A
+  reminder of the standing rule that a `--field` census is a floor.
+
+### 1j.5 What our server does, independently confirmed
+
+* **No server-side path solving at all.** Every destination we put on the wire is a
+  **bit-identical echo of a point the client chose — 51 of 51** in run 5. **OBSERVED.**
+* **LOAD-BEARING NEGATIVE: we have no position-correction channel.** Our server never
+  tells the client where *it* thinks the player is — not by default, and not under the
+  movement flags. So the only thing that ever reconciles the two copies is the client's
+  own reseed, which is the rollback. **OBSERVED.**
+* **`0x001E`'s delta is real**, from a monotonic clock (QueryPerformanceCounter), not a
+  constant — but it is emitted on a fixed ~20 Hz sleep loop and per-tick `int()`
+  truncation of the sleep overshoot makes the running sum advance the client's world
+  clock **~1.3% slow**, where retail's sum tracks wall clock to 0.1%. **This is very
+  likely the already-recorded "movetap's `now` runs 1.36% slow"** — that `now` is the
+  int32 this message advances. **CORROBORATED.** Far too small to explain the warps,
+  and worth fixing on its own terms.
+
+### 1j.6 Still open after this pass
+
+* **UNVERIFIED, flagged by the lane that found it:** `reseed`'s preamble may make its
+  second-half guard at `0x00602457` always false — `0x006022E7` calls `0x00602540`
+  whenever `this->+0x48 != 0`, and that path reaches the same state the guard tests.
+  If so, the stop-dead/re-face block is dead code in practice. Not resolved.
+* `agent+0x24` is still **not captured** by the hook, so the world identity is read
+  from call-site structure rather than from the record. One row in
+  `content/movecode.toml`.
+* Nothing here measures the `heading-rate` suppressor (§1i.5), which is still a sixth
+  of our grant budget.
 
 ---
 
