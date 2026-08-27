@@ -7697,13 +7697,39 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   distant, and the check that earns its place is the one asserting a line which
   FITS the description field is REFUSED for the dialog one; a single shared
   constant would pass everything else and put that error where only a screen
-  could find it. **Floor 73 against a healthy 77 with the vault present, 73
-  without** — §19 re-derives 888 from the client image and §20 re-checks the
-  twelve cited sites across builds, so those two sections carry four checks
-  between them and declare skips on a machine with no vault (§20 also skips
+  could find it. **Floor 73 against a healthy 83 with the vault present, 73
+  without** (it read "a healthy 77" until 2026-08-27) — §19 re-derives 888
+  from the client image, §19b is new, and §20 re-checks the
+  twelve cited sites across builds, so those sections declare skips on a
+  machine with no vault (§20 also skips
   on fewer than two vaulted builds at or after the pin). 73 is what remains
-  when all four stand down, which is where the floor sits and why adding a
-  vault-gated section never has to move it. **AND 73 IS NOW A MEASURED NUMBER
+  when they all stand down, which is where the floor sits and why adding a
+  vault-gated section never has to move it. **§19 GREW ON 2026-08-27 AND §19b
+  ARRIVED, because §19 was scoring one of two names for the same quantity and
+  the other one was WRONG.** `authsrv.MAP_ID_COUNT` was 877 — OpenTyria's enum
+  end, UPSTREAM, never read off a binary — and it is what the first
+  `MANIFEST_DONE` of every login burst carries as the "no map" sentinel. Row
+  877 is a real populated row on this build (`Forsaken Tunnels: Level 2`), so
+  the server's "no destination" named an actual dungeon, while `NO_MARKER_MAP`
+  sat at a correctly re-derived 888 twenty lines away and this section stayed
+  green because it only ever asked about that one. §19 now scores **both**
+  names and their identity; `NO_MARKER_MAP` is *defined as* `MAP_ID_COUNT`, so
+  the quantity is expressed once in code instead of as two literals that drifted
+  apart for weeks. **§19b is the part that makes it a measurement rather than a
+  coincidence**: it scans every vaulted client for
+  `mov dword ptr [reg+0x134], imm32` — the store the manifest's own map argument
+  lands in, reached as `[ebp+0x10]` at `0x0085222E` — and requires five sites
+  per build with the immediate tracking the map table: **883 on 38519, 888 on
+  38797/38833/38849**, ArenaNet having added five maps in between. An older
+  build reading a *different* value is asserted too, because without it "every
+  build stores 888" could be true of any constant in the image. **And the
+  control is the half that kills 877**: the same scan must find `0x36D` as a
+  compare bound **zero times on all four builds**, which it does — so 877 has no
+  client witness anywhere and the real sequence is 883 → 888 with OpenTyria's
+  enum end naming nothing between them. Full record at
+  [studies/maprows/FINDINGS.md](studies/maprows/FINDINGS.md) §10, including the
+  honest gap: nothing in MsCliMan *reads* +0x134, so the consumer was not chased,
+  and no login has run since the flip. **AND 73 IS NOW A MEASURED NUMBER
   RATHER THAN AN ARITHMETIC ONE, which it was not until 2026-08-18**: it was
   77 minus the four vault-gated checks, sound as subtraction and impossible to
   observe, because TWO separate defects stopped a bare run before the verdict.

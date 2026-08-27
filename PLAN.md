@@ -1480,6 +1480,64 @@ before the first native commit, which is where that doc says to pose them.
 
 ## 8. Immediate next actions
 
+### DESK ARC 2026-08-27 — the manifest sentinel named a real dungeon; R4c-1's spawn clause becomes a score; and a test was red on confirming evidence
+
+Three pieces, all desk-only. No client launched, no ArenaNet contact.
+
+**1. `MAP_ID_COUNT` was 877 and it was WRONG — measured, fixed, and now
+re-derived.** The first `MANIFEST_DONE` of **every login burst** carried 877 as
+the "no map" sentinel, taken from OpenTyria's enum. Row 877 on our build is a
+real populated row — `Forsaken Tunnels: Level 2` — so "no destination" named an
+actual dungeon. `authsrv.py`'s own comment had flagged this **OPEN** with *"nothing
+here has measured which. Do not quietly make them equal."* It is measured now, on
+witnesses that share no method: ArenaNet's `mission < MISSIONS` assert compiles to
+`cmp edi, 0x378` (MsCliMan:368) and `cmp eax, 0x378` (MsCliMan:409); `areatable`
+walks 888 records; and **the client writes 888 into the very field our argument
+feeds** — our map lands at `[ebp+0x10]` in `0x00852040` and is stored to
+`context+0x134` (`0x0085222E`), a field with three stores and zero reads in
+MsCliMan, two of them the literal `0x378`. **The clincher is that it moves with
+the table**: five `mov [reg+0x134], imm32` sites on every build, reading **883 on
+38519 and 888 on 38797/38833/38849** — five maps added in between. **The control:
+877 as a compare bound appears zero times on all four builds**, so it never had a
+client witness at all. `NO_MARKER_MAP` is now *defined as* `MAP_ID_COUNT` so the
+quantity lives once in code; `test_quests.py` §19/§19b score both names, the
+per-build immediate and the 877 control (83 with the vault, floor 73 without).
+Also settled, and it is what the OPEN comment mis-guessed: **`MISSION_MAPS` is 2**,
+a two-element enum (`cmp dword ptr [edi+0x238], 2`), and was never "one past the
+last map". Record: [studies/maprows/FINDINGS.md](studies/maprows/FINDINGS.md) §10.
+**THE ONE OPEN ITEM: nothing in MsCliMan READS +0x134**, so the consumer was not
+chased, and the client writing 888 there itself proves it is a legal resting value
+— not that the client tolerates *receiving* it mid-burst. **UNVERIFIED until one
+loopback login reaches character select.** That is the next action here and it is
+a single caged run.
+
+**2. R4c-1's spawn-in-trapezoid clause is a SCORE: 8 of 15** — see §3.2, which
+carried it unmeasured since it was written. `toolkit/mapdata/spawncheck.py` +
+`test_spawncheck.py` (floor 44, 7 of 7 mutations caught). The yield is that the
+criterion's own premise had a hole: `maps.toml` documents "EXACTLY ONE", but
+`Trapezoid.contains` closes both y *and* x bounds, so maps 143/144's authored
+`(1536, 1536)` sits on a seam and lands in two — walkable ground, a pass, `SEAM`.
+Three created chains resolve in exactly one stale 38797-era probe archive and
+none of the current run dirs. One `(0,0)` placeholder (Sparkfly Swamp) passes by
+accident, which is why this is a checked-in test and not a number in a document.
+
+**3. `test_itemmods.py` was RED ON MAIN, on evidence that CONFIRMS its claim.**
+§10 pinned `len(bonus_words) == 26`; nine later captures took the corpus to 38 and
+all twelve new words carry the same `(543, stacking, attr 20, +1)` signature. The
+equality was pinning the size of the vault. It is a floor now, with a signature
+set carrying the claim and the count reported rather than asserted.
+
+**Surveyed but NOT taken**, so nobody re-derives the list: a 31-agent sweep found
+103 candidates, verified 24 and confirmed 21 open. The strongest untaken ones are
+`PROBE-ITEMID-COLLISION` (probe item ids 2 and 3 shadow `BACKPACK_ITEM_ID` and
+`warrior_body` — **two** collisions, and the armour probe's readings are
+contaminated), `PROPS-TAG46-VALUE-WORDS` (tag 6's `value` u16 below its map's prop
+count on 418 of 418 — reads as a prop-to-prop relation), and `TAPE-TRANSFER-PORT`
+(the one harness item needing no visual judgement — the readout is which listener
+gets a SYN). Three were REFUTED as already-done and should not be re-raised:
+`CREATE-PAYLOAD-TAIL-010C`, `E8-FINDINGS34-UNTESTED`, `QUEST-INTERACT-WALK-VERIFY`.
+**79 of the 103 went unverified** — the sweep capped verification at 24.
+
 ### CANCELWALK: CLOSED — the freeze answered (R9), the float-forward fixed and SHIPPED (R10, ruling 2026-08-25); follow-on gaps filed (2026-08-25)
 
 **Full handoff: [studies/movement/CANCELWALK.md](studies/movement/CANCELWALK.md)

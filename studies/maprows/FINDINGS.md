@@ -543,3 +543,117 @@ tied to a content class; and the set both grows and shrinks with play (25 in
    *dimensions* are unique, and dimensions are not identity. The two anchors and
    the upstream rate are what make the mapping credible; a single row's name is
    as good as its `rival_rows` count says it is.
+
+---
+
+## 10. The table's SIZE, and the "no map" sentinel our server had wrong
+
+**MEASURED 2026-08-27, desk only** — pinned build 38797 plus the three other
+vaulted clients read as files. The client was never launched.
+
+§3 establishes that the table is `s_missionClientData` and that the client
+measures its own extent. This section measures the extent's *value*, because a
+constant in `authsrv.py` disagreed with it for weeks and nothing scored the
+disagreement.
+
+### 10.1 What was wrong
+
+`authsrv.py`'s `MAP_ID_COUNT` was **877**, sourced from OpenTyria's enum, and it
+is the value the first `MANIFEST_DONE` of **every login burst** carries as the
+"no map" sentinel. Row 877 on our pinned build is a real, populated row —
+`Forsaken Tunnels: Level 2`, a genuine `type 18` dungeon
+([studies/presearing/MANIFEST.md](../presearing/MANIFEST.md) §560, CLIENT-sourced).
+So the server's "no destination" named an actual dungeon level.
+
+`NO_MARKER_MAP` in the same file was already **888** and already re-derived off
+the exe by `test_quests.py` §19 — which stayed green the whole time, because it
+only ever scored one of the two names. The file's own comment flagged the
+disagreement as **OPEN** and said *"nothing here has measured which. Do not
+quietly make them equal."*
+
+### 10.2 The measurement — four witnesses, no shared method
+
+| # | Witness | Reads |
+|---|---|---|
+| 1 | `mission < MISSIONS` compiled | `cmp edi, 0x378` at `0x008524AC` (MsCliMan:368) and `cmp eax, 0x378` at `0x0085236B` (MsCliMan:409). **888**, two sites |
+| 2 | `areatable.py` | **888** consecutive valid records, structural and code locators agreeing on the base |
+| 3 | The client's own store | `mov dword ptr [reg+0x134], 0x378` — and see §10.3 for why that field is the one that matters |
+| 4 | `test_quests.py` §19 | already re-derived 888 for `NO_MARKER_MAP` |
+
+### 10.3 The field our argument actually feeds — OBSERVED
+
+This is the leg that makes it a ruling rather than a coincidence of two numbers.
+
+`GAME_SMSG_INSTANCE_MANIFEST_DONE` is `0x0197`. Its receive handler is
+`0x0084EDE0`, which reads three fields off the message and calls `0x00852040`
+with four arguments (`add esp, 0x10`):
+
+```
+0x0084EDE9  mov esi, [eax+0xc]     ; our field 3
+0x0084EDEC  mov edi, [eax+8]       ; our field 2 -- the map
+0x0084EDEF  mov ebx, [eax+4]       ; our field 1 -- the "phase"
+```
+
+Inside `0x00852040`, our map argument lands at `[ebp+0x10]` and is stored:
+
+```
+0x0085222B  mov eax, dword ptr [ebp + 0x10]
+0x0085222E  mov dword ptr [edi + 0x134], eax
+```
+
+`codescan.py --field 0x134 --in MsCliMan` finds **three stores and zero reads**.
+Two of the three are the literal `0x378`, and one of those (`0x008520E1`) sits
+beside `[edi+0x168] = 4` — `MANIFEST_TYPES`, the "none" type — and
+`[edi+0x130] = 0`. **So 888 is the client's own resting value for "no map" in
+exactly the slot our argument writes.**
+
+### 10.4 It moves with the table — and 877 is nowhere
+
+Scanning every vaulted client for `mov dword ptr [reg+0x134], imm32` finds
+**five such stores on every build**, and the immediate tracks the table:
+
+| Build | Immediate |
+|---|---|
+| 38519 (2026-04-30) | **883** ×5 |
+| 38797 (2026-07-29) | **888** ×5 |
+| 38833 (2026-08-13) | **888** ×5 |
+| 38849 (2026-08-20) | **888** ×5 |
+
+ArenaNet added five maps between 38519 and 38797 and the sentinel followed them,
+same five sites, same shape. That is the field *being* the table's size rather
+than coinciding with it once.
+
+**The control, and it is the half that kills 877:** the same byte scan looking
+for `0x36D` (877) as a compare bound finds it **zero times on all four builds**.
+877 is not a client constant and never was one — the real sequence is 883 → 888,
+and OpenTyria's enum end sits between them naming nothing. Its enums stop at the
+highest map somebody had bothered to name; they were never read off a binary.
+
+### 10.5 The OPEN comment's guess was wrong in an interesting way
+
+It feared "two different numbers for one past the last map … either two different
+quantities or a bug." Both halves resolve, but not as posed:
+
+- **877 and 888 ARE the same quantity**, and 877 was simply wrong. UPSTREAM
+  against MEASURED.
+- **`MISSION_MAPS` was never that quantity at all.** MsCliMan:486's
+  `context->map != MISSION_MAPS` compiles to `cmp dword ptr [edi+0x238], 2` — so
+  `MISSION_MAPS = 2`, a two-element enum indexed by an internal context field.
+  A survey pass had reported that none of MsCliMan's asserts bounds a map id;
+  that reading was right about the *conclusion* and wrong about *this assert*,
+  which does name a map and bounds it at 2 because it is not the map id.
+  `MANIFEST_TYPES = 4` the same way (`cmp esi, 4`).
+
+### 10.6 Status and what is NOT established
+
+`MAP_ID_COUNT` is **888** as of `2026-08-27`, `NO_MARKER_MAP` is defined *as*
+`MAP_ID_COUNT` so the identity is expressed once in code rather than as two
+literals, and `test_quests.py` §19/§19b score both names, the per-build immediate
+and the 877 control (83 checks with the vault, floor 73 without).
+
+**NOT established, and it is the honest gap: nothing in MsCliMan READS +0x134.**
+The consumer is in another module and was not chased. The client writing 888 into
+that field in its own reset path is strong evidence 888 is a legal resting value
+there; it is **not** proof the client tolerates *receiving* 888 from the wire at
+that instant in the burst. **UNVERIFIED until a login reaches character select
+with the new value** — one loopback run, no ArenaNet contact.
