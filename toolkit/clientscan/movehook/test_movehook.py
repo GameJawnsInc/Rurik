@@ -22,6 +22,7 @@ WHAT IS CHECKED, and which of them need what:
   §7  inject into a throwaway 32-bit cmd.exe and read it back    needs cmd.exe
   §8  movehook.cfg beats the environment                         rides on §7
   §9  attach.py refuses a client that is not build 38797         process-free
+  §10 pathdiff replays queries through the REAL Ascalon mesh     needs the archive
 
 §7 IS THE ONE THAT MATTERS AND IT IS THE ONE THAT COULD NOT EXIST WITHOUT THE
 RULING. It injects the real DLL into a real 32-bit process, waits for the run to
@@ -46,21 +47,23 @@ TOOLKIT = os.path.dirname(CLIENTSCAN)
 sys.path.insert(0, TOOLKIT)
 sys.path.insert(0, CLIENTSCAN)
 sys.path.insert(0, HERE)
+sys.path.insert(0, os.path.join(TOOLKIT, "mapdata"))
 import checks                                                   # noqa: E402
 
-# MEASURED off a real green run, 2026-08-26 -- counted per section out of the
-# banner, never computed by addition. A whole green run on this machine is 47:
+# MEASURED off a real green run, 2026-08-27 -- counted per section out of the
+# banner, never computed by addition. A whole green run on this machine is 63:
 #
-#   §1  6   sites.h is what the generator emits    needs the vaulted client
-#   §2  5   first bytes vs the pinned image        needs the vaulted client
-#   §3  4   the provenance rules really refuse     process-free
-#   §4 12   the reader's parse and its scoring     process-free
-#   §5  6   the dead-control refusal + the commit flag   process-free
-#   §6  2   the DLL builds, and it is x86          needs a compiler
-#   §7  5   inject into a live 32-bit cmd.exe      needs SysWOW64\cmd.exe
-#   §8  2   movehook.cfg beats the environment     rides on §7's injected run
-#   §9  5   attach.py's build guard, both ways   process-free
-#   ----   process-free core = 27, and THAT is the floor.  A whole run is 47.
+#   §1   6   sites.h is what the generator emits     needs the vaulted client
+#   §2  10   first bytes vs the pinned image         needs the vaulted client
+#   §3   4   the provenance rules really refuse      process-free
+#   §4  15   the reader's parse, v1/v2/v3, scoring   process-free
+#   §5   6   dead-control refusal + the commit flag  process-free
+#   §6   2   the DLL builds, and it is x86           needs a compiler
+#   §7   5   inject into a live 32-bit cmd.exe       needs a 32-bit cmd.exe
+#   §8   2   movehook.cfg beats the environment      rides on §7's injected run
+#   §9   5   attach.py's build guard, both ways      process-free
+#   §10  8   pathdiff replays vs the REAL mesh       needs the vaulted archive
+#   ----    process-free core = 30, and THAT is the floor.
 #
 # The first draft of this comment guessed 16 by adding up what the sections
 # looked like they contained, and it was two low -- which would have let two
@@ -68,8 +71,8 @@ import checks                                                   # noqa: E402
 # ("set the floor from a real green run, never from a guess") is not about
 # arithmetic being hard; it is that a floor derived from the code rather than
 # from the output drifts the moment either changes. `skip()` lowers the floor by
-# ZERO, so a bare machine must still clear 27.
-LEDGER = checks.Ledger("movehook", floor=27)
+# ZERO, so a bare machine must still clear 30.
+LEDGER = checks.Ledger("movehook", floor=30)
 check = checks.adopt(LEDGER)
 
 WOW64_CMD = r"C:\Windows\SysWOW64\cmd.exe"
@@ -177,7 +180,7 @@ def _synth(recs, sites_hits, base=0x00400000):
     import readhook
     out = bytearray()
     out += b"MVHK"
-    out += struct.pack("<IIIII", 2, base, len(sites_hits), readhook.REC_LEN, len(recs))
+    out += struct.pack("<IIIII", 3, base, len(sites_hits), readhook.REC_LEN, len(recs))
     for rva, hits in sites_hits:
         out += struct.pack("<II", rva, hits)
     for r in recs:
@@ -190,6 +193,8 @@ def _synth(recs, sites_hits, base=0x00400000):
         vals += list(r.get("point", (0, 0, 0, 0)))
         vals += list(r.get("segment", (0, 0, 0, 0)))
         vals += list(r.get("target", (0, 0, 0, 0)))
+        vals += list(r.get("pt_a", (0, 0, 0, 0)))
+        vals += list(r.get("pt_b", (0, 0, 0, 0)))
         out += struct.pack(readhook.REC_FMT, *vals)
     return bytes(out)
 
@@ -470,6 +475,86 @@ def section_9():
         keytap.module_base, keytap.read_at = real_base, real_read
 
 
+# ---------------------------------------------------------------- §10
+def section_10(tmp):
+    """pathdiff replays a v3 capture through the REAL Ascalon mesh.
+
+    MOVECODE-B3's whole output is a verdict per query, and the two verdicts that
+    matter (`OURS-FAILED`, `OFF-MESH`) are claims that OUR decode is wrong. A
+    harness that cannot tell those apart from `BOTH-OK` would launder our own bugs
+    into a clean bill of health, so both directions are exercised against real map
+    data rather than a stub: a point pair the mesh really does connect must score
+    BOTH-OK, and a goal a million units away must score OFF-MESH.
+
+    Needs the vaulted archive; skips with its reason otherwise.
+    """
+    try:
+        import gensites
+        import pathdiff
+        import readhook as rh
+        from pathmap import PathingMap
+    except Exception as ex:
+        LEDGER.skip("10. the pathdiff replay", f"cannot import: {ex}")
+        return
+    try:
+        rows, _offs = gensites.rows()
+        names = sorted(rows)
+        if "mapfindpath" not in names:
+            LEDGER.skip("10. the pathdiff replay", "no mapfindpath row")
+            return
+        pm = PathingMap.load(0x1B97D)
+    except Exception as ex:
+        LEDGER.skip("10. the pathdiff replay", f"needs the vaulted archive: {ex}")
+        return
+
+    check(len(pm.trapezoids) > 100, "10. Ascalon's mesh loaded",
+          f"{len(pm.trapezoids)} trapezoid(s)")
+
+    # (9826, 8077) is map 148's spawn, pinned in content/maps.toml as landing in
+    # exactly 1 trapezoid -- so it is a known-good point, not a hopeful one.
+    good = (9826.0, 8077.0, 9900.0, 8100.0)
+    far = (9826.0, 8077.0, 1.0e6, 1.0e6)
+    _rows, tally = pathdiff.score(pm, [good], 0)
+    eq(tally["BOTH-OK"], 1, "10. a connected pair scores BOTH-OK")
+    _rows, tally = pathdiff.score(pm, [far], 0)
+    eq(tally["OFF-MESH"], 1, "10. a goal off the mesh scores OFF-MESH")
+    check(tally["BOTH-OK"] == 0,
+          "10. and does NOT quietly score as fine",
+          "an off-mesh goal reading BOTH-OK would launder our own decode gaps")
+
+    # And the whole path: a synthetic v3 capture must parse and replay.
+    mi = names.index("mapfindpath")
+    sites = [(rows[n]["rva"], 0) for n in names]
+
+    def fl(x):
+        return struct.unpack("<I", struct.pack("<f", x))[0]
+
+    blob = bytearray(b"MVHK")
+    blob += struct.pack("<IIIII", 3, 0x00400000, len(sites), rh.REC_LEN, 1)
+    for rva, h in sites:
+        blob += struct.pack("<II", rva, h)
+    rec = {"seq": 0, "tick": 1000, "site": mi, "retaddr": 0x00709000,
+           "have_pts": 3, "arg3": fl(64.0)}
+    vals = [rec.get(k, 0) for k in rh.FIELDS]
+    vals += [0] * 12
+    vals += [fl(good[0]), fl(good[1]), 0, 0]
+    vals += [fl(good[2]), fl(good[3]), 0, 0]
+    blob += struct.pack(rh.REC_FMT, *vals)
+    p = os.path.join(tmp, "v3.bin")
+    with open(p, "wb") as fh:
+        fh.write(bytes(blob))
+
+    cap = rh.Capture(p)
+    qs = pathdiff.queries(cap, rh.site_names(cap))
+    eq(len(qs), 1, "10. a v3 capture yields its MapFindPath query")
+    check(qs[0].src is not None and qs[0].dst is not None,
+          "10. and the DEREFERENCED coordinates survive the round trip",
+          "have_pts said both points were read; if they are None the v3 layout "
+          "and the DLL disagree and every replay would be empty")
+    eq(round(qs[0].src[0], 1), 9826.0, "10. and the `from` point is exact")
+    eq(round(qs[0].rng, 1), 64.0, "10. and the float range argument decodes")
+
+
 def main():
     import tempfile
     tmp = tempfile.mkdtemp(prefix="movehook-test-")
@@ -478,6 +563,7 @@ def main():
     section_4_5(tmp)
     section_6_7(tmp)
     section_9()
+    section_10(tmp)
     return LEDGER.verdict()
 
 

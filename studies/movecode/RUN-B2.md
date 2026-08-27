@@ -122,6 +122,14 @@ starts.** One command; it finds the pid, writes the config, and injects.
 python toolkit/clientscan/movehook/attach.py --minutes 10
 ```
 
+**Stop it the moment you have what you need** — there is no reason to stand around,
+and a long tail of a motionless character is dead weight (run 1 spent 337 of its 600
+seconds that way):
+
+```bash
+python toolkit/clientscan/movehook/attach.py --stop
+```
+
 Expect `build check: every site reads 0x55 in the live process`, then
 `LoadLibraryA returned 0x…  (loaded)` and `armed for 10 minute(s)`.
 
@@ -156,6 +164,19 @@ The DLL disarms itself and writes when its timer elapses or the ring fills.
 ```bash
 python toolkit/clientscan/movehook/readhook.py
 ```
+
+Then the navmesh differential — MOVECODE-B3's half, and the reason run 2 exists.
+`--map` is required: a capture does not record which map it was taken in, and the
+wrong mesh answers confidently. Ascalon City is `0x1B97D`.
+
+```bash
+python toolkit/clientscan/movehook/pathdiff.py --map 0x1B97D
+```
+
+`OURS-FAILED` and `OFF-MESH` are **our** decode failing on a query a live client
+made while the player was moving — each one names a place to look, and that is Q2
+answering. `BOTH-OK` means only that we found *a* route, not the *same* route;
+scoring shape needs the client's own answer, which an entry-only tap cannot see.
 
 **Read the control lines first, before any number below them.** `readhook.py` refuses to
 score a capture whose control A did not fire, and says so — but a `control B: DID NOT

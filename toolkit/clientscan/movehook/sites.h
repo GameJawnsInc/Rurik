@@ -18,18 +18,20 @@ typedef struct {
     unsigned long rva;
     const char   *name;
     int           deref_agent;   /* is ecx an agent pointer at entry? */
+    int           deref_a;       /* arg index (1-6) to deref as a point, 0=none */
+    int           deref_b;
 } site_t;
 
 static const site_t SITES[NSITES] = {
-    { 0x001FC7A0u, "agapi_setdest", 0 },   /* 0x005FC7A0 */
-    { 0x00205FC0u, "agtrack", 0 },   /* 0x00605FC0 */
-    { 0x001FE950u, "bake", 1 },   /* 0x005FE950 */
-    { 0x0041A8F0u, "chcli_a", 0 },   /* 0x0081A8F0 */
-    { 0x0041ADB0u, "chcli_b", 0 },   /* 0x0081ADB0 */
-    { 0x0041B220u, "chcli_c", 0 },   /* 0x0081B220 */
-    { 0x00309E90u, "mapfindpath", 0 },   /* 0x00709E90 */
-    { 0x00202A40u, "setter", 1 },   /* 0x00602A40 */
-    { 0x002020B0u, "teleport", 1 },   /* 0x006020B0 */
+    { 0x001FC7A0u, "agapi_setdest", 0, 2, 0 },   /* 0x005FC7A0 */
+    { 0x00205FC0u, "agtrack", 0, 0, 0 },   /* 0x00605FC0 */
+    { 0x001FE950u, "bake", 1, 0, 0 },   /* 0x005FE950 */
+    { 0x0041A8F0u, "chcli_a", 0, 0, 0 },   /* 0x0081A8F0 */
+    { 0x0041ADB0u, "chcli_b", 0, 0, 0 },   /* 0x0081ADB0 */
+    { 0x0041B220u, "chcli_c", 0, 0, 0 },   /* 0x0081B220 */
+    { 0x00309E90u, "mapfindpath", 0, 1, 2 },   /* 0x00709E90 */
+    { 0x00202A40u, "setter", 1, 0, 0 },   /* 0x00602A40 */
+    { 0x002020B0u, "teleport", 1, 0, 0 },   /* 0x006020B0 */
 };
 
 /* Agent struct offsets the handler reads at each hit. */

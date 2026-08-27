@@ -72,7 +72,7 @@
 
 #include "sites.h"
 
-#define NCAP      65536u          /* records kept; ~7 MB at v2's record size.
+#define NCAP      32768u          /* records kept; ~7 MB at v2's record size.
                                    * Run 1 used 2,062 in 263 s over four sites;
                                    * B3 adds MapFindPath, which a path solver can
                                    * call far more often than an agent moves, and a
@@ -218,6 +218,23 @@ typedef struct {
     DWORD point[4];               /* +0x78 m_point       : where the body IS */
     DWORD segment[4];             /* +0x88 m_segmentPoint: the leg's end */
     DWORD target[4];              /* +0x9C m_targetPoint : the destination */
+    /* DEREFERENCED POINTER ARGUMENTS, and the record is v3 because of them.
+     *
+     * `MapFindPath`'s from/to and `AgApi`'s targetPoint are passed BY REFERENCE, so
+     * a record holding only the argument dwords holds addresses in the client's
+     * address space and nothing replayable. Writing `pathdiff.py` is what surfaced
+     * it: the replay harness had no coordinates to replay. Which args to follow is
+     * per site (`deref_a` / `deref_b`, 1-based, 0 = none) and comes from the
+     * content rows, so this stays a table-driven property rather than a special
+     * case for one address.
+     *
+     * SEPARATE FIELDS rather than reusing `point`/`segment`, which are dead when
+     * `have_agent` is 0. Aliasing one slot to two meanings is how a reader ends up
+     * confidently plotting a query as a body position. `have_pts` says which of the
+     * two were actually read. */
+    DWORD have_pts;               /* bit 0 = pt_a valid, bit 1 = pt_b valid */
+    DWORD pt_a[4];
+    DWORD pt_b[4];
 } rec_t;
 
 static DWORD  g_base;
@@ -284,6 +301,24 @@ static int readable(DWORD p, DWORD n)
 static void copy4(DWORD *dst, DWORD src)
 {
     if (readable(src, 16)) memcpy(dst, (const void *)src, 16);
+}
+
+/* Follow a POINTER ARGUMENT and copy the 16-byte point it names.
+ *
+ * `which` is 1-based over the caller's stack args and 0 means "this site has no
+ * such pointer" -- the site table carries it, so which args are references is a
+ * property of the row rather than a branch on an address. Returns 1 when the point
+ * was actually read, so the record can say which halves are real instead of
+ * leaving a zeroed point looking like the origin. */
+static int deref_arg(DWORD esp, int which, DWORD *dst)
+{
+    DWORD p;
+    if (which < 1 || which > 6) return 0;
+    if (!readable(esp, 4u * (DWORD)(which + 1))) return 0;
+    p = ((DWORD *)esp)[which];
+    if (!readable(p, 16)) return 0;
+    memcpy(dst, (const void *)p, 16);
+    return 1;
 }
 
 static LONG CALLBACK on_bp(PEXCEPTION_POINTERS ep)
@@ -372,6 +407,8 @@ static LONG CALLBACK on_bp(PEXCEPTION_POINTERS ep)
                     r->arg2    = ((DWORD *)esp)[2];
                     r->arg3    = ((DWORD *)esp)[3];
                 }
+                if (deref_arg(esp, SITES[i].deref_a, r->pt_a)) r->have_pts |= 1u;
+                if (deref_arg(esp, SITES[i].deref_b, r->pt_b)) r->have_pts |= 2u;
                 if (SITES[i].deref_agent && readable(ag, 0xB0)) {
                     r->have_agent = 1;
                     r->id    = *(DWORD *)(ag + A_ID);
@@ -573,7 +610,7 @@ static DWORD WINAPI worker(LPVOID unused)
     snprintf(path, sizeof path, "%s\\movehook.bin", dir);
     f = fopen(path, "wb");
     if (f) {
-        DWORD n = (DWORD)g_n, reclen = (DWORD)sizeof(rec_t), ver = 2, ns = NSITES;
+        DWORD n = (DWORD)g_n, reclen = (DWORD)sizeof(rec_t), ver = 3, ns = NSITES;
         if (n > NCAP) n = NCAP;
         fwrite("MVHK", 4, 1, f);
         fwrite(&ver, 4, 1, f);

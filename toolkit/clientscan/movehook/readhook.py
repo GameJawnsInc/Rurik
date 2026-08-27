@@ -53,19 +53,28 @@ _V1 = ("seq tick site tid retaddr ecx arg1 arg2 arg3 have_agent "
        "id flags stop x98").split()
 _V2 = ("seq tick site tid retaddr ecx arg1 arg2 arg3 arg4 arg5 arg6 have_agent "
        "id flags stop x98").split()
+# v3 adds the DEREFERENCED pointer arguments. v2 recorded `MapFindPath`'s from/to as
+# the raw argument dwords -- which are addresses in the client's address space, so a
+# v2 capture of that site holds nothing replayable at all. Found by writing
+# `pathdiff.py` and discovering it had no coordinates to replay.
+_V3 = _V2
 NPOINT = 4
+# Trailing 16-byte point blocks, in order, per version.
+_BLOCKS = {1: ("point", "segment", "target"),
+           2: ("point", "segment", "target"),
+           3: ("point", "segment", "target", "pt_a", "pt_b")}
 
 
 def _layout(ver):
-    fields = {1: _V1, 2: _V2}.get(ver)
+    fields = {1: _V1, 2: _V2, 3: _V3 + ["have_pts"]}.get(ver)
     if fields is None:
-        raise CaptureError(f"capture version {ver}: this reader knows 1 and 2")
-    fmt = "<" + "I" * len(fields) + "I" * (NPOINT * 3)
+        raise CaptureError(f"capture version {ver}: this reader knows 1, 2 and 3")
+    fmt = "<" + "I" * len(fields) + "I" * (NPOINT * len(_BLOCKS[ver]))
     return fields, fmt, struct.calcsize(fmt)
 
 
 # The current writer's layout, for anything that builds a capture (the tests do).
-FIELDS, REC_FMT, REC_LEN = _layout(2)
+FIELDS, REC_FMT, REC_LEN = _layout(3)
 
 BIT_ISWAYPOINT = 1 << 18
 BIT_IN_WORLD = 1 << 17
@@ -120,9 +129,8 @@ class Capture:
                 self.partial += 1
                 continue
             rest = vals[len(fields):]
-            r["point"] = rest[0:4]
-            r["segment"] = rest[4:8]
-            r["target"] = rest[8:12]
+            for k, blk in enumerate(_BLOCKS[ver]):
+                r[blk] = rest[k * 4:(k + 1) * 4]
             self.recs.append(r)
         self.stored = len(self.recs)
         self.claimed = n
@@ -162,15 +170,31 @@ def static_base():
     return 0x00400000
 
 
-def site_names():
-    """Names in the same order gensites.py emits them: sorted by key."""
+def site_names(cap=None):
+    """Names for a capture's site indices.
+
+    RESOLVED BY RVA, NOT BY POSITION, when a capture is given -- and that is a
+    defect fix rather than a nicety. `gensites.py` emits sites sorted by key, so
+    ADDING A ROW RENUMBERS EVERY INDEX AFTER IT. Run 1's capture has four sites;
+    B3 added five more, three of which sort before `bake`. Indexing that old
+    capture against today's row list silently relabels every record in it —
+    `bake` becomes `chcli_b`, and the report reads as confidently as ever.
+
+    The capture stores its OWN rva per site in its header, so the mapping is
+    recoverable exactly. A site whose rva is not in the current rows is named by
+    its address rather than guessed at.
+    """
     try:
         import content as content_mod
         t = content_mod.load()
         t = t.tables if hasattr(t, "tables") else t
-        return sorted(t.get("hook_site") or {})
+        rows = t.get("hook_site") or {}
     except Exception:
-        return []
+        rows = {}
+    if cap is None:
+        return sorted(rows)
+    by_rva = {r["rva"]: n for n, r in rows.items()}
+    return [by_rva.get(s["rva"], f"rva_{s['rva']:08X}") for s in cap.sites]
 
 
 def report(cap, names, dump=0):
@@ -342,7 +366,7 @@ def main():
               f"that the DLL was injected and that its timeout elapsed.")
         return 2
     cap = Capture(path)
-    text, rc = report(cap, site_names(), args.dump)
+    text, rc = report(cap, site_names(cap), args.dump)
     print(text)
     return rc
 

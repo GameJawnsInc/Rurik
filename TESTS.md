@@ -6571,8 +6571,20 @@ shrinks section 10),
   everywhere must ACCEPT, one wrong byte must refuse and NAME the byte it found,
   and an unreadable site must refuse rather than pass by default. A live positive
   control was tried first and only reached the "no Gw.exe module" path, which
-  proves the weaker half. 23 floor, 43 on a machine with the client, a compiler and
-  `cmd.exe`; each of the other four sections declares a skip with its reason),
+  proves the weaker half. **§10 is MOVECODE-B3's half**, and it runs against the
+  REAL Ascalon mesh rather than a stub, both ways: a connected pair must score
+  `BOTH-OK` and a goal a million units out must score `OFF-MESH` and NOT quietly
+  read as fine — because `OURS-FAILED` and `OFF-MESH` are claims that *our* decode
+  is wrong, and a harness that cannot tell them from `BOTH-OK` would launder our
+  own bugs into a clean bill of health. It also round-trips a synthetic v3 capture
+  through `pathdiff.queries()` and requires the DEREFERENCED coordinates to
+  survive: the client passes `MapFindPath`'s from/to **by reference**, so a record
+  storing only the argument dwords holds addresses and nothing replayable — which
+  is what writing `pathdiff.py` discovered and what took the record to v3. §4 pins
+  that **a v1 capture still parses**, because run 1 is v1 and is the arc's only
+  live evidence; versioning that orphaned it would have been worse than not
+  versioning. 30 floor, 63 on a machine with the client, a compiler, an archive
+  and a 32-bit `cmd.exe`; each other section declares a skip with its reason),
   `toolkit/clientscan/test_commandertrap.py` (the hardware-breakpoint trap, and
   the section that matters CAUGHT A DEAD TOOL BEFORE IT PUBLISHED A FINDING.
   `commandertrap.py` answers "does instruction X ever execute", and the

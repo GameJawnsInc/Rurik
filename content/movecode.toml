@@ -169,6 +169,12 @@ rva = 0x00309E90
 first_byte = 0x55
 thiscall = false
 deref_agent = false
+# The query's coordinates are BEHIND POINTERS -- the client passes from/to by
+# reference -- so a record that stores only the pointer values has nothing
+# replayable in it. These name which args to dereference (16 bytes each) at
+# capture time, guarded by readable(). 0 = none.
+deref_arg_a = 1
+deref_arg_b = 2
 what = "the client's own navmesh query. __cdecl, SIX dword args, and NO meaningful return value -- all four exits are a bare `ret` and eax is leftover scratch. arg1 = from (point*), arg2 = to (point*, 16 B: float x, float y, int plane, int), arg3 = float range, arg4 = opaque dword forwarded to the backends, arg5 = int* outCount, arg6 = point* outPath with a 16-byte stride."
 why_hooked = "MOVECODE-Q2 and the whole of B3. Run 5 of the router arc found our pathmap decode reads open ground as a pocket; capturing every query the client makes and replaying it through our own route() turns that from an inference into a per-query measurement."
 limits = "AN ENTRY HOOK CAPTURES THE QUESTION, NOT THE ANSWER. arg5 and arg6 point at UNINITIALISED caller memory at entry -- the results are written by the backends during the call. Scoring our route against the CLIENT's needs a second tap at the four `ret` sites (0x00709F0F, 0x00709F44, 0x0070A0AD, 0x0070A0D4). Replaying our own router over the captured queries needs only this."
@@ -184,6 +190,11 @@ rva = 0x001FC7A0
 first_byte = 0x55
 thiscall = false
 deref_agent = false
+# arg2 is `targetPoint*` -- ArenaNet's own name, from assert AgApi.cpp:1041. This
+# is the leg the client is about to walk to, so dereferencing it turns a stream of
+# pointer values into the actual path the client walked.
+deref_arg_a = 2
+deref_arg_b = 0
 what = "AgApi.cpp's set-destination entry point, and the source of 525 of run 1's 586 setter calls. __cdecl: arg1 = agentId (an INDEX into the agent array at ctx+0x14C, not a pointer), arg2 = targetPoint*, arg3 = moveSpeed, arg4 = flags (masked & 0xf), arg5 = stored to agent+0x50."
 why_hooked = "run 1 measured the client re-issuing destinations ~11x more often than we grant them, all through this function. It hardcodes the setter's arg3 = -1 and arg2 = 0 at its call site 0x005FC8F0, which is why every one of the 525 arms a hard arrival."
 [hook_site.agapi_setdest.provenance]
