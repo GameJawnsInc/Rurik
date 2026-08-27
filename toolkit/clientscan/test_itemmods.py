@@ -297,7 +297,8 @@ def main():
     print("\n9. the composed word is ArenaNet's word, byte for byte")
     LEDGER.ok(itemmods.attribute_bonus_word(20, 1) == 0x21F81401,
               "attribute_bonus_word(20, 1) == 0x21F81401",
-              "the exact dword on 26 retail headpieces in the live corpus -- "
+              "the exact dword on every retail headpiece in the live corpus "
+              "(26 of them when this was written, 38 by 2026-08-27) -- "
               "identifier 543, attribute 20, +1, AND the three bits the "
               "walker never reads (31, 30, 19). Compose from the four fields "
               "alone and you get 0x21F01401, which is not what retail sends")
@@ -313,7 +314,7 @@ def main():
               f"that trips ItemName:1202 rather than one that renders")
 
     if live is None:
-        LEDGER.skip("the live corpus is not reachable, so the 26 retail "
+        LEDGER.skip("the live corpus is not reachable, so the retail "
                     "attribute-bonus words cannot be replayed and the "
                     "constant-prefix measurement the composer rests on cannot "
                     "be taken")
@@ -348,12 +349,24 @@ def main():
                         kinds.add(head[3])
                     if any(itemmods.decode(x)["identifier"] == 572 for x in ws):
                         with_armour += 1
-        LEDGER.ok(len(bonus_words) == 26
-                  and all(b["identifier"] == 543 and b["stacking"]
-                          and b["attribute"] == 20 and b["amount"] == 1
-                          for b, _ in bonus_words),
+        # THE COUNT IS A FLOOR AND NOT AN EQUALITY, and it used to be an
+        # equality at 26. That reddened this file on 2026-08-27 -- on
+        # CONFIRMING evidence, which is the worst possible reason for a red.
+        # Nine later live captures took the corpus from 26 words to 38 and
+        # every one of the twelve new ones is the same (543, stacking, attr 20,
+        # +1) signature, so the claim got STRONGER and the check called it a
+        # failure. An exact count pins the size of the vault, which no
+        # measurement here is about; what the floor is for is vacuity -- an
+        # `all()` over an empty list is True, and a corpus that stopped loading
+        # would otherwise pass this silently. So: the floor guards vacuity, the
+        # `all()` carries the claim, and the count is REPORTED so a reader sees
+        # the evidence grow.
+        sigs = {(b["identifier"], b["stacking"], b["attribute"], b["amount"])
+                for b, _ in bonus_words}
+        LEDGER.ok(len(bonus_words) >= 26 and sigs == {(543, True, 20, 1)},
                   "every attribute bonus ArenaNet sent us is 543, attr 20, +1",
-                  f"{len(bonus_words)} of them, and attribute 20 resolves "
+                  f"{len(bonus_words)} of them, signatures {sorted(sigs)} "
+                  f"against a floor of 26; attribute 20 resolves "
                   f"through s_attrib to a Warrior weapon attribute -- on "
                   f"items that also carry an armour rating (572) and a "
                   f"'+20 vs. physical' (527). A headpiece, which is exactly "
@@ -369,7 +382,8 @@ def main():
                       for w in ws
                       if itemmods.decode(w)["identifier"] == 543),
                   "the composer reproduces each of those words exactly",
-                  "26 chances for a wrong prefix or a swapped field to show")
+                  f"{len(bonus_words)} chances for a wrong prefix or a swapped "
+                  f"field to show")
         LEDGER.ok(not exceptions and len(prefix) > 30,
                   "bits 31, 30 and 19 are CONSTANT per identifier",
                   f"{len(prefix)} identifiers over the whole corpus, 0 "

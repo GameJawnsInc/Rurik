@@ -1972,6 +1972,54 @@ step off, and returns None in the middle of nowhere — run 3's
 answers. Floor 69 against a green 73 (two archive-conditional §6
 checks and the stacked-point pair may skip-declare); ~105 s, `--routes`
 shrinks section 10),
+  `toolkit/mapdata/test_spawncheck.py` (the map-row spawn census, `spawncheck.py`,
+  which answers a clause `PLAN.md` §3.2 had carried unmeasured since it was written:
+  *"how many of the nine pass the trapezoid test has not been re-run, so the map figure
+  is a row count and not yet a score against this criterion."* It is fifteen rows now and
+  the score is **8**. `test_pathmap.py` §4 checks ONE spawn -- Kamadan's, hardcoded --
+  so nothing walked the content store until this. The verdict is five-valued because each
+  failure has a different cause and one number hides which: PASS, SEAM, OFF-MESH,
+  WRONG-PLANE, UNRESOLVED. **The SEAM token is the finding.** `content/maps.toml`'s
+  header says "EXACTLY ONE is what a non-overlapping tiling gives", and that sentence has
+  a boundary case it does not mention: `Trapezoid.contains` closes BOTH y bounds, so a
+  point on the horizontal seam between two vertically adjacent trapezoids is in both.
+  Maps 143 and 144 sit exactly there -- authored `(1536, 1536)`, and 1536.0 is precisely
+  where one trapezoid ends and the next begins. Walkable ground, a pass, and a different
+  thing from an overlap. §3 SABOTAGES that reading rather than asserting it: it
+  re-implements `contains` with a half-open y interval and requires the same points to
+  collapse to one, with an interior PASS row as the control on the control (the sabotage
+  must move nothing else, and moves 0 of 6). **THE MUTATION CAMPAIGN IS THE REASON THIS
+  FILE IS THE SHAPE IT IS.** Seven breaks were built on 2026-08-27; the first pass caught
+  three, and every escape was a real defect rather than a missing assertion. (1)
+  `_share_an_edge` forced to `return True` survived, because §4 was calling `spawncheck`'s
+  own predicate and asserting the mutant against itself -- it computes the shared-edge set
+  inline now. (2) Chasing WHY that predicate did no work found that it tested only the
+  y axis, so a **VERTICAL seam** -- two trapezoids in one y band meeting along a shared x
+  boundary, which `contains` also closes -- was being filed as OVERLAP. That is walkable
+  ground condemned, and the fix is in `spawncheck.py`, not in the test. (3) Collapsing the
+  overlap branch into an unconditional `SEAM` survived, because **no content row overlaps**
+  and the branch is unreachable from real data. §4b is the positive control that answers
+  all three: four synthetic meshes, each isolating one term. A wide overlap must score
+  OVERLAP; an edge-touching pair must score SEAM; a vertical seam must score SEAM; and a
+  **sub-eps sliver** -- two trapezoids overlapping by less than `SEAM_EPS`, so every
+  diagonal nudge escapes it and the interior probe reads a clean 1 -- must still score
+  OVERLAP, which only the edge test can do. The mirror of that case earns the other term:
+  a **seam-touching overlap** (three trapezoids meeting at one y, two stacked and a third
+  straddling the line) is on a genuine shared edge, so only the interior probe can see it
+  is also an overlap. Both terms are now provably load-bearing in both directions, and the
+  campaign closes **7 of 7**. §5 pins the **(0,0) accident**: five rows carry a placeholder
+  arrival point, four fail honestly, and Sparkfly Swamp's lands on walkable ground and
+  scores a clean PASS -- a placeholder that passes is worse than one that fails, because
+  it looks verified, so the count is asserted. §6 requires no row to score OVERLAP, and
+  requires every UNRESOLVED file id to resolve in SOME vault archive -- "not in the
+  archive" and "not in THIS archive" are different findings, and `--find-missing` keeps
+  them apart: the three created chains (165/166/167) resolve in exactly one place,
+  `run/2026-07-29_…-probe`, a 38797-era probe directory and none of the current run dirs.
+  The TOTALS are deliberately NOT pinned -- `PASS=6` would redden on every new map row and
+  train the reader to re-baseline instead of look; named rows keep their verdicts, the set
+  keeps its invariants, the arithmetic moves freely. Floor **44** against a green 44, and
+  the first draft declared 36 against a body that could only produce 33 and was correctly
+  called incomplete. ~25 s),
   `toolkit/mapdata/test_deploy.py` (rung G's one command, `deploy.py`, which
   takes an area row in `content/areas.toml` from geometry to a map the retail
   client compiles. It is an ORCHESTRATOR -- nearly every line it runs belongs to
@@ -5949,7 +5997,17 @@ shrinks section 10),
   study named.
 
   `toolkit/clientscan/test_itemmods.py` (**the item-modifier decode, who reads
-  a modifier, and the attribute bonus** — 28 checks, floor 28). Every item on the wire carries a list of 32-bit modifier words, and
+  a modifier, and the attribute bonus** — 37 checks, floor 37; this line read "28
+  checks, floor 28" until 2026-08-27, when the file itself declared 37. **§10's
+  attribute-bonus count is a FLOOR and was an equality until the same day, when it
+  went RED ON CONFIRMING EVIDENCE**: nine later live captures took the corpus from 26
+  words to 38 and all twelve new ones carry the same `(543, stacking, attr 20, +1)`
+  signature, so the claim strengthened and `len(bonus_words) == 26` called it a
+  failure. The count pinned the size of the vault, which nothing here measures. It is
+  `>= 26` now with the signature set carrying the claim — the floor guards vacuity,
+  because an `all()` over an empty list is True and a corpus that stopped loading
+  would have passed silently. Both mutations redden it: an emptied corpus and a
+  planted stray signature). Every item on the wire carries a list of 32-bit modifier words, and
   `studies/character/FINDINGS.md` called them "the largest hole" three times: armour
   rating, damage range and every "+15% while…" line live in them and nobody had
   decoded one. `itemmods.py` reads the format out of the client's own parser —
