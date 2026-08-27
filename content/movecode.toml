@@ -294,8 +294,13 @@ verified = "Read as vx/vy by the extrapolator at 0x005FFBAD and applied as `out.
 va = 0x006055E0
 rva = 0x002055E0
 first_byte = 0x55
-thiscall = true
-deref_agent = true
+# ecx is NOT `this` here, and run 5 proved it: with deref_agent on, all 70 snaptest
+# records reported agent ids of 574588536 and 459313176 -- readable memory that is
+# not an agent. It was marked thiscall because 0x006055FB saves ecx to a local, but
+# a register being SAVED does not make it a `this` pointer. What ecx holds at this
+# entry is NOT DETERMINED, so nothing dereferences it.
+thiscall = false
+deref_agent = false
 # arg2 is the SOURCE agent -- the sync twin the test compares against. Capturing
 # BOTH sides is what lets gate 1's separation be recomputed offline instead of
 # inferred, because an entry hook cannot see which gate the function chose.

@@ -415,14 +415,32 @@ def report(cap, names, dump=0):
         # SEPARATION is what gate 1 judges, and with both agents captured it can be
         # recomputed here rather than inferred -- an entry hook cannot see which
         # gate the function chose.
-        sep = []
+        # ONLY WHERE BOTH SIDES ARE THE SAME AGENT. A separation between two
+        # DIFFERENT agents is not a desync, it is the distance between two
+        # characters -- and run 5 produced exactly that trap: 70 records whose
+        # `this` block was readable memory that is not an agent at all (ids
+        # 574588536 and 459313176), giving a p50 of 7,197 u that looked like a
+        # catastrophic desync and was nothing of the kind. Pairing on the id is
+        # what makes the number mean what its label says.
+        sep, mismatched = [], 0
         for r in tests + seeds:
             if not (r.get("have_agent") and r.get("have_src")):
+                continue
+            if r["id"] != r["src_id"]:
+                mismatched += 1
                 continue
             ax, ay = _f(r["point"][0]), _f(r["point"][1])
             bx, by_ = _f(r["src_point"][0]), _f(r["src_point"][1])
             if all(map(math.isfinite, (ax, ay, bx, by_))):
                 sep.append(((ax - bx) ** 2 + (ay - by_) ** 2) ** 0.5)
+        if mismatched:
+            a(f"      ({mismatched} record(s) EXCLUDED: `this` and the source are "
+              f"different agent ids,")
+            a("       so their distance is not a desync. Check the site's row "
+              "before reading")
+            a("       this as a client-side fact -- it usually means something is "
+              "being")
+            a("       dereferenced that is not an agent.)")
         if sep:
             sep.sort()
             a(f"      separation `this` vs the SOURCE agent, {len(sep)} sample(s):")

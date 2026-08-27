@@ -952,6 +952,83 @@ Run 5 is that measurement. Until then §1g.2's magnitudes are OBSERVED and their
 
 ---
 
+## 1h. RUN 5 — the snap APPLIES rarely, the warp is a ROLLBACK, and Q2 finally bites
+
+**OBSERVED, 2026-08-27.** Map 280, 3,246 records, **v5**, both controls FIRED, 206 s,
+ended by `--stop`. Capture at `vault/research/movecode/run5-2026-08-27-v5/`.
+
+### 1h.1 A TRAP THE RECORD WALKED INTO, caught by pairing on agent id
+
+v5's first output claimed a separation of **p50 7,197 u, max 9,566** — most of the
+map, and it would have read as a catastrophic desync. It was nothing of the kind.
+`snaptest`'s `ecx` **is not `this`**: all 70 of its records reported agent ids of
+`574588536` and `459313176` — readable memory that is not an agent.
+
+The row had been marked `thiscall` because `0x006055FB` saves `ecx` to a local. **A
+register being SAVED does not make it a `this` pointer**, and that is the
+verify-the-operand failure this repo already has a note about. `snaptest` no longer
+dereferences `ecx`, and what `ecx` holds there is **NOT DETERMINED**.
+
+`readhook.py` now pairs the separation **on agent id** and prints how many records it
+excluded, because a distance between two *different* agents is not a desync — it is
+the distance between two characters, and it looked like a finding.
+
+**The honest number, over the 14 reseeds where both sides are agent 1:**
+separation **min 23.6, p50 634.9, max 1,897.2**, with **11 of 14 past gate 1's
+299.33 cut** and 11 of 14 past the 100.0 history band. So **gate 1 (separation) is
+what fires**; the 3 under the cut failed some other gate.
+
+### 1h.2 §1g's headline needs qualifying: the snap is CALLED often and APPLIES rarely
+
+Following each reseed to the next record carrying agent 1's position:
+
+**12 of 14 did not move the player at all** (`d(before)` 3.6–14.4 u). **2 of 14 moved
+it to the source** — **690.8 u** and **510.7 u**.
+
+So "the warp is the snap" (§1g.2) is right about the mechanism and wrong about the
+rate. 70 desync tests → 14 reseeds → **2 actual displacements**. §1g's 18
+"unexplained jumps" were measured without agent attribution, exactly as §1g.3 warned;
+this supersedes them.
+
+### 1h.3 What the two real warps ARE: a ROLLBACK
+
+Both are the same shape, and it is visible in the coordinates:
+
+| reseed | source position | equals |
+|---|---|---|
+| `#889` | `(−7871.4, 1804.5)` | **`#812`'s player position** |
+| `#2427` | `(−6027.3, 6632.3)` | **`#2305`'s player position** |
+
+**The source agent is holding a position the player occupied at an EARLIER reseed,
+and the correction pulls the player back to it.** The player walks away, the sync
+twin does not follow, and the next correction rolls the player back to where the twin
+still thinks it is. That is the warp the operator has been seeing, and it is a
+**rollback to a stale sync position**, not a jump to a new one.
+
+### 1h.4 MOVECODE-Q2 finally bites — and §1f.3's refutation was an n=7 artifact
+
+**2 of 20 queries OFF-MESH (10%)** on map 280:
+
+```
+(-6034.1, 6885.1) -> (-4705.9, 7670.4)   start OFF mesh, goal on mesh
+(-5526.5, 7877.5) -> (-4284.3, 8482.0)   start on mesh, goal OFF mesh
+```
+
+Run 3 sampled 7 queries on this map and got 7/7 clean, and §1f.3 read that as
+refuting the map-280 prediction outright. **With 20 queries the gap appears.** Both
+failures are in the same north-east region (y ≈ 6,900–8,500), which is where to look.
+
+So §1f.3 is **corrected, not reversed**: our decode of map 280 does have a hole, run 5
+locates it, and the earlier "refuted" was a small-sample result stated too strongly.
+Router run 5's pocket may yet be a decode failure after all.
+
+### 1h.5 P1a: avoidance again, and the same rate
+
+**9 of 618 bakes glided (1.5%)**, all from `0x00600B0F`, matching run 3's 1.2% on the
+same input style. Three runs, 1,943 bakes, still no unknown bake caller — Q4 holds.
+
+---
+
 ## 2. Corrections to the record
 
 Each of these was in circulation and each is now measured against the bytes.

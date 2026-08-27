@@ -33,7 +33,7 @@ static const site_t SITES[NSITES] = {
     { 0x00309E90u, "mapfindpath", 0, 1, 2, 0 },   /* 0x00709E90 */
     { 0x002022B0u, "reseed", 1, 0, 0, 1 },   /* 0x006022B0 */
     { 0x00202A40u, "setter", 1, 0, 0, 0 },   /* 0x00602A40 */
-    { 0x002055E0u, "snaptest", 1, 0, 0, 2 },   /* 0x006055E0 */
+    { 0x002055E0u, "snaptest", 0, 0, 0, 2 },   /* 0x006055E0 */
     { 0x002020B0u, "teleport", 1, 0, 0, 0 },   /* 0x006020B0 */
 };
 
