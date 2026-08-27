@@ -294,8 +294,12 @@ verified = "Read as vx/vy by the extrapolator at 0x005FFBAD and applied as `out.
 va = 0x006055E0
 rva = 0x002055E0
 first_byte = 0x55
-thiscall = false
-deref_agent = false
+thiscall = true
+deref_agent = true
+# arg2 is the SOURCE agent -- the sync twin the test compares against. Capturing
+# BOTH sides is what lets gate 1's separation be recomputed offline instead of
+# inferred, because an entry hook cannot see which gate the function chose.
+deref_agent_arg = 2
 what = "the desync match test. Asks whether the SYNC agent's dead-reckoned position is within 100.0 u of the client's own history chain; on a miss it runs three fallback gates, ANY of which failing snaps -- straight-line separation vs 300.0f, MapFindPath returning pathCount == 0, and a step-clearance predicate."
 why_hooked = "run 3 exonerated the teleport and proved this path RAN (two MapFindPath calls from its 0x00605807 with range 300.0f). Hooking it turns `the client snapped` into `the client snapped because gate N failed`."
 [hook_site.snaptest.provenance]
@@ -310,6 +314,11 @@ rva = 0x002022B0
 first_byte = 0x55
 thiscall = true
 deref_agent = true
+# arg1 is ANOTHER AGENT, not a point: 0x006022C0 loads it into edi and then reads
+# [edi+0x24] (world), [edi+0x48] (m_timeStopMovement) and [edi+0x88..0x90]
+# (m_segmentPoint). So this copies one agent's state onto another, and capturing
+# only `this` records half of a correction.
+deref_agent_arg = 1
 what = "the correction itself. On a snap this reseeds EVERY agent in world 1, not just the one that diverged."
 why_hooked = "the snap test says a correction was decided; this says one HAPPENED, and to whom. Without it a failed gate and an applied snap are the same record."
 [hook_site.reseed.provenance]

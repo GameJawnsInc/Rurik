@@ -136,6 +136,7 @@ def emit(sites, offs, exe_path):
     a("    int           deref_agent;   /* is ecx an agent pointer at entry? */")
     a("    int           deref_a;       /* arg index (1-6) to deref as a point, 0=none */")
     a("    int           deref_b;")
+    a("    int           deref_agent_arg; /* arg index holding a SECOND agent, 0=none */")
     a("} site_t;")
     a("")
     a("static const site_t SITES[NSITES] = {")
@@ -144,7 +145,8 @@ def emit(sites, offs, exe_path):
         a(f"    {{ 0x{r['rva']:08X}u, \"{n}\", "
           f"{1 if r.get('deref_agent') else 0}, "
           f"{int(r.get('deref_arg_a') or 0)}, "
-          f"{int(r.get('deref_arg_b') or 0)} }},   /* 0x{r['va']:08X} */")
+          f"{int(r.get('deref_arg_b') or 0)}, "
+          f"{int(r.get('deref_agent_arg') or 0)} }},   /* 0x{r['va']:08X} */")
     a("};")
     a("")
     a("/* Agent struct offsets the handler reads at each hit. */")

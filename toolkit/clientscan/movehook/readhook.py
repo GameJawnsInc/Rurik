@@ -81,6 +81,14 @@ _LAYOUTS = {
     4: [(n, 1) for n in _SCALARS_V2] + _POINTS
        + [("have_pts", 1), ("pt_a", 4), ("pt_b", 4),
           ("vel", 2), ("ptime", 1)],
+    # v5 adds the SECOND agent both snap sites take as an argument -- the other
+    # side of a correction. See the note in movehook.c's rec_t.
+    5: [(n, 1) for n in _SCALARS_V2] + _POINTS
+       + [("have_pts", 1), ("pt_a", 4), ("pt_b", 4),
+          ("vel", 2), ("ptime", 1),
+          ("have_src", 1), ("src_id", 1), ("src_flags", 1), ("src_stop", 1),
+          ("src_ptime", 1), ("src_point", 4), ("src_segment", 4),
+          ("src_target", 4), ("src_vel", 2)],
 }
 NPOINT = 4
 
@@ -103,8 +111,8 @@ def _unpack(spec, vals):
 
 
 # The current writer's layout, for anything that builds a capture (the tests do).
-FIELDS = [n for n, c in _LAYOUTS[4] if c == 1]
-_SPEC4, REC_FMT, REC_LEN = _layout(4)
+FIELDS = [n for n, c in _LAYOUTS[5] if c == 1]
+_SPEC5, REC_FMT, REC_LEN = _layout(5)
 
 BIT_ISWAYPOINT = 1 << 18
 BIT_IN_WORLD = 1 << 17
@@ -384,6 +392,50 @@ def report(cap, names, dump=0):
                     a(f"       -> {len(chain) - linked} did NOT chain. Those are the")
                     a("          candidates for a real divergence; the rest are legs.")
     a("")
+
+    # ---- the SNAP: a correction decided, applied, and how far it moved -------
+    si, ri = idx.get("snaptest"), idx.get("reseed")
+    if si is not None or ri is not None:
+        tests = [r for r in cap.recs if r["site"] == si] if si is not None else []
+        seeds = [r for r in cap.recs if r["site"] == ri] if ri is not None else []
+        a("")
+        a(f"SNAP  {len(tests)} desync test(s) -> {len(seeds)} reseed(s) APPLIED")
+        if tests and not seeds:
+            a("      Every test passed: the client judged itself in sync and")
+            a("      corrected nothing. That is a real absence, not a miss.")
+        for label, rows in (("test", tests), ("reseed", seeds)):
+            if not rows:
+                continue
+            by = {}
+            for r in rows:
+                by[reb(r["retaddr"])] = by.get(reb(r["retaddr"]), 0) + 1
+            a(f"      {label} caller(s): "
+              + ", ".join(f"0x{v:08X} x{n}" for v, n in
+                          sorted(by.items(), key=lambda kv: -kv[1])))
+        # SEPARATION is what gate 1 judges, and with both agents captured it can be
+        # recomputed here rather than inferred -- an entry hook cannot see which
+        # gate the function chose.
+        sep = []
+        for r in tests + seeds:
+            if not (r.get("have_agent") and r.get("have_src")):
+                continue
+            ax, ay = _f(r["point"][0]), _f(r["point"][1])
+            bx, by_ = _f(r["src_point"][0]), _f(r["src_point"][1])
+            if all(map(math.isfinite, (ax, ay, bx, by_))):
+                sep.append(((ax - bx) ** 2 + (ay - by_) ** 2) ** 0.5)
+        if sep:
+            sep.sort()
+            a(f"      separation `this` vs the SOURCE agent, {len(sep)} sample(s):")
+            a(f"        min {sep[0]:8.1f}  p50 {sep[len(sep) // 2]:8.1f}  "
+              f"max {sep[-1]:8.1f} units")
+            a(f"        over 100.0 (the history band): "
+              f"{sum(1 for d in sep if d > 100.0)}")
+            a(f"        over 299.33 (gate 1's effective cut): "
+              f"{sum(1 for d in sep if d > 299.332591)}")
+        elif tests or seeds:
+            a("      !! no record carries BOTH agents, so the separation gate 1")
+            a("         judges cannot be recomputed. A capture before v5 records")
+            a("         only `this`, which is half of a correction.")
 
     if dump:
         a(f"first {dump} record(s):")

@@ -872,6 +872,86 @@ gate and an applied snap are the same record.
 
 ---
 
+## 1g. RUN 4 — the snap CAUGHT, and the warp is OURS
+
+**OBSERVED, 2026-08-27.** Map 280, 491 records, v4, both controls FIRED, ended by
+`--stop` at 79 s. Capture at `vault/research/movecode/run4-2026-08-27-snap/`. First
+run with the two snap sites armed.
+
+**`snaptest` fired 11 times and `reseed` 6 times** — the first capture of a
+correction actually being applied.
+
+### 1g.1 The causal chain, in the record, in order
+
+```
+#231 setter    ret=0x005FD918   <-- OUR 0x0029 WIRE GRANT
+#232 bake      ret=0x00602AD8
+#233 agtrack   ret=0x005FEBF0
+#234 snaptest  ret=0x00606021   <-- the desync test runs
+#235 reseed    ret=0x006060E7   <-- the correction is APPLIED
+#236 teleport  ret=0x006025AB   <-- halt-in-place
+```
+
+**Our grant, then the test, then the correction.** The same shape repeats at
+`#295`, `#398` and `#471`; the pair at `#243`/`#479` follows a `chcli_dir`
+keyboard event instead.
+
+### 1g.2 The warp, measured — and it is NOT the teleport
+
+Run 3 exonerated the teleport (§1f.1): divergence 0.1 u over 42 samples. So the
+detector had to change. For every record carrying the player's position block, ask
+whether the move since the previous one is explained by that agent's **own**
+velocity and **own** timestamps:
+
+**18 jumps that dead reckoning cannot explain**, and they land on the reseeds:
+
+| record | site | unexplained |
+|---|---|---|
+| `#235` | **reseed** | **1,359.5 u** |
+| `#295` | **reseed** | **1,784.0 u** |
+| `#398` | **reseed** | **1,048.9 u** |
+| `#471` | **reseed** | **2,048.2 u** |
+
+At `#235` the agent should have been at `(−5834.0, −470.7)` by its own velocity over
+804 ms. It was at `(−6264.1, 819.0)`.
+
+**So the warp is the snap, and the snap follows our grant.** Not the client's own
+path-following, which run 3 measured exact to 0.3 u.
+
+### 1g.3 What this does NOT yet establish, and the reason is structural
+
+**`reseed`'s `arg1` is another AGENT, not a point.** `0x006022C0` loads it into
+`edi` and reads `[edi+0x24]` (world), `[edi+0x48]`, `[edi+0x88..0x90]`
+(`m_segmentPoint`) — so the function copies one agent's state onto another, and a
+record holding only `this` holds **half of a correction**. The same is true of
+`snaptest`, whose `arg2` is the source agent under assert `AgTrack:458
+source.GetWorld() == WORLD_SYNC`.
+
+That matters for reading §1g.2 honestly: the rows at `#239`, `#299` and `#475` show
+the jump **reversing** on the next setter, which is what two agents alternating in
+one timeline look like — not necessarily one body moving twice. **Which agent each
+jump belongs to is NOT DETERMINED from a v4 capture.**
+
+**Gate attribution is also still open.** Run 4 made **zero** `MapFindPath` calls at
+`range = 300.0f`, so gate 2 was not the decider; whether gate 1 (separation),
+gate 3 (step clearance) or the history-chain match settled each of the 11 tests is
+unmeasured.
+
+### 1g.4 Record v5 answers both, and is wired
+
+`deref_agent_arg` names, per row, which argument holds a second agent — `1` for
+`reseed`, `2` for `snaptest` — and the DLL reads that agent through the **same**
+`read_agent()` used for `this`, so the two sides of a correction cannot be
+described differently by construction. With both captured, **gate 1's separation is
+recomputable offline** rather than inferred, and `readhook.py` now prints it against
+both thresholds this repo already argued over (100.0 and 299.332591, `PLAN.md` §7
+Q11).
+
+Run 5 is that measurement. Until then §1g.2's magnitudes are OBSERVED and their
+**attribution to a particular agent is not**.
+
+---
+
 ## 2. Corrections to the record
 
 Each of these was in circulation and each is now measured against the bytes.

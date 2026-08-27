@@ -251,6 +251,29 @@ typedef struct {
      * form: `out.x = [esi+0x78] + vx * dt`, dt in ms scaled by 0.001. */
     DWORD vel[2];                 /* +0xB0, +0xB4 -- velocity x, y */
     DWORD ptime;                  /* +0x58 -- the timestamp m_point is valid AT */
+    /* v5: THE OTHER SIDE OF A CORRECTION.
+     *
+     * Run 4 caught the snap for the first time -- 11 `snaptest` calls, 6 `reseed`
+     * calls, and 18 position jumps that dead reckoning cannot explain. But both
+     * sites take a SECOND AGENT as an argument and the record held only `this`,
+     * which is half of a correction: `reseed` reads its arg1 as an agent
+     * (`0x006022C0` -> edi, then `[edi+0x24]`, `[edi+0x48]`, `[edi+0x88..0x90]`),
+     * and `snaptest` reads its arg2 the same way (`[ebx+0x24]` under assert
+     * AgTrack:458 `source.GetWorld() == WORLD_SYNC`).
+     *
+     * With both sides captured the separation the test judges can be RECOMPUTED
+     * offline, which matters because an entry hook cannot see which gate the
+     * function chose -- and run 4 made zero `MapFindPath` calls at range 300, so
+     * gate 2 was not the decider and the gate is still unmeasured.
+     *
+     * Which argument holds it is per site (`deref_agent_arg`, 1-based, 0 = none),
+     * from the content rows, so this stays table-driven. */
+    DWORD have_src;
+    DWORD src_id, src_flags, src_stop, src_ptime;
+    DWORD src_point[4];
+    DWORD src_segment[4];
+    DWORD src_target[4];
+    DWORD src_vel[2];
 } rec_t;
 
 static DWORD  g_base;
@@ -326,6 +349,24 @@ static void copy4(DWORD *dst, DWORD src)
  * property of the row rather than a branch on an address. Returns 1 when the point
  * was actually read, so the record can say which halves are real instead of
  * leaving a zeroed point looking like the origin. */
+/* Copy an agent's position block. Shared by `this` and by a SECOND agent named in
+ * an argument, so the two cannot drift apart -- the run-4 record had `this` only,
+ * which is half of a correction. Returns 0 when the pointer is not readable. */
+static int read_agent(DWORD ag, DWORD *id, DWORD *flags, DWORD *stop, DWORD *ptime,
+                      DWORD *point, DWORD *segment, DWORD *target, DWORD *vel)
+{
+    if (!readable(ag, 0xB8)) return 0;
+    *id    = *(DWORD *)(ag + A_ID);
+    *flags = *(DWORD *)(ag + A_FLAGS);
+    *stop  = *(DWORD *)(ag + A_TIME_STOP_MOVEMENT);
+    *ptime = *(DWORD *)(ag + A_POINT_TIME);
+    memcpy(point,   (const void *)(ag + A_POINT),         16);
+    memcpy(segment, (const void *)(ag + A_SEGMENT_POINT), 16);
+    memcpy(target,  (const void *)(ag + A_TARGET_POINT),  16);
+    memcpy(vel,     (const void *)(ag + A_VELOCITY),       8);
+    return 1;
+}
+
 static int deref_arg(DWORD esp, int which, DWORD *dst)
 {
     DWORD p;
@@ -423,20 +464,30 @@ static LONG CALLBACK on_bp(PEXCEPTION_POINTERS ep)
                     r->arg2    = ((DWORD *)esp)[2];
                     r->arg3    = ((DWORD *)esp)[3];
                 }
+                /* A SECOND AGENT, when the row names one. Same reader as `this`. */
+                if (SITES[i].deref_agent_arg >= 1 &&
+                    SITES[i].deref_agent_arg <= 6 &&
+                    readable(esp, 4u * (DWORD)(SITES[i].deref_agent_arg + 1))) {
+                    DWORD src = ((DWORD *)esp)[SITES[i].deref_agent_arg];
+                    r->have_src = read_agent(src, &r->src_id, &r->src_flags,
+                                             &r->src_stop, &r->src_ptime,
+                                             r->src_point, r->src_segment,
+                                             r->src_target, r->src_vel);
+                }
                 if (deref_arg(esp, SITES[i].deref_a, r->pt_a)) r->have_pts |= 1u;
                 if (deref_arg(esp, SITES[i].deref_b, r->pt_b)) r->have_pts |= 2u;
-                if (SITES[i].deref_agent && readable(ag, 0xB0)) {
-                    r->have_agent = 1;
-                    r->id    = *(DWORD *)(ag + A_ID);
-                    r->flags = *(DWORD *)(ag + A_FLAGS);
-                    r->stop  = *(DWORD *)(ag + A_TIME_STOP_MOVEMENT);
-                    r->x98   = *(DWORD *)(ag + A_X98);
-                    copy4(r->point,   ag + A_POINT);
-                    copy4(r->segment, ag + A_SEGMENT_POINT);
-                    copy4(r->target,  ag + A_TARGET_POINT);
-                    r->vel[0] = *(DWORD *)(ag + A_VELOCITY);
-                    r->vel[1] = *(DWORD *)(ag + A_VELOCITY + 4);
-                    r->ptime  = *(DWORD *)(ag + A_POINT_TIME);
+                /* `this`, through the SAME reader the second agent uses. It was a
+                 * separate inline copy until v5, which is how two readings of one
+                 * struct drift: add a field to one and the other still parses, so
+                 * a correction's two sides would be described differently by
+                 * construction. `+0x98` is the one field only `this` carries,
+                 * because only the setter path has anything to say about it. */
+                if (SITES[i].deref_agent) {
+                    r->have_agent = read_agent(ag, &r->id, &r->flags, &r->stop,
+                                               &r->ptime, r->point, r->segment,
+                                               r->target, r->vel);
+                    if (r->have_agent)
+                        r->x98 = *(DWORD *)(ag + A_X98);
                 }
                 /* COMMIT. Every field above is in place; this store is what
                  * makes the record readable. See the note at the memset. */
@@ -629,7 +680,7 @@ static DWORD WINAPI worker(LPVOID unused)
     snprintf(path, sizeof path, "%s\\movehook.bin", dir);
     f = fopen(path, "wb");
     if (f) {
-        DWORD n = (DWORD)g_n, reclen = (DWORD)sizeof(rec_t), ver = 4, ns = NSITES;
+        DWORD n = (DWORD)g_n, reclen = (DWORD)sizeof(rec_t), ver = 5, ns = NSITES;
         if (n > NCAP) n = NCAP;
         fwrite("MVHK", 4, 1, f);
         fwrite(&ver, 4, 1, f);
