@@ -539,3 +539,67 @@ warps in both witnesses.** REFUTED IF a >450 u/s tape step or a
 warp engine off the lead channel entirely and make the client-side
 instrumentation (hook DLL on the movement code) the next instrument,
 which is the owner's stated fallback either way.
+
+## 10. Run 5 — 20260826T215206: **PREDICTION REFUTED**, and the arc ends
+## on a wrong-mesh finding (OBSERVED)
+
+The owner reported an immediate warp. **The registered prediction
+FAILED**, and it failed cleanly: the log shows `arm=zero-lead` on all
+five fired grants, zero `a2_leg` rows, zero watchdog fires — the D1
+lead channel was genuinely off. **The lead channel is ACQUITTED as the
+sole warp engine.** No tape was captured; the client's own report
+stream (the witness that caught runs 3 and 4) carries the evidence.
+
+**What the rows show, and it is not a bookkeeping defect:**
+
+- **The routing origin was PERFECT** — 0 u error against the client's
+  own last reported position on three of four clicks, 75 u on the
+  fourth. Everything B5 fixed stayed fixed.
+- **Every click routed AWAY from its destination.** Four clicks, from
+  four origins spread over 800 u, all wanting to go EAST — and all four
+  first legs went to the identical waypoint `(-6121, -2356)`, WEST:
+  cos(first leg, click) = −0.997, −0.950, −0.965, −0.995. Re-running
+  `route()` from the client's own reported position reproduces the same
+  first leg every time, so this is not our state, it is our MESH.
+- **Our decode of map 280 says the player's open ground is a pocket.**
+  From the player's stand, our mesh walks freely east for 1,000 u and
+  then ends; the corridor that actually reaches the destination is 90 u
+  south, at y = −2356, and A* correctly threads it — 419 u west to the
+  shared edge, then 2,385 u east. Ratio 1.66, legal, under the cap, and
+  a shape no player would ever accept.
+- **The warp itself is the run-3 mechanism at 650 u instead of 3.2 km.**
+  The world-tick integrator walked `state["pos"]` toward the westward
+  waypoint while the player walked east on the keyboard; at t=10.190 the
+  client reported `(-6039, -2318)` — 650 u west in 217 ms (2,995 u/s) —
+  within ~40 u of where the server's own model had walked to. **The
+  client reconciled onto the server's copy.** Abandoning the chain at
+  t=9.974 did not prevent it: our abandon is server-side bookkeeping
+  and sends nothing that cancels an order already given.
+
+**THE ARC'S CLOSING FINDING.** Five runs of server-side policy work
+have converged on a wall that server-side policy cannot cross: *any*
+divergence between the client's own position and the server-fed copy —
+from any cause, including a legal route the player simply declines to
+walk — is resolved by the CLIENT snapping. We have never observed the
+rule that decides when it snaps, how far it tolerates, or what in a
+grant arms a hard arrival versus a glide. Every fix so far has removed
+one *source* of divergence; the resolution mechanism itself is
+untouched and unmeasured, and it is the thing that produces every warp
+the owner has seen.
+
+Two distinct defects are now separated and both are client-code
+questions:
+1. **The snap/reconcile rule** — unmeasured, and the campaign's
+   remaining warps all reduce to it.
+2. **Mesh fidelity** — our pathing decode's connectivity disagrees with
+   the client's in at least this region (an open area our mesh reads as
+   a pocket, plus the 138–146 u `dest-off-mesh` gaps from run 4).
+   Whether that is a decode bug or a missing layer is answerable from
+   the client's own pathing code.
+
+**Policy work on this arc stops here** (owner's ruling, 2026-08-26:
+"static analysis + DLL hooks... normal library/language restrictions
+are off for this"). The router ships as it stands — opt-in, four runs
+of measured improvement behind it — and the next arc instruments the
+client instead of inferring from the wire. Handoff:
+[studies/movecode/PLAN.md](../movecode/PLAN.md).
