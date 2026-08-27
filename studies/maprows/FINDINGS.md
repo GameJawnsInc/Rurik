@@ -478,6 +478,59 @@ tied to a content class; and the set both grows and shrinks with play (25 in
 
 ---
 
+## 8.1 BIT-31 REGISTRATION IS GONE AS OF BUILD 38833 — measured 2026-08-27
+
+§8 establishes that bit 31 on a file id is a RENAME. **ArenaNet stopped emitting
+those registrations between 38797 and 38833**, and the resync of `dat_study`
+(§10.13) is what surfaced it — the mechanism was invisible while the server read
+a 38797 archive.
+
+Census over the whole file-id table, all four vaulted generations:
+
+| archive | file ids | bit-31 ids | paired with a masked twin |
+|---|---|---|---|
+| 38519 | 171,024 | **25** | 25 |
+| 38797 | 171,048 | **25** | 25 |
+| 38833 | 171,208 | **0** | 0 |
+| 38849 | 171,208 | **0** | 0 |
+
+Every bit-31 id that ever existed was paired — **0 orphans in any generation** —
+so this is a clean disappearance of a whole registration style, not a decay.
+
+**The two map heads that carried it were both REWRITTEN in the same patch.** On
+38797 exactly two map heads were named by four ids rather than two — row 7982
+(`0x1B97D` Pre-Searing, plus `0x8001B97D`) and row 20118 (`0x1C539` The
+Northlands, plus `0x8001C539`). Those are precisely the two maps §10.11 found
+had changed bytes across the patch, and §10.12 found had regenerated their
+content UUID. In 38833 both rows are gone from the head set and their
+replacements — 177262 and 177590 — carry a single raw id and no twin.
+
+**Consequence for `file_id_table()`'s mask-on-miss lookup: it is now unreachable
+on a current archive, and that is fine.** The lookup exists because the id a
+server sends is the masked form while only the raw form was in the table. With
+no bit-31 ids registered, the raw id resolves directly — `contentids` reports
+12 of 12 content map rows agreeing on the resynced archive. The path should NOT
+be removed: it is still required for 38519 and 38797, which the crossbuild arc
+reads.
+
+**`test_pathmap.py` §6 caught this** rather than being wrong about it. Its checks
+are now generation-aware: the census must land on one of the two states we have
+seen (25 or 0) — **a third number is a format change nobody has looked at and
+still reddens** — and the pairing checks declare skips where there is no twin to
+pair. Its floor rises by 3 when bit-31 ids are present, so a 38797 run cannot
+quietly lose them. Measured both ways: 73 checks on 38797, 68 with 5 declared
+skips on 38833.
+
+**A second registration difference, and it is NOT the same thing.** A map head is
+normally named by **two distinct raw file ids**. On 38833, **4 of the 361 heads
+are named by only one** — rows 177737, 177743, 177747, 177749, with ids 387574,
+388989, 389121 and 389122. All four are among the fourteen heads added in that
+patch. Whether single registration is normal for newly added content or a
+difference worth chasing is **NOT established here**; it is recorded so the next
+reader of `test_mapchunks` §"every head is named by exactly two file ids" knows
+the census `{1: 4, 2: 357}` is a fact about the archive rather than a decoder
+fault.
+
 ## 9. What is not established
 
 1. **Why bit 31 is set.** Still open, and §8 makes it more interesting rather

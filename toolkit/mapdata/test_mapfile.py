@@ -758,9 +758,20 @@ def section45(ar, mi, picks, want_all):
     partners = [p for _h, p in picks]
 
     print(f"\n-- 4. Bloated round-trip over {len(heads)} maps")
-    check(len(mi.heads) == CORPUS_MAPS and len(mi.pairs) == CORPUS_MAPS,
-          "the population is what it should be before anything is measured",
-          f"{len(mi.heads)} map heads, {len(mi.pairs)} with a Stripped partner")
+    # TWO CLAIMS, AND ONLY ONE OF THEM WAS EVER ABOUT THIS FILE. That every
+    # head has a Stripped partner is a structural invariant and is asserted as
+    # a RELATION -- heads against pairs, both measured -- so it holds on any
+    # generation. How MANY there are is the size of the archive: 349 on 38797,
+    # 361 on 38833 after ArenaNet added twelve maps, and a floor is what keeps
+    # a resync from reading as a regression while still catching a corpus that
+    # SHRANK, which would mean the index lost maps.
+    check(len(mi.heads) == len(mi.pairs),
+          "every map head has a Stripped partner",
+          f"{len(mi.heads)} heads, {len(mi.pairs)} paired -- an orphaned head "
+          f"is the defect this is for, and it does not depend on the count")
+    check(len(mi.pairs) >= CORPUS_MAPS,
+          f"and the population is at least {CORPUS_MAPS}",
+          f"{len(mi.pairs)} in this archive (349 on 38797, 361 on 38833)")
     check(len(picks) > 0 and len(picks) <= len(mi.pairs),
           "the sample is non-empty and drawn from that population",
           f"{len(picks)} of {len(mi.pairs)}")
