@@ -2550,8 +2550,20 @@ BEFORE the memset, and 9.14's "residue" reading is SUPERSEDED by its own
 successor. (2) **Record 91's absence is an item-id COLLISION IN OUR OWN
 PROBE**: `armor_slots` declares `_ARMOR_BOOTS_ITEM = 3` and STARTER_ARMOUR
 already uses item id 3 for `warrior_body`, so the chest is silently redefined
-as boots and nothing holds 91. Recorded, NOT fixed -- probes.py is another
-arc's instrument. (3) ★ **9.11's two wire-ordered instances are REPRODUCED --
+as boots and nothing holds 91. ~~Recorded, NOT fixed -- probes.py is another
+arc's instrument.~~ **FIXED 2026-08-27, and there were TWO collisions rather
+than one** (`studies/playercomposite/FINDINGS.md`, the superseded block):
+`_ARMOR_LEGS_ITEM` was **2**, which is `BACKPACK_ITEM_ID`, declared by the
+server on the SAME `0x0161` through the SAME `agents.named_item` helper in
+every login burst -- so the entry's "the leggings conclusions ride on item id 2
+and are untouched" was reasoning from an incomplete collision list. Both moved
+to 43/44, the module's existing `_DRAIN_ITEM` band. Whether that contaminates
+§9.8's leggings reading is **open, not assumed**: the backpack is `item_type 3`,
+a bag, against armour's 19/7, so whether it takes a `CpsBase` slot the way item
+id 3 demonstrably did is unmeasured, and one `armor_slots` run on the fixed ids
+answers it. `test_armour.py` §2 now scans every `_*_ITEM*` constant in
+`probes.py` against the server's minted set; it went RED on both before either
+constant moved, and 6 of 6 mutations redden it. (3) ★ **9.11's two wire-ordered instances are REPRODUCED --
 three of them, in a run with NO movement -- and IDENTIFIED**: same class
 (**CpsPlayer**, vtable 0xA96B5C) and same caller (**CpsApi::SetSlotItem**) as
 the world agent. So the two orderings are not two classes or two entry points;

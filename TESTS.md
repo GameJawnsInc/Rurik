@@ -6047,7 +6047,39 @@ shrinks section 10),
   existing two-name precedent rather than dumping 42; the emitter itself writes
   **no** authored text, committing `name_string_id` for run-time resolution,
   and a check asserts no string leaks into the rows),
-  `toolkit/authsrv/test_armour.py` (**the armour RATING** — 16 checks, floor 16).
+  `toolkit/authsrv/test_armour.py` (**the armour RATING** — 19 checks with the vault,
+  15 without, floor **15**; it read "16 checks, floor 16" until 2026-08-27. **§2 now
+  scores `probes.py`'s item ids against the server's minted set, and it went RED on
+  two live collisions before either constant moved.** The `reserved` check had
+  existed since the section was written and was pointed ONE WAY ONLY — it scored
+  `STARTER_ARMOUR` against the server's own ids and never read `probes.py`, which
+  mints item ids of its own and declares them onto the SAME client through the SAME
+  `0x0161`. `_ARMOR_LEGS_ITEM` was **2**, which is `BACKPACK_ITEM_ID`; and
+  `_ARMOR_BOOTS_ITEM` was **3**, which is `warrior_body`. Neither failed anything at
+  run time — a second `0x0161` for an id the server already declared overwrites the
+  client's record rather than erroring — so the armour probe was silently
+  re-declaring the backpack and the chest on every run, and any reading through it
+  measured two writers at one slot. Now 43/44, joining `_DRAIN_ITEM_A/B/C` in that
+  module's existing 40s band rather than the 10/11 sitting flush against the
+  server's block. The ids are gathered **from the module** rather than re-listed, so
+  a fourth probe item is covered automatically — that is the exact way the gap
+  survived. **Three bugs surfaced behind this one and all are fixed here.** (1) The
+  first scan required a name ENDING in `_ITEM` and read 2 of the 5, missing
+  `_DRAIN_ITEM_A/B/C` — caught on its first run by the vacuity guard sitting beside
+  it, which is the whole argument for putting one next to a filtered search.
+  (2) §3's no-vault path had **never executed**: `vaultpath.require_dir` reports a
+  missing vault by raising `SystemExit`, a BaseException that sails through
+  `except Exception`, so a bare machine did not skip — it died with no verdict, while
+  the docstring promised "sections 1, 2 and 4 hold with no vault". `test_quests.py`
+  §19 carries the identical note. (3) Past that, the `skip()` call passed **one**
+  argument to a two-argument signature, so the moment the except caught, the skip
+  itself raised `TypeError`. Two stacked bugs in a path nothing exercised; both found
+  by pointing `RURIK_VAULT` at an empty directory, which is the one-line way to test
+  a no-vault claim. **The floor moved DOWN, 16 → 15, and that is the repair rather
+  than a retreat**: 16 was the with-vault count of the day it was set, so the bare
+  machine the docstring promised would have been called incomplete — it never got to
+  prove that, because the run died first. Six deliberate breaks redden §2, including
+  a collision planted on the `_DRAIN_ITEM` ids and the scan itself going blind).
   `studies/character/FINDINGS.md` §2 asked on 2026-08-06 where an item's armour
   rating lives and proposed the experiment that would answer it: send the
   warrior chest and read the rating off the client's own tooltip. It sat open

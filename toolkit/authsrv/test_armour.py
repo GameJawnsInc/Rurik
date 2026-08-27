@@ -43,11 +43,25 @@ sys.path.insert(0, os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "clientscan"))
 import agents  # noqa: E402
 import authsrv  # noqa: E402
+import probes  # noqa: E402
 import checks  # noqa: E402
 import content  # noqa: E402
 import itemmods  # noqa: E402
 
-LEDGER = checks.Ledger("armour rating", floor=16)
+# MEASURED 2026-08-27, both ways: 19 with the vault present, 15 without.
+#
+# THE FLOOR MOVED DOWN, 16 -> 15, AND THAT IS THE FIX RATHER THAN A RETREAT.
+# 16 was the WITH-VAULT count of the day it was set, so the docstring's promise
+# that "sections 1, 2 and 4 hold with no vault" was unreachable: a bare machine
+# runs 15 and would have been called incomplete at 16. It never got to prove
+# that, because two stacked bugs in section 3's skip path meant a missing vault
+# killed the run outright instead (see there). Both are fixed; the floor is now
+# what a bare machine actually executes, which is the same shape test_quests.py
+# uses -- floor 73 against a healthy 83.
+#
+# The three new section-2 checks (the probe-id collision scan) are vault-free
+# and so raise BOTH numbers.
+LEDGER = checks.Ledger("armour rating", floor=15)
 
 ARMOR_RATING = 572          # `Armor` + `%str1%: %num1%`
 ARMOR_VS_TYPE = 527         # `Armor` + `%str1% +%num1%`
@@ -108,6 +122,45 @@ def main():
               f"{ids} against weapon {authsrv.WEAPON_ITEM_ID}, backpack "
               f"{authsrv.BACKPACK_ITEM_ID} and purchases from "
               f"{authsrv.PURCHASED_ITEM_ID_BASE}")
+    # AND THE PROBES' OWN IDS, which this section did not read until 2026-08-27
+    # and which is the whole point of a reserved set. The check above scores
+    # STARTER_ARMOUR against the server's minted ids and stops there -- so
+    # `probes.py`, which mints item ids of its own and declares them onto the
+    # SAME client, was never in the comparison. It collided twice:
+    # `_ARMOR_LEGS_ITEM` was 2, which is `BACKPACK_ITEM_ID`, and
+    # `_ARMOR_BOOTS_ITEM` was 3, which is `warrior_body`. The armour probe was
+    # silently re-declaring the backpack and the chest on every run.
+    #
+    # The probe ids are gathered from the MODULE, not re-listed here: a copy
+    # would go stale the first time somebody adds a fourth probe item, which is
+    # exactly how the gap above survived.
+    # `_ITEM` ANYWHERE IN THE NAME, not as a suffix. The first draft of this
+    # scan required the name to END in `_ITEM` and so read only 2 of the 5 --
+    # it missed `_DRAIN_ITEM_A/B/C` entirely. The "still mints ids to check"
+    # guard below is what caught that, on its first run, which is the whole
+    # argument for having a vacuity check next to a filtered search.
+    probe_ids = {v for n, v in vars(probes).items()
+                 if n.startswith("_") and "_ITEM" in n and isinstance(v, int)}
+    minted = ({authsrv.WEAPON_ITEM_ID, authsrv.BACKPACK_ITEM_ID,
+               authsrv.COSTUME_ITEM_ID, authsrv.COSTUME_HEAD_ITEM_ID}
+              | set(ids))
+    clash = probe_ids & minted
+    LEDGER.ok(len(probe_ids) >= 5,
+              "the probe module still mints item ids to check",
+              f"{sorted(probe_ids)} -- a name-shaped scan that found none would "
+              f"make the next check vacuously true, which is the failure mode "
+              f"this whole section exists to refuse")
+    LEDGER.ok(not clash,
+              "and NO probe item id collides with one the server mints",
+              f"probe {sorted(probe_ids)} against server {sorted(minted)}; "
+              f"overlap {sorted(clash)}. A probe that re-declares a live item "
+              f"id does not fail -- it silently overwrites the server's record "
+              f"on the client, and every reading taken through it is measuring "
+              f"two writers at one slot")
+    LEDGER.ok(all(i < authsrv.PURCHASED_ITEM_ID_BASE for i in probe_ids),
+              "and none strays into the purchase band",
+              f"{sorted(probe_ids)} against {authsrv.PURCHASED_ITEM_ID_BASE}")
+
     src = open(authsrv.__file__, encoding="utf-8").read()
     tree = ast.parse(src)
     names = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
@@ -121,9 +174,24 @@ def main():
         import vaultpath
         import cmsgstream
         live = vaultpath.require_dir("captures", "live", why="armour rows")
-    except Exception as exc:
+    # SystemExit EXPLICITLY, and MEASURED 2026-08-27 rather than copied: with
+    # RURIK_VAULT pointed at an empty directory this file did not skip, it
+    # DIED -- no verdict banner, no ledger, exit non-zero -- because
+    # `require_dir` reports a missing vault by raising SystemExit, which is a
+    # BaseException and sails straight through `except Exception`. The
+    # docstring above has claimed "Section 3 declares a skip without one" the
+    # whole time. `test_quests.py` §19 hit this exact defect and carries the
+    # same note; the fix is the same one word.
+    except (Exception, SystemExit) as exc:
         live = None
-        LEDGER.skip(f"the live corpus is not reachable ({exc}), so the one "
+        # TWO bugs were stacked in this path and NEITHER had ever run. Past
+        # the SystemExit above, `skip()` takes (label, why) and this call
+        # passed one argument -- so the moment the except finally caught, the
+        # skip itself raised TypeError. A skip path nothing exercises is not a
+        # skip path; both were found by pointing RURIK_VAULT at an empty
+        # directory, which is the one-line way to test a no-vault claim.
+        LEDGER.skip("the corpus agreement that retires the UPSTREAM label",
+                    f"the live corpus is not reachable ({exc}), so the one "
                     f"check that can retire these rows' UPSTREAM label -- "
                     f"ArenaNet having sent us the same bytes -- cannot run")
 
