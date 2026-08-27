@@ -100,8 +100,19 @@ and the machine is shared.
 window on the owner's screen forever.
 
 ```bash
-python toolkit/harness/session.py --keep-open --hold 900
+python toolkit/harness/session.py --exe vault/run/2026-07-29_221c13772c7a/Gw.exe --keep-open --hold 900
 ```
+
+**`--exe` IS NOT OPTIONAL HERE.** `session.py` defaults to the *newest* build under
+`vault/run/`, which today is `2026-08-20_21511009c460` — and every movehook address
+is **38797**, the `2026-07-29_221c13772c7a` build. This is the `sorted()[-1]` trap
+this repo has hit three times in three files. Getting it wrong is not a wrong number,
+it is a **crash**: a 38797 RVA in another build's image points at the middle of some
+unrelated instruction, and the `0xCC` goes in anyway.
+
+`gensites.py --check` cannot catch this — it reads the *pinned file*, so it says OK
+regardless of which client is running. `attach.py` checks the **running process**
+instead and refuses; that is the guard that actually covers it.
 
 **Shell 2 — attach once the character is in the world and standing where the run
 starts.** One command; it finds the pid, writes the config, and injects.
@@ -110,7 +121,12 @@ starts.** One command; it finds the pid, writes the config, and injects.
 python toolkit/clientscan/movehook/attach.py --minutes 10
 ```
 
-Expect `LoadLibraryA returned 0x…  (loaded)` and `armed for 10 minute(s)`. It
+Expect `build check: every site reads 0x55 in the live process`, then
+`LoadLibraryA returned 0x…  (loaded)` and `armed for 10 minute(s)`.
+
+**If it refuses with "the running client is not the build these addresses were
+measured against", you launched the wrong build** — stop, close the client, and
+relaunch with the explicit `--exe` above. Do not force past it. It
 **refuses a second attach** into the same client: the DLL patches bytes and restores
 them on disarm, so a double load arms each site twice and restores once, leaving a live
 `0xCC` in the client's code. If it refuses, restart the client rather than forcing.

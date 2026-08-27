@@ -6557,7 +6557,21 @@ shrinks section 10),
   `movehook.cfg` beside the DLL, and §8 sets the file and the environment to
   DIFFERENT output directories and a 1500 ms against a 600000 ms run, so which one
   the DLL actually honoured is visible in where the sidecar landed and in whether
-  the run finished. 18 floor, 38 on a machine with the client, a compiler and
+  the run finished. **§9 is the most important guard in the directory and it is
+  the one `gensites.py` structurally cannot provide.** `session.py --exe` defaults
+  to the NEWEST build under `vault/run/` — the `sorted()[-1]` trap this repo has hit
+  three times in three files — while every movehook address is 38797. Arming a
+  38797 RVA in a 38833 image is not a wrong number, it is a **crash**: the `0xCC`
+  lands in the middle of some unrelated instruction and the client dies with our
+  patch in it. `gensites.py --check` reads the PINNED FILE, so it answers OK no
+  matter which client is actually running — it is checking the wrong artifact. So
+  `attach.py` re-verifies the same property against the **live process** and
+  refuses. §9 exercises BOTH directions with `keytap` monkeypatched, because a
+  guard that only ever refuses is indistinguishable from a broken one: 0x55
+  everywhere must ACCEPT, one wrong byte must refuse and NAME the byte it found,
+  and an unreadable site must refuse rather than pass by default. A live positive
+  control was tried first and only reached the "no Gw.exe module" path, which
+  proves the weaker half. 23 floor, 43 on a machine with the client, a compiler and
   `cmd.exe`; each of the other four sections declares a skip with its reason),
   `toolkit/clientscan/test_commandertrap.py` (the hardware-breakpoint trap, and
   the section that matters CAUGHT A DEAD TOOL BEFORE IT PUBLISHED A FINDING.

@@ -57,6 +57,41 @@ def already_loaded(pid):
         return None
 
 
+def verify_running_build(pid):
+    """Every armed site's first byte must be 0x55 IN THE LIVE PROCESS.
+
+    THE FAILURE THIS IS AGAINST IS A CRASH, not a wrong number, and it is the trap
+    this repo has walked into three times in three files. `session.py --exe`
+    defaults to the NEWEST build under `vault/run/` -- `sorted()[-1]` -- while every
+    address in `content/movecode.toml` is build 38797. `gensites.py --check` reads
+    the PINNED FILE and would say OK while a different build is the one running:
+    it is checking the wrong artifact to catch this.
+
+    Arming a 38797 RVA in a 38833 image does not miss politely. It writes 0xCC into
+    whatever byte lives there, which is usually the middle of an instruction, and
+    the client dies somewhere unrelated with our patch in it.
+
+    So the same property `gensites.py` verifies against the file is verified here
+    against the process we are about to inject. Returns ([], base) when every site
+    agrees, or (reasons, base) when it must be refused.
+    """
+    import keytap
+    import gensites
+    sites, _offs = gensites.rows()
+    base = keytap.module_base(pid, "Gw.exe")
+    bad = []
+    for name in sorted(sites):
+        rva = sites[name]["rva"]
+        got = keytap.read_at(pid, base + rva, 1)
+        if not got:
+            bad.append(f"{name}: could not read 0x{base + rva:08X} in the live "
+                       f"process")
+        elif got[0] != 0x55:
+            bad.append(f"{name}: rva 0x{rva:08X} holds 0x{got[0]:02X} in the "
+                       f"running client, not 0x55 (push ebp)")
+    return bad, base
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -91,6 +126,28 @@ def main(argv=None):
     if loaded is None:
         print("  (could not determine whether it is already loaded -- proceeding; "
               "if this is a re-attach, restart the client instead)")
+
+    # THE BUILD CHECK, against the running process and not against the pinned file.
+    try:
+        bad, base = verify_running_build(pid)
+    except Exception as ex:
+        print(f"cannot verify the running client's build: {ex}")
+        print("Refusing rather than arming addresses that may not belong to this "
+              "build. Every movehook address is 38797.")
+        return 4
+    if bad:
+        print("REFUSING TO INJECT -- the running client is not the build these "
+              "addresses were measured against:")
+        for b in bad:
+            print(f"  {b}")
+        print("")
+        print("Launch the 38797 build EXPLICITLY -- session.py defaults to the "
+              "newest build under vault/run/, which is not this one:")
+        print("  python toolkit/harness/session.py --exe "
+              "vault/run/2026-07-29_221c13772c7a/Gw.exe --keep-open --hold 900")
+        return 4
+    print(f"build check: every site reads 0x55 in the live process "
+          f"(image base 0x{base:08X})")
 
     # THE CONFIG GOES IN A FILE, NOT THE ENVIRONMENT, and the difference is not
     # stylistic. `GetEnvironmentVariableA` inside the injected DLL reads the

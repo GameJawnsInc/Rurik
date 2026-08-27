@@ -20,6 +20,8 @@ WHAT IS CHECKED, and which of them need what:
   §5  the reader REFUSES when control A failed                   process-free
   §6  the DLL builds, and it is x86                              needs a compiler
   §7  inject into a throwaway 32-bit cmd.exe and read it back    needs cmd.exe
+  §8  movehook.cfg beats the environment                         rides on §7
+  §9  attach.py refuses a client that is not build 38797         process-free
 
 §7 IS THE ONE THAT MATTERS AND IT IS THE ONE THAT COULD NOT EXIST WITHOUT THE
 RULING. It injects the real DLL into a real 32-bit process, waits for the run to
@@ -47,7 +49,7 @@ sys.path.insert(0, HERE)
 import checks                                                   # noqa: E402
 
 # MEASURED off a real green run, 2026-08-26 -- counted per section out of the
-# banner, never computed by addition. A whole green run on this machine is 36:
+# banner, never computed by addition. A whole green run on this machine is 43:
 #
 #   §1  6   sites.h is what the generator emits    needs the vaulted client
 #   §2  5   first bytes vs the pinned image        needs the vaulted client
@@ -57,7 +59,8 @@ import checks                                                   # noqa: E402
 #   §6  2   the DLL builds, and it is x86          needs a compiler
 #   §7  5   inject into a live 32-bit cmd.exe      needs SysWOW64\cmd.exe
 #   §8  2   movehook.cfg beats the environment     rides on §7's injected run
-#   ----   process-free core = 18, and THAT is the floor.  A whole run is 38.
+#   §9  5   attach.py's build guard, both ways   process-free
+#   ----   process-free core = 23, and THAT is the floor.  A whole run is 43.
 #
 # The first draft of this comment guessed 16 by adding up what the sections
 # looked like they contained, and it was two low -- which would have let two
@@ -65,8 +68,8 @@ import checks                                                   # noqa: E402
 # ("set the floor from a real green run, never from a guess") is not about
 # arithmetic being hard; it is that a floor derived from the code rather than
 # from the output drifts the moment either changes. `skip()` lowers the floor by
-# ZERO, so a bare machine must still clear 18.
-LEDGER = checks.Ledger("movehook", floor=18)
+# ZERO, so a bare machine must still clear 23.
+LEDGER = checks.Ledger("movehook", floor=23)
 check = checks.adopt(LEDGER)
 
 WOW64_CMD = r"C:\Windows\SysWOW64\cmd.exe"
@@ -369,6 +372,60 @@ def section_6_7(tmp):
                 fh.write(cfg_saved)
 
 
+# ---------------------------------------------------------------- §9
+def section_9():
+    """attach.py's build guard REFUSES a client whose bytes are not 0x55.
+
+    WHY THIS IS THE MOST IMPORTANT GUARD IN THE DIRECTORY. `session.py --exe`
+    defaults to the NEWEST build under `vault/run/` -- the `sorted()[-1]` trap this
+    repo has hit three times in three files -- while every movehook address is
+    38797. `gensites.py --check` reads the PINNED FILE, so it says OK regardless of
+    which client is actually running: it is checking the wrong artifact to catch
+    this. Arming a 38797 RVA in a 38833 image writes 0xCC into the middle of some
+    unrelated instruction and kills the client with our patch in it.
+
+    BOTH DIRECTIONS ARE EXERCISED, because a guard that only ever refuses is
+    indistinguishable from one that is broken. `keytap` is monkeypatched so the
+    'client' can be made to hold 0x55 everywhere (must ACCEPT) or one wrong byte
+    (must REFUSE). A live positive control was tried first and only reached the
+    'no Gw.exe module' path, which proves the weaker half.
+    """
+    try:
+        import attach
+        import keytap
+    except Exception as ex:
+        LEDGER.skip("9. the build guard", f"cannot import: {ex}")
+        return
+
+    real_base, real_read = keytap.module_base, keytap.read_at
+    try:
+        keytap.module_base = lambda pid, name: 0x00400000
+
+        keytap.read_at = lambda pid, addr, n: b"\x55" * n
+        bad, base = attach.verify_running_build(1234)
+        check(bad == [], "9. a client holding 0x55 at every site is ACCEPTED",
+              f"refused a correct client: {bad}")
+        eq(base, 0x00400000, "9. and the image base is reported")
+
+        # One site wrong is enough: this is what a build bump looks like.
+        wrong = {0x00400000 + 0x001FE950: b"\x8b"}
+        keytap.read_at = lambda pid, addr, n: wrong.get(addr, b"\x55" * n)
+        bad, _ = attach.verify_running_build(1234)
+        check(len(bad) == 1, "9. ONE wrong byte is enough to refuse the whole run",
+              f"expected exactly one refusal, got {bad}")
+        check(any("0x8B" in b for b in bad),
+              "9. and the refusal names the byte it actually found",
+              f"{bad}")
+
+        # A read that fails is a refusal too, not an accept-by-default.
+        keytap.read_at = lambda pid, addr, n: None
+        bad, _ = attach.verify_running_build(1234)
+        check(len(bad) == 4, "9. an unreadable site refuses rather than passing",
+              f"{bad}")
+    finally:
+        keytap.module_base, keytap.read_at = real_base, real_read
+
+
 def main():
     import tempfile
     tmp = tempfile.mkdtemp(prefix="movehook-test-")
@@ -376,6 +433,7 @@ def main():
     section_3()
     section_4_5(tmp)
     section_6_7(tmp)
+    section_9()
     return LEDGER.verdict()
 
 
