@@ -657,3 +657,62 @@ that field in its own reset path is strong evidence 888 is a legal resting value
 there; it is **not** proof the client tolerates *receiving* 888 from the wire at
 that instant in the burst. **UNVERIFIED until a login reaches character select
 with the new value** — one loopback run, no ArenaNet contact.
+
+### 10.7 PRE-REGISTERED, before the run — the loopback confirmation
+
+Written and committed **before** the client was launched, per the house rule that
+a probe states its prediction first. §10.6 leaves exactly one thing unmeasured;
+this is the run that measures it.
+
+**Question.** Does the client complete the login burst and reach a map when the
+first `MANIFEST_DONE` carries `map_arg = 888` instead of `877`?
+
+**Why it is not already answered.** §10.3 shows the argument is stored at
+`context+0x134` and that nothing in MsCliMan reads it back. But `MISSIONS = 888`
+appears in the module as a **strict** bound — `mission < MISSIONS` — so **888 is
+exactly the value that would trip it** and 877 is exactly the value that would
+not. If our map argument ever reaches a bounds-checked path, the flip we just
+shipped turns a silent mislabel into an assert. That is a real and specific way
+for this to be wrong, and it is why the run is worth doing rather than a
+formality.
+
+**H1 (predicted).** The client reaches the map. The field takes 888 from the
+client's own reset path, and MsCliMan performs three stores and zero reads of it,
+so nothing on this path bounds-checks our argument.
+
+**H0 (the refutation, and what it would look like).** The client dies with
+`Assertion: mission < MISSIONS` naming `MsCliMan.cpp(368)` or `(409)`. If that
+appears, 888 is wrong **for the wire** even though it is right for the field, the
+flip is reverted, and §10 is rewritten to say that the client's internal sentinel
+and the value a server may send are different questions.
+
+**Design — two arms, treatment first.**
+
+- **Arm A, treatment:** `MAP_ID_COUNT = 888`, as shipped. Predicted: reaches the map.
+- **Arm B, control:** `MAP_ID_COUNT = 877`, the old value, restored temporarily.
+  Predicted: also reaches the map.
+
+Treatment runs first so that a crash answers the question immediately. The control
+runs regardless of A's outcome — it is what separates "the change is fine" from
+"the harness cannot tell", and per this repo's own rule a failed control must not
+be allowed to void a positive treatment.
+
+**What to watch, in priority order.**
+
+1. The harness's **capture-derived** verdict — the spawn rung, read from messages
+   the client itself sent. Not a screenshot: §"WHY THE VERDICT COMES FROM THE
+   CAPTURE" in `harness/session.py` records two runs with byte-identical
+   screenshots that stopped at different rungs.
+2. The client's error log and any crash dialog, specifically for MsCliMan:368/409.
+3. Whether A and B differ **at all**.
+
+**The outcome that is NOT a vindication, stated now so it cannot be spun later.**
+If both arms reach the map identically, this run has **not** confirmed 888 is
+correct — it has only shown the client is indifferent to the value on this path,
+which is what "three stores, zero reads" already predicted. The ruling would still
+rest on §10.2–§10.4's static evidence, and the honest summary is *"behaviourally
+neutral, and correct on the measurement."* A green pair is a weak result by
+construction. Only H0 would be strong, and it would be strong against us.
+
+**Run:** `python toolkit/harness/session.py` (default `--until map`), loopback,
+synthetic credential, caged `ours`-DH build. No ArenaNet contact.
