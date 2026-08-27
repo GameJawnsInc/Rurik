@@ -1904,7 +1904,24 @@ it snaps, how far it tolerates, what arms a hard arrival vs a glide —
 and no server-side policy can cross that. **Owner's ruling 2026-08-26:
 static analysis + DLL hooks, dependency restrictions lifted for that
 arc.** The router ships as it stands (opt-in, four runs of measured
-improvement). Handoff: `studies/movecode/PLAN.md`.
+improvement).
+
+**NEXT ARC — MOVECODE, scoped and handed off:
+[studies/movecode/PLAN.md](studies/movecode/PLAN.md).** Its recon turned
+up that most of the mechanism is ALREADY DECODED in
+`studies/movement/FINDINGS.md`: `0x00602A40` hardcodes `isWaypoint=0`,
+which clears `m_flags` bit 18, and `0x0060029F` reads bit-18-clear as
+**TELEPORT** at the exact arrival tick — so every `0x0029` we send arms
+a scheduled hard arrival, invisible while the body is gliding to it and
+a warp the moment the body is elsewhere. Bit 18 has **two unreconciled
+readings** on record; reconciling them (MOVECODE-B1, static, no client
+run) is the first move and may reprice the whole arc. Then `movehook`
+(B2) — extending the PROVEN `trnblock.c` persistent-int3 pattern — taps
+the glide-vs-teleport branch, the AgTrack dispatch and the match test;
+and B3 hooks the client's own `MapFindPath` for a per-query differential
+against `pathmap.route()`, which settles run 5's pocket. Four process
+questions are posed for the owner in that doc's §6 before the first
+native commit.
 *The staging block that preceded the run, kept for the record:*
 The follow-on recon (`studies/movement/followon-notes/README.md`, merged
 to `main` the same day) answered F35's counterfactual from tape (castless,
