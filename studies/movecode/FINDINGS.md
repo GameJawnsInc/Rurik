@@ -1130,15 +1130,28 @@ Grants per second is not comparable — across 37 live connections it ranges 0.0
 removes the free parameter (`0x0029` field 2 is the destination, SOURCED by four
 `worldDims` asserts).
 
+**The denominator has to be built the same way on both sides**, and this bit me once:
+retail's is the **granted path** (the chain of destination-to-destination distances
+reconstructed from the wire), so ours must be too. Our server logs its own
+destinations, so it can be: the 51 fired grants chain to **36,387 u**.
+
 | | grants per 1000 u |
 |---|---|
-| retail, 118 agents, 3.1 M u of path | min **1.70**, p10 2.47, **p50 4.30**, p90 10.27, max 21.79 |
-| our sync copy | **1.65** |
-| our local copy | 11.39 |
+| retail, 118 agents | min **1.70**, p10 2.47, **p50 4.30**, p90 10.27, max 21.79 |
+| our sync copy, same construction | **1.40** |
 
-**The twin sits below retail's minimum — the 0th percentile of 118 agents**, at 2.6×
-under retail's median. (Ticks are not the shortfall: we send `0x001E` at 19.65/s
-against retail's 5.822/s.)
+**The twin sits below retail's MINIMUM — 0 of 118 live agents were granted more
+sparsely — and retail's median is 3.07× ours.**
+
+(The first pass reported 1.65, dividing by the distance *implied* by the twin's
+motion time rather than by the granted chain. Both figures are below retail's
+minimum, but only the chain is the same quantity retail's is, so 1.40 is the one
+that means what its label says. Its measured walked path, a third denominator,
+gives 1.88 — also below 1.70.)
+
+Ticks are not the shortfall: we send `0x001E` at 19.65/s against retail's 5.822/s.
+Nor is it the local copy, which at 11.39 per 1000 u of its own walked path sits up
+at retail's p90 — but it is driven by the client's own solver, not by us.
 
 ### 1i.5 WHY our server under-grants — and it is the SAME defect as MOVECODE-Q2
 

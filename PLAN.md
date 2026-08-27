@@ -1500,7 +1500,7 @@ calls, paired 1:1 on inter-event gaps to a 15 ms maximum), so a refusal does not
 leave the client to its own pathing — it leaves the sync copy standing still while
 the local copy walks away, until the client's own desync test **rolls the player
 back**. In one 207 s run that was 17 refused clicks, 37% of all movement authority
-suppressed, and a grant density of **1.65 per 1000 u against retail's 4.30 median
+suppressed, and a grant density of **1.40 per 1000 u against retail's 4.30 median
 and 1.70 minimum over 118 live agents** — below the floor of anything ArenaNet's
 own server was ever observed doing.
 
@@ -2419,9 +2419,10 @@ the re-issuers, because we know there are **two agents**, not one.
   **100.2 s of 207.6 s** against the local copy's 37.8 s and falls ~18,000 u
   behind, until the client's own desync test rolls the player back.
 - **Against retail, normalised by path walked** (grants/second is not
-  comparable — it ranges 0.086–9.142/s with operator activity): retail is
-  **4.30 grants per 1000 u** (p50, 118 agents), minimum 1.70. Ours is **1.65 —
-  below retail's minimum.**
+  comparable — it ranges 0.086–9.142/s with operator activity, and the
+  denominator must be the GRANTED path on both sides): retail is **4.30 grants
+  per 1000 u** (p50, 118 agents), minimum 1.70. Ours is **1.40 — below retail's
+  minimum, 0 of 118 agents granted more sparsely, and 3.07× under the median.**
 - **It is the same defect as MOVECODE-Q2.** Two of the 17 clicks our server
   refused are exactly §1h.4's two OFF-MESH `MapFindPath` goals, and the reason
   codes match which end was off-mesh. 11 of 17 sit in §1h.4's north-east region.
