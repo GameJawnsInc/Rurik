@@ -130,14 +130,82 @@ def score(pm, pts, list_n=0):
     return rows, tally
 
 
+def identify(qs):
+    """Work out WHICH map a capture came from, by asking every rowed mesh.
+
+    A capture does not record its map, so `--map` is a value a human types from
+    memory -- and the wrong mesh does not error, it answers. Every point lands
+    off-mesh, `pathdiff` reports OFF-MESH for all of them, and that reads exactly
+    like the decode gap this tool exists to find. That is the worst possible failure
+    for an instrument whose interesting answer is "our mesh is wrong".
+
+    So: score the captured endpoints against each candidate and let the data pick.
+    The right map puts nearly every point ON its mesh; a wrong one puts nearly none.
+    REFUSES when the winner is not clear-cut, rather than guessing.
+    """
+    from pathmap import PathingMap
+    from archive import Archive, file_id_table
+    pts = []
+    for q in qs:
+        if q.src:
+            pts.append((q.src[0], q.src[1]))
+        if q.dst:
+            pts.append((q.dst[0], q.dst[1]))
+    if not pts:
+        print("")
+        print("cannot identify the map: no query in this capture carries "
+              "coordinates.")
+        return None, None
+    try:
+        import content as content_mod
+        t = content_mod.load()
+        t = t.tables if hasattr(t, "tables") else t
+        fids = sorted({r["file_id"] for r in (t.get("map") or {}).values()
+                       if r.get("file_id")})
+    except Exception as ex:
+        print("")
+        print(f"cannot identify the map: no content rows ({ex})")
+        return None, None
+
+    ar = Archive()
+    table = file_id_table(ar)
+    scored = []
+    for fid in fids:
+        try:
+            pm = PathingMap.load(fid, archive=ar, table=table)
+        except Exception:
+            continue
+        on = sum(1 for x, y in pts if pm.walkable(x, y))
+        scored.append((on / len(pts), fid, pm))
+    scored.sort(reverse=True, key=lambda r: r[0])
+    if not scored:
+        print("")
+        print("cannot identify the map: no candidate mesh loaded.")
+        return None, None
+    print("")
+    print(f"identifying the map from {len(pts)} captured point(s):")
+    for frac, fid, _pm in scored[:5]:
+        print(f"   0x{fid:<7X} {100.0 * frac:5.1f}% on mesh")
+    best, runner = scored[0], (scored[1] if len(scored) > 1 else (0.0, 0, None))
+    if best[0] < 0.6 or best[0] - runner[0] < 0.2:
+        print("")
+        print("REFUSING to pick: no candidate is a clear winner. Pass --map "
+              "explicitly if you know it, but check first -- an ambiguous result "
+              "can also mean our decode is wrong for the real map.")
+        return None, None
+    print(f"   -> 0x{best[1]:X}")
+    return best[1], best[2]
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--bin", default=None, help="capture file")
     ap.add_argument("--map", required=True,
-                    help="map FILE id the capture was taken in, e.g. 0x1B97D. "
-                         "Required: a capture does not record it, and the wrong "
-                         "mesh answers confidently.")
+                    help="map FILE id the capture was taken in, e.g. 0x1B97D, or "
+                         "`auto` to identify it from the captured coordinates. "
+                         "Required either way: a capture does not record the map, "
+                         "and the WRONG mesh answers confidently.")
     ap.add_argument("--list", type=int, default=12,
                     help="print this many individual queries")
     a = ap.parse_args()
@@ -170,8 +238,33 @@ def main():
         return 1
 
     from pathmap import PathingMap
-    fid = int(a.map, 0)
-    pm = PathingMap.load(fid)
+    if a.map.strip().lower() == "auto":
+        fid, pm = identify(qs)
+        if fid is None:
+            return 1
+    else:
+        fid = int(a.map, 0)
+        pm = PathingMap.load(fid)
+        # CROSS-CHECK the map you were TOLD, because the wrong one does not error
+        # -- it reports every point OFF-MESH, which reads exactly like the decode
+        # gap this tool exists to find. `auto` alone cannot identify a map (meshes
+        # overlap in coordinate space; run 2's points sit on two different maps at
+        # 100%), but it can say "the one you named is not among the plausible ones",
+        # and that is the half worth having.
+        pts = [(q.src[0], q.src[1]) for q in qs if q.src]
+        pts += [(q.dst[0], q.dst[1]) for q in qs if q.dst]
+        if pts:
+            on = sum(1 for x, y in pts if pm.walkable(x, y)) / len(pts)
+            if on < 0.5:
+                print("")
+                print(f"!! WARNING: only {100.0 * on:.0f}% of this capture's points "
+                      f"are on map 0x{fid:X}'s mesh.")
+                print("   Either --map is wrong, or our decode of that map is badly "
+                      "off. Run")
+                print("   `--map auto` to see which meshes DO fit before reading "
+                      "anything below")
+                print("   as a finding -- a wrong map produces 100% OFF-MESH and "
+                      "looks like a result.")
     print(f"our mesh: map file 0x{fid:X}, {len(pm.trapezoids)} trapezoid(s), "
           f"{len(pm.planes)} plane(s)")
 
