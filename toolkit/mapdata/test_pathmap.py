@@ -302,7 +302,11 @@ def all_valid(pm, paths):
 # Was 41 against a green 43 before section 10 existed.
 # If a run scores 61, a section stopped executing and the passes above it are
 # not evidence of anything.
-LEDGER = checks.Ledger("pathing map", floor=62)
+# Floor history: 62 (green 64, two archive-conditional section-6 checks may
+# skip) until 2026-08-26; section 11 (ROUTER-B4 route plane preference)
+# added five checks, two of which sit behind a stacked-point search that
+# may skip-declare -- green run 69, floor 65.
+LEDGER = checks.Ledger("pathing map", floor=65)
 check = checks.adopt(LEDGER)
 
 
@@ -811,6 +815,80 @@ def main():
               f"{sum(1 for p in tight_paths if p)} paths, 0 bad")
         check(pathmap.PULL_SAMPLE_BUDGET == saved_budget,
               "the budget was put back", f"{pathmap.PULL_SAMPLE_BUDGET}")
+
+    print("\n11. route() plane preference and corridor planes (ROUTER-B4)")
+    # The 2026-08-26 run-2 defect: endpoint selection took containing()[0]
+    # blind, and on stacked geometry that routed a click to the wrong
+    # surface (a twelve-waypoint island tour to the terrain under a prop).
+    # (a) with_planes agrees with the plain call and parallels the path.
+    rng11 = random.Random(11)
+    routed_n = 0
+    agree = True
+    para = True
+    ends_ok = True
+    tries = 0
+    while routed_n < 20 and tries < 400:
+        tries += 1
+        a = rng11.choice(pre.trapezoids).centre
+        b = rng11.choice(pre.trapezoids).centre
+        plain = pre.route(a[0], a[1], b[0], b[1])
+        both = pre.route(a[0], a[1], b[0], b[1], with_planes=True)
+        if plain is None:
+            if both is not None:
+                agree = False
+            continue
+        if both is None:
+            agree = False
+            continue
+        path, planes = both
+        routed_n += 1
+        if path != plain:
+            agree = False
+        if len(planes) != len(path):
+            para = False
+        if (planes[0] not in {t.plane for t in pre.containing(*path[0])}
+                or planes[-1] not in
+                {t.plane for t in pre.containing(*path[-1])}):
+            ends_ok = False
+    check(routed_n >= 20,
+          "twenty routed pairs found for the with_planes comparison",
+          f"{routed_n} in {tries} draws")
+    check(agree, "with_planes returns the SAME path as the plain call",
+          "the aux planes must be a decoration, never a behavior change")
+    check(para and ends_ok,
+          "planes parallel the path and its endpoints' planes are real",
+          "each end's plane must belong to a trapezoid actually "
+          "containing that point")
+    # (b) preference picks the named surface on stacked ground.
+    stacked = None
+    for t in pre.trapezoids:
+        cx, cy = t.centre
+        here = pre.containing(cx, cy)
+        if len({c.plane for c in here}) >= 2:
+            stacked = (cx, cy, sorted({c.plane for c in here}))
+            break
+    if stacked is None:
+        LEDGER.skip("plane preference on stacked ground",
+                    "no stacked point found on Pre-Searing")
+    else:
+        sx, sy, splanes = stacked
+        got = []
+        for want in splanes[:2]:
+            r = pre.route(sx, sy, sx, sy, start_plane=want,
+                          goal_plane=want, with_planes=True)
+            got.append(None if r is None else r[1])
+        check(got[0] == [splanes[0], splanes[0]]
+              and got[1] == [splanes[1], splanes[1]],
+              "start/goal preference selects the named surface of a "
+              "stacked point",
+              f"point ({sx:.0f},{sy:.0f}) planes {splanes[:2]} -> {got}")
+        # an unmatched preference falls back rather than refusing.
+        bogus = max(splanes) + 1000
+        r = pre.route(sx, sy, sx, sy, start_plane=bogus, goal_plane=bogus)
+        check(r is not None,
+              "an unmatchable preference falls back to all candidates",
+              "prefer semantics, same contract as plane_at(prefer=): "
+              "refusing would turn a hint into a gate")
 
     dt = time.perf_counter() - t0
     print(f"\nwalked the archive in {dt:.1f}s")

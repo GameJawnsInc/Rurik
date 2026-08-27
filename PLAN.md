@@ -1853,8 +1853,22 @@ mesh cannot place; test_d1lead's cell flipped from pinning the door
 open to pinning it closed). **Next: re-run under the same flags** —
 registered prediction: the drag-phase phasing episodes lose their ray
 injections; what remains is mesh-edge residual, not server-ordered.
-Open: ROUTER-Q1..Q9 in the doc; P-2 (cross-floor) still VOID for
-exposure.
+**Run 2 (20260826T194505, ROUTER.md §7): B3's prediction HELD**
+(zero-distance demotions, off-mesh episodes collapsed 9.6s→≤3.5s,
+wall-press stable per the owner) — and the owner's remaining complaints
+decoded to PLANE-BLIND endpoint selection: a 1,020u click answered by a
+twelve-waypoint 12,000u island tour to the wrong stack level, and the
+cross-floor click overshooting 900u and walking back (no teleport on
+the tape — the "warp" was the route's shape). **ROUTER-B4 shipped**:
+`pathmap.route()` gained start/goal plane preference + corridor-true
+per-waypoint planes (test_pathmap §11, floor 65, proven on a real
+stacked point), the wiring passes the click's own planes and sends the
+corridor's plane words, and a TOUR CAP (4×direct+800u,
+measured-bounded) demotes island tours to the clip-fallback stop.
+**Next: run 3, same flags** — registered: tours gone, stacked clicks
+resolve to the clicked surface, cross-floor routes sane-or-stop.
+Open: ROUTER-Q1..Q10 in the doc; P-2 (cross-floor) exercised in run 2
+but scored against a defect since fixed — re-score in run 3.
 *The staging block that preceded the run, kept for the record:*
 The follow-on recon (`studies/movement/followon-notes/README.md`, merged
 to `main` the same day) answered F35's counterfactual from tape (castless,
