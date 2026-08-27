@@ -1153,38 +1153,62 @@ Ticks are not the shortfall: we send `0x001E` at 19.65/s against retail's 5.822/
 Nor is it the local copy, which at 11.39 per 1000 u of its own walked path sits up
 at retail's p90 — but it is driven by the client's own solver, not by us.
 
-### 1i.5 WHY our server under-grants — and it is the SAME defect as MOVECODE-Q2
+### 1i.5 WHY our server under-grants — TWO defects, and only one of them is the mesh
 
-The server log records its own refusals, and they account for the gap:
+The server log records its own refusals. **17 movement clicks refused outright**, plus
+**13 of 64 grant verdicts refused** on `heading-rate` — so **30 of 81
+movement-authority events were suppressed (37%)** against 51 granted.
 
-* **17 movement clicks refused outright** — `geo-stale` 13, `geo-blocked` 3,
-  `geo-unplaced` 1. Every one `fired: false`.
-* **13 of 64 grant verdicts refused** on `heading-rate`.
+**I first read all 17 as geometry refusals and that was wrong.** The branch at
+`authsrv.py:16453` picks between three reasons and only two of them are about the
+mesh:
 
-So **30 of 81 movement-authority events were suppressed (37%)**, against 51 granted.
+```
+fresh  = (time.time() - state["pos_seen"]) <= 1.0        # 16373
+placed = here == {a2_place_plane}                        # is the PLAYER on the mesh
+reason = "geo-stale" if not fresh else "geo-unplaced" if not placed else "geo-blocked"
+```
 
-The branch is `authsrv.py:16453`, and its comment states the intent plainly: *"Something
-is in the way, so the client is pathing around it and knows more than we do. Say
-nothing, and drop our own destination rather than integrate along a line the player is
-not walking."*
-
-**The silence is not free**, and that is the finding. The client is not "left to its
-own pathing" — it is left to walk the local copy away from a sync copy that receives
-nothing, until the client's own desync test fires and rolls the player back.
-
-**And these are Q2's coordinates.** Two of the 17 refusals are *exactly* §1h.4's two
-OFF-MESH `MapFindPath` goals, and the server's own reason code matches which end
-§1h.4 found off-mesh:
-
-| refused click | server's reason | §1h.4's verdict |
+| reason | n | what it actually means |
 |---|---|---|
-| `(−4705.9, 7670.4)` t=170.4 | `geo-unplaced` — "cannot place **them**" | **start** off mesh |
-| `(−4284.3, 8482.0)` t=178.7 | `geo-blocked` — "not a straight shot" | **goal** off mesh |
+| `geo-stale` | **13** | the server has no position report inside its own 1.0 s window |
+| `geo-blocked` | 3 | the straight-line clip failed |
+| `geo-unplaced` | 1 | the player's own position will not place on the mesh |
 
-11 of the 17 refusals sit at y > 5000, the same north-east region §1h.4 named. **The
-navmesh hole and the twin starvation are one defect seen from two sides**: our decode
-of map 280 is wrong in the north-east, the server therefore refuses to grant there,
-and the client warps.
+**The 13 are a CADENCE defect and have nothing to do with geometry.** Position reports
+arrive at **0.448/s**, with an inter-report gap of p50 0.80 s but **p90 7.24 s and max
+14.01 s**; **44% of gaps exceed the 1.0 s window and the session spends 69% of its
+time staler than that**. All 13 refused clicks landed in such a window (12 measured at
+1.20–9.48 s old; the 13th arrived before the first report at all). **Our server refuses
+to answer because it does not know where the player is**, and the window it tests
+against is tighter than the cadence it actually receives.
+
+**The 4 geometry refusals are Q2, and they are unanimous about where.**
+
+| refused click | reason | §1h.4's independent verdict |
+|---|---|---|
+| `(−5282.7, 7513.6)` | `geo-blocked` | — |
+| `(−4705.9, 7670.4)` | `geo-unplaced` — "cannot place **them**" | **start** off mesh |
+| `(−4284.3, 8482.0)` | `geo-blocked` — "not a straight shot" | **goal** off mesh |
+| `(−6724.6, 8312.2)` | `geo-blocked` | — |
+
+**4 of 4 sit in the north-east region (y > 5,000)** that §1h.4 named from the
+`MapFindPath` side, and two of them are that section's exact off-mesh coordinates,
+with the reason code matching which end was off-mesh. The staleness refusals, by
+contrast, are spread 7 north-east to 6 elsewhere — which is what a defect unrelated to
+geometry should look like, and is the control that separates the two.
+
+So: **the navmesh hole is real and is confirmed from two independent sides, but it
+accounts for 4 of 17 refusals, not 17.** An earlier draft of this section said the
+two were "one defect seen from two sides"; that holds for the four and not for the
+thirteen.
+
+The branch's own comment states the intent: *"Something is in the way, so the client is
+pathing around it and knows more than we do. Say nothing, and drop our own destination
+rather than integrate along a line the player is not walking."* **The silence is not
+free**, and that is the finding common to both defects: the client is not left to its
+own pathing — it is left to walk the local copy away from a sync copy that receives
+nothing, until the desync test rolls the player back.
 
 ### 1i.6 What the warp actually IS, at the byte level
 
@@ -1209,7 +1233,16 @@ discarded exactly the ten steps that matter. `readhook` now counts them instead.
 ### 1i.7 Status and what is NOT settled
 
 * **MOVECODE-Q2 is no longer only a decode question.** It has a measured server-side
-  consequence and a measured cost in grants.
+  consequence, confirmed from two independent sides — but it costs **4 of 17**
+  refusals, not 17. Bounded to y ≈ 7,500–8,500 by those four.
+* **A SECOND, LARGER defect is now named and is not the mesh: the freshness window.**
+  `authsrv.py:16373` requires a position report inside 1.0 s; the session spends **69%
+  of its time staler than that**, and it cost **13 of 17** refused clicks. This is a
+  cadence question (how often the client reports, or how long we are willing to trust
+  the last report, or whether the model should answer when the report is stale — which
+  is what `D1_LEAD`'s `a2_click_leg` block at `authsrv.py:16385` already does, and it
+  is inert under the shipped default). **It is cheaper to investigate than the mesh and
+  it is the bigger contributor.**
 * **The existing candidate fix is already in the tree and is OFF.** `D1_LEAD`
   (`authsrv.py:4595`, REALFIX-A2) makes geometry *not* refuse a click, because the
   answer is a verbatim echo of the client's own point — "retail's contract, 23/23

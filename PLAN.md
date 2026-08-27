@@ -1518,12 +1518,24 @@ UNVERIFIED remainder (~5.7% of retail-unclipped rays clip >20 u on our mesh). It
 off by default deliberately. §1i changes the *price of the status quo*; it does not
 by itself discharge that spec.
 
-**The rival, and it may be the better buy:** fix the mesh instead. The two refusals
-§1i could cross-check are **exactly** §1h.4's two OFF-MESH `MapFindPath` goals, with
-the server's reason code matching which end was off-mesh — so the geometry refusals
-are substantially *our decode being wrong*, not the client knowing better. Repairing
-map 280's north-east region removes the refusals at the source and needs no policy
-change. The two are not exclusive.
+**Two rivals, and the cheaper one is not the bundle.** §1i.5 decomposes the 17
+refusals and only **4** are geometry; **13** are `geo-stale` — no position report
+inside `authsrv.py:16373`'s 1.0 s window, in a session that spends **69% of its time
+staler than that**. So:
+
+* **Widen or bypass the freshness window** (13 of 17). `D1_LEAD` already contains the
+  bypass — its `a2_click_leg` block at `authsrv.py:16385` answers from the model when
+  the report is stale, and is inert under the shipped default — but the window is also
+  a one-line policy question that can be asked on its own, without the bundle. **This
+  is the cheapest thing on the list and the largest single contributor.**
+* **Repair map 280's north-east mesh** (4 of 17). Those four are unanimous about the
+  region and two of them are exactly §1h.4's OFF-MESH coordinates, so the geometry
+  refusals really are *our decode being wrong* rather than the client knowing better.
+  Needs no policy change at all.
+
+Neither excludes the other, and neither requires answering Q13 as posed. **What Q13
+actually asks is whether we adopt the BUNDLE**, which is a bigger commitment than
+either fix above.
 
 ---
 
@@ -2423,25 +2435,36 @@ the re-issuers, because we know there are **two agents**, not one.
   denominator must be the GRANTED path on both sides): retail is **4.30 grants
   per 1000 u** (p50, 118 agents), minimum 1.70. Ours is **1.40 — below retail's
   minimum, 0 of 118 agents granted more sparsely, and 3.07× under the median.**
-- **It is the same defect as MOVECODE-Q2.** Two of the 17 clicks our server
-  refused are exactly §1h.4's two OFF-MESH `MapFindPath` goals, and the reason
-  codes match which end was off-mesh. 11 of 17 sit in §1h.4's north-east region.
+- **TWO defects starve it, and only the smaller one is the mesh.** Of the 17
+  clicks our server refused: **13 are `geo-stale`** — no position report inside
+  `authsrv.py:16373`'s 1.0 s window, and the session spends **69% of its time
+  staler than that** — and only **4 are geometry**. The 4 are unanimous about
+  where: **4 of 4 in §1h.4's north-east region**, two of them that section's
+  exact OFF-MESH coordinates with the reason code matching which end was
+  off-mesh. The staleness refusals spread 7 NE / 6 elsewhere, which is the
+  control separating the two.
 
 **NEXT, and B5's scope is now settled by measurement rather than left pending.**
 In cost order:
 
-1. **The map-280 mesh hole is the root cause, not a side finding** — it costs
-   17 refusals and 37% of movement authority in one 207 s run. Offline work
-   against `pathmap`, bounded to y ≈ 5,600–8,600, and it needs no client.
-2. **`D1_LEAD` (`authsrv.py:4595`) is the existing candidate fix and it is OFF.**
+1. **The freshness window is the bigger contributor and the cheaper look** —
+   13 of 17 refusals, and it is not a mesh question at all: we demand a position
+   report inside 1.0 s and are outside that window 69% of the time. Either the
+   report cadence rises, or the trust window widens, or the model answers when
+   the report is stale (`D1_LEAD`'s `a2_click_leg` at `authsrv.py:16385` already
+   does exactly this and is inert under the shipped default). Desk work.
+2. **The map-280 mesh hole is real and independently confirmed**, but it costs 4
+   refusals, not 17. Bounded by those four to y ≈ 7,500–8,500. Offline against
+   `pathmap`, needs no client.
+3. **`D1_LEAD` (`authsrv.py:4595`) is the existing candidate fix and it is OFF.**
    Its geometry branch echoes the client's own point verbatim ("retail's
    contract, 23/23 bit-exact") instead of refusing; all 17 refusals recorded
    `d1_passthrough: false`. It is a four-term bundle with registered predictions
    in `studies/movement/REALFIX.md` §0.9 and requires `--zero-lead` and
    `--plane-carry`. **Turning it on is the owner's call** — Q13 below.
-3. **`heading-rate` refused 13 of 64 grant verdicts** — a sixth of the budget —
+4. **`heading-rate` refused 13 of 64 grant verdicts** — a sixth of the budget —
    and nothing here separates its cost from the geometry refusals'.
-4. **Capture `+0x24` (world)**: one row in `content/movecode.toml`. The sync
+5. **Capture `+0x24` (world)**: one row in `content/movecode.toml`. The sync
    side is currently identified indirectly, from `reseed`'s source argument.
 
 ### MODEL AUTHORING: the one-bit question is answered, and every player identity closes (2026-08-22)
