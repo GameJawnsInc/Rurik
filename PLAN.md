@@ -1407,6 +1407,51 @@ rule never runs on. Wired and tested the same day: both files at 100.0,
 Full record: `studies/movement/followon-notes/p5-resync-disarm.md` §4.2a's
 ruling block.
 
+**Q12. The four MOVECODE process questions — how does a hook arc carry the
+repo's discipline?** ✅ **CLOSED 2026-08-26, by the owner**, all four at once
+("your recommendations are all good"). Posed in `studies/movecode/PLAN.md` §6
+before the first native commit, which is where that doc says to pose them.
+
+- **(a) Client-derived constants go in `content/*.toml` with
+  `source = "client-table"`, not in a plain Python module.** The reason is
+  enforcement, not taste: a TOML row inherits `content.py`'s refusals
+  automatically — the extractor must be named and present, and
+  `NEEDS_BUILD = {"client-table"}` forces the build stamp — while a Python
+  constant inherits **nothing** and needs the whole discipline hand-copied. "A
+  rule nothing checks is a wish." The C hook takes its addresses from a header
+  generated off the same rows, so there is one home for the fact. **The one
+  thing that is refused is SPLITTING** one struct's offsets across both homes;
+  if the generation step proves too expensive, keep them in one Python module
+  and say so out loud instead.
+- **(b) A hook DLL DOES need a `test_*.py`.** `trnhook/` has none and `srclint`
+  therefore imposes nothing on it — that was silence, and it is now a ruling.
+  The hook is the arc's instrument and its whole output is a ledger; a hook that
+  silently mis-captures makes every downstream number wrong with nothing to say
+  so. The shape is already proven and cheap: `test_commandertrap.py` exercises
+  its debugger plumbing against a throwaway 32-bit `cmd.exe` under WOW64
+  (`C:\Windows\SysWOW64\cmd.exe`), reserving `LEDGER.skip` for the sections that
+  genuinely need the vaulted client — so build, inject and read-back are all
+  testable with the game not running, and a bare machine skips instead of failing.
+- **(c) The capstone/pefile carve-out stays FILE-SCOPED.** It names
+  `msghandler.py` and `codescan.py` and it is not widened to a category, because
+  the category would erode the guarantee it was scoped for: the fixed-byte-pattern
+  tools (`asserts.py`, `msgshape.py`, `areatable.py`, `genericvalue.py`) must keep
+  working on a bare machine. When something new needs a disassembler, fold the
+  capability into `codescan.py` — as MOVECODE-B1's `--bit` did, which is why B1
+  needed no ruling here — or add that one filename explicitly.
+- **(d) The hook stays HAND-ROLLED; no MinHook, no Detours, and no §6.1 row is
+  owed.** A library's real cost is the second gate (a derivation-register row and
+  a notices entry *before a line imports it*), and it buys a length-disassembler
+  this arc can avoid needing. **The design consequence is the load-bearing half:
+  prefer FUNCTION ENTRIES as hook sites, so the persistent-`int3` handler
+  re-emulates one standard prologue shape rather than an arbitrary instruction per
+  site.** Concretely — hook the entry of the teleport `0x006020B0` rather than the
+  branch `0x0060029F` (7 bytes, mid-function): the branch's only CLEAR-path
+  consequence *is* that call, so the ledger is the same and the emulation is one
+  shape instead of several. `trnblock.c`'s proven pattern re-emulates a
+  `call rel32`; every site shape beyond that is new code, and the site list should
+  be chosen to keep that number at one.
+
 ---
 
 ## 8. Immediate next actions
