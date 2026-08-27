@@ -1607,10 +1607,19 @@ MsCliMan reads +0x134**, so the consumer in another module was never chased.
 stock loopback run today** — `contentids` FATALs because `dat_study` and every
 current run archive bind map 146/148 to different files. `RUNBOOK.md` has carried a
 row for this since 2026-08-23 (the client writes to its own `Gw.dat` as it patches
-content); what is new is that it is **systematic** — all three current run dirs
-share the identical modified map, the three older dirs differ on map 143 instead,
-and **no run directory agrees with `dat_study` on every content map row**, so the
-row's "pin the map" remedy is not always available. A third route is now in that
+content); what is new is the diagnosis: **it is GENERATION SKEW, not modification.** The run
+dirs' copy is byte-identical to `dat_study_38833` down to the MFT row index, and
+all three land on the SAME row 177262 — independent client appends could not do
+that. `dat_study`, the archive the SERVER reads, is a 38797 snapshot while the run
+dirs are 38833. The three older dirs are the old generation and differ on map 143
+instead, which IS local authoring. **No run directory agrees with `dat_study` on
+every content map row**, so the row's "pin the map" remedy is not always
+available; and a future session should check the generation before suspecting
+damage. **This also refutes item (C)'s leading candidate**: crc is measured across
+both patches on disk and is REFUTED as a durable MAP key — 146/148 is the same map
+in both generations and its crc changed — while the item's stated premise ("row
+indices do not survive a patch") is not supported either, the row surviving
+marginally better than the crc on both. Record: `studies/maprows` §10.10-§10.11. A third route is now in that
 row: `RURIK_DAT=<run dir>/Gw.dat` points the server at the bytes the client
 actually draws, which is what the gate is protecting, and yields 12 of 12 agreeing.
 (2) **`spawncheck`'s 8 of 15 survives the archive question** — it defaults to
