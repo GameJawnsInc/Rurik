@@ -1886,13 +1886,25 @@ events** — 664 u at t=40.8 and 331 u at t=139.3, each in the client's
 own consecutive reports, each bracketed by an op61 report and a fired
 D1 lead, none involving a click, chain or router row. That is
 REALFIX-A2's channel, untouched by this arc, and it explains run 3's
-"middle went fine — no WASD". **Next: run 5, `--router` ALONE (drop
-`--d1-lead`)** — the attribution test, prediction ZERO warps in both
-witnesses; if it holds, the shippable configuration is router-without-
-lead and the lead channel goes back on the bench. If it fails, the
-warp engine is elsewhere and client-side instrumentation (a movement-
-code hook DLL, CLAUDE.md carve-out 3) is the next instrument.
-Open: ROUTER-Q1..Q11 in the doc.
+"middle went fine — no WASD". **Run 5 (20260826T215206, ROUTER.md §10): PREDICTION REFUTED — and the
+movement campaign's server-side phase ENDS here.** The lead channel was
+genuinely off (all grants `arm=zero-lead`, zero a2_leg rows) and the
+owner still warped immediately, so the lead channel is acquitted as the
+sole engine. The rows show the origin was PERFECT (0u error) while all
+four clicks routed AWAY from their destinations through one identical
+waypoint — **our decode of map 280 reads the player's open ground as a
+pocket** whose exit is 419u west — and the warp itself is run 3's
+mechanism at 650u: the world tick walked our copy toward that westward
+waypoint, the player walked east, and **the client reconciled onto the
+server's copy** (650u in 217ms, within 40u of our model). Abandoning
+the chain did not stop it: our abandon sends nothing that cancels an
+order already given. **The closing finding: every remaining warp
+reduces to a client-side reconcile rule we have never observed** — when
+it snaps, how far it tolerates, what arms a hard arrival vs a glide —
+and no server-side policy can cross that. **Owner's ruling 2026-08-26:
+static analysis + DLL hooks, dependency restrictions lifted for that
+arc.** The router ships as it stands (opt-in, four runs of measured
+improvement). Handoff: `studies/movecode/PLAN.md`.
 *The staging block that preceded the run, kept for the record:*
 The follow-on recon (`studies/movement/followon-notes/README.md`, merged
 to `main` the same day) answered F35's counterfactual from tape (castless,
