@@ -49,32 +49,62 @@ DEFAULT_DIR = os.path.join("vault", "research", "movecode")
 # rather than assumed. v1 carried three args; v2 carries six, because B3's
 # `MapFindPath` is a navmesh query whose output buffer is among its parameters and
 # an entry hook that cannot see arg4 cannot record where the answer was written.
-_V1 = ("seq tick site tid retaddr ecx arg1 arg2 arg3 have_agent "
-       "id flags stop x98").split()
-_V2 = ("seq tick site tid retaddr ecx arg1 arg2 arg3 arg4 arg5 arg6 have_agent "
-       "id flags stop x98").split()
-# v3 adds the DEREFERENCED pointer arguments. v2 recorded `MapFindPath`'s from/to as
-# the raw argument dwords -- which are addresses in the client's address space, so a
-# v2 capture of that site holds nothing replayable at all. Found by writing
-# `pathdiff.py` and discovering it had no coordinates to replay.
-_V3 = _V2
+# THE RECORD, PER VERSION, AS AN ORDERED FIELD LIST -- name and dword count.
+#
+# WHY ORDERED PAIRS AND NOT "SCALARS THEN BLOCKS". v3 was first described here as
+# `scalars + [point, segment, target, pt_a, pt_b]`, with `have_pts` appended to the
+# scalars. movehook.c actually declares `have_pts` AFTER target[4]. Both spellings
+# total 38 dwords, so `reclen` matched and the length check -- whose own message
+# warns about "a record whose fields would silently shift" -- could not fire. Every
+# point block read one dword late: `have_pts` came back as m_point.x, which is 0 for
+# a site with no agent, so `pathdiff` reported "no coordinates" on a capture that
+# had them, and run 2's teleport distances came out plausible and WRONG.
+#
+# A layout is now a SEQUENCE, so the order is stated once and cannot drift from the
+# C by accident; `test_movehook.py` §11 parses `rec_t` out of movehook.c and
+# compares it to this table, which is the check the length test could never be.
+_SCALARS_V1 = ["seq", "tick", "site", "tid", "retaddr", "ecx",
+               "arg1", "arg2", "arg3",
+               "have_agent", "id", "flags", "stop", "x98"]
+_SCALARS_V2 = ["seq", "tick", "site", "tid", "retaddr", "ecx",
+               "arg1", "arg2", "arg3", "arg4", "arg5", "arg6",
+               "have_agent", "id", "flags", "stop", "x98"]
+_POINTS = [("point", 4), ("segment", 4), ("target", 4)]
+
+_LAYOUTS = {
+    1: [(n, 1) for n in _SCALARS_V1] + _POINTS,
+    2: [(n, 1) for n in _SCALARS_V2] + _POINTS,
+    3: [(n, 1) for n in _SCALARS_V2] + _POINTS
+       + [("have_pts", 1), ("pt_a", 4), ("pt_b", 4)],
+    # v4 adds what it takes to see a WARP rather than a leg: velocity and the
+    # timestamp m_point is valid at. See the note in movehook.c's rec_t.
+    4: [(n, 1) for n in _SCALARS_V2] + _POINTS
+       + [("have_pts", 1), ("pt_a", 4), ("pt_b", 4),
+          ("vel", 2), ("ptime", 1)],
+}
 NPOINT = 4
-# Trailing 16-byte point blocks, in order, per version.
-_BLOCKS = {1: ("point", "segment", "target"),
-           2: ("point", "segment", "target"),
-           3: ("point", "segment", "target", "pt_a", "pt_b")}
 
 
 def _layout(ver):
-    fields = {1: _V1, 2: _V2, 3: _V3 + ["have_pts"]}.get(ver)
-    if fields is None:
-        raise CaptureError(f"capture version {ver}: this reader knows 1, 2 and 3")
-    fmt = "<" + "I" * len(fields) + "I" * (NPOINT * len(_BLOCKS[ver]))
-    return fields, fmt, struct.calcsize(fmt)
+    spec = _LAYOUTS.get(ver)
+    if spec is None:
+        raise CaptureError(f"capture version {ver}: this reader knows "
+                           f"{sorted(_LAYOUTS)}")
+    fmt = "<" + "I" * sum(c for _n, c in spec)
+    return spec, fmt, struct.calcsize(fmt)
+
+
+def _unpack(spec, vals):
+    out, i = {}, 0
+    for name, count in spec:
+        out[name] = vals[i] if count == 1 else tuple(vals[i:i + count])
+        i += count
+    return out
 
 
 # The current writer's layout, for anything that builds a capture (the tests do).
-FIELDS, REC_FMT, REC_LEN = _layout(3)
+FIELDS = [n for n, c in _LAYOUTS[4] if c == 1]
+_SPEC4, REC_FMT, REC_LEN = _layout(4)
 
 BIT_ISWAYPOINT = 1 << 18
 BIT_IN_WORLD = 1 << 17
@@ -124,13 +154,10 @@ class Capture:
         self.partial = 0
         for i in range(n):
             vals = struct.unpack_from(fmt, blob, off + i * self.reclen)
-            r = dict(zip(fields, vals[:len(fields)]))
+            r = _unpack(fields, vals)
             if not r["tick"]:
                 self.partial += 1
                 continue
-            rest = vals[len(fields):]
-            for k, blk in enumerate(_BLOCKS[ver]):
-                r[blk] = rest[k * 4:(k + 1) * 4]
             self.recs.append(r)
         self.stored = len(self.recs)
         self.claimed = n
@@ -321,11 +348,41 @@ def report(cap, names, dump=0):
             a(f"        Excluded from the distances below and reported here instead.")
         if moved:
             moved.sort()
-            a(f"     distance body -> target at the teleport, {len(moved)} sample(s):")
+            a(f"     m_point -> m_targetPoint at the teleport, {len(moved)} sample(s):")
             a(f"       min {moved[0]:8.1f}  p50 {moved[len(moved) // 2]:8.1f}  "
               f"max {moved[-1]:8.1f} units")
-            big = [d for d in moved if d > 100.0]
-            a(f"       over 100 u (a visible warp): {len(big)}")
+            # THIS IS LEG LENGTH, NOT WARP, AND THE CHAIN TEST BELOW IS WHY.
+            # It was labelled "a visible warp" for two runs. `m_point` (+0x78) is
+            # the last COMMITTED position -- the extrapolator only brings it forward
+            # on demand -- so at the arrival tick it still holds where the leg
+            # STARTED. The teleport commits the body to the leg's end. Measured
+            # 2026-08-27 run 2: 25 of 25 consecutive teleports chain to EXACTLY
+            # 0.00 (target[N] == m_point[N+1] to the bit), and the elapsed times
+            # give ~282 u/s, ordinary walking speed. A 2,677 u warp in one tick
+            # would be absurd; a 2,677 u leg over 9.5 s is a walk.
+            chain, prev = [], None
+            for r in sorted(tps, key=lambda x: x["seq"]):
+                if not r["have_agent"]:
+                    continue
+                px, py = _f(r["point"][0]), _f(r["point"][1])
+                if prev is not None and all(map(math.isfinite, (px, py) + prev)):
+                    chain.append(((px - prev[0]) ** 2 + (py - prev[1]) ** 2) ** 0.5)
+                tx, ty = _f(r["target"][0]), _f(r["target"][1])
+                prev = (tx, ty) if all(map(math.isfinite, (tx, ty))) else None
+            if chain:
+                linked = sum(1 for d in chain if d < 0.01)
+                a(f"       consecutive teleports that CHAIN exactly: "
+                  f"{linked}/{len(chain)}")
+                if linked == len(chain):
+                    a("       -> every one links end-to-start, so the figures above")
+                    a("          are LEG LENGTHS, not warps. A warp is the body")
+                    a("          being somewhere the client did not walk it to, and")
+                    a("          this tap cannot see that: it would need m_point")
+                    a("          extrapolated by velocity (+0xB0/+0xB4) to the")
+                    a("          arrival tick, which the record does not yet carry.")
+                else:
+                    a(f"       -> {len(chain) - linked} did NOT chain. Those are the")
+                    a("          candidates for a real divergence; the rest are legs.")
     a("")
 
     if dump:

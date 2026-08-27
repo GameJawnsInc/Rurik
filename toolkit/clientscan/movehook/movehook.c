@@ -235,6 +235,22 @@ typedef struct {
     DWORD have_pts;               /* bit 0 = pt_a valid, bit 1 = pt_b valid */
     DWORD pt_a[4];
     DWORD pt_b[4];
+    /* v4: WHAT IT TAKES TO SEE A WARP AT ALL.
+     *
+     * Runs 1 and 2 both reported `m_point -> m_targetPoint` at the teleport as
+     * "over 100 u, a visible warp". It is nothing of the kind: `m_point` (+0x78) is
+     * the last COMMITTED position -- the extrapolator brings it forward only on
+     * demand -- so at the arrival tick it still holds where the leg STARTED, and the
+     * figure is the LEG's LENGTH. Run 2 settled it: 25 of 25 consecutive teleports
+     * chain to exactly 0.00, target[N] == m_point[N+1] to the bit.
+     *
+     * A warp is the body being somewhere the client did not walk it to, so seeing
+     * one needs the position the client would RENDER: m_point advanced by velocity
+     * over (arrival tick - point timestamp). Those are the two fields below, and
+     * without them the question cannot be asked. `0x005FFC19` is the client's own
+     * form: `out.x = [esi+0x78] + vx * dt`, dt in ms scaled by 0.001. */
+    DWORD vel[2];                 /* +0xB0, +0xB4 -- velocity x, y */
+    DWORD ptime;                  /* +0x58 -- the timestamp m_point is valid AT */
 } rec_t;
 
 static DWORD  g_base;
@@ -418,6 +434,9 @@ static LONG CALLBACK on_bp(PEXCEPTION_POINTERS ep)
                     copy4(r->point,   ag + A_POINT);
                     copy4(r->segment, ag + A_SEGMENT_POINT);
                     copy4(r->target,  ag + A_TARGET_POINT);
+                    r->vel[0] = *(DWORD *)(ag + A_VELOCITY);
+                    r->vel[1] = *(DWORD *)(ag + A_VELOCITY + 4);
+                    r->ptime  = *(DWORD *)(ag + A_POINT_TIME);
                 }
                 /* COMMIT. Every field above is in place; this store is what
                  * makes the record readable. See the note at the memset. */
@@ -610,7 +629,7 @@ static DWORD WINAPI worker(LPVOID unused)
     snprintf(path, sizeof path, "%s\\movehook.bin", dir);
     f = fopen(path, "wb");
     if (f) {
-        DWORD n = (DWORD)g_n, reclen = (DWORD)sizeof(rec_t), ver = 3, ns = NSITES;
+        DWORD n = (DWORD)g_n, reclen = (DWORD)sizeof(rec_t), ver = 4, ns = NSITES;
         if (n > NCAP) n = NCAP;
         fwrite("MVHK", 4, 1, f);
         fwrite(&ver, 4, 1, f);

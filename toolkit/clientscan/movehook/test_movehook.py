@@ -23,6 +23,7 @@ WHAT IS CHECKED, and which of them need what:
   §8  movehook.cfg beats the environment                         rides on §7
   §9  attach.py refuses a client that is not build 38797         process-free
   §10 pathdiff replays queries through the REAL Ascalon mesh     needs the archive
+  §11 the reader's field layout matches rec_t in movehook.c      process-free
 
 §7 IS THE ONE THAT MATTERS AND IT IS THE ONE THAT COULD NOT EXIST WITHOUT THE
 RULING. It injects the real DLL into a real 32-bit process, waits for the run to
@@ -51,19 +52,20 @@ sys.path.insert(0, os.path.join(TOOLKIT, "mapdata"))
 import checks                                                   # noqa: E402
 
 # MEASURED off a real green run, 2026-08-27 -- counted per section out of the
-# banner, never computed by addition. A whole green run on this machine is 63:
+# banner, never computed by addition. A whole green run on this machine is 68:
 #
 #   §1   6   sites.h is what the generator emits     needs the vaulted client
 #   §2  10   first bytes vs the pinned image         needs the vaulted client
 #   §3   4   the provenance rules really refuse      process-free
-#   §4  15   the reader's parse, v1/v2/v3, scoring   process-free
+#   §4  16   the reader's parse, v1..v4, scoring      process-free
 #   §5   6   dead-control refusal + the commit flag  process-free
 #   §6   2   the DLL builds, and it is x86           needs a compiler
 #   §7   5   inject into a live 32-bit cmd.exe       needs a 32-bit cmd.exe
 #   §8   2   movehook.cfg beats the environment      rides on §7's injected run
 #   §9   5   attach.py's build guard, both ways      process-free
 #   §10  8   pathdiff replays vs the REAL mesh       needs the vaulted archive
-#   ----    process-free core = 30, and THAT is the floor.
+#   §11  4   the reader's layout vs rec_t IN THE C   process-free
+#   ----    process-free core = 35, and THAT is the floor.
 #
 # The first draft of this comment guessed 16 by adding up what the sections
 # looked like they contained, and it was two low -- which would have let two
@@ -71,8 +73,8 @@ import checks                                                   # noqa: E402
 # ("set the floor from a real green run, never from a guess") is not about
 # arithmetic being hard; it is that a floor derived from the code rather than
 # from the output drifts the moment either changes. `skip()` lowers the floor by
-# ZERO, so a bare machine must still clear 30.
-LEDGER = checks.Ledger("movehook", floor=30)
+# ZERO, so a bare machine must still clear 35.
+LEDGER = checks.Ledger("movehook", floor=35)
 check = checks.adopt(LEDGER)
 
 WOW64_CMD = r"C:\Windows\SysWOW64\cmd.exe"
@@ -175,27 +177,36 @@ def section_3():
 
 # ---------------------------------------------------------------- §4, §5
 REC_N = 14          # scalar fields, must match readhook.FIELDS
-def _synth(recs, sites_hits, base=0x00400000):
-    """A capture file exactly as movehook.c writes one."""
+def _synth(recs, sites_hits, base=0x00400000, ver=None):
+    """A capture file exactly as movehook.c writes one.
+
+    BUILT FROM THE LAYOUT SPEC, not from a hand-kept field order. The first version
+    of this walked `FIELDS` and then appended the point blocks, which is the very
+    shape that let v3's `have_pts` drift out of position between the C and the
+    reader -- a fixture that encodes the layout a SECOND time can agree with a wrong
+    reader and prove nothing. Walking `readhook._LAYOUTS[ver]` means the fixture and
+    the parser share one description, and §11 checks that description against the C.
+    """
     import readhook
+    ver = ver or max(readhook._LAYOUTS)
+    spec = readhook._LAYOUTS[ver]
+    fmt = "<" + "I" * sum(c for _n, c in spec)
     out = bytearray()
     out += b"MVHK"
-    out += struct.pack("<IIIII", 3, base, len(sites_hits), readhook.REC_LEN, len(recs))
+    out += struct.pack("<IIIII", ver, base, len(sites_hits),
+                       struct.calcsize(fmt), len(recs))
     for rva, hits in sites_hits:
         out += struct.pack("<II", rva, hits)
     for r in recs:
-        # `tick` is the DLL's commit flag, so a fixture that leaves it 0 is an
-        # UNCOMMITTED record and readhook drops it. Default it to something
-        # non-zero; a test that wants the drop path sets it to 0 explicitly.
         r = dict(r)
+        # `tick` is the DLL's commit flag; a fixture leaving it 0 is an UNCOMMITTED
+        # record and readhook drops it. A test wanting that path sets it explicitly.
         r.setdefault("tick", 1000 + r.get("seq", 0))
-        vals = [r.get(k, 0) for k in readhook.FIELDS]
-        vals += list(r.get("point", (0, 0, 0, 0)))
-        vals += list(r.get("segment", (0, 0, 0, 0)))
-        vals += list(r.get("target", (0, 0, 0, 0)))
-        vals += list(r.get("pt_a", (0, 0, 0, 0)))
-        vals += list(r.get("pt_b", (0, 0, 0, 0)))
-        out += struct.pack(readhook.REC_FMT, *vals)
+        vals = []
+        for name, count in spec:
+            v = r.get(name, 0 if count == 1 else (0,) * count)
+            vals.extend([v] if count == 1 else list(v))
+        out += struct.pack(fmt, *vals)
     return bytes(out)
 
 
@@ -241,22 +252,20 @@ def section_4_5(tmp):
     # BACKWARD COMPATIBILITY, and it is not hypothetical: run 1's capture
     # (2026-08-27 Ascalon, the arc's only live evidence) is v1, and a reader that
     # orphaned it would have destroyed the thing the instrument was built to get.
-    v1_fields = readhook._V1
-    v1_fmt = "<" + "I" * len(v1_fields) + "I" * (readhook.NPOINT * 3)
-    v1 = bytearray(b"MVHK")
-    v1 += struct.pack("<IIIII", 1, 0x00400000, 1, struct.calcsize(v1_fmt), 1)
-    v1 += struct.pack("<II", 0x1FE950, 1)
-    v1rec = {"seq": 0, "tick": 999, "site": 0, "retaddr": 0x00602AD8, "arg2": 0}
-    v1 += struct.pack(v1_fmt, *([v1rec.get(k, 0) for k in v1_fields] + [0] * 12))
+    v1 = _synth([{"seq": 0, "tick": 999, "site": 0, "retaddr": 0x00602AD8}],
+                [(0x1FE950, 1)], ver=1)
     v1path = os.path.join(tmp, "v1.bin")
     with open(v1path, "wb") as fh:
-        fh.write(bytes(v1))
+        fh.write(v1)
     v1cap = readhook.Capture(v1path)
-    eq(v1cap.version, 1, "4. a v1 capture still parses after the record grew")
-    eq(v1cap.stored, 1, "4. and its records survive the version bump")
+    eq(v1cap.version, 1, "4. a v1 capture still parses after the record grew twice")
+    eq(v1cap.stored, 1, "4. and its records survive the version bumps")
     check("arg4" not in v1cap.recs[0],
           "4. and a v1 record does NOT sprout the fields it never carried",
-          "reading v2 fields out of a v1 record would invent data")
+          "reading later fields out of a v1 record would invent data")
+    check("vel" not in v1cap.recs[0],
+          "4. nor v4's velocity",
+          "a v1 record has no velocity; producing one would be fabrication")
 
     # THE COMMIT FLAG, in the direction that can fail. A partial record decodes as
     # a perfectly plausible real one -- all-zero reads as site 0, seq 0 -- so a
@@ -529,20 +538,15 @@ def section_10(tmp):
     def fl(x):
         return struct.unpack("<I", struct.pack("<f", x))[0]
 
-    blob = bytearray(b"MVHK")
-    blob += struct.pack("<IIIII", 3, 0x00400000, len(sites), rh.REC_LEN, 1)
-    for rva, h in sites:
-        blob += struct.pack("<II", rva, h)
-    rec = {"seq": 0, "tick": 1000, "site": mi, "retaddr": 0x00709000,
-           "have_pts": 3, "arg3": fl(64.0)}
-    vals = [rec.get(k, 0) for k in rh.FIELDS]
-    vals += [0] * 12
-    vals += [fl(good[0]), fl(good[1]), 0, 0]
-    vals += [fl(good[2]), fl(good[3]), 0, 0]
-    blob += struct.pack(rh.REC_FMT, *vals)
+    # Same single source of truth as the reader -- see _synth's docstring.
+    blob = _synth([{"seq": 0, "tick": 1000, "site": mi, "retaddr": 0x00709000,
+                    "have_pts": 3, "arg3": fl(64.0),
+                    "pt_a": (fl(good[0]), fl(good[1]), 0, 0),
+                    "pt_b": (fl(good[2]), fl(good[3]), 0, 0)}],
+                  [(rows[n]["rva"], 0) for n in names])
     p = os.path.join(tmp, "v3.bin")
     with open(p, "wb") as fh:
-        fh.write(bytes(blob))
+        fh.write(blob)
 
     cap = rh.Capture(p)
     qs = pathdiff.queries(cap, rh.site_names(cap))
@@ -555,6 +559,56 @@ def section_10(tmp):
     eq(round(qs[0].rng, 1), 64.0, "10. and the float range argument decodes")
 
 
+# ---------------------------------------------------------------- §11
+def section_11():
+    """The reader's CURRENT layout must match `rec_t` in movehook.c, FIELD BY FIELD.
+
+    THE CHECK THE LENGTH TEST COULD NEVER BE, and it exists because the failure
+    already happened. v3 was described in readhook.py as `scalars + [point, segment,
+    target, pt_a, pt_b]` with `have_pts` appended to the scalars; movehook.c declares
+    `have_pts` AFTER target[4]. Both spellings total 38 dwords, so `reclen` matched
+    and the guard whose own message warns about "a record whose fields would silently
+    shift" could not fire. Every point block read one dword late. `pathdiff` reported
+    "no coordinates" on a capture that had them, and run 2's teleport figures came
+    out plausible and wrong.
+
+    A length check cannot catch a reorder. Parsing the struct can, so this does: the
+    C is the source of truth and the Python table has to agree with it by NAME and by
+    ORDER, not merely by size.
+    """
+    import re
+    import readhook as rh
+    src = os.path.join(HERE, "movehook.c")
+    if not os.path.isfile(src):
+        LEDGER.skip("11. reader layout vs rec_t", "no movehook.c")
+        return
+    text = open(src, encoding="utf-8", errors="replace").read()
+    m = re.search(r"\}\s*rec_t\s*;", text)
+    start = text.rfind("typedef struct", 0, m.start()) if m else -1
+    if start < 0:
+        LEDGER.skip("11. reader layout vs rec_t", "could not find rec_t")
+        return
+    body = text[start:m.start()]
+    # Strip comments so a field name mentioned in prose cannot be picked up.
+    body = re.sub(r"/\*.*?\*/", " ", body, flags=re.S)
+    fields = []
+    for decl in re.finditer(r"\bDWORD\s+([^;]+);", body):
+        for part in decl.group(1).split(","):
+            part = part.strip()
+            am = re.match(r"^(\w+)\s*(?:\[\s*(\d+)\s*\])?$", part)
+            if am:
+                fields.append((am.group(1), int(am.group(2) or 1)))
+    check(len(fields) > 10, "11. rec_t parsed out of movehook.c",
+          f"got {len(fields)} field(s)")
+    want = rh._LAYOUTS[max(rh._LAYOUTS)]
+    eq([n for n, _c in fields], [n for n, _c in want],
+       "11. the reader's newest layout has rec_t's fields IN ORDER")
+    eq([c for _n, c in fields], [c for _n, c in want],
+       "11. and every field's dword WIDTH matches")
+    eq(sum(c for _n, c in fields) * 4, rh.REC_LEN,
+       "11. and the sizes agree, which is the weaker check that missed the reorder")
+
+
 def main():
     import tempfile
     tmp = tempfile.mkdtemp(prefix="movehook-test-")
@@ -564,6 +618,7 @@ def main():
     section_6_7(tmp)
     section_9()
     section_10(tmp)
+    section_11()
     return LEDGER.verdict()
 
 

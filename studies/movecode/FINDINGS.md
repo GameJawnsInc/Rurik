@@ -456,11 +456,17 @@ and it is now the most interesting open question in the arc.
 `0x00600333` is the return of `0x0060032E call 0x6020b0` — **the bit-18-CLEAR arm
 of the branch at `0x0060029F`**, precisely as `PLAN.md` §2.1 decoded it statically.
 
-> **⚠ CORRECTED in §1d.3 — read that before quoting the table above.**
-> `0x006025AB` is a **halt-in-place**, not a jump: it teleports the agent to its own
-> current position, so its 28 rows measure `m_point` against a stale `m_targetPoint`
-> and mean nothing. The "75 over 100 u" below OVER-COUNTS; the honest figure is
-> `0x00600333`'s **53**.
+> **⚠ CORRECTED TWICE — read §1d.3 and then §1e.2 before quoting the table above,
+> because the second correction RETRACTS the number entirely.**
+>
+> §1d.3: `0x006025AB` is a **halt-in-place**, not a jump — it teleports the agent to
+> its own current position, so its 28 rows measure `m_point` against a stale
+> `m_targetPoint` and mean nothing. That took "75 over 100 u" down to 53.
+>
+> §1e.2: **the remaining 53 are not warps either.** `m_point` is the last *committed*
+> position, so at the arrival tick it holds where the leg STARTED — the figure is a
+> LEG LENGTH at every caller. Run 2 settled it: consecutive teleports chain to
+> exactly 0.00, 25 of 25. **No warp count from run 1 or run 2 stands.**
 
 75 teleports moved the body over 100 u. The operator's own report of the trigger
 matches the model exactly: *"clicking somewhere far/cornered and pressing a
@@ -692,6 +698,95 @@ the same 300 the separation gate uses. The only other caller is `chcli_point`'s
 callers' output buffers close *exactly* on the stack-cookie slot — caller 1 reserves
 4 × 16 at `[ebp-0x44]`, caller 2 reserves 9 × 16 at `[ebp-0x94]`, and both end at
 `[ebp-0x04]`. Two capacities, two frame sizes, both to the byte.
+
+---
+
+## 1e. RUN 2 — Ascalon City, long walks. **P1a REPLICATED, Q2's first answer, and the "warp" figure RETRACTED**
+
+**OBSERVED, 2026-08-27.** Nine sites, 198 records, both controls FIRED, ring 0.6%
+full. Capture at `vault/research/movecode/run2-2026-08-27/`. The operator walked
+long routes around corners and across bridges, plus a few short ones.
+
+| site | hits |
+|---|---|
+| `mapfindpath` | 8 |
+| `chcli_point` | 8 |
+| `chcli_dir` | **0** |
+| `agapi_setdest` / `setter` / `bake` / `teleport` / `chcli_advance` | **26 each** |
+| `agtrack` | 52 (= 2 × 26) |
+
+### 1e.1 P1a REPLICATED: still 0.0% glide, on the obstacle-rich case
+
+**0 of 26 bakes carried `isWaypoint = 1`**, all 26 returning to the setter. This was
+the run designed to provoke the re-bakers — long routes around corners — and neither
+`0x00600B0F` (avoidance) nor `0x0060193B` (the solve) appeared. Two independent runs,
+different movement, **zero glides in 612 bakes.**
+
+### 1e.2 **I RETRACT the "visible warp" figure from every prior run**
+
+Runs 1 and 2 both printed `m_point → m_targetPoint` at the teleport under the label
+*"over 100 u (a visible warp)"* — 75, then 53 after §1d.3, then 23 here. **All of it
+is mis-framed. Those are LEG LENGTHS.**
+
+`m_point` (+0x78) is the last **committed** position; the extrapolator brings it
+forward only on demand (§1d.4), so at the arrival tick it still holds where the leg
+**started**. The teleport commits the body to the leg's end.
+
+**The check that settles it, and it is not an argument — it is an identity.**
+Consecutive teleports **chain to exactly 0.00**: `target[N] == m_point[N+1]` to the
+bit, **25 of 25**. The timings agree — 2,677 u over 9.5 s is ~282 u/s, ordinary
+walking speed. A 2,677 u warp in one tick would be absurd.
+
+`readhook.py` now prints the chain test beside the figure and says in words that
+these are legs. **A warp — the body being somewhere the client did not walk it to —
+this tap could not see at all**, because it needs `m_point` advanced by velocity to
+the arrival tick. Record **v4** captures `+0xB0/+0xB4` and `+0x58` so run 3 can ask
+the question; runs 1 and 2 cannot, and no warp count from them stands.
+
+### 1e.3 A SECOND defect of mine: the reader read every point block one dword late
+
+`pathdiff` reported *"no coordinates"* on a **v3** capture. The cause: `readhook.py`
+described v3 as *scalars + [point, segment, target, pt_a, pt_b]* with `have_pts`
+appended to the scalars, while `movehook.c` declares `have_pts` **after** `target[4]`.
+Both total 38 dwords, so `reclen` matched and **the guard whose own message warns
+about "a record whose fields would silently shift" could not fire.**
+
+`have_pts` came back as `m_point.x` — 0 for a site with no agent — so the coordinates
+were discarded, and every point block was off by one dword. A length check cannot
+catch a reorder. `test_movehook.py` §11 now **parses `rec_t` out of movehook.c** and
+compares name and width in order; planting the exact historical reorder makes it go
+red, which is the check the length test could never be.
+
+### 1e.4 MOVECODE-Q2: on Ascalon City, our mesh agrees — **8 of 8**
+
+With the reader fixed, `pathdiff` replays every captured query:
+
+```
+OURS-FAILED  0   0.0%      OFF-MESH  0   0.0%      BOTH-OK  8  100.0%
+```
+
+The queries chain — each `from` is the previous `to` — and the first begins at
+**(9826.0, 8077.0)**, which `content/maps.toml` independently pins as map 148's spawn
+landing in exactly one trapezoid. That chaining is a strong check that the
+dereference reads true coordinates rather than plausible garbage.
+
+**This does NOT clear our decode.** Router run 5's pocket was **map 280**, not 148,
+and 8 queries is a small sample from one town. What it establishes is that **the
+instrument works** and that Ascalon City is not where our mesh is wrong. All 8 came
+from `chcli_point` with `range = 10000.0f` — exactly the click-to-move caller
+profile §1d.6 predicted from the image.
+
+### 1e.5 Our server granted NOTHING, and the client still moved 26 legs
+
+**All 26 setter calls came from `agapi_setdest`. Zero from the `0x0029` wire
+handler.** Run 1 saw 49 wire against 537 internal; run 2 saw **0 against 26**.
+
+The client solved, walked and committed 26 legs across a long route with **no
+movement grant from us at all**. Whether that is our server declining to grant on
+this path, or the click policy not firing, is NOT DETERMINED here — but it sharpens
+§1c.7's point past where that section put it: our grant rate is not merely a minority
+input, it can be **absent** while the client moves normally. B5 has to be designed for
+a client that does not need us to walk.
 
 ---
 

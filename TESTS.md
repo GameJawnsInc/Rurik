@@ -6792,8 +6792,21 @@ shrinks section 10),
   is what writing `pathdiff.py` discovered and what took the record to v3. §4 pins
   that **a v1 capture still parses**, because run 1 is v1 and is the arc's only
   live evidence; versioning that orphaned it would have been worse than not
-  versioning. 30 floor, 63 on a machine with the client, a compiler, an archive
-  and a 32-bit `cmd.exe`; each other section declares a skip with its reason),
+  versioning. **§11 is the section that exists because the length check was not
+  enough, and it caught a defect that had already shipped two wrong runs.**
+  `readhook.py` described v3 as *scalars + point/segment/target/pt_a/pt_b* with
+  `have_pts` appended to the scalars; `movehook.c` declares `have_pts` AFTER
+  `target[4]`. Both spell 38 dwords, so `reclen` matched and the guard whose own
+  message warns about "a record whose fields would silently shift" COULD NOT FIRE —
+  every point block read one dword late, `have_pts` came back as `m_point.x`, and
+  `pathdiff` reported "no coordinates" on a capture that had them. A length check
+  cannot catch a reorder, so §11 PARSES `rec_t` out of movehook.c and compares name
+  and width IN ORDER. Planting the exact historical reorder makes it go red, which
+  was verified rather than assumed. The fixture builder was rebuilt the same way:
+  `_synth` now walks `readhook._LAYOUTS[ver]` instead of encoding the field order a
+  second time, because a fixture that re-states the layout can agree with a wrong
+  reader and prove nothing. 35 floor, 68 on a machine with the client, a compiler,
+  an archive and a 32-bit `cmd.exe`; each other section declares a skip),
   `toolkit/clientscan/test_commandertrap.py` (the hardware-breakpoint trap, and
   the section that matters CAUGHT A DEAD TOOL BEFORE IT PUBLISHED A FINDING.
   `commandertrap.py` answers "does instruction X ever execute", and the
