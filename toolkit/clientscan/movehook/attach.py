@@ -102,7 +102,21 @@ def main(argv=None):
     ap.add_argument("--force", action="store_true",
                     help="attach even if the DLL looks already loaded. Read the "
                          "docstring first -- this can leave a live 0xCC behind.")
+    ap.add_argument("--stop", action="store_true",
+                    help="end a run that is already armed, NOW. There is no Ctrl+C "
+                         "for an injected DLL -- it runs on the client's threads "
+                         "and this console has already exited -- so the stop is a "
+                         "file the DLL polls. It disarms and writes immediately.")
     a = ap.parse_args(argv)
+
+    if a.stop:
+        stop = os.path.join(HERE, "movehook.stop")
+        with open(stop, "w", encoding="ascii") as fh:
+            fh.write("stop\n")
+        print(f"wrote {stop}")
+        print("the DLL polls at 100 ms; it will disarm and write within a second.")
+        print("  python toolkit/clientscan/movehook/readhook.py")
+        return 0
 
     if not os.path.isfile(DLL):
         return print(f"no DLL at {DLL} -- build it:\n"
@@ -168,12 +182,21 @@ def main(argv=None):
     if rc:
         print("\ninjection FAILED. If the client is elevated, run this elevated too.")
         return rc
-    print(f"\narmed for {a.minutes:g} minute(s). Walk the character -- click across "
-          f"open ground, click where something is IN THE WAY (that is the case "
-          f"MOVECODE-P1a is about), walk on the keyboard, and stand still for a "
-          f"stretch.\n"
-          f"When it elapses the DLL disarms itself and writes. Then:\n"
-          f"  python toolkit/clientscan/movehook/readhook.py")
+    import datetime
+    ends = datetime.datetime.now() + datetime.timedelta(minutes=a.minutes)
+    print(f"\narmed for {a.minutes:g} minute(s) -- ends at "
+          f"{ends.strftime('%H:%M:%S')} unless you stop it sooner.")
+    print("Walk the character: click across open ground, click where something is "
+          "IN THE WAY (that is the case MOVECODE-P1a is about), walk on the "
+          "keyboard, and stand still for a stretch.")
+    print("")
+    print("STOP EARLY when you have what you need -- there is no reason to stand "
+          "around, and a long tail of a motionless character is dead weight in the "
+          "capture:")
+    print("  python toolkit/clientscan/movehook/attach.py --stop")
+    print("")
+    print("Then read it:")
+    print("  python toolkit/clientscan/movehook/readhook.py")
     return 0
 
 

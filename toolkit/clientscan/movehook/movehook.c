@@ -94,14 +94,41 @@
  * reliable channel is the filesystem. */
 static HINSTANCE g_self;
 
-static void cfg_path(char *out, size_t n)
+static void beside_dll(char *out, size_t n, const char *leaf)
 {
     char *slash;
     out[0] = 0;
     if (!GetModuleFileNameA(g_self, out, (DWORD)n)) return;
     slash = strrchr(out, '\\');
     if (slash) slash[1] = 0; else out[0] = 0;
-    if (out[0]) strncat(out, "movehook.cfg", n - strlen(out) - 1);
+    if (out[0]) strncat(out, leaf, n - strlen(out) - 1);
+}
+
+static void cfg_path(char *out, size_t n) { beside_dll(out, n, "movehook.cfg"); }
+
+/* THE STOP FILE, and it exists because the first live run was worse without it.
+ *
+ * There is no Ctrl+C for an injected DLL: the code runs on the CLIENT's threads,
+ * and the console that ran the injector has already exited. On 2026-08-27 the
+ * operator finished the useful part of a capture in four minutes and then had to
+ * stand still for six more with no way to end it and no idea when it would end --
+ * and the capture's own record shows the cost, 337 of its 600 seconds holding a
+ * character that had stopped moving.
+ *
+ * So the run ends on ANY of three conditions and the sidecar says WHICH: the timer,
+ * a full ring, or this file appearing. `attach.py --stop` writes it. */
+static int stop_requested(void)
+{
+    char path[MAX_PATH];
+    beside_dll(path, sizeof path, "movehook.stop");
+    return path[0] && GetFileAttributesA(path) != INVALID_FILE_ATTRIBUTES;
+}
+
+static void clear_stop(void)
+{
+    char path[MAX_PATH];
+    beside_dll(path, sizeof path, "movehook.stop");
+    if (path[0]) DeleteFileA(path);
 }
 
 /* `key` from movehook.cfg, else the environment, else `dflt`. */
@@ -182,6 +209,7 @@ static DWORD  g_base;
 static DWORD  g_addr[NSITES];
 static BYTE   g_orig[NSITES];
 static volatile LONG g_hits[NSITES];
+static int    g_armed[NSITES];   /* did the 0xCC actually go in? */
 static volatile LONG g_n = 0;
 static rec_t  g_rec[NCAP];
 
@@ -190,7 +218,8 @@ static volatile LONG  g_ctlhit  = 0;      /* control B */
 static DWORD  g_selfprobe = 0;
 static DWORD  g_ctl = 0;
 static BYTE   g_ctl_orig;
-static int    g_ctl_armed = 0;
+static volatile LONG g_ctl_armed = 0;
+static const char *g_why = "unknown";
 
 static int poke(DWORD addr, BYTE val, BYTE *saved)
 {
@@ -261,11 +290,28 @@ static LONG CALLBACK on_bp(PEXCEPTION_POINTERS ep)
     /* CONTROL B -- a byte of real client code, one-shot. Restore it and rewind
      * so the client executes its own instruction exactly once, unpatched. This
      * is why B may safely be an arbitrary mid-instruction address: it is never
-     * emulated, only restored. */
-    if (g_ctl_armed && a == g_ctl) {
+     * emulated, only restored.
+     *
+     * MATCHED ON ADDRESS ALONE, and the earlier `g_ctl_armed && a == g_ctl` was a
+     * MEASURED crash rather than a theoretical one: an adversarial probe on this
+     * machine produced 11 unhandled EXCEPTION_BREAKPOINTs per 400 trials x 8
+     * threads with the flag in the condition, and ZERO with `trnint3.c`'s
+     * unconditional form. Two triggers, neither exotic -- two threads inside the
+     * ~10-30 us restore window (control B deliberately picks a byte a live thread
+     * was executing), or ONE thread whose trap dispatches just after the worker's
+     * CTLB_MS timeout clears the flag. Either way the handler declined a trap IT
+     * PLANTED and the client took an unhandled breakpoint. movehook had regressed
+     * its own precedent; this restores it.
+     *
+     * The restore has a SINGLE OWNER (InterlockedExchange), because the handler and
+     * the worker could otherwise poke the same page concurrently -- one restoring
+     * PAGE_EXECUTE_READ while the other is mid-write, which faults inside a
+     * vectored handler. And `g_ctlhit` publishes LAST, so the worker cannot wake and
+     * start its own restore before this one has finished. */
+    if (g_ctl && a == g_ctl) {
+        if (InterlockedExchange(&g_ctl_armed, 0))
+            poke(g_ctl, g_ctl_orig, NULL);
         InterlockedExchange(&g_ctlhit, 1);
-        poke(g_ctl, g_ctl_orig, NULL);
-        g_ctl_armed = 0;
         c->Eip = a;
         return EXCEPTION_CONTINUE_EXECUTION;
     }
@@ -278,9 +324,17 @@ static LONG CALLBACK on_bp(PEXCEPTION_POINTERS ep)
             if (slot < (LONG)NCAP) {
                 rec_t *r = &g_rec[slot];
                 DWORD esp = c->Esp, ag = c->Ecx;
+                /* A3-F5: the slot is claimed by the Interlocked above but FILLED
+                 * here, and the worker's Sleep(150) is the only thing between a
+                 * preempted handler and `fwrite`. A half-written record decodes as
+                 * a real one (all-zero reads as site 0, seq 0) and gets counted.
+                 * So `tick` is written LAST and IS the commit flag: memset leaves
+                 * it 0, and GetTickCount never returns 0 in practice, so `tick != 0`
+                 * marks a complete record for EVERY slot. (`seq == slot` was tried
+                 * first and fails for slot 0, where a zeroed record has seq 0 too.)
+                 * readhook.py drops anything still 0. It costs one store. */
                 memset(r, 0, sizeof *r);
                 r->seq = (DWORD)slot;
-                r->tick = GetTickCount();
                 r->site = i;
                 r->tid = GetCurrentThreadId();
                 r->ecx = ag;
@@ -301,6 +355,9 @@ static LONG CALLBACK on_bp(PEXCEPTION_POINTERS ep)
                     copy4(r->segment, ag + A_SEGMENT_POINT);
                     copy4(r->target,  ag + A_TARGET_POINT);
                 }
+                /* COMMIT. Every field above is in place; this store is what
+                 * makes the record readable. See the note at the memset. */
+                r->tick = GetTickCount();
             }
         }
         /* Re-emulate the ONE instruction shape every site begins with:
@@ -412,6 +469,12 @@ static DWORD WINAPI worker(LPVOID unused)
     for (i = 0; i < NSITES; i++) g_addr[i] = g_base + SITES[i].rva;
 
     veh = AddVectoredExceptionHandler(1, on_bp);
+    /* A3-F4. Control A executes an `int3` unconditionally a few lines below. If
+     * registration failed, that int3 kills Gw.exe the instant the DLL is injected
+     * and writes no file at all -- an unattributable crash, which is the worst
+     * possible failure for an instrument. Refuse instead. */
+    if (!veh)
+        return 0;
 
     /* CONTROL A. Costs nothing and touches no client byte. */
     {
@@ -439,22 +502,43 @@ static DWORD WINAPI worker(LPVOID unused)
     if (text_span(g_base, &tlo, &thi)) {
         g_ctl = sample_client_eip(tlo, thi);
         if (g_ctl && poke(g_ctl, 0xCC, &g_ctl_orig)) {
-            g_ctl_armed = 1;
+            InterlockedExchange(&g_ctl_armed, 1);
             while (!g_ctlhit && waited < CTLB_MS) { Sleep(25); waited += 25; }
-            if (g_ctl_armed) { poke(g_ctl, g_ctl_orig, NULL); g_ctl_armed = 0; }
+            if (InterlockedExchange(&g_ctl_armed, 0))
+                poke(g_ctl, g_ctl_orig, NULL);
         }
     }
 
+    /* A stop file left over from a previous run would end this one instantly. */
+    clear_stop();
+
+    /* A4-F2: the return was ignored here, so a site whose patch FAILED reported
+     * `hits 0` with both controls green -- a confident zero about the client that
+     * was really a fact about us. Recorded per site and printed. */
     for (i = 0; i < NSITES; i++)
-        poke(g_addr[i], 0xCC, &g_orig[i]);
+        g_armed[i] = poke(g_addr[i], 0xCC, &g_orig[i]);
 
     waited = 0;
-    while (waited < run_ms && g_n < (LONG)NCAP) { Sleep(100); waited += 100; }
+    while (waited < run_ms && g_n < (LONG)NCAP && !stop_requested()) {
+        Sleep(100);
+        waited += 100;
+    }
+    g_why = (g_n >= (LONG)NCAP) ? "ring full"
+          : (waited >= run_ms)  ? "timer elapsed"
+                                : "stopped by request (movehook.stop)";
+    clear_stop();
 
     for (i = 0; i < NSITES; i++)
-        poke(g_addr[i], g_orig[i], NULL);
+        if (g_armed[i]) poke(g_addr[i], g_orig[i], NULL);
     Sleep(150);                       /* let in-flight handlers finish */
-    RemoveVectoredExceptionHandler(veh);
+    /* A3-F3: the handler is DELIBERATELY LEFT REGISTERED. Sleep(150) is a guess,
+     * not synchronisation, and there is no in-flight count to drain -- so a trap
+     * raised before the restore but dispatched after it can still arrive. The site
+     * path survives that: `g_addr[]` is never cleared, so a straggler still matches
+     * and still emulates its `push ebp` correctly even though the byte is back.
+     * UNREGISTERING is the only thing that would make such a straggler fatal, and
+     * it buys nothing here -- this DLL is never unloaded. So we keep it. */
+    (void)veh;
 
     dir = outdir();
     mkdirs(dir);
@@ -486,6 +570,7 @@ static DWORD WINAPI worker(LPVOID unused)
         fprintf(f, "movehook -- MOVECODE-B2\n");
         fprintf(f, "base 0x%08X  ran %ums  capacity %u\n",
                 (unsigned)g_base, (unsigned)waited, (unsigned)NCAP);
+        fprintf(f, "ended: %s\n", g_why);
         fprintf(f, "control A (our own int3): %s\n",
                 g_selfhit ? "FIRED" : "DID NOT FIRE -- the vectored handler is "
                                       "dead and nothing below means anything");
@@ -501,9 +586,11 @@ static DWORD WINAPI worker(LPVOID unused)
         fprintf(f, "\nper site:\n");
         for (i = 0; i < NSITES; i++) {
             total += g_hits[i];
-            fprintf(f, "  %-10s rva 0x%08X va 0x%08X  hits %ld\n",
+            fprintf(f, "  %-10s rva 0x%08X va 0x%08X  hits %ld%s\n",
                     SITES[i].name, (unsigned)SITES[i].rva,
-                    (unsigned)g_addr[i], (long)g_hits[i]);
+                    (unsigned)g_addr[i], (long)g_hits[i],
+                    g_armed[i] ? "" : "   *** NEVER ARMED: the patch FAILED, so "
+                                      "this zero is about us, not the client ***");
         }
         fprintf(f, "\nhits %ld  stored %ld of %u%s\n", (long)total, (long)g_n,
                 (unsigned)NCAP,

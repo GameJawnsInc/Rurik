@@ -329,18 +329,57 @@ number will be real.** All OBSERVED, build 38797:
   `0x005FE957 mov ebx, [ebp+8]` (arg1) landing on `entry_esp + 4`. If these had
   disagreed the headline rate would have been a different argument entirely.
 
-**Reviewed by hand rather than by fan-out, and that is worth recording.** A
-five-lane adversarial review was launched at the C and **all five agents died
-returning `None`** (usage limits — the third such failure this session), writing no
-notes. The checks were done directly instead. One genuine defect was found and
-fixed: `readable()`'s range test computed `p + n` before screening for overflow, so
-a pointer near `0xFFFFFFFF` would wrap to a small value and compare happily inside
-the region. It is unreachable today — `VirtualQuery` fails on kernel-space
-addresses in a 32-bit user process — but a bounds check whose own arithmetic can
-wrap is not a bounds check. Also hardened: the region-end sum, and a comment
-recording that Control B's sampling **must** run before the sites are armed,
-because it suspends client threads and suspending one that sits inside our own
-vectored handler is a deadlock.
+**CORRECTION, 2026-08-27: the five-lane adversarial review DID produce its work,
+and this section previously said it did not.** All five agents died returning
+`None` (usage limits), and from the orchestrator's side that is indistinguishable
+from having done nothing — so it was written up as a total loss. It was not. Every
+lane had persisted its notes to disk before dying, and all five files were intact:
+they are now in [review/](review/). The lesson is the opposite of the one first
+recorded: **persist-as-you-go WORKED, and the thing that failed was only the
+structured return.** Check the scratchpad before declaring a fan-out empty.
+
+**What they found, and it was not cosmetic.** The lanes verified the emulation
+independently — A1 compiled a 32-bit probe that runs the handler's three lines
+verbatim against a hand-assembled `55 8B EC` stub and compared the emulated push
+against a real one from the same frame (identical: pushed value, `ebp`, arg
+pointer, EFLAGS) — and then found **five crash-class defects the hand review had
+missed**, all now fixed:
+
+- **The control-B gate was a MEASURED crash, not a theoretical one.** `if
+  (g_ctl_armed && a == g_ctl)` declined a trap the DLL itself had planted whenever
+  dispatch landed after the flag cleared — two threads inside the ~10–30 µs restore
+  window, or one thread straddling the `CTLB_MS` timeout. A2's probe measured **11
+  unhandled `EXCEPTION_BREAKPOINT`s per 400 trials × 8 threads** with that form and
+  **zero** with `trnint3.c`'s unconditional `a == g_ctl`. movehook had regressed its
+  own precedent. Now matched on address alone, with a single-owner
+  `InterlockedExchange` restore and the hit published last.
+- **`AddVectoredExceptionHandler`'s return was unchecked**, and Control A executes
+  an `int3` three lines later — so a failed registration would kill the client the
+  instant it was injected, writing no file, unattributable.
+- **`RemoveVectoredExceptionHandler` is not a barrier.** `Sleep(150)` is a guess;
+  the handler is now deliberately left registered, which is safe because `g_addr[]`
+  is never cleared and a straggler still emulates correctly.
+- **Sites were armed BLIND** — `poke`'s return ignored, so a site whose patch failed
+  reported `hits 0` with both controls green. That is precisely the confident-zero
+  shape this repo keeps getting caught by; the sidecar now says `NEVER ARMED`.
+- **A slot was published before its record was written**, so a preempted handler
+  left a partial record that decodes as a plausible real one (all-zero reads as
+  site 0, seq 0) and got counted. `tick` is now written last as a commit flag and
+  `readhook.py` drops anything still 0, reporting the count.
+
+**And A5 predicted, statically, the anomaly the live run then produced**: that the
+teleport takes its destination in its ARGUMENTS rather than from `m_targetPoint`,
+and that `m_targetPoint` can hold `+INF`. §1c.6 is that exact value arriving in the
+capture. A refutation lane earned its keep before the instrument was ever armed.
+
+The hand review found one defect the lanes did not: `readable()`'s range test
+computed `p + n` before screening for overflow, so a pointer near `0xFFFFFFFF`
+would wrap and compare happily inside the region. Unreachable today
+(`VirtualQuery` fails on kernel-space addresses in a 32-bit user process), but a
+bounds check whose own arithmetic can wrap is not a bounds check. Also hardened:
+the region-end sum, and a comment recording that Control B's sampling **must** run
+before the sites are armed, because it suspends client threads and suspending one
+inside our own vectored handler is a deadlock.
 
 **Two defects the test caught before any client run** (`TESTS.md` §7/§8 for
 `test_movehook.py`): the throwaway host was spawned `stdin=DEVNULL`, so `cmd /k`
@@ -353,6 +392,112 @@ DLL inherits from the *client*, not the injector, so `attach.py`'s `--minutes` a
 **Status: UNVERIFIED against the client.** Nothing here is a measurement of the
 game. 38 checks green, controls proven to fire inside a real injected process, and
 the run itself waits on the owner.
+
+---
+
+## 1c. MOVECODE-B2 RUN 1 — Ascalon City, 2026-08-27. **P1a REFUTED, P1b CONFIRMED, Q4 ANSWERED**
+
+**OBSERVED.** 10-minute window, 263 s of activity, 2,062 records, ring 13% full.
+Both controls FIRED. Capture kept at
+`vault/research/movecode/run-2026-08-27-ascalon/`. Build 38797, image base
+0x00BD0000; every address below is rebased to 0x00400000.
+
+Only **one agent (id 1)** ever baked or teleported. A prediction made before the
+run — that Ascalon City's NPC crowds would dominate the record — was **wrong**:
+NPC movement does not pass through these sites at all.
+
+### 1c.1 P1a is REFUTED, and it is refuted cleanly
+
+**0 of 586 bakes carried `isWaypoint = 1`. 0.0%.** All 586 returned to
+`0x00602AD8` — the shared setter. `0x00600B0F` (obstacle avoidance) and
+`0x0060193B` (the PriQ path solve) **never appeared as bake callers at all**,
+across ten minutes that included repeated clicks into building corners and
+through NPC crowds.
+
+So §1.6's reframing — "the client re-plans our grants by re-baking them with
+`isWaypoint = 1`" — **is wrong**, and `PLAN.md` §2.1's original reading stands
+unmodified: every grant arms a scheduled hard arrival, and nothing in a normal
+session converts one into a glide. The refuter was registered in
+[RUN-B2.md](RUN-B2.md) §1 before the instrument existed, and this is it.
+
+### 1c.2 But the client DOES re-plan — through a door nobody was watching
+
+The setter's own callers split three ways, and `arg3` separates them exactly:
+
+| caller | n | `arg3` | what it is |
+|---|---|---|---|
+| `0x005FC8F5` | 525 | `-1` always | internal re-issue, keeps the plane |
+| `0x005FD918` | **49** | `{0, 29, 17, 18}` | **the `0x0029` wire handler — OUR grants** |
+| `0x0060244D` | 12 | `-1` always | internal re-issue, keeps the plane |
+
+`-1` is "do not write the plane" (`0x00602A6C` skips `agent+0x80` on −1), and the
+49 wire calls carry real plane numbers — which is `0x0029`'s field 4 = the agent's
+current plane, exactly as FINDINGS:3393 has it. So **the client re-issued the
+destination 537 times against our 49 — about 11 to 1.**
+
+**That is the re-planning, and it routes through the SETTER rather than through
+the re-bakers.** Because the setter hardcodes `isWaypoint = 0`, every one of those
+537 re-plans arms *another* hard arrival. The mechanism §1.6 was reaching for is
+real; the route it proposed is not. `0x005FC7A0` (the 525-caller's function) sits
+**outside AgAgent's assert bounds** and is reached from three sites at
+`0x0081A8F0`/`0x0081ADB0`/`0x0081B220` — NOT DETERMINED what subsystem that is,
+and it is now the most interesting open question in the arc.
+
+### 1c.3 P1b CONFIRMED — and the decoded branch is confirmed live
+
+**131 of 131 teleports had bit 18 CLEAR.** Their callers:
+
+| caller | n | p50 | max | >100 u |
+|---|---|---|---|---|
+| `0x00600333` | 102 | 116.3 | 3,603 | 53 |
+| `0x006025AB` | 28 | 579.1 | 4,525.9 | 21 |
+| `0x00602B79` | 1 | 4,325.1 | — | 1 |
+
+`0x00600333` is the return of `0x0060032E call 0x6020b0` — **the bit-18-CLEAR arm
+of the branch at `0x0060029F`**, precisely as `PLAN.md` §2.1 decoded it statically.
+75 teleports moved the body over 100 u. The operator's own report of the trigger
+matches the model exactly: *"clicking somewhere far/cornered and pressing a
+directional key mid-walk"* — the grant arms a hard arrival, the player walks off
+under keyboard control, the scheduled tick yanks them back.
+
+### 1c.4 MOVECODE-Q4 ANSWERED: the 3-caller claim HOLDS dynamically
+
+`0x00605FC0` (AgTrack dispatch) was entered **759 times from exactly three
+distinct return addresses** — `0x005FEBF0` (575), `0x006022A6` (131),
+`0x00602BC2` (53) — matching the static `--xrefs` count of exactly 3 direct
+callers. **No indirect caller appeared.** All three pass `this + 0x1CC`.
+
+`0x006022A6` fired **exactly 131 times, the exact teleport count**, confirming
+§2.2's "the teleport's tail" as a 1:1 relationship rather than an inference.
+
+This is the answer the whole site was added for: the snap really is
+message-driven, and the assumption the model rests on survives contact.
+
+### 1c.5 MOVECODE-Q3: `+0x98` was 0 in all 586 calls
+
+`arg2` was `0` in every setter call from every caller, so `agent+0x98` never
+changed. `0x002A` was never used this session. The field's MEANING is still
+UNKNOWN — but we now know our own traffic never sets it, so nothing observed so
+far can have depended on it.
+
+### 1c.6 An anomaly worth its own line: AGENT_INVALID_POSITION reached m_targetPoint
+
+At t=243.5 s one teleport (`0x006025AB`, agent 1) entered with `m_targetPoint` =
+**(+inf, +inf)** — raw `0x7F800000`, which is `AGENT_INVALID_POSITION`, the exact
+value ArenaNet's assert `AgAgent:1144 m_targetPoint.position !=
+AGENT_INVALID_POSITION` exists to keep out of that field. From then to the end of
+the capture the field stayed `inf` while the body stayed finite.
+
+**NOT DETERMINED whether this caused the stuck character.** The teleport takes its
+coordinates as *arguments* (`0x006020B6 fld [ebp+8]`), and the args at that call
+were finite, so the invalid field may be a symptom rather than the cause. What is
+OBSERVED: from t≈243 s the player was pinned at (11979.8, 10491.5) plane 29,
+**our server kept granting that same position back**, and all movement stopped at
+t=263 s — the last 337 s of the window are empty. The operator was stuck inside
+geometry for the whole tail.
+
+That last fact is also what the stop-file change is for: 337 of 600 seconds were
+spent holding a character that had stopped moving.
 
 ---
 

@@ -31,6 +31,7 @@ by name.
 """
 
 import argparse
+import math
 import os
 import struct
 import sys
@@ -86,16 +87,28 @@ class Capture:
                 f"{path}: record length {self.reclen} but this reader's layout is "
                 f"{REC_LEN}. The DLL and this file disagree; regenerate one of them "
                 f"rather than parsing a record whose fields would silently shift.")
+        # `tick` IS THE COMMIT FLAG. The DLL claims a slot with an Interlocked and
+        # fills it afterwards, so a handler preempted mid-record leaves a partial
+        # one -- and a partial record decodes as a perfectly plausible real one
+        # (all-zero reads as site 0, seq 0, have_agent 0) and would be COUNTED.
+        # movehook.c writes `tick` last, after every other field; memset leaves it
+        # 0 and GetTickCount never returns 0 in practice. Anything still 0 here was
+        # never committed and is dropped, loudly.
         self.recs = []
+        self.partial = 0
         for i in range(n):
             vals = struct.unpack_from(REC_FMT, blob, off + i * self.reclen)
             r = dict(zip(FIELDS, vals[:len(FIELDS)]))
+            if not r["tick"]:
+                self.partial += 1
+                continue
             rest = vals[len(FIELDS):]
             r["point"] = rest[0:4]
             r["segment"] = rest[4:8]
             r["target"] = rest[8:12]
             self.recs.append(r)
-        self.stored = n
+        self.stored = len(self.recs)
+        self.claimed = n
 
     def sidecar(self):
         """(control_a, control_b, text) from movehook.txt beside the capture."""
@@ -114,6 +127,24 @@ class Capture:
         return names[idx] if idx < len(names) else f"site{idx}"
 
 
+def static_base():
+    """The image base every address in `studies/` is quoted against.
+
+    DERIVED, not hardcoded: `content/movecode.toml` carries both `va` and `rva` for
+    each site, so their difference IS the base the rows were measured at. Falls back
+    to the PE default only when the content store cannot be read.
+    """
+    try:
+        import content as content_mod
+        t = content_mod.load()
+        t = t.tables if hasattr(t, "tables") else t
+        for row in (t.get("hook_site") or {}).values():
+            return row["va"] - row["rva"]
+    except Exception:
+        pass
+    return 0x00400000
+
+
 def site_names():
     """Names in the same order gensites.py emits them: sorted by key."""
     try:
@@ -128,8 +159,20 @@ def site_names():
 def report(cap, names, dump=0):
     out = []
     a = out.append
+    # ASLR moves the client every launch, so a captured return address is a LIVE
+    # address and every address in the studies is a STATIC one. Printing the live
+    # form next to a static expectation makes the two uncomparable by eye, which is
+    # exactly the mistake this report exists to prevent -- so rebase once, here, and
+    # print only static addresses below.
+    _sbase = static_base()
+    def reb(va):
+        return va - cap.base + _sbase if va >= cap.base else va
     a(f"capture: {cap.path}")
-    a(f"image base 0x{cap.base:08X}   {cap.stored} record(s) stored")
+    a(f"image base 0x{cap.base:08X} (rebased to 0x{_sbase:08X} below)   "
+      f"{cap.stored} record(s) stored")
+    if getattr(cap, "partial", 0):
+        a(f"!! {cap.partial} of {cap.claimed} slot(s) were claimed but never "
+          f"committed -- a handler was preempted mid-record. Dropped, not counted.")
     a("")
 
     ctl_a, ctl_b, _text = cap.sidecar()
@@ -179,7 +222,7 @@ def report(cap, names, dump=0):
               f"  -- {100.0 * len(glide) / len(bakes):.1f}% glide")
             by_ret = {}
             for r in bakes:
-                k = (r["retaddr"], bool(r["arg2"]))
+                k = (reb(r["retaddr"]), bool(r["arg2"]))
                 by_ret[k] = by_ret.get(k, 0) + 1
             a("     by return address (which caller baked it):")
             for (ret, isw), n in sorted(by_ret.items(), key=lambda kv: -kv[1]):
@@ -196,6 +239,14 @@ def report(cap, names, dump=0):
     if ti is not None:
         tps = [r for r in cap.recs if r["site"] == ti]
         a(f"P1b  {len(tps)} teleport(s)")
+        by_c = {}
+        for r in tps:
+            by_c[reb(r["retaddr"])] = by_c.get(reb(r["retaddr"]), 0) + 1
+        a("     by return address (which caller teleported):")
+        for ret, n in sorted(by_c.items(), key=lambda kv: -kv[1]):
+            a(f"       0x{ret:08X}  {n}")
+        a("     0x00600333 is the return of `0x0060032E call 0x6020b0` -- the")
+        a("     bit-18-CLEAR arm of the branch at 0x0060029F (FINDINGS §1.3).")
         clear = sum(1 for r in tps if r["have_agent"]
                     and not (r["flags"] & BIT_ISWAYPOINT))
         if tps:
@@ -203,13 +254,30 @@ def report(cap, names, dump=0):
               + ("  -- as predicted" if clear == len(tps) else
                  "  -- SOME TELEPORTED WITH BIT 18 SET, which FINDINGS §1.3 says "
                  "should not happen. That is a refutation, not noise."))
-        moved = []
+        # AGENT_INVALID_POSITION is +inf (0x7F800000), and it is a FINDING rather
+        # than noise: ArenaNet's own assert AgAgent:1144
+        # `m_targetPoint.position != AGENT_INVALID_POSITION` exists to keep it out
+        # of exactly this field. MEASURED 2026-08-27, one record in 131. Left in the
+        # distance list it makes `max` read `inf` and drags nothing else, so the
+        # number that looked broken was the only honest thing on the line. Counted
+        # and named separately instead -- a silent filter here would delete the
+        # anomaly and leave a clean-looking p50 over the survivors.
+        moved, invalid = [], 0
         for r in tps:
             if not r["have_agent"]:
                 continue
             px, py = _f(r["point"][0]), _f(r["point"][1])
             tx, ty = _f(r["target"][0]), _f(r["target"][1])
+            if not all(map(math.isfinite, (px, py, tx, ty))):
+                invalid += 1
+                continue
             moved.append(((tx - px) ** 2 + (ty - py) ** 2) ** 0.5)
+        if invalid:
+            a(f"     !! {invalid} teleport(s) entered with a NON-FINITE point or "
+              f"target.")
+            a(f"        That is AGENT_INVALID_POSITION (+inf), which ArenaNet's own")
+            a(f"        assert AgAgent:1144 exists to keep out of m_targetPoint.")
+            a(f"        Excluded from the distances below and reported here instead.")
         if moved:
             moved.sort()
             a(f"     distance body -> target at the teleport, {len(moved)} sample(s):")
@@ -224,7 +292,7 @@ def report(cap, names, dump=0):
         for r in cap.recs[:dump]:
             nm = names[r["site"]] if r["site"] < len(names) else str(r["site"])
             line = (f"  #{r['seq']:<5} t={r['tick']:<10} {nm:9} "
-                    f"ret=0x{r['retaddr']:08X} ecx=0x{r['ecx']:08X} "
+                    f"ret=0x{reb(r['retaddr']):08X} ecx=0x{r['ecx']:08X} "
                     f"a1=0x{r['arg1']:08X} a2=0x{r['arg2']:08X}")
             if r["have_agent"]:
                 line += (f" id={r['id']:<5} flags=0x{r['flags']:08X}"

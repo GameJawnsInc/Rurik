@@ -49,18 +49,18 @@ sys.path.insert(0, HERE)
 import checks                                                   # noqa: E402
 
 # MEASURED off a real green run, 2026-08-26 -- counted per section out of the
-# banner, never computed by addition. A whole green run on this machine is 43:
+# banner, never computed by addition. A whole green run on this machine is 47:
 #
 #   §1  6   sites.h is what the generator emits    needs the vaulted client
 #   §2  5   first bytes vs the pinned image        needs the vaulted client
 #   §3  4   the provenance rules really refuse     process-free
-#   §4 11   the reader's parse and its scoring     process-free
-#   §5  3   the refusal on a dead control          process-free
+#   §4 12   the reader's parse and its scoring     process-free
+#   §5  6   the dead-control refusal + the commit flag   process-free
 #   §6  2   the DLL builds, and it is x86          needs a compiler
 #   §7  5   inject into a live 32-bit cmd.exe      needs SysWOW64\cmd.exe
 #   §8  2   movehook.cfg beats the environment     rides on §7's injected run
 #   §9  5   attach.py's build guard, both ways   process-free
-#   ----   process-free core = 23, and THAT is the floor.  A whole run is 43.
+#   ----   process-free core = 27, and THAT is the floor.  A whole run is 47.
 #
 # The first draft of this comment guessed 16 by adding up what the sections
 # looked like they contained, and it was two low -- which would have let two
@@ -68,8 +68,8 @@ import checks                                                   # noqa: E402
 # ("set the floor from a real green run, never from a guess") is not about
 # arithmetic being hard; it is that a floor derived from the code rather than
 # from the output drifts the moment either changes. `skip()` lowers the floor by
-# ZERO, so a bare machine must still clear 23.
-LEDGER = checks.Ledger("movehook", floor=23)
+# ZERO, so a bare machine must still clear 27.
+LEDGER = checks.Ledger("movehook", floor=27)
 check = checks.adopt(LEDGER)
 
 WOW64_CMD = r"C:\Windows\SysWOW64\cmd.exe"
@@ -181,6 +181,11 @@ def _synth(recs, sites_hits, base=0x00400000):
     for rva, hits in sites_hits:
         out += struct.pack("<II", rva, hits)
     for r in recs:
+        # `tick` is the DLL's commit flag, so a fixture that leaves it 0 is an
+        # UNCOMMITTED record and readhook drops it. Default it to something
+        # non-zero; a test that wants the drop path sets it to 0 explicitly.
+        r = dict(r)
+        r.setdefault("tick", 1000 + r.get("seq", 0))
         vals = [r.get(k, 0) for k in readhook.FIELDS]
         vals += list(r.get("point", (0, 0, 0, 0)))
         vals += list(r.get("segment", (0, 0, 0, 0)))
@@ -220,12 +225,26 @@ def section_4_5(tmp):
 
     cap = readhook.Capture(path)
     eq(cap.stored, 4, "4. every record round-trips")
+    eq(getattr(cap, "partial", -1), 0, "4. and none is flagged uncommitted")
     eq(cap.base, 0x00400000, "4. the image base round-trips")
     eq(len(cap.sites), 4, "4. the per-site hit table round-trips")
     eq(cap.sites[1]["hits"], 3, "4. a site's hit count round-trips")
     eq(cap.recs[2]["arg2"], 1, "4. arg2 -- the isWaypoint the whole arc turns on")
     eq(cap.recs[2]["retaddr"], 0x0060193B, "4. the return address round-trips")
     eq(cap.recs[3]["flags"] & (1 << 18), 0, "4. bit 18 reads CLEAR on the teleport")
+
+    # THE COMMIT FLAG, in the direction that can fail. A partial record decodes as
+    # a perfectly plausible real one -- all-zero reads as site 0, seq 0 -- so a
+    # reader that does not check would COUNT it. Adversarial lane A3-F5.
+    torn = list(recs) + [{"seq": 4, "site": BAKE, "tick": 0, "arg2": 1}]
+    tpath = os.path.join(tmp, "torn.bin")
+    with open(tpath, "wb") as fh:
+        fh.write(_synth(torn, [(0x205FC0, 0), (0x1FE950, 4), (0x202A40, 2),
+                               (0x2020B0, 1)]))
+    tcap = readhook.Capture(tpath)
+    eq(tcap.stored, 4, "5. an UNCOMMITTED record (tick==0) is DROPPED, not counted")
+    eq(tcap.partial, 1, "5. and it is reported rather than silently discarded")
+    eq(tcap.claimed, 5, "5. while the claimed-slot count still shows it existed")
 
     # A capture with a control-A-FAILED sidecar must be REFUSED, not scored.
     with open(os.path.join(tmp, "movehook.txt"), "w", encoding="utf-8") as fh:
