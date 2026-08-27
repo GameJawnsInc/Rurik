@@ -1764,9 +1764,18 @@ it changes what §9.8 measured.~~
 > `model_id` 32 and `file_id` — so whether it occupies a `CpsBase` slot at all,
 > the way item id 3 demonstrably did, is the question, and this session did not
 > measure it. If a bag takes no composite record the leggings reading survives
-> intact; if it does, that entry needs the same treatment the chest got. **One
-> loopback run of `armor_slots` on the fixed ids, compared against §9.8's own
-> capture, answers it.**
+> intact; if it does, that entry needs the same treatment the chest got.
+>
+> **Who can run it, because the two obvious routes split.** `armor_slots`'s own
+> readout is explicitly a MODEL-APPEARANCE verdict -- its docstring scores
+> "gray leggings versus bare calves versus booted feet" -- which is the class
+> this project keeps with the operator, so re-running the probe for its stated
+> purpose is **owner-driven** even though it needs no aiming. The composite
+> question here is NOT that: it asks which `CpsBase` slot holds which record,
+> which is a memory readout rather than a pixel one, and it is answerable
+> unattended by whatever instrument §9.14-§9.17 already used to see record 90
+> and 91 -- naming and re-pointing that instrument is the first step, not
+> launching anything.
 >
 > The "another arc's instrument" reasoning is retired too. It is sound about not
 > silently changing what a past run measured — which is why the runs stay
