@@ -22,6 +22,8 @@ can say which renders; asserting one here would be this repo's favourite bug --
 two of our own components agreeing and calling it evidence.
 """
 import os
+import re
+import struct
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -33,11 +35,13 @@ import content                                               # noqa: E402
 import questdefs                                             # noqa: E402
 import authsrv                                              # noqa: E402
 
-# MEASURED 2026-08-17: 77 with the vault present, 73 without. Sections 19
-# and 20 read the client image (888's re-derivation, and the cross-build
-# site check) and declare skips without it; 20 also skips if fewer than two
-# builds at or after the pin are vaulted. The floor is 73 -- what ONE quest
-# row runs on a bare machine.
+# MEASURED 2026-08-27: 83 with the vault present, 73 without. (It read "77
+# with the vault present" from 2026-08-17 until section 19 grew the manifest
+# sentinel's checks and section 19b's cross-build census.) Sections 19, 19b
+# and 20 read the client image -- 888's re-derivation, the sentinel's
+# per-build immediate, and the cross-build site check -- and declare skips
+# without it; 20 also skips if fewer than two builds at or after the pin are
+# vaulted. The floor is 73 -- what ONE quest row runs on a bare machine.
 #
 # THE PREVIOUS DERIVATION WAS STALE AND SAID SO CONFIDENTLY: "13 checks are
 # row-count independent and each quest row adds 4, so 17 is what the
@@ -590,6 +594,94 @@ def main():
               f"FINDINGS 2.3 says derive it rather than pin it; the server path "
               f"may not import a vault reader at startup, so it is pinned there "
               f"and re-derived here")
+        # AND THE MANIFEST SENTINEL, which is the same quantity and was NOT
+        # covered here until 2026-08-27. MAP_ID_COUNT was 877 -- OpenTyria's
+        # enum end -- while this section re-derived 888 for NO_MARKER_MAP twenty
+        # lines away in the same file and stayed green the whole time, because it
+        # only ever scored one of the two names. 877 is a real map row
+        # (`Forsaken Tunnels: Level 2`), so the server's "no destination"
+        # sentinel named an actual dungeon on every login burst.
+        check(n == authsrv.MAP_ID_COUNT,
+              "and it is the MANIFEST sentinel too",
+              f"areatable says {n}, authsrv pins {authsrv.MAP_ID_COUNT}. This is "
+              f"the value the first MANIFEST_DONE carries as 'no map'; the "
+              f"client stores it at context+0x134 and writes 0x378 there itself "
+              f"in its own reset path")
+        check(authsrv.MAP_ID_COUNT == authsrv.NO_MARKER_MAP,
+              "the two names are ONE quantity, expressed once",
+              f"MAP_ID_COUNT {authsrv.MAP_ID_COUNT}, NO_MARKER_MAP "
+              f"{authsrv.NO_MARKER_MAP} -- two literals for 'one past the last "
+              f"map' is what let them drift apart for weeks. If a future build "
+              f"genuinely separates them, split them WITH a measurement rather "
+              f"than by editing one number")
+
+    # 19b. THE SENTINEL MOVES WITH THE MAP TABLE, and 877 is nowhere.
+    #
+    # Section 19 above proves our constant equals THIS build's map count. That
+    # alone does not show the field at context+0x134 IS the table's size -- any
+    # number that happens to match once would pass it. This scans every vaulted
+    # client for the store itself and reads the immediate out: five sites per
+    # build, every build, and the value tracks the table across a patch that
+    # added five maps. That is the field being the size rather than coinciding
+    # with it.
+    #
+    # THE CONTROL IS THE HALF THAT MATTERS. The same scan looks for 877 as a
+    # compare bound and must find it ZERO times on every build -- because 877 was
+    # OpenTyria's enum end, not any client's constant, and it is what this
+    # server sent as "no map" until 2026-08-27 while naming a real dungeon row.
+    # A scan that found 888 but was never asked about 877 would have left the
+    # old value looking merely un-preferred instead of absent.
+    STORE_0x134 = re.compile(rb"\xc7[\x80-\x87]\x34\x01\x00\x00(....)", re.S)
+    CMP_877 = re.compile(rb"\x81\xff\x6d\x03\x00\x00|\x3d\x6d\x03\x00\x00")
+    try:
+        sys.path.insert(0, os.path.join(HERE, "clientscan"))
+        import pinned as _pinned
+        import vaultpath as _vp
+        seen = {}
+        for b in _pinned.BUILDS:
+            path = os.path.join(_vp.vault_root(), "client", b.stamp, "Gw.exe")
+            if not os.path.exists(path):
+                continue
+            blob = open(path, "rb").read()
+            imms = [struct.unpack("<I", m.group(1))[0]
+                    for m in STORE_0x134.finditer(blob)]
+            sized = [v for v in imms if 500 < v < 5000]
+            seen[b.number] = (sized, len(CMP_877.findall(blob)))
+    except (Exception, SystemExit) as exc:                      # noqa: BLE001
+        seen = {}
+        LEDGER.skip("the sentinel's cross-build census",
+                    f"{type(exc).__name__}: {exc}")
+    if seen:
+        check(len(seen) >= 3, "at least three builds are readable",
+              f"{sorted(seen)} -- with fewer, 'it moves with the table' has no "
+              f"span to move across")
+        current = {n: v for n, v in seen.items() if n >= 38797}
+        check(current and all(set(v[0]) == {authsrv.MAP_ID_COUNT}
+                              for v in current.values()),
+              f"every build from 38797 on stores {authsrv.MAP_ID_COUNT}, and "
+              f"only that",
+              "; ".join(f"{n}: {sorted(set(v[0]))} x{len(v[0])}"
+                        for n, v in sorted(current.items())))
+        old = {n: v for n, v in seen.items() if n < 38797}
+        if old:
+            check(all(set(v[0]) and set(v[0]) != {authsrv.MAP_ID_COUNT}
+                      for v in old.values()),
+                  "and an older build stores a DIFFERENT one",
+                  "; ".join(f"{n}: {sorted(set(v[0]))}"
+                            for n, v in sorted(old.items()))
+                  + " -- 38519 reads 883, five maps fewer. Without this the "
+                    "check above could be true of any constant in the image")
+        else:
+            LEDGER.skip("the older-build contrast",
+                        "no pre-38797 client in the vault to contrast against")
+        check(all(v[1] == 0 for v in seen.values()),
+              "CONTROL: 877 is a bound on NO build",
+              "877-as-a-bound counts "
+              + ", ".join(f"{n}: {v[1]}" for n, v in sorted(seen.items()))
+              + " -- 877 came from OpenTyria's enum and names a real map row "
+                "(Forsaken Tunnels: Level 2). If this ever reads nonzero, the "
+                "constant has a client witness after all and this whole section "
+                "needs re-reading")
 
     print("\n20. every cited site, re-checked on the build the owner RUNS")
     # WHY THIS SECTION EXISTS. FINDINGS 7.9's last bullet said every binary

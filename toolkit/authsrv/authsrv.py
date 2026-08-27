@@ -3518,9 +3518,67 @@ PLAYER_NUMBER = 1
 MANIFEST_PHASE1 = 0
 MANIFEST_PHASE2 = 1
 MANIFEST_DONE = 2
-# The sentinel OpenTyria passes as map_id on the first DONE: one past the last
-# real map (876), meaning "no map" rather than any actual destination.
-MAP_ID_COUNT = 877
+# The "no map" sentinel on the first manifest DONE -- one past the last real
+# map, meaning "no destination" rather than any actual one.
+#
+# THIS WAS 877 UNTIL 2026-08-27, TAKEN FROM OPENTYRIA, AND IT WAS WRONG -- it
+# named a real map. Row 877 on our pinned build is `Forsaken Tunnels: Level 2`,
+# a genuine type-18 dungeon (studies/presearing/MANIFEST.md:560, CLIENT-sourced).
+# OpenTyria's enum stops at the highest map somebody had bothered to name; it was
+# never read off a binary, so it is UPSTREAM and it is short by eleven rows.
+#
+# 888 IS MEASURED, four ways that do not share a method:
+#   1. ArenaNet's own `mission < MISSIONS` assert compiles to `cmp edi, 0x378`
+#      at 0x008524AC (MsCliMan:368) and `cmp eax, 0x378` at 0x0085236B
+#      (MsCliMan:409). 0x378 = 888. Two sites, one constant.
+#   2. `areatable.py` walks 888 consecutive valid records off .rdata, and its
+#      structural locator and its code locator agree on the base.
+#   3. The client WRITES 888 into the very field our argument feeds. Our
+#      MANIFEST_DONE field 2 reaches `0x00852040` as arg3 and is stored at
+#      `context+0x134` (0x0085222E, `mov [edi+0x134], eax` off `[ebp+0x10]`).
+#      The same field takes the literal 0x378 at 0x00851F9C and at 0x008520E1 --
+#      the latter beside `[edi+0x168] = 4` (MANIFEST_TYPES, the "none" type) and
+#      `[edi+0x130] = 0`. So 888 is the client's own resting value for "no map"
+#      in that exact slot. `codescan.py --field 0x134 --in MsCliMan` finds three
+#      stores and zero reads; two of the three are the literal.
+#   4. test_quests.py section 19 already re-derived it for NO_MARKER_MAP, and has
+#      been green the whole time this constant disagreed with it twenty lines
+#      away.
+#
+# AND THE CONSTANT MOVES WITH THE MAP TABLE, which is what proves the field IS
+# the table's size rather than merely correlating with it. Scanning every vaulted
+# client for `mov dword ptr [reg+0x134], imm32` finds FIVE such stores on every
+# build, and the immediate is:
+#       38519 (2026-04-30)  ->  883  x5
+#       38797 (2026-07-29)  ->  888  x5
+#       38833 (2026-08-13)  ->  888  x5
+#       38849 (2026-08-20)  ->  888  x5
+# ArenaNet added five maps between 38519 and 38797 and the sentinel followed them,
+# same five sites, same shape. THE CONTROL, and it is the one that kills 877
+# outright: the same byte scan looking for 0x36D (877) as a bound finds it ZERO
+# times on ALL FOUR builds. 877 is not a client constant and never was one -- the
+# real sequence is 883 -> 888, and OpenTyria's enum end sits between them naming
+# nothing.
+#
+# SO THIS IS A PINNED, BUILD-DEPENDENT NUMBER and that is a liability, not a
+# design. It is pinned only because the server path may not import a vault reader
+# at startup (FINDINGS 2.3); `test_quests.py` section 19 is what re-derives it off
+# the exe, and it now scores BOTH names rather than one.
+#
+# NOT the same quantity, and this is what the OPEN comment below used to fear:
+# `MISSION_MAPS` is 2, not 888. Its assert (MsCliMan:486,
+# `context->map != MISSION_MAPS`) compiles to `cmp dword ptr [edi+0x238], 2` --
+# a two-element enum indexed by an internal context field, nothing to do with a
+# map id. So "two different numbers for one past the last map" resolved as: 877
+# and 888 ARE the same quantity and 877 was simply wrong, while MISSION_MAPS was
+# never that quantity at all.
+#
+# WHAT IS STILL NOT MEASURED: nothing in MsCliMan READS +0x134, so the consumer
+# is in another module and no run has confirmed the burst end to end since the
+# flip. The client putting 888 there itself is strong evidence it is a legal
+# value for the field, not proof it tolerates receiving it from the wire at that
+# instant. A login to character select is the confirmation.
+MAP_ID_COUNT = 888
 
 # Where the world's facts live: content/maps.toml, loaded through toolkit/content.py.
 #
@@ -6545,12 +6603,26 @@ GAME_SMSG_QUEST_SET_ACTIVE_MARKER = 0x0053
 # pinned HERE and RE-DERIVED in test_quests.py against areatable when the vault
 # is present, which is the same shape framebus.QUEST_EXPECTED uses.
 #
-# OPEN, and flagged rather than reconciled: MAP_ID_COUNT above is 877, and it
+# ~~OPEN, and flagged rather than reconciled: MAP_ID_COUNT above is 877, and it
 # is also used as a "no map" sentinel (the manifest's first round). Two
 # different numbers for "one past the last map" in one file is either two
 # different quantities or a bug, and nothing here has measured which. Do not
-# quietly make them equal.
-NO_MARKER_MAP = 888
+# quietly make them equal.~~
+#
+# MEASURED 2026-08-27, and they ARE the same quantity: one past the last map is
+# 888, on four witnesses that do not share a method. MAP_ID_COUNT's own comment
+# carries the derivation; the short version is that ArenaNet's `mission <
+# MISSIONS` assert compiles to `cmp edi, 0x378` and the client writes 0x378 into
+# the very context field our manifest argument feeds. 877 was OpenTyria's enum
+# end and it named a real dungeon row. So they are equal now -- LOUDLY, which is
+# what the paragraph above was asking for, and expressed ONCE in code rather
+# than as two literals that can drift apart again. `test_quests.py` section 19
+# re-derives this off the exe and reddens if either name stops matching.
+#
+# The bug the old comment feared was real and was NOT the one it guessed at:
+# `MISSION_MAPS` (MsCliMan:486) is 2, a two-element enum, and was never "one
+# past the last map" at all.
+NO_MARKER_MAP = MAP_ID_COUNT
 NO_MARKER_POS = (float("inf"), float("inf"))
 
 GAME_SMSG_QUEST_REMOVE = 0x0052
