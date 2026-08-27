@@ -1480,6 +1480,87 @@ before the first native commit, which is where that doc says to pose them.
 
 ## 8. Immediate next actions
 
+### DESK ARC 2026-08-27, second pass — the props `value` words are MEASURED, and an armour probe was overwriting live items
+
+**PROPS: tag 6's `value` is a prop INDEX; tag 4's is not.**
+[toolkit/mapdata/refscan.py](toolkit/mapdata/refscan.py) + `test_refscan.py` (17
+checks) close `studies/customarea` UNVERIFIED item 1 and the same sentence in
+`props.py`'s header — *"the `value` u16 of tags 4 and 6 recurs across maps, so
+those are ids rather than per-map hashes — not measured."* **Right for tag 4,
+wrong for tag 6**, and recurrence could never have separated them: small indices
+collide across maps for the same reason small integers do. The bound does, at
+once — tag 6's `value` is under `len(props)` on **10,647 of 10,647** rows in 149
+maps, tag 4's on **212 of 6,355** with values to 65,521. A `PropRef` is
+`{u16 value, u16 prop}` and only `prop` was documented as an index; for tag 6
+**both words index the prop array**, so the entry is a prop-to-prop relation.
+**The 10,647 of 10,647 is not the finding** — an inequality over small numbers
+can hold by construction — so the file asserts the two things that make it one:
+**tightness**, `max(value)/(len(props)-1)` at median **0.939** with 90 of 149
+maps individually over 0.9 and 7 landing on the last index exactly (tag 4's
+median is **94.6**); and a **shuffle control**, re-scoring each map's values
+against another map's prop count, which puts **32.2%** out of range — so the
+ceiling belongs to *this* map rather than to integers. Asserted from both sides:
+near-zero would make the reading vacuous, 100% would mean the counts share no
+scale. **Limits carried in the module, not buried:** this does NOT show the
+indexed array is the *prop* array rather than another per-map array of equal
+length, and says nothing about what the relation MEANS. Ten tag-6 rows are
+self-references, which a 40-map sample had reported as zero.
+
+**SKILLDMG: a filed R4a/R4b blocker, REFUTED at a desk before it was built.**
+The asymmetry is real — `land_swing` scales incoming melee by the player's
+armour and `land_skill` never touches it, and `armour_multiplier` has exactly
+two references in the server. Filed as a one-line hole. **Applying an armour
+term there would have made this server WRONG.** WIKI (GWW, "Damage"
+§Properties, rev. 2020-08-11): shadow damage, **holy damage** and damage with no
+stated type — including *"+&lt;number&gt; damage"* — **ignore the target's
+armor**; corroborated by "Armor-ignoring damage" (rev. 2020-03-28), which adds
+that holy from WEAPONS does not, so the split is by type *and source*, never by
+skill-versus-swing. Scored against our five damage-bearing `skill_effect` rows:
+**312 `Holy damage` and 322/323 `+ Damage` are already CORRECT** to ignore it;
+only **194 (Flare) and 431, both `Fire damage`, are the real gap**. And the
+default `ENEMY_SKILL_BAR` is `276, 253, 312, 289` — its only damage-bearing
+skill is 312, one of the correct ones — so **on the shipped configuration there
+is no defect**; Flare reaches that path only under `--enemy-skills`. What
+remains is narrower than filed and is a CONTENT job, not a code one: the damage
+type lives in the prose `scale_means` string, so it needs a real column with
+per-row wiki provenance rather than prose-parsing. Full record and the three
+traps: [studies/skills/FINDINGS.md](studies/skills/FINDINGS.md) §39 (SKILLS-A1).
+**And the residual is NOT fixed here, deliberately**: the damage TYPE is settled
+but the armour VALUE a spell scales against is not — GWW says the hit piece
+matters "in the player's and heroes' case" yet introduces the 3/2/1/1/1 location
+odds as the chance to be hit by an *attack*, and gives *non-attack* skills a
+separate formula naming no location. Copying `land_swing`'s roll would be
+inventing the answer. **One caged run settles it** (`--enemy-skills 194`, a
+lopsided armour set, repeated Flare: one damage value means one rating, five
+buckets in 3/2/1/1/1 proportion means a location roll) and it is a number
+readout, so agent-drivable. **Confirmed en route**: `HIT_LOCATION_ODDS`,
+`ARMOR_BASELINE = 60.0` and `ARMOUR_DIVISOR = 40.0` all match GWW exactly, and
+the divisor is independently corroborated by `studies/isle` rung 7's fit of
+39.5, 95% CI [37.30, 42.00].
+
+**PROBE-ITEMID: the armour probe was re-declaring the backpack AND the chest.**
+`probes.py` minted item ids the server already mints, on the same opcode
+(`0x0161`) through the same helper: `_ARMOR_LEGS_ITEM` was **2**
+(`BACKPACK_ITEM_ID`, declared every login burst) and `_ARMOR_BOOTS_ITEM` was **3**
+(`warrior_body`). Nothing ever failed — a second `0x0161` overwrites the client's
+record rather than erroring — so any reading through that arm measured two
+writers at one slot. Now 43/44, joining `_DRAIN_ITEM_A/B/C` in that module's
+existing band. `test_armour.py` §2's `reserved` check had existed all along and
+was **pointed one way only**: it scored `STARTER_ARMOUR` against the server and
+never read `probes.py`. It now gathers the ids *from the module* and reddens on
+overlap; 6 of 6 mutations caught. **Three more bugs surfaced behind it**: my own
+first scan matched names ENDING in `_ITEM` and read 2 of 5 (caught by the vacuity
+guard beside it); §3's no-vault path had **never executed**, because
+`require_dir` raises `SystemExit` past `except Exception`, so a bare machine died
+instead of skipping while the docstring promised otherwise; and past that,
+`skip()` was called with one argument against a two-argument signature. Floor
+moved **16 → 15**, which is the repair rather than a retreat — 16 was the
+with-vault count, so the bare machine the docstring promised could never have
+passed. **And the recorded note was wrong**: `studies/playercomposite` said the
+leggings conclusions "ride on item id 2 and are untouched", but item 2 *is* the
+backpack; whether §9.8's leggings reading is contaminated is left **open**, with
+the instrument question named rather than guessed.
+
 ### DESK ARC 2026-08-27 — the manifest sentinel named a real dungeon; R4c-1's spawn clause becomes a score; and THREE tests were red on confirming evidence
 
 Three pieces, all desk-only. No client launched, no ArenaNet contact.
@@ -1526,10 +1607,19 @@ MsCliMan reads +0x134**, so the consumer in another module was never chased.
 stock loopback run today** — `contentids` FATALs because `dat_study` and every
 current run archive bind map 146/148 to different files. `RUNBOOK.md` has carried a
 row for this since 2026-08-23 (the client writes to its own `Gw.dat` as it patches
-content); what is new is that it is **systematic** — all three current run dirs
-share the identical modified map, the three older dirs differ on map 143 instead,
-and **no run directory agrees with `dat_study` on every content map row**, so the
-row's "pin the map" remedy is not always available. A third route is now in that
+content); what is new is the diagnosis: **it is GENERATION SKEW, not modification.** The run
+dirs' copy is byte-identical to `dat_study_38833` down to the MFT row index, and
+all three land on the SAME row 177262 — independent client appends could not do
+that. `dat_study`, the archive the SERVER reads, is a 38797 snapshot while the run
+dirs are 38833. The three older dirs are the old generation and differ on map 143
+instead, which IS local authoring. **No run directory agrees with `dat_study` on
+every content map row**, so the row's "pin the map" remedy is not always
+available; and a future session should check the generation before suspecting
+damage. **This also refutes item (C)'s leading candidate**: crc is measured across
+both patches on disk and is REFUTED as a durable MAP key — 146/148 is the same map
+in both generations and its crc changed — while the item's stated premise ("row
+indices do not survive a patch") is not supported either, the row surviving
+marginally better than the crc on both. Record: `studies/maprows` §10.10-§10.11. A third route is now in that
 row: `RURIK_DAT=<run dir>/Gw.dat` points the server at the bytes the client
 actually draws, which is what the gate is protecting, and yields 12 of 12 agreeing.
 (2) **`spawncheck`'s 8 of 15 survives the archive question** — it defaults to
@@ -2550,8 +2640,20 @@ BEFORE the memset, and 9.14's "residue" reading is SUPERSEDED by its own
 successor. (2) **Record 91's absence is an item-id COLLISION IN OUR OWN
 PROBE**: `armor_slots` declares `_ARMOR_BOOTS_ITEM = 3` and STARTER_ARMOUR
 already uses item id 3 for `warrior_body`, so the chest is silently redefined
-as boots and nothing holds 91. Recorded, NOT fixed -- probes.py is another
-arc's instrument. (3) ★ **9.11's two wire-ordered instances are REPRODUCED --
+as boots and nothing holds 91. ~~Recorded, NOT fixed -- probes.py is another
+arc's instrument.~~ **FIXED 2026-08-27, and there were TWO collisions rather
+than one** (`studies/playercomposite/FINDINGS.md`, the superseded block):
+`_ARMOR_LEGS_ITEM` was **2**, which is `BACKPACK_ITEM_ID`, declared by the
+server on the SAME `0x0161` through the SAME `agents.named_item` helper in
+every login burst -- so the entry's "the leggings conclusions ride on item id 2
+and are untouched" was reasoning from an incomplete collision list. Both moved
+to 43/44, the module's existing `_DRAIN_ITEM` band. Whether that contaminates
+§9.8's leggings reading is **open, not assumed**: the backpack is `item_type 3`,
+a bag, against armour's 19/7, so whether it takes a `CpsBase` slot the way item
+id 3 demonstrably did is unmeasured, and one `armor_slots` run on the fixed ids
+answers it. `test_armour.py` §2 now scans every `_*_ITEM*` constant in
+`probes.py` against the server's minted set; it went RED on both before either
+constant moved, and 6 of 6 mutations redden it. (3) ★ **9.11's two wire-ordered instances are REPRODUCED --
 three of them, in a run with NO movement -- and IDENTIFIED**: same class
 (**CpsPlayer**, vtable 0xA96B5C) and same caller (**CpsApi::SetSlotItem**) as
 the world agent. So the two orderings are not two classes or two entry points;

@@ -1740,10 +1740,52 @@ holds 91**. `armor_slots` declares `_ARMOR_BOOTS_ITEM = 3`, and
 silently redefines the chest as boots, and CpsBase slot 2 — which still holds
 item id 3 — reads record **90**.
 
-§9.8's run had the same collision. Its leggings conclusions ride on item id 2
-and are untouched; anything in that entry about the chest is contaminated.
-**Recorded, not fixed**: `probes.py` is another arc's instrument and changing
-it changes what §9.8 measured.
+§9.8's run had the same collision. ~~Its leggings conclusions ride on item id 2
+and are untouched; anything in that entry about the chest is contaminated.~~
+~~**Recorded, not fixed**: `probes.py` is another arc's instrument and changing
+it changes what §9.8 measured.~~
+
+> **SUPERSEDED 2026-08-27 — FIXED, and "untouched" was wrong because the
+> collision list was incomplete.** `_ARMOR_LEGS_ITEM` is now **43** and
+> `_ARMOR_BOOTS_ITEM` **44**, joining `_DRAIN_ITEM_A/B/C` in this module's
+> existing 40s band, clear of the server's 1..9 and its purchases from 5000.
+>
+> **THERE WERE TWO COLLISIONS, NOT ONE.** The paragraph above found the id-3
+> chest/boots clash and then reasoned that the leggings arm was safe because it
+> used id 2. **Item id 2 is `authsrv.BACKPACK_ITEM_ID`** — and the server
+> declares it on **`GAME_SMSG_CREATE_NAMED_ITEM`, which is `0x0161`**, through
+> `agents.named_item(...)`: the same opcode, the same helper and the same id the
+> probe used, unguarded, in every login burst. So the leggings arm re-declared
+> the player's backpack exactly as the boots arm re-declared the chest.
+>
+> **What that does to §9.8's leggings conclusions is NOT settled here, and the
+> honest answer is "unknown", not "contaminated".** The backpack's template is
+> `item_type = 3` (a bag) against the armour pieces' 19 and 7, with its own
+> `model_id` 32 and `file_id` — so whether it occupies a `CpsBase` slot at all,
+> the way item id 3 demonstrably did, is the question, and this session did not
+> measure it. If a bag takes no composite record the leggings reading survives
+> intact; if it does, that entry needs the same treatment the chest got.
+>
+> **Who can run it, because the two obvious routes split.** `armor_slots`'s own
+> readout is explicitly a MODEL-APPEARANCE verdict -- its docstring scores
+> "gray leggings versus bare calves versus booted feet" -- which is the class
+> this project keeps with the operator, so re-running the probe for its stated
+> purpose is **owner-driven** even though it needs no aiming. The composite
+> question here is NOT that: it asks which `CpsBase` slot holds which record,
+> which is a memory readout rather than a pixel one, and it is answerable
+> unattended by whatever instrument §9.14-§9.17 already used to see record 90
+> and 91 -- naming and re-pointing that instrument is the first step, not
+> launching anything.
+>
+> The "another arc's instrument" reasoning is retired too. It is sound about not
+> silently changing what a past run measured — which is why the runs stay
+> labelled above rather than being re-scored — but it left a live defect in an
+> instrument every future run would use. The change is recorded here instead,
+> and `test_armour.py` §2 now scans **every** `_*_ITEM*` constant in `probes.py`
+> against the server's minted set, so a third collision cannot arrive unnoticed.
+> That check went red on both of these before either constant moved, and six
+> deliberate breaks redden it — including a collision planted on the
+> `_DRAIN_ITEM` ids, which the first version of the scan silently skipped.
 
 ### ⚠ X1 AND X2 BOTH REFUTED, and X2 is a finding
 

@@ -5811,9 +5811,27 @@ without a save/restore has already moved it.
 ### What is still UNVERIFIED
 
 1. **The rotation and scale readings are INFERRED**, from the client's
-   arithmetic rather than from any assert or any measurement of an effect. The
+   arithmetic rather than from any assert or any measurement of an effect. ~~The
    tag-4 and tag-6 `value` words recur across maps, so they are ids rather than
-   per-map hashes; also not measured. The u16 at +0x00 is **not** an index into
+   per-map hashes; also not measured.~~ **The `value` words are MEASURED as of
+   2026-08-27 ([toolkit/mapdata/refscan.py](../../toolkit/mapdata/refscan.py),
+   `test_refscan.py`, 17 checks) and the id reading holds for tag 4 only.**
+   Recurrence was never able to separate the two — small indices collide across
+   maps for the same reason small integers do — and the bound separates them at
+   once: **tag 6's `value` is under `len(props)` on 10,647 of 10,647 rows** in
+   149 maps, **tag 4's on 212 of 6,355** with values to 65,521. So tag 6's
+   `PropRef` has BOTH words indexing the prop array and is a prop-to-prop
+   relation, while tag 4's is the wide cross-map id namespace this item guessed
+   at. The bound is not an artefact of scale: `max(value)/(len(props)-1)` runs
+   to a median of **0.939** (p75 0.981, 90 of 149 maps over 0.9, 7 landing on
+   `len(props)-1` exactly) against tag 4's median of **94.6**, and the shuffle
+   control — re-scoring each map's values against another map's prop count —
+   puts **32.2%** out of range, so the ceiling belongs to *this* map. Still
+   NOT established: that the indexed array is the prop array rather than
+   another per-map array of the same length, and what the relation means. Ten
+   tag-6 rows are self-references, which a 40-map sample reported as zero. The
+   rotation and scale readings above remain INFERRED and are untouched by this.
+   The u16 at +0x00 is **not** an index into
    tag 4 — measured from both sides, 209,960 of 285,670 land outside it.
 2. **Nothing has been PLACED yet.** `stripbuild.build()` takes a `props=`
    argument and defaults to `minimal()`, the empty chunk. That the client

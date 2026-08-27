@@ -413,10 +413,27 @@ def _health_shrink_steps(agent_id):
     ]
 
 
-# Item ids for the armor-slot arm. The weapon is item 1 (authsrv
-# WEAPON_ITEM_ID); these two are declared by the probe itself via 0x0161.
-_ARMOR_LEGS_ITEM = 2
-_ARMOR_BOOTS_ITEM = 3
+# Item ids for the armor-slot arm, declared by the probe itself via 0x0161.
+#
+# THESE WERE 2 AND 3 UNTIL 2026-08-27 AND BOTH COLLIDED WITH LIVE SERVER ITEMS.
+# 2 is `authsrv.BACKPACK_ITEM_ID` and 3 is STARTER_ARMOUR's `warrior_body`, so
+# this arm re-declared the player's backpack and chest onto the same client, on
+# every run. Nothing failed: a second `0x0161` for an id the server already
+# declared does not error, it overwrites the client's record, so any reading
+# taken through this arm was measuring two writers at one slot.
+#
+# 43/44 AND NOT 10/11, which is the free pair immediately after the server's
+# block. Probe items live in the 40s here already -- `_DRAIN_ITEM_A/B/C` are
+# 40/41/42 -- and keeping the band means a probe id is visibly a probe id
+# instead of sitting flush against ids the server mints. The server's own
+# range is 1..9 plus purchases from `PURCHASED_ITEM_ID_BASE` (5000).
+#
+# `test_armour.py` §2 now scores every `_*_ITEM*` constant in this module
+# against the server's minted set and reddens on any overlap. It did not read
+# this module at all before, which is why the collision survived: the reserved
+# check existed and was pointed one way only.
+_ARMOR_LEGS_ITEM = 43
+_ARMOR_BOOTS_ITEM = 44
 
 
 def _armor_slots_steps(agent_id):

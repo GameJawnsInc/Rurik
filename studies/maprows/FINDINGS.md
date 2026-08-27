@@ -801,3 +801,80 @@ the census with `--dat` pointed at the client's archive gives **the same 8 of 15
 and the same verdict on every single row**. The 8-byte difference does not move
 the navmesh's answer for those arrival points. That is a check that could have
 changed this morning's number and did not — which is worth more than the number.
+
+### 10.10 CORRECTION to §10.9 — it is GENERATION SKEW, not modification
+
+§10.9 recorded the `dat_study` ↔ run-dir divergence on map 146/148 and let
+`RUNBOOK.md`'s standing explanation stand: *the client writes to its own `Gw.dat`
+as it patches content*. **That mechanism is real and documented since 2026-08-23,
+but it is not what happened here.** Measured the same day:
+
+| copy | row | size | crc |
+|---|---|---|---|
+| `dat_study` | 7982 | 1,300,036 | `0xA0AE500A` |
+| `dat_study_38833` | **177262** | **1,300,044** | **`0x33F1A289`** |
+| `run/2026-07-29_221c13772c7a` | **177262** | **1,300,044** | **`0x33F1A289`** |
+| `run/2026-08-13_64fae3b1369b` | **177262** | **1,300,044** | **`0x33F1A289`** |
+| `run/2026-08-20_21511009c460` | **177262** | **1,300,044** | **`0x33F1A289`** |
+| `client/2026-07-29…` (pristine 38797) | 7982 | 1,300,036 | `0xA0AE500A` |
+| `run/…-probe`, `run/…-c2` | 7982 | 1,300,036 | `0xA0AE500A` |
+
+The run dirs' "modified" map is **byte-identical to the 38833 archive
+generation**, down to the MFT row index. **All three land on the same row 177262**,
+and independent client-side appends could not produce one shared index — each
+client would have appended at its own next free row. They were re-staged from a
+38833-era source.
+
+So: **`vault/dat_study` — the archive the SERVER reads — is a 38797-era snapshot,
+and the current run dirs are 38833-era.** The `-probe` and `-c2` dirs are the old
+generation, which is exactly why they agreed with `dat_study` on 146/148 and
+differed on map 143 instead: that difference IS local authoring, and this one is
+not.
+
+**Note the trap in the naming.** `run/2026-07-29_221c13772c7a` carries the
+**38833** map. The directory is named for the exe build it was staged for, and
+its `Gw.dat` has since moved on — so the name is not evidence about the archive
+inside it. That is the same shape as
+[[project-rurik-sorted-last-defect]]'s lesson: never infer a build from a
+filename.
+
+**What this changes.** The remedy in §10.9 (`RUNBOOK`'s new third route,
+`RURIK_DAT=<run dir>/Gw.dat`) is unaffected and still correct — it points the
+server at the bytes the client draws, which is right whatever the cause. What
+changes is the DIAGNOSIS a future session should reach for first: **check the
+generation before suspecting damage.** `dat_study` being a generation behind is
+a re-stage away from fixed and is not corruption; `datcheck`'s repair paths are
+the wrong tool for it.
+
+### 10.11 And it refutes PLAN.md item (C)'s leading candidate
+
+§8's archive-independent-content item ranks candidate durable keys and says
+**"The crc is the one to try, and it needs measuring across a patch before it is
+trusted."** Measured, on both patches on disk:
+
+| patch | size+crc identical | MFT row identical |
+|---|---|---|
+| 38519 → 38797 (~90 days) | 170,409 / 170,718 (**99.819%**) | 170,412 / 170,718 (**99.821%**) |
+| 38797 → 38833 (15 days) | 170,985 / 171,012 (**99.984%**) | 170,995 / 171,012 (**99.990%**) |
+
+Two results, and the second is the one that matters.
+
+1. **The item's stated PREMISE is not supported.** It prefers crc "since row
+   indices do not survive a patch". On both patches available the **row survived
+   marginally better than the crc did**. That does not make the row a good key —
+   it is an index into one archive's MFT and answers a different question — but
+   the reason given for rejecting it is empirically wrong, and a rule resting on
+   a wrong reason is worth restating on a right one.
+2. **crc is REFUTED as a durable MAP key, which is the question (C) actually
+   asks.** The item already frames it exactly: *"crc identifies a FILE, and
+   whether it identifies a MAP across an ArenaNet update is exactly the open
+   question."* Map 146/148 is the same map in both generations and **its crc
+   changed**. So a content row keyed on crc would have failed to resolve across
+   precisely the update (C) exists to survive. crc is the wrong key, and the
+   27 changed rows in one 15-day patch are how often it would bite.
+
+**Not settled here:** the fallback candidate, the content UUID in chunk
+`0x2000000C`. `mapbuild.py` records it as never read by the client, so nothing
+guarantees ArenaNet keeps it stable — and the discriminating test is narrow by
+construction: only the rows whose bytes CHANGED can say anything, and there were
+27 of them.
