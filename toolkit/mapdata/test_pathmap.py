@@ -304,9 +304,10 @@ def all_valid(pm, paths):
 # not evidence of anything.
 # Floor history: 62 (green 64, two archive-conditional section-6 checks may
 # skip) until 2026-08-26; section 11 (ROUTER-B4 route plane preference)
-# added five checks, two of which sit behind a stacked-point search that
-# may skip-declare -- green run 69, floor 65.
-LEDGER = checks.Ledger("pathing map", floor=65)
+# added five checks, two behind a stacked-point search that may
+# skip-declare; section 12 (ROUTER-B5 nearest_walkable) added four --
+# green run 73, floor 69.
+LEDGER = checks.Ledger("pathing map", floor=69)
 check = checks.adopt(LEDGER)
 
 
@@ -889,6 +890,40 @@ def main():
               "an unmatchable preference falls back to all candidates",
               "prefer semantics, same contract as plane_at(prefer=): "
               "refusing would turn a hint into a gate")
+
+    print("\n12. nearest_walkable (ROUTER-B5)")
+    # (a) an already-walkable point comes back at zero distance.
+    wt = pre.trapezoids[0].centre
+    nw = pre.nearest_walkable(wt[0], wt[1], 16.0)
+    check(nw is not None and nw[2] == 0.0
+          and (nw[0], nw[1]) == (wt[0], wt[1]),
+          "an on-mesh point is its own nearest at distance zero",
+          f"{nw}")
+    # (b) step off a real edge and be led back: walk outward from a
+    # trapezoid centre until walkable() goes false, then ask.
+    found = None
+    for t in pre.trapezoids:
+        cx, cy = t.centre
+        for d in range(4, 13, 4):
+            if not pre.walkable(cx + d, cy):
+                found = (cx + d, cy, d)
+                break
+        if found:
+            break
+    check(found is not None,
+          "an off-mesh probe point within the snap radius exists",
+          f"{found}")
+    if found:
+        px, py, d0 = found
+        nw = pre.nearest_walkable(px, py, 16.0)
+        check(nw is not None and nw[2] <= d0
+              and pre.walkable(nw[0], nw[1]),
+              "the nearest point is walkable and no farther than the "
+              "step off the edge", f"stepped {d0}, got {nw}")
+    # (c) the middle of nowhere refuses.
+    check(pre.nearest_walkable(9e6, 9e6, 16.0) is None,
+          "a point with nothing in radius returns None",
+          "refuse-to-guess: the caller must handle a true hole")
 
     dt = time.perf_counter() - t0
     print(f"\nwalked the archive in {dt:.1f}s")

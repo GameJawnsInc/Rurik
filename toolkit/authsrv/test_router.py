@@ -23,12 +23,13 @@ sys.path.insert(0, os.path.dirname(HERE))                      # toolkit/
 import checks                                                  # noqa: E402
 import authsrv                                                 # noqa: E402
 
-# Floor from the 2026-08-26 green run: 64 checks, all unconditional
+# Floor from the 2026-08-26 green run: 68 checks, all unconditional
 # (51 at the B2 landing; +6 review round: the sampling-gate pair, two new
 # composition refusals, two fine-step source locks; +7 ROUTER-B4: planes
 # through route(), corridor planes on the grants, the tour cap and its
-# SLACK control).
-LEDGER = checks.Ledger("router wiring", floor=64)
+# SLACK control; +4 ROUTER-B5: the origin snap answered-not-refused, the
+# streak counting, the true-hole refusal).
+LEDGER = checks.Ledger("router wiring", floor=68)
 check = checks.adopt_named(LEDGER)
 
 SPEED_OP = authsrv.GAME_SMSG_AGENT_UPDATE_SPEED
@@ -82,6 +83,16 @@ class StubPM:
                 return best
             best = p
         return (x1, y1)
+
+    def nearest_walkable(self, x, y, radius):
+        if self.walkable(x, y):
+            return (x, y, 0.0)
+        if 100.0 < x < 200.0 and y <= 400.0:
+            d = min(x - 100.0, 200.0 - x)
+            if d <= radius:
+                edge = 100.0 if x - 100.0 <= 200.0 - x else 200.0
+                return (edge, y, d)
+        return None
 
     def route(self, x0, y0, x1, y1, start_plane=None, goal_plane=None,
               with_planes=False):
@@ -229,6 +240,32 @@ def main():
           any(r["kind"] == "router_route" and r.get("verdict") == "routed"
               for r in rows)
           and not any(r.get("reason") == "tour-capped" for r in rows))
+
+    print("== 1c: ROUTER-B5 -- the origin snap and the refusal streak ==")
+
+    # An origin 8u inside the wall (run 3's measured penetration class)
+    # snaps to the edge and the click is ANSWERED, not refused -- the
+    # refusal lock-in that armed the 3.2km reconcile snap cannot start
+    # from an edge-penetrated stand.
+    st = base_state(pos=(108.0, 0.0))
+    handled, sent, rows = answer(st, (50.0, 0.0))
+    row = next(r for r in rows if r["kind"] == "router_route")
+    check("an edge-penetrated origin is snapped and answered",
+          row["verdict"] == "verbatim" and row.get("snapped") == 8.0)
+    check("the answered click resets the refusal streak",
+          st.get("router_refusal_streak") == 0)
+
+    # A stand deeper than the radius still refuses -- and the streak
+    # counts, so the run-3 silence is at least LOUD now.
+    st = base_state(pos=(150.0, 0.0))
+    _h, _s, rows1 = answer(st, (50.0, 0.0))
+    _h, _s, rows2 = answer(st, (60.0, 0.0))
+    r1 = next(r for r in rows1 if r["kind"] == "router_route")
+    r2 = next(r for r in rows2 if r["kind"] == "router_route")
+    check("a true hole still refuses with the reason named",
+          r1["verdict"] == "refused" and r1["reason"] == "origin-off-mesh")
+    check("consecutive refusals count a streak on every row",
+          r1.get("streak") == 1 and r2.get("streak") == 2)
 
     # kbd-drop: active keyboard authority.
     st = base_state()

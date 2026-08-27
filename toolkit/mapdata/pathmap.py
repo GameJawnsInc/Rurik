@@ -461,6 +461,52 @@ class PathingMap:
                     return True
         return False
 
+    def nearest_walkable(self, x, y, radius):
+        """(px, py, dist) -- the nearest on-mesh point within radius, or None.
+
+        ROUTER-B5 (2026-08-26 run 3): a client can legitimately STAND a few
+        units outside this decode -- measured penetrations 0.25u (the P-17
+        wall press) and 8.0u (run 3's parked stop beside a plane-44
+        structure, which turned into 218 seconds of origin-off-mesh click
+        refusals and ended in the client's own 3.2km reconcile snap when
+        the keyboard finally spoke). A caller that needs a routable origin
+        asks for the nearest covered point instead of refusing outright.
+
+        Per candidate trapezoid the point is found by clamping y into the
+        trapezoid's span and x into its edges at that y -- not the exact
+        euclidean nearest against slanted edges, but within the small radii
+        this is for the error is bounded by the edge slope over the radius,
+        and every returned point is VERIFIED walkable() (a clamp landing on
+        a boundary float is nudged toward the trapezoid's centre first;
+        a candidate that still fails verification is skipped, never
+        returned)."""
+        best = None
+        b0 = int((y - radius) // BAND)
+        b1 = int((y + radius) // BAND)
+        for band in range(b0, b1 + 1):
+            for t in self._bands.get(band, ()):
+                lo, hi = t.y_bottom, t.y_top
+                if lo > hi:
+                    lo, hi = hi, lo
+                cy = lo if y < lo else (hi if y > hi else y)
+                xl, xr = self._x_at(t, cy)
+                if xl > xr:
+                    xl, xr = xr, xl
+                cx = xl if x < xl else (xr if x > xr else x)
+                d = ((cx - x) ** 2 + (cy - y) ** 2) ** 0.5
+                if d > radius or (best is not None and d >= best[0]):
+                    continue
+                if not self.walkable(cx, cy):
+                    ctr = t.centre
+                    cx += (ctr[0] - cx) * 1e-3
+                    cy += (ctr[1] - cy) * 1e-3
+                    if not self.walkable(cx, cy):
+                        continue
+                best = (d, cx, cy)
+        if best is None:
+            return None
+        return best[1], best[2], best[0]
+
     def plane_at(self, x, y, prefer=None):
         """Which plane a point is on, or None if the geometry cannot say.
 

@@ -1964,7 +1964,12 @@ stacked point on Pre-Searing ((-6854,13008), planes {0,36}) has each of
 its surfaces selectable by preference, and an unmatchable preference
 falls back rather than refusing — the run-2 twelve-waypoint island tour
 was blind `containing()[0]` endpoint selection, and this section is its
-regression. Floor 65 against a green 69 (two archive-conditional §6
+regression. Section 12 (ROUTER-B5): `nearest_walkable` returns an
+on-mesh point at distance zero for an on-mesh query, leads a real ≤12u
+edge penetration back to a verified-walkable point no farther than the
+step off, and returns None in the middle of nowhere — run 3's
+218-second refusal lock-in stood on an 8u penetration this query now
+answers. Floor 69 against a green 73 (two archive-conditional §6
 checks and the stacked-point pair may skip-declare); ~105 s, `--routes`
 shrinks section 10),
   `toolkit/mapdata/test_deploy.py` (rung G's one command, `deploy.py`, which
@@ -8992,5 +8997,11 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   island-tour route (the run's 11.8x specimen shape) into the
   clip-fallback with reason=tour-capped, and a short corner detour under
   the SLACK term survives the cap — the control that keeps the cap from
-  eating ordinary cornering. Floor 64 from the green run (51 at the B2
-  landing, 57 after the review round). ~1 s).
+  eating ordinary cornering. ROUTER-B5 (run 3) added four: an
+  8u-penetrated origin (the run's own measured stand) snaps and gets a
+  VERBATIM answer instead of the refusal that armed the 218-second
+  lock-in, the answered click resets the refusal streak, a true hole
+  deeper than the radius still refuses with the reason named, and
+  consecutive refusals count a streak onto every row — the run-3
+  silence can never again be quiet. Floor 68 from the green run (51 at
+  the B2 landing, 57 after the review round, 64 after B4). ~1 s).
