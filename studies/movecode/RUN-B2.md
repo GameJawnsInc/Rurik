@@ -213,3 +213,44 @@ overwrites both files.
 | `LoadLibraryA returned 0x00000000` | injection failed. The client may be elevated — run the injector elevated too. |
 | the client dies on injection | stop, and do not re-run. Capture the crash and treat it as a defect in `movehook.c`, not a flaky run. |
 | no output file at all | the run never completed its timer. The DLL writes only on disarm. |
+
+---
+
+## RUN 3 — PRE-REGISTERED, before the run. Map 280, interrupt mid-walk
+
+**Written 2026-08-27 before run 3 exists.** The standard that got the router arc four
+honest results: state the prediction and its refuter first, then score the run against
+the rows rather than the impression.
+
+**MOVECODE-P2 — the interrupt produces a measurable divergence.** When the operator
+walks a granted/solved leg and then interrupts it mid-walk with a directional key,
+the body ends up somewhere the client's own leg did not send it. Concretely, in a
+v4 capture:
+
+- **P2a.** At least one teleport will show a **real divergence**: `m_point`
+  extrapolated to the arrival tick by velocity — `m_point + v × (stop − ptime)`,
+  the client's own form at `0x005FFC19` — will differ materially from
+  `m_targetPoint`. **Runs 1 and 2 could not measure this at all**, which is why
+  §1e.2 retracted their warp counts.
+- **P2b.** Consecutive teleports will **stop chaining** across an interrupt. Run 2
+  measured 25 of 25 chaining to exactly 0.00 on uninterrupted walking; an interrupt
+  should break that identity, and the break should coincide with the divergence.
+- **P2c.** `chcli_dir` (`0x0081A8F0`) will fire — it was **0** in run 2 — because
+  the interrupt is keyboard input, and its count bounds how many interrupts landed.
+
+**What refutes P2, and it is a real outcome.** If every teleport still chains to
+0.00 and the extrapolated position matches `m_targetPoint` throughout, then the
+client absorbs the interrupt cleanly and **the teleport is not the warp mechanism at
+all** — the warps the router arc saw on the wire would have to come from somewhere
+else entirely, most likely our own grants racing the client's path. That would be a
+bigger finding than confirmation.
+
+**A third outcome that is NOT a refutation.** Zero interrupts landing (`chcli_dir`
+hits 0) means the treatment never ran — zero exposure, not a null result. Re-run;
+do not conclude. Pre-registered exposure floor: **`chcli_dir` ≥ 3.**
+
+**MOVECODE-Q2 on map 280 — the one map we know we get wrong.** Router run 5 found
+our decode reads the player's open ground as a pocket *on map 280*. Run 2's 8/8
+BOTH-OK was Ascalon, a different mesh. **Prediction: map 280 will produce non-zero
+`OURS-FAILED` or `OFF-MESH`.** If it does not, run 5's pocket was not a mesh-decode
+failure and ROUTER-Q10 (route quality) takes its place.
