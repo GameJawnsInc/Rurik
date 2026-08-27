@@ -6548,9 +6548,17 @@ shrinks section 10),
   header is exactly the two-homes split the ruling refuses and is otherwise
   invisible. §2 requires every site's first byte to be `0x55` in the pinned 38797
   image — the handler re-emulates `push ebp` and nothing else, so a site that is
-  no longer a function entry must never be armed. 18 floor, 36 on a machine with
-  the client, a compiler and `cmd.exe`; each of the other four sections declares
-  a skip with its reason),
+  no longer a function entry must never be armed. **§8 pins a bug that would
+  otherwise have been invisible until a live run produced a ten-minute capture
+  nobody asked for**: `GetEnvironmentVariableA` inside an injected DLL reads the
+  *client's* environment, inherited from whatever launched `Gw.exe`, **not the
+  injector's** — so `attach.py` exporting a variable would change nothing and the
+  DLL would quietly use its defaults. The config therefore lives in a
+  `movehook.cfg` beside the DLL, and §8 sets the file and the environment to
+  DIFFERENT output directories and a 1500 ms against a 600000 ms run, so which one
+  the DLL actually honoured is visible in where the sidecar landed and in whether
+  the run finished. 18 floor, 38 on a machine with the client, a compiler and
+  `cmd.exe`; each of the other four sections declares a skip with its reason),
   `toolkit/clientscan/test_commandertrap.py` (the hardware-breakpoint trap, and
   the section that matters CAUGHT A DEAD TOOL BEFORE IT PUBLISHED A FINDING.
   `commandertrap.py` answers "does instruction X ever execute", and the

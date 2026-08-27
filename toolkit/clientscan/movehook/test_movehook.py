@@ -56,7 +56,8 @@ import checks                                                   # noqa: E402
 #   §5  3   the refusal on a dead control          process-free
 #   §6  2   the DLL builds, and it is x86          needs a compiler
 #   §7  5   inject into a live 32-bit cmd.exe      needs SysWOW64\cmd.exe
-#   ----   process-free core = 18, and THAT is the floor.
+#   §8  2   movehook.cfg beats the environment     rides on §7's injected run
+#   ----   process-free core = 18, and THAT is the floor.  A whole run is 38.
 #
 # The first draft of this comment guessed 16 by adding up what the sections
 # looked like they contained, and it was two low -- which would have let two
@@ -279,8 +280,18 @@ def section_6_7(tmp):
         LEDGER.skip("7. inject into a live 32-bit process", f"cannot import: {ex}")
         return
 
+    # §8 rides along on §7's injected run: the CONFIG FILE beside the DLL must
+    # beat the environment, because that is the only channel `attach.py` has --
+    # an injected DLL reads the TARGET's environment, not the injector's. The two
+    # are set to different output directories on purpose, so whichever the DLL
+    # actually honoured is visible in where the sidecar lands.
     outdir = os.path.join(tmp, "hookout")
-    env = dict(os.environ, RURIK_MOVEHOOK_OUT=outdir, RURIK_MOVEHOOK_MS="1500")
+    envdir = os.path.join(tmp, "hookout-env-loses")
+    cfg = os.path.join(HERE, "movehook.cfg")
+    cfg_saved = open(cfg, encoding="ascii").read() if os.path.isfile(cfg) else None
+    with open(cfg, "w", encoding="ascii", newline="\n") as fh:
+        fh.write("ms=1500\nout=" + outdir + "\n")
+    env = dict(os.environ, RURIK_MOVEHOOK_OUT=envdir, RURIK_MOVEHOOK_MS="600000")
     # A throwaway host that will sit still. STDIN MUST BE A HELD-OPEN PIPE, not
     # DEVNULL: `cmd /k` reads EOF from DEVNULL and exits within half a second, and
     # the injector then fails with a WOW64-looking `WinError 299` on the module
@@ -337,11 +348,25 @@ def section_6_7(tmp):
         check(proc.poll() is None,
               "7. and the host process is STILL ALIVE -- the hook did not kill it",
               "the host died, which is the failure mode that matters most")
+        check(not os.path.isdir(envdir),
+              "8. the config FILE beat the environment for the output directory",
+              f"the DLL wrote to the env's dir -- attach.py's only channel is the "
+              f"file, so this landing in {envdir} means a live capture would "
+              f"silently ignore --out and --minutes")
+        check(os.path.isfile(side),
+              "8. and the run honoured ms=1500 from the file rather than the "
+              "env's 600000 -- it finished inside the deadline")
     finally:
         try:
             proc.kill()
         except Exception:
             pass
+        if cfg_saved is None:
+            if os.path.isfile(cfg):
+                os.remove(cfg)
+        else:
+            with open(cfg, "w", encoding="ascii", newline="\n") as fh:
+                fh.write(cfg_saved)
 
 
 def main():

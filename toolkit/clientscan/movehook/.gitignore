@@ -2,3 +2,4 @@
 *.obj
 *.exp
 *.lib
+movehook.cfg

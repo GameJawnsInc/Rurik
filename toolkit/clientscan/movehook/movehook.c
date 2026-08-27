@@ -79,17 +79,82 @@
 #define OUTENV    "RURIK_MOVEHOOK_OUT"
 #define MSENV     "RURIK_MOVEHOOK_MS"
 
-/* Read a DWORD out of the environment, or `dflt`. Both knobs exist for
- * `test_movehook.py`, which per PLAN.md §7 Q12(b) must exercise build + inject +
- * read-back with the game NOT running -- it injects into a throwaway 32-bit
- * cmd.exe, where a ten-minute run would be a ten-minute test. They are also the
- * honest way to redirect output away from the real vault during a test. */
-static DWORD env_dword(const char *name, DWORD dflt)
+/* TWO CONFIG CHANNELS, AND THE SECOND ONE IS NOT REDUNDANT.
+ *
+ * The environment works only when whoever sets it also LAUNCHED the target:
+ * `GetEnvironmentVariableA` inside an injected DLL reads the CLIENT's environment,
+ * inherited from whatever started Gw.exe, not from the injector. `test_movehook.py`
+ * spawns its own cmd.exe host and so can use it; `attach.py`, which injects into a
+ * client already in the world, cannot -- and the bug that hides here is silent, the
+ * DLL simply using its defaults while the operator believes otherwise.
+ *
+ * So a `movehook.cfg` BESIDE THE DLL wins over the environment. `attach.py` writes
+ * it; the DLL finds it from its own module path. Same precedent as
+ * `trnblock.c`'s target_block.txt, for the same reason: an injected DLL's only
+ * reliable channel is the filesystem. */
+static HINSTANCE g_self;
+
+static void cfg_path(char *out, size_t n)
 {
-    char buf[32];
-    DWORD n = GetEnvironmentVariableA(name, buf, sizeof buf);
-    if (!n || n >= sizeof buf) return dflt;
-    return (DWORD)strtoul(buf, NULL, 10);
+    char *slash;
+    out[0] = 0;
+    if (!GetModuleFileNameA(g_self, out, (DWORD)n)) return;
+    slash = strrchr(out, '\\');
+    if (slash) slash[1] = 0; else out[0] = 0;
+    if (out[0]) strncat(out, "movehook.cfg", n - strlen(out) - 1);
+}
+
+/* `key` from movehook.cfg, else the environment, else `dflt`. */
+static DWORD cfg_dword(const char *key, const char *envname, DWORD dflt)
+{
+    char path[MAX_PATH], line[512];
+    FILE *f;
+    size_t klen = strlen(key);
+    cfg_path(path, sizeof path);
+    if (path[0] && (f = fopen(path, "r")) != NULL) {
+        while (fgets(line, sizeof line, f)) {
+            if (strncmp(line, key, klen) == 0 && line[klen] == '=') {
+                DWORD v = (DWORD)strtoul(line + klen + 1, NULL, 10);
+                fclose(f);
+                if (v) return v;
+                break;
+            }
+        }
+        fclose(f);
+    }
+    {
+        char buf[32];
+        DWORD n = GetEnvironmentVariableA(envname, buf, sizeof buf);
+        if (n && n < sizeof buf) return (DWORD)strtoul(buf, NULL, 10);
+    }
+    return dflt;
+}
+
+static void cfg_string(const char *key, const char *envname,
+                       char *out, size_t n, const char *dflt)
+{
+    char path[MAX_PATH], line[512];
+    FILE *f;
+    size_t klen = strlen(key);
+    cfg_path(path, sizeof path);
+    if (path[0] && (f = fopen(path, "r")) != NULL) {
+        while (fgets(line, sizeof line, f)) {
+            if (strncmp(line, key, klen) == 0 && line[klen] == '=') {
+                char *v = line + klen + 1, *e;
+                e = v + strlen(v);
+                while (e > v && (e[-1] == 10 || e[-1] == 13)) *--e = 0;
+                if (*v) { strncpy(out, v, n - 1); out[n - 1] = 0; fclose(f); return; }
+                break;
+            }
+        }
+        fclose(f);
+    }
+    {
+        DWORD got = GetEnvironmentVariableA(envname, out, (DWORD)n);
+        if (got && got < n) return;
+    }
+    strncpy(out, dflt, n - 1);
+    out[n - 1] = 0;
 }
 
 /* One event. Fixed size and self-describing: the reader takes `reclen` from the
@@ -302,8 +367,8 @@ static DWORD sample_client_eip(DWORD lo, DWORD hi)
 static const char *outdir(void)
 {
     static char buf[MAX_PATH];
-    DWORD n = GetEnvironmentVariableA(OUTENV, buf, sizeof buf);
-    return (n > 0 && n < sizeof buf) ? buf : DEFDIR;
+    cfg_string("out", OUTENV, buf, sizeof buf, DEFDIR);
+    return buf;
 }
 
 static void mkdirs(const char *dir)
@@ -327,7 +392,7 @@ static DWORD WINAPI worker(LPVOID unused)
     FILE *f;
     (void)unused;
 
-    run_ms = env_dword(MSENV, DEF_RUN_MS);
+    run_ms = cfg_dword("ms", MSENV, DEF_RUN_MS);
     g_base = (DWORD)(ULONG_PTR)GetModuleHandleW(NULL);
     for (i = 0; i < NSITES; i++) g_addr[i] = g_base + SITES[i].rva;
 
@@ -430,6 +495,7 @@ BOOL WINAPI DllMain(HINSTANCE h, DWORD reason, LPVOID reserved)
 {
     (void)reserved;
     if (reason == DLL_PROCESS_ATTACH) {
+        g_self = h;
         DisableThreadLibraryCalls(h);
         CloseHandle(CreateThread(NULL, 0, worker, NULL, 0, NULL));
     }
