@@ -214,11 +214,26 @@ static int poke(DWORD addr, BYTE val, BYTE *saved)
 static int readable(DWORD p, DWORD n)
 {
     MEMORY_BASIC_INFORMATION mbi;
+    DWORD base, end;
     if (!p || (p & 3u)) return 0;
+    /* Overflow FIRST, before any arithmetic that could wrap. `p + n` for p near
+     * 0xFFFFFFFF wraps to a small number that compares happily against the region
+     * end, so the range check would pass on a pointer that is nowhere near the
+     * region. Unreachable today -- VirtualQuery fails on kernel-space addresses
+     * and this is a 32-bit user process -- but a bounds check whose own arithmetic
+     * can wrap is not a bounds check, and the cost of getting it right is a line. */
+    if (n == 0 || p > 0xFFFFFFFFu - n) return 0;
     if (!VirtualQuery((LPCVOID)p, &mbi, sizeof mbi)) return 0;
     if (mbi.State != MEM_COMMIT) return 0;
+    /* PAGE_NOACCESS and PAGE_GUARD are the two that fault on a read. Note
+     * PAGE_EXECUTE (execute-only, no read) also would on hardware that enforces
+     * it; x86 page tables do not, and Windows maps it readable, so it is not
+     * screened here. */
     if (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD)) return 0;
-    if (p + n > (DWORD)(ULONG_PTR)mbi.BaseAddress + (DWORD)mbi.RegionSize) return 0;
+    base = (DWORD)(ULONG_PTR)mbi.BaseAddress;
+    if (mbi.RegionSize > 0xFFFFFFFFu - base) end = 0xFFFFFFFFu;
+    else end = base + (DWORD)mbi.RegionSize;
+    if (p + n > end) return 0;
     return 1;
 }
 
@@ -411,8 +426,16 @@ static DWORD WINAPI worker(LPVOID unused)
         }
     }
 
-    /* CONTROL B, before the measurement sites are armed so its hit cannot be
-     * confused with one of theirs. */
+    /* CONTROL B, and the ORDER HERE IS LOAD-BEARING TWICE OVER.
+     *
+     * It runs before the measurement sites are armed, so (1) its hit cannot be
+     * confused with one of theirs, and (2) -- the safety half --
+     * `sample_client_eip` SUSPENDS client threads to read their Eip, and at this
+     * point no client thread can possibly be inside our vectored handler, because
+     * nothing of ours is armed in client code yet. Suspending a thread that was
+     * mid-handler would be a deadlock waiting to be discovered on someone's
+     * machine. Arming first and sampling second would be the same code and a much
+     * worse program. */
     if (text_span(g_base, &tlo, &thi)) {
         g_ctl = sample_client_eip(tlo, thi);
         if (g_ctl && poke(g_ctl, 0xCC, &g_ctl_orig)) {
