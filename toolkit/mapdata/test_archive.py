@@ -42,8 +42,21 @@ import datwrite  # noqa: E402
 import checks  # noqa: E402
 
 # Map files carry flags 259. The high byte is the stream (1) and the low byte is
-# the entry flags (3). MEASURED: exactly 349 entries in this archive have it, and
-# every one sampled decompressed to an ffna type-3 payload.
+# the entry flags (3). MEASURED: 349 entries carried it on the 38797 archive and
+# 361 on 38833, and every one sampled decompressed to an ffna type-3 payload.
+#
+# A FLOOR SINCE 2026-08-27, and it was an equality until then. ArenaNet added 12
+# maps between those two generations, so the equality turned an archive resync
+# into a red test -- on a corpus that GREW, which is not a defect. The claim this
+# section makes is its own heading, "map files are identifiable by flags alone",
+# and section 3 is what carries it by decompressing a sample and requiring ffna
+# type 3 on every one. The count corroborates; it is not the claim.
+#
+# The floor still catches what matters: a SHRINK means either the archive lost
+# maps or the flag reading broke, and both are real. The rest of this file is
+# already generation-aware -- section 4 skips its reference rows when the entry
+# count differs, and adjusts LEDGER.floor by hand for them -- so this constant
+# was the last thing tying it to one archive.
 MAP_FLAGS = 259
 EXPECTED_MAP_COUNT = 349
 FFNA_TYPE_MAP = 3
@@ -511,9 +524,12 @@ def main():
 
         print("\n2. map files are identifiable by flags alone")
         maps = [e for e in ar.entries if e.flags == MAP_FLAGS]
-        check(len(maps) == EXPECTED_MAP_COUNT,
-              f"exactly {EXPECTED_MAP_COUNT} entries carry flags "
-              f"{MAP_FLAGS} (got {len(maps)})")
+        check(len(maps) >= EXPECTED_MAP_COUNT,
+              f"at least {EXPECTED_MAP_COUNT} entries carry flags {MAP_FLAGS}",
+              f"{len(maps)} today. A floor, not an equality: 349 on 38797 and "
+              f"361 on 38833, and a corpus that GREW must not redden this. A "
+              f"shortfall means the archive lost maps or the flag reading "
+              f"broke -- section 3 is what proves flags alone identify a map")
         if not maps:
             print("\nno map entries; nothing further to check")
             return LEDGER.verdict()
