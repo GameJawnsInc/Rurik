@@ -4567,10 +4567,19 @@ The bodies differ, and that is where the distinction lives:
 - **16** has no variants and instead **asserts both flags are clear** — two
   `GmSkHelpers.cpp:139` sites at `0x004FA30B..0x004FA34B`.
 
-**Why the engine needs two enum values for one word is NOT ANSWERED.** Nothing
+~~**Why the engine needs two enum values for one word is NOT ANSWERED.** Nothing
 here read the code that *consumes* the distinction, only the code that names it.
 That is the honest residue of item 5, and it is a different and much smaller
-question than the one that was open this morning.
+question than the one that was open this morning.~~
+
+**ANSWERED 2026-08-27 — see §40 (SKILLS-T2).** A caller of the row resolver at
+`0x008CAF5D`, in `GmCtlSkList.cpp`, reads the type field and gives **type 16 its
+own arm** alongside types 6, 14 and 22 — while **type 10 has no arm at all** and
+falls to the same default as the rest of the enum. So they are not two labels for
+one thing: 10 is the default and 16 is an exception carved out of it, which is
+the shape this section's own structural profile predicted. Over the resolver's
+101 call sites, 18 read the type field and exactly one compares against 10 or 16.
+The bound is tight rather than closed, and §40.2 says why.
 
 It also explains the structural profile that made 16 puzzling before the switch
 turned up. Its 21 rows are **100% instant, 100% self-targeted, 100% carrying a
@@ -5168,3 +5177,72 @@ And the divisor is independently CORROBORATED rather than merely copied:
 `studies/isle` rung 7 fitted it from retail damage at **39.5, 95% CI
 [37.30, 42.00]**, containing 40. Wiki and a measurement of our own agreeing,
 from sources that share nothing.
+
+---
+
+## 40. SKILLS-T2 — §35.4's residue is ANSWERED: type 16 has a consumer, and type 10 is the default
+
+**Desk only, 2026-08-27, pinned build 38797.** §35.4 closed with: *"Why the engine
+needs two enum values for one word is NOT ANSWERED. Nothing here read the code
+that CONSUMES the distinction, only the code that names it."* Something does
+consume it.
+
+### 40.1 The consumer, at `0x008CAF5D`
+
+A caller of the id→`s_skill` row resolver reads the type field and branches:
+
+```
+008CAF5D  call 0x5a88b0          ; resolve the row -> eax
+008CAF65  mov  ecx, [eax + 0xc]  ; ecx = type_code
+008CAF68  cmp  ecx, 0x10         ; TYPE 16
+008CAF6B  jne  0x8caf72
+008CAF6D  lea  ecx, [edi + 0xa]  ;   <- its own arm
+008CAF70  jmp  0x8caf99
+008CAF72  cmp  ecx, 6      / je 0x8caf90
+008CAF77  cmp  ecx, 0xe    / je 0x8caf87
+008CAF7C  cmp  ecx, 0x16   / jne 0x8caf99
+008CAF99  mov  edx, 0xb          ; the default everything else falls to
+```
+
+**Type 16 has an arm. Types 6, 14 and 22 have arms. Type 10 has none** — it
+reaches `0x8caf99` with the rest of the enum. So the pair is not "two labels for
+one thing": **10 is the default case and 16 is an exception carved out of it**,
+which is exactly the shape §35.4 predicted from the structural profile (16's 21
+rows are 100% instant / self-targeted / duration-carrying, 10's 55 rows are
+13/31/38 — "two 'Skill' codes, one of them the untargeted-self-buff case").
+
+**MODULE: `GmCtlSkList.cpp`**, the skills-list control — nearest assert site
+`0x008cb0b1 GmCtlSkList:3294 title < TITLES`. **RECONSTRUCTION, not measured:**
+the arms feed a value that is then packed by shifts
+(`shl esi,0xc / add esi,edi / shl esi,8 / add esi,ecx / shl esi,8`), which reads
+as a sort or grouping key for the list. Nothing here proves what the packed word
+is used for.
+
+### 40.2 The census, and its bound
+
+`0x00988ED0`, the `s_skill` table base, has **0 rel32 references and exactly 2
+words holding the VA** — `0x005A861C` (`mov eax,0x988ed0`) and `0x005A88DA`
+(`add eax,0x988ed0`), both inside the resolver family at `0x005A88B0`, which has
+**101 direct call sites**. Over those 101:
+
+| | |
+|---|---|
+| read a `+0x0C` field within 96 bytes | **18** |
+| compare against `0x0A` (10) or `0x10` (16) | **1** — and it is 16 |
+
+**This is a TIGHT bound, NOT a closed one**, and the difference matters for how
+much the "only one" is worth. `codescan` states its own limits: it cannot see
+indirect calls, vtable dispatch, or an address the image computes rather than
+stores. The 96-byte window misses a read that happens further out or through a
+pointer spilled and reloaded — the first version of this scan matched only
+`[eax+0x0C]` and found 3, until its own control showed the known namer reads
+`[edi+0x0C]` and was invisible to it. **18 is a floor of a floor.** What the
+result supports is *"the distinction is consumed, here"*, not *"nowhere else"*.
+
+### 40.3 The control that earned its place
+
+The first run of this scan reported a confident **"0 call sites read the type
+field"** — because it called a PE method that does not exist, mapped every VA to
+`None`, and searched empty windows. The positive control (require the KNOWN
+namer's `mov eax,[edi+0x0C]` at `0x004F9C48` to be visible before believing any
+zero) is what caught it, and it is why §40.2's numbers are worth reading at all.
