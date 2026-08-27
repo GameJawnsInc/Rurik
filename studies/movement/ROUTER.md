@@ -491,3 +491,51 @@ does not recur absent a streak. REFUTED IF a streak ≥10 occurs at a
 stand within 16 u of our mesh (the snap failed its own case), or a
 kilometre-class self-snap appears in the client's reports without a
 preceding refusal streak (the divergence has another engine).
+
+## 9. Run 4 — 20260826T211820: the router is clean, the warps are the
+## KEYBOARD channel (OBSERVED)
+
+Scored on BOTH witnesses this time (the tape's `live` column and the
+client's own report stream — run 3's snap lived only in the latter, so
+scoring one is scoring half).
+
+**The router path is clean, three ways:**
+- **Zero tape steps over 450 u/s all run** (a deliberately low cut; the
+  teleport class is >600). Fourth consecutive run with no
+  server-ordered teleport.
+- **The tour cap fired 12 times and every one was a genuine tour** —
+  ratios recomputed plane-aware from the rows: 5.74×, 6.81×, and a
+  cluster at 9.5–11.0× on a 950–1,100 u click. All demoted to the
+  clip-fallback.
+- **B5's instruments worked**: one refusal streak reached 10 and printed
+  its console warning (a click re-issued at a capped spot), and the six
+  `dest-off-mesh` refusals were clicks 138–146 u past a mesh edge — a
+  real decode gap, far outside the 16 u snap radius, correctly refused
+  rather than guessed (ROUTER-Q11's class, now with coordinates).
+
+**Both remaining warps are `--d1-lead` keyboard-lead events.** Neither
+involves a click grant, a chain leg, or the router at all:
+- **t=40.823→40.889, 664 u** in the client's consecutive reports. The
+  bracket: four clicks refused `dest-off-mesh` (the 140 u-off-edge
+  gap), then an `op61` keyboard report, a D1 lead firing
+  `lead_clip_why=clipped` — and the client's next report 664 u away.
+  The lead's own dest is the report point; the jump follows the grant.
+- **t=139.305→139.439, 331 u**, pure keyboard: D1 leads firing
+  `clipped` ~500 u ahead of the player on consecutive reports, the
+  client snapping between them, then a stop report at the far point.
+
+**This is REALFIX-A2's channel, untouched by this arc** — the router
+replaced the CLICK policy; `--d1-lead` still sends 500–770 u keyboard
+leads clipped at mesh boundaries, and those are what snap. It explains
+the owner's run-3 observation exactly ("the middle went fine — I didn't
+give any WASD"): no keyboard, no lead, no lead-warp.
+
+**Registered for run 5 (the attribution test, owner's choice):** run
+`--router` ALONE, no `--d1-lead` — the keyboard falls back to the
+shipped zero-lead heading path and emits no leads at all. Composition
+verified: the pair needs no flag beyond the defaults. **PREDICTION: zero
+warps in both witnesses.** REFUTED IF a >450 u/s tape step or a
+>25 u/450 u/s client-report jump still occurs — that would move the
+warp engine off the lead channel entirely and make the client-side
+instrumentation (hook DLL on the movement code) the next instrument,
+which is the owner's stated fallback either way.
