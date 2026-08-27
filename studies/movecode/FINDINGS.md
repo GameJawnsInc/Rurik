@@ -790,6 +790,88 @@ a client that does not need us to walk.
 
 ---
 
+## 1f. RUN 3 — Isle of the Nameless, interrupted walks. **THE TELEPORT IS EXONERATED**
+
+**OBSERVED, 2026-08-27.** Map 280, 3,417 records, v4, both controls FIRED, ring 10%
+full. Operator did long walks interrupted mid-walk with a directional key and
+**reports seeing 3–4 warps**. Capture at
+`vault/research/movecode/run3-2026-08-27-isle/`. Predictions were registered in
+[RUN-B2.md](RUN-B2.md) before the run.
+
+### 1f.1 MOVECODE-P2a REFUTED — and this is the arc's biggest result so far
+
+The measurement v4 exists for. For every teleport, advance `m_point` by velocity to
+the arrival tick — the client's own form at `0x005FFC19`,
+`m_point + v × (stop − ptime) × 0.001` — and compare against `m_targetPoint`:
+
+| caller | n | leg (`m_point`→target) p50 | **divergence (extrapolated→target)** |
+|---|---|---|---|
+| `0x00600333` (tick arm) | 25 | 147.2 | **p50 0.1, max 0.3** |
+| `0x006025AB` (halt) | 17 | 707.0 | **p50 0.1, max 0.3** |
+
+**Zero. On all 42, across keyboard interrupts.** The body was already exactly where
+the teleport put it; the "leg" figure is only the distance from the *stale committed*
+`m_point`, and the extrapolation covers it to within floating-point noise.
+
+**So the teleport is never a warp. It is the ordinary arrival mechanism**, and
+`PLAN.md` §2.1's framing — *"every `0x0029` we send arms a scheduled hard arrival …
+a warp the moment the body is elsewhere"* — is wrong about the second half: the body
+is never elsewhere. This was pre-registered as the refuting outcome and named the
+bigger finding, and it is: **the warp the operator saw came from somewhere else.**
+
+P2b was confirmed and turned out to measure something weaker than intended — chaining
+fell to 11/41 (run 2: 25/25) — but with divergence at zero, a broken chain only means
+consecutive teleports belong to different paths, which is what an interrupt does. **A
+broken chain is not evidence of a warp.**
+
+P2c confirmed and comfortably past its exposure floor: `chcli_dir` **618** (was 0).
+
+### 1f.2 P1a is PARTIALLY REVERSED: avoidance DOES fire — at 1.2%
+
+**8 of 687 bakes carried `isWaypoint = 1`, and all 8 returned to `0x00600B0F` —
+obstacle avoidance**, the re-baker §1.6 predicted and §1c.1 declared never fires.
+
+It fires. Runs 1 and 2 saw zero across 612 bakes because both were click-driven; run
+3's keyboard interrupts produced it. All 8 are agent 1 within one episode
+(t = 69.5–83.0 s, clustered near (−4700, 2100)) — a keyboard walk into geometry.
+`0x006002BA` (the tick) also baked twice, another first.
+
+So §1c.1's refutation stands **for click-driven movement** and is **too strong as
+stated**: the correct claim is that the re-bakers are rare and input-dependent, not
+that they never run. Still no unknown bake caller in 1,325 bakes across three runs,
+so MOVECODE-Q4 holds.
+
+### 1f.3 MOVECODE-Q2 on map 280: **7 of 7 BOTH-OK. MY PREDICTION REFUTED.**
+
+I predicted map 280 would produce non-zero `OURS-FAILED` or `OFF-MESH`, because
+router run 5 found our decode reads the player's open ground there as a pocket. It
+did not: zero OFF-MESH, zero OURS-FAILED, on the map we believed we got wrong.
+
+Per the pre-registration's own terms: **run 5's pocket was not a mesh-decode
+failure**, and ROUTER-Q10 (route *quality* — a legal but ugly route) takes its place
+as the explanation. Our mesh is not the problem on map 280.
+
+### 1f.4 The new suspect, and it is named by the capture
+
+**`MapFindPath` was called twice from `0x00605807` with `range = 300.0f`** — that is
+the **snap's gate 2** (§1d.6). Two evaluations of the desync test in a run where the
+operator saw 3–4 warps, while the teleport was provably innocent on all 42.
+
+The other five queries came from `chcli_point` at `range = 10000.0f`, so the two are
+cleanly separable by range alone.
+
+**Our server also granted this run**: 38 of 677 setter calls came from the `0x0029`
+wire handler (run 1: 49; run 2: 0), against 634 from `agapi_setdest`. And keyboard
+walking re-issues *per input tick* — 617 of those 634 came from `chcli_dir`'s call
+site `0x0081AC14` — which is why 618 keyboard events produced 617 destination sets.
+
+**Two sites are added for run 4**: `snaptest` (`0x006055E0`) and `reseed`
+(`0x006022B0`), both verified `55 push ebp`. The first says *which gate failed*, the
+second says a correction was actually **applied, and to whom** — without it, a failed
+gate and an applied snap are the same record.
+
+---
+
 ## 2. Corrections to the record
 
 Each of these was in circulation and each is now measured against the bytes.

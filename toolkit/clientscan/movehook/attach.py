@@ -29,6 +29,7 @@ import argparse
 import os
 import subprocess
 import sys
+import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -140,6 +141,28 @@ def main(argv=None):
     if loaded is None:
         print("  (could not determine whether it is already loaded -- proceeding; "
               "if this is a re-attach, restart the client instead)")
+
+    # THE STALE-DLL CHECK. `gensites.py` can regenerate sites.h while the previous
+    # DLL is still LOCKED by a running client (the hook is deliberately never
+    # unloaded), so the build silently fails with LNK1104 and the .dll on disk keeps
+    # the OLD site set. Arming that would capture 9 sites while the runsheet, the
+    # rows and every downstream reader say 11 -- a confident wrong answer of exactly
+    # the shape this directory keeps producing. Compare mtimes and refuse.
+    hdr = os.path.join(HERE, "sites.h")
+    if os.path.isfile(hdr) and os.path.getmtime(hdr) > os.path.getmtime(DLL) + 1:
+        print(f"REFUSING: {os.path.basename(DLL)} is OLDER than sites.h, so it was "
+              f"built against a different site set.")
+        print("  sites.h  " + time.strftime("%H:%M:%S",
+                                            time.localtime(os.path.getmtime(hdr))))
+        print("  the DLL  " + time.strftime("%H:%M:%S",
+                                            time.localtime(os.path.getmtime(DLL))))
+        print("")
+        print("Rebuild it. If the build fails with LNK1104 the DLL is still loaded "
+              "in a running")
+        print("client -- close the client first; the hook does not unload itself.")
+        print(f"  cd {HERE} && powershell -ExecutionPolicy Bypass "
+              f"-File ./build.ps1 movehook.c")
+        return 5
 
     # THE BUILD CHECK, against the running process and not against the pinned file.
     try:

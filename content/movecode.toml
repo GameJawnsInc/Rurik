@@ -280,3 +280,40 @@ source = "client-table"
 extractor = "toolkit/clientscan/codescan.py"
 build = 38797
 verified = "Read as vx/vy by the extrapolator at 0x005FFBAD and applied as `out.x = [esi+0x78] + vx*dt` (0x005FFC19) / `out.y = [esi+0x7c] + vy*dt` (0x005FFC21). The teleport zeroes both at 0x0060210E and 0x00602117. Our name, not ArenaNet's."
+
+# --------------------------------------------------------------------------
+# Added after run 3, 2026-08-27. Run 3 EXONERATED the teleport as the warp
+# mechanism -- the client's own extrapolated position matched m_targetPoint to
+# within 0.3 u on all 42 teleports, across keyboard interrupts. The operator
+# still SAW 3-4 warps, so something else produces them, and the capture named
+# the suspect: MapFindPath was called twice from 0x00605807 with range = 300.0f,
+# which is the SNAP's gate 2. These two sites are what turn that into a ledger.
+# --------------------------------------------------------------------------
+
+[hook_site.snaptest]
+va = 0x006055E0
+rva = 0x002055E0
+first_byte = 0x55
+thiscall = false
+deref_agent = false
+what = "the desync match test. Asks whether the SYNC agent's dead-reckoned position is within 100.0 u of the client's own history chain; on a miss it runs three fallback gates, ANY of which failing snaps -- straight-line separation vs 300.0f, MapFindPath returning pathCount == 0, and a step-clearance predicate."
+why_hooked = "run 3 exonerated the teleport and proved this path RAN (two MapFindPath calls from its 0x00605807 with range 300.0f). Hooking it turns `the client snapped` into `the client snapped because gate N failed`."
+[hook_site.snaptest.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/codescan.py"
+build = 38797
+verified = "--dis 0x006055E0 shows `55 push ebp`. Its call to MapFindPath is 0x00605802 (returning to 0x00605807) with maxCount=4 and range=300.0f, and the pathCount==0 test is `cmp [ebp-0x60],edi` / `je` at 0x0060580A-0x0060580D with edi provably 0. Its args are named by its own module's asserts: AgTrack:457 `state->clientControlled` at 0x0060560B, AgTrack:458 `source.GetWorld() == WORLD_SYNC` at 0x00605625."
+
+[hook_site.reseed]
+va = 0x006022B0
+rva = 0x002022B0
+first_byte = 0x55
+thiscall = true
+deref_agent = true
+what = "the correction itself. On a snap this reseeds EVERY agent in world 1, not just the one that diverged."
+why_hooked = "the snap test says a correction was decided; this says one HAPPENED, and to whom. Without it a failed gate and an applied snap are the same record."
+[hook_site.reseed.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/codescan.py"
+build = 38797
+verified = "--dis 0x006022B0 shows `55 push ebp`. Its caller 0x006022D8 tests m_timeStopMovement and calls the halt-in-place 0x00602540 first (`if it is moving, stop it here`), then checks assert AgAgent:2147 `syncPoint.position != AGENT_INVALID_POSITION` at 0x00602350."
