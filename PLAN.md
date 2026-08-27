@@ -8868,6 +8868,26 @@ records a file id, and a file id is a fact about one copy of `Gw.dat`.
   FILE, and whether it identifies a MAP across an ArenaNet update is exactly the
   open question.
 
+  **MEASURED 2026-08-27, and ALL THREE candidates above are dead.** The crc is
+  **REFUTED**: map `0x1B97D` is the same map in both generations and its crc
+  changed, so it identifies a FILE and not a MAP -- which is the question this
+  item poses in its own words. The item's stated reason for preferring it is
+  wrong too: over both patches on disk the MFT **row survived marginally BETTER**
+  than the crc (99.821% vs 99.819% at ~90 days; 99.990% vs 99.984% at 15). And
+  the content UUID is **REFUTED** on the only rows that can discriminate -- the
+  two maps whose bytes changed across 38797→38833 both **regenerated** it
+  (`0af52e87…`→`f7a5db04…`, `7c536e52…`→`110481b5…`), 0 of 2, with the control
+  holding 8 of 8 on unchanged maps. The dims were already recorded weak.
+  **The pattern is the useful part: every proposed key is a fact about the BYTES,
+  and bytes are what a patch changes.** A durable key has to come from something
+  ArenaNet keeps stable because the game depends on it -- the map id the server
+  sends, or a join through `s_missionClientData`, which §3 of
+  [studies/maprows/FINDINGS.md](studies/maprows/FINDINGS.md) establishes the
+  client measures itself. That is a different design from the one sketched here.
+  Limit: **n = 2** -- the whole changed set of one 15-day patch rather than a
+  sample of it, and both failed. Record and the two instrument defects found en
+  route: `studies/maprows` §10.11-§10.12.
+
   *Why it is not urgent.* The exposure is two content rows and one id, it is
   correct for the current pair, and (B) now makes any future divergence a refusal
   rather than a client assert. Do C when a second archive state actually has to

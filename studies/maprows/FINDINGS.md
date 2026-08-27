@@ -878,3 +878,61 @@ Two results, and the second is the one that matters.
 guarantees ArenaNet keeps it stable — and the discriminating test is narrow by
 construction: only the rows whose bytes CHANGED can say anything, and there were
 27 of them.
+
+### 10.12 The content UUID is refuted too — so ALL THREE of item (C)'s candidates fail
+
+§10.11 refuted the crc. The fallback is the content UUID in the stripped params
+chunk, and it fails the same way, on the same maps.
+
+**Two maps changed bytes across the 38797 → 38833 patch**, out of 696 shared map
+heads. They are the entire discriminating set — an unchanged map cannot say
+anything about whether a key survives a change:
+
+| file id | MFT row | UUID |
+|---|---|---|
+| `0x1B97D` | 7982 → 177262 | `0af52e87…` → `f7a5db04…` **REGENERATED** |
+| `0x1C539` | 20118 → 177590 | `7c536e52…` → `110481b5…` **REGENERATED** |
+
+**0 of 2 held.** The UUID regenerates on precisely the maps where a durable key
+would have to work. `mapbuild.py` already warned that nothing guarantees
+ArenaNet keeps it stable, since the client never reads it; that caution is now a
+measurement.
+
+**CONTROL: on 8 unchanged maps the UUID holds 8 of 8.** Without it, "regenerated"
+could just be an unstable reader, and the two rows above would be noise.
+
+So item (C)'s three named candidates stand as:
+
+| candidate | verdict |
+|---|---|
+| MFT `crc` + `size` | **REFUTED** — identifies a FILE; changes when the map changes (§10.11) |
+| map dims from `0x2000000C` | already recorded weak — 104 distinct over 349 rows |
+| content UUID | **REFUTED** — regenerates on the changed maps, 0 of 2, control 8/8 |
+
+**What that means for (C), stated carefully.** It is not that (C) is impossible;
+it is that **every key it proposed is a fact about the BYTES, and bytes are what
+a patch changes.** A durable map key has to come from something ArenaNet holds
+stable *because the game depends on it* — the map id the server sends, or a join
+through `s_missionClientData`, which §3 already establishes the client measures
+itself. That is a different design from the one (C) sketches, and naming it is
+the useful half of this refutation.
+
+**The honest limit: n = 2.** That is the whole changed set of one 15-day patch,
+not a sample of it, and both failed — but a patch that rebuilt more maps could in
+principle behave differently. The cheap way to widen it is the same scan across
+the 38519 → 38797 pair, where §10.11 already counted 309 changed file ids
+overall; this run did not decode their params.
+
+**Two instrument defects were found getting here and both are worth carrying**,
+because each produced a confident wrong answer first:
+1. `mapbuild.MAP_PARAMS_CHUNK` is `0x2000000C`, the **BLOATED** spelling; the
+   stripped partner uses `0x1000000C` and `MapFile.find()` returns None for the
+   wrong one rather than raising. A 40-minute corpus scan reported "0 maps with
+   params" in both generations. Now named as `STRIPPED_MAP_PARAMS_CHUNK` at the
+   definition site.
+2. The corrected sweep then reported **"347 of 347 UUIDs identical"** — over an
+   EMPTY discriminating set, because its change-detector read `size`/`crc` off
+   objects that did not carry them, so every map compared equal to itself. A
+   vacuous green that looked like a strong result. The fix is this section's
+   shape: find the changed set FIRST, report its size, and refuse to conclude
+   when it is empty.
