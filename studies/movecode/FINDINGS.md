@@ -71,13 +71,21 @@ instrument's own three self-inflicted defects and their controls are in
 [TESTS.md](../../TESTS.md) §12 for `test_codescan.py`.
 
 **The narrowed spelling turns out not to exist in this image** — and that is a
-measurement, not an assumption. Two independent scans agree: `--bit 0x20:18`
-unbounded finds no 8- or 16-bit memory form at `+0x22` carrying mask `0x04`/`0xFB`,
-and a lane's hand-rolled `narrowscan.py` covering `80 /n ib`, `F6 /0 ib`,
-`66 83 /n ib`, `66 81 /n iw`, `88`/`8A`, `C6 /0 ib` and `0F B6/B7/BE/BF` returned
-zero **with a positive control that passed**. The client *does* narrow in this very
-function — `0x005FEA1E test al, 4` is a byte-width test of bit 2 of `m_flags` — so
-the zero is a fact about bit 18, not an artifact of a client that never narrows.
+measurement, not an assumption. Two independent scans agree. `--bit 0x20:18`
+unbounded returns 10,151 rows over the whole `.text` section, of which **54 are
+8- or 16-bit memory accesses at `+0x22` and not one of them is a SET, CLEAR or
+TOGGLE** — every one is a `mov` or `movzx` on an unrelated structure. Separately, a
+lane's hand-rolled `narrowscan.py` covering `80 /n ib`, `F6 /0 ib`, `66 83 /n ib`,
+`66 81 /n iw`, `88`/`8A`, `C6 /0 ib` and `0F B6/B7/BE/BF` returned zero **with a
+positive control that passed**. The client *does* narrow in this very function —
+`0x005FEA1E test al, 4` is a byte-width test of bit 2 of `m_flags` — so the zero is
+a fact about bit 18, not an artifact of a client that never narrows.
+
+**The phantom rate is worth knowing before trusting any unbounded bit scan.** Over
+the whole image the filter drops **1,353 of 11,504 rows, 11.8%**, as VAs that are
+not instruction boundaries at all; the unfiltered SET count is 136 and the real one
+is 47 (of which exactly one is a memory form). A one-byte anchor cannot avoid this,
+and an unbounded scan that does not filter is roughly one part in eight fiction.
 
 ### 1.3 The census — every read and every write of bit 18
 
@@ -152,6 +160,16 @@ Three refinements the record did not have, all OBSERVED:
 race: the constructor never calls the bake, and none of the bake's five callers lies
 inside the constructor. The constructor seeds the bit once at `t=0` from geometry;
 the bake is the two-valued authority for the rest of the agent's life.
+
+**The register chain was audited rather than assumed**, because every claim above
+rests on `eax` at `0x005FEA4E` still holding what `0x005FEA19` loaded, and on `esi`
+being the same object at both ends. Walking the fourteen instructions between them
+and reading capstone's own register-write set for each: the only writers of `eax`
+are the two intended bit operations, **`esi` is never written at all**, and
+everything in between touches only the FPU status word, EFLAGS, or memory. Chain
+intact — so `test al, 4` at `0x005FEA1E` really does test **bit 2** of this same
+`m_flags` value, and it is *not* a bit-18 site despite matching a naive byte-mask
+search.
 
 ### 1.6 The five bake callers — and the finding that moves the arc
 
@@ -402,19 +420,51 @@ than a decode bug, and would move the arc's weight back onto route selection.
    can answer that; MOVECODE-P1 pre-registers it and B2's hook on `0x0060029F`
    measures it. Until then, §1.6's *mechanism* is OBSERVED and its *significance* is
    a RECONSTRUCTION.
-2. **`--xrefs` sees direct rel32 branches and stored data words only.** Every
-   caller count here inherits that. It is not a hypothetical limit in this
-   subsystem: **the movement tick `0x00600140` has zero direct callers and is
-   reached through a `.rdata` word at `0x00A52F64`**, and the `0x0020` handler is
-   likewise dispatched only from a table. Movement code in this image *is*
-   dispatched indirectly, so "5 callers" and "8 callers" are floors. This is
-   MOVECODE-Q4, and B1 has turned it from a worry into a demonstrated property.
-3. **`asserts.py` is short by ~373 sites**, so every `--in <module>` bound —
+2. **`--xrefs` sees direct rel32 branches and stored data words only, and
+   MOVECODE-Q4 is no longer a worry but a demonstrated property.** Every caller
+   count here inherits that limit. **The movement tick `0x00600140` is a C++
+   virtual method** — OBSERVED: `0x00A52F64` is *slot 1* of a two-entry vftable at
+   `0x00A52F60`, whose slot 0 is a textbook MSVC scalar deleting destructor
+   (`0x005FE920`, `push 0x134` = the class size), and whose address the constructor
+   stores at object offset 0 (`0x005FDE8E mov dword [ebx], 0xa52f60`). Both words
+   are in the relocation table, which is the refutable test that they are pointers
+   rather than string bytes that look like one; everything around them is
+   unrelocated string data, which bounds the table at exactly two entries. The tick
+   is `ret 8` — `this` in `ecx` plus two stack args — and is reached only by
+   `call dword [reg+4]` after a vptr load.
+
+   So `--xrefs 0x00600140` returns **0 direct callers for a function that runs
+   several times a second**, and that zero is the same zero a genuinely dead
+   function produces. The discriminator is cheap and should be the rule:
+   **a 0-direct-caller function whose only reference is a relocated `.rdata` word is
+   a virtual, and its true caller list is unknown.** Which call site dispatches it is
+   NOT DETERMINED — there are 112 `call dword [reg+4]` sites in `.text` and none in
+   the movement region; `AgTimer::Advance` (`0x00603FE0`) is the obvious candidate
+   and is **ruled out**, because it dispatches slot 1 with no pushed args
+   (`0x006040E7 call dword [eax+4]`, no `add esp`) while the tick is `ret 8`. A
+   breakpoint reading the return address settles it in one run; static analysis
+   will not. That is a B2 site.
+
+3. **`func_start` returns `None` when MSVC does not pad, and a lane read that
+   backwards.** Two lanes disagreed on which function contains the `isWaypoint=1`
+   bake at `0x00600B0A`. Resolved from the bytes, and the answer is `0x00600840`:
+   it carries a full prologue (`push ebp / mov ebp, esp / sub esp, 0x64 / push ebx /
+   push esi / push edi`) sitting **immediately** after the previous function's
+   `mov esp, ebp / pop ebp / ret 0x10` with **zero `int3` bytes between them**, and
+   its epilogue is `0x00600B5B ret 8` — which matches the setter's two-argument
+   thiscall at `0x00602AEB` exactly. The tick's own first `ret` is at `0x006004FF`,
+   far short of it. `func_start(0x00600B0A)` answers `None` purely because of that
+   missing padding (`0x006011F0`, by contrast, has a clean `cc cc cc…` run before
+   it), and the lane that took `None` as "then it belongs to the previous function"
+   inverted the tool's own "best effort, not proof of a function boundary" warning.
+   **A `None` from `func_start` is an absence of evidence about the boundary, not
+   evidence that there is none.**
+4. **`asserts.py` is short by ~373 sites**, so every `--in <module>` bound —
    including AgAgent's `0x005FE0C3..0x00602CE2` — is approximate, and every "no
    assert names X" is a floor. §2.3 is a worked example of that floor hiding the
    answer.
-4. **`+0x98`'s meaning** (Q3) is still unknown; only its writers and the existence
+5. **`+0x98`'s meaning** (Q3) is still unknown; only its writers and the existence
    of its readers are settled.
-5. **Bit 18 has no ArenaNet name.** `isWaypoint` is our reconstruction from
+6. **Bit 18 has no ArenaNet name.** `isWaypoint` is our reconstruction from
    behaviour. It is a good name and it should be used, but it should not be quoted
    as the client's own.
