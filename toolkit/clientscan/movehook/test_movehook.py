@@ -24,6 +24,7 @@ WHAT IS CHECKED, and which of them need what:
   §9  attach.py refuses a client that is not build 38797         process-free
   §10 pathdiff replays queries through the REAL Ascalon mesh     needs the archive
   §11 the reader's field layout matches rec_t in movehook.c      process-free
+  §12 the world-copy census: two objects per id, and a non-agent process-free
 
 §7 IS THE ONE THAT MATTERS AND IT IS THE ONE THAT COULD NOT EXIST WITHOUT THE
 RULING. It injects the real DLL into a real 32-bit process, waits for the run to
@@ -52,7 +53,7 @@ sys.path.insert(0, os.path.join(TOOLKIT, "mapdata"))
 import checks                                                   # noqa: E402
 
 # MEASURED off a real green run, 2026-08-27 -- counted per section out of the
-# banner, never computed by addition. A whole green run on this machine is 68:
+# banner, never computed by addition. A whole green run on this machine is 76:
 #
 #   §1   6   sites.h is what the generator emits     needs the vaulted client
 #   §2  10   first bytes vs the pinned image         needs the vaulted client
@@ -65,7 +66,12 @@ import checks                                                   # noqa: E402
 #   §9   5   attach.py's build guard, both ways      process-free
 #   §10  8   pathdiff replays vs the REAL mesh       needs the vaulted archive
 #   §11  4   the reader's layout vs rec_t IN THE C   process-free
-#   ----    process-free core = 35, and THAT is the floor.
+#   §12  6   the world-copy census, both directions  process-free
+#   ----    process-free core = 41, and THAT is the floor.
+#
+# §12 reads `gensites.rows()`, which goes to `content.load()` and never opens the
+# client, so its six are process-free and the core moved with them. A whole green
+# run on this machine is now 76.
 #
 # The first draft of this comment guessed 16 by adding up what the sections
 # looked like they contained, and it was two low -- which would have let two
@@ -73,8 +79,8 @@ import checks                                                   # noqa: E402
 # ("set the floor from a real green run, never from a guess") is not about
 # arithmetic being hard; it is that a floor derived from the code rather than
 # from the output drifts the moment either changes. `skip()` lowers the floor by
-# ZERO, so a bare machine must still clear 35.
-LEDGER = checks.Ledger("movehook", floor=35)
+# ZERO, so a bare machine must still clear 41.
+LEDGER = checks.Ledger("movehook", floor=41)
 check = checks.adopt(LEDGER)
 
 WOW64_CMD = r"C:\Windows\SysWOW64\cmd.exe"
@@ -609,6 +615,100 @@ def section_11():
        "11. and the sizes agree, which is the weaker check that missed the reorder")
 
 
+# ---------------------------------------------------------------- §12
+def section_12(tmp):
+    """The world-copy census: two objects per id, and a non-agent that says so.
+
+    THE DEFECT THIS IS AGAINST is not hypothetical -- it is how FINDINGS 1h.2 scored
+    the warp rate. `WORLD_CREATE_AGENT` builds each agent in BOTH worlds, so ONE id
+    names TWO objects; a trajectory filtered on `id == 1` crosses between two bodies
+    that genuinely sit hundreds of units apart, and reports the crossing as a
+    displacement. The census must therefore group on the OBJECT ADDRESS and must SAY
+    when an id is ambiguous -- a census that silently merged them would read exactly
+    as clean as a correct one.
+
+    Both directions are exercised, because a warning that cannot stay quiet is as
+    useless as one that cannot fire: a capture with one object per id must NOT raise
+    the ambiguity warning.
+    """
+    import readhook as rh
+    try:
+        import gensites
+        rows, _offs = gensites.rows()
+        names = sorted(rows)
+    except Exception as ex:
+        LEDGER.skip("12. the world-copy census", f"cannot read the rows: {ex}")
+        return
+    for need in ("setter", "reseed"):
+        if need not in names:
+            LEDGER.skip("12. the world-copy census", f"no {need} row")
+            return
+    sites = [(rows[n]["rva"], 0) for n in names]
+    si, ri = names.index("setter"), names.index("reseed")
+    A, B = 0x21E20128, 0x21E208D8          # two objects, one id -- the real shape
+
+    # The tick spacing is deliberately WIDER than the declared legs. A real capture
+    # runs for minutes and its legs last seconds; a fixture spaced 10 ms apart makes
+    # every honest agent look like it declares a leg longer than the capture, and
+    # would have forced the non-agent guard to be loosened to accommodate the
+    # fixture rather than the client.
+    def rec(i, site, ecx, x, ptime, stop, **kw):
+        r = {"seq": i, "tick": 1000 + i * 2000, "site": site, "ecx": ecx,
+             "have_agent": 1, "id": 1, "ptime": ptime, "stop": stop,
+             "point": (_fl(x), _fl(0.0), 0, 0), "vel": (_fl(288.0), _fl(0.0))}
+        r.update(kw)
+        return r
+
+    # A walks; B is the sync copy, named as such by being reseed's arg1.
+    recs = [rec(0, si, A, 0.0, 1000, 2000),
+            rec(1, si, A, 288.0, 2000, 3000),
+            rec(2, si, B, 0.0, 1000, 2000),
+            rec(3, ri, A, 288.0, 2000, 3000,
+                arg1=B, have_src=1, src_id=1, src_ptime=1000,
+                src_point=(_fl(0.0), _fl(0.0), 0, 0))]
+    p = os.path.join(tmp, "worlds.bin")
+    with open(p, "wb") as fh:
+        fh.write(_synth(recs, sites))
+    cap = rh.Capture(p)
+    txt = rh._worlds(cap, rh.site_names(cap))
+
+    check(f"0x{A:08X}" in txt and f"0x{B:08X}" in txt,
+          "12. both world copies are listed by ADDRESS",
+          "an id-keyed census would show one row and hide the split")
+    check("WORLD_SYNC" in txt,
+          "12. and the sync copy is NAMED from reseed's source argument",
+          "which side is authoritative must be read off the record, not assumed")
+    check("MORE THAN ONE object" in txt,
+          "12. and the ambiguous id RAISES the warning",
+          "this is the warning whose absence let 1h.2 score two bodies as one")
+
+    # The other direction: one object per id must stay quiet.
+    p2 = os.path.join(tmp, "oneworld.bin")
+    with open(p2, "wb") as fh:
+        fh.write(_synth([rec(0, si, A, 0.0, 1000, 2000),
+                         rec(1, si, A, 288.0, 2000, 3000)], sites))
+    txt2 = rh._worlds(rh.Capture(p2), names)
+    check("MORE THAN ONE object" not in txt2,
+          "12. and a capture with ONE object per id does NOT warn",
+          "a warning that always fires carries no information")
+
+    # THE NON-AGENT GUARD. Compared against the capture's own wall span, never a
+    # literal -- a literal is what goes stale. `snaptest`'s ecx produced 70 such
+    # records in run 5 and they read as a 7,197 u desync.
+    p3 = os.path.join(tmp, "notagent.bin")
+    with open(p3, "wb") as fh:
+        fh.write(_synth([rec(0, si, A, 0.0, 1000, 2000),
+                         rec(1, si, 0x060C9B6C, 0.0, 12, 101489588,
+                             id=574588536)], sites))
+    txt3 = rh._worlds(rh.Capture(p3), names)
+    check("NOT AN AGENT" in txt3,
+          "12. a leg longer than the whole capture is called out as NOT AN AGENT",
+          "a register being SAVED does not make it `this`")
+    check("NOT AN AGENT" not in txt,
+          "12. and a real agent is NOT flagged by that guard",
+          "a guard that fires on everything would have to be ignored")
+
+
 def main():
     import tempfile
     tmp = tempfile.mkdtemp(prefix="movehook-test-")
@@ -619,6 +719,7 @@ def main():
     section_9()
     section_10(tmp)
     section_11()
+    section_12(tmp)
     return LEDGER.verdict()
 
 

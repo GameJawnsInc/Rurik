@@ -232,6 +232,159 @@ def site_names(cap=None):
     return [by_rva.get(s["rva"], f"rva_{s['rva']:08X}") for s in cap.sites]
 
 
+def _union_ms(ivs):
+    """Total length of the union of [start, end] millisecond intervals.
+
+    Union, not sum, and that is the whole point: an agent sampled twice during one
+    leg declares that leg twice, so a sum would count it twice and would scale with
+    how often our hook happened to fire on that object. The two world copies are
+    sampled ~10x apart in this capture, so any sample-weighted statistic comparing
+    them measures our hook placement rather than the client.
+    """
+    if not ivs:
+        return 0
+    ivs = sorted(ivs)
+    merged = [list(ivs[0])]
+    for lo, hi in ivs[1:]:
+        if lo <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], hi)
+        else:
+            merged.append([lo, hi])
+    return sum(hi - lo for lo, hi in merged)
+
+
+def _worlds(cap, names):
+    """The world-copy census: how many OBJECTS carry each agent id, and what drives each.
+
+    WHY THIS IS A SECTION AND NOT A FOOTNOTE. `GAME_SMSG_WORLD_CREATE_AGENT` runs its
+    body TWICE with the agent array base advanced 0x64 -- AgAgent.cpp:312 names them
+    m_world 0 and 1 -- so **one agent id names TWO objects**. Every per-agent
+    trajectory in this file's history filtered on `id == 1` and treated the result as
+    one body. It is not one body, and the artifact is not subtle: in the run 5 capture
+    the two copies sit 940 u apart, so an id-filtered walk crosses between them and
+    reports a 940 u displacement inside a single 15 ms GetTickCount tick. FINDINGS 1h.2
+    scored the warp rate that way.
+
+    `id` cannot distinguish them and `ecx` can -- it is the object's address. So the
+    grouping key here is the ADDRESS, and the id is only a label. Nothing below is
+    inferred; each object's motion is read from its own declared legs.
+    """
+    out = []
+    a = out.append
+    bysite = {nm: i for i, nm in enumerate(names)}
+    objs = {}
+    for r in cap.recs:
+        if not r.get("have_agent"):
+            continue
+        o = objs.setdefault(r["ecx"], {"id": r["id"], "recs": [], "sites": {}})
+        o["recs"].append(r)
+        nm = names[r["site"]] if r["site"] < len(names) else str(r["site"])
+        o["sites"][nm] = o["sites"].get(nm, 0) + 1
+    if not objs:
+        return "world copies: no record carries an agent, so nothing to census."
+
+    # Which object is the SYNC one is not guessed: the source argument of a desync
+    # test / correction is asserted WORLD_SYNC by the client itself
+    # (AgTrack.cpp:458 `source.GetWorld() == WORLD_SYNC`), and the DLL records that
+    # agent's address in the same record.
+    sync = set()
+    for r in cap.recs:
+        if not r.get("have_src"):
+            continue
+        nm = names[r["site"]] if r["site"] < len(names) else ""
+        key = r["arg1"] if nm == "reseed" else r["arg2"]
+        sync.add(key)
+
+    byid = {}
+    for addr, o in objs.items():
+        byid.setdefault(o["id"], []).append(addr)
+    multi = {i: v for i, v in byid.items() if len(v) > 1}
+
+    # NOT EVERY `this` IS AN AGENT, and a census that lists a non-agent beside the
+    # two real world copies invites exactly the reading that cost run 5 a headline:
+    # `snaptest`'s ecx was marked thiscall because 0x006055FB saves ecx to a local,
+    # and it produced 70 records with agent ids 574588536 / 459313176 and a p50
+    # separation of 7,197 u that looked like a catastrophic desync.
+    #
+    # The test compares two MEASUREMENTS from this capture rather than a literal
+    # threshold, because a literal is the thing that goes stale: an agent's declared
+    # leg [ptime, stop] cannot outlast the capture that observed it. The bogus object
+    # above declares a leg of 28 hours inside a 192 s run.
+    wall = max((r["tick"] for r in cap.recs), default=0) - \
+        min((r["tick"] for r in cap.recs), default=0)
+    for addr, o in objs.items():
+        o["impossible"] = 0
+        if wall <= 0:
+            continue
+        for r in o["recs"]:
+            if r["stop"] > r["ptime"] and (r["stop"] - r["ptime"]) > wall:
+                o["impossible"] += 1
+
+    a("world copies (grouped by OBJECT ADDRESS, because one agent id names two):")
+    for aid in sorted(byid):
+        for addr in sorted(byid[aid]):
+            o = objs[addr]
+            tag = "WORLD_SYNC" if addr in sync else "other world"
+            if not multi:
+                tag = "only copy seen" if addr not in sync else tag
+            ivs, path, zero = [], 0.0, 0
+            seq = o["recs"]
+            for i, r in enumerate(seq):
+                v = (_f(r["vel"][0]) ** 2 + _f(r["vel"][1]) ** 2) ** 0.5
+                if v > 1.0 and r["stop"] > r["ptime"]:
+                    ivs.append((r["ptime"], r["stop"]))
+                if i:
+                    p, q = seq[i - 1], r
+                    d = ((_f(q["point"][0]) - _f(p["point"][0])) ** 2
+                         + (_f(q["point"][1]) - _f(p["point"][1])) ** 2) ** 0.5
+                    if math.isfinite(d):
+                        path += d
+                        # A step that MOVED but did not advance +0x58, the stamp
+                        # saying when m_point was valid. A walk always advances
+                        # both; this is the signature of a write, not a walk.
+                        if q["ptime"] == p["ptime"] and d > 1.0:
+                            zero += 1
+            moving = _union_ms(ivs)
+            span = max(r["ptime"] for r in seq) - min(r["ptime"] for r in seq)
+            a(f"  0x{addr:08X}  id {o['id']:<6} {tag}")
+            a(f"      {len(seq):5} record(s)   "
+              + ", ".join(f"{k} x{v}" for k, v in
+                          sorted(o["sites"].items(), key=lambda kv: -kv[1])))
+            if span > 0:
+                a(f"      in motion {moving / 1000.0:7.1f} s of {span / 1000.0:.1f} s "
+                  f"({100.0 * moving / span:.1f}%), path {path:.0f} u")
+            a(f"      steps that moved but did NOT advance the position stamp: "
+              f"{zero}")
+            if o.get("impossible"):
+                a(f"      !! NOT AN AGENT: {o['impossible']} of {len(seq)} record(s) "
+                  f"declare a movement leg")
+                a(f"         longer than the whole {wall / 1000.0:.0f} s capture. "
+                  f"Whatever this pointer is,")
+                a("         it is not an agent, and its id and position are "
+                  "meaningless. Check the")
+                a("         site's `thiscall` row -- a register being SAVED does not "
+                  "make it `this`.")
+    if multi:
+        a("")
+        a(f"  !! {len(multi)} agent id(s) name MORE THAN ONE object: "
+          + ", ".join(str(i) for i in sorted(multi)))
+        a("     Do not build a trajectory by filtering on the id -- it interleaves")
+        a("     two bodies, and the two copies genuinely sit hundreds of units")
+        a("     apart. Group on the address, as this section does.")
+    setter_i = bysite.get("setter")
+    if setter_i is not None and sync:
+        for addr in sorted(sync):
+            if addr in objs:
+                n = objs[addr]["sites"].get("setter", 0)
+                a("")
+                a(f"  the WORLD_SYNC copy 0x{addr:08X} took {n} setter call(s) -- "
+                  f"that is its ONLY")
+                a("  source of destinations, so it is the count our server's "
+                  "movement grants")
+                a("  have to be compared against.")
+    return "\n".join(out)
+
+
 def report(cap, names, dump=0):
     out = []
     a = out.append
@@ -280,6 +433,9 @@ def report(cap, names, dump=0):
     a("")
 
     idx = {nm: i for i, nm in enumerate(names)}
+
+    a(_worlds(cap, names))
+    a("")
 
     # ---- P1a: the isWaypoint rate, and who issued each bake ----------------
     bi = idx.get("bake")
