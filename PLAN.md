@@ -1487,6 +1487,44 @@ before the first native commit, which is where that doc says to pose them.
   `call rel32`; every site shape beyond that is new code, and the site list should
   be chosen to keep that number at one.
 
+**Q13. Do we turn `D1_LEAD` on, now that the cost of leaving it off is measured?**
+⏳ **OPEN, raised 2026-08-27 by
+[studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1i.**
+
+The measurement, not the proposal, is what is new. When our geometry cannot place
+or clear a click, `authsrv.py:16453` refuses to grant and says so in its own
+comment — *"the client is pathing around it and knows more than we do. Say
+nothing."* §1i measures what the silence costs: the client's **sync-world copy of
+the player is driven by our grants and by nothing else** (51 grants ↔ 51 setter
+calls, paired 1:1 on inter-event gaps to a 15 ms maximum), so a refusal does not
+leave the client to its own pathing — it leaves the sync copy standing still while
+the local copy walks away, until the client's own desync test **rolls the player
+back**. In one 207 s run that was 17 refused clicks, 37% of all movement authority
+suppressed, and a grant density of **1.65 per 1000 u against retail's 4.30 median
+and 1.70 minimum over 118 live agents** — below the floor of anything ArenaNet's
+own server was ever observed doing.
+
+`D1_LEAD` (`authsrv.py:4595`) already contains the alternative: under the bundle
+geometry does **not** refuse, because the answer is a verbatim echo of the client's
+own chosen point, and an echo invents nothing for our navmesh to be wrong about
+(REALFIX-A2, "retail's contract, 23/23 bit-exact"). Every one of the 17 refusals
+recorded `d1_passthrough: false`.
+
+**Why this is the owner's call and not a session's.** It is a FOUR-TERM BUNDLE —
+lead, speed truth, plane truth, stop-ack — that travels together by design, it
+requires `--zero-lead` and `--plane-carry`, and it carries its own registered
+predictions and REFUTED-IF lines in `studies/movement/REALFIX.md` §0.9 plus an
+UNVERIFIED remainder (~5.7% of retail-unclipped rays clip >20 u on our mesh). It is
+off by default deliberately. §1i changes the *price of the status quo*; it does not
+by itself discharge that spec.
+
+**The rival, and it may be the better buy:** fix the mesh instead. The two refusals
+§1i could cross-check are **exactly** §1h.4's two OFF-MESH `MapFindPath` goals, with
+the server's reason code matching which end was off-mesh — so the geometry refusals
+are substantially *our decode being wrong*, not the client knowing better. Repairing
+map 280's north-east region removes the refusals at the source and needs no policy
+change. The two are not exclusive.
+
 ---
 
 ## 8. Immediate next actions
@@ -2360,6 +2398,50 @@ the owner's terminal), and the P8 rep. Expected shape: P5 **bounds** the snap at
 is the owner's call after the run. Tests: `test_resyncscore` 116
 (floor 50 bare), `test_cancelwalk` 121, `test_position_trust` 219 (211
 bare), all green 2026-08-25, floors from the runs.
+
+**MOVECODE-B2 HAS NOW RUN FIVE TIMES, AND RUN 5 CLOSED THE MECHANISM —
+[studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1i, 2026-08-27,
+commits `09b1b1a` + `60209b2`.** The paragraph above is superseded on the
+question it calls "the arc's biggest open question": we now know what drives
+the re-issuers, because we know there are **two agents**, not one.
+
+- **One agent id names TWO objects.** `WORLD_CREATE_AGENT` runs its body twice
+  with the array base advanced `0x64` (`AgAgent.cpp:312` names them `m_world` 0
+  and 1). The "537 internal re-issues vs 49 wire grants" split above is
+  **exactly** that: the client path-solves for the **local** copy (557 setters)
+  while the wire drives the **sync** copy (51 setters). They are separate
+  bodies. Every per-agent trajectory this arc computed before §1i filtered on
+  `id == 1` and silently interleaved them; `readhook.py` now censuses by object
+  ADDRESS and raises on an ambiguous id (`test_movehook.py` §12).
+- **The warp is starvation, and it is ours.** Our 51 `0x0029` pair 1:1 with the
+  sync copy's 51 setters — proven on inter-event GAP sequences (no clock
+  alignment needed), all 50 agreeing to a 15 ms maximum. That copy idles
+  **100.2 s of 207.6 s** against the local copy's 37.8 s and falls ~18,000 u
+  behind, until the client's own desync test rolls the player back.
+- **Against retail, normalised by path walked** (grants/second is not
+  comparable — it ranges 0.086–9.142/s with operator activity): retail is
+  **4.30 grants per 1000 u** (p50, 118 agents), minimum 1.70. Ours is **1.65 —
+  below retail's minimum.**
+- **It is the same defect as MOVECODE-Q2.** Two of the 17 clicks our server
+  refused are exactly §1h.4's two OFF-MESH `MapFindPath` goals, and the reason
+  codes match which end was off-mesh. 11 of 17 sit in §1h.4's north-east region.
+
+**NEXT, and B5's scope is now settled by measurement rather than left pending.**
+In cost order:
+
+1. **The map-280 mesh hole is the root cause, not a side finding** — it costs
+   17 refusals and 37% of movement authority in one 207 s run. Offline work
+   against `pathmap`, bounded to y ≈ 5,600–8,600, and it needs no client.
+2. **`D1_LEAD` (`authsrv.py:4595`) is the existing candidate fix and it is OFF.**
+   Its geometry branch echoes the client's own point verbatim ("retail's
+   contract, 23/23 bit-exact") instead of refusing; all 17 refusals recorded
+   `d1_passthrough: false`. It is a four-term bundle with registered predictions
+   in `studies/movement/REALFIX.md` §0.9 and requires `--zero-lead` and
+   `--plane-carry`. **Turning it on is the owner's call** — Q13 below.
+3. **`heading-rate` refused 13 of 64 grant verdicts** — a sixth of the budget —
+   and nothing here separates its cost from the geometry refusals'.
+4. **Capture `+0x24` (world)**: one row in `content/movecode.toml`. The sync
+   side is currently identified indirectly, from `reseed`'s source argument.
 
 ### MODEL AUTHORING: the one-bit question is answered, and every player identity closes (2026-08-22)
 
