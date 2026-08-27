@@ -1412,6 +1412,47 @@ freezes it is the pin above. **OBSERVED.**
   int32 this message advances. **CORROBORATED.** Far too small to explain the warps,
   and worth fixing on its own terms.
 
+### 1j.7 The asymmetry is COMPILED IN, not a property of this capture
+
+**ONE WITNESS.** The synthesis pass read these bytes itself and they did **not** go
+through the refutation pass the rest of §1j did. Treat accordingly.
+
+The two worlds are reached through **two different agent arrays**, and the names are
+ArenaNet's own — two asserts in `AgMsg.cpp`, at lines 579 and 584, name the pair
+**`syncPtr`** and **`asyncPtr`**:
+
+| path | array | bound | which array |
+|---|---|---|---|
+| `agapi_setdest` `0x005FC7A0` — **local input** | `[ctx+0x14C]` | `[ctx+0x154]` | **asyncPtr** |
+| the wire handler `0x005FD890` — **our `0x0029`** | `[ctx+0xE8]` | `[ctx+0xF0]` | **syncPtr** |
+
+`0x14C − 0xE8 = 0x154 − 0xF0 = 0x64`, the known world stride. Both funnel into the same
+destination setter `0x00602A40`.
+
+**So local player input structurally cannot address the sync world, and the wire cannot
+address the local one.** That is compiled in — it is not something this run happened to
+exhibit, and no grant policy changes it. It is the reason §1i.3's 557-vs-51 split is a
+property of the client rather than of our server.
+
+The capture agrees, split by `this` on the setter's return address:
+
+| object | from | n |
+|---|---|---|
+| local `0x21E20128` | `0x005FC8F5` (`agapi_setdest`, local solver) | 546 |
+| local `0x21E20128` | `0x0060244D` (the shared teleport) | 11 |
+| **twin `0x21E208D8`** | **`0x005FD918` (AgMsg, the wire) — and nothing else** | **51** |
+
+Replicated in run 4 (75/5 against 9). And **51 of 51 twin leg starts follow a setter
+within 250 ms, with 0 legs starting without one.**
+
+**The gate reads the twin through the freezing accessor.** Three of `0x005FF820`'s six
+callers (`0x006057AD`, `0x006057BA`, `0x006058BF`) are inside `snaptest` itself, which
+fetches both positions through it, hands them to `0x00709990` with the float at
+**`0x00946564` = 300.0**, and compares. So the pin of §1j.3 is not incidental to the
+desync test — **it is what the desync test measures.** `agtrack` then branches:
+`test eax,eax` / `jne` skips the correction entirely; only a ZERO return reaches the
+reseed walk.
+
 ### 1j.6 Still open after this pass
 
 * **UNVERIFIED, flagged by the lane that found it:** `reseed`'s preamble may make its

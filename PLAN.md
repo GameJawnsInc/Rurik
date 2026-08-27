@@ -2444,6 +2444,18 @@ the re-issuers, because we know there are **two agents**, not one.
   off-mesh. The staleness refusals spread 7 NE / 6 elsewhere, which is the
   control separating the two.
 
+- **THE CLIENT SIDE IS NOW READ OUT OF THE BINARY TOO — §1j**, four static/capture
+  lanes with an adversarial pass (three claims REFUTED and recorded). `WORLD_SYNC == 0`;
+  at both call sites of `reseed`, `this` is `world[1]` and `arg1` is `world[0]`, and
+  state flows **arg1 → this** — so the player really is rolled back to the twin.
+  **Why it falls behind is a HARD PIN, not a lag**: `Agent::GetPointAt 0x005FF820`
+  returns `m_segmentPoint` verbatim once the query time passes `m_timeStopMovement`, so
+  past its last granted segment the twin does not move at all — and `snaptest` reads
+  BOTH agents through that same freezing accessor before comparing against 300.0.
+  **The asymmetry is compiled in**: local input resolves through `asyncPtr`
+  (`[ctx+0x14C]`) and the wire through `syncPtr` (`[ctx+0xE8]`), 0x64 apart, so local
+  input structurally cannot address the sync world and no grant policy changes that.
+
 **NEXT, and B5's scope is now settled by measurement rather than left pending.**
 In cost order:
 
