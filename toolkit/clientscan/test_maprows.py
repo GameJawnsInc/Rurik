@@ -80,6 +80,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(HERE), "mapdata"))
 
 import areatable                                              # noqa: E402
 import checks                                                 # noqa: E402
+import archive                                                # noqa: E402
+import pathmap                                                # noqa: E402
 import maprows                                                # noqa: E402
 import pinned                                                 # noqa: E402
 import vaultpath                                              # noqa: E402
@@ -94,13 +96,24 @@ from gwpe import PE                                           # noqa: E402
 FLOOR = 29
 
 # The two anchors. Neither was derived from the join under test.
-#   7982  -- GAME_SMSG 0x0195 carried file 0x1B97D in 9 of 9 live connections
-#            and 0x0199 named maps 146/148/164 in them.
-#   22371 -- archive.py's docstring: file id 0x345CC resolves here, map-flagged.
+#   0x1B97D -- GAME_SMSG 0x0195 carried this file id in 9 of 9 live connections
+#              and 0x0199 named maps 146/148/164 in them.
+#   0x345CC -- archive.py's docstring: this file id is map-flagged.
+#
+# KEYED BY FILE ID SINCE 2026-08-27, AND THAT IS WHAT THEY ALWAYS WERE. Both
+# were established from a file id -- one off ArenaNet's own wire, one out of
+# archive.py -- and the MFT ROW was only ever a derived fact about one archive.
+# Keying by the row tied the anchors to a single generation, and the moment
+# `dat_study` was resynced to 38833 the Pre-Searing anchor evaporated into a
+# declared skip: 0x1B97D was rewritten in that patch and moved 7982 -> 177262.
+# A skip is honest, but it silently retired the check the file's own header
+# calls decisive ("what catches the sabotage is ... the anchors"), so the fix is
+# to resolve the row at run time rather than to lower a floor.
 ANCHORS = {
-    7982: ("Ascalon City", "Lakeside County", "Ashford Abbey"),
-    22371: ("Kamadan, Jewel of Istan",),
+    0x1B97D: ("Ascalon City", "Lakeside County", "Ashford Abbey"),
+    0x345CC: ("Kamadan, Jewel of Istan",),
 }
+PRESEARING_ANCHOR = 0x1B97D
 
 LEDGER = checks.Ledger("maprows footprint join", floor=FLOOR)
 check = checks.adopt(LEDGER)
@@ -263,9 +276,21 @@ def main():
         LEDGER.skip("everything from section 3 on",
                     f"cannot read the archive: {exc}")
         return LEDGER.verdict()
-    check(len(dims) == 349, "349 map rows yield a terrain rect", str(len(dims)))
-    # map_dims REFUSES a non-integral extent rather than rounding, so a full
-    # 349 is itself the assertion that every map is a whole number of cells.
+    # AGAINST THE ARCHIVE'S OWN MAP-ROW COUNT, not against 349. The literal was
+    # right for 38797 and wrong the moment `dat_study` was resynced to 38833,
+    # which has 361 map rows -- ArenaNet added twelve maps. But the COUNT was
+    # never the claim: the comment below is, and it survives any number as long
+    # as the two sides are measured rather than one of them frozen.
+    with archive.Archive(a.dat) as _ar:
+        map_rows = sum(1 for e in _ar.entries if e.flags == maprows.MAP_FLAGS)
+    check(len(dims) == map_rows,
+          "EVERY map row yields a terrain rect",
+          f"{len(dims)} of {map_rows} map-flagged rows in this archive "
+          f"(349 on 38797, 361 on 38833). A shortfall names maps whose extent "
+          f"map_dims refused, which is the finding; the total is just how many "
+          f"maps the archive has")
+    # map_dims REFUSES a non-integral extent rather than rounding, so a FULL
+    # count is itself the assertion that every map is a whole number of cells.
     check(all(w > 0 and h > 0 for w, h in dims.values()),
           "every map's extent is positive in both axes")
     ndims = len(set(dims.values()))
@@ -336,20 +361,26 @@ def main():
     import textrec
     with textrec.TextIndex(exe=exe, dat=a.dat) as ix:
         name = {r["id"]: ix.get(r["name_id"]) for r in rows}
-        for row, want in ANCHORS.items():
-            e = sol.get(row)
+        with archive.Archive(a.dat) as _aar:
+            _fids = pathmap.file_id_table(_aar)
+        for fid, want in ANCHORS.items():
+            row = _fids.get(fid)
+            e = sol.get(row) if row is not None else None
             if e is None:
-                LEDGER.skip(f"anchor row {row}", "not a map row in this archive")
+                LEDGER.skip(f"anchor file 0x{fid:X}",
+                            f"resolves to row {row} which is not a map row in "
+                            f"this archive")
                 continue
             got = {name[i] for i in e["map_ids"] if name[i]}
             check(set(want) <= got,
-                  f"row {row} admits its independently-known name(s)",
+                  f"file 0x{fid:X} (row {row}) admits its "
+                  f"independently-known name(s)",
                   f"{len(got)} candidate(s)")
         # Row 7982's three names are one FILE with three zones -- the wire
         # measured that, and it is why the tool reports a set per row rather
         # than a name. Asserting it keeps a future "one name per row"
         # simplification from silently dropping two of them.
-        e = sol.get(7982)
+        e = sol.get(_fids.get(PRESEARING_ANCHOR))
         if e:
             got = {name[i] for i in e["map_ids"] if name[i]}
             check(len({"Ascalon City", "Lakeside County",

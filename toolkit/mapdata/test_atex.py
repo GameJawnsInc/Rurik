@@ -806,9 +806,16 @@ def section4(ar, rows, found, stride):
           "compressed levels are excluded by their own code, not by us")
 
     if stride == DEFAULT_STRIDE:
-        check(found == ATEX_AT_STRIDE,
-              f"the default stride finds exactly {ATEX_AT_STRIDE} ATEX rows",
-              f"{found} -- a population assertion about vault/dat_study/Gw.dat")
+        # A FLOOR since 2026-08-27. This row says of itself that it is "a
+        # population assertion about vault/dat_study/Gw.dat", and that archive
+        # was resynced from 38797 to 38833: 3,238 -> 3,240 ATEX at this stride.
+        # The findings this file exists for are ratios over whatever it finds
+        # (400 of 400 parsed, the block-count formula), and none of them moved.
+        check(found >= ATEX_AT_STRIDE,
+              f"the default stride finds at least {ATEX_AT_STRIDE} ATEX rows",
+              f"{found} -- a population FLOOR for vault/dat_study/Gw.dat; 3,238 "
+              f"on 38797 and 3,240 on 38833. A shortfall means the stride walk "
+              f"stopped seeing them, which is the defect worth catching")
     else:
         LEDGER.skip("the ATEX population count",
                     f"stride {stride} is not the default {DEFAULT_STRIDE}, so "
@@ -880,9 +887,14 @@ def section5(ar, rows, stride):
           "trailer -- rather than a crash report")
 
     if stride == DEFAULT_STRIDE:
-        check(n == ATTX_AT_STRIDE,
-              f"the default stride finds exactly {ATTX_AT_STRIDE} ATTX rows",
-              f"{n} -- a population assertion about vault/dat_study/Gw.dat")
+        # A FLOOR, same reason as the ATEX count above: 106 on 38797, 107 on
+        # 38833. THE ATTX FINDING IS UNTOUCHED BY THIS -- it is that parse()
+        # raises on every ATTX row and none of the ATEX beside them, and that
+        # the trailer is a constant size with distinct contents. Those are all
+        # "n of n" over whatever population exists and are asserted separately.
+        check(n >= ATTX_AT_STRIDE,
+              f"the default stride finds at least {ATTX_AT_STRIDE} ATTX rows",
+              f"{n} -- a population FLOOR; 106 on 38797 and 107 on 38833")
     else:
         LEDGER.skip("the ATTX population count",
                     f"stride {stride} is not the default {DEFAULT_STRIDE}")
