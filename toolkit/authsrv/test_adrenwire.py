@@ -179,8 +179,26 @@ CORPUS_CAPTURES = 20
 CORPUS_CONNECTIONS = 59
 CORPUS_MESSAGES = 143408
 # Floors, not a census. SET stays EXACT because zero is the claim.
+#
+# READ THIS BEFORE USING `CENSUS[...]` AS AN EXPECTED VALUE. These became FLOORS
+# on 2026-08-27 and two sites three hundred lines away were still comparing a
+# LIVE count to them for equality (§6's `spend_copies`, §7's activation join) --
+# the same constant meaning two things, green only because the corpus had not
+# grown since the morning. Both now read `agg["census"][...]`, the measured
+# number. If you need "all N of them", take N from the measurement.
 CENSUS = {SMSG_ADRENALINE_CHARGE: 918, SMSG_ADRENALINE_CLEAR: 27,
           SMSG_ADRENALINE_SET: 0, SMSG_ADRENALINE_SPEND: 40}
+
+# THE TWO EXACT CORPUS CLAIMS THAT ARE DELIBERATE, so the next session does not
+# quietly re-pin them. Both were confirmed size-sensitive on 2026-08-27 by
+# doubling the corpus, and both are being LEFT that way on purpose:
+#   - §4b's `tail == SUB_STRIKE`. The sub-25 multiset has survived two corpus
+#     growths unchanged. A new value in it is a FINDING about the 1%-of-health
+#     rule, not a re-baselining chore.
+#   - §13's `len(band) == 1`, the near miss. A second row in the round/ceil
+#     disagreement band is the single observation that would SETTLE the
+#     boundary. Reddening is the point.
+# When either goes red, investigate the new row. Do not widen the constant.
 
 # 207's amount, split into the two populations §4b is about. A STRIKE is 25 --
 # GWW ("Adrenaline", rev. 2026-07-02) gives one per successful weapon hit -- and
@@ -700,10 +718,18 @@ def section_spend_join(agg):
     import content
     world = content.load()
 
-    LEDGER.ok(dict(agg["spend_skills"]) == SPEND_SKILLS,
+    # PER-SKILL FLOORS. The exact multiset was a size pin: every new capture that
+    # spends adrenaline moves one of these counts. What must not happen is a
+    # known spender going MISSING, and what a new skill appearing means is
+    # settled by the zero-cost check immediately below -- which is the actual
+    # join to content, and which gets sharper as the corpus grows.
+    LEDGER.ok(all(agg["spend_skills"].get(k, 0) >= v
+                  for k, v in SPEND_SKILLS.items()),
               f"the {sum(agg['spend_skills'].values())} spends name "
               f"{dict(sorted(agg['spend_skills'].items()))}",
-              f"expected {SPEND_SKILLS}")
+              f"at least {SPEND_SKILLS}. A floor per skill: growth moves these "
+              f"counts and that is the campaign working; a SHORTFALL would mean "
+              f"the join stopped seeing a spender it used to see")
 
     zero_cost = []
     for skill, n in agg["spend_skills"].items():
@@ -736,7 +762,14 @@ def section_spend_join(agg):
               f"it, and none of them ever gets a 210. A join that could only "
               f"pass is not a join")
 
-    LEDGER.ok(dict(agg["spend_copies"]) == {0: CENSUS[SMSG_ADRENALINE_SPEND]},
+    # AGAINST THE MEASURED CENSUS, not against CENSUS[...]. That constant became
+    # a FLOOR on 2026-08-27 and this site was still reading it as an exact
+    # expected value -- the same number meaning two different things three
+    # hundred lines apart, and green only because the corpus had not grown since.
+    # The claim is "0 in ALL of them", so the denominator has to be whatever
+    # section 4 actually counted.
+    n_spend = agg["census"][SMSG_ADRENALINE_SPEND]
+    LEDGER.ok(dict(agg["spend_copies"]) == {0: n_spend},
               f"and skill_copy is 0 in all {sum(agg['spend_copies'].values())}",
               f"{dict(agg['spend_copies'])}. §9 reads the worker matching a "
               f"slot on the PAIR (skillId, skillCopy), so the field is real "
@@ -757,7 +790,10 @@ def section_order(agg):
     print("\n7. does the spend lead its own activation, or follow it?")
     order = agg["order"]
     total = sum(order.values())
-    LEDGER.ok(total == CENSUS[SMSG_ADRENALINE_SPEND],
+    # Same repair as §6: the denominator is section 4's MEASURED spend count,
+    # not the floor constant. "ALL spends have an activation" is a relation
+    # between two things this file measures, and it stays exact forever.
+    LEDGER.ok(total == agg["census"][SMSG_ADRENALINE_SPEND],
               f"all {total} spends have a same-batch activation naming the "
               f"same skill for the same agent",
               f"{dict(order)} as (stream delta, property id) -> n. Joined on "
@@ -1235,28 +1271,57 @@ def section_bar_gate(agg):
               f"the zero above is a GATE and not a quiet capture. Without this "
               f"line the previous check is unfalsifiable")
 
-    LEDGER.ok(armed["damage_taken"] == ARMED_DAMAGE_TAKEN,
-              f"the armed side took {armed['damage_taken']} damage messages, "
-              f"and every one of them granted",
-              f"expected {ARMED_DAMAGE_TAKEN}. The two populations happen to "
-              f"be the same size, which is a coincidence and not a check -- "
-              f"what matters is that one is 32 grants of 32 and the other is "
-              f"0 of 32")
+    # THE GRANT RELATION, WHICH IS WHAT THE DETAIL STRINGS ALREADY SAID. Both of
+    # these were `damage_taken == <frozen 32>` while their own prose explained
+    # that "the two populations happen to be the same size, which is a
+    # coincidence and not a check -- what matters is that one is 32 grants of 32
+    # and the other is 0 of 32". The count was the part that could not survive a
+    # capture, and the part that mattered was never asserted at all: nothing here
+    # read `units`. Now the counts are floors and the GRANT is scored per row.
+    # NAMED `_dmg` because `armed_rows` is rebound further down this same
+    # function to the AMBIGUITY-FILTERED population. Two different denominators
+    # under one name is how a grant share silently starts measuring a subset.
+    armed_dmg = [r for r in rows if r["arm"] == "armed"]
+    dark_dmg = [r for r in rows if r["arm"] == "dark"]
+    armed_gr = [r for r in armed_dmg if r["units"]]
+    dark_gr = [r for r in dark_dmg if r["units"]]
 
-    LEDGER.ok(dark["damage_taken"] == DARK_DAMAGE_TAKEN,
+    LEDGER.ok(armed["damage_taken"] >= ARMED_DAMAGE_TAKEN
+              and len(armed_dmg) == armed["damage_taken"]
+              and armed_gr and len(armed_gr) == len(armed_dmg),
+              f"the armed side took {armed['damage_taken']} damage messages, "
+              f"and EVERY ONE of them granted ({len(armed_gr)}/"
+              f"{len(armed_dmg)})",
+              f"at least {ARMED_DAMAGE_TAKEN} expected, and the grant share "
+              f"must be ALL. The row count is cross-checked against the arm's "
+              f"own counter so a joiner that dropped rows cannot make 'all of "
+              f"them' true by shrinking the denominator, and `armed_gr` is "
+              f"asserted non-empty because all() of nothing is this repo's own "
+              f"recorded trap")
+
+    LEDGER.ok(dark["damage_taken"] >= DARK_DAMAGE_TAKEN
+              and len(dark_dmg) == dark["damage_taken"]
+              and dark_dmg and not dark_gr,
               f"and they took {dark['damage_taken']} damage messages, every "
-              f"one of which granted nothing",
-              f"expected {DARK_DAMAGE_TAKEN}. THESE ARE THE ROWS THAT LOOK "
-              f"LIKE A ROUNDING BOUNDARY and are not: unstratified they say "
-              f"'damage of up to 7.5% of maximum health grants no adrenaline', "
-              f"which is absurd and would refute `pools.damage_units` outright")
+              f"one of which granted nothing ({len(dark_gr)}/{len(dark_dmg)})",
+              f"ZERO is the claim here and stays exact -- a single dark grant "
+              f"would refute the bar gate outright. THESE ARE THE ROWS THAT "
+              f"LOOK LIKE A ROUNDING BOUNDARY and are not: unstratified they "
+              f"say 'damage of up to 7.5% of maximum health grants no "
+              f"adrenaline', which is absurd and would refute "
+              f"`pools.damage_units` outright")
 
     fits = adrenjoin.fits([r for r in rows if r["arm"] == "armed"])
-    LEDGER.ok(fits["n"] == ARMED_JOINED
-              and fits["round"] == ARMED_FITS["round"] == fits["n"],
+    # `round() fits ALL of them` is the finding and stays EXACT; it is a relation
+    # between two numbers from the same fit and cannot go stale. What went was
+    # `fits["n"] == ARMED_JOINED` and the third copy of 32 in ARMED_FITS["round"]
+    # -- both frozen sizes of the vault, and the corpus doubling took them to 64.
+    LEDGER.ok(fits["n"] >= ARMED_JOINED and fits["n"] > 0
+              and fits["round"] == fits["n"],
               f"re-fitted on the armed rows alone, round() fits "
               f"{fits['round']} of {fits['n']}",
-              f"expected {ARMED_FITS} over {ARMED_JOINED}. floor "
+              f"at least {ARMED_JOINED} rows, and round must fit ALL of "
+              f"them; the pinned shape was {ARMED_FITS}. floor "
               f"{fits['floor']}, ceil {fits['ceil']} -- so the 2026-08-21 "
               f"correction from floor to round survives the stratification "
               f"that killed the boundary claim. Note what it does NOT survive "
@@ -1326,12 +1391,23 @@ def section_bar_gate(agg):
               f"which is exactly where the two rules AGREE. Three independent "
               f"readers printed it rounded and all three read past it")
 
-    LEDGER.ok(len(skipped) <= 1,
-              f"{len(skipped)} connection skipped for having no unique self "
-              f"agent",
-              f"the self agent is int property 41, self-scoped, with NO "
-              f"fallback (`adrenjoin.whose_agent`). The one skip is a 6112 "
-              f"auth channel, which carries no agent properties at all. "
+    # THE PREDICATE, NOT THE COUNT. `len(skipped) <= 1` capped an absolute
+    # number over a growing corpus -- every live session contributes its own
+    # 6112 auth channel, so the second capture-pair to do so reddens it. What
+    # the detail string always claimed is WHY the skip is harmless: it is an
+    # auth channel, which carries no agent properties at all. That is checkable
+    # per row and gets stronger as the corpus grows.
+    not_auth = [s for s in skipped
+                if not s["connection"].rsplit(":", 1)[-1] == "6112"]
+    LEDGER.ok(not not_auth,
+              f"all {len(skipped)} connection(s) skipped for having no unique "
+              f"self agent are 6112 auth channels",
+              f"offenders: {not_auth}. The self agent is int property 41, "
+              f"self-scoped, with NO fallback (`adrenjoin.whose_agent`). Every "
+              f"skip so far is a 6112 auth channel, which carries no agent "
+              f"properties at all -- a skip on a GAME channel is the one that "
+              f"would mean the observer had gone unidentifiable, and it is what "
+              f"this now names. The count is reported, not capped. "
               f"Identifying the observer by 'the agent a 207 names' would "
               f"delete the ENTIRE dark population from the denominator -- the "
               f"outcome-selection defect one level down")

@@ -1583,6 +1583,39 @@ A sweep of the 25 tests that read `vault/captures/live/` found 23 green, 2 red;
   §4's decision record expired. Both demonstrated by injection. §4's brackets are
   left frozen **as the decision record** and now say so.
 
+  **THE WHOLE CLASS SWEPT, 2026-08-27, and this time with a rig instead of a
+  reading.** The three fixes above were each found by a test going red. That only
+  ever finds the pins the corpus has ALREADY overtaken, so the remaining ones were
+  hunted directly: build a **shadow vault** whose `captures/live/` is DOUBLED with
+  identical content (junctions, 21 stamps → 42, ~0 bytes), and re-run every test
+  that reads it. A corpus that merely got bigger must not redden anything.
+  Three outcomes, and the middle one is what makes the first mean anything:
+
+  | | |
+  |---|---|
+  | **BLIND** (11) | output byte-identical — never read the corpus. Their green is **not** evidence of good shape. |
+  | **ROBUST** (23) | read the bigger corpus, stayed green. Floors and relations look like this. |
+  | **SIZE-PIN** (2) | reddened on evidence that changed nothing. |
+
+  36 candidates − 11 BLIND = **25, which reconciles exactly with the sweep's own
+  count of tests reading `captures/live/`**. Of the 23 that were green that
+  morning, **22 are genuinely robust and one — `test_tickclock.py` — was not**:
+  `short <= 6` capped an ABSOLUTE count of short town hops over a corpus whose
+  purpose is to grow. Now a share (8.5% today, cap 15%), which held flat across
+  the doubling. And `test_adrenwire`'s morning fix turned out **incomplete**: nine
+  more checks of the same class, two of them comparing a live count against
+  `CENSUS[…]` — *the constant that same pass had redefined as a floor* — so one
+  number meant two things and was green only because nothing had been captured
+  since. Repaired as relations (the damage arms now score the GRANT, which nothing
+  had ever asserted); two exact corpus claims deliberately kept and labelled.
+  Eight deliberate breaks, eight red.
+
+  **What the rig cannot see, stated so nobody trusts it too far:** duplication
+  preserves extrema, so it is blind to the movesync class above. That was closed
+  by hand — a static scan of all 25 for an equality or tolerance on a corpus
+  `max()`/`min()` returns exactly one hit, in `test_marks.py`, and it is a
+  synthetic five-tick fixture. No other extremum pin exists.
+
   **The one thing worth carrying forward, and it is not a defect:** the 2.0 s
   headroom is **1.75 u** and eroding (2.13 → 1.75 over seven stamps), and it is
   **not physically bounded** — a 2.0 s gap at retail's own top speed reaches

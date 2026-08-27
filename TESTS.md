@@ -5093,7 +5093,14 @@ shrinks section 10),
   milliseconds on the two 2026-08-07/10 captures its corpus deliberately pins; every
   timed claim since (the respawn pins, the burrow windows) rides captures that check
   never covered, so this one runs `behaviourrun.corpus_tick_sweep()` over all 54
-  measurable live connections (5 short town hops counted, never dropped). What it pins,
+  measurable live connections (5 short town hops counted, never dropped — as a SHARE
+  since 2026-08-27: that was `short <= 6` against 5, an absolute cap over a corpus whose
+  whole purpose is to grow, so the sixth town hop would have reddened a check whose own
+  sentence reads *"stays small"*. Small is a proportion. Caught by doubling the live
+  corpus with identical content, which took it 5 → 10 and reddened the old form having
+  changed nothing, while the share held flat at 8.5% across the same doubling — which is
+  what says it measures the sweep and not the vault. Cap 15%, a little under 2×, and a
+  planted run where the sweep cannot measure 20% of connections reddens it). What it pins,
   from the 2026-08-23 sweep: the residual is a bounded transport-jitter WALK, not a
   clock skew — 52/54 walks end within 50 ms (most within 20), the 1,076 s connection
   closes at −4.6 ms (~4 ppm, the rate witness that rules out skew), and exactly TWO
@@ -5530,7 +5537,31 @@ shrinks section 10),
   finally two queries and not both agreeing with a constant. A new check carries the
   durable form of the strike count: 25 is the *overwhelming* mode, >20× the tail, which a
   re-pin could never paper over. Six deliberate breaks all redden it, including a shrunk
-  corpus and a nonzero 209. The zero
+  corpus and a nonzero 209.
+  **COMPLETED LATER THE SAME DAY — that pass fixed the four checks that had ACTUALLY
+  reddened and left nine more of the same class standing.** Found by a rig rather than by
+  reading: the live corpus was DOUBLED with identical content (a shadow vault of
+  junctions, 21 stamps → 42) and every test that reads it re-run, on the principle that a
+  corpus which merely got bigger must not redden anything. Nine checks here did. Two were
+  worse than stale — §6's `spend_copies` and §7's activation join compared a LIVE count
+  against `CENSUS[…]`, *the very constant the morning's pass had redefined as a floor*,
+  so the same number meant two things three hundred lines apart and was green only
+  because nothing had been captured since; both now read `agg["census"][…]`, the
+  measurement. The rest became relations the counts cannot stale: the two damage arms now
+  score **the GRANT** (`armed` all granted, `dark` exactly none) with the counts as
+  floors and the row count cross-checked against each arm's own counter, which is what
+  their detail strings always said mattered — *"the two populations happen to be the same
+  size, which is a coincidence and not a check"* — and which nothing had actually
+  asserted, since no check read `units` at all; `fits` keeps **round-fits-ALL** exact and
+  floors the population; `spend_skills` becomes a floor per skill; and the skipped-
+  connection cap becomes the PREDICATE it always claimed (*every skip is a 6112 auth
+  channel*), so a skip on a game channel — the one that would mean the observer had gone
+  unidentifiable — is now named instead of tolerated. **Two exact corpus claims are
+  deliberately LEFT exact and the constants block now says so**: the sub-25 tail multiset,
+  and §13's `len(band) == 1` near miss, where a second row is the single observation that
+  would settle round-vs-ceil. Reddening is the point there; investigate, do not widen.
+  Eight deliberate breaks, eight red — one per repaired check. Under the doubled corpus
+  the file now reddens on exactly those two deliberate claims and nothing else. The zero
   is the one to read — **209 is a fully wired handler retail never sends**, the same shape
   as energy property 33, with its three neighbours (724) as the positive control that
   makes a null mean something. §4b splits 207's amount into **886 at exactly 25 and a
