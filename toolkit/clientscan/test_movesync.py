@@ -138,8 +138,19 @@ import vaultpath  # noqa: E402
 # median not at all, the estimator distinction having been guarded on the
 # truncated side only -- and an AST import guard on movetap.py and movesync.py,
 # which `import pefile` walked straight through on this machine.
+#
+# 127 -> 131 on 2026-08-27, and this one is a CORRECTION rather than a raise:
+# 127 had been 4 BELOW the minimum a green run produces since CANCELWALK-R5 and
+# REALFIX-I1 landed (2026-08-24), which is the loose-floor failure the rule
+# warns about from the other side. Measured on this date at HEAD, before the
+# §16 repair below and again after it, both giving the same two numbers: 131
+# with `RURIK_VAULT` pointed at an empty directory (the same 7 declared skips)
+# and 183 with the vault present. The §16 repair replaces one check with three,
+# so it adds a NET TWO to the vaulted run (181 -> 183, both counted) and NONE to
+# the bare one -- §16 skips whole when the live corpus is unreachable, which is
+# why the empty-vault number is 131 on both sides of the repair.
 LEDGER = checks.Ledger("separation: the quantity that actually predicts a warp",
-                       floor=127)
+                       floor=131)
 check = checks.adopt(LEDGER)
 
 MOVETAP = "movetap-20260819T171436.jsonl"
@@ -418,9 +429,12 @@ def main():
           f"{movesync.RUN_SPEED} -- 65 of 153 player-directed sends")
     check(movesync.HARD_JUMP_SPEED == 400.0,
           "the hard bar is 400 u/s, above every speed retail produces",
-          f"{movesync.HARD_JUMP_SPEED} -- retail's own reports max at 388.8 "
-          f"over 2,665 intervals, just over its 383.04 boost base; a bar below "
-          f"that would start counting boosted walking")
+          f"{movesync.HARD_JUMP_SPEED} -- retail's own reports maxed at 388.8 "
+          f"over the 2,665 intervals in the corpus this was calibrated on "
+          f"(14 stamps), just over its 383.04 boost base; a bar below that "
+          f"would start counting boosted walking. Section 16 re-measures the "
+          f"max against WHATEVER the live corpus holds today -- it has since "
+          f"grown to 21 stamps and 388.80 has not moved")
     check(movesync.HARD_JUMP_MIN_DT == 0.05,
           "and it refuses a SPEED verdict on intervals shorter than 0.05 s",
           f"{movesync.HARD_JUMP_MIN_DT} -- a displacement over a near-zero dt "
@@ -428,18 +442,31 @@ def main():
           f"clock-jitter detector")
     check(movesync.HARD_JUMP_UNITS == 520.0,
           "below which the DISTANCE arm decides at 520 u",
-          f"{movesync.HARD_JUMP_UNITS} -- retail-calibrated: 0 of its 2,629 "
-          f"intervals inside 2.0 s exceed 520 u (largest 517.87), and below "
-          f"the dt floor -- the only place this arm fires -- retail's largest "
-          f"step is 19.15 u over 82 intervals")
+          f"{movesync.HARD_JUMP_UNITS} -- retail-calibrated on the 14-stamp "
+          f"corpus of 2026-08-19: 0 of its 2,629 intervals inside 2.0 s "
+          f"exceeded 520 u (largest 517.87), and below the dt floor -- the "
+          f"only place this arm fires -- retail's largest step was 19.15 u "
+          f"over 82 intervals. THOSE ARE THE CHOICE-TIME NUMBERS and they are "
+          f"frozen on purpose; section 16 re-measures all four against the "
+          f"live corpus, which is where a moving one has to show up")
+    # THE DECISION RECORD, and deliberately a frozen one: these are the two
+    # rows that bracketed 520 the day it was picked. Both are historical facts
+    # and neither is free to move. What IS free to move is the live corpus's
+    # extremum -- it has already gone 517.87 -> 518.25 on seven new stamps --
+    # and that belongs in section 16 against the constant, not here against a
+    # second literal. Re-pinning 517.87 to 518.25 would make this check a
+    # record of the newest capture instead of the decision.
     check(movesync.HARD_JUMP_UNITS > 517.87 and movesync.HARD_JUMP_UNITS < 525.3,
-          "and it is bracketed on BOTH sides by measured data",
-          f"{movesync.HARD_JUMP_UNITS} sits above retail's largest 2 s step "
-          f"(517.87 u) and below the smallest of the four ordinary WALKING "
-          f"rows the wide `dist>=520 & dt<=2.0s` form would have swept in "
-          f"(525.3 u at 285.5 u/s, 20260814T090541) -- the narrow form escapes "
-          f"that only because it fires below the dt floor, where walking "
-          f"cannot reach")
+          "and it was bracketed on BOTH sides by measured data when it was "
+          "chosen",
+          f"{movesync.HARD_JUMP_UNITS} sits above retail's largest 2 s step AS "
+          f"MEASURED THEN (517.87 u; the live corpus now reads 518.25 u, and "
+          f"section 16 is what checks it) and below the smallest of the four "
+          f"ordinary WALKING rows the wide `dist>=520 & dt<=2.0s` form would "
+          f"have swept in (525.3 u at 285.5 u/s, 20260814T090541) -- the "
+          f"narrow form escapes that only because it fires below the dt floor, "
+          f"where walking cannot reach. That 7.4 u gap is why the wide form "
+          f"was rejected; it was never headroom for the narrow one")
     check(abs(movesync.FREE_SILENCE - 300.0 / 288.0) < 1e-9
           and abs(movesync.FREE_SILENCE - 1.0417) < 1e-3,
           "THE HONEST BAR is derived, not chosen: 300/288 = 1.042 s",
@@ -1255,15 +1282,71 @@ def main():
               f"{top_d:.2f} u against a {movesync.HARD_JUMP_UNITS:.0f} u arm: "
               f"{movesync.HARD_JUMP_UNITS / max(top_d, 1e-9):.0f}x of headroom, "
               f"so the arm is not scraping past retail, it is nowhere near it")
+        # THE 2.0 s WINDOW -- the REJECTED wide form's witness, not the arm's.
+        # This used to read `abs(top2["dist"] - 517.87) < 0.05`, and on
+        # 2026-08-27 that went RED at 518.25 u on a corpus that had GROWN from
+        # 14 stamps to 21. Re-measured as of the pin (stamps < 20260820) the
+        # scanner still reproduces 517.87 u / 2,629 intervals / 388.80 u/s /
+        # 82 sub-floor rows at 19.15 u -- every frozen literal in section 4, to
+        # the decimal -- so nothing in the scorer moved and nothing in retail
+        # got faster: the seven new stamps top out at 385.72 u/s, BELOW the old
+        # corpus's 388.80. What grew was the sample. 518.25 u / 1.352 s /
+        # 383.21 u/s is one more draw from the same ~1.35 s boost-cadence
+        # family that produced 517.87, and an equality against the extremum of
+        # a growing corpus is a pin on the SIZE OF THE VAULT.
+        #
+        # The durable form is the RELATION this check always claimed to be:
+        # 520 measured against the corpus's own largest 2 s step, live. That
+        # can still go red -- and should, because a step past 520 would mean
+        # the constant had lost the property it was chosen for.
         in2 = [r for r in rows if r["dt"] <= 2.0]
         top2 = max(in2, key=lambda r: r["dist"]) if in2 else None
-        check(top2 is not None and abs(top2["dist"] - 517.87) < 0.05
-              and top2["dist"] < movesync.HARD_JUMP_UNITS,
-              f"while its largest step inside 2.0 s is {top2['dist']:.2f} u / "
-              f"{top2['dt']:.3f} s = {top2['speed']:.1f} u/s"
+        check(len(in2) > 2000 and top2 is not None,
+              f"{len(in2)} of those intervals fall inside 2.0 s",
+              f"asserted BEFORE the extremum: `max(..., default=0)` over an "
+              f"empty window returns a number that clears a 520 u bar for free, "
+              f"which is this section's own vacuity trap one line further on")
+        check(top2 is not None and top2["dist"] < movesync.HARD_JUMP_UNITS,
+              f"and their largest step is {top2['dist']:.2f} u / "
+              f"{top2['dt']:.3f} s = {top2['speed']:.1f} u/s, still under the "
+              f"{movesync.HARD_JUMP_UNITS:.0f} u bar it was chosen to clear "
+              f"(by {movesync.HARD_JUMP_UNITS - top2['dist']:.2f} u)"
               if top2 else "no retail interval inside 2.0 s",
-              f"this is the number 520 was chosen above, reproduced here from "
-              f"the wire rather than quoted from studies/movement/FINDINGS.md")
+              f"THE CONSTANT AGAINST THE WIRE, re-measured every run rather "
+              f"than quoted from studies/movement/FINDINGS.md. NOTE the "
+              f"headroom is small and NOT physically bounded -- at retail's own "
+              f"top speed a 2.0 s gap reaches {top_v * 2.0:.0f} u -- so this "
+              f"can go red on a long enough report gap. That would NOT be a "
+              f"live defect: the distance arm fires only below the "
+              f"{movesync.HARD_JUMP_MIN_DT} s floor, where the check above "
+              f"measures {top_d:.2f} u against 520. It would mean the DECISION "
+              f"RECORD in section 4 had expired, and section 4 says so")
+        # NOT A LONE SPIKE -- and this check exists to DISAMBIGUATE the one
+        # above, not to fire on its own. Today no lone spike can redden this
+        # without also clearing 520, so read the PAIR of verdicts:
+        #
+        #   relation RED + shoulder RED   -> one row stands alone above the
+        #                                    walking cloud. A MOVEMENT FINDING;
+        #                                    it belongs to REALFIX, not here.
+        #   relation RED + shoulder GREEN -> the cloud itself drifted up. The
+        #                                    decision record in section 4 has
+        #                                    expired; no jump happened.
+        #
+        # Both were demonstrated on 2026-08-27 by injection: a single
+        # 600 u / 1.6 s row at 375 u/s (deliberately under the speed arm, so
+        # this window is the only thing that can see it) reddens both; 40 rows
+        # at ~524 u / 1.80 s at ordinary walking speed redden only the first.
+        # The equality this replaced pinned WHAT the extremum was and could
+        # never tell those two apart -- which is exactly the question that had
+        # to be answered before touching it.
+        near = [r for r in in2
+                if top2 is not None and r["dist"] >= top2["dist"] - 5.0]
+        check(top2 is not None and len(near) >= 5,
+              f"and it is the tail of a crowded shoulder, not an outlier: "
+              f"{len(near)} interval(s) sit within 5 u of it",
+              f"corpus growth adds neighbours; a discontinuity arrives alone. "
+              f"Read this verdict TOGETHER with the one above -- the pair is "
+              f"what separates a movement regression from an expired constant")
 
     # ---------------------------------------------------------------------
     print("\n17. the AgTrack fence: movetap's selftest 5-7, in the SUITE")
