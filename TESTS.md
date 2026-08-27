@@ -5997,7 +5997,17 @@ shrinks section 10),
   study named.
 
   `toolkit/clientscan/test_itemmods.py` (**the item-modifier decode, who reads
-  a modifier, and the attribute bonus** — 28 checks, floor 28). Every item on the wire carries a list of 32-bit modifier words, and
+  a modifier, and the attribute bonus** — 37 checks, floor 37; this line read "28
+  checks, floor 28" until 2026-08-27, when the file itself declared 37. **§10's
+  attribute-bonus count is a FLOOR and was an equality until the same day, when it
+  went RED ON CONFIRMING EVIDENCE**: nine later live captures took the corpus from 26
+  words to 38 and all twelve new ones carry the same `(543, stacking, attr 20, +1)`
+  signature, so the claim strengthened and `len(bonus_words) == 26` called it a
+  failure. The count pinned the size of the vault, which nothing here measures. It is
+  `>= 26` now with the signature set carrying the claim — the floor guards vacuity,
+  because an `all()` over an empty list is True and a corpus that stopped loading
+  would have passed silently. Both mutations redden it: an emptied corpus and a
+  planted stray signature). Every item on the wire carries a list of 32-bit modifier words, and
   `studies/character/FINDINGS.md` called them "the largest hole" three times: armour
   rating, damage range and every "+15% while…" line live in them and nobody had
   decoded one. `itemmods.py` reads the format out of the client's own parser —
