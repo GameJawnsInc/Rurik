@@ -6805,8 +6805,32 @@ shrinks section 10),
   was verified rather than assumed. The fixture builder was rebuilt the same way:
   `_synth` now walks `readhook._LAYOUTS[ver]` instead of encoding the field order a
   second time, because a fixture that re-states the layout can agree with a wrong
-  reader and prove nothing. 35 floor, 68 on a machine with the client, a compiler,
-  an archive and a 32-bit `cmd.exe`; each other section declares a skip),
+  reader and prove nothing. **§12 is the world-copy census, and it exists because
+  the reader had no concept of the structure the client actually has.**
+  `WORLD_CREATE_AGENT` builds each agent in BOTH worlds — the handler runs its body
+  twice with the array base advanced `0x64`, and `AgAgent.cpp:312` names them
+  `m_world` 0 and 1 — so **one agent id names two objects**. Every per-agent
+  trajectory this directory has ever computed filtered on `id == 1` and treated the
+  result as one body; in the run 5 capture the two copies sit **940 u apart**, so
+  such a walk crosses between them and reports the crossing as a displacement
+  *inside a single 15 ms `GetTickCount` tick*. That is how FINDINGS §1h.2 scored the
+  warp rate. `id` cannot separate them and `ecx` — the object's address — can, so
+  the census groups on the address, names the sync copy from `reseed`'s source
+  argument rather than assuming it, and RAISES when an id is ambiguous. Both
+  directions are exercised, because a warning that cannot stay quiet carries no
+  information: a capture with one object per id must NOT warn. §12 also carries the
+  **non-agent guard**, and it is deliberately built as a comparison between two
+  measurements rather than against a literal — an agent's declared leg
+  `[ptime, stop]` cannot outlast the capture that observed it. `snaptest`'s `ecx`
+  was marked `thiscall` because `0x006055FB` saves `ecx` to a local, and it produced
+  70 records with agent ids 574588536 / 459313176 and a p50 separation of 7,197 u
+  that read as a catastrophic desync; that object declares a 28-hour leg inside a
+  192 s run and is now called out by name. Writing this section also caught its own
+  fixture: the first draft spaced synthetic ticks 10 ms apart while giving legs
+  1000 ms, so an *honest* agent tripped the guard — the fixture was widened rather
+  than the guard loosened, which is the direction that matters. 41 floor, 76 on a
+  machine with the client, a compiler, an archive and a 32-bit `cmd.exe`; each other
+  section declares a skip),
   `toolkit/clientscan/test_commandertrap.py` (the hardware-breakpoint trap, and
   the section that matters CAUGHT A DEAD TOOL BEFORE IT PUBLISHED A FINDING.
   `commandertrap.py` answers "does instruction X ever execute", and the
