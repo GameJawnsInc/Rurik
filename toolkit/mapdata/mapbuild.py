@@ -146,6 +146,19 @@ REPO_ROOT = os.path.dirname(os.path.dirname(HERE))
 
 # ------------------------------------------------------------- the chunk ids
 
+# EVERY ID HERE IS THE **BLOATED** (head) SPELLING, `0x2xxxxxxx`. The STRIPPED
+# partner carries the same sections under `0x1xxxxxxx` -- map parameters are
+# `0x1000000C` there, props `0x10000004`, and `MapFile.find()` returns None for
+# the wrong one rather than raising. So a sweep that reads the PARTNER (the
+# cheap file, which is where most readers want to be) and looks for
+# `MAP_PARAMS_CHUNK` finds nothing at all, on every map, and looks like a
+# finding. That cost a 40-minute corpus scan on 2026-08-27 before a
+# one-map positive control showed the partner holding a perfectly good
+# `0x1000000C`. `test_props.py` defines its own `MAP_PARAMS_CHUNK = 0x1000000C`
+# for exactly this reason -- two constants, one name, different files.
+#
+# `decode_map_parameters` reads BOTH: the payload shape is the same, so the
+# only thing to get right is which chunk id you asked for.
 HEADER_CHUNK = 0x20000000
 WATER_CHUNK = 0x20000006
 PROPS_CHUNK = 0x20000004
@@ -153,6 +166,10 @@ LOCATIONS_CHUNK = 0x2000000A
 MAP_PARAMS_CHUNK = 0x2000000C
 COLLISION_CHUNK = 0x2000000E
 WATER_DEPS_CHUNK = 0x21000006
+#: The stripped-partner spellings, named so a reader does not have to know the
+#: 0x1/0x2 rule to avoid the trap above.
+STRIPPED_MAP_PARAMS_CHUNK = 0x1000000C
+STRIPPED_PROPS_CHUNK = 0x10000004
 
 # FINDINGS 14: byte-identical ArenaNet constants in all 349 maps. THE BYTES ARE
 # NOT HERE AND NEVER WILL BE -- only the ids and the sizes, which are
