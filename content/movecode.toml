@@ -1,0 +1,159 @@
+# MOVECODE — the client's movement code: hook sites and agent struct offsets.
+#
+# WHY THESE ARE HERE AND NOT IN A PYTHON MODULE. Owner's ruling, PLAN.md §7 Q12(a),
+# 2026-08-26. A row with `source = "client-table"` inherits `content.py`'s refusals
+# automatically — the extractor must be named AND present in this repo, and
+# `NEEDS_BUILD` forces the build stamp — while a Python constant inherits nothing and
+# needs the whole discipline hand-copied. The hook DLL takes its addresses from a
+# header generated off these rows (`movehook/gensites.py`), so there is exactly one
+# home for each fact. The thing the ruling refuses is SPLITTING a struct's offsets
+# across both homes.
+#
+# EVERY ADDRESS IS BUILD 38797 and moves when ArenaNet ships. The `first_byte` column
+# is what makes that checkable rather than hoped: `gensites.py` re-reads each site's
+# first byte out of the pinned client and refuses to emit a header if any row
+# disagrees, so a build bump fails loudly at generation time instead of arming a
+# breakpoint in the middle of some unrelated instruction.
+#
+# `movetap.py`'s offset block is the same struct read by a different instrument. It is
+# grandfathered where it stands; these rows are the ones the HOOK uses.
+
+# --------------------------------------------------------------------------
+# Hook sites. All four are function ENTRIES, and that is a design constraint
+# rather than a coincidence — PLAN.md §7 Q12(d). A persistent-int3 hook must
+# re-emulate whatever instruction its 0xCC displaced; entries all begin
+# `55` (`push ebp`), so ONE emulation shape covers every site. Hooking the
+# glide-vs-teleport branch 0x0060029F directly (`test dword [esi+0x20],
+# 0x40000`, seven bytes, mid-function) would have needed its own.
+# --------------------------------------------------------------------------
+
+[hook_site.bake]
+va = 0x005FE950
+rva = 0x001FE950
+first_byte = 0x55
+thiscall = true
+deref_agent = true
+what = "the movement bake. arg2 IS isWaypoint: cmp [ebp+0xc],0 at 0x005FEA35 selects or eax,0x40000 (SET bit 18, glide) against and eax,0xfffbffff (CLEAR, hard arrival)."
+why_hooked = "MOVECODE-P1's whole measurement. Every bake, its isWaypoint, and its return address — which names which of the five callers fired."
+[hook_site.bake.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/codescan.py"
+build = 38797
+verified = "--dis 0x005FE950 shows `55 push ebp`; --xrefs gives 5 direct callers; arg2's use read at 0x005FEA35-0x005FEA4E. 2026-08-26."
+
+[hook_site.teleport]
+va = 0x006020B0
+rva = 0x002020B0
+first_byte = 0x55
+thiscall = true
+deref_agent = true
+what = "the hard arrival. Copies m_targetPoint's 16 bytes into m_point and zeroes velocity; no path solve, no collision check, no distance guard."
+why_hooked = "the ledger of every teleport the client performs. Hooked HERE rather than at the branch 0x0060029F because the branch's only CLEAR-path consequence is this call, so the ledger is identical and the emulation stays one shape (PLAN.md §7 Q12(d))."
+[hook_site.teleport.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/codescan.py"
+build = 38797
+verified = "--dis 0x006020B0 shows `55 push ebp`; reached from 0x0060032E on the bit-18-CLEAR arm of 0x0060029F. 2026-08-26."
+
+[hook_site.setter]
+va = 0x00602A40
+rva = 0x00202A40
+first_byte = 0x55
+thiscall = true
+deref_agent = true
+what = "the shared destination setter. Writes ONE source point into both m_segmentPoint (+0x88) and m_targetPoint (+0x9C), stores its arg2 into agent+0x98, and hardcodes isWaypoint=0 into the bake at 0x00602A7F."
+why_hooked = "the grant side. Correlating a setter hit with the bake hits that follow it is what turns 'the client re-planned our grant' from structure into a rate."
+[hook_site.setter.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/codescan.py"
+build = 38797
+verified = "--dis 0x00602A40 shows `55 push ebp`; --xrefs gives 8 direct callers incl. the 0x0029 handler 0x005FD913 and the 0x002A handler 0x005FD9B4. 2026-08-26."
+
+[hook_site.agtrack]
+va = 0x00605FC0
+rva = 0x00205FC0
+first_byte = 0x55
+thiscall = true
+deref_agent = false
+what = "AgTrack dispatch, the desync/snap entry point."
+why_hooked = "MOVECODE-Q4. The record's `exactly 3 callers` came from --xrefs, which sees DIRECT rel32 branches only. Logging the return address over a long session is the only way to learn whether the snap is really message-driven. `deref_agent` is false because ecx has not been shown to be an agent here."
+[hook_site.agtrack.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/codescan.py"
+build = 38797
+verified = "--dis 0x00605FC0 shows `55 push ebp`. Caller count NOT verified as complete — that is the question. 2026-08-26."
+
+# --------------------------------------------------------------------------
+# Agent struct offsets the hook reads at each hit. Names that ArenaNet's own
+# asserts give are marked in `verified`; the rest are ours and say so.
+# --------------------------------------------------------------------------
+
+[agent_offset.id]
+offset = 0x10
+width = 4
+name = "agent id"
+[agent_offset.id.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/codescan.py"
+build = 38797
+verified = "movetap.py:452 derives it from 0x00605758 indexing the ASYNC array at AGBASE+0x14C and 0x00605FCE indexing AgTrack. Our name, not ArenaNet's."
+
+[agent_offset.flags]
+offset = 0x20
+width = 4
+name = "m_flags"
+[agent_offset.flags.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/codescan.py"
+build = 38797
+verified = "ArenaNet's own name. Assert AgAgent:2334 `m_flags & INTERNAL_FLAG_IN_WORLD` at 0x00602A56 guards a test of [ebx+0x20]; AgAgent:1198 `!(m_flags & INTERNAL_FLAG_MOVEMENT_STALE)` at 0x0060015C guards `shr eax,0x13` on the same field. Bit 17 = IN_WORLD, bit 19 = MOVEMENT_STALE, both ArenaNet's names; bit 18 = isWaypoint, OURS."
+
+[agent_offset.time_stop_movement]
+offset = 0x48
+width = 4
+name = "m_timeStopMovement"
+[agent_offset.time_stop_movement.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/codescan.py"
+build = 38797
+verified = "ArenaNet's own name. Assert AgAgent:978 `!m_timeStopMovement || ((int)(m_timeStopMovement - time) >= 0)` at 0x005FF0F0 guards the read of [edi+0x48] at 0x005FF0DF. The baked arrival tick."
+
+[agent_offset.point]
+offset = 0x78
+width = 16
+name = "m_point"
+[agent_offset.point.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/codescan.py"
+build = 38797
+verified = "ArenaNet's own name. Assert AgAgent:342 `m_point.position != AGENT_INVALID_POSITION` at 0x005FE9B9 guards the load at 0x005FE999. Where the body IS: x f, y f, plane i, w i."
+
+[agent_offset.segment_point]
+offset = 0x88
+width = 16
+name = "m_segmentPoint"
+[agent_offset.segment_point.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/codescan.py"
+build = 38797
+verified = "ArenaNet's own name. Assert AgAgent:1143 `m_segmentPoint.position != AGENT_INVALID_POSITION`, call at 0x00600256, expression string at 0xA5346C — NOT readable by asserts.py (an fstp at 0x00600254 sits inside its byte pattern), so it is read off the call site directly. The end of the leg being walked."
+
+[agent_offset.x98]
+offset = 0x98
+width = 4
+name = "unnamed scalar"
+[agent_offset.x98.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/codescan.py"
+build = 38797
+verified = "MOVECODE-Q3's field. Written from the setter's arg2 at 0x00602AA8; 0x0029 hardcodes 0, 0x002A fills it from wire dword [edi+0x18] — the single field separating the two opcodes. 7 reads in AgAgent. Meaning UNKNOWN; captured so the hook can answer it."
+
+[agent_offset.target_point]
+offset = 0x9C
+width = 16
+name = "m_targetPoint"
+[agent_offset.target_point.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/codescan.py"
+build = 38797
+verified = "ArenaNet's own name. Assert AgAgent:1144 `m_targetPoint.position != AGENT_INVALID_POSITION` at 0x00600287. The final destination; what the teleport copies into m_point."

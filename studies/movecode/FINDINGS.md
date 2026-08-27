@@ -306,6 +306,56 @@ separate guard reads test bit 17 across AgAgent.
 
 ---
 
+## 1b. MOVECODE-B2 — `movehook`, built and tested, NOT yet run
+
+The instrument for §4.1's gap. Four sites, all function **entries**, so the
+persistent-`int3` handler re-emulates one shape (`push ebp`) rather than an
+arbitrary instruction per site — owner's ruling `PLAN.md` §7 Q12(d), and
+`gensites.py` refuses to generate the site table if any row's first byte is not
+`0x55`. The procedure is [RUN-B2.md](RUN-B2.md); the prediction it will be scored
+against is §3 below and was registered before the instrument existed.
+
+**What is verified statically, and it is the part that decides whether the headline
+number will be real.** All OBSERVED, build 38797:
+
+- **`ecx` is the agent at every site that dereferences it.** Bake
+  `0x005FE95C mov esi, ecx`; teleport `0x006020C5 mov ebx, ecx`; setter
+  `0x00602A44 mov ebx, ecx`. `agtrack` does not dereference, because nothing shows
+  `ecx` is an agent there.
+- **The captured `arg2` really is the `isWaypoint` the bake tests.** At an entry
+  hook the `push ebp` has not run, so `esp` is the caller's: the hook reads
+  `[esp+8]`. After `push ebp / mov ebp, esp`, `ebp = entry_esp - 4`, so
+  `[ebp+0xc] = entry_esp + 8` — the same slot. Cross-checked against the bake's own
+  `0x005FE957 mov ebx, [ebp+8]` (arg1) landing on `entry_esp + 4`. If these had
+  disagreed the headline rate would have been a different argument entirely.
+
+**Reviewed by hand rather than by fan-out, and that is worth recording.** A
+five-lane adversarial review was launched at the C and **all five agents died
+returning `None`** (usage limits — the third such failure this session), writing no
+notes. The checks were done directly instead. One genuine defect was found and
+fixed: `readable()`'s range test computed `p + n` before screening for overflow, so
+a pointer near `0xFFFFFFFF` would wrap to a small value and compare happily inside
+the region. It is unreachable today — `VirtualQuery` fails on kernel-space
+addresses in a 32-bit user process — but a bounds check whose own arithmetic can
+wrap is not a bounds check. Also hardened: the region-end sum, and a comment
+recording that Control B's sampling **must** run before the sites are armed,
+because it suspends client threads and suspending one that sits inside our own
+vectored handler is a deadlock.
+
+**Two defects the test caught before any client run** (`TESTS.md` §7/§8 for
+`test_movehook.py`): the throwaway host was spawned `stdin=DEVNULL`, so `cmd /k`
+read EOF and died in half a second while the injector's resulting `WinError 299`
+read exactly like the known 64-bit-enumerating-WOW64 bug — *the error was about the
+corpse*; and the DLL read its config from the **environment**, which an injected
+DLL inherits from the *client*, not the injector, so `attach.py`'s `--minutes` and
+`--out` would have been silently ignored on every live run.
+
+**Status: UNVERIFIED against the client.** Nothing here is a measurement of the
+game. 38 checks green, controls proven to fire inside a real injected process, and
+the run itself waits on the owner.
+
+---
+
 ## 2. Corrections to the record
 
 Each of these was in circulation and each is now measured against the bytes.

@@ -6510,6 +6510,55 @@ shrinks section 10),
   goes red on a rebuild rather than letting the tool read a stale address, and
   SKIPs with its reason when the vault is absent; §4 pins that a NULL context
   is reported rather than dereferenced. Floor 7, instant),
+  `toolkit/clientscan/movehook/test_movehook.py` (**MOVECODE-B2's hook DLL, and
+  the first test any hook in this repo has ever had.** `trnhook/` has none, and
+  `srclint` therefore imposed nothing on it — which was *silence, not a ruling*,
+  until the owner made it one: `PLAN.md` §7 Q12(b), 2026-08-26. A hook is an
+  instrument whose whole output is a ledger and whose interesting answer is often
+  a small number, which is the worst shape for a tool to break quietly in: **"the
+  hook was dead" and "the client never did it" produce the same zero.** §7 is the
+  section the ruling bought. It injects the real DLL into a real 32-bit
+  `SysWOW64\cmd.exe` and reads the sidecar back, and it works *because* the four
+  hook RVAs are ~2 MB into an image that small — **every site fails to arm**, and
+  that is the property worth testing: the DLL must survive unresolvable sites,
+  leave its host running, and report `hits 0` honestly. Control A (an `int3` in a
+  buffer the DLL allocated) must still fire, because it touches no host byte —
+  a control on the control. Control B came back COULD NOT ARM, which is the
+  three-valued path working rather than a failure: an idle `cmd.exe` has no
+  thread executing in `.text` to sample. **Two defects this section found before
+  any client run.** The host was spawned with `stdin=DEVNULL`, so `cmd /k` read
+  EOF and exited within half a second; the injector then failed on a module
+  snapshot with `WinError 299`, which reads exactly like the known
+  64-bit-enumerating-a-WOW64-target bug and sent the first diagnosis at
+  `TH32CS_SNAPMODULE32`. MEASURED: DEVNULL → host dead at t=0.50s and never
+  resolves; a held-open pipe → `kernel32` resolves at t=0.25s. **The error was
+  about the corpse.** And the floor was first written as 16 by adding up what the
+  sections looked like they held; the real process-free core is **18**, so two
+  checks could have stopped running with the suite still green — the floor is now
+  counted per section off the banner (§1 6, §2 5, §3 4, §4 11, §5 3, §6 2, §7 5;
+  36 whole). §5 is the file's negative control and it is the one that can go red
+  in the useful direction: a capture whose sidecar says control A DID NOT FIRE
+  must be **refused**, not scored, and the test asserts no rate is printed after
+  the refusal. §3 is what makes `PLAN.md` §7 Q12(a) worth anything — it breaks a
+  `hook_site` row four ways (no `build`, no `extractor`, an extractor that is not
+  in the repo, and a well-formed control that must LOAD) and requires
+  `content.py` to refuse three of them; if it did not, putting the addresses in
+  TOML bought nothing over `#define`s. §1 asserts the checked-in `sites.h` is
+  byte-identical to what `gensites.py` emits, because a hand-edited generated
+  header is exactly the two-homes split the ruling refuses and is otherwise
+  invisible. §2 requires every site's first byte to be `0x55` in the pinned 38797
+  image — the handler re-emulates `push ebp` and nothing else, so a site that is
+  no longer a function entry must never be armed. **§8 pins a bug that would
+  otherwise have been invisible until a live run produced a ten-minute capture
+  nobody asked for**: `GetEnvironmentVariableA` inside an injected DLL reads the
+  *client's* environment, inherited from whatever launched `Gw.exe`, **not the
+  injector's** — so `attach.py` exporting a variable would change nothing and the
+  DLL would quietly use its defaults. The config therefore lives in a
+  `movehook.cfg` beside the DLL, and §8 sets the file and the environment to
+  DIFFERENT output directories and a 1500 ms against a 600000 ms run, so which one
+  the DLL actually honoured is visible in where the sidecar landed and in whether
+  the run finished. 18 floor, 38 on a machine with the client, a compiler and
+  `cmd.exe`; each of the other four sections declares a skip with its reason),
   `toolkit/clientscan/test_commandertrap.py` (the hardware-breakpoint trap, and
   the section that matters CAUGHT A DEAD TOOL BEFORE IT PUBLISHED A FINDING.
   `commandertrap.py` answers "does instruction X ever execute", and the
