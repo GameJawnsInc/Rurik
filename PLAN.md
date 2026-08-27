@@ -1988,6 +1988,45 @@ and B3 hooks the client's own `MapFindPath` for a per-query differential
 against `pathmap.route()`, which settles run 5's pocket. Four process
 questions are posed for the owner in that doc's §6 before the first
 native commit.
+**MOVECODE-B2 IS DONE AND RUN ONCE, 2026-08-27 —
+[studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1c. READ IT
+BEFORE THE PARAGRAPH ABOVE, WHICH IS NOW PART WRONG.** `movehook` was built
+(four function-entry sites, both controls firing inside a real injected
+process, 47-check test) and run for ten minutes in Ascalon City. Result:
+
+- **MOVECODE-P1a is REFUTED.** 0 of 586 bakes carried `isWaypoint = 1`.
+  Obstacle avoidance (`0x00600840`) and the PriQ solve (`0x006011F0`) —
+  the two re-bakers the paragraph above rests on — **never fired once**,
+  including on repeated clicks into building corners. The re-bake route is
+  not what happens in a normal session, and `§2.1`'s original reading
+  stands: every grant arms a scheduled hard arrival, full stop.
+- **But the client DOES re-plan, through the SETTER.** Of 586 setter calls
+  only **49** came from the `0x0029` wire handler (carrying real plane
+  numbers); **537** came from two internal re-issuers passing `arg3 = -1`
+  ("keep the plane"). The client re-issues **~11× more often than we
+  grant** — and every one goes through the setter's hardcoded
+  `isWaypoint = 0`, arming another hard arrival. `0x005FC7A0` is that
+  path's function; it is **NOT in the message dispatch table**, so this is
+  client-internal, and its three callers sit at `0x0081A8F0` /
+  `0x0081ADB0` / `0x0081B220`. **What drives them is the arc's biggest
+  open question**, because it means our grant policy is a minority input
+  to what the client actually does with destinations — which reprices B5.
+- **P1b CONFIRMED and the decoded branch confirmed live**: 131/131
+  teleports had bit 18 clear, 102 of them returning to `0x00600333` — the
+  bit-18-CLEAR arm of `0x0060029F` — and 75 moved the body over 100 u.
+- **MOVECODE-Q4 ANSWERED, and the model's assumption HOLDS.** AgTrack was
+  entered 759 times from **exactly three** return addresses, matching the
+  static `--xrefs` count; no indirect caller appeared. One fired exactly
+  131 times, the exact teleport count.
+
+**Next is B3, and it is now cheap:** `MapFindPath 0x00709E90` is a
+`push ebp` entry, so it is a `content/movecode.toml` row and a
+`gensites.py` regenerate rather than new machinery — as are the three
+`0x0081xxxx` re-issue callers. One further run answers Q2 (the mesh
+differential that settles run 5's pocket) and names the re-issuer at the
+same time. **B5 should NOT be written yet** — its scope was deliberately
+left pending B1–B4, and run 1 just changed what it should be.
+
 *The staging block that preceded the run, kept for the record:*
 The follow-on recon (`studies/movement/followon-notes/README.md`, merged
 to `main` the same day) answered F35's counterfactual from tape (castless,
