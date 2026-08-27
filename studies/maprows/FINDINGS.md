@@ -936,3 +936,41 @@ because each produced a confident wrong answer first:
    vacuous green that looked like a strong result. The fix is this section's
    shape: find the changed set FIRST, report its size, and refuse to conclude
    when it is empty.
+
+### 10.13 RESOLVED — `dat_study` is the 38833 generation as of 2026-08-27
+
+Owner's ruling: resync. Done, and the divergence §10.10 measured is closed —
+`contentids` reports **12 of 12 map rows agreeing with no `RURIK_DAT`**, so
+`RUNBOOK`'s third route is no longer needed for the current run dirs.
+
+**The source was NOT `vault/dat_study_38833`, and that matters.** That directory
+is a deliberately preserved regression fixture: its live file-id table occupies
+`0xF57D5000..0xF5923800`, **destroying the `Mft\x1a` magic** and leaving a
+2,892,800 B orphaned tail of a stale MFT generation that `datmove.plan_move`
+picks with nothing in the current rule set refusing it —
+[studies/archivewrite/FINDINGS.md](../archivewrite/FINDINGS.md) §1.5, which calls
+it "a ready-made regression fixture" for rung A3 and says the archive "would look
+clean afterwards … right up until the client rotated its table back onto our
+payload." Promoting it would have put that trap under the server's own reference
+archive **and consumed the fixture**. The same paragraph names the clean
+counterpart, and that is what was installed:
+`vault/client/2026-08-13_64fae3b1369b/Gw.dat`.
+
+**Nothing was deleted.** The vault now holds three generations, each with a job:
+
+| path | generation | why it is kept |
+|---|---|---|
+| `vault/dat_study/` | **38833** | what the server reads now |
+| `vault/dat_study_38797/` | 38797 | every 38797-pinned measurement and the crossbuild arc — `RURIK_DAT` at it reproduces an old number |
+| `vault/dat_study_38833/` | 38833, damaged | the A3 regression fixture, untouched |
+
+**Verified byte-for-byte rather than by size.** MFT sha256 `4ce9ef10dce12583`,
+self-crc `0xA1F24741` — both identical to the source read *before* the copy —
+with 177,738 payload CRCs recomputed and 10 of 10 open-time rules cleared.
+
+**What it costs.** Tests that pinned facts about *which* archive is on disk move,
+and that is the honest price of the resync rather than a defect in it. Known so
+far: `test_archive`'s map count (349 → 361; ArenaNet added twelve maps) and
+`test_pathmap`. `test_spawncheck` is unaffected, measured both ways. Each red is
+classified by re-running it against `dat_study_38797` — green there and red here
+means the resync caused it; red both ways means it was already broken.

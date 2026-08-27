@@ -1491,6 +1491,33 @@ before the first native commit, which is where that doc says to pose them.
 
 ## 8. Immediate next actions
 
+### ⚠ VAULT CHANGE 2026-08-27 — `dat_study` is now the 38833 generation
+
+**Owner's ruling, and it changes a resource every session shares.** The server's
+reference archive was a 38797 snapshot while all three current run dirs were
+38833 (`studies/maprows` §10.10), so every loopback run needed `RURIK_DAT`
+pointed at the client's copy. `vault/dat_study/Gw.dat` is now **38833** and
+`contentids` reports **12 of 12 agreeing with no `RURIK_DAT`**.
+
+**Source was `vault/client/2026-08-13_64fae3b1369b`, the pristine snapshot — NOT
+`vault/dat_study_38833`.** That directory is a preserved regression fixture whose
+live file-id table destroyed the `Mft` magic, leaving an orphaned stale-generation
+tail `datmove.plan_move` allocates into (`studies/archivewrite` §1.5, rung A3);
+promoting it would have put that trap under the server's own archive.
+
+**Nothing was deleted.** `vault/dat_study_38797/` holds the outgoing archive, so
+any 38797-pinned measurement reproduces by pointing `RURIK_DAT` at it, and the
+A3 fixture is untouched. Verified byte-for-byte: MFT sha256 `4ce9ef10dce12583`,
+self-crc `0xA1F24741`, 177,738 payload CRCs recomputed, 10 of 10 open-time rules.
+
+**What it costs, and this is the price rather than a defect:** tests that pinned
+facts about *which* archive is on disk move. `test_archive`'s map count was
+`== 349` and ArenaNet added twelve maps — a floor now (its real claim, "map files
+are identifiable by flags alone", is carried by its own sampling section).
+`test_spawncheck` is unaffected, measured both ways. Remaining reds are being
+classified by re-running each against `dat_study_38797`: green there and red here
+means the resync caused it. Record: `studies/maprows` §10.13.
+
 ### DESK ARC 2026-08-27, second pass — the props `value` words are MEASURED, and an armour probe was overwriting live items
 
 **PROPS: tag 6's `value` is a prop INDEX; tag 4's is not.**
