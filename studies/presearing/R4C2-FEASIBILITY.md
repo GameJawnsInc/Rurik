@@ -146,3 +146,63 @@ Named so the next session does not do them:
 11. **Calling the three health numbers base-mode.** They are 96/8/40 or 120/10/50 and this machine cannot say which.
 
 **The one session that changes this**, and it needs no owner go-ahead and no ArenaNet contact: write `npcdefs.py` with the interval join and its sabotage test, close the three `content.py` enforcement gaps with refusals tested, make `--mode` a required argument, and do the loopback nameplate run on the 8 definitions already in the vault. That converts R4c-2 from ungradeable to merely unstarted, and it turns 8 opaque slots into 8 rows a wiki row can finally be checked against.
+
+---
+
+## 7. RE-MEASURED 2026-08-27 — the counts moved a long way, and the denominator did not
+
+Everything in §2 was measured over the 12-connection corpus of 2026-08-11. The
+Isle campaign has since added captures. Re-run today
+(`python toolkit/authsrv/npcdefs.py --hostile-only`):
+
+| | 2026-08-11 | **2026-08-27** |
+|---|---|---|
+| captures pooled | 12 conn. | **16 captures** |
+| definitions declared | 54 | **266** |
+| **hostile** slots | **7** | **31** |
+| with a model id | 3 of 8 | **245** |
+| with an attack rate | 4 of 8 | **20** |
+| with a health value | 3 of 8 | **15** |
+
+`unitassembly.py --captures` closes **266 of 266** over the same pool
+(every definition resolves to a complete archive file set), against the 54 that
+`test_unitassembly.py` pins.
+
+### 7.1 DO NOT read this as "R4c-2a is 31 of 35"
+
+That is the exact error §6 item 9 warns about, and it would be wrong for a
+reason the numbers alone do not show: **almost all of the growth is Isle of the
+Nameless, and R4c-2 grades PRE-SEARING content.**
+
+The new hostile slots are dominated by a block at indices **129-165** — level 20,
+professions spread across the range, file ids 116228 / 169534 / 16267. The repo's
+own record identifies these: `studies/isle` has the Suits at **152/153/154**, the
+Master of Damage candidates at **144/145**, and `PLAN.md`'s R-ISLE row names
+**130, 139, 146** among the pre-registered Isle definition indices. They are a
+calibration range's furniture, not Pre-Searing foes.
+
+**The Pre-Searing hostile roster is still the original seven** —
+{1346, 1420, 1421, 1431, 1432, 1434, 1442}. What grew is the corpus's total
+coverage, which is real and useful, but it is coverage of a different zone than
+the rung is scored against. A session that reports "31 hostile types" against
+R4c-2a's 35 has counted the training dummies.
+
+### 7.2 What DID improve for the rung, honestly
+
+- **Health readings went from 3 to 15.** §2 called health "3 of 8 and
+  mode-ambiguous" and it was the thinnest column. Most of the new ones are Isle
+  bodies (480 on the Suits, 590 on slot 144), so they are level-20 calibration
+  values rather than Pre-Searing stats — but they are real, and the 480 already
+  did work in `studies/isle` rung 7 as the level-20 base-health anchor.
+- **The extractor scales.** 266 of 266 closed with 0 problems is the answer to
+  §4's build plan actually holding up at 5× its original corpus.
+
+### 7.3 One claim in §2 is now stale
+
+§2 says slot **1480** "is the ONLY slot under two allegiance tokens". Today's
+census shows slot **155** created **424 times under both `mon1` and `play`**, so
+at least two slots carry two tokens. Whether 1480 still does was not re-checked —
+it is non-hostile and does not appear in a `--hostile-only` census. The
+underlying point of the original observation survives and is strengthened:
+**hostility is a spawn fact, not a property of the definition**, which is why
+`npcdefs.py` emits no allegiance key.

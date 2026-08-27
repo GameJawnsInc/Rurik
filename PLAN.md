@@ -636,8 +636,19 @@ Both are now graded against an enumerated content surface:
   which proposes a three-way split (R4c-2a roster / R4c-2b evidence / R4c-2c the name join)
   **and is a proposal until the owner adopts it**, exactly as the two rewrites above are.
   The four clauses, measured over the canonical 12-connection corpus:
-  - *"35–40 monster types"* — **today 7** hostile definition slots (1346, 1420, 1421, 1431,
-    1432, 1434, 1442), all from one 568 s visit to one map. Coverage-blocked; a live capture
+  - *"35–40 monster types"* — ~~**today 7** hostile definition slots (1346, 1420, 1421, 1431,
+    1432, 1434, 1442), all from one 568 s visit to one map.~~ **RE-MEASURED 2026-08-27:
+    the corpus now pools 16 captures and 266 definitions, of which 31 are hostile, and
+    `unitassembly.py` closes 266 of 266. READ THAT CAREFULLY — it is NOT "31 of 35".**
+    The growth is almost entirely **Isle of the Nameless**: the new block at indices
+    129-165 is the calibration range's furniture (the Suits at 152/153/154, the Master
+    of Damage candidates at 144/145, and 130/139/146 among R-ISLE's own pre-registered
+    indices). **The PRE-SEARING hostile roster — which is what this criterion grades —
+    is still the original seven.** Reporting 31 against a 35 denominator counts the
+    training dummies, which is §6 item 9's named error. What did genuinely improve:
+    health readings went from 3 to 15, attack rates from 4 to 20, model ids to 245, and
+    the extractor held at 5× its original corpus with 0 problems. Full re-measurement
+    and the stale-claim list: [studies/presearing/R4C2-FEASIBILITY.md](studies/presearing/R4C2-FEASIBILITY.md) §7. Coverage-blocked; a live capture
     campaign fixes it at roughly one explorable per session. **And the denominator is
     contested by 22% between two of our own wiki passes** (91 vs 111 hostile), while the
     wire counts *slots* and the wiki counts *pages* — slots 1431/1432/1434 are one model
