@@ -71,7 +71,8 @@ a fact about the run, not about the client. Re-run; do not conclude.
    ```bash
    python toolkit/clientscan/movehook/test_movehook.py
    ```
-   36 checks on a machine with the client, a compiler and `SysWOW64\cmd.exe`.
+   43 checks on a machine with the client, a compiler and a 32-bit cmd.exe;
+   floor 23, and a bare machine skips the rest with reasons.
 
 ---
 
