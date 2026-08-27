@@ -12,7 +12,7 @@
  * re-emulates ONE instruction shape. See PLAN.md §7 Q12(d). */
 #define SITE_FIRST_BYTE 0x55u
 
-#define NSITES 4u
+#define NSITES 9u
 
 typedef struct {
     unsigned long rva;
@@ -21,8 +21,13 @@ typedef struct {
 } site_t;
 
 static const site_t SITES[NSITES] = {
+    { 0x001FC7A0u, "agapi_setdest", 0 },   /* 0x005FC7A0 */
     { 0x00205FC0u, "agtrack", 0 },   /* 0x00605FC0 */
     { 0x001FE950u, "bake", 1 },   /* 0x005FE950 */
+    { 0x0041A8F0u, "chcli_a", 0 },   /* 0x0081A8F0 */
+    { 0x0041ADB0u, "chcli_b", 0 },   /* 0x0081ADB0 */
+    { 0x0041B220u, "chcli_c", 0 },   /* 0x0081B220 */
+    { 0x00309E90u, "mapfindpath", 0 },   /* 0x00709E90 */
     { 0x00202A40u, "setter", 1 },   /* 0x00602A40 */
     { 0x002020B0u, "teleport", 1 },   /* 0x006020B0 */
 };

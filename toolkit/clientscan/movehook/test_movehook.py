@@ -177,7 +177,7 @@ def _synth(recs, sites_hits, base=0x00400000):
     import readhook
     out = bytearray()
     out += b"MVHK"
-    out += struct.pack("<IIIII", 1, base, len(sites_hits), readhook.REC_LEN, len(recs))
+    out += struct.pack("<IIIII", 2, base, len(sites_hits), readhook.REC_LEN, len(recs))
     for rva, hits in sites_hits:
         out += struct.pack("<II", rva, hits)
     for r in recs:
@@ -232,6 +232,26 @@ def section_4_5(tmp):
     eq(cap.recs[2]["arg2"], 1, "4. arg2 -- the isWaypoint the whole arc turns on")
     eq(cap.recs[2]["retaddr"], 0x0060193B, "4. the return address round-trips")
     eq(cap.recs[3]["flags"] & (1 << 18), 0, "4. bit 18 reads CLEAR on the teleport")
+
+    # BACKWARD COMPATIBILITY, and it is not hypothetical: run 1's capture
+    # (2026-08-27 Ascalon, the arc's only live evidence) is v1, and a reader that
+    # orphaned it would have destroyed the thing the instrument was built to get.
+    v1_fields = readhook._V1
+    v1_fmt = "<" + "I" * len(v1_fields) + "I" * (readhook.NPOINT * 3)
+    v1 = bytearray(b"MVHK")
+    v1 += struct.pack("<IIIII", 1, 0x00400000, 1, struct.calcsize(v1_fmt), 1)
+    v1 += struct.pack("<II", 0x1FE950, 1)
+    v1rec = {"seq": 0, "tick": 999, "site": 0, "retaddr": 0x00602AD8, "arg2": 0}
+    v1 += struct.pack(v1_fmt, *([v1rec.get(k, 0) for k in v1_fields] + [0] * 12))
+    v1path = os.path.join(tmp, "v1.bin")
+    with open(v1path, "wb") as fh:
+        fh.write(bytes(v1))
+    v1cap = readhook.Capture(v1path)
+    eq(v1cap.version, 1, "4. a v1 capture still parses after the record grew")
+    eq(v1cap.stored, 1, "4. and its records survive the version bump")
+    check("arg4" not in v1cap.recs[0],
+          "4. and a v1 record does NOT sprout the fields it never carried",
+          "reading v2 fields out of a v1 record would invent data")
 
     # THE COMMIT FLAG, in the direction that can fail. A partial record decodes as
     # a perfectly plausible real one -- all-zero reads as site 0, seq 0 -- so a
@@ -439,8 +459,13 @@ def section_9():
         # A read that fails is a refusal too, not an accept-by-default.
         keytap.read_at = lambda pid, addr, n: None
         bad, _ = attach.verify_running_build(1234)
-        check(len(bad) == 4, "9. an unreadable site refuses rather than passing",
-              f"{bad}")
+        # Derived, not literal: this said `== 4` and went red the moment B3 added
+        # five sites. A count that has to be edited whenever the thing it measures
+        # grows is a tripwire for maintenance, not for defects.
+        import gensites
+        nsites = len(gensites.rows()[0])
+        eq(len(bad), nsites,
+           "9. EVERY unreadable site refuses rather than passing")
     finally:
         keytap.module_base, keytap.read_at = real_base, real_read
 

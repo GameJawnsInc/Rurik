@@ -480,24 +480,100 @@ changed. `0x002A` was never used this session. The field's MEANING is still
 UNKNOWN — but we now know our own traffic never sets it, so nothing observed so
 far can have depended on it.
 
-### 1c.6 An anomaly worth its own line: AGENT_INVALID_POSITION reached m_targetPoint
+### 1c.7 THE 525-PATH IS NAMED: the client walking its own path, one leg at a time
 
-At t=243.5 s one teleport (`0x006025AB`, agent 1) entered with `m_targetPoint` =
-**(+inf, +inf)** — raw `0x7F800000`, which is `AGENT_INVALID_POSITION`, the exact
-value ArenaNet's assert `AgAgent:1144 m_targetPoint.position !=
-AGENT_INVALID_POSITION` exists to keep out of that field. From then to the end of
-the capture the field stayed `inf` while the body stayed finite.
+**OBSERVED, 2026-08-27, static.** §1c.2 left `0x005FC7A0` unidentified and called it
+"the most interesting open question in the arc". It is now named, and the answer
+reframes the model.
 
-**NOT DETERMINED whether this caused the stuck character.** The teleport takes its
-coordinates as *arguments* (`0x006020B6 fld [ebp+8]`), and the args at that call
-were finite, so the invalid field may be a symptom rather than the cause. What is
-OBSERVED: from t≈243 s the player was pinned at (11979.8, 10491.5) plane 29,
-**our server kept granting that same position back**, and all movement stopped at
-t=263 s — the last 337 s of the window are empty. The operator was stuck inside
-geometry for the whole tail.
+**`0x005FC7A0` is an `AgApi.cpp` set-destination entry point**, and ArenaNet's own
+asserts inside its body give its parameter names: `AgApi.cpp:1041`
+*"targetPoint.position != AGENT_INVALID_POSITION"* at `0x005FC7CD`, and
+`AgApi.cpp:1043` *"moveSpeed <= AGENT_MAX_MOVE_SPEED"* at `0x005FC81D`. It is
+`__cdecl`, and its first argument is an **agent ID** — an index into the array at
+`ctx+0x14C`, bound-checked against `ctx+0x154` under `Array.h:587` — not a pointer.
+Signature: `(agentId, targetPoint*, moveSpeed, flags & 0xf, valueStoredTo+0x50)`.
 
-That last fact is also what the stop-file change is for: 337 of 600 seconds were
-spent holding a character that had stopped moving.
+**Why all 525 carried `arg3 = -1`:** it is not a per-call decision at all. The call
+site `0x005FC8F0` **hardcodes** `push -1` (plane: do not change) and `push 0`
+(isWaypoint: hard arrival), exactly as the `0x0029` handler hardcodes its own. Two
+different callers, the same constant, for different reasons.
+
+**Its only three callers are in `ChCliBase.cpp`** — the client's own character layer —
+and the asserts there are what settle the interpretation: `ChCliBase.cpp:154`
+*"index < arrsize(m_path)"* at `0x0081AC3D`, and `ChCliBase.cpp:164`
+*"this == context->playerControlledChar"* at `0x0081AD27`.
+
+**So the 525 are the client walking `m_path`, leg by leg, gated on the
+player-controlled character.** That is the shape of the whole thing:
+
+> We grant a **destination** (49 times). The client solves a path to it, then feeds
+> itself each **leg** as a fresh destination through `AgApi` (525 times) — and every
+> leg, like every grant, arms a hard arrival at its end.
+
+**RECONSTRUCTION, and it is the reframing that matters.** The teleport is not our
+grant fighting the client. It is the client's own **precision landing at the end of
+each leg it computed**, which is what §1.6 was reaching for and attributed to the
+wrong function. It also explains P1a's refutation rather than sitting awkwardly
+beside it: the client never needs `isWaypoint = 1`, because it does not walk a
+multi-leg route as one baked leg — it re-issues each leg as a complete destination.
+**A ~10:1 leg-to-grant ratio is therefore the expected shape of normal movement, not
+a pathology**, and B5 must be designed against it rather than against our grant rate.
+
+**What this makes urgent.** Those legs come from a path the client solved with
+`MapFindPath` — so **B3 is now the direct continuation of this finding**, not a
+parallel errand: the legs the client walks ARE the output of the queries B3 captures.
+
+
+### 1c.6 CORRECTED — the +INF was NOT an anomaly. It is what the teleport WRITES.
+
+**Static recon on 2026-08-27 refuted this section's own reading, and the correction
+is more interesting than the claim.** §1c.6 originally reported the `+inf` in
+`m_targetPoint` as an anomaly that ArenaNet's assert exists to prevent. Both halves
+of that were wrong.
+
+**OBSERVED — the sentinel is confirmed.** `AGENT_INVALID_POSITION` is the float at
+`0x00948654`, whose bytes are `00 00 80 7F` = `0x7F800000` = IEEE `+inf`. It is
+compared **per component**, not as a struct: the teleport's own guard loads `[ebp+8]`
+and `[ebp+0xc]` against it (`0x006020B6`, `0x006020D2`) and fires assert
+`AgAgent:2066 point.position != AGENT_INVALID_POSITION` at `0x006020E3` only when
+both match. So the value's identity is settled.
+
+**OBSERVED — but the teleport WRITES that sentinel itself, every time.** Reading
+`0x006020B0`'s body through: `ebx = this`, `esi = ebx+0x78`, and the stores are
+
+| store | VA | what |
+|---|---|---|
+| `+0x78..+0x84` ← **the ARGUMENTS** | `0x00602132`–`0x0060214F` | where the body lands |
+| `+0x88`, `+0x8C` ← `+inf` | `0x00602155`, `0x00602164` | `m_segmentPoint` **invalidated** |
+| `+0x9C`, `+0xA0` ← `+inf` | `0x0060216D`, `0x00602179` | `m_targetPoint` **invalidated** |
+| `+0xB0`, `+0xB4` ← `0.0` | `0x0060210E`, `0x00602117` | velocity zeroed |
+
+So `+inf` in `m_targetPoint` is the client's **"arrived, no destination"** marker,
+written on *every* teleport. Our hook reads state at ENTRY, so it sees the *previous*
+teleport's marker — which is why exactly 1 of 131 records showed it: the one case
+where two teleports ran back to back with no setter call between them. **Normal
+state, correctly captured, wrongly interpreted.** `readhook.py` still counts
+non-finite targets separately, which remains the right presentation — only the
+prose calling it an anomaly was wrong.
+
+**And the arc's `PLAN.md` §2.1 is wrong on this in the opposite direction.** It says
+the teleport *"copies `+0x9C`'s 16 bytes into `+0x78/+0x7C/+0x80/+0x84`"*. It does
+not: it writes its own **arguments** there and puts the sentinel **into** `+0x9C`.
+The data flow is backwards in the record. What the caller passes is the destination;
+`m_targetPoint` is an input to the *decision*, not the source of the copy.
+
+**NOT DETERMINED, and explicitly withdrawn: the stuck character.** §1c.6 suggested
+the `+inf` might explain it. It cannot — the value is routine. What remains OBSERVED
+is only that movement events ceased at t=263 s with the player pinned at
+(11979.8, 10491.5) plane 29 while our server re-granted that same position. The
+cause is unknown and nothing here bears on it.
+
+**One more thing the read turned up, UNVERIFIED as to purpose:** the teleport
+**recurses**. At `0x0060221E` it calls itself with the same 16-byte point rebuilt
+from `[ebp+8..0x14]`, after walking an array at `[ebx+0x28]` with count `[ebx+0x30]`.
+Carried or attached agents is the obvious guess and is not evidence.
+
 
 ---
 

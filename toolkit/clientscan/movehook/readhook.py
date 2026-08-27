@@ -43,13 +43,29 @@ sys.path.insert(0, TOOLKIT)
 MAGIC = b"MVHK"
 DEFAULT_DIR = os.path.join("vault", "research", "movecode")
 
-# The record, as movehook.c writes it. `reclen` in the header is authoritative --
-# this layout is only how we interpret a record of that length.
-FIELDS = ("seq tick site tid retaddr ecx arg1 arg2 arg3 have_agent "
-          "id flags stop x98").split()
+# The record, as movehook.c writes it, PER VERSION. `reclen` in the header is
+# authoritative and the version selects the layout -- so an old capture stays
+# readable after the record grows, which is the whole reason this is versioned
+# rather than assumed. v1 carried three args; v2 carries six, because B3's
+# `MapFindPath` is a navmesh query whose output buffer is among its parameters and
+# an entry hook that cannot see arg4 cannot record where the answer was written.
+_V1 = ("seq tick site tid retaddr ecx arg1 arg2 arg3 have_agent "
+       "id flags stop x98").split()
+_V2 = ("seq tick site tid retaddr ecx arg1 arg2 arg3 arg4 arg5 arg6 have_agent "
+       "id flags stop x98").split()
 NPOINT = 4
-REC_FMT = "<" + "I" * len(FIELDS) + "I" * (NPOINT * 3)
-REC_LEN = struct.calcsize(REC_FMT)
+
+
+def _layout(ver):
+    fields = {1: _V1, 2: _V2}.get(ver)
+    if fields is None:
+        raise CaptureError(f"capture version {ver}: this reader knows 1 and 2")
+    fmt = "<" + "I" * len(fields) + "I" * (NPOINT * 3)
+    return fields, fmt, struct.calcsize(fmt)
+
+
+# The current writer's layout, for anything that builds a capture (the tests do).
+FIELDS, REC_FMT, REC_LEN = _layout(2)
 
 BIT_ISWAYPOINT = 1 << 18
 BIT_IN_WORLD = 1 << 17
@@ -74,19 +90,20 @@ class Capture:
             raise CaptureError(f"{path}: not a movehook capture (magic "
                                f"{blob[:4]!r}, expected {MAGIC!r})")
         ver, self.base, nsites, self.reclen, n = struct.unpack_from("<IIIII", blob, 4)
-        if ver != 1:
-            raise CaptureError(f"{path}: capture version {ver}, this reader knows 1")
+        self.version = ver
+        fields, fmt, want_len = _layout(ver)
         off = 24
         self.sites = []
         for _ in range(nsites):
             rva, hits = struct.unpack_from("<II", blob, off)
             self.sites.append({"rva": rva, "va": self.base + rva, "hits": hits})
             off += 8
-        if self.reclen != REC_LEN:
+        if self.reclen != want_len:
             raise CaptureError(
-                f"{path}: record length {self.reclen} but this reader's layout is "
-                f"{REC_LEN}. The DLL and this file disagree; regenerate one of them "
-                f"rather than parsing a record whose fields would silently shift.")
+                f"{path}: header says version {ver} (record {want_len} B) but the "
+                f"record length is {self.reclen}. The DLL and this file disagree; "
+                f"regenerate one of them rather than parsing a record whose fields "
+                f"would silently shift.")
         # `tick` IS THE COMMIT FLAG. The DLL claims a slot with an Interlocked and
         # fills it afterwards, so a handler preempted mid-record leaves a partial
         # one -- and a partial record decodes as a perfectly plausible real one
@@ -97,12 +114,12 @@ class Capture:
         self.recs = []
         self.partial = 0
         for i in range(n):
-            vals = struct.unpack_from(REC_FMT, blob, off + i * self.reclen)
-            r = dict(zip(FIELDS, vals[:len(FIELDS)]))
+            vals = struct.unpack_from(fmt, blob, off + i * self.reclen)
+            r = dict(zip(fields, vals[:len(fields)]))
             if not r["tick"]:
                 self.partial += 1
                 continue
-            rest = vals[len(FIELDS):]
+            rest = vals[len(fields):]
             r["point"] = rest[0:4]
             r["segment"] = rest[4:8]
             r["target"] = rest[8:12]
@@ -169,7 +186,7 @@ def report(cap, names, dump=0):
         return va - cap.base + _sbase if va >= cap.base else va
     a(f"capture: {cap.path}")
     a(f"image base 0x{cap.base:08X} (rebased to 0x{_sbase:08X} below)   "
-      f"{cap.stored} record(s) stored")
+      f"{cap.stored} record(s) stored, capture v{cap.version}")
     if getattr(cap, "partial", 0):
         a(f"!! {cap.partial} of {cap.claimed} slot(s) were claimed but never "
           f"committed -- a handler was preempted mid-record. Dropped, not counted.")

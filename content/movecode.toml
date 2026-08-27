@@ -157,3 +157,79 @@ source = "client-table"
 extractor = "toolkit/clientscan/codescan.py"
 build = 38797
 verified = "ArenaNet's own name. Assert AgAgent:1144 `m_targetPoint.position != AGENT_INVALID_POSITION` at 0x00600287. The final destination; what the teleport copies into m_point."
+
+# --------------------------------------------------------------------------
+# MOVECODE-B3's sites, added 2026-08-27 after run 1. All five are `push ebp`
+# entries like the four above, so the handler still emulates ONE shape.
+# --------------------------------------------------------------------------
+
+[hook_site.mapfindpath]
+va = 0x00709E90
+rva = 0x00309E90
+first_byte = 0x55
+thiscall = false
+deref_agent = false
+what = "the client's own navmesh query. __cdecl, SIX dword args, and NO meaningful return value -- all four exits are a bare `ret` and eax is leftover scratch. arg1 = from (point*), arg2 = to (point*, 16 B: float x, float y, int plane, int), arg3 = float range, arg4 = opaque dword forwarded to the backends, arg5 = int* outCount, arg6 = point* outPath with a 16-byte stride."
+why_hooked = "MOVECODE-Q2 and the whole of B3. Run 5 of the router arc found our pathmap decode reads open ground as a pocket; capturing every query the client makes and replaying it through our own route() turns that from an inference into a per-query measurement."
+limits = "AN ENTRY HOOK CAPTURES THE QUESTION, NOT THE ANSWER. arg5 and arg6 point at UNINITIALISED caller memory at entry -- the results are written by the backends during the call. Scoring our route against the CLIENT's needs a second tap at the four `ret` sites (0x00709F0F, 0x00709F44, 0x0070A0AD, 0x0070A0D4). Replaying our own router over the captured queries needs only this."
+[hook_site.mapfindpath.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/codescan.py"
+build = 38797
+verified = "--dis 0x00709E90 shows `55 push ebp`. Signature read from the body 2026-08-27: ecx is never read at entry (first use 0x00709EE7 WRITES it from arg6), all exits are bare `ret`, and no access to [ebp+0x20] or beyond. Point stride 16 from `shl edi,4` at 0x00709FDF indexing outPath."
+
+[hook_site.agapi_setdest]
+va = 0x005FC7A0
+rva = 0x001FC7A0
+first_byte = 0x55
+thiscall = false
+deref_agent = false
+what = "AgApi.cpp's set-destination entry point, and the source of 525 of run 1's 586 setter calls. __cdecl: arg1 = agentId (an INDEX into the agent array at ctx+0x14C, not a pointer), arg2 = targetPoint*, arg3 = moveSpeed, arg4 = flags (masked & 0xf), arg5 = stored to agent+0x50."
+why_hooked = "run 1 measured the client re-issuing destinations ~11x more often than we grant them, all through this function. It hardcodes the setter's arg3 = -1 and arg2 = 0 at its call site 0x005FC8F0, which is why every one of the 525 arms a hard arrival."
+[hook_site.agapi_setdest.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/codescan.py"
+build = 38797
+verified = "--dis 0x005FC7A0 shows `55 push ebp`. Module and parameter NAMES are ArenaNet's own, from asserts inside the body: AgApi.cpp:1041 `targetPoint.position != AGENT_INVALID_POSITION` at 0x005FC7CD and AgApi.cpp:1043 `moveSpeed <= AGENT_MAX_MOVE_SPEED` at 0x005FC81D. deref_agent is false because arg1 is an agent ID, not a pointer, and ecx is not `this`."
+
+[hook_site.chcli_a]
+va = 0x0081A8F0
+rva = 0x0041A8F0
+first_byte = 0x55
+thiscall = false
+deref_agent = false
+what = "one of exactly three callers of agapi_setdest. In ChCliBase.cpp, the client's own character layer."
+why_hooked = "to name what DRIVES the 525 re-issues -- a forwarder names the messenger, so the answer is one frame further out than agapi_setdest."
+[hook_site.chcli_a.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/codescan.py"
+build = 38797
+verified = "--dis 0x0081A8F0 shows `55 push ebp`; calls agapi_setdest at 0x0081AC0F. Module from asserts inside 0x0081A8F0..0x0081ADB0: ChCliBase.cpp:154 `index < arrsize(m_path)` at 0x0081AC3D and ChCliBase.cpp:164 `this == context->playerControlledChar` at 0x0081AD27."
+
+[hook_site.chcli_b]
+va = 0x0081ADB0
+rva = 0x0041ADB0
+first_byte = 0x55
+thiscall = false
+deref_agent = false
+what = "the second of three callers of agapi_setdest, in ChCliBase.cpp."
+why_hooked = "same as chcli_a."
+[hook_site.chcli_b.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/codescan.py"
+build = 38797
+verified = "--dis 0x0081ADB0 shows `55 push ebp`; calls agapi_setdest at 0x0081B04F. 2026-08-27."
+
+[hook_site.chcli_c]
+va = 0x0081B220
+rva = 0x0041B220
+first_byte = 0x55
+thiscall = false
+deref_agent = false
+what = "the third of three callers of agapi_setdest, in ChCliBase.cpp."
+why_hooked = "same as chcli_a."
+[hook_site.chcli_c.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/codescan.py"
+build = 38797
+verified = "--dis 0x0081B220 shows `55 push ebp`; calls agapi_setdest at 0x0081B69A. 2026-08-27."

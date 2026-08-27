@@ -72,7 +72,12 @@
 
 #include "sites.h"
 
-#define NCAP      16384u          /* records kept; ~1.6 MB */
+#define NCAP      65536u          /* records kept; ~7 MB at v2's record size.
+                                   * Run 1 used 2,062 in 263 s over four sites;
+                                   * B3 adds MapFindPath, which a path solver can
+                                   * call far more often than an agent moves, and a
+                                   * full ring is a TRUNCATED run whose rates are
+                                   * biased toward whatever happened early. */
 #define DEF_RUN_MS 600000u        /* 10 minutes, then disarm and write */
 #define CTLB_MS   8000u           /* how long control B waits for its own hit */
 #define DEFDIR    "C:\\gd\\Rurik\\vault\\research\\movecode"
@@ -194,7 +199,17 @@ typedef struct {
     DWORD tid;
     DWORD retaddr;                /* [esp] -- which caller. Closes Q4. */
     DWORD ecx;                    /* `this` */
-    DWORD arg1, arg2, arg3;       /* [esp+4], [esp+8], [esp+12] */
+    /* SIX args, not three, and the widening is what made the record version 2.
+     * Three covered the movement sites (the setter's thiscall takes three), but
+     * MOVECODE-B3's `MapFindPath` is a navmesh query with an output buffer among
+     * its parameters -- an entry hook that cannot see arg4 cannot record WHERE the
+     * client asked its answer to be written. Reading six dwords off the caller's
+     * stack costs nothing extra: `readable(esp, 28)` covers all of them in the one
+     * guard that already ran. Args beyond a function's real arity are whatever the
+     * caller happened to leave there and MUST NOT be read as parameters -- the site
+     * row's own `nargs` is what says how many are meaningful. */
+    DWORD arg1, arg2, arg3;       /* [esp+4],  [esp+8],  [esp+12] */
+    DWORD arg4, arg5, arg6;       /* [esp+16], [esp+20], [esp+24] */
     DWORD have_agent;             /* 0 = the block below is not meaningful */
     DWORD id;                     /* +0x10 */
     DWORD flags;                  /* +0x20 -- bit 18 is isWaypoint */
@@ -338,8 +353,20 @@ static LONG CALLBACK on_bp(PEXCEPTION_POINTERS ep)
                 r->site = i;
                 r->tid = GetCurrentThreadId();
                 r->ecx = ag;
-                /* esp is untouched: the `push ebp` we replaced has not run. */
-                if (readable(esp, 16)) {
+                /* esp is untouched: the `push ebp` we replaced has not run.
+                 * Six args in one guarded read; see the note on rec_t. Falls back
+                 * to four dwords when the stack is short, so a thread near the
+                 * bottom of its stack still yields the return address rather than
+                 * nothing at all. */
+                if (readable(esp, 28)) {
+                    r->retaddr = ((DWORD *)esp)[0];
+                    r->arg1    = ((DWORD *)esp)[1];
+                    r->arg2    = ((DWORD *)esp)[2];
+                    r->arg3    = ((DWORD *)esp)[3];
+                    r->arg4    = ((DWORD *)esp)[4];
+                    r->arg5    = ((DWORD *)esp)[5];
+                    r->arg6    = ((DWORD *)esp)[6];
+                } else if (readable(esp, 16)) {
                     r->retaddr = ((DWORD *)esp)[0];
                     r->arg1    = ((DWORD *)esp)[1];
                     r->arg2    = ((DWORD *)esp)[2];
@@ -546,7 +573,7 @@ static DWORD WINAPI worker(LPVOID unused)
     snprintf(path, sizeof path, "%s\\movehook.bin", dir);
     f = fopen(path, "wb");
     if (f) {
-        DWORD n = (DWORD)g_n, reclen = (DWORD)sizeof(rec_t), ver = 1, ns = NSITES;
+        DWORD n = (DWORD)g_n, reclen = (DWORD)sizeof(rec_t), ver = 2, ns = NSITES;
         if (n > NCAP) n = NCAP;
         fwrite("MVHK", 4, 1, f);
         fwrite(&ver, 4, 1, f);
