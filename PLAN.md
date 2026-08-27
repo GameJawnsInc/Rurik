@@ -1480,7 +1480,7 @@ before the first native commit, which is where that doc says to pose them.
 
 ## 8. Immediate next actions
 
-### DESK ARC 2026-08-27 — the manifest sentinel named a real dungeon; R4c-1's spawn clause becomes a score; and a test was red on confirming evidence
+### DESK ARC 2026-08-27 — the manifest sentinel named a real dungeon; R4c-1's spawn clause becomes a score; and THREE tests were red on confirming evidence
 
 Three pieces, all desk-only. No client launched, no ArenaNet contact.
 
@@ -1521,11 +1521,49 @@ Three created chains resolve in exactly one stale 38797-era probe archive and
 none of the current run dirs. One `(0,0)` placeholder (Sparkfly Swamp) passes by
 accident, which is why this is a checked-in test and not a number in a document.
 
-**3. `test_itemmods.py` was RED ON MAIN, on evidence that CONFIRMS its claim.**
-§10 pinned `len(bonus_words) == 26`; nine later captures took the corpus to 38 and
-all twelve new words carry the same `(543, stacking, attr 20, +1)` signature. The
-equality was pinning the size of the vault. It is a floor now, with a signature
-set carrying the claim and the count reported rather than asserted.
+**3. THREE tests were RED ON MAIN, all on evidence that CONFIRMS their claims.**
+A sweep of the 25 tests that read `vault/captures/live/` found 23 green, 2 red;
+`test_itemmods` had already been caught the same day on disk. All three are fixed.
+
+- **`test_itemmods.py` §10** pinned `len(bonus_words) == 26`; nine later captures
+  took the corpus to 38 and all twelve new words carry the same
+  `(543, stacking, attr 20, +1)` signature. Floor + signature set now, count
+  reported rather than asserted. (18a9345)
+- **`test_adrenwire.py`** pinned corpus totals and per-opcode counts; 20 captures
+  → 21 reddened four checks with no reading moved. **Its own comment recorded a
+  previous re-pin (14 → 20), which is what showed the SHAPE was wrong rather than
+  the numbers.** Floors now, and §12's armed-side family is scored against §4's
+  MEASURED census instead of a third literal holding the same three numbers —
+  strictly stronger and it cannot go stale. (2734c6b)
+- **`test_movesync.py` §16** pinned retail's largest 2.0 s step at
+  `abs(dist - 517.87) < 0.05` and read **518.25 u**. **This one was NOT obviously
+  the same defect and the diagnosis had to come first**: 520 is documented as
+  having been *chosen* from this very measurement, so a moved measurement could
+  equally have meant a movement regression with the threshold now wrong — a
+  REALFIX matter, not test hygiene. **It is the stale pin.** Re-scanning the
+  corpus *as of the pin* (stamps `< 20260820`) reproduces every frozen literal in
+  §4 to the decimal — 2,629 intervals, largest **517.87**, top speed **388.80**,
+  **82** sub-floor rows at **19.15 u** — so the scorer had not drifted
+  (`cmsgstream.py` byte-identical since the pin; `steps()`, `hard_step()` and
+  every `HARD_JUMP_*` untouched). Seven new stamps carried it to 518.25 and
+  **retail did not get faster** — the new stamps top out at **385.72 u/s**,
+  *below* the old corpus's 388.80. 518.25 u / 1.352 s / 383.21 u/s is one more
+  draw from the same ~1.35 s boost-cadence family that produced 517.87. Now a
+  floor, a **relation** (the constant against the live extremum, headroom
+  reported), and a **shoulder** check that tells the two failure modes apart:
+  *relation RED + shoulder RED* = one row alone above the walking cloud, a
+  REALFIX finding; *relation RED + shoulder GREEN* = the cloud drifted and only
+  §4's decision record expired. Both demonstrated by injection. §4's brackets are
+  left frozen **as the decision record** and now say so.
+
+  **The one thing worth carrying forward, and it is not a defect:** the 2.0 s
+  headroom is **1.75 u** and eroding (2.13 → 1.75 over seven stamps), and it is
+  **not physically bounded** — a 2.0 s gap at retail's own top speed reaches
+  778 u. This never touches the live arm, which fires only below the 0.05 s dt
+  floor where retail's largest step is 19.15 u against 520 (27x). So the 2.0 s
+  window is the REJECTED wide form's witness, and if it ever reddens with the
+  shoulder green, the correct response is to re-date §4's record — not to move
+  `HARD_JUMP_UNITS`.
 
 **Surveyed but NOT taken**, so nobody re-derives the list: a 31-agent sweep found
 103 candidates, verified 24 and confirmed 21 open. The strongest untaken ones are

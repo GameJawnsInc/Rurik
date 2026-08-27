@@ -3938,7 +3938,12 @@ shrinks section 10),
   sits above retail's largest step inside 2.0 s (**517.87 u / 1.352 s**) and
   below the smallest of the four ordinary WALKING rows the wide
   `dist>=520 & dt<=2.0s` form would have swept in (**525.3 u at 285.5 u/s**,
-  `20260814T090541`). §5 is a client walking at 288 u/s with a report every
+  `20260814T090541`). **Both of those are the DECISION RECORD of 2026-08-19 and
+  are frozen deliberately** — the live corpus's own extremum has since moved to
+  **518.25 u** on seven new stamps, and §16 is what measures it against the
+  constant. That 7.4 u gap is why the wide form was REJECTED; it was never
+  headroom for the narrow one, which fires below the dt floor where walking
+  cannot reach. §5 is a client walking at 288 u/s with a report every
   2 s: **the legacy bar flags 11 of 11 steps and the hard bar flags none**, which
   is how retail scored 6.4/min on the legacy bar with zero intervals above
   400 u/s -- the row count is asserted first. §6 plants a **900 u / 0.13 s** step
@@ -4054,12 +4059,41 @@ shrinks section 10),
   reads **0 hard of 157**, and its 14 sub-0.05 s intervals top out at 14.1 u.
   §16 RE-MEASURES THE CALIBRATION rather than inheriting it, decoding the live
   corpus's own c2s stream through `cmsgstream.timed` (per connection, so no
-  interval is invented across a map load): **2,789 retail self-reports, 2,747
-  intervals, ZERO on either arm**, fastest believable interval **388.80 u/s**,
-  largest step inside 2.0 s **517.87 u / 1.352 s**, and below the dt floor --
-  the only place the distance arm ever fires -- a largest step of **19.15 u over
-  82 intervals**, which is 27x of headroom. A constant justified in a comment is
-  justified nowhere. Nine sabotages were BUILT AND RUN and all nine redden,
+  interval is invented across a map load): at the 2026-08-19 calibration
+  **2,789 retail self-reports, 2,747 intervals, ZERO on either arm**, fastest
+  believable interval **388.80 u/s**, largest step inside 2.0 s
+  **517.87 u / 1.352 s**, and below the dt floor -- the only place the distance
+  arm ever fires -- a largest step of **19.15 u over 82 intervals**, which is
+  27x of headroom. A constant justified in a comment is justified nowhere.
+  **REPAIRED 2026-08-27, and the diagnosis had to come first.** The 2.0 s check
+  was `abs(top2["dist"] - 517.87) < 0.05` and it went RED on `main` at
+  **518.25 u** — the same shape as `test_itemmods` §10 and `test_adrenwire`, but
+  NOT obviously so, because 520 is described as having been *chosen* from this
+  very measurement, so a moved measurement could equally have been a movement
+  regression with the threshold now wrong. It was not. Re-scanning the corpus
+  **as of the pin** (stamps `< 20260820`) reproduces every frozen literal in §4
+  to the decimal — 2,629 intervals inside 2.0 s, largest **517.87**, top speed
+  **388.80**, **82** sub-floor rows topping at **19.15 u** — so the scorer had
+  not drifted (`cmsgstream.py` is byte-identical since the pin, and `steps()`,
+  `hard_step()` and every `HARD_JUMP_*` constant are untouched across the 2,000
+  lines `movesync.py` gained). Seven new stamps carried it to 518.25, and
+  **retail did not get faster**: the new stamps top out at **385.72 u/s**,
+  *below* the old corpus's 388.80. 518.25 u / 1.352 s / 383.21 u/s is one more
+  draw from the same ~1.35 s boost-cadence family that produced 517.87. The
+  check is now a **floor** (>2,000 rows inside the window, because
+  `max(..., default=0)` over an empty one clears a 520 u bar for free), a
+  **relation** (the constant against the corpus's live extremum, reported with
+  its headroom — 1.75 u today, and NOT physically bounded, since a 2.0 s gap at
+  retail's own top speed reaches 778 u), and a **shoulder** check that
+  disambiguates the two ways the relation can redden: *relation RED + shoulder
+  RED* is one row standing alone above the walking cloud and belongs to REALFIX;
+  *relation RED + shoulder GREEN* is the cloud itself drifting and means only
+  that §4's decision record expired. Both were demonstrated by injection rather
+  than argued — a lone **600 u / 1.6 s at 375 u/s** row (deliberately under the
+  speed arm, so this window is the only thing that can see it) reddens both,
+  while **40 rows at ~524 u / 1.80 s** at walking speed redden only the first.
+  Four deliberate breaks, four correct signatures. Nine earlier sabotages were
+  BUILT AND RUN and all nine redden,
   including reverting each arm separately, widening to the contaminated form,
   lowering 520 to 400, dropping the plane carry, restoring the early return at
   the interval floor, and silencing the threshold sweep or the reconciliation.
