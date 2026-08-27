@@ -1505,11 +1505,38 @@ per-build immediate and the 877 control (83 with the vault, floor 73 without).
 Also settled, and it is what the OPEN comment mis-guessed: **`MISSION_MAPS` is 2**,
 a two-element enum (`cmp dword ptr [edi+0x238], 2`), and was never "one past the
 last map". Record: [studies/maprows/FINDINGS.md](studies/maprows/FINDINGS.md) §10.
-**THE ONE OPEN ITEM: nothing in MsCliMan READS +0x134**, so the consumer was not
-chased, and the client writing 888 there itself proves it is a legal resting value
-— not that the client tolerates *receiving* it mid-burst. **UNVERIFIED until one
-loopback login reaches character select.** That is the next action here and it is
-a single caged run.
+~~**THE ONE OPEN ITEM: nothing in MsCliMan READS +0x134**, so the consumer was not
+chased … **UNVERIFIED until one loopback login reaches character select.**~~ **THE
+RUN HAPPENED THE SAME DAY — agent-driven, caged, loopback, both arms
+([studies/maprows/FINDINGS.md](studies/maprows/FINDINGS.md) §10.8).** Arm A (888)
+and arm B (877) each reached `body is in the map`, 8 of 8 rungs, `undecodable` 0,
+no `Assertion:` line in either `Gw.log`. **Exposure verified from the server log
+rather than assumed** — the arms differ exactly at `MANIFEST_DONE[2, map 888]`
+versus `[2, map 877]`. **H0 is REFUTED and that is the whole yield: `MISSIONS` is a
+STRICT bound, so 888 was precisely the value that could have tripped
+`mission < MISSIONS`, and it does not. The flip is safe on the login path.** What
+the run did NOT do, exactly as pre-registered before it ran: confirm 888 is
+*correct*. Both arms passing identically shows the client is **indifferent** to the
+value here — which is what "three stores, zero reads" already predicted — so the
+ruling still rests on the static evidence and the honest summary is *"behaviourally
+neutral, and correct on the measurement."* Still genuinely open: **nothing in
+MsCliMan reads +0x134**, so the consumer in another module was never chased.
+
+**Two things that run turned up sideways** (§10.9). (1) **The harness refuses a
+stock loopback run today** — `contentids` FATALs because `dat_study` and every
+current run archive bind map 146/148 to different files. `RUNBOOK.md` has carried a
+row for this since 2026-08-23 (the client writes to its own `Gw.dat` as it patches
+content); what is new is that it is **systematic** — all three current run dirs
+share the identical modified map, the three older dirs differ on map 143 instead,
+and **no run directory agrees with `dat_study` on every content map row**, so the
+row's "pin the map" remedy is not always available. A third route is now in that
+row: `RURIK_DAT=<run dir>/Gw.dat` points the server at the bytes the client
+actually draws, which is what the gate is protecting, and yields 12 of 12 agreeing.
+(2) **`spawncheck`'s 8 of 15 survives the archive question** — it defaults to
+`dat_study`, which is *not* what the client draws, and 146/148 are exactly the rows
+that differ; re-run against the client's archive it gives the same 8 of 15 and the
+same verdict on every row. A check that could have moved this morning's headline
+and did not.
 
 **2. R4c-1's spawn-in-trapezoid clause is a SCORE: 8 of 15** — see §3.2, which
 carried it unmeasured since it was written. `toolkit/mapdata/spawncheck.py` +

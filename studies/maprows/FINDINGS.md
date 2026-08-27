@@ -716,3 +716,88 @@ construction. Only H0 would be strong, and it would be strong against us.
 
 **Run:** `python toolkit/harness/session.py` (default `--until map`), loopback,
 synthetic credential, caged `ours`-DH build. No ArenaNet contact.
+
+### 10.8 THE RUN HAPPENED — 2026-08-27, both arms, and the result is the weak one §10.7 predicted
+
+Agent-driven, caged, loopback, synthetic credential. No ArenaNet contact. Two
+runs, `--until map`, verdicts read from the client's own messages.
+
+| Arm | `MAP_ID_COUNT` | Wire | Verdict |
+|---|---|---|---|
+| **A** treatment | 888 | `MANIFEST_DONE[2, map 888]` | **PASS**, 8/8 rungs, `body is in the map` t+28.6 s |
+| **B** control | 877 | `MANIFEST_DONE[2, map 877]` | **PASS**, 8/8 rungs, `body is in the map` t+23.1 s |
+
+Captures: `vault/captures/harness/20260827T122700` and `…T122757`.
+
+**The exposure is verified, not assumed.** Both arms' `gamesrv.log` were grepped
+for the send itself and they differ exactly where they should:
+`MANIFEST_DONE[2, map 888]` against `MANIFEST_DONE[2, map 877]`, with the second
+round's `MANIFEST_DONE[0, map 148]` identical in both. An arm that never met its
+condition has zero trials, and this one met it.
+
+Arm B moved **only** the manifest sentinel: `NO_MARKER_MAP` was pinned to 888 by
+hand for that run rather than left as `= MAP_ID_COUNT`, because the identity this
+section shipped would otherwise have dragged the quest-marker sentinel along and
+confounded the arm. Both edits were reverted immediately; the tree is clean.
+
+**What the run establishes: H0 is REFUTED.** §10.7 named one specific way the flip
+could be wrong — `MISSIONS = 888` is a **strict** bound, so 888 is precisely the
+value that would trip `mission < MISSIONS` where 877 would not. It does not trip
+it. No assert fired, `Gw.log` carries no `Assertion:` line in either arm (its only
+`Error:` is `Failed to store credentials`, which is the synthetic credential and
+is present in both), and `undecodable` is 0 both times, so the framer met nothing
+it could not read. **The flip is safe on the login path.**
+
+**What the run does NOT establish, exactly as pre-registered.** Both arms passed
+identically, so this did **not** confirm 888 is correct — it showed the client is
+*indifferent* to the value on this path, which is what "three stores, zero reads"
+already predicted at §10.3. The ruling still rests on §10.2–§10.4's static
+evidence. The honest one-line summary is **"behaviourally neutral, and correct on
+the measurement."** A green pair was always going to be the weak outcome; only H0
+would have been strong, and it would have been strong against us.
+
+Do not read the 28.6 s / 23.1 s difference as a signal. It is n=1 per arm and
+dominated by client boot, not by anything after the manifest.
+
+### 10.9 Two things the run turned up that it was not looking for
+
+**1. The harness REFUSES a stock loopback run today, and it is right to — and this
+was ALREADY KNOWN.** `RUNBOOK.md`'s failure table has carried a row for it since **2026-08-23**, naming
+the same map and the same cause: the client **writes to its own `Gw.dat`** as it patches
+content, so a map it has loaded can end up re-pointed at an appended row that no
+longer matches the frozen `dat_study` copy the server reads. What is new here is
+only the census below and the third remedy. `contentids.preflight` stopped the first
+attempt cold:
+
+> map 146/148 `0x1B97D`: the two archives bind this id to **different files** —
+> server row 7982 is 1,300,036 B crc `0xA0AE500A`, client row 177262 is
+> 1,300,044 B crc `0x33F1A289`.
+
+This is not one drifted client. **All three current run directories**
+(`2026-07-29_221c13772c7a`, `2026-08-13_64fae3b1369b`, `2026-08-20_21511009c460`)
+carry the same 1,300,044 B / `0x33F1A289` Pre-Searing map, and only the server's
+pristine `vault/dat_study/Gw.dat` has 1,300,036 B. The older directories are the
+mirror image — they agree with `dat_study` on 146/148 and differ on map **143**
+instead (`-c2` 4,352 B, `-probe` 1,168 B, `reskin-roster` 6,012 B against
+`dat_study`'s 9,284 B). So there is **no run directory that agrees with
+`dat_study` on every content map row.**
+
+The remedy used here, and it is arguably the more correct configuration rather
+than a workaround: point the server at the archive the client actually draws.
+
+```
+RURIK_DAT="C:/gd/Rurik/vault/run/2026-07-29_221c13772c7a/Gw.dat" \
+    python toolkit/harness/session.py --until map
+```
+
+`contentids` then reports **12 of 12 map rows agree**. Whether `dat_study` should
+be re-synced instead is an open operational question and is **not** decided here.
+
+**2. §10's archive-dependence does not reach `spawncheck`'s headline — measured,
+not assumed.** [toolkit/mapdata/spawncheck.py](../../toolkit/mapdata/spawncheck.py)
+defaults to `dat_study`, which the above shows is *not* the archive the client
+draws, and maps 146/148 are exactly the rows that differ between them. Re-running
+the census with `--dat` pointed at the client's archive gives **the same 8 of 15
+and the same verdict on every single row**. The 8-byte difference does not move
+the navmesh's answer for those arrival points. That is a check that could have
+changed this morning's number and did not — which is worth more than the number.
