@@ -599,10 +599,34 @@ Both are now graded against an enumerated content surface:
   are the gitignored `vault/content/npcs.toml` overlay `npcdefs.py` emits, and they carry
   `level = 0` placeholders with no name, armor, energy or allegiance (that module's own
   header says so). So the "≥15 NPC templates" bar is met on the count and **not** on the
-  content, which is the distinction this criterion exists to force. Every map row carries a `file_id` and a `spawn_x`/`spawn_y`; **how many
+  content, which is the distinction this criterion exists to force. Every map row carries a `file_id` and a `spawn_x`/`spawn_y`. ~~**How many
   of the nine pass the trapezoid test has not been re-run**, so the map figure is a row
-  count and not yet a score against this criterion. The printed "(today 2)" and "(today 1)"
-  were true when written and were never updated.
+  count and not yet a score against this criterion.~~ **RE-RUN 2026-08-27, and it is a
+  SCORE now: 8 of 15** ([toolkit/mapdata/spawncheck.py](toolkit/mapdata/spawncheck.py),
+  `test_spawncheck.py`, floor 44). Nine had become fifteen, and one number was hiding four
+  different failures, so the verdict is five-valued: **PASS 6, SEAM 2, OFF-MESH 3,
+  WRONG-PLANE 1, UNRESOLVED 3.** Four things the score does not say on its own, each of
+  which is the reason its own token exists. (1) **The criterion's own premise has an
+  unstated boundary case.** `content/maps.toml`'s header says "EXACTLY ONE is what a
+  non-overlapping tiling gives", but `Trapezoid.contains` closes both y bounds *and* both
+  x bounds, so a point on a seam between two neighbours is in both — maps 143 and 144 sit
+  exactly on one, at the authored `(1536, 1536)`, and one unit either way returns 1. That
+  is walkable ground and a pass; `SEAM` is a pass with a name, not a failure. (2) **The
+  three UNRESOLVED rows are the created chains** (165/166/167), and "not in the archive"
+  turned out to mean "not in the *study* archive" — `--find-missing` puts all three in
+  exactly one place, `vault/run/2026-07-29_221c13772c7a-probe/Gw.dat`, a 38797-era probe
+  directory and **none of the current run dirs**. Whether that matters is a question for
+  WORLDMAPS, but it is a fact about deployment and not about the maps. (3) **Four of the
+  five `(0,0)` placeholder rows fail honestly and one does not** — Sparkfly Swamp's origin
+  happens to be walkable ground and scores a clean PASS. A placeholder that passes is
+  worse than one that fails, because it looks verified; the count is asserted so the day
+  somebody promotes that row the check says which greens were earned. (4) **Domain of
+  Anguish's `(0,0)` is contained but not on the `plane = 0` its row declares.** Seven of
+  seven deliberate mutations of the scorer turn the test red, including two that escaped
+  the first pass and were both real defects rather than missing assertions — one of them a
+  *vertical* seam being condemned as an overlap. The printed "(today 2)" and "(today 1)"
+  were true when written and were never updated; the map-row count in the census line
+  above is also stale — `content.py`'s own census reads **map 15, npc 56** on 2026-08-27.
   *R4c-2, formerly capture-gated*: 35–40 monster types with real stats and skill bars,
   graded on **types, never on spawn instances** — spawn counts are unstatable from any
   source this project has.
