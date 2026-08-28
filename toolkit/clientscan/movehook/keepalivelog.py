@@ -40,6 +40,32 @@ GRANT_OPCODE = 41                      # 0x0029 AGENT_MOVE_TO_POINT
 TICK_OPCODE = 30                       # 0x001E WORLD_SIMULATION_TICK
 
 
+def _grant_local_window():
+    """authsrv's GRANT_LOCAL_WINDOW, read out of its SOURCE TEXT.
+
+    MOVECODE-R1-B1's exposure floor is "GRANTED with a non-null keyboard_age
+    INSIDE the window", and the window is the whole discriminator: with the flag
+    off a grant can still carry a non-null age when that age is OVER the window,
+    so "any non-null age" over-counts and would report exposure the arm never had.
+
+    Read rather than mirrored, and read rather than imported. A local literal
+    would drift silently the first time the server retunes -- and importing
+    `authsrv` here would pull a server module into an analysis tool. This is the
+    pattern `test_position_trust.py` already uses for the same three constants.
+    Returns None if it cannot be found, and every caller SAYS SO rather than
+    falling back on a guess.
+    """
+    import re
+    src = os.path.join(TOOLKIT, "authsrv", "authsrv.py")
+    try:
+        with open(src, encoding="utf-8") as fh:
+            m = re.search(r"^GRANT_LOCAL_WINDOW\s*=\s*([0-9.]+)", fh.read(),
+                          re.M)
+    except OSError:
+        return None
+    return float(m.group(1)) if m else None
+
+
 def newest_log():
     """The most recent gamesrv connection log, or None.
 
@@ -153,9 +179,50 @@ def main(argv=None):
     print(f"CLICK VERDICTS: {len(cv)}   ANSWERED {len(cv) - len(refused)}"
           f"   REFUSED {len(refused)}")
     if echoed:
-        print(f"  of the answered, {len(echoed)} were K2 ECHOES of a stale click")
+        # SPLIT BY REASON, and the split is the point rather than a nicety.
+        # This line used to read "N were K2 ECHOES of a stale click" over ALL
+        # echoes. Once MOVECODE-R1-B2 (--echo-any-refusal) exists an echo can
+        # answer geo-blocked or geo-unplaced, and the old sentence would have
+        # reported those under a label that is false for them -- the same defect
+        # as authsrv's hardcoded "clear line" (FINDINGS sec.1p.11), in the
+        # instrument this time instead of in the log.
+        stale_echo = [r for r in echoed if r.get("reason") == "geo-stale"]
+        geo_echo = [r for r in echoed if r.get("reason") != "geo-stale"]
+        print(f"  of the answered, {len(stale_echo)} were K2 ECHOES of a "
+              f"STALE click")
         print(f"  (MOVECODE-K2's pre-registered exposure floor is 3 -- "
               f"FINDINGS sec.1m.4)")
+        # MOVECODE-R1-B2's own floor. An echo of a GEOMETRY refusal is a thing
+        # only --echo-any-refusal can produce, so this count is the arm's
+        # exposure and is not shared with K2's.
+        flagged = any(r.get("echo_any_refusal") for r in cv)
+        if geo_echo or flagged:
+            print(f"  and {len(geo_echo)} were R1-B2 ECHOES of a GEOMETRY "
+                  f"refusal (--echo-any-refusal)"
+                  + ("" if flagged else "  [FLAG NOT SEEN IN ANY ROW]"))
+            print(f"  (MOVECODE-R1-B2's pre-registered exposure floor is 3 "
+                  f"NON-geo-stale echoes -- FINDINGS sec.1p.10 item 2)")
+            if flagged and len(geo_echo) < 3:
+                print(f"  !! BELOW FLOOR: {len(geo_echo)} of 3. The flag was ON "
+                      f"but barely acted -- re-run, do not conclude. This is "
+                      f"the floor K1 arm A failed with 2 fires while sec.1l "
+                      f"reported through it anyway.")
+            # AN ECHO IS NOT A GRANT, and this is the arm's main way to measure
+            # nothing while looking busy. The echo decision is taken at
+            # authsrv.py's geometry block; `_grant_verdict` runs ~80 lines
+            # LATER, so rule 1 can still drop an echoed click as
+            # locally-moving. A click made while the keyboard latch is armed is
+            # therefore counted here as exposure and never reaches the wire.
+            dropped = sum(1 for r in rs
+                          if r.get("kind") == "grant_verdict"
+                          and r.get("reason") == "locally-moving")
+            if geo_echo and dropped:
+                print(f"  !! {dropped} click(s) were dropped downstream as "
+                      f"locally-moving. An echo is a DECISION, not a grant -- "
+                      f"rule 1 runs after it. Some of the {len(geo_echo)} "
+                      f"above may never have reached the wire; check the "
+                      f"0x0029 count. Clear the latch (stop, THEN click) or "
+                      f"add --answer-kbd-click.")
     for reason, n in collections.Counter(
             (r.get("reason"), bool(r.get("fired"))) for r in cv).most_common():
         print(f"  {reason[0]:<16} answered={str(reason[1]):<5} x{n}")
@@ -210,6 +277,37 @@ def main(argv=None):
         for (reason, ok), n in collections.Counter(
                 (r.get("reason"), bool(r.get("fired"))) for r in gv).most_common():
             print(f"  {reason:<16} fired={str(ok):<5} x{n}")
+
+        # MOVECODE-R1-B1 (--answer-kbd-click). Its exposure is NOT a reason
+        # string -- the flag deliberately keeps returning "grant", because two
+        # offline scorers filter on that literal and a new enum value would have
+        # shrunk them silently rather than erroring. The signature is the PAIR:
+        # GRANTED with a non-null keyboard_age INSIDE the window, which
+        # `_grant_verdict` cannot produce with the flag off (rule 1 refuses it
+        # as locally-moving). So this census is the arm, and without it the
+        # floor registered in sec.1p.10 item 1 is unreadable.
+        win = _grant_local_window()
+        if win is None:
+            print("  !! could not read GRANT_LOCAL_WINDOW out of authsrv.py, "
+                  "so the R1-B1 exposure census is SKIPPED rather than "
+                  "computed against a guessed window.")
+        else:
+            kbd = [r for r in gv
+                   if r.get("fired")
+                   and r.get("keyboard_age") is not None
+                   and r["keyboard_age"] <= win]
+            locally = [r for r in gv if r.get("reason") == "locally-moving"]
+            print(f"  R1-B1: {len(kbd)} grant(s) fired with the keyboard latch "
+                  f"ARMED (age <= {win:.1f}s)")
+            print(f"  (pre-registered exposure floor is 3 -- FINDINGS "
+                  f"sec.1p.10 item 1; unreachable without --answer-kbd-click)")
+            if kbd and len(kbd) < 3:
+                print(f"  !! BELOW FLOOR: {len(kbd)} of 3 -- re-run, do not "
+                      f"conclude.")
+            if not kbd and locally:
+                print(f"  ({len(locally)} click(s) were REFUSED as "
+                      f"locally-moving, so the situation occurred "
+                      f"{len(locally)} time(s) and the flag was OFF or absent)")
     return 0
 
 
