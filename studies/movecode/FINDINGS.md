@@ -1467,6 +1467,96 @@ reseed walk.
 
 ---
 
+## 1k. MOVECODE-K1 — the keep-alive re-grant, BUILT and PRE-REGISTERED. Not yet run.
+
+**Built 2026-08-27.** `--keepalive-grant`, off by default,
+`toolkit/authsrv/authsrv.py` + `test_keepalive.py` (32 checks, floor 32).
+
+### 1k.1 What it does, and why it is not "grant more often"
+
+While our model says the client's **sync** copy has PARKED more than 100.0 u from the
+player's own last **reported** position, re-grant that reported position, unclipped.
+
+Two things make this the sixth candidate rather than a repeat of the five dead ones:
+
+* **The target is named.** §1j.7: local input resolves through `asyncPtr`
+  (`[ctx+0x14C]`) and the wire through `syncPtr` (`[ctx+0xE8]`). A `0x0029`
+  **cannot move the displayed body** — it re-bases the sync twin and nothing else.
+  That is why this is safe where the tick's own arrival broadcast was not: `0x002C`
+  is a hard set and lands on *both* copies. Every earlier candidate was scored with
+  an instrument that could not tell the two copies apart.
+* **The trigger is the pin, not a clock.** §1j.3: past `m_timeStopMovement` the twin's
+  position is `m_segmentPoint` verbatim and does not advance at all. `_sync_position`
+  already models exactly that, so the grant fires when the twin has parked — not on a
+  timer, which grants hardest when the player is stationary and the twin is already
+  correct.
+
+### 1k.2 What the graveyard forbids, compiled in as refusals
+
+`--heading-grant` refreshed at 0.32 s — **faster than retail's 0.49 s** — and still
+warped. Its epitaph names two failures, and both are refusals in the code:
+
+| the dead candidate's failure | what K1 does |
+|---|---|
+| point computed from `state["pos"]`, the server's model | sends `state["client_pos"]`, written only on the accept path and only from what the client said |
+| point CLIPPED to our navmesh | unclipped — the point is one the client already stood on |
+
+And one guard the graveyard implies but never had: **a REJECTED position report
+refuses the grant**, because a disagreement between our model and the client is term
+(1) failing live.
+
+`test_keepalive.py` §5–§7 check these **at the source**, not through the verdict,
+because an edit swapping `client_pos` for `pos` would keep every behaviour test green
+while reintroducing a measured warp. Both guards were proven to go red by planting the
+exact regressions.
+
+### 1k.3 THE PREDICTION, registered before the run
+
+Scored with **`movehook`**, which no earlier candidate had — it separates the two world
+copies by object address, so "separation" means what its label says rather than
+pooling two bodies (§1i.1).
+
+| quantity | run 5 (control) | K1 predicts |
+|---|---|---|
+| twin idle time | **100.2 s** of 207.6 s | falls toward the local copy's **37.8 s** |
+| twin grant gaps, p50 | **1.78 s** | falls toward retail's **0.82 s** |
+| grant density | **1.40** / 1000 u | rises toward retail's p50 **4.30**, floor 1.70 |
+| reseeds past the 299.33 cut | **11 of 14** | falls toward **0** |
+| reseeds that DISPLACED the player | **2** | **0** |
+
+**REFUTED IF** the reseed count does not fall, **or** if any displaced reseed appears
+that run 5 did not have. The second clause is the one that matters: four of the five
+dead candidates improved one number while making the warp worse, and
+`--client-endpoint` in particular met both its terms and went from 5.7 to 14.6
+jumps/min. **A fall in idle time with no fall in reseeds is a REFUTATION, not a
+partial win.**
+
+### 1k.4 The negative control, and why it is a flag rather than a second run
+
+`--keepalive-separation <huge>` disarms the re-grant while leaving **every other term
+of the run identical** — same build, same flags, same operator, same map. It is
+refused without `--keepalive-grant`, because a run carrying only the override would
+look configured and change nothing.
+
+Run the control arm **in the same session** if the operator's patience allows; a
+control taken from a different day carries the day's own differences.
+
+### 1k.5 What is NOT claimed
+
+* **Nothing here has been run.** Every number in §1k.3's left column is run 5; the
+  right column is a prediction. UNVERIFIED until a capture says otherwise.
+* The pin budget the earlier drafts quoted (300 u ÷ 288 u/s = 1.042 s) assumed
+  separation grows at the full walk speed. **That rate is not cleanly measurable from
+  run 5** — 8 of 14 reseeds have a grant landing inside the same tick, so grants and
+  reseeds are temporally entangled. The **cadence** comparison (ours p50 1.78 s
+  against retail's 0.82 s) needs no such assumption and is what K1 is built against.
+* K1 does not touch the two defects §1i.5 named. The freshness window still refuses 13
+  of 17 clicks and the map-280 mesh hole still refuses 4. K1 grants **in spite of**
+  those refusals rather than fixing them, which is deliberate — it is one change — but
+  it means a null result does not clear them.
+
+---
+
 ## 2. Corrections to the record
 
 Each of these was in circulation and each is now measured against the bytes.

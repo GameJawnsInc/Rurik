@@ -3515,6 +3515,39 @@ shrinks section 10),
   (a partial decode reported as full is the suite's oldest defect class).
   Vault sections skip loudly on a bare machine. Floor 12 from the green
   run. ~50 s),
+  `toolkit/authsrv/test_keepalive.py` (**MOVECODE-K1's keep-alive re-grant, and
+  the file is mostly REFUSALS on purpose.** `--keepalive-grant` is the *sixth*
+  candidate in a family that killed five, and the graveyard at `HEADING_GRANT` /
+  `CLIENT_ENDPOINT` is specific about how they died: `--heading-grant` refreshed
+  FASTER than retail (0.32 s against 0.49 s) and still warped, because it
+  computed its point from `state["pos"]` — the server's own integrated model —
+  rather than the report in hand, and because it CLIPPED that point to our
+  navmesh where the client's own collision disagrees; `--client-endpoint` met
+  both terms it was designed for and warped MORE. So the interesting content of
+  this flag is not that it grants, it is **what it refuses to send and where the
+  point comes from**, and §5–§7 are therefore SOURCE checks over the world-tick
+  call site rather than behaviour checks over the verdict. A future edit
+  swapping `client_pos` for `pos` would keep every behaviour test green while
+  reintroducing a measured warp — the same shape `test_movehook.py` §11 exists
+  for. Both source guards were proven to go red by planting the exact
+  regressions: `client_pos → pos` reddens §5 twice, and the clock swap reddens
+  §7 twice. **§7 is the clock check and the bug was real during development**:
+  `world_tick` runs on `time.perf_counter()` (an arbitrary epoch, for the tick
+  delta) while every stamp the verdict reads — `grant_at`, `sync_at`,
+  `pos_seen` — is `time.time()`; mixing them does not raise, it makes every
+  interval a nonsense number and parks `_sync_position` instantly, so the pin
+  gate would read "parked" forever and the flag would grant on every tick. §7
+  also pins that the block runs **before** the tick's `dest` early-out, because
+  run 5's two real warps both had the player standing still with the twin parked
+  hundreds of units away and an early-out on `dest` would skip exactly those.
+  §2's fixture starts in a GRANTING state and each test turns exactly one thing
+  off — a fixture that started refusing would let a rule stop working unnoticed.
+  §4 pins which side of the 100.0 band the boundary falls on from both
+  directions, and that the band is the figure `PLAN.md` §7 Q11 already
+  reconciled `RESYNC_SEPARATION` to rather than a second constant for the same
+  quantity. §8 requires `--keepalive-separation` to REFUSE on its own, because a
+  run launched with only the override would look configured and change nothing.
+  Every section is process-free, so floor 32 is the whole run),
   `toolkit/authsrv/test_position_trust.py` (the position-trust policy: it may
   refuse a client-reported position, but it may never **latch**. The old
   `_adopt_client_position` refused anything more than `900 u` from

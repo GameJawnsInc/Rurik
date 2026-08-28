@@ -2459,6 +2459,36 @@ the re-issuers, because we know there are **two agents**, not one.
 **NEXT, and B5's scope is now settled by measurement rather than left pending.**
 In cost order:
 
+**MOVECODE-K1 IS BUILT, 2026-08-27 — `--keepalive-grant`, off by default,
+[studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1k, `test_keepalive.py`
+32 checks.** While our model says the client's SYNC copy has PARKED more than 100 u
+from the player's own last REPORTED position, it re-grants that reported position,
+unclipped.
+
+**It is the SIXTH candidate in a family that killed five, and it is written against
+their epitaphs rather than around them.** `--heading-grant` refreshed at 0.32 s —
+FASTER than retail's 0.49 s — and still warped, because it took its point from
+`state["pos"]` rather than the report in hand and clipped it to our navmesh;
+`--client-endpoint` met both terms it was designed for and went from 5.7 to 14.6
+jumps/min. Both failures are compiled out as refusals, and `test_keepalive.py` §5–§7
+check them **at the source** — an edit swapping `client_pos` for `pos` would keep every
+behaviour test green while reintroducing a measured warp. Both guards were proven to go
+red by planting the exact regressions.
+
+**What is genuinely new** is §1j: the target is NAMED (a `0x0029` resolves through
+`syncPtr` and cannot move the displayed body, where `0x002C` lands on both copies), the
+trigger is the PIN rather than a clock, and it is scored with `movehook`, which is the
+first instrument this arc has had that can tell the two world copies apart.
+
+**NOT RUN.** §1k.3 is the registered prediction and §1k.4 the negative control
+(`--keepalive-separation <huge>`, refused on its own). **REFUTED IF the reseed count
+does not fall, or if any displaced reseed appears that run 5 did not have** — four of
+the five dead candidates improved one number while making the warp worse, so a fall in
+idle time with no fall in reseeds is a refutation, not a partial win.
+
+**K1 does not fix either defect §1i.5 named** — it grants in spite of them. The two
+below stand on their own:
+
 1. **The freshness window is the bigger contributor and the cheaper look** —
    13 of 17 refusals, and it is not a mesh question at all: we demand a position
    report inside 1.0 s and are outside that window 69% of the time. Either the
