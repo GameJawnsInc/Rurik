@@ -65,24 +65,24 @@ import checks                                                   # noqa: E402
 #   §6   2   the DLL builds, and it is x86           needs a compiler
 #   §7   5   inject into a live 32-bit cmd.exe       needs a 32-bit cmd.exe
 #   §8   2   movehook.cfg beats the environment      rides on §7's injected run
-#   §9   5   attach.py's build guard, both ways      process-free
+#   §9  11   attach.py's build guard + the stale check process-free
 #   §10  8   pathdiff replays vs the REAL mesh       needs the vaulted archive
 #   §11  4   the reader's layout vs rec_t IN THE C   process-free
 #   §12  6   the world-copy census, both directions  process-free
 #   §13  5   the displacement count, both directions process-free
 #   §14 59   2026-08-28 sites, v6, setposition, the tick + its STRIDE  50 pf + 9 client
-#   ----    process-free core = 96, and THAT is the floor.
+#   ----    process-free core = 102, and THAT is the floor.
 #
 # §12 and §13 both read `gensites.rows()`, which goes to `content.load()` and never
 # opens the client, so their eleven are process-free and the core moved with them.
-# A whole green run on this machine is now 144.
+# A whole green run on this machine is now 150.
 #
 # §14 SPLITS, and the split was counted out of the banner rather than reasoned
 # about: 25 checks, of which the 8 non-entry refusals and their 1 control call
 # `gensites.verify()` and therefore need the vaulted image, while the row
 # assertions and the whole v6 round-trip go through `content.load()` and a
 # synthesised capture and never open it. 59 - 9 = 50 process-free, so the core
-# moves 46 -> 96. A bare machine must still clear 96.
+# moves 46 -> 102. A bare machine must still clear 102.
 #
 # The first draft of this comment guessed 16 by adding up what the sections
 # looked like they contained, and it was two low -- which would have let two
@@ -90,8 +90,8 @@ import checks                                                   # noqa: E402
 # ("set the floor from a real green run, never from a guess") is not about
 # arithmetic being hard; it is that a floor derived from the code rather than
 # from the output drifts the moment either changes. `skip()` lowers the floor by
-# ZERO, so a bare machine must still clear 96.
-LEDGER = checks.Ledger("movehook", floor=96)
+# ZERO, so a bare machine must still clear 102.
+LEDGER = checks.Ledger("movehook", floor=102)
 check = checks.adopt(LEDGER)
 
 WOW64_CMD = r"C:\Windows\SysWOW64\cmd.exe"
@@ -904,6 +904,58 @@ def section_14(tmp):
           f"call addresses present as keys: "
           f"{sorted(hex(v) for v in keys & set(CALLS))} -- that is the off-by-five "
           "that reported reseed as an unknown caller on the first R3 readout")
+
+    # THE STALE-DLL GUARD, both directions, on throwaway files. It refused a
+    # perfectly current DLL in the MIDDLE OF A LIVE RUN on 2026-08-28, twice over,
+    # because it compared MTIMES on a generated, git-managed header: `gensites.py`
+    # rewrote a byte-identical sites.h (which RUN-R4.md's preconditions ask the
+    # operator to do) and git normalised its line endings on commit. Neither
+    # changed a byte. It is content-based now, and both arms are exercised here
+    # because a guard that cannot refuse is as bad as one that always does.
+    import attach as _at
+    sub = os.path.join(tmp, "stalecheck")
+    os.makedirs(sub, exist_ok=True)
+    hdr_p = os.path.join(sub, "sites.h")
+    dll_p = os.path.join(sub, "movehook.dll")
+    stamp_p = os.path.join(sub, "movehook.sites.sha256")
+    with open(hdr_p, "w", encoding="utf-8") as fh:
+        fh.write("/* pretend header */\n")
+    with open(dll_p, "wb") as fh:
+        fh.write(b"MZ")
+    import hashlib
+    good = hashlib.sha256(open(hdr_p, "rb").read()).hexdigest()
+    with open(stamp_p, "w", encoding="ascii") as fh:
+        fh.write(good)
+
+    st, why = _at.sites_stale(sub, dll_p)
+    check(st is False, "9. a matching build stamp passes",
+          f"{why}")
+    # ...and it passes even when the header is NEWER, which is the false alarm.
+    os.utime(hdr_p, (time.time() + 3600, time.time() + 3600))
+    st, why = _at.sites_stale(sub, dll_p)
+    check(st is False,
+          "9. and STILL passes when sites.h is newer but byte-identical",
+          "this is the exact false alarm that stopped a live run: an untouched "
+          "header with a bumped mtime")
+    # A real change must still refuse.
+    with open(hdr_p, "w", encoding="utf-8") as fh:
+        fh.write("/* pretend header, EDITED */\n")
+    st, why = _at.sites_stale(sub, dll_p)
+    check(st is True, "9. CONTROL: an actually-changed sites.h is REFUSED",
+          "the guard exists for a header regenerated while the old DLL was locked "
+          "by a running client, and it must still catch that")
+    check(any("DIFFERENT" in ln for ln in why),
+          "9. and it says the header differs, not that it is older",
+          f"{why}")
+    # With no stamp at all it must fall back to mtime rather than passing blindly.
+    os.remove(stamp_p)
+    os.utime(hdr_p, (time.time() + 3600, time.time() + 3600))
+    st, why = _at.sites_stale(sub, dll_p)
+    check(st is True, "9. with NO stamp it falls back to mtime and still refuses",
+          "a DLL built before stamping existed must not be silently trusted")
+    check(any("no build stamp" in ln for ln in why),
+          "9. and says so, because that arm CAN be a false alarm",
+          f"{why}")
 
     # MOVECODE-R4: the tick, and the STRIDE it forced into existence.
     eq("tick" in names, True, "14. the `tick` row is present")

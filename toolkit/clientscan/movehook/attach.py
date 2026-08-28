@@ -41,6 +41,65 @@ import inject                                                  # noqa: E402
 DLL = os.path.join(HERE, "movehook.dll")
 
 
+def sites_stale(here=None, dll=None):
+    """(stale, [reason lines]) -- was this DLL built against THIS sites.h?
+
+    DECIDED BY CONTENT WHERE POSSIBLE. `build.ps1` writes the sha256 of the header
+    it compiled against into `movehook.sites.sha256`; when that stamp is present it
+    is the whole answer, and timestamps are ignored.
+
+    MTIME WAS WRONG TWICE IN ONE SESSION and is only the fallback now. sites.h is
+    git-managed and generated, so its mtime moves without its bytes changing:
+    `gensites.py` rewriting a byte-identical header -- which RUN-R4.md's own
+    preconditions ask the operator to do, as a check that looks read-only -- and git
+    normalising line endings on commit both bump it. Both refused a DLL that was
+    perfectly current, once in the middle of a live run.
+
+    The real case this exists for is unaffected: a header regenerated while the old
+    DLL is still LOCKED by a running client makes the build fail with LNK1104, the
+    .dll on disk keeps the OLD site set, and arming it would capture one site list
+    while every downstream reader assumed another.
+    """
+    here = here or HERE
+    dll = dll or DLL
+    hdr = os.path.join(here, "sites.h")
+    stamp_path = os.path.join(here, "movehook.sites.sha256")
+    if not os.path.isfile(hdr) or not os.path.isfile(dll):
+        return False, []
+    stamp = None
+    if os.path.isfile(stamp_path):
+        try:
+            stamp = open(stamp_path, encoding="ascii").read().strip().lower()
+        except OSError:
+            stamp = None
+    if stamp:
+        import hashlib
+        with open(hdr, "rb") as fh:
+            got = hashlib.sha256(fh.read()).hexdigest()
+        if got == stamp:
+            return False, []
+        return True, [
+            f"REFUSING: {os.path.basename(dll)} was built against a DIFFERENT "
+            f"sites.h.",
+            f"  sites.h now   sha256 {got[:16]}",
+            f"  the DLL wants sha256 {stamp[:16]}",
+        ]
+    if os.path.getmtime(hdr) <= os.path.getmtime(dll) + 1:
+        return False, []
+    return True, [
+        f"REFUSING: {os.path.basename(dll)} is OLDER than sites.h, so it may have "
+        f"been built against a different site set.",
+        "  sites.h  " + time.strftime("%H:%M:%S",
+                                      time.localtime(os.path.getmtime(hdr))),
+        "  the DLL  " + time.strftime("%H:%M:%S",
+                                      time.localtime(os.path.getmtime(dll))),
+        "  (no build stamp -- this DLL predates content checking, so this is an "
+        "mtime",
+        "   comparison and CAN be a false alarm; rebuilding stamps it and settles "
+        "it.)",
+    ]
+
+
 def already_loaded(pid):
     """Is movehook.dll already in `pid`? None when it cannot be determined.
 
@@ -148,14 +207,10 @@ def main(argv=None):
     # the OLD site set. Arming that would capture 9 sites while the runsheet, the
     # rows and every downstream reader say 11 -- a confident wrong answer of exactly
     # the shape this directory keeps producing. Compare mtimes and refuse.
-    hdr = os.path.join(HERE, "sites.h")
-    if os.path.isfile(hdr) and os.path.getmtime(hdr) > os.path.getmtime(DLL) + 1:
-        print(f"REFUSING: {os.path.basename(DLL)} is OLDER than sites.h, so it was "
-              f"built against a different site set.")
-        print("  sites.h  " + time.strftime("%H:%M:%S",
-                                            time.localtime(os.path.getmtime(hdr))))
-        print("  the DLL  " + time.strftime("%H:%M:%S",
-                                            time.localtime(os.path.getmtime(DLL))))
+    stale, why = sites_stale()
+    if stale:
+        for line in why:
+            print(line)
         print("")
         print("Rebuild it. If the build fails with LNK1104 the DLL is still loaded "
               "in a running")

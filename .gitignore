@@ -63,6 +63,11 @@ Win32/
 *.obj
 *.exe
 *.dll
+# The build stamp beside movehook.dll: the sha256 of the sites.h it was compiled
+# against. A build artifact like the DLL itself -- committing it would hand the
+# next checkout a stamp for a DLL they do not have, and attach.py would refuse a
+# build they had just made correctly.
+movehook.sites.sha256
 *.pdb
 *.ilk
 *.lib

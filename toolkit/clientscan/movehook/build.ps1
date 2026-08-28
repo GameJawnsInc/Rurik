@@ -41,5 +41,22 @@ try {
     # 0x014C = IMAGE_FILE_MACHINE_I386. A 64-bit DLL here would fail to inject
     # with a useless error, so the check is worth the three lines.
     if ($machine -ne 0x014C) { throw ("built {0:X4}, need 014C (x86)" -f $machine) }
-    "built $dll  machine=014C (x86)  $((Get-Item $dll).Length) bytes"
+    # THE BUILD STAMP: the sha256 of the sites.h this DLL was compiled against.
+    # attach.py used to decide staleness by comparing MTIMES, which is unreliable
+    # on a git-managed file -- `gensites.py` rewriting an identical header, or git
+    # normalising line endings on commit, both bump the mtime without changing a
+    # byte, and both armed the refusal against a DLL that was perfectly current.
+    # The operator hit that mid-session. A content hash cannot be fooled that way
+    # and still catches the real case the check exists for (a header regenerated
+    # while the old DLL was locked by a running client, so the build silently
+    # failed with LNK1104 and the .dll kept the OLD site set).
+    $hdr = Join-Path $here "sites.h"
+    if (Test-Path $hdr) {
+        $sha = (Get-FileHash -Algorithm SHA256 -LiteralPath $hdr).Hash.ToLower()
+        Set-Content -LiteralPath (Join-Path $here "movehook.sites.sha256") `
+            -Value $sha -Encoding ascii -NoNewline
+        "built $dll  machine=014C (x86)  $((Get-Item $dll).Length) bytes  sites.h $($sha.Substring(0,12))"
+    } else {
+        "built $dll  machine=014C (x86)  $((Get-Item $dll).Length) bytes  (no sites.h to stamp)"
+    }
 } finally { Pop-Location }

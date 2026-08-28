@@ -192,6 +192,23 @@ def main():
         print("\n--check: every row agrees with the binary. Nothing written.")
         return 0
     text = emit(sites, offs, path)
+    # IDEMPOTENT: an unchanged header is NOT rewritten, and that is a bug fix
+    # rather than tidiness. `attach.py` refuses to inject when sites.h is NEWER
+    # than the DLL, on the sound reasoning that a regenerated header means the DLL
+    # was built against a different site set. But this script used to rewrite the
+    # file unconditionally -- so merely RUNNING it, which RUN-R4.md's own
+    # preconditions tell the operator to do as a read-only-looking check, bumped
+    # the mtime past the DLL and armed that refusal against a DLL that was
+    # perfectly current. The operator hit exactly that mid-session, after a
+    # verified build, on a header whose bytes had not changed.
+    try:
+        current = open(HEADER, encoding="utf-8", newline="").read()
+    except OSError:
+        current = None
+    if current == text:
+        print(f"\n{HEADER} is already current ({len(text)} bytes) -- not "
+              f"rewritten, so the DLL's build stamp stays valid.")
+        return 0
     with open(HEADER, "w", encoding="utf-8", newline="\n") as f:
         f.write(text)
     print(f"\nwrote {HEADER} ({len(text)} bytes)")

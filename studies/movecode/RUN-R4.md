@@ -170,7 +170,16 @@ python toolkit/clientscan/movehook/gensites.py --exe vault/client/2026-07-29_221
 ```
 
 Expect **15 hook site(s), 12 agent offset(s)**, every row `OK`, including
-`tick 0x00600140`. **The DLL is already rebuilt** and newer than `sites.h`.
+`tick 0x00600140`, and a last line saying `sites.h is already current -- not
+rewritten`. **The DLL is already built and stamped against that header.**
+
+> **This step used to break the run it was checking.** `gensites.py` rewrote
+> `sites.h` unconditionally, so running it as a precondition bumped the header's
+> mtime past the DLL's and armed `attach.py`'s stale-DLL refusal against a DLL that
+> was perfectly current — which is exactly what happened on the first R4-A attempt.
+> The write is idempotent now, and the staleness check is decided by a **content
+> hash** written at build time rather than by timestamps. If you do see the refusal,
+> it now means the header genuinely differs and a rebuild is genuinely needed.
 
 ---
 

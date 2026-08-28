@@ -6993,8 +6993,15 @@ shrinks section 10),
   than the row — requires every site whose RECORDS are counted to be unstrided, since a
   stride there would turn the displacement census, the reseed split, P1a and the gate-3
   filter into silent 1-in-N samples while `hits` stayed whole. Planting `stride = 8` on
-  `reseed` reddens that check *and* the generated-header check independently. 96 floor,
-  144 on a
+  `reseed` reddens that check *and* the generated-header check independently. **§9 also now owns
+  the stale-DLL guard**, which refused a byte-identical DLL in the middle of a live run —
+  twice, because it compared *mtimes* on a generated, git-managed header that
+  `gensites.py` rewrote unconditionally and git then normalised on commit. It is decided
+  by a build-stamp sha256 now, with mtime as the fallback for a DLL predating stamping,
+  and all four arms are exercised: a matching stamp passes, it **still** passes when
+  sites.h is newer but byte-identical (the false alarm), an actually-edited header is
+  refused, and with no stamp it falls back to mtime and says so. 102 floor,
+  150 on a
   machine with the client, a compiler, an archive and a 32-bit `cmd.exe`; each other
   section declares a skip),
   `toolkit/clientscan/test_commandertrap.py` (the hardware-breakpoint trap, and
