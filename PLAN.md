@@ -1541,7 +1541,103 @@ either fix above.
 
 ## 8. Immediate next actions
 
-### ★ MOVEMENT 2026-08-28 — R1 is DONE, and the two cheapest fixes are DESK changes that each DELETE a refusal
+### ★★ MOVEMENT 2026-08-28, SECOND PASS — R3 is CLOSED, a SECOND gateless reseed route is OBSERVED, and the scoring number's RATE is disqualified
+
+**[studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1s (six lanes, each
+adversarially attacked) and §1r.7.** Desk only — no client run, no capture, no DLL. One
+lane came back REFUTED, five HOLDS-WEAKENED. Tests green where touched: `test_content`
+45, `test_routerbench` 48, `test_spawncheck` 44, `test_contentids` 40, `test_clickecho`
+25, `test_position_trust` 224, `test_srclint` 22, `test_provlint` 19.
+**`test_deploy` is RED and it is NOT this pass** — it fails identically with the change
+stashed (`donor row 7982 is not a map head`), which is the `dat_study` 38833 resync
+class the VAULT CHANGE note below already names.
+
+**★ THE BIGGEST RESULT — a SECOND reseed route with NO GATES, and it is 39.6% of the
+corpus.** `reseed` `0x006022B0` has exactly two direct callers (0 data words, so this is
+a census not a floor). Over 10 captures, **n = 53**: 32 came through `agtrack`'s gated
+loop, **21 came through `0x00605E40` / `ResyncAllAsync`, which calls `snaptest` ZERO
+times.** This **promotes `studies/movement/FINDINGS.md:3242` and `:3722` from UNVERIFIED
+to OBSERVED** — those lines predicted the exact function, thunk and caller list. Two
+lanes reached it independently, from opposite ends. **It was a no-op in this corpus**
+(0 of 7 finite rows moved `m_segmentPoint`, against 19 of 20 gated, Fisher p ≈ 1e-6) and
+14 of the 21 come from one capture, so n = 21 is not 21 independent events.
+**Whether it is WIRE-REACHABLE is OPEN and matters**: its third caller `0x004E6E82` was
+never opened, and `movement/FINDINGS.md:2386` associates that entry with **opcode
+`0x0023`**. If it is reachable, a wire policy can reach a route with no gates at all.
+**Method consequence reaching back through the arc:** `readhook.py:637-646` pools the two
+routes with no caller split, so every separation statistic published here mixes them —
+§1h.1's run-5 "n = 14" is **11 gated + 3 gateless**.
+
+**★ R3 IS CLOSED, on its own registered refuting shape (§1s.2).** All three named
+candidates are dead. The decisive fact: `snaptest` **touches `m_flags` zero times**, so
+the decision function cannot read bits 17, 18 or 19 at all. Bit 19 has zero memory-form
+tests image-wide; bit 17's four real branches are all in the *correction*, never the
+decision; `agent+0x98` appears once on the path, forwarded and never tested. **It cost
+two agent-lanes re-deriving material `movetap.py:66-155` and `movement/FINDINGS.md` have
+carried since 2026-08-20** — the same failure R1 already recorded costing five. The
+handoff's R3 block now says so at the top.
+
+**★ THE RATE IS DISQUALIFIED AS A SCORING NUMBER (§1r.7)** — see the note under the
+first-pass entry below, which this supersedes on that one point.
+
+**Gate attribution (§1s.3): gate 1 firmly decides 19 of 28 scorable snaps (67.9%), at
+most 25 of 28, with 6 UNDETERMINED** — not the 23 of 28 a 200 ms evaluation band gave.
+The conclusion the arc needed survives every band: **the nine separation-managing
+candidates were aimed at the right gate.** But the bound is hard and it bounds §1p too:
+across all 10 captures the hook saw **one agent id and two agent objects — the two world
+copies** — so **gate 3's agent half has never been exercised by anything in this arc**,
+and the "crowding" lead is NOT-MEASURABLE-BY-THIS-CORPUS. Gate 3 is also **a
+disjunction** (neighbour crowding **OR** a `timeToEvent < 0.0005f` obstacle test), which
+`studies/movement/FINDINGS.md:3180-3183` already recorded correctly.
+
+**Maps 242, 248 and 310 are committed** (§1s.4) — file ids 156969 / 165811 / 167730, on
+two independent witnesses (wire `0x0195` field 1, single-valued on 5/17/1 connections;
+and the owner's archive). **Item 4's forecast was wrong in both directions: +1 scored
+click, not +3, and 3 navmeshes, not 5** — 248 shares 165811 with 280. Its registered
+"check that could fail" **could not have fired**: on the one admitted specimen, 259 of
+259 swept directions route one-leg. The new number worth having is the **forced-verdict
+census**: 10 of 27 rows are geometrically forced, the informative subset is 17, and H
+scores 15 of 17 there.
+
+**The three mesh specimens SPLIT (§1s.5).** **A is CLOSED** — not a disagreement at all;
+there is a real 10.00 u gap in ArenaNet's own data and retail did not cross it either,
+stopping within ~0.5–1.2 u of where our clip does. **B is LOCATED and costed** — a
+float32 quantization **tolerance** (~1e-2 u) at `pathmap.py:327`/`:460`, not a decode
+bug: the decode is exact to 1.06e-13 u and retail's grant is genuinely 1.27e-06 u
+outside the edge. Half a day; exposure is 1 of 41 grants. **C is STILL NOT FOUND**, and
+its proposed debunk was itself refuted — measured on the plane retail actually transited,
+retail moved 101.7 u laterally to a point with *less* clearance.
+
+**`0x0025` is absent from the click contract (§1s.6)** — but as an **entailment on n = 2
+exposed trials**, not a 32-trial measurement, and it is stated that way. `0x0025` carries
+`unit(the client's own vec2)` and a click supplies a *point*, so there is structurally
+nothing to echo. **Do NOT "correct" item 5's 32.2/min premise** — it is a live per-run
+figure. Our real defect is **one arm**: `legacy_dir` ships a bare direction, while our
+zero-lead arms already pair at 100% forward, at or above retail.
+
+**The click-walk silence (§1s.7): the counterexample class is ~3, not 24**, and §1p.4's
+second table row is **RETRACTED as unreproducible**. Three shipped sites that stated the
+silence as absolute are corrected (`REALFIX.md` §0.18, `routerbench.py`'s
+`modeled_origin`, `authsrv.py`'s `router_chain_tick`), and `INPUT_OPS` now carries the
+tripwire comment naming the defect that cost three lanes.
+
+**And the `clear line` label is now COMPUTED** (`authsrv.py`), three ways rather than
+two — `clear line` / `line BLOCKED by our mesh` / `geometry NOT evaluated`. It was a
+string literal on every path, asserting a clip result in the one state where no clip
+ran; 7 of the 8 lines it called clear in the K2 run were blocked.
+
+**WHAT IS WORTH DOING NEXT, and it is one run, not four (§1s.9).** Four new
+`content/movecode.toml` rows + a `gensites.py` regenerate + one owner-driven loopback run
+on 38797 answers four open questions at once: `0x00606009` (the fence, **counting
+executions** — the only thing that can settle whether it suppresses anything),
+`0x00605634`/`0x00605683` (the facing-9 early-out), **`0x005FCAA0` (the gateless route —
+the only instrument that can catch it firing cold, which is the residual risk to "aimed
+at the right gate")**, and `0x005FEF70` (gate 3, filtered on `retaddr == 0x0060581E`).
+**Do NOT paste the `stepclear` row as drafted** — its `verified` prose asserts a second
+caller is a phantom, which is false (`boundary_status(0x006007A9)` = confirmed), and
+`content.py` cannot catch a false prose claim.
+
+### ★ MOVEMENT 2026-08-28, FIRST PASS — R1 is DONE, and the two cheapest fixes are DESK changes that each DELETE a refusal
 
 **[studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1p**, offline over 61
 live connections, no run. The ranked list lives at **§1p.10** and supersedes
@@ -1573,15 +1669,26 @@ gap, and the numbers coincide to the decimal (separations 682.7/1093.7/3368.1 ag
 displacements 657.9/1093.7/451.0). **The worst one fires at ARRIVAL**: it began 293 u from
 the clicked destination and ended 1,188 u from it.
 
-**AND IT IS THE FIRST ARM WHERE THE TWO SCORINGS DISAGREE, which is a live methodology
-question rather than a footnote.** As a RATE B2 is the **best of the three arms** — 0.115
-displacements per 1000 u walked and 84.2 u of displacement per 1000 u, against K2's 0.255
-/ 93.5 and B1's 0.308 / 142.2 — and 6 of its 8 echoes produced no displacement at all. It
-warps **less often and much harder**. §1o.1 chose "largest displacement" for
-COMPARABILITY, never to arbitrate "how often" against "how bad", and every arm since has
-ranked the same way on both so nothing forced the question. **The registered clause
-governs and B2 is refuted by it**; whether that is the right headline for the next arm is
-§1r.3 and is worth an owner view.
+**★ THE METHODOLOGY QUESTION §1r.3 RAISED IS NOW CLOSED, AND NOT IN §1r.3'S FAVOUR —
+[studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1r.7, 2026-08-28, desk,
+adversarially scored.** §1r.3 read B2 as "the best of the three arms" as a RATE (0.115
+displacements per 1000 u against K2's 0.255) and flagged largest-vs-rate as needing an
+owner view. **No owner view is needed: the count rate is disqualified.** Extended to all
+six captures on §1r.3's own denominator it ranks the **shipped** arm — the one the
+operator watched warp 5,970 u back to spawn — **2nd of 6, above `--click-echo` at 4th**.
+That is fatal before any statistics. And there are none to be had: **K2 and B2 recorded
+the same 3 displacements each**, so the entire rate difference is the denominator (B2's
+operator walked further), the exact conditional test gives **p = 0.377** and is
+denominator-proof across five constructions, and a goodness-of-fit says **one common rate
+per unit distance fits all six arms (p = 0.843)**. §1r.3's sentence *"Neither is a reason
+to believe the rate finding is noise"* does not survive. **Largest displacement stays the
+scoring number**, and the magnitude rate — which is *not* disqualified — puts B2 ahead of
+K2 by only **1.11×**, not the 2.2× the count column implied. Nothing shipped moves; B1
+and B2 were already refuted and off, and `--click-echo` still stands at 446 u.
+*(Also settled there: §1r.3's undocumented denominator is readhook's chord sum with
+chords over 2,000 u dropped, on a **tick** span where readhook prints a **ptime** span —
+which is why §1q.1 and §1r.2 quote different paths for the same captures 118 lines
+apart, unflagged.)*
 
 **UNSCORED, not zero: the no-clip row.** It was pre-registered as its own outcome rather
 than a refutation, no metric in the tree can see it (§1n.2), and the operator's report of

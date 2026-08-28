@@ -36,7 +36,7 @@ the same map, operator and instrument:
 | **`--click-echo` (MOVECODE-K2)** | **446 u** | **1,101 u** | **best measured** |
 | `--router` | 2,127 u | 3,276 u | REFUTED, §1o |
 | `--answer-kbd-click` (R1-B1) | 537 u | 1,385 u | REFUTED, §1q — on HALF the walk |
-| `--echo-any-refusal` (R1-B2) | **1,094 u** | 2,203 u | REFUTED, §1r — but the best RATE of any arm |
+| `--echo-any-refusal` (R1-B2) | **1,094 u** | 2,203 u | REFUTED, §1r. Its rate is lower, but **the rate is disqualified** — §1r.7 |
 
 `--click-echo` is the current recommendation and is **off by default**. Its residual
 harm is **no-clip**: the character walks through props along the straight line to the
@@ -102,7 +102,7 @@ refuted candidate carrying its measurement is worth more than a deleted one.
 | **clip-gated echo** (gate the echo on a clip from `_sync_position`) | **REFUTED at a desk 2026-08-28, §1p.12** — replayed against K2's own 8 echoed clicks it refuses **7 of 8**, i.e. a near-total revert to the shipped refusal. `--heading-grant` had already granted a clipped point and its epitaph names the clip as one of its two failures |
 | **one-leg-gated echo** (echo only when our mesh says one leg suffices) | **NOT WORTH BUILDING, §1p.8** — buys **0** additional bit-exact matches against retail (13/26 either way); its only win is not granting an off-mesh line in 11 of 26, into an else-branch that is either `--router` (2,127 u) or refusal (5,970 u). A gate whose false branch is a refuted policy is a refuted policy with extra steps |
 | **`--answer-kbd-click`** (MOVECODE-R1-B1) | **RAN AND REFUTED 2026-08-28, §1q.** Largest displacement **537 u against K2's 446 u**, on a walk **half as long**. Floor met (4 fires). Spawn clause passed (closest 2,403 u). **All 3 displacements follow a B1 grant** at +1.97/+1.97/+3.04 s on a checked clock pairing — its own pre-registered failure mode, verbatim |
-| **`--echo-any-refusal`** (MOVECODE-R1-B2) | **RAN AND REFUTED 2026-08-28, §1r.** Largest **1,094 u against K2's 446 u** — checked on K2's span AND K2's path, both give 1,094 u. Floor met (8 echoes) and its exposure was the family's CLEANEST (0 K2-stale echoes on the wire). **But as a RATE it is the BEST arm** (0.115/1000 u vs K2's 0.255) — first time the two scorings disagree, §1r.3. Mesh is NOT the cause: pathdiff 10/10 BOTH-OK |
+| **`--echo-any-refusal`** (MOVECODE-R1-B2) | **RAN AND REFUTED 2026-08-28, §1r.** Largest **1,094 u against K2's 446 u** — checked on K2's span AND K2's path, both give 1,094 u. Floor met (8 echoes) and its exposure was the family's CLEANEST (0 K2-stale echoes on the wire). Its RATE is lower (0.115/1000 u vs K2's 0.255) and §1r.3 read that as B2 "warping less often" — **but the count rate is DISQUALIFIED and no arm's rate is distinguishable from any other's (§1r.7)**: it ranks the *shipped* spawn-warping arm 2nd of 6, above `--click-echo`, and K2 and B2 recorded the same 3 displacements each so the whole difference is the denominator (exact test p = 0.377, and p = 0.843 that one common rate fits all six arms). Mesh is NOT the cause: pathdiff 10/10 BOTH-OK |
 
 **The pattern across all five — now eight — candidates, AND IT NEEDED A CORRECTION.**
 It used to read *"every candidate that asserts more about where the player should go does
@@ -192,7 +192,26 @@ wrong gate. That is a cheap, high-information check.
 Also unhooked and cheap: `agent+0x24` (the world field) — currently the sync side is
 identified indirectly from `reseed`'s source argument.
 
-### R3 — Can the reconcile be SUPPRESSED at all? **Static, cheap**
+### R3 — Can the reconcile be SUPPRESSED at all? ~~**Static, cheap**~~ **CLOSED 2026-08-28**
+
+> **CLOSED AT A DESK — `FINDINGS.md` §1s.2. All three candidates below are DEAD on
+> this item's own registered refuting shape.** The decisive fact: `snaptest`
+> (`0x006055E0..0x0060583D`, 207 instructions) **touches `m_flags` zero times**, so the
+> decision function cannot read bits 17, 18 or 19 — it never touches the word they live
+> in. Bit 19 has **zero memory-form tests image-wide**; bit 17's four real branches are
+> all inside the *correction*, never the decision, and it is set in 78,745 of 78,745
+> movetap rows (clearing it would freeze the agent, not spare it); `agent+0x98` appears
+> on the reconcile path exactly once, forwarded and never tested.
+>
+> **Before spending any time here, read `studies/movement/FINDINGS.md:3240-3248`,
+> `:3246`, `:3681`, `:3722` and `:2386`, and `toolkit/clientscan/movetap.py:66-155`** —
+> which have carried the `0x00605FC0` fence disassembly, both facing-9 early-outs and
+> the gate verdicts **since 2026-08-20**. This item cost two agent-lanes re-deriving
+> them, which is the same failure R1's own entry above records costing five.
+>
+> **What R3 did turn up is in §1s.1 and is bigger than the question asked**: a *second*
+> reseed route with **no gates at all** (`ResyncAllAsync`, `0x005FCAA0`), carrying
+> **21 of 53** reseeds in the whole corpus. Whether it is wire-reachable is OPEN.
 
 If some flag or message makes the client stop reconciling, the entire class disappears
 and no grant policy is needed. Named but unexplored:

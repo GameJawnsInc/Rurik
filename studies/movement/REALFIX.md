@@ -1420,9 +1420,21 @@ Rule 1 never armed (56 click answers fired under the held key, zero
 engaged, the void never ran — **every report-triggered guard inert for the
 session, the failure mode suppressing the guards' own signal.**
 **The drawing-board pass ran the same evening** (three lanes + a scripted
-skeptic; every number re-derived): retail's own client is report-silent
-during click-walks (zero counterexamples corpus-wide; clean evidence n≈6
-walk-exposed specimens per the skeptic's trim) while keyboard-lead walks
+skeptic; every number re-derived): retail's own client is markedly quieter —
+**NOT silent** — during click-walks. **CORRECTED 2026-08-28**
+(`studies/movecode/FINDINGS.md` §1p.4 and §1s.7): the "zero counterexamples"
+figure came from a window whose terminator set contained the very opcode being
+counted, so its maximum possible reading was **0**. Command-terminated: K=27
+windows / 79.73 s, **24** position rows fall inside, in 4 of 27 windows — but
+only **3 of the 24** sit at the ODOMETER stride (490–530 u at ~288 u/s); 22 of
+24 are lead-changed steering reports and 12 are in one window the discriminator
+scores RECEDING at −264.7 u/s. What survives at full strength is the specimen
+the claim was built on: `20260807T143055/_62994` carries two silences of 23.27 s
+and 27.84 s covering 14,140 u at 270–284 u/s, with 12 clicks issued inside them
+and **zero** c2s position reports (click-anchored permutation on that
+connection's own report stream, p_le = 0.00005–0.00130 across four control
+definitions). **State the mechanism as conditional, never as absolute** — while
+keyboard-lead walks
 report at baseline cadence (0.463 s vs 0.500 s, n=649) — reproduced exactly
 on our own logs (zero-lead 0.352 s vs `click-d1` **166 s** median
 next-report). One mechanism: **a fired 0x0029 starts an autonomous

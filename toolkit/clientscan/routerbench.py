@@ -105,6 +105,15 @@ OP_SPEED = 43     # s2c 0x002B [hdr, agent, fraction, mt]
 # abort causes on the 8 never-completed chains: a later click (6), keyboard
 # resume (1), an op57 interaction (1). Position pings and heartbeats are not
 # input and do not abort.
+# CAUTION, and it has now cost this arc three lanes: INPUT_OPS contains
+# OP_REPORT and OP_STOP, i.e. BOTH position-bearing opcodes. Any exposure
+# window CLOSED on INPUT_OPS and then searched for position rows inside it
+# returns 0 IDENTICALLY, for any corpus -- the counted event is the
+# terminator. Two independent lanes published that forced zero before it was
+# caught, and a splice control recovered 0 of 27 synthetic reports with the
+# exposure falling exactly 50.0%. See movecode/FINDINGS.md sec.1p.4 and
+# sec.1s.7. For that question use a COMMAND-ONLY terminator ({OP_CLICK, 57},
+# optionally OP_STOP) -- never this set.
 INPUT_OPS = frozenset({OP_REPORT, OP_CLICK, OP_STOP, 57})
 
 # s2c instance-load row; its third field is the map id (see MESH SELECTION
@@ -177,9 +186,15 @@ def last_pos_before(merged, when):
 def modeled_origin(merged, agent, when):
     """((x, y), age_s) -- the client's position at `when`, dead-reckoned.
 
-    The client is report-silent during click-walks (sec.0.18, zero
-    counterexamples), so for a click issued mid-chain the last REPORT is the
-    start of the previous walk, seconds stale. Retail routes from the agent's
+    The client is markedly quieter -- NOT silent -- during click-walks
+    (sec.0.18 as corrected 2026-08-28; the "zero counterexamples" figure was
+    an artifact of a window whose terminator set was THIS MODULE's INPUT_OPS
+    at :108, which contains OP_REPORT itself). Command-terminated: 24 reports
+    inside K=27 windows / 79.73 s, of which 3 are at the odometer stride. So
+    for a click issued mid-chain the last REPORT is USUALLY, not always, the
+    start of the previous walk -- which is why this function returns age_s: so
+    a caller can tell the two cases apart instead of assuming the stale one.
+    Retail routes from the agent's
     actual position; this models it the way the contract itself was measured:
     from each grant the client order-walks toward the granted point at
     RUN_SPEED until it arrives or the next event moves it (QB's own cadence

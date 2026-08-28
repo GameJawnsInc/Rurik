@@ -5218,7 +5218,11 @@ def router_chain_tick(send, state, conn_id, rec, now=None):
     sending), with the socket timeout shortened to the next ETA while a
     chain is live so a leg grant lands at completion, not up to 1 s late.
     Leg completion is TIMED (distance / DEFAULT_RUN_SPEED) because the
-    client is report-silent during click-walks -- the same ETA arithmetic
+    client is markedly quieter during click-walks -- never SILENT (REALFIX
+    sec.0.18 as corrected 2026-08-28: 24 position rows inside K=27
+    command-terminated windows, 3 of them at the odometer stride). A report
+    MAY arrive mid-leg; the timed ETA is the fallback for when none does, not
+    a contract that none will. It is the same ETA arithmetic
     a2_watchdog_due already uses, and the cadence retail itself grants at
     (ROUTER.md sec.1: grant(n+1) lands at leg n's completion at 288 u/s).
     """
@@ -17121,10 +17125,35 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         send(GAME_SMSG_AGENT_UPDATE_SPEED,
                              agents.agent_update_speed(PLAYER_AGENT_ID, 1.0),
                              "AGENT_UPDATE_SPEED(player, 1.0 = 288 u/s)")
+                        # This label read `clear line` as a STRING LITERAL on
+                        # every path until 2026-08-28. Nothing computed it --
+                        # and under CLICK_ECHO this send is reached exactly
+                        # when the geometry gate at :16836 was SKIPPED, so it
+                        # asserted a clip result in the one state where no clip
+                        # ran. Replaying K2's own run against our mesh put 7 of
+                        # the 8 lines it called "clear" at BLOCKED, median
+                        # shortfall ~2,300 u (studies/movecode/FINDINGS.md
+                        # sec.1p.11). "A check that cannot fail is not a check"
+                        # one layer out: this string lands in the jsonl a later
+                        # session audits, and it could not be false.
+                        #
+                        # All three states ARE distinguishable here -- `fresh`
+                        # (:16785), `placed` (:16835) and `blocked` (:16836)
+                        # are each bound on every path reaching this send, with
+                        # no early exit between. Note the middle arm matters:
+                        # collapsing it into "not evaluated" would trade one
+                        # false label for another, because this same send is
+                        # also reached where the clip DID run and was clean.
+                        if not blocked:
+                            geom_note = "clear line"
+                        elif fresh and placed:
+                            geom_note = "line BLOCKED by our mesh"
+                        else:
+                            geom_note = "geometry NOT evaluated"
                         send(GAME_SMSG_AGENT_MOVE_TO_POINT,
                              [PLAYER_AGENT_ID, list(dest), plane_first, plane_second],
                              f"AGENT_MOVE_TO_POINT({dest[0]:.0f},{dest[1]:.0f}"
-                             f" on plane {cur_plane}->{dest_plane}, clear line)")
+                             f" on plane {cur_plane}->{dest_plane}, {geom_note})")
                         if sweep_note:
                             print(sweep_note, flush=True)
                     elif opcode == GAME_CMSG_LAST_POS_BEFORE_MOVE_CANCELED:
