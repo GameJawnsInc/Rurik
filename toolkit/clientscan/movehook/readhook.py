@@ -740,6 +740,44 @@ def report(cap, names, dump=0):
                 a("      RECALL backstop for the DISPLACEMENT count below: compare")
                 a("      the two, and if the displacement count is lower, the")
                 a("      difference is warps the stamp-comparison could not see.")
+        # ...AND WHICH CALLER, WHICH IS THE WHOLE REASON THE SITE EXISTS.
+        #
+        # THE TRAP, and it caught the orchestrator on the very first R3 readout:
+        # the record stores the RETURN address, and every one of SetPosition's
+        # seven callers is a 5-byte `call rel32`. A table keyed on the CALL
+        # addresses -- which is how --xrefs prints them, and how FINDINGS and
+        # content/movecode.toml both cite them -- reports every known caller as
+        # UNKNOWN. reseed calls at 0x00602369 and returns to 0x0060236E.
+        SP_CALLERS = {
+            0x0060236E: "reseed 0x006022B0 -- the known warp path",
+            0x00604A55: "0x00604880, called from AgApi (0x005FC110/0x005FC24A)",
+            0x00606399: "0x00606120, called from AgTrack (0x006040BA/0x0060413A)",
+            0x005FDAEA: "0x005FDAE5 -- never observed firing",
+            0x005FDB4E: "0x005FDB49 -- never observed firing",
+            0x005FF750: "0x005FF74B -- never observed firing",
+            0x00602904: "0x006028FF -- never observed firing",
+        }
+        spi = idx.get("setposition")
+        spr = [r for r in cap.recs if r["site"] == spi] if spi is not None else []
+        if spr:
+            a("")
+            a(f"SetPosition CALLERS  {len(spr)} record(s) at the writer itself")
+            by = {}
+            for r in spr:
+                by[reb(r["retaddr"])] = by.get(reb(r["retaddr"]), 0) + 1
+            for v, n in sorted(by.items(), key=lambda kv: -kv[1]):
+                who = SP_CALLERS.get(v, "!! NOT one of the seven known callers")
+                a(f"      ret 0x{v:08X}  x{n:<4} {who}")
+            unknown = [v for v in by if v not in SP_CALLERS]
+            if unknown:
+                a("      An unlisted return address is a caller --xrefs could not")
+                a("      see, which is the same shape as MOVECODE-Q4. Check it is")
+                a("      not simply a call site quoted where a RETURN belongs.")
+            elif set(by) == {0x0060236E}:
+                a("      ONLY reseed fired. The other six callers exist in the")
+                a("      image and did not run on this walk -- which is a fact")
+                a("      about the walk, not about the site.")
+
         # Gate 3, which has to be filtered: 0x005FEF70 has TWO direct callers and
         # only 0x0060581E is the gate. An unfiltered count is not a gate-3 count.
         ci = idx.get("stepclear")

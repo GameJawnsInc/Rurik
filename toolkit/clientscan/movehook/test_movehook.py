@@ -70,19 +70,19 @@ import checks                                                   # noqa: E402
 #   §11  4   the reader's layout vs rec_t IN THE C   process-free
 #   §12  6   the world-copy census, both directions  process-free
 #   §13  5   the displacement count, both directions process-free
-#   §14 36   the 2026-08-28 sites, v6, and setposition 27 pf + 9 need the client
-#   ----    process-free core = 73, and THAT is the floor.
+#   §14 38   the 2026-08-28 sites, v6, setposition + its off-by-five  29 pf + 9 client
+#   ----    process-free core = 75, and THAT is the floor.
 #
 # §12 and §13 both read `gensites.rows()`, which goes to `content.load()` and never
 # opens the client, so their eleven are process-free and the core moved with them.
-# A whole green run on this machine is now 120.
+# A whole green run on this machine is now 122.
 #
 # §14 SPLITS, and the split was counted out of the banner rather than reasoned
 # about: 25 checks, of which the 8 non-entry refusals and their 1 control call
 # `gensites.verify()` and therefore need the vaulted image, while the row
 # assertions and the whole v6 round-trip go through `content.load()` and a
-# synthesised capture and never open it. 36 - 9 = 27 process-free, so the core
-# moves 46 -> 73. A bare machine must still clear 73.
+# synthesised capture and never open it. 38 - 9 = 29 process-free, so the core
+# moves 46 -> 75. A bare machine must still clear 75.
 #
 # The first draft of this comment guessed 16 by adding up what the sections
 # looked like they contained, and it was two low -- which would have let two
@@ -90,8 +90,8 @@ import checks                                                   # noqa: E402
 # ("set the floor from a real green run, never from a guess") is not about
 # arithmetic being hard; it is that a floor derived from the code rather than
 # from the output drifts the moment either changes. `skip()` lowers the floor by
-# ZERO, so a bare machine must still clear 73.
-LEDGER = checks.Ledger("movehook", floor=73)
+# ZERO, so a bare machine must still clear 75.
+LEDGER = checks.Ledger("movehook", floor=75)
 check = checks.adopt(LEDGER)
 
 WOW64_CMD = r"C:\Windows\SysWOW64\cmd.exe"
@@ -871,6 +871,39 @@ def section_14(tmp):
                   "the row exists BECAUSE these two call sites cannot be hooked "
                   "and this callee reaches both; drop them and the row looks "
                   "arbitrary")
+
+    # THE OFF-BY-FIVE, pinned. readhook's SetPosition caller table is keyed on
+    # RETURN addresses, because that is what the record stores -- and every one of
+    # the seven callers is a 5-byte `call rel32`. The orchestrator's first R3
+    # analysis keyed on the CALL addresses, which is how --xrefs prints them and
+    # how both FINDINGS and content/movecode.toml cite them, and every known
+    # caller came back "UNKNOWN". A future edit "correcting" the table to the
+    # cited addresses would silently do the same thing, so the relationship is
+    # asserted here rather than trusted to a comment.
+    CALLS = (0x00602369, 0x00604A50, 0x00606394, 0x005FDAE5,
+             0x005FDB49, 0x005FF74B, 0x006028FF)
+    tbl = getattr(rh, "SP_CALLERS", None)
+    if tbl is None:
+        # It lives inside report(); read it off the source rather than skipping,
+        # because a skip here would hide the very drift this check exists for.
+        src = open(os.path.join(HERE, "readhook.py"), encoding="utf-8").read()
+        keys = set()
+        for line in src.splitlines():
+            ls = line.strip()
+            if ls.startswith("0x00") and ":" in ls and '"' in ls:
+                try:
+                    keys.add(int(ls.split(":")[0], 16))
+                except ValueError:
+                    pass
+    else:
+        keys = set(tbl)
+    eq(len(keys & {c + 5 for c in CALLS}), 7,
+       "14. the SetPosition caller table is keyed on RETURN addresses (call+5)")
+    check(not (keys & set(CALLS)),
+          "14. and NOT on the call addresses --xrefs prints",
+          f"call addresses present as keys: "
+          f"{sorted(hex(v) for v in keys & set(CALLS))} -- that is the off-by-five "
+          "that reported reseed as an unknown caller on the first R3 readout")
 
     # The two offsets the early-out and the world census need.
     eq(offs.get("facing", {}).get("offset"), 0xC4,

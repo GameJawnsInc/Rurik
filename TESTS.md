@@ -6977,7 +6977,13 @@ shrinks section 10),
   losing the two addresses that are the row's whole justification. That second
   check went red on its first draft because it read `provenance.verified`, which
   `gensites.rows()` does not return — the check catching the test's own wrong
-  operand rather than the row's. 73 floor, 120 on a
+  operand rather than the row's. **And the off-by-five that caught the orchestrator on
+  R3's very first readout:** the record stores a RETURN address, every one of
+  SetPosition's seven callers is a 5-byte `call rel32`, and a caller table keyed on the
+  CALL addresses — which is how `--xrefs` prints them and how both `FINDINGS.md` and
+  `content/movecode.toml` cite them — reports every known caller as UNKNOWN. §14 asserts
+  the table is keyed on call+5 and that no call address appears as a key; planting the
+  exact regression reddens both checks. 75 floor, 122 on a
   machine with the client, a compiler, an archive and a 32-bit `cmd.exe`; each other
   section declares a skip),
   `toolkit/clientscan/test_commandertrap.py` (the hardware-breakpoint trap, and
