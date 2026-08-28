@@ -192,7 +192,26 @@ wrong gate. That is a cheap, high-information check.
 Also unhooked and cheap: `agent+0x24` (the world field) — currently the sync side is
 identified indirectly from `reseed`'s source argument.
 
-### R3 — Can the reconcile be SUPPRESSED at all? **Static, cheap**
+### R3 — Can the reconcile be SUPPRESSED at all? ~~**Static, cheap**~~ **CLOSED 2026-08-28**
+
+> **CLOSED AT A DESK — `FINDINGS.md` §1s.2. All three candidates below are DEAD on
+> this item's own registered refuting shape.** The decisive fact: `snaptest`
+> (`0x006055E0..0x0060583D`, 207 instructions) **touches `m_flags` zero times**, so the
+> decision function cannot read bits 17, 18 or 19 — it never touches the word they live
+> in. Bit 19 has **zero memory-form tests image-wide**; bit 17's four real branches are
+> all inside the *correction*, never the decision, and it is set in 78,745 of 78,745
+> movetap rows (clearing it would freeze the agent, not spare it); `agent+0x98` appears
+> on the reconcile path exactly once, forwarded and never tested.
+>
+> **Before spending any time here, read `studies/movement/FINDINGS.md:3240-3248`,
+> `:3246`, `:3681`, `:3722` and `:2386`, and `toolkit/clientscan/movetap.py:66-155`** —
+> which have carried the `0x00605FC0` fence disassembly, both facing-9 early-outs and
+> the gate verdicts **since 2026-08-20**. This item cost two agent-lanes re-deriving
+> them, which is the same failure R1's own entry above records costing five.
+>
+> **What R3 did turn up is in §1s.1 and is bigger than the question asked**: a *second*
+> reseed route with **no gates at all** (`ResyncAllAsync`, `0x005FCAA0`), carrying
+> **21 of 53** reseeds in the whole corpus. Whether it is wire-reachable is OPEN.
 
 If some flag or message makes the client stop reconciling, the entire class disappears
 and no grant policy is needed. Named but unexplored:

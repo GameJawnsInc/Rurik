@@ -2172,8 +2172,18 @@ recovered**, and the exposure fell **exactly 50.0%** — the signature of edge-e
 | window construction | exposure | position rows inside | windows carrying any |
 |---|---|---|---|
 | `[click, click+walk_t]`, closed by `INPUT_OPS` (published) | 70.07–70.34 s | **0 (forced)** | 0 of 27 |
-| `[click, click+walk_t]`, closed by `0x003E`/`0x0039` only | 77.44 s | **7** | 3 of 27 |
+| `[click, click+walk_t]`, closed by `0x003E`/`0x0039` only | ~~77.44 s~~ **79.73 s** | ~~7~~ **24** | ~~3 of 27~~ **4 of 27** |
 | `[first grant, ETA]`, closed by `0x003E`/`0x0039`/capture-end | 82.22 s | **25** | 4 of 27 |
+
+> **ROW 2 CORRECTED 2026-08-28, §1s.7 — it was not reproducible.** Two independent
+> reimplementations get **27 windows / 79.73 s / 24 rows / 4 of 27** under *both* the
+> published construction (`term{62,57}` / `count{61,71}`) and `term{62,71,57}` /
+> `count{61}`; `term{62}` alone gives 26 windows; and **no 3-window subset of the
+> carrying counts `{12, 7, 3, 2}` sums to 7.** The original row's script was a
+> scratchpad artifact that cannot be re-run — the two are inconsistent, not
+> differently sensitive. **And of the 24, only 3 sit at the odometer stride** (490–530 u
+> at ~288 u/s): 22 of 24 are lead-CHANGED steering reports, which refute nothing about
+> a click-walk. The counterexample class is ~3, not 24 — see §1s.7.
 
 **The null was wrong too.** The quoted 0.500 s keyboard baseline is the **steering**
 cadence: of 2,917 consecutive `op61` pairs, 2,574 change the lead vector (median 0.500 s)
@@ -3350,6 +3360,757 @@ labelled `other world` — the `snaptest` `ecx`, which readhook flags itself as
 lets it **overwrite the real local copy**, replacing a 49,378 u path with none at all.
 It did exactly that here, and was caught only because the guard refused to print an
 incomplete row rather than treating a missing field as a zero.
+
+---
+
+## 1s. THE DESK PASS OF 2026-08-28 — R3's three named candidates are DEAD on their own refuting shape, a SECOND gateless reseed route is now OBSERVED firing live, and three of the four "our mesh is wrong" specimens are not
+
+**Desk only, 2026-08-28.** Six lanes ran offline against artifacts already on disk; each was
+then attacked by an adversarial skeptic that re-ran the load-bearing steps independently.
+**One lane came back REFUTED (L1), five HOLDS-WEAKENED.** No client was launched, no DLL
+was built, no capture was taken. Every `codescan`/`asserts`/`msgshape`/`areatable` call in
+the pass passed `--exe C:/gd/Rurik/vault/client/2026-07-29_221c13772c7a/Gw.exe`
+**explicitly** (build 38797) — the `sorted()[-1]` default would have picked
+`2026-08-20_21511009c460`, and the relative `vault/client/…` form the briefs quote throws
+`FileNotFoundError` inside a worktree, so the absolute path is mandatory here.
+
+**Read this before quoting any denominator below.** One lane (L3) landed
+`content/maps.toml`, `toolkit/test_content.py` and `toolkit/clientscan/test_routerbench.py`
+into the shared worktree while the others were running. Every "of 26 rows", "of 40/41
+grants", "of 8 connections" figure in §1s.5 and §1s.7 — and every one in §1p.5 and §1p.6 —
+is pinned to the **pre-change** corpus and moves when those rows land. §1s.4's own numbers
+are post-change.
+
+**The pass's shape, honestly:** two genuinely new results (§1s.1, §1s.4's forced-verdict
+census), three corrections to our own record (§1s.5, §1s.7, and the retraction below), and
+a large amount of re-derivation of things already committed on `main` that the arc's own
+handoff does not cite. **HANDOFF-WARP.md §4's R1 already records this failure costing five
+agent-lanes; R3 and R6 cost two more in this pass.** §1s.8 prints the vacuous and forced
+results.
+
+**[§1r.7](#) ran in this same pass and is filed with §1r because it corrects §1r.3, not
+because it is separate work.** It disqualifies the displacement **rate** as a scoring
+number — the count rate ranks the *shipped* spawn-warping arm 2nd of 6, above
+`--click-echo` — and shows that no arm's rate is distinguishable from any other's
+(K2 and B2 recorded the same 3 displacements each; exact test p = 0.377; one common rate
+per unit distance fits all six arms at p = 0.843). **Read it before quoting any rate in
+§1s**, and note that it closes the largest-vs-rate methodology question §1r.3 had flagged
+for an owner view.
+
+---
+
+### 1s.1 A SECOND reseed route with NO gates — two lanes found it from opposite ends, and it is now OBSERVED firing
+
+**OBSERVED, and this is the best thing in the pass.** `reseed` (`0x006022B0`) has **exactly
+two** direct callers — `--xrefs` reports "2 direct rel32 reference(s), **0 word(s) holding
+the VA**", so §4 item 2's virtual-dispatch caveat does not apply here and this is a census
+rather than a floor. Rebasing the return addresses in the movehook corpus, pooled over **10
+distinct captures, n = 53 reseed records**:
+
+| retaddr | route | count |
+|---|---|---|
+| `0x006060E7` | inside `agtrack`'s **gated** snap loop, downstream of `snaptest` | **32** |
+| `0x00605EF6` | inside `0x00605E40`, which calls `snaptest` **zero times** | **21** |
+
+**21 of 53 = 39.6% of every reseed this arc has ever captured did not come through
+`snaptest` at all.** The route is `ResyncAllAsync`: `0x00605E40` has exactly one inbound
+reference image-wide (`0x005FCAAE jmp`) from the thunk `0x005FCAA0`
+(`call 0x47f660 / mov ecx,[eax+8] / lea ecx,[ecx+0x1cc] / jmp 0x605e40`), which has 3
+callers (`0x004E6E82`, `0x00816499`, `0x0081655D`); its body calls only the assert helper
+and `reseed`; `snaptest` `0x006055E0` has exactly one caller image-wide (`0x0060601C`). Its
+loop is instruction-for-instruction the gated one — null check, `test [eax+0x20],0x10000`,
+Array:587 bounds assert, inline record clear, `cmp esi,[edi+0x14] / setne bl` for the
+`i != focusId` third argument.
+
+**CORROBORATED — this promotes `studies/movement/FINDINGS.md:3242` and `:3722` from
+UNVERIFIED to OBSERVED.** Those lines predicted this exact function, thunk and caller list
+and labelled the route as not-yet-seen live. Two lanes reached it independently in this
+pass: L1 from a static walk of the fence, L2 from the retaddr census. The skeptic
+reproduced every structural fact on the pinned build.
+
+**Concentration, in the sentence:** 14 of the 21 firings come from **one** capture
+(`k1-treatment`), in one burst (seq 920–964); the route fired in 5 of the 7 snap-capable
+captures. **n = 21 is not 21 independent events.**
+
+**The route was a NO-OP in this corpus — n = 7, not 19.** On `m_segmentPoint` (`+0x88`),
+the field `reseed` actually copies, **0 of 7 finite gateless rows** are non-zero against
+**19 of 20 finite gated** rows (Fisher p ≈ 1e-6). The lane's published 0-of-19 counted 12
+non-finite rows (the `+INF` `AGENT_INVALID_POSITION` sentinel at `0x00948654`, asserted by
+AgAgent:974) as zeros on one side while scoring 3 `inf` rows as non-zero on the other —
+`math.hypot(nan,nan) > 1e-3` is False. Corrected, n drops 19 → 7 across 3 captures, 3 of
+the 7 from one file. **The best vacuity attack on this null FAILED and the result is
+stronger for it:** `arg1 − ecx` is a nonzero constant per capture and *identical* at the
+gated and gateless sites (k1 +2624, k2 +984, k2-2 −4264, r1b1 +4920, r1b2 −1640, run4
+−2952, run5 +1968), so both routes carry the same two world copies and the ~0 separation is
+not a same-object identity.
+
+**Whether the route is wire-reachable is OPEN, and the lane's claim that it is not is
+REFUTED.** "Driven by LOCAL input … no wire policy can close it" generalised from 2 of 3
+callers; the third, `0x004E6E82`, was never opened, and `studies/movement/FINDINGS.md:2386`
+already associates that entry with **opcode `0x0023` — a wire opcode**.
+
+**Method consequence, and it reaches back through the arc.** `readhook.py:637-646` pools
+`tests + seeds` with **no caller split**, so every separation statistic this arc has
+published mixes the two routes. §1h.1's run-5 "n = 14" is **11 gated + 3 gateless**.
+
+---
+
+### 1s.2 R3 is CLOSED at a desk, on its own refuting shape — and the suppressor that does exist cannot be scored from any corpus we hold
+
+`HANDOFF-WARP.md:195-208` names three candidates and registers the refuting shape: *"if
+every reader of those bits is cosmetic, this route is dead in an afternoon."* **All three
+are dead, and the afternoon is spent.**
+
+**The fact that makes the three verdicts rigorous rather than shallow (OBSERVED):**
+`snaptest`, bounded exactly at `0x006055E0..0x0060583D` (207 instructions), **touches
+`m_flags` zero times.** Its entire agent-field surface is `+0x24` (world, assert only),
+`+0x48`, `+0x78`/`+0x7C`/`+0x80`/`+0x84` and `+0xC4`; everything else is stack, AgTrack
+record, or 16-byte position-block offsets ≤ `0x14`. **The decision function cannot read
+bits 17, 18 or 19 because it never touches the word they live in.**
+
+* **(a) `INTERNAL_FLAG_MOVEMENT_STALE`, bit 19 (`0x80000`) — DEAD. OBSERVED (static).**
+  Mask confirmed from `shr eax,0x13` at `0x0060014E` guarding ArenaNet's own assert
+  AgAgent:1198. Image-wide memory-form operations on the bit number exactly **3**: SET
+  `0x00602429` (inside `reseed`), SET `0x00602A22` (inside the `0x002B` rate/facing
+  setter), CLEAR `0x00602A65` (the destination setter). **Zero memory-form TESTs anywhere
+  in `.text`.** The two SHIFT CANDIDATEs `codescan` also printed (`0x00600EC5`,
+  `0x00601138`) were traced and are `shl eax,4` loop arithmetic — genuine false positives.
+  *Caveat that must travel with this:* `codescan` does not search a mask held in a register
+  or a compound mask, so "zero memory-form TESTs" is not "never tested".
+* **(b) `INTERNAL_FLAG_IN_WORLD`, bit 17 — DEAD as a lever. OBSERVED.** Mask confirmed from
+  `shr eax,0x11` at `0x005FE6BD` guarding AgAgent:297. Its 9 tests in AgAgent split 5
+  assert guards and 4 real branches (`0x00602462`, `0x0060254E`, `0x006025F8`,
+  `0x0060293D`) — every one inside `reseed`, its callee `0x00602540`, or the re-aim setter
+  `0x00602910`, i.e. **the CORRECTION, never the decision.** `0x00602462`'s block is
+  additionally gated on `reseed` arg3 (`cmp [ebp+0xc],0 / je 0x602536`), which is
+  `i != focusId` and therefore 0 for the player's own agent. Set in **78,745 of 78,745**
+  movetap rows; clearing it would freeze the agent, not spare it.
+* **(c) `agent+0x98` — does not gate the reconcile. OBSERVED.** `--field 0x98 --in AgTrack`
+  returns **0 instructions**, and an exhaustive capstone operand sweep of 12 reconcile-path
+  ranges (`snaptest`, `agtrack`, `seg_match`, `GetPointAt`, gate 3 `0x005FEF70`, `map_dist`,
+  `find_path`) finds no `0x98` displacement in any of them. On the reconcile path it appears
+  **exactly once** — `0x00602441 push dword [edi+0x98]` inside `reseed` — and there it is
+  **forwarded** to the setter, never tested.
+
+**The suppressor that DOES exist, at the strength that survived.** `agtrack` `0x00605FC0`
+computes `rec = [this+0x20] + id*0x1C` and at `0x00606002` does
+`cmp dword [eax+ecx*4], 0` / `0x00606009 je 0x606103`; the tail returns doing nothing or
+appends history. On a zero `clientControlled` record, `snaptest` is never called and the
+reseed walk never runs **for that invocation**. Reproduced exactly by the skeptic on the
+pinned build.
+
+**"Complete" is REFUTED, and so is the novelty.** The *decision* is per-agent; the
+*correction* is roster-wide — `0x0060604C..0x006060EE` walks every non-DESTROYING world-1
+agent and calls `reseed` on it, so a zero record on the player stops the player *triggering*
+a reseed and does not stop the player *being* reseeded by someone else's snap. And
+`agtrack` **clears records itself on its own snap branch** (`0x0060602E call 0x605f70`, plus
+`0x006060A2`/`0x006060A9` inside the walk). None of this is new: **`movetap.py:66-155` has
+carried the full `0x00605FC0` fence disassembly in prose since 2026-08-20**, including
+`00606002 cmp dword[record+0x00],0  clientControlled` and both facing-9 early-outs verbatim,
+and `movement/FINDINGS.md:3246`, `:3681` and `:3722` carry the rest.
+
+**A retracted claim was reintroduced and must not be re-published.** "Every local
+destination-set re-arms the fence" is **FALSE**: `0x00605F3F cmp dword[eax+ecx*4],0` /
+`0x00605F43 jne 0x605f57` makes the setter a **no-op on an already-armed record**.
+`movement/FINDINGS.md:3681` already caught and corrected exactly this.
+
+**Whether the fence suppresses warps is NOT-MEASURABLE-BY-THIS-METHOD.** See §1s.8 item 1
+for why the 0.329%-vs-0.113% contrast is not a measurement of suppression.
+
+---
+
+### 1s.3 Gate 1 decides the majority of snaps — at 19 of 28, not 23 of 28 — and gate 3 is a DISJUNCTION `main` already had
+
+**OBSERVED.** Denominator: the 32 **gated** reseeds pair **1:1 and exactly** with the 32
+`snaptest` calls that returned 0 (a gated reseed within 2 ms; no `snaptest` has two
+candidates, none is orphaned), and the paired records carry **byte-identical source-agent
+blocks 28/28**, so the reseed record is a faithful snapshot of gate 1's operands. 28 are
+scorable — `run4` is a v4 capture with no `src` block. Snap rate overall **32 of 245
+`snaptest` calls = 13.1%**.
+
+**Gate 1 firmly decided 19 of 28 (67.9%); at most 25 of 28 (89.3%); 6 of 28 are
+UNDETERMINED** because the verdict flips inside the feasible evaluation window. The lane's
+23-of-28 came from an unjustified `[t0, t0+200 ms]` band; the client's own assert
+**AgAgent:978** (`!m_timeStopMovement || ((int)(m_timeStopMovement - time) >= 0)`, at
+`0x005FFB9E` in the extrapolator and again at `0x005FF0F0` inside gate 3) names
+`m_timeStopMovement` as the ceiling, and `stop`/`src_stop` are already fields in the record.
+Band sweep: `[t0,+200]` 23 over / 1 straddle / 4 under; `[t0,+500]` 23/2/3; `[t0,+1000]`
+22/3/3; `[t0, min(stop,src_stop)]` **19/6/3**. Empirical `m_point` staleness is p50 17 /
+p90 1,382 / p99 8,613 / max 21,735 ms (n = 2,944), so 200 ms is not conservative.
+
+**The conclusion the arc needs survives every band**: gate 1 is the majority explanation at
+each, clearing the lane's pre-registered "< 50% means the wrong gate" threshold. **The nine
+separation-managing candidates were aimed at the right gate** — for the gated snaps, in a
+world containing one agent.
+
+**The gate-2 coincidence check, at its honest p.** 3 of the 4 not-gate-1 snaps had a
+`MapFindPath` query at the same tick; **0 of 23** gate-1 snaps did. The published
+p = 0.00137 is the **one-sided** value on a 27-row table with the ambiguous row deleted;
+two-sided including it is **p = 0.0031** at the lane's band and **p = 0.0256** under the
+assert band. And 7 of the 24 over-cut rows sit in captures (`r1b1`, `r1b2`) that recorded
+**zero** gate-2 executions at all. Supportive, not decisive.
+
+**RECONSTRUCTION:** 209 of 245 `snaptest` calls (85.3%) were resolved before any gate ran —
+by an early-out or the 100 u history chain. This is inference from an absence and rests on
+the `MapFindPath` hook not dropping records (73 records corpus-wide, `claimed == stored`,
+0 partial, in every capture).
+
+**REFUTED — "gate 3 is agent-vs-agent blocking, not a terrain test."** Two independent
+kills. **(a) `main` already had the fuller answer**: `studies/movement/FINDINGS.md:3180`
+records the call site as OBSERVED and `:3183` names **both** ways it returns zero — a
+neighbour agent inside a 60-degree forward cone (`fcomp [0x9458BC]` = 0.5f) whose combined
+radius contains A, **OR** `timeToEvent < 0.0005f` (threshold at `0x00A53744`, read raw as
+`0.0005000000237487257f`); `:3240`, `:3639`, `:3954` and `:3357` carry the rest. **(b) The
+negative is false.** The 430 bytes the lane stopped short of contain `0x005FF496 call
+0x70a0e0`, then `0x005FF49E fldz` / `0x005FF4A6 fcom st(1)` / `0x005FF4AC test ah,1`, then
+`0x005FF510 fcomp dword ptr [0xa53744]`; and `asserts.py --at 0x005FEF70` **misses two
+sites in that same extent** whose expression pointers (`0xa53390`, `0xa533a8`) read
+AgAgent:764 `timeToEvent >= 0` at `0x005FF4B6` and AgAgent:773 at `0x005FF508`. **Gate 3 is
+a disjunction: neighbour-agent crowding OR an obstacle time-to-impact test.** The negative
+was published from a tool whose own banner says every "no assert names X" answer is a floor
+and that it is short by ~370 sites — and it was short by exactly the two that mattered.
+
+**REFUTED — "`0x006007A9` is a phantom, so gate 3 has exactly one real caller."**
+`boundary_status(0x006007A9)` returns **confirmed**. The address the provenance quotes as
+failing is `0x006007B5`, twelve bytes later, phantom only because it lands mid-instruction
+inside the `je` at `0x006007B0`. `0x006007A9` is a textbook thiscall inside the
+obstacle-sidestep `0x00600500`, and `main:3278`/`:3357` already record **n = 2 of 2 direct
+callers**. This matters operationally: the proposed `stepclear` content row's `verified`
+prose would have committed a false provenance statement that `content.py` **cannot** catch,
+and "presence alone discriminates gate 2 from gate 3" is unsound until the hit is filtered
+on `retaddr == 0x0060581E` (free — `rec_t` already stores it).
+
+**THE HARD BOUND ON ALL OF §1s.3, and it bounds §1p's whole client-side picture too.**
+Across all 10 captures the hook dereferenced **exactly one agent id (1, the player) and
+exactly two agent objects per capture — the two world copies.** The snap loop is
+roster-wide and produced exactly one reseed record per snap in every case, consistent with a
+roster of one. **There is nobody to crowd with, so this corpus cannot exercise gate 3's
+agent half at all**, and the K-vs-R "crowding" lead (4/10 vs 1/18, p = 0.041) is
+**NOT-MEASURABLE-BY-THIS-CORPUS** — it is a map/operator difference with a crowding label
+attached. The attribution table is **28 snaps of one agent in a world containing one agent.**
+
+---
+
+### 1s.4 Maps 242, 248 and 310 are committed — item 4's forecast was wrong in both directions, and the forced-verdict census is the number §1p.5 was missing
+
+**CORROBORATED — the three file ids.** 242 → 156969, 248 → 165811, 310 → 167730, on two
+independent predicates over the map→file **edge** plus an existence check. Wire: pairing
+each connection's first `0x0199` field 2 with its first `0x0195` field 1 over **61 live
+connections, 57 carrying both**, gives 242 → 156969 on 5/5, 248 → 165811 on 17/17,
+310 → 167730 on 1/1, and all 14 map ids in the corpus are single-valued. Archive
+(`vault/dat_study/Gw.dat`, a *different* copy from the one `studies/mapload/FINDINGS.md` §1
+used): 156969 → MFT 21189 (64 planes / 3,307 traps), 165811 → 21641 (68 / 2,769),
+167730 → 71585 (13 / 443), and **25 of 25 arrivals across maps 242/248/309/310/311 land in
+exactly 1 trapezoid on the plane their own `0x0195` field 3 declares** (the committed rows
+say 24 of 24 — one low; see the fixes block). Geometry-fit, with a wrong-mesh control that
+survived a vacuity attack **decisively**: on `_54071`, coverage is **1.000 on the wrong
+file 113021** and 1.000 on 167730 — coverage cannot separate them — yet heading-clip
+agreement gives 113021 **0 of 53** and 167730 **24 of 53 = 45.3%**.
+
+**The question was already answered in the tree.** `studies/mapload/FINDINGS.md:53-60`
+committed the whole table on 2026-08-17/18, and `content/maps.toml` `[map.280]`'s own note
+already stated 165811 carries map 248. This lane turned a known measurement into a
+selectable row; it did not derive anything.
+
+**§1p.10 item 4's forecast was wrong in both directions. OBSERVED.** It buys **+1** scored
+click (26 → 27, refusals 4 → 3), not +3, and **3 navmeshes, not 5** — 248 resolves to
+165811 which the corpus already held via map 280, so the ceiling was 4. Grouping is
+`{113021: 15, 165811: 11, 167730: 1}`. The other two clicks fail for a **scorer** reason
+that no content row can fix: neither connection has a c2s position anchor before its click
+(`_60966`'s first `0x003D` is **26.74 s after** the click; `_52092`'s is 1.84 s after; zero
+rows before, either way).
+
+**REFUTED — "the check that could fail did not fire."** Item 4's registered payoff was that
+all 3 admitted clicks are verbatim, so a many-leg verdict on any is H's first false
+negative. **On the one specimen actually admitted, a many-leg verdict was geometrically
+unattainable.** Holding the row's own modelled origin and its own 832.0 u click distance
+fixed and sweeping 720 directions, **259 of 259 on-mesh destinations route ONE-LEG**;
+many-leg only becomes attainable past ~1,200 u at that origin. It is not a mesh-wide
+property — the base rate at 800–864 u on 167730 is 57.2% one-leg over n = 400 random
+on-mesh pairs — so the specimen was unusually open, not the mesh.
+
+**THE NEW NUMBER, and it quantifies §1p.5 item 5's "trivially one-leg" caveat for the first
+time. OBSERVED.** Running that same sweep over all 27 rows: **10 of 27 verdicts are
+forced** — 7 one-leg at P ≥ 99.5% (all verbatim) and 3 many-leg at P ≤ 0.5% (all part-way)
+— and **17 of 27 are informative, where H scores 15 of 17.** The +1 row contributes **0 of
+the 17**. H's headline 2×2 moves 13/2/0/11 → 14/2/0/11 = 25/27, honestly stated as
+**24–25/27 across 277–328 u/s**, the same band §1p.5 item 1 already forced onto the 26-row
+version.
+
+**And the ≤ 2 s standard was applied asymmetrically.** The lane disqualified its two
+RECONSTRUCTION rows for origin ages of 21.5 s and 50.0 s, then counted the new row (origin
+age **14.0 s**) toward H without the same caveat. A held-out check on that connection puts
+`modeled_origin` at **652.2 u error against a naive "origin never moved" of 200.9 u** — the
+model loses there. The verdict survives perturbation (one-leg at 200–400 u/s and on 360/360
+perturbed origins out to r = 475 u) but the row is **not in a validated regime**, and it
+enters neither of §1p.5's two informative cuts (age ≤ 2 s fails; d ≥ 1,276.4 u fails at
+832 u). **The single largest scope limit on §1p is not materially relieved:** 167730
+supplies 1 of 27 rows, 26 of 27 are still on the original two meshes, and `_62994` still
+supplies 12 of them in a 48-second window.
+
+**CONTESTED, flagged for whoever owns `content/`:** `explorable = false` on `[map.310]`.
+The literal reading is verified — AreaInfo type is 11, not the 2 that means explorable —
+but `type == 2` is calibrated only against Pre-Searing, type 11 is uncalibrated and rare
+(17 of 888 records), and `map_explorable`'s own docstring makes it the **combat** gate,
+while `studies/isle/FINDINGS.md:713` records **553 observed damage events on map 310**. The
+row asserts combat is impossible on a map we have 553 damage events from. Not a behaviour
+regression — unconfigured maps already default False — but it must carry a CONTESTED note
+rather than a bare `false`.
+
+---
+
+### 1s.5 The three named mesh specimens: one is CLOSED, one is LOCATED, and the third survived its own debunk
+
+**Specimen A (`_60935 t=58.694`) is NOT a mesh disagreement. OBSERVED, n = 1.** Sampling
+the origin→click ray at 0.1 u on **every** plane: walkable over f 0.94000–0.95042, **FALSE
+over f 0.95046–0.95425 — a 10.00 u gap** — walkable again f 0.95429–0.97498. The gap is
+real in ArenaNet's own pathing data and **retail did not cross it either**: it granted a
+point 131.08 u short of the click, at along-fraction 0.9503, 0.53 u off our own ray, and
+our `clip` stops **within ~0.5–1.2 u of retail's grant** depending on step (1.14 u at
+step 4.0, 0.48 at 1.0, 0.58 at 0.25). A's origin is modelled but at age 0.951 s, inside
+§1p.5's validated regime. **A's defect is `route()`'s refuse-vs-truncate policy**
+(`pathmap.py:698-703` returns None on a component split), not its geometry — the click
+point is covered only by plane 20, so all three plane-hint settings return None.
+
+**Specimen B (`_52318 t=262.438`) is a real, located, fixable defect — but it is a
+TOLERANCE, not a decode bug. OBSERVED, n = 1.** Retail's granted point lies
+**1.268e-06 u outside** the exact real edge of `p0#1994`. Evaluated in exact rational
+arithmetic over the decoded float32 corners, `|float64 lerp − exact| = 1.06e-13 u` — so
+**nothing decodes wrong and `contains()` is mathematically correct**; the grant is
+genuinely outside. What is missing is a tolerance for comparing **float32-quantized wire
+coordinates** against an exactly-evaluated boundary, in `Trapezoid.contains`
+(`pathmap.py:327`) and `walkable`'s flat copy (`pathmap.py:460`). Retail's grant is the
+intersection of the click ray with that edge — along-fraction 0.065287, perpendicular
+offset 0.000039 u, measured from a **reported** origin at age 0.348 s.
+
+* **The fix is an epsilon, not float32, and the float32 route was tested and BREAKS**
+  `_63805 t=1103.590`, whose leg runs exactly along `p0#1295`'s left edge (`x − left64` =
+  0.000e+00 at 6+ consecutive samples).
+* **Size it at ~1e-2 u, not 1e-4.** Half a float32 ULP is 1.221e-04 u at B's own
+  |x| = 2992.7 and 9.766e-04 at map148's extreme |x| = 21504, so 1e-4 is **below the
+  quantization it exists to absorb everywhere |coord| ≥ 2048**. And
+  `studies/movement/FINDINGS.md:1670` already measured retail grant deviations to
+  **0.0025 u**, "tracking the float32 ULP by binade" — 25× the proposed number. The corpus
+  cannot select a size: 1e-4, 1e-3 and 1e-2 all give 26/26 chains clip-clean and 41/41
+  grants on-mesh.
+* **The exposure is 1 of 41 grants, not 11 of 40.** Ten of the eleven "exactly 0.0 u from an
+  edge" grants are **degenerate** (f == 0.0 or 1.0 — the lerp returns a corner exactly and
+  the hazard cannot arise); `contains()` accepts all eleven anyway. Genuine non-degenerate
+  near-edge landings corpus-wide: 3 of 41, one of which is rejected. The eleven also come
+  from 6 click rows on **2 connections of 8**.
+* **The negative control that DID pass:** the 26 raw user click points are min 69.54 u /
+  p50 1,412.23 u from an edge, **0 of 26 within 1e-2 u**. Edge-sitting is a property of
+  retail's *router output*, not of the point population.
+* `CELL_SLACK = 1.0` (`pathmap.py:184-201`) is applied at `:424-425` and `:458` but not at
+  the acceptance comparison `:460` — factually true, but its stated job is keeping
+  `walkable()`'s bucket from missing a trapezoid `contains()` would find, which it does
+  correctly. An acceptance epsilon is a **new** policy, not a misplaced existing one.
+
+**Specimen C (`_61106 t=67.787`) — the "plane-blindness artifact" reading is REFUTED, and
+§1p.6's exception 2 stands as NOT FOUND.** The lane measured ring clearance restricted to
+**plane 0**, the plane it had itself just shown is empty over that stretch, and read the
+resulting 0.0 u as a debunk of the published 96 u corridor. Restricted to **plane 17**, the
+plane retail actually transited: clearance is the **full 96 u for f 0.075–0.500 and 64 u at
+f 0.525**; at retail's grant0 the plane-17 ring is 68 u, and at our straight line at the
+same along-fraction it is 76 u. **Retail moved 101.7 u laterally to a point with LESS
+clearance on its own plane.** A plane-17-aware router going straight would have had more
+room. §1p.6's "our mesh has nothing there to route around" survives intact.
+
+**Also REFUTED — "C's two anomalies share one cause."** On the lane's own cached data,
+grant0 (+0.007 s) is the 101.7 u detour with wire plane words **(17,17) — no transition** —
+and grant1 (+0.048 s) is 1.60 u lateral with words (0,17), which *is* the handoff. The 41 ms
+cadence pair spans a non-transition waypoint and a transition waypoint, so the handoff
+cannot explain the first one's offset. **And the "fourth row shares C's cause" grouping
+falls with it**: `_63805 t=1233.471`'s grant is a **1.29 u truncation**, not a detour.
+
+**What DOES survive there is a genuine refinement of §1p.6's exception 1. RECONSTRUCTION,
+n = 1.** `_63805 t=1233.471`'s grant carries wire words **(29,0)** — retail's server
+explicitly announced a plane-29 destination — and the `{0,29}` union clearance dips to 28 u
+at f = 0.600 while plane 0 → 0.0 and plane 29 → 8.0. So the committed "~24 u clearance dip
+our zero-width clip walks" **is the plane-blind union thinning at a plane seam**. It
+explains why the committed dip exists; it does not supersede it, and it does not join C.
+
+**Two of the lane's own hypotheses died correctly and are worth recording:** the unused
+forward portal index is a **redundant second witness that agrees** (map148 378/378 keys,
+906 == 906 memberships; map280 698/698, 1230 == 1230; zero reverse-only, zero forward-only),
+and the tag-13 obstacle candidate is **NOT-MEASURABLE** (0 of 26 corpus lines cross one, but
+the positive control gives only ~1.5 expected crossings, p ≈ 0.22). **CONTESTED:** retail's
+`0x0029` plane-word field order is not settled by geometry — **both** candidate orders match
+our decode on 40 of 40 grants with **zero** discriminating rows.
+`studies/movement/FINDINGS.md:849-880` remains the sole witness.
+
+---
+
+### 1s.6 `0x0025` is absent from the click contract — as an ENTAILMENT, on n = 2 exposed trials — and our defect is ONE ARM, not our rate
+
+**CORROBORATED, and this is the lane's strongest result.** `0x0025` carries nothing the
+server computes, at n = 2,595 (against the committed n = 2,256): the vec2 is a unit vector
+(|v| p50 0.999593, max exactly 1.000000, 100% below 1.01), the angle to the client's **own**
+reported vec2 is p50 and p90 both 0.0000 deg, and the trailing byte equals the c2s `0x003D`
+field-4 `movementType` on **2,550 of 2,592 = 98.38%**. The null the lane did not run and
+the skeptic did: shifting to the report five places earlier on the same connection gives
+**1,243 of 2,380 = 52.23%**, against a mode-guess baseline of 61.50%. Reproduces
+`movement/FINDINGS.md:3809` at larger n. Field decode independently confirmed on the pinned
+build by `msgshape`, which recovers the **client's own** cmds-table initializer writes and
+is therefore a second witness rather than the OpenTyria import counted twice: `0x0025` RECV
+table `0x00a52d70`, handler `0x005fd540`, `[u32, vec2, u8]`, 15 B; `0x0029` handler
+`0x005fd890`, `[u32, vec2, u16, u16]`, 18 B.
+
+**The same-frame subordination is real but it is not `0x0025`'s property.** Timestamps
+**tie** — dt from a player `0x0025` to the next player `0x0029` is 0.000000 s at p50, p90
+*and* p99 — so the pairing must be scored on merged wire **order**. Forward: 2,592 of 2,595
+(99.88%) carry a same-frame position-moving message. Backward: 2,592 of 3,672 (70.59%). But
+`0x002B` shows the same subordination at **100.00% forward (n = 1,273)** while `0x0027`
+(n = 184) and `0x002A` (n = 215) both read **0.00%** — the instrument is not vacuous and
+the rule is more general. **`movement/FINDINGS.md:3810` already committed the stronger
+form.** CORROBORATION of a committed result, not a new finding.
+
+**§1p.10 item 5's registered refutation FIRES — but as an entailment, not a 32-trial
+measurement.** The lane's "0 of 32 clicks, 0 of 32 chains, 0 of 5 multi-grant chains" is
+arithmetically right and its **exposure is 2, not 32**: on 24 of 32 clicks the preceding
+report's own `0x0025` had already been sent (0.20–20.95 s earlier, median 2.29 s), 5 had no
+report at all, 1 was 17.12 s stale, and the 2 genuinely exposed sat at lags of 0.67 s and
+0.12 s against a 36 ms answer median. The in-instrument control (82.0% of 3,079 reports vs
+0 of 32 clicks) contrasts a population that **by construction** holds a fresh vector with
+one that by construction does not. **The conclusion nonetheless holds as an entailment of
+two already-committed facts** — the client sends **no position** while click-moving
+(`movecode/FINDINGS.md:1716`) and `0x0025` is `unit(the client's own vec2)`
+(`movement/FINDINGS.md:3809`). A click supplies a **point**, not a vector, so there is
+structurally nothing to echo. **Independent evidential weight: n = 2.** State it that way.
+
+**REFUTED — the "if and only if" trigger.** Necessary: `0x0025` → a fresh `0x003D` exists,
+2,592 of 2,595 = 99.88%. Sufficient: a fresh `0x003D` → a `0x0025` follows, **2,543 of
+3,079 = 82.59%**. 17.4% of fresh reports draw none. The lane's own body concedes it (492 of
+2,990 first-grants bare).
+
+**OUR SIDE: the pooled row describes no configuration our server has ever run. OBSERVED.**
+Every `0x0025` send's `label` field carries the arm inline. Partitioned on it instead of on
+a date proxy, agent-filtered, same 60 ms instrument on both sides, post-2026-08-22:
+
+| arm | n(0x0025) | forward | backward | ratio |
+|---|---|---|---|---|
+| `[legacy+zero-lead]` | 1,673 | **100.00%** | 90.09% | 0.901 |
+| `[zero-lead]` | 464 | **100.00%** | 89.23% | 0.892 |
+| `[legacy]` | 1,636 | **0.67%** | 3.01% | 4.470 |
+| untagged | 861 | 0.46% | 1.71% | 3.679 |
+| *pooled (the published row)* | 4,634 | *46.44%* | *72.29%* | *1.557* |
+| **retail, same instrument** | 2,595 | 99.81% | 70.53% | 0.707 |
+
+**Not one arm is near 46.44% or 72.29%.** Our zero-lead arms are at or **above** retail on
+the forward test and **over-pair** on the backward one. The defect is that the `legacy_dir`
+arm ships a bare direction — `authsrv.py:15788-15794` fires `0x0025` on
+`turned or state['walking'] is not True` while the accompanying grant is gated separately on
+`zero_ok` (`HEADING_GRANT` defaults False at `:1200`) — which is already committed at
+`movement/FINDINGS.md:3899`. It is a per-arm defect, not a global misuse and not a rate
+error.
+
+**DO NOT correct §1p.10 item 5's "32.2/min, 4.7× our grant rate" in place.** That is a
+**per-run** figure for a named default build with its per-run counts stated. Replacing it
+with a pooled mean over 230 heterogeneous logs is a denominator substitution: per-log today
+the ratio is p10 0.00 / p50 0.70 / p90 1.92 / **max 134.0** (n = 164 finite) and the rate
+p10 0.0 / p50 12.2 / p90 67.4 / **max 165.1 per min**; **66 of 230 logs contain zero
+grants** — the exact `HEADING_GRANT = False` condition the committed figure describes — and
+80 of 230 are still ≥ 4.0×, 62 of 230 still ≥ 25/min. The committed figures are live,
+currently-reproducible configurations.
+
+---
+
+### 1s.7 The click-walk silence: the counterexample class is ~3, not 24 — and I RETRACT §1p.4's 7-row cell as unreproducible
+
+**The refutation of the absolute wording HOLDS — and it was already committed at §1p.4,
+whose own heading calls the answer OVERSTATED.** This lane verified it independently rather
+than discovering it. What is genuinely new: an independent reimplementation, a 27/27
+anti-vacuity splice control, the `movementType` test, the closing-rate discriminator, the
+per-connection table, and the replacement texts in the fixes block.
+
+**CORROBORATED — the vacuity, reproduced from scratch.** Rebuilding the `INPUT_OPS`
+terminator gives 0 inside, **0 of 27 recovered** by the splice, and exposure falling
+**exactly −50.0%** — the edge-eating signature. The corrected census reproduces exactly
+under an independent implementation on cache-verified data (61/61 connections re-decoded
+byte-identical, 153,688 rows): **K = 27 windows, 79.73 s exposure, 24 position rows inside,
+4 of 27 windows carrying.**
+
+**But the counterexample class is ~3, not 24. OBSERVED.** Scored on the tree's **own**
+committed discriminator (§1p.4: lead-changed pairs p50 0.500 s = steering; lead-unchanged
+p50 1.768 s at ~511 u stride = odometer — reproduced exactly, stride p50 509.9 u), **22 of
+the 24 are lead-CHANGED**. By stride, the cleaner marker, only **3 of 24 sit at the odometer
+stride**: 513.8 u / 1.784 s and 509.3 u / 1.768 s on `_63805 t=1233.471`, and 514.1 u /
+1.786 s on `_62994 t=136.480`, all at 287.9–288.1 u/s. The remaining twelve on `_52318` are
+strides of 12.6–300.3 u at 109–383 u/s — **383 u/s exceeds the 288 run speed** — and the
+lane's own discriminator calls that window RECEDING at −264.7 u/s and excludes it. **Half
+the headline is a class the lane rejects three claims later.** A steering-cadence report
+inside a click-outstanding window is a keyboard report and refutes nothing about a
+click-walk.
+
+**REFUTED — "it is a session property, not a client property."** `_63805`'s three click
+windows split **0 / 7 / 3**, and the zero window (`t=1103.590`, 6.725 s) sits inside a
+**36.70 s report gap covering 1,936.9 u on that same connection**. A property of the session
+cannot produce heterogeneity within the session. And the contrast mixed nulls: scored
+against `_63805`'s **own** report stream — the control that gave `_62994` its p_le = 0.0002
+— that connection gives obs 10 vs null p50 12 (uniform) / 18–19 (command-onset), i.e.
+**0.53–0.83×, the same direction as the corpus**, at p_le 0.16–0.41. **Underpowered, not
+null.** Seven of the nine per-connection rows have odometer expectations of 0.0–3.7 reports
+and carry no information at all.
+
+**The permutation nulls are biased upward and must be quoted as a bracket.** The observed
+window terminates at the first command and therefore contains **zero** commands by
+construction; the null windows are unconstrained and can span commands, which correlate
+with report bursts. Truncating the null identically moves uniform p_le **0.0203 → 0.0622**
+(crosses 0.05) and command-onset **0.00005 → 0.00285**. Significant under command-onset
+(p ≈ 0.003), **not** under uniform (p ≈ 0.06).
+
+**The silence specimen survives at full strength, and it is what the original claim's
+authors were looking at. OBSERVED.** `20260807T143055/_62994` leaves two gaps of **23.27 s
+(6,611 u, 284.1 u/s)** and **27.84 s (7,529 u, 270.4 u/s)** with 8 and 4 clicks issued
+inside them and **zero** c2s position reports. Confounds checked and clean: no s2c `0x002C`
+reposition, no `409` map load inside either gap, capture continuous (max inter-row gap
+0.58 s), 113 and 23 player grants inside them. Player attribution verified twice — agent 31,
+132 grants within 0.25 s of a client report at a median 765.5 u (the D1 lead constant),
+runner-up 2,056.8 u, plus bit-exact click echoes. Click-anchored permutation on that
+connection alone: **obs 2 vs null p50 22–33, p_le 0.00005 / 0.00020 / 0.00035 / 0.00130**
+across all four control definitions. *Caveat in the sentence:* "two gaps between consecutive
+position rows contain zero position rows" is an identity and the two quoted are the
+**maxima** of that connection's gap distribution, so the odometer-null figure is not a null
+test — the permutation is the defensible statistic. And the same connection produces a
+12.03 s / 2,388.0 u gap with **zero clicks inside**.
+
+**I RETRACT §1p.4's second table row.** `FINDINGS.md:2175` publishes "77.44 s / **7** / 3 of
+27" for the command-terminated window. It is **not reproducible from `routerbench`'s
+committed instrument**, and the cause is not the terminator or the counted set:
+`term{62,57}/count{61,71}` — the published construction — gives **exactly 27 / 79.73 s /
+24 / 4-of-27**, identical to `term{62,71,57}/count{61}`; `term{62}` alone gives 26; and no
+3-window subset of the carrying counts `{12, 7, 3, 2}` sums to 7. The row's script was a
+scratchpad artifact and cannot be re-run. **They are inconsistent, not differently
+sensitive.**
+
+**The `movementType` candidate is NOT-MEASURABLE-BY-THIS-METHOD, not NOT FOUND.** Its
+numbers reproduce exactly (inside `{1:16, 2:2, 3:6}`, p = 1.00 / 0.76 / 0.26 against a
+corpus of `{1:2033, 2:373, 3:494, 4:51, 5:19, 6:18, 7:42, 8:49}`, n = 3,079) — but the test
+population **is** the 24 in-window reports whose attribution the lane itself calls CONTESTED
+and which are 22/24 steering-cadence. A test for "does `movementType` mark a click-walk
+report" run over a population that may contain zero click-walk reports cannot return a valid
+negative, and n = 24 has no power against anything short of a total partition. **§1p.10
+item 6's pre-registered refutation criterion is neither met nor honestly tested.**
+
+**The closing-rate discriminator is a real instrument and passes both controls. OBSERVED.**
+Pointed at grant points on **1,751 known-walked legs** it scores 1,717 CLOSING (98.1%) at
+p10/p50/p90 = 276.9 / 287.8 / 382.7 u/s — recovering the measured run speed with **no fitted
+parameter** — and the negative control the lane did not run (replace the grant with a random
+grant from the same connection) gives **45.6% at p50 84.1 u/s**. It separates "moving toward
+the click point" from "moving away". **It does not separate a keyboard walk aimed at the
+click from an autonomous order-walk**, which is the contested hypothesis.
+
+**NOT-MEASURABLE-BY-THIS-METHOD, and this is the most useful claim in the lane.** Every
+discriminator in this family — `movementType`, `|lead|`, answer-along-heading, closing rate,
+arrival/overshoot — is computed **from position reports**, and the silent class has none by
+definition: **15 of 16 silent clicks have zero trajectory rows before the next click.** No
+report-derived instrument can be applied to the class that supports the mechanism. Note also
+that the census loses **5 of 32 clicks** because `routerbench.player_agent()` votes with
+`op61` — §1p.10 loose end (a) already names `20260817T183323/_49545` (78.7 s, 3 clicks, zero
+`op61`) and offers the `op32` fallback. **The most report-silent connection in the corpus is
+excluded from a census about report silence.** It biases retail *louder*, so it does not
+rescue the absolute claim.
+
+**The overshoot specimen cuts harder than the lane stated.** On `_63805 t=1233.471`, reports
+at 1231.025 and 1232.803 sit **1.778 s apart (odometer cadence) BEFORE the click** and are
+already closing on a point not yet clicked (2,976.2 → 2,464.0 u); post-click the client
+closes to 60.3 u and stops on an explicit c2s `0x0047` at t = 1242.730, **391.3 u past the
+click point**. The client was on that heading 2.4 s before the click existed.
+
+---
+
+### 1s.8 The lanes and sub-lanes that came back vacuous, forced, or refuted by their own skeptic — printed as results
+
+In §1p.9's style. Eleven of them, and three are the same defect this arc has now published
+five times.
+
+1. **"Suppression buys ~3×" (L1's headline) — KILLED, and the classifier is mutated by the
+   outcome it classifies.** The 0.329% (187/56,918 fence-open) vs 0.113% (20/17,657
+   fence-shut) contrast reproduces to the digit over 74,575 adjacent sample pairs in 60
+   captures, and is not a measurement. (a) The offered control — "no open-fence event
+   ≥ 150 u in the preceding 2.0 s" — looked for a preceding **detected warp**, never at fence
+   **state**, so it could not have found the confound it was offered as ruling out; the
+   matched control fires hard (**18 of 20 shut-arm events within 15 samples of an 'open'
+   reading vs 15.6% ambient (624/4,000), p = 4.1e-13**; 6 of 20 within 2 samples vs 2.8%,
+   p = 1.3e-05). (b) The sampler runs at **11.4 Hz / 87.8 ms median period against a median
+   shut run of 13 samples and 640 transitions over 78,745 samples** — the exact condition
+   `movetap.py`'s own docstring **pre-registers as INCONCLUSIVE**, and the abort was not
+   invoked. (c) `agtrack` zeroes the whole roster's `clientControlled` on snap
+   (`0x0060602E`, `0x006060A2`, `0x006060A9`), so "shut" is partly the **post-snap** state.
+   (d) The sign **inverts within date** — 2026-08-24 gives shut 10/1,306 = 0.766% against
+   open 3/1,838 = 0.163%, i.e. shut **4.7× worse**. (e) Simpson: moving 4.3×, stationary
+   1.6×, with **14 of the 20 shut-arm events being ≥ 150 u jumps from a standstill** — not
+   the prediction-drag this arc calls a warp. Concentration: 8 files, 6 of 20 from one, 14
+   of 20 from three, and three of them inside 2.4 s at 179/177/178 u — one episode counted
+   three times.
+2. **Bit 19 "never observed set, 0 of 78,745" — NOT-MEASURABLE-BY-THIS-METHOD.** Bit 19 is
+   SET at `0x00602A22` and CLEARED at `0x00602A65`, plausibly inside one 87.8 ms sample
+   interval. The offered control (6 rows of bit-18 toggling across 5 files = 0.0076%) proves
+   the reader is live, not that an 11.4 Hz poll could catch it. The static half carries the
+   verdict alone.
+3. **The facing-9 armed/unarmed cross-tab — NOT-MEASURABLE-BY-THIS-METHOD, correctly
+   self-labelled.** All 6 armed-state events are in one file and the next sample shows
+   facing back to 1. `movetap` samples state, not executions
+   (`studies/movement/PROBE-GATEFIRE.md:765` says this in terms).
+4. **L3's "check that could fail did not fire" — FORCED, 259 of 259.** §1s.4.
+5. **L3's fourth positive control (seeded origin bit-identical, 27/27) — a check that cannot
+   fail, and its own script's docstring says so** ("the seed MUST be overwritten and the
+   seeded origin MUST be BIT-IDENTICAL"). It tests code equivalence in exactly the regime
+   where the two models cannot differ. **Three controls passed; one is an identity.**
+6. **L4's epsilon safety zeros — vacuous.** "0 newly-walkable of 40,000 uniform samples at
+   eps = 1e-3 and 1e-2" has an expectation of **0.02–0.3**, computed from the lane's own
+   instrument (0 / 0 / 3 / 21 on map148 and 0 / 0 / 4 / 28 on map280 at 1e-3 / 1e-2 / 1e-1 /
+   1.0). It could not have returned anything else at the sizes reported as safe.
+7. **L4's "bit-exact refutable form" — 99.48% forced.** The discrepancy is 1.268e-06 u
+   against a float32 ULP of 2.441e-04 at that magnitude — **0.0052 ULP** — so the two could
+   only have differed on a 0.52% straddle.
+8. **L4's "11 of 40 grants sit at exactly 0.0 u from an edge" — 10 of the 11 are
+   degenerate.** §1s.5.
+9. **L5's "0 of 32 clicks" — exposure 2 of 32.** §1s.6. This is "zero exposure is not a
+   null" one level above §1p.4's terminator-set form.
+10. **L5's "the entire ratio excess is the unaccompanied population" — an algebraic
+    identity.** `accompanied / grants = 2,590/3,672 = 0.7053` and the backward rate is
+    `2,590/3,672 = 0.7053`; the forward and backward tests read the same 1:1 nearest-neighbour
+    pairing from two ends. Removing the unaccompanied population leaves the backward rate **by
+    construction**. §1p.9's "two instruments may be one theorem", exactly.
+11. **L6's floor F3 — implied by F2.** `D_hi ≡ 288 × expo_seconds` by construction, so
+    `F2 (expo ≥ 40 s)` forces `F3 (≥ 8,000 u)`: 288 × 40 = 11,520. **Two of five
+    pre-registered floors are one floor, in the lane whose whole brief was about checks that
+    cannot fail.** Relatedly, "22,962 modelled units" is 288 × 79.73 s restated, not a
+    measured distance: the uncapped grant-chain length over the same windows is **54,856 u**
+    and the `min()` cap binds on 23 of 27.
+
+**Also underpowered rather than negative:** L2's K-vs-R crowding lead (one agent id and two
+agent objects in the entire 10-capture corpus — §1s.3); L2's gateless `m_segmentPoint` null
+after the NaN correction (n = 7 across 3 captures, 3 from one file); L4's `starts[0]`
+component hazard (**zero exposure** — all three specimens have `n_containing == 1` at the
+origin); and L6's `movementType` test (§1s.7).
+
+---
+
+### 1s.9 What this changes about the ranked list (§1p.10)
+
+**Items 1 and 2** were run and REFUTED before this pass (§1q, §1r). Untouched.
+
+**Item 3 — "do NOT build the one-leg gate" is CONFIRMED as a decision, and now has the
+number it was missing.** 10 of 27 rows are geometrically forced; the informative subset is
+17 rows and H scores 15 of 17 there. n rose 26 → 27 and the **informative core did not
+grow** — the new row contributes 0 of the 17. Nothing changes; the item stays a decision.
+
+**Item 4 — CLOSED, delivered, and wrong in both directions.** +1 click and 3 navmeshes,
+not +3 and 5. The follow-on (a `routerbench.modeled_origin` fallback anchoring on the
+connection's own `0x0195` field 2) is **REPRICED DOWN**: ~1 hour desk, buys 2 clicks whose
+origins are 21.5 s and 50.0 s stale — far outside the ≤ 2 s validated regime — and both are
+RECONSTRUCTED as one-leg, so the expected yield is confirmation of a possibly-forced kind.
+**Buy it for the 4th navmesh (156969), not for H**, and gate it on an explicit staleness
+column so §1p.5's regime stays separable.
+
+**Item 5 — CLOSED on its registered clause, but as an entailment (n = 2 exposed), not a
+32-trial measurement.** Do **not** correct the 32.2/min premise. Two cheap things replace
+it: (a) our forward-pairing defect is the **`legacy_dir` arm**, not our rate — the zero-lead
+arms already sit at or above retail; (b) `authsrv`'s jsonl records origin, build, `world_id`
+and `map_id` but **no argv/flags row**, and every ours-vs-retail comparison in this arc
+inherits that blindness. A handful of lines.
+
+**Item 6 — REPRICED and REDESIGNED. Do not buy the run as item 6 frames it.** "3–5 minutes
+of pure click-walking, raising K from 27 to hundreds" raises n on the quantity that is
+already settled and leaves attribution exactly as unsettleable, because a bigger corpus
+still cannot observe key state. If the run is bought it must carry the missing variable and
+the right statistic: **(i)** fix input mode by protocol — 3–5 min mouse-only with hands off
+the movement keys, then 3–5 min of mouse clicks with a key held, **filed as two arms with
+the arm recorded in the capture header** — or record key state; **(ii)** pre-register
+**odometer-stride reports (490–530 u at ~288 u/s) inside a click-outstanding window** as the
+statistic — corpus n = 3 today — **not total reports inside**, which is dominated by
+keyboard steering and is what produced the 8×-inflated headline; **(iii)** carry the `op32`
+spawn-position attribution fallback so all 32 clicks and any zero-`op61` connections score.
+Same operator time; it turns an unfalsifiable attribution into a two-arm comparison with a
+registered prediction (mouse-only should reproduce `_62994`; mixed should reproduce
+`_63805`; if mouse-only reports at baseline, the mechanism is dead).
+
+**Item 7 — SPLIT THREE WAYS.**
+* **A (`_60935`) — CLOSED as a mesh disagreement.** Our mesh reproduces retail to ~0.5–1.2 u.
+  What remains is `route()`'s refuse-vs-truncate policy, which is a **server decision**, not
+  a `pathmap` change, and it is the same decision as item 3's "third else-branch that asserts
+  nothing".
+* **B (`_52318`) — LOCATED and COSTED.** A quantization tolerance at `pathmap.py:327` and
+  `:460`, **~1e-2 u**, best implemented by pre-computing the slacked bounds into
+  `_build_grid`'s record so the hot path pays nothing, with its own test section and a floor
+  bump (`test_pathmap.py` is 981 lines, floor 68). Half a day. **Price it as a correctness
+  fix, not a scope win:** the measured corpus exposure is 1 of 41 grants on n = 1 row.
+* **C (`_61106`) — STILL NOT FOUND**, and it survived a debunk the plane data does not
+  support. §1p.6's remaining candidates (a dynamic agent; a solver emitting from a coarser
+  graph than the one it validates against) are untouched by this pass.
+
+**NEW, and it is the top of the list: ONE owner-driven run with four new movehook sites
+answers four open questions at once.** `0x00606009` (the fence, **counting executions**
+rather than sampling state — this is the only thing that can settle §1s.8 item 1),
+`0x00605634` + `0x00605683` (the facing-9 early-out's first compare and its return-1 tail),
+`0x005FCAA0` (the gate-free `ResyncAllAsync` — the only instrument that can attribute the
+fence-shut warps and the only one that can catch the gateless route firing *cold*), and
+`0x005FEF70` (gate 3, filtered on `retaddr == 0x0060581E`), which discriminates gate 2 from
+gate 3 **by presence alone** on all 3 undiscriminated snaps and captures `MapFindPath`'s
+output path as a free by-product — the "second tap" the `mapfindpath` row's own `limits`
+field says is needed. **Cost:** 4 rows in `content/movecode.toml` + a `gensites.py`
+regenerate (NSITES 11 → 12+; `teleport`'s site *index* moves, harmless only because
+`readhook.site_names()` resolves by RVA) + a DLL rebuild + one owner-driven run on build
+38797 (`vault/run/2026-07-29_221c13772c7a/Gw.exe`, ours → loopback, caged). **Ring-fill
+caveat:** `0x005FEF70`'s second caller sits on the avoidance retry path, which `main:3333`
+says retries up to 6 times per collision event, so that site may fire far more often than
+gate 3 does.
+
+**NEW, desk, cheap:** split `readhook.py`'s separation report by reseed caller and switch it
+to dead-reckoned positions — as it stands (`:637-646`) it pools the gated and gateless
+routes and quotes stale `m_point`. **And two instruments are worth promoting** into
+`toolkit/clientscan/` beside `routerbench`, with their controls as tests: the forced-verdict
+sweep (which is the first thing that can say whether a 2×2 cell could have come out the
+other way) and the closing-rate discriminator (the first thing in this arc that can tell a
+click answer from a lead refresh **without consulting our navmesh**). Both passed a real
+positive *and* a real negative control.
+
+---
+
+### 1s.10 What is NOT settled
+
+* **Whether the AgTrack fence suppresses warps at all.** The corpus cannot answer it — an
+  11.4 Hz sampler against a 1.14 s median shut run, with a classifier the counted outcome
+  mutates. Needs a breakpoint counting executions at `0x00606009` / `0x0060601C` /
+  `0x0060602E`. Owner's run.
+* **Which route produces the fence-shut warps** — `ResyncAllAsync` `0x005FCAA0`, the arrival
+  teleport `0x006020B0`, or our own `0x002C` pins. The tap cannot attribute them.
+* **Whether `0x005FCAA0` is wire-reachable.** Its third caller `0x004E6E82` was never
+  characterised, and `movement/FINDINGS.md:2386` associates that entry with **opcode
+  `0x0023`**. If it is, a wire policy *can* reach the gateless route.
+* **Whether the gateless route ever fires with a non-zero separation.** All 19 observed
+  firings follow closely on a gated snap that had just glued the copies, so this corpus
+  cannot see it firing cold. That is the residual risk to "the candidates were aimed at the
+  right gate".
+* **Gate 2 vs gate 3 on the 3 undiscriminated snaps**, and `k2 seq 720` (snapped at a
+  recomputed 293.4 u, 2% *under* the cut, with no gate-2 query — either a missed record or
+  a ~20 ms evaluation-time error). UNVERIFIED.
+* **Gate 3's AGENT half has never been exercised by anything in this arc.** 10 captures, one
+  agent id, two agent objects. Nothing here has measured a crowded world.
+* **Whether a bare `0x002B` with no paired `0x0029` trips assert AgAgent:1198** by leaving
+  bit 19 set. Statically it must — `0x00602990` sets the bit at `0x00602A22` and the only
+  clear in the image is inside the destination setter a bare `0x002B` does not reach — and
+  the corpus never catches bit 19 set, which the sampling cannot distinguish from "always
+  cleared inside a tick". UNVERIFIED.
+* **The attribution of the 3 odometer-stride reports inside click-outstanding windows.**
+  Structurally unsettleable from the wire; needs the two-arm capture of §1s.9 item 6.
+* **`agent+0x98`'s meaning — MOVECODE-Q3's remaining half.** Narrowed (it travels with the
+  destination, is copied to follower agents alongside `m_segmentPoint`/`m_targetPoint`, is
+  forwarded unchanged by `reseed` and by the re-aim, and is compared against a register at
+  `0x006017CB` inside the local path solver `0x006011F0`), but that register's origin is
+  untraced.
+* **`explorable` for AreaInfo type 11.** An owner decision, or a calibration against an
+  upstream column — permitted only as *verification* of a value we derived, per `PLAN.md`
+  §6.1.
+* **Whether the epsilon changes anything outside the two meshes and 26 rows.** The map corpus
+  is 349 maps and `route()`/spawncheck/coverage consumers were not swept.
+* **Whether file 165811 is 68 or 70 planes** — only `vault/dat_study/Gw.dat` was parsed (68);
+  `vault/run-live/2026-08-13_…/Gw.dat` was not.
+* **All `--in <module>` bounds in §1s.2 and §1s.3 are approximate.** `asserts.py` is short by
+  ~373 sites, and `AgTrack`'s assert-derived upper bound `0x00605DE6` is **already known to be
+  short** — `agtrack` itself lives at `0x00605FC0`.
 
 ---
 

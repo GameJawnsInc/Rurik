@@ -311,7 +311,11 @@ session scratchpad; studies/isle/PLAN.md section 2 pre-registered the prediction
 vault/run archive copies checked -- flags 259, 1,516,583 B decompressed, magic ffna, \
 25 chunks -- and 165811 is the low id, the form a server sends \
 (studies/mapdata/FORMAT.md's 397-for-397 rule). The mesh parses to 2,769 trapezoids \
-over 70 planes; the spawn (1136, -463) lands in exactly 1 trapezoid on plane 0, \
+over 70 planes (DISPUTED 2026-08-28: vault/dat_study/Gw.dat parses this same \
+file as 68 planes, while byte size 1,516,583 and trapezoid count 2,769 match \
+exactly and it is MFT row 21641 either way -- two archive copies, only one \
+parsed per reading, so neither side is picked here; see [map.248]'s note); \
+the spawn (1136, -463) lands in exactly 1 trapezoid on plane 0, \
 against 0 for Pre-Searing Ascalon's spawn (9826, 8077), the control. The map id \
 binds the row by SIZE + area-table footprint: rows 248/280/784 share the identical \
 footprint rect and 352x320 is unique in the archive (vault/areatable/maprows.json \
@@ -603,3 +607,218 @@ WHAT IS NOT VERIFIED: the spawn-in-EXACTLY-ONE-trapezoid test, which needs the \
 mesh the CLIENT compiles, and everything else about a map this size -- no client \
 has compiled anything above 96x96 for this project, and nothing above 64x64 under \
 compression and a created chain together. WORLDMAPS-W7 is the run that settles it."""
+
+# ---------------------------------------------------------------------------
+# The three maps the live click corpus visits and this store could not name.
+# Added 2026-08-28 for studies/movecode/FINDINGS.md section 1p.10 item 4: their
+# absence was refusing three CONNECTIONS out of `routerbench.py --score`, and
+# with them three known-verbatim CLICKS, which is what manufactured the
+# 13-verbatim/13-part-way balance section 1p.5 item 3 warns about. Nothing here
+# is new to the repo -- studies/mapload/FINDINGS.md section 1 measured the whole
+# map -> file table on 2026-08-17/18 and content/maps.toml [map.280]'s own note
+# already says 165811 carries map 248. What is new is that it is now a row a
+# tool can select on.
+#
+# THE SPAWN FIELDS ARE WEAKER THAN THE FILE IDS, deliberately and per row.
+# Maps 242 and 248 have NO fixed arrival: 5 loads of 242 gave 5 distinct
+# positions and 17 loads of 248 gave 17, so `spawn_x`/`spawn_y` here are ONE
+# retail arrival apiece -- the one from the connection this row admits into
+# routerbench -- and not "the" spawn the way [map.280]'s byte-identical
+# (-6036, -2519) is. Every one of the 25 arrivals observed across these three
+# maps lands in exactly 1 trapezoid on the plane its own wire message declares,
+# which is what makes any of them a defensible choice.
+
+[map.242]
+name = "Map 242 (name_id 22190, resolved at run time)"
+file_id = 156969
+spawn_x = -8777.75
+spawn_y = 8552.43359375
+plane = 0
+explorable = false
+
+[map.242.provenance]
+source = "measured"
+extractor = "toolkit/mapdata/archive.py"
+capture = "20260817T183756"
+origin = "live"
+verified = """TWO INDEPENDENT WITNESSES, neither of which is the other's method.
+
+WIRE. `GAME_SMSG 0x0195` field 1 is the map FILE id by construction in the \
+client's own code (studies/mapload/FINDINGS.md section 1: the handler passes it \
+straight to the archive-filename encoder at 0x004702B0). Pairing each game \
+connection's first `0x0199` field 2 (map id) with its first `0x0195` field 1 \
+over the WHOLE live corpus -- 61 game connections, 61 decoded ok, 57 carrying \
+both -- map 242 appears on 5 connections and reads 156969 on all 5. All 14 map \
+ids in the corpus are single-valued in this direction; 156969 is one-to-many the \
+other way and also carries maps 212 and 416, so this row is well-formed and the \
+file id is NOT a name for this map alone.
+
+ARCHIVE. In the owner's own copy (vault/dat_study/Gw.dat, 171,208 file-id \
+records) `archive.binds_plainly(156969)` returns MFT row 21189 -- the CLIENT's \
+own exact-32-bit lookup, not our reader's -- decompressing to 2,306,358 bytes of \
+`ffna` whose chunk walk closes to the exact byte, and whose pathing chunk parses \
+to 64 planes and 3,307 trapezoids with no malformed row.
+
+THE CONTROLS, because a walkability test that accepts anything proves nothing. \
+The Pre-Searing spawn (9826, 8077) -- the control content/maps.toml has used \
+since [map.148] -- lands in 0 trapezoids of this mesh, and map 280's committed \
+arrival (-6036, -2519) also lands in 0, while landing in exactly 1 of file \
+165811. So the test discriminates in both directions and not merely against one \
+far-away point.
+
+THE CHECK THAT COULD HAVE FAILED AND DID NOT: `0x0195` field 3 (the plane) \
+against the plane of the trapezoid our decode puts the arrival in. Agreement is \
+5 of 5 for this map and 25 of 25 across maps 242, 248, 309, 310 and 311, with \
+the [map.280] row as the positive control.
+
+`explorable` is the CLIENT's own answer, same rule as [map.146]: AreaInfo type \
+is 2 for an explorable and this row reads 13. Read with \
+toolkit/clientscan/areatable.py against the pinned build-38797 client \
+(vault/client/2026-07-29_221c13772c7a/Gw.exe), both independent locators \
+agreeing at VA 0x0096de38 over 888 records; the controls in the same pass \
+reproduce every AreaInfo type this file already commits -- 146 type 2, 148 and \
+164 type 10, 280 type 2, 449 type 13. Row 242 also reads campaign 2, continent \
+2, region 11, party 1-4, level 1-20, flags 0x00000200, name_id 22190, and no \
+file id of its own (AreaInfo.file_id is a loading-screen texture and never the \
+map file)."""
+note = """
+SPAWN IS ONE OBSERVED ARRIVAL, NOT THE ARRIVAL. Five loads of map 242 across
+three captures gave five distinct positions -- (-7426.30, 10042.78),
+(-13889.24, 10134.72), (-8777.75, 8552.43), (-7524.79, 8990.11) and
+(-8851.17, 8431.66), all plane 0, all landing in exactly 1 trapezoid. Committed
+here is the one from 20260817T183756/_60966, the connection this row admits into
+routerbench. A later reader wanting retail's real entry rule should treat the
+spread as the finding: this map is entered from more than one place, and
+[map.280]'s byte-identical arrival is the exception rather than the pattern.
+
+The map NAME is not committed. name_id 22190 resolves it at run time out of the
+owner's own archive -- CLAUDE.md's rule, and what mapbuild.py and areatable.py
+already do.
+"""
+
+[map.248]
+name = "Great Temple of Balthazar"
+file_id = 165811
+spawn_x = -5574.0771484375
+spawn_y = -4944.68310546875
+plane = 0
+explorable = false
+
+[map.248.provenance]
+source = "measured"
+extractor = "toolkit/mapdata/archive.py"
+capture = "20260817T231139"
+origin = "live"
+verified = """This map SHARES ITS TERRAIN FILE WITH [map.280], which is the \
+single most useful thing about the row and was measured before it: \
+content/maps.toml [map.280]'s own note records that 165811 carries map 248 as \
+well, and that inside that one file the map-280 arrival and the map-248 arrivals \
+sit 2,205-2,734 units apart on the same connected walkable mesh. So the file id \
+below is not a new claim -- it is the same claim, now selectable.
+
+WIRE. Pairing first `0x0199` field 2 with first `0x0195` field 1 over the whole \
+live corpus (61 game connections, 57 carrying both), map 248 appears on 17 \
+connections spanning 8 captures and reads 165811 on all 17. Single-valued \
+map -> file; 165811 is one-to-many the other way (248 and 280).
+
+ARCHIVE. `archive.binds_plainly(165811)` returns MFT row 21641 in \
+vault/dat_study/Gw.dat -- the client's own exact-32-bit lookup -- 1,516,583 \
+bytes of `ffna`, chunk walk closing to the byte, pathing chunk parsing to 68 \
+planes and 2,769 trapezoids. The byte count and trapezoid count are the ones \
+[map.280] already committed; that row's prose says 70 planes and this copy \
+parses 68, which is worth someone's attention but changes nothing here.
+
+CONTROLS. All 17 observed arrivals land in exactly 1 trapezoid on the plane \
+their own `0x0195` field 3 declares. The Pre-Searing spawn (9826, 8077) lands in \
+0 trapezoids of this mesh; map 280's arrival lands in exactly 1, as it must, \
+since it is the same file -- so for THIS row the discriminating control is the \
+Pre-Searing one plus the fact that the same point scores 0 in files 156969 and \
+167730.
+
+`explorable` from the client, not from an upstream table: AreaInfo type is 13, \
+not the 2 that means explorable. toolkit/clientscan/areatable.py against \
+vault/client/2026-07-29_221c13772c7a/Gw.exe (build 38797), VA 0x0096de38, both \
+locators agreeing, with 146/148/164/280/449 reproducing this file's committed \
+values as the positive control. Row 248 also reads campaign 0, continent 3, \
+region 21, party 1-8, level 1-20, flags 0x00008000, name_id 2974."""
+note = """
+SPAWN IS ONE OBSERVED ARRIVAL. Seventeen loads gave seventeen distinct
+positions, spread over roughly 1,400 units of x and 1,300 of y, every one
+walkable on plane 0. Committed here is 20260817T231139/_52092's, the connection
+this row admits into routerbench. `0x0199` field 1 on the map-248 loads reads
+1, 35, 14, 35, 12 -- districts -- and studies/mapload/FINDINGS.md section 6 is
+where that thread is.
+
+The name is the one the repo has used for this map since studies/tape and
+studies/maprows; name_id 2974 is what actually resolves it at run time.
+"""
+
+[map.310]
+name = "Map 310 (name_id 2978, resolved at run time)"
+file_id = 167730
+spawn_x = 5089.0
+spawn_y = 940.0
+plane = 4
+# CONTESTED 2026-08-28 (studies/movecode/FINDINGS.md §1s.4). The literal reading
+# is verified -- this map's AreaInfo type is 11, not the 2 that means explorable
+# -- but `type == 2` is calibrated only against Pre-Searing, type 11 is
+# uncalibrated and rare (17 of 888 records), and `map_explorable` is the COMBAT
+# gate, while studies/isle/FINDINGS.md:713 records 553 observed damage events on
+# map 310. So this row asserts combat is impossible on a map we have 553 damage
+# events from. NOT a behaviour regression -- unconfigured maps already default
+# False, so the value ships the same either way -- but it needs an owner ruling
+# or a calibration of type 11 before anything relies on it.
+explorable = false
+
+[map.310.provenance]
+source = "measured"
+extractor = "toolkit/mapdata/archive.py"
+capture = "20260817T231139"
+origin = "live"
+verified = """THE WEAKEST OF THE THREE ROWS ADDED TODAY, and the reason is n. \
+The live corpus contains exactly ONE map-310 connection \
+(20260817T231139/_54071), so the wire witness for this map id is n=1 and cannot \
+be corroborated by repetition the way maps 242 (n=5) and 248 (n=17) can. What \
+carries it instead is the file, which three sibling map ids reach independently.
+
+WIRE. `0x0199` field 2 = 310 paired with `0x0195` field 1 = 167730 on that one \
+connection. The same file id is read on maps 309 and 311 on their own \
+connections in the same capture, so 167730 is witnessed 3 times; only the \
+310 -> 167730 EDGE is witnessed once.
+
+ARCHIVE. `archive.binds_plainly(167730)` returns MFT row 71585 in \
+vault/dat_study/Gw.dat, 855,669 bytes of `ffna`, chunk walk closing to the byte, \
+pathing chunk parsing to 13 planes and 443 trapezoids.
+
+THE CHECK THAT COULD HAVE FAILED. This map's arrival is (5089, 940) on \
+`0x0195` plane 4 -- and 4 of 13 planes is not a value our decode would land on \
+by luck. The trapezoid our mesh puts that point in is on plane 4, exactly 1 \
+trapezoid, no others. Map 311's arrival (5048.50, 1006.59) also lands in \
+exactly 1 trapezoid on plane 4 of the same file. The Pre-Searing spawn \
+(9826, 8077) lands in 0, and map 280's arrival (-6036, -2519) lands in 0, so \
+the test discriminates against both controls.
+
+WORTH SAYING OUT LOUD: map 310's arrival is BYTE-IDENTICAL to map 309's \
+(5089.0, 940.0, plane 4) on the same file. That is consistent with 309/310/311 \
+being instances cut out of one arena terrain -- the same shape 165811 has with \
+248 and 280 -- and it is also the reason the spawn field here is not \
+independent evidence for the map id.
+
+`explorable`: AreaInfo type is 11, not 2. toolkit/clientscan/areatable.py \
+against vault/client/2026-07-29_221c13772c7a/Gw.exe (build 38797), VA \
+0x0096de38, both locators agreeing over 888 records, with 146/148/164/280/449 \
+reproducing this file's committed values as the positive control. Row 310 also \
+reads campaign 0, continent 3, region 1, party 1-4, level 1-20, flags \
+0x00040200, name_id 2978, and an AreaInfo file id of 0x28FEF -- which is a \
+loading-screen texture, NOT the map file, and is shared with rows 309, 311 and \
+312. The two must not be confused: 0x28FEF is 167919, and it appears as a \
+`0x0195` field 1 on 0 of the 57 corpus connections that carry one."""
+note = """
+n=1 ON THE MAP ID. If a later capture ever shows map 310 loading a file other
+than 167730, this row is the one to delete first -- and it is the only one of
+the three that a single counter-observation could overturn.
+
+studies/isle/FINDINGS.md:713 already treats maps 310/311/312 as one family
+(641 p16 + 119 p17 events, 553 on map 310 alone), so the arena reading here is
+consistent with what that arc measured from the other side.
+"""

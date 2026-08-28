@@ -348,8 +348,21 @@ def section4_score(census_rows):
         cr = rows_by_key.get((row["cap"], row["conn"], round(row["t"], 3)))
         if cr is not None and cr["kind"] == "verbatim":
             verb.append(row["score"])
-    check("all 13 scoreable verbatim clicks found",
-                 len(verb) == 13, f"got {len(verb)}")
+    # 13 UNTIL 2026-08-28, and the 14th is confirming evidence rather than
+    # drift: content/maps.toml gained rows for maps 242, 248 and 310
+    # (studies/movecode/FINDINGS.md 1p.10 item 4), and map 310's click
+    # 20260817T231139/_54071 t=672.403 -- inside the era set already, refused
+    # before only because `score_corpus` could not name its mesh -- entered the
+    # scored set and reproduced as the one-leg case like the other 13. The pin
+    # was re-scanned AS OF ITS OWN VALUE first: on the commit before those rows
+    # this expression returned exactly 13, so the whole delta is the content
+    # change and none of it is a moved constant. Held as a FLOOR from here, per
+    # the house rule about counts that redden on confirming evidence -- the
+    # direction that must still go red is LOSING verbatim rows, and the check
+    # below is the strict one, since it must hold for every row found.
+    check("at least the 14 scoreable verbatim clicks found (13 before the "
+          "2026-08-28 content rows)",
+                 len(verb) >= 14, f"got {len(verb)}")
     check("verbatim class reproduces as the one-leg case",
                  all(s["routed"] and s["n_wp_ours"] == 1
                      and s["first_wp_dist"] == 0.0 for s in verb))

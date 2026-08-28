@@ -130,9 +130,10 @@ def main():
               world_err or f"census {world.census()}")
 
     # --- it loads, and it loaded the tables we expect ------------------------
-    LEDGER.ok(world.census().get("map", 0) == 15,
-              "fifteen maps load (map.167, WORLDMAPS-W24's Ashcoil chain, "
-              "landed 2026-08-22 -- see the note beside ADDED)",
+    LEDGER.ok(world.census().get("map", 0) == 18,
+              "eighteen maps load (maps 242, 248 and 310, the three the live "
+              "click corpus visits, landed 2026-08-28 -- see the note beside "
+              "ADDED)",
               f"{world.census().get('map')}")
     LEDGER.ok(all(world.census().get(k) for k in
                   ("npc", "item", "spawn", "player", "attack_speed")),
@@ -224,7 +225,21 @@ def main():
     # frontier's, the journal is ashcoil_alloc.json-shaped, and two areas
     # sharing one created chain would clobber each other on every re-install.
     # The refusal's own advice -- own file, own row -- is this row.
-    ADDED = {143, 144, 280, 27, 166, 165, 167}
+    # 242, 248 and 310 are the three maps the LIVE CLICK CORPUS visits that this
+    # store could not name (studies/movecode/FINDINGS.md 1p.10 item 4, landed
+    # 2026-08-28). They are a fourth KIND again: unlike 143/144/27 they write
+    # nothing and open nothing, and unlike 165/166/167 they are not ours -- they
+    # are retail rows whose file id was read off the WIRE (`0x0195` field 1,
+    # single-valued on 5, 17 and 1 connections) and then checked against the
+    # owner's archive (`binds_plainly` -> MFT rows 21189, 21641, 71585). Their
+    # absence was refusing three connections out of `routerbench.py --score`,
+    # which is what manufactured the 13v/13p balance FINDINGS 1p.5 item 3 warns
+    # about. 248 shares file 165811 with 280 -- the same terrain, two instances --
+    # so adding it added a map row but no navmesh. Their spawns are DELIBERATELY
+    # weaker than 280's: 242 and 248 have no fixed arrival (5 loads, 5 positions;
+    # 17 loads, 17 positions), so each row commits ONE observed retail arrival
+    # and its note says so.
+    ADDED = {143, 144, 280, 27, 166, 165, 167, 242, 248, 310}
     LEDGER.ok(set(msc) == MIGRATED | ADDED,
               "and the only additions are the ones this test names",
               f"unnamed: {sorted(set(msc) - MIGRATED - ADDED)}")

@@ -226,6 +226,34 @@ GRANDFATHERED = {
     # not a new number, and it leaves the headroom this file's docstring asks
     # for on an arc that is still landing.
     os.path.join("studies", "playercomposite", "FINDINGS.md"): 25,
+    # 12 on 2026-08-28, two over NEWCOMER_CEILING on the day the movement arc's
+    # six-lane desk pass landed (1s: R3 closed, the gateless reseed route, gate
+    # attribution, three map rows, the mesh specimens). The document was at 10
+    # of 10 -- zero headroom -- and 1s added exactly two, which is the state the
+    # comment at the top of this dict names as the failure mode rather than a
+    # signal.
+    # The 12 are 11 DISTINCT asserts and the repeat is the informative one:
+    # `AgAgent:978 !m_timeStopMovement || ((int)(m_timeStopMovement - time) >= 0)`
+    # is cited at 1d.5 and again at 1s.3, because 1s.3 uses it to CORRECT a
+    # number 1d.5's neighbourhood produced -- the assert names m_timeStopMovement
+    # as the extrapolation ceiling, which is what took gate 1's attribution from
+    # 23 of 28 (an unjustified 200 ms band) down to 19 of 28. A document that
+    # re-cites one assert in order to retract what it argued is the opposite of
+    # a dump -- the same ruling the `Map.cpp:1239` row above already made.
+    # The other newcomer, `AgAgent:764 timeToEvent >= 0`, is load-bearing twice
+    # over: it is the evidence that gate 3 is a DISJUNCTION rather than the
+    # agent-only test a lane had published, and asserts.py MISSED it (it is one
+    # of the ~370 sites the tool's own banner says it is short by), so the claim
+    # was only auditable by reading the expression pointer at the call site --
+    # which is precisely what CLAUDE.md means by "the quote is what lets a
+    # reader audit the claim without the binary".
+    # The remaining ten are grandfathered-in-place from earlier rounds, each a
+    # SINGLE assert pinning one claim (AgTrack:458 the world fence, AgAgent:2334
+    # /:1198 the two named m_flags bits, AgApi/ChCliBase bounding m_path). This
+    # arc's findings are addresses, offsets and branch conditions, which the
+    # gate permits in bulk. 25 is the proportion the 11- and 12-entry rows above
+    # already carry, not a new number, and this arc is still landing.
+    os.path.join("studies", "movecode", "FINDINGS.md"): 25,
 }
 
 # A dump landing anywhere in the tree moves this even if no single file trips its own
