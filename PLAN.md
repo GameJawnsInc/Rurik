@@ -1541,6 +1541,53 @@ either fix above.
 
 ## 8. Immediate next actions
 
+### ★ MOVEMENT 2026-08-28 — R1 is DONE, and the two cheapest fixes are DESK changes that each DELETE a refusal
+
+**[studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1p**, offline over 61
+live connections, no run. The ranked list lives at **§1p.10** and supersedes
+`HANDOFF-WARP.md` §4 (whose R1 said "nobody has ever looked" — false when written; the
+measurement was two days old in `studies/movement/ROUTER.md` §1, and §1p.1 quotes the
+replacement sentence).
+
+**The headline: `--click-echo` is retail's own answer, not a heuristic.** Retail answers
+**32 of 32** live clicks within 0.065 s, with the bit-exact click point on **19 of 32**;
+on **13 of 13** scorable verbatim clicks our mesh independently agrees one leg suffices,
+so we reproduce ArenaNet **bit-for-bit** there — and **0 of 11** on the part-way class,
+whose waypoints are bit-exact navmesh trapezoid corners no policy here emits.
+
+**Two DESK items, each deleting a refusal rather than adding a policy** (§1p.10 items 1–2):
+
+1. **Stop dropping clicks that arrive under keyboard authority.** **7 of 32** live clicks
+   arrive with the latch our Rule 1 arms on, and retail answered every one within one RTT,
+   635–2,445 u from any D1 lead prediction. Keep §0.15's *actual* contract (drop the older
+   click of a rapid **pair**) — `authsrv.py:5105-5107` and `ROUTER.md` §4 rule 1 both cite
+   §0.15 for a single-click rule it does not state.
+2. **Delete the 1.0 s freshness gate on the echo path** (`authsrv.py:16583`). Retail
+   answered **22 of 32** clicks with a report older than 1.0 s, 13 older than 10 s (max
+   **20.99 s**), and **5 of 32** with no client position ever reported. A bit-exact echo
+   needs no origin, which is exactly why the echo is the arm that can be ungated. Keep the
+   gate on every origin-dependent path — `modeled_origin`'s held-out error is p50 ~15 u
+   below 2 s and 250–475 u above it.
+
+**Explicitly NOT worth building** (§1p.8, §1p.12): the one-leg gate (0 additional
+bit-exact matches) and the clip-gated echo (refuses 7 of 8 on K2's own clicks; already
+killed once as `--heading-grant`'s clip).
+
+**Three corrections that reach outside this arc:**
+
+* **`s2c 0x0199` field 1 is the PLAYER NUMBER, not the player's agent id** — 0 of 56
+  agreement with three independent witnesses of the controlled agent, corroborating
+  `studies/divergence/FINDINGS.md` D7 (n=4) at n=56. **§3's R4c row, note (14), glosses it
+  as "the player's agent id"** and should be read with D7. `routerbench.player_agent()`
+  itself is correct; its docstring is not.
+* **`REALFIX.md` §0.18, `routerbench.py:180-182` and `authsrv.py:5044` state retail's
+  click-walk report silence as absolute, and it is overstated** — the two instruments
+  built to re-measure it were structurally incapable of returning non-zero (§1p.4).
+* **`HANDOFF-WARP.md` §4's R2 is cheaper than it says**: gate 2 is already observable in
+  captures we hold (9 executions across 5 movehook captures, §1p.13); only gate 3 needs a
+  content row. Note this is *not* the same quantity as §"round 3"'s starred "gate 2 has
+  n = 0 observed firings", which counts which gate **decided** a snap.
+
 ### ⚠ VAULT CHANGE 2026-08-27 — `dat_study` is now the 38833 generation
 
 **Owner's ruling, and it changes a resource every session shares.** The server's
