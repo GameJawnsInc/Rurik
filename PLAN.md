@@ -1541,6 +1541,74 @@ either fix above.
 
 ## 8. Immediate next actions
 
+### ★★★ MOVEMENT 2026-08-28 — R2 RAN. The operator was right, our detector was under-counting, and gate 3 is finally OBSERVED
+
+**[studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1t**, capture
+`vault/research/movecode/r2/`, 9,094 records, **v6**, both controls FIRED, 13 sites.
+Three analysis lanes each attacked by a skeptic; all three HOLDS-WEAKENED.
+**All five registered exposure floors met.** P1 CONFIRMED, P4 floor met, P5 MET,
+**P2 and P3 REFUTED** — and P2's refutation is ours: the "independent second route" to
+the fence count asked `world == 1?` before `was it tested?`, but `agtrack` tests the
+**fence first** (`0x00606009`) and the world second (`0x00606013`), so 43 fence-shut
+world-1 invocations are invisible to it. `47 − 43 = 4` exactly. It was a subset, not a
+witness.
+
+**★ THE MECHANISM, replicated digit-for-digit by two lanes and both skeptics.** All 11
+displacements are ONE event: a **gated** `reseed` (`0x006022B0`, caller `0x006060E7`)
+reaching `SetPosition` (`0x00602B20`), which writes `m_point` and **never stamps
+`+0x58`**. The value written is the **WORLD_SYNC copy's own dead-reckoned position** —
+`src_point + src_vel × dt` — residual **max 0.000208 u on 11 of 11**. A vacuity control
+the skeptic ran and the lane had not: the same formula at the 146 snaptests that did NOT
+reseed gives error **p50 129.33 u**, so it could have fitted everything and does not.
+**"After teleport ×10" was an ATTRIBUTION DEFECT** — that teleport is `reseed`'s own
+halt-in-place child. **Prior art is substantial and this is corroboration, not discovery**:
+`studies/movement/FINDINGS.md:2617` already says *"`0x006022B0` hard-SetPositions the
+player onto the authoritative copy. That is the warp"*. What is new is that the source is
+the *other world copy* with the extrapolation **measured** (§1g.3 had it NOT DETERMINED
+from v4).
+
+**★ THE OPERATOR IS RIGHT IN DIRECTION, and the literal claim is not confirmed** — a
+distinction one lane blurred and its skeptic caught. Against the **actual** click chord
+(which the capture holds: `mapfindpath`'s `pt_a` equals the body's position at the click
+to 0.0 u on 14 of 14), landings sit **median 39 u, max 556 u** off — not "on the line".
+But paired **within event**, perpendicular distance falls from **p50 ~420 u to ~39 u with
+8 of 10 moving toward the chord**, because the snap puts the body on the **server's copy**
+and that copy sits ~3× closer to the straight line (SYNC p50 156 u vs LOCAL p50 516 u).
+"Yanked onto the server's copy, which is much straighter than your route was" is the
+geometry behind the sentence.
+
+**★ OUR DETECTOR UNDER-COUNTS, and the backstop is free.** `SetPosition`'s direct-write
+branch calls `agtrack` unconditionally at `0x00602BBD`, so every unstamped `m_point` write
+is countable with no threshold: that census finds **15** where the displacement detector
+finds **11**. Two are genuine misses that escaped because the stamp happened to advance —
+**47.4% of local-copy record gaps have it advancing**, where the detector is structurally
+blind. **True relocation for this run is ~7,055 u over 13 events, not 6,418 over 11.**
+`readhook` now prints the census as an explicit recall check.
+
+**The fence suppresses almost nothing:** 43 of its 47 shut invocations sit on a world-1
+agent diverted anyway, so it prevented **4 desync tests of 161** (2.5%) — and "shut" is
+mostly the POST-SNAP state (37 of 47 within 100 ms of a gated reseed against 45 of 1,867
+open, Fisher p = 8.5e-46). **That closes §1s.8 item 1** in the direction it suspected.
+
+**Also:** gate 3 **OBSERVED for the first time in the arc** (1 of 4 `stepclear` hits — the
+mandatory filter earned itself immediately, unfiltered is a 4× over-read); the teleport
+exonerated a **third** time (p50 0.13 u, max 0.29 u, n=125); `WORLD_SYNC == 0` now read
+**directly from the record** (157/157), closing §1i.7; grant cadence now essentially
+retail's (**p50 0.86 s** vs 0.82, **3.57 per 1,000 u** vs retail p50 4.30 — §1i.4's
+starvation is fixed); and MOVECODE-Q2 bites at **NEW coordinates** — 3 of 15 OFF-MESH, two
+of them well below §1h.4's y ≈ 6,900–8,500 bound, so the hole is **larger** than the bound.
+
+**Three defects of ours, all fixed:** the v6 fields were captured and never PRINTED (the
+run had to be scored from a scratchpad script while the readout said nothing); the chain
+test **pooled the two world copies** (25/124 pooled against 35/123 per object — §1i.1's
+id-pooling defect in a second place); and the displacement attribution named a position
+rather than a cause. `test_movehook` 67 floor / 113 checks, and §14 now requires the
+**report** to print the v6 sections, since round-tripping a field cannot catch silence.
+
+**NEXT, and it is small:** two hook sites — `0x00604A50` and `0x00606394` — to name which
+caller produced the two missed `SetPosition` warps. The cornered-trigger half needs a run
+that logs the client's solved path; 10 warped clicks against 4 controls is too few.
+
 ### ★★ MOVEMENT 2026-08-28, SECOND PASS — R3 is CLOSED, a SECOND gateless reseed route is OBSERVED, and the scoring number's RATE is disqualified
 
 **[studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1s (six lanes, each

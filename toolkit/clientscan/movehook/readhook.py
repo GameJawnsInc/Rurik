@@ -600,19 +600,31 @@ def report(cap, names, dump=0):
             # 0.00 (target[N] == m_point[N+1] to the bit), and the elapsed times
             # give ~282 u/s, ordinary walking speed. A 2,677 u warp in one tick
             # would be absurd; a 2,677 u leg over 9.5 s is a walk.
-            chain, prev = [], None
+            # GROUPED BY OBJECT ADDRESS, because "consecutive" across a pooled
+            # list is not consecutive for either body. ONE AGENT ID NAMES TWO
+            # OBJECTS, and the pooled form interleaved them: on the R2 capture it
+            # printed 25/124 while the two copies separately are 4/66 (local) and
+            # 31/57 (sync). Every "did NOT chain" row it produced across that seam
+            # is a comparison between one copy's target and the OTHER copy's next
+            # point -- which is guaranteed not to link and means nothing. The line
+            # below then read the total out as "candidates for a real divergence",
+            # which is the same id-pooling defect sec.1i.1 already retracted a whole
+            # analysis for, arriving in a second place.
+            chain, per_obj = [], {}
             for r in sorted(tps, key=lambda x: x["seq"]):
                 if not r["have_agent"]:
                     continue
                 px, py = _f(r["point"][0]), _f(r["point"][1])
+                prev = per_obj.get(r["ecx"])
                 if prev is not None and all(map(math.isfinite, (px, py) + prev)):
                     chain.append(((px - prev[0]) ** 2 + (py - prev[1]) ** 2) ** 0.5)
                 tx, ty = _f(r["target"][0]), _f(r["target"][1])
-                prev = (tx, ty) if all(map(math.isfinite, (tx, ty))) else None
+                per_obj[r["ecx"]] = ((tx, ty)
+                                     if all(map(math.isfinite, (tx, ty))) else None)
             if chain:
                 linked = sum(1 for d in chain if d < 0.01)
                 a(f"       consecutive teleports that CHAIN exactly: "
-                  f"{linked}/{len(chain)}")
+                  f"{linked}/{len(chain)}   (per OBJECT, not pooled)")
                 if linked == len(chain):
                     a("       -> every one links end-to-start, so the figures above")
                     a("          are LEG LENGTHS, not warps. A warp is the body")
@@ -702,6 +714,32 @@ def report(cap, names, dump=0):
             if not early:
                 a("      Zero means the client never entered that state here --")
                 a("      NOT that the early-out does not exist. It is one walk.")
+        # THE SetPosition CENSUS -- the backstop for the displacement detector,
+        # and it is a RECALL check the detector cannot perform on itself.
+        #
+        # `reseed` reaches `SetPosition` (0x00602B20) at 0x00602369, and that
+        # function is the only path that writes m_point (0x00602B7B) WITHOUT
+        # stamping +0x58 -- which is exactly the signature the displacement
+        # detector keys on. Its direct-write branch then calls agtrack
+        # UNCONDITIONALLY at 0x00602BBD, so every such write returns to
+        # 0x00602BC2 and is countable here with no threshold at all.
+        #
+        # WHY IT MATTERS: on the R2 capture the detector found 11 and this census
+        # finds 15 -- 13 reseed-driven plus 2 the detector MISSED because the
+        # stamp happened to advance across the record gap. 47.4% of local-copy
+        # record gaps have the stamp advancing, so the detector is structurally
+        # blind there; this count is not. A detector that cannot state its own
+        # recall is the shape this arc keeps getting caught by.
+        if ai is not None:
+            sp = [r for r in cap.recs
+                  if r["site"] == ai and reb(r["retaddr"]) == 0x00602BC2]
+            if sp:
+                a("")
+                a(f"SetPosition CENSUS  {len(sp)} unstamped m_point write(s)")
+                a("      Every one is a body relocated without a walk. This is the")
+                a("      RECALL backstop for the DISPLACEMENT count below: compare")
+                a("      the two, and if the displacement count is lower, the")
+                a("      difference is warps the stamp-comparison could not see.")
         # Gate 3, which has to be filtered: 0x005FEF70 has TWO direct callers and
         # only 0x0060581E is the gate. An unfiltered count is not a gate-3 count.
         ci = idx.get("stepclear")
@@ -827,6 +865,21 @@ def report(cap, names, dump=0):
             for site in sorted(by_site, key=lambda s: -max(by_site[s])):
                 v = sorted(by_site[site], reverse=True)
                 a(f"        after {site:<10} x{len(v):<3} largest {v[0]:.0f} u")
+            # ...AND THE PRECEDING-SITE LABEL IS NOT THE CAUSE. Read literally it
+            # says two mechanisms; on the R2 capture it printed "after teleport
+            # x10, after reseed x1" and there is only ONE. `reseed` calls the
+            # halt-in-place 0x00602540 at 0x006022E7 when the body is moving, and
+            # THAT calls the teleport at 0x006025A6 -- so the teleport sitting in
+            # front of a displacement is reseed's own child, not a rival cause.
+            # Every displacement in that run followed a GATED reseed, 1:1 with the
+            # 11 gated reseeds. The label is a position in the record, not an
+            # attribution, and it is printed that way from 2026-08-28.
+            if "teleport" in by_site or "reseed" in by_site:
+                a("        (`after <site>` is the PRECEDING RECORD, not the cause:")
+                a("         reseed -> 0x00602540 halt-in-place -> teleport is one")
+                a("         chain, so `after teleport` and `after reseed` are the")
+                a("         same event seen at two points. Attribute on the reseed")
+                a("         caller -- gated 0x006060E7 vs gateless 0x00605EF6.)")
         a("        A reseed that FIRES is not a warp -- but a displacement IS "
           "one, whatever")
         a("        site performed it. MOVECODE-K1 (FINDINGS §1k.3) is refuted "

@@ -4114,6 +4114,240 @@ positive *and* a real negative control.
 
 ---
 
+## 1t. MOVECODE-R2 — the gate/fence run. **The operator was right, the detector was under-counting, and gate 3 is finally OBSERVED**
+
+**OBSERVED, 2026-08-28.** Map 280, `--click-echo`, **9,094 records, v6**, both controls
+FIRED, 13 sites, ~187 s of tracked motion. Capture
+`vault/research/movecode/r2/movehook.bin`, image base `0x00230000` (every address below
+rebased to `0x00400000`). Predictions were registered in [RUN-R2.md](RUN-R2.md) §1 before
+the instrument existed. Three analysis lanes, each attacked by an adversarial skeptic; all
+three came back **HOLDS-WEAKENED**, and the weakenings are in §1t.6.
+
+**The operator's report is the finding this run turns on:**
+
+> *"there is still clipping. the warp shape for this run was approximately getting yanked
+> out of my cornered click to move, and put into place as if I'd run a straight line
+> toward the destination from my original starting position"*
+
+---
+
+### 1t.1 The registered table
+
+| # | prediction | result | |
+|---|---|---|---|
+| **P1** | the fence is READ, and seen both open and shut | **1,914 of 1,914 read (100%)**, 1,867 open / 47 shut | ✅ **CONFIRMED** |
+| **P2** | two independent routes to the fence count agree | direct **47** vs derived **4** | ❌ **REFUTED — and the error was ours** |
+| **P3** | the facing-9 early-out fires | `facing == 1` on **157 of 157**; never 9 | ❌ **REFUTED for this walk** |
+| **P4** | `resync` fires, and the question is whether it fires COLD | 2 firings, **0.03 s and 0.05 s** after a gated snap, separations **30.0 u / 18.7 u** | ✅ floor met, **cold-fire answered NO** |
+| **P5** | gate 3 discriminates, filtered on `retaddr == 0x0060581E` | 4 `stepclear` hits, **1 is gate 3** | ✅ **MET — first observation in the arc** |
+
+Exposure floors: `snaptest` 157 (floor 20) ✅, `resync` 2 (floor 1) ✅, fence reads 1,914
+(floor 50) ✅, fence shut 47 (floor 3) ✅, gate 3 1 (floor 1) ✅. **All five met.**
+
+**P2's refutation is instructive and it is mine.** The "independent second route" was not
+independent: it asked `world == 1?` before `was it tested?`, but `agtrack` tests the
+**fence first** (`0x00606009`) and the world second (`0x00606013`). So every fence-shut
+invocation on a world-1 agent is structurally invisible to it — **43 of them** — and
+`47 − 43 = 4`, exactly the derived count. The derived construction is a **subset**, not a
+witness. Only a direct read at the decision can see a fence shut on an agent the world
+check would have diverted anyway.
+
+---
+
+### 1t.2 THE MECHANISM — all 11 displacements are ONE event, and it is not the teleport
+
+**OBSERVED, replicated digit-for-digit by two independent lanes and both their skeptics.**
+
+Every displacement is a **gated** `reseed` (`0x006022B0`, caller `0x006060E7`) reaching
+`SetPosition` (`0x00602B20`) at `0x00602369`, which writes `m_point` at `0x00602B7B`
+(`mov [edi], eax`, `edi = ebx+0x78`) and **never stamps `+0x58`** — which is precisely the
+signature the displacement detector keys on. The value written is the **WORLD_SYNC copy's
+own dead-reckoned position**:
+
+> `landing = src_point + src_vel × (q.ptime − src_ptime) / 1000`
+
+Perpendicular residual **max 0.000208 u on 11 of 11**; `|src_vel| = 288.0` on 10 of 10;
+the 11th has `src_vel = 0` and `|landing − src_point| = 0.000 u`. Implied `dt` matches the
+clock difference to **0.00 ms**.
+
+**The vacuity control PASSED, and the lane had not run it — the skeptic did.** Applying
+the same formula at the **146 snaptests that did not reseed** gives error **p50 129.33 u**
+with only 7.5% under 1 u, against **< 0.001 u on 13 of 13** reseed rows. The formula could
+have fitted everything and does not.
+
+**"After teleport x10, after reseed x1" was an ATTRIBUTION DEFECT, not two mechanisms.**
+`reseed` calls the halt-in-place `0x00602540` at `0x006022E7` when the body is moving, and
+*that* calls the teleport at `0x006025A6`. The teleport sitting in front of a displacement
+is **reseed's own child call**. All 11 follow a gated reseed, 1:1 with the 11 gated
+reseeds. `readhook` now says so at the call site.
+
+**Arithmetic closure, a check that could have failed:** 13 reseeds − 1 branch-skipped
+(source idle) = 12, and `setter@0x0060244D` fires **exactly 12** times.
+
+**PRIOR ART, and it is substantial — this is a corroboration, not a discovery.**
+`studies/movement/FINDINGS.md:2617` already states *"`0x006022B0` hard-SetPositions the
+player onto the authoritative copy. **That is the warp**"*, with `:3204` and `:3675`
+carrying the rest; §1j.2 already OBSERVED that reseed installs the sync agent's point, and
+§1j.4 already measured the extrapolation identity to under 3e-4 u over 34 transitions.
+**What is genuinely new:** that the source is the *other world copy* with the extrapolation
+term **measured** — §1g.3 explicitly recorded this as NOT DETERMINED from a v4 capture —
+plus the per-record attribution of all 11, the arithmetic closure, and §1t.4's recall gap.
+
+---
+
+### 1t.3 The operator: RIGHT IN DIRECTION, and the literal claim is NOT confirmed
+
+**This is where the first lane over-claimed and the skeptic caught it, and the correction
+matters because it is the difference between two different lines.**
+
+The lane measured perpendicular distance to the **sync copy's own velocity ray** — got
+0.0001 u — and reported it as confirmation of *"a straight line toward the destination
+from my original starting position"*. **Those are two different lines.**
+
+**The capture holds the operator's actual line and the lane never used it.** `mapfindpath`
+records `pt_a` (query start) and `pt_b` (query end); 14 of 15 come from `chcli_point`'s
+`0x0081AF56`, paired 1:1 with the 14 clicks. **Operand check: `pt_a` equals the local
+copy's `m_point` at the click to 0.0 u on 14 of 14**, so `pt_a` *is* "where I was when I
+clicked" and `pt_b` *is* the destination.
+
+Perpendicular from **that** chord: **1.5, 10.4, 13.6, 37.5, 38.4, 40.0, 49.2, 122.2,
+264.9, 555.9 u** — 3 of 10 within 32 u, **median 39 u, max 556 u**. That is not "on the
+line", and it barely improves on the orchestrator's first 2-of-11 attempt.
+
+**But the operator is not scored wrong, and the mechanism explains the perception exactly.**
+Paired **within event** — same body, same chord, milliseconds apart:
+
+| | perpendicular to the click chord |
+|---|---|
+| **before** the yank | 3.4, 37.5, 310.9, 356.5, 395.2, 444.1, 555.6, 606.5, 661.9, 942.7 u |
+| **after** the yank | 1.5, 10.4, 13.6, 37.5, 38.4, 40.0, 49.2, 122.2, 264.9, 555.9 u |
+
+**8 of 10 move TOWARD the chord; the median falls from ~420 u to ~39 u.** The reason is
+structural: the snap puts the body on the **server's copy**, and the server's copy sits
+about **3× closer to the straight line** than the local copy does (SYNC p50 156 u against
+LOCAL p50 516 u), because it has no path solver and walks straight at whatever we grant.
+
+**So the correct labels are:** *landing == the sync copy's extrapolated position* is
+**OBSERVED and exact**; *"put into place as if I'd run a straight line"* is **SUPPORTED IN
+DIRECTION, not confirmed as landing-on-the-line**. The operator described the direction of
+a real effect and the sensation it produces; the geometry is "yanked onto the server's
+copy, which is much straighter than your route was."
+
+**The CORNERED half (claim 1) is CONTESTED at this n.** A de-circularised instrument
+(local max perpendicular from the click chord using only samples *before* the warp) gives
+warped p50 444 u against control p50 243 u — overlapping, and the control max exceeds 5 of
+9 warped rows. **10 warped clicks against 4 control clicks is too few.**
+
+**A test that does NOT work, recorded so it is not quoted:** path tortuosity of the local
+copy before each snap looked like a refutation (reseed p50 1.00 vs control 1.28) and is a
+**sampling-density artifact** — reseed windows hold 3–7 samples and controls hold dozens;
+matched on sample count both give p50 1.00. **NOT-MEASURABLE-BY-THIS-METHOD.**
+
+---
+
+### 1t.4 THE DETECTOR UNDER-COUNTS, and the backstop is free
+
+**OBSERVED.** `SetPosition`'s direct-write branch calls `agtrack` **unconditionally** at
+`0x00602BBD`, so every unstamped `m_point` write returns to `0x00602BC2` and is countable
+with no threshold. That census finds **15**; the displacement detector finds **11**.
+
+Two of the four are genuine misses (**#3656 and #5338**) that escaped because the stamp
+*happened* to advance across the record gap. Both moved the body **opposite to its own
+declared heading** — `v = (23.22, 287.06)` against motion `(−9.53, −116.83)`, dot −33,758;
+and `v = (−0.83, −271.29)` against motion `(0.44, 142.61)`, dot −38,691. That form needs
+no target and no extrapolator, which matters because both landing records carry
+`target = (inf, inf)` and a distance-to-target computed there is not computable at all —
+the lane published one and its own next sentence contradicted it.
+
+**The true relocation total for this run is ~7,055 u over 13 events, not 6,418 u over 11.**
+
+**Why the detector is structurally blind:** **47.4% of local-copy record gaps
+(1,620 of 3,417) have the stamp advancing.** It cannot see a warp there. It does not bite
+for the reseed-driven class *only* because `reseed` is itself hooked and the denominator
+closes at 13 — a reason the lane never gave. `readhook` now prints the census beside the
+count as an explicit **recall** check.
+
+---
+
+### 1t.5 The fence suppresses almost nothing, and "shut" is mostly the POST-SNAP state
+
+**OBSERVED.** Of the 47 shut invocations, **43 sit on a world-1 agent** that `0x00606016`
+diverts regardless. **The fence prevented exactly 4 desync tests of the 161 that would
+otherwise have run — 2.5%.**
+
+And "shut" is overwhelmingly a *consequence* rather than a cause: **37 of 47** shut
+invocations land within 100 ms of a gated reseed, against **45 of 1,867** open ones
+(Fisher one-sided **p = 8.5e-46**). `agtrack` clears the roster's `clientControlled` on its
+own snap branch, so most of what a sampler would have called "the fence suppressing" is the
+client having just snapped.
+
+**That closes §1s.8 item 1 in the direction it suspected.** The killed "suppression buys
+~3×" finding was a sampler reading post-snap state; read at the decision, the fence is
+worth 4 tests in 1,914 entries.
+
+---
+
+### 1t.6 Three defects of ours this run exposed, all now fixed
+
+1. **The v6 fields were captured and never PRINTED.** The fence, the facing and the gate-3
+   split were written correctly into the record and no report section existed, so the run's
+   five registered predictions had to be scored out of a scratchpad script while the readout
+   said nothing. **A field captured and never reported is a field the run does not have.**
+   `readhook` gained four v6 sections; `test_movehook.py` §14 now requires the *report* to
+   print them, with a v5 control that requires it not to — round-tripping a field cannot
+   catch this.
+2. **The chain test pooled the two world copies.** It printed **25/124** on this capture;
+   per object it is **4/66 (local) + 31/57 (sync) = 35/123**. Every "did not chain" row
+   across that seam compares one copy's target with the *other* copy's next point and is
+   guaranteed not to link. The line then read the total out as *"candidates for a real
+   divergence"*. **This is §1i.1's id-pooling defect arriving in a second place**, and it
+   also silently changed K2's figure (11/34 → 14/33) when fixed.
+3. **The displacement attribution named a position, not a cause** (§1t.2).
+
+---
+
+### 1t.7 What else the run says
+
+* **The teleport is exonerated a THIRD time.** Extrapolating `m_point` by velocity to the
+  arrival tick against `m_targetPoint`: **p50 0.13 u, max 0.29 u over 125 samples**
+  (run 3: p50 0.1, max 0.3, n=42). It is the ordinary arrival mechanism.
+* **`WORLD_SYNC == 0` is now read DIRECTLY from the record** — `src_world == 0` on 157 of
+  157 snaptest rows. §1i.7 listed this as identified only from call-site structure; that
+  item is **closed**.
+* **Our grant cadence is now essentially retail's.** Sync-copy grant gaps p50 **0.86 s**
+  against retail's 0.82 s, and **3.57 grants per 1,000 u** against retail's p50 4.30 and
+  floor 1.70 (§1i.4 measured **1.40** and called it below every one of 118 live agents).
+  **The starvation §1i named is fixed**, and the residual is not cadence.
+* **P1a replicates a fourth time:** 3 of 1,776 bakes glided (0.2%), all from `0x00600B0F`
+  (avoidance), against 1.2% and 1.5% in runs 3 and 5. No unknown bake caller in ~3,700
+  bakes across five runs; MOVECODE-Q4 holds.
+* **MOVECODE-Q2 bites again, at NEW coordinates.** `pathdiff` returns **3 of 15 OFF-MESH
+  (20%)** on map 280, at `(−4926.6, 3765.9)`, `(−10475.9, 4400.2)` and `(−6749.2, 6211.4)`.
+  §1h.4 bounded the hole to y ≈ 6,900–8,500; **two of these sit well below that**, so the
+  region is larger than the bound, not confirmed by it.
+* **The no-clip row is SCORED for the first time in five attempts.** The operator reports
+  clipping is still present under `--click-echo`. That is the known residual (§1n.2), and
+  it is now a recorded observation rather than a fifth deferral.
+
+---
+
+### 1t.8 What is NOT settled
+
+* **WHICH caller produced the two missed `SetPosition` warps** (#3656, #5338). Candidates
+  are `0x00604A50` and `0x00606394`, neither hooked. **That is the next run's site list.**
+* **Operator claim (1), the cornered trigger.** 10 warped clicks against 4 controls, groups
+  overlapping. Settling it needs a run that logs the client's solved path.
+* **Why `agtrack` snapped on 11 of 157 tests when 37 exceeded gate 1's 299.33 u cut.** An
+  entry hook cannot see which gate the function took, and gate 3 fired once.
+* **Gate 3's AGENT half is still unexercised.** One agent id and two objects in the whole
+  capture; there is nobody to crowd with.
+* **Whether `0x005FCAA0` is wire-reachable** — unchanged from §1s.10, and its third caller
+  `0x004E6E82` is still uncharacterised.
+* **Why `ptime` advanced 774 ms across #5332 → #5341** on a body that had already arrived.
+  It does not touch the 11, but "ptime only advances on walk-commit" is not fully closed.
+
+---
+
 ## 2. Corrections to the record
 
 Each of these was in circulation and each is now measured against the bytes.
