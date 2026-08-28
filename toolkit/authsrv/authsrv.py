@@ -5368,6 +5368,114 @@ def _grant_verdict(state, now):
     return True, "grant", age, since
 
 
+# --keepalive-grant. MOVECODE-K1, and it is the SIXTH candidate in the family
+# that killed five, so it is written against their epitaphs rather than around
+# them. `studies/movecode/FINDINGS.md` §1i-§1j is what it stands on and
+# §1k is the registered prediction.
+#
+# WHAT IS ACTUALLY NEW, because "grant more often" is not -- `--heading-grant`
+# already refreshed FASTER than retail (0.32 s against retail's 0.49 s) and
+# still warped. Two things:
+#
+# (1) THE TARGET IS NAMED, and it is not the player. The client keeps the agent
+#     TWICE -- WORLD_CREATE_AGENT runs its body twice with the array base
+#     advanced 0x64, AgAgent.cpp:312 names them m_world 0 and 1 -- and the two
+#     copies have DIFFERENT drivers compiled in: local input resolves through
+#     asyncPtr ([ctx+0x14C]) and our 0x0029 through syncPtr ([ctx+0xE8]). So a
+#     MOVE_TO_POINT cannot move the displayed body at all; it re-bases the SYNC
+#     twin and nothing else. That is why this is safe where the tick's own
+#     arrival broadcast was not: 0x002C is a hard set and lands on BOTH copies
+#     (see _note_wire_move), 0x0029 lands on one. Every earlier candidate was
+#     scored with an instrument that could not tell the two apart, and read
+#     their separation as one body's jump.
+# (2) THE TRIGGER IS THE PIN, not a timer. Agent::GetPointAt (0x005FF820)
+#     returns m_segmentPoint VERBATIM once the query time passes
+#     m_timeStopMovement, so past the end of the last granted segment the twin
+#     does not move AT ALL -- and snaptest reads BOTH agents through that same
+#     accessor before comparing. `_sync_position` already models exactly that
+#     ("parking on the point"), so we can grant when the model says the twin has
+#     PARKED and the player has walked on, instead of granting on a clock and
+#     hoping. A timer grants hardest when the player is stationary and the twin
+#     is already correct, which is traffic bought for nothing.
+#
+# WHAT THE GRAVEYARD FORBIDS, and both are refusals compiled into the code below:
+#   * NOT `state["pos"]`. --heading-grant computed its point from the server's
+#     integrated model rather than the report in hand, and that is one of the two
+#     failures its epitaph names. This sends `state["client_pos"]`, which
+#     _take_client_position writes ONLY on the accept path and ONLY from what the
+#     client said.
+#   * NOT CLIPPED. --heading-grant's other named failure was sending a point
+#     shortened by OUR navmesh where the client's own collision disagrees. The
+#     point here is one the client already stood on, so there is nothing to clip
+#     and clipping it could only move it somewhere the client never was.
+# And one guard the graveyard implies but never had: if the last report was
+# REJECTED, our model and the client disagree about where the player is, which is
+# term (1) failing live. Refuse until they agree again.
+#
+# THE MEASURED GAP THIS IS AGAINST (FINDINGS §1i.4, run 5 vs 118 live agents,
+# denominators built the same way on both sides): retail grants 4.30 per 1000 u
+# of granted path (p50, minimum 1.70 over 118 agents) and we grant 1.40. Twin
+# grant gaps: ours p50 1.78 s, retail p50 0.82 s. The twin idles 100.2 s of a
+# 207.6 s run against the local copy's 37.8 s.
+KEEPALIVE_GRANT = False
+# The separation at which a parked twin is worth re-basing.
+#
+# NOT A NEW NUMBER, deliberately. 100.0 is the figure `RESYNC_SEPARATION` was
+# reconciled to across both files by the owner's ruling (PLAN.md §7 Q11), and it
+# is the same quantity: how far the two copies may drift before we act. Run 5
+# measured 11 of 14 reseeds past it, so it is a band the mechanism really does
+# cross. Re-deriving a second constant for the same physical thing is how the two
+# files disagreed in the first place.
+KEEPALIVE_SEPARATION = 100.0
+
+
+def _keepalive_ok(state, now):
+    """Pure: should a keep-alive re-grant go on the wire right now?
+
+    Returns (grant, reason, sep, since). No side effects, so the policy is
+    drivable from a capture replay without a socket -- the same property
+    `_position_verdict`, `_grant_ok` and `_resync_verdict` have, and for the same
+    reason: an offline scorer must be able to run THIS decision rather than a
+    paraphrase that agrees with it by construction.
+
+    Fails closed everywhere. An unseeded sync model, a missing report, a rejected
+    report and a still-walking twin all return False with a reason, because every
+    one of them means we do not know something this grant would assert.
+    """
+    if not KEEPALIVE_GRANT:
+        return False, "off", None, None
+    # The report in hand, and nothing else, may be sent. See the graveyard note.
+    client = state.get("client_pos")
+    if client is None:
+        return False, "no-report", None, None
+    # A report we REFUSED means our model and the client disagree about where the
+    # player is standing. Granting through that is term (1) failing live.
+    if state.get("pos_rejects", 0):
+        return False, "report-rejected", None, None
+    sync = _sync_position(state, now)
+    if sync is None:
+        return False, "unseeded", None, None
+    since = None
+    last = state.get("grant_at")
+    if last is not None:
+        since = now - last
+        # Never faster than retail's own floor. GRANT_MIN_INTERVAL is shared on
+        # purpose: a second rate limiter for the same wire would be a second
+        # place to disagree with retail's cadence.
+        if since < GRANT_MIN_INTERVAL:
+            return False, "rate-limited", None, since
+    sep = math.hypot(client[0] - sync[0], client[1] - sync[1])
+    # THE PIN GATE. `to` is None once the model has been hard-set, and otherwise
+    # the twin has parked when the lerp has reached it. Only a PARKED twin is
+    # falling behind; one still walking its last leg is doing what we asked.
+    to = state.get("sync_to")
+    if to is not None and math.hypot(to[0] - sync[0], to[1] - sync[1]) > 1e-6:
+        return False, "twin-walking", sep, since
+    if sep <= KEEPALIVE_SEPARATION:
+        return False, "in-band", sep, since
+    return True, "keepalive", sep, since
+
+
 def _heading_grant_ok(state, now):
     """Pure: may a ZERO-LEAD heading grant go on the wire right now?
 
@@ -14499,6 +14607,58 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # for the rest of the session, and the client just goes still.
                         print(f"[c{conn_id}] WORLD TICK: {ex}", flush=True)
 
+                    # THE KEEP-ALIVE RE-GRANT (MOVECODE-K1). Placed here, after
+                    # the tick's other sweeps and BEFORE the `dest` early-out,
+                    # because the case that warps hardest is the one where the
+                    # player has already ARRIVED and is standing still while the
+                    # twin is parked hundreds of units away -- run 5's two real
+                    # warps both had BOTH velocities at exactly 0.0. An early-out
+                    # on `dest` would skip exactly those.
+                    #
+                    # It sends 0x0029 and never 0x002C. That distinction is the
+                    # whole safety argument and it is compiled into the client:
+                    # our grant resolves through syncPtr and cannot reach the
+                    # displayed body, while the hard set lands on both copies.
+                    # The tick's own epitaph below ("NOTHING IS BROADCAST FROM
+                    # HERE") is about 0x002C and stays true of it.
+                    if KEEPALIVE_GRANT:
+                        try:
+                            # time.time(), NOT this loop's `now`. The tick runs on
+                            # perf_counter (an arbitrary epoch, for the tick delta)
+                            # while every stamp this verdict reads -- grant_at from
+                            # _note_wire_move, sync_at, pos_seen -- is time.time().
+                            # Mixing the two does not fail loudly: it makes every
+                            # interval a nonsense number and the lerp in
+                            # _sync_position park instantly, so the gate would read
+                            # "twin parked" forever.
+                            ok, why, sep, since = _keepalive_ok(state, time.time())
+                            if rec is not None and why not in ("off", "in-band"):
+                                rec.event("keepalive_verdict", fired=bool(ok),
+                                          reason=why,
+                                          sep=None if sep is None
+                                          else round(float(sep), 2),
+                                          since_last=None if since is None
+                                          else round(float(since), 3))
+                            if ok:
+                                cx, cy = state["client_pos"]
+                                pl = state.get("plane", 0)
+                                # Point AND plane from the same report, so they
+                                # cannot disagree -- the split that left the
+                                # server holding a new plane against an old
+                                # position (see _take_client_position).
+                                send(GAME_SMSG_AGENT_MOVE_TO_POINT,
+                                     [PLAYER_AGENT_ID, [cx, cy], pl, pl],
+                                     f"KEEPALIVE re-grant ({cx:.0f},{cy:.0f})"
+                                     f" plane {pl}, twin parked {sep:.0f} u away")
+                        except OSError:
+                            return
+                        except (ValueError, KeyError, TypeError) as ex:
+                            # Loud and survivable, like the sweeps above: this
+                            # runs on a daemon thread and an escaping exception
+                            # stops the world silently for the rest of the run.
+                            print(f"[c{conn_id}] KEEPALIVE refused a value: {ex}",
+                                  flush=True)
+
                     dest = state.get("dest")
                     if not dest:
                         continue
@@ -18423,6 +18583,24 @@ def main():
                          "experiment and are announced loudly; the appearance "
                          "nibble stays at the default on purpose, being "
                          "different bound-checked storage.")
+    ap.add_argument("--keepalive-grant", action="store_true",
+                    help="MOVECODE-K1. Re-grant the player's own last REPORTED "
+                         "position, unclipped, whenever our model says the "
+                         "client's SYNC copy has parked more than 100 u away. "
+                         "The client keeps the agent twice and only the sync "
+                         "copy is reachable from the wire, so this cannot move "
+                         "the displayed body -- see studies/movecode/FINDINGS.md "
+                         "sec.1i-1j. Off by default; it is the sixth candidate "
+                         "in a family that killed five, and its registered "
+                         "prediction is sec.1k.")
+    ap.add_argument("--keepalive-separation", type=float, default=None,
+                    metavar="U",
+                    help="Override the 100.0 u band at which a parked twin is "
+                         "re-granted. Refused without --keepalive-grant. Exists "
+                         "for the NEGATIVE CONTROL: a huge value disarms the "
+                         "re-grant while leaving every other term of the run "
+                         "identical, which is the arm that tells a real effect "
+                         "from a quiet session.")
     ap.add_argument("--list-probes", action="store_true",
                     help="Print the available probes, their questions and their "
                          "predictions, then exit.")
@@ -20286,6 +20464,34 @@ def main():
               "attribution (sec.0.6: gate 2 OR 3) firms to gate 2, and "
               "the NO-snap registration is wrong in the most informative "
               "way available.")
+    global KEEPALIVE_GRANT, KEEPALIVE_SEPARATION
+    if a.keepalive_separation is not None and not a.keepalive_grant:
+        # Refused rather than ignored: a run launched with only the override
+        # would look configured and change nothing, which is the shape of a
+        # measurement that quietly answers a different question.
+        raise SystemExit("--keepalive-separation needs --keepalive-grant; "
+                         "on its own it configures a flag that is off.")
+    if a.keepalive_separation is not None:
+        KEEPALIVE_SEPARATION = float(a.keepalive_separation)
+        print(f"[map] --keepalive-separation {KEEPALIVE_SEPARATION:.1f} u "
+              f"(default 100.0, the figure PLAN.md sec.7 Q11 reconciled "
+              f"RESYNC_SEPARATION to).")
+    if a.keepalive_grant:
+        KEEPALIVE_GRANT = True
+        print("[map] --keepalive-grant ON (MOVECODE-K1). Re-granting the "
+              "player's own LAST REPORTED position, unclipped, when the sync "
+              f"copy is modelled parked more than {KEEPALIVE_SEPARATION:.0f} u "
+              "away.")
+        print("      PREDICTION (studies/movecode/FINDINGS.md sec.1k), scored "
+              "with movehook because no earlier candidate had an instrument "
+              "that could tell the two world copies apart:")
+        print("        twin idle time falls from 100.2 s / 207.6 s toward the "
+              "local copy's 37.8 s;")
+        print("        twin grant gaps fall from p50 1.78 s toward retail's "
+              "0.82 s;")
+        print("        reseeds past the 299.33 cut fall from 11 of 14 toward 0.")
+        print("      REFUTED IF the reseed count does not fall, or if any "
+              "displaced reseed appears that did not before.")
     if grant_suppress:
         global GRANT_SUPPRESS
         GRANT_SUPPRESS = True
