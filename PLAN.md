@@ -1593,16 +1593,37 @@ the correct null they are **no more likely per test** (80.0% vs 79.5%, p = 1.0) 
 warp count scales with test count. That dissolves the 11× drop without a new mechanism,
 and the drop is not denominator-robust anyway (on `agtrack` invocations, p = 0.31).
 
-**NEXT, and it needs an INSTRUMENT change first.** Every disagreement in this pass reduces
-to the hook having **no input-independent sampling backbone**, so the denominator can be
-chosen to give either answer. The fix is one row: the movement tick **`0x00600140`** is a
-verified `push ebp` entry that runs per agent per frame regardless of input — **and
-hooking it simultaneously closes §4 item 2**, open since B1, which says in terms that only
-a breakpoint reading the return address can name the tick's dispatcher. **Costed:** ~30 fps
-× 2 agents would write ~29,000 records into a 32,768 ring, so it wants a 2–3 minute
-capture or its own run. Then the design is §1u.6 — a **2 × 3 factorial**, distance held at
-1,800–2,200 u so it cannot proxy for corner, three keyboard levels, **interleaved not
-blocked**, ~20 clicks per cell.
+**★ THE INSTRUMENT GAP IS CLOSED — MOVECODE-R4 is BUILT, UNRUN.** Every disagreement in
+this pass reduced to the hook having **no input-independent sampling backbone**, so the
+denominator could be chosen to give either answer. The movement tick **`0x00600140`** is
+now a site: a verified `push ebp` entry firing per agent per frame regardless of input, so
+its hit count is exposure on the client's own clock. **It also closes §4 item 2**, open
+since B1 — the tick is a virtual with 0 direct callers, and §4 says only a captured return
+address can name its dispatcher.
+
+**The stride is the real work and it is a new silent-failure surface.** movehook's worker
+**ends the run** when the ring fills, so an unstrided per-frame site would not truncate the
+tail — it would cut the capture short and starve every other site (~29,000 occurrences
+against NCAP 32,768 in eight minutes). `g_hits[]` increments **before** the stride test, so
+the census stays exact at any stride; only the stored sample thins. `tick` is 1-in-64.
+Guarded both ways: `readhook` labels a strided row *"`stored` is a SAMPLE, use `hits`"*,
+and `test_movehook` §14 pins the arithmetic against movehook.c's own expression **and
+requires every site whose RECORDS are counted to be unstrided** — the displacement census,
+the reseed split, P1a and the gate-3 filter all count stored records, and a stride there
+would make each a silent 1-in-N sample while `hits` stayed whole. Planting `stride = 8` on
+`reseed` reddens that check and the header-drift check independently. 15 sites, DLL
+rebuilt, floor 75 → 96, run 122 → 144.
+
+**The design is [RUN-R4.md](studies/movecode/RUN-R4.md): TWO runs.** Run A is the
+instrument alone — 3 minutes, any walk — because the tick is now the denominator everything
+rests on and should be proven before an experiment is built on it. Run B is the 2 × 3
+factorial: CLEAR/BLOCKED × none/after-arriving/interrupting, **interleaved not blocked**,
+distance held at **1,800–2,200 u** so it cannot proxy for corner. **Every floor carries its
+arithmetic**, which is the rule R3 earned: multiply the exposure floor by the previously
+measured rate and check it clears the outcome floor *before* the run. It says plainly that
+the *interrupting* cell is powered (31 expected against a floor of 15), the *none* cell is
+not (1.5 expected) — and that the unpowered one is a **control whose emptiness is the
+measurement**, not a failed run.
 
 ### ★★★ MOVEMENT 2026-08-28 — R2 RAN. The operator was right, our detector was under-counting, and gate 3 is finally OBSERVED
 
