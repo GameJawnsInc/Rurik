@@ -26,6 +26,7 @@ WHAT IS CHECKED, and which of them need what:
   §11 the reader's field layout matches rec_t in movehook.c      process-free
   §12 the world-copy census: two objects per id, and a non-agent process-free
   §13 the displacement count -- what K1's prediction is refuted by process-free
+  §14 the 2026-08-28 sites, the refusal that shaped them, and v6  mostly pf
 
 §7 IS THE ONE THAT MATTERS AND IT IS THE ONE THAT COULD NOT EXIST WITHOUT THE
 RULING. It injects the real DLL into a real 32-bit process, waits for the run to
@@ -69,19 +70,19 @@ import checks                                                   # noqa: E402
 #   §11  4   the reader's layout vs rec_t IN THE C   process-free
 #   §12  6   the world-copy census, both directions  process-free
 #   §13  5   the displacement count, both directions process-free
-#   §14 25   the 2026-08-28 sites and the v6 fields  16 pf + 9 need the client
-#   ----    process-free core = 62, and THAT is the floor.
+#   §14 30   the 2026-08-28 sites and the v6 fields  21 pf + 9 need the client
+#   ----    process-free core = 67, and THAT is the floor.
 #
 # §12 and §13 both read `gensites.rows()`, which goes to `content.load()` and never
 # opens the client, so their eleven are process-free and the core moved with them.
-# A whole green run on this machine is now 108.
+# A whole green run on this machine is now 113.
 #
 # §14 SPLITS, and the split was counted out of the banner rather than reasoned
 # about: 25 checks, of which the 8 non-entry refusals and their 1 control call
 # `gensites.verify()` and therefore need the vaulted image, while the row
 # assertions and the whole v6 round-trip go through `content.load()` and a
-# synthesised capture and never open it. 25 - 9 = 16 process-free, so the core
-# moves 46 -> 62. A bare machine must still clear 62.
+# synthesised capture and never open it. 30 - 9 = 21 process-free, so the core
+# moves 46 -> 67. A bare machine must still clear 67.
 #
 # The first draft of this comment guessed 16 by adding up what the sections
 # looked like they contained, and it was two low -- which would have let two
@@ -89,8 +90,8 @@ import checks                                                   # noqa: E402
 # ("set the floor from a real green run, never from a guess") is not about
 # arithmetic being hard; it is that a floor derived from the code rather than
 # from the output drifts the moment either changes. `skip()` lowers the floor by
-# ZERO, so a bare machine must still clear 46.
-LEDGER = checks.Ledger("movehook", floor=62)
+# ZERO, so a bare machine must still clear 67.
+LEDGER = checks.Ledger("movehook", floor=67)
 check = checks.adopt(LEDGER)
 
 WOW64_CMD = r"C:\Windows\SysWOW64\cmd.exe"
@@ -914,6 +915,20 @@ def section_14(tmp):
             {"seq": 2, "tick": 3000, "site": si, "ecx": 0x0BBB0000,
              "have_src": 1, "src_id": 1, "src_world": 0,
              "src_stop": 5000, "src_facing": 9},
+            # BOTH reseed routes, so the gated/gateless split has something to
+            # split. The retaddrs are the real ones; `_synth` bases the capture
+            # at 0x00400000, so they go in already rebased.
+            {"seq": 3, "tick": 4000, "site": names.index("reseed"),
+             "ecx": 0x0CCC0000, "retaddr": 0x006060E7,
+             "have_agent": 1, "id": 1, "world": 1},
+            {"seq": 4, "tick": 5000, "site": names.index("reseed"),
+             "ecx": 0x0CCC0000, "retaddr": 0x00605EF6,
+             "have_agent": 1, "id": 1, "world": 1},
+            # Gate 3 AND its other caller, so the filter has something to filter.
+            {"seq": 5, "tick": 6000, "site": names.index("stepclear"),
+             "ecx": 0x0DDD0000, "retaddr": 0x0060581E},
+            {"seq": 6, "tick": 7000, "site": names.index("stepclear"),
+             "ecx": 0x0DDD0000, "retaddr": 0x006007AE},
         ], sites))
     cap = rh.Capture(p)
     eq(cap.version, 6, "14. the capture declares v6")
@@ -943,6 +958,33 @@ def section_14(tmp):
           "14. and the two are not the same record",
           "if have_fence were dropped, `could not read` and `shut` would be one "
           "value and the fence count would be silently inflated")
+
+    # A FIELD CAPTURED AND NEVER PRINTED IS A FIELD THE RUN DOES NOT HAVE, and
+    # that is not hypothetical: v6 shipped with all six fields written correctly
+    # and NO report section, so run R2's five registered predictions had to be
+    # scored out of a scratchpad script while the readout said nothing about the
+    # fence, the facing or the gate-3 filter. The answer was in the file and the
+    # instrument was silent. Round-tripping the fields (above) cannot catch that
+    # -- only asking the REPORT can.
+    txt, _rc = rh.report(cap, rh.site_names(cap))
+    for want, why in (("FENCE", "the fence census"),
+                      ("RESEED ROUTES", "the gated/gateless split"),
+                      ("FACING", "the pre-gate early-out"),
+                      ("GATE 3", "gate 3 and its mandatory retaddr filter")):
+        check(want in txt, f"14. the v6 report prints {why}",
+              "the field round-trips but the readout is silent, which is how "
+              "R2 came back needing a scratchpad script to score itself")
+    # ...and the same report on a v5 capture must NOT print them, or a reader of
+    # an old capture is shown a section built from fields it does not carry.
+    p3 = os.path.join(tmp, "v5-quiet.bin")
+    with open(p3, "wb") as fh:
+        fh.write(_synth([{"seq": 0, "tick": 1000, "site": ai, "ecx": 0x0AAA0000}],
+                        sites, ver=5))
+    txt5, _rc5 = rh.report(rh.Capture(p3), names)
+    check("FENCE" not in txt5 and "GATE 3" not in txt5,
+          "14. CONTROL: a v5 capture prints NO v6 section",
+          "a section built from absent fields would read as a measurement of "
+          "zero rather than of nothing")
 
 
 def main():

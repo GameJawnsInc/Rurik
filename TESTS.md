@@ -6960,7 +6960,14 @@ shrinks section 10),
   that **an UNREAD fence is distinguishable from a fence read as zero** — `have_fence`
   exists so "could not read it" and "it was shut" are not one value, which is the
   §1s.8-item-1 failure class in miniature: a state that was never observed scoring as
-  a state. 62 floor, 108 on a
+  a state. **And the check the R2 run itself bought:** v6 shipped with all six fields
+  written correctly and NO report section, so the fence, the facing and the gate-3
+  filter sat in the capture while the readout said nothing and the run's five
+  registered predictions had to be scored out of a scratchpad script. Round-tripping a
+  field cannot catch that — only asking the REPORT can — so §14 requires all four v6
+  sections to appear on a v6 capture, with the control that a **v5** capture prints
+  none of them, since a section built from absent fields would read as a measurement
+  of zero rather than of nothing. 67 floor, 113 on a
   machine with the client, a compiler, an archive and a 32-bit `cmd.exe`; each other
   section declares a skip),
   `toolkit/clientscan/test_commandertrap.py` (the hardware-breakpoint trap, and

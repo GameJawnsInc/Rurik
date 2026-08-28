@@ -625,6 +625,97 @@ def report(cap, names, dump=0):
                     a("          candidates for a real divergence; the rest are legs.")
     a("")
 
+    # ---- v6: the FENCE, the FACING, and the two reseed ROUTES ----------------
+    #
+    # These fields were captured from the first v6 run and NOT printed, which is
+    # the same class of defect as a field that was never captured: the answer sat
+    # in the file and the readout said nothing. Run R2's five registered
+    # predictions were scored out of a scratchpad script because of it.
+    if cap.version >= 6:
+        ai = idx.get("agtrack")
+        ag = [r for r in cap.recs if r["site"] == ai] if ai is not None else []
+        if ag:
+            have = [r for r in ag if r.get("have_fence")]
+            shut = [r for r in have if r["fence"] == 0]
+            a("")
+            a(f"FENCE  AgTrack's per-agent `clientControlled`, READ AT THE "
+              f"DECISION over {len(ag)} agtrack entr(y|ies)")
+            a(f"      read successfully : {len(have)}"
+              f"  ({100.0 * len(have) / len(ag):.1f}%)")
+            a(f"      SHUT (== 0)       : {len(shut)}")
+            a(f"      OPEN (!= 0)       : {len(have) - len(shut)}")
+            if len(have) < len(ag):
+                a(f"      could NOT be read : {len(ag) - len(have)}"
+                  f" -- `have_fence` keeps these OUT of the shut count, because")
+                a("                          `could not read it` and `it was shut`"
+                  " are different facts.")
+            # THE BRANCH ORDER IS LOAD-BEARING, and a reader who does not know it
+            # will build the wrong derived count. agtrack tests the fence at
+            # 0x00606009 and the world at 0x00606013 -- FENCE FIRST -- so a shut
+            # fence on a world-1 agent is a real suppression of a test that would
+            # have been diverted anyway, and only a DIRECT read can see it.
+            wshut = sum(1 for r in shut if r.get("src_world") == 1)
+            if shut:
+                a(f"      of the shut, on a world-1 (local) agent: {wshut}"
+                  f", on a sync agent: {len(shut) - wshut}")
+                a("      The fence is tested BEFORE the world check (0x00606009 vs")
+                a("      0x00606013), so only the sync-side shuts suppressed a test")
+                a("      that would otherwise have RUN. That is the number that")
+                a("      bears on whether the fence suppresses anything.")
+        # The two reseed routes. sec.1s.1: 0x00605EF6 is ResyncAllAsync, which
+        # calls snaptest ZERO times -- so those reseeds passed NO gate. Pooling
+        # them with the gated ones is what made every prior separation statistic
+        # in this arc a mixture (readhook did exactly that until 2026-08-28).
+        ri2 = idx.get("reseed")
+        rr = [r for r in cap.recs if r["site"] == ri2] if ri2 is not None else []
+        if rr:
+            gated = [r for r in rr if reb(r["retaddr"]) == 0x006060E7]
+            free = [r for r in rr if reb(r["retaddr"]) == 0x00605EF6]
+            a("")
+            a(f"RESEED ROUTES  {len(gated)} GATED (agtrack's loop, downstream of "
+              f"snaptest), {len(free)} GATELESS (ResyncAllAsync)")
+            if free:
+                a("      A gateless reseed passed NO gate. sec.1s.1 found these are")
+                a("      39.6% of the corpus and were a no-op there -- every one")
+                a("      following closely on a gated snap that had just glued the")
+                a("      copies, so that corpus could not see one fire COLD.")
+        # The facing-9 early-out: snaptest returns 1 (NO SNAP) before any gate
+        # when m_timeStopMovement != 0 AND facing == 9 (0x00605634 -> 0x00605641
+        # -> 0x00605683 `mov eax, 1`). Both operands are on its arg2.
+        s_i = idx.get("snaptest")
+        sr = [r for r in cap.recs if r["site"] == s_i and r.get("have_src")] \
+            if s_i is not None else []
+        if sr:
+            early = [r for r in sr if r.get("src_stop")
+                     and r.get("src_facing") == FACING_EARLY_OUT]
+            facs = {}
+            for r in sr:
+                facs[r.get("src_facing")] = facs.get(r.get("src_facing"), 0) + 1
+            a("")
+            a(f"FACING  snaptest's pre-gate early-out over {len(sr)} test(s) "
+              f"carrying a source agent")
+            a(f"      facing values seen: "
+              + ", ".join(f"{k}x{v}" for k, v in
+                          sorted(facs.items(), key=lambda kv: -kv[1])))
+            a(f"      stop != 0 AND facing == {FACING_EARLY_OUT} (NO SNAP before "
+              f"any gate): {len(early)}")
+            if not early:
+                a("      Zero means the client never entered that state here --")
+                a("      NOT that the early-out does not exist. It is one walk.")
+        # Gate 3, which has to be filtered: 0x005FEF70 has TWO direct callers and
+        # only 0x0060581E is the gate. An unfiltered count is not a gate-3 count.
+        ci = idx.get("stepclear")
+        cr = [r for r in cap.recs if r["site"] == ci] if ci is not None else []
+        if cr:
+            g3 = [r for r in cr if reb(r["retaddr"]) == 0x0060581E]
+            a("")
+            a(f"GATE 3  {len(cr)} stepclear hit(s), of which {len(g3)} are GATE 3")
+            a("      (retaddr 0x0060581E, inside snaptest). The rest are the")
+            a("      obstacle-sidestep caller 0x006007A9 -- a real second caller,")
+            a("      NOT a phantom, so an unfiltered count over-reads gate 3.")
+
+    a("")
+
     # ---- the SNAP: a correction decided, applied, and how far it moved -------
     si, ri = idx.get("snaptest"), idx.get("reseed")
     if si is not None or ri is not None:
