@@ -4564,6 +4564,133 @@ own run — and `readhook` already reports ring fill, which is the number to wat
 
 ---
 
+## 1v. MOVECODE-R4-A — **the tick is NOT a frame clock (P1 refuted), AgTimer IS its dispatcher (P2 answered, correcting §4), and I crashed the client getting here**
+
+**OBSERVED, 2026-08-28.** Map 280, 161.5 s, **3,664 records, 15 sites**, both controls
+FIRED, ended by `--stop`. Capture `vault/research/movecode/r4a/`. Run A was the
+instrument-only run [RUN-R4.md](RUN-R4.md) §1 requires before the experiment.
+
+### 1v.0 FIRST: the crash, because it was ours
+
+The first attempt at this run **crashed the client** — `c0000005`, seconds after arming.
+The stride added for the tick was written as
+
+```c
+if (SITES[i].stride > 1u && ((nth - 1) % stride) != 0u)
+    continue;
+```
+
+directly above the `push ebp` re-emulation at the bottom of the same loop, **whose own
+comment reads *"This must happen on every hit — a skipped prologue is a corrupted frame,
+not a missing sample."*** `continue` leaves the for-loop, so on a strided-out hit EIP never
+advanced past the `0xCC` and the caller's frame was never built. At stride 64 that is **63
+of every 64 hits** on a site that fires for every agent.
+
+Fixed by gating the *record* rather than jumping past the *emulation*. **Nothing in the
+suite could have caught it**: §7 injects the real DLL into a throwaway `cmd.exe` where
+every site deliberately **fails to arm**, which is the property that section tests — so the
+handler's hot path is never executed by any test, and a behavioural test needs the vaulted
+client, a live process and an armed breakpoint. `test_movehook.py` §15 now checks the
+property **structurally** (no `continue`, `break` or stray `return` between the address
+match and the emulation) with a control that plants the exact crashing statement.
+
+Nothing persists: the hook patches process memory, never the file on disk.
+
+### 1v.1 R4-P1 REFUTED — the tick fires 0.62/s, not ~60/s
+
+**97 hits over 156.2 s.** A per-agent-per-frame update over two agents at 30 fps predicts
+~60/s. **It is off by a factor of ~100**, and the floor (≥ 5,000) is missed by 50×.
+
+| site | hits | tick / site |
+|---|---|---|
+| `teleport` | 72 | 1.35 |
+| `snaptest` | 111 | 0.87 |
+| `chcli_point` | 103 | 0.94 |
+| `bake` / `setter` / `agtrack` | 689 / 688 / 771 | 0.13 |
+
+**So the tick is an ARRIVAL TIMER CALLBACK, not a per-frame update** — which fits the
+mechanism the arc already decoded and did not join up: its arrival test at `0x006001EB` is
+`now == +0x48`, **exact equality**, and an exactly-equal time test is only sane if the
+function is *scheduled for* that tick rather than polled every frame. §2.1 and §4 item 2
+both call it "the movement tick" and §4 says it "runs several times a second"; **that is
+wrong, and this run is what says so.**
+
+**The consequence is the one that matters and it is negative: §1u.6's instrument
+prerequisite is NOT solved.** The tick was added to be the input-independent sampling
+backbone every denominator dispute in §1u reduced to. Arrivals are input-driven, so its
+rate tracks player activity exactly like every other site here. **No per-frame site is
+known, and the denominator problem is still open.**
+
+*The row is corrected in `content/movecode.toml` and its stride removed — 1-in-64 stored 2
+records of 97 and cost §1v.2 most of its evidence. The stride MECHANISM is kept because a
+genuine per-frame site would need it, but no site uses it today.*
+
+### 1v.2 R4-P2 ANSWERED — and it REFUTES §4 item 2's exclusion
+
+**Both stored tick records return to `0x006040EA`.** That is `0x006040E7 + 3`, and
+`--dis 0x006040E7` reads `ff 50 04  call dword ptr [eax + 4]` — **inside
+`AgTimer::Advance` `0x00603FE0`.**
+
+§4 item 2, open since B1, says the tick is a virtual whose dispatcher `--xrefs` cannot
+name, that "a breakpoint reading the return address settles it in one run", and that
+**`AgTimer::Advance` "is the obvious candidate and is *ruled out*, because it dispatches
+slot 1 with no pushed args (`0x006040E7 call dword [eax+4]`, no `add esp`) while the tick
+is `ret 8`."**
+
+**The exclusion is refuted by the capture.** The obvious candidate was right; the static
+argument that killed it was not. §4 item 2 is otherwise vindicated — only a breakpoint
+could have settled it — and it is now **CLOSED**.
+
+*n = 2, because the stride discarded the other 95. The two agree, the arithmetic is exact,
+and the site is now unstrided so the next run gives ~100.*
+
+### 1v.3 What else the run holds — and a mesh-selection trap worth carrying
+
+* **10 displacements** on the local copy, 13 reseeds, 14 `setposition`, 72 teleports.
+* **103 clicks and 116 planner queries** — by far the click-richest capture in the arc
+  (R2: 14, R3: 27).
+* **`stepclear` fired 9 times**, against R2's 4 and R3's 2.
+* **THE MESH SELECTOR PICKS THE WRONG MAP HERE, and it is not a tie.** Scoring the 1,478
+  sampled agent positions against every mesh in `content/maps.toml`, **Sparkfly Swamp
+  (287493) wins at 0.962** against map 280's 165811 at **0.947**. The run is map 280 —
+  the first captured position is `(−6036.0, −2519.0)`, its committed spawn, to the decimal,
+  and the server log says so. `HANDOFF-WARP.md` warns that "two meshes tie"; **it is worse
+  than a tie, the wrong one can win**, and the spawn coordinate is the anchor that settles
+  it. The positions run to x = +11,860 because the operator explored far more of the isle
+  than R2 or R3 did, which is what widened the coverage overlap.
+
+### 1v.4 THE OPERATOR HAS A DETERMINISTIC NO-CLIP REPRO, and that is the most valuable thing here
+
+> *"was able to easily repro a no-clip walk by clicking around a corner then clicking again
+> after a short delay (~1s). that would put me in a straight line path towards the point i
+> clicked, through or over terrain/props"*
+
+**The no-clip row has been UNSCORED four times** (§1n.2, §1p.10 item 2, §1r.6, §1t.7) and
+§1r.6 built an offline detector for it that **failed its own positive control** — the arm
+that should have been clean scored *higher* than the arm the operator watched no-clip in.
+Its diagnosis was that `movehook` samples on solver events, so a whole run yields only
+134–571 usable chords at a ~1% base rate: **n = 1–2, which is no power at all.**
+
+**A deterministic repro changes what is possible**, because it supplies the known-positive
+class the detector never had. And this capture contains it: of 103 clicks, **84 are the
+second click of a pair issued within 2.0 s of the first**, and the operator says the
+manoeuvre reliably produces the walk-through.
+
+**This is also the mechanism the arc already predicted from two directions and never
+measured.** §1n.2: the sync copy has no path solver, so under `--click-echo` it walks the
+**straight line** to whatever it is granted, and the reconcile puts the body on that line.
+§1n.3 called the residual "worse in kind" than the warps it replaced. §1o.3 recorded the
+operator's earlier report that "double click has even worse behaviors, clipping into the
+ground". **Retail's own contract has a rule about exactly this shape** — `REALFIX` §0.15's
+"the older click of a rapid **pair** is dropped outright" — and §1p.9 flagged that
+`authsrv.py` generalises that pair rule into a single-click rule it does not state.
+
+**Status: UNVERIFIED here.** What is OBSERVED is the repro's existence, the operator's
+description, and 84 rapid pairs in a capture on the right mesh. Scoring it is the next
+piece of work and it is the first time it has been tractable.
+
+---
+
 ## 2. Corrections to the record
 
 Each of these was in circulation and each is now measured against the bytes.
@@ -4702,6 +4829,16 @@ than a decode bug, and would move the arc's weight back onto route selection.
    (`0x006040E7 call dword [eax+4]`, no `add esp`) while the tick is `ret 8`. A
    breakpoint reading the return address settles it in one run; static analysis
    will not. That is a B2 site.
+
+   > **CLOSED 2026-08-28 by MOVECODE-R4-A (§1v.2), and the exclusion above is
+   > REFUTED.** The tick was hooked and **both captured records return to
+   > `0x006040EA`** — which is `0x006040E7 + 3`, since `ff 50 04
+   > call dword ptr [eax + 4]` is three bytes. **`AgTimer::Advance` IS the
+   > dispatcher.** The `ret 8` / no-`add esp` argument that ruled it out does not
+   > survive contact. The rest of this item is vindicated: only a breakpoint could
+   > have settled it. The same run also refutes "runs several times a second" — it
+   > fires **0.62/s**, and is an **arrival timer callback**, not a per-frame
+   > update, which is why its arrival test can be an exact equality.
 
 3. **`func_start` returns `None` when MSVC does not pad, and a lane read that
    backwards.** Two lanes disagreed on which function contains the `isWaypoint=1`

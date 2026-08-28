@@ -963,9 +963,16 @@ def section_14(tmp):
     if "tick" in rows:
         tk = rows["tick"]
         eq(tk.get("va"), 0x00600140, "14. tick is the movement tick 0x00600140")
-        eq(int(tk.get("stride") or 0), 64,
-           "14. and it is STRIDED -- movehook's worker ENDS THE RUN when the ring "
-           "fills, so an unstrided per-frame site truncates the whole capture")
+        # NOT strided, and the history matters more than the value. It was 64,
+        # sized for a per-frame reading of this site that RUN A REFUTED at 0.62
+        # hits/s -- so 1-in-64 stored 2 records of 97 and cost R4-P2 most of its
+        # evidence. The stride MECHANISM is kept (a genuine per-frame site would
+        # need it, and sec.1u.6 still wants one) but NO SITE USES IT today; its
+        # logic is covered by the arithmetic mirror below and its crash mode by
+        # sec.15, neither of which needs a strided row.
+        eq(int(tk.get("stride") or 0), 0,
+           "14. and it is NOT strided -- the per-frame premise was refuted at "
+           "0.62 hits/s, and 1-in-64 was discarding 95 of 97 records")
 
     # THE GUARD THAT MATTERS MORE THAN THE ROW. A stride on a site whose RECORDS
     # are counted turns every rate in this arc into a silent undercount -- the

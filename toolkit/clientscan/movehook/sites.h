@@ -44,7 +44,7 @@ static const site_t SITES[NSITES] = {
     { 0x002055E0u, "snaptest", 0, 0, 0, 2, 0, 0u },   /* 0x006055E0 */
     { 0x001FEF70u, "stepclear", 0, 0, 0, 0, 0, 0u },   /* 0x005FEF70 */
     { 0x002020B0u, "teleport", 1, 0, 0, 0, 0, 0u },   /* 0x006020B0 */
-    { 0x00200140u, "tick", 1, 0, 0, 0, 0, 64u },   /* 0x00600140 */
+    { 0x00200140u, "tick", 1, 0, 0, 0, 0, 0u },   /* 0x00600140 */
 };
 
 /* Agent struct offsets the handler reads at each hit. */
