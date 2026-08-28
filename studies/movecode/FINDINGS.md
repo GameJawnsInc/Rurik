@@ -4691,6 +4691,161 @@ piece of work and it is the first time it has been tractable.
 
 ---
 
+## 1w. THE NO-CLIP, SCORED AT LAST — **it is not a walk. The reseed INSTALLS the body inside geometry**
+
+**OBSERVED, 2026-08-28**, from `vault/research/movecode/r4a/` (R4-A, §1v) and its server
+log. No new run. Two lanes, each attacked by a skeptic: **one HOLDS-WEAKENED, one
+REFUTED**, and in both cases **the skeptic's work is better than the lane's** — one found
+the correct operand sitting in the record the lane had searched around, the other found
+the lane's headline was an unpowered null contradicting the operator.
+
+The row this scores has been **UNSCORED four times** (§1n.2, §1p.10 item 2, §1r.6, §1t.7).
+
+### 1w.1 The answer, and it collapses two defects into one
+
+> **The body does not WALK through geometry. It is PUT there.**
+
+Attributing every sampled position of the displayed copy by whether it was reached by
+walking or written by the reseed chain:
+
+| | n | off-mesh | depth |
+|---|---|---|---|
+| **walked** | 561 | **0 genuinely** | — |
+| **installed** | 95 | 21 | median **239.1 u**, max **390.7 u** inside blocked ground |
+
+**There is no walked off-mesh excursion in this run at all.** The lane reported one —
+10 frames, 156 ms, "2.0 u depth" — and its skeptic killed it outright: `nearest_walkable`
+finds walkable ground **0.000023–0.000199 u** away on all ten frames. It is `walkable()`
+failing a float boundary test while the body walks *along a trapezoid edge*, and the
+"2.0 u depth" was the floor of a home-rolled ring search that starts at r = 2.0 — **an
+instrument's minimum reported as a measurement, with a justification invented for it.**
+The repo ships `nearest_walkable`; one call would have shown it.
+
+**Relocation landings are off-mesh at 6 of 10, against 10 of 96 control episodes
+(p ≈ 6.9e-4).** *(The lane published 3.4e-7 by counting 636 autocorrelated 16 ms frames as
+independent trials — three sentences after correctly refusing to do exactly that elsewhere.
+Clustered, it is 6.9e-4, stable 3.6e-4–9.1e-4 over a 250 ms–5 s sweep.)* **It is not a hole
+in our mesh:** walk samples within 1,500 u of a landing are off-mesh at 4.6%.
+
+**So the no-clip and the warp are the same defect wearing two faces.** §1t.2 established
+that a gated reseed installs the sync copy's dead-reckoned position through `SetPosition`;
+this shows **where** that lands — inside props and terrain, because the sync copy has no
+path solver and walks the straight line (§1n.2). The arc has been treating "warps to spawn"
+and "walks through walls" as two harms to be traded off (§1n.3). They are one mechanism.
+
+**The committed formula does this better than either lane did.** §1t.2's
+`landing = src_point + src_vel × (ptime − src_ptime)/1000`, read straight off the reseed
+record's own `src_*` fields, gives **13 of 13 under 1 u, median 0.000110 u** on this
+capture, and passes its vacuity control here (non-reseed snaptests: 0 of 14 under 1 u,
+median 71.86 u). The lane instead searched a ±3 s window over the sync *object* with an
+argmin, got 9/10 within 16 u, and needed a guard **because the window is the free parameter
+its "zero free parameters" claim denied**.
+
+### 1w.2 What the detector can and cannot do — and why §1r.6 failed
+
+**The positive control §1r.6 never had now exists and it PASSES.** The sync copy walks the
+straight line *by construction*, so it must score dirtier. It does: on chords ≥ 100 u,
+**local 2/51 against sync 9/52, p = 0.028**; length-standardised, **4.7×**.
+
+*(The lane led with "38×", which is the chord-length confound the brief had named as
+probably dominant: 86% of local chords are under 32 u — median 4.9 u — where nothing can be
+blocked, against a sync median of 173 u. The real separation is 4–5× on n = 103, not 38× on
+n = 605.)*
+
+**And this explains §1r.6's failure.** Its control pair was `k1-treatment` against `k2` —
+**both of them client-pathed bodies**. It was comparing two arms of the same class, which is
+why the arm that "should be clean" scored higher. The discriminating contrast is not
+policy-vs-policy, it is **walked-vs-installed**.
+
+**The rapid-pair contrast the runsheet asked for is NOT-MEASURABLE.** 541 scored chords
+carry **k = 2** blocked, and with the walked arm now at **k = 0** no design reaches any
+p at all. Sweeping gap bands and window lengths gives 18 cells whose *best attainable*
+one-sided p ranges 0.032–0.409 — **one of eighteen could ever have cleared 0.05.**
+
+**A statistical control that FAILED, reported instead of its p-values.** A circular-shift
+permutation of the click series cannot detect a time-lock that must exist: with 103 clicks
+in 156 s and windows covering 20–50% of the run, a random shift lands nearly the same
+exposure. Every shift p-value computed in that lane is uninterpretable and **none is quoted
+here.** That was the best methodological move either lane made.
+
+### 1w.3 NOT SETTLED: whether the operator saw a glide or a jump
+
+Two reseeds (t+130.188, t+131.172) move the body **572.3 u and 275.3 u through blocked
+ground at exactly 288 u/s on the stamp clock — but inside ONE wall-clock tick.** Which
+clock is real to the eye is **NOT-MEASURABLE-BY-THIS-METHOD**, and the wording "installed,
+not walked" should not be read as settling it.
+
+The related trap, and it is the fourth "check that cannot fail" this arc has caught:
+"no chord is superhuman on the stamp clock" is **true by construction** — `SetPosition`
+writes a self-consistent (point, time) pair at run speed, so the install *defines* itself
+as walking-speed on the clock it rewrites. On the wall clock those same steps are
+infinite.
+
+### 1w.4 The rapid pair: the lane said "not the defect" and it had power 0.04
+
+**REFUTED as a claim; the question is open and the operator may well be right.** The
+lane's evidence was second-of-pair 9/32 against isolated 1/7 (p = 0.653). At those arm
+sizes, **the chance of detecting an isolated rate of even ZERO is 0.04.** The design could
+not have found the operator's effect if it were total.
+
+**What is genuinely established about pairs:**
+
+* **Retail answers both clicks of a rapid pair too** — 7 of 7 under 4.0 s in the live
+  corpus, zero no-answers corpus-wide. So *answering both* is not the defect, and
+  `REALFIX` §0.15's drop rule is the **keyboard-occupied cell only** — its channel-clear
+  cell has both answered in 30–60 ms. §1p.9 already flagged that `authsrv.py` generalises
+  that pair rule beyond what §0.15 states; this confirms the direction.
+* **What differs is the CONTENT of the answer.** We grant the float32-exact clicked point
+  on **55 of 55** granted clicks; retail, in the matched 1,000–4,000 u band, is **3
+  verbatim to 6 part-way**. `origin_age` is not the confound (verbatim p50 1.92 s against
+  part-way 3.39 s).
+* **The client re-solves every click** — 103 clicks → 103 `MapFindPath`, strict 1:1 — **and
+  almost never walks the solved chain** (`chcli_advance` 22). Corroborated from a second
+  direction the lane did not use: `isWaypoint = 1` on **1 of 689 bakes**, so the setter's
+  own obstacle-avoidance re-bake fired **once** in 156 s.
+* **The reseed warps the drawn body FIRST and installs the leg second** — all 10
+  unstamped-move steps sit 0 ms from a reseed and relocate it 159.0–1,234.5 u.
+
+**A published number that must not be carried: "click grants draw a reseed 18/55 against
+1/34, p = 9.5e-4" is invalid.** The numerator 18 exceeds the **13 reseeds that exist in the
+capture** — clustered click grants each get credited with the same reseed. Under 1:1
+nearest-prior attribution it is **11/55 against 2/34, p = 0.12**, and the two arms are
+disjoint regimes anyway (zero-lead grants are 34/34 keyboard-armed, click grants 50/55
+keyboard-clear), with a zero-lead grant's destination *being* the reported body position
+(|grant − body| p50 **5 u**), so it cannot desync two copies by construction.
+
+### 1w.5 THE FINDING WITH A LEVER ON IT: `D1_LEAD` was OFF, so the hold built for this was inert
+
+**OBSERVED, from source.** `authsrv.py:17000`'s outstanding-answer hold carries
+`and D1_LEAD`; the flush at `:6609` is `if D1_LEAD and (...)`; and the arming stamp
+`state["a2_click_answered_at"]` is written inside `if D1_LEAD:` at `:17114`. `--d1-lead` is
+`store_true`, and **[RUN-R4.md](RUN-R4.md) §5 passes only `--click-echo --map 280`.**
+
+**So the §0.17 hold — built for exactly this repro — was inert for the whole run**, and
+every fired click grant carries `arm="click"`. That is not a proposal, it is a
+configuration fact about the capture this section scores: **the run measured the policy
+with its own guard switched off.**
+
+*Per the graveyard discipline, no fix is proposed here. What is recorded is that a
+mechanism intended to bound this behaviour was not running, which makes any reading of
+R4-A as "the shipped policy's residual" wrong.*
+
+### 1w.6 Status
+
+* **The no-clip row is SCORED** for the first time: the body is **installed** inside
+  geometry by the reseed, at median 239 u and max 391 u depth, 6 of 10 landings off-mesh
+  against a 4.6% matched spatial control. **It is the warp mechanism, not a separate one.**
+* **No walked off-mesh travel exists in this run** — the only candidate was a 1e-4 u float
+  boundary artifact.
+* **NOT SETTLED:** glide or jump; the rapid-pair effect (power 0.04); and whether
+  `D1_LEAD` on would change any of it.
+* **The instrument problem from §1u.6 is unchanged.** §1v.1 refuted the tick as a
+  per-frame denominator, and this pass needed exactly that: the chord contrast died at
+  k = 0–2 because position sampling is event-driven. **A timer-based position sampler is
+  still the missing instrument, and no candidate site is known.**
+
+---
+
 ## 2. Corrections to the record
 
 Each of these was in circulation and each is now measured against the bytes.

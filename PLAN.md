@@ -1541,6 +1541,71 @@ either fix above.
 
 ## 8. Immediate next actions
 
+### ★★★★ MOVEMENT 2026-08-28 — THE NO-CLIP IS SCORED. It is not a walk: the reseed INSTALLS the body inside geometry
+
+**[studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1w**, off R4-A's capture
+and its server log. No new run. Two lanes, each attacked by a skeptic — one
+HOLDS-WEAKENED, one REFUTED — and **in both cases the skeptic's work beat the lane's.**
+The row has been UNSCORED four times (§1n.2, §1p.10 item 2, §1r.6, §1t.7).
+
+**★ THE ANSWER, AND IT COLLAPSES TWO DEFECTS INTO ONE.** Splitting every sampled position
+of the displayed body by walked vs installed: **walked 561 samples, ZERO genuinely
+off-mesh; installed 95 samples, 21 off-mesh at median 239 u and max 391 u inside blocked
+ground.** Relocation landings are off-mesh **6 of 10 against 10 of 96** control episodes
+(p ≈ 6.9e-4), and it is **not a mesh hole** — walk samples within 1,500 u score 4.6%.
+**So "warps to spawn" and "walks through walls" are the same mechanism**, not the two
+harms §1n.3 set up as a trade-off: the reseed installs the sync copy's dead-reckoned
+position, and the sync copy has no path solver, so that position is on a straight line
+through whatever is in the way.
+
+**There is NO walked off-mesh travel in this run.** The lane's only candidate was off-mesh
+by **0.000023–0.000199 u** — `walkable()` failing a float boundary test along a trapezoid
+edge — and its "2.0 u depth" was the floor of a home-rolled ring search reported as a
+measurement. The repo ships `nearest_walkable`.
+
+**★ THE POSITIVE CONTROL §1r.6 NEVER HAD NOW EXISTS AND PASSES**, at **4.7x
+length-standardised (p = 0.028 on chords ≥ 100 u)** — not the 38x the lane led with, which
+was the chord-length confound the brief had named. **And it explains why §1r.6 failed:**
+its control pair was `k1-treatment` vs `k2`, **both client-pathed bodies** — two arms of
+the same class. The discriminating contrast is walked-vs-installed, not policy-vs-policy.
+
+**The rapid-pair contrast is NOT-MEASURABLE** — 541 chords carry k = 2, the walked arm is
+k = 0, and of 18 swept cells exactly one could *ever* have cleared 0.05. A circular-shift
+control **failed** and its p-values are withheld rather than quoted, which is the best
+methodological move in the pass.
+
+**★ "THE RAPID PAIR IS NOT THE DEFECT" IS REFUTED — it had power 0.04.** Second-of-pair
+9/32 vs isolated 1/7 could not have detected an isolated rate of *zero*. **The operator may
+well be right.** What IS established: **retail answers both clicks too** (7/7 under 4.0 s,
+zero no-answers corpus-wide), so answering both is not the defect — **what differs is the
+CONTENT**: we grant the float32-exact clicked point **55 of 55**, where retail in the
+matched 1,000–4,000 u band is **3 verbatim to 6 part-way**. Also: the client re-solves
+every click (103 → 103 `MapFindPath`, 1:1) and almost never walks the solved chain
+(`chcli_advance` 22; `isWaypoint=1` on 1 of 689 bakes).
+
+**A number that must not be carried forward:** "click grants draw a reseed 18/55 vs 1/34,
+p = 9.5e-4" is invalid — **the numerator exceeds the 13 reseeds that exist**, crediting one
+reseed to several clustered grants. Under 1:1 attribution it is 11/55 vs 2/34, **p = 0.12**,
+and the arms are disjoint keyboard regimes anyway.
+
+**★ `D1_LEAD` WAS OFF, so the hold built for this repro was INERT.** `authsrv.py:17000`'s
+outstanding-answer hold carries `and D1_LEAD`, the flush at `:6609` is `if D1_LEAD and
+(...)`, the arming stamp at `:17114` sits inside `if D1_LEAD:` — and `RUN-R4.md` §5 passes
+only `--click-echo --map 280`. **R4-A measured the policy with its own guard switched
+off**, which makes any reading of it as "the shipped policy's residual" wrong. No fix is
+proposed (graveyard discipline); the configuration fact is the finding.
+
+**NOT SETTLED:** whether the operator saw a **glide or a jump** — two reseeds move the body
+572 u and 275 u through blocked ground at exactly 288 u/s *on the stamp clock* but inside
+**one wall tick**, and "no chord is superhuman on the stamp clock" is true **by
+construction**, since `SetPosition` writes a self-consistent (point, time) pair at run
+speed on the clock it rewrites. Fourth check-that-cannot-fail caught in this arc.
+
+**AND THE INSTRUMENT PROBLEM IS UNCHANGED.** §1v.1 refuted the tick as a per-frame
+denominator, and this pass needed exactly that — the chord contrast died at k = 0–2 because
+position sampling is event-driven. **A timer-based position sampler is still the missing
+instrument and no candidate site is known.** That, not another run, is the blocker.
+
 ### ★★★ MOVEMENT 2026-08-28 — R3 RAN and is UNSCOREABLE. The RUNSHEET is why, and the keyboard rival is back
 
 **[studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1u.** Three lanes each
