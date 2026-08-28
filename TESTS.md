@@ -3558,7 +3558,27 @@ shrinks section 10),
   17 refusals into 13 staleness and 4 geometry — and a flag that quietly answered
   geometry refusals too would be re-running the railing graveyard under a new name.
   Planting the exact regression (dropping `and not fresh`) makes it go red, which was
-  verified rather than assumed. **§3 pins the POINT**, which is what killed
+  verified rather than assumed.
+  **§2 CHANGED 2026-08-28 and the change is worth reading, because the check did
+  exactly its job and then had to be rewritten.** MOVECODE-R1-B2
+  (`--echo-any-refusal`, FINDINGS §1p.10 item 2) widens the gate to
+  `bool(CLICK_ECHO) and (ECHO_ANY_REFUSAL or not fresh)` — deliberately crossing the
+  scoping the paragraph above defends, on the warrant that retail has no freshness
+  precondition at all (§1p.3: 22 of 32 live clicks answered with a report over 1.0 s
+  old, 5 with no client position ever reported). The old check pinned the literal
+  string `k2_echo = bool(CLICK_ECHO) and not fresh` and went **red the instant the term
+  moved**, which is what a source-shape pin is for. It now pins three things instead of
+  one spelling: that `not fresh` is still *a term* (so K2 remains runnable as its own
+  arm rather than being silently merged into R1-B2), that the only widening term is
+  `ECHO_ANY_REFUSAL`, and that `ECHO_ANY_REFUSAL` defaults False — and the original
+  scope claim is now **evaluated rather than grepped** (with the flag off, a fresh
+  click cannot echo whatever `placed` and the clip said). The match is
+  whitespace-normalised because the gate wraps across two lines and the old form would
+  have been pinning the indentation. **§1 also gained the CLI guard**: passing
+  `--echo-any-refusal` without `--click-echo` must `raise`, because it is one term
+  inside `CLICK_ECHO and (...)` and alone it changes nothing — a run launched on it
+  would produce a clean capture of the *shipped* policy filed under the new arm's name,
+  which is how K1 got reported through two fires. **§3 pins the POINT**, which is what killed
   `--heading-grant` twice over: it must be the click's own `dest`, never
   `state["pos"]`, never clipped. It also counts the `continue`s between the gate and
   the send and requires exactly TWO — the refusal the echo skipped, and the RATE GATE
@@ -3570,8 +3590,8 @@ shrinks section 10),
   `bool(False) and X` is False whatever `X` is, so the gate reduces to the shipped
   `if not D1_LEAD:` and the refusal message is untouched — and the echo's own log line
   must read differently, because two decisions printing the same line is how a run gets
-  scored as the wrong arm. Floor 19, and every section is process-free so the floor is
-  the whole run),
+  scored as the wrong arm. Floor 19 against a green run of 25, and every section is
+  process-free so the floor is the whole run),
   `toolkit/authsrv/test_position_trust.py` (the position-trust policy: it may
   refuse a client-reported position, but it may never **latch**. The old
   `_adopt_client_position` refused anything more than `900 u` from
@@ -3749,7 +3769,30 @@ shrinks section 10),
   proves nothing — a policy that refuses everything passes the first and today's
   code passes the second — and the section says out loud that it replays rules 1
   and 2 only, the two geometry refusals running upstream of them and not being
-  modelled. **§14 IS `--zero-lead` (REALFIX-P2), AND IT IS THE FIRST SECTION
+  modelled.
+  **RULE 1 GAINED AN OPT-OUT 2026-08-28 and it is checked in the same block that
+  pins rule 1 itself.** MOVECODE-R1-B1 (`--answer-kbd-click`, FINDINGS §1p.10
+  item 1): rule 1's refusal is OURS and not ArenaNet's — over the live corpus
+  **7 of 32 clicks arrived with this latch armed and retail answered every one
+  within one RTT**, 635–2,445 u from any D1 lead prediction, so they are click
+  answers rather than lead refreshes. The flag lets the click fall through, and
+  the four checks are built so that a flag deleting *too much* cannot pass: the
+  default is asserted False; the identical state that returns `locally-moving`
+  with the flag off returns `grant` with it on (each is the other's control);
+  the `keyboard_age` is asserted still present on the verdict, because
+  **GRANTED-with-a-non-null-age-inside-the-window is unreachable with the flag
+  off** and that pair is therefore an exact offline signature *and* the
+  registered exposure floor; and — the load-bearing one — a click inside
+  `GRANT_MIN_INTERVAL` must still come back `rate-limited`, because rule 2's
+  hold-and-coalesce IS the pair contract REALFIX §0.15 actually states, and a
+  flag that removed both rules would pass every other check in the block. A
+  final check restores the global and re-asserts the refusal, since a module
+  global left set by one section leaks into every section below it. **The reason
+  string stays `grant` on purpose**: `grantsim.py:2000` filters `w[2] ==
+  "grant"` and `policyreplay.py:267` switches on `locally-moving`, so a new enum
+  value would have silently shrunk two scorers rather than erroring — the
+  greppability was traded for that, and `keyboard_age` carries the information
+  instead. **§14 IS `--zero-lead` (REALFIX-P2), AND IT IS THE FIRST SECTION
   HERE THAT EXECUTES A RECEIVE ARM** rather than only matching its syntax tree.
   Two of that flag's claims are behavioural and no AST matcher can reach them --
   a moving report the shipped `turned or not walking` gate would SKIP is still

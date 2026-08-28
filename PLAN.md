@@ -1555,19 +1555,32 @@ on **13 of 13** scorable verbatim clicks our mesh independently agrees one leg s
 so we reproduce ArenaNet **bit-for-bit** there — and **0 of 11** on the part-way class,
 whose waypoints are bit-exact navmesh trapezoid corners no policy here emits.
 
-**Two DESK items, each deleting a refusal rather than adding a policy** (§1p.10 items 1–2):
+**Two DESK items, each deleting a refusal rather than adding a policy** (§1p.10 items 1–2).
+**BOTH ARE NOW BUILT, both OFF by default, and NEITHER HAS BEEN RUN** — they are the next
+thing to put in front of a client, together, on map 280:
 
-1. **Stop dropping clicks that arrive under keyboard authority.** **7 of 32** live clicks
-   arrive with the latch our Rule 1 arms on, and retail answered every one within one RTT,
-   635–2,445 u from any D1 lead prediction. Keep §0.15's *actual* contract (drop the older
-   click of a rapid **pair**) — `authsrv.py:5105-5107` and `ROUTER.md` §4 rule 1 both cite
-   §0.15 for a single-click rule it does not state.
-2. **Delete the 1.0 s freshness gate on the echo path** (`authsrv.py:16583`). Retail
-   answered **22 of 32** clicks with a report older than 1.0 s, 13 older than 10 s (max
-   **20.99 s**), and **5 of 32** with no client position ever reported. A bit-exact echo
-   needs no origin, which is exactly why the echo is the arm that can be ungated. Keep the
-   gate on every origin-dependent path — `modeled_origin`'s held-out error is p50 ~15 u
-   below 2 s and 250–475 u above it.
+1. **`--answer-kbd-click`** (MOVECODE-R1-B1) — stop dropping clicks that arrive under
+   keyboard authority. **7 of 32** live clicks arrive with the latch Rule 1 arms on, and
+   retail answered every one within one RTT, 635–2,445 u from any D1 lead prediction. The
+   click now falls through to the **rate floor**, which still holds-and-coalesces: that is
+   §0.15's *actual* contract (drop the older click of a rapid **pair**) and it deliberately
+   stays. `authsrv.py:5105-5107` and `ROUTER.md` §4 rule 1 both cite §0.15 for a
+   single-click rule it does not state, and that misreading is what Rule 1 encoded.
+2. **`--echo-any-refusal`** (MOVECODE-R1-B2, requires `--click-echo` and raises without it)
+   — the echo stops asking *why* the click was refused. Retail answered **22 of 32** clicks
+   with a report older than 1.0 s, 13 older than 10 s (max **20.99 s**), and **5 of 32**
+   with no client position ever reported. A bit-exact echo needs no origin, which is why the
+   echo is the arm that can be ungated; `fresh` still gates every path that COMPUTES
+   (`modeled_origin` p50 ~15 u under 2 s, 250–475 u over it). **This crosses §1m.3's
+   deliberate scoping**, warranted by §1p.11: 7 of K2's own 8 echoed clicks already granted
+   a line our mesh calls blocked, so it does not open a new harm class.
+
+Both carry pre-registered exposure floors and refuting clauses beside their module globals
+in `authsrv.py`, printed as a banner at startup. **`--echo-any-refusal` is expected to
+produce MORE no-clip**, which no displacement counter can see (§1n.2) — the operator's
+report is the instrument, and that outcome is registered as its own row, not as a
+refutation. Tests: `test_position_trust.py` 224, `test_clickecho.py` 25, both with the
+deleting mutation run and reddening.
 
 **Explicitly NOT worth building** (§1p.8, §1p.12): the one-leg gate (0 additional
 bit-exact matches) and the clip-gated echo (refuses 7 of 8 on K2's own clicks; already
