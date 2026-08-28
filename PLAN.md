@@ -2480,6 +2480,20 @@ red by planting the exact regressions.
 trigger is the PIN rather than a clock, and it is scored with `movehook`, which is the
 first instrument this arc has had that can tell the two world copies apart.
 
+**K1 ARM A RAN AND K1 IS REFUTED — for being INERT, not harmful.** It fired twice in
+1,773 verdicts (`FINDINGS` §1l), and §1m.1 withdraws §1l.4's claim that it caused the
+spawn warps: both fires were ~100 u nudges and the warp happened 0.8 s before the first
+one. **What actually caused them is now measured** (§1m.2): during click-walking the
+client sends NO position, so `geo-stale`'s 1.0 s freshness gate is *unsatisfiable*, and
+in arm A's first 78 s **four clicks were refused, zero reports arrived and zero grants
+went out** while the operator click-walked 2,000 u from spawn. The first keyboard press
+produced the first report and the client reconciled by putting the body back at spawn.
+
+**MOVECODE-K2 (`--click-echo`) is BUILT and NOT RUN** —
+[studies/movecode/RUN-K2.md](studies/movecode/RUN-K2.md), prediction §1m.4, 19 checks.
+One condition: a click refused for STALENESS is answered with the verbatim clicked
+point; geometry refusals still refuse. Baseline is K1 arm A, already captured.
+
 **NOT RUN. The runsheet is
 [studies/movecode/RUN-K1.md](studies/movecode/RUN-K1.md)** — two arms in one session,
 **treatment FIRST** (the operator gets fluent at the route, so a smoother second walk

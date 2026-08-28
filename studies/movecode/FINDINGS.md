@@ -1627,6 +1627,14 @@ twin ~5 km from the player.
 
 ### 1l.4 The design error, and it is mine
 
+> **WITHDRAWN by §1m.1.** This subsection says the keep-alive granted a 5,000 u leg.
+> It did not: both fires were ~100 u nudges (sep 103.2 and 114.15), and the spawn warp
+> at t=78.91 happened **0.8 s before the first one**. The 5,044 u p50 I quoted is a
+> distribution over `twin-walking` REFUSALS, not grants. The paragraph below is kept
+> because a wrong reading with its correction attached is worth more than a deleted
+> one — but do not carry any of it forward. §1l.5's own "NOT DETERMINED" caveat was
+> the correct reading and the rest of this section talked past it.
+
 The sync model is seeded at spawn and advances only on grants we send. Our server
 granted little, so by t = 78 s the model still had the twin **near spawn** while the
 player had walked 5 km away. The keep-alive then did exactly what it was built to do:
@@ -1663,6 +1671,119 @@ What a rebuild would need, and none of it is a small edit:
 too few to attribute, the arms were not matched, and run 5 had displacements of its own.
 What is OBSERVED is that the largest displacement is **3.2× run 5's** and that both
 landings are at spawn, which is where our starved sync model had the twin.
+
+---
+
+## 1m. CORRECTING §1l, and MOVECODE-K2 — the click echo
+
+### 1m.1 §1l.4 BLAMED THE WRONG THING, and the log says so plainly
+
+§1l.4 said the keep-alive "granted a 5,000 u leg" and that this produced the spawn
+warps. **Both halves are wrong.** Reading the fired rows rather than the aggregate:
+
+| t | event | detail |
+|---|---|---|
+| 68.35 | click | refused `geo-stale` |
+| **77.85** | **first position report ever** | player at `(−5117.8, −503.7)` |
+| 78.37–78.63 | keepalive | `twin-walking`, sep **2066 → 1993 u**, falling |
+| **78.91** | **report** | **player at `(−5978.7, −2250.2)` — SPAWN** |
+| 79.69 | keepalive | **FIRED, sep 103.2 u** |
+| 80.86 | keepalive | **FIRED, sep 114.15 u** |
+
+**Both fires were ~100 u nudges, and the warp at t=78.91 happened 0.8 s BEFORE the
+first one.** The p50 5,044 u figure §1l quoted came from the `twin-walking` rows,
+which are refusals — I read a distribution over refused verdicts as if it described
+the grants. **MOVECODE-K1 did not cause the spawn warps**, and §1l.4's "design error"
+paragraph describes a leg that was never granted. §1l's own §1l.5 caveat
+("NOT DETERMINED whether the keep-alive caused the warps") was the correct reading and
+the rest of the section talked past it.
+
+**K1 stays refuted** — it fired twice in 1,773 verdicts, which is no exposure — but it
+is refuted for being *inert*, not for being harmful.
+
+### 1m.2 What DID cause it: a gate the client cannot satisfy
+
+The first 77.85 s of that session, from the server's own log:
+
+* **4 clicks. All 4 refused `geo-stale`.**
+* **0 position reports.**
+* **0 grants.** The sync copy never left spawn while the operator click-walked
+  ~2,000 u away from it.
+
+`fresh` is `(time.time() - pos_seen) <= 1.0`. This file already had the measurement
+that makes that unsatisfiable, two screens below the gate:
+
+> *the client sends NO position while click-moving. `0x003E` carries a destination and
+> a plane and nothing else, and one capture ran 37 seconds without the client saying
+> where it was.*
+
+**So during click-walking the precondition is not slow, it is impossible**, and every
+click dies for a reason the client cannot fix. §1i.5 called this "a cadence defect"
+and put it at 13 of 17 refusals; that was right about the count and too gentle about
+the mechanism. It is not that reports are late. In that mode **there are none**.
+
+The operator's first keyboard press produced the first report, and 1.06 s later the
+client reconciled the accumulated divergence by putting the body back on the sync copy
+— at spawn. **"pressed keyboard after ~3-4 clicks and warped back to spawn."** Twice.
+
+### 1m.3 MOVECODE-K2 — `--click-echo`
+
+**One condition.** When a click is refused for **staleness only**, answer it with the
+**verbatim clicked point** instead of saying nothing. `geo-unplaced` and `geo-blocked`
+keep refusing — they are the geometry defect (§1i.5's other 4) and want the mesh fixed,
+not a policy change.
+
+It sends `dest`, the click's own destination field, unclipped, through the **same send
+the shipped path already uses**. Both of `--heading-grant`'s named failures are
+structurally impossible: the point is not computed from `state["pos"]`, and it is not
+clipped. It still passes through the **rate gate**, so it cannot out-run retail's
+cadence and a click under active keyboard authority is still dropped — retail's own
+measured contract.
+
+**THE HONEST COUNTER-ARGUMENT, and it is why this is opt-in.** Answering a click has
+its own measured harm, recorded in `authsrv.py` beside the gate:
+
+> *the player clicked a spot up a staircase, the character set off correctly towards
+> the FOOT of the stairs — a real route, around the railing — and about a second later
+> snapped onto a straight line aimed at the clicked point, straight through the
+> railing.*
+
+That is this same mechanism from the other side: our grant moves the sync copy onto the
+straight line and the client's reconcile pulls the body onto it. **So both arms are
+wrong and the question is which is less wrong** — refusing leaves the sync copy at the
+ORIGIN, diverging by the whole distance walked (2,000 u, measured); echoing leaves it
+on the straight line to the DESTINATION, diverging only around obstacles. That is a
+measurement, not an argument, which is what the run is for. `--router` answers the same
+click with real legs and is the better answer where a mesh exists; K2 is the fallback,
+and ROUTER intercepts first so they compose rather than race.
+
+### 1m.4 The registered prediction — MOVECODE-P3
+
+Against **K1 arm A** as the baseline (`vault/research/movecode/k1-treatment/`), same
+map, same walking style — *click-walk first, then press a key*, which is the sequence
+that produced the warps.
+
+| quantity | arm A | K2 predicts |
+|---|---|---|
+| `geo-stale` clicks answered | **0 of 4** | **all of them** |
+| grants to the sync copy | 13 | **> 13** |
+| sync copy idle | **74.3%** of its span | falls |
+| displacements landing within 300 u of spawn | **2** | **0** |
+| largest displacement | **5,970 u** | **< 5,970 u** |
+
+**REFUTED IF the largest displacement exceeds 5,970 u, or if any displacement still
+lands within 300 u of the spawn point.** The second clause is the one that matters —
+it is the operator's own report turned into a number.
+
+**EXPOSURE FLOOR, pre-registered.** The arm needs **≥ 3 `click_verdict` rows with
+`click_echo: true`**. Fewer means the operator did not click-walk enough for the flag
+to act and the arm measures nothing — re-run, do not conclude. This is the floor K1
+arm A failed (2 fires) and which §1l should have led with.
+
+**A THIRD OUTCOME THAT IS NOT A REFUTATION.** If the spawn warps stop but the
+character starts phasing through railings on clicked routes, that is the staircase harm
+above arriving as predicted, and it argues for `--router` rather than against K2.
+Record it as its own row rather than scoring it as failure.
 
 ---
 

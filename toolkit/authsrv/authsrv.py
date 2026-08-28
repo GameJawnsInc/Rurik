@@ -1248,6 +1248,56 @@ HEADING_GRANT = False
 # the rate needs no movetap at all.
 CLIENT_ENDPOINT = False
 
+# --click-echo. MOVECODE-K2, and it is the SEVENTH candidate in this family. Read
+# the five epitaphs above and MOVECODE-K1's (studies/movecode/FINDINGS.md §1l)
+# before touching it. Its spec and registered prediction are §1m.
+#
+# WHAT IT CHANGES, and it is one condition: when a click is refused because we have
+# no fresh position -- `geo-stale`, and ONLY that reason -- answer it anyway with the
+# VERBATIM clicked point instead of saying nothing. Geometry refusals
+# (`geo-unplaced`, `geo-blocked`) still refuse; they are a different defect with a
+# different fix, and §1i.5 separates them.
+#
+# WHY THE STALENESS ARM AND NOT THE GEOMETRY ONE. `fresh` is
+# `(time.time() - pos_seen) <= 1.0`. During CLICK-MOVING the client sends no position
+# at all -- this file already measured it two screens down: "the client sends NO
+# position while click-moving. 0x003E carries a destination and a plane and nothing
+# else, and one capture ran 37 seconds without the client saying where it was." So in
+# that mode the gate's precondition is not slow, it is UNSATISFIABLE, and every click
+# is refused for a reason the client cannot fix.
+#
+# WHAT THAT COST, MEASURED (K1 arm A, 2026-08-27, and it is the run this flag exists
+# for): in the first 77.8 s the operator click-walked ~2,000 u from spawn. FOUR clicks
+# arrived; ALL FOUR were refused `geo-stale`; ZERO position reports arrived; ZERO
+# grants went out. The sync copy therefore never left spawn. The first keyboard press
+# produced the first report at t=77.85, and 1.06 s later the client corrected the
+# player from (-5336, -431) back to (-5978, -2250) -- the spawn point. The operator's
+# words were "pressed keyboard after ~3-4 clicks and warped back to spawn". Twice.
+#
+# WHAT IT SENDS: `dest`, the client's own clicked destination, unclipped, through the
+# SAME send the shipped path already uses -- so the echo invents nothing. Both of
+# --heading-grant's named failures are structurally impossible here: the point is not
+# computed from `state["pos"]` (it is the click's own field) and it is not clipped.
+#
+# THE HONEST COUNTER-ARGUMENT, and it is why this is opt-in and why the prediction has
+# a refuting clause. Answering a click is MEASURED to have its own harm, recorded two
+# screens down: "the player clicked a spot up a staircase, the character set off
+# correctly towards the FOOT of the stairs -- a real route, around the railing -- and
+# about a second later snapped onto a straight line aimed at the clicked point,
+# straight through the railing." That snap is this same mechanism seen from the other
+# side: our grant moves the SYNC copy onto the straight line, and the client's own
+# reconcile then pulls the body onto it (§1j -- a 0x0029 reaches syncPtr and cannot
+# move the displayed body directly).
+#
+# So both arms are wrong and the question is WHICH IS LESS WRONG, which is a
+# measurement rather than an argument: refusing leaves the sync copy at the ORIGIN and
+# diverging by the whole distance walked (2,000 u, measured above); echoing leaves it
+# on the straight line to the DESTINATION, diverging only around obstacles. --router
+# answers the same click with real legs and is the better answer where a mesh exists;
+# this is the no-mesh, no-position fallback, and it composes -- ROUTER intercepts
+# first and this never runs for a routed click.
+CLICK_ECHO = False
+
 # --zero-lead. REALFIX-P2, and the ONE candidate in the family that has never
 # been run. The module global defaults False and main()'s argparse layer flips
 # it ON BY DEFAULT since 2026-08-22 -- owner's ruling after REALFIX-L9 (33
@@ -16608,16 +16658,33 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             # a console line -- the census had to be
                             # reconstructed by subtraction. Every geometry
                             # refusal is a row now, both modes.
+                            # MOVECODE-K2. The STALENESS arm only: during
+                            # click-moving the client sends no position at all,
+                            # so `fresh` is unsatisfiable rather than slow and
+                            # every click dies for a reason the client cannot
+                            # fix. Geometry keeps refusing -- that is a
+                            # different defect (FINDINGS §1i.5) with a
+                            # different fix, and conflating them is what made
+                            # this look like one problem.
+                            k2_echo = bool(CLICK_ECHO) and not fresh
                             if rec is not None:
-                                rec.event("click_verdict", fired=False,
+                                rec.event("click_verdict",
+                                          fired=bool(k2_echo),
                                           reason=("geo-stale" if not fresh
                                                   else "geo-unplaced"
                                                   if not placed
                                                   else "geo-blocked"),
                                           dest=[float(dest[0]),
                                                 float(dest[1])],
-                                          d1_passthrough=bool(D1_LEAD))
-                            if not D1_LEAD:
+                                          d1_passthrough=bool(D1_LEAD),
+                                          click_echo=bool(k2_echo))
+                            if k2_echo:
+                                print(f"[c{conn_id}] click to ({dest[0]:.0f}, "
+                                      f"{dest[1]:.0f}): {why} -- ECHOING it "
+                                      f"verbatim anyway (K2); the sync copy "
+                                      f"cannot be left at the origin",
+                                      flush=True)
+                            if not D1_LEAD and not k2_echo:
                                 print(f"[c{conn_id}] click to ({dest[0]:.0f}, "
                                       f"{dest[1]:.0f}): {why} -- leaving it to "
                                       f"the client's own pathing", flush=True)
@@ -18583,6 +18650,16 @@ def main():
                          "experiment and are announced loudly; the appearance "
                          "nibble stays at the default on purpose, being "
                          "different bound-checked storage.")
+    ap.add_argument("--click-echo", action="store_true",
+                    help="MOVECODE-K2. When a click is refused for STALENESS "
+                         "(geo-stale) -- which during click-moving is "
+                         "unsatisfiable, because the client sends no position "
+                         "in that mode -- answer it with the VERBATIM clicked "
+                         "point instead of saying nothing. Geometry refusals "
+                         "still refuse. Off by default; it is the seventh "
+                         "candidate in a family that killed six, and its "
+                         "registered prediction is studies/movecode/FINDINGS.md "
+                         "sec.1m.")
     ap.add_argument("--keepalive-grant", action="store_true",
                     help="MOVECODE-K1. Re-grant the player's own last REPORTED "
                          "position, unclipped, whenever our model says the "
@@ -20464,6 +20541,26 @@ def main():
               "attribution (sec.0.6: gate 2 OR 3) firms to gate 2, and "
               "the NO-snap registration is wrong in the most informative "
               "way available.")
+    global CLICK_ECHO
+    if a.click_echo:
+        CLICK_ECHO = True
+        print("[map] --click-echo ON (MOVECODE-K2). A click refused for "
+              "STALENESS is now answered with the VERBATIM clicked point; "
+              "geometry refusals still refuse.")
+        print("      WHY: during click-moving the client sends NO position, so "
+              "`fresh` is unsatisfiable and every click dies for a reason the "
+              "client cannot fix. K1 arm A: 4 clicks, 4 refused, 0 reports, 0 "
+              "grants, and the sync copy never left spawn.")
+        print("      PREDICTION (FINDINGS sec.1m), scored with readhook because "
+              "no earlier candidate could tell the two world copies apart:")
+        print("        geo-stale refusals answered rather than dropped -> the "
+              "sync copy's grant count rises above K1 arm A's 13;")
+        print("        the sync copy's idle time falls from arm A's 74.3% of "
+              "its span;")
+        print("        NO displacement lands within 300 u of the map spawn "
+              "point (arm A had two).")
+        print("      REFUTED IF the largest displacement exceeds arm A's 5970 u, "
+              "or if any displacement still lands on spawn.")
     global KEEPALIVE_GRANT, KEEPALIVE_SEPARATION
     if a.keepalive_separation is not None and not a.keepalive_grant:
         # Refused rather than ignored: a run launched with only the override

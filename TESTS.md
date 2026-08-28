@@ -3548,6 +3548,30 @@ shrinks section 10),
   quantity. §8 requires `--keepalive-separation` to REFUSE on its own, because a
   run launched with only the override would look configured and change nothing.
   Every section is process-free, so floor 32 is the whole run),
+  `toolkit/authsrv/test_clickecho.py` (**MOVECODE-K2, and it is a STRUCTURAL test on
+  purpose.** The change lives inside the `0x003E` handler in `handle()`, which needs a
+  socket, a key exchange and a live client to reach, so there is no pure function to
+  drive the way `_keepalive_ok` and `_position_verdict` can be. What CAN be pinned is
+  the shape of the decision, and here the shape IS the claim. **§2 is the load-bearing
+  one**: the echo must fall through on `not fresh` and on NOTHING else, because
+  `geo-unplaced` and `geo-blocked` are a different defect — FINDINGS §1i.5 splits the
+  17 refusals into 13 staleness and 4 geometry — and a flag that quietly answered
+  geometry refusals too would be re-running the railing graveyard under a new name.
+  Planting the exact regression (dropping `and not fresh`) makes it go red, which was
+  verified rather than assumed. **§3 pins the POINT**, which is what killed
+  `--heading-grant` twice over: it must be the click's own `dest`, never
+  `state["pos"]`, never clipped. It also counts the `continue`s between the gate and
+  the send and requires exactly TWO — the refusal the echo skipped, and the RATE GATE
+  the echo passes through **on purpose**, since an echo that bypassed
+  `GRANT_SUPPRESS`'s floor would out-run retail's own 0.49 s cadence the way the
+  reproduction's 0.13 s did. A third would be a path silently swallowing the echo.
+  Writing that check found the second `continue` and turned an assumption into a
+  documented design decision. **§5 is the negative control**: with the flag off,
+  `bool(False) and X` is False whatever `X` is, so the gate reduces to the shipped
+  `if not D1_LEAD:` and the refusal message is untouched — and the echo's own log line
+  must read differently, because two decisions printing the same line is how a run gets
+  scored as the wrong arm. Floor 19, and every section is process-free so the floor is
+  the whole run),
   `toolkit/authsrv/test_position_trust.py` (the position-trust policy: it may
   refuse a client-reported position, but it may never **latch**. The old
   `_adopt_client_position` refused anything more than `900 u` from
