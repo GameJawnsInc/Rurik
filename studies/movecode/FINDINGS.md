@@ -2908,6 +2908,120 @@ skeptics. I spent an agent rediscovering it because I disassembled before greppi
 
 ---
 
+---
+
+## 1q. MOVECODE-R1-B1 ARM — **REFUTED on its registered clause, and by the exact mechanism its own predicted failure mode named**
+
+**OBSERVED, 2026-08-28.** Map 280, `--click-echo --answer-kbd-click`, 1,804 records,
+both controls FIRED, 97.9 s server span / 46.8 s of tracked motion. Capture
+`vault/research/movecode/r1b1/`, log `authsrv-20260828T105948-c1.jsonl`. Baseline
+throughout is the **K2** arm, same map and operator.
+
+### 1q.1 The registered table
+
+**Exposure floor MET**: 4 grants fired with the keyboard latch armed, against a floor
+of 3. Zero `locally-moving` refusals in the whole run, which is the flag's negative
+control — that reason is unreachable while it is on.
+
+| §1p.10 quantity | K2 | B1 | predicted | |
+|---|---|---|---|---|
+| grants fired with the latch armed | 0 (unreachable) | **4** | ≥ 3 | ✅ floor met |
+| clicks answered | 8 | 4 | rises | ❌ **fell** |
+| **largest displacement** | **446 u** | **537 u** | **≤ 446 u** | ❌ **REFUTED** |
+| displacements within 300 u of spawn | 0 | **0** | 0 | ✅ |
+
+**REFUTED.** The registered clause was *"refuted if the largest displacement exceeds
+446 u"*, and it is 537 u. The three displacements are **537, 527 and 321 u**, total
+1,385 u against K2's 1,101 u.
+
+**And the walk was SHORTER, which strengthens rather than weakens it**: the local copy
+walked **9,734 u over 46.8 s** against K2's 18,577 u over 88.1 s. B1 produced a larger
+maximum displacement in **half** the path.
+
+The spawn clause passes cleanly — closest approach **2,403 u**, and the three landings
+are at `(−5881, −121)`, `(−6079, 2537)` and `(−7365, 4147)`. Nothing went back to
+`(−6036, −2519)`. **This is not a regression to arm A's failure**; it is a different,
+smaller one that the arc's own scoring number nonetheless refuses.
+
+### 1q.2 The attribution, on a CHECKED clock pairing
+
+The two clocks are different, so they were aligned the way §1i.3 aligned them — by the
+grant pairing, and **the pairing is tested rather than assumed**: the server sent
+**30** `0x0029` and the sync copy took **exactly 30** setter calls, and the 29
+inter-event **gap sequences** agree at **p50 4 ms, max 16 ms** with an offset spread of
+**0.021 s**. Gaps need no shared origin, so this is a check that could have failed.
+
+| server t | event | |
+|---|---|---|
+| 16.26 | B1 click grant `(−5979, −336)` | latch age 1.08 s |
+| 23.54 | B1 click grant `(−4606, 2936)` | latch age 1.18 s |
+| **25.51** | **DISPLACEMENT 537 u** | **+1.97 s** |
+| 35.90 | B1 click grant `(−7712, 5964)` | latch age 1.74 s |
+| **37.87** | **DISPLACEMENT 527 u** | **+1.97 s** |
+| 44.61 | B1 click grant `(−8592, 4693)` | latch age 1.12 s |
+| **47.65** | **DISPLACEMENT 321 u** | **+3.04 s** |
+
+**Three of three displacements follow a B1 click grant, at +1.97, +1.97 and +3.04 s.**
+Two of them at the same 1.97 s to the centisecond. The fourth B1 grant (t = 16.26) is
+the one that did not warp, so it is 3 of 4 grants rather than 3 of 3 — the count that
+matters is that **no displacement in this run failed to follow one.**
+
+The operator's report is the independent witness and it agrees: *"got some warps. ended
+with a W press that caused a warp."* The last displacement is the 321 u one at
+t = 47.65, and a `W` press is exactly what produces the heading grant it lands beside.
+
+**This is B1's own predicted failure mode, quoted from `authsrv.py` before the run:**
+
+> *a click answered under a live keyboard authority races the lead refreshes and the
+> client briefly sees two authorities*
+
+That is what 1.97 s after a click grant, landing 136 u from the next heading grant's
+destination, looks like on the wire.
+
+### 1q.3 What the run does NOT separate, and it is inherent rather than sloppy
+
+**All 4 of B1's fires were also K2 echoes of `geo-stale` clicks**, so this arm does not
+separate "answering a mid-keyboard click" from "echoing a stale click while the keyboard
+is authoritative". That confound cannot be walked around: the latch ages measured are
+**1.08–1.74 s**, and `fresh` is `<= 1.0 s`, so a click arriving late enough to be
+mid-keyboard is by construction already stale. The two conditions overlap by
+arithmetic, not by accident.
+
+The consequence for the reading is real: **B1's action set was a subset of K2's echo
+set in this run**, and what B1 changed was only whether those 4 echoes survived rule 1.
+Without the flag all four would have died as `locally-moving` and this run would have
+answered **zero** clicks.
+
+**Which is why "clicks answered fell from 8 to 4" is not the regression it looks like.**
+It is a different walk: the operator was told to click while holding a key, so the run
+contains fewer pure click-walk legs than K2's did. The two arms are not comparable on
+that row and it should not be quoted as one.
+
+### 1q.4 The other six clicks, and the exposure B2 now has for free
+
+Six clicks were refused `geo-blocked` (t = 26.72 → 41.55), clustered in the north-east
+at y ≈ 4,400–5,300 — the region §1i.5 and §1h.4 both name. Those are exactly the set
+`--echo-any-refusal` (R1-B2) exists to answer, and **6 ≥ its registered floor of 3**, so
+that arm's exposure is reachable on this operator's own walking pattern without any
+special instruction.
+
+### 1q.5 Status
+
+* **`--answer-kbd-click` is REFUTED and stays OFF.** It is kept in the tree with its
+  numbers, like the seven before it.
+* **The eighth candidate, and the pattern holds with one correction.** §1o said every
+  candidate asserting *more* about where the player should go does worse. B1 asserts
+  nothing about *where* — it only removes a refusal — and it still lost. The sharper
+  statement is that **every candidate that puts a grant on the wire while the client
+  already has an authority does worse**, which is a claim about *when* rather than
+  *where*, and rule 1 was right for a reason its own comment got wrong.
+* **`--click-echo` alone remains the best measured configuration** at 446 u.
+* **NOT DETERMINED:** whether B1 would refute on a walk where the mid-keyboard click is
+  *fresh* — which needs a report inside 1.0 s of the click, i.e. a click within a second
+  of a key edge. No such click occurred here and the arm cannot be scored on it.
+
+---
+
 ## 2. Corrections to the record
 
 Each of these was in circulation and each is now measured against the bytes.

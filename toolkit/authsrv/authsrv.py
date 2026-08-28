@@ -1346,8 +1346,42 @@ CLICK_ECHO = False
 #     produce more of it, so the operator's report is the instrument here.
 ECHO_ANY_REFUSAL = False
 
-# --answer-kbd-click. MOVECODE-R1-B1, and it deletes a refusal rather than
-# adding a policy, which is why it ranks above anything in the graveyard above.
+# --answer-kbd-click. MOVECODE-R1-B1. **REFUTED 2026-08-28 by the run built for
+# it, and left here with its numbers like the seven before it.** Largest
+# displacement **537 u against the K2 baseline's 446 u** — on a walk HALF as
+# long (local copy 9,734 u / 46.8 s against 18,577 u / 88.1 s), which makes it
+# worse rather than marginal. The spawn clause passed (closest approach
+# 2,403 u), so this is a different and smaller harm than arm A's, and the arc's
+# own scoring number refuses it anyway. Do not re-enable it. Full record:
+# `studies/movecode/FINDINGS.md` §1q.
+#
+# **THE PREDICTED FAILURE MODE BELOW IS WHAT HAPPENED**, which is the only
+# satisfying thing about it. On a clock pairing checked at p50 4 ms / max 16 ms
+# over 29 gap sequences, **all three displacements follow a B1 click grant** —
+# +1.97 s, +1.97 s and +3.04 s, two of them identical to the centisecond. The
+# operator's report agrees and is the independent witness: "got some warps.
+# ended with a W press that caused a warp."
+#
+# **THE PATTERN NEEDED ONE CORRECTION AND THIS IS IT.** §1o said every candidate
+# asserting MORE about WHERE the player should go does worse. B1 asserts nothing
+# about where — it only deletes a refusal — and it still lost. The sharper
+# statement is that **a grant put on the wire while the client already holds an
+# authority does worse**, which is a claim about WHEN. Rule 1 was right, for a
+# reason its own comment got wrong.
+#
+# What the run could NOT separate, and it is arithmetic rather than sloppiness:
+# all 4 fires were ALSO K2 echoes of stale clicks, because the measured latch
+# ages were 1.08-1.74 s and `fresh` is <= 1.0 s — a click late enough to be
+# mid-keyboard is already stale by construction. So B1's action set was a subset
+# of K2's echo set, and what it changed was only whether those 4 survived rule 1.
+# UNVERIFIED: whether it would refute on a click that is mid-keyboard AND fresh
+# (one arriving within a second of a key edge). None occurred.
+#
+# The original reasoning follows, unedited, because the prediction it registered
+# is the one the run scored.
+#
+# It deletes a refusal rather than
+# adding a policy, which is why it ranked above anything in the graveyard above.
 # `studies/movecode/FINDINGS.md` §1p.10 item 1.
 #
 # WHAT IT CHANGES. `_grant_verdict`'s RULE 1 -- "do not grant while the player

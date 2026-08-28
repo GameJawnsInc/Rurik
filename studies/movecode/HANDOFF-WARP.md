@@ -99,14 +99,22 @@ refuted candidate carrying its measurement is worth more than a deleted one.
 | **MOVECODE-K3** (route from `_sync_position`) | **withdrawn before being built** — the router's origins are on-mesh and its routes are valid, so a better origin yields a *different* valid route the client still disagrees with |
 | **clip-gated echo** (gate the echo on a clip from `_sync_position`) | **REFUTED at a desk 2026-08-28, §1p.12** — replayed against K2's own 8 echoed clicks it refuses **7 of 8**, i.e. a near-total revert to the shipped refusal. `--heading-grant` had already granted a clipped point and its epitaph names the clip as one of its two failures |
 | **one-leg-gated echo** (echo only when our mesh says one leg suffices) | **NOT WORTH BUILDING, §1p.8** — buys **0** additional bit-exact matches against retail (13/26 either way); its only win is not granting an off-mesh line in 11 of 26, into an else-branch that is either `--router` (2,127 u) or refusal (5,970 u). A gate whose false branch is a refuted policy is a refuted policy with extra steps |
+| **`--answer-kbd-click`** (MOVECODE-R1-B1) | **RAN AND REFUTED 2026-08-28, §1q.** Largest displacement **537 u against K2's 446 u**, on a walk **half as long**. Floor met (4 fires). Spawn clause passed (closest 2,403 u). **All 3 displacements follow a B1 grant** at +1.97/+1.97/+3.04 s on a checked clock pairing — its own pre-registered failure mode, verbatim |
 
-**The pattern across all five — now seven — candidates:** every candidate that asserts
-*more* about where the player should go does worse. The winner asserts the least.
-**2026-08-28 sharpens why, and it is not a maxim about modesty:** every lever except the
-bare echo consults our navmesh, and our navmesh agrees with the client's on ~35.7% of
-clipped stops on map 280 (`ROUTER.md` §3). The echo wins because it is the only answer
-that never consults it — and because it is, on the majority class, exactly what ArenaNet
-sends (§1p.8).
+**The pattern across all five — now eight — candidates, AND IT NEEDED A CORRECTION.**
+It used to read *"every candidate that asserts more about where the player should go does
+worse."* **B1 refuted that formulation on 2026-08-28** (§1q): it asserts nothing about
+*where* — it only deletes a refusal — and it lost anyway, 537 u against 446 u, with all
+three of its displacements landing 2–3 s after a grant it had unlocked. The surviving
+statement is about **WHEN**, not where:
+
+> **A grant put on the wire while the client already holds an authority does worse.**
+
+Rule 1 was right, for a reason its own comment got wrong. The *where* half still holds
+separately and has its own cause: every lever except the bare echo consults our navmesh,
+which agrees with the client's on ~35.7% of clipped stops on map 280 (`ROUTER.md` §3).
+The echo wins because it is the only answer that never consults it — and because it is,
+on the majority class, exactly what ArenaNet sends (§1p.8).
 
 ---
 
