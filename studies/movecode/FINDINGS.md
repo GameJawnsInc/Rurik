@@ -4911,8 +4911,10 @@ standing on it.
   radius >= 0`, reached from the teleport's spatial query at `0x0070A150` → `0x00722B90`,
   and the step-clearance gate `0x005FEF70` already hooked as `stepclear`). That is a
   different structure from the trapezoid navmesh and we do not decode it.
-* **Terrain height.** The operator's own words — *"onto the base terrain underneath"* —
-  are a height claim, and height is exactly what the pathing chunk does not carry.
+* **Terrain height.** ~~The operator's own words — *"onto the base terrain underneath"* —
+  are a height claim~~ **WITHDRAWN AS THE LEAD the same day — see §1w.8.** The operator's
+  correction: it is not about height, it is about OBSTACLES. Height stays on the list only
+  as an instrument of last resort.
 
 **What this means for the arc, stated plainly:** the no-clip row **cannot be scored
 offline with what we have**, and the four previous attempts failed for a reason that was
@@ -4928,6 +4930,60 @@ map is essentially one component, so it always says yes); and **`route()`** says
 are straight-line legal at ratio exactly 1.00, which is **the plane-blind chain again,
 one level deeper**. A clean answer from the third would have been published if the first
 two had not disagreed with each other.
+
+### 1w.8 CORRECTED, same day: not a height claim — an OBSTACLE claim. The operator's map model
+
+**OPERATOR, 2026-08-28**, with two screenshots (client-rendered imagery — described here,
+never committed; they live in the owner's screens folder, `gw077.jpg` and its neighbour):
+
+> *"i wouldn't really call it a height claim, it just seems to be how the maps are
+> shaped. ... it's not a "height" thing because you're not supposed to walk over the
+> mountain either. the "base terrain" just seems to be how their maps are set up, with
+> props (like mountains, walls, stairs, etc) that can either be walkable or walls placed
+> upon that base terrain. and our clipping lets us walk on that. it's definitely an
+> obstacle thing, that's the one worth digging into"*
+
+**Screenshot 1:** the massif from outside — a rock formation rising off the isle's ground.
+**Screenshot 2:** the body INSIDE it — upright, mid-stride on a surface that continues
+under the rock, the massif's face filling the frame. Not falling, not floating: a walk.
+
+**What this corrects in §1w.7.** Instrument 2 — "terrain height" — was this document's
+framing, not the operator's, and it is withdrawn as the lead. The operator's model is:
+**a base terrain layer, with props (mountains, walls, stairs) placed upon it, each one
+walkable or a wall — and the no-clip ignores the PROPS while walking the base layer.**
+
+**And that model PREDICTS §1w.7's own key measurement.** The navmesh being "essentially a
+single surface" stops being a curiosity and becomes the observation that **the pathing
+chunk we decode may be (or be dominated by) the base layer** — with the prop obstacles
+represented somewhere we do not read. That is a hypothesis, not a conclusion; the dig is
+what settles it, and it decomposes into four offline questions:
+
+* **Q1 — decisive, cheapest.** Does mesh 165811's coverage have a **hole** at the massif's
+  footprint, or is the interior covered by trapezoids we score walkable? Render coverage
+  (`toolkit/mapdata/png.py` exists), overlay r4a's walked samples and its rapid-pair
+  chords, compare against the isle's known shape. A hole means the detector's zero was a
+  sampling artifact and clip() should be re-run on the no-clip chords; full coverage means
+  the block genuinely is not in the trapezoids we read.
+* **Q2.** Which trapezoid / plane-record fields does `pathmap.py` read and discard, and do
+  any of them differ regionally (massif interior vs open ground)?
+* **Q3.** Do prop placements (`props.py`) plus prop model files (`modelfile.py`) carry
+  collision data? `Engine\Map\Path\` has nine modules including `PathObstacle.cpp` and
+  `PathDataImport.cpp` ("what it imports is in `Gw.dat`" — srvtree §5), and
+  `PathApi:753/754 obstacleCenter/obstacleRadius` is a shipped obstacle interface our
+  `pathmap.py` has no counterpart for.
+* **Q4 — client side.** What structure does the resolve at `0x0072B840` walk, who besides
+  the teleport calls the spatial query `0x0070A150` → `0x00722B90`, and does the per-step
+  mover consult ANY static geometry — or is retail's wall integrity purely
+  (server-granted paths) + (client pathfind for prediction), so that a server granting a
+  straight line gets a client that walks it without ever asking?
+
+**Why Q4's answer matters even though the fix is server-side either way:** B3-3 Q5 already
+showed the teleport's position write is never gated on the spatial query. If the WALK
+stepper is the same — no static collision anywhere in the mover — then the retail client
+never had wall integrity of its own, the mountain was always enforced by what retail's
+server would grant, and our fix is exactly one thing: **grant paths from a mesh that
+contains the obstacles.** Which makes Q1–Q3 the critical path and the four dead detectors
+a closed chapter.
 
 ---
 
