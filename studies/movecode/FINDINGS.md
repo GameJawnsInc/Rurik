@@ -3134,6 +3134,60 @@ until the separation crosses the cut. Different mechanisms, and the timing separ
   metric in this file can see it** (§1n.2). The operator's report of this run does not
   mention it either way, so that row is **UNSCORED**, not zero.
 
+
+### 1r.6 The no-clip row: an offline detector was BUILT, FAILED ITS POSITIVE CONTROL, and is not published as a result
+
+**The row is UNSCORED because of a handoff defect, and the defect is worth naming
+because the runsheet did not have it wrong — the handoff did.** `RUN-R1B.md` §1 states
+that no-clip is pre-registered, that every metric is blind to it, and that *"the
+operator's report is the instrument for this and nothing else is"*. The server also
+prints it as a startup banner. What reached the operator was a **bare command**, pasted
+without the runsheet's own observation step, and the answer came back
+*"i didn't pay attention as it wasn't noted in the run B2 instructions."* **The
+instruction existed and did not travel with the command.** An instrument that is a human
+has to be briefed in the same breath as the launch, or it is not an instrument.
+
+**Then the dependency was attacked directly, and this is the part worth keeping.** If
+no-clip could be read out of the capture, no briefing would be needed. The detector walks
+the LOCAL copy's sampled positions and runs each chord through `pathmap.clip()` — the
+server's own geometry primitive — counting chords the mesh says are blocked. Warp steps
+(stamp not advancing) are excluded, sub-1 u chords are dropped, and long chords are capped
+so a sparse sample cannot manufacture a corner cut.
+
+**It was calibrated against a control pair whose answer is already known**, which is the
+only reason its failure is legible:
+
+| arm | what it should show | steps | blocked | rate | worst |
+|---|---|---|---|---|---|
+| `k1-treatment` (shipped, clicks REFUSED — body is entirely client-pathed) | **clean** | 134 | 1 | **0.7%** | 73 u |
+| `k2` (echo — operator REPORTED no-clip, §1n.2) | **dirty** | 158 | 1 | **0.6%** | 171 u |
+
+**No separation.** The arm that should be clean scores *higher* than the arm the operator
+watched no-clip in. Swept over chord caps 400/800/2000/6000 u and tolerances 16/32/64 u,
+the rates stay ~1% in both and `n` stays at **1–2 blocked chords per arm**. **A detector
+that cannot tell the control pair apart cannot score B2**, and its readings for B1 (0) and
+B2 (2) are therefore reported nowhere else in this document.
+
+**WHY it fails, and it is NOT the obvious reason.** The first hypothesis was that our mesh
+is terrain-only and cannot represent a prop. **Refuted by measurement:** map 0x287B3's
+mesh has **2,769 trapezoids with a median y-extent of 44.8 u, and 70.6% are under 80 u** —
+prop scale. The mesh is fine enough.
+
+The real limit is **sampling**. `movehook` fires on path-solver *events* — bake, setter,
+teleport — not at a fixed interval, so a capture yields only **134–571 usable chords** for
+a whole run, and the body's actual traversed path between two decision points is not
+recorded. At a ~1% base rate that is **n = 1–2**, which is no power at all.
+
+**What would work, costed rather than hand-waved:** a hook that samples the body's
+position on a timer (or reads the client's own collision result) instead of at solver
+entries. That is a `movehook.c` change and a `sites.h` regenerate, not a new arc — and it
+would retire a row this family has now deferred to human attention **four times**.
+
+**Until then the row is genuinely UNSCORED for B1 and B2**, it cannot be recovered from
+the captures on disk, and only a re-run with the operator briefed *before* the walk can
+close it. That does not change either refutation: both were refuted on displacement, which
+is measured.
+
 ---
 
 ## 2. Corrections to the record

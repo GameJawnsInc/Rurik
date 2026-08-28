@@ -121,6 +121,24 @@ powershell -ExecutionPolicy Bypass -File toolkit/clientscan/movehook/build.ps1 t
 every movehook address is **38797**. `--hold 900` bounds the window; without it the
 client parks on the owner's screen indefinitely.
 
+
+> ### ⚠ BRIEF THE OPERATOR BEFORE THE WALK — copy this WITH the command
+>
+> Two of this arm's rows have **no instrument but your eyes**, and an offline
+> detector for the first was built on 2026-08-28, **failed its positive control**
+> and cannot substitute (§1r.6). If you are not told before the walk, the row
+> comes back UNSCORED — which is exactly what happened to B2.
+>
+> **1. NO-CLIP.** Did the character walk *through* props, railings, rocks, or
+> along bare ground it should not reach? This is **not** a refutation — it is
+> pre-registered as its own row — but it must be reported either way, including
+> "I watched for it and saw none", which is a result and not a blank.
+> **2. HOW THE WARPS FELT and WHEN.** Mid-route, or on arrival at the clicked
+> point? B2's worst displacement fired **293 u from the destination**, and no
+> counter in the tree can tell those two apart.
+>
+> Handing over a bare command without this block is the defect §1r.6 records.
+
 ```bash
 python toolkit/harness/session.py --exe vault/run/2026-07-29_221c13772c7a/Gw.exe --keep-open --hold 900 --game-args="--click-echo --answer-kbd-click --map 280"
 ```
