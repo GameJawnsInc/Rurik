@@ -7000,8 +7000,18 @@ shrinks section 10),
   by a build-stamp sha256 now, with mtime as the fallback for a DLL predating stamping,
   and all four arms are exercised: a matching stamp passes, it **still** passes when
   sites.h is newer but byte-identical (the false alarm), an actually-edited header is
-  refused, and with no stamp it falls back to mtime and says so. 102 floor,
-  150 on a
+  refused, and with no stamp it falls back to mtime and says so. **§15 exists because the
+  client CRASHED:** the stride was written as `if (strided out) continue;` directly above
+  the `push ebp` emulation whose own comment reads *"this must happen on every hit — a
+  skipped prologue is a corrupted frame, not a missing sample"*. `continue` leaves the
+  for-loop, so EIP never advanced past the `0xCC`; 63 of every 64 tick hits took that path
+  and the client died with `c0000005` within seconds of arming. **Nothing in the suite
+  could have caught it** — §7 injects into a throwaway `cmd.exe` where every site
+  deliberately fails to arm, so the handler's hot path is never executed by a test. The
+  property is structural and is now checked structurally: no `continue`, `break` or stray
+  `return` between the address match and the emulation, with a control that plants the
+  exact crashing statement and confirms detection. 105 floor,
+  153 on a
   machine with the client, a compiler, an archive and a 32-bit `cmd.exe`; each other
   section declares a skip),
   `toolkit/clientscan/test_commandertrap.py` (the hardware-breakpoint trap, and

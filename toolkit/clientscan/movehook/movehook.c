@@ -485,10 +485,22 @@ static LONG CALLBACK on_bp(PEXCEPTION_POINTERS ep)
          * A stride of N stores occurrence 1, N+1, 2N+1 ... so a site always
          * contributes its FIRST hit (a site that fired once still appears) and the
          * stored records stay evenly spaced for timing. Sites with stride 0 or 1
-         * are unaffected, which is every site that existed before this. */
-        if (SITES[i].stride > 1u && ((DWORD)(nth - 1) % SITES[i].stride) != 0u)
-            continue;
-        {
+         * are unaffected, which is every site that existed before this.
+         *
+         * IT GATES THE RECORD ONLY. The first version of this was
+         * `if (strided out) continue;` and it CRASHED THE CLIENT on the first run
+         * that armed the tick -- c0000005, within seconds. `continue` leaves the
+         * for-loop, and the `push ebp` emulation at the BOTTOM of this loop body
+         * is what keeps the client running: skip it and EIP never advances past
+         * the 0xCC and the frame is never built. 63 of every 64 tick hits took
+         * that path. The comment on that emulation block already said "this must
+         * happen on every hit -- a skipped prologue is a corrupted frame, not a
+         * missing sample", and the `continue` was written directly above it.
+         * So the stride is an `if` around the RECORD, never a jump past the
+         * EMULATION, and `test_movehook.py` §15 now refuses a `continue` anywhere
+         * between the address match and the emulation. */
+        if (!(SITES[i].stride > 1u
+              && ((DWORD)(nth - 1) % SITES[i].stride) != 0u)) {
             LONG slot = InterlockedIncrement(&g_n) - 1;
             if (slot < (LONG)NCAP) {
                 rec_t *r = &g_rec[slot];

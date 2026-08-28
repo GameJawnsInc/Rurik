@@ -71,18 +71,19 @@ import checks                                                   # noqa: E402
 #   §12  6   the world-copy census, both directions  process-free
 #   §13  5   the displacement count, both directions process-free
 #   §14 59   2026-08-28 sites, v6, setposition, the tick + its STRIDE  50 pf + 9 client
-#   ----    process-free core = 102, and THAT is the floor.
+#   §15  3   the dispatch loop reaches its emulation  process-free
+#   ----    process-free core = 105, and THAT is the floor.
 #
 # §12 and §13 both read `gensites.rows()`, which goes to `content.load()` and never
 # opens the client, so their eleven are process-free and the core moved with them.
-# A whole green run on this machine is now 150.
+# A whole green run on this machine is now 153.
 #
 # §14 SPLITS, and the split was counted out of the banner rather than reasoned
 # about: 25 checks, of which the 8 non-entry refusals and their 1 control call
 # `gensites.verify()` and therefore need the vaulted image, while the row
 # assertions and the whole v6 round-trip go through `content.load()` and a
 # synthesised capture and never open it. 59 - 9 = 50 process-free, so the core
-# moves 46 -> 102. A bare machine must still clear 102.
+# moves 46 -> 102, and §15's three take it to 105.
 #
 # The first draft of this comment guessed 16 by adding up what the sections
 # looked like they contained, and it was two low -- which would have let two
@@ -90,8 +91,8 @@ import checks                                                   # noqa: E402
 # ("set the floor from a real green run, never from a guess") is not about
 # arithmetic being hard; it is that a floor derived from the code rather than
 # from the output drifts the moment either changes. `skip()` lowers the floor by
-# ZERO, so a bare machine must still clear 102.
-LEDGER = checks.Ledger("movehook", floor=102)
+# ZERO, so a bare machine must still clear 105.
+LEDGER = checks.Ledger("movehook", floor=105)
 check = checks.adopt(LEDGER)
 
 WOW64_CMD = r"C:\Windows\SysWOW64\cmd.exe"
@@ -1151,6 +1152,65 @@ def section_14(tmp):
           "zero rather than of nothing")
 
 
+# ---------------------------------------------------------------- §15
+def section_15():
+    """The dispatch loop must reach its emulation on EVERY matched hit.
+
+    THIS SECTION EXISTS BECAUSE THE CLIENT CRASHED. The stride added on
+    2026-08-28 was written as `if (strided out) continue;` directly above the
+    `push ebp` emulation whose own comment reads "this must happen on every hit
+    -- a skipped prologue is a corrupted frame, not a missing sample". `continue`
+    leaves the for-loop, so EIP never advanced past the 0xCC and the frame was
+    never built; 63 of every 64 tick hits took that path and the client died with
+    c0000005 within seconds of arming.
+
+    Nothing in the suite could have caught it: §7 injects into a throwaway
+    cmd.exe where every site FAILS TO ARM, which is deliberate and is exactly why
+    the handler's hot path is never executed by a test. The property is
+    structural, so it is checked structurally -- between the address match and
+    the emulation there may be no `continue`, no `break`, and no `return` other
+    than the emulation's own.
+    """
+    c_path = os.path.join(HERE, "movehook.c")
+    if not os.path.isfile(c_path):
+        LEDGER.skip("15. the dispatch loop", "movehook.c is not here")
+        return
+    src = open(c_path, encoding="utf-8").read()
+    bad = _loop_escapes(src)
+    check(bad == [], "15. no early exit between the site match and the emulation",
+          f"found {bad} -- each one is a hit that never emulates `push ebp`, "
+          f"never advances EIP past the 0xCC, and crashes the client")
+
+    # CONTROL: the check must catch the exact statement that crashed it.
+    planted = src.replace(
+        "        if (!(SITES[i].stride > 1u",
+        "        if (SITES[i].stride > 1u) continue;\n        if (!(SITES[i].stride > 1u",
+        1)
+    check(planted != src, "15. CONTROL: the crashing form could be planted")
+    check(_loop_escapes(planted) != [],
+          "15. CONTROL: and planting it is DETECTED",
+          "a checker that cannot find the bug it was written for is decoration")
+
+
+def _loop_escapes(src):
+    """[offending statements] between the address match and the emulation."""
+    import re
+    try:
+        i = src.index("for (i = 0; i < NSITES; i++) {")
+        j = src.index("c->Eip = a + 1;", i)
+    except ValueError:
+        return ["could not locate the dispatch loop or its emulation"]
+    body = re.sub(r"/\*.*?\*/", "", src[i:j], flags=re.S)   # strip comments
+    body = body[body.index("if (a != g_addr[i]) continue;")
+                + len("if (a != g_addr[i]) continue;"):]
+    out = []
+    for line in body.splitlines():
+        s = line.strip()
+        if re.search(r"\b(continue|break)\s*;", s) or re.search(r"\breturn\b", s):
+            out.append(s)
+    return out
+
+
 def main():
     import tempfile
     tmp = tempfile.mkdtemp(prefix="movehook-test-")
@@ -1164,6 +1224,7 @@ def main():
     section_12(tmp)
     section_13(tmp)
     section_14(tmp)
+    section_15()
     return LEDGER.verdict()
 
 
