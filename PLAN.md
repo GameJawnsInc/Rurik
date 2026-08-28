@@ -1626,16 +1626,43 @@ two — `clear line` / `line BLOCKED by our mesh` / `geometry NOT evaluated`. It
 string literal on every path, asserting a clip result in the one state where no clip
 ran; 7 of the 8 lines it called clear in the K2 run were blocked.
 
-**WHAT IS WORTH DOING NEXT, and it is one run, not four (§1s.9).** Four new
-`content/movecode.toml` rows + a `gensites.py` regenerate + one owner-driven loopback run
-on 38797 answers four open questions at once: `0x00606009` (the fence, **counting
-executions** — the only thing that can settle whether it suppresses anything),
-`0x00605634`/`0x00605683` (the facing-9 early-out), **`0x005FCAA0` (the gateless route —
-the only instrument that can catch it firing cold, which is the residual risk to "aimed
-at the right gate")**, and `0x005FEF70` (gate 3, filtered on `retaddr == 0x0060581E`).
-**Do NOT paste the `stepclear` row as drafted** — its `verified` prose asserts a second
-caller is a phantom, which is false (`boundary_status(0x006007A9)` = confirmed), and
-`content.py` cannot catch a false prose claim.
+**★★ THE RUN IS SET UP AND WAITS ONLY ON THE OWNER — `studies/movecode/RUN-R2.md`,
+2026-08-28, commit `8780d53`.** Five pre-registered predictions, exposure floors, and
+the walk the operator needs (which is a *snap*-provoking walk, not a click-walk —
+different from the last three arms).
+
+**§1s.9 asked for four sites and named five addresses; FOUR OF THE FIVE ARE NOT
+FUNCTION ENTRIES** and `gensites.py` would have refused them all at generation time
+(`PLAN.md` §7 Q12(d) — the handler re-emulates one shape). Re-read from the pinned
+image: `0x00606009` is a `je`, `0x00605634` a `cmp`, `0x00605683` a `pop esi`, and
+`0x005FCAA0` the ResyncAllAsync **thunk**, a `call`. Only `0x005FEF70` (gate 3) is a
+`push ebp`.
+
+**What replaced them is not a relaxed rule — three of the four wanted a VALUE the
+existing entry hooks already reach**, so the run arms **2 new sites, not 4**:
+the facing-9 early-out's operands both sit on `snaptest`'s **arg2**, the agent that row
+already dereferences (and one of them, `m_timeStopMovement`, was already captured), so
+**one new offset** finished it; the fence is the operand of `agtrack`'s own branch,
+computable at its entry, which is the fix for §1s.8 item 1 (its defect was that the
+fence was *sampled* at 11.4 Hz by a classifier the outcome mutates); and
+ResyncAllAsync is `0x00605E40`, the body the thunk jumps to. `agtrack` is also re-armed
+with `deref_agent_arg = 1`, because **its arg1 IS an agent** — `0x00605FCE` reads
+`[edi+0x10]` and bounds-checks it as an index, `0x00605FD1` reads `[edi+0x24]` and
+compares it against 1. NSITES 11 → 13; record **v6** appends `world`, `facing` and the
+fence (append-only, because §1e.3's reorder kept the same length and `reclen` could not
+catch it). Old v5 captures still parse identically.
+
+`test_movehook.py` is **62 floor / 108 checks**, and its new §14 proves the refusal
+**fires** on all four real proposed addresses — twice each, naively and then with
+`first_byte` "fixed" to the byte actually there, which is what a session does after
+reading the first refusal. §2 only ever checked that rows *are* `0x55`, which cannot
+show the gate works.
+
+**The `stepclear` row was NOT pasted as drafted** — its `verified` prose claimed the
+second caller is a phantom, which is false (`boundary_status(0x006007A9)` = confirmed,
+`main:3278`/`:3357` record n = 2 of 2), and `content.py` cannot catch a false prose
+claim. The committed row states the two callers and the disjunction, and the runsheet
+carries the `retaddr == 0x0060581E` filter as mandatory.
 
 ### ★ MOVEMENT 2026-08-28, FIRST PASS — R1 is DONE, and the two cheapest fixes are DESK changes that each DELETE a refusal
 
