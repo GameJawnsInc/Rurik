@@ -253,6 +253,26 @@ def _union_ms(ivs):
     return sum(hi - lo for lo, hi in merged)
 
 
+def _by_object(cap, names):
+    """{this-pointer: [its records, in capture order]} for every agent-bearing hit.
+
+    ONE grouping, used by both the world census and the displacement count. Two
+    copies of this would be two places to disagree about what an object is --
+    the same defect `_synth` was rebuilt to avoid, from the other side.
+
+    Keyed on the ADDRESS and never on the id, because one agent id names TWO
+    objects (the two world copies) and grouping on it interleaves bodies that
+    genuinely sit hundreds of units apart.
+    """
+    objs = {}
+    for i, r in enumerate(cap.recs):
+        if not r.get("have_agent"):
+            continue
+        r.setdefault("_i", i)
+        objs.setdefault(r["ecx"], []).append(r)
+    return objs
+
+
 def _worlds(cap, names):
     """The world-copy census: how many OBJECTS carry each agent id, and what drives each.
 
@@ -374,14 +394,49 @@ def _worlds(cap, names):
     setter_i = bysite.get("setter")
     if setter_i is not None and sync:
         for addr in sorted(sync):
-            if addr in objs:
-                n = objs[addr]["sites"].get("setter", 0)
-                a("")
-                a(f"  the WORLD_SYNC copy 0x{addr:08X} took {n} setter call(s) -- "
-                  f"that is its ONLY")
-                a("  source of destinations, so it is the count our server's "
-                  "movement grants")
-                a("  have to be compared against.")
+            if addr not in objs:
+                continue
+            o = objs[addr]
+            n = o["sites"].get("setter", 0)
+            a("")
+            a(f"  the WORLD_SYNC copy 0x{addr:08X} took {n} setter call(s) -- "
+              f"that is its ONLY")
+            a("  source of destinations, so it is the count our server's "
+              "movement grants")
+            a("  have to be compared against.")
+            # THE CADENCE, which is the quantity MOVECODE-K1 is built against
+            # and the one a runsheet has to be able to read in one command.
+            # Retail's figures are the control and are quoted beside ours so a
+            # reader does not have to go and find them: FINDINGS §1i.4, 118 live
+            # agents, denominators built the same way on both sides.
+            ticks = sorted(r["tick"] for r in o["recs"]
+                           if names[r["site"]] == "setter"
+                           if r["site"] < len(names))
+            if len(ticks) > 1:
+                gaps = sorted((ticks[i] - ticks[i - 1]) / 1000.0
+                              for i in range(1, len(ticks)))
+                a(f"      grant gaps s: min {gaps[0]:.2f}  "
+                  f"p50 {gaps[len(gaps) // 2]:.2f}  "
+                  f"p90 {gaps[int(len(gaps) * 0.9)]:.2f}  max {gaps[-1]:.2f}"
+                  f"   [retail p50 0.82]")
+            # Density against the copy's OWN walked path. This is the sampled
+            # chord sum and it UNDER-reads a curved path -- the sync copy is
+            # sampled far more sparsely than the local one -- so it is labelled
+            # rather than quietly compared against retail's granted-chain figure.
+            path = 0.0
+            seq = o["recs"]
+            for i in range(1, len(seq)):
+                d = ((_f(seq[i]["point"][0]) - _f(seq[i - 1]["point"][0])) ** 2
+                     + (_f(seq[i]["point"][1]) - _f(seq[i - 1]["point"][1])) ** 2) ** 0.5
+                if math.isfinite(d):
+                    path += d
+            if path > 0:
+                a(f"      grants per 1000 u of its own SAMPLED path: "
+                  f"{1000.0 * n / path:.2f}")
+                a("        (a chord sum under-reads a curved path, and this copy "
+                  "is sampled sparsely,")
+                a("         so compare cadence above rather than this against "
+                  "retail's 4.30 granted-chain)")
     return "\n".join(out)
 
 
@@ -610,6 +665,41 @@ def report(cap, names, dump=0):
             a("      !! no record carries BOTH agents, so the separation gate 1")
             a("         judges cannot be recomputed. A capture before v5 records")
             a("         only `this`, which is half of a correction.")
+        # WHICH RESEEDS ACTUALLY MOVED THE PLAYER, and this is the number
+        # MOVECODE-K1's prediction is REFUTED by. A reseed that fires is not a
+        # warp -- run 5 had 14 reseeds and 2 displacements -- so counting
+        # reseeds alone would score a candidate that fires less but warps more
+        # as an improvement, which is how four of the five dead candidates in
+        # the authsrv graveyard flattered themselves.
+        #
+        # The signature is exact and needs no threshold: a WALK always advances
+        # both m_point (+0x78) and the stamp at +0x58 saying when m_point was
+        # valid. A displacement moves the point with the stamp STANDING STILL.
+        # FINDINGS §1j.4: 10 such steps on the local copy, 0 on the sync copy,
+        # and the two after a reseed are the two real warps.
+        moved = []
+        for addr, seq in _by_object(cap, names).items():
+            for i in range(1, len(seq)):
+                p, q = seq[i - 1], seq[i]
+                if q["ptime"] != p["ptime"]:
+                    continue
+                d = ((_f(q["point"][0]) - _f(p["point"][0])) ** 2
+                     + (_f(q["point"][1]) - _f(p["point"][1])) ** 2) ** 0.5
+                if not (math.isfinite(d) and d > 1.0):
+                    continue
+                prev_site = (names[p["site"]] if p["site"] < len(names)
+                             else str(p["site"]))
+                moved.append((prev_site, d, q["_i"] if "_i" in q else i))
+        after_reseed = [m for m in moved if m[0] == "reseed"]
+        a(f"      DISPLACEMENTS -- the point moved with its stamp STANDING "
+          f"STILL: {len(moved)}")
+        a(f"        of those, following a RESEED: {len(after_reseed)}"
+          + ("" if not after_reseed else
+             "  (" + ", ".join(f"{d:.0f} u" for _s, d, _i in after_reseed) + ")"))
+        a("        A reseed that fires is not a warp. This is the count "
+          "MOVECODE-K1 (FINDINGS §1k.3)")
+        a("        is refuted by: any displaced reseed the control arm did not "
+          "have.")
 
     if dump:
         a(f"first {dump} record(s):")

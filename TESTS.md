@@ -6861,7 +6861,20 @@ shrinks section 10),
   192 s run and is now called out by name. Writing this section also caught its own
   fixture: the first draft spaced synthetic ticks 10 ms apart while giving legs
   1000 ms, so an *honest* agent tripped the guard — the fixture was widened rather
-  than the guard loosened, which is the direction that matters. 41 floor, 76 on a
+  than the guard loosened, which is the direction that matters. **§13 is the DISPLACEMENT
+  count, and it exists because a reseed that FIRES is not a warp** — run 5 had 14
+  reseeds and 2 displacements. Counting reseeds alone would score a candidate that
+  fires less but warps more as an improvement, which is exactly how four of the five
+  dead candidates in `authsrv.py`'s movement graveyard flattered themselves. The
+  signature needs no threshold: a WALK advances both `m_point` and the `+0x58` stamp
+  saying when `m_point` was valid, while a displacement moves the point with the stamp
+  STANDING STILL. All four directions are exercised — a walk must NOT count, a frozen
+  stamp MUST, it must be attributed to the reseed rather than the teleport that
+  preceded it (run 5: 10 displacements, only 2 after a reseed), and sub-unit float
+  noise must not count, because two reads of a parked agent differ in the low bits.
+  The distance is printed beside the count, since a bare count cannot tell a 5 u nudge
+  from a 691 u warp. This is the number `MOVECODE-K1`'s registered prediction
+  (FINDINGS §1k.3) is REFUTED by. 46 floor, 81 on a
   machine with the client, a compiler, an archive and a 32-bit `cmd.exe`; each other
   section declares a skip),
   `toolkit/clientscan/test_commandertrap.py` (the hardware-breakpoint trap, and

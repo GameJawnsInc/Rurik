@@ -2480,8 +2480,16 @@ red by planting the exact regressions.
 trigger is the PIN rather than a clock, and it is scored with `movehook`, which is the
 first instrument this arc has had that can tell the two world copies apart.
 
-**NOT RUN.** §1k.3 is the registered prediction and §1k.4 the negative control
-(`--keepalive-separation <huge>`, refused on its own). **REFUTED IF the reseed count
+**NOT RUN. The runsheet is
+[studies/movecode/RUN-K1.md](studies/movecode/RUN-K1.md)** — two arms in one session,
+**treatment FIRST** (the operator gets fluent at the route, so a smoother second walk
+would flatter whichever arm ran last; this order makes that bias work against the
+hypothesis), the control being the flag ON with the band set out of reach so the code
+path, verdict rows and logging are all held constant. §1k.3 is the registered
+prediction and §1k.4 the negative control (`--keepalive-separation <huge>`, refused on
+its own). Two exposure floors are pre-registered, because zero exposure is not a null:
+the control arm must produce **≥ 5 reseeds past the cut**, and the treatment arm's
+server log must show `keepalive_verdict` rows with `fired: true`. **REFUTED IF the reseed count
 does not fall, or if any displaced reseed appears that run 5 did not have** — four of
 the five dead candidates improved one number while making the warp worse, so a fall in
 idle time with no fall in reseeds is a refutation, not a partial win.

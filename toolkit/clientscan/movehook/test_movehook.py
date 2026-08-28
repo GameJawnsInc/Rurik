@@ -25,6 +25,7 @@ WHAT IS CHECKED, and which of them need what:
   §10 pathdiff replays queries through the REAL Ascalon mesh     needs the archive
   §11 the reader's field layout matches rec_t in movehook.c      process-free
   §12 the world-copy census: two objects per id, and a non-agent process-free
+  §13 the displacement count -- what K1's prediction is refuted by process-free
 
 §7 IS THE ONE THAT MATTERS AND IT IS THE ONE THAT COULD NOT EXIST WITHOUT THE
 RULING. It injects the real DLL into a real 32-bit process, waits for the run to
@@ -53,7 +54,7 @@ sys.path.insert(0, os.path.join(TOOLKIT, "mapdata"))
 import checks                                                   # noqa: E402
 
 # MEASURED off a real green run, 2026-08-27 -- counted per section out of the
-# banner, never computed by addition. A whole green run on this machine is 76:
+# banner, never computed by addition. A whole green run on this machine is 81:
 #
 #   §1   6   sites.h is what the generator emits     needs the vaulted client
 #   §2  10   first bytes vs the pinned image         needs the vaulted client
@@ -67,11 +68,12 @@ import checks                                                   # noqa: E402
 #   §10  8   pathdiff replays vs the REAL mesh       needs the vaulted archive
 #   §11  4   the reader's layout vs rec_t IN THE C   process-free
 #   §12  6   the world-copy census, both directions  process-free
-#   ----    process-free core = 41, and THAT is the floor.
+#   §13  5   the displacement count, both directions process-free
+#   ----    process-free core = 46, and THAT is the floor.
 #
-# §12 reads `gensites.rows()`, which goes to `content.load()` and never opens the
-# client, so its six are process-free and the core moved with them. A whole green
-# run on this machine is now 76.
+# §12 and §13 both read `gensites.rows()`, which goes to `content.load()` and never
+# opens the client, so their eleven are process-free and the core moved with them.
+# A whole green run on this machine is now 81.
 #
 # The first draft of this comment guessed 16 by adding up what the sections
 # looked like they contained, and it was two low -- which would have let two
@@ -79,8 +81,8 @@ import checks                                                   # noqa: E402
 # ("set the floor from a real green run, never from a guess") is not about
 # arithmetic being hard; it is that a floor derived from the code rather than
 # from the output drifts the moment either changes. `skip()` lowers the floor by
-# ZERO, so a bare machine must still clear 41.
-LEDGER = checks.Ledger("movehook", floor=41)
+# ZERO, so a bare machine must still clear 46.
+LEDGER = checks.Ledger("movehook", floor=46)
 check = checks.adopt(LEDGER)
 
 WOW64_CMD = r"C:\Windows\SysWOW64\cmd.exe"
@@ -709,6 +711,83 @@ def section_12(tmp):
           "a guard that fires on everything would have to be ignored")
 
 
+# ---------------------------------------------------------------- §13
+def section_13(tmp):
+    """The DISPLACEMENT count -- the number MOVECODE-K1 is refuted by.
+
+    A reseed that FIRES is not a warp: run 5 had 14 reseeds and 2 displacements.
+    Counting reseeds alone would score a candidate that fires less but warps more as
+    an improvement, which is how four of the five dead candidates in authsrv's
+    graveyard flattered themselves. So the readout has to separate the two, and the
+    separation must be exercised in BOTH directions -- a counter that can only go up
+    is not a counter.
+
+    The signature needs no threshold: a WALK advances both m_point and the +0x58
+    stamp saying when m_point was valid; a DISPLACEMENT moves the point with the
+    stamp standing still.
+    """
+    import readhook as rh
+    try:
+        import gensites
+        rows, _offs = gensites.rows()
+        names = sorted(rows)
+    except Exception as ex:
+        LEDGER.skip("13. the displacement count", f"cannot read the rows: {ex}")
+        return
+    for need in ("setter", "reseed"):
+        if need not in names:
+            LEDGER.skip("13. the displacement count", f"no {need} row")
+            return
+    sites = [(rows[n]["rva"], 0) for n in names]
+    si, ri = names.index("setter"), names.index("reseed")
+    A = 0x21E20128
+
+    def rec(i, site, x, ptime, stop):
+        return {"seq": i, "tick": 1000 + i * 2000, "site": site, "ecx": A,
+                "have_agent": 1, "id": 1, "ptime": ptime, "stop": stop,
+                "point": (_fl(x), _fl(0.0), 0, 0),
+                "vel": (_fl(288.0), _fl(0.0))}
+
+    # A WALK: the point moves and the stamp moves with it. Must NOT count.
+    p = os.path.join(tmp, "walk.bin")
+    with open(p, "wb") as fh:
+        fh.write(_synth([rec(0, ri, 0.0, 1000, 4000),
+                         rec(1, si, 288.0, 2000, 4000)], sites))
+    txt, _rc = rh.report(rh.Capture(p), rh.site_names(rh.Capture(p)))
+    check("STANDING STILL: 0" in txt,
+          "13. a WALK (point and stamp both advance) is NOT a displacement",
+          "if this counted, every ordinary leg would read as a warp")
+
+    # A DISPLACEMENT after a reseed: the point moves, the stamp does not.
+    p2 = os.path.join(tmp, "warp.bin")
+    with open(p2, "wb") as fh:
+        fh.write(_synth([rec(0, ri, 0.0, 1000, 4000),
+                         rec(1, si, 691.0, 1000, 4000)], sites))
+    cap2 = rh.Capture(p2)
+    txt2, _rc = rh.report(cap2, rh.site_names(cap2))
+    check("STANDING STILL: 1" in txt2,
+          "13. a point that moves with the stamp FROZEN is a displacement",
+          "this is the exact signature of run 5's two real warps")
+    check("following a RESEED: 1" in txt2,
+          "13. and it is attributed to the RESEED that preceded it",
+          "a displacement after a teleport is a different event -- run 5 had 10 "
+          "displacements and only 2 followed a reseed")
+    check("691 u" in txt2,
+          "13. and the distance is reported, not just the count",
+          "a bare count cannot tell a 5 u nudge from a 691 u warp")
+
+    # Sub-unit noise must not count: the guard is > 1.0 u.
+    p3 = os.path.join(tmp, "noise.bin")
+    with open(p3, "wb") as fh:
+        fh.write(_synth([rec(0, ri, 0.0, 1000, 4000),
+                         rec(1, si, 0.5, 1000, 4000)], sites))
+    cap3 = rh.Capture(p3)
+    txt3, _rc = rh.report(cap3, rh.site_names(cap3))
+    check("STANDING STILL: 0" in txt3,
+          "13. and sub-unit float noise does NOT count as a displacement",
+          "two reads of a parked agent differ in the low bits")
+
+
 def main():
     import tempfile
     tmp = tempfile.mkdtemp(prefix="movehook-test-")
@@ -720,6 +799,7 @@ def main():
     section_10(tmp)
     section_11()
     section_12(tmp)
+    section_13(tmp)
     return LEDGER.verdict()
 
 
