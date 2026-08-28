@@ -413,6 +413,43 @@ build = 38797
 verified = "--dis 0x00605E40 shows `55 8b ec 83 ec 0c 56` (push ebp / mov ebp,esp / sub esp,0xc / push esi), re-read from the pinned image 2026-08-28. Hooked HERE and not at the thunk 0x005FCAA0 that §1s.9 named: that address is `e8 call 0x47f660`, not an entry, and gensites would refuse it. The thunk (call / mov ecx,[eax+8] / lea ecx,[ecx+0x1cc] / jmp 0x605e40) is this function's only inbound reference image-wide, via 0x005FCAAE, so hooking the body loses no caller. Its three callers are 0x004E6E82, 0x00816499 and 0x0081655D; whether the first is wire-reachable is OPEN and studies/movement/FINDINGS.md:2386 ties that entry to opcode 0x0023."
 
 # --------------------------------------------------------------------------
+# MOVECODE-R3, added 2026-08-28 after R2. ONE site replaces the TWO that
+# FINDINGS §1t.8 asked for, and it answers strictly more.
+#
+# §1t.8 named 0x00604A50 and 0x00606394 -- the two call sites that produced the
+# unstamped m_point writes R2's displacement detector MISSED. Neither can be
+# hooked: both are `e8 call 0x602b20`, first byte 0xE8, and gensites refuses
+# anything that is not `55`. That is the same shape as §1s.9's four proposals,
+# three of which were also not entries; naming a call SITE when the question is
+# "which caller" is the recurring version of this mistake.
+#
+# The callee is the answer. SetPosition has SEVEN direct callers and the hook
+# already records the return address, so one entry hook names WHICHEVER fired --
+# including five this arc has never observed -- exactly as `bake`'s retaddr
+# names which of its five callers baked.
+# --------------------------------------------------------------------------
+
+[hook_site.setposition]
+va = 0x00602B20
+rva = 0x00202B20
+first_byte = 0x55
+thiscall = true
+deref_agent = true
+# arg1 is the point being INSTALLED. Capturing it makes the landing a MEASURED
+# value at the moment of the write rather than an inference from whatever record
+# happens to come next -- which is the step §1t.2 had to make by hand, and the
+# step §1t.3's operand substitution went wrong inside of.
+deref_arg_a = 1
+what = "the client's position INSTALLER, and the only path that writes m_point (+0x78, at 0x00602B7B `mov [edi],eax` with edi = lea edi,[ebx+0x78]) WITHOUT stamping +0x58. ecx is `this` (0x00602B29 mov ebx,ecx) and the object is an agent (0x00602B40 imul eax,[ebx+0x24],0x64 -- the world stride). arg1 is a 16-byte point. Its direct-write branch calls agtrack unconditionally at 0x00602BBD, which is why a returning-to-0x00602BC2 census counts every such write."
+why_hooked = "R2 measured this function's output at 15 writes while the displacement detector saw 11 (FINDINGS §1t.4), and 47.4% of local-copy record gaps have the stamp advancing, where that detector is structurally blind. Hooking the writer itself makes the warp count a DIRECT census with no threshold and no stamp comparison. The return address then partitions it by caller: 0x00602369 is reseed (R2's 11), 0x00604A50 and 0x00606394 are the two misses, and 0x005FDAE5 / 0x005FDB49 / 0x005FF74B / 0x006028FF have never been seen fire."
+limits = "AN ENTRY HOOK SEES THE ARGUMENT, NOT THE EFFECT. arg1 is what the caller ASKED for; the branch at 0x00602B57 decides whether the write is direct (`mov [edi],eax`) or goes through the teleport 0x006020B0, and a `je`-not-taken path writes something else. Reading the installed position back still needs the NEXT record carrying this object, or a second tap at the returns. Also: this fires on EVERY agent, not just the player -- filter on the object address the way the world-copy census does, or a crowded map will bury the player's writes."
+[hook_site.setposition.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/codescan.py"
+build = 38797
+verified = "--dis 0x00602B20 shows `55 8b ec 83 ec 0c 53 56 57` re-read from the pinned image 2026-08-28. --xrefs gives SEVEN direct rel32 callers and 0 words holding the VA: 0x005FDAE5, 0x005FDB49, 0x005FF74B, 0x00602369 (inside reseed), 0x006028FF, 0x00604A50, 0x00606394. ecx is `this`, confirmed at 0x00602B29 `mov ebx,ecx` with every later agent access based on ebx; arg1 at 0x00602B30 `mov esi,[ebp+8]`. The two addresses §1t.8 asked for are in that caller list, which is what makes this site a superset of the request rather than a substitute for it."
+
+# --------------------------------------------------------------------------
 # Two offsets added 2026-08-28. Neither needs a new site: both are read off an
 # agent the record ALREADY dereferences.
 # --------------------------------------------------------------------------

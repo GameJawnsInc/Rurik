@@ -70,19 +70,19 @@ import checks                                                   # noqa: E402
 #   §11  4   the reader's layout vs rec_t IN THE C   process-free
 #   §12  6   the world-copy census, both directions  process-free
 #   §13  5   the displacement count, both directions process-free
-#   §14 30   the 2026-08-28 sites and the v6 fields  21 pf + 9 need the client
-#   ----    process-free core = 67, and THAT is the floor.
+#   §14 36   the 2026-08-28 sites, v6, and setposition 27 pf + 9 need the client
+#   ----    process-free core = 73, and THAT is the floor.
 #
 # §12 and §13 both read `gensites.rows()`, which goes to `content.load()` and never
 # opens the client, so their eleven are process-free and the core moved with them.
-# A whole green run on this machine is now 113.
+# A whole green run on this machine is now 120.
 #
 # §14 SPLITS, and the split was counted out of the banner rather than reasoned
 # about: 25 checks, of which the 8 non-entry refusals and their 1 control call
 # `gensites.verify()` and therefore need the vaulted image, while the row
 # assertions and the whole v6 round-trip go through `content.load()` and a
-# synthesised capture and never open it. 30 - 9 = 21 process-free, so the core
-# moves 46 -> 67. A bare machine must still clear 67.
+# synthesised capture and never open it. 36 - 9 = 27 process-free, so the core
+# moves 46 -> 73. A bare machine must still clear 73.
 #
 # The first draft of this comment guessed 16 by adding up what the sections
 # looked like they contained, and it was two low -- which would have let two
@@ -90,8 +90,8 @@ import checks                                                   # noqa: E402
 # ("set the floor from a real green run, never from a guess") is not about
 # arithmetic being hard; it is that a floor derived from the code rather than
 # from the output drifts the moment either changes. `skip()` lowers the floor by
-# ZERO, so a bare machine must still clear 67.
-LEDGER = checks.Ledger("movehook", floor=67)
+# ZERO, so a bare machine must still clear 73.
+LEDGER = checks.Ledger("movehook", floor=73)
 check = checks.adopt(LEDGER)
 
 WOW64_CMD = r"C:\Windows\SysWOW64\cmd.exe"
@@ -836,6 +836,41 @@ def section_14(tmp):
 
     for need in ("resync", "stepclear", "agtrack", "snaptest"):
         eq(need in names, True, f"14. the `{need}` row is present")
+
+    # MOVECODE-R3: the SetPosition row. FINDINGS §1t.8 asked for TWO sites,
+    # 0x00604A50 and 0x00606394, and NEITHER can be hooked -- both are
+    # `e8 call 0x602b20`, and gensites refuses anything whose first byte is not
+    # 0x55. Hooking the CALLEE instead names whichever of its seven callers
+    # fired, from the return address the record already carries, so one row is a
+    # superset of the request. These checks pin the two things that would break
+    # it SILENTLY: the row disappearing, and arg1 no longer being dereferenced --
+    # in which case the landing position stops being captured and every warp
+    # measurement quietly reverts to inferring it from the next record.
+    eq("setposition" in names, True, "14. the `setposition` row is present")
+    if "setposition" in rows:
+        sp = rows["setposition"]
+        eq(sp.get("va"), 0x00602B20,
+           "14. setposition is the CALLEE 0x00602B20, not a call site")
+        eq(sp.get("deref_agent"), True,
+           "14. and ecx is dereferenced as the agent -- 0x00602B29 `mov ebx,ecx`")
+        eq(sp.get("deref_arg_a"), 1,
+           "14. and arg1 IS dereferenced -- without it the installed point is "
+           "not captured and the landing reverts to an inference")
+        # The row's whole justification is that the two addresses §1t.8 named are
+        # among this function's callers. If a future edit drops them, the row
+        # still generates and the reasoning is gone. Checked against
+        # `why_hooked` rather than the provenance block because `gensites.rows()`
+        # returns only the site fields -- the nested [.provenance] table is
+        # `content.py`'s business and never reaches here. A first draft asserted
+        # on `provenance.verified` and went red for exactly that reason, which is
+        # the check catching the test's own wrong operand rather than the row's.
+        why = sp.get("why_hooked", "") or ""
+        for addr in ("0x00604A50", "0x00606394"):
+            check(addr in why,
+                  f"14. setposition's `why_hooked` still names {addr}",
+                  "the row exists BECAUSE these two call sites cannot be hooked "
+                  "and this callee reaches both; drop them and the row looks "
+                  "arbitrary")
 
     # The two offsets the early-out and the world census need.
     eq(offs.get("facing", {}).get("offset"), 0xC4,

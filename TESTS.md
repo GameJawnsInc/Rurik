@@ -6967,7 +6967,17 @@ shrinks section 10),
   field cannot catch that — only asking the REPORT can — so §14 requires all four v6
   sections to appear on a v6 capture, with the control that a **v5** capture prints
   none of them, since a section built from absent fields would read as a measurement
-  of zero rather than of nothing. 67 floor, 113 on a
+  of zero rather than of nothing. **And the row R2's own result asked for:**
+  `setposition` (`0x00602B20`), pinned as the CALLEE — §1t.8 named two call sites,
+  `0x00604A50` and `0x00606394`, and neither can be hooked because both are
+  `e8 call`, so the row hooks what they call and reads the caller off the return
+  address. §14 pins the two things that would break that silently: `deref_arg_a`
+  no longer dereferencing arg1 (the installed point stops being captured and every
+  warp measurement reverts to inferring it from the next record), and `why_hooked`
+  losing the two addresses that are the row's whole justification. That second
+  check went red on its first draft because it read `provenance.verified`, which
+  `gensites.rows()` does not return — the check catching the test's own wrong
+  operand rather than the row's. 73 floor, 120 on a
   machine with the client, a compiler, an archive and a 32-bit `cmd.exe`; each other
   section declares a skip),
   `toolkit/clientscan/test_commandertrap.py` (the hardware-breakpoint trap, and

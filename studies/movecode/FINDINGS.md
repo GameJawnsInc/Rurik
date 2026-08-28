@@ -4333,8 +4333,19 @@ worth 4 tests in 1,914 entries.
 
 ### 1t.8 What is NOT settled
 
-* **WHICH caller produced the two missed `SetPosition` warps** (#3656, #5338). Candidates
-  are `0x00604A50` and `0x00606394`, neither hooked. **That is the next run's site list.**
+* ~~**WHICH caller produced the two missed `SetPosition` warps**~~ — **the site is BUILT
+  as of 2026-08-28, and it is one row rather than the two this line asked for.**
+  `0x00604A50` and `0x00606394` **cannot be hooked**: both are `e8 call 0x602b20`, first
+  byte `0xE8`, and `gensites` refuses anything that is not `55`. That is the same mistake
+  §1s.9 made three times — *naming a call SITE when the question is "which caller"*.
+  **The callee is the answer.** `SetPosition` `0x00602B20` **is** a `push ebp` entry with
+  **7 direct callers** (`0x005FDAE5`, `0x005FDB49`, `0x005FF74B`, `0x00602369` = reseed,
+  `0x006028FF`, `0x00604A50`, `0x00606394`), and the record already carries the return
+  address — so one hook names whichever fired, including **five this arc has never
+  observed**, and `deref_arg_a = 1` captures the point being installed so the landing is
+  measured at the write instead of inferred from the next record. Rowed in
+  `content/movecode.toml`, `sites.h` regenerated (14 sites, all `0x55`), DLL rebuilt.
+  **UNRUN.**
 * **Operator claim (1), the cornered trigger.** 10 warped clicks against 4 controls, groups
   overlapping. Settling it needs a run that logs the client's solved path.
 * **Why `agtrack` snapped on 11 of 157 tests when 37 exceeded gate 1's 299.33 u cut.** An
