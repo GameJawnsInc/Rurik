@@ -768,13 +768,16 @@ def section_13(tmp):
     check("STANDING STILL: 1" in txt2,
           "13. a point that moves with the stamp FROZEN is a displacement",
           "this is the exact signature of run 5's two real warps")
-    check("following a RESEED: 1" in txt2,
+    check("after reseed" in txt2,
           "13. and it is attributed to the RESEED that preceded it",
           "a displacement after a teleport is a different event -- run 5 had 10 "
           "displacements and only 2 followed a reseed")
-    check("691 u" in txt2,
-          "13. and the distance is reported, not just the count",
-          "a bare count cannot tell a 5 u nudge from a 691 u warp")
+    check("largest 691 u" in txt2,
+          "13. and the MAGNITUDE leads, not the attribution",
+          "MOVECODE-K1's arm A printed `following a RESEED: 0` and read as clean "
+          "while the operator watched the character warp to spawn twice -- both "
+          "warps went through the teleport arm, so they were counted and then "
+          "buried under a subcount that happened to be zero")
 
     # Sub-unit noise must not count: the guard is > 1.0 u.
     p3 = os.path.join(tmp, "noise.bin")

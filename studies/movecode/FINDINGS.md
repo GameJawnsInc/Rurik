@@ -1557,6 +1557,115 @@ control taken from a different day carries the day's own differences.
 
 ---
 
+## 1l. MOVECODE-K1 ARM A — **REFUTED, and it made the warp WORSE**
+
+**OBSERVED, 2026-08-27.** Map 280, 966 records, v5, both controls FIRED, 114 s of a
+228.7 s server session. Capture at `vault/research/movecode/k1-treatment/`, server log
+`vault/captures/gamesrv/authsrv-20260827T212317-c1.jsonl`. **The control arm was never
+run** — the runsheet's file-the-capture step used bash `cp` on a PowerShell machine and
+died — so everything below compares against **run 5** rather than against a matched
+control, and that is a weaker comparison than §1k.4 asked for.
+
+### 1l.1 The operator's report, which is the ground truth here
+
+> *"did a few long walks, then pressed keyboard after ~3-4 clicks and warped back to
+> spawn. i ended the run stuck in the ground after warping back to spawn again and
+> pressing W during a long walk."*
+
+**Two warps to spawn, and the character ended stuck in terrain.** Run 5's warps were
+690.8 u and 510.7 u; nothing in five prior runs put the body back at the spawn point.
+
+### 1l.2 The instrument said it was CLEAN, and the instrument was wrong
+
+This is the finding worth keeping, independently of K1.
+
+| | run 5 | arm A |
+|---|---|---|
+| reseeds past the 299.33 cut | 11 of 14 | **3 of 17** |
+| displacements **following a reseed** | 2 | **0** |
+
+Read off §1k.3's registered table, arm A **passed**: the reseed count fell and the
+displaced-reseed count went to zero. It is the number I chose to be refuted by, and it
+would have scored a run the operator watched warp to spawn as an improvement.
+
+**What it missed:** both warps went through the **teleport** arm
+(`teleport → setter`), not the record straight after a reseed, so they were counted in
+the total and then buried under a subcount that happened to be zero.
+
+| | run 5 | arm A |
+|---|---|---|
+| displacements, total | 10 | 3 |
+| **largest displacement** | **1,871 u** | **5,970 u** |
+| total displaced distance | 8,527 u | 8,040 u |
+
+**5,970 u and 1,947 u**, and both land on the spawn point's own coordinates — spawn is
+`(−6036.0, −2519.0)`, the two landings are `(−6032.8, −1828.0)` and
+`(−5932.3, −2284.1)`. The operator's "warped back to spawn" is in the bytes, twice.
+
+`readhook` now leads with **magnitude and total**, with the per-site attribution as
+detail. A displacement is a warp whichever site performed it.
+
+### 1l.3 Why it fired at all, and why twice
+
+`keepalivelog.py` over the arm's server log: **1,773 verdict rows, 2 fired.**
+
+| reason | n | when |
+|---|---|---|
+| `no-report` | 1,527 | all before t = 90 s |
+| `rate-limited` | 119 | after the first report |
+| `twin-walking` | 117 | after the first report |
+| `report-rejected` | 8 | — |
+| **`keepalive` (fired)** | **2** | **t = 60–90 s** |
+
+**The first `position_report` arrived at t = 77.8 s.** So the 1,527 `no-report`
+refusals are correct behaviour — the flag refuses until the client has told us where it
+is. Both fires happened in the 12 seconds *after* that first report, and then the flag
+never fired again: `twin-walking` blocked everything after t = 90.
+
+**Separation at the verdicts: min 103, p50 5,044, max 5,977 u.** Our sync model had the
+twin ~5 km from the player.
+
+### 1l.4 The design error, and it is mine
+
+The sync model is seeded at spawn and advances only on grants we send. Our server
+granted little, so by t = 78 s the model still had the twin **near spawn** while the
+player had walked 5 km away. The keep-alive then did exactly what it was built to do:
+it granted the player's reported position to a twin sitting at spawn — **a 5,000 u
+leg**.
+
+While the twin walks that leg it is somewhere on a straight line from spawn, wrong
+everywhere along it, and my `twin-walking` gate **refuses to correct it** for the whole
+traverse. The client's desync test meanwhile compares the player against that
+mid-traverse position and pulls the player back toward it.
+
+**The flag has no bound on how far a re-grant may send the twin.** A keep-alive is
+supposed to nudge a twin that has drifted; granting a 5 km leg is not a nudge, and the
+`twin-walking` gate then guarantees a long window in which nothing can fix it. Both of
+`--heading-grant`'s epitaph terms were respected — the point was the report in hand and
+it was unclipped — and the candidate still failed, on a term the graveyard does not
+name: **the LENGTH of the leg the grant creates.**
+
+### 1l.5 Status
+
+**MOVECODE-K1 is REFUTED as built** and joins the graveyard as the sixth candidate.
+What a rebuild would need, and none of it is a small edit:
+
+* **A distance cap.** Refuse the re-grant when the modelled separation exceeds some
+  bound, or grant an intermediate point instead of the player's own. An uncapped
+  re-grant is a teleport with extra steps.
+* **Something to fix a twin that is already kilometres out.** The cap alone leaves that
+  case unhandled, and it is the case arm A was in from t = 78 s onward.
+* **A matched control.** Arm A is compared to run 5, which had a different walk
+  (`chcli_dir` 140 against run 5's 494 — far less keyboard input), so the reseed and
+  grant counts are not like-for-like.
+
+**NOT DETERMINED:** whether the two warps were *caused* by the keep-alive. Two fires is
+too few to attribute, the arms were not matched, and run 5 had displacements of its own.
+What is OBSERVED is that the largest displacement is **3.2× run 5's** and that both
+landings are at spawn, which is where our starved sync model had the twin.
+
+---
+
 ## 2. Corrections to the record
 
 Each of these was in circulation and each is now measured against the bytes.

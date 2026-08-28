@@ -4,6 +4,12 @@
 off by default. The prediction it is scored against is
 [FINDINGS.md](FINDINGS.md) §1k.3 and was registered before this run existed.
 
+**Every command here is `python` or `powershell`, and that is deliberate.** This
+project is driven from PowerShell, where `cp a b dir/` is `Copy-Item` and rejects the
+Unix form, and `&&` is a parser error in 5.1. The first version of this runsheet used
+both and died on the first arm at the copy step. `python …` lines run in any shell,
+which is what `CLAUDE.md` already says.
+
 Read §1 before launching anything. This is the **sixth** candidate in a family that
 killed five, and four of those five improved one number while making the warp worse.
 
@@ -58,7 +64,11 @@ regenerate `sites.h` while the previous DLL is still LOCKED by a running client,
 the build fails with `LNK1104` and the `.dll` on disk keeps the OLD site set:
 
 ```bash
-cd toolkit/clientscan/movehook && powershell -ExecutionPolicy Bypass -File ./build.ps1 movehook.c
+python toolkit/clientscan/movehook/gensites.py
+```
+
+```bash
+powershell -ExecutionPolicy Bypass -File toolkit/clientscan/movehook/build.ps1 toolkit/clientscan/movehook/movehook.c
 ```
 
 `attach.py` refuses a DLL older than `sites.h`, so this is checked rather than
@@ -99,7 +109,7 @@ If that banner is absent the flag did not reach the game instance — the arm is
 **Shell 2**, once the character is in the world and standing where the run starts:
 
 ```bash
-python toolkit/clientscan/movehook/attach.py --minutes 6
+python toolkit/clientscan/movehook/attach.py --minutes 6 --out vault/research/movecode/k1-treatment
 ```
 
 **Walk for about five minutes**: long walks across open ground, a few clicks where
@@ -109,12 +119,6 @@ arriving**. Then:
 
 ```bash
 python toolkit/clientscan/movehook/attach.py --stop
-```
-
-**File the capture before the next arm overwrites it:**
-
-```bash
-mkdir -p vault/research/movecode/k1-treatment && cp vault/research/movecode/movehook.bin vault/research/movecode/movehook.txt vault/research/movecode/k1-treatment/
 ```
 
 ### Arm B — CONTROL
@@ -127,14 +131,10 @@ only the grant is disarmed. That is a tighter control than turning the flag off.
 python toolkit/harness/session.py --exe vault/run/2026-07-29_221c13772c7a/Gw.exe --keep-open --hold 900 --game-args="--keepalive-grant --keepalive-separation 100000 --map 280"
 ```
 
-Then attach, walk **the same route for the same length of time**, stop, and file it:
+Then attach, walk **the same route for the same length of time**, and stop:
 
 ```bash
-python toolkit/clientscan/movehook/attach.py --minutes 6
-```
-
-```bash
-mkdir -p vault/research/movecode/k1-control && cp vault/research/movecode/movehook.bin vault/research/movecode/movehook.txt vault/research/movecode/k1-control/
+python toolkit/clientscan/movehook/attach.py --minutes 6 --out vault/research/movecode/k1-control
 ```
 
 ---
@@ -162,10 +162,10 @@ python toolkit/clientscan/movehook/pathdiff.py --map 0x287B3 --bin vault/researc
 And the server side, for the exposure floor and the refusal census:
 
 ```bash
-python -c "import json,collections,glob,os; p=sorted(glob.glob('vault/captures/gamesrv/authsrv-*-c1.jsonl'),key=os.path.getmtime)[-1]; rows=[json.loads(l) for l in open(p,encoding='utf-8')]; print(p); print('keepalive:',collections.Counter((r.get('reason'),r.get('fired')) for r in rows if r.get('kind')=='keepalive_verdict')); print('clicks:',collections.Counter(r.get('reason') for r in rows if r.get('kind')=='click_verdict')); print('0x0029 sent:',sum(1 for r in rows if r.get('kind')=='sent' and r.get('opcode')==41))"
+python toolkit/clientscan/movehook/keepalivelog.py
 ```
 
-Run that **after each arm**, before the next launch overwrites the newest log.
+Run that **after each arm**, before the next launch writes a newer log — it reads the newest by mtime.
 
 ---
 
