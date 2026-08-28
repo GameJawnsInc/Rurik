@@ -1573,15 +1573,26 @@ gap, and the numbers coincide to the decimal (separations 682.7/1093.7/3368.1 ag
 displacements 657.9/1093.7/451.0). **The worst one fires at ARRIVAL**: it began 293 u from
 the clicked destination and ended 1,188 u from it.
 
-**AND IT IS THE FIRST ARM WHERE THE TWO SCORINGS DISAGREE, which is a live methodology
-question rather than a footnote.** As a RATE B2 is the **best of the three arms** — 0.115
-displacements per 1000 u walked and 84.2 u of displacement per 1000 u, against K2's 0.255
-/ 93.5 and B1's 0.308 / 142.2 — and 6 of its 8 echoes produced no displacement at all. It
-warps **less often and much harder**. §1o.1 chose "largest displacement" for
-COMPARABILITY, never to arbitrate "how often" against "how bad", and every arm since has
-ranked the same way on both so nothing forced the question. **The registered clause
-governs and B2 is refuted by it**; whether that is the right headline for the next arm is
-§1r.3 and is worth an owner view.
+**★ THE METHODOLOGY QUESTION §1r.3 RAISED IS NOW CLOSED, AND NOT IN §1r.3'S FAVOUR —
+[studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1r.7, 2026-08-28, desk,
+adversarially scored.** §1r.3 read B2 as "the best of the three arms" as a RATE (0.115
+displacements per 1000 u against K2's 0.255) and flagged largest-vs-rate as needing an
+owner view. **No owner view is needed: the count rate is disqualified.** Extended to all
+six captures on §1r.3's own denominator it ranks the **shipped** arm — the one the
+operator watched warp 5,970 u back to spawn — **2nd of 6, above `--click-echo` at 4th**.
+That is fatal before any statistics. And there are none to be had: **K2 and B2 recorded
+the same 3 displacements each**, so the entire rate difference is the denominator (B2's
+operator walked further), the exact conditional test gives **p = 0.377** and is
+denominator-proof across five constructions, and a goodness-of-fit says **one common rate
+per unit distance fits all six arms (p = 0.843)**. §1r.3's sentence *"Neither is a reason
+to believe the rate finding is noise"* does not survive. **Largest displacement stays the
+scoring number**, and the magnitude rate — which is *not* disqualified — puts B2 ahead of
+K2 by only **1.11×**, not the 2.2× the count column implied. Nothing shipped moves; B1
+and B2 were already refuted and off, and `--click-echo` still stands at 446 u.
+*(Also settled there: §1r.3's undocumented denominator is readhook's chord sum with
+chords over 2,000 u dropped, on a **tick** span where readhook prints a **ptime** span —
+which is why §1q.1 and §1r.2 quote different paths for the same captures 118 lines
+apart, unflagged.)*
 
 **UNSCORED, not zero: the no-clip row.** It was pre-registered as its own outcome rather
 than a refutation, no metric in the tree can see it (§1n.2), and the operator's report of

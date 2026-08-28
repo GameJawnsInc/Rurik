@@ -3188,6 +3188,169 @@ the captures on disk, and only a re-run with the operator briefed *before* the w
 close it. That does not change either refutation: both were refuted on displacement, which
 is measured.
 
+### 1r.7 §1r.3's RATE is DISQUALIFIED as a scoring number — it ranks the spawn-warping shipped arm above `--click-echo`
+
+**OBSERVED, 2026-08-28, at a desk.** No client run, no new capture: every number below
+comes from `readhook.py` at HEAD `7c56fb7` over the six movehook captures already in
+`vault/research/movecode/`. Scored by an adversarial pass that attacked seven vectors;
+the verdict was HOLDS, and **the pass found a stronger argument than the one I had
+written, plus two overreaches of mine that are corrected in place below.**
+
+**First, the arms table reproduces bit-for-bit** — 5,970 / 446 / 2,127 / 537 / 1,094 u,
+matching §1o.1, §1q.1 and §1r.2 exactly, with the individual displacement lists intact
+(K2: 446, 363, 292). Nothing has drifted, which is what makes the rest of this a
+statement about the metric rather than about the captures.
+
+#### The disqualifying argument, and it needs no statistics at all
+
+§1r.3 ranked the arms on displacements per 1,000 u and called B2 "**the best of the
+three arms** — on both normalisations". Extended to all six captures **on §1r.3's own
+denominator**, the count rate ranks:
+
+| rank | arm | n per 1000 u | largest displacement |
+|---|---|---|---|
+| 1 | `--echo-any-refusal` (B2) | 0.115 | 1,094 u |
+| **2** | **shipped, refuse the click (K1 arm A)** | **0.170** | **5,970 u — warps to spawn** |
+| 3 | run 5 (pre-policy) | 0.211 | 1,871 u |
+| **4** | **`--click-echo` (K2, the recommendation)** | **0.255** | **446 u** |
+| 5 | `--router` | 0.260 | 2,127 u |
+| 6 | `--answer-kbd-click` (B1) | 0.308 | 537 u |
+
+**The count rate ranks the shipped configuration — the one the operator watched warp
+the character 5,970 u back to spawn, twice (§1l.1) — as SECOND BEST of six, above the
+arm this arc recommends.** A scoring number that does that is disqualified on its face,
+before any p-value.
+
+**Precision, because §1r.3's claim was two columns and only one of them dies.** The
+*magnitude* normalisation (u per 1,000 u) does **not** have this defect — it puts the
+shipped arm last at 454.7, correctly. But on that surviving column B2 beats K2 by
+**84.2 against 93.5, a 1.11× margin**, not the "half K2's rate" §1r.3's prose carries
+over from the count column. **"Best on both normalisations" is true and misleading**:
+one normalisation is disqualified, and on the other the margin is 1.11×.
+
+#### The numerator does not move, and the rate is not distinguishable from noise
+
+Local-copy path against displacement count, readhook's own census:
+
+| arm | local path | n |
+|---|---|---|
+| B1 | 9,734 u | **3** |
+| K2 | 18,577 u | **3** |
+| `--router` | 26,929 u | **4** |
+| shipped | 31,136 u | **3** |
+| B2 | 42,526 u | **3** |
+
+**Across a 4.37× range of walked path the count is 3, 3, 4, 3, 3.** K2 and B2 recorded
+**the same three displacements each**; the whole rate difference is the denominator.
+
+The exact conditional test for two Poisson counts (Przyborowski–Wilenski) conditions on
+the total and asks how the events split between the exposures — no rate estimate, no
+free parameter. K2 vs B2 gives **two-sided p = 0.377** on readhook's paths and
+**0.383** on §1r.3's, and the verdict is **denominator-proof across five**: local path
+0.377, sync path 0.387, span 0.388, motion-time 0.411, records 0.144. The one-sided
+test — the direction §1r.3 actually claimed — is **0.263**. **No denominator in the
+tree makes the pair significant.**
+
+Over all fifteen pairwise comparisons on §1r.3's own denominator the smallest p is
+**0.354**, and a Poisson goodness-of-fit across all six arms gives **χ² = 2.046,
+p = 0.843**: *one common rate per unit distance fits every arm.* Cap sensitivity from
+500 u to none leaves K2 vs B2 in 0.355–0.394.
+
+**Minimum detectable outcome** (this was labelled "power" in my first draft and that
+was wrong): holding B2 at 3 events, the design does not reach p ≤ 0.05 until the other
+arm shows **6** — a 4.58× ratio. True **power** at the observed 2.29× ratio is **0.149**;
+80% power needs R ≈ 6.2× or roughly 8–9× more walking.
+
+**Scoped honestly:** 6 of 75 pairwise tests across all denominators do reach p ≤ 0.05,
+and **all six sit on the two denominators the goodness-of-fit rejects** — sync path
+(p = 0.0046) and record count (p = 0.0298). Both are instrument artifacts rather than
+exposure: the shipped arm's sync path is 2,804 u *because its policy refuses to grant*,
+so the arm under test sets its own denominator. Local path, span and motion time all
+pass as exposures (GOF p = 0.41 / 0.46 / 0.47).
+
+#### What this corrects, precisely
+
+§1r.3 wrote: *"Neither is a reason to believe the rate finding is noise — it is the
+same n = 3 the refutation rests on."* **That sentence does not survive.** The exact
+conditional test is such a reason and was available from the same numbers.
+
+**And my own first draft of this section overreached in the opposite direction**, saying
+the rate arm of the methodology dilemma "is empty at this n" and that the alternative
+"has no discriminating power". That is false as a statement about the *design*. The
+corrected form, which the refutation pass supplied:
+
+> This closes the methodology question §1r.3 flagged, and closes it without a
+> preference. **Neither statistic reaches p ≤ 0.05.** The size comparison sits **at the
+> design's evidential ceiling** — perfect separation (1,094, 658, 451 all exceed 446,
+> 363, 292), exact permutation two-sided **p = 0.100**, the smallest value 3 v 3 can
+> produce — while the count comparison landed at **p = 0.377 against an attainable
+> 0.027**. The rate is not the weaker *instrument*; it is the one that found nothing
+> where it could have found something. And the count rate ranks the shipped
+> spawn-warping arm second of six, which disqualifies it before any p-value.
+
+**Largest displacement therefore stays the scoring number** — not because it is the
+better estimator (at n = 3 a maximum is noisy and exposure-biased; what defends it is
+that it is the harm the operator actually experiences, and §1r.2 already matched B2
+against K2 on both span and path and got 1,094 u either way) — but because the count
+rate is disqualified and the magnitude rate's margin is 1.11×.
+
+#### §1r.3's denominator is now identified, and the document contradicts itself about it
+
+§1r.3's paths are readhook's chord sum **with chords over 2,000 u dropped**, and its
+span column is the **tick** span where readhook prints the **ptime** span. Verified
+against all three published figures: K2 **11,777**, B2 **26,155**, B1 **9,734**, every
+one to within 0.5 u. **The check that could have failed did not:** B1's published figure
+equals its *uncapped* sum, so the rule predicts B1 contains no chord over 2,000 u — and
+its capped and uncapped sums are identical at 9,734 u, which coincidence would not
+produce. Both rules are defensible; neither is written down.
+
+**They are 118 lines apart in this file and neither says it changed.** §1q.1 reads
+*"9,734 u over 46.8 s against K2's 18,577 u over 88.1 s"*; §1r.2/§1r.3 read K2
+**11,777 u over 88.2 s** and B1 over **33.7 s** — the same captures, two path rules and
+two span rules, unflagged. Anyone comparing a figure from §1q against one from §1r is
+comparing two different quantities.
+
+#### A hypothesis of mine this data REFUTED, kept because it was tested
+
+I suspected the count was pinned near 3 by **sampling density** rather than by the world
+— §1r.6 established that `movehook` fires on solver events rather than on a timer, which
+left the no-clip detector at n = 1–2, and the displacement counter reads the same
+records. **Refuted.** Displacements per 1,000 local records spread 2.39–23.81 (≈10×),
+*worse* than the per-distance spread of 4.37×, and a proper goodness-of-fit **rejects
+record count as an exposure** (p = 0.0298) while accepting distance, span and motion
+time. *(The spread comparison alone was near-tautological — with n pinned at 3, rate
+spread is denominator spread by algebra — so the GOF is what carries this, not the
+ratio I first quoted.)*
+
+My first draft concluded from that that **"what pins the count near 3 is NOT
+DETERMINED"**, and that over-reads. The supported statement is the weaker and cleaner
+one: **the six counts are consistent with a single common rate per unit distance across
+every arm (χ² p = 0.843), and no arm-specific mechanism is required to explain them.**
+
+#### What it changes, and it is less than it looks
+
+**No shipped behaviour moves.** B1 and B2 were already refuted and off on largest
+displacement, and `--click-echo` already stands at 446 u. This resolves a
+**documentation** question, not a policy one.
+
+**One cold-start line is actively misleading and should be corrected**:
+`HANDOFF-WARP.md`'s arms table calls `--echo-any-refusal` *"REFUTED, §1r — but the best
+RATE of any arm"*, which invites exactly the reach this arc has documented cold sessions
+making. It should read: *"— its rate is lower, but the count rate is disqualified (it
+ranks the shipped spawn-warping arm above `--click-echo`) and no arm's rate is
+distinguishable from any other's, §1r.7."*
+
+**Method note the parse itself produced.** `readhook`'s world-copy census does **not**
+print the two copies in a stable order — `k2-2` and `r1b2` print the sync copy first,
+`k2`, `k1-treatment` and `r1b1` print the local copy first — so anything reading them
+positionally silently swaps two bodies that sit hundreds of units apart. Key on the
+`WORLD_SYNC` / `other world` label. Run 5 additionally prints a **third** entry also
+labelled `other world` — the `snaptest` `ecx`, which readhook flags itself as
+`NOT AN AGENT` (§1h.1) — and a label-keyed parse that does not skip the disowned entry
+lets it **overwrite the real local copy**, replacing a 49,378 u path with none at all.
+It did exactly that here, and was caught only because the guard refused to print an
+incomplete row rather than treating a missing field as a zero.
+
 ---
 
 ## 2. Corrections to the record
