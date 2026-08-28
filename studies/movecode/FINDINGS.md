@@ -2630,7 +2630,8 @@ Every candidate in this arc that asserted **more** about where the player should
 (`--client-endpoint`, `--router`, K3). The first two items below assert **less** — they each delete
 a refusal — which is why they rank above anything that adds a policy.
 
-**1. Stop dropping clicks under keyboard authority. — DESK, one flag.**
+**1. Stop dropping clicks under keyboard authority. — BUILT 2026-08-28 as
+`--answer-kbd-click` (MOVECODE-R1-B1), OFF by default, UNRUN.**
 **7 of 32 live clicks (21.9%)** arrive with the latch our Rule 1 arms on (an `op61` with
 `movementType != 0` within `GRANT_LOCAL_WINDOW = 3.0 s`, no intervening `0x0047`) and **retail
 answered every one within one RTT**, with answers **635–2,445 u from any D1 lead prediction**, so
@@ -2648,7 +2649,18 @@ refreshes and the client briefly sees two authorities — §0.15's *actual* cont
 **Refuted by:** a run reporting warps on single clicks that arrive mid-key, or larger displacements
 on the answered mid-keyboard clicks than the current build's dropped ones show.
 
-**2. Delete the 1.0 s freshness gate on the echo path. — DESK, one line.**
+**AS BUILT.** `_grant_verdict`'s rule 1 stops refusing and the click falls through to **rule 2**,
+which still holds-and-coalesces — that is the pair contract §0.15 actually states and it deliberately
+stays. The reason string stays `"grant"` rather than gaining a value: `grantsim.py:2000` filters
+`w[2] == "grant"` and `policyreplay.py:267` switches on `"locally-moving"`, so a new enum would have
+silently shrunk two scorers instead of erroring. The turnaround is still exactly countable, because
+**GRANTED with a non-null `keyboard_age` inside the window is unreachable with the flag off** — and
+that pair is the registered exposure floor (≥ 3 such rows). Checks live beside rule 1's own in
+`test_position_trust.py`; the mutation that deletes rule 2 as well was run and reddens exactly the
+one check written for it.
+
+**2. Delete the 1.0 s freshness gate on the echo path. — BUILT 2026-08-28 as
+`--echo-any-refusal` (MOVECODE-R1-B2), OFF by default, UNRUN.**
 Retail answered **22 of 32** clicks with a report older than 1.0 s, **13 of 32** older than 10 s
 (max 20.99 s), and **5 of 32** with no client position ever reported, all within 0.065 s.
 `authsrv.py:16583`'s `fresh = … <= 1.0` models a precondition retail does not have. The decisive
@@ -2660,6 +2672,21 @@ is p50 ~15 u below 2 s and **250–475 u above it on only 52 samples**. Ungate t
 on everything that computes.
 **Refuted by:** an echo-only run where displacements *rise* once the geo-stale refusals stop — i.e.
 the refusals were suppressing a harm rather than causing one.
+
+**AS BUILT, and it crosses §1m.3's scoping on purpose.** The gate becomes
+`bool(CLICK_ECHO) and (ECHO_ANY_REFUSAL or not fresh)`, so the echo answers `geo-unplaced` and
+`geo-blocked` as well as `geo-stale`. §1m.3 refused geometry deliberately; **§1p.11 is what makes
+the crossing arguable rather than reckless** — 7 of K2's own 8 echoed clicks *already* granted a
+line our mesh calls blocked, so the flag does not open a new harm class, it stops pretending the
+class is closed. `fresh` still gates every path that COMPUTES from the position belief, which is the
+job it can actually do (`modeled_origin` p50 ~15 u under 2 s, 250–475 u over it). The flag
+**requires `--click-echo` and raises without it** — it is one term inside `CLICK_ECHO and (...)`, so
+alone it is inert, and a run launched on it would file a capture of the *shipped* policy under this
+arm's name. Exposure floor: ≥ 3 `click_verdict` rows with `echo_any_refusal: true` **and a reason
+other than `geo-stale`** — the flag alone would not separate them from K2's staleness arm.
+**Its expected cost is MORE no-clip, which no displacement counter can see (§1n.2), so the operator's
+report is the instrument and that outcome is pre-registered as its own row rather than as a
+refutation.**
 
 **3. Do NOT build the one-leg gate yet. — DESK, already measured; this item is a decision, not work.**
 It buys **0** additional bit-exact matches (13/26 either way), and its only win is stopping a grant

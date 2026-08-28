@@ -1356,6 +1356,63 @@ def main():
               f"under 8.93 s would refuse it. A rule that refuses everything "
               f"is not a rule")
 
+        # MOVECODE-R1-B1 (--answer-kbd-click). Rule 1's refusal is OURS, not
+        # ArenaNet's: retail answered 7 of 7 live clicks that arrived with this
+        # latch armed (FINDINGS sec.1p.10 item 1). The flag deletes the refusal
+        # -- and must delete ONLY that, because rule 2's hold-and-coalesce IS
+        # the pair contract REALFIX sec.0.15 actually states.
+        check(authsrv.ANSWER_KBD_CLICK is False,
+              "ANSWER_KBD_CLICK defaults to False",
+              "an eighth candidate that shipped ON would change the click "
+              "policy for every session before any run scored it")
+        _saved_kbd = authsrv.ANSWER_KBD_CLICK
+        try:
+            authsrv.ANSWER_KBD_CLICK = True
+            st = clicking(kbd=1000.0)
+            grant, why, age, _s = authsrv._grant_verdict(st, 1000.0)
+            check(grant is True and why == "grant",
+                  "with --answer-kbd-click the SAME click rule 1 refused is "
+                  "now answered",
+                  f"{why} at age {age} -- this is the whole flag, and the "
+                  f"check above is its control: the identical state returns "
+                  f"'locally-moving' with the flag off")
+            # The reason string is deliberately "grant" and not a new value:
+            # grantsim.py:2000 filters `w[2] == "grant"` and policyreplay.py
+            # switches on "locally-moving", so a new enum would silently shrink
+            # those scorers rather than error. The turnaround stays countable
+            # because keyboard_age is on the row and GRANTED-with-age-in-window
+            # is unreachable without the flag.
+            check(age is not None and age <= authsrv.GRANT_LOCAL_WINDOW,
+                  "and it still REPORTS the keyboard age, so the turnaround "
+                  "set stays countable offline",
+                  f"age={age} -- granted with a non-null keyboard_age inside "
+                  f"the window is unreachable with the flag off, so that pair "
+                  f"is an exact signature and it is the registered exposure "
+                  f"floor. A distinct reason string would have been more "
+                  f"greppable and would have been dropped on the floor by two "
+                  f"scorers that filter on the literal 'grant'")
+            # RULE 2 MUST SURVIVE. This is the guard sec.1p.10 names, and
+            # without this check the flag would pass by removing both rules.
+            recent = clicking(kbd=1000.0)
+            recent["grant_at"] = 1000.0 - (authsrv.GRANT_MIN_INTERVAL / 2.0)
+            g2, why2, _a2, since2 = authsrv._grant_verdict(recent, 1000.0)
+            check(g2 is False and why2 == "rate-limited",
+                  "but a click inside the RATE FLOOR is still refused -- and "
+                  "refused as rate-limited, so it is HELD rather than dropped",
+                  f"{why2} at since={since2} -- the held branch coalesces to "
+                  f"the newest destination, which IS sec.0.15's pair contract. "
+                  f"A flag that deleted rule 2 as well would be the 'assert "
+                  f"more' error running in reverse, and it would pass every "
+                  f"other check in this block")
+        finally:
+            authsrv.ANSWER_KBD_CLICK = _saved_kbd
+        check(authsrv._grant_verdict(clicking(kbd=1000.0), 1000.0)[1]
+              == "locally-moving",
+              "CONTROL: restoring the flag restores the refusal",
+              "a module global left set by a test leaks into every section "
+              "below it, and this file drives the click policy for the rest "
+              "of the run")
+
         # RULE 2, BOUNDED ABOVE AND BELOW, driven through the REAL send-side
         # hook so the bookkeeping under test is the server's own rather than a
         # paraphrase written for the test.

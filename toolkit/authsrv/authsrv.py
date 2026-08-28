@@ -1298,6 +1298,102 @@ CLIENT_ENDPOINT = False
 # first and this never runs for a routed click.
 CLICK_ECHO = False
 
+# --echo-any-refusal. MOVECODE-R1-B2, and it is the EIGHTH candidate in this
+# family. It is the first one whose warrant is a measurement of ARENANET rather
+# than of us: `studies/movecode/FINDINGS.md` §1p.3 and §1p.10 item 2.
+#
+# WHAT IT CHANGES, and it is one term. `k2_echo = CLICK_ECHO and not fresh`
+# becomes `CLICK_ECHO and (ECHO_ANY_REFUSAL or not fresh)`. The echo stops
+# asking WHY the shipped path refused and answers all three reasons --
+# `geo-stale`, `geo-unplaced`, `geo-blocked` -- instead of staleness alone.
+#
+# WHY THE FRESHNESS TERM WAS THERE AND WHY IT GOES. `fresh` does two different
+# jobs in one name. It decides whether we trust our position belief enough to
+# COMPUTE geometry from it -- legitimate, and `modeled_origin`'s held-out error
+# is p50 ~15 u under 2 s against 250-475 u over it, so that job keeps the gate.
+# And it decides whether we ANSWER AT ALL, which is the job retail does not
+# have: over 32 live clicks retail answered **22 with a report older than 1.0 s,
+# 13 older than 10 s (max 20.99 s), and 5 with no client position ever
+# reported** -- every one inside 0.065 s. A bit-exact echo of the client's own
+# clicked point needs no origin, so it is the one arm that can be ungated
+# without asserting anything new about where the player is.
+#
+# THE HONEST COST, and it is the reason this is opt-in rather than a default.
+# §1m.3 scoped K2 to the staleness arm deliberately: "geometry refusals still
+# refuse; they are a different defect with a different fix." This flag crosses
+# that line, and §1p.11 is what makes the crossing arguable rather than
+# reckless -- replaying K2's own 8 echoed clicks, **7 of 8 already granted a
+# line our mesh calls blocked** (median shortfall ~2,300 u). The echo has been
+# sending blocked lines nearly every time; it simply could not SEE that it was,
+# because the state it fires in is the state where the clip is never run. So
+# this flag does not open a new harm class, it stops pretending the class is
+# closed -- and the else-branch it replaces is the shipped refusal, which is the
+# 5,970 u spawn warp (§1o.1). Both arms are wrong; this picks the one measured
+# smaller.
+#
+# THE PREDICTION, registered here before any run. Baseline is the K2 arm
+# (`vault/research/movecode/k2/`, largest displacement 446 u, total 1,101 u).
+#   EXPOSURE FLOOR: >= 3 `click_verdict` rows with `echo_any_refusal: true` AND
+#     a refusal reason other than `geo-stale`. Fewer and the flag never acted;
+#     re-run, do not conclude. (K1 arm A fired twice and was reported through
+#     anyway -- §1l is that mistake.)
+#   PREDICTED: largest displacement stays under 446 u; zero displacements land
+#     within 300 u of spawn; the count of answered clicks rises.
+#   REFUTED IF the largest displacement exceeds 446 u, or any displacement
+#     lands within 300 u of the spawn point.
+#   NOT A REFUTATION, and it must be recorded as its own row: more no-clip.
+#     A displacement counter cannot see it (§1n.2) and this flag is expected to
+#     produce more of it, so the operator's report is the instrument here.
+ECHO_ANY_REFUSAL = False
+
+# --answer-kbd-click. MOVECODE-R1-B1, and it deletes a refusal rather than
+# adding a policy, which is why it ranks above anything in the graveyard above.
+# `studies/movecode/FINDINGS.md` §1p.10 item 1.
+#
+# WHAT IT CHANGES. `_grant_verdict`'s RULE 1 -- "do not grant while the player
+# is driving locally" -- stops refusing. The click then falls through to RULE 2
+# (the rate floor) exactly as any other click does, so a click inside the floor
+# is still HELD with the newest destination winning.
+#
+# WHAT IT DELIBERATELY DOES NOT CHANGE, and this is the guard §1p.10 says must
+# stay. Retail's real contract for a rapid PAIR is that the older click is
+# dropped, and that is RULE 2's hold-and-coalesce, not RULE 1. Removing rule 2
+# as well would be the "assert more" error running in reverse.
+#
+# WHY RULE 1 WAS THERE. It reads REALFIX §0.15 as "a click under an active
+# keyboard authority is dropped outright". **§0.15 does not say that** -- it is
+# about the older click of a rapid pair (§1p.9's documentary correction; the
+# same misreading is at `authsrv.py:5105-5107` and `ROUTER.md` §4 rule 1).
+# §0.14's V-RETAIL-2 says the opposite for SINGLE mid-keyboard clicks, and the
+# live corpus agrees: **7 of 32 clicks arrive with this latch armed and retail
+# answered every one within one RTT**, with answers 635-2,445 u from any D1
+# lead prediction, so they are click answers and not lead refreshes. 14 of 32
+# were inside the window; 6 fall out because a `0x0047` had cleared the latch
+# and 1 is ambiguous, leaving 7 that survive both confounds.
+#
+# THE HONEST LIMIT, stated because the flag's own evidence names it. Of §0.14's
+# 7 mid-keyboard clicks retail echoed only the two SHORT ones (72 and 149 u)
+# verbatim; **all four distant ones (1,387-6,919 u) got PART-WAY waypoints**,
+# which are bit-exact navmesh trapezoid corners we cannot reproduce (0 of 11,
+# §1p.6/§1p.8). So on a distant mid-keyboard click this flag answers with a
+# verbatim echo where retail would have answered with a waypoint. That is not a
+# new divergence -- it is the same echo the arm already uses for every long
+# click -- but it is a place where "retail answers it too" is doing less work
+# than it appears to, and a reader should not take the 7 of 32 as licence for
+# the shape of the answer.
+#
+# THE PREDICTION, registered before any run.
+#   EXPOSURE FLOOR: >= 3 `grant_verdict` rows carrying a non-null
+#     `keyboard_age` <= GRANT_LOCAL_WINDOW that were GRANTED. Fewer and the
+#     operator did not mix clicking with keyboard walking enough to test it.
+#   PREDICTED: no displacement larger than the arm's own baseline, and the
+#     "dropped, leaving it to the client's own pathing" line disappears from
+#     the log while the held-and-coalesced line survives.
+#   REFUTED IF single clicks arriving mid-key produce warps, or if the answered
+#     mid-keyboard clicks show larger displacements than the dropped ones do in
+#     the current build.
+ANSWER_KBD_CLICK = False
+
 # --zero-lead. REALFIX-P2, and the ONE candidate in the family that has never
 # been run. The module global defaults False and main()'s argparse layer flips
 # it ON BY DEFAULT since 2026-08-22 -- owner's ruling after REALFIX-L9 (33
@@ -5410,8 +5506,29 @@ def _grant_verdict(state, now):
     # `age <= WINDOW` rather than `0 <= age <= WINDOW`: a negative age is a
     # report dated in the future, and it counts as armed. Failing toward silence
     # is the cheap direction here (see the window's derivation above).
+    #
+    # MOVECODE-R1-B1 (--answer-kbd-click): retail answered 7 of 7 live clicks
+    # that arrived with this latch armed, so the refusal is ours and not
+    # ArenaNet's. With the flag the click falls through to RULE 2 -- it is not
+    # granted unconditionally, and a click inside the rate floor is still HELD
+    # with the newest destination winning, which is the pair contract §0.15
+    # actually states.
+    #
+    # THE REASON STRING STAYS "grant", deliberately. A distinct value would be
+    # more greppable and would also be dropped on the floor: `grantsim.py:2000`
+    # filters `w[2] == "grant"`, `policyreplay.py:267` and `grantsim.py:827`
+    # switch on "locally-moving", and `test_grantsim.py:822` asserts over a
+    # fixed reason set -- so a new enum value would silently shrink several
+    # scorers rather than error. Nothing is lost: `keyboard_age` is already on
+    # every grant_verdict row, and GRANTED with `keyboard_age <= 3.0` is
+    # unreachable without this flag, so the turnaround set is exactly
+    # recoverable and that pair IS the registered exposure floor.
     if age is not None and age <= GRANT_LOCAL_WINDOW:
-        return False, "locally-moving", age, since
+        if not ANSWER_KBD_CLICK:
+            return False, "locally-moving", age, since
+        if since is not None and since < GRANT_MIN_INTERVAL:
+            return False, "rate-limited", age, since
+        return True, "grant", age, since
     # RULE 2. And never faster than retail does it.
     if since is not None and since < GRANT_MIN_INTERVAL:
         return False, "rate-limited", age, since
@@ -16666,7 +16783,17 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             # different defect (FINDINGS §1i.5) with a
                             # different fix, and conflating them is what made
                             # this look like one problem.
-                            k2_echo = bool(CLICK_ECHO) and not fresh
+                            # MOVECODE-R1-B2 (--echo-any-refusal): the `not
+                            # fresh` term is the 1.0 s freshness gate reaching
+                            # the ANSWER decision, and §1p.3 measured that
+                            # retail has no such precondition -- 22 of 32 live
+                            # clicks answered with a report over 1.0 s old, 5
+                            # with no client position ever reported. A bit-exact
+                            # echo needs no origin, so it is the arm that can be
+                            # ungated; `fresh` still gates every path that
+                            # COMPUTES from the belief, above.
+                            k2_echo = bool(CLICK_ECHO) and (ECHO_ANY_REFUSAL
+                                                            or not fresh)
                             if rec is not None:
                                 rec.event("click_verdict",
                                           fired=bool(k2_echo),
@@ -16677,7 +16804,16 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                           dest=[float(dest[0]),
                                                 float(dest[1])],
                                           d1_passthrough=bool(D1_LEAD),
-                                          click_echo=bool(k2_echo))
+                                          click_echo=bool(k2_echo),
+                                          # MOVECODE-R1-B2's exposure floor is
+                                          # counted over rows where the flag
+                                          # was ON and the reason was NOT
+                                          # geo-stale -- i.e. the echoes only
+                                          # this flag can produce. Recording
+                                          # the flag alone would not separate
+                                          # them from K2's own staleness arm.
+                                          echo_any_refusal=bool(
+                                              ECHO_ANY_REFUSAL))
                             if k2_echo:
                                 print(f"[c{conn_id}] click to ({dest[0]:.0f}, "
                                       f"{dest[1]:.0f}): {why} -- ECHOING it "
@@ -18660,6 +18796,30 @@ def main():
                          "candidate in a family that killed six, and its "
                          "registered prediction is studies/movecode/FINDINGS.md "
                          "sec.1m.")
+    ap.add_argument("--echo-any-refusal", action="store_true",
+                    help="MOVECODE-R1-B2. Requires --click-echo. Answer a "
+                         "refused click with the verbatim point for ANY "
+                         "refusal reason, not just staleness -- deleting the "
+                         "1.0 s freshness gate from the ANSWER decision while "
+                         "leaving it on every path that COMPUTES from our "
+                         "position belief. Warranted by ArenaNet rather than "
+                         "by us: retail answered 22 of 32 live clicks with a "
+                         "report over 1.0 s old, 13 over 10 s, and 5 with no "
+                         "client position ever reported, all inside 0.065 s "
+                         "(studies/movecode/FINDINGS.md sec.1p.3). Off by "
+                         "default; it crosses sec.1m.3's deliberate scoping "
+                         "and its registered prediction is beside "
+                         "ECHO_ANY_REFUSAL in this file.")
+    ap.add_argument("--answer-kbd-click", action="store_true",
+                    help="MOVECODE-R1-B1. Stop dropping a click because the "
+                         "player is also using the keyboard. Rule 1 of the "
+                         "click grant refuses whenever the locally-driving "
+                         "latch is younger than 3.0 s; retail answered 7 of 7 "
+                         "such clicks within one RTT, so the refusal is ours "
+                         "(sec.1p.10 item 1). The click falls through to the "
+                         "RATE FLOOR, which still holds-and-coalesces -- that "
+                         "is the pair contract REALFIX sec.0.15 actually "
+                         "states, and it deliberately stays. Off by default.")
     ap.add_argument("--keepalive-grant", action="store_true",
                     help="MOVECODE-K1. Re-grant the player's own last REPORTED "
                          "position, unclipped, whenever our model says the "
@@ -20561,6 +20721,72 @@ def main():
               "point (arm A had two).")
         print("      REFUTED IF the largest displacement exceeds arm A's 5970 u, "
               "or if any displacement still lands on spawn.")
+    global ECHO_ANY_REFUSAL
+    if a.echo_any_refusal and not a.click_echo:
+        # Refused rather than ignored, for the reason --keepalive-separation is
+        # below: this flag is one term inside `CLICK_ECHO and (...)`, so without
+        # --click-echo it changes nothing at all. A run launched on it would
+        # produce a clean-looking capture of the SHIPPED policy under the new
+        # arm's name, and the arm would be scored on data it never touched.
+        raise SystemExit(
+            "--echo-any-refusal requires --click-echo: it widens the echo's "
+            "trigger and there is no echo without that flag. Pass both, or "
+            "neither.")
+    if a.echo_any_refusal:
+        ECHO_ANY_REFUSAL = True
+        print("[map] --echo-any-refusal ON (MOVECODE-R1-B2). The echo now "
+              "answers EVERY refused click -- geo-stale, geo-unplaced and "
+              "geo-blocked -- not staleness alone.")
+        print("      WHY: retail has no freshness precondition. Over 32 live "
+              "clicks it answered 22 with a report older than 1.0 s, 13 older "
+              "than 10 s (max 20.99 s) and 5 with NO client position ever "
+              "reported -- every one inside 0.065 s (FINDINGS sec.1p.3). A "
+              "bit-exact echo needs no origin, so it is the arm that can be "
+              "ungated; `fresh` still gates everything that COMPUTES.")
+        print("      THIS CROSSES sec.1m.3's SCOPING on purpose. K2 refused "
+              "geometry deliberately. sec.1p.11 is the warrant: replaying K2's "
+              "own 8 echoed clicks, 7 of 8 ALREADY granted a line our mesh "
+              "calls blocked (median shortfall ~2,300 u) -- the echo could not "
+              "see it, because it fires in the state where the clip never runs.")
+        print("      EXPOSURE FLOOR, pre-registered: >= 3 click_verdict rows "
+              "with echo_any_refusal true AND a reason other than geo-stale. "
+              "Fewer means the flag never acted -- re-run, do not conclude.")
+        print("      PREDICTED: largest displacement stays under K2's 446 u; "
+              "no displacement within 300 u of spawn; answered clicks rise.")
+        print("      REFUTED IF the largest displacement exceeds 446 u, or any "
+              "displacement lands within 300 u of spawn.")
+        print("      NOT A REFUTATION, record it as its own row: MORE NO-CLIP. "
+              "A displacement counter cannot see it (sec.1n.2) and this flag is "
+              "expected to produce more; the operator's report is the "
+              "instrument.")
+    global ANSWER_KBD_CLICK
+    if a.answer_kbd_click:
+        ANSWER_KBD_CLICK = True
+        print("[map] --answer-kbd-click ON (MOVECODE-R1-B1). A click no longer "
+              "dies because the player is ALSO on the keyboard; it falls "
+              "through to the rate floor like any other click.")
+        print("      WHY: rule 1 read REALFIX sec.0.15 as 'a click under an "
+              "active keyboard authority is dropped outright'. sec.0.15 does "
+              "not say that -- it is about the older click of a rapid PAIR "
+              "(FINDINGS sec.1p.9). Live: 7 of 32 clicks arrived with this "
+              "latch armed and retail answered EVERY one within one RTT, "
+              "635-2445 u from any D1 lead prediction.")
+        print("      WHAT STAYS: rule 2. A click inside the "
+              f"{GRANT_MIN_INTERVAL:.2f}s floor is still HELD, newest "
+              "destination only -- that IS the pair contract, and removing it "
+              "would be the 'assert more' error in reverse.")
+        print("      HONEST LIMIT: of sec.0.14's 7 mid-keyboard clicks retail "
+              "echoed only the two SHORT ones verbatim; all four distant ones "
+              "got PART-WAY waypoints we cannot reproduce (0 of 11). On a "
+              "distant mid-key click this answers with an echo where retail "
+              "sent a waypoint.")
+        print("      EXPOSURE FLOOR, pre-registered: >= 3 grant_verdict rows "
+              "GRANTED with a non-null keyboard_age <= "
+              f"{GRANT_LOCAL_WINDOW:.1f}s. Fewer means the operator did not mix "
+              "clicking with keyboard walking enough to test it.")
+        print("      REFUTED IF single clicks arriving mid-key produce warps, "
+              "or if answered mid-keyboard clicks show larger displacements "
+              "than the dropped ones do today.")
     global KEEPALIVE_GRANT, KEEPALIVE_SEPARATION
     if a.keepalive_separation is not None and not a.keepalive_grant:
         # Refused rather than ignored: a run launched with only the override

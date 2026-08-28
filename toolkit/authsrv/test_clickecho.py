@@ -75,17 +75,70 @@ def section_1():
           "1. and it names its arc and its registered prediction",
           "a flag whose prediction is not written down can be rationalised into "
           "agreeing with whatever the run produced")
+    # MOVECODE-R1-B2, the widening added 2026-08-28.
+    check("--echo-any-refusal" in names,
+          "1. --echo-any-refusal is registered in argparse")
+    check("MOVECODE-R1-B2" in SRC and "sec.1p.3" in SRC,
+          "1. and it names its arc and the measurement that warrants it",
+          "this is the first candidate in the family whose warrant is a "
+          "measurement of ARENANET rather than of us, and the citation is the "
+          "only thing carrying that")
+    # THE REFUSAL GUARD. `--echo-any-refusal` is one term inside
+    # `CLICK_ECHO and (...)`, so alone it changes NOTHING. A run launched on it
+    # would produce a clean capture of the SHIPPED policy filed under the new
+    # arm's name -- the exact failure mode --keepalive-separation is guarded
+    # against a few lines below it in main().
+    guard = [n for n in ast.walk(ast.parse(SRC))
+             if isinstance(n, ast.If)
+             and "echo_any_refusal" in ast.dump(n.test)
+             and "click_echo" in ast.dump(n.test)
+             and any(isinstance(s, ast.Raise) for s in ast.walk(n))]
+    check(len(guard) == 1,
+          "1. and passing it WITHOUT --click-echo raises rather than being "
+          "silently inert",
+          f"{len(guard)} guard(s) found -- a flag that quietly does nothing "
+          f"lets an arm be scored on data it never touched, which is how K1 "
+          f"was reported through two fires")
 
 
 # ------------------------------------------------------------------ §2
 def section_2():
     blk = refusal_block()
-    check("k2_echo = bool(CLICK_ECHO) and not fresh" in blk,
-          "2. the echo gate is CLICK_ECHO **and not fresh**",
-          "staleness only -- this is the whole scope of the flag")
-    check("not placed" not in blk.split("k2_echo =")[1].split("\n")[0],
-          "2. and the gate does not consult `placed`",
-          "geo-unplaced is a geometry refusal and must keep refusing")
+    # MOVECODE-R1-B2 widened this gate on 2026-08-28. It used to be the literal
+    # `bool(CLICK_ECHO) and not fresh`, and this check pinned that spelling --
+    # correctly, and it went red the moment the term moved, which is what a
+    # source-shape pin is for. The scope claim it was defending is unchanged and
+    # is now conditional: with ECHO_ANY_REFUSAL off, K2 is still staleness-only.
+    # Whitespace-normalised: the gate wraps across two source lines, so a raw
+    # substring match would be pinning the indentation rather than the logic.
+    gate = " ".join("".join(
+        blk.split("k2_echo =")[1].split("\n")[0:2]).split())
+    check("bool(CLICK_ECHO)" in gate and "not fresh" in gate,
+          "2. the echo gate still requires CLICK_ECHO and still carries the "
+          "`not fresh` staleness term",
+          "the widening is a second term, not a replacement -- an echo that "
+          "stopped consulting `fresh` at all would make K2 and R1-B2 the same "
+          "flag and there would be no way to run K2 again")
+    check("ECHO_ANY_REFUSAL or not fresh" in gate,
+          "2. and it widens ONLY through ECHO_ANY_REFUSAL",
+          "any other widening term would be an unregistered ninth candidate")
+    check(authsrv.ECHO_ANY_REFUSAL is False,
+          "2. ECHO_ANY_REFUSAL defaults to False",
+          "so the shipped gate reduces to `CLICK_ECHO and not fresh`, which is "
+          "the arm sec.1n measured; a default-ON widening would silently "
+          "re-scope every future K2 run")
+    # The ORIGINAL scope claim, now proven by reduction rather than by spelling:
+    # with the new flag off the gate is False for every fresh click, whatever
+    # `placed` and the clip said.
+    check(not (bool(True) and (authsrv.ECHO_ANY_REFUSAL or not True)),
+          "2. and with ECHO_ANY_REFUSAL off a FRESH click never echoes",
+          "geo-unplaced and geo-blocked are geometry refusals and must keep "
+          "refusing under K2 alone -- sec.1m.3's scoping, evaluated rather "
+          "than grepped")
+    check("not placed" not in gate,
+          "2. and the gate does not consult `placed` directly",
+          "geo-unplaced must be reached through the refusal reason, not "
+          "special-cased inside the echo condition")
     # The fall-through condition must require BOTH the shipped flag being off AND
     # the echo being off, or the flag would change behaviour under D1_LEAD too.
     check("if not D1_LEAD and not k2_echo:" in blk,
