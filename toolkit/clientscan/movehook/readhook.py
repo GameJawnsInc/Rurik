@@ -690,16 +690,41 @@ def report(cap, names, dump=0):
                 prev_site = (names[p["site"]] if p["site"] < len(names)
                              else str(p["site"]))
                 moved.append((prev_site, d, q["_i"] if "_i" in q else i))
-        after_reseed = [m for m in moved if m[0] == "reseed"]
+        # THE HEADLINE IS THE SIZE, NOT THE ATTRIBUTION, and that ordering is a
+        # correction paid for in a real run. MOVECODE-K1's arm A printed
+        # "following a RESEED: 0" and read as clean, while the operator watched
+        # the character warp to spawn twice -- because both warps went through
+        # the TELEPORT arm (`teleport -> setter`) rather than landing on the
+        # record straight after a reseed. They were counted and then buried
+        # under a subcount that happened to be zero.
+        #
+        # A displacement is a displacement whichever site performed it. The
+        # attribution is detail; the magnitude is the finding, and arm A's
+        # 5,970 u against run 5's largest of 1,871 u is not a rounding
+        # difference -- it is 3.2x, and it landed on the spawn point.
+        by_site = {}
+        for site, d, _i in moved:
+            by_site.setdefault(site, []).append(d)
         a(f"      DISPLACEMENTS -- the point moved with its stamp STANDING "
           f"STILL: {len(moved)}")
-        a(f"        of those, following a RESEED: {len(after_reseed)}"
-          + ("" if not after_reseed else
-             "  (" + ", ".join(f"{d:.0f} u" for _s, d, _i in after_reseed) + ")"))
-        a("        A reseed that fires is not a warp. This is the count "
-          "MOVECODE-K1 (FINDINGS §1k.3)")
-        a("        is refuted by: any displaced reseed the control arm did not "
-          "have.")
+        if moved:
+            ds = sorted((d for _s, d, _i in moved), reverse=True)
+            a(f"        largest {ds[0]:.0f} u   total {sum(ds):.0f} u   "
+              f"all: " + ", ".join(f"{d:.0f}" for d in ds[:8])
+              + (" …" if len(ds) > 8 else ""))
+            for site in sorted(by_site, key=lambda s: -max(by_site[s])):
+                v = sorted(by_site[site], reverse=True)
+                a(f"        after {site:<10} x{len(v):<3} largest {v[0]:.0f} u")
+        a("        A reseed that FIRES is not a warp -- but a displacement IS "
+          "one, whatever")
+        a("        site performed it. MOVECODE-K1 (FINDINGS §1k.3) is refuted "
+          "by the SIZE")
+        a("        and COUNT here, not by the reseed row alone. RUN 5 "
+          "BASELINE: 10 displacements,")
+        a("        largest 1871 u, total 8527 u. (691 u was run 5's largest "
+          "RESEED-attributed one,")
+        a("        which is the subcount that read as clean while arm A warped "
+          "to spawn.)")
 
     if dump:
         a(f"first {dump} record(s):")
