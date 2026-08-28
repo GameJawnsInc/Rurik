@@ -1970,6 +1970,917 @@ best of them is the one that asserts the least.
 
 ---
 
+## 1p. WHAT RETAIL ACTUALLY DOES DURING A CLICK-WALK — R1, offline
+
+**Retail answers every click, immediately, from a position it does not have.** Over the
+live corpus — 21 capture dirs → 20 admitted by the origin gate, 61 game connections,
+61/61 decoding with byte closure in both directions, 7,028 c2s messages — there are **32
+c2s `0x003E` clicks**, and **32 of 32 were answered within 0.065 s** (observed first-grant
+latency 0.007–0.065 s). The answer is one of exactly two things: **the bit-exact clicked
+point (19 of 32)**, or **a part-way first waypoint (13 of 32)** that is, in our own
+independent decode of ArenaNet's own pathing archive, **a bit-exact navmesh trapezoid
+corner in 13 of 19 distinct cases** and within 0.01 u of a trapezoid edge in 18 of 19. It
+did all of this while holding a client position report **older than 1.0 s on 22 of 32
+clicks** (older than 10 s on 13 of 32, max 20.99 s) and **no client position at all on 5
+of 32**. **What this means for `--click-echo` is not that it is a lucky heuristic: it is
+the exact subset of retail's contract we can reproduce bit-for-bit.** On all **13 of 13**
+scorable clicks retail echoed, our own mesh independently says a straight line suffices,
+so the echo *is* retail's answer there; on the other class our route's first waypoint
+matches retail's on **0 of 11** routable rows, missing by 290.4–2,351.3 u. §1o's
+conclusion stands and is now corroborated from ArenaNet's side.
+
+**Whole-section scope, stated once and applying to every number below.** 32 clicks / 12
+connections / 7 sessions / 6 maps / 5 characters, and **61 of 61 live connections come
+from one client IP (10.0.0.210), one GPU string, one account (`capture`)** — **one
+operator, one machine**, solo, across three client-build eras. The 26 clicks that can be
+scored against a mesh sit on **two navmeshes, not three maps**: content maps 146 and 148
+both resolve to pathing file 113021 (n=15), map 280 to 165811 (n=11). Nothing here is
+evidence about a party, a crowded outpost, stacked geometry (0 of 26 rows have a stacked
+destination), or any post-Searing outdoor, explorable, PvP or dungeon mesh.
+
+---
+
+### 1p.1 R1 was mostly already answered, and `HANDOFF-WARP.md` §4 sends the next session to re-measure it
+
+**REFUTED.** `HANDOFF-WARP.md:74` reads:
+
+> **Nobody has ever looked.** Three policies were invented and measured against each
+> other; none was compared against ArenaNet answering the same situation.
+
+That is wrong, and **this document is one of the places it is wrong from**. §1n.4 of this
+file already writes "which is what retail does (ROUTER.md §1: waypoint chains at
+leg-completion cadence)". `studies/movement/ROUTER.md` §1/§3 is a 605-line record of
+exactly the comparison the handoff says nobody made, dated 2026-08-26, and
+`python toolkit/clientscan/routerbench.py --census` still reproduces it bit-for-bit today
+at HEAD `1f36508`: `live clicks: 29, skipped connections: 1`,
+`kinds: {'part-way': 13, 'verbatim': 16}`, `within 0.2s: 29/29`. `--score` prints
+`scored clicks: 26   refused: 4` with exactly 13 rows at `firstwp=0.0u`. A handoff that
+sends a cold session to re-derive a committed, still-green measurement is the exact
+failure mode the top of `CLAUDE.md` is about, and it cost this arc five agent-lanes to
+discover.
+
+**The replacement text for `:74`:**
+
+> **Mostly already looked at; the record is `studies/movement/ROUTER.md` §1/§3 and
+> `REALFIX.md` §0.14–§0.15/§0.18, and `FINDINGS.md` §1n.4 already cites it.**
+> `routerbench.py --census` prints ≥29 attributed clicks, ≥16 verbatim / ≥13 part-way,
+> all answered within one RTT, and still reproduces on 2026-08-28. What is genuinely open
+> is narrower and is listed in §1p.10.
+
+**`HANDOFF-WARP.md:81-84`** — "**Does retail's client send position during a
+click-walk?** Ours does not … If retail's client *does*, something we send (or fail to
+send) suppresses it, and that is a far better lever than any grant policy." This one is
+**PARTLY answered, and the committed answer is overstated in our own tree** (§1p.4). It
+should read: *"Answered at reduced strength: retail's client is ~5–10× quieter during
+click-walks than during keyboard steering, but it is not silent — 3–4 of 27 windows carry
+position rows. There is no large lever here; the lever is the origin question in §1p.3."*
+
+**`HANDOFF-WARP.md:89-90`** — "It is also the only route that can tell us the residual
+no-clip is *unavoidable* rather than *unsolved*." **REFUTED, strike it.** Retail's chains
+come off the mesh the client agrees with **by construction**, so measuring them cannot
+bound what our mesh can achieve. That question belongs to R4 and the handoff already
+assigns it there at `:126-131`.
+
+---
+
+### 1p.2 The contract, re-derived today (R1b — ANSWERED)
+
+**OBSERVED.** Independently rebuilt by four lanes from `livewire.decode_conn`, three of
+which never called `routerbench.census()`. The corpus-wide split, including the
+connection the committed census cannot attribute, is **19 verbatim / 13 part-way of 32**;
+`ROUTER.md`'s method-bounded 16/29 and 13/29 are over a method-selected population and
+should be quoted with the 32 alongside.
+
+| clause | status | evidence |
+|---|---|---|
+| first answer within one RTT | **OBSERVED** | 32 of 32 clicks answered, latency 0.007–0.065 s (3.1× inside the 0.2 s cut) |
+| answer is the bit-exact click point, or a part-way waypoint | **OBSERVED** | 19 / 13 of 32; all 19 echoes are `first_dist == 0.0` **exactly**, so "verbatim" is not an artifact of `EXACT_TOL = 5.0` — the smallest part-way offset is 131.08 u, a 131 u margin |
+| terminal grant is the bit-exact click point | **OBSERVED** | every completed chain |
+| further legs at leg-completion cadence, 288 u/s | **PARTLY — n=5 chains** | 9 of 10 origin-free legs within 20 ms, but **7 of the 10 come from one specimen** (`_63805`), 3 of 5 first legs are circular (origin dead-reckoned at the speed under test), and one chain contradicts it |
+| chain grammar: one `op43` speed row at chain start | **OBSERVED on 1 of 5** | only `_63805@1103.590` carries it; the other four multi-grant chains carry **no** `op43` for the player agent within ±0.5 s |
+| any new c2s input abandons the chain | **OBSERVED** | ends over 26 scored: terminal 18, `superseded:62` 5, `superseded:61` 2, `superseded:57` 1 |
+
+**CONTESTED, n=1 — the cadence counterexample.** `20260821T163511/_61106 t=67.787`
+granted two waypoints **41 ms apart** (+0.007 s, +0.048 s) with 777 u of walking between
+the origin and wp0, from an origin anchored to a raw report 0.12 s old; the whole
+1,546 u / 5.37 s chain was granted inside 2.19 s. `ROUTER.md` does not mention this
+specimen. It is contested rather than refuting because its first grant sits 34.7 u from
+the D1 lead prediction and could be a keyboard-lead refresh; four arguments favour the
+click reading, and one cheap check settles it (does any other `op61` on that connection
+draw two `op41`s?).
+
+**Corrections to `ROUTER.md`'s own reporting**, all measured, none affecting its
+conclusions:
+
+* **"29/29 within one RTT" is not a third fact.** `kind` is `no-answer` **iff** `first_dt`
+  is `None` or `> RTT_WINDOW`; measured, both buckets are 0, so `within == total` is
+  algebraically identical to `16 + 13 = 29`. `test_routerbench.py:247` and `:253` both
+  check it, so one ledger check is a duplicate.
+* **`firstwp = 0.0` and `len r = 1.00` are one bit printed as three columns.** Over the 13
+  rows, `max |ratio − 1| = 0.000e+00` exactly and `max retail→ours = 2.3e-13`; over all 15
+  one-leg scored rows `--score`'s `firstwp` equals `--census`'s own `d` column 15/15.
+* **"scored 26, refused 4" mixes units.** The 4 are *connections*, hiding **6 clicks**.
+  The honest ledger is 26 scored + 6 unscored = 32.
+* **"24/26 retail legs clip-clean" is 24/25 computed** — the 26th (`_60935@58.694`) never
+  had the field computed, because `route()` refused first.
+* **8 of the 26 published length ratios compare our full route to a superseded ONE-grant
+  fragment** (all 8 have `n_grants = 1`), including ROUTER-Q3's headline "0.34–0.41× our
+  length" (both specimens) and ROUTER-Q2's 127.84×. Only the 18 terminal-chain ratios are
+  like-for-like; the two clean ones are `_63805` 1.18× and `_60935` 1.26×.
+* **"every retail waypoint ≤120.3 u from our polyline … ≤12.0 u" is a directed distance.**
+  Reverse (our corners → retail's polyline) is **202.7 u** and **249.9 u**; reverse exceeds
+  forward on 10 of 25 routed rows. Publish the Hausdorff or both directions.
+* **"nothing went stale" is corpus-invariance, not robustness.** The newest live capture is
+  `20260824T074002`; `ROUTER.md` is dated 2026-08-26. No new click-bearing capture has
+  landed, so invariance was guaranteed. The prose should carry `≥29 / ≥16 / ≥13` floors
+  plus the per-connection anchors, the way `test_routerbench.py` already does.
+
+---
+
+### 1p.3 Retail does not need a fresh client position, and our freshness gate models a contract it does not have
+
+**OBSERVED — the strongest actionable finding in this section, and it does not depend on
+§1p.4 at all.**
+
+| | count | denominator |
+|---|---|---|
+| clicks answered with last position report **> 1.0 s** old | 22 | 32 |
+| > 5.0 s | 16 | 32 |
+| > 10.0 s | 13 | 32 |
+| **no client position ever reported on the connection** | 5 | 32 |
+| answered anyway, within 0.065 s | **32** | 32 |
+
+Age of the last report at click time, n=27 attributable: p0 0.035, p50 2.334, p75 13.144,
+max **20.993 s**. Connection `20260817T183323/_49545` runs 78.7 s with 3 clicks and **zero
+`0x003D` and zero `0x0047` for the whole connection** — verified to carry its own prologue
+(`op10`, `op11 'Gw/38833.0 (Win32)'`, `op409`), so those are real zeros over a whole
+connection, not a mid-stream view. All three clicks were answered by agent 332 with
+bit-equal echoes at +0.030/+0.032/+0.032 s.
+
+**Weight correction, applied.** That connection is **not** the strongest evidence for
+anything about silence: it carries 2.11 s of the corpus's ~70 s of click-caused motion
+(**3.0%**), its clicks rank 21st, 22nd and 24th of 32 by exposure, and its zero-`op61` half
+is **selected on** — `routerbench.player_agent()` votes with `op61`, so the census skips a
+click-bearing connection **iff** it has no `op61`. Its real value is R1(b): three more
+bit-equal verbatim echoes, and it contributes exactly zero to R1(a)'s published headline,
+which already dropped its clicks as no-origin.
+
+**Therefore:** `fresh = (time.time() - state.get("pos_seen", 0.0)) <= 1.0`
+(`authsrv.py:16583`) encodes a precondition **retail does not have**. And retail is not
+compensating with corrections either:
+
+* **`0x002C AGENT_UPDATE_POSITION` fires 13 times in the entire live corpus**, 5 of them to
+  the player, over 7,038 s of in-world connection span — one player reposition per 1,407 s.
+  **None of the five is a correction:** 2 are spawn placements (no prior report, no prior
+  grant), 3 are jumps of 5,308–5,376 u after 26.1–71.7 s of report silence. 0 of 5 is under
+  1,000 u.
+* **No snap-back through the ordinary grant either.** Conditioned on a self-report ≤0.5 s
+  old, **3 of 3,501** player grants (0.09%) land more than 1,000 u from it; p99 is 817.1 u,
+  barely above the 765 u heading lead. The unconditioned 2.37% tail beyond 1,000 u is
+  report *staleness*, not repositioning, and disappears once the report is required fresh.
+* **A periodic server-side position sync is NOT FOUND.** Of 3,672 player grants, **3,621
+  (98.6%) answer a c2s input within 2 s** (median latency **36 ms**); the 51 unprompted ones
+  all had a prior input 2.19–15.57 s earlier and 34 of the 51 sit on 2 of 9 connections.
+  There is no clock-driven mechanism to copy.
+* **`RECONSTRUCTION`, n=2:** `0x0067` (op103) looks like an invalidate-position sentinel —
+  all 3 rows in the corpus carry `(inf, inf)`, and two of them precede the two spawn-placement
+  `0x002C` by 1.94 s and 2.00 s.
+
+---
+
+### 1p.4 Does the client report during a click-walk? The committed answer is OVERSTATED — and it is ours
+
+This is the section that corrects our own record. **`REALFIX.md` §0.18 states "retail's own
+client is report-silent during click-walks (zero counterexamples corpus-wide)";
+`routerbench.py:180-182` asserts it in `modeled_origin`'s docstring; `authsrv.py:5044`
+ships the chain scheduler on it.** Two lanes were asked to re-measure it, and **both
+independently built the same vacuous instrument and got zero.**
+
+**REFUTED — the zero is an identity, not a measurement.** `routerbench.py:108` defines
+`INPUT_OPS = frozenset({OP_REPORT, OP_CLICK, OP_STOP, 57})` = `{61, 62, 71, 57}`, which
+**contains both position-bearing opcodes**. Both lanes closed the exposure window at the
+first c2s row in `INPUT_OPS`, then counted rows with op in `{61, 71}` strictly inside it.
+The counted event *is* the terminator, so `n_inside` is identically 0 for any possible
+corpus. Two published exposures, 70.07 s and 70.34 s, both with the same forced zero.
+
+**The positive control nobody had run.** 27 synthetic c2s `0x003D` spliced into the exact
+midpoint of every one of the 27 published windows in the **real** corpus: **0 of 27
+recovered**, and the exposure fell **exactly 50.0%** — the signature of edge-eating.
+
+**With a window censored only by a genuine new command:**
+
+| window construction | exposure | position rows inside | windows carrying any |
+|---|---|---|---|
+| `[click, click+walk_t]`, closed by `INPUT_OPS` (published) | 70.07–70.34 s | **0 (forced)** | 0 of 27 |
+| `[click, click+walk_t]`, closed by `0x003E`/`0x0039` only | 77.44 s | **7** | 3 of 27 |
+| `[first grant, ETA]`, closed by `0x003E`/`0x0039`/capture-end | 82.22 s | **25** | 4 of 27 |
+
+**The null was wrong too.** The quoted 0.500 s keyboard baseline is the **steering**
+cadence: of 2,917 consecutive `op61` pairs, 2,574 change the lead vector (median 0.500 s)
+and **343 do not** (median **1.768 s**, p10 0.501, p90 1.786). A click-walk is a
+steady-heading walk by construction, so its null is the steady arm — **~47 reports over
+82.22 s, not ~140**. Independently, a second lane found the mechanism: **the client
+re-sends `0x003D` every ~510–512 units TRAVELLED**, not on a clock — over 243
+unchanged-heading pairs with real displacement, distance IQR/median = **0.008** (p25 509.2,
+p50 510.0, p75 513.3; 205/243 within ±6% of 512) against time IQR/median = 0.253, and
+distance still holds at p50 511.0 on the **101 pairs not moving at ~288 u/s**, which are the
+only rows that can separate the two hypotheses. An odometer predicts **1.96 sends per
+1,000 u**, not the 5.997/1,000 u the published power calculation used.
+
+**The corrected reading, and its label.** **OBSERVED:** retail's client is **markedly
+quieter during click-walks than during keyboard steering** — 4 events in 67.90 s = 0.0589/s
+against a steady-heading null of 0.566/s, **9.6× quieter**; under the odometer null,
+7 observed against ~43.7 predicted over 22,303 modelled units, **0.16×**. **The published
+`P(0) = 1.8e-53` and `λ = 121.5` must not be quoted**: the report process is bursty, not
+Poisson (147 of 3,197 gaps hold 67.8% of all gap-time), and assumption-free permutation
+nulls put the honest bracket at **1e-8 to 1e-23** depending on the control's start-event
+definition, with the like-for-like run-onset control at 1.8e-20.
+
+**And the survivors' attribution is CONTESTED, not settled.** One lane read all 7 as
+keyboard takeovers because the server answered each with a grant along the reported heading
+(0.00 deg on 7/7) — but **the corpus base rate for that test is 92.9% within 5 deg over
+n=3,018**, so 7 of 7 is expected ~59% of the time under the rival and the test does not
+separate. The `|lead|` magnitude test is worse: **all 3,079 `op61` in the corpus carry
+`|lead|` in [765.02, 768.00] — 100.0%** — it is a constant-magnitude direction vector and
+discriminates nothing. Meanwhile 22 odometer sends fire **while a click destination is
+commanded and never cancelled**, at 282.7–288.1 u/s, all 22 with no `0x0047` within 1.0 s
+(nearest 1.53 s), on 3 connections; corpus-wide, 303 reports in that regime and 202 of them
+moving at run speed with no nearby stop, on 5 connections. **A steady keyboard walk and a
+click-walk produce the same wire signature at the same ~1.77 s cadence, and this corpus
+cannot tell them apart.**
+
+**Circularity, flagged:** `modeled_origin` produces `walk_t`, which produces the exposure,
+and its own docstring asserts the silence being tested. The residual suppression is
+therefore **UNVERIFIED**, not OBSERVED.
+
+**What survives at full strength from this lane, and it is not small:**
+
+* **`{0x003D, 0x0047}` is complete for c2s position.** Over 46 distinct c2s opcodes and
+  7,028 rows, with every integer field also reinterpreted as float32, no other opcode
+  carries a coordinate pair — 0 hits across the 15 other tested opcodes. The negative
+  control **passed**: the same detector finds `0x003D` 3078/3079, `0x0047` 172/172, s2c
+  `0x0029` 2459/7904, and is correctly low on `0x003E` (6/13, since a click point is often
+  far from the player). A first pass anchored on "near the last report" **failed** its own
+  control on `0x002C` and was discarded and rebuilt.
+* **`0x0009` is a 5.005 s liveness heartbeat carrying no position** — 10 distinct payloads
+  in 1,410 messages, 1,340 of 1,349 gaps in [4.8, 5.2] s. `0x0093`'s whole payload is one
+  2-byte word, structurally too small for a coordinate pair.
+* **`0x0047` is not a periodic ping.** Gap spread p10 1.535 / p50 18.021 / p90 80.047 /
+  max 765.7 s, against the heartbeat control's p10 4.988 / p50 5.005 / p90 5.007 (0.4%
+  spread). Its `(x,y)` equals the next `0x003D`'s reported position on **132 of 172** (86.3%
+  of the 153 comparable), against a control of 22/3,026 = 0.7% for `0x003D`→`0x003D` — a
+  110× enrichment, so "stopped here" is well supported. **But it is not a clean census of
+  stops**: only 98 of 181 keyboard runs (54.1%) end in one, and 160 of 172 sit *inside* a
+  run. Two of the originally-cited supports are dead — the consecutive-run test cannot
+  discriminate (the known-periodic heartbeat scores 78.7% runs of 1) and the "preceded by
+  `0x003D` 116/172" enrichment is only 1.53× over a 44.2% base rate.
+* **The silent exposure is real walking time**, not a parked client: on 13 of 23 silent
+  windows (50.72 of 62.95 s) the first report after the window lands nearer the 288 u/s walk
+  model than the origin, including `_63805@1103.590` (8.95 s silent, d_model 0.0 u vs
+  d_origin 1,936.9 u).
+* **Our own cadence is inside retail's range, on the slow end** — ours 0.448/s and 69.4%
+  stale, against retail's per-connection p50 1.122/s and p50 0.406 stale, with **14 of 61
+  (23.0%)** retail connections slower than ours and 8 of 53 with ≥2 reports staler (max
+  0.963). *(The originally-published "7 of 53" dropped 7 connections with **zero** reports —
+  rate 0, slower by any reading — i.e. it excluded exactly the connections that belong in the
+  numerator.)* **Our client's cadence is not the pathology; the freshness gate is.**
+
+---
+
+### 1p.5 The one-leg discriminator: 24 of 26, and every way that is weaker than it reads
+
+**OBSERVED, with a CORROBORATED label rather than a bare measurement**, because one column
+is a wire fact and the other is `route()` run from a dead-reckoned origin over our decode of
+ArenaNet's mesh.
+
+Hypothesis H: our mesh says a straight line from the modelled origin to the click is
+walkable (`route()` returns exactly `[origin, click]`) **iff** retail echoed verbatim.
+
+| | retail verbatim | retail part-way |
+|---|---|---|
+| our mesh: one leg | **13** | **2** |
+| our mesh: many-leg | **0** | **11** |
+
+Agreement **24 of 26**. Rebuilt three independent ways — a join of the two committed CLI
+outputs on `(cap, conn, t)`, a from-scratch per-connection rebuild, and **a dense
+`walkable()` sampler at 512 interior points that shares no code path with `route()` or
+`clip()`** — all three give the identical 2×2, with 0/26 disagreements from the dense
+sampler. **The arithmetic is not in dispute.** Six things about it are:
+
+1. **H has a free parameter, and the claim that it does not is deleted.** It routes from
+   `modeled_origin`, which dead-reckons at `RUN_SPEED = 288.0` u/s. Sweep: **22/26 at
+   200–240, 23/26 at 277, 24/26 at 288–328, 23/26 at 400, 21/26 instantaneous.** Retail's own
+   measured chain-leg band is 277–328 u/s (`routerbench.py:90-91`), so **H scores 23–24/26
+   across the band its own constant is measured over**, not 24/26 outright.
+2. **"Zero false negatives" bounds to 13 of the 16 known verbatim clicks** — 3 are untestable
+   because maps 242, 248 and 310 have no content row. At 277 u/s one verbatim row
+   (`_62994@135.655`) leaves the one-leg cell, and it leaves as a `route()` **refusal**, not a
+   multi-leg path, so across 277–328 u/s the mesh never returns a multi-leg verdict on a
+   verbatim click.
+3. **The 13v/13p balance and its 50% baseline are manufactured by the exclusion**, which
+   removed exactly **3 verbatim and 0 part-way**. The census baseline is 16/29 = 55.2%; the
+   exclusion moved it to the weakest available 50.0%.
+4. **The majority baseline is the wrong comparator.** A destination shuffle (keep each origin,
+   permute click points within the same mesh, 200 trials) scores min 13 / **median 17** / p95
+   20 / max 22, mean 17.5. The true pairing beats every trial, but **the effect is ~6.5 rows
+   over the correct null, not ~11.**
+5. **26 rows are not 26 trials.** 8 connections, 5 captures, **2 navmeshes**; `_62994` supplies
+   **12 of 26 in a 48-second window**, and only 3 of 8 connections carry both answer kinds. A
+   within-connection permutation null gives **p = 0.0009**, not the ~1e-05 that 26 independent
+   trials implies. **5 of 26 rows are clicks 29–43 u from the origin** and 7 of 26 are under
+   400 u (all 7 verbatim), where one-leg is trivially true; and **4 of the 13 verbatim rows get
+   their verdict from `route()`'s same-trapezoid shortcut** (`pathmap.py:687`), which runs no
+   walkability test at all — the dense-512 sampler clears all 4 independently, but `route()`
+   alone could not have shown it.
+6. **Two of the 11 part-way "many-leg agreements" are rows where OUR MESH is wrong, not rows
+   where retail took a detour.** `20260807T143055/_60935 t=58.694` has origin and destination
+   in **different connected components** with both endpoints on-mesh — our mesh says
+   unreachable while retail answered the click; and `_52318 t=262.438` has **retail's own
+   granted leg not clip-clean on our mesh**, with our route 127.8× longer than retail's chain.
+   Corrected part-way column: **2 one-leg / 9 many-leg / 2 our-mesh-cannot-represent-it.**
+   Folding a refusal in as "many-leg" scores a mesh disagreement as a point for H.
+
+**The rival sweep, restated.** "No rival comes close" is **not supported**. In-sample, H
+against the best fitted straight-line-distance cut is McNemar **4-vs-1 discordant, exact
+two-sided p = 0.375** — 24/26 and 21/26 are not distinguishable on this corpus. Worse, **on
+the 14 rows outside `_62994` a distance cut separates perfectly** (8 verbatim all ≤1,325.1 u,
+6 part-way all ≥1,341.1 u, **14/14**) while H scores 12/14, both of its errors there. **The
+defensible claim is transfer, not margin:** leave-one-connection-out gives **H 24/26 vs
+distance 17/26** (McNemar 8-vs-1, **p = 0.039**), because distance needs a different cut per
+subset (≤1,325 outside `_62994`, ≤2,737 inside) while one-leg carries across unchanged.
+Other rivals, each given its best fitted threshold or a per-group majority oracle against
+H's zero-to-one: modelled-origin age 15/26, last-reported-position age 15/26, distance from
+the previous click 13/18 (8 undefined), map id 16/26 (3-group oracle), connection 19/26
+(8-group), capture 18/26 (5-group), same-trapezoid-as-origin 17/26 — and only **4 of the 13
+verbatim clicks are same-trapezoid**, so the mechanism is line-of-sight across trapezoids,
+not trapezoid identity. Two named "rivals" were **vacuous**: `clip2_frac > 0.95` is H
+restated (frac == 1.0 matches on 26/26, no row falls in the interval), and "origin/destination
+on the mesh" scores exactly the baseline because **26 of 26 rows have both endpoints on-mesh**
+— which also means the one `route()` refusal is a genuine no-path.
+
+**The informative core, and it has no power in either direction.** Restricted to rows where
+the origin model is inside its validated regime (age ≤2 s), the two classes overlap in
+distance (d ≥1,276.4 u), and our mesh is not demonstrably broken: **n = 6 (2v/4p), H agrees
+4/6 — exactly the 4/6 majority baseline.** Intermediate cuts: age ≤2 s alone, n=12, 10/12 vs
+7/12; d ≥1,276.4 u alone, n=19, **17/19 vs 13/19** with verbatim still 6/6, and there is a
+4,911 u click retail echoed verbatim against a 1,276 u click it answered part-way, so the
+result is not an artifact of trivially short clicks.
+
+**The straight-line clip is not a second instrument. REFUTED as corroboration.**
+`pathmap._sightline`'s docstring states its sample set is exactly `clip()`'s — "the same n,
+the same f = k/n" — and the bodies agree (`clip` at `:539-559`, `_sightline` at `:851-871`,
+both `n = max(1, int(dist/step))`), and `_string_pull` asks `_sightline(origin, dest)` first.
+So **`n_wp == 1` ⟺ `clip(origin, dest, step=16) == dest` is a theorem on the string-pull
+branch**, verified over 3,000 random on-mesh pairs with 0 breaks. The "26/26 agreement" is a
+**consistency check**, not a measurement, and the "identical cells at step 1/2/4/8/16/32/64"
+robustness is **a null over zero exposure**: 0 of 26 corpus lines are blocked at 0.5 u yet
+clean on the 16 u grid, only 1 of 26 contains any sub-16 u blocked run (10.0 u, and the 16 u
+grid caught it), and 0 of 500 band-matched wild lines flip. The identity is **not** general:
+for the plane-aware call the server actually makes (`authsrv.py:5139` passes `start_plane` and
+`goal_plane`; the 26 rows were computed plane-blind), on mesh 113021 with **stacked**
+destinations `route()` and `clip@16` disagree on **38 of 300 = 12.7%** (all 38 are
+`route()=None` while clip reaches). The corpus has **0 of 26 stacked destinations**, so it had
+zero exposure to the one regime where the instruments demonstrably differ — on the mesh
+supplying 15 of the 26 rows.
+
+**`modeled_origin`, validated for the first time — promote this, it is the most useful thing
+the arc produced this pass.** Three independent held-out calibrations against reports the
+function cannot see:
+
+| conditioning | p50 error | n |
+|---|---|---|
+| all ages, vs a "never moved" naive of p50 502 u | **14.0 u** (better on 505/633) | 633 |
+| age 0–0.5 s / 0.5–1 s / 1–2 s | 15.3 / 15.9 / 14.4 u | 511 / 323 / 183 |
+| age > 2 s | **250–373 u**, p90 up to 1,301 u, max 1,795 u | **52 total** |
+| age 5–10 s / ≥10 s (conditioned on model travel > 50 u) | 267.6 / **475.3 u** (max 2,972 u) | 11 / 29 |
+
+**13 of the 26 scored rows sit above 2 s**, i.e. in the regime with 52 validation samples.
+But the specific window carrying H's margin — `_62994`, 23.27 s unanchored — closes with a
+held-out error of **58.9 u against a naive 6,611 u**, so the modelled origin is the better
+choice exactly there. **A caveat, not a refutation**; and under the module's only other
+origin (`last_pos_before`) the verbatim column is 11/13 rather than 13/13, with the two
+flipping rows' candidate origins **5,700 u apart**.
+
+---
+
+### 1p.6 Retail's part-way waypoints are mesh boundary points — the ray-clip model is dead, but the direct refutation is n=1
+
+**OBSERVED.** Of the 28 grants in the 13 part-way chains, 23 are router-chosen (not the
+bit-exact click point) — and those 23 are only **19 distinct points**, because
+`(-3039.0, -6531.0)` is granted for three clicks and `(-6941.0, -10766.0)` for three more,
+all six inside connection `_62994`. **Deduplicated, on the two navmeshes we hold:**
+
+| test | count | decoy behaviour |
+|---|---|---|
+| **bit-exact trapezoid CORNER** | **13 of 19** | **0 of 19 under every decoy tried**, including (1,0) and (−1,0) |
+| exactly 0.0 from a trapezoid edge | 16 of 19 | degrades to 10/19 and 12/19 under (±1, 0) |
+| within 0.01 u of an edge | 18 of 19 | — |
+| neither | 1 of 19 | — |
+
+**Lead with the corner form**: it is decoy-proof in both axes, whereas the edge-distance
+test slides along horizontal trapezoid top/bottom edges under an x-shift. Vacuity guards
+that could have failed and did: 300 random walkable points give **0** exactly-0 hits on map
+146 (p50 29.8 u) and 0 on map 280 (p50 23.3 u); the 13 verbatim first grants (raw user click
+points) give 0 exactly-0, p50 14.2 u; 200 random walkable *integer* points give 0 of 200
+corner hits on each of maps 146, 148 and 280; the 16 verbatim first grants are 0 of 16
+integer-valued. **Concentration, stated in the sentence:** **8 of the 19 distinct points come
+from one 9-grant chain** (click 11, `_63805`, map 280), and it is the best-behaved specimen
+(8/8 exactly-0, 7/8 corners). Drop it and n=11 with 8 exactly-0 (72.7%) and 6 corners
+(54.5%). Per-mesh the direction replicates: 113021 n=7 → 6/6; 165811 n=12 → 10/7.
+
+**CORROBORATED:** `ROUTER.md` §1's "interior waypoints are integer-valued mesh vertices" is
+independently confirmed and is stronger than the doc states — **12 of 15 interior grants have
+both coordinates integer-valued and are bit-exact trapezoid corners in our decode**, and the
+3 misses are exactly the two exemptions the doc names. The doc claimed bit-exact *prop
+outline* vertices; navmesh trapezoid corners are a different structure, so this is a second
+witness, not the same one restated. *(The dedup caveat above has not been applied to this
+15; treat it as an upper bound on independence.)*
+
+**REFUTED — the origin→click ray-clip model.** But the refutation is weaker than the lane
+first stated and the corrected version is worth stating precisely, because **4 of the 6
+"killer" clicks received back, bit-exactly, the waypoint already in flight** (prev-grant ages
+5.60 / 1.86 / 1.85 / 4.04 s), and the corpus base rate for that is **69 of 216 = 31.94%** of
+consecutive player-grant pairs whose first grant is an integer router waypoint. Only
+`t=122.976` and `t=146.434` got a *new* waypoint; for the other four the router's answer to
+that click was never observed. Stripping the 5 re-issues corpus-wide leaves **8 genuine
+part-way router answers: on-ray 3 of 8, clip reproduces 2 of 8.** **The only model-light
+single-specimen refutation is `_62994 t=146.434`** — fresh origin (age 0.25 s, error scale
+~16 u), perp 157.9 u, clip residual 933.5 u, requiring 291.8 u of origin error to rescue.
+`t=122.976` needs only 240.4 u against a measured p50 dead-reckoning error of 267.6 u at its
+7.49 s origin age. And the logic "a clip's answer is a function of the ray, these rays differ
+and the answer does not move" is **invalid as stated** — non-injectivity does not refute
+functionhood; clip-then-snap-to-nearest-corner *is* a ray-function that could have been
+constant, and it was tested and failed (snaps land 109.4–960.8 u away), so the clip stays
+dead but by the perpendicular-offset arm, which is not independent of it.
+
+**The geometry, with its error bar.** Perpendicular offset of retail's first part-way
+waypoint from the origin→click ray, n=13 (9 distinct waypoints, 5 connections, 3 captures):
+min 0.0 / p25 7.3 / **p50 71.6** / p75 139.8 / max 328.3 u (modelled origin); p50 123.3 /
+max 529.1 (reported origin). **3 of 13 within 5 u is the origin-robust count**; "within 10 u"
+is 4 of 13 modelled or 3 of 13 reported. **Median |modelled − reported| origin is 600.7 u
+(max 5,192.1 u) against a median effect of 71.6 u**, and 7 of 13 rows move by >10 u between
+the two. **On the 6 rows where the answer does not depend on the origin choice, the split is
+3 on-ray / 3 off-ray.** Deduplicated to 9 distinct waypoints: p25 1.3 / p50 49.7 / p75 101.7,
+4 of 9 within 10 u. **Scale matters and was missing:** median perp is **2.02% of the ray
+length** and **2.44 deg of bearing**; 12 of 13 are within 5.3% and 8.7 deg. Against a
+random-walkable null at the same along-fraction band, retail's waypoint sits at the **1.0th
+percentile** at the median and 13 of 13 at or below the 10th. **"Off the ray" is true relative
+to the clip model's prediction of exactly zero, never relative to the mesh.**
+
+The stated control — "the 16 verbatim clicks give |perp| = 0.0, so the measure is calibrated"
+— **cannot fail and must be deleted**: all 16 verbatim first grants are bit-exact equal to the
+click point, which is the ray's own endpoint, so their perp is 0 for *any* origin (verified by
+substituting (0,0), (1e6, −1e6) and (−33333, 77777): max |perp| = 0.0 in all three).
+
+**Where retail's waypoint *is* on the ray, our clip reproduces it — 3 of 13, from three
+different connections**, residuals 1.1 / 1.5 / 16.5 u at step 2.0, along-fractions 0.950 vs
+0.950, 0.064 vs 0.065, 0.420 vs 0.432. **On-ray is necessary but not sufficient:** two more
+on-ray rows have `clip_along = 1.000` against retail stops 922.3 u and 726.4 u short.
+
+**The two exceptions to H, named:**
+
+* **`_63805 t=1233.471`, map 280 — RECONSTRUCTION, explained.** Retail's grant is collinear
+  with our line (1.3 u lateral, 59.6% along): a truncation, not a detour. Our line's ring
+  clearance drops to ≤24 u at exactly **2 of 133 interior samples**, at f = 0.592 and 0.599 —
+  and retail's grant sits at f = 0.596, between them. Our zero-width clip walks a ~24 u gap a
+  solver moving a body would refuse.
+* **`_61106 t=67.787`, map 280 — NOT FOUND, unexplained, n=1.** Retail's first grant is
+  **101.7 u laterally off our straight line at 51.7% along** — a real detour — over a corridor
+  our mesh reports at the probe's **full 96 u ring clearance for its whole interior** (n=86
+  samples). Our mesh has nothing there to route around, and the chain ran to a bit-exact
+  terminal over 3 grants, so this is retail's considered answer, not an interruption.
+  Candidates, none tested: an obstacle absent from our pathing decode on map 280, a dynamic
+  agent, or a solver emitting from a coarser graph than the one it validates against.
+
+**REFUTED by the lane against its own hypothesis:** a radius-aware corridor gate does **not**
+improve the discriminator, despite explaining exception 1's location. Swept r = 0, 8, 12, 16,
+24, 32, 48 u with and without a 64 u endpoint trim: nothing beats 24/26. r = 8–24 blocks a
+click retail answered **verbatim** (`_64103 t=268.097`, d = 384.5 u, interior clearance 16 u)
+while still passing both exceptions — strictly worse at 23/26; r = 32/48 fixes exception 1 and
+still blocks that same verbatim click, a one-for-one trade. **Zero radius stays the best gate
+on this corpus.**
+
+---
+
+### 1p.7 Retail's grant density to the player, and what the gap actually is
+
+**OBSERVED.** Retail grants the player's **own** agent at pooled **3.19 per 1,000 u of granted
+path** (29 rows: min 2.17, p10 2.39, p50 3.22, p90 4.08, max 4.31). Our shipped **1.40**
+(§1i.4: 51 grants chaining to 36,387 u) is **below even the player-specific floor**. The
+hypothesis that retail barely grants the player either — which would have aimed this whole arc
+at the wrong mechanism — is **REFUTED**.
+
+**The warrant is filter-independence, not a reproduction.** The published claim that
+`min_n >= 18` "reproduces the committed 118-agent figure exactly, so the comparison is
+like-for-like by construction" is **REFUTED and must not be repeated**: `min_n` is a free
+parameter fitted to one target on a flat surface (`max = 21.79` holds for 34 of 38 swept
+values), **no integer `min_n` yields 118** (17→128, 18→121, 19→120, 20→116), the stated excuse
+"the corpus grew" is false (the committing commit is 2026-08-27; the newest live capture is
+**2026-08-24**), the reported p10 2.48 is a **miss** against the committed 2.47, and the
+original committed row's "**3.1 M u of path**" exceeds the entire corpus's unfiltered ceiling
+of **2,940,424 u**. §1i.4's construction is not recoverable from its prose. **The conclusion
+does not need it:** the player minimum is **2.169 at every cut including no cut at all**, and
+**0 of 54 unfiltered player rows sit at or below 1.40.**
+
+**Scope and error bars, both of which the headline lacked.** The 29 rows come from **13
+sessions, 11 maps, 3 client-build eras, 1 account**; one session supplies 43.3% of the pooled
+grants and one map 53.7% of the pooled path. Per-era pooled is **2.77 / 3.37 / 2.74** with 19
+of 29 rows in the middle era, so **the honest cross-era figure is ~2.7–3.4, not a point 3.19**.
+And **our 1.40 is n=1 with no error bar** — Poisson on 51 counts alone is ±14%, so even +3σ
+≈ 2.0, still below the 2.17 floor and below the lowest-era pooled 2.74, but the asymmetry
+belongs in the sentence.
+
+**The legible form, because "per 1,000 u of granted path" is self-referential:** the rate is
+identically `1000 / (mean distance between consecutive grant destinations)`. **Retail's mean
+player grant step is ~313 u. Ours is ~714 u.**
+
+**The stronger, matched result the pooled comparison misses:** in the 12 connections carrying a
+player row plus ≥3 NPC rows, the player is granted **less** densely than its own connection's
+NPC median in **11 of 12** (sign test p = 3.2e-03) and less densely than **every** NPC in its
+instance in 8 of 12. Player cross-connection log-rate sd is 0.197 against an NPC
+*within*-connection log sd of 0.497 — the player's cadence looks regulated; the NPCs' does not.
+
+**Selection audit, passed:** all 7 excluded connections (5 with no `0x0022`, 2 with zero player
+grants) show **zero** c2s player movement of every kind — 0 heading, 0 click, 0 interact, 0
+rotate, 1 stop in total. **There is no connection in the corpus where the player walked and was
+not granted.** And `min_n >= 18` is conservative, not favourable: the 25 rows it drops have min
+2.87 and p50 4.22.
+
+**So the gap is cadence and latency on the heading arm, not a missing message type.** 92.6% of
+retail's player grants answer a `0x003D` heading report at a **36 ms median**, and 88.0% of
+them (3,230 of 3,672) land inside a keyboard walk at 1.895 grants/s over 1,704.8 s of
+report-covered exposure, on 42 of 42 connections with ≥5 s of exposure. **We already send
+`0x0029`.** *(The lane's first exposure construction required heading walks to close and
+censored 34 of 56 connections while they still carried grants — deleting 1,070.4 s and 845
+grants, 23% of the numerator, i.e. exactly the long walks. Three constructions are reported;
+the conclusion holds on all three.)*
+
+**REFUTED — a correction to the record that reaches outside this arc.** **s2c `op409` (`0x0199`)
+field 1 is the PLAYER NUMBER, not the player's agent id.** Three independent witnesses of the
+controlled agent — `op34` (`0x0022`) f1, `op89 PLAYER_CREATE` f2, and `routerbench.player_agent`'s
+`op61` heading vote — agree 56/56, 53/53 and 53/53 with each other, while `op409` f1 agrees with
+each on **0 of 56 / 0 of 56 / 0 of 53**. Positive evidence with its vacuity guard: `op409` f1
+keys exactly one `PLAYER_CREATE` row on 56 of 57 connections, against 15.4% for a random agent
+id from the same connection. This corroborates `studies/divergence/FINDINGS.md` D7 (n=4) at
+**n=56 connections / 35 distinct (map, agent) instances**. Two independent adversarial passes
+confirmed it, one using the **bit-exact click echo** — a witness with no free parameter — which
+names `op34` f1 on 10 of 10 and `op409` f1 on 0 of 10. `routerbench.player_agent()` itself is
+correct; its module docstring's gloss of `[409, 1, 146, ...]` is not, and the R1 brief inherited
+the error.
+
+---
+
+### 1p.8 What this changes about §1o, and what it does not
+
+**§1o's conclusion SURVIVES, and it is now corroborated from ArenaNet's side rather than
+inferred from ours.**
+
+§1o.4 said: *"The residual is mesh AGREEMENT, not mesh correctness … the only grant the client
+cannot disagree with is the destination it chose itself."* Retail's own behaviour is that
+statement from the other end: **retail's part-way answers are bit-exact points on ArenaNet's
+navmesh** — 13 of 19 distinct router-chosen grants are bit-exact trapezoid corners in our decode
+of the same archive, 18 of 19 within 0.01 u of an edge. Retail grants exactly the points the
+client's own solver already agrees with, because it *is* the client's mesh. **Our route's first
+waypoint is never one of them: 0 of 11 routable part-way rows, missing by 290.4–2,351.3 u** —
+while retail's own granted legs are clip-clean on our mesh for 12 of 13. That is §1o.2's "our
+route is not the CLIENT'S route" measured, not argued.
+
+**REFRAMED, and this is the sentence that should carry forward: the echo's win is that it is
+the subset of retail's contract we can reproduce bit-exactly.** Retail echoes the click point
+on **19 of 32 clicks (16 of 29 attributed)**, the majority class. On **13 of 13** scorable
+verbatim clicks our own mesh independently says one leg suffices, so on that class the echo is
+retail's answer and we match **bit-for-bit, 13 of 13**. On the other class we match **0 of 11**,
+and no policy this arc has built reproduces it at all. `--click-echo` is not a heuristic that
+happened to win; it is retail's answer for the majority class, adopted for the right reason.
+
+**§1o.3's repeated-first-leg pathology is now explained offline, and it is NOT generic to
+recomputation.** Replaying the router arm's own 8 logged `(origin, dest)` pairs from
+`authsrv-20260827T231722-c1.jsonl` through both policies on identical inputs: the router produced
+**4 distinct points, max repeat 4, and 1 pointing away from the click (cos = −0.906)**; the
+clip-gated echo produced **8 distinct points, max repeat 1, 0 backwards (all cos = +1.000)**. The
+mechanism is that A*'s answer space is the mesh's discrete corner set, so many origins in one
+region map to one corner, while `clip()`'s answer space is the continuous ray and is monotone
+toward the click, guarded by `moved > COLLISION_STEP` (`authsrv.py:5189-5191`). **RECONSTRUCTION
+limit:** under the clip policy the origins would themselves differ, and **1 of the 8 clip answers
+moves 0.0 u** and would be a refusal, not a grant.
+
+**What this does NOT settle.** §1o's "NOT DETERMINED: whether anything short of matching
+ArenaNet's own navmesh closes the remaining gap" is **still NOT DETERMINED, and R1 could never
+have settled it** — retail's chains come off the client's own mesh by construction, so measuring
+them bounds nothing about ours. What R1 *did* produce toward it is three named coordinates where
+our decode disagrees with what ArenaNet's server actually did (§1p.10 item 7), which is a
+cheaper entry to R4 than a fresh differential.
+
+**And the case for building a one-leg gate is NOT made.** Measured over the same 26 rows:
+
+| policy compared to retail | unconditional echo | one-leg-gated |
+|---|---|---|
+| grant **bit-exactly equal** to retail's first grant | 13 / 26 | **13 / 26 — the gate buys nothing** |
+| emits the same **kind** of answer retail emitted | 13 / 26 | 24 / 26 |
+| emits a grant whose straight line **leaves our mesh** | 11 / 26 | 0 / 26 (+1 where `route()` refuses) |
+
+The gate's only measured win is the third row — and **both available else-branches are
+already-measured-worse arms**: routing is `--router` (2,127 u largest displacement) and refusing
+is the shipped default (5,970 u), against the echo alone's 446 u. A gate whose false branch is a
+refuted policy is not an improvement; it is a refuted policy with extra steps.
+
+---
+
+### 1p.9 The lanes and sub-lanes that came back underpowered or vacuous — printed as results
+
+A lane that could not measure its question is a result. Six of them:
+
+1. **"Zero position reports in a click-walk"** — the instrument's maximum possible reading was 0
+   (§1p.4). Two lanes, independently, same defect. Exposure 70.07 s and 70.34 s, both vacuous;
+   the honest windows are 77.44 s (7 rows) and 82.22 s (25 rows).
+2. **"Identical clip verdicts at step 1/2/4/8/16/32/64"** — a null over **zero exposure**. 0 of
+   26 corpus lines are blocked at 0.5 u yet clean on the 16 u grid; 0 of 500 band-matched wild
+   lines flip. It could not have come out any other way.
+3. **"The straight-line clip is an independent second instrument"** — 26/26 agreement is a
+   theorem on the string-pull branch, and the divergence class fires 0/300 per mesh in the
+   corpus's own regime. Two instruments agreeing here is **one instrument counted twice** — the
+   same defect this repo names for OpenTyria and `schema/messages.json`.
+4. **The perp control (16 verbatim clicks at |perp| = 0.0)** — cannot fail; verified by
+   substituting three absurd origins.
+5. **"On-mesh origin / destination discriminates"** — vacuous: 26 of 26 rows have both endpoints
+   on the mesh, so the test never varies.
+6. **The informative core of H** — n=6 (2v/4p), H 4/6, majority baseline 4/6. **The headline
+   separation is not established there in either direction.** That is the honest statement of how
+   much of the 24/26 is carried by rows with a fresh origin, overlapping distance and a sound mesh.
+
+Also underpowered rather than negative: **the cadence clause** (5 multi-grant chains corpus-wide,
+7 of 10 origin-free legs from one specimen, 1 contested counterexample); **the re-click question**
+(all 5 re-click specimens are also long-range, 922–4,243 u, so re-click and distance are perfectly
+confounded and only new capture separates them); and **`0x002A` field 5**, which is
+in-agent-universe on 0.772 of 464 rows and is an uncatalogued **second agent id** on an opcode that
+addresses the player 215 of 464 times.
+
+**And a documentary correction that a cold reader will otherwise trip on:** `authsrv.py:5105-5107`
+and `ROUTER.md` §4 rule 1 both cite `REALFIX` §0.15 for a claim §0.15 does not make. §0.15 says
+"**keyboard-occupied — the older click DROPPED OUTRIGHT**", which is about the older click of a
+rapid *pair*. §0.14's V-RETAIL-2 says the opposite for single mid-keyboard clicks: of 7, only the
+two SHORT ones (72/149 u) were echoed verbatim immediately and **all four distant ones (1,387–6,919 u)
+got PART-WAY points**. The shipped comment generalises the pair rule into a single-click rule.
+
+---
+
+### 1p.10 What this makes worth doing next, ranked
+
+Every candidate in this arc that asserted **more** about where the player should go did worse
+(`--client-endpoint`, `--router`, K3). The first two items below assert **less** — they each delete
+a refusal — which is why they rank above anything that adds a policy.
+
+**1. Stop dropping clicks under keyboard authority. — DESK, one flag.**
+**7 of 32 live clicks (21.9%)** arrive with the latch our Rule 1 arms on (an `op61` with
+`movementType != 0` within `GRANT_LOCAL_WINDOW = 3.0 s`, no intervening `0x0047`) and **retail
+answered every one within one RTT**, with answers **635–2,445 u from any D1 lead prediction**, so
+they are click answers and not lead refreshes. 14 of 32 were within the window; 6 dropped because a
+`0x0047` had cleared the latch; 1 dropped as ambiguous (answer 34.7 u from the D1 prediction); 7
+survive both confounds. *Vacuity note: the `movementType != 0` filter passes every `op61` in the
+corpus — distribution `{1:2033, 3:494, 2:373, 8:49, 4:51, 7:42, 5:19, 6:18}`, no zeros — so the
+discriminating work is done by the two confound checks, not the predicate. It is nonetheless the
+server's own predicate (`moving = values[4]`, `authsrv.py:15426`), which is what makes the
+comparison legitimate.*
+**Predicted failure mode:** a click answered under a live keyboard authority races the lead
+refreshes and the client briefly sees two authorities — §0.15's *actual* contract (drop the
+**older** click of a rapid pair) is the guard that must stay, and removing that too would be the
+"assert more" error in reverse.
+**Refuted by:** a run reporting warps on single clicks that arrive mid-key, or larger displacements
+on the answered mid-keyboard clicks than the current build's dropped ones show.
+
+**2. Delete the 1.0 s freshness gate on the echo path. — DESK, one line.**
+Retail answered **22 of 32** clicks with a report older than 1.0 s, **13 of 32** older than 10 s
+(max 20.99 s), and **5 of 32** with no client position ever reported, all within 0.065 s.
+`authsrv.py:16583`'s `fresh = … <= 1.0` models a precondition retail does not have. The decisive
+point is structural: **a bit-exact echo of the click point needs no origin at all**, which is
+exactly why the echo is the arm that can be ungated by freshness.
+**Predicted failure mode:** none for the echo, which asserts nothing about the origin — but the gate
+is genuinely load-bearing for any origin-dependent path, because `modeled_origin`'s held-out error
+is p50 ~15 u below 2 s and **250–475 u above it on only 52 samples**. Ungate the echo, keep the gate
+on everything that computes.
+**Refuted by:** an echo-only run where displacements *rise* once the geo-stale refusals stop — i.e.
+the refusals were suppressing a harm rather than causing one.
+
+**3. Do NOT build the one-leg gate yet. — DESK, already measured; this item is a decision, not work.**
+It buys **0** additional bit-exact matches (13/26 either way), and its only win is stopping a grant
+whose straight line leaves our mesh in **11 of 26** cases — into an else-branch that is either
+`--router` (2,127 u) or refusal (5,970 u). Its discriminator is also weaker than 24/26 reads: the
+correct null is **17.5/26**, the informative core is **n=6 at 4/6 = baseline**, and on the 14 rows
+outside one connection a fitted distance cut beats it **14/14 to 12/14**. It also needs the 288 u/s
+dead-reckoned origin on 13 of 26 rows.
+**What would make it worth building:** a third else-branch that asserts nothing — echo anyway and
+let the client's own solver route — measured against the echo alone; or n raised past 26 by item 4.
+
+**4. Add content rows with `file_id` for maps 242, 248 and 310. — DESK.**
+It moves **3 known-verbatim clicks** into the scorable matrix (the current 13v/13p balance was
+manufactured by their exclusion, which removed 3 verbatim and 0 part-way), and lifts the corpus from
+**2 navmeshes to up to 5** — the single largest scope limit on everything in §1p. It is a check that
+**can fail**: all 3 are verbatim, so a many-leg verdict on any of them is H's first false negative.
+**Refuted by:** those maps having no pathing file, which is the only way it returns nothing.
+
+**5. Census `0x0025 AGENT_MOVE_DIRECTION` against `0x0029` on the existing cache. — DESK, cheap.**
+**2,595 of 4,473 `0x0025` rows (58.0%) address the player** — the highest player share of any
+movement opcode, above `0x0029`'s 33.7% — and `studies/movement/FINDINGS.md` already records that our
+server sends `0x0025` at 32.2/min (4.7× our grant rate) and that including it made a residual 11×
+worse. **Nobody has computed retail's `0x0025`:`0x0029` pairing per report.**
+**Predicted failure mode of acting on it:** sending more `0x0025` is an "assert more" move and the
+prior on it is bad; the census is worth doing precisely to find out whether the pairing is a *rate*
+we are getting wrong or a *primitive* we are misusing.
+**Refuted by:** the two not being paired per report, in which case `0x0025` is not part of the click
+contract and the residual lives elsewhere.
+
+**6. Settle the report-during-click-walk question with a window that CAN return non-zero. — DESK
+first; ONE RUN only if the desk answer stays contested.**
+Re-run the exposure census with a command-only terminator, a pre-registered exposure floor, and the
+odometer null (1.96 sends per 1,000 u, not 5.997); score the 3–4 surviving windows against a
+discriminator that actually separates. **What is NOT a discriminator:** the `|lead|` magnitude test
+(100.0% of 3,079 `op61` carry `|lead|` in [765.02, 768.00]) and the answer-along-heading test (corpus
+base rate 92.9% within 5 deg, so 7 of 7 is p ≈ 0.59). A candidate that could work: `0x003D` field 5
+`movementType`, which takes values 1–8 and is undecoded here. Also fix `REALFIX` §0.18,
+`routerbench.py:180-182` and the comment at `authsrv.py:5044`, all of which state the silence as
+absolute.
+**Refuted by:** finding a `movementType` value that partitions the click-outstanding regime cleanly,
+which would settle it at a desk; failing that, the question is worth one targeted capture of 3–5
+minutes of pure click-walking, which would raise K from 27 to hundreds.
+
+**7. Characterise the three named mesh-disagreement specimens. — DESK to characterise, LONG ROAD to fix.**
+`_60935 t=58.694` (origin and destination in **different connected components** on our mesh, both
+endpoints on-mesh, retail answered the click), `_52318 t=262.438` (retail's own granted leg **not
+clip-clean** on our mesh, our route 127.8× longer), and `_61106 t=67.787` (retail detoured **101.7 u**
+over a corridor our mesh calls fully clear at 96 u for its whole interior). These are three named
+coordinates on two maps where our decode of ArenaNet's own pathing chunk disagrees with what
+ArenaNet's server actually did — R4's cheapest entry, and much cheaper than a fresh differential.
+**Refuted by:** a decode bug in `pathmap` for those regions, which is the first thing to look for and
+far cheaper than concluding the mesh is wrong.
+
+**Two loose ends worth recording rather than ranking.** (a) The 3 clicks on
+`20260817T183323/_49545` are invisible to every committed instrument because
+`routerbench.player_agent()`'s `op61` heading vote returns an empty `Counter` there — but **s2c
+`op32` field 5 (spawn position) agrees with the connection's first `op61` on 51 of 53 attributable
+connections** and would have let the exposure census score all 32 clicks instead of dropping 5. A
+click-echo attribution fallback also works, but **must never be applied to `ours` captures**: a
+verbatim echo is precisely what the arm under test produces. (b) The two `0x002C` rows on `_52294`
+share a timestamp (`t=363.324`, points 68.6 u apart, both ~5,300 u from the same stale report). Two
+repositions of one agent in one frame is either a decode artifact or a real double-write, and n=1
+cannot say which — worth one look at the raw frame before anyone cites it.
+
+---
+
+### 1p.11 OUR OWN K2 RUN, re-scored against that contract — the echo's grants are almost never walkable, and the log says they all were
+
+**OBSERVED, 2026-08-28**, at a desk, from artifacts that already existed: the K2 arm's
+server log (`vault/captures/gamesrv/authsrv-20260827T230405-c1.jsonl`, 2,784 rows) and its
+matching client-side capture (`vault/research/movecode/k2/movehook.bin`, 1,058 records,
+both controls FIRED). No run. Script kept at `scratchpad/replay_syncgate.py` in the
+session that produced it; the numbers below are what matter and are reproducible from the
+two artifacts named.
+
+Sections §1n–§1o scored K2 on **displacement**, which is the right headline and is blind
+to the no-clip by construction (§1n.2). This scores the other quantity: **were the lines
+we granted walkable at all?**
+
+The sync model is seeded at the map-280 spawn `(−6036, −2519)` — `authsrv.py:14475`, the
+one instant the two copies are known to be in the same place because we put them there —
+then advanced by each grant decoded from its own `sent` row's wire bytes, and clipped with
+`pathmap.clip(step=COLLISION_STEP=16.0)` on file `0x287B3`.
+
+| # | t | sync origin | clicked dest | straight | clip falls short |
+|---|---|---|---|---|---|
+| 1 | 10.99 | (−6036, −2519) | (−3407, −1865) | 2,709 | **1,347** |
+| 2 | 22.35 | (−3407, −1865) | (−2298, 2199) | 4,213 | **449** |
+| 3 | 40.60 | (−2298, 2199) | (−3928, −360) | 3,034 | **3,034** (no progress) |
+| 4 | 53.78 | (−3928, −360) | (−6060, −403) | 2,132 | 0 — clear |
+| 5 | 62.06 | (−5433, 21) | (−9026, 4465) | 5,714 | **4,322** |
+| 6 | 72.28 | (−6708, 2127) | (−3209, 6793) | 5,832 | **3,749** |
+| 7 | 87.28 | (−5491, 4411) | (−5709, 7063) | 2,661 | **2,261** |
+| 8 | 89.88 | (−5553, 5157) | (−5686, 7808) | 2,654 | **2,380** |
+
+**1 of 8 clear, 7 of 8 blocked**, median shortfall ~2,300 u. The no-clip is not an
+occasional artifact of the echo; on this run it is what the echo did almost every time.
+
+**Controls, because a sync model that silently fails closed reads exactly like a clean
+result.** Seed returns at t=0; **13 of 13** legs park within 0.5 u of their granted point
+once their travel time has elapsed; mesh selection scores map 280 at coverage **1.00**
+over the 18 client-reported positions against a runner-up of 0.78 (and 146/148 at 0.33
+each, so the known shared-pathing-file tie is nowhere near the top); **16 of 18** granted
+points place on the mesh. *A first draft of this replay omitted the spawn seed, so
+`_sync_position` returned `None` for all 8 clicks and the script confidently reported the
+opposite conclusion. The controls above exist because of that.*
+
+**AND THE LOG CALLS ALL EIGHT "clear line".** `authsrv.py:16910` builds the click answer's
+label as
+
+```python
+f"AGENT_MOVE_TO_POINT({dest[0]:.0f},{dest[1]:.0f}"
+f" on plane {cur_plane}->{dest_plane}, clear line)"
+```
+
+— `clear line` is a **string literal**. Nothing computes it. It rides the click-answer send
+path, which under `CLICK_ECHO` is reached exactly when `not fresh`, i.e. exactly when the
+geometry check above it (`if fresh and placed: … pm_c.clip(...)`, `authsrv.py:16635`) has
+been **skipped**. So the label asserts a property in the one state where the property was
+never evaluated, and 7 of the 8 it asserted it for were false. This is "a check that
+cannot fail is not a check" one layer out: a **label** that cannot be false, sitting in the
+artifact a later session audits. It should be computed, or it should say
+`geometry not evaluated`.
+
+**A verbatim echo can also park the authoritative copy OFF the mesh, and it cascades.**
+Click 2's destination `(−2298, 2199)` is not contained by any trapezoid in our decode; the
+echo granted it anyway; it then became click 3's origin, and click 3's clip therefore made
+**zero progress** (3,034 of 3,034 u). Independently witnessed by the client itself:
+`pathdiff` replays the 9 `MapFindPath` queries `movehook` captured in this same run and
+returns **OFF-MESH on 3 of 9**, two of which are that very point as goal and then as start.
+The client asked those queries routinely while the operator walked, so this is our decode
+failing where ArenaNet's succeeded — MOVECODE-Q2, on named coordinates.
+
+**What this does and does not license.** "Blocked" here means *our* mesh says blocked, and
+our clip agrees with the client's on ~35.7% of stops on this map (`ROUTER.md` §3). So this
+is a statement about our decode as much as about the world — but it is the **same mesh any
+gate would use**, which makes it the right mesh for costing a gate and the wrong one for
+claiming the client no-clipped. The operator's report (§1n.2) is the independent witness
+that it did.
+
+### 1p.12 A gate on this was built at a desk, measured, and REFUTED — by its own numbers and by the graveyard
+
+**REFUTED.** The obvious move from §1p.11 is to gate the echo on a clip test taken from
+`_sync_position()` — the ray the sync copy will actually walk — instead of skipping
+geometry because the player's position is stale. It is **not** the withdrawn MOVECODE-K3
+(route from `_sync_position`): it asserts no corridor and invents no waypoint, it only
+decides whether to answer.
+
+Pre-registered before running: 2–5 of 8 refused would be a real trade; 0 means inert (K1's
+death), 8 means a full revert to the shipped refusal and its 5,970 u spawn warp.
+
+**Measured: 7 of 8 refused** — outside the band, at the revert end. It would have fed the
+sync copy on one click in eight, which is §1i's starvation returning.
+
+And the graveyard already held it. `--heading-grant` (`authsrv.py:1200`, candidate #4)
+**granted a clipped point**, and the clip is one of the two reasons its epitaph gives:
+
+> *"it sent `clip_to_walkable(...)`, a point shortened by OUR navmesh where the client's
+> own collision disagrees"* … *"the clip is dropped because the client collides for itself
+> and does it better than our navmesh does."*
+
+The variant here avoids heading-grant's *other* failure (it clips the click's own ray from
+an exact model rather than an invented heading ray from `state["pos"]`), but commits that
+one squarely, and §1p.6 independently kills the shape from retail's side: retail's part-way
+waypoints are **bit-exact navmesh trapezoid corners**, not points on the player's ray, so a
+clip stop is not the thing retail sends either.
+
+**Three roads to the same wall, which is the finding.** §1p.8's table shows the one-leg
+gate buys 0 additional bit-exact matches; this shows the clip gate degenerates to refusal
+7 of 8; and the graveyard shows a clipped grant already lost once. Every server-side lever
+that consults our navmesh is capped by how well it agrees with ArenaNet's, and
+**`--click-echo` wins because it is the only one that never consults it.** That is §1o's
+"the residual is mesh AGREEMENT" arrived at from a fourth direction.
+
+### 1p.13 Incidental — HANDOFF §4's R2 is cheaper than it says, and one thing I got wrong
+
+**OBSERVED.** `HANDOFF-WARP.md` §4 R2 prices "which gate fires?" at *"one content row +
+one run"* and says only gate 1 has ever been confirmed. **Gate 2 needs neither.**
+`movehook` already taps `MapFindPath`, and snaptest's gate-2 call is
+`00605802  call 0x709e90` — so a captured query whose **return address** is `0x00605807`
+is that call site having executed. Censused across all 9 movehook captures:
+
+| capture | records | MapFindPath | gate 2 (`0x00605807`) | planner (`0x0081AF56`) |
+|---|---|---|---|---|
+| `k1-treatment/` | 966 | 11 | **3** | 8 |
+| `k2-2/` | 503 | 13 | **2** | 11 |
+| `k2/` | 1,058 | 9 | **1** | 8 |
+| `run3-…-isle/` | 3,417 | 7 | **2** | 5 |
+| `run5-…-v5/` | 3,246 | 20 | **1** | 19 |
+| `run2-…`, `run4-…-snap` | 198 / 491 | 8 / 5 | 0 | 8 / 5 |
+| `run-…-ascalon` | 2,062 | — | pre-B3, no site | — |
+
+**9 gate-2 executions across 5 distinct captures**, of 73 queries. *(The raw sweep said 12
+across 6: `vault/research/movecode/movehook.bin` and `k1-treatment/movehook.bin` are the
+same file, identical MD5 `18a65c1d…`. **That top-level path is `readhook.py`'s DEFAULT
+target**, so `python readhook.py` with no `--bin` silently reports on the K1 arm's
+capture.)*
+
+Flow reaches `0x00605802` only after gate 1 has passed, so **each execution is a witness to
+a gate-1 pass**. This is *not* the same quantity as `PLAN.md`'s starred *"Gate 2 has n = 0
+observed firings"* (line 4942), which counts which gate **decided** the 24 measured snaps
+and is not contradicted here — but that line is dated **2026-08-20** and four of the five
+captures holding these executions were taken on **2026-08-27**. R2's real remaining cost is
+one content row for **gate 3** (`0x005FEF70`) alone.
+
+**AND A MISTAKE, recorded because the method is the point.** Reading the tail of
+`0x006055E0` I concluded the three gates were an AND rather than "any one of which snaps",
+and was about to correct `PLAN.md` §3's R3 row. A skeptic tasked with refuting me did:
+**the polarity is inverted — `1 = NO SNAP, 0 = SNAP`**, established from the sole caller
+(`0x00606021 test eax,eax / jne 0x606110`, which returns doing nothing on nonzero and
+otherwise falls through to the roster reseed at `0x006060E2 call 0x6022B0`). The three-way
+AND on the *accept* path is exactly "any one gate snaps" on the *failure* path. The
+mechanics I read were right and the meaning was the opposite; I had taken our own invented
+name `snaptest` as evidence of direction. **The whole function was also already decoded
+correctly on `main`** — [studies/movement/FINDINGS.md](../movement/FINDINGS.md) §3117–3143,
+same pseudocode, same `edi` sweep, same caller-derived polarity, reproduced there by two
+skeptics. I spent an agent rediscovering it because I disassembled before grepping
+`studies/movement/`. Both documents stand unchanged.
+
+---
+
 ## 2. Corrections to the record
 
 Each of these was in circulation and each is now measured against the bytes.
