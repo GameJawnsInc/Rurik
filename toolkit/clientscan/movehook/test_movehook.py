@@ -69,11 +69,19 @@ import checks                                                   # noqa: E402
 #   §11  4   the reader's layout vs rec_t IN THE C   process-free
 #   §12  6   the world-copy census, both directions  process-free
 #   §13  5   the displacement count, both directions process-free
-#   ----    process-free core = 46, and THAT is the floor.
+#   §14 25   the 2026-08-28 sites and the v6 fields  16 pf + 9 need the client
+#   ----    process-free core = 62, and THAT is the floor.
 #
 # §12 and §13 both read `gensites.rows()`, which goes to `content.load()` and never
 # opens the client, so their eleven are process-free and the core moved with them.
-# A whole green run on this machine is now 81.
+# A whole green run on this machine is now 108.
+#
+# §14 SPLITS, and the split was counted out of the banner rather than reasoned
+# about: 25 checks, of which the 8 non-entry refusals and their 1 control call
+# `gensites.verify()` and therefore need the vaulted image, while the row
+# assertions and the whole v6 round-trip go through `content.load()` and a
+# synthesised capture and never open it. 25 - 9 = 16 process-free, so the core
+# moves 46 -> 62. A bare machine must still clear 62.
 #
 # The first draft of this comment guessed 16 by adding up what the sections
 # looked like they contained, and it was two low -- which would have let two
@@ -82,7 +90,7 @@ import checks                                                   # noqa: E402
 # arithmetic being hard; it is that a floor derived from the code rather than
 # from the output drifts the moment either changes. `skip()` lowers the floor by
 # ZERO, so a bare machine must still clear 46.
-LEDGER = checks.Ledger("movehook", floor=46)
+LEDGER = checks.Ledger("movehook", floor=62)
 check = checks.adopt(LEDGER)
 
 WOW64_CMD = r"C:\Windows\SysWOW64\cmd.exe"
@@ -791,6 +799,152 @@ def section_13(tmp):
           "two reads of a parked agent differ in the low bits")
 
 
+def section_14(tmp):
+    """The 2026-08-28 sites and the v6 fields -- and the refusal that shaped them.
+
+    FINDINGS 1s.9 asked for four hook sites and named five addresses. FOUR OF THE
+    FIVE ARE NOT FUNCTION ENTRIES -- 0x00606009 is a `je`, 0x00605634 a `cmp`,
+    0x00605683 a `pop esi`, and 0x005FCAA0 a `call` (the ResyncAllAsync THUNK, not
+    its body) -- so `gensites` would have refused all four at generation time under
+    PLAN.md 7 Q12(d), which requires one emulation shape.
+
+    So the FIRST thing this section does is prove that refusal FIRES, using the
+    real address the record proposed rather than an invented one. 2 checks every
+    site's byte IS 0x55; that is the positive side and it cannot show the gate
+    works. A gate nothing has ever tripped is a gate nobody has tested.
+
+    What replaced those three refused addresses is not a relaxed rule -- it is that
+    each wanted a VALUE the existing entry hooks already reach:
+
+      the facing-9 early-out  both operands sit on snaptest's arg2, which the
+                              snaptest row ALREADY dereferences, and one of them
+                              (m_timeStopMovement) was already captured. One new
+                              offset finished it.
+      the AgTrack fence       the operand of agtrack's own branch, computable at
+                              its entry from ecx and arg1.
+      ResyncAllAsync          0x00605E40, the body the thunk jumps to.
+    """
+    import readhook as rh
+    try:
+        import gensites
+        rows, offs = gensites.rows()
+        names = sorted(rows)
+    except Exception as ex:
+        LEDGER.skip("14. the 2026-08-28 sites", f"cannot read the rows: {ex}")
+        return
+
+    for need in ("resync", "stepclear", "agtrack", "snaptest"):
+        eq(need in names, True, f"14. the `{need}` row is present")
+
+    # The two offsets the early-out and the world census need.
+    eq(offs.get("facing", {}).get("offset"), 0xC4,
+       "14. `facing` is +0xC4 -- snaptest reads it at 0x0060563A")
+    eq(offs.get("world", {}).get("offset"), 0x24,
+       "14. `world` is +0x24 -- agtrack reads it at 0x00605FD1")
+
+    # agtrack must now deref arg1 as an agent AND declare the fence, or the run
+    # answers neither of the two questions it was re-armed for.
+    eq(rows["agtrack"].get("deref_agent_arg"), 1,
+       "14. agtrack dereferences arg1 as an agent (id at +0x10, world at +0x24)")
+    eq(bool(rows["agtrack"].get("deref_fence")), True,
+       "14. and declares the fence read")
+    eq(bool(rows["snaptest"].get("deref_fence")), False,
+       "14. while a row that does NOT declare it stays off -- the flag is per row")
+
+    # THE REFUSAL, on the real proposed addresses. Each is a genuine mid-function
+    # byte in the pinned image, so this is the case that actually arose.
+    # The real first byte at each address, re-read from the pinned image and
+    # quoted here so the refusal is exercised on the actual case, not a fiction.
+    PROPOSED = ((0x00606009, 0x0F, "the AgTrack fence branch, a `je`"),
+                (0x00605634, 0x83, "the facing-9 compare, a `cmp`"),
+                (0x00605683, 0x5E, "the facing-9 return tail, a `pop esi`"),
+                (0x005FCAA0, 0xE8, "the ResyncAllAsync THUNK, a `call`"))
+    try:
+        # CONTROL FIRST: the row these are cloned from must be ACCEPTED, or every
+        # refusal below is about the cloning rather than about the address.
+        ctl_bad, _p = gensites.verify({"resync": dict(rows["resync"])})
+    except Exception as ex:
+        LEDGER.skip("14. the non-entry refusal", f"{NO_CLIENT}: {ex}")
+    else:
+        eq(ctl_bad, [],
+           "14. CONTROL: the row these are cloned from is ACCEPTED at its real "
+           "address")
+        for va, real, why in PROPOSED:
+            # (a) the row as anyone would first write it -- address changed,
+            #     first_byte left at 0x55. Caught by the byte-mismatch guard.
+            naive = {"x": dict(rows["resync"])}
+            naive["x"]["va"] = va
+            naive["x"]["rva"] = va - 0x00400000
+            bad_a, _ = gensites.verify(naive)
+            check(bool(bad_a),
+                  f"14. gensites REFUSES 0x{va:08X} -- {why}",
+                  "a site table that accepted a mid-function byte would arm a "
+                  "breakpoint the handler cannot re-emulate; the client would die "
+                  "inside our own vectored handler with no attribution")
+            # (b) the row `fixed` to match reality -- first_byte set to the byte
+            #     that is actually there. This is the one that matters: it is what
+            #     a session does after reading the refusal in (a), and the ruling
+            #     has to survive it. Caught by the EXPECT_FIRST_BYTE guard.
+            fixed = {"x": dict(naive["x"])}
+            fixed["x"]["first_byte"] = real
+            bad_b, _ = gensites.verify(fixed)
+            check(bool(bad_b),
+                  f"14. and still refuses 0x{va:08X} with first_byte `fixed` to "
+                  f"0x{real:02X}",
+                  "PLAN.md 7 Q12(d) is a constraint on the HANDLER, not a typo in "
+                  "the row -- matching the row to the binary does not make a `je` "
+                  "emulable as a `push ebp`")
+
+    # v6 round-trip. A field that does not survive the write/read is a field the
+    # run will not have, and it would look exactly like a client that never set it.
+    sites = [(rows[n]["rva"], 0) for n in names]
+    ai, si = names.index("agtrack"), names.index("snaptest")
+    p = os.path.join(tmp, "v6.bin")
+    with open(p, "wb") as fh:
+        fh.write(_synth([
+            # agtrack: fence READ and shut, on a world-0 (sync) agent.
+            {"seq": 0, "tick": 1000, "site": ai, "ecx": 0x0AAA0000,
+             "have_src": 1, "src_id": 1, "src_world": 0, "src_facing": 3,
+             "have_fence": 1, "fence": 0},
+            # agtrack: fence read and OPEN.
+            {"seq": 1, "tick": 2000, "site": ai, "ecx": 0x0AAA0000,
+             "have_src": 1, "src_id": 1, "src_world": 0, "src_facing": 3,
+             "have_fence": 1, "fence": 1},
+            # snaptest on an agent in the facing-9 early-out: stop != 0, facing 9.
+            {"seq": 2, "tick": 3000, "site": si, "ecx": 0x0BBB0000,
+             "have_src": 1, "src_id": 1, "src_world": 0,
+             "src_stop": 5000, "src_facing": 9},
+        ], sites))
+    cap = rh.Capture(p)
+    eq(cap.version, 6, "14. the capture declares v6")
+    r0, r1, r2 = cap.recs[0], cap.recs[1], cap.recs[2]
+    eq((r0["have_fence"], r0["fence"]), (1, 0),
+       "14. a fence READ AS ZERO round-trips as read-and-zero")
+    eq((r1["have_fence"], r1["fence"]), (1, 1),
+       "14. and an open fence round-trips as open")
+    eq(r0["src_world"], 0,
+       "14. the world field survives -- WORLD_SYNC is the literal 0")
+    eq(r2["src_facing"], rh.FACING_EARLY_OUT,
+       "14. and the facing value the early-out tests survives")
+
+    # THE DISTINCTION THAT IS THE WHOLE MEASUREMENT: a fence that could not be
+    # read must not read as a fence that was zero. 1s.8 item 1's defect was
+    # exactly this class -- a state that was never observed scored as a state.
+    p2 = os.path.join(tmp, "v6-unread.bin")
+    with open(p2, "wb") as fh:
+        fh.write(_synth([{"seq": 0, "tick": 1000, "site": ai, "ecx": 0x0AAA0000,
+                          "have_src": 1, "src_id": 1, "have_fence": 0,
+                          "fence": 0}], sites))
+    cap2 = rh.Capture(p2)
+    eq(cap2.recs[0]["have_fence"], 0,
+       "14. an UNREAD fence is distinguishable from a fence read as zero",
+       )
+    check(cap2.recs[0]["have_fence"] != cap.recs[0]["have_fence"],
+          "14. and the two are not the same record",
+          "if have_fence were dropped, `could not read` and `shut` would be one "
+          "value and the fence count would be silently inflated")
+
+
 def main():
     import tempfile
     tmp = tempfile.mkdtemp(prefix="movehook-test-")
@@ -803,6 +957,7 @@ def main():
     section_11()
     section_12(tmp)
     section_13(tmp)
+    section_14(tmp)
     return LEDGER.verdict()
 
 

@@ -274,6 +274,42 @@ typedef struct {
     DWORD src_segment[4];
     DWORD src_target[4];
     DWORD src_vel[2];
+    /* v6, 2026-08-28: THE WORLD FIELD, THE FACING, AND THE AGTRACK FENCE.
+     *
+     * APPENDED, never inserted, and that is the whole reason this block sits at
+     * the bottom of a struct whose grouping would prefer `world` next to `id`.
+     * sec.1e.3: readhook described v3 as scalars + [point, segment, target, pt_a,
+     * pt_b] with `have_pts` among the scalars while this file declared it AFTER
+     * target[4]. Both totalled 38 dwords, so `reclen` matched and the guard whose
+     * own message warns about "a record whose fields would silently shift" could
+     * not fire -- every point block was read one dword late for a whole run. A
+     * LENGTH CHECK CANNOT CATCH A REORDER. Appending changes the length, so a
+     * mismatched reader fails loudly instead.
+     *
+     * `world` (+0x24) closes sec.1i.7's standing item: the sync side has been
+     * identified from call-site STRUCTURE (which argument reseed takes) rather
+     * than from the record, which works but is indirect. WORLD_SYNC is the
+     * literal 0 -- AgTrack:458's assert body runs when the field is non-zero.
+     *
+     * `facing` (+0xC4) is the second half of snaptest's early-out at 0x0060563A,
+     * `cmp dword [ebx+0xc4], 9` / `je 0x605683` where 0x605683 is `mov eax, 1`.
+     * Its first half, m_timeStopMovement, is already captured as `stop`/`src_stop`,
+     * so this ONE field makes a NO-SNAP-before-any-gate evaluable offline. ebx
+     * there is arg2, the agent snaptest already dereferences -- which is why the
+     * early-out costs an offset and not the two mid-function sites sec.1s.9 asked
+     * for, neither of which gensites would have accepted.
+     *
+     * `fence` is agtrack's per-agent `clientControlled` dword -- the operand of
+     * the branch at 0x00606009 that skips the whole snap path on zero. Read HERE,
+     * at the entry, on the same invocation that then branches on it. sec.1s.8
+     * item 1's defect was that this was SAMPLED by movetap at 11.4 Hz against a
+     * median shut run of 13 samples, by a classifier the counted outcome mutates;
+     * reading the operand at the decision is the fix. `have_fence` distinguishes
+     * "read it, it was 0" from "could not read it", which is the distinction a
+     * bare 0 would destroy. */
+    DWORD world, facing;
+    DWORD src_world, src_facing;
+    DWORD have_fence, fence;
 } rec_t;
 
 static DWORD  g_base;
@@ -353,13 +389,20 @@ static void copy4(DWORD *dst, DWORD src)
  * an argument, so the two cannot drift apart -- the run-4 record had `this` only,
  * which is half of a correction. Returns 0 when the pointer is not readable. */
 static int read_agent(DWORD ag, DWORD *id, DWORD *flags, DWORD *stop, DWORD *ptime,
-                      DWORD *point, DWORD *segment, DWORD *target, DWORD *vel)
+                      DWORD *point, DWORD *segment, DWORD *target, DWORD *vel,
+                      DWORD *world, DWORD *facing)
 {
-    if (!readable(ag, 0xB8)) return 0;
-    *id    = *(DWORD *)(ag + A_ID);
-    *flags = *(DWORD *)(ag + A_FLAGS);
-    *stop  = *(DWORD *)(ag + A_TIME_STOP_MOVEMENT);
-    *ptime = *(DWORD *)(ag + A_POINT_TIME);
+    /* The guard was 0xB8 and `facing` lives at +0xC4, so it now has to cover
+     * +0xC8. Widening a bounds check is not a formality here: reading four bytes
+     * past a committed page inside a VECTORED HANDLER faults in a way nobody
+     * could attribute to us, which is the whole reason `readable` exists. */
+    if (!readable(ag, A_FACING + 4u)) return 0;
+    *id     = *(DWORD *)(ag + A_ID);
+    *flags  = *(DWORD *)(ag + A_FLAGS);
+    *stop   = *(DWORD *)(ag + A_TIME_STOP_MOVEMENT);
+    *ptime  = *(DWORD *)(ag + A_POINT_TIME);
+    *world  = *(DWORD *)(ag + A_WORLD);
+    *facing = *(DWORD *)(ag + A_FACING);
     memcpy(point,   (const void *)(ag + A_POINT),         16);
     memcpy(segment, (const void *)(ag + A_SEGMENT_POINT), 16);
     memcpy(target,  (const void *)(ag + A_TARGET_POINT),  16);
@@ -472,7 +515,38 @@ static LONG CALLBACK on_bp(PEXCEPTION_POINTERS ep)
                     r->have_src = read_agent(src, &r->src_id, &r->src_flags,
                                              &r->src_stop, &r->src_ptime,
                                              r->src_point, r->src_segment,
-                                             r->src_target, r->src_vel);
+                                             r->src_target, r->src_vel,
+                                             &r->src_world, &r->src_facing);
+                }
+                /* THE AGTRACK FENCE, for the one row that declares it.
+                 *
+                 * agtrack computes `record = [this+0x20] + id*0x1C` and branches
+                 * on `[record]` at 0x00606009, skipping the entire snap path when
+                 * it is zero. Reproduced here from the two things the entry has:
+                 * ecx (`this`) and the agent named by deref_agent_arg. The stride
+                 * is the client's own `lea ecx,[ebx*8] / sub ecx,ebx` -- id*7
+                 * dwords -- not a constant anyone chose.
+                 *
+                 * Guarded at every level, because this runs inside the vectored
+                 * handler and a wild id would index anywhere: the base must be
+                 * readable, the id is bounded against the client's OWN bound at
+                 * [this+0x28] (the same one its Array.h:587 assert checks), and
+                 * the record itself is range-checked before the read. `have_fence`
+                 * stays 0 if any of that fails, so a refusal is distinguishable
+                 * from a genuine zero -- which is the whole measurement. */
+                if (SITES[i].deref_fence && r->have_src) {
+                    DWORD base = 0, bound = 0;
+                    if (readable(ag + 0x20u, 4) && readable(ag + 0x28u, 4)) {
+                        base  = *(DWORD *)(ag + 0x20u);
+                        bound = *(DWORD *)(ag + 0x28u);
+                        if (r->src_id < bound && bound < 0x100000u) {
+                            DWORD off = r->src_id * 0x1Cu;
+                            if (readable(base + off, 4)) {
+                                r->fence = *(DWORD *)(base + off);
+                                r->have_fence = 1;
+                            }
+                        }
+                    }
                 }
                 if (deref_arg(esp, SITES[i].deref_a, r->pt_a)) r->have_pts |= 1u;
                 if (deref_arg(esp, SITES[i].deref_b, r->pt_b)) r->have_pts |= 2u;
@@ -485,7 +559,8 @@ static LONG CALLBACK on_bp(PEXCEPTION_POINTERS ep)
                 if (SITES[i].deref_agent) {
                     r->have_agent = read_agent(ag, &r->id, &r->flags, &r->stop,
                                                &r->ptime, r->point, r->segment,
-                                               r->target, r->vel);
+                                               r->target, r->vel,
+                                               &r->world, &r->facing);
                     if (r->have_agent)
                         r->x98 = *(DWORD *)(ag + A_X98);
                 }
@@ -680,7 +755,7 @@ static DWORD WINAPI worker(LPVOID unused)
     snprintf(path, sizeof path, "%s\\movehook.bin", dir);
     f = fopen(path, "wb");
     if (f) {
-        DWORD n = (DWORD)g_n, reclen = (DWORD)sizeof(rec_t), ver = 5, ns = NSITES;
+        DWORD n = (DWORD)g_n, reclen = (DWORD)sizeof(rec_t), ver = 6, ns = NSITES;
         if (n > NCAP) n = NCAP;
         fwrite("MVHK", 4, 1, f);
         fwrite(&ver, 4, 1, f);

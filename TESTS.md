@@ -6941,7 +6941,26 @@ shrinks section 10),
   noise must not count, because two reads of a parked agent differ in the low bits.
   The distance is printed beside the count, since a bare count cannot tell a 5 u nudge
   from a 691 u warp. This is the number `MOVECODE-K1`'s registered prediction
-  (FINDINGS §1k.3) is REFUTED by. 46 floor, 81 on a
+  (FINDINGS §1k.3) is REFUTED by. **§14 is the 2026-08-28 sites and the v6 fields,
+  and its first half exists because a gate nothing has ever tripped is a gate nobody
+  has tested.** §2 checks every row's first byte *is* `0x55`; that is the positive
+  side and it cannot show the refusal works. FINDINGS §1s.9 asked for four hook sites
+  and named five addresses, and **four of the five are not function entries** —
+  `0x00606009` is a `je`, `0x00605634` a `cmp`, `0x00605683` a `pop esi`, and
+  `0x005FCAA0` the ResyncAllAsync *thunk*, a `call`. So §14 clones a real row onto
+  each of those four real addresses and requires a refusal — **twice each**, because
+  the second is the one that encodes the ruling: first as anyone would naively write
+  it (address changed, `first_byte` still `0x55`, caught by the byte-mismatch guard),
+  and then "fixed" so `first_byte` matches the byte actually there, which is what a
+  session does after reading the first refusal. `PLAN.md` §7 Q12(d) is a constraint on
+  the HANDLER, not a typo in the row — matching the row to the binary does not make a
+  `je` emulable as a `push ebp`. A control runs first: the row all four are cloned
+  from must still be ACCEPTED at its own address, or every refusal is about the
+  cloning. The second half round-trips the v6 fields, and the check that carries it is
+  that **an UNREAD fence is distinguishable from a fence read as zero** — `have_fence`
+  exists so "could not read it" and "it was shut" are not one value, which is the
+  §1s.8-item-1 failure class in miniature: a state that was never observed scoring as
+  a state. 62 floor, 108 on a
   machine with the client, a compiler, an archive and a 32-bit `cmd.exe`; each other
   section declares a skip),
   `toolkit/clientscan/test_commandertrap.py` (the hardware-breakpoint trap, and

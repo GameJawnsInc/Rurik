@@ -89,8 +89,26 @@ _LAYOUTS = {
           ("have_src", 1), ("src_id", 1), ("src_flags", 1), ("src_stop", 1),
           ("src_ptime", 1), ("src_point", 4), ("src_segment", 4),
           ("src_target", 4), ("src_vel", 2)],
+    # v6 adds the world field, the facing, and AgTrack's fence dword. All three
+    # are APPENDED rather than grouped where they belong, deliberately -- see the
+    # note in movehook.c's rec_t. `world` closes §1i.7's "the sync side is
+    # identified from call-site structure rather than from the record"; `facing`
+    # is the second half of snaptest's pre-gate early-out (its first half,
+    # m_timeStopMovement, is already `src_stop`); `fence` is the operand of
+    # agtrack's own branch at 0x00606009, read at the entry rather than sampled.
+    6: [(n, 1) for n in _SCALARS_V2] + _POINTS
+       + [("have_pts", 1), ("pt_a", 4), ("pt_b", 4),
+          ("vel", 2), ("ptime", 1),
+          ("have_src", 1), ("src_id", 1), ("src_flags", 1), ("src_stop", 1),
+          ("src_ptime", 1), ("src_point", 4), ("src_segment", 4),
+          ("src_target", 4), ("src_vel", 2),
+          ("world", 1), ("facing", 1), ("src_world", 1), ("src_facing", 1),
+          ("have_fence", 1), ("fence", 1)],
 }
 NPOINT = 4
+# The facing value that, together with a non-zero m_timeStopMovement, returns
+# NO SNAP from snaptest before any gate runs (0x0060563A / 0x00605641).
+FACING_EARLY_OUT = 9
 
 
 def _layout(ver):
@@ -111,8 +129,11 @@ def _unpack(spec, vals):
 
 
 # The current writer's layout, for anything that builds a capture (the tests do).
-FIELDS = [n for n, c in _LAYOUTS[5] if c == 1]
-_SPEC5, REC_FMT, REC_LEN = _layout(5)
+# Bump BOTH of these with the version, or the tests keep synthesising the OLD
+# record while the DLL writes the new one and every parse silently disagrees.
+CURRENT_VER = 6
+FIELDS = [n for n, c in _LAYOUTS[CURRENT_VER] if c == 1]
+_SPEC5, REC_FMT, REC_LEN = _layout(CURRENT_VER)
 
 BIT_ISWAYPOINT = 1 << 18
 BIT_IN_WORLD = 1 << 17

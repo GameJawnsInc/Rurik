@@ -75,13 +75,30 @@ rva = 0x00205FC0
 first_byte = 0x55
 thiscall = true
 deref_agent = false
-what = "AgTrack dispatch, the desync/snap entry point."
-why_hooked = "MOVECODE-Q4. The record's `exactly 3 callers` came from --xrefs, which sees DIRECT rel32 branches only. Logging the return address over a long session is the only way to learn whether the snap is really message-driven. `deref_agent` is false because ecx has not been shown to be an agent here."
+# arg1 IS AN AGENT, established 2026-08-28 and not exploited before: 0x00605FC9
+# loads it into edi, 0x00605FCE reads [edi+0x10] and BOUNDS-CHECKS it as an index
+# (cmp against [esi+0x28], Array.h:587), and 0x00605FD1 reads [edi+0x24] and
+# compares it against 1 at 0x00606013 to divert the local copy. Both are agent
+# fields. This does NOT contradict the note at snaptest: agtrack pushes edi (the
+# agent) then ebx (&record) at 0x00606011-12, so snaptest's arg1 is the 0x1C
+# record and its arg2 is this same agent -- the two rows are consistent and the
+# record is one frame further in.
+deref_agent_arg = 1
+# THE FENCE. 0x00606002 `cmp dword [eax+ecx*4], 0` where eax = [this+0x20] and
+# ecx = id*7 dwords (lea ecx,[ebx*8] / sub ecx,ebx), i.e. a 0x1C stride -- then
+# 0x00606009 `je 0x606103` skips EVERYTHING on zero. Reading that dword here, at
+# the entry, on the same invocation that then branches on it, is what §1s.8 item
+# 1 needs: its defect was that the fence was SAMPLED by movetap at 11.4 Hz
+# against a median shut run of 13 samples, by a classifier the counted outcome
+# mutates. This reads the operand at the decision instead.
+deref_fence = true
+what = "AgTrack dispatch, the desync/snap entry point. Its first branch is the per-agent `clientControlled` fence (0x00606009); past it, world == 1 is diverted at 0x00606016; only then is snaptest called at 0x0060601C."
+why_hooked = "MOVECODE-Q4, ANSWERED -- 3 distinct return addresses over 759 entries, matching --xrefs. It stays armed for two NEW questions (2026-08-28): with `deref_fence` it counts fence EXECUTIONS rather than sampling fence state, and with arg1 dereferenced as an agent it captures the world field, which partitions every invocation into diverted / fence-shut / tested and gives a second independent route to the same fence count."
 [hook_site.agtrack.provenance]
 source = "client-table"
 extractor = "toolkit/clientscan/codescan.py"
 build = 38797
-verified = "--dis 0x00605FC0 shows `55 push ebp`. Caller count NOT verified as complete — that is the question. 2026-08-26."
+verified = "--dis 0x00605FC0 shows `55 push ebp`. Caller count answered 2026-08-27: 759 entries from exactly 3 distinct return addresses, matching the static --xrefs count. The fence chain and the arg1-is-an-agent reading were re-disassembled from the pinned image 2026-08-28 (0x00605FC9 through 0x0060601C, quoted in the comments above); the 0x1C record stride is `lea ecx,[ebx*8] / sub ecx,ebx` = id*7 dwords."
 
 # --------------------------------------------------------------------------
 # Agent struct offsets the hook reads at each hit. Names that ArenaNet's own
@@ -331,3 +348,91 @@ source = "client-table"
 extractor = "toolkit/clientscan/codescan.py"
 build = 38797
 verified = "--dis 0x006022B0 shows `55 push ebp`. Its caller 0x006022D8 tests m_timeStopMovement and calls the halt-in-place 0x00602540 first (`if it is moving, stop it here`), then checks assert AgAgent:2147 `syncPoint.position != AGENT_INVALID_POSITION` at 0x00602350."
+
+# --------------------------------------------------------------------------
+# Added 2026-08-28 for the run FINDINGS.md §1s.9 asks for. THE PROPOSAL THERE
+# NAMED FIVE ADDRESSES AND ONLY ONE OF THEM IS A LEGAL SITE -- read this before
+# re-reading §1s.9 as a work order.
+#
+# `gensites.py` refuses any row whose first byte is not `0x55`, because the
+# handler re-emulates ONE instruction shape (PLAN.md §7 Q12(d)). Re-read from
+# the pinned 38797 image, the five were:
+#
+#   0x00606009  `0f 84` je        -- the AgTrack fence branch      REFUSED
+#   0x00605634  `83 7b` cmp       -- the facing-9 first compare    REFUSED
+#   0x00605683  `5e`    pop esi   -- the facing-9 return-1 tail    REFUSED
+#   0x005FCAA0  `e8`    call      -- the ResyncAllAsync THUNK      REFUSED
+#   0x005FEF70  `55`    push ebp  -- gate 3                        OK
+#
+# So four of the five would have failed at generation time. What replaces them
+# is NOT a relaxed rule -- it is that three of the four wanted a VALUE the entry
+# hooks can already reach, and the fourth wanted the thunk's target rather than
+# the thunk:
+#
+#   the fence      -> read the dword the branch tests, AT the agtrack entry, on
+#                     the same invocation that then branches on it (below)
+#   the facing-9   -> both its operands (+0x48, +0xC4) sit on snaptest's arg2,
+#                     which `snaptest` ALREADY dereferences; +0x48 is captured
+#                     already, so this costs ONE new offset (`facing`)
+#   ResyncAllAsync -> 0x00605E40, the body the thunk jumps to, which IS `55`
+#   gate 3         -> unchanged
+#
+# That is 2 new sites and 2 new offsets, not 4 sites. It is also a better
+# measurement: §1s.8 item 1's whole defect was that the fence was SAMPLED at
+# 11.4 Hz by a classifier the outcome mutates. Reading the operand at the
+# decision is the fix, and pairing agtrack against snaptest gives a second,
+# independent route to the same count (see the runsheet).
+# --------------------------------------------------------------------------
+
+[hook_site.stepclear]
+va = 0x005FEF70
+rva = 0x001FEF70
+first_byte = 0x55
+thiscall = true
+deref_agent = false
+what = "the snap's GATE 3, and it is a DISJUNCTION rather than the single test the arc long assumed: it returns 0 (blocked) for a neighbour agent inside a 60-degree forward cone (`fcomp [0x9458BC]` = 0.5f) whose combined radius contains the mover, OR for `timeToEvent < 0.0005f` against an obstacle (threshold at 0x00A53744, read raw as 0.0005000000237487257f)."
+why_hooked = "gate 3 is the only one of snaptest's three that has never been observed, and §1s.3 leaves 3 snaps undiscriminated between gates 2 and 3. Because gate 2 is already witnessed by a MapFindPath whose return address is 0x00605807, PRESENCE of a gate-3 hit on the same tick discriminates the two -- but only once the hit is filtered on retaddr, because this function has a second, unrelated caller."
+[hook_site.stepclear.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/codescan.py"
+build = 38797
+verified = "--dis 0x005FEF70 shows `55 8b ec 81 ec 94 00 00` (push ebp / mov ebp,esp / sub esp,0x94), re-read from the pinned image 2026-08-28. TWO direct callers, not one: 0x00605819 (gate 3, inside snaptest) and 0x006007A9 (inside the obstacle-sidestep 0x00600500); both treat a 0 return as blocked, and studies/movement/FINDINGS.md:3278/:3357 records n = 2 of 2. A draft of this row called the second a phantom -- it is NOT; boundary_status(0x006007A9) returns confirmed, and the address that fails is 0x006007B5, twelve bytes later, which lands mid-instruction inside the je at 0x006007B0. The disjunction is named by two asserts asserts.py MISSES (it is short by ~370 sites): AgAgent:764 `timeToEvent >= 0` at 0x005FF4B6 and AgAgent:773 at 0x005FF508, both read from their expression pointers at the call sites."
+
+[hook_site.resync]
+va = 0x00605E40
+rva = 0x00205E40
+first_byte = 0x55
+thiscall = true
+deref_agent = false
+what = "ResyncAllAsync -- a SECOND route to the roster reseed that calls snaptest ZERO times, so nothing it does passes a gate. Its loop is instruction-for-instruction agtrack's gated one (null check, test [eax+0x20],0x10000, Array:587 bounds assert, inline record clear, cmp esi,[edi+0x14] / setne bl for the i != focusId third argument)."
+why_hooked = "§1s.1: 21 of the 53 reseeds in the whole movehook corpus -- 39.6% -- returned to 0x00605EF6, i.e. came through HERE and not through the gated loop. It was a no-op in that corpus (0 of 7 finite rows moved m_segmentPoint) but every one of those firings followed closely on a gated snap that had just glued the copies, so the corpus CANNOT see it firing cold. This site is the only instrument that can, and that is the residual risk to `the nine candidates were aimed at the right gate`."
+[hook_site.resync.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/codescan.py"
+build = 38797
+verified = "--dis 0x00605E40 shows `55 8b ec 83 ec 0c 56` (push ebp / mov ebp,esp / sub esp,0xc / push esi), re-read from the pinned image 2026-08-28. Hooked HERE and not at the thunk 0x005FCAA0 that §1s.9 named: that address is `e8 call 0x47f660`, not an entry, and gensites would refuse it. The thunk (call / mov ecx,[eax+8] / lea ecx,[ecx+0x1cc] / jmp 0x605e40) is this function's only inbound reference image-wide, via 0x005FCAAE, so hooking the body loses no caller. Its three callers are 0x004E6E82, 0x00816499 and 0x0081655D; whether the first is wire-reachable is OPEN and studies/movement/FINDINGS.md:2386 ties that entry to opcode 0x0023."
+
+# --------------------------------------------------------------------------
+# Two offsets added 2026-08-28. Neither needs a new site: both are read off an
+# agent the record ALREADY dereferences.
+# --------------------------------------------------------------------------
+
+[agent_offset.world]
+offset = 0x24
+width = 4
+name = "m_world"
+[agent_offset.world.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/codescan.py"
+build = 38797
+verified = "AgAgent.cpp:312 names the two copies m_world 0 and 1. The value is read at 0x00605FD1 (`mov edx,[edi+0x24]`) and compared against 1 at 0x00606013 to divert the local copy, and asserted at 0x0060561A (`cmp dword [ebx+0x24],0` guarding AgTrack:458 `source.GetWorld() == WORLD_SYNC`) -- so WORLD_SYNC is the literal 0, the assert body running when the field is NON-zero. §1i.7 lists this field as `not captured, so the sync side is identified from call-site structure rather than from the record`; this closes that."
+
+[agent_offset.facing]
+offset = 0xC4
+width = 4
+name = "facing"
+[agent_offset.facing.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/codescan.py"
+build = 38797
+verified = "Read at 0x0060563A (`cmp dword [ebx+0xc4], 9`) inside snaptest, where ebx is arg2 (`mov ebx,[ebp+0xc]` at 0x006055F4) -- the agent snaptest already dereferences. It is the second half of an early-out that returns 1 = NO SNAP before any gate runs: 0x00605634 `cmp [ebx+0x48],0` / je past, then 0x00605641 `je 0x605683` where 0x00605683 is `pop esi / mov eax,1` -- so the condition is m_timeStopMovement != 0 AND facing == 9. m_timeStopMovement is captured already, so this one offset makes the early-out evaluable offline and needs no site. `facing` is OUR name: no ArenaNet assert names the field."
