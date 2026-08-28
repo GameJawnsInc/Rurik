@@ -2499,7 +2499,17 @@ construction — no-clip is a legal WALK at 288 u/s. K2 grants the clicked point
 and the sync copy has no path solver, so it travels the STRAIGHT LINE and the reconcile
 puts the body on it.
 
-**NEXT IS `--router`, and it needs no build** (§1n.4): it answers a click with the legs
+**`--router` RAN AND IS REFUTED (§1o) -- it is WORSE than the echo alone**: largest
+displacement 446 u (echo) against 2,127 u (router) against 5,970 u (shipped). The route
+itself is valid -- checked offline, all legs clear, both shortcuts genuinely blocked --
+but our route is not the CLIENT's route, and the reconcile drags the body onto ours.
+The router also re-granted the SAME first leg four times, which is the operator's
+"warping around". **MOVECODE-K3 is withdrawn before being built**: the origin is not the
+defect. **`--click-echo` alone is the best measured configuration.** The residual is
+mesh AGREEMENT, not mesh correctness -- the only grant the client cannot disagree with
+is the destination it chose itself.
+
+*(superseded:)* **NEXT IS `--router`, and it needs no build** (§1n.4): it answers a click with the legs
 of a real route, it intercepts ABOVE the freshness gate and never consults `fresh`, and
 a routed leg is walkable by construction. Its known objection is that it takes its
 origin from `state["pos"]`, a belief that goes uncorrected during click-walking —

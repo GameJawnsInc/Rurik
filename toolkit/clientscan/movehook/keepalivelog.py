@@ -169,6 +169,40 @@ def main(argv=None):
         print("     Different defects; only the second is the mesh. FINDINGS "
               "sec.1i.5.")
 
+    # ROUTER rows, because a router run records NOTHING in click_verdict --
+    # router_answer_click intercepts above the freshness block and returns True,
+    # so the census above prints "CLICK VERDICTS: 0" for a run that answered every
+    # click. That is exactly the shape of report this file exists to prevent.
+    rr = [r for r in rs if str(r.get("kind", "")).startswith("router")]
+    if rr:
+        print()
+        routes = [r for r in rr if r.get("kind") == "router_route"]
+        print(f"ROUTER: {len(routes)} route(s) -- the click census above is BLIND "
+              f"to these")
+        for v, n in collections.Counter(
+                r.get("verdict") for r in routes).most_common():
+            print(f"  {str(v):<16} x{n}")
+        wp = [r.get("n_wp") for r in routes
+              if isinstance(r.get("n_wp"), int)]
+        if wp:
+            print(f"  waypoints per route: min {min(wp)}  max {max(wp)}")
+        # THE ORIGIN IS THE ROUTER'S WEAK POINT and it is worth printing: it comes
+        # from state["pos"], the integrator's belief, and during click-walking the
+        # client sends no position to correct it (FINDINGS §1m.2).
+        legs = [r for r in rr if r.get("kind") == "router_leg"
+                and r.get("act") == "grant"]
+        print(f"  first legs granted: {len(legs)}")
+        firsts = collections.Counter(
+            tuple(r["dest"]) for r in legs if isinstance(r.get("dest"), list))
+        rep = [(d, n) for d, n in firsts.most_common() if n > 1]
+        if rep:
+            print("  !! a leg granted MORE THAN ONCE -- the route is being "
+                  "recomputed and")
+            print("     landing on the same waypoint, which drags the body "
+                  "back to it each time:")
+            for d, n in rep[:4]:
+                print(f"       ({d[0]:.0f}, {d[1]:.0f})  x{n}")
+
     gv = [r for r in rs if r.get("kind") == "grant_verdict"]
     if gv:
         print()
