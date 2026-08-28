@@ -142,18 +142,30 @@ def main(argv=None):
           + "   [retail 5.822/s]")
 
     cv = [r for r in rs if r.get("kind") == "click_verdict"]
+    # ANSWERED vs REFUSED, and the split is not cosmetic. Under MOVECODE-K2 a
+    # `geo-stale` row can be ANSWERED (echoed) rather than dropped, so counting
+    # every click_verdict row as a refusal -- which this did on K2's first arm --
+    # reports 8 refusals for a run that refused none of them. `fired` is the
+    # discriminator and the row has carried it since K2.
+    echoed = [r for r in cv if r.get("click_echo")]
+    refused = [r for r in cv if not r.get("fired")]
     print()
-    print(f"CLICK REFUSALS: {len(cv)}")
-    for reason, n in collections.Counter(r.get("reason") for r in cv).most_common():
-        print(f"  {reason:<16} x{n}")
-    if cv:
+    print(f"CLICK VERDICTS: {len(cv)}   ANSWERED {len(cv) - len(refused)}"
+          f"   REFUSED {len(refused)}")
+    if echoed:
+        print(f"  of the answered, {len(echoed)} were K2 ECHOES of a stale click")
+        print(f"  (MOVECODE-K2's pre-registered exposure floor is 3 -- "
+              f"FINDINGS sec.1m.4)")
+    for reason, n in collections.Counter(
+            (r.get("reason"), bool(r.get("fired"))) for r in cv).most_common():
+        print(f"  {reason[0]:<16} answered={str(reason[1]):<5} x{n}")
+    if refused:
         # The split FINDINGS §1i.5 found, and it is worth watching per arm: only the
         # geometry pair is the navmesh, and the two want different fixes.
-        geo = sum(1 for r in cv
+        geo = sum(1 for r in refused
                   if r.get("reason") in ("geo-blocked", "geo-unplaced"))
-        stale = sum(1 for r in cv if r.get("reason") == "geo-stale")
-        print(f"  -> {stale} STALENESS (no report inside the 1.0 s window) "
-              f"and {geo} GEOMETRY.")
+        stale = sum(1 for r in refused if r.get("reason") == "geo-stale")
+        print(f"  -> of the REFUSED: {stale} staleness, {geo} geometry.")
         print("     Different defects; only the second is the mesh. FINDINGS "
               "sec.1i.5.")
 
