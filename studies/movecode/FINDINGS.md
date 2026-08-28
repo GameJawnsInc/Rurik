@@ -3022,6 +3022,120 @@ special instruction.
 
 ---
 
+---
+
+## 1r. MOVECODE-R1-B2 ARM — **REFUTED on its registered clause, and it is the first arm in this family where the two ways of scoring a warp DISAGREE**
+
+**OBSERVED, 2026-08-28.** Map 280, `--click-echo --echo-any-refusal`, 3,375 records,
+both controls FIRED, 205.8 s server span. Capture `vault/research/movecode/r1b2/`, log
+`authsrv-20260828T113351-c1.jsonl`. Baseline is **K2**, same map and operator.
+
+### 1r.1 The exposure is MET and, unlike B1's, it is CLEAN
+
+**8 geometry echoes against a floor of 3.** More important than the count is what the
+run does *not* contain: **the single `geo-stale` click (t = 38.85) was dropped
+downstream as `locally-moving`** — the operator's own reported slip, *"i messed up the
+second click-to-move (didn't stop)"* — so **zero K2-staleness echoes reached the wire.**
+
+Every one of the 46 grants this arm put up came from a **geometry** echo. That is the
+confound §1q.3 could not escape, absent: B1's action set was a subset of K2's, and B2's
+is disjoint from it. **This is the cleanest arm the family has produced.**
+
+The drop was caught by the readout's own cross-check rather than by reading the log by
+hand — *"an echo is a DECISION, not a grant; rule 1 runs after it"* — which is the guard
+added when this runsheet was written, firing on the first run that needed it.
+
+### 1r.2 REFUTED, and truncation does not rescue it
+
+| quantity | K2 | B2 | predicted | |
+|---|---|---|---|---|
+| non-`geo-stale` echoes | 0 (unreachable) | **8** | ≥ 3 | ✅ floor met |
+| **largest displacement** | **446 u** | **1,094 u** | **≤ 446 u** | ❌ **REFUTED** |
+| displacements within 300 u of spawn | 0 | **0** | 0 | ✅ |
+
+**B2 walked 2.2× further than K2** (local-copy path 26,155 u over 168.1 s against
+11,777 u over 88.2 s, both measured the same way), so a larger *maximum* is partly an
+extreme-value effect and quoting it raw would be the denominator trap this arc has
+already paid for. **It was checked both ways and the refutation survives both:**
+
+| matched on | B2 | K2 |
+|---|---|---|
+| K2's span (first 88.2 s) | n = 3, **largest 1,094 u** | n = 3, largest 446 u |
+| K2's path (first 11,777 u, t ≤ 68.0 s) | n = 3, **largest 1,094 u** | n = 3, largest 446 u |
+
+All three of B2's displacements fall inside K2's own denominators, so there is nothing
+to truncate. **1,094 u against 446 u is 2.45×, on a matched walk.**
+
+### 1r.3 The finding that cuts the OTHER way, and it is unregistered
+
+Scored as a **rate**, B2 is the **best of the three arms** — on both normalisations:
+
+| arm | span | local path | n | largest | total | per 1000 u | u per 1000 u |
+|---|---|---|---|---|---|---|---|
+| K2 | 88.2 s | 11,777 u | 3 | 446 u | 1,101 u | 0.255 | 93.5 |
+| B1 | 33.7 s | 9,734 u | 3 | 537 u | 1,385 u | 0.308 | 142.2 |
+| **B2** | **168.1 s** | **26,155 u** | **3** | **1,094 u** | **2,203 u** | **0.115** | **84.2** |
+
+**B2 warps less OFTEN and harder WHEN it does** — half K2's rate per unit walked, and
+2.45× its worst single event. **6 of its 8 geometry echoes produced no displacement at
+all.**
+
+**This is the first time in this arc that the two scorings disagree**, and it matters
+because the choice of headline was never argued — §1o.1 picked "largest displacement" as
+*"the one number that survives all three arms"*, which was a statement about
+comparability, not about which harm is worse. Every arm since has happened to rank the
+same way on both, so nothing forced the question. It is forced now.
+
+**The registered clause governs and B2 is refuted by it.** Two reasons not to reach for
+the rate instead, both weaker than they look and stated as such: the operator experiences
+the maximum, not the mean; and n = 3 per arm is far too small for a rate to carry a
+decision. **Neither is a reason to believe the rate finding is noise** — it is the same
+n = 3 the refutation rests on.
+
+### 1r.4 The mechanism, and the mesh is NOT the limiting factor
+
+`pathdiff` replays the client's own `MapFindPath` calls through our mesh: **10 of 10
+BOTH-OK, 0 OFF-MESH, 0 OURS-FAILED.** So none of this run's warps is a map-280 navmesh
+hole, and MOVECODE-Q2 is not the explanation here.
+
+What those queries *do* show is the divergence stated exactly: **the client's own solver
+returned 2–5 waypoints for every click**, and we granted a **single straight line** to
+the same destination. That is §1o.4's "mesh AGREEMENT, not mesh correctness" seen from
+the sharpest angle yet — our mesh can answer every query, and the answer we *send* is
+still not the path the client walks.
+
+**The warp IS the reconcile closing that divergence, and the numbers coincide exactly.**
+The snap tests recorded separations of **682.7 / 1,093.7 / 3,368.1 u**; the displacements
+are **657.9 / 1,093.7 / 451.0 u**. `1093.7` appears in both lists to the decimal.
+
+**And the worst one fires at ARRIVAL, which is the sharpest thing in this run.** The
+1,094 u displacement began at `(594.4, −805.4)` — **293 u from the point the operator
+had clicked** — and ended at `(−456.9, −1107.4)`, **1,188 u from it**. The player walked
+almost the whole way to their destination and was then thrown four times that remaining
+distance backwards. A 446 u nudge mid-route and a 1,094 u yank one step from the goal are
+not the same defect at different sizes.
+
+The coupling is also **loose**, unlike B1's: the gaps from each displacement to the
+preceding geometry echo are **+13.78, +15.86 and +13.05 s**, against B1's +1.97/+1.97/
++3.04. B1's warps raced a competing authority; B2's accumulate over a long straight leg
+until the separation crosses the cut. Different mechanisms, and the timing separates them.
+
+### 1r.5 Status
+
+* **`--echo-any-refusal` is REFUTED and stays OFF**, kept with its numbers as the ninth.
+* **`--click-echo` alone remains the best measured configuration** at 446 u.
+* **§1m.3's original scoping is VINDICATED.** It refused geometry deliberately; §1p.11
+  argued the refusal was already hollow because 7 of K2's 8 echoes were blocked lines
+  anyway. That argument was **sound about the wire and wrong about the outcome** —
+  answering geometry refusals *knowingly* is worse than answering them *unknowingly*,
+  because the set it adds is exactly the set where the straight line is longest.
+* **NOT DETERMINED, and only the operator can supply it: the no-clip row.** §1p.10 item 2
+  pre-registered "more no-clip" as its own outcome rather than a refutation, and **no
+  metric in this file can see it** (§1n.2). The operator's report of this run does not
+  mention it either way, so that row is **UNSCORED**, not zero.
+
+---
+
 ## 2. Corrections to the record
 
 Each of these was in circulation and each is now measured against the bytes.

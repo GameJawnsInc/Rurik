@@ -1556,9 +1556,36 @@ so we reproduce ArenaNet **bit-for-bit** there — and **0 of 11** on the part-w
 whose waypoints are bit-exact navmesh trapezoid corners no policy here emits.
 
 **Two DESK items, each deleting a refusal rather than adding a policy** (§1p.10 items 1–2).
-Both are built and OFF by default. **B1 RAN 2026-08-28 AND IS REFUTED (§1q); B2 IS STILL
-UNRUN** and its exposure is reachable on the same walk — B1's own run left 6 `geo-blocked`
-refusals against B2's floor of 3.
+Both are built, OFF by default, and **BOTH RAN 2026-08-28 AND BOTH ARE REFUTED** (§1q,
+§1r). `--click-echo` alone remains the best measured configuration at 446 u, and the arc
+has now buried nine candidates.
+
+**★ B2 REFUTED — largest displacement 1,094 u against K2's 446 u.** Its walk was 2.2×
+longer, so it was matched both ways — on K2's span (first 88.2 s) and on K2's path (first
+11,777 u) — and the largest is **1,094 u either way**, because all three displacements
+land inside K2's own denominators. Exposure met (8 geometry echoes) and **cleanest in the
+family**: the one `geo-stale` click was dropped downstream, so zero K2-staleness echoes
+reached the wire and the arm is disjoint from K2 rather than a subset of it. The mesh is
+**not** the cause — `pathdiff` returned **10 of 10 BOTH-OK, 0 OFF-MESH** — and what those
+queries show is the divergence exactly: the client's solver returns **2–5 waypoints** per
+click where we grant a **single straight line**. The warp is the reconcile closing that
+gap, and the numbers coincide to the decimal (separations 682.7/1093.7/3368.1 against
+displacements 657.9/1093.7/451.0). **The worst one fires at ARRIVAL**: it began 293 u from
+the clicked destination and ended 1,188 u from it.
+
+**AND IT IS THE FIRST ARM WHERE THE TWO SCORINGS DISAGREE, which is a live methodology
+question rather than a footnote.** As a RATE B2 is the **best of the three arms** — 0.115
+displacements per 1000 u walked and 84.2 u of displacement per 1000 u, against K2's 0.255
+/ 93.5 and B1's 0.308 / 142.2 — and 6 of its 8 echoes produced no displacement at all. It
+warps **less often and much harder**. §1o.1 chose "largest displacement" for
+COMPARABILITY, never to arbitrate "how often" against "how bad", and every arm since has
+ranked the same way on both so nothing forced the question. **The registered clause
+governs and B2 is refuted by it**; whether that is the right headline for the next arm is
+§1r.3 and is worth an owner view.
+
+**UNSCORED, not zero: the no-clip row.** It was pre-registered as its own outcome rather
+than a refutation, no metric in the tree can see it (§1n.2), and the operator's report of
+this run does not mention it either way.
 
 **★ B1 REFUTED — largest displacement 537 u against K2's 446 u**, on a walk half as long
 (9,734 u / 46.8 s against 18,577 u / 88.1 s). Exposure floor met (4 fires, floor 3). The
@@ -1579,7 +1606,7 @@ remains the best measured configuration at 446 u.
    §0.15's *actual* contract (drop the older click of a rapid **pair**) and it deliberately
    stays. `authsrv.py:5105-5107` and `ROUTER.md` §4 rule 1 both cite §0.15 for a
    single-click rule it does not state, and that misreading is what Rule 1 encoded.
-2. **`--echo-any-refusal`** (MOVECODE-R1-B2, requires `--click-echo` and raises without it)
+2. ~~**`--echo-any-refusal`** (MOVECODE-R1-B2)~~ — **REFUTED, stays off.** requires `--click-echo` and raises without it
    — the echo stops asking *why* the click was refused. Retail answered **22 of 32** clicks
    with a report older than 1.0 s, 13 older than 10 s (max **20.99 s**), and **5 of 32**
    with no client position ever reported. A bit-exact echo needs no origin, which is why the

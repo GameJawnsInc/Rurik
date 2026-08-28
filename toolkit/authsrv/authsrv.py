@@ -1298,7 +1298,54 @@ CLIENT_ENDPOINT = False
 # first and this never runs for a routed click.
 CLICK_ECHO = False
 
-# --echo-any-refusal. MOVECODE-R1-B2, and it is the EIGHTH candidate in this
+# --echo-any-refusal. MOVECODE-R1-B2. **REFUTED 2026-08-28 by the run built for
+# it; kept here with its numbers as the ninth epitaph.** Largest displacement
+# **1,094 u against the K2 baseline's 446 u** -- and the walk was 2.2x longer, so
+# it was checked BOTH ways: matched on K2's span (first 88.2 s) and on K2's path
+# (first 11,777 u) the largest is still 1,094 u, because all three displacements
+# land inside K2's own denominators. 2.45x on a matched walk. Do not re-enable.
+# Full record: `studies/movecode/FINDINGS.md` §1r.
+#
+# **ITS EXPOSURE WAS THE CLEANEST THIS FAMILY HAS PRODUCED**, which is why the
+# refutation is worth trusting: the single geo-stale click was dropped downstream
+# as locally-moving, so ZERO K2-staleness echoes reached the wire and all 46
+# grants came from geometry echoes. B1's action set was a subset of K2's (§1q.3);
+# this one is disjoint from it.
+#
+# **AND IT IS THE FIRST ARM WHERE THE TWO SCORINGS DISAGREE.** As a RATE it is the
+# BEST of the three arms -- 0.115 displacements per 1000 u walked and 84.2 u of
+# displacement per 1000 u, against K2's 0.255 / 93.5 and B1's 0.308 / 142.2. It
+# warps less OFTEN and much harder WHEN it does; 6 of its 8 echoes produced no
+# displacement at all. The registered clause governs and refuses it, but the
+# headline number was chosen in §1o.1 for COMPARABILITY and has never before had
+# to arbitrate between "how often" and "how bad". Read §1r.3 before quoting
+# either number alone.
+#
+# **THE MESH IS NOT THE EXPLANATION.** pathdiff replayed the client's own
+# MapFindPath calls: 10 of 10 BOTH-OK, 0 OFF-MESH. What those queries show is the
+# divergence exactly -- the client's solver returned 2-5 WAYPOINTS per click and
+# we granted a single STRAIGHT LINE to the same destination. The warp is the
+# reconcile closing that gap, and the numbers coincide to the decimal: snap-test
+# separations 682.7 / 1093.7 / 3368.1 u against displacements 657.9 / 1093.7 /
+# 451.0 u.
+#
+# **THE WORST ONE FIRES AT ARRIVAL.** The 1,094 u displacement began 293 u from
+# the clicked destination and ended 1,188 u from it -- the player walked almost
+# the whole way and was thrown four times the remaining distance backwards. A
+# 446 u nudge mid-route and a 1,094 u yank one step from the goal are not the same
+# defect at different sizes.
+#
+# **§1m.3's ORIGINAL SCOPING IS VINDICATED.** It refused geometry deliberately.
+# §1p.11 argued that refusal was already hollow, since 7 of K2's 8 echoes were
+# blocked lines anyway -- sound about the WIRE and wrong about the OUTCOME, because
+# the set this flag adds is exactly the set where the straight line is longest.
+#
+# UNSCORED, not zero: the no-clip row. It was pre-registered as its own outcome
+# rather than a refutation and no metric in the tree can see it (§1n.2); the
+# operator's report of this run does not mention it either way.
+#
+# The original reasoning follows unedited, because the prediction it registered is
+# the one the run scored. It was the EIGHTH candidate in this
 # family. It is the first one whose warrant is a measurement of ARENANET rather
 # than of us: `studies/movecode/FINDINGS.md` §1p.3 and §1p.10 item 2.
 #
