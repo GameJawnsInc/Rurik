@@ -2489,7 +2489,24 @@ in arm A's first 78 s **four clicks were refused, zero reports arrived and zero 
 went out** while the operator click-walked 2,000 u from spawn. The first keyboard press
 produced the first report and the client reconciled by putting the body back at spawn.
 
-**MOVECODE-K2 (`--click-echo`) is BUILT and NOT RUN** —
+**MOVECODE-K2 (`--click-echo`) RAN AND IS CONFIRMED on every registered clause
+(`FINDINGS` §1n) — and it bought a new harm.** The starvation is fixed: the sync copy
+went from 2,804 u of path to **17,627 u** against the local copy's 18,577 u, its idle
+share from 74.3% to **10.7%**, and the largest displacement from **5,970 u to 446 u**
+with **none** near spawn. Keyboard walking no longer warps. **But the operator reports
+NO-CLIP through props on clicked routes**, which a displacement counter cannot see by
+construction — no-clip is a legal WALK at 288 u/s. K2 grants the clicked point verbatim
+and the sync copy has no path solver, so it travels the STRAIGHT LINE and the reconcile
+puts the body on it.
+
+**NEXT IS `--router`, and it needs no build** (§1n.4): it answers a click with the legs
+of a real route, it intercepts ABOVE the freshness gate and never consults `fresh`, and
+a routed leg is walkable by construction. Its known objection is that it takes its
+origin from `state["pos"]`, a belief that goes uncorrected during click-walking —
+**MOVECODE-K3** is routing from `_sync_position()` instead, which is the one position
+we know exactly, and it should not be built until the router arm says it is needed.
+
+*(superseded:)* **MOVECODE-K2 was BUILT and NOT RUN** —
 [studies/movecode/RUN-K2.md](studies/movecode/RUN-K2.md), prediction §1m.4, 19 checks.
 One condition: a click refused for STALENESS is answered with the verbatim clicked
 point; geometry refusals still refuse. Baseline is K1 arm A, already captured.

@@ -1787,6 +1787,111 @@ Record it as its own row rather than scoring it as failure.
 
 ---
 
+## 1n. MOVECODE-K2 RUN — **CONFIRMED on every registered clause, and it bought a NEW harm**
+
+**OBSERVED, 2026-08-27.** Map 280, 1,058 records, v5, both controls FIRED, 88.1 s.
+Capture `vault/research/movecode/k2/`, server log
+`vault/captures/gamesrv/authsrv-20260827T230405-c1.jsonl`. Baseline throughout is
+**K1 arm A**, same map and operator.
+
+### 1n.1 The registered table — every row passes
+
+**Exposure floor MET**: 8 echoed clicks against a floor of 3.
+
+| §1m.4 quantity | arm A | K2 | predicted | |
+|---|---|---|---|---|
+| `geo-stale` clicks answered | 0 of 4 | **8 of 8** | all | ✅ |
+| grants to the sync copy | 13 | **18** | > 13 | ✅ |
+| sync copy idle | **74.3%** | **10.7%** | falls | ✅ |
+| displacements within 300 u of spawn | 1 (a second at 691 u) | **0** | 0 | ✅ |
+| largest displacement | **5,970 u** | **446 u** | < 5,970 | ✅ |
+
+**The starvation is fixed, and not marginally.** The sync copy went from **2,804 u of
+path to 17,627 u**, against the local copy's 18,577 u — **the two copies now walk
+together**, which is the thing this whole arc has been trying to produce since §1i.
+Its in-motion share went from 25.7% to 89.3%, *above* the local copy's 83.0%.
+
+The three remaining displacements are **446, 292 and 363 u, all mid-route** — 6,000 to
+7,700 u from spawn. Nothing went back to the spawn point. The operator confirms
+**keyboard walking no longer warps**.
+
+### 1n.2 The NEW harm, which the metric cannot see BY CONSTRUCTION
+
+> *"by the 2nd click i already warped near the destination, then the third click had me
+> no-clipping through props/on the base terrain… long range clicks or a
+> second-click-to-move during a long click-to-move also gave me no-clip-terrain-walk"*
+
+**A displacement counter cannot detect no-clip**, and that is structural rather than an
+oversight I can tune away: no-clip is a **WALK** — `m_point` and the `+0x58` stamp both
+advance, at 288 u/s, exactly like any legal leg. Every metric in §1m.4 is blind to it.
+§1m.4 pre-registered this outcome as "not a refutation", and that label was right about
+the *bookkeeping* and much too comfortable about the *harm*: a character walking through
+props is not a smaller defect than one warping to spawn, it is a different one.
+
+**The mechanism, and it is the same one from the other side.** K2 grants the clicked
+point verbatim. The sync copy has no path solver — it walks the **straight line** to
+whatever it is granted. The client's reconcile then puts the body on that line
+(the 446/292/363 u displacements), and from there the body continues along ground its
+own pathing would never have chosen. `authsrv.py` already had this measured, beside the
+gate K2 changed:
+
+> *the player clicked a spot up a staircase, the character set off correctly towards
+> the FOOT of the stairs — a real route, around the railing — and about a second later
+> snapped onto a straight line aimed at the clicked point, straight through the
+> railing.*
+
+That is this run's report, written down before this run happened. **K2 did not
+introduce the straight line; it made the sync copy actually travel it** by answering
+the 8 clicks that were previously dropped.
+
+### 1n.3 So the trade is now measured, and it is not obviously good
+
+| | refusing (shipped) | echoing (K2) |
+|---|---|---|
+| sync copy | parked at the ORIGIN | walks the straight line to the DESTINATION |
+| divergence | the whole distance walked (2,000 u) | only around obstacles |
+| the warp | **back to spawn**, 5,970 u | **forward to the route**, 446 u |
+| the body ends up | where it was long ago | **inside props, on base terrain** |
+
+§1m.3 predicted exactly this shape and called it "which is less wrong". The measurement
+says K2 is 13× smaller in displacement and **worse in kind** — a 446 u nudge that
+leaves you inside a prop is not obviously better than a 5,970 u one that leaves you at
+spawn, and only the operator can price that.
+
+### 1n.4 The answer is already in the tree, and it is `--router`
+
+`router_answer_click` (`authsrv.py:5086`) answers a click with **the legs of a real
+route over our mesh** instead of a straight line — which is what retail does
+(ROUTER.md §1: waypoint chains at leg-completion cadence). Two properties settle why it
+is the right next arm rather than a new build:
+
+* **It never consults `fresh`.** It intercepts *above* the whole freshness/geometry
+  block — "the freshness/geometry/hold machinery below never runs for it" — and
+  returns False only when there is no mesh or no position belief. So it would have
+  answered all 8 of this run's stale clicks, **without K2 being involved at all.**
+* **A routed leg is walkable by construction**, so a reconcile onto it lands on ground
+  the client's own collision agrees with. That is precisely the no-clip.
+
+They compose rather than compete: ROUTER intercepts first, and K2 catches whatever it
+falls through on.
+
+**The known objection, and it is real.** The router arc already ran and the character
+still warped — its run 5 showed *"a perfect routing origin and all four clicks routing
+away from their destinations"*. `router_answer_click` takes its origin from
+`state["pos"]`, the server's **integrator guess**, and during click-walking that guess
+is never corrected by a report (§1m.2: zero reports in 78 s). A route from a wrong
+origin is a wrong route.
+
+**MOVECODE-K3, if the router arm reproduces that:** route from
+`_sync_position(state, now)` instead of `state["pos"]`. We know where the sync copy is
+**exactly** — we put it there, and §1i.3 proved the pairing 1:1 to a 15 ms maximum —
+whereas `state["pos"]` is a belief. Routing from the copy the client actually
+reconciles against is the origin that cannot be stale. **UNVERIFIED**; it is a
+one-expression change and should not be built before the router arm says whether it is
+needed.
+
+---
+
 ## 2. Corrections to the record
 
 Each of these was in circulation and each is now measured against the bytes.
