@@ -2499,6 +2499,15 @@ construction — no-clip is a legal WALK at 288 u/s. K2 grants the clicked point
 and the sync copy has no path solver, so it travels the STRAIGHT LINE and the reconcile
 puts the body on it.
 
+**THE HUNT CONTINUES FROM
+[studies/movecode/HANDOFF-WARP.md](studies/movecode/HANDOFF-WARP.md)** — cold-start
+orientation, the seven refuted candidates with their numbers so none is rebuilt, and
+four open routes ranked by cost. **R1 is the one to take first and it needs no client**:
+nobody has ever asked what RETAIL does during a click-walk, and the vault holds 37+ live
+connections with the decoders already written. Every policy so far was invented and
+measured against the other policies, never against ArenaNet answering the same
+situation.
+
 **`--router` RAN AND IS REFUTED (§1o) -- it is WORSE than the echo alone**: largest
 displacement 446 u (echo) against 2,127 u (router) against 5,970 u (shipped). The route
 itself is valid -- checked offline, all legs clear, both shortcuts genuinely blocked --
