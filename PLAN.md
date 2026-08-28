@@ -1541,7 +1541,45 @@ either fix above.
 
 ## 8. Immediate next actions
 
-### ★★★★ MOVEMENT 2026-08-28 — THE NO-CLIP IS SCORED. It is not a walk: the reseed INSTALLS the body inside geometry
+### ★★★★ MOVEMENT 2026-08-28 — THE NO-CLIP CANNOT BE SCORED WITH OUR MESH, and now we know why
+
+**CORRECTED BY THE OPERATOR the same day, and the correction is the finding.** The entry
+below concluded the body is *installed* inside geometry and does not *walk* through it,
+on a detector reporting **561 walked samples with zero off-mesh**. The operator had
+**deliberately triggered a sustained walk** through a mountain onto the terrain beneath
+it, several times, in the same run.
+
+**§1w.7 is why the detector said zero, and it is structural.** Every line-level primitive
+in `pathmap` is **plane-blind** — `walkable(x, y)` takes no plane, `clip()` calls it,
+`_sightline()` calls it, and `route()`'s string-pull calls `_sightline`. Underneath that,
+**our navmesh is essentially a single surface**: stacked geometry occurs on **0.2%** of
+random walkable points in the walked region and **1.4%** of the body's own samples.
+`pathmap.py`'s docstring says it outright — *"THERE IS NO HEIGHT in this file"*.
+
+> **The mountain is not in our navmesh as an obstacle. One walkable surface, and a
+> straight line across it is legal at every sample BY CONSTRUCTION. No `pathmap`-based
+> detector can ever score this row.**
+
+**That explains all four previous failures at once and corrects §1r.6's diagnosis**,
+which asked whether the mesh was too COARSE to hold a prop and refuted that by
+measurement (2,769 trapezoids, 70.6% under 80 u — "fine enough"). That answered
+**resolution**; the problem is **content**. The instruments that would work are the
+client's own `PathObstacle` collision, or terrain height — neither decoded for this.
+
+**Three tests were run before this was understood and each failed differently**, which is
+the method note worth keeping: adjacency says 0 of 9 plane changes are legal (**too
+strict** — event sampling skips intermediates), connectivity says 6 of 6 are (**too loose**
+— the map is one component), and `route()` says all nine are straight-line legal at ratio
+exactly 1.00 (**the plane-blind chain again, one level deeper**). The third would have been
+published had the first two not disagreed.
+
+**What survives from the entry below is everything about the INSTALLS** — the reseed does
+put the body inside geometry, at median 239 u depth, 6 of 10 landings off-mesh against a
+4.6% matched control. **What is withdrawn is the exclusive claim** ("installed, NOT
+walked") and the zero it rested on. **Third time in this arc the operator has contradicted
+a metric and been right.**
+
+### ★★★★ MOVEMENT 2026-08-28 — the INSTALL half, which stands: the reseed puts the body inside geometry
 
 **[studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1w**, off R4-A's capture
 and its server log. No new run. Two lanes, each attacked by a skeptic — one

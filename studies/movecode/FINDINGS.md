@@ -4691,7 +4691,29 @@ piece of work and it is the first time it has been tractable.
 
 ---
 
-## 1w. THE NO-CLIP, SCORED AT LAST — **it is not a walk. The reseed INSTALLS the body inside geometry**
+## 1w. THE NO-CLIP — **§1w.1's "it is not a walk" is WITHDRAWN. Read §1w.7 FIRST**
+
+> **CORRECTED 2026-08-28, hours after it was written, by the operator.** This section
+> concluded "the body does not WALK through geometry, it is PUT there", on a detector
+> that reported **561 walked samples with zero off-mesh**. The operator's reply:
+>
+> > *"the main thing i intentionally triggered a few times was me no clipping through
+> > props and walking on the base terrain only. i.e. instead of walking around a
+> > mountain i would walk through its faces onto the base terrain underneath, walking
+> > in a straight line towards the second click. not a glide, not a jump, just a
+> > wall/mountain/corner/etc ignoring terrain walk"*
+>
+> **That is a sustained WALK, deliberately triggered, several times — and the detector
+> said it could not have happened.** §1w.7 is why: the instrument was plane-blind, so is
+> every line-level primitive in `pathmap`, and underneath that our navmesh **does not
+> contain the mountain at all**. The zero was structural, not a measurement.
+>
+> **What survives unchanged is everything about the INSTALLS** (§1w.1's table, §1w.2's
+> controls, §1w.4, §1w.5). What is withdrawn is the exclusive claim — "installed, NOT
+> walked" — and the "zero walked off-mesh" it rested on. This is the third time in this
+> arc the operator has contradicted a metric and been right.
+
+## 1w-orig. The reseed INSTALLS the body inside geometry — which is true, and is not the whole story
 
 **OBSERVED, 2026-08-28**, from `vault/research/movecode/r4a/` (R4-A, §1v) and its server
 log. No new run. Two lanes, each attacked by a skeptic: **one HOLDS-WEAKENED, one
@@ -4843,6 +4865,69 @@ R4-A as "the shipped policy's residual" wrong.*
   per-frame denominator, and this pass needed exactly that: the chord contrast died at
   k = 0–2 because position sampling is event-driven. **A timer-based position sampler is
   still the missing instrument, and no candidate site is known.**
+
+### 1w.7 WHY THE DETECTOR COULD NOT SEE IT — our navmesh has no mountain in it
+
+**OBSERVED, 2026-08-28.** Three nested reasons, each one enough on its own.
+
+**1. Every line-level primitive in `pathmap` is PLANE-BLIND.** `walkable(x, y)` takes no
+plane. `clip()` calls it. `_sightline()` binds `walkable = self.walkable` and calls it.
+`route()`'s string-pull calls `_sightline`. **So the entire chain projects to 2D**, and
+§1w.1's detector — built on `clip()` — asked "is some surface walkable at this (x, y)"
+when the question was "is the body on a surface it could have reached".
+
+**2. The record carried the plane the whole time and no detector used it.** `m_point` is
+16 bytes — `float x, float y, int plane, int` — so `point[2]` is the plane. In r4a it
+takes values 0 (×621), 61 (×25), 22 (×4), 24 (×3), 21 (×2). A plane-aware pass over the
+same samples finds **8 of 589 declaring a plane the mesh does not offer at their (x, y)**
+— e.g. seq 1047 at `(−162.3, 822.4)` declares plane 61 where the mesh has only plane 0.
+Small, real, and *not* the phenomenon the operator describes.
+
+**3. AND THIS IS THE ONE THAT ENDS THE LINE OF ATTACK: our navmesh is essentially a
+SINGLE SURFACE.** Stacked geometry — more than one plane at the same (x, y) — occurs on:
+
+| | stacked |
+|---|---|
+| 4,000 random walkable points in the walked region | **0.2%** |
+| the body's own 589 sampled positions | **1.4%** |
+
+`pathmap.py`'s own docstring says it in terms: on stacked geometry *"(a prop top over
+terrain, a bridge over ground — **THERE IS NO HEIGHT in this file**)"*.
+
+> **So the mountain the operator walks through is not in the navmesh as an obstacle.
+> There is one walkable surface, and a straight line across it is legal at every sample
+> BY CONSTRUCTION. No `pathmap`-based detector can ever score this row.**
+
+**That explains all four previous failures at once**, and it corrects the diagnosis
+§1r.6 reached. §1r.6 asked whether the mesh was too coarse to hold a prop and **refuted
+that by measurement** — 2,769 trapezoids, median y-extent 44.8 u, 70.6% under 80 u,
+"the mesh is fine enough". **That answered RESOLUTION. The problem is CONTENT**: a mesh
+of any fineness that contains only the ground cannot say you walked through a mountain
+standing on it.
+
+**The two instruments that would work, neither of them ours today:**
+
+* **The client's own collision** — the `PathObstacle` machinery (`PathObstacle:176
+  radius >= 0`, reached from the teleport's spatial query at `0x0070A150` → `0x00722B90`,
+  and the step-clearance gate `0x005FEF70` already hooked as `stepclear`). That is a
+  different structure from the trapezoid navmesh and we do not decode it.
+* **Terrain height.** The operator's own words — *"onto the base terrain underneath"* —
+  are a height claim, and height is exactly what the pathing chunk does not carry.
+
+**What this means for the arc, stated plainly:** the no-clip row **cannot be scored
+offline with what we have**, and the four previous attempts failed for a reason that was
+never going to yield to a better statistic. §1n.2 said "the operator's report is the
+instrument for this and nothing else is" — that is still true, and now it is understood
+rather than merely observed.
+
+**A method note worth keeping.** Three tests were run before this was understood, and
+each failed differently: **adjacency** between sampled trapezoids says 0 of 9 plane
+changes are legal, which is **too strict** (event-driven sampling skips intermediates);
+**connectivity** over the union-find says 6 of 6 are legal, which is **too loose** (the
+map is essentially one component, so it always says yes); and **`route()`** says all nine
+are straight-line legal at ratio exactly 1.00, which is **the plane-blind chain again,
+one level deeper**. A clean answer from the third would have been published if the first
+two had not disagreed with each other.
 
 ---
 
