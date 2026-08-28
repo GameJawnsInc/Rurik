@@ -1892,6 +1892,84 @@ needed.
 
 ---
 
+## 1o. THE ROUTER ARM — **REFUTED, and it is WORSE than the echo alone.** My §1n.4 recommendation was wrong
+
+**OBSERVED, 2026-08-27.** Map 280, `--router --click-echo`, 219 records, both controls
+FIRED, 104.0 s. Capture `vault/research/movecode/k2-2/`, log
+`authsrv-20260827T231722-c1.jsonl`.
+
+**`--click-echo` never ran in this arm.** `router_answer_click` intercepts above the
+freshness block and returns True, so there were **0 `click_verdict` rows**. This arm is
+router-only, and the readout said "CLICK VERDICTS: 0" for a run that answered every
+click -- exactly the blind report `keepalivelog.py` exists to prevent. It is
+router-aware now.
+
+### 1o.1 The ranking, measured, on the one number that survives all three arms
+
+| arm | largest displacement | total | n |
+|---|---|---|---|
+| shipped, refuse the click (K1 arm A) | **5,970 u** | 8,040 u | 3 |
+| **`--click-echo` alone (§1n)** | **446 u** | **1,101 u** | 3 |
+| `--router` (this arm) | **2,127 u** | 3,276 u | 4 |
+
+**The echo alone is the best configuration measured, by 4.8x over the router and 13x
+over the shipped default.** §1n.4 recommended adding `--router` on the argument that a
+routed leg is walkable by construction. That argument was sound and **the measurement
+refutes it**: the operator reported "still warping/terrainwalking, even on single
+clicks", and the number agrees.
+
+The starvation stays fixed in both -- sync copy 82.4% in motion, 23,971 u of path
+against the local copy's 26,929 u -- so this is not a regression to §1i's problem. It
+is a worse *reconcile*.
+
+### 1o.2 WHY, and the route is not the bug
+
+I checked the failing route offline against the real mesh, and **it is a valid route**:
+origin `(-4764, -2140)`, clicked destination `(-2581, -666)`, first granted leg
+`(-6120, -2356)` -- 1,356 u the *wrong way*. All three legs are individually CLEAR, and
+both shortcuts are genuinely BLOCKED (`origin -> leg2` stops 1,051 u short,
+`origin -> dest` stops immediately). So `pathmap.route()` found a real way around a real
+obstacle, 2.20x the straight line, which is ordinary.
+
+**The bug is not the route. It is that our route is not the CLIENT'S route.** The
+client paths the same click over its own mesh, gets a different answer, and the
+reconcile then drags the body onto ours -- 1,356 u westward on that click. Echoing the
+bare destination diverges only *around obstacles*; granting our own waypoints diverges
+by the whole difference between two independent path solvers.
+
+### 1o.3 The pathology the router-aware readout now names
+
+**The same first leg was granted FOUR times** -- `(-6902, 3595)` x4, and
+`(-6025, 3741)` x2 -- with `router_leg abandon` between them. The router recomputes on
+each new position, lands on the same waypoint, and re-grants it, dragging the body back
+to it each time. Its origins march while it does: `(-5899, 636)`, `(-6130, 1318)`,
+`(-6199, 1523)`, `(-6393, 2096)` -- the integrator walking a route nobody is on.
+
+That is the operator's "double click has even worse behaviors, clipping into the ground
+or warping around". **Warping around** is this loop.
+
+### 1o.4 Where that leaves it
+
+* **Do not run `--router` for this.** REFUTED on its own registered ground.
+* **`--click-echo` alone is the best measured configuration** and stays the
+  recommendation.
+* **MOVECODE-K3 (route from `_sync_position`) is WITHDRAWN before being built.** §1n.4
+  proposed it to fix the router's origin. The origin is not the defect -- the origins
+  above are on-mesh and the routes are valid. Fixing the origin would produce a
+  *different* valid route that the client still disagrees with.
+* **The residual is mesh AGREEMENT, not mesh correctness.** Every arm's remaining harm
+  is the same shape: whatever we grant, the client's own solver disagrees, and the
+  reconcile drags the body onto our answer. The only grant the client cannot disagree
+  with is **the destination it chose itself**, which is why the echo wins -- and the
+  no-clip that survives it (§1n.2) is the irreducible part of that disagreement, on the
+  straight line between two points both parties agree on.
+
+**NOT DETERMINED:** whether anything short of matching ArenaNet's own navmesh closes
+the remaining gap. Three server-side policies have now been measured against it and the
+best of them is the one that asserts the least.
+
+---
+
 ## 2. Corrections to the record
 
 Each of these was in circulation and each is now measured against the bytes.
