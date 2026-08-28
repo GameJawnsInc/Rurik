@@ -1541,6 +1541,69 @@ either fix above.
 
 ## 8. Immediate next actions
 
+### ★★★ MOVEMENT 2026-08-28 — R3 RAN and is UNSCOREABLE. The RUNSHEET is why, and the keyboard rival is back
+
+**[studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1u.** Three lanes each
+attacked by a skeptic: two HOLDS-WEAKENED, **one REFUTED — and it was the lane whose
+headline had already been reported upward.**
+
+**★ THE RUNSHEET SET TWO FLOORS THAT CANNOT BOTH BE MET, and that is our error, not the
+operator's.** `RUN-R3.md` §2 asked for **≥ 30 clicks** and **≥ 8 displacements** while §4
+prescribed a **click-dominated** walk to get the clicks. Measured per-click warp rates are
+**78.6%** in R2's keyboard-interrupted regime and **3.7%** in the click-dominated regime
+the sheet prescribed — so **8 displacements needs ~216 clicks**, not 30. The operator did
+exactly what was asked and delivered a balanced 14 CLEAR / 12 BLOCKED split; the design
+could not fill its own outcome floor. **The rule this earns: check an outcome floor
+against its exposure prescription BEFORE the run, at whatever rate the previous run
+already measured. It costs one division.**
+
+**Pooling with R2 does not rescue it, and that is arithmetic rather than judgement.** The
+exact stratified test's **smallest attainable one-sided p is 0.0839** — computed from the
+margins alone, before any outcome — so the pre-registered p ≤ 0.05 was **unreachable under
+every possible result**. Naive pooling would have printed **p = 0.0233**, a pure Simpson
+artifact: run predicts outcome (p = 4.1e-06) *and* exposure (p = 1.4e-02), and stratifying
+gives p = 0.5594 with per-run odds ratios of 0 and infinity.
+
+**★ WHAT THE RUN DID BUY, and it is durable.** The CLEAR/BLOCKED classifier agrees with
+the operator's eye-labels on **23 of 24** (permutation P(≥23/24) = 0.00000 against a
+shuffled median of 13/24), and a second independent instrument recovers his click
+*numbering* — the clicks carrying keyboard input are **exactly** the six he named, P by
+chance 6.9e-05 — and separates his two keyboard treatments without being told they differ.
+
+**★ THE KEYBOARD RIVAL IS NOT REFUTED; on the least-arbitrary denominator it is the factor
+that separates.** A lane reported it refuted on a click-idle zero, and its skeptic killed
+that three ways: the denominator was wall seconds (which the lane's own other claims prove
+invalid for this instrument), **the zero was FORCED** — any window ≥ the 6.30 s maximum
+displacement lag makes the idle arm empty with probability 1, and the lane chose 10 s
+citing that 6.30 s — and click-idle exposure of the settled mechanism's own sites is
+literally **zero** (the seventh zero-exposure vacuum in this arc). On a structural
+non-outcome-selected denominator the sign **reverses**: keyboard in-hold **11/31 vs 1/76,
+Fisher < 0.0001**, holding within R2 alone, while the click factor does not separate.
+**Distance also outscores corner** (p = 0.0048 vs 0.0335) and is **71% collinear** with it.
+**None of the three is separable from the RUN** — every un-interrupted click in the corpus
+is an R3 click.
+
+**★ §1i's STARVATION STORY IS NOT REFUTED** — a lane said so and its skeptic caught a
+**level error**: §1i is a run-level claim, the evidence was event-level, and the run-level
+test over the 8-run corpus gives rho = **−0.476** and **−0.429**, *carrying §1i's own
+sign*, nothing significant at n = 8. **NOT FOUND / UNDERPOWERED.** What survives is a real
+refinement: warps cluster within 500 ms of a grant (32 of 40, P = 1.23e-17), but against
+the correct null they are **no more likely per test** (80.0% vs 79.5%, p = 1.0) —
+**the grant SCHEDULES the desync test, it does not raise the per-test failure rate**, so
+warp count scales with test count. That dissolves the 11× drop without a new mechanism,
+and the drop is not denominator-robust anyway (on `agtrack` invocations, p = 0.31).
+
+**NEXT, and it needs an INSTRUMENT change first.** Every disagreement in this pass reduces
+to the hook having **no input-independent sampling backbone**, so the denominator can be
+chosen to give either answer. The fix is one row: the movement tick **`0x00600140`** is a
+verified `push ebp` entry that runs per agent per frame regardless of input — **and
+hooking it simultaneously closes §4 item 2**, open since B1, which says in terms that only
+a breakpoint reading the return address can name the tick's dispatcher. **Costed:** ~30 fps
+× 2 agents would write ~29,000 records into a 32,768 ring, so it wants a 2–3 minute
+capture or its own run. Then the design is §1u.6 — a **2 × 3 factorial**, distance held at
+1,800–2,200 u so it cannot proxy for corner, three keyboard levels, **interleaved not
+blocked**, ~20 clicks per cell.
+
 ### ★★★ MOVEMENT 2026-08-28 — R2 RAN. The operator was right, our detector was under-counting, and gate 3 is finally OBSERVED
 
 **[studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1t**, capture

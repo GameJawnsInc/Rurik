@@ -4359,6 +4359,211 @@ worth 4 tests in 1,914 entries.
 
 ---
 
+## 1u. MOVECODE-R3 — **the run is UNSCOREABLE, my runsheet is why, and the keyboard rival is back**
+
+**OBSERVED, 2026-08-28.** Map 280, `--click-echo`, **2,709 records, v6, 14 sites**, both
+controls FIRED, 268 s. Capture `vault/research/movecode/r3/`, log
+`authsrv-20260828T162424-c1.jsonl`. Three analysis lanes, each attacked by a skeptic:
+**two HOLDS-WEAKENED and one REFUTED — the refuted one being the lane whose headline I
+had already reported.**
+
+The operator's own design, which turned out to be better than the one the runsheet asked
+for:
+
+> *"10 cornered clicks, with WASD moves after arriving on clicks 4, 6, and 10. 10 open
+> clicks, with WASD moves on 14, 16, and 20. then 4 W-interrupted corner clicks. the
+> final one warped me, and i closed the run"*
+
+---
+
+### 1u.1 R3-P2 is UNSCOREABLE, and pooling with R2 does not rescue it
+
+**The floors govern and three were missed** — clicks 27 of 30, **displacements 1 of 8**,
+`setposition` 2 of 10. `RUN-R3.md` §2 says in terms that such a run *"measures nothing
+and must be re-run, not reported through."* It is not reported through.
+
+**Pooling with R2 was the obvious rescue and it is arithmetically impossible.** The exact
+stratified test conditions on each run's arm sizes *and* its number of warped clicks. R2
+contributes one CLEAR click; R3 contributes one warp. **The smallest attainable one-sided
+p, computed from the margins alone before looking at any outcome, is 0.0839** — 0.1376 if
+OFF-MESH folds into BLOCKED. **The pre-registered p ≤ 0.05 was unreachable under every
+possible outcome**, so no result this pass could have produced would have counted.
+
+**And naive pooling would have printed p = 0.0233.** That number is a Simpson artifact
+end to end: run predicts outcome (R2 82% of clicks warped against R3's 4%, p = 4.1e-06)
+*and* predicts exposure (R2 91% BLOCKED against R3's 46%, p = 1.4e-02). Stratified by run
+it becomes **p = 0.5594**. Neither run shows any within-run effect at all — R2 alone
+BLOCKED 8/10 against CLEAR 1/1 (p = 1.0), R3 alone 1/12 against 0/14 (p = 0.4615) — and
+the per-run odds ratios are **0 and infinity**, so Breslow–Day is not computable, which is
+itself the finding.
+
+### 1u.2 THE RUNSHEET SET TWO FLOORS THAT CANNOT BOTH BE MET. That is my error, not the operator's
+
+`RUN-R3.md` §2 asked for **≥ 30 clicks** *and* **≥ 8 displacements**, and §4 prescribed a
+**click-dominated** walk to get the clicks. Measured per-click warp rates:
+
+| regime | warps per click | 95% CI |
+|---|---|---|
+| R2 (keyboard-interrupted throughout) | **11/14 = 78.6%** | 49.2–95.3% |
+| R3 (click-dominated, as prescribed) | **1/27 = 3.7%** | 0.09–19.0% |
+
+**At the rate the prescribed walking style produces, 8 displacements needs ~216 clicks**
+(CI 42–8,536). The runsheet asked for 30. **The walk did exactly what it was told and the
+design could not fill its own outcome floor in eight minutes.**
+
+Keyboard density is the mechanism: R2 ran 1,615 `chcli_dir` over 175 s (**9.21/s**, every
+one of its 14 clicks key-exposed), R3 ran 350 over 262 s (**1.34/s**, with **15 of 27
+clicks carrying zero keyboard**). I asked for the arm that does not warp and then
+required warps from it.
+
+**The lesson is not "ask for more clicks".** It is that an outcome floor and an exposure
+prescription have to be checked against each other *before the run*, using whatever rate
+the prior run already measured. That check costs one division and it was not done.
+
+### 1u.3 What the run DID buy: the classifier is validated, and the operator's own labels are recoverable from the bytes
+
+**CORROBORATED, and this is the durable result of the pass.** The CLEAR/BLOCKED
+classifier — `pathmap.clip(pt_a → pt_b)` over `mapfindpath`'s recorded endpoints — agrees
+with the operator's eye-labels on **23 of 24 mapped clicks (95.8%)**, Fisher p = 5.6e-06.
+A 20,000-permutation label shuffle puts **P(agreement ≥ 23/24) = 0.00000** against a
+shuffled median of 13/24. The two methods share nothing: one is geometry over ArenaNet's
+pathing chunk, the other is a person looking at a screen. Both disagreements are named —
+one genuine miss (a 3,296 u click the operator called cornered and our mesh says is
+clear), one OFF-MESH destination, which is our decode gap rather than a statement about
+the client.
+
+**And a second, independent instrument recovers the operator's click NUMBERING.** He
+named WASD on clicks 4, 6, 10 and 14, 16, 20. The clicks carrying any `chcli_dir` in
+window are **exactly [4, 6, 10, 14, 16, 20]** — 6 of 6, no false positives, P by chance
+within the two blocks **6.9e-05**, and `chcli_dir` played no part in building the mapping.
+The same instrument separates his two keyboard treatments without being told they differ:
+**WASD-after-arriving starts +5.6 to +20.7 s after its click; the W-interrupted tail
++2.3 to +5.9 s.**
+
+**Exposure, corrected.** R3 is **14 CLEAR / 12 BLOCKED / 1 OFF-MESH** — my first readout's
+"14/13" folded the OFF-MESH row into BLOCKED. R2 is **1 CLEAR / 10 BLOCKED / 3 OFF-MESH**,
+which is why R2 cannot supply a control arm: *it has one*.
+
+### 1u.4 §1i's starvation story is NOT refuted — the lane that said so made a LEVEL ERROR
+
+A lane reported *"§1i's starvation story is REFUTED AND INVERTED"* and its skeptic killed
+the framing. **§1i is a RUN-level claim** (grants per 1,000 u below retail's floor, so the
+twin falls behind); the lane's evidence is **event-level**. The run-level test the lane
+never ran, over its own 8-run corpus: grants/1000u against warps-per-snaptest
+**rho = −0.476** (perm p 0.241), against warps-per-grant **rho = −0.429** (p 0.301) —
+**both carrying §1i's own sign**, neither significant at n = 8. The one positive
+correlation shares the path denominator on both axes and is the spurious-ratio artifact.
+
+**Correct label: NOT FOUND / UNDERPOWERED. §1i stands, unconfirmed and unrefuted.**
+
+**What does survive, and it is a real refinement.** Warps cluster immediately after
+grants — **32 of 40 gated reseeds across eight runs fire within 500 ms of one**,
+Poisson-binomial P(≥32) = 1.23e-17, every figure reproduced. But against the *correct*
+null — warps as a random subset of snaptests rather than of wall time — the enrichment is
+**zero**: 80.0% of warps are grant-adjacent against 79.5% of snaptests, exact p = 1.0.
+
+> **The grant SCHEDULES the desync test; it does not raise the per-test failure rate.**
+> Warp count therefore scales with test count, not with grant scarcity.
+
+That also dissolves the 11× drop without needing a new mechanism: R3 granted 55 times
+against R2's 104, so it ran fewer tests. And the drop is **not denominator-robust** —
+on `agtrack` invocations (a clean single-object per-invocation exposure, verified to fire
+on exactly one `ecx` in every run) R2's 11 against R3's 1 gives **p = 0.31**. The lane
+reported only the two denominators giving p < 1e-3.
+
+**A factual correction that reaches the server side:** our server did **not** grant zero
+clicks. Under `--click-echo` it echoed **12 of 14** refused clicks in R2 and **22 of 24**
+in R3, verbatim (`authsrv.py:16883`, `fired=True, geo-stale`).
+
+**A check that could have failed eight times and did not:** the sync-copy setter count
+equals the server's own `0x0029` send count **1:1 in all eight runs** — 13, 18, 21, 30,
+46, 104, 55, 51.
+
+### 1u.5 The keyboard rival is NOT refuted. On the least-arbitrary denominator it is the factor that separates
+
+A lane reported the keyboard trigger REFUTED — *"30 bursts across 121.3 s of click-idle
+time produced ZERO displacements against 4.61 expected, Poisson P(0) = 0.010"* — **and I
+repeated that headline before its skeptic returned.** It does not survive, three ways:
+
+1. **The denominator is wall seconds**, which the lane's *own* claims 2 and 8 separately
+   prove is the one thing this instrument's density cannot support (record density tracks
+   input: R2/R3 time-normalised site ratios run 4.7–6.9 on input-driven sites). The lane
+   refuted its own headline twice and did not connect the claims.
+2. **The zero is FORCED by window selection.** With `active = [click, click+W]`, a
+   displacement is idle iff its lag exceeds W. Pooled lags top out at **6.30 s**; the lane
+   chose **W = 10 s** and cited that 6.30 s as evidence the window was *not* tuned. Any
+   W ≥ 6.30 s makes the idle arm zero with probability 1. Its own script docstring writes
+   the tell out loud. **Click-idle exposure of the settled mechanism's own sites is
+   literally zero** — `reseed` 0/15, `setposition` 0/2, `setter@0x0060244D` 0/14. That is
+   a zero-exposure vacuum, the **seventh** in this arc.
+3. **No minimum detectable effect.** The test can only reject a standalone keyboard
+   potency ≥ ~65% of the click-active rate.
+
+**And the sign reverses on an honest denominator.** On a structural, non-outcome-selected
+opportunity set (either record from `teleport`/`reseed`/`setposition`; n = 107, 12
+movers): **keyboard in-hold 11/31 against 1/76, Fisher < 0.0001**, stable across hold
+windows from 50 ms to 2 s, and **within R2 alone Fisher 0.0119**. On that same denominator
+the **click factor does not separate** — pooled 12/87 vs 0/20 (p = 0.1173), R2 alone
+(p = 0.5602). The lane's ratio of 1.05 is one endpoint of a range running **1.05 → 2.20 →
+11.0** as structurally-impossible pairs are removed; 92% of its denominator was
+`setter→bake` pairs that have never moved a body.
+
+**Correct label: NOT-MEASURABLE on this corpus, and still live.** Not refuted.
+
+**Two further things that outrank the corner.** In the per-click 2×2, the best-scoring
+factor is the keyboard one (`interrupt` 11/20 vs 0/21, **p = 0.0001**) and the next is
+plain **distance** (≥ 2500 u: 10/22 vs 1/19, **p = 0.0048**), both beating corner
+(p = 0.0335) — **and corner is 71% collinear with distance**, agreeing on 29 of 41 clicks.
+There is a CLEAR click at 3,318 u that warped 282 u.
+
+**But none of it is separable from the RUN**, and that is the honest bottom line: **every
+un-interrupted click in the corpus is an R3 click.** Corner, distance and keyboard are
+mutually confounded with each other and with the run.
+
+### 1u.6 What the next run needs — and it needs an INSTRUMENT change first
+
+**The design (from L3, upheld by its skeptic as the most valuable thing it produced):** a
+**2 × 3 factorial**, **distance held in a narrow band (1,800–2,200 u)** so it cannot proxy
+for corner, three keyboard levels (**none / after-arrival / interrupting**), **INTERLEAVED,
+not blocked** — R3's block structure is what made phase and factor inseparable — and
+**~20 clicks per cell**. At R2's interrupted rate that is a few minutes; at R3's
+click-only rate the *no-keyboard* cells will produce almost no warps, which is the point:
+**that cell is the control and its emptiness is the measurement.**
+
+**The prerequisite, and it is why another run should not be booked yet.** Every
+disagreement in this pass reduces to the same thing: **the hook has no input-independent
+sampling backbone**, so the denominator can be chosen to give either answer, and both
+lanes chose one without a sensitivity analysis.
+
+**The fix is available and it is one row.** The movement tick `0x00600140` is a
+`push ebp` entry (re-read from the pinned image 2026-08-28: `55 8b ec 83 ec 2c 53 56`).
+It runs per agent per frame regardless of input, which is exactly the missing
+denominator — **and hooking it simultaneously answers §4 item 2**, which has stood open
+since B1: the tick is a C++ virtual with **0 direct callers**, reached only through
+`call dword [reg+4]`, and §4 says in terms *"a breakpoint reading the return address
+settles it in one run; static analysis will not."*
+
+**Costed honestly, because it is not free:** at ~30 fps over two agents, an 8-minute
+capture would write ~29,000 records into a 32,768 ring and truncate everything else. R3
+used 2,709. So the tick site wants a **short capture (2–3 minutes)**, or a stride, or its
+own run — and `readhook` already reports ring fill, which is the number to watch.
+
+### 1u.7 Corrections to the record from this pass
+
+* **`readhook`'s per-site table prints LIVE addresses, and record `retaddr`s are LIVE
+  too** — both rebase by `(− cap.base + 0x00400000)`. I briefed three lanes that retaddrs
+  were already static; `pathdiff.py`'s own `reb()` had it right all along. Combined with
+  the call-vs-return off-by-five (`0x00602369` vs `0x0060236E`), this is **two distinct
+  address-space traps in one readout**, and both produce the same symptom: every known
+  caller reported as unknown.
+* **R3's exposure is 14 CLEAR / 12 BLOCKED / 1 OFF-MESH**, not the 14/13 first reported.
+* **R3-P1 is UNSCORED, not refuted** (2 records against a floor of 10). Both returned to
+  `reseed`; the other six callers did not fire, which is a fact about the walk.
+* **R3-P3 is CONFIRMED** — the captured `arg1` equals the landing to **0.000 u** on both
+  records, so the landing is measured at the write rather than inferred.
+
+---
+
 ## 2. Corrections to the record
 
 Each of these was in circulation and each is now measured against the bytes.

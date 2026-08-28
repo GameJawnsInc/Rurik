@@ -1,5 +1,25 @@
 # MOVECODE-R3 — the click-shape run
 
+> **RAN 2026-08-28. UNSCOREABLE, AND THIS RUNSHEET IS WHY — read
+> [FINDINGS.md](FINDINGS.md) §1u before copying its shape.**
+>
+> §2 below asks for **≥ 30 clicks** and **≥ 8 displacements**, while §4 prescribes a
+> **click-dominated** walk to get the clicks. Those cannot both happen. Measured
+> per-click warp rates are **78.6%** in R2's keyboard-interrupted regime and **3.7%**
+> in the click-dominated regime this sheet prescribed, so **8 displacements needs
+> ~216 clicks**, not 30. The operator did exactly what was asked (27 clicks, a
+> balanced 14 CLEAR / 12 BLOCKED split) and the design could not fill its own outcome
+> floor. **The run did not fail; the runsheet did.**
+>
+> **The rule this earns:** an outcome floor and an exposure prescription must be
+> checked against each other *before the run*, at whatever rate the previous run
+> already measured. It costs one division.
+>
+> What the run did buy is in §1u.3 — the CLEAR/BLOCKED classifier validated at
+> **23 of 24** against the operator's own eye-labels, and his click *numbering*
+> independently recovered from `chcli_dir` at **6 of 6**. The next design is §1u.6
+> and it needs an instrument change first.
+
 **Written 2026-08-28, after R2 ([FINDINGS.md](FINDINGS.md) §1t). One new site, one
 question.** Predictions and floors are registered here **before** the run, per the
 standard that got this arc its honest results.
