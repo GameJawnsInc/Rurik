@@ -163,7 +163,7 @@ R3 could not deliver.
 python toolkit/clientscan/movehook/test_movehook.py
 ```
 
-Expect **144** (floor 96).
+Expect **150** (floor 102).
 
 ```bash
 python toolkit/clientscan/movehook/gensites.py --exe vault/client/2026-07-29_221c13772c7a/Gw.exe
