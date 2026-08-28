@@ -1556,10 +1556,23 @@ so we reproduce ArenaNet **bit-for-bit** there — and **0 of 11** on the part-w
 whose waypoints are bit-exact navmesh trapezoid corners no policy here emits.
 
 **Two DESK items, each deleting a refusal rather than adding a policy** (§1p.10 items 1–2).
-**BOTH ARE NOW BUILT, both OFF by default, and NEITHER HAS BEEN RUN** — they are the next
-thing to put in front of a client, together, on map 280:
+Both are built and OFF by default. **B1 RAN 2026-08-28 AND IS REFUTED (§1q); B2 IS STILL
+UNRUN** and its exposure is reachable on the same walk — B1's own run left 6 `geo-blocked`
+refusals against B2's floor of 3.
 
-1. **`--answer-kbd-click`** (MOVECODE-R1-B1) — stop dropping clicks that arrive under
+**★ B1 REFUTED — largest displacement 537 u against K2's 446 u**, on a walk half as long
+(9,734 u / 46.8 s against 18,577 u / 88.1 s). Exposure floor met (4 fires, floor 3). The
+spawn clause passed — closest approach 2,403 u — so this is a smaller, different harm than
+arm A's, and the scoring number refuses it anyway. **All three displacements follow a B1
+click grant** at +1.97, +1.97 and +3.04 s, on a clock pairing checked at p50 4 ms over 29
+gap sequences; the operator's report agrees ("ended with a W press that caused a warp").
+**That is B1's own pre-registered failure mode, and it corrects §1o's pattern**: the rule
+is not "asserting more about WHERE does worse" — B1 asserted nothing about where — it is
+**a grant put on the wire while the client already holds an authority does worse**, a claim
+about WHEN. Rule 1 was right for a reason its own comment got wrong. `--click-echo` alone
+remains the best measured configuration at 446 u.
+
+1. ~~**`--answer-kbd-click`** (MOVECODE-R1-B1)~~ — **REFUTED, stays off.** stop dropping clicks that arrive under
    keyboard authority. **7 of 32** live clicks arrive with the latch Rule 1 arms on, and
    retail answered every one within one RTT, 635–2,445 u from any D1 lead prediction. The
    click now falls through to the **rate floor**, which still holds-and-coalesces: that is
