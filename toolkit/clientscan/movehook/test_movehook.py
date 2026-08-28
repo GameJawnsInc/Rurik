@@ -70,19 +70,19 @@ import checks                                                   # noqa: E402
 #   §11  4   the reader's layout vs rec_t IN THE C   process-free
 #   §12  6   the world-copy census, both directions  process-free
 #   §13  5   the displacement count, both directions process-free
-#   §14 38   the 2026-08-28 sites, v6, setposition + its off-by-five  29 pf + 9 client
-#   ----    process-free core = 75, and THAT is the floor.
+#   §14 59   2026-08-28 sites, v6, setposition, the tick + its STRIDE  50 pf + 9 client
+#   ----    process-free core = 96, and THAT is the floor.
 #
 # §12 and §13 both read `gensites.rows()`, which goes to `content.load()` and never
 # opens the client, so their eleven are process-free and the core moved with them.
-# A whole green run on this machine is now 122.
+# A whole green run on this machine is now 144.
 #
 # §14 SPLITS, and the split was counted out of the banner rather than reasoned
 # about: 25 checks, of which the 8 non-entry refusals and their 1 control call
 # `gensites.verify()` and therefore need the vaulted image, while the row
 # assertions and the whole v6 round-trip go through `content.load()` and a
-# synthesised capture and never open it. 38 - 9 = 29 process-free, so the core
-# moves 46 -> 75. A bare machine must still clear 75.
+# synthesised capture and never open it. 59 - 9 = 50 process-free, so the core
+# moves 46 -> 96. A bare machine must still clear 96.
 #
 # The first draft of this comment guessed 16 by adding up what the sections
 # looked like they contained, and it was two low -- which would have let two
@@ -90,8 +90,8 @@ import checks                                                   # noqa: E402
 # ("set the floor from a real green run, never from a guess") is not about
 # arithmetic being hard; it is that a floor derived from the code rather than
 # from the output drifts the moment either changes. `skip()` lowers the floor by
-# ZERO, so a bare machine must still clear 75.
-LEDGER = checks.Ledger("movehook", floor=75)
+# ZERO, so a bare machine must still clear 96.
+LEDGER = checks.Ledger("movehook", floor=96)
 check = checks.adopt(LEDGER)
 
 WOW64_CMD = r"C:\Windows\SysWOW64\cmd.exe"
@@ -904,6 +904,50 @@ def section_14(tmp):
           f"call addresses present as keys: "
           f"{sorted(hex(v) for v in keys & set(CALLS))} -- that is the off-by-five "
           "that reported reseed as an unknown caller on the first R3 readout")
+
+    # MOVECODE-R4: the tick, and the STRIDE it forced into existence.
+    eq("tick" in names, True, "14. the `tick` row is present")
+    if "tick" in rows:
+        tk = rows["tick"]
+        eq(tk.get("va"), 0x00600140, "14. tick is the movement tick 0x00600140")
+        eq(int(tk.get("stride") or 0), 64,
+           "14. and it is STRIDED -- movehook's worker ENDS THE RUN when the ring "
+           "fills, so an unstrided per-frame site truncates the whole capture")
+
+    # THE GUARD THAT MATTERS MORE THAN THE ROW. A stride on a site whose RECORDS
+    # are counted turns every rate in this arc into a silent undercount -- the
+    # displacement census, the reseed split, P1a's bake rate and the gate-3 filter
+    # all count stored records. `hits` is unaffected by the stride, `stored` is
+    # not, and nothing in the file would announce the change. So the sites whose
+    # records are counted are named here and required to be unstrided.
+    COUNTED = ("bake", "teleport", "setter", "reseed", "resync", "snaptest",
+               "stepclear", "setposition", "agtrack", "mapfindpath",
+               "chcli_point", "chcli_dir", "chcli_advance", "agapi_setdest")
+    for nm in COUNTED:
+        if nm in rows:
+            check(int(rows[nm].get("stride") or 0) in (0, 1),
+                  f"14. `{nm}` is NOT strided -- its records are counted",
+                  f"stride {rows[nm].get('stride')} would make every count over "
+                  f"this site a 1-in-N sample while `hits` stayed whole, and no "
+                  f"reader would say so")
+
+    # THE STRIDE ARITHMETIC, mirrored from movehook.c's own expression so the
+    # two properties it is relied on for are pinned rather than assumed:
+    # the FIRST occurrence is always stored (a site that fired once still appears
+    # in the capture), and storage is evenly spaced thereafter.
+    def _stores(nth, stride):
+        return not (stride > 1 and ((nth - 1) % stride) != 0)
+    eq([n for n in range(1, 12) if _stores(n, 4)], [1, 5, 9],
+       "14. stride 4 stores occurrences 1, 5, 9 -- first hit always kept")
+    eq([n for n in range(1, 6) if _stores(n, 1)], [1, 2, 3, 4, 5],
+       "14. stride 1 stores everything")
+    eq([n for n in range(1, 6) if _stores(n, 0)], [1, 2, 3, 4, 5],
+       "14. and stride 0 means unset, not `store nothing`")
+    src_c = open(os.path.join(HERE, "movehook.c"), encoding="utf-8").read()
+    check("(nth - 1) % SITES[i].stride" in src_c,
+          "14. and movehook.c uses that exact expression",
+          "the C and this mirror must not drift; `nth % stride` would drop the "
+          "first hit and a site that fired once would vanish from the capture")
 
     # The two offsets the early-out and the world census need.
     eq(offs.get("facing", {}).get("offset"), 0xC4,

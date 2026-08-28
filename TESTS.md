@@ -6983,7 +6983,18 @@ shrinks section 10),
   CALL addresses — which is how `--xrefs` prints them and how both `FINDINGS.md` and
   `content/movecode.toml` cite them — reports every known caller as UNKNOWN. §14 asserts
   the table is keyed on call+5 and that no call address appears as a key; planting the
-  exact regression reddens both checks. 75 floor, 122 on a
+  exact regression reddens both checks. **And the tick, which forced a new mechanism:**
+  `0x00600140` runs per agent per frame, and movehook's worker *ends the run* when the ring
+  fills — so an unstrided per-frame site would not truncate the tail, it would cut the
+  capture short and starve every other site. `stride` stores 1 hit in N while `g_hits[]`
+  still counts every one, so the denominator stays exact. §14 pins the arithmetic
+  (occurrence 1 is always stored, so a site that fired once still appears; `nth % stride`
+  would drop it) against movehook.c's own expression, and — the guard that matters more
+  than the row — requires every site whose RECORDS are counted to be unstrided, since a
+  stride there would turn the displacement census, the reseed split, P1a and the gate-3
+  filter into silent 1-in-N samples while `hits` stayed whole. Planting `stride = 8` on
+  `reseed` reddens that check *and* the generated-header check independently. 96 floor,
+  144 on a
   machine with the client, a compiler, an archive and a 32-bit `cmd.exe`; each other
   section declares a skip),
   `toolkit/clientscan/test_commandertrap.py` (the hardware-breakpoint trap, and

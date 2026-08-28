@@ -12,7 +12,7 @@
  * re-emulates ONE instruction shape. See PLAN.md §7 Q12(d). */
 #define SITE_FIRST_BYTE 0x55u
 
-#define NSITES 14u
+#define NSITES 15u
 
 typedef struct {
     unsigned long rva;
@@ -22,23 +22,29 @@ typedef struct {
     int           deref_b;
     int           deref_agent_arg; /* arg index holding a SECOND agent, 0=none */
     int           deref_fence;   /* read AgTrack's per-agent clientControlled */
+    unsigned      stride;        /* store 1 hit in N; 0/1 = every hit. The
+                                    HIT COUNT is unaffected and is what the
+                                    sidecar reports, so a strided site still
+                                    gives an exact denominator -- see the
+                                    note at the stride test in movehook.c. */
 } site_t;
 
 static const site_t SITES[NSITES] = {
-    { 0x001FC7A0u, "agapi_setdest", 0, 2, 0, 0, 0 },   /* 0x005FC7A0 */
-    { 0x00205FC0u, "agtrack", 0, 0, 0, 1, 1 },   /* 0x00605FC0 */
-    { 0x001FE950u, "bake", 1, 0, 0, 0, 0 },   /* 0x005FE950 */
-    { 0x0041B580u, "chcli_advance", 0, 0, 0, 0, 0 },   /* 0x0081B580 */
-    { 0x0041A8F0u, "chcli_dir", 0, 0, 0, 0, 0 },   /* 0x0081A8F0 */
-    { 0x0041ADB0u, "chcli_point", 0, 0, 0, 0, 0 },   /* 0x0081ADB0 */
-    { 0x00309E90u, "mapfindpath", 0, 1, 2, 0, 0 },   /* 0x00709E90 */
-    { 0x002022B0u, "reseed", 1, 0, 0, 1, 0 },   /* 0x006022B0 */
-    { 0x00205E40u, "resync", 0, 0, 0, 0, 0 },   /* 0x00605E40 */
-    { 0x00202B20u, "setposition", 1, 1, 0, 0, 0 },   /* 0x00602B20 */
-    { 0x00202A40u, "setter", 1, 0, 0, 0, 0 },   /* 0x00602A40 */
-    { 0x002055E0u, "snaptest", 0, 0, 0, 2, 0 },   /* 0x006055E0 */
-    { 0x001FEF70u, "stepclear", 0, 0, 0, 0, 0 },   /* 0x005FEF70 */
-    { 0x002020B0u, "teleport", 1, 0, 0, 0, 0 },   /* 0x006020B0 */
+    { 0x001FC7A0u, "agapi_setdest", 0, 2, 0, 0, 0, 0u },   /* 0x005FC7A0 */
+    { 0x00205FC0u, "agtrack", 0, 0, 0, 1, 1, 0u },   /* 0x00605FC0 */
+    { 0x001FE950u, "bake", 1, 0, 0, 0, 0, 0u },   /* 0x005FE950 */
+    { 0x0041B580u, "chcli_advance", 0, 0, 0, 0, 0, 0u },   /* 0x0081B580 */
+    { 0x0041A8F0u, "chcli_dir", 0, 0, 0, 0, 0, 0u },   /* 0x0081A8F0 */
+    { 0x0041ADB0u, "chcli_point", 0, 0, 0, 0, 0, 0u },   /* 0x0081ADB0 */
+    { 0x00309E90u, "mapfindpath", 0, 1, 2, 0, 0, 0u },   /* 0x00709E90 */
+    { 0x002022B0u, "reseed", 1, 0, 0, 1, 0, 0u },   /* 0x006022B0 */
+    { 0x00205E40u, "resync", 0, 0, 0, 0, 0, 0u },   /* 0x00605E40 */
+    { 0x00202B20u, "setposition", 1, 1, 0, 0, 0, 0u },   /* 0x00602B20 */
+    { 0x00202A40u, "setter", 1, 0, 0, 0, 0, 0u },   /* 0x00602A40 */
+    { 0x002055E0u, "snaptest", 0, 0, 0, 2, 0, 0u },   /* 0x006055E0 */
+    { 0x001FEF70u, "stepclear", 0, 0, 0, 0, 0, 0u },   /* 0x005FEF70 */
+    { 0x002020B0u, "teleport", 1, 0, 0, 0, 0, 0u },   /* 0x006020B0 */
+    { 0x00200140u, "tick", 1, 0, 0, 0, 0, 64u },   /* 0x00600140 */
 };
 
 /* Agent struct offsets the handler reads at each hit. */

@@ -502,10 +502,26 @@ def report(cap, names, dump=0):
     a("")
 
     a("per site:")
+    # A STRIDED SITE'S `stored` IS A SAMPLE, NOT A COUNT, and conflating the two
+    # would break every rate in this arc silently. `hits` is always the census --
+    # movehook increments it BEFORE the stride test -- so the row says which
+    # number to use rather than leaving it to be inferred from the gap.
+    strides = {}
+    try:
+        import gensites
+        for _n, _r in gensites.rows()[0].items():
+            if int(_r.get("stride") or 0) > 1:
+                strides[int(_r["rva"])] = int(_r["stride"])
+    except Exception:                                            # pragma: no cover
+        pass
     for i, s in enumerate(cap.sites):
         nm = names[i] if i < len(names) else f"site{i}"
         stored = sum(1 for r in cap.recs if r["site"] == i)
-        a(f"  {nm:10} va 0x{s['va']:08X}  hits {s['hits']:7}  stored {stored}")
+        st = strides.get(int(s["rva"]))
+        note = (f"   STRIDE 1-in-{st}: `stored` is a SAMPLE, use `hits`"
+                if st else "")
+        a(f"  {nm:10} va 0x{s['va']:08X}  hits {s['hits']:7}  "
+          f"stored {stored}{note}")
     a("")
 
     idx = {nm: i for i, nm in enumerate(names)}

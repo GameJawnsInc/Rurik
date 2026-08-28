@@ -467,8 +467,27 @@ static LONG CALLBACK on_bp(PEXCEPTION_POINTERS ep)
     }
 
     for (i = 0; i < NSITES; i++) {
+        LONG nth;
         if (a != g_addr[i]) continue;
-        InterlockedIncrement(&g_hits[i]);
+        nth = InterlockedIncrement(&g_hits[i]);
+        /* STRIDE, added 2026-08-28 for the per-frame tick site.
+         *
+         * `g_hits[i]` counts EVERY occurrence and is what the sidecar reports, so
+         * a strided site still yields an exact denominator -- which for the tick
+         * is the whole point: we need the per-frame COUNT, not per-frame records.
+         * Storage is what the ring cannot afford. The movement tick runs per agent
+         * per frame, so at ~30 fps over two agents an 8-minute run offers ~29,000
+         * occurrences against NCAP 32768 -- and the worker loop at the bottom of
+         * this file ENDS THE RUN when the ring fills, so an unstrided tick would
+         * not merely truncate the tail, it would cut the capture short and starve
+         * every other site of the rest of the session.
+         *
+         * A stride of N stores occurrence 1, N+1, 2N+1 ... so a site always
+         * contributes its FIRST hit (a site that fired once still appears) and the
+         * stored records stay evenly spaced for timing. Sites with stride 0 or 1
+         * are unaffected, which is every site that existed before this. */
+        if (SITES[i].stride > 1u && ((DWORD)(nth - 1) % SITES[i].stride) != 0u)
+            continue;
         {
             LONG slot = InterlockedIncrement(&g_n) - 1;
             if (slot < (LONG)NCAP) {

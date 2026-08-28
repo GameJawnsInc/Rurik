@@ -450,6 +450,55 @@ build = 38797
 verified = "--dis 0x00602B20 shows `55 8b ec 83 ec 0c 53 56 57` re-read from the pinned image 2026-08-28. --xrefs gives SEVEN direct rel32 callers and 0 words holding the VA: 0x005FDAE5, 0x005FDB49, 0x005FF74B, 0x00602369 (inside reseed), 0x006028FF, 0x00604A50, 0x00606394. ecx is `this`, confirmed at 0x00602B29 `mov ebx,ecx` with every later agent access based on ebx; arg1 at 0x00602B30 `mov esi,[ebp+8]`. The two addresses §1t.8 asked for are in that caller list, which is what makes this site a superset of the request rather than a substitute for it."
 
 # --------------------------------------------------------------------------
+# MOVECODE-R4, added 2026-08-28. THE INPUT-INDEPENDENT SAMPLING BACKBONE, and
+# it is an INSTRUMENT row rather than a question row.
+#
+# WHY. Every disagreement in the R3 analysis pass reduced to one thing: this
+# hook has no denominator that is independent of input. Its sites all fire on
+# solver events, and record density therefore tracks how much the operator was
+# doing -- FINDINGS §1u.5 is a worked example where two honest analyses of the
+# same 12 events reached opposite signs purely by choosing different
+# denominators, one giving a rate ratio of 1.05 and the other 11.0 over the same
+# corpus. A denominator you get to choose is not a denominator.
+#
+# The movement tick runs per agent per frame regardless of what the player is
+# doing, so its hit count is wall-clock exposure measured by the client's own
+# clock. That makes every per-opportunity rate in this arc computable without a
+# modelling choice.
+#
+# AND IT CLOSES §4 ITEM 2, OPEN SINCE B1. The tick is a C++ virtual: 0 direct
+# rel32 callers, reached only by `call dword [reg+4]` after a vptr load, so
+# `--xrefs` returns a zero indistinguishable from a dead function. §4 says in
+# terms that "a breakpoint reading the return address settles it in one run;
+# static analysis will not. That is a B2 site." This is that site, and the
+# record already carries retaddr.
+#
+# THE STRIDE IS NOT OPTIONAL, and it is why `stride` exists at all. At ~30 fps
+# over the two world copies an 8-minute run offers ~29,000 occurrences against
+# NCAP 32768 -- and movehook's worker loop ENDS THE RUN when the ring fills, so
+# an unstrided tick would cut the capture short and starve every other site of
+# the rest of the session. `g_hits[]` counts every occurrence regardless, so the
+# denominator is exact at any stride; only the stored sample is thinned.
+# 64 keeps a full-length run at roughly a record every two seconds per agent.
+# --------------------------------------------------------------------------
+
+[hook_site.tick]
+va = 0x00600140
+rva = 0x00200140
+first_byte = 0x55
+thiscall = true
+deref_agent = true
+stride = 64
+what = "the movement tick, AgAgent's per-frame update. A C++ virtual: slot 1 of the two-entry vftable at 0x00A52F60 whose slot 0 is the scalar deleting destructor 0x005FE920 (`push 0x134` = the class size), and whose address the constructor stores at object offset 0 (0x005FDE8E `mov dword [ebx], 0xa52f60`). `ret 8` -- `this` in ecx plus two stack args. It carries the arrival test at 0x006001EB (`now == +0x48`, exact equality) and the glide-vs-teleport branch at 0x0060029F."
+why_hooked = "TWO jobs, and the first is why it is here. (1) THE DENOMINATOR: it fires per agent per frame independently of input, so its hit count is exposure. Every other site in this table fires on a solver event, which means record density tracks operator activity and any per-opportunity rate depends on which denominator the analyst picks -- FINDINGS §1u.5 is two analyses of the same 12 events reaching opposite signs that way. (2) IT CLOSES §4 item 2: the tick is a virtual with 0 direct callers, so --xrefs cannot name its dispatcher and only a captured return address can. AgTimer::Advance 0x00603FE0 is the obvious candidate and is RULED OUT -- it dispatches slot 1 with no pushed args (0x006040E7 `call dword [eax+4]`, no `add esp`) while the tick is `ret 8`."
+limits = "STRIDED 1-IN-64, so the stored records are a SAMPLE and the hit count is the census. Never compute a rate from stored tick records; read `hits` from the sidecar. The stride also means a tick record's neighbours in the ring are not its temporal neighbours. And this site fires for EVERY agent, so on a populated map the hit count is agents x frames, not frames -- divide by the object count from the world census before calling it a frame rate."
+[hook_site.tick.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/codescan.py"
+build = 38797
+verified = "--dis 0x00600140 shows `55 8b ec 83 ec 2c 53 56` (push ebp / mov ebp,esp / sub esp,0x2c / push ebx / push esi), re-read from the pinned image 2026-08-28. --xrefs returns 0 direct rel32 callers and 0 words holding the VA, which for this function is the SIGNATURE of a virtual rather than of dead code: both vftable words at 0x00A52F60 are in the relocation table while the surrounding string data is unrelocated, which bounds the table at exactly two entries. The tick's own first `ret` is at 0x006004FF. FINDINGS §4 item 2 carries the full derivation and the AgTimer::Advance exclusion."
+
+# --------------------------------------------------------------------------
 # Two offsets added 2026-08-28. Neither needs a new site: both are read off an
 # agent the record ALREADY dereferences.
 # --------------------------------------------------------------------------

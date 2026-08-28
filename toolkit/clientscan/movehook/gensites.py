@@ -138,6 +138,11 @@ def emit(sites, offs, exe_path):
     a("    int           deref_b;")
     a("    int           deref_agent_arg; /* arg index holding a SECOND agent, 0=none */")
     a("    int           deref_fence;   /* read AgTrack's per-agent clientControlled */")
+    a("    unsigned      stride;        /* store 1 hit in N; 0/1 = every hit. The")
+    a("                                    HIT COUNT is unaffected and is what the")
+    a("                                    sidecar reports, so a strided site still")
+    a("                                    gives an exact denominator -- see the")
+    a("                                    note at the stride test in movehook.c. */")
     a("} site_t;")
     a("")
     a("static const site_t SITES[NSITES] = {")
@@ -148,7 +153,8 @@ def emit(sites, offs, exe_path):
           f"{int(r.get('deref_arg_a') or 0)}, "
           f"{int(r.get('deref_arg_b') or 0)}, "
           f"{int(r.get('deref_agent_arg') or 0)}, "
-          f"{1 if r.get('deref_fence') else 0} }},   /* 0x{r['va']:08X} */")
+          f"{1 if r.get('deref_fence') else 0}, "
+          f"{int(r.get('stride') or 0)}u }},   /* 0x{r['va']:08X} */")
     a("};")
     a("")
     a("/* Agent struct offsets the handler reads at each hit. */")
