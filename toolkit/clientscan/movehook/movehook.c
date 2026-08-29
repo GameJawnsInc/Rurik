@@ -683,15 +683,162 @@ static const char *outdir(void)
     return buf;
 }
 
-static void mkdirs(const char *dir)
+static int mkdirs(const char *dir)
 {
     char buf[MAX_PATH];
     size_t i;
+    DWORD attr;
     strncpy(buf, dir, sizeof buf - 1);
     buf[sizeof buf - 1] = 0;
     for (i = 1; buf[i]; i++)
         if (buf[i] == '\\') { buf[i] = 0; CreateDirectoryA(buf, NULL); buf[i] = '\\'; }
     CreateDirectoryA(buf, NULL);
+    /* CreateDirectoryA failing with ALREADY_EXISTS is the success case, so the
+     * return value cannot be read directly -- ask the filesystem instead. The
+     * old version returned void and the caller ignored it either way, which is
+     * half of why the R5 capture vanished without a word. */
+    attr = GetFileAttributesA(buf);
+    return attr != INVALID_FILE_ATTRIBUTES
+        && (attr & FILE_ATTRIBUTE_DIRECTORY) != 0;
+}
+
+/* ---------------------------------------------------------------------------
+ * THE WRITER, and why it is Win32 rather than the CRT it used to be.
+ *
+ * MOVECODE R5 (2026-08-28): the operator armed an 8-minute run, played, ran
+ * `attach.py --stop`, and got NOTHING -- no movehook.bin, no movehook.txt, and
+ * no output directory at all. `movehook.stop` was still on disk afterwards,
+ * which is the tell: the worker clears it only AFTER its poll loop exits, so
+ * the loop never exited and the single end-of-run write never ran. The whole
+ * capture was lost and the run had to be scored from the server log instead.
+ *
+ * Three defects, all of them this file's:
+ *
+ *   1. THE WRITE HAPPENED EXACTLY ONCE, at the end. Any ending the loop does
+ *      not reach -- the client exiting, the worker dying, a hang -- discards
+ *      every record. Now `snapshot()` runs on a timer during the loop, so the
+ *      worst case is FLUSH_MS of loss instead of the whole run.
+ *   2. NOTHING WAS WRITTEN WHEN THE PROCESS EXITED. DllMain now writes on
+ *      DLL_PROCESS_DETACH -- which is why this writer uses CreateFileA/
+ *      WriteFile instead of fopen/fwrite. At process shutdown the CRT may
+ *      already be torn down and its stdio is not safe to call under the loader
+ *      lock; the Win32 file API is. The .txt report keeps using stdio and is
+ *      NOT written from DllMain, because it is a convenience, not the data.
+ *   3. A FAILED WRITE WAS SILENT. fopen's NULL was dropped on the floor, so an
+ *      unwritable path looked exactly like a run that captured nothing. Every
+ *      failure now lands in g_werr/g_wpath and is reported twice: in
+ *      movehook.txt, and in a `movehook.status` file BESIDE THE DLL, which is
+ *      the one place still writable when the configured output path is not.
+ * ------------------------------------------------------------------------- */
+static volatile LONG g_wrote = 0;      /* successful .bin writes this run */
+static DWORD g_werr = 0;               /* GetLastError of the last failure */
+static char  g_wpath[MAX_PATH];        /* what it was trying to write */
+static volatile LONG g_final_written = 0;
+
+static int put(HANDLE h, const void *p, DWORD n)
+{
+    DWORD done = 0;
+    return WriteFile(h, p, n, &done, NULL) && done == n;
+}
+
+/* Serialise `n` records to <dir>\movehook.bin. Same v6 layout as before, byte
+ * for byte -- readhook.py is unchanged. */
+static int write_bin(const char *dir, DWORD n)
+{
+    char path[MAX_PATH];
+    HANDLE h;
+    DWORD ver = 6, ns = NSITES, reclen = (DWORD)sizeof(rec_t);
+    unsigned i;
+    int ok = 1;
+
+    if (!mkdirs(dir)) {
+        g_werr = GetLastError();
+        snprintf(g_wpath, sizeof g_wpath, "%s  (could not create directory)", dir);
+        return 0;
+    }
+    snprintf(path, sizeof path, "%s\\movehook.bin", dir);
+    /* A partial file is worse than none: write beside it and rename over, so a
+     * reader never sees a half-flushed snapshot. */
+    {
+        char tmp[MAX_PATH];
+        snprintf(tmp, sizeof tmp, "%s\\movehook.bin.part", dir);
+        h = CreateFileA(tmp, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
+                        FILE_ATTRIBUTE_NORMAL, NULL);
+        if (h == INVALID_HANDLE_VALUE) {
+            g_werr = GetLastError();
+            strncpy(g_wpath, tmp, sizeof g_wpath - 1);
+            g_wpath[sizeof g_wpath - 1] = 0;
+            return 0;
+        }
+        if (n > NCAP) n = NCAP;
+        ok &= put(h, "MVHK", 4);
+        ok &= put(h, &ver, 4);
+        ok &= put(h, &g_base, 4);
+        ok &= put(h, &ns, 4);
+        ok &= put(h, &reclen, 4);
+        ok &= put(h, &n, 4);
+        for (i = 0; i < NSITES; i++) {
+            DWORD rva = (DWORD)SITES[i].rva, hits = (DWORD)g_hits[i];
+            ok &= put(h, &rva, 4);
+            ok &= put(h, &hits, 4);
+        }
+        if (n) ok &= put(h, g_rec, n * (DWORD)sizeof(rec_t));
+        if (!ok) g_werr = GetLastError();
+        CloseHandle(h);
+        if (ok) {
+            if (!MoveFileExA(tmp, path, MOVEFILE_REPLACE_EXISTING)) {
+                ok = 0;
+                g_werr = GetLastError();
+            }
+        }
+        if (!ok) {
+            strncpy(g_wpath, path, sizeof g_wpath - 1);
+            g_wpath[sizeof g_wpath - 1] = 0;
+            return 0;
+        }
+    }
+    InterlockedIncrement(&g_wrote);
+    return 1;
+}
+
+/* How many records a snapshot may safely serialise while the handler is still
+ * appending. A handler claims its slot with InterlockedIncrement and THEN fills
+ * it, so the newest few slots can be half-written; hold that many back. The
+ * final write does not need the slack -- it runs after the sites are disarmed
+ * and the in-flight sleep. */
+#define FLUSH_SLACK 32u
+#define FLUSH_MS    15000u
+
+static void snapshot(const char *dir)
+{
+    LONG n = g_n;
+    n = (n > (LONG)FLUSH_SLACK) ? n - (LONG)FLUSH_SLACK : 0;
+    if (n <= 0) return;
+    write_bin(dir, (DWORD)n);
+}
+
+/* The one report that is still written when the configured output path is not
+ * writable. Beside the DLL, where attach.py already looks for the cfg. */
+static void write_status(const char *dir, const char *note)
+{
+    char path[MAX_PATH], line[1024];
+    HANDLE h;
+    beside_dll(path, sizeof path, "movehook.status");
+    if (!path[0]) return;
+    h = CreateFileA(path, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS,
+                    FILE_ATTRIBUTE_NORMAL, NULL);
+    if (h == INVALID_HANDLE_VALUE) return;
+    snprintf(line, sizeof line,
+             "movehook status\r\n"
+             "out dir: %s\r\n"
+             "state:   %s\r\n"
+             "records: %ld\r\n"
+             "bin writes that succeeded: %ld\r\n"
+             "last write error: %lu%s%s\r\n",
+             dir, note, (long)g_n, (long)g_wrote, (unsigned long)g_werr,
+             g_wpath[0] ? "  writing " : "", g_wpath[0] ? g_wpath : "");
+    put(h, line, (DWORD)strlen(line));
+    CloseHandle(h);
 }
 
 static DWORD WINAPI worker(LPVOID unused)
@@ -758,10 +905,28 @@ static DWORD WINAPI worker(LPVOID unused)
     for (i = 0; i < NSITES; i++)
         g_armed[i] = poke(g_addr[i], 0xCC, &g_orig[i]);
 
+    /* The output directory is resolved and PROVEN WRITABLE BEFORE the run,
+     * not after it. R5 spent eight minutes capturing into a path that was
+     * never created; the status file says so in the first second instead. */
+    dir = outdir();
+    write_status(dir, "armed");
+
     waited = 0;
-    while (waited < run_ms && g_n < (LONG)NCAP && !stop_requested()) {
-        Sleep(100);
-        waited += 100;
+    {
+        DWORD since_flush = 0;
+        while (waited < run_ms && g_n < (LONG)NCAP && !stop_requested()) {
+            Sleep(100);
+            waited += 100;
+            since_flush += 100;
+            /* THE PERIODIC SNAPSHOT. Bounds the loss from any ending this loop
+             * does not reach to FLUSH_MS, which is the whole point: R5 lost 8
+             * minutes because the only write was past the end of this loop. */
+            if (since_flush >= FLUSH_MS) {
+                since_flush = 0;
+                snapshot(dir);
+                write_status(dir, "running (periodic snapshot)");
+            }
+        }
     }
     g_why = (g_n >= (LONG)NCAP) ? "ring full"
           : (waited >= run_ms)  ? "timer elapsed"
@@ -780,28 +945,12 @@ static DWORD WINAPI worker(LPVOID unused)
      * it buys nothing here -- this DLL is never unloaded. So we keep it. */
     (void)veh;
 
-    dir = outdir();
-    mkdirs(dir);
-
-    snprintf(path, sizeof path, "%s\\movehook.bin", dir);
-    f = fopen(path, "wb");
-    if (f) {
-        DWORD n = (DWORD)g_n, reclen = (DWORD)sizeof(rec_t), ver = 6, ns = NSITES;
-        if (n > NCAP) n = NCAP;
-        fwrite("MVHK", 4, 1, f);
-        fwrite(&ver, 4, 1, f);
-        fwrite(&g_base, 4, 1, f);
-        fwrite(&ns, 4, 1, f);
-        fwrite(&reclen, 4, 1, f);
-        fwrite(&n, 4, 1, f);
-        for (i = 0; i < NSITES; i++) {
-            DWORD rva = (DWORD)SITES[i].rva, h = (DWORD)g_hits[i];
-            fwrite(&rva, 4, 1, f);
-            fwrite(&h, 4, 1, f);
-        }
-        fwrite(g_rec, sizeof(rec_t), n, f);
-        fclose(f);
-    }
+    /* The final write. No FLUSH_SLACK here: the sites are disarmed and the
+     * in-flight sleep is done, so every claimed slot is filled. */
+    if (write_bin(dir, (DWORD)g_n))
+        InterlockedExchange(&g_final_written, 1);
+    write_status(dir, g_final_written ? "finished, capture written"
+                                      : "finished, BUT THE WRITE FAILED");
 
     snprintf(path, sizeof path, "%s\\movehook.txt", dir);
     f = fopen(path, "w");
@@ -836,6 +985,13 @@ static DWORD WINAPI worker(LPVOID unused)
                 (unsigned)NCAP,
                 g_n >= (LONG)NCAP ? "  RING FULL -- the run was truncated and the "
                                     "tail is missing" : "");
+        fprintf(f, "capture writes that succeeded: %ld%s\n", (long)g_wrote,
+                g_wrote ? "" : "   *** NONE -- there is no movehook.bin for this "
+                               "run, and every number above exists only in this "
+                               "file ***");
+        if (g_werr)
+            fprintf(f, "last write error: %lu writing %s\n",
+                    (unsigned long)g_werr, g_wpath);
         fclose(f);
     }
     return 0;
@@ -848,6 +1004,32 @@ BOOL WINAPI DllMain(HINSTANCE h, DWORD reason, LPVOID reserved)
         g_self = h;
         DisableThreadLibraryCalls(h);
         CloseHandle(CreateThread(NULL, 0, worker, NULL, 0, NULL));
+    } else if (reason == DLL_PROCESS_DETACH) {
+        /* THE CLIENT IS EXITING WITH A RUN STILL ARMED -- the case that cost
+         * R5 its whole capture. Everything here is Win32 only: at this point
+         * the CRT may already be torn down and stdio is not safe under the
+         * loader lock, which is why write_bin uses CreateFileA/WriteFile and
+         * why the .txt report is deliberately NOT written from here.
+         *
+         * FLUSH_SLACK is kept because the sites may still be armed: a handler
+         * can be mid-record on another thread even now. Skipped entirely once
+         * the worker's own final write has happened, so a normal ending never
+         * pays for this and never overwrites the complete file with a
+         * short one.
+         *
+         * IT WRITES EVEN AT ZERO RECORDS, deliberately. A header-only capture
+         * still carries the per-site hit counts and proves the run existed --
+         * and "no file at all" is the exact ambiguity that cost R5 its
+         * diagnosis, where nothing on disk could not be told apart from
+         * nothing captured. It also makes this path TESTABLE against a real
+         * process exit (test_movehook.py §16), which the n > 0 version was
+         * not. */
+        if (!g_final_written) {
+            const char *d = outdir();
+            LONG n = g_n;
+            n = (n > (LONG)FLUSH_SLACK) ? n - (LONG)FLUSH_SLACK : 0;
+            write_bin(d, (DWORD)n);
+        }
     }
     return TRUE;
 }

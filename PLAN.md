@@ -1593,9 +1593,16 @@ This supersedes the two entries below it (each marked in place in FINDINGS):
   a fallback CANDIDATE), and a third by `routerbench.py`, whose 2.0 u re-clip reddened on
   a leg passing route()'s 16 u gate. Cost p95 12.9 → 23.3 ms, 0/300 over a 50 ms tick.
   `test_pathmap.py` §13 (floor 75, control included), `test_router.py`, `test_routerbench.py`
-  all green. **UNFIXED and filed: movehook armed but wrote nothing on the R5 run** — the
-  DLL writes once at exit and its stop file was never cleared, so everything is scored
-  from the server log; it has no periodic flush and no error when `fopen` fails. Still open: keyboard channel (client-free), mesh fattening, §1y.4's
+  all green. **AND THE INSTRUMENT THAT LOST R5 IS FIXED (§2b):** movehook now
+  snapshots every 15 s, writes on `DLL_PROCESS_DETACH` (Win32, not stdio — it runs at
+  process shutdown), writes atomically, and reports failures in a `movehook.status`
+  file beside the DLL; `attach.py` proves the output path writable BEFORE injecting and
+  `--stop` waits for the artifact instead of promising it. **The testing lesson is the
+  durable part: §7 asserted the `.txt` SUMMARY and never asked whether the CAPTURE
+  existed**, so none of the file's checks could have caught a run that produced no data.
+  §7 now requires the `.bin` and that `readhook.py` parses it; §16 verifies the exit
+  path behaviourally against a real graceful process exit, with a control. 176 checks
+  green, floor 105 → 118. Still open: keyboard channel (client-free), mesh fattening, §1y.4's
   third carve source, retail's waypoint vocabulary (§1p.6).
 
 ### ★★★★ MOVEMENT 2026-08-28 — SUPERSEDED by the §1x entry above — THE NO-CLIP CANNOT BE SCORED WITH OUR MESH, and now we know why

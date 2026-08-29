@@ -39,6 +39,39 @@ import autoinject                                              # noqa: E402
 import inject                                                  # noqa: E402
 
 DLL = os.path.join(HERE, "movehook.dll")
+STATUS = os.path.join(HERE, "movehook.status")
+
+# The DLL's own DEFDIR, duplicated deliberately: --stop has to know where to
+# look for the artifact, and importing anything from the C source is not a
+# thing. If DEFDIR in movehook.c ever moves, this is the line that must move
+# with it -- and test_movehook.py checks the two agree rather than trusting it.
+DEFAULT_OUT = os.path.join(os.path.dirname(os.path.dirname(
+    os.path.dirname(HERE))), "vault", "research", "movecode")
+
+
+def default_outdir():
+    return os.path.abspath(DEFAULT_OUT)
+
+
+def report_status():
+    """Print the DLL's own status file, if it left one.
+
+    It is written BESIDE THE DLL rather than into the output directory, which
+    is the point: when the configured output path is the broken thing, that is
+    the one place still writable.
+    """
+    if not os.path.exists(STATUS):
+        return False
+    try:
+        with open(STATUS, encoding="ascii", errors="replace") as fh:
+            text = fh.read().strip()
+    except OSError as exc:
+        print(f"(movehook.status unreadable: {exc})")
+        return False
+    print("\n-- the DLL's own status --")
+    for line in text.splitlines():
+        print(f"  {line}")
+    return True
 
 
 def sites_stale(here=None, dll=None):
@@ -171,12 +204,49 @@ def main(argv=None):
 
     if a.stop:
         stop = os.path.join(HERE, "movehook.stop")
+        outdir = os.path.abspath(a.out) if a.out else default_outdir()
+        binpath = os.path.join(outdir, "movehook.bin")
+        before = os.path.getmtime(binpath) if os.path.exists(binpath) else None
         with open(stop, "w", encoding="ascii") as fh:
             fh.write("stop\n")
         print(f"wrote {stop}")
-        print("the DLL polls at 100 ms; it will disarm and write within a second.")
-        print("  python toolkit/clientscan/movehook/readhook.py")
-        return 0
+        # WAIT FOR THE FILE, DO NOT ANNOUNCE IT. This used to print "it will
+        # disarm and write within a second" and exit, and on the R5 run that
+        # sentence was false: the DLL never wrote, the operator believed the
+        # capture existed, and it was gone by the time anyone looked. The
+        # instrument has to prove the artifact.
+        deadline = time.time() + 8.0
+        wrote = False
+        while time.time() < deadline:
+            time.sleep(0.25)
+            if os.path.exists(binpath):
+                now = os.path.getmtime(binpath)
+                if before is None or now > before:
+                    wrote = True
+                    break
+            if not os.path.exists(stop) and os.path.exists(binpath):
+                wrote = True                 # cleared the stop AND has a file
+                break
+        report_status()
+        if wrote:
+            size = os.path.getsize(binpath)
+            print(f"capture written: {binpath}  ({size:,} bytes)")
+            print("  python toolkit/clientscan/movehook/readhook.py "
+                  f"--bin {binpath}")
+            return 0
+        print(f"\nNO CAPTURE APPEARED at {binpath} within 8 s.")
+        if not autoinject.find_pid(a.image):
+            print(f"  {a.image} is NOT running. A run only writes from a live "
+                  f"process -- if it exited, the last periodic snapshot (every "
+                  f"15 s) is what survives, and there is none here.")
+        elif os.path.exists(stop):
+            print("  the stop file was NOT consumed, so the DLL's poll loop is "
+                  "not running: either nothing is injected into that process, "
+                  "or its worker thread is gone. Check movehook.status above.")
+        else:
+            print("  the stop file WAS consumed but no file appeared -- the "
+                  "write itself failed. movehook.status above names the error.")
+        return 4
 
     if not os.path.isfile(DLL):
         return print(f"no DLL at {DLL} -- build it:\n"
@@ -246,10 +316,32 @@ def main(argv=None):
     # CLIENT's environment -- inherited from whatever launched Gw.exe -- not this
     # process's. Setting os.environ here would change nothing and the DLL would
     # quietly use its defaults while the operator believed the run was bounded.
+    # PROVE THE OUTPUT PATH BEFORE THE RUN, NOT AFTER IT. The R5 capture was
+    # lost into a directory that never existed, and nothing said so until the
+    # run was over and the client was closed. Eight minutes of the operator's
+    # play is worth two syscalls up front. The DLL creates the directory too --
+    # this is not redundant, it is the check that can still ABORT.
+    outdir = os.path.abspath(a.out) if a.out else default_outdir()
+    try:
+        os.makedirs(outdir, exist_ok=True)
+        probe = os.path.join(outdir, ".movehook-writable")
+        with open(probe, "w", encoding="ascii") as fh:
+            fh.write("ok\n")
+        os.remove(probe)
+    except OSError as exc:
+        print(f"REFUSING TO INJECT -- cannot write the output directory:\n"
+              f"  {outdir}\n  {exc}\n"
+              f"Fix the path (or pass a different --out) before spending a run "
+              f"on it.")
+        return 6
+    # A status file from a PREVIOUS run would be read as this one's.
+    try:
+        os.remove(STATUS)
+    except OSError:
+        pass
+
     cfg = os.path.join(HERE, "movehook.cfg")
-    lines = [f"ms={int(a.minutes * 60_000)}"]
-    if a.out:
-        lines.append(f"out={os.path.abspath(a.out)}")
+    lines = [f"ms={int(a.minutes * 60_000)}", f"out={outdir}"]
     with open(cfg, "w", encoding="ascii", newline="\n") as fh:
         fh.write("\n".join(lines) + "\n")
     print(f"config -> {cfg}")
@@ -273,8 +365,14 @@ def main(argv=None):
           "capture:")
     print("  python toolkit/clientscan/movehook/attach.py --stop")
     print("")
+    print(f"The capture lands at {os.path.join(outdir, 'movehook.bin')} -- and it "
+          f"is now snapshotted every 15 s, so a client that exits or crashes "
+          f"mid-run costs at most the last 15 seconds instead of the whole run. "
+          f"--stop waits for the file and tells you if it did not appear.")
+    print("")
     print("Then read it:")
-    print("  python toolkit/clientscan/movehook/readhook.py")
+    print(f"  python toolkit/clientscan/movehook/readhook.py --bin "
+          f"{os.path.join(outdir, 'movehook.bin')}")
     return 0
 
 

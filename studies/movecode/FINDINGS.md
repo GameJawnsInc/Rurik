@@ -5342,7 +5342,7 @@ and the two no-loss properties over a 120-draw sweep **with an exposure guard** 
 sweep that routed nothing cannot pass them vacuously. Green at 75 checks / 5 skips.
 `test_router.py` 68/68 and `test_routerbench.py` 48/48 green after the fine-step gate.
 
-### 2a.5 What this does NOT close
+### 2a.5 The instrument that lost the run — FIXED, §2b
 
 The R5 run's **movehook capture was armed and produced nothing** — `attach.py` reported
 `LoadLibraryA returned 0x5EF90000 (loaded)`, the config named
@@ -5352,8 +5352,67 @@ exits — so the worker never completed its exit path, and the client is gone, s
 be diagnosed post hoc. **Everything in §1z and §2a is scored from the server log alone.**
 The DLL writes exactly once, at the end; a run that ends any other way writes nothing.
 That is an instrument defect (no periodic flush, no `DLL_PROCESS_DETACH` write, no error
-if `fopen` fails) and it is UNFIXED — filed, and the next movehook run should not be
-planned as if the capture is guaranteed.
+if `fopen` fails). **Fixed the same day — §2b.**
+
+## 2b. THE INSTRUMENT THAT LOST R5 — fixed, and the test that should have caught it did not exist
+
+**FIXED 2026-08-28**, `movehook.c` / `attach.py` / `test_movehook.py` §7 + §16.
+
+### 2b.1 Three defects, all of them the instrument's
+
+R5 armed an 8-minute capture, the operator played, `--stop` ran, and **nothing reached
+disk** — no `movehook.bin`, no `movehook.txt`, no output directory. The run was scored
+from the server log instead (§1z, §2a), which happened to carry the routing story; that
+was luck, not design.
+
+| | was | now |
+|---|---|---|
+| **when it writes** | **exactly once**, past the end of the poll loop — any ending that loop does not reach discards every record | a **snapshot every 15 s** during the run; worst case is 15 s of loss |
+| **process exit** | nothing; a client that closes or crashes with a run armed takes the records with it | `DllMain` writes on `DLL_PROCESS_DETACH`, standing down once the worker's own final write happened |
+| **failed write** | **silent** — `fopen`'s NULL dropped, so an unwritable path looked exactly like a run that captured nothing | recorded in `g_werr` and reported twice: in `movehook.txt`, and in a `movehook.status` file **beside the DLL** |
+
+Two structural changes fall out of the second row. The writer is now **Win32**
+(`CreateFileA`/`WriteFile`) rather than CRT stdio, because it is called at process
+shutdown where the CRT may be torn down and stdio can deadlock under the loader lock —
+the `.txt` report keeps stdio and is deliberately **not** written from `DllMain`. And the
+write is **atomic** (temp file, then `MoveFileExA`), so a snapshot interrupted mid-flight
+cannot replace a good capture with a truncated one.
+
+`attach.py` changed on both ends: it **proves the output directory writable before
+injecting** (and refuses, rather than spending a run on a path that does not work), and
+`--stop` **waits for the artifact and reports a missing one**. Its old text — *"the DLL
+polls at 100 ms; it will disarm and write within a second"* — was printed on R5 and was
+false; the operator reasonably believed it.
+
+### 2b.2 The testing lesson, which is the durable part
+
+**`test_movehook.py` §7 injected the DLL into a real process, waited for output, and
+asserted the `.txt` sidecar — the SUMMARY. It never once asked whether the CAPTURE
+existed.** 176 checks in that file and not one of them could have caught a run that
+produces no data. The artifact a test does not name is the artifact that can vanish.
+
+§7 now requires the `.bin`, its `MVHK` header, that **`readhook.py` can parse what the
+DLL just wrote** (the writer was rewritten under this change — "the bytes still mean what
+the reader thinks" is exactly the property that rewrite could break), and that no `.part`
+temp survives.
+
+**§16 verifies the exit path BEHAVIOURALLY, not just structurally**: a real 32-bit
+`cmd.exe` is injected with a long timer, a **control** confirms nothing is on disk
+mid-run so the file cannot be attributed to the normal ending, then its stdin is closed
+for a **graceful** exit — `TerminateProcess` does not run `DllMain`, and a test built on
+`kill()` would prove nothing — and the capture must appear. That is the R5 scenario
+itself, and it passes.
+
+**Two checks went red against the fix, and both were the test working.** One read
+`WriteFile` inside `write_bin` when that call lives in its one-line `put` helper — a
+wrong **operand**, the second this arc has paid for. One still looked for `snapshot(`
+after the detach path was inlined.
+
+**What is still only structural, said plainly rather than implied:** the periodic
+snapshot. It needs records to write, and in a `cmd.exe` host no site can arm, so §16
+checks the loop calls it on a bounded timer and no more. §16's docstring says so.
+
+**Suite:** `test_movehook.py` 176 checks green, floor 105 → 118.
 
 ---
 

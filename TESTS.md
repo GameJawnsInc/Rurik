@@ -7030,8 +7030,45 @@ Floor 75 against a green 75 with 5 declared skips (the archive-conditional
   deliberately fails to arm, so the handler's hot path is never executed by a test. The
   property is structural and is now checked structurally: no `continue`, `break` or stray
   `return` between the address match and the emulation, with a control that plants the
-  exact crashing statement and confirms detection. 105 floor,
-  153 on a
+  exact crashing statement and confirms detection. **§16 IS DURABILITY, AND IT
+  EXISTS BECAUSE AN 8-MINUTE CAPTURE WAS LOST.** MOVECODE R5, 2026-08-28: the
+  operator armed, played, ran `--stop`, and got no `movehook.bin`, no
+  `movehook.txt`, and no output directory at all — the run had to be scored from
+  the server log instead. Three defects, all in the instrument: the DLL wrote
+  **exactly once**, past the end of its poll loop, so any ending that loop did not
+  reach discarded every record; **nothing was written when the process exited**;
+  and a failed write was **silent**, `fopen`'s NULL dropped on the floor, so an
+  unwritable path was indistinguishable from a run that captured nothing. What
+  makes this a testing lesson and not just a bug: **§7 asserted the `.txt` sidecar
+  and never once asked whether the CAPTURE existed** — the summary, not the data —
+  so no check in this file could have caught it. §7 now requires the `.bin`, its
+  `MVHK` header, that `readhook.py` can PARSE what the DLL just wrote (the writer
+  was rewritten from stdio to Win32 under this change, and "the bytes still mean
+  what the reader thinks" is exactly what that could break), and that no `.part`
+  temp survives — the write is atomic, temp-then-rename, so a snapshot interrupted
+  mid-flight cannot replace a good capture with a truncated one. §16 itself checks
+  the poll loop snapshots on a bounded timer, that `DllMain` writes on
+  `DLL_PROCESS_DETACH` and stands down once the worker's own final write has
+  happened, that the writer is Win32 rather than CRT stdio (it is called at process
+  shutdown, where stdio can deadlock under the loader lock) with a control that no
+  stdio slipped back in, that failures reach `g_werr` and a `movehook.status` file
+  **beside the DLL** — the one place still writable when the output path is the
+  broken thing — and that `attach.py` proves the path writable BEFORE injecting and
+  that `--stop` now WAITS for the artifact and reports a missing one instead of
+  promising it ("the DLL polls at 100 ms; it will disarm and write within a second"
+  was printed on R5 and was false). **The exit path is verified behaviourally, not
+  just structurally**: a real 32-bit `cmd.exe` is injected with a long timer, a
+  CONTROL confirms nothing is on disk mid-run so the file cannot be attributed to
+  the normal ending, then its stdin is closed for a GRACEFUL exit — `TerminateProcess`
+  would not run `DllMain` and a test built on `kill()` would prove nothing — and the
+  capture must appear. Two checks went red against the fix and were the test working:
+  one read `WriteFile` inside `write_bin` when that call lives in its one-line `put`
+  helper (a wrong OPERAND, the second this arc has paid for), and one still looked for
+  `snapshot(` after the detach path was inlined. The periodic snapshot itself is the
+  one property still only structural, and §16's docstring says so rather than
+  implying coverage: it needs records, and in a `cmd.exe` host no site can arm.
+  118 floor,
+  176 on a
   machine with the client, a compiler, an archive and a 32-bit `cmd.exe`; each other
   section declares a skip),
   `toolkit/clientscan/test_commandertrap.py` (the hardware-breakpoint trap, and

@@ -68,6 +68,12 @@ Win32/
 # next checkout a stamp for a DLL they do not have, and attach.py would refuse a
 # build they had just made correctly.
 movehook.sites.sha256
+# The DLL's own run report, written beside itself so it survives an output path
+# that is not writable (MOVECODE R5). Per-run state on one machine, like the cfg
+# and the stop file -- never a repo artifact.
+movehook.status
+movehook.cfg
+movehook.stop
 *.pdb
 *.ilk
 *.lib

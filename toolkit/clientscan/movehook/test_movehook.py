@@ -40,6 +40,7 @@ must still fire, because it touches no host byte. That is a control on the contr
 handler never ran is worse than no reader, so the refusal is exercised on purpose.
 """
 import os
+import re
 import struct
 import subprocess
 import sys
@@ -92,7 +93,7 @@ import checks                                                   # noqa: E402
 # arithmetic being hard; it is that a floor derived from the code rather than
 # from the output drifts the moment either changes. `skip()` lowers the floor by
 # ZERO, so a bare machine must still clear 105.
-LEDGER = checks.Ledger("movehook", floor=105)
+LEDGER = checks.Ledger("movehook", floor=118)
 check = checks.adopt(LEDGER)
 
 WOW64_CMD = r"C:\Windows\SysWOW64\cmd.exe"
@@ -422,6 +423,51 @@ def section_6_7(tmp):
         check(proc.poll() is None,
               "7. and the host process is STILL ALIVE -- the hook did not kill it",
               "the host died, which is the failure mode that matters most")
+        # THE .bin, WHICH THIS SECTION NEVER CHECKED. It asserted the .txt
+        # sidecar and stopped -- and the .txt is the SUMMARY, while the .bin is
+        # the data. MOVECODE R5 lost a whole 8-minute capture to a write that
+        # never happened, and no test in this file would have caught it,
+        # because none of them ever asked whether the capture exists.
+        binfile = os.path.join(outdir, "movehook.bin")
+        check(os.path.isfile(binfile),
+              "7. AND THE CAPTURE ITSELF LANDS -- the .bin, not just the sidecar",
+              f"nothing at {binfile}; a run whose summary exists and whose data "
+              f"does not is exactly the R5 failure")
+        if os.path.isfile(binfile):
+            head = open(binfile, "rb").read(24)
+            check(head[:4] == b"MVHK" and len(head) >= 24,
+                  "7. and it is a v6 capture with a complete header",
+                  f"first bytes {head[:8]!r}")
+            check(not os.path.exists(binfile + ".part"),
+                  "7. and no .part temp file is left behind -- the write is "
+                  "atomic (write-then-rename), so a reader never sees a "
+                  "half-flushed snapshot",
+                  f"{binfile}.part still exists")
+            # AND THE READER MUST ACCEPT IT. Magic plus a header length would
+            # pass on a file readhook cannot parse; the writer was rewritten
+            # from stdio to Win32 under this change, and "the bytes still mean
+            # what readhook thinks" is the property that rewrite could break.
+            try:
+                import readhook as _rh
+                cap_live = _rh.Capture(binfile)
+                ok, why = True, f"{len(cap_live.recs)} records, v{cap_live.version}"
+            except Exception as ex:                            # noqa: BLE001
+                ok, why = False, f"readhook refused it: {ex}"
+            check(ok, "7. and readhook.py parses what the DLL just wrote", why)
+        # The status file, which is the channel that reports a FAILED write --
+        # deliberately beside the DLL, because when the output path is the
+        # broken thing it is the only place still writable.
+        status = os.path.join(HERE, "movehook.status")
+        check(os.path.isfile(status),
+              "7. the DLL leaves a status file beside itself",
+              f"nothing at {status}")
+        if os.path.isfile(status):
+            stext = open(status, encoding="ascii", errors="replace").read()
+            check("bin writes that succeeded: 1" in stext
+                  or "bin writes that succeeded: " in stext
+                  and " 0\n" not in stext.split("bin writes that succeeded:")[1][:4],
+                  "7. and it reports a write that actually succeeded",
+                  f"status said:\n{stext}")
         check(not os.path.isdir(envdir),
               "8. the config FILE beat the environment for the output directory",
               f"the DLL wrote to the env's dir -- attach.py's only channel is the "
@@ -1218,6 +1264,206 @@ def _loop_escapes(src):
     return out
 
 
+# ---------------------------------------------------------------- §16
+def section_16(tmp):
+    """DURABILITY: a run must not be able to end with nothing on disk.
+
+    THIS SECTION EXISTS BECAUSE AN 8-MINUTE CAPTURE WAS LOST. MOVECODE R5,
+    2026-08-28: the operator armed, played, ran `--stop`, and got no
+    movehook.bin, no movehook.txt, and no output directory at all. The whole
+    run had to be scored from the server log instead. Three defects behind it,
+    and each gets a check here:
+
+      * the DLL wrote EXACTLY ONCE, past the end of the poll loop, so any
+        ending that loop did not reach discarded every record;
+      * nothing was written when the process exited;
+      * a failed write was SILENT -- fopen's NULL was dropped, so an unwritable
+        path was indistinguishable from a run that captured nothing.
+
+    The first two are checked structurally against the C source, because the
+    behaviour needs a live client and a real crash to exercise; §7 covers the
+    write path end to end in a real injected process. The third is checked
+    against attach.py, which now refuses BEFORE spending a run.
+    """
+    src_path = os.path.join(HERE, "movehook.c")
+    if not os.path.isfile(src_path):
+        LEDGER.skip("16. durability", "movehook.c not beside the test")
+        return
+    src = open(src_path, encoding="utf-8", errors="replace").read()
+
+    # (a) the poll loop flushes on a timer.
+    try:
+        lo = src.index("while (waited < run_ms")
+        hi = src.index("g_why =", lo)
+        loop = src[lo:hi]
+    except ValueError:
+        loop = ""
+    check("snapshot(" in loop,
+          "16. the poll loop takes a periodic snapshot",
+          "without it the only write is past the end of the loop, which is "
+          "exactly how R5 lost 8 minutes of play")
+    check("FLUSH_MS" in loop,
+          "16. and it is on a bounded timer, not a guess",
+          "the loss window has to be a named number")
+
+    # (b) process exit writes.
+    try:
+        dm = src[src.index("BOOL WINAPI DllMain"):]
+    except ValueError:
+        dm = ""
+    check("DLL_PROCESS_DETACH" in dm
+          and ("write_bin(" in dm or "snapshot(" in dm),
+          "16. DllMain writes the capture when the process EXITS",
+          "a client that closes or crashes with a run armed must not take the "
+          "records with it")
+    check("g_final_written" in dm,
+          "16. and it does NOT overwrite a completed capture with a short one",
+          "the detach path must stand down once the worker's own final write "
+          "has happened")
+
+    # (c) the writer is Win32, because DllMain at shutdown cannot trust stdio.
+    # The slice starts at `put`, not at `write_bin`: the WriteFile call lives in
+    # that one-line helper, and slicing from write_bin alone made this check go
+    # red against a function that is already pure Win32 -- a wrong OPERAND, not
+    # a wrong claim, and the second time this arc has paid for one.
+    try:
+        wb = src[src.index("static int put(HANDLE"):src.index("#define FLUSH_SLACK")]
+    except ValueError:
+        wb = ""
+    check("CreateFileA" in wb and "WriteFile" in wb,
+          "16. the capture writer uses Win32, not CRT stdio",
+          "it is called from DLL_PROCESS_DETACH, where the CRT may already be "
+          "torn down and stdio can deadlock under the loader lock")
+    check("fopen" not in wb and "fwrite" not in wb,
+          "16. CONTROL: and no stdio slipped back into it",
+          f"found stdio in write_bin:\n{wb[:400]}")
+    check("MoveFileExA" in wb and ".part" in wb,
+          "16. and the write is atomic (temp file, then rename)",
+          "a snapshot interrupted mid-write must not replace a good capture "
+          "with a truncated one")
+
+    # (d) failures are reported rather than swallowed.
+    check("g_werr" in src and "write_status" in src,
+          "16. a failed write is RECORDED and reported",
+          "R5's fopen returned NULL into a void; the error has to reach a human")
+    try:
+        ws = src[src.index("static void write_status"):]
+        ws = ws[:ws.index("\n}")]
+    except ValueError:
+        ws = ""
+    check("beside_dll" in ws,
+          "16. and the status file sits BESIDE THE DLL, not in the output dir",
+          "when the configured output path is the broken thing, writing the "
+          "complaint into it reports nothing")
+
+    # (e) attach.py refuses an unwritable output directory BEFORE injecting.
+    try:
+        import attach
+    except Exception as ex:                                   # noqa: BLE001
+        LEDGER.skip("16. attach.py pre-flight", f"cannot import: {ex}")
+        return
+    asrc = open(os.path.join(HERE, "attach.py"), encoding="utf-8").read()
+    check("makedirs" in asrc and "REFUSING TO INJECT -- cannot write" in asrc,
+          "16. attach.py proves the output path is writable before injecting",
+          "eight minutes of the operator's play is worth two syscalls up front")
+    # And --stop must WAIT for the artifact rather than announce it. The old
+    # text promised the DLL 'will disarm and write within a second'; on R5 that
+    # sentence was false and the operator believed it.
+    stop_blk = asrc[asrc.index("if a.stop:"):asrc.index("if not os.path.isfile(DLL)")]
+    check("NO CAPTURE APPEARED" in stop_blk,
+          "16. --stop reports a MISSING capture instead of promising one",
+          "an instrument that announces an artifact it has not seen is how a "
+          "lost run goes unnoticed until the client is closed")
+    check("os.path.getsize" in stop_blk or "getmtime" in stop_blk,
+          "16. and it confirms the file by looking at it",
+          "existence alone would pass on a stale file from a previous run")
+
+    # (f) THE PROCESS-EXIT WRITE, FOR REAL. Everything above is structural;
+    # this is the R5 scenario itself -- a run still armed when the host exits.
+    # `cmd /k` with a held-open stdin exits GRACEFULLY when that pipe closes,
+    # which is what runs DLL_PROCESS_DETACH (TerminateProcess would not, and a
+    # test built on kill() would prove nothing).
+    dllpath = os.path.join(HERE, "movehook.dll")
+    if not os.path.isfile(WOW64_CMD) or not os.path.isfile(dllpath):
+        LEDGER.skip("16. the process-exit write",
+                    "needs a 32-bit cmd.exe and a built DLL")
+    else:
+        exitdir = os.path.join(tmp, "hookout-exit")
+        cfg = os.path.join(HERE, "movehook.cfg")
+        saved = open(cfg, encoding="ascii").read() if os.path.isfile(cfg) else None
+        # ms is LONG on purpose: the worker must still be in its poll loop when
+        # the host exits, so the only thing that can write is the detach path.
+        with open(cfg, "w", encoding="ascii", newline="\n") as fh:
+            fh.write("ms=600000\nout=" + exitdir + "\n")
+        proc = subprocess.Popen([WOW64_CMD, "/k", "rem movehook exit test"],
+                                stdin=subprocess.PIPE,
+                                stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL,
+                                creationflags=0x08000000)
+        try:
+            sys.path.insert(0, os.path.join(TOOLKIT, "harness"))
+            import keytap
+            import inject
+            deadline = time.time() + 10
+            while time.time() < deadline:
+                try:
+                    keytap.module_base(proc.pid, "KERNEL32.DLL")
+                    break
+                except Exception:
+                    time.sleep(0.2)
+            rc = inject.main([str(proc.pid), dllpath])
+            binfile = os.path.join(exitdir, "movehook.bin")
+            # Let the worker get past its controls and INTO the poll loop, then
+            # confirm nothing has been written yet -- otherwise a file produced
+            # by the normal ending would be mistaken for the detach path's.
+            time.sleep(6.0)
+            pre = os.path.isfile(binfile)
+            check(rc == 0 and not pre,
+                  "16. CONTROL: mid-run, with a long timer, nothing is written yet",
+                  f"inject rc={rc}; bin present already: {pre} -- if it is, this "
+                  f"section cannot attribute the file to the exit path")
+            proc.stdin.close()                    # graceful exit -> DllMain
+            proc.wait(timeout=20)
+            deadline = time.time() + 10
+            while time.time() < deadline and not os.path.isfile(binfile):
+                time.sleep(0.25)
+            check(os.path.isfile(binfile),
+                  "16. AND THE CAPTURE IS WRITTEN WHEN THE HOST EXITS MID-RUN",
+                  f"nothing at {binfile} -- this is the R5 failure exactly: a "
+                  f"run still armed when the client goes away")
+            if os.path.isfile(binfile):
+                check(open(binfile, "rb").read(4) == b"MVHK",
+                      "16. and it is a real capture, not a stub",
+                      "the exit path must write the same format as any other")
+        except Exception as ex:                                # noqa: BLE001
+            LEDGER.skip("16. the process-exit write", f"host/inject failed: {ex}")
+        finally:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+            if saved is None:
+                if os.path.isfile(cfg):
+                    os.remove(cfg)
+            else:
+                with open(cfg, "w", encoding="ascii", newline="\n") as fh:
+                    fh.write(saved)
+
+    # (g) THE TWO DEFAULT PATHS MUST AGREE. attach.py --stop looks for the
+    # artifact at its own default; the DLL writes at DEFDIR. If they diverge,
+    # --stop reports a missing capture that is sitting on disk somewhere else.
+    m = re.search(r'#define\s+DEFDIR\s+"([^"]+)"', src)
+    check(m is not None, "16. movehook.c still declares DEFDIR")
+    if m:
+        c_default = m.group(1).replace("\\\\", "\\").rstrip("\\").lower()
+        py_default = attach.default_outdir().rstrip("\\").lower()
+        check(os.path.normcase(os.path.normpath(c_default))
+              == os.path.normcase(os.path.normpath(py_default)),
+              "16. and attach.py's default output dir AGREES with it",
+              f"C says {c_default!r}, attach.py says {py_default!r} -- a "
+              f"divergence makes --stop report a missing capture that exists")
+
+
 def main():
     import tempfile
     tmp = tempfile.mkdtemp(prefix="movehook-test-")
@@ -1232,6 +1478,7 @@ def main():
     section_13(tmp)
     section_14(tmp)
     section_15()
+    section_16(tmp)
     return LEDGER.verdict()
 
 
