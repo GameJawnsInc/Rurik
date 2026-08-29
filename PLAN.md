@@ -1577,11 +1577,16 @@ This supersedes the two entries below it (each marked in place in FINDINGS):
   holds no extra walkable geometry there (positive-controlled scan; the skipped tag-1
   blocks are plane boundary rings). **The no-clip scorer is promoted to
   `toolkit/clientscan/noclipscore.py`** (r4a: 21 deep off-mesh across THREE massifs —
-  props 127/179/221 — 39/84 chords crossing). **NEXT: [RUN-R5](studies/movecode/RUN-R5.md)**
-  — `--router` vs the corner-click repro, four registered predictions, the signature
-  being chords-still-cross while the body goes clean. Owner drives; ~6 min. Open behind
-  it: footprint fattening (P4, operator's eye), the third carve source (§1y.4), retail's
-  waypoint vocabulary (§1p.6).
+  props 127/179/221 — 39/84 chords crossing). **[RUN-R5](studies/movecode/RUN-R5.md) RAN
+  2026-08-28 (§1z): THE NO-CLIP IS DEAD UNDER THE ROUTER.** Operator could not clip in
+  at the same rock; 108 reports / 1 off-mesh at 0.0 u (vs r4a's 21 at 65–391 u); the
+  dissociation measured TOTAL — 34/34 direct chords cross the geometry, 0/37 granted
+  legs do; on-rock clicks demote to walk-to-edge-and-stop; the compound's walls
+  confirmed by eye. New observation: a rapid re-click walks the body back to the
+  click-1 position first — §1z.2 diagnoses it as the two-copies divergence (sync walks
+  our corners, local walks its own), benign here. Registered, not built: the re-click
+  pin-leg (§1z.3). Still open: keyboard channel (client-free), mesh fattening, §1y.4's
+  third carve source, retail's waypoint vocabulary (§1p.6).
 
 ### ★★★★ MOVEMENT 2026-08-28 — SUPERSEDED by the §1x entry above — THE NO-CLIP CANNOT BE SCORED WITH OUR MESH, and now we know why
 

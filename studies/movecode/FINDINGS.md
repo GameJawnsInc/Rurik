@@ -5180,6 +5180,71 @@ while section A's body goes clean (only legal legs are granted). A body still de
 off-mesh under click-only movement would indict the display/reconcile path, not grant
 content — and the reconcile is the mechanism §1t.2 already measured.
 
+## 1z. R5 RAN — the no-clip is DEAD under the router, the dissociation measured 34/34 vs 0/37, and the operator's "backtrack" is the two-copies divergence made visible
+
+**OBSERVED, 2026-08-28**, log `vault/captures/gamesrv/authsrv-20260828T214828-c1.jsonl`
+(67 s of routing, 44 routed clicks). **The movehook was not armed**, so scoring is from
+the server log alone — position reports are sparser than movehook samples and
+`noclipscore.py` section A proper could not run. Scored by
+`obstacle-dig/r5score.py`. The operator, verbatim:
+
+> *"this time I couldn't clip in, the new behavior was the second click would make me
+> path back to the original position of the first click, then continue walking towards
+> the second from there"*
+
+### 1z.1 The predictions
+
+* **P1 (body clean) — SUPPORTED.** 108 reported positions, **1 off-mesh at depth
+  0.0 u** (a boundary touch inside prop 247's outline — B5's 0.25–8 u standing-penetration
+  class). R4-A under `--click-echo`: 21 samples 65–391 u deep inside three massifs. The
+  operator could not reproduce the clip at the same rock. *Caveat: sparse reports, no
+  movehook track; the floor of ≥6 deliberate manoeuvres was "a couple" plus sustained
+  rapid re-clicking (44 routed clicks total).*
+* **P2 (the dissociation) — MEASURED, TOTAL.** **34 of 34** routed clicks' direct
+  origin→dest chords cross uncovered ground (worst 28.8% covered over 4,937 u) — the
+  geometry did not move — while **0 of 37** granted-leg chords cross anything. Grant
+  content is the whole difference, exactly §1x.6's chain read backwards.
+* **P3 (on-rock clicks) — OBSERVED**, six of them ((2779, 6455), (3447, 6707),
+  (3868, 6781) at the rock; three more NE): verdict `clip-fallback dest-off-mesh` — walk
+  straight toward the click, stop at the geometry. Retail-shaped behaviour, no grant into
+  the hole.
+* **P4 (the compound) — CONFIRMED BY EYE.** *"there's some walls east northeast from the
+  spawn, yeah."* `ROUTER.md` §10's "wrong-mesh" closing is now retired on both specimens
+  and the eyewitness; what survives is only §1p.6's waypoint vocabulary and the
+  unmeasured fattening question.
+
+### 1z.2 The backtrack, diagnosed from the log
+
+**The server's origins were FRESH** — section 3 of `r5score.py` shows them advancing
+along the granted legs between reports (the world-tick integrator), with
+|origin − last report| growing to 1,324 u only as report age grows to 15 s. So the
+origin is not the defect. The mechanism (RECONSTRUCTION, from settled pieces): the wire
+grant carries only a destination, so the client's **sync copy** walks OUR corners from
+wherever it was — while the **local copy** runs ahead on the client's own solve, whose
+corners are never ours (§1p.6: 0/11). A rapid second click delivers a new grant, the
+reconcile drags the local body onto the sync copy — which, having walked our
+2,600 u first leg for only ~0.3–1 s, is still near the click-1 position. **"Path back to
+where I was when I first clicked, then continue" is the two-world-copies mechanism
+(§1n.2) wearing its benign face**: bounded by inter-click walk distance, no clipping,
+the same divergence that under `--click-echo` produced installs inside geometry.
+
+### 1z.3 Registered candidate, NOT built: the re-click pin-leg
+
+On a re-click whose freshest client report is younger than ~2 s, grant **the client's
+own reported position as leg 0** before the routed corners — §1w.4 already measured
+that a grant whose destination IS the reported body position cannot desync the two
+copies by construction, so the sync copy converges to the body instead of the body
+being dragged back. Needs its own runsheet with a REFUTED-IF (candidate harm: an extra
+grant per pair re-enters §0.15 territory). Filed behind it: the keyboard channel is
+still client-free, and mesh fattening is still unmeasured.
+
+### 1z.4 Status
+
+**The click channel under `--router` is clip-free at this run's exposures, and the
+no-clip defect is closed as a grant-content defect** — opened §1n, mechanism §1t.2,
+scored §1w–§1x, fixed by ROUTER-B2, verified here. What remains on the arc is
+cosmetic (the backtrack, §1z.3's candidate) and channel-scoped (keyboard).
+
 ---
 
 ## 2. Corrections to the record
