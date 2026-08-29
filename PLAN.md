@@ -1541,7 +1541,42 @@ either fix above.
 
 ## 8. Immediate next actions
 
-### ★★★★ MOVEMENT 2026-08-28 — THE NO-CLIP CANNOT BE SCORED WITH OUR MESH, and now we know why
+### ★★★★★ MOVEMENT 2026-08-28 — THE OBSTACLE DIG: the mesh HAS the mountains, the no-clip IS scored, the client ignores its own geometry check. THE LEAD IS SERVER-SIDE PATH-SOLVED GRANTS
+
+**[studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1x** — four lanes + four
+skeptics off §1w.8's questions, artifacts in `vault/research/movecode/obstacle-dig/`.
+This supersedes the two entries below it (each marked in place in FINDINGS):
+
+* **The mountains are IN the mesh.** Prop placements carry authored outline rings and
+  the retail mesh carves them: **97 of 98 ring interiors fully unwalkable** on map 280.
+  The rock the operator no-clipped through (prop 127) is carved **edge-for-edge**, and
+  28/32 body samples inside its ring are off-mesh with `containing()` empty on all 68
+  planes. Mesh 165811 is 12.9% interior holes; **39 of 84 rapid-pair chords in r4a cross
+  them** (worst 19.3% covered, 90% of the uncovered footage in genuine holes).
+* **"Installed, not walked" is dead; the installs stand.** §1w's own scorer prints
+  walked 569 / off-mesh 14, not 561/0 (the committed split does not regenerate). Ten of
+  the 14 are a moving run riding prop 127's carve boundary — the ENTRY of a no-clip walk,
+  previously dismissed as float noise — and the body stood **113.4 u off-mesh inside the
+  massif twice, 6.7 s apart, clear of installs**: the operator's screenshot, in numbers.
+  The four dead detectors died on **8.9–19.8 s event-sampling gaps** sitting exactly over
+  the repro windows (§1r.6's power diagnosis was right), not on mesh content. **Score
+  chords and outline membership, not points** — the offline detector now exists.
+* **The client's walker consults the pathing query every ~16 ms and ignores the answer**
+  (`bake 0x005FE950 → 0x0070A150`, byte-verified; result gates only the +0x68 copy;
+  movement dead-reckons from +0x78, never reads +0x68; the resolve cannot write +0x78).
+  **Wall integrity on retail was always the server's grants.** Both skeptic verdicts
+  CONFIRMED; the walk chain joins B3-3 Q5's unguarded teleport.
+* **Tag 13 is a real, fully-skipped round-collider layer** (167 records, 107 circles
+  r 21–70 u, per-cell CSR proven 990/990) and is NOT this defect (0/1,199 samples inside
+  any circle). Filed: likely `PathApi:753/754`'s data. Also filed: 14/92 prop models
+  carry collision sub-meshes, merge UNRESOLVED, compile-experiment specimen named.
+* **THE LEAD:** the one changeable link in the measured chain is grant CONTENT — we echo
+  the verbatim click (55/55), retail grants routed part-way points. **Answer clicks with
+  `route()` waypoints on our own mesh** (now proven to carve props). Design question to
+  settle before building: waypoint cadence/spacing vs retail's 3-verbatim-to-6-part-way
+  pattern (§1w.4), and how the grant interacts with `--click-echo`'s remaining users.
+
+### ★★★★ MOVEMENT 2026-08-28 — SUPERSEDED by the §1x entry above — THE NO-CLIP CANNOT BE SCORED WITH OUR MESH, and now we know why
 
 **CORRECTED BY THE OPERATOR the same day, and the correction is the finding.** The entry
 below concluded the body is *installed* inside geometry and does not *walk* through it,

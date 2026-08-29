@@ -4725,7 +4725,13 @@ The row this scores has been **UNSCORED four times** (§1n.2, §1p.10 item 2, §
 
 ### 1w.1 The answer, and it collapses two defects into one
 
-> **The body does not WALK through geometry. It is PUT there.**
+> **SUPERSEDED 2026-08-28 by §1x.5.** The quote below and the table's walked row are
+> refuted: the lane's own scorer, run verbatim from disk, prints **walked 569, off-mesh
+> 14 (2.5%), max depth 435.6 u** — and the committed 561/95 split does not regenerate
+> (the disk script prints 569/87), so the table's provenance is broken. The INSTALLED
+> row stands. §1x.5 has the decomposition of the 14.
+
+> ~~**The body does not WALK through geometry. It is PUT there.**~~
 
 Attributing every sampled position of the displayed copy by whether it was reached by
 walking or written by the reseed chain:
@@ -4916,9 +4922,15 @@ standing on it.
   correction: it is not about height, it is about OBSTACLES. Height stays on the list only
   as an instrument of last resort.
 
-**What this means for the arc, stated plainly:** the no-clip row **cannot be scored
-offline with what we have**, and the four previous attempts failed for a reason that was
-never going to yield to a better statistic. §1n.2 said "the operator's report is the
+**What this means for the arc, stated plainly — REFUTED 2026-08-28, §1x:** ~~the
+no-clip row cannot be scored offline with what we have~~. It can, and §1x did: the massif
+is a **HOLE in the trapezoid tiling** (carved by the prop's authored outline ring), not a
+second plane — this section's decisive "single surface" measurement asked about STACKING
+and concluded absence-of-obstacle from it, which does not follow. Plane-blindness is
+irrelevant to a hole: `walkable()` unions all 68 planes, so it over-covers, and a hole is
+a hole on every plane. §1r.6's sampling-power diagnosis was right after all — the
+mid-walk footage hides in 8.9–19.8 s event-sampling gaps that sit exactly over the repro
+windows. Score CHORDS and outline-interior membership, not points. §1n.2 said "the operator's report is the
 instrument for this and nothing else is" — that is still true, and now it is understood
 rather than merely observed.
 
@@ -4984,6 +4996,118 @@ never had wall integrity of its own, the mountain was always enforced by what re
 server would grant, and our fix is exactly one thing: **grant paths from a mesh that
 contains the obstacles.** Which makes Q1–Q3 the critical path and the four dead detectors
 a closed chapter.
+
+## 1x. THE OBSTACLE DIG — the mesh HAS the mountains, the no-clip IS scorable offline, and the client asks about geometry every step and ignores the answer
+
+**OBSERVED, 2026-08-28**, same day as §1w.8, which posed the four questions this answers.
+Four lanes + four skeptics, no new run; artifacts and every cited script preserved at
+`vault/research/movecode/obstacle-dig/`. Two lane verdicts CONFIRMED, two WEAKENED — and
+for the second pass running the skeptics outproduced the lanes: the decisive finding of
+the whole dig (§1x.2's prop-127 result) is a skeptic's, made while refuting its lane.
+
+### 1x.1 Q1 CONFIRMED — the mesh has holes, and the repro chords cross them
+
+Mesh 165811 (map 280): 68 planes, 2,769 trapezoids — and **12.9% of its bounding-box
+grid is interior ground with no trapezoid on ANY plane** (46.2k cells at 40 u, 24
+components over 50 cells, the largest ~5,440 × 6,480 u). The skeptic re-derived the
+holes with an **independent struct walk of the pathing chunk** — own tag walk, own
+trapezoid decode, own containment lerp — landing within 3 cells of 358,068 (`walkable()`
+cross-check 0/20,000 disagreements): **the holes are in the file, not the instrument.**
+
+Overlaying r4a: 84 of 102 click gaps are rapid pairs (≤ 2,000 ms), and **39 of 84
+rapid-pair chords are partially uncovered — 8 below 50% covered, the worst 19.3% on a
+1,406 u chord — with 90% of the uncovered footage in genuine interior holes**, not
+coastline (the skeptic's addition, closing the lane's own caveat). Renders:
+`q1_coverage.png`, `q1_overlay.png` — the yellow chords visibly cut straight across the
+black holes.
+
+### 1x.2 Q3 — THE MOUNTAINS ARE CARVED INTO THE MESH, by authored prop outline rings
+
+The skeptic's finding, and the dig's decisive one. Map 280 carries **665 prop
+placements over 92 models; 98 placements have authored outline rings**, and **97 of 98
+ring interiors are fully unwalkable in the retail mesh** (5,298 interior samples, 1
+walkable). **The rock the operator walked through is prop 127** (model 28, at
+(2788, 5249)): a 12-point outline whose carve the mesh follows **edge-for-edge**
+(`sk_prop127_track.png` — red ring on black hole), and **28 of the 32 local-body samples
+inside that outline are off-mesh with `containing()` empty on ALL 68 planes** — the
+plane-blindness-immune direction.
+
+So the operator's model (§1w.8) is CONFIRMED with one refinement: **the props' walls are
+already IN the pathing data, as holes carved by their outlines.** The "base terrain" the
+body walks on inside them is render-side only — the navmesh offers no surface there at
+all, which is why "walking on the base terrain" and "off-mesh" are the same statement.
+
+Two subsidiary results, both labelled: prop MODEL files also carry **collision
+sub-meshes** (14 of 92 models, 69 of 665 placements, near-disjoint from the outlined
+population — 1/69 overlap); whether they merge into the navmesh is **UNRESOLVED** — a
+compile experiment with the measured specimen (model 24, fid 0x28535, 46 verts/156
+indices, single placement at (−9389, −856)) would settle it. And the lane's own headline
+clause — "the largest prop has no outline, a plausible mechanism for the repro" — was
+**REFUTED by its skeptic**: that prop was never within 3,346 u of the walk, and it is
+not the largest placed footprint.
+
+### 1x.3 Q2 WEAKENED — tag 13 is a real skipped obstacle layer, and it is NOT this defect
+
+`pathmap.py` opens only the planes tag; **tags 7/12/13/14 and plane tags 3/4/5/6/11/1
+are skipped outright.** Tag 13 decodes as a per-cell CSR — count byte + wrapping-u8
+prefix-sum offset (law holds 990/990 cells, re-derived independently) — indexing **167
+round-collider records (107 distinct circles, r 21–70 u)**. Real, spatially structured,
+fully unread. But not this defect: **0 of 1,199 body samples inside any circle, nearest
+circle 701.6 u from the repro leg** — too small, too sparse, wrong places. Best current
+reading (RECONSTRUCTION): the data-side face of `PathApi:753/754
+obstacleCenter/obstacleRadius`, the shipped round-collider interface. Filed, not the lead.
+
+### 1x.4 Q4 CONFIRMED — the mover consults the mesh every ~16 ms and ignores the answer
+
+The per-step chain, every call site byte-verified on the pinned 38797 image:
+`chcli_advance 0x0081B580 → agapi_setdest 0x005FC7A0 → setter 0x00602A40 → bake
+0x005FE950 → 0x0070A150 → 0x00722B90` — the walker asks the pathing query **on every
+advance step**. And the answer gates nothing that moves: the authoritative `m_point`
+(+0x78) is **written before the query**; the query's only consumer is the +0x78→+0x68
+copy; the movement read path (`0x005FFB40`) dead-reckons from +0x78/+0xB0/+0x58 and
+**never reads +0x68**; and the resolve writes to a local buffer (`lea eax,[ebp-0x10]`),
+so it cannot correct +0x78 through the pointer. `0x0070A150` has exactly 5 direct
+callers and **zero stored VA words image-wide** — no vtable route around that census.
+What +0x68 feeds is UNKNOWN (the "display copy" reading is unlabelled RECONSTRUCTION and
+sits awkwardly with a display that did not freeze off-mesh; open).
+
+> **Wall integrity on retail was never the client's. It is the server's grants.**
+> B3-3 Q5 showed the teleport unguarded; this shows the WALK is too. MOVER-BLIND.
+
+### 1x.5 The corrections this forces, owned in one place
+
+1. **§1w.1's "installed, NOT walked" is dead; the installs stand.** The scorer on disk
+   prints walked 569 / off-mesh 14 (2.5%); the committed 561/95 does not regenerate
+   (569/87). The 14 decompose: **10** are a continuously-moving run t+53.59–53.75 s
+   riding the carve boundary of prop 127's outline ~1e-4 u on the blocked side — §1w
+   dismissed exactly these as float noise, and they are the **entry of a no-clip walk**;
+   **3** sit within ±200 ms of installs; **1** is an install-straggler. Independent
+   counts without the install-hold attribution: 20–25 of ~550–600 (three measurements,
+   three dedup conventions, all ≫ 0). And the pair at **(3122, 6619), 113.4 u off-mesh,
+   twice, 6.7 s apart, the second clear of any install** — the body STANDING inside the
+   massif on render-only ground. That is the operator's second screenshot, in numbers.
+2. **§1w.7's "cannot be scored offline" is refuted by this section's own scoring** —
+   marked in place there. Stacking ≠ holes; plane-blindness is irrelevant to holes.
+3. **A wrong committed number propagated.** Both dig briefings carried §1w's "every
+   walked sample scored on-mesh" as context; both skeptics contradicted it from raw
+   artifacts. Cost: none this time, because skeptics measure — but it is the
+   carried-forward-constant failure again, one section later.
+
+### 1x.6 What is settled, and the lead
+
+**The mechanism end to end, every link now measured:** our server grants the verbatim
+clicked point (55/55, §1w.4) → the client re-solves but does not drive from the solve
+(§1w.4) → the granted straight line drives +0x78 → the mover's geometry consult is
+non-gating (§1x.4) → the body crosses carved prop holes (§1x.1–1x.2). Retail never
+shows this because retail's server grants routed part-way points — the one link in the
+chain that is ours to change.
+
+**THE LEAD: server-side path-solved grants on our own mesh.** The mesh is now proven to
+carve props (97/98); `route()` string-pulls on it; the grant should be its waypoints,
+not the click echo. **The offline no-clip detector exists** (chord coverage + outline
+membership, `obstacle-dig/` scripts) for scoring any future run. Filed behind the lead:
+tag 13's client-side consumer; the collision-sub-mesh merge experiment (specimen named);
++0x68's reader.
 
 ---
 
