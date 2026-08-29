@@ -7231,8 +7231,32 @@ the same-tick ALIAS**: the
   loosening cannot be smuggled in as "making the fix pass". It carries the control
   that a correct map produces no warning, because a guard that fires on the right
   answer too is noise. Archive-dependent, so the floor does not move for it.
-  157 floor,
-  273 on a
+  **§19 is the motion window, where ONE EXPRESSION carried THREE defects.** The
+  world census computed `max(ptime) - min(ptime)` over every record. (1) An
+  UNSET stamp is not a timestamp: exactly two records per object -- the run's
+  first `setter` and `bake` -- carry `ptime == 0`, dragging `min` to zero and
+  inflating the denominator by the whole pre-capture uptime; r7 printed "in
+  motion 61.8%" where the truth is 87.8%, a **27-point error from 2 records in
+  1,785**, present in EVERY v4+ capture in the corpus. The existing
+  impossible-leg guard cannot catch it because those records carry `stop == 0`
+  too, so `stop > ptime` is false -- **that guard tests the LEG and this defect
+  is in the STAMP**, which is why a new check was needed rather than a wider
+  threshold. (2) `stop` is a PREDICTED FUTURE arrival, so de-zeroing alone still
+  produced percentages OVER 100 (107.9% on run3-isle); legs are now clipped into
+  the observed window rather than the window stretched to fit them. (3) It
+  raised KeyError on v1-v3, which have no `ptime` field at all -- so
+  `readhook.py --bin` CRASHED on run 1, the arc's only v1 capture, while §4 pins
+  "a v1 capture still parses": true of the PARSE and never of the REPORT. Two
+  separate sites had to be fixed and **the second was found by this test rather
+  than by reading**, which is the argument for writing it. The control is the
+  one that makes the section mean anything -- the OLD expression, applied to the
+  same fixture, must still produce the inflated 110 s denominator -- and the
+  exclusion is COUNTED AND PRINTED in the report, because "we ignored two
+  records" and "there were none" are different facts and the first is the one
+  that explains a number. Process-free (synthetic captures only), so the floor
+  moves with it.
+  163 floor,
+  279 on a
   machine with the client, a compiler, an archive and a 32-bit `cmd.exe`; each other
   section declares a skip),
   `toolkit/clientscan/test_commandertrap.py` (the hardware-breakpoint trap, and

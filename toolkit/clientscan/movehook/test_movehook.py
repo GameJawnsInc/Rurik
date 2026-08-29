@@ -96,18 +96,18 @@ import checks                                                   # noqa: E402
 # ZERO, so a bare machine must still clear 105.
 #
 # 2026-08-29, THE RETURN TAP. Re-counted per section out of a real green run on
-# this machine, which is now 273 (was 215):
+# this machine, which is now 279 (was 215):
 #
 #   §1   6  §2  39  §3   4  §4  16  §5   6  §6   2  §7  11  §8   2  §9  13
 #   §10  8  §11  4  §12  6  §13  5  §14 63  §15  3  §15b 4  §16 25
-#   §17 37  §17e 7  §17f 4  §18 8
+#   §17 37  §17e 7  §17f 4  §18 8  §19 6
 #
 # CLIENT-DEPENDENT (opens the vaulted image): §1, §2, and the three
 # `gensites.verify()` blocks inside §14 and the six inside §17.
 # COMPILER / cmd.exe / ARCHIVE: §6, §7, §8, §10, §16.
 # PROCESS-FREE CORE, which is what the floor is:
 #   §3 4 + §4 16 + §5 6 + §9 13 + §11 4 + §12 6 + §13 5 + §14 54 + §15 3
-#   + §15b 4 + §17 31 + §17e 7 + §17f 4 = 157.
+#   + §15b 4 + §17 31 + §17e 7 + §17f 4 + §19 6 = 163.
 #
 # §18 (map identification, 8 checks) needs the vaulted archive AND the r7
 # capture, so it is NOT in the core and the floor does not move for it --
@@ -121,7 +121,7 @@ import checks                                                   # noqa: E402
 # rather than dying when the image is absent -- `pinned.find()` exits the
 # process rather than raising, so an `except Exception` around it catches
 # nothing, which is a trap §2 is still standing in.
-LEDGER = checks.Ledger("movehook", floor=157)
+LEDGER = checks.Ledger("movehook", floor=163)
 check = checks.adopt(LEDGER)
 
 WOW64_CMD = r"C:\Windows\SysWOW64\cmd.exe"
@@ -2027,6 +2027,113 @@ def _flt(f):
     return struct.unpack("<I", struct.pack("<f", f))[0]
 
 
+# ---------------------------------------------------------------- §19
+def section_19(tmp):
+    """THE MOTION WINDOW: an unset stamp is not a time, and a leg is clipped.
+
+    THREE DEFECTS IN ONE EXPRESSION, all found by R7's scoring pass. The world
+    census computed `max(ptime) - min(ptime)` over every record:
+
+      (1) Exactly two records per object -- the run's first setter and bake --
+          carry `ptime == 0`, an agent stamp the client had never set. They drag
+          `min` to zero and inflate the denominator by the whole pre-capture
+          uptime: r7 printed "in motion 61.8%" where the truth is 87.8%, a
+          27-POINT ERROR FROM 2 RECORDS IN 1,785 -- and it is in EVERY v4+
+          capture in the corpus. The existing "impossible leg" guard cannot see
+          it, because those records have `stop == 0` too: that guard tests the
+          LEG, and this defect is in the STAMP.
+      (2) `stop` is a FUTURE arrival, so a leg can end after the last
+          observation and merely dropping the zeros still produced percentages
+          OVER 100 (107.9% on run3-isle). Legs are clipped into the observed
+          window rather than the window stretched to fit them.
+      (3) It raised KeyError on v1-v3, which have no `ptime` field -- so
+          `readhook.py --bin` CRASHED on run 1, the arc's only v1 capture,
+          while §4 pinned "a v1 capture still parses". That was true of the
+          PARSE and never of the REPORT.
+
+    Each gets a check, and (1) gets the control that matters: the OLD
+    expression, applied to the same fixture, must produce the inflated number.
+    """
+    try:
+        import readhook as rh
+        import gensites
+        names = list(gensites.rows()[0])
+    except Exception as ex:                                  # noqa: BLE001
+        LEDGER.skip("19. the motion window", f"cannot import: {ex}")
+        return
+    site = names.index("setter")
+    A = 0x0BAD1000
+
+    def rec(seq, ptime, stop, vx, x, ver_has_stamp=True):
+        r = {"seq": seq, "tick": 1000 + seq, "site": site, "ecx": A,
+             "have_agent": 1, "id": 1, "world": 1,
+             "point": (_flt(x), _flt(0.0), 0, 0),
+             "vel": (_flt(vx), _flt(0.0))}
+        if ver_has_stamp:
+            r["ptime"] = ptime
+            r["stop"] = stop
+        return r
+
+    # ---- (1) the UNSET stamp -------------------------------------------
+    # One zero-stamp record, then a 10 s window with a 1 s leg in it.
+    recs = [rec(0, 0, 0, 0.0, 0.0),                 # the unset stamp
+            rec(1, 100000, 101000, 300.0, 100.0),   # a 1 s leg
+            rec(2, 110000, 110000, 0.0, 200.0)]
+    p = _synth_capture(tmp, "window.bin", recs, len(names))
+    cap = rh.Capture(p)
+    txt, _ = rh.report(cap, names)
+    check("of 10.0 s" in txt,
+          "19. the window EXCLUDES the unset stamp (10.0 s, not 110.0 s)",
+          f"the census said:\n{_census(txt)}")
+    check("UNSET position stamp" in txt,
+          "19. and the exclusion is REPORTED, not silent",
+          "'we ignored 2 records' and 'there were none' are different facts, "
+          "and the first is the one that explains a number")
+    # THE CONTROL: the shipped expression, on this same fixture, must produce
+    # the inflated denominator -- or this section pins nothing.
+    old_span = max(r["ptime"] for r in recs) - min(r["ptime"] for r in recs)
+    eq(old_span, 110000,
+       "19. CONTROL: the OLD expression inflates this same fixture to 110.0 s")
+
+    # ---- (2) a leg that outlives the window is CLIPPED -------------------
+    # One leg running 100 s past the last observation. Unclipped it would read
+    # 1000%; the honest answer is that we observed 10 s and it moved for all
+    # of them.
+    recs2 = [rec(0, 100000, 200000, 300.0, 0.0),
+             rec(1, 110000, 110000, 0.0, 100.0)]
+    p2 = _synth_capture(tmp, "clip.bin", recs2, len(names))
+    txt2, _ = rh.report(rh.Capture(p2), names)
+    check("(100.0%)" in txt2,
+          "19. a leg outlasting the window is CLIPPED to it, never over 100%",
+          f"the census said:\n{_census(txt2)}")
+
+    # ---- (3) a pre-stamp capture reports rather than crashing ------------
+    # v3 has no `ptime`/`stop` field at all. This raised KeyError before.
+    recs3 = [{"seq": 0, "tick": 1000, "site": site, "ecx": A, "have_agent": 1,
+              "id": 1, "point": (_flt(0.0), _flt(0.0), 0, 0)},
+             {"seq": 1, "tick": 1100, "site": site, "ecx": A, "have_agent": 1,
+              "id": 1, "point": (_flt(50.0), _flt(0.0), 0, 0)}]
+    p3 = _synth_capture(tmp, "nostamp.bin", recs3, len(names), ver=3)
+    try:
+        txt3, _ = rh.report(rh.Capture(p3), names)
+        crashed = None
+    except Exception as ex:                                  # noqa: BLE001
+        txt3, crashed = "", ex
+    check(crashed is None,
+          "19. a v3 capture (no position stamp) does NOT crash the report",
+          f"raised {crashed!r} -- this is the KeyError that made "
+          f"`readhook.py --bin` unusable on run 1")
+    check("UNAVAILABLE" in txt3,
+          "19. and it says UNAVAILABLE rather than inventing a window",
+          f"{_census(txt3)}")
+
+
+def _census(txt):
+    """The world-copy block of a report, for a failure message."""
+    i = txt.find("world copies")
+    return txt[i:i + 600] if i >= 0 else txt[-600:]
+
+
 # ---------------------------------------------------------------- §18
 def section_18():
     """MAP IDENTIFICATION: the score must not be won by mesh SIZE.
@@ -2169,6 +2276,7 @@ def main():
     section_16(tmp)
     section_17(tmp)
     section_18()
+    section_19(tmp)
     return LEDGER.verdict()
 
 

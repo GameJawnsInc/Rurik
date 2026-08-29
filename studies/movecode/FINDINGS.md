@@ -6508,11 +6508,8 @@ five-valued split of §1z-h.3 stands** — THEIRS-FAILED reads `out_count` direc
 
 * ~~**`pathdiff --map auto` ranks the WRONG map first.**~~ **FIXED, §1z-j
   below.**
-* **`readhook`'s motion denominator** includes two `ptime == 0` records (the
-  run's first setter/bake, a stamp never set), inflating the span 193.5 s →
-  280.6 s and the printed "in motion" from **89.7 % to 61.8 %** — a 27-point
-  error from 2 records in 1,785. The existing "impossible leg" guard cannot see
-  it: that tests the LEG, and this is a bad STAMP.
+* ~~**`readhook`'s motion denominator**~~ **FIXED, §1z-k below — and it was
+  three defects, not one.**
 * **`nearest_walkable` over-reports off-mesh depth by up to 3×** (worst: true
   26.1 u reported as 77.4 u) and returns the pre-nudge distance. Any prior
   off-mesh depth quoted from it carries the error.
@@ -6596,6 +6593,57 @@ than a constructed one — the mesh that actually beat the true map — plus the
 control that the correct map produces no warning (a guard that fires on the
 right answer too is noise). Eight checks; archive-dependent, so the floor does
 not move.
+
+---
+
+## 1z-k. THE MOTION WINDOW — one expression, three defects, and the reader had been CRASHING on run 1
+
+**FIXED 2026-08-29, desk-only.** §1z-i.6 filed the first of these; looking at it
+properly found two more in the same line.
+
+The world census computed `max(ptime) - min(ptime)` over every record of an
+object. That is wrong three ways:
+
+**(1) An unset stamp is not a timestamp.** Exactly **two records per object** —
+the run's first `setter` and `bake`, both at t+0 — carry `ptime == 0`: an agent
+stamp the client had never set. They drag `min` to zero and inflate the
+denominator by the whole pre-capture uptime. On r7 that turned 193.5 s into
+280.6 s and printed **"in motion 61.8 %"** where the truth is **87.8 %** — a
+**27-point error from 2 records in 1,785**. It is in **every v4+ capture in the
+corpus**, not just r7. The existing "impossible leg" guard cannot catch it:
+those records carry `stop == 0` too, so `stop > ptime` is false and they are
+never examined — **that guard tests the LEG; this defect is in the STAMP.**
+
+**(2) Motion could exceed its own window.** `stop` is a *future* arrival the
+client has predicted, so a leg can legitimately end after the last observation.
+Merely dropping the zeros still produced percentages **over 100** (107.9 % on
+run3-isle). We can only claim motion during the window we actually observed, so
+legs are now **clipped into it** rather than the window stretched to fit them.
+
+**(3) It crashed on v1–v3.** Those records have no `ptime` field at all, so
+`readhook.py --bin` raised `KeyError` and **produced no report** for run 1 — the
+arc's only v1 capture, and §1c's whole evidence base. `test_movehook.py` §4
+pins *"a v1 capture still parses"*, and that was true of the **parse** and never
+of the **report**. Two separate sites had to be fixed; the second was found by
+the new test rather than by reading, which is the point of writing it.
+
+**Corrected corpus figures** (previously all understated, some grossly):
+
+| capture | printed | corrected |
+|---|---|---|
+| r7 | 61.8 % | **87.8 %** |
+| r6b | — | 72.8 % |
+| r4a | — | 100.0 % |
+| run3-isle | 95.3 % (and 107.9 % once de-zeroed) | **99.0 %** |
+| r5stuck | — | **0.0 %** — the lock, correctly reading zero motion |
+| run-2026-08-27-ascalon (v1) | **CRASH** | `UNAVAILABLE`, with the reason |
+
+The exclusion is **counted and printed**, never silent: *"2 record(s) carried an
+UNSET position stamp and are excluded"* — because "we ignored two records" and
+"there were none" are different facts, and the first is the one that explains a
+number. `test_movehook.py` §19 pins all three with the control that matters —
+the OLD expression, on the same fixture, must still produce the inflated
+denominator, or the section pins nothing. Floor 157 → 163.
 
 ---
 

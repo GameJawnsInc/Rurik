@@ -1775,8 +1775,29 @@ This supersedes the two entries below it (each marked in place in FINDINGS):
   the fix work". The explicit-`--map` cross-check now speaks in BOTH
   directions and names the better-fitting mesh. `test_movehook.py` §18, 8
   checks, pinned against the REAL impostor plus the control that a correct map
-  is not called out. Still filed unfixed: `readhook`'s motion
-  denominator is off by 27 points from two `ptime == 0` records;
+  is not called out.
+* **★ THE MOTION WINDOW — ONE EXPRESSION, THREE DEFECTS, FIXED 2026-08-29
+  (§1z-k), desk-only.** `readhook`'s world census computed
+  `max(ptime) - min(ptime)` over every record. (1) **An unset stamp is not a
+  timestamp**: exactly two records per object (the run's first setter/bake)
+  carry `ptime == 0`, dragging `min` to zero and inflating the denominator by
+  the whole pre-capture uptime — r7 printed "in motion 61.8 %" where the truth
+  is **87.8 %**, a **27-point error from 2 records in 1,785**, and it is in
+  **every v4+ capture in the corpus**. The existing impossible-leg guard cannot
+  see it (those records carry `stop == 0`, so `stop > ptime` is false) — **that
+  guard tests the LEG; this defect is in the STAMP**. (2) **Motion could exceed
+  its own window**: `stop` is a predicted future arrival, so de-zeroing alone
+  still gave percentages **over 100** (107.9 % on run3-isle); legs are now
+  CLIPPED into the observed window. (3) **It CRASHED on v1–v3**, which have no
+  `ptime` field — `readhook.py --bin` raised KeyError and produced no report at
+  all for run 1, the arc's only v1 capture, while §4 pins "a v1 capture still
+  parses" (true of the PARSE, never of the REPORT). Two sites; the second was
+  found by the new test rather than by reading. Corrected: r7 87.8 %, r6b
+  72.8 %, r4a 100 %, run3-isle 99.0 %, **r5stuck 0.0 % — the lock, correctly
+  reading zero motion** — and the v1 capture now says UNAVAILABLE with its
+  reason. Exclusions are COUNTED AND PRINTED, never silent. `test_movehook.py`
+  §19, 6 checks, with the control that the OLD expression must still inflate
+  the same fixture; floor 157 → 163. Still filed unfixed:
   `nearest_walkable` over-reports depth up to 3×; RET_MAX_POINTS should rise
   4 → 9.
 * **★ THE BRIDGE AND THE STUCK CLIENT, 2026-08-29 (§1z-c) — a PLANE channel nobody

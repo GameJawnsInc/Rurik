@@ -384,7 +384,12 @@ def _worlds(cap, names):
         if wall <= 0:
             continue
         for r in o["recs"]:
-            if r["stop"] > r["ptime"] and (r["stop"] - r["ptime"]) > wall:
+            # `.get`, because v1-v3 records have no `ptime` field at all and this
+            # line used to KeyError on them -- `readhook.py --bin` CRASHED on run
+            # 1, the arc's only v1 capture, while §4 pinned "a v1 capture still
+            # parses" and was true only of the PARSE. See the note at the span.
+            pt, st = r.get("ptime"), r.get("stop")
+            if pt and st and st > pt and (st - pt) > wall:
                 o["impossible"] += 1
 
     a("world copies (grouped by OBJECT ADDRESS, because one agent id names two):")
@@ -397,9 +402,11 @@ def _worlds(cap, names):
             ivs, path, zero = [], 0.0, 0
             seq = o["recs"]
             for i, r in enumerate(seq):
-                v = (_f(r["vel"][0]) ** 2 + _f(r["vel"][1]) ** 2) ** 0.5
-                if v > 1.0 and r["stop"] > r["ptime"]:
-                    ivs.append((r["ptime"], r["stop"]))
+                pt, st = r.get("ptime"), r.get("stop")
+                v = (_f(r["vel"][0]) ** 2 + _f(r["vel"][1]) ** 2) ** 0.5 \
+                    if "vel" in r else 0.0
+                if v > 1.0 and pt and st and st > pt:
+                    ivs.append((pt, st))
                 if i:
                     p, q = seq[i - 1], r
                     d = ((_f(q["point"][0]) - _f(p["point"][0])) ** 2
@@ -409,19 +416,73 @@ def _worlds(cap, names):
                         # A step that MOVED but did not advance +0x58, the stamp
                         # saying when m_point was valid. A walk always advances
                         # both; this is the signature of a write, not a walk.
-                        if q["ptime"] == p["ptime"] and d > 1.0:
+                        if p.get("ptime") and q.get("ptime") == p.get("ptime") \
+                                and d > 1.0:
                             zero += 1
-            moving = _union_ms(ivs)
-            span = max(r["ptime"] for r in seq) - min(r["ptime"] for r in seq)
+            # THE MOTION WINDOW, AND THREE DEFECTS THIS BLOCK USED TO CARRY.
+            #
+            # It was `max(ptime) - min(ptime)` over every record, and that is
+            # wrong three ways -- all three found by R7's scoring pass (§1z-k):
+            #
+            # (1) AN UNSET STAMP IS NOT A TIMESTAMP. Exactly two records per
+            #     object -- the run's first `setter` and `bake`, both at t+0 --
+            #     carry `ptime == 0`: an agent stamp the client had never set.
+            #     They drag `min` to zero and inflate the denominator by the
+            #     whole pre-capture uptime. On r7 that turned 193.5 s into
+            #     280.6 s and printed "in motion 61.8%" where the truth is
+            #     89.7% -- a 27-POINT ERROR FROM 2 RECORDS IN 1,785, and it is
+            #     in EVERY v4+ capture in the corpus, not just this one.
+            #     The existing "impossible leg" guard above cannot catch it:
+            #     those records have `stop == 0` too, so `stop > ptime` is false
+            #     and they are never examined. THAT GUARD TESTS THE LEG; THIS
+            #     DEFECT IS IN THE STAMP.
+            # (2) MOTION COULD EXCEED ITS OWN WINDOW. `stop` is a FUTURE arrival
+            #     the client has predicted, so a leg can legitimately end after
+            #     the last observation -- and merely dropping the zeros produced
+            #     percentages over 100 (107.9% on run3-isle). We can only claim
+            #     motion during the window we actually observed, so the legs are
+            #     CLIPPED into it rather than the window stretched to fit them.
+            # (3) IT CRASHED ON v1-v3, which have no `ptime` field at all.
+            #     `readhook.py --bin` raised KeyError on run 1 -- the arc's only
+            #     v1 capture -- while §4 pinned "a v1 capture still parses",
+            #     which was true of the PARSE and not of the REPORT.
+            #
+            # The dropped stamps are COUNTED AND PRINTED, never silently
+            # excluded: "we ignored 2 records" and "there were none" are
+            # different facts, and the first is the one that explains a number.
+            stamps = sorted(p for p in (r.get("ptime") for r in seq) if p)
+            unset = sum(1 for r in seq if "ptime" in r and not r["ptime"])
+            no_field = seq and "ptime" not in seq[0]
             a(f"  0x{addr:08X}  id {o['id']:<6} {tag}")
             a(f"      {len(seq):5} record(s)   "
               + ", ".join(f"{k} x{v}" for k, v in
                           sorted(o["sites"].items(), key=lambda kv: -kv[1])))
+            span = (stamps[-1] - stamps[0]) if len(stamps) >= 2 else 0
             if span > 0:
+                lo, hi = stamps[0], stamps[-1]
+                clipped = [(max(s, lo), min(e, hi)) for s, e in ivs]
+                moving = _union_ms([(s, e) for s, e in clipped if e > s])
                 a(f"      in motion {moving / 1000.0:7.1f} s of {span / 1000.0:.1f} s "
                   f"({100.0 * moving / span:.1f}%), path {path:.0f} u")
-            a(f"      steps that moved but did NOT advance the position stamp: "
-              f"{zero}")
+                if unset:
+                    a(f"      ({unset} record(s) carried an UNSET position stamp "
+                      f"(+0x58 == 0) and are excluded from")
+                    a("       the window -- an unset stamp is not a time. "
+                      "Counting them put the")
+                    a("       denominator before the capture began.)")
+            elif no_field:
+                a(f"      in motion: UNAVAILABLE -- a v{cap.version} record has "
+                  f"no position stamp (+0x58),")
+                a(f"       so this object has no motion window. path {path:.0f} u")
+            else:
+                a(f"      in motion: UNAVAILABLE -- fewer than 2 set position "
+                  f"stamps. path {path:.0f} u")
+            if no_field:
+                a("      steps that moved but did NOT advance the position "
+                  "stamp: UNAVAILABLE (no stamp)")
+            else:
+                a(f"      steps that moved but did NOT advance the position "
+                  f"stamp: {zero}")
             if o.get("impossible"):
                 a(f"      !! NOT AN AGENT: {o['impossible']} of {len(seq)} record(s) "
                   f"declare a movement leg")
@@ -1023,7 +1084,12 @@ def report(cap, names, dump=0):
         for addr, seq in _by_object(cap, names).items():
             for i in range(1, len(seq)):
                 p, q = seq[i - 1], seq[i]
-                if q["ptime"] != p["ptime"]:
+                # The displacement signature IS the stamp standing still, so a
+                # record with no stamp cannot carry it -- and reading the field
+                # unguarded is the second half of the v1-v3 KeyError that made
+                # `readhook.py --bin` crash on run 1. An absent stamp is not a
+                # stamp that failed to advance.
+                if not p.get("ptime") or q.get("ptime") != p.get("ptime"):
                     continue
                 d = ((_f(q["point"][0]) - _f(p["point"][0])) ** 2
                      + (_f(q["point"][1]) - _f(p["point"][1])) ** 2) ** 0.5
