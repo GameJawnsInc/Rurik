@@ -40,11 +40,18 @@ Terminal 2 — arm the hook once you are in the map:
 python toolkit/clientscan/movehook/attach.py --minutes 8 --out vault/research/movecode/r5
 ```
 
-When done playing:
+When done playing (`--stop` reads `movehook.cfg` for the armed run's output
+directory, so it needs no `--out`; it now WAITS for the capture and tells you if
+it did not appear):
 
 ```
 python toolkit/clientscan/movehook/attach.py --stop
 ```
+
+**The capture now survives either way the client goes down** — a snapshot every
+15 s covers a hard kill, and a `DLL_PROCESS_DETACH` write covers a graceful
+close (FINDINGS §2b). Killing the server before `--stop` is no longer fatal to
+the run, but stop first anyway: it is the only path that writes `movehook.txt`.
 
 ## 3. What to do in the map, in order
 
@@ -83,6 +90,10 @@ not actually performed ≥6 times, P1/P2 are unread, not passed.
 ```
 python toolkit/clientscan/noclipscore.py --bin vault/research/movecode/r5/movehook.bin
 ```
+
+Section A is the no-clip census (off-mesh body samples with prop-outline
+attribution); section B is the rapid-pair chord coverage. Under `--router` the
+signature is A clean while B still counts crossings.
 
 ```
 python toolkit/clientscan/movehook/readhook.py --bin vault/research/movecode/r5/movehook.bin

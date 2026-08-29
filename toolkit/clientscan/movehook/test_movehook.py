@@ -1384,6 +1384,37 @@ def section_16(tmp):
     check("os.path.getsize" in stop_blk or "getmtime" in stop_blk,
           "16. and it confirms the file by looking at it",
           "existence alone would pass on a stale file from a previous run")
+    # --stop MUST look where the ARMED RUN is writing, which is the cfg's `out=`
+    # and not this script's default. `attach.py --stop` with no --out is exactly
+    # what the operator typed on R5; resolving that to the default vault dir
+    # would report a MISSING capture for a run that wrote correctly.
+    check("armed_outdir" in stop_blk,
+          "16. --stop resolves the output dir from the CFG, not from its default",
+          "a bare --stop after `--out vault/.../r5` would look in the wrong "
+          "place and call a good capture missing")
+    try:
+        cfgp = os.path.join(HERE, "movehook.cfg")
+        saved_cfg = open(cfgp, encoding="ascii").read() \
+            if os.path.isfile(cfgp) else None
+        with open(cfgp, "w", encoding="ascii", newline="\n") as fh:
+            fh.write("ms=1000\nout=" + os.path.join(tmp, "cfgwins") + "\n")
+        got = attach.armed_outdir(None)
+        check(os.path.normcase(got) == os.path.normcase(
+                  os.path.abspath(os.path.join(tmp, "cfgwins"))),
+              "16. CONTROL: and it really reads that value back",
+              f"armed_outdir() returned {got!r}")
+        check(os.path.normcase(attach.armed_outdir(os.path.join(tmp, "explicit")))
+              == os.path.normcase(os.path.abspath(os.path.join(tmp, "explicit"))),
+              "16. CONTROL: an explicit --out still wins over the cfg",
+              "the override has to survive, or a re-read of an old run is "
+              "impossible")
+    finally:
+        if saved_cfg is None:
+            if os.path.isfile(cfgp):
+                os.remove(cfgp)
+        else:
+            with open(cfgp, "w", encoding="ascii", newline="\n") as fh:
+                fh.write(saved_cfg)
 
     # (f) THE PROCESS-EXIT WRITE, FOR REAL. Everything above is structural;
     # this is the R5 scenario itself -- a run still armed when the host exits.

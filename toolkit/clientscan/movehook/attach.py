@@ -53,6 +53,35 @@ def default_outdir():
     return os.path.abspath(DEFAULT_OUT)
 
 
+def armed_outdir(explicit=None):
+    """Where the run that is CURRENTLY ARMED is writing.
+
+    Precedence: an explicit --out, then `movehook.cfg`, then the default.
+
+    THE CFG IS THE POINT. `--stop` has to look where the DLL is actually
+    writing, and the DLL reads that path out of the cfg -- so the cfg is the
+    ground truth, not this script's default. Without this, the natural
+    `attach.py --stop` (no --out, exactly what the operator typed on R5) would
+    look in the default vault directory, find nothing, and report a MISSING
+    capture for a run that wrote correctly into `--out`. That is the same class
+    of failure as the one this whole change is about: an instrument confidently
+    describing a place nobody wrote to.
+    """
+    if explicit:
+        return os.path.abspath(explicit)
+    cfg = os.path.join(HERE, "movehook.cfg")
+    try:
+        with open(cfg, encoding="ascii", errors="replace") as fh:
+            for line in fh:
+                if line.startswith("out="):
+                    val = line[4:].strip()
+                    if val:
+                        return os.path.abspath(val)
+    except OSError:
+        pass
+    return default_outdir()
+
+
 def report_status():
     """Print the DLL's own status file, if it left one.
 
@@ -204,8 +233,9 @@ def main(argv=None):
 
     if a.stop:
         stop = os.path.join(HERE, "movehook.stop")
-        outdir = os.path.abspath(a.out) if a.out else default_outdir()
+        outdir = armed_outdir(a.out)
         binpath = os.path.join(outdir, "movehook.bin")
+        print(f"looking for the capture in {outdir}")
         before = os.path.getmtime(binpath) if os.path.exists(binpath) else None
         with open(stop, "w", encoding="ascii") as fh:
             fh.write("stop\n")
