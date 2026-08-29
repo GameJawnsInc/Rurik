@@ -3612,6 +3612,58 @@ Floor 75 against a green 75 with 5 declared skips (the archive-conditional
   must read differently, because two decisions printing the same line is how a run gets
   scored as the wrong arm. Floor 19 against a green run of 25, and every section is
   process-free so the floor is the whole run),
+  `toolkit/authsrv/test_planerepair.py` (**the plane-lock repair and the
+  plane-echo tripwire, MOVECODE §1z-d** — built from r5stuck, the first
+  captured client-side movement LOCK: a client that crossed a plane boundary
+  carrying its old plane word could not solve a path from the impossible
+  plane and so could never walk to ground that would re-plane it, while the
+  server accepted 82 byte-identical 0x003D reports over 40.4 s and echoed the
+  impossible plane back in 43 grants without one log line naming it. **The
+  design under test is the pre-commit review's, not the first draft's**: the
+  draft disarmed on every 0x0047 stop-report, and replaying the source
+  capture through it refuted its own registered prediction (the measured
+  lock INTERLEAVES stops — a victim mashes keys — pushing the first fire
+  from 5.1 s to 9.3 s); stops are now ignored and evidence freshness is the
+  GAP stream-continuity bound, derived from that capture's own gap structure
+  (a 2.47 s intra-episode gap must accumulate, the 10.3 s inter-episode gap
+  must re-arm — both are checks here). §1–§3 hold `plane_repair_track` to
+  the measured signature and — the part that matters — to every clause that
+  must DISARM it, because the failure mode of a repair is firing on a client
+  that is fine: the moving no-clipper (r5bridge's shape, re-arms every
+  report), the DECODED deck-stroller whose plane the mesh OFFERS (the check
+  says out loud that the 9/198 hole — deck coverage our decode LACKS — is
+  the opposite case and IS restamped after 5 s frozen; that residual is
+  priced in the constants block, not prevented), the ambiguous stack
+  (plane_at's None refuses), the off-mesh point, the NaN coordinate (refused
+  before `containing()` can raise `int(nan)` out of the recv loop), the
+  trust-refused report (which DISARMS rather than skips — the anti-teleport
+  inheritance), the pure-turn report (movementType 0, never seen in 7,988
+  corpus records, guarded per the cancel arm's own precedent), and the stale
+  stream (a report gap over GAP re-arms — one keypress cannot inherit a
+  minutes-old streak). §4 pins the wire: numbered fires at most once per
+  MIN_INTERVAL, at the client's OWN frozen point (no positional yank),
+  labelled PLANE-REPAIR (attribution-by-label is the licence for a third
+  0x002C sender), with `plane_repair_due` rows on reason TRANSITION only —
+  and that a fire heals `zl_last_grant_plane`, or the SAME packet's
+  zero-lead grant would restamp the sync copy with the plane the 0x002C
+  just corrected (the review's skeptic finding 1).
+  §5 pins the tripwire's one load-bearing property: the emitted values are
+  **UNCHANGED** — it observes the impossible echo the stuck session made 43
+  times silently, and a mutation here is the exact twice-refused regression
+  — plus a control that r5bridge's 9 legitimate deck grants stay silent and
+  that the sync model is byte-identical with and without a mesh. §6 pins the
+  composition note to appear only beside a second 0x002C policy, and the
+  bare call to stay `(None, [])`. §7 is source order on the 0x003D call site
+  (its first draft matched the function DEF instead of the call — the
+  verify-the-operand trap, kept as a comment) plus an ABSENCE pin on the
+  0x0047 arm: the refuted stop-reset reappearing there is the failure it
+  guards. §8 proves the r5stuck premise against the REAL map-280 mesh —
+  offers exactly [0], resolves 41→0 — runs the verdict against the real
+  `PathingMap` unmodified, and closes the review's last gap by driving the
+  ambiguous door on REAL stacked geometry (r5bridge's deck point offers
+  [0, 37]; a claim of 5 refuses); ledger-skipped, never silent, without the
+  archive. Floor 36 against a green run of 41 — exactly the 5-check
+  real-mesh section of headroom. ~2 s with the archive),
   `toolkit/authsrv/test_position_trust.py` (the position-trust policy: it may
   refuse a client-reported position, but it may never **latch**. The old
   `_adopt_client_position` refused anything more than `900 u` from

@@ -1570,6 +1570,35 @@ This supersedes the two entries below it (each marked in place in FINDINGS):
   r 21–70 u, per-cell CSR proven 990/990) and is NOT this defect (0/1,199 samples inside
   any circle). Filed: likely `PathApi:753/754`'s data. Also filed: 14/92 prop models
   carry collision sub-meshes, merge UNRESOLVED, compile-experiment specimen named.
+* **★ THE LOCK'S ONSET WAS IN THE SERVER LOG, AND THE LOCK NOW HAS A REPAIR,
+  2026-08-29 (§1z-d).** Read the same day §1z-c called the onset unmeasured: the
+  client reported plane 41 FIRST, from ground where 41 is CORRECT (strongest
+  plane-index corroboration yet), carried it 150 u across a boundary onto ground
+  offering only 0, and our trust guard REJECTED that report while the zero-lead grant
+  echoed its plane anyway — **43 of 58 grants carried the impossible plane; the
+  censuses on r5bridge/r5/08-28 read 0 of 53 / 0 of 128 / 0 of 104** (r5bridge's 9
+  legitimate plane-37 deck grants are the positive control). The blanket "never emit
+  an impossible plane" rewrite is REFUSED on the arc's own record (plane_at's 9/198
+  class = client right, decode incomplete; one such site already reverted;
+  test_position_trust pins verbatim echo) — an instantaneous geometry test cannot
+  tell a deck we failed to decode from a stale plane, but BEHAVIOUR can: the lock is
+  accepted 0x003D movement reports byte-identical for 40.4 s on an impossible plane.
+  **Landed: the plane repair** (ON by default, `--no-plane-repair` reverts) — after
+  5.0 s of that signature on a LIVE report stream (a gap over 5 s re-arms; stops are
+  ignored — the review's capture replay refuted the first draft's stop-reset, which
+  pushed the fire to 9.3 s because a locked victim MASHES keys), a numbered
+  PLANE-REPAIR 0x002C restamps agent+0x80 with the mesh's plane at the client's own
+  frozen point, healing `zl_last_grant_plane` so the same packet's grant can't
+  re-poison it; every non-lock clause DISARMS; zero fires expected healthy — **plus
+  the plane-echo tripwire** (observation only, the 43 silent echoes would each have
+  been a named row) and `test_planerepair.py` (41 checks). Replay of the shipped
+  design over r5stuck: first fire 5.11 s after the freeze. Registered prediction
+  for its first live lock: due-ladder to `plane-lock` in ~5 s of the first
+  continuous episode, and — the part no replay scores — the client walks after
+  fire #1, so a healed lock shows exactly ONE fire; repeat numbers refute the
+  agent+0x80 heal reconstruction, not the trigger. Still open: the `MapFindPath`
+  RETURN tap (now also scores whether the restamp revives the walker), the
+  silent-lock case (no 0x003D stream, no evidence), NPC planes.
 * **★ THE BRIDGE AND THE STUCK CLIENT, 2026-08-29 (§1z-c) — a PLANE channel nobody
   has scored, and the first captured movement LOCK.** `noclipscore.py` read 0 off-mesh
   on a capture taken *because* the operator had walked under a bridge twice: §1w.7's

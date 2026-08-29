@@ -5612,7 +5612,11 @@ The causal chain from the impossible plane to the dead walker is **RECONSTRUCTIO
 observe the queries and the silence after them, not the client's failure to resolve.
 Plane indices are our decode's; they come from the same file the client reads, but the
 identity is assumed. **The onset is not captured** — the hook was armed after the lock
-— so what set plane 41 is unmeasured. `r4a` carries the mirror anomaly 200 u away
+— so what set plane 41 is unmeasured. *(SUPERSEDED 2026-08-29, same day: not captured
+CLIENT-side. The server log had it the whole time — §1z-d reads the onset out of
+`authsrv-20260829T091543-c1.jsonl`, and it is the client's own plane-carry across a
+boundary, echoed back by our grant path. The MapFindPath tap below is still the missing
+client-side half of the chain.)* `r4a` carries the mirror anomaly 200 u away
 (declaring plane 0 where the mesh offers 41), so this neighbourhood produces plane
 confusion under both policies.
 
@@ -5620,6 +5624,123 @@ confusion under both policies.
 `0x00709F44`, `0x0070A0AD`, `0x0070A0D4` — named in `content/movecode.toml`'s own
 `limits` note): it would turn "the client asked from an impossible plane" into "the
 client got pathCount 0", which is the one link this section infers.
+
+## 1z-d. THE ONSET WAS IN THE SERVER LOG ALL ALONG — and the lock now has a repair
+
+**OBSERVED 2026-08-29**, from `vault/captures/gamesrv/authsrv-20260829T091543-c1.jsonl`
+(the stuck session's server-side capture, matched by its 127 router rows / 100
+kbd-drop) — read the same day §1z-c.3 called the onset unmeasured. One correction
+first: the "healthy run" §1z-c.2 cites for comparison is `085952`, the same morning's
+§1z-b r5 session (12/90 = 13.3% kbd-drop, 76 zero-lead grants — the exact figures),
+not the 08-28 evening file.
+
+### 1z-d.1 The onset, observed
+
+* **The client reported plane 41 first, from ground where 41 is CORRECT.** The first
+  plane-41 anywhere in the session is a c2s `MOVE_SET_HEADING` at t=29.03 from
+  (−2921.0, 523.4) — where our mesh offers exactly {41}. This is the strongest
+  corroboration yet that the client's plane indices are our decode's: the client
+  acquired 41 precisely where we say 41 lives.
+* **1.5 s and 150 u later the mesh offers only {0} and the client still said 41** —
+  the plane rode along across the boundary. B3-3 Q5 measured this for installs
+  ("the plane rides along unchanged"); this is the same defect on the client's own
+  walking report path, in the wild.
+* **Our trust guard rejected that report — and the grant path echoed its plane
+  anyway.** `position_report` idx 988: `accepted: false`. The very next
+  `grant_verdict` used the same packet's `plane_dest=41` and sent
+  `ZERO LEAD (−3074, 22) plane 41`. The position validator and the grant plane were
+  never connected.
+* From t=39.9 the client repeated a byte-identical report at the frozen coordinate:
+  **82 accepted reports (81 `in-budget`, 1 `stop-report`), one coordinate, plane 41,
+  40.4 s (t=39.87..80.23).** REFINES §1z-c.2's "58 zero-lead grants pinned the frozen position": 58 is
+  the session's total zero-lead count; **43 carried a mesh-impossible plane, 35 of
+  those at the frozen coordinate**; the early approach (t=1.7–19 s) was all plane 0
+  and correct.
+* **The wrong-plane emission is unique to the lock, and it is pure echo.** Full
+  outbound census, every plane-bearing send checked against the mesh at its own
+  point: stuck **43 of 65** wrong-plane; r5bridge **0 of 53** (including 9
+  legitimate plane-37 deck grants — the positive control that the census can pass
+  real stacked traffic); r5 **0 of 128** (3 off-mesh-point sends are a separate,
+  milder class); 08-28 healthy **0 of 104**. The server never *invents* a wrong
+  plane; it faithfully relays the client's confusion.
+
+### 1z-d.2 What landed: a repair keyed on behaviour, and a tripwire that only watches
+
+The obvious fix — never emit a plane the mesh does not offer at the emitted point —
+is **wrong, and this file's own arc proves it twice**: `plane_at`'s 9-of-198 failure
+class is exactly "the client's plane is CORRECT and our decode's coverage is missing"
+(bridge-over-ground), a send site that second-guessed the client's plane through
+`plane_at` was reverted for overruling it in precisely the wrong place, and
+`test_position_trust` pins verbatim echo at the zero-lead site as design. An
+instantaneous geometry test cannot tell "client on a deck we failed to decode" from
+"client with a stale plane". **Behaviour can**: the locked client reported keyboard
+movement (0x003D is emitted only while moving) from a byte-identical position for
+40.4 s — a deck-walker moves, and a standing player sends no 0x003D at all.
+
+So `authsrv.py` now carries (commit this section lands in):
+
+* **The plane repair** (`plane_repair_track` / `_maybe_plane_repair`, ON by default,
+  `--no-plane-repair` reverts): after accepted 0x003D reports repeat an identical
+  (x, y) for 5.0 s claiming a plane the mesh does not offer there, with an
+  unambiguous single-candidate resolution, send a numbered, labelled `PLANE-REPAIR`
+  0x002C — the client's own frozen point, the mesh's plane — at most once per 10 s
+  while the signature persists. 0x002C's slot-2 plane is what the client writes to
+  agent+0x80 (§1x.4's decode), which is the exact field its path queries read from —
+  RECONSTRUCTION: that this heals the lock is the registered prediction, not yet a
+  measurement (the stuck session sent zero 0x002C of any kind, so the heal has never
+  been tried). Every clause that is not the lock DISARMS the streak (moving client,
+  offered plane, ambiguous stack, off-mesh point, NaN coordinate, trust-refused
+  report, pure-turn report, stale stream — a report gap over 5.0 s re-arms the
+  clock, because the evidence must be a live stream). The constants derive from the
+  one measured lock (exact-equality freeze because the reports were byte-identical;
+  5.0 s HOLD against a 40.4 s lock; the 5.0 s GAP from the capture's own gap
+  structure — 2.47 s intra-episode must survive, 10.3 s inter-episode must not —
+  REFUSED-IF a future lock drifts or is shorter, in which case re-derive, don't
+  loosen). A fire also heals `zl_last_grant_plane`, or the SAME packet's zero-lead
+  grant would restamp the sync copy with the plane the 0x002C just corrected; the
+  grant's field 3 still echoes the report's plane by the verbatim-echo design, and
+  whether that residue matters on a healed client is unmeasured. A false fire (a
+  client frozen 5 s on a deck our decode missed — the 9/198 class, no measured
+  instance in four sessions) restamps a correct plane with no positional yank;
+  NOT established recoverable, since the client carries plane words rather than
+  re-deriving them. In a healthy run it fires ZERO times.
+* **The first draft of this repair was refuted before it ran, by the review.** It
+  disarmed the streak on every 0x0047 stop-report ("no movement claim, no lock
+  evidence") — and replaying the source capture through the shipped code showed the
+  measured lock INTERLEAVES stop-reports (a victim mashes keys; 1 stop at the
+  frozen coordinate itself), pushing the first fire to 9.3 s and tripling the
+  sends against a prediction of "~5 s, one 0x002C". Stops are now ignored entirely
+  and freshness is the GAP bound's job. **Replay of the shipped design over
+  r5stuck: fires at t=44.98, 55.12, 70.80 — the first 5.11 s after the freeze,
+  each legitimate (this client stayed locked the whole capture; no repair existed
+  to heal it).**
+* **The plane-echo tripwire** (in `_note_wire_move`, the send() choke point all
+  three player-moving opcodes route through): an outbound slot-2 plane the mesh does
+  not offer at its own point gets a `plane_echo` row and a transition print — and
+  goes out **unchanged**. The 43 silent echoes above would each have been a named
+  row. Observation only; the rewrite is the twice-refused design.
+* `test_planerepair.py` (35 checks, floor 30) holds both to the disarm clauses, the
+  label, the transition-only logging, the no-mutation property, and the r5stuck
+  premise against the real map-280 mesh.
+
+### 1z-d.3 What is still NOT established
+
+The client-side half of the chain is still §1z-c.3's inference — the `MapFindPath`
+RETURN tap remains the cheapest next measurement, and would also measure whether a
+repair's restamp actually revives the walker (predict: first post-repair query
+starts from the restamped plane and returns pathCount > 0). The repair has never
+fired against a live client — its next lock is its first trial, and the registered
+prediction (timing restated from the offline replay above, which is its authority):
+the `plane_repair_due` ladder reaches `plane-lock` within ~5 s of the first
+continuous report episode at the frozen point, numbered PLANE-REPAIR 0x002C rows go
+out at most every 10 s while the lock persists, and — the part no replay can score —
+the client walks on the next click after fire #1, so a healed client shows exactly
+ONE fire. Repeat fire numbers on a live lock mean the restamp is NOT healing, which
+would refute the agent+0x80 reconstruction rather than the trigger. A lock whose
+victim stops pressing keys entirely is invisible to it (no 0x003D stream, no
+evidence — key-MASHING victims are covered, that was the first draft's blind spot);
+nothing here covers NPC planes; and the onset itself is not prevented — the
+client's plane-carry is the client's, we only heal its consequence.
 
 ---
 

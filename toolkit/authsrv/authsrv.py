@@ -4313,6 +4313,77 @@ RESYNC_MIN_INTERVAL = 0.5
 # a real network would need this re-derived from an RTT.
 RESYNC_MAX_REPORT_AGE = 100.0 / DEFAULT_RUN_SPEED
 
+# THE PLANE REPAIR -- the containment for the first captured client-side
+# movement LOCK (studies/movecode/FINDINGS.md sec.1z-c/1z-d, r5stuck,
+# 2026-08-29). What was measured: the client crossed a plane boundary carrying
+# its old plane word along (onset at (-2921.0, 523.4), where plane 41 is
+# CORRECT; 150 u later the mesh offers only 0 and the client still said 41),
+# and then could not move at all -- its own path queries started from a plane
+# that does not contain its position, so no path was ever solved, so it could
+# never walk to ground that would re-plane it. A plane desync is a LOCK where
+# a position desync is only a warp. The one message that heals it is 0x002C:
+# its slot-2 plane is what the client writes to agent+0x80 (0x00602B20's both
+# arms), which is exactly the field its path queries read from. In the stuck
+# session zero 0x002C of any kind went out.
+#
+# WHY THIS IS A BEHAVIOURAL TRIGGER AND NOT A GEOMETRY REWRITE. The obvious
+# fix -- "never emit a plane the mesh does not offer at the emitted point" --
+# is REFUSED, twice, in this file's own history: plane_at's 9-of-198 failure
+# class is precisely "the client's plane is CORRECT and our decode's coverage
+# is missing" (bridge-over-ground), a send site that second-guessed the
+# client's plane through plane_at was reverted for overruling it in exactly
+# the wrong place (see the click arm's plane note), and test_position_trust
+# pins verbatim echo at the zero-lead site as design. An instantaneous
+# geometry test cannot tell "client on a deck we failed to decode" from
+# "client with a stale plane". What CAN tell them apart is behaviour: the
+# locked client reported keyboard movement (0x003D is emitted only while
+# moving) with a BYTE-IDENTICAL position, 82 accepted reports over 33 s --
+# while a deck-walker's position changes every report and a standing player
+# sends no 0x003D at all. So the trigger is the measured lock signature and
+# nothing wider: accepted 0x003D reports, exactly-repeated (x, y), a plane
+# the mesh does not offer there, an unambiguous single-candidate resolution,
+# held PLANE_REPAIR_HOLD seconds.
+#
+# THE CONSTANTS, derived rather than fitted: the one measured lock repeated
+# its report verbatim for 40.4 s (server log t=39.87..80.23, 82 accepted
+# rows) and the client-side capture shows 0 u of body path over 22.9 s, so
+# HOLD = 5.0 s sits 8x inside the shortest measurement while being orders
+# above the report interval; the freeze test is EXACT float equality because
+# the lock's reports were byte-identical (both captures) -- REFUSED-IF a
+# future lock shows the position drifting, in which case re-derive both from
+# that capture rather than loosening these. GAP is the stream-continuity
+# bound: the evidence for "locked NOW" must be a live report stream, so a
+# gap over GAP seconds between qualifying reports re-arms the clock instead
+# of letting one keypress inherit a minutes-old streak. Its 5.0 s is derived
+# from the same capture's own gap structure -- intra-episode gaps reach
+# 2.47 s (which must NOT re-arm, or the lock fires late) and the one
+# inter-episode gap is 10.3 s (which should) -- so GAP sits 2x above the
+# former and 2x under the latter. The first draft DISARMED on any 0x0047
+# stop-report instead; replaying the source capture through it (pre-commit
+# review, 2026-08-29) refuted that design's own registered prediction --
+# the measured lock INTERLEAVES stop-reports (a victim mashes keys), so the
+# reset pushed the first fire to 9.3 s and tripled the sends. Stops are now
+# ignored: they carry no movement claim, and continuity is the gap bound's
+# job. MIN_INTERVAL bounds re-fires while un-healed.
+#
+# WHAT A FALSE FIRE COSTS, said out loud: a client standing in our decode's
+# 9/198 hole pressing into a wall for HOLD seconds would get its (correct)
+# deck plane restamped to the ground's -- no positional yank (the payload is
+# the client's own accepted report), but NOT established to be recoverable:
+# the client CARRIES a plane word rather than re-deriving it (1z-d's own
+# onset measurement), so a wrong restamp rides along and could itself become
+# a lock wherever the stamped plane's coverage runs out. RECONSTRUCTION both
+# ways -- the false fire has never happened and neither has a heal. What the
+# licence for defaulting ON actually rests on: the lock side is MEASURED
+# unrecoverable, the false fire needs a 5 s frozen movement stream on a deck
+# our decode missed (no measured instance in four sessions), and every fire
+# is loud -- one numbered row each, zero expected in a healthy run, a repeat
+# number meaning NOT HEALING.
+PLANE_REPAIR = True
+PLANE_REPAIR_HOLD = 5.0
+PLANE_REPAIR_GAP = 5.0
+PLANE_REPAIR_MIN_INTERVAL = 10.0
+
 
 def _sync_position(state, now):
     """Where the client's SYNC (authoritative) copy is, by OUR OWN model.
@@ -4347,7 +4418,7 @@ def _sync_position(state, now):
     return (frm[0] + dx / dist * gone, frm[1] + dy / dist * gone)
 
 
-def _note_wire_move(state, opcode, values, now):
+def _note_wire_move(state, opcode, values, now, rec=None):
     """Update the SYNC model from a message we are about to put on the wire.
 
     Hooked into send() for the same reason the create and item hooks there are:
@@ -4361,6 +4432,38 @@ def _note_wire_move(state, opcode, values, now):
     if not (isinstance(point, (list, tuple)) and len(point) == 2):
         return
     point = (float(point[0]), float(point[1]))
+    # THE PLANE-ECHO TRIPWIRE -- observation, NEVER a rewrite. In the r5stuck
+    # session 43 of 65 outbound plane-bearing sends (all 43 among its 58
+    # zero-lead grants) echoed the client's plane 41 at points where the mesh
+    # offers only 0, and nothing in the log named it while it happened; the
+    # same census over three healthy sessions reads 0 of 285. All
+    # three opcodes here pair their slot-2 plane with THIS point (a grant's
+    # field 4 describes a different, historical point and is deliberately not
+    # judged against this one). Rewriting the value is refused twice over in
+    # this file's history -- plane_at's 9/198 failures are exactly "the client
+    # is right and our decode's coverage is missing", and test_position_trust
+    # pins verbatim echo at the zero-lead site as design -- so an impossible
+    # emission gets a row and a transition print, and goes out unchanged.
+    pm = state.get("pathmap")
+    if (pm is not None and len(values) > 2 and isinstance(values[2], int)
+            and math.isfinite(point[0]) and math.isfinite(point[1])):
+        # the isfinite gate is load-bearing: containing() does int(y // BAND)
+        # and int(nan) raises out of send() -- a NaN report echoed into a
+        # zero-lead grant must not let the tripwire kill the session.
+        offered = {t.plane for t in pm.containing(point[0], point[1])}
+        bad = bool(offered) and values[2] not in offered
+        if bad and rec is not None:
+            rec.event("plane_echo", opcode=opcode, plane=values[2],
+                      offered=sorted(offered),
+                      point=[round(point[0], 2), round(point[1], 2)])
+        if bad and not state.get("plane_echo_bad"):
+            print(f"[plane-echo] emitting plane {values[2]} at "
+                  f"({point[0]:.0f},{point[1]:.0f}) where the mesh offers "
+                  f"{sorted(offered)} (opcode 0x{opcode:04X}) -- echoed "
+                  f"unchanged by design; see the plane-repair block for what "
+                  f"acts on this. Logged per send, printed on transition.",
+                  flush=True)
+        state["plane_echo_bad"] = bad
     if opcode in (GAME_SMSG_AGENT_MOVE_TO_POINT,
                   GAME_SMSG_AGENT_UPDATE_DESTINATION):
         # A grant: the copy starts gliding from wherever the model already has
@@ -4594,6 +4697,141 @@ def _maybe_resync(send, state, rec, now=None):
          f"RESYNC 0x002C at ({payload[0]:.0f},{payload[1]:.0f}) plane {plane} "
          f"-- the CLIENT's own report, {age * 1000:.0f} ms old, closing a "
          f"modelled {sep:.0f} u between the authoritative copy and it")
+    return True
+
+
+def plane_repair_track(state, reported, plane, accepted, moving, pm, now):
+    """Track one 0x003D report against the lock signature. -> (fire, why, fix).
+
+    The streak state (`pr_point`/`pr_since`/`pr_last`) arms on the FIRST
+    accepted report that repeats nothing (a new point starts the clock, it
+    does not fire), and every clause that is not the lock CLEARS it -- so a
+    deck-walker (position changes every report), a refused report (the trust
+    radius is the anti-teleport guard and this function inherits it by only
+    counting accepts), a pure turn (movementType 0 -- never seen in 7,988
+    corpus records, guarded per the cancel arm's own precedent: no movement
+    claim, no lock evidence), a non-finite coordinate (int(nan // BAND)
+    raises out of the recv loop -- refuse it here, before the mesh sees it),
+    an off-mesh point (no authority to say anything), an ambiguous stack
+    (plane_at returns None rather than guess) and a legal plane all disarm
+    the repair rather than merely not firing it. A report gap over
+    PLANE_REPAIR_GAP re-arms the clock -- the evidence must be a LIVE stream,
+    not one keypress inheriting a minutes-old streak -- and 0x0047
+    stop-reports are ignored entirely rather than resetting anything, because
+    the measured lock interleaves them (see the constants block). Fires at
+    most once per PLANE_REPAIR_MIN_INTERVAL while the signature persists.
+    """
+    if not PLANE_REPAIR:
+        return False, "off", None
+    if pm is None:
+        state["pr_point"] = None
+        return False, "no-mesh", None
+    if not moving:
+        state["pr_point"] = None
+        return False, "not-moving", None
+    if not accepted:
+        state["pr_point"] = None
+        return False, "report-refused", None
+    pt = (float(reported[0]), float(reported[1]))
+    if not (math.isfinite(pt[0]) and math.isfinite(pt[1])):
+        state["pr_point"] = None
+        return False, "bad-point", None
+    offered = {t.plane for t in pm.containing(pt[0], pt[1])}
+    if not offered:
+        state["pr_point"] = None
+        return False, "off-mesh", None
+    if plane in offered:
+        state["pr_point"] = None
+        return False, "plane-legal", None
+    fix = pm.plane_at(pt[0], pt[1], prefer=plane)
+    if fix is None:
+        # >1 candidate and the report matches none: the mesh cannot say WHICH
+        # plane is right, only that this one is wrong -- refuse, like every
+        # other door plane_at's None closes.
+        state["pr_point"] = None
+        return False, "ambiguous", None
+    gap_from = state.get("pr_last")
+    state["pr_last"] = now
+    if state.get("pr_point") != pt:
+        # EXACT equality, not a radius: the measured lock repeated its report
+        # byte-identically (82 accepted reports, one coordinate). A moving
+        # client re-arms here every report and can never accumulate HOLD.
+        state["pr_point"] = pt
+        state["pr_since"] = now
+        state["pr_fires"] = 0
+        return False, "arming", None
+    if gap_from is not None and now - gap_from > PLANE_REPAIR_GAP:
+        state["pr_since"] = now
+        return False, "stale-stream", None
+    if now - state["pr_since"] < PLANE_REPAIR_HOLD:
+        return False, "holding", None
+    last = state.get("pr_fired_at")
+    if last is not None and now - last < PLANE_REPAIR_MIN_INTERVAL:
+        return False, "rate-limited", None
+    return True, "plane-lock", fix
+
+
+def _maybe_plane_repair(send, state, rec, reported, plane, accepted, moving,
+                        now=None):
+    """Send one PLANE-REPAIR 0x002C if the lock signature says so.
+
+    Called from the 0x003D arm only: that arm hands over the report, the
+    trust verdict and the movementType enum the signature is built from (the
+    track gates on the enum -- a pure turn is not a movement claim). Sits
+    AFTER _maybe_resync for the same reason that sits after the take: a fire
+    and a grant in one packet are ordered the way the client applies them.
+    The two never double-set: the resync fires on modelled SEPARATION and
+    this on a frozen impossible plane, and a frozen client in agreement with
+    its own model is exactly the state the resync's `in-agreement` clause
+    refuses.
+    """
+    if now is None:
+        now = time.time()
+    fire, why, fix = plane_repair_track(
+        state, reported, plane, accepted, moving, state.get("pathmap"), now)
+    if why != state.get("pr_why"):
+        # Logged on REASON TRANSITION only, a2_watchdog_due's discipline --
+        # per-report rows would restate "plane-legal" at report rate all
+        # session, and a capture that cannot show the arming edge cannot
+        # answer "why didn't the repair fire".
+        state["pr_why"] = why
+        if rec is not None:
+            rec.event("plane_repair_due", why=why, plane=plane,
+                      reported=[round(float(reported[0]), 2),
+                                round(float(reported[1]), 2)])
+    if not fire:
+        return False
+    state["pr_fired_at"] = now
+    state["pr_fires"] = state.get("pr_fires", 0) + 1
+    nth = state["pr_fires"]
+    # THE CARRY POISON (pre-commit review, skeptic finding 1, code fact):
+    # this same report's zero-lead grant -- and every grant until the client
+    # re-reports -- reads zl_last_grant_plane for field 4. Left stale, the
+    # grant riding in the SAME packet would restamp the sync copy with the
+    # plane the 0x002C just corrected. Heal the carry before the grant arms
+    # below this call site run. (The grant's field 3 still echoes the
+    # report's plane by the verbatim-echo design; whether that residue
+    # matters on a healed client is unmeasured -- the live prediction's
+    # "walks on the next click" is the test.)
+    state["zl_last_grant_plane"] = fix
+    held = now - state["pr_since"]
+    send(GAME_SMSG_AGENT_UPDATE_POSITION,
+         [PLAYER_AGENT_ID, [float(reported[0]), float(reported[1])], fix],
+         f"PLANE-REPAIR #{nth} 0x002C at ({reported[0]:.0f},{reported[1]:.0f}) "
+         f"plane {plane} -> {fix} -- streak {held:.1f}s on a plane the mesh "
+         f"does not offer there")
+    if rec is not None:
+        rec.event("plane_repair", fired=True, n=nth, plane_from=plane,
+                  plane_to=fix, held_s=round(held, 3),
+                  reported=[float(reported[0]), float(reported[1])])
+    print(f"[plane-repair] fire #{nth}: the client reported keyboard "
+          f"movement from the SAME point "
+          f"({reported[0]:.0f},{reported[1]:.0f}) for a {held:.1f}s streak "
+          f"claiming plane {plane}, which the mesh does not offer there -- "
+          f"hard-set with plane {fix} (agent+0x80 is what its path queries "
+          f"read). In a healthy run this NEVER fires; a repeat fire means "
+          f"the restamp is NOT HEALING and the streak is still alive.",
+          flush=True)
     return True
 
 
@@ -5927,7 +6165,8 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
                           cast_stop=False, resync_separation=None,
                           family_rate_probe=False, checksum_probe=None,
                           pc_spoof=None, d1_lead=False, router=False,
-                          interact_walk=False, move_speed_effects=False):
+                          interact_walk=False, move_speed_effects=False,
+                          plane_repair=False):
     """Pure: may these movement flags run together, and what must be said?
 
     Returns (refusal, notes). `refusal` is None or the text main() raises as a
@@ -5960,6 +6199,16 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
     ALLOWED WITH A NOTE: --resync, a different opcode (0x002C hard-sets BOTH
     copies) on a different trigger -- but a second uncontrolled variable in an
     A/B built for one, so the note says to prefer one arm at a time.
+
+    ALLOWED WITH A NOTE: the plane repair (on by default) beside --resync or
+    --cast-stop=pin. All three can put a 0x002C on the wire, and "one 0x002C
+    policy per run" is the pin/resync refusal's ground -- but the repair fires
+    only on the frozen-impossible-plane lock signature, a regime neither
+    policy occupies (the pin needs a cast, the resync needs modelled
+    separation, and a frozen client in agreement with its model has none),
+    and its sends are labelled PLANE-REPAIR, so a hard-set in the capture
+    still attributes to exactly one policy by its label. The note exists so
+    a run reading its own capture knows a third labelled sender is armed.
 
     ALLOWED WITH A NOTE: --click-sweep, and it is allowed for the same reason
     --resync is rather than because it is harmless. It is a CLICK-arm
@@ -6413,6 +6662,18 @@ def zero_lead_composition(zero_lead=False, heading_grant=False,
                 f"{both} {'are' if len(clash) > 1 else 'is'} already REFUTED "
                 f"({lines}).{tail} Pass at most one."), []
     notes = []
+    if plane_repair and (resync or cast_stop == "pin"):
+        notes.append(
+            "      + plane repair (default ON): a THIRD possible 0x002C "
+            "sender is armed beside this run's 0x002C policy. It fires only "
+            "on the frozen-impossible-plane lock signature (accepted 0x003D "
+            "reports byte-identical for "
+            f"{PLANE_REPAIR_HOLD:.0f}s claiming a plane the mesh does not "
+            "offer at that point) -- a regime neither the pin nor the resync "
+            "occupies -- and every send is labelled PLANE-REPAIR, so a "
+            "hard-set in the capture attributes by label. In a healthy run "
+            "it fires ZERO times; pass --no-plane-repair to run the pure "
+            "one-policy configuration.")
     if grant_suppress:
         notes.append(
             "      + --grant-suppress: ALLOWED -- orthogonal arms. That flag "
@@ -14446,7 +14707,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
             if opcode in (GAME_SMSG_AGENT_MOVE_TO_POINT,
                           GAME_SMSG_AGENT_UPDATE_DESTINATION,
                           GAME_SMSG_AGENT_UPDATE_POSITION):
-                _note_wire_move(state, opcode, values, time.time())
+                _note_wire_move(state, opcode, values, time.time(), rec=rec)
             blob = codec.encode(smsg, opcode, values)
             with send_lock:
                 seq = next(s2c_seq)
@@ -15754,6 +16015,15 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # grant arms below so a fire and a grant in the same
                         # packet are ordered the way the client will apply them.
                         _maybe_resync(send, state, rec)
+                        # THE PLANE REPAIR's only evaluation site: the lock
+                        # signature is built from THIS arm's decode (0x003D is
+                        # emitted only while moving), so this is where the
+                        # evidence arrives. `a2_pos_taken` carries the trust
+                        # verdict -- a refused report disarms rather than
+                        # counts, which is what keeps a lying position from
+                        # steering the hard-set.
+                        _maybe_plane_repair(send, state, rec, reported, plane,
+                                            a2_pos_taken, moving)
                         # REALFIX-I3. Ask the CLIENT whether its authoritative
                         # copy matches ours, using ArenaNet's own checksum. It
                         # sits here -- after the take, before the grant arms --
@@ -19218,6 +19488,20 @@ def main():
                          "sends the client's own figure and refuses to send "
                          "anything else. OFF by default; independent of "
                          "--heading-grant and --client-endpoint, both REFUTED.")
+    ap.add_argument("--no-plane-repair", action="store_true",
+                    help="Disable the plane-lock repair (ON by default). The "
+                         "repair sends ONE labelled 0x002C -- the client's own "
+                         "accepted frozen position with the mesh's plane -- "
+                         "when accepted 0x003D movement reports have repeated "
+                         "an identical (x, y) for PLANE_REPAIR_HOLD seconds "
+                         "claiming a plane the mesh does not offer there: the "
+                         "measured signature of the r5stuck movement LOCK "
+                         "(FINDINGS sec.1z-c/1z-d), which a client cannot "
+                         "escape alone because its path queries start from "
+                         "the impossible plane. In a healthy run it fires "
+                         "ZERO times. Pass this to run a strict one-0x002C-"
+                         "policy session (e.g. a --resync or --cast-stop=pin "
+                         "A/B that wants no third sender armed).")
     ap.add_argument("--resync-separation", type=float, default=None,
                     metavar="UNITS",
                     help="Override RESYNC_SEPARATION (shipped 100.0 u -- "
@@ -20034,7 +20318,8 @@ def main():
         checksum_probe=a.checksum_probe,
         pc_spoof=a.pc_spoof, d1_lead=a.d1_lead, router=a.router,
         interact_walk=a.interact_walk,
-        move_speed_effects=a.move_speed_effects)
+        move_speed_effects=a.move_speed_effects,
+        plane_repair=not a.no_plane_repair)
     # The default-flip hint rides ONLY the refusal family it can actually
     # fix: "--zero-lead cannot be combined with X". On a PAIRWISE cell
     # (--cast-stop with --stop-answer, pin with --resync...) the advice is
@@ -20544,6 +20829,15 @@ def main():
               "--planecarry   (the offline counterfactual that pre-screened "
               "this policy, and the calibration gate it had to pass first)")
 
+    if a.no_plane_repair:
+        global PLANE_REPAIR
+        PLANE_REPAIR = False
+        print("[map] --no-plane-repair: the plane-lock repair is DISARMED. A "
+              "client that crosses a plane boundary carrying its old plane "
+              "word and freezes (the r5stuck lock) will stay frozen until "
+              "relog; the capture shows one plane_repair_due row with why "
+              "'off' and nothing further. The plane-echo tripwire in "
+              "_note_wire_move still logs, it observes rather than acts.")
     if a.resync:
         global RESYNC, RESYNC_SEPARATION
         RESYNC = True
