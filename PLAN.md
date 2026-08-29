@@ -1693,6 +1693,35 @@ This supersedes the two entries below it (each marked in place in FINDINGS):
   glitch-placed, zero in plain walking (7 % wire coverage caveat stated); P2
   proposed RETIRED (both disarm clauses now have live demonstrations).
   Scripts: `vault/research/movecode/r6b/scoring/`.
+* **★ THE `MapFindPath` RETURN TAP IS BUILT, 2026-08-29 (§1z-h)** — HANDOFF-PLANE
+  §4.2 closed, desk-only, not yet armed at a client. Four `mapfindpath_ret*`
+  rows, a SECOND emulation shape (`C3 ret` beside `55 push ebp` — the first the
+  hook has ever needed), capture **v7** carrying the client's own `pathCount`
+  and its first four waypoints, and a **(tid, esp) join whose key audits its own
+  premise** (all four exits are `8B E5 5D C3`, so esp at a ret must equal esp at
+  the entry — a pair that disagrees REFUTES the design and is refused, counted
+  and printed rather than paired). **The hypothesis was half REFUTED and the
+  refuted half would have silently corrupted every capture:** the callee reuses
+  its caller's arg2 slot as FPU scratch (`fstp [ebp+0xc]`, 9×, first 3 before
+  any branch), so `to` is a FLOAT at every ret — and `readable()` accepts it
+  (10000.0f = `0x461C4000`), which would have stored 16 bytes of unrelated
+  memory as a coordinate and scored it OFF-MESH, i.e. exactly like the decode
+  gap the tool hunts. That is now a gensites REFUSAL, not a row value. **The
+  result that needed no run: `OURS-FAILED` was an over-count** — it assumed the
+  client had succeeded, and `BOTH-FAILED` (neither side found a path, NOT our
+  bug) was folded into it; `pathdiff` is five-valued now, with §17e's control
+  proving the old scorer really did mislabel it. Also settled: arg5 = `int*
+  outCount`, arg6 = `point* outPath` (stride 16, `{x,y,plane,w}`), eax is
+  leftover scratch that NEITHER caller reads, the exit list is COMPLETE at four
+  (the fifth `0xC3` is a phantom inside a call displacement), and the four exits
+  are NOT four outcomes (`0x0070A0D4` is two sharing one epilogue). Tests: §15b
+  (arms counted against `c->Eip` assignments — §15's scanner cannot see a
+  missing `else`, the way this change could have crashed the client) and
+  §17/§17e, 44 checks; floor 118 → 153; §9's positive control corrected (serving
+  `0x55` everywhere is now a WRONG client). **Honest gap: no offline test proves
+  a persistent `0xCC` at a `ret` resumes on real hardware** — §7/§16 inject where
+  every site fails to arm by design. The DLL compiles, loads and injects green;
+  the emulation is a live-run question the next ordinary session answers.
 * **★ THE BRIDGE AND THE STUCK CLIENT, 2026-08-29 (§1z-c) — a PLANE channel nobody
   has scored, and the first captured movement LOCK.** `noclipscore.py` read 0 off-mesh
   on a capture taken *because* the operator had walked under a bridge twice: §1w.7's

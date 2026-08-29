@@ -6913,7 +6913,8 @@ Floor 75 against a green 75 with 5 declared skips (the archive-conditional
   asserting anything about the detector. Writing it found a second defect: section B
   `return`ed on a capture with fewer than two clicks, which SILENTLY SKIPPED section C
   — a keyboard-only walk would have been scored with the one section that can see a
-  bridge missing. **§5 (2026-08-29, FINDINGS §1z-e.1) pins the same-tick ALIAS**: the
+  bridge missing. **§5 of `test_noclipscore.py` (2026-08-29, FINDINGS §1z-e.1) pins
+the same-tick ALIAS**: the
   old section C re-found each sample's plane by (tick, ecx), reading the FIRST record
   at the tick — which erased two real k2-2 anomalies whose own plane differed from a
   same-tick sibling's. The fixture is two same-tick records where the first record's
@@ -6959,9 +6960,14 @@ Floor 75 against a green 75 with 5 declared skips (the archive-conditional
   TOML bought nothing over `#define`s. §1 asserts the checked-in `sites.h` is
   byte-identical to what `gensites.py` emits, because a hand-edited generated
   header is exactly the two-homes split the ruling refuses and is otherwise
-  invisible. §2 requires every site's first byte to be `0x55` in the pinned 38797
-  image — the handler re-emulates `push ebp` and nothing else, so a site that is
-  no longer a function entry must never be armed. **§8 pins a bug that would
+  invisible. §2 requires every site's first byte to be **its own SHAPE's byte** in
+  the pinned 38797 image — `0x55` for the `push ebp` entries and, since 2026-08-29,
+  `0xC3` for the four MapFindPath `ret` sites, because that byte IS the instruction
+  the handler will re-emulate. Note what it deliberately is NOT: a check that
+  accepts "0x55 or 0xC3" anywhere would let a ret's emulation be armed on an entry
+  byte, so the pairing is per row and is checked as a pair — a tighter gate than
+  the single global constant it replaced, since an entry that decayed into
+  something else is still caught. **§8 pins a bug that would
   otherwise have been invisible until a live run produced a ten-minute capture
   nobody asked for**: `GetEnvironmentVariableA` inside an injected DLL reads the
   *client's* environment, inherited from whatever launched `Gw.exe`, **not the
@@ -7165,8 +7171,44 @@ Floor 75 against a green 75 with 5 declared skips (the archive-conditional
   the cfg through `fopen` on every call and the DETACH path called it, at the one moment
   the CRT cannot be trusted, so the path is now resolved once at arm time and the
   shutdown path builds strings with kernel32 rather than `snprintf`.
-  118 floor,
-  180 on a
+  **§15b and §17 are the MapFindPath RETURN tap, 2026-08-29 (HANDOFF-PLANE §4.2).**
+  §15b exists because §15 structurally cannot catch the bug the second emulation
+  shape introduces: the emulation is now a branch on `SITES[i].shape`, and the way
+  to break it is not a `continue` but an arm that falls through **without assigning
+  `c->Eip`** — a missing `else`, or a new shape with no arm — which leaves EIP on
+  the `0xCC` and re-traps forever, and at `0x0070A0D4` the following eleven bytes
+  are the compiler's own `int3` padding so it is not even loud. `_loop_escapes`
+  scans for continue/break/return and a missing else is none of those, so §15b
+  counts the arms against the assignments and requires them equal — with §15's own
+  control discipline: delete an assignment and the checker must go red. §17 holds
+  the four ret rows to what the disassembly proved and the generator to its
+  refusals. The one that would have silently corrupted every capture: **a ret row
+  must NOT inherit the entry row's `deref_arg_b = 2`**, because MapFindPath reuses
+  its caller's arg2 slot as FPU scratch (`fstp [ebp+0xc]`, nine times, the first
+  three before any branch), so at every ret that slot holds a FLOAT — and
+  `readable()` can ACCEPT it, since 10000.0f is `0x461C4000`, a plausible committed
+  address in a 32-bit client. Sixteen bytes of unrelated memory would have been
+  stored as "the destination" and scored OFF-MESH, reading exactly like the decode
+  gap the tool exists to find. That is a REFUSAL in `gensites.py` rather than a
+  value in a row, and §17 proves all five refusals fire, including one on a site
+  (`chcli_dir`) that trips no structural rule so the BYTE half is exercised rather
+  than short-circuited. §17 also pins v7 as APPENDED (`v7[:len(v6)] == v6`) and
+  round-trips a synthetic capture through the **(tid, esp) pairing**, whose key is
+  also its own audit: all four exits are `8B E5 5D C3`, so a pair whose two `esp`
+  values disagree REFUTES the premise the tap rests on and must be counted and
+  printed rather than paired anyway. **§17e is the split that was the point.** The
+  three-valued scorer called "we found no route" `OURS-FAILED` *without knowing
+  whether the client found one*, so every query neither side could answer inflated
+  our own decode-gap number by an unknown amount — the MOVECODE-Q2 headline. §17e
+  scores all five verdicts against a stub mesh (process-free: the assertion is
+  about verdict LOGIC, not geometry) and carries the control that makes it mean
+  something — the same `BOTH-FAILED` query, scored by the OLD path, must come out
+  `OURS-FAILED`, or the section is asserting a distinction that never existed.
+  `UNREADABLE` is checked separately from `pathCount == 0` for the reason
+  `have_fence` exists: pathCount 0 IS §4.2's registered lock prediction, so merging
+  "could not read it" into it would manufacture evidence for the thing being tested.
+  153 floor,
+  254 on a
   machine with the client, a compiler, an archive and a 32-bit `cmd.exe`; each other
   section declares a skip),
   `toolkit/clientscan/test_commandertrap.py` (the hardware-breakpoint trap, and

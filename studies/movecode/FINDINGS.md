@@ -6246,6 +6246,131 @@ plausibly dest-install records, not body positions.
 
 ---
 
+## 1z-h. THE `MapFindPath` RETURN TAP IS BUILT — a second emulation shape, the answer on tape, and `OURS-FAILED` split in half
+
+**BUILT 2026-08-29 (HANDOFF-PLANE §4.2), not yet run against a client.** Four
+lanes of disassembly against the pinned 38797 image priced it first; the build
+is `content/movecode.toml`'s four `mapfindpath_ret*` rows plus capture **v7**.
+Every address and every claim below came out of the client's own bytes.
+
+### 1z-h.1 What the disassembly settled, including one refutation
+
+The working hypothesis was "at a `__cdecl` ret, esp is back where it started, so
+the existing six-arg read works unchanged and the out-pointers now aim at
+written memory". **Half confirmed, half refuted, and the refuted half would have
+silently corrupted every capture.**
+
+* **CONFIRMED, and it is what makes the tap cheap:** all four exits are
+  byte-identical `8B E5 5D C3` — `mov esp,ebp / pop ebp / ret` — so esp at every
+  ret is EXACTLY the esp the entry hook saw. `mov esp,ebp` makes it
+  path-independent (the differing `add esp,N` and pop counts cannot matter), ebp
+  is written exactly once in the body, and no branch targets an epilogue, so no
+  path evades it. The six-arg read needed no change at all.
+* **REFUTED — arg2's slot is CLOBBERED.** The callee caches `to` in ebx and then
+  reuses the caller's arg2 slot as FPU scratch: `fstp dword ptr [ebp+0xc]` NINE
+  times, the first three before any branch, so it is unconditional on all four
+  paths. At every ret `[esp+8]` holds a float. Copying the entry row's
+  `deref_arg_b = 2` onto a ret row would have dereferenced a float as a point
+  pointer — and `readable()` can ACCEPT it, since 10000.0f is `0x461C4000`, a
+  plausible committed address in a 32-bit client. Sixteen bytes of unrelated
+  memory would have been stored as "the destination" and scored OFF-MESH,
+  reading exactly like the decode gap the tool exists to find. **`to` is
+  readable at the ENTRY only**, which is why that row stays and why the two
+  records must be joined rather than one replacing the other.
+* **The signature is closed from the body AND both callers:** arg3 = float range
+  (300.0f at snap gate 2, 10000.0f at click-to-move), arg4 = maxCount,
+  **arg5 = `int* outCount`**, **arg6 = `point* outPath`**, stride 16, elements
+  `{float x, float y, int plane, int}` — the same shape as `m_point`. Both
+  callers branch on `*outCount` and NEITHER reads eax; eax is leftover scratch
+  and is four different kinds of leftover at the four exits. **The two range
+  constants are corroborated by the corpus, not just by the disassembly:**
+  `pathdiff` over r6b's 935 captured queries reports exactly two callers —
+  `0x00605807` (snap gate 2, 102 queries) and `0x0081AF56` (click-to-move, 833)
+  — with range min 300.0 and p50/max 10000.0. The static read of two `fld`
+  constants and the live census of 935 calls agree.
+* **The exit list is complete at four**, checked rather than assumed: a byte
+  scan of all 581 body bytes finds five `0xC2`/`0xC3` and the fifth is a phantom
+  inside `call 0x47f660`'s displacement; the linear decode closes to the byte on
+  eleven bytes of `0xCC` padding at `0x0070A0D5`. **One caveat stated rather
+  than discovered later:** the function sets up no SEH frame, so a C++ exception
+  from a solver callee would unwind past all four rets and the query would be
+  recorded as unanswered.
+* **The four exits are NOT four outcomes.** `0x0070A0D4` is two semantically
+  different exits sharing one epilogue — the ordinary completion (the collapse
+  loop's three early exits jump to `0x0070A0CE`, inside that epilogue) and the
+  fallback-solver path (four rejection tests, including a PLANE MISMATCH at
+  `0x0070A035`, all jump to `0x0070A0AE` and run `call 0x721a30`). The record
+  says WHICH DOOR; `out_count` says WHAT ANSWER. `0x0070A0AD` is the RARE arm
+  (the collapse consumed the whole buffer), which is the opposite of what its
+  position suggests.
+
+### 1z-h.2 What landed
+
+* **A second emulation shape.** Every site was `55 push ebp` until now, which is
+  what let the handler emulate ONE instruction (Q12(d)); the ret sites are
+  `C3 ret` and emulate `eip = [esp]; esp += 4`. Both shapes keep the property
+  that made the entry rule safe — a one-byte instruction has no interior, so a
+  one-byte patch cannot land mid-instruction. `gensites.py` now checks each
+  byte against **its own row's shape**, which is TIGHTER than the global `0x55`
+  it replaced (an entry that decayed into something else is still caught), and
+  refuses an unrecognised shape rather than defaulting.
+* **Three structural refusals the bytes cannot express**, because each is a
+  silent-garbage bug: a ret row that sets `deref_arg_b` (the float above), one
+  that sets `deref_agent` (ecx is scratch at a return), and any row naming a
+  shape the handler does not emulate. All five refusals are proven to fire.
+* **The asymmetry between the shapes, and it decides an error path.** At an
+  entry, failing to emulate loses a sample. At a ret there is no safe skip —
+  leaving EIP on the `0xCC` re-traps forever — so the fallback restores the
+  byte, rewinds, and marks the site DISARMED, so a sidecar zero is attributable
+  to us rather than to the client.
+* **Capture v7**, appended: `esp` (on every site), `have_out`, `out_count`,
+  `out_n`, `out_path[16]`. 264 → 344 bytes per record.
+* **The join is (tid, esp), and the key audits its own premise.** Because esp at
+  a ret must equal esp at the entry, a pair whose values disagree REFUTES §1z-h.1
+  rather than being a bad record — `_pair_mfp` refuses it, counts it, and both
+  `readhook`'s v7 section and `pathdiff` print it. An instrument has to be able
+  to report that the thing it was built on turned out to be false.
+* **`have_out` keeps "could not read it" and "the client answered ZERO" apart**,
+  the `have_fence` lesson — and here the distinction IS the measurement, because
+  pathCount == 0 is the registered prediction. `out_n < out_count` records
+  truncation rather than hiding it (capacity 4 points: snap gate 2 asks 4 and is
+  captured whole, click-to-move asks 9).
+
+### 1z-h.3 The result that does not need a run: `OURS-FAILED` was over-counting
+
+`pathdiff` scored three-valued, and `OURS-FAILED` — "we found no route where
+the client asked one" — **assumed the client had found one**. It cannot have
+been checked, because the answer was not on tape. With v7 it splits:
+`OURS-FAILED` (we failed, the client succeeded — our bug, now measured),
+`THEIRS-FAILED` (we routed, the client returned 0 — §4.2's lock prediction),
+and **`BOTH-FAILED` (neither found a path — NOT our bug, and every one of these
+was previously counted as ours)**. The size of that over-count is unknown until
+a v7 capture exists, and it bears directly on MOVECODE-Q2's headline. The
+control that makes the claim real is in `test_movehook.py` §17e: the same
+query, scored by the old path, comes out `OURS-FAILED`.
+
+### 1z-h.4 Tests, and the one honest gap
+
+`test_movehook.py` gains **§15b** (the emulation's arms counted against its
+`c->Eip` assignments — §15's `continue`-scanner structurally cannot see a
+missing `else`, which is exactly how this change could have crashed the client)
+and **§17/§17e** (44 checks: the rows, all five refusals, v7-is-appended, the
+pairing and its esp refusal, and the five-valued split with its control). Floor
+118 → **153**, re-counted per section off a real green run. §9's positive
+control was corrected in the same commit — it served `0x55` everywhere, which
+is now a WRONG client — and the four ret names joined §14's COUNTED tuple,
+where a stride would decimate the pairing while `hits` stayed whole.
+
+**The gap, stated plainly:** no offline test proves a persistent `0xCC` at a
+`ret` resumes correctly on real hardware. §7/§16 inject into a 32-bit `cmd.exe`
+where every site fails to arm — deliberately, which is why the handler's hot
+path is never executed by a test. What IS proven offline: the DLL compiles and
+loads with the new shape (§6/§7/§16 green), the rows match the pinned image's
+bytes, and the reader/pairing/verdict logic behave. The emulation itself is a
+live-run question, and the first ordinary session answers it.
+
+---
+
 ## 2. Corrections to the record
 
 Each of these was in circulation and each is now measured against the bytes.

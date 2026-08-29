@@ -194,12 +194,130 @@ deref_arg_a = 1
 deref_arg_b = 2
 what = "the client's own navmesh query. __cdecl, SIX dword args, and NO meaningful return value -- all four exits are a bare `ret` and eax is leftover scratch. arg1 = from (point*), arg2 = to (point*, 16 B: float x, float y, int plane, int), arg3 = float range, arg4 = maxCount (an int, CONFIRMED by buffer arithmetic on both callers), arg5 = int* outCount, arg6 = point* outPath with a 16-byte stride."
 why_hooked = "MOVECODE-Q2 and the whole of B3. Run 5 of the router arc found our pathmap decode reads open ground as a pocket; capturing every query the client makes and replaying it through our own route() turns that from an inference into a per-query measurement."
-limits = "AN ENTRY HOOK CAPTURES THE QUESTION, NOT THE ANSWER. arg5 and arg6 point at UNINITIALISED caller memory at entry -- the results are written by the backends during the call. Scoring our route against the CLIENT's needs a second tap at the four `ret` sites (0x00709F0F, 0x00709F44, 0x0070A0AD, 0x0070A0D4). Replaying our own router over the captured queries needs only this."
+limits = "AN ENTRY HOOK CAPTURES THE QUESTION, NOT THE ANSWER. arg5 and arg6 point at UNINITIALISED caller memory at entry -- the results are written by the backends during the call. Scoring our route against the CLIENT's needs a second tap at the four `ret` sites (0x00709F0F, 0x00709F44, 0x0070A0AD, 0x0070A0D4). Replaying our own router over the captured queries needs only this. THE RET TAP EXISTS AS OF 2026-08-29 -- the four `mapfindpath_ret*` rows below -- and it does NOT make this row redundant: arg2's slot is CLOBBERED by the callee, so `to` is readable ONLY here, at the entry. The two records are joined on (tid, esp)."
 [hook_site.mapfindpath.provenance]
 source = "client-table"
 extractor = "toolkit/clientscan/codescan.py"
 build = 38797
 verified = "--dis 0x00709E90 shows `55 push ebp`. Exactly 2 direct callers: 0x00605802 -- which IS the snap gate 2, whose pathCount==0 test is the `cmp [ebp-0x60],edi` / `je` at 0x0060580A-0x0060580D with edi provably 0 -- and 0x0081AF51 (click-to-move). arg4 = maxCount is confirmed by the out-buffer sizes closing exactly to the stack-cookie slot in BOTH frames: caller 1 asks 4 and reserves 4x16 at [ebp-0x44], caller 2 asks 9 and reserves 9x16 at [ebp-0x94], both ending at [ebp-0x04]. Two capacities, two frame sizes, both exact. Coordinates are the same world floats as m_point: the args come from 0x005FF820, which copies agent+0x88.. or recomputes from +0x78/+0x7C under assert AgAgent:974. Signature read from the body 2026-08-27: ecx is never read at entry (first use 0x00709EE7 WRITES it from arg6), all exits are bare `ret`, and no access to [ebp+0x20] or beyond. Point stride 16 from `shl edi,4` at 0x00709FDF indexing outPath."
+
+# --------------------------------------------------------------------------
+# THE MapFindPath RETURN TAP, added 2026-08-29 (HANDOFF-PLANE.md §4.2). FOUR
+# rows for one function, because the answer leaves by four doors.
+#
+# THE SECOND EMULATION SHAPE, and it is the first time this hook has needed one.
+# Every site above is a `55 push ebp` entry, which is what let movehook emulate
+# ONE instruction (PLAN.md §7 Q12(d)). These four are `C3 ret`, so they carry
+# `shape = "ret"` and the handler emulates `eip = [esp]; esp += 4` instead.
+# gensites.py refuses a byte that is not its own shape's, in BOTH directions.
+#
+# WHY THE ARGUMENTS ARE STILL READABLE AT A RET, which is what makes this cheap:
+# all four exits are byte-identical `8B E5 5D C3` -- `mov esp,ebp / pop ebp /
+# ret` -- so esp at the ret is EXACTLY the esp the entry hook saw, and
+# [esp]=retaddr / [esp+4..24]=arg1..arg6 is bit-identical to the entry layout.
+# That equality is also the JOIN KEY: one invocation's entry and ret records
+# share (tid, esp), and a pair that disagrees refutes this paragraph rather than
+# being a bad record. movehook stores `esp` on every record for exactly that.
+#
+# WHAT MUST NOT BE COPIED FROM THE ENTRY ROW, and it would have silently
+# corrupted the capture: `deref_arg_b = 2`. The callee reuses the CALLER's arg2
+# slot as FPU scratch -- `fstp dword ptr [ebp+0xc]` NINE times, the first three
+# before any branch -- so at every ret [esp+8] holds a float, not the `to`
+# pointer. 10000.0f is 0x461C4000 and 300.0f is 0x43960000, both plausible
+# committed addresses in this 32-bit client, so readable() can ACCEPT one and
+# hand back 16 bytes of unrelated memory as "the destination". Every row below
+# therefore sets deref_arg_b = 0, and gensites REFUSES a ret row that does not
+# (a row value alone is a promise; the refusal is the control). `to` is
+# readable at the ENTRY only -- which is why the entry row stays.
+#
+# THE EXIT LIST IS COMPLETE AT FOUR, checked rather than assumed: a byte scan of
+# all 581 body bytes finds five 0xC2/0xC3 and the fifth is a phantom inside
+# `call 0x47f660`'s displacement; the linear decode closes to the byte on the
+# eleven 0xCC of alignment padding at 0x0070A0D5. A missed exit would be a query
+# that answered without being recorded -- a silent under-count.
+#
+# ONE THING THESE ROWS CANNOT DO. The function sets up no SEH frame, so a C++
+# exception thrown by a solver callee would unwind past all four rets and the
+# query would be recorded as unanswered. Nothing observed suggests it happens;
+# it is stated because the exit list is otherwise exhaustive by construction.
+# --------------------------------------------------------------------------
+
+[hook_site.mapfindpath_ret1]
+va = 0x00709F0F
+rva = 0x00309F0F
+first_byte = 0xC3
+shape = "ret"
+thiscall = false
+deref_agent = false
+deref_arg_a = 1
+deref_arg_b = 0
+deref_out = 5
+deref_out_path = 6
+what = "MapFindPath exit 1 of 4, the DEGENERATE-ECHO. Reached when dist^2(from,to) <= FLT_EPSILON (the constant at 0xA545B0 reads 1.1920928955078125e-07), i.e. from and to are the same point to ~3.5e-4 world units. It writes *to verbatim into outPath[0] (all four dwords) and sets *outCount = 1."
+why_hooked = "The answer's cheapest arm, and the one that proves the tap reads a WRITTEN out-param: outCount is a literal 1 here, so a capture where this arm reports anything else is the instrument lying, not the client."
+[hook_site.mapfindpath_ret1.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/codescan.py"
+build = 38797
+verified = "Byte at 0x00709F0F read from the pinned client's file bytes as 0xC3 (bare near ret; explicitly NOT 0xC2, whose imm16 would break the `esp += 4` emulation). Preceded by `8B E5 5D` = mov esp,ebp / pop ebp. `--xrefs` reports 0 direct rel32 references and 0 words holding the VA, and no intra-function branch targets it (the ten targets are 0x00709F10, 0x00709F45, 0x0070A075, 0x0070A0AE, 0x0070A0CE). The guard is `fld [0xa545b0] / fcomp [ebp+0xc] / test ah,1 / jne 0x709f10` at 0x00709ED7-0x00709EE5; the echo is `mov eax,[ebx] / mov [ecx],eax` over four dwords with ecx = arg6 and ebx = arg2; the count is `mov [eax],1` at 0x00709F06 with eax = arg5."
+
+[hook_site.mapfindpath_ret2]
+va = 0x00709F44
+rva = 0x00309F44
+first_byte = 0xC3
+shape = "ret"
+thiscall = false
+deref_agent = false
+deref_arg_a = 1
+deref_arg_b = 0
+deref_out = 5
+deref_out_path = 6
+what = "MapFindPath exit 2 of 4, the DELEGATED arm. A global read through [esi+0x78] selects a different backend (0x00737350) which is handed the same out-params plus a literal 0, and its answer is returned unexamined. NOT a failure arm -- an alternate solver."
+why_hooked = "If this arm ever fires, our replay is scoring a query the client did not answer with the solver we model. A count on this site is the only way to know that, and the arc has never had one."
+[hook_site.mapfindpath_ret2.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/codescan.py"
+build = 38797
+verified = "Byte at 0x00709F44 read as 0xC3, preceded by `83 C4 20 5F 5E 5B 8B E5 5D` = add esp,0x20 / pop edi / pop esi / pop ebx / mov esp,ebp / pop ebp. Gate at 0x00709F10-0x00709F1D: `push [esi+0x78] / call 0x7372a0 / test eax,eax / je 0x709f45`; the delegate call is `call 0x737350` at 0x00709F36. 0 rel32 xrefs to the ret address."
+
+[hook_site.mapfindpath_ret3]
+va = 0x0070A0AD
+rva = 0x0030A0AD
+first_byte = 0xC3
+shape = "ret"
+thiscall = false
+deref_agent = false
+deref_arg_a = 1
+deref_arg_b = 0
+deref_out = 5
+deref_out_path = 6
+what = "MapFindPath exit 3 of 4, the TOTAL-COLLAPSE, and it is the RARE one rather than the common one -- the opposite of what its position suggests. Reached only when the backward trailing-duplicate collapse consumed the entire buffer (`cmp ecx,edx` matching at 0x0070A0A3), i.e. every waypoint merged and *outCount fell to 1."
+why_hooked = "Completes the exit partition. Its rarity is the point: a capture where this arm is common would mean the client's paths are collapsing to a point far more often than the model assumes."
+[hook_site.mapfindpath_ret3.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/codescan.py"
+build = 38797
+verified = "Byte at 0x0070A0AD read as 0xC3, preceded by `5F 5E 5B 8B E5 5D`. Reached only by falling out of the collapse loop at `0070A0A5 jne 0x70a075`; the loop decrements the count through arg5 at `0070A09E mov eax,[ebp+0x18] / 0070A0A1 dec dword [eax]`. 0 rel32 xrefs. NOTE the neighbouring address 0x0070A0AE IS a branch target (the fallback block) -- it is one byte past this ret and is NOT hooked."
+
+[hook_site.mapfindpath_ret4]
+va = 0x0070A0D4
+rva = 0x0030A0D4
+first_byte = 0xC3
+shape = "ret"
+thiscall = false
+deref_agent = false
+deref_arg_a = 1
+deref_arg_b = 0
+deref_out = 5
+deref_out_path = 6
+what = "MapFindPath exit 4 of 4, and it is TWO SEMANTICALLY DIFFERENT EXITS SHARING ONE EPILOGUE -- the ordinary success completion (the collapse loop's three early exits jump to 0x0070A0CE, INSIDE this epilogue, skipping the fallback) and the FALLBACK-SOLVER path (four rejection tests -- outCount==0, endpoint fell short, PLANE MISMATCH at 0x0070A035, and a validity call -- all jump to 0x0070A0AE and run `call 0x721a30`). A ret4 hit alone does NOT say whether the fallback solver ran."
+why_hooked = "The common arm: it carries most answers, including every path the plane-mismatch rejection re-solved. THE REGISTERED PREDICTION IS SCORED HERE -- a locked client's queries returning *outCount == 0 -- though the count is read the same way at all four."
+limits = "DO NOT CAPTION THE FOUR SITES AS FOUR OUTCOMES. This one is two, and the record cannot separate them: both reach the same byte. The site says WHICH ARM; `out_count` says WHAT ANSWER; distinguishing fallback-ran from success needs a fifth tap at 0x0070A0CE, which is not an instruction boundary this hook can use."
+[hook_site.mapfindpath_ret4.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/codescan.py"
+build = 38797
+verified = "Byte at 0x0070A0D4 read as 0xC3, preceded by `83 C4 1C 5F 5E 5B 8B E5 5D`. Followed by ELEVEN 0xCC of alignment padding then `55 8B EC` at 0x0070A0E0 (the next function's entry) -- which is what proves the function's tail boundary. The two families: fallthrough after `0070A0C6 call 0x721a30`, and the three loop exits `0070A073 je / 0070A082 jp / 0070A092 jp` all targeting 0x0070A0CE. 0 rel32 xrefs to the ret address."
 
 [hook_site.agapi_setdest]
 va = 0x005FC7A0

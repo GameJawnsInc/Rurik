@@ -209,7 +209,7 @@ def already_loaded(pid):
 
 
 def verify_running_build(pid):
-    """Every armed site's first byte must be 0x55 IN THE LIVE PROCESS.
+    """Every armed site's first byte must be ITS OWN SHAPE'S byte IN THE LIVE PROCESS.
 
     THE FAILURE THIS IS AGAINST IS A CRASH, not a wrong number, and it is the trap
     this repo has walked into three times in three files. `session.py --exe`
@@ -234,12 +234,24 @@ def verify_running_build(pid):
     for name in sorted(sites):
         rva = sites[name]["rva"]
         got = keytap.read_at(pid, base + rva, 1)
+        # THE SHAPE'S BYTE, LOOKED UP RATHER THAN RESTATED. Since 2026-08-29 the
+        # sites are not all `55 push ebp` -- the MapFindPath ret tap is `C3 ret`
+        # -- and this check imports gensites' own map instead of hardcoding a
+        # second copy. Q12(a) refuses two homes for one fact, and the failure
+        # mode here is not subtle: a hardcoded 0x55 refuses every ret site and
+        # the operator loses a session to a message naming the wrong problem.
+        shape = sites[name].get("shape", gensites.DEFAULT_SHAPE)
+        need = gensites.SHAPE_BYTE.get(shape)
         if not got:
             bad.append(f"{name}: could not read 0x{base + rva:08X} in the live "
                        f"process")
-        elif got[0] != 0x55:
+        elif need is None:
+            bad.append(f"{name}: shape {shape!r} is not one movehook emulates "
+                       f"({sorted(gensites.SHAPE_BYTE)})")
+        elif got[0] != need:
             bad.append(f"{name}: rva 0x{rva:08X} holds 0x{got[0]:02X} in the "
-                       f"running client, not 0x55 (push ebp)")
+                       f"running client, not the 0x{need:02X} that shape "
+                       f"{shape!r} requires")
     return bad, base
 
 
@@ -384,8 +396,8 @@ def main(argv=None):
         print("  python toolkit/harness/session.py --exe "
               "vault/run/2026-07-29_221c13772c7a/Gw.exe --keep-open --hold 900")
         return 4
-    print(f"build check: every site reads 0x55 in the live process "
-          f"(image base 0x{base:08X})")
+    print(f"build check: every site reads its own shape's byte in the live "
+          f"process (image base 0x{base:08X})")
 
     # THE CONFIG GOES IN A FILE, NOT THE ENVIRONMENT, and the difference is not
     # stylistic. `GetEnvironmentVariableA` inside the injected DLL reads the

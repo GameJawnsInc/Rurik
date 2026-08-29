@@ -27,7 +27,9 @@ answered. We do not need to for the primary question:
   * What an entry-only tap cannot do is adjudicate a DISAGREEMENT in route SHAPE —
     two different legal paths. That needs the client's own answer, which needs a
     second tap at the four `ret` sites (`0x00709F0F`, `0x00709F44`, `0x0070A0AD`,
-    `0x0070A0D4`). Named in `content/movecode.toml`'s `mapfindpath` row, not built.
+    `0x0070A0D4`). BUILT 2026-08-29 — the `mapfindpath_ret*` rows — so a v7
+    capture carries the client's own answer and the paragraph below applies.
+    A v6-or-older capture is still entry-only and still scores three-valued.
 
 So the verdicts here are deliberately three-valued, and only one of them is a claim
 about the client:
@@ -36,6 +38,26 @@ about the client:
     BOTH-OK       we found a route. Says nothing about whether it is the SAME route.
     OFF-MESH      the query's own endpoints are not on our mesh at all — a decode
                   gap upstream of routing, and the more serious kind.
+
+THE RET TAP EXISTS AS OF 2026-08-29, AND IT SPLITS ONE OF THOSE THREE IN HALF.
+`OURS-FAILED` above bundles two opposite situations, and the bundling always ran in
+the direction that flatters nothing: "we found no route where the client asked one"
+assumed the CLIENT found one. When a v7 capture carries the answer, it does not have
+to be assumed:
+
+    OURS-FAILED   we found nothing, the client found a path. OUR BUG, and now
+                  genuinely so rather than by assumption.
+    THEIRS-FAILED we routed, the client returned pathCount == 0. The CLIENT's own
+                  failure — and precisely what HANDOFF-PLANE §4.2 predicts under a
+                  plane lock.
+    BOTH-FAILED   neither of us found a path. NOT our bug, and the three-valued
+                  scorer counted every one of these as OURS-FAILED, so its
+                  decode-gap number was an over-count of unknown size.
+    AGREE / DIFFER  both routed; whether the SHAPES match is a separate axis.
+
+That over-count is the MOVECODE-Q2 headline, so the split matters more than the new
+verdict names suggest. A v6-or-older capture still scores three-valued and says so —
+the point is that it now says so rather than quietly meaning something narrower.
 
 REFUSES RATHER THAN GUESSES about which map. A capture does not record the map id,
 and replaying map A's queries against map B's mesh produces confident nonsense — so
@@ -124,6 +146,81 @@ def score(pm, pts, list_n=0):
             else:
                 verdict = "OURS-FAILED"
                 detail = "both endpoints on our mesh, but route() found nothing"
+        tally[verdict] += 1
+        if len(rows) < list_n:
+            rows.append((verdict, x0, y0, x1, y1, detail))
+    return rows, tally
+
+
+def answered(cap, names):
+    """[(Query, ret_record)] for every query whose ANSWER is in the capture.
+
+    Joined on (tid, esp) by `readhook._pair_mfp` -- one home for the join, so a
+    consumer cannot invent a looser one. Returns (pairs, notes) where `notes`
+    carries the refusals as COUNTS: nothing is silently dropped, because a low
+    pairing rate makes every verdict below it a statement about a biased subset.
+    """
+    sbase = readhook.static_base()
+
+    def reb(va):
+        return va - cap.base + sbase if va >= cap.base else va
+    pairs, orphan, esp_bad = readhook._pair_mfp(cap, names)
+    out = [(Query(e, reb), r) for e, r in pairs]
+    return out, {"unpaired-answer": orphan, "esp-mismatch": esp_bad}
+
+
+def score_paired(pm, pairs, list_n=0):
+    """Five-valued scoring against the CLIENT's own answer. -> (rows, tally).
+
+    `OURS-FAILED` no longer assumes the client succeeded, and `BOTH-FAILED` --
+    which the three-valued scorer counted as ours -- is now its own row. A query
+    whose count could not be read is UNREADABLE rather than assumed to be zero:
+    `have_out` bit 0 is what says the difference, and pathCount == 0 is the
+    registered prediction, so merging the two would destroy the measurement.
+    """
+    rows = []
+    tally = {"AGREE": 0, "DIFFER": 0, "OURS-FAILED": 0, "THEIRS-FAILED": 0,
+             "BOTH-FAILED": 0, "OFF-MESH": 0, "UNREADABLE": 0}
+    for q, r in pairs:
+        if not (r.get("have_out", 0) & 1):
+            tally["UNREADABLE"] += 1
+            continue
+        theirs = r["out_count"]
+        x0, y0, x1, y1 = q.src[0], q.src[1], q.dst[0], q.dst[1]
+        a_on, b_on = pm.walkable(x0, y0), pm.walkable(x1, y1)
+        if not (a_on and b_on):
+            verdict = "OFF-MESH"
+            detail = (f"start {'on' if a_on else 'OFF'} mesh, "
+                      f"goal {'on' if b_on else 'OFF'} mesh; "
+                      f"client pathCount {theirs}")
+        else:
+            ours = pm.route(x0, y0, x1, y1)
+            if ours and theirs:
+                # SHAPE is a separate axis and is only comparable when the
+                # record kept the whole path: out_n < out_count means the
+                # waypoints are truncated even though the COUNT is exact.
+                whole = (r.get("have_out", 0) & 2) and r["out_n"] >= theirs
+                if not whole:
+                    verdict = "AGREE"
+                    detail = (f"ours {len(ours)}, theirs {theirs} -- shape not "
+                              f"compared (path truncated at {r.get('out_n', 0)})")
+                else:
+                    ex, ey = _f(r["out_path"][(theirs - 1) * 4]), \
+                             _f(r["out_path"][(theirs - 1) * 4 + 1])
+                    gap = math.hypot(ours[-1][0] - ex, ours[-1][1] - ey)
+                    verdict = "AGREE" if gap <= 16.0 else "DIFFER"
+                    detail = (f"ours {len(ours)}, theirs {theirs}, endpoints "
+                              f"{gap:.1f} u apart")
+            elif ours and not theirs:
+                verdict = "THEIRS-FAILED"
+                detail = "we routed; the client returned pathCount 0"
+            elif theirs and not ours:
+                verdict = "OURS-FAILED"
+                detail = f"the client found {theirs} point(s); route() found none"
+            else:
+                verdict = "BOTH-FAILED"
+                detail = ("neither found a path -- NOT our decode, and the "
+                          "three-valued scorer counted this as OURS-FAILED")
         tally[verdict] += 1
         if len(rows) < list_n:
             rows.append((verdict, x0, y0, x1, y1, detail))
@@ -299,6 +396,59 @@ def main():
             for v, x0, y0, x1, y1, d in rows:
                 print(f"   {v:12} ({x0:9.1f},{y0:9.1f}) -> "
                       f"({x1:9.1f},{y1:9.1f})  {d}")
+
+        # ---- THE CLIENT'S OWN ANSWER, when the capture carries it -----------
+        if cap.version >= 7:
+            pairs, notes = answered(cap, names)
+            withpts = [(q, r) for q, r in pairs if q.src and q.dst]
+            print(f"\nPAIRED WITH THE CLIENT'S ANSWER: {len(pairs)} of {n} "
+                  f"({100.0 * len(pairs) / n:.1f}%), {len(withpts)} with "
+                  f"coordinates")
+            for k, v in sorted(notes.items()):
+                if v:
+                    print(f"   {k:16} {v}")
+            if notes["esp-mismatch"]:
+                print("   *** an esp mismatch REFUTES the join's own premise "
+                      "(all four exits")
+                print("       restore esp to the entry value). Those pairs are "
+                      "NOT scored.")
+            if len(pairs) < n * 0.9:
+                print("   NOTE: a low pairing rate makes every verdict below a "
+                      "statement")
+                print("   about a BIASED SUBSET -- the ring drops questions "
+                      "before answers.")
+            if withpts:
+                prows, ptally = score_paired(pm, withpts, a.list)
+                m = sum(ptally.values())
+                print(f"\nscored against the client's own answer ({m}):")
+                for k in ("OURS-FAILED", "BOTH-FAILED", "THEIRS-FAILED",
+                          "OFF-MESH", "DIFFER", "AGREE", "UNREADABLE"):
+                    if ptally[k] or k in ("OURS-FAILED", "BOTH-FAILED"):
+                        print(f"   {k:14} {ptally[k]:6}  "
+                              f"{100.0 * ptally[k] / m if m else 0:5.1f}%")
+                print("")
+                print("   OURS-FAILED is now a MEASUREMENT rather than an "
+                      "assumption: the")
+                print("   client found a path where we found none. BOTH-FAILED "
+                      "is the half")
+                print("   the three-valued scorer above counted as ours and is "
+                      "NOT our bug.")
+                if ptally["THEIRS-FAILED"]:
+                    print("   THEIRS-FAILED is the client's own solver returning "
+                          "pathCount 0 --")
+                    print("   HANDOFF-PLANE §4.2's registered lock prediction, "
+                          "if it clusters.")
+                if prows:
+                    print(f"\nfirst {len(prows)}:")
+                    for v, x0, y0, x1, y1, d in prows:
+                        print(f"   {v:14} ({x0:9.1f},{y0:9.1f}) -> "
+                              f"({x1:9.1f},{y1:9.1f})  {d}")
+        else:
+            print("")
+            print(f"   (capture v{cap.version}: no ret tap, so OURS-FAILED "
+                  f"still ASSUMES the")
+            print("   client succeeded. v7 splits out BOTH-FAILED, which is not "
+                  "our bug.)")
 
     # Caller census -- useful regardless of whether coordinates were captured.
     import collections

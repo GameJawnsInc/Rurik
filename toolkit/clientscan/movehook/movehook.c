@@ -13,17 +13,38 @@
  *     hook the bake's ENTRY, read arg2 and the return address, and the rate and
  *     the responsible caller both fall out of the same record.
  *
- * ONE EMULATION SHAPE, WHICH IS A DESIGN CONSTRAINT AND NOT LUCK. Owner's ruling,
- * PLAN.md §7 Q12(d): the hook stays hand-rolled -- no MinHook, no Detours, no
- * §6.1 derivation row -- and it buys that by hooking only FUNCTION ENTRIES. A
- * persistent int3 must re-emulate whatever instruction its 0xCC displaced;
- * entries all begin `55` (push ebp), so one three-line emulation covers every
- * site. Hooking the glide-vs-teleport branch 0x0060029F directly -- seven bytes,
- * mid-function -- would have needed its own, and the teleport's entry gives the
- * identical ledger because that branch's only CLEAR-path consequence IS the call
- * to 0x006020B0. `gensites.py` re-reads each site's first byte out of the pinned
- * client and refuses to generate `sites.h` if any is not 0x55, so a build bump
- * stops the build instead of arming a breakpoint mid-instruction.
+ * TWO EMULATION SHAPES, AND THE SECOND ONE IS STILL A DESIGN CONSTRAINT. Owner's
+ * ruling, PLAN.md §7 Q12(d): the hook stays hand-rolled -- no MinHook, no
+ * Detours, no §6.1 derivation row -- and it buys that by hooking only shapes
+ * whose displaced instruction is ONE BYTE and trivially re-emulable. A
+ * persistent int3 must re-emulate whatever its 0xCC displaced:
+ *
+ *     SHAPE_ENTRY  `55 push ebp`  ->  esp -= 4; [esp] = ebp; eip = a + 1
+ *     SHAPE_RET    `C3 ret`       ->  eip = [esp]; esp += 4
+ *
+ * Every site was SHAPE_ENTRY until 2026-08-29, when the MapFindPath RETURN tap
+ * (HANDOFF-PLANE.md §4.2) needed the answer rather than the question. Both
+ * shapes share the property that made the entry rule safe: a one-byte
+ * instruction has no interior, so a one-byte patch cannot land mid-instruction.
+ * What is still refused is a shape whose displaced instruction is longer --
+ * hooking the glide-vs-teleport branch 0x0060029F directly, seven bytes,
+ * mid-function -- and the teleport's ENTRY gives the identical ledger anyway,
+ * because that branch's only CLEAR-path consequence IS the call to 0x006020B0.
+ *
+ * `gensites.py` re-reads each site's first byte out of the pinned client and
+ * refuses to generate `sites.h` unless it matches THAT ROW'S OWN SHAPE -- which
+ * is a tighter gate than the single global 0x55 it replaced, because an entry
+ * that decayed into something else is still caught. A build bump stops the build
+ * instead of arming a breakpoint mid-instruction.
+ *
+ * THE ASYMMETRY BETWEEN THE TWO SHAPES, because it decides an error path. At an
+ * entry, failing to emulate merely loses a sample -- the client re-executes
+ * `push ebp` on the next pass. At a RET there is no safe skip: leaving Eip on
+ * the 0xCC re-traps forever, and at 0x0070A0D4 the next eleven bytes are the
+ * compiler's own int3 padding. So the ret arm's fallback is control B's proven
+ * technique -- restore the byte, rewind, let the client run its own `ret` once,
+ * and mark the site DISARMED so the sidecar reports a hook that stopped
+ * measuring rather than a client that stopped calling.
  *
  * READING ARGUMENTS AT AN ENTRY HOOK. The 0xCC replaced the FIRST byte, so the
  * `push ebp` has not run and esp is exactly as the caller left it:
@@ -80,6 +101,11 @@
                                    * biased toward whatever happened early. */
 #define DEF_RUN_MS 600000u        /* 10 minutes, then disarm and write */
 #define CTLB_MS   8000u           /* how long control B waits for its own hit */
+#define RET_MAX_POINTS 4u         /* out_path capacity, in points. Sized to snap
+                                   * gate 2's maxCount = 4 (captured whole);
+                                   * click-to-move asks 9 and TRUNCATES, which
+                                   * `out_n < out_count` records rather than
+                                   * hides. See the note on rec_t. */
 #define DEFDIR    "C:\\gd\\Rurik\\vault\\research\\movecode"
 #define OUTENV    "RURIK_MOVEHOOK_OUT"
 #define MSENV     "RURIK_MOVEHOOK_MS"
@@ -310,6 +336,37 @@ typedef struct {
     DWORD world, facing;
     DWORD src_world, src_facing;
     DWORD have_fence, fence;
+    /* v7, 2026-08-29: THE ANSWER, not just the question -- the MapFindPath
+     * RETURN tap (HANDOFF-PLANE.md §4.2). Appended, never inserted, for the
+     * reason the v6 block above states.
+     *
+     * `esp` IS THE JOIN KEY AND ITS OWN AUDIT, and it is stored on EVERY site
+     * rather than only the ret ones. All four MapFindPath exits are
+     * `8B E5 5D C3` -- `mov esp,ebp / pop ebp / ret` -- so esp at a ret is
+     * EXACTLY the esp the entry hook saw one call earlier, which is what lets a
+     * reader pair an answer to its question on (tid, esp). Storing it
+     * universally costs one dword and makes the pairing's precondition
+     * CHECKABLE: a pair whose two esp values disagree refutes that paragraph
+     * rather than being a bad record, and `pathdiff.py` must say so out loud
+     * instead of pairing anyway. An instrument has to be able to report that
+     * the thing it was built on turned out to be false.
+     *
+     * `have_out` is `have_fence`'s lesson applied again, and here the
+     * distinction IS the measurement: bit 0 says outCount was READ, so "could
+     * not read it" and "the client answered ZERO" stay different facts -- and
+     * pathCount == 0 under a lock is exactly what §4.2 predicts.
+     *
+     * `out_n` vs `out_count` makes TRUNCATION visible rather than silent:
+     * out_count is the client's own answer, out_n is how many points this
+     * record kept. RET_MAX_POINTS is 4 because snap gate 2 asks maxCount = 4
+     * (`006057F4 push 4`) and is therefore captured WHOLE, while click-to-move
+     * asks 9 (`0081AF43 push 9`) and truncates -- 9 would cost 36 dwords on
+     * every record of every site to complete one caller. */
+    DWORD esp;
+    DWORD have_out;               /* bit 0 = out_count read, bit 1 = out_path */
+    DWORD out_count;              /* *arg5 -- the client's own pathCount */
+    DWORD out_n;                  /* points actually copied (<= out_count) */
+    DWORD out_path[16];           /* RET_MAX_POINTS * 4 dwords, {x,y,plane,w} */
 } rec_t;
 
 static DWORD  g_base;
@@ -519,6 +576,12 @@ static LONG CALLBACK on_bp(PEXCEPTION_POINTERS ep)
                 r->site = i;
                 r->tid = GetCurrentThreadId();
                 r->ecx = ag;
+                /* THE PAIRING KEY, on every site. See the note on rec_t: for
+                 * one invocation the entry hook and the ret hook see the SAME
+                 * esp, so (tid, esp) joins a question to its answer -- and a
+                 * pair that disagrees refutes the design rather than being a
+                 * bad record. */
+                r->esp = esp;
                 /* esp is untouched: the `push ebp` we replaced has not run.
                  * Six args in one guarded read; see the note on rec_t. Falls back
                  * to four dwords when the stack is short, so a thread near the
@@ -581,6 +644,41 @@ static LONG CALLBACK on_bp(PEXCEPTION_POINTERS ep)
                 }
                 if (deref_arg(esp, SITES[i].deref_a, r->pt_a)) r->have_pts |= 1u;
                 if (deref_arg(esp, SITES[i].deref_b, r->pt_b)) r->have_pts |= 2u;
+                /* THE OUT-PARAMS, for the rows that name them -- table-driven
+                 * like every other deref, so this stays a property of the
+                 * content rows rather than a special case for one address.
+                 *
+                 * Only meaningful at a RET: at the entry these pointers aim at
+                 * uninitialised caller memory (content/movecode.toml's
+                 * mapfindpath `limits`), which is the whole reason this tap
+                 * exists. Nothing here enforces that -- gensites does, by
+                 * refusing the shape/deref combinations that would be wrong.
+                 *
+                 * The count is read FIRST and gates the path read, because the
+                 * count is what says how much of the buffer the callee wrote:
+                 * copying RET_MAX_POINTS unconditionally would hand back
+                 * uninitialised stack for any answer shorter than that and a
+                 * reader could not tell which points were real. */
+                if (SITES[i].deref_out >= 1 && SITES[i].deref_out <= 6 &&
+                    readable(esp, 4u * (DWORD)(SITES[i].deref_out + 1))) {
+                    DWORD p = ((DWORD *)esp)[SITES[i].deref_out];
+                    if (readable(p, 4)) {
+                        r->out_count = *(DWORD *)p;
+                        r->have_out |= 1u;
+                    }
+                }
+                if (SITES[i].deref_out_path >= 1 && SITES[i].deref_out_path <= 6 &&
+                    (r->have_out & 1u) &&
+                    readable(esp, 4u * (DWORD)(SITES[i].deref_out_path + 1))) {
+                    DWORD n = r->out_count;
+                    DWORD p = ((DWORD *)esp)[SITES[i].deref_out_path];
+                    if (n > RET_MAX_POINTS) n = RET_MAX_POINTS;
+                    if (n && readable(p, 16u * n)) {
+                        memcpy(r->out_path, (const void *)p, 16u * n);
+                        r->out_n = n;
+                        r->have_out |= 2u;
+                    }
+                }
                 /* `this`, through the SAME reader the second agent uses. It was a
                  * separate inline copy until v5, which is how two readings of one
                  * struct drift: add a field to one and the other still parses, so
@@ -600,14 +698,35 @@ static LONG CALLBACK on_bp(PEXCEPTION_POINTERS ep)
                 r->tick = GetTickCount();
             }
         }
-        /* Re-emulate the ONE instruction shape every site begins with:
-         * `55  push ebp`. Then resume at site+1, the `mov ebp, esp`. This must
-         * happen on every hit -- a skipped prologue is a corrupted frame, not a
-         * missing sample -- and it is what keeps the breakpoint ARMED, because
-         * the 0xCC is never restored. */
-        c->Esp -= 4;
-        *(DWORD *)c->Esp = c->Ebp;
-        c->Eip = a + 1;
+        /* Re-emulate the ONE instruction THIS SITE'S SHAPE displaced. This must
+         * happen on every hit -- a skipped instruction is a corrupted frame, not
+         * a missing sample -- and it is what keeps the breakpoint ARMED, because
+         * the 0xCC is never restored. BOTH ARMS MUST ASSIGN c->Eip: an arm that
+         * falls through without one leaves Eip on the 0xCC and re-traps forever,
+         * which is why test_movehook.py §15 counts the assignments rather than
+         * only scanning for `continue`. */
+        if (SITES[i].shape == SHAPE_RET) {
+            /* `C3 ret`: eip = [esp]; esp += 4. Bare near ret -- gensites refuses
+             * any byte but 0xC3 for this shape, so there is no imm16 to add. */
+            if (readable(c->Esp, 4)) {
+                c->Eip = *(DWORD *)c->Esp;
+                c->Esp += 4;
+            } else {
+                /* NO SAFE SKIP AT A RET (see the file header). Restore the byte
+                 * and rewind, control B's proven technique: the client executes
+                 * its own `ret` once, unpatched. The site is then DISARMED and
+                 * must say so, because a silently disarmed site reports `hits`
+                 * about us and a zero about the client. */
+                poke(a, g_orig[i], NULL);
+                g_armed[i] = 0;
+                c->Eip = a;
+            }
+        } else {
+            /* `55 push ebp`: then resume at site+1, the `mov ebp, esp`. */
+            c->Esp -= 4;
+            *(DWORD *)c->Esp = c->Ebp;
+            c->Eip = a + 1;
+        }
         return EXCEPTION_CONTINUE_EXECUTION;
     }
     return EXCEPTION_CONTINUE_SEARCH;
@@ -776,7 +895,7 @@ static int write_bin(const char *dir, DWORD n)
 {
     char path[MAX_PATH];
     HANDLE h;
-    DWORD ver = 6, ns = NSITES, reclen = (DWORD)sizeof(rec_t);
+    DWORD ver = 7, ns = NSITES, reclen = (DWORD)sizeof(rec_t);
     unsigned i;
     int ok = 1;
 

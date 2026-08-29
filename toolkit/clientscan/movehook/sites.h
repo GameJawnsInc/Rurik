@@ -8,11 +8,15 @@
 #ifndef MOVEHOOK_SITES_H
 #define MOVEHOOK_SITES_H
 
-/* All sites are function entries beginning `55` (push ebp), so the handler
- * re-emulates ONE instruction shape. See PLAN.md §7 Q12(d). */
-#define SITE_FIRST_BYTE 0x55u
+/* THE SHAPES THE HANDLER EMULATES. Every site's byte was re-read from the
+ * pinned client and matched against ITS OWN shape's byte before this file
+ * was written; a byte outside its shape stops generation. Two shapes, not
+ * one free-for-all: an entry row that decayed into a ret is still caught.
+ * See PLAN.md §7 Q12(d) and content/movecode.toml's ret block. */
+#define SHAPE_ENTRY 0u   /* 0x55 push ebp -> esp -= 4; [esp] = ebp; eip = a+1 */
+#define SHAPE_RET   1u   /* 0xC3 ret      -> eip = [esp]; esp += 4           */
 
-#define NSITES 15u
+#define NSITES 19u
 
 typedef struct {
     unsigned long rva;
@@ -27,24 +31,34 @@ typedef struct {
                                     sidecar reports, so a strided site still
                                     gives an exact denominator -- see the
                                     note at the stride test in movehook.c. */
+    int           deref_out;     /* arg index of `int* outCount`, 0=none */
+    int           deref_out_path;/* arg index of `point* outPath`, 0=none */
+    unsigned      shape;         /* SHAPE_ENTRY or SHAPE_RET -- selects which
+                                    ONE instruction the handler re-emulates. */
 } site_t;
 
+/* rva, name, deref_agent, deref_a, deref_b, deref_agent_arg, deref_fence,
+ * stride, deref_out, deref_out_path, shape */
 static const site_t SITES[NSITES] = {
-    { 0x001FC7A0u, "agapi_setdest", 0, 2, 0, 0, 0, 0u },   /* 0x005FC7A0 */
-    { 0x00205FC0u, "agtrack", 0, 0, 0, 1, 1, 0u },   /* 0x00605FC0 */
-    { 0x001FE950u, "bake", 1, 0, 0, 0, 0, 0u },   /* 0x005FE950 */
-    { 0x0041B580u, "chcli_advance", 0, 0, 0, 0, 0, 0u },   /* 0x0081B580 */
-    { 0x0041A8F0u, "chcli_dir", 0, 0, 0, 0, 0, 0u },   /* 0x0081A8F0 */
-    { 0x0041ADB0u, "chcli_point", 0, 0, 0, 0, 0, 0u },   /* 0x0081ADB0 */
-    { 0x00309E90u, "mapfindpath", 0, 1, 2, 0, 0, 0u },   /* 0x00709E90 */
-    { 0x002022B0u, "reseed", 1, 0, 0, 1, 0, 0u },   /* 0x006022B0 */
-    { 0x00205E40u, "resync", 0, 0, 0, 0, 0, 0u },   /* 0x00605E40 */
-    { 0x00202B20u, "setposition", 1, 1, 0, 0, 0, 0u },   /* 0x00602B20 */
-    { 0x00202A40u, "setter", 1, 0, 0, 0, 0, 0u },   /* 0x00602A40 */
-    { 0x002055E0u, "snaptest", 0, 0, 0, 2, 0, 0u },   /* 0x006055E0 */
-    { 0x001FEF70u, "stepclear", 0, 0, 0, 0, 0, 0u },   /* 0x005FEF70 */
-    { 0x002020B0u, "teleport", 1, 0, 0, 0, 0, 0u },   /* 0x006020B0 */
-    { 0x00200140u, "tick", 1, 0, 0, 0, 0, 0u },   /* 0x00600140 */
+    { 0x001FC7A0u, "agapi_setdest", 0, 2, 0, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x005FC7A0 */
+    { 0x00205FC0u, "agtrack", 0, 0, 0, 1, 1, 0u, 0, 0, SHAPE_ENTRY },   /* 0x00605FC0 */
+    { 0x001FE950u, "bake", 1, 0, 0, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x005FE950 */
+    { 0x0041B580u, "chcli_advance", 0, 0, 0, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x0081B580 */
+    { 0x0041A8F0u, "chcli_dir", 0, 0, 0, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x0081A8F0 */
+    { 0x0041ADB0u, "chcli_point", 0, 0, 0, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x0081ADB0 */
+    { 0x00309E90u, "mapfindpath", 0, 1, 2, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x00709E90 */
+    { 0x00309F0Fu, "mapfindpath_ret1", 0, 1, 0, 0, 0, 0u, 5, 6, SHAPE_RET   },   /* 0x00709F0F */
+    { 0x00309F44u, "mapfindpath_ret2", 0, 1, 0, 0, 0, 0u, 5, 6, SHAPE_RET   },   /* 0x00709F44 */
+    { 0x0030A0ADu, "mapfindpath_ret3", 0, 1, 0, 0, 0, 0u, 5, 6, SHAPE_RET   },   /* 0x0070A0AD */
+    { 0x0030A0D4u, "mapfindpath_ret4", 0, 1, 0, 0, 0, 0u, 5, 6, SHAPE_RET   },   /* 0x0070A0D4 */
+    { 0x002022B0u, "reseed", 1, 0, 0, 1, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x006022B0 */
+    { 0x00205E40u, "resync", 0, 0, 0, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x00605E40 */
+    { 0x00202B20u, "setposition", 1, 1, 0, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x00602B20 */
+    { 0x00202A40u, "setter", 1, 0, 0, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x00602A40 */
+    { 0x002055E0u, "snaptest", 0, 0, 0, 2, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x006055E0 */
+    { 0x001FEF70u, "stepclear", 0, 0, 0, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x005FEF70 */
+    { 0x002020B0u, "teleport", 1, 0, 0, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x006020B0 */
+    { 0x00200140u, "tick", 1, 0, 0, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x00600140 */
 };
 
 /* Agent struct offsets the handler reads at each hit. */

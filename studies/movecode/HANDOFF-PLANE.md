@@ -153,7 +153,21 @@ do — all 112 movement sessions scored once the review closed the first pass's
 label-parse holes (§1z-e.2), the two map-167 sessions included (clean under the
 run archive's own authored mesh).
 
-### 4.2 The `MapFindPath` RETURN tap — the cheapest measurement left
+### 4.2 The `MapFindPath` RETURN tap — ✅ BUILT 2026-08-29, never yet run
+
+**Landed as FINDINGS §1z-h**: four `mapfindpath_ret*` rows, a second emulation
+shape (`SHAPE_RET`), capture v7 carrying `out_count` (the client's own
+pathCount) and the first four waypoints, and a (tid, esp) join that audits its
+own premise. `pathdiff` now scores five-valued, which **splits `OURS-FAILED`**:
+that verdict assumed the client had succeeded, so every query neither side
+could answer inflated our decode-gap number — `BOTH-FAILED` is now its own row.
+It has not been armed against a client yet; the next ordinary session scores
+it, and the registered prediction below is unchanged.
+
+The rest of this section is the pre-build reasoning, kept because the cost
+estimate and the design constraint are what the build was priced against.
+
+### 4.2-orig The `MapFindPath` RETURN tap — the cheapest measurement left
 
 This is the one link §1z-c.3 infers, and it now buys a second thing: whether a repair's
 restamp actually revives the walker. Ret sites `0x00709F0F`, `0x00709F44`, `0x0070A0AD`,

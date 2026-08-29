@@ -93,7 +93,30 @@ import checks                                                   # noqa: E402
 # arithmetic being hard; it is that a floor derived from the code rather than
 # from the output drifts the moment either changes. `skip()` lowers the floor by
 # ZERO, so a bare machine must still clear 105.
-LEDGER = checks.Ledger("movehook", floor=118)
+#
+# 2026-08-29, THE RETURN TAP. Re-counted per section out of a real green run on
+# this machine, which is now 254 (was 215):
+#
+#   §1   6  §2  39  §3   4  §4  16  §5   6  §6   2  §7  11  §8   2  §9  13
+#   §10  8  §11  4  §12  6  §13  5  §14 63  §15  3  §15b 4  §16 25
+#   §17 37  §17e 7
+#
+# CLIENT-DEPENDENT (opens the vaulted image): §1, §2, and the three
+# `gensites.verify()` blocks inside §14 and the six inside §17.
+# COMPILER / cmd.exe / ARCHIVE: §6, §7, §8, §10, §16.
+# PROCESS-FREE CORE, which is what the floor is:
+#   §3 4 + §4 16 + §5 6 + §9 13 + §11 4 + §12 6 + §13 5 + §14 54 + §15 3
+#   + §15b 4 + §17 31 + §17e 7 = 153.
+#
+# §17 SPLITS the way §14 does and the split was read off the banner, not
+# reasoned about: 37 checks, of which 6 (the generator's own gate plus its five
+# refusals) call `gensites.verify()` and need the image, while the 21 row
+# assertions, the 4 layout checks and the 6 synthetic-capture checks go through
+# `content.load()` and a fixture built from readhook's own layout. §17(b) SKIPS
+# rather than dying when the image is absent -- `pinned.find()` exits the
+# process rather than raising, so an `except Exception` around it catches
+# nothing, which is a trap §2 is still standing in.
+LEDGER = checks.Ledger("movehook", floor=153)
 check = checks.adopt(LEDGER)
 
 WOW64_CMD = r"C:\Windows\SysWOW64\cmd.exe"
@@ -131,11 +154,20 @@ def section_1_2():
         return
     check(not bad, "2. every row's first byte matches the pinned 38797 image",
           "; ".join(f"{n}: {w}" for n, w in bad) if bad else f"read {path}")
-    # The load-bearing one: the emulation is `push ebp` and nothing else, so a
-    # site that is not an entry must never be armed by the generator.
+    # The load-bearing one: every site's byte must be ITS OWN SHAPE's, because
+    # that byte is the instruction the handler will re-emulate. This was a flat
+    # `== 0x55` until 2026-08-29, when the MapFindPath ret tap added SHAPE_RET;
+    # note it did NOT become "0x55 or 0xC3", which would let a ret's emulation
+    # be armed on an entry byte -- the pairing is per row and checked as a pair.
     for name in sorted(sites):
-        eq(sites[name]["first_byte"], 0x55,
-           f"2. {name} begins `55 push ebp` -- the ONE shape the handler emulates")
+        shape = sites[name].get("shape", gensites.DEFAULT_SHAPE)
+        want = gensites.SHAPE_BYTE.get(shape)
+        check(want is not None,
+              f"2. {name} declares a shape the handler emulates",
+              f"shape {shape!r} is not in {sorted(gensites.SHAPE_BYTE)}")
+        eq(sites[name]["first_byte"], want,
+           f"2. {name} begins with shape {shape!r}'s own byte "
+           f"(0x{want:02X})" if want else f"2. {name} has a known shape")
 
     # §1: the checked-in header must BE what the generator produces. A hand-edited
     # sites.h is the split the ruling refuses, and it would be invisible otherwise.
@@ -516,17 +548,46 @@ def section_9():
 
     real_base, real_read = keytap.module_base, keytap.read_at
     try:
+        import gensites
         keytap.module_base = lambda pid, name: 0x00400000
 
-        keytap.read_at = lambda pid, addr, n: b"\x55" * n
+        # A CORRECT CLIENT NOW SERVES TWO BYTES, and serving 0x55 everywhere is
+        # a WRONG client since 2026-08-29 -- the four MapFindPath ret sites hold
+        # 0xC3. This control is built from the rows' own shapes for the same
+        # reason `nsites` below is derived: a literal here goes stale the moment
+        # the site set changes, and a stale positive control fails in the
+        # direction that looks like the feature is broken.
+        _rows = gensites.rows()[0]
+        byshape = {}
+        for _n, _r in _rows.items():
+            _shape = _r.get("shape", gensites.DEFAULT_SHAPE)
+            byshape[0x00400000 + _r["rva"]] = gensites.SHAPE_BYTE[_shape]
+        def _serve(pid, addr, n, _m=byshape):
+            return bytes([_m.get(addr, 0x55)]) * n
+        keytap.read_at = _serve
         bad, base = attach.verify_running_build(1234)
-        check(bad == [], "9. a client holding 0x55 at every site is ACCEPTED",
+        check(bad == [], "9. a client holding each site's OWN shape byte is "
+                         "ACCEPTED (0x55 at entries, 0xC3 at the ret sites)",
               f"refused a correct client: {bad}")
         eq(base, 0x00400000, "9. and the image base is reported")
 
+        # AND THE OTHER DIRECTION, which is the one this file's own history
+        # argues for: a client serving 0x55 at a RET site is a wrong client and
+        # must be refused. Before the shape column this was the accepted case.
+        nret = sum(1 for _r in _rows.values() if _r.get("shape") == "ret")
+        if nret:
+            keytap.read_at = lambda pid, addr, n: b"\x55" * n
+            bad, _ = attach.verify_running_build(1234)
+            check(len(bad) == nret,
+                  "9. a client serving 0x55 at the RET sites is REFUSED",
+                  f"expected {nret} refusal(s), got {bad}")
+            check(any("0xC3" in b for b in bad),
+                  "9. and the refusal names the byte the SHAPE required",
+                  f"{bad}")
+
         # One site wrong is enough: this is what a build bump looks like.
         wrong = {0x00400000 + 0x001FE950: b"\x8b"}
-        keytap.read_at = lambda pid, addr, n: wrong.get(addr, b"\x55" * n)
+        keytap.read_at = lambda pid, addr, n: wrong.get(addr, _serve(pid, addr, n))
         bad, _ = attach.verify_running_build(1234)
         check(len(bad) == 1, "9. ONE wrong byte is enough to refuse the whole run",
               f"expected exactly one refusal, got {bad}")
@@ -540,8 +601,7 @@ def section_9():
         # Derived, not literal: this said `== 4` and went red the moment B3 added
         # five sites. A count that has to be edited whenever the thing it measures
         # grows is a tripwire for maintenance, not for defects.
-        import gensites
-        nsites = len(gensites.rows()[0])
+        nsites = len(_rows)
         eq(len(bad), nsites,
            "9. EVERY unreadable site refuses rather than passing")
     finally:
@@ -1026,8 +1086,17 @@ def section_14(tmp):
     # all count stored records. `hits` is unaffected by the stride, `stored` is
     # not, and nothing in the file would announce the change. So the sites whose
     # records are counted are named here and required to be unstrided.
+    #
+    # THE FOUR RET SITES ARE HERE FOR A SECOND REASON ON TOP OF THAT ONE: a
+    # stride on either half of the MapFindPath pair DECIMATES THE PAIRING. The
+    # entry and the ret are joined on (tid, esp), so striding one side drops the
+    # partner of N-1 of every N invocations and the pairing rate collapses --
+    # while `hits` stays whole on both sides and nothing in the readout would
+    # say the answers had been unpaired rather than absent.
     COUNTED = ("bake", "teleport", "setter", "reseed", "resync", "snaptest",
                "stepclear", "setposition", "agtrack", "mapfindpath",
+               "mapfindpath_ret1", "mapfindpath_ret2", "mapfindpath_ret3",
+               "mapfindpath_ret4",
                "chcli_point", "chcli_dir", "chcli_advance", "agapi_setdest")
     for nm in COUNTED:
         if nm in rows:
@@ -1149,7 +1218,12 @@ def section_14(tmp):
              "ecx": 0x0DDD0000, "retaddr": 0x006007AE},
         ], sites))
     cap = rh.Capture(p)
-    eq(cap.version, 6, "14. the capture declares v6")
+    # The fixture is built at the WRITER's current version, so this tracks
+    # `CURRENT_VER` rather than pinning a literal that goes red on every bump
+    # -- the same reason §9's site count is derived. The v6-specific fields it
+    # then asserts are still present, because versions only ever APPEND.
+    eq(cap.version, rh.CURRENT_VER,
+       "14. the capture declares the writer's current version")
     r0, r1, r2 = cap.recs[0], cap.recs[1], cap.recs[2]
     eq((r0["have_fence"], r0["fence"]), (1, 0),
        "14. a fence READ AS ZERO round-trips as read-and-zero")
@@ -1231,8 +1305,8 @@ def section_15():
     src = open(c_path, encoding="utf-8").read()
     bad = _loop_escapes(src)
     check(bad == [], "15. no early exit between the site match and the emulation",
-          f"found {bad} -- each one is a hit that never emulates `push ebp`, "
-          f"never advances EIP past the 0xCC, and crashes the client")
+          f"found {bad} -- each one is a hit that never emulates its shape's "
+          f"instruction, never advances EIP past the 0xCC, and crashes the client")
 
     # CONTROL: the check must catch the exact statement that crashed it.
     planted = src.replace(
@@ -1243,6 +1317,63 @@ def section_15():
     check(_loop_escapes(planted) != [],
           "15. CONTROL: and planting it is DETECTED",
           "a checker that cannot find the bug it was written for is decoration")
+
+    # ---- 15b: EVERY SHAPE ARM MUST ASSIGN Eip ---------------------------
+    #
+    # THE ESCAPE CHECK ABOVE CANNOT SEE THE BUG THIS ONE IS FOR. Since
+    # 2026-08-29 the emulation is a two-armed branch on SITES[i].shape, and the
+    # way to break it is not a `continue` -- it is an arm that falls through
+    # without assigning c->Eip (a missing `else`, or a new shape added with no
+    # arm). EIP then stays on the 0xCC and the site re-traps forever; at
+    # 0x0070A0D4 the eleven bytes that follow are the compiler's own int3
+    # padding, so the failure is not even loud. `_loop_escapes` scans for
+    # continue/break/return and a missing else is none of those.
+    #
+    # So: count the arms and count the assignments, and require them equal.
+    arms, assigns = _shape_arms(src)
+    check(arms >= 2, "15b. the emulation dispatches on at least two shapes",
+          f"found {arms} arm(s) -- if the ret shape was removed, remove this "
+          f"check with it rather than letting it pass vacuously")
+    check(arms == assigns,
+          "15b. every shape arm assigns c->Eip",
+          f"{arms} arm(s) but {assigns} assignment(s) to c->Eip -- an arm that "
+          f"does not set EIP leaves it on the 0xCC and the site re-traps forever")
+
+    # CONTROL, in the same posture as §15's: delete the else-arm's assignment
+    # and prove the checker goes red.
+    planted2 = src.replace("            c->Eip = a + 1;\n", "", 1)
+    check(planted2 != src, "15b. CONTROL: the defective form could be planted")
+    a2, s2 = _shape_arms(planted2)
+    check(a2 != s2,
+          "15b. CONTROL: and planting it is DETECTED",
+          f"planted source reports {a2} arm(s) and {s2} assignment(s) -- the "
+          f"checker cannot see the bug it exists for")
+
+
+def _shape_arms(src):
+    """(shape arms, c->Eip assignments) in the emulation block. See §15b.
+
+    The block runs from the shape dispatch to the loop's own
+    `return EXCEPTION_CONTINUE_EXECUTION;` -- anchored on the dispatch rather
+    than on any one arm's text, so removing an arm's assignment (the bug) does
+    not also move the window and hide itself.
+    """
+    import re
+    try:
+        i = src.index("if (SITES[i].shape == SHAPE_RET) {")
+        j = src.index("return EXCEPTION_CONTINUE_EXECUTION;", i)
+    except ValueError:
+        return 0, 0
+    body = re.sub(r"/\*.*?\*/", "", src[i:j], flags=re.S)
+    # EVERY branch counts, nested ones included -- the ret arm's own
+    # readable() fallback is an arm for this purpose, because it is a path a
+    # hit can take and every path must leave EIP somewhere other than the
+    # 0xCC. Counting only the top-level dispatch would let a fallback that
+    # forgot its assignment pass. Currently 3 and 3: ret-ok, ret-fallback,
+    # entry.
+    arms = 1 + len(re.findall(r"\}\s*else\b", body))
+    assigns = len(re.findall(r"c->Eip\s*=", body))
+    return arms, assigns
 
 
 def _loop_escapes(src):
@@ -1609,6 +1740,257 @@ def section_16(tmp):
               f"divergence makes --stop report a missing capture that exists")
 
 
+# ---------------------------------------------------------------- §17
+def section_17(tmp):
+    """THE RETURN TAP: the second emulation shape, and the answer it captures.
+
+    WHAT THIS CAN AND CANNOT PROVE, stated first because §16's own trick does
+    not transfer. §7 injects into a throwaway 32-bit cmd.exe where EVERY SITE
+    FAILS TO ARM -- deliberately, and §15's docstring says that is exactly why
+    the handler's hot path is never executed by a test. So a cmd.exe host proves
+    the DLL survives non-resolving ret rows and NOTHING about the emulation
+    itself. What is checkable offline is: the rows are what they claim against
+    the pinned client's own bytes (§1/§2 already do the byte half), the
+    structural refusals fire, the reader's v7 layout matches the C, the pairing
+    joins and REFUSES correctly, and the out-param semantics survive a synthetic
+    capture. Whether a persistent 0xCC at 0x00709F0F resumes correctly on real
+    hardware is a live-run question, and no offline check substitutes for it.
+    """
+    try:
+        import gensites
+        import readhook
+    except Exception as ex:
+        LEDGER.skip("17. the return tap", f"cannot import: {ex}")
+        return
+    rows = gensites.rows()[0]
+    rets = {n: r for n, r in rows.items()
+            if r.get("shape") == "ret"}
+
+    # ---- (a) the rows exist and declare the shape ------------------------
+    eq(len(rets), 4, "17. four MapFindPath ret rows are registered")
+    for n, r in sorted(rets.items()):
+        eq(r["first_byte"], 0xC3, f"17. `{n}` declares first_byte 0xC3")
+        # THE ONE THAT WOULD HAVE CORRUPTED THE CAPTURE. arg2's slot holds FPU
+        # scratch at every ret, so a ret row inheriting the entry row's
+        # deref_arg_b = 2 would deref a float as a pointer -- and readable()
+        # can ACCEPT it (10000.0f is 0x461C4000, a plausible address).
+        eq(int(r.get("deref_arg_b") or 0), 0,
+           f"17. `{n}` does NOT deref arg2 -- the callee overwrites that slot")
+        check(not r.get("deref_agent"),
+              f"17. `{n}` does NOT deref ecx -- it is scratch at a return")
+        eq(int(r.get("deref_out") or 0), 5, f"17. `{n}` reads outCount from arg5")
+        eq(int(r.get("deref_out_path") or 0), 6,
+           f"17. `{n}` reads outPath from arg6")
+
+    # ---- (b) the REFUSALS, each proven to fire ---------------------------
+    # A gate nobody has watched refuse is a wish. Every one of these is a
+    # silent-garbage bug rather than a loud one, which is why they are refusals
+    # in the generator rather than comments in the row.
+    import copy
+    # `pinned.find()` EXITS THE PROCESS rather than raising when the vaulted
+    # image is missing, so `except Exception` around it catches nothing -- which
+    # is why a vault-less machine dies at §2 today instead of skipping. Ask
+    # first, and skip this block cleanly rather than taking the suite down.
+    try:
+        import pinned
+        _have_image = bool(pinned.find())
+    except BaseException:                                   # noqa: BLE001
+        _have_image = False
+    # NOT a `return` -- (c) and (d) below are process-free and must still run on
+    # a machine with no vaulted image, or the floor's own arithmetic is wrong.
+    if not _have_image:
+        LEDGER.skip("17b. the generator's refusals", NO_CLIENT)
+    else:
+        base_bad, _ = gensites.verify(rows)
+        check(base_bad == [], "17. the real rows pass the generator's own gate",
+              f"{base_bad}")
+        victim = sorted(rets)[0]
+        for label, patch, expect in (
+                ("an unknown shape", {"shape": "middle-of-a-loop"},
+                 "not one movehook"),
+                ("a ret row dereffing ecx", {"deref_agent": True}, "SCRATCH"),
+                ("a ret row dereffing arg2", {"deref_arg_b": 2}, "FPU scratch"),
+                ("a ret row claiming 0x55", {"first_byte": 0x55}, "0xC3")):
+            s = copy.deepcopy(rows)
+            s[victim].update(patch)
+            bad, _ = gensites.verify(s)
+            hit = [b for b in bad if b[0] == victim]
+            check(hit and expect in hit[0][1],
+                  f"17. the generator REFUSES {label}",
+                  f"got {hit or 'no refusal at all'}")
+        # And the byte check alone must refuse a shape swap on a row that trips
+        # no structural rule -- otherwise the byte half is untested, having
+        # always been short-circuited by the deref refusals.
+        s = copy.deepcopy(rows)
+        s["chcli_dir"]["shape"] = "ret"
+        bad, _ = gensites.verify(s)
+        hit = [b for b in bad if b[0] == "chcli_dir"]
+        check(hit and "0xC3" in hit[0][1],
+              "17. and an ENTRY row relabelled `ret` is refused ON THE BYTE",
+              f"got {hit or 'no refusal'} -- chcli_dir sets no deref, so only "
+              f"the byte check can catch this one")
+
+    # ---- (c) v7 is APPENDED, not inserted --------------------------------
+    v6 = readhook._LAYOUTS[6]
+    v7 = readhook._LAYOUTS[7]
+    # A reorder keeps `reclen` plausible while shifting every field -- the
+    # defect the v6 note in movehook.c was written for. Appending is what makes
+    # a mismatched reader fail loudly instead.
+    check(v7[:len(v6)] == v6,
+          "17. v7 is v6 plus a tail -- APPENDED, never inserted",
+          f"v7's first {len(v6)} fields are {v7[:len(v6)]}, not v6's {v6}")
+    added = [n for n, _c in v7[len(v6):]]
+    eq(added, ["esp", "have_out", "out_count", "out_n", "out_path"],
+       "17. and the tail is exactly the ret tap's fields")
+    eq(readhook.CURRENT_VER, 7, "17. the writer's version is 7")
+    src_c = open(os.path.join(HERE, "movehook.c"), encoding="utf-8").read()
+    check("DWORD ver = 7" in src_c,
+          "17. and movehook.c writes version 7 into the header",
+          "the C and the reader must agree or every parse shifts")
+
+    # ---- (d) the OUT-PARAM semantics, on a synthetic capture -------------
+    # `have_out` is the measurement, not bookkeeping: pathCount == 0 IS the
+    # registered prediction (HANDOFF-PLANE §4.2), so "could not read it" and
+    # "the client answered zero" must never merge into one number.
+    import gensites as gs
+    names = list(gs.rows()[0])
+    ret_i = names.index(sorted(rets)[3])          # ret4, the common arm
+    ent_i = names.index("mapfindpath")
+    recs = [
+        # a paired question and answer, same tid, same esp: pathCount 2
+        {"seq": 0, "tick": 1000, "site": ent_i, "tid": 7, "esp": 0x1000},
+        {"seq": 1, "tick": 1001, "site": ret_i, "tid": 7, "esp": 0x1000,
+         "have_out": 3, "out_count": 2, "out_n": 2},
+        # a pair whose esp DISAGREES -- refutes the premise, must not pair
+        {"seq": 2, "tick": 1002, "site": ent_i, "tid": 7, "esp": 0x2000},
+        {"seq": 3, "tick": 1003, "site": ret_i, "tid": 7, "esp": 0x2ff0,
+         "have_out": 1, "out_count": 0},
+        # an answer with no question at all
+        {"seq": 4, "tick": 1004, "site": ret_i, "tid": 9, "esp": 0x3000,
+         "have_out": 1, "out_count": 0},
+    ]
+    path = _synth_capture(tmp, "rettap.bin", recs, len(names))
+    cap = readhook.Capture(path)
+    eq(cap.version, 7, "17. the synthetic v7 capture parses")
+    pairs, orphan, esp_bad = readhook._pair_mfp(cap, names)
+    eq(len(pairs), 1, "17. exactly the one well-formed pair is joined")
+    eq(orphan, 1, "17. an answer with no question is COUNTED, not paired")
+    # Pairing an esp mismatch anyway would compare two different invocations;
+    # the mismatch refutes the epilogue reading and must be visible as that.
+    eq(esp_bad, 1,
+       "17. an esp MISMATCH refuses the pair and is counted separately")
+    txt, _ = readhook.report(cap, names)
+    check("MapFindPath ANSWERS" in txt,
+          "17. and the v7 report SECTION prints",
+          "a field captured and never printed is a field the run does not have")
+    check("esp MISMATCH" in txt,
+          "17. and the report says so out loud when the premise is refuted",
+          f"{txt[-1500:]}")
+
+    # ---- (e) THE SPLIT THAT WAS THE POINT: BOTH-FAILED is not OURS ------
+    #
+    # The three-valued scorer counted "we found no route" as OURS-FAILED
+    # WITHOUT KNOWING whether the client found one -- so every query neither
+    # side could answer inflated our own decode-gap number by an unknown
+    # amount. That is the MOVECODE-Q2 headline, and it is what the ret tap
+    # actually buys. A stub mesh keeps this process-free: the assertion is
+    # about the VERDICT LOGIC, not about any map's geometry.
+    try:
+        import pathdiff
+    except Exception as ex:                                  # noqa: BLE001
+        LEDGER.skip("17e. the five-valued split", f"cannot import pathdiff: {ex}")
+        return
+
+    class _StubMesh:
+        """walkable() everywhere; route() succeeds only from x == 0."""
+        def walkable(self, x, y):
+            return abs(x) < 1e5 and abs(y) < 1e5
+        def route(self, x0, y0, x1, y1):
+            return [(x0, y0), (x1, y1)] if x0 == 0.0 else []
+
+    def _q(sx, sy, dx, dy):
+        return pathdiff.Query({"seq": 0, "tick": 1, "arg3": 0, "arg4": 0,
+                               "have_pts": 3,
+                               "pt_a": (_flt(sx), _flt(sy), 0, 0),
+                               "pt_b": (_flt(dx), _flt(dy), 0, 0)},
+                              lambda v: v)
+
+    def _ret(count, n=0, path=()):
+        return {"have_out": 3 if path else 1, "out_count": count, "out_n": n,
+                "out_path": tuple(path) + (0,) * (16 - len(path))}
+
+    cases = [
+        # (ours routes?, client count) -> verdict
+        (_q(0.0, 0.0, 10.0, 0.0), _ret(0), "THEIRS-FAILED"),
+        (_q(5.0, 0.0, 10.0, 0.0), _ret(2, 2, (_flt(7.0), _flt(0.0), 0, 0,
+                                              _flt(10.0), _flt(0.0), 0, 0)),
+         "OURS-FAILED"),
+        (_q(5.0, 0.0, 10.0, 0.0), _ret(0), "BOTH-FAILED"),
+        (_q(0.0, 0.0, 10.0, 0.0), _ret(2, 2, (_flt(3.0), _flt(0.0), 0, 0,
+                                              _flt(10.0), _flt(0.0), 0, 0)),
+         "AGREE"),
+        (_q(0.0, 0.0, 10.0, 0.0), _ret(2, 2, (_flt(3.0), _flt(0.0), 0, 0,
+                                              _flt(900.0), _flt(0.0), 0, 0)),
+         "DIFFER"),
+        # have_out bit 0 clear: the count could NOT be read. Must NOT become a
+        # zero -- pathCount == 0 is the registered prediction, and merging
+        # "unreadable" into it would manufacture evidence for it.
+        (_q(0.0, 0.0, 10.0, 0.0), {"have_out": 0, "out_count": 0, "out_n": 0,
+                                   "out_path": (0,) * 16}, "UNREADABLE"),
+    ]
+    stub = _StubMesh()
+    for q, r, want in cases:
+        _rows, t = pathdiff.score_paired(stub, [(q, r)])
+        got = [k for k, v in t.items() if v]
+        check(got == [want], f"17e. a query scores {want}",
+              f"scored {got or 'nothing'} instead")
+
+    # THE CONTROL THAT MATTERS: the same BOTH-FAILED query, scored by the OLD
+    # three-valued path, must come out OURS-FAILED -- otherwise this section is
+    # asserting a distinction that never existed and proves nothing.
+    _rows, old = pathdiff.score(stub, [(5.0, 0.0, 10.0, 0.0)])
+    eq(old["OURS-FAILED"], 1,
+       "17e. CONTROL: the three-valued scorer calls that same query OURS-FAILED")
+
+
+def _flt(f):
+    """A float as the dword movehook would have stored."""
+    return struct.unpack("<I", struct.pack("<f", f))[0]
+
+
+def _synth_capture(tmp, name, recs, nsites, ver=7):
+    """A movehook capture built from readhook's OWN layout for `ver`.
+
+    Fixture and parser share one description of the record -- §11's discipline,
+    and the reason a fixture cannot drift from the C without §11 going red.
+    """
+    import readhook
+    spec, fmt, _ln = readhook._layout(ver)
+    flat = []
+    for n, c in spec:
+        flat.extend([n] * c)
+    out = bytearray(b"MVHK")
+    out += struct.pack("<IIIII", ver, 0x00400000, nsites,
+                       struct.calcsize(fmt), len(recs))
+    for i in range(nsites):
+        out += struct.pack("<II", i, 0)
+    for r in recs:
+        vals, seen = [], {}
+        for n, c in spec:
+            v = r.get(n, 0)
+            if c == 1:
+                vals.append(v if isinstance(v, int) else 0)
+            else:
+                seq = v if isinstance(v, (list, tuple)) else ()
+                vals.extend(list(seq) + [0] * (c - len(seq)))
+            seen[n] = True
+        out += struct.pack(fmt, *vals)
+    p = os.path.join(tmp, name)
+    with open(p, "wb") as fh:
+        fh.write(bytes(out))
+    return p
+
+
 def main():
     import tempfile
     tmp = tempfile.mkdtemp(prefix="movehook-test-")
@@ -1624,6 +2006,7 @@ def main():
     section_14(tmp)
     section_15()
     section_16(tmp)
+    section_17(tmp)
     return LEDGER.verdict()
 
 

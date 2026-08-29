@@ -105,7 +105,33 @@ _LAYOUTS = {
           ("world", 1), ("facing", 1), ("src_world", 1), ("src_facing", 1),
           ("have_fence", 1), ("fence", 1)],
 }
+# v7, 2026-08-29: THE MapFindPath RETURN TAP -- the ANSWER, where every version
+# before it captured only the question. Spelled as `_LAYOUTS[6] + [...]` rather
+# than retyped, so "APPENDED, never inserted" is structural here instead of a
+# promise a future editor has to keep (the v6 note in movehook.c's rec_t explains
+# why a length check cannot catch a reorder).
+#
+#   esp        the entry<->ret JOIN KEY, stored on every site. All four exits are
+#              `8B E5 5D C3`, so esp at a ret is exactly the entry esp -- and a
+#              pair whose two values disagree REFUTES that premise rather than
+#              being a bad record. pathdiff refuses such a pair, loudly.
+#   have_out   bit 0 = out_count was read, bit 1 = out_path was. The `have_fence`
+#              distinction again, and here it IS the measurement: "could not read"
+#              and "the client answered ZERO" must not merge, because pathCount
+#              == 0 under a lock is the registered prediction.
+#   out_count  the client's own pathCount.
+#   out_n      how many points this record kept (<= out_count). Truncation is
+#              RECORDED, not hidden: RET_MAX_POINTS is 4, click-to-move asks 9.
+_LAYOUTS[7] = _LAYOUTS[6] + [("esp", 1), ("have_out", 1), ("out_count", 1),
+                             ("out_n", 1), ("out_path", 16)]
 NPOINT = 4
+# The four MapFindPath exits, in one place. Anything keyed on the single name
+# "mapfindpath" sees the QUESTION only; these four carry the ANSWER.
+MFP_ENTRY = "mapfindpath"
+MFP_RETS = ("mapfindpath_ret1", "mapfindpath_ret2",
+            "mapfindpath_ret3", "mapfindpath_ret4")
+# out_path holds RET_MAX_POINTS points of 4 dwords; movehook.c owns the 4.
+RET_MAX_POINTS = 4
 # The facing value that, together with a non-zero m_timeStopMovement, returns
 # NO SNAP from snaptest before any gate runs (0x0060563A / 0x00605641).
 FACING_EARLY_OUT = 9
@@ -131,7 +157,7 @@ def _unpack(spec, vals):
 # The current writer's layout, for anything that builds a capture (the tests do).
 # Bump BOTH of these with the version, or the tests keep synthesising the OLD
 # record while the DLL writes the new one and every parse silently disagrees.
-CURRENT_VER = 6
+CURRENT_VER = 7
 FIELDS = [n for n, c in _LAYOUTS[CURRENT_VER] if c == 1]
 _SPEC5, REC_FMT, REC_LEN = _layout(CURRENT_VER)
 
@@ -459,6 +485,47 @@ def _worlds(cap, names):
                 a("         so compare cadence above rather than this against "
                   "retail's 4.30 granted-chain)")
     return "\n".join(out)
+
+
+def _pair_mfp(cap, names):
+    """Join MapFindPath answers to their questions. -> (pairs, orphan_rets, esp_bad).
+
+    THE KEY IS (tid, esp), AND IT AUDITS ITSELF. All four exits are
+    `mov esp,ebp / pop ebp / ret`, so esp at a ret is EXACTLY the esp the entry
+    hook saw for that invocation -- which makes esp both the join key and the
+    check on the premise the join rests on. A candidate pair whose esp values
+    disagree is NOT paired and is COUNTED: it refutes the epilogue reading rather
+    than being a bad record, and a consumer must be able to see that happen.
+
+    Per thread, entries are a STACK and a ret pops the innermost open one. The
+    disassembly shows no self-call, so a non-empty stack at a second entry means
+    the ring dropped a ret (or the function recursed after all, which would be a
+    finding in itself) -- either way the older entry is abandoned rather than
+    paired to a later answer.
+
+    `pairs` are (entry, ret). Anything this cannot join with confidence is left
+    out and counted, never guessed into a pair.
+    """
+    idx = {n: i for i, n in enumerate(names)}
+    ei = idx.get(MFP_ENTRY)
+    rset = {idx[n] for n in MFP_RETS if n in idx}
+    if ei is None or not rset:
+        return [], 0, 0
+    open_by_tid, pairs, orphan, esp_bad = {}, [], 0, 0
+    for r in sorted(cap.recs, key=lambda r: r["seq"]):
+        if r["site"] == ei:
+            open_by_tid.setdefault(r["tid"], []).append(r)
+        elif r["site"] in rset:
+            stack = open_by_tid.get(r["tid"]) or []
+            if not stack:
+                orphan += 1
+                continue
+            ent = stack.pop()
+            if ent.get("esp") != r.get("esp"):
+                esp_bad += 1
+                continue
+            pairs.append((ent, r))
+    return pairs, orphan, esp_bad
 
 
 def report(cap, names, dump=0):
@@ -805,6 +872,77 @@ def report(cap, names, dump=0):
             a("      (retaddr 0x0060581E, inside snaptest). The rest are the")
             a("      obstacle-sidestep caller 0x006007A9 -- a real second caller,")
             a("      NOT a phantom, so an unfiltered count over-reads gate 3.")
+
+    # ---- v7: THE ANSWER -- MapFindPath's four exits and their pathCount ------
+    #
+    # Every version before this captured the QUESTION and nothing else. The four
+    # ret rows carry `out_count`, which is the client's own pathCount, and the
+    # registered prediction (HANDOFF-PLANE.md §4.2, FINDINGS §1z-d.3) is scored
+    # off it: a locked client's queries return 0, and the first query after a
+    # repair's restamp returns > 0.
+    #
+    # THE PAIRING IS PRINTED AS A RATE, not assumed. A ret record joins its entry
+    # on (tid, esp) -- see the note on `esp` above -- and an unpaired ret means
+    # the ring dropped the question or the run armed mid-call. A low pairing rate
+    # makes every comparison below it a statement about a biased subset, so it is
+    # a headline rather than a footnote.
+    if cap.version >= 7:
+        ei = idx.get(MFP_ENTRY)
+        rets = {n: idx.get(n) for n in MFP_RETS if idx.get(n) is not None}
+        ents = [r for r in cap.recs if r["site"] == ei] if ei is not None else []
+        rrs = [r for r in cap.recs if r["site"] in set(rets.values())]
+        if ents or rrs:
+            a("")
+            a(f"MapFindPath ANSWERS  {len(ents)} question(s), {len(rrs)} answer(s) "
+              f"over {len(rets)} armed exit(s)")
+            pairs, unpaired_ret, mismatch = _pair_mfp(cap, names)
+            if ents:
+                a(f"      paired to their question : {len(pairs)} of {len(ents)}"
+                  f"  ({100.0 * len(pairs) / len(ents):.1f}%)")
+            if unpaired_ret:
+                a(f"      answers with NO question : {unpaired_ret}"
+                  f" -- the ring dropped it, or the hook armed mid-call")
+            if mismatch:
+                a(f"      *** esp MISMATCH on {mismatch} pair(s): the entry and the")
+                a("          ret disagree about esp, which REFUTES the premise this")
+                a("          tap rests on (all four exits are `8B E5 5D C3`, so the")
+                a("          two must be equal). These are NOT paired. Re-read the")
+                a("          epilogues before trusting any comparison here.")
+            got = [r for r in rrs if r.get("have_out", 0) & 1]
+            zero = [r for r in got if r["out_count"] == 0]
+            a(f"      pathCount READ           : {len(got)} of {len(rrs)}")
+            if len(got) < len(rrs):
+                a(f"      could NOT be read        : {len(rrs) - len(got)}"
+                  f" -- `have_out` keeps these OUT of the zero count, because")
+                a("                                 `could not read it` and `the")
+                a("                                 client answered ZERO` are")
+                a("                                 different facts, and the zero")
+                a("                                 IS the registered prediction.")
+            a(f"      pathCount == 0 (no path) : {len(zero)}")
+            a(f"      pathCount >  0           : {len(got) - len(zero)}")
+            trunc = [r for r in rrs if (r.get("have_out", 0) & 2)
+                     and r["out_n"] < r["out_count"]]
+            if trunc:
+                a(f"      path TRUNCATED by the record : {len(trunc)}"
+                  f" (out_n < out_count; capacity {RET_MAX_POINTS} points)")
+                a("          The COUNT is still exact -- only the stored waypoints")
+                a("          are short. Compare counts freely; compare shapes only")
+                a("          on the untruncated ones.")
+            # WHICH ARM, and it is deliberately NOT captioned as an outcome.
+            # 0x0070A0D4 is TWO exits sharing one epilogue (the ordinary
+            # completion and the fallback-solver path), so the four sites do not
+            # partition the answers -- content/movecode.toml's ret4 `limits` says
+            # so, and a report that implied otherwise would be inventing a
+            # taxonomy the code does not have.
+            a("      by exit arm (WHICH DOOR, not which outcome -- ret4 is two):")
+            for n in MFP_RETS:
+                si2 = idx.get(n)
+                if si2 is None:
+                    continue
+                arm = [r for r in rrs if r["site"] == si2]
+                az = sum(1 for r in arm
+                         if (r.get("have_out", 0) & 1) and r["out_count"] == 0)
+                a(f"        {n:18s} {len(arm):5d}   pathCount==0: {az}")
 
     a("")
 
