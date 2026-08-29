@@ -1600,9 +1600,13 @@ This supersedes the two entries below it (each marked in place in FINDINGS):
   `--stop` waits for the artifact instead of promising it. **The testing lesson is the
   durable part: §7 asserted the `.txt` SUMMARY and never asked whether the CAPTURE
   existed**, so none of the file's checks could have caught a run that produced no data.
-  §7 now requires the `.bin` and that `readhook.py` parses it; §16 verifies the exit
-  path behaviourally against a real graceful process exit, with a control. 176 checks
-  green, floor 105 → 118. Still open: keyboard channel (client-free), mesh fattening, §1y.4's
+  §7 now requires the `.bin` and that `readhook.py` parses it; §16 verifies BOTH survival paths
+  behaviourally, one host each: a graceful exit (`DllMain`) and a hard
+  `TerminateProcess` (no `DllMain` at all — the snapshot is what survives, and that is
+  the harness's own fallback when WM_CLOSE times out). Its first version raced both
+  through one host and compared mtimes, which cannot attribute anything; chasing that red
+  found a real defect — the detach path resolved its output dir through `fopen` at
+  shutdown. **180 checks green**, floor 105 → 118. Still open: keyboard channel (client-free), mesh fattening, §1y.4's
   third carve source, retail's waypoint vocabulary (§1p.6).
 
 ### ★★★★ MOVEMENT 2026-08-28 — SUPERSEDED by the §1x entry above — THE NO-CLIP CANNOT BE SCORED WITH OUR MESH, and now we know why

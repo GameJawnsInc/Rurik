@@ -7061,14 +7061,28 @@ Floor 75 against a green 75 with 5 declared skips (the archive-conditional
   CONTROL confirms nothing is on disk mid-run so the file cannot be attributed to
   the normal ending, then its stdin is closed for a GRACEFUL exit — `TerminateProcess`
   would not run `DllMain` and a test built on `kill()` would prove nothing — and the
-  capture must appear. Two checks went red against the fix and were the test working:
-  one read `WriteFile` inside `write_bin` when that call lives in its one-line `put`
-  helper (a wrong OPERAND, the second this arc has paid for), and one still looked for
-  `snapshot(` after the detach path was inlined. The periodic snapshot itself is the
-  one property still only structural, and §16's docstring says so rather than
-  implying coverage: it needs records, and in a `cmd.exe` host no site can arm.
+  capture must appear. **§16 RUNS ONE HOST PER MECHANISM, and the reason is a red it
+  produced:** its first version tested the periodic snapshot and the exit write through
+  the SAME host and told them apart by **mtime**, which cannot work — the two writes
+  landed 86 ms apart, so the "before" reading was already the exit write's and the check
+  compared a write against itself. Neither mechanism was broken; standalone repros of
+  both passed. **Two mechanisms racing through one artifact cannot be attributed by
+  looking at the artifact.** So (f) proves the graceful-exit path, and (g) proves the
+  snapshot in a SECOND host: wait past `FLUSH_MS` (read out of the C source, never
+  restated in the test), require the file **with the host still alive**, then
+  `TerminateProcess` it — no `DllMain` runs at all — and require what survived to be a
+  capture `readhook.py` parses. That second host is the case the first cannot reach: a
+  hard kill is the harness's own fallback when WM_CLOSE times out, so without a mid-run
+  flush the fix would only have covered a graceful close. **Three checks went red against
+  the fix and all three were the test working:** one read `WriteFile` inside `write_bin`
+  when that call lives in its one-line `put` helper (a wrong OPERAND, the second this arc
+  has paid for); one still looked for `snapshot(` after the detach path was inlined; and
+  the mtime race above, which on the way turned up a genuine defect — `outdir()` reads
+  the cfg through `fopen` on every call and the DETACH path called it, at the one moment
+  the CRT cannot be trusted, so the path is now resolved once at arm time and the
+  shutdown path builds strings with kernel32 rather than `snprintf`.
   118 floor,
-  176 on a
+  180 on a
   machine with the client, a compiler, an archive and a 32-bit `cmd.exe`; each other
   section declares a skip),
   `toolkit/clientscan/test_commandertrap.py` (the hardware-breakpoint trap, and

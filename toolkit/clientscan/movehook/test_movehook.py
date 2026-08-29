@@ -1290,6 +1290,13 @@ def section_16(tmp):
         LEDGER.skip("16. durability", "movehook.c not beside the test")
         return
     src = open(src_path, encoding="utf-8", errors="replace").read()
+    # Read the flush interval OUT OF THE SOURCE rather than restating it: a
+    # test that hardcodes 15000 keeps passing after someone changes FLUSH_MS
+    # and starts measuring a window that no longer exists.
+    m_flush = re.search(r"#define\s+FLUSH_MS\s+(\d+)u?", src)
+    FLUSH_MS_S = (int(m_flush.group(1)) / 1000.0) if m_flush else 15.0
+    check(m_flush is not None, "16. movehook.c declares FLUSH_MS",
+          "the flush interval has to be a named constant the test can read")
 
     # (a) the poll loop flushes on a timer.
     try:
@@ -1429,8 +1436,9 @@ def section_16(tmp):
                 time.sleep(0.25)
             check(os.path.isfile(binfile),
                   "16. AND THE CAPTURE IS WRITTEN WHEN THE HOST EXITS MID-RUN",
-                  f"nothing at {binfile} -- this is the R5 failure exactly: a "
-                  f"run still armed when the client goes away")
+                  f"nothing at {binfile} (exit code {proc.returncode}) -- this "
+                  f"is the R5 failure exactly: a run still armed when the "
+                  f"client goes away")
             if os.path.isfile(binfile):
                 check(open(binfile, "rb").read(4) == b"MVHK",
                       "16. and it is a real capture, not a stub",
@@ -1449,7 +1457,90 @@ def section_16(tmp):
                 with open(cfg, "w", encoding="ascii", newline="\n") as fh:
                     fh.write(saved)
 
-    # (g) THE TWO DEFAULT PATHS MUST AGREE. attach.py --stop looks for the
+    # (g) THE PERIODIC SNAPSHOT, AND THE HARD KILL IT EXISTS FOR.
+    #
+    # A SEPARATE HOST FROM (f), DELIBERATELY. The first version of this tested
+    # both mechanisms through ONE file and compared mtimes to tell them apart,
+    # and it went red for a reason that was neither mechanism failing: the
+    # snapshot and the exit write landed 86 ms apart, so the "before" reading
+    # was already the exit write's. Two mechanisms racing through one artifact
+    # cannot be attributed by looking at the artifact. One host, one mechanism.
+    #
+    # What this one covers is the case (f) cannot: `TerminateProcess` does NOT
+    # run DllMain, so on a hard kill -- the harness's own fallback when WM_CLOSE
+    # times out, or an operator's taskkill -- the periodic snapshot is the only
+    # thing standing between the run and another R5.
+    if not os.path.isfile(WOW64_CMD) or not os.path.isfile(dllpath):
+        LEDGER.skip("16. the periodic snapshot", "needs cmd.exe and a built DLL")
+    else:
+        snapdir = os.path.join(tmp, "hookout-snap")
+        cfg = os.path.join(HERE, "movehook.cfg")
+        saved = open(cfg, encoding="ascii").read() if os.path.isfile(cfg) else None
+        with open(cfg, "w", encoding="ascii", newline="\n") as fh:
+            fh.write("ms=600000\nout=" + snapdir + "\n")
+        proc = subprocess.Popen([WOW64_CMD, "/k", "rem movehook snapshot test"],
+                                stdin=subprocess.PIPE,
+                                stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL,
+                                creationflags=0x08000000)
+        try:
+            import keytap
+            import inject
+            deadline = time.time() + 10
+            while time.time() < deadline:
+                try:
+                    keytap.module_base(proc.pid, "KERNEL32.DLL")
+                    break
+                except Exception:
+                    time.sleep(0.2)
+            inject.main([str(proc.pid), dllpath])
+            binfile = os.path.join(snapdir, "movehook.bin")
+            # The worker only reaches its poll loop after control B, which can
+            # wait CTLB_MS for its own hit -- so the first flush is FLUSH_MS
+            # AFTER that, not after injection. Budget both, generously.
+            deadline = time.time() + FLUSH_MS_S + 25
+            while time.time() < deadline and not os.path.isfile(binfile):
+                time.sleep(0.5)
+            alive = proc.poll() is None
+            check(os.path.isfile(binfile) and alive,
+                  "16. THE PERIODIC SNAPSHOT LANDS MID-RUN, host still alive",
+                  f"file={os.path.isfile(binfile)} alive={alive} -- without a "
+                  f"mid-run flush, a hard kill still loses the whole run and "
+                  f"the fix would only cover a graceful close")
+            # NOW KILL IT HARD. TerminateProcess runs no DllMain, so nothing
+            # more can be written: whatever is on disk is the snapshot's, and
+            # it has to be a usable capture.
+            proc.kill()
+            proc.wait(timeout=10)
+            time.sleep(1.0)
+            ok = os.path.isfile(binfile)
+            check(ok, "16. AND IT SURVIVES A HARD KILL (no DllMain runs at all)",
+                  f"nothing at {binfile} after TerminateProcess")
+            if ok:
+                try:
+                    import readhook as _rh2
+                    n = len(_rh2.Capture(binfile).recs)
+                    good, why = True, f"{n} records"
+                except Exception as ex:                        # noqa: BLE001
+                    good, why = False, f"readhook refused it: {ex}"
+                check(good,
+                      "16. and what survived is a capture readhook can parse",
+                      why)
+        except Exception as ex:                                # noqa: BLE001
+            LEDGER.skip("16. the periodic snapshot", f"host/inject failed: {ex}")
+        finally:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+            if saved is None:
+                if os.path.isfile(cfg):
+                    os.remove(cfg)
+            else:
+                with open(cfg, "w", encoding="ascii", newline="\n") as fh:
+                    fh.write(saved)
+
+    # (h) THE TWO DEFAULT PATHS MUST AGREE. attach.py --stop looks for the
     # artifact at its own default; the DLL writes at DEFDIR. If they diverge,
     # --stop reports a missing capture that is sitting on disk somewhere else.
     m = re.search(r'#define\s+DEFDIR\s+"([^"]+)"', src)

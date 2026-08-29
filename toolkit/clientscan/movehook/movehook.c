@@ -730,6 +730,35 @@ static int mkdirs(const char *dir)
  *      movehook.txt, and in a `movehook.status` file BESIDE THE DLL, which is
  *      the one place still writable when the configured output path is not.
  * ------------------------------------------------------------------------- */
+/* THE OUTPUT PATH, RESOLVED ONCE AND CACHED -- and this is not a tidy-up.
+ *
+ * `outdir()` reads movehook.cfg through fopen/fgets EVERY call. At
+ * DLL_PROCESS_DETACH every other thread has already been terminated, possibly
+ * inside the CRT holding its locks, so calling it there can return an empty
+ * buffer or hang -- and an empty dir makes write_bin fail with no file and no
+ * clue. That is the exact hazard this file already documents for the WRITER,
+ * walked into again one line away from it. Caught by test_movehook.py §16 only
+ * once the periodic snapshot existed: before that, the detach write was the
+ * first write of the run, so "a file appeared" could not tell the two apart.
+ * The mtime comparison is what made it visible.
+ *
+ * So: the worker resolves the path once, while the process is healthy, and the
+ * detach path reads this and never the file. */
+static char g_outdir[MAX_PATH];
+
+static const char *outdir_cached(void)
+{
+    return g_outdir[0] ? g_outdir : DEFDIR;
+}
+
+/* Path building for the shutdown path uses kernel32 rather than the CRT, for
+ * the same reason. lstrcpynA/lstrcatA are kernel32 exports and stay valid. */
+static void path_join(char *out, size_t n, const char *dir, const char *leaf)
+{
+    lstrcpynA(out, dir, (int)n);
+    lstrcatA(out, leaf);
+}
+
 static volatile LONG g_wrote = 0;      /* successful .bin writes this run */
 static DWORD g_werr = 0;               /* GetLastError of the last failure */
 static char  g_wpath[MAX_PATH];        /* what it was trying to write */
@@ -751,23 +780,27 @@ static int write_bin(const char *dir, DWORD n)
     unsigned i;
     int ok = 1;
 
-    if (!mkdirs(dir)) {
-        g_werr = GetLastError();
-        snprintf(g_wpath, sizeof g_wpath, "%s  (could not create directory)", dir);
+    if (!dir || !dir[0]) {                 /* an empty path writes nowhere */
+        g_werr = ERROR_BAD_PATHNAME;
+        lstrcpynA(g_wpath, "(no output directory resolved)", MAX_PATH);
         return 0;
     }
-    snprintf(path, sizeof path, "%s\\movehook.bin", dir);
+    if (!mkdirs(dir)) {
+        g_werr = GetLastError();
+        path_join(g_wpath, sizeof g_wpath, dir, "  (could not create directory)");
+        return 0;
+    }
+    path_join(path, sizeof path, dir, "\\movehook.bin");
     /* A partial file is worse than none: write beside it and rename over, so a
      * reader never sees a half-flushed snapshot. */
     {
         char tmp[MAX_PATH];
-        snprintf(tmp, sizeof tmp, "%s\\movehook.bin.part", dir);
+        path_join(tmp, sizeof tmp, dir, "\\movehook.bin.part");
         h = CreateFileA(tmp, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
                         FILE_ATTRIBUTE_NORMAL, NULL);
         if (h == INVALID_HANDLE_VALUE) {
             g_werr = GetLastError();
-            strncpy(g_wpath, tmp, sizeof g_wpath - 1);
-            g_wpath[sizeof g_wpath - 1] = 0;
+            lstrcpynA(g_wpath, tmp, MAX_PATH);
             return 0;
         }
         if (n > NCAP) n = NCAP;
@@ -792,8 +825,7 @@ static int write_bin(const char *dir, DWORD n)
             }
         }
         if (!ok) {
-            strncpy(g_wpath, path, sizeof g_wpath - 1);
-            g_wpath[sizeof g_wpath - 1] = 0;
+            lstrcpynA(g_wpath, path, MAX_PATH);
             return 0;
         }
     }
@@ -809,11 +841,17 @@ static int write_bin(const char *dir, DWORD n)
 #define FLUSH_SLACK 32u
 #define FLUSH_MS    15000u
 
+/* WRITES EVEN AT ZERO RECORDS, for the same reason the detach path does: a
+ * header-only capture still carries the per-site hit counts, and "no file at
+ * all" is the exact ambiguity that cost R5 its diagnosis. It also makes the
+ * FIRST flush a live proof that the output path works, mid-run, while the
+ * operator can still do something about it -- and it makes this path testable
+ * (test_movehook.py §16), which a `return` on empty made impossible in a host
+ * where no site can arm. */
 static void snapshot(const char *dir)
 {
     LONG n = g_n;
     n = (n > (LONG)FLUSH_SLACK) ? n - (LONG)FLUSH_SLACK : 0;
-    if (n <= 0) return;
     write_bin(dir, (DWORD)n);
 }
 
@@ -908,7 +946,8 @@ static DWORD WINAPI worker(LPVOID unused)
     /* The output directory is resolved and PROVEN WRITABLE BEFORE the run,
      * not after it. R5 spent eight minutes capturing into a path that was
      * never created; the status file says so in the first second instead. */
-    dir = outdir();
+    lstrcpynA(g_outdir, outdir(), MAX_PATH);
+    dir = outdir_cached();
     write_status(dir, "armed");
 
     waited = 0;
@@ -1025,7 +1064,7 @@ BOOL WINAPI DllMain(HINSTANCE h, DWORD reason, LPVOID reserved)
          * process exit (test_movehook.py §16), which the n > 0 version was
          * not. */
         if (!g_final_written) {
-            const char *d = outdir();
+            const char *d = outdir_cached();
             LONG n = g_n;
             n = (n > (LONG)FLUSH_SLACK) ? n - (LONG)FLUSH_SLACK : 0;
             write_bin(d, (DWORD)n);

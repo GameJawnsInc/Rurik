@@ -5408,11 +5408,53 @@ itself, and it passes.
 wrong **operand**, the second this arc has paid for. One still looked for `snapshot(`
 after the detach path was inlined.
 
-**What is still only structural, said plainly rather than implied:** the periodic
-snapshot. It needs records to write, and in a `cmd.exe` host no site can arm, so §16
-checks the loop calls it on a bounded timer and no more. §16's docstring says so.
+### 2b.3 The operator's own hypothesis, and what it changes
 
-**Suite:** `test_movehook.py` 176 checks green, floor 105 → 118.
+> *"i think i may have killed the server before running the stop, maybe that did it"*
+
+**Consistent with every piece of evidence, and it decides WHICH half of the fix carries
+the case.** The tell was always the `movehook.stop` file still sitting on disk at 21:51:
+the DLL clears it only after its poll loop exits, so nothing was alive to consume it —
+the client was already gone when `--stop` ran. `session.py`'s teardown closes the client
+on **every** path including `--keep-open`, and `drive_client.close_client` sends
+**WM_CLOSE first** (graceful, so `Gw.log` survives) with a `terminate()` fallback after
+20 s. So:
+
+| how the client goes away | what saves the capture |
+|---|---|
+| WM_CLOSE — harness teardown, or closing the window | **the `DLL_PROCESS_DETACH` write** |
+| `TerminateProcess` — the 20 s fallback, or a taskkill | **the periodic snapshot**; DllMain does not run at all |
+
+Both are now verified behaviourally, **in separate hosts**, for a reason worth keeping.
+
+### 2b.4 Two mechanisms racing through one artifact cannot be attributed by the artifact
+
+The first version of the snapshot test reused the exit test's host and told the two
+writes apart by **mtime**. It went red — and neither mechanism was broken. Standalone
+repro of the same sequence showed both working; the DLL's own status file dated the
+snapshot's write **86 ms before** the file's mtime, which means the "before" reading the
+test took was **already the exit write's**. The check was comparing a write against
+itself.
+
+Chasing that produced one genuine fix on the way, which is why the red was still worth
+having: `outdir()` reads `movehook.cfg` through `fopen` on **every call**, and the detach
+path called it — at `DLL_PROCESS_DETACH`, where every other thread is already terminated,
+possibly inside the CRT holding its locks. That is the exact hazard this file documents
+for the *writer*, walked into again one line away from it. The path is now resolved once
+at arm time into `g_outdir`, and the shutdown path builds its strings with kernel32
+(`lstrcpynA`/`lstrcatA`) rather than `snprintf`. It was not the cause of the red, and it
+is committed as a fix on its own merits — not as the answer to a question it did not
+answer.
+
+**§16 now runs one host per mechanism.** (f) injects, confirms by control that nothing is
+on disk before the first flush, then closes stdin for a **graceful** exit and requires the
+capture to appear from nothing. (g) injects a second host, waits past `FLUSH_MS` (read
+out of the C source, never restated in the test), requires the file **with the host still
+alive**, then **`TerminateProcess`es it** — no DllMain, nothing more can possibly be
+written — and requires what survived to be a capture `readhook.py` parses. That second
+host is the operator's own scenario if the WM_CLOSE path ever times out.
+
+**Suite:** `test_movehook.py` **180 checks green**, floor 105 → 118.
 
 ---
 
