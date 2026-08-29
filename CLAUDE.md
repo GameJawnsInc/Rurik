@@ -135,6 +135,13 @@ The wins in this repo all came from capturing the client and reading it, never f
 reasoning about it. Two of the three hardest questions so far were settled that way
 *against* what the written sources claimed.
 
+**Where a number comes from and how far to trust it:
+[studies/method/FINDINGS.md](studies/method/FINDINGS.md)** — the four layers (ArenaNet's
+asserts, the disassembly, an upstream file layout, our own instruments), which techniques
+belong to which, and the standing weaknesses to state out loud. Read it before quoting a
+figure you did not measure yourself; most published mistakes here are a number our own
+tool produced, later cited as if the client had said it.
+
 - **Verbatim-first.** Real bytes → replicate ONE piece → verify. Offline agreement
   between two of our own components proves nothing.
 - **Label every claim.** The vocabulary is defined in
