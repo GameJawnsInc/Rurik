@@ -1570,6 +1570,22 @@ This supersedes the two entries below it (each marked in place in FINDINGS):
   r 21–70 u, per-cell CSR proven 990/990) and is NOT this defect (0/1,199 samples inside
   any circle). Filed: likely `PathApi:753/754`'s data. Also filed: 14/92 prop models
   carry collision sub-meshes, merge UNRESOLVED, compile-experiment specimen named.
+* **★ THE BRIDGE AND THE STUCK CLIENT, 2026-08-29 (§1z-c) — a PLANE channel nobody
+  has scored, and the first captured movement LOCK.** `noclipscore.py` read 0 off-mesh
+  on a capture taken *because* the operator had walked under a bridge twice: §1w.7's
+  "plane-blindness is irrelevant" is true for HOLES and false for DECKS. New section C
+  finds **6 plane anomalies in r5bridge, 0 in r5 (reported as ZERO EXPOSURE, not
+  clean), 5 in r4a** — orthogonal to 2D coverage. **The stuck client is the arc's most
+  diagnostic capture:** body frozen 0 u in 22.9 s, `agapi_setdest`/`chcli_advance`
+  **0 hits** against 49 clicks that each solved a path, **all 49 queries starting from
+  plane 41 where the mesh offers only 0**, fence SHUT 110/110 (healthy: 804 OPEN), 93
+  gateless `ResyncAllAsync` reseeds re-pinning at 0.0 u. Reconstruction: an install
+  carries a STALE plane (B3-3 Q5's "the plane rides along unchanged"), the client
+  cannot resolve its own position, so no path is driven and it cannot re-plane itself
+  — **a plane desync is a LOCK where a position desync is a warp.** Our `route()` is
+  more forgiving and cannot reproduce it. REFUTED by control: zero-length grants (the
+  healthy run has 76/76 and does not lock). NEXT: a `MapFindPath` RETURN tap turns the
+  one inferred link into a measurement. New test: `toolkit/clientscan/test_noclipscore.py`.
 * **R5b RAN 2026-08-29 (§1z-b) — the instrument fix carried it (9 writes, error 0)
   and ALL FOUR predictions read with exposure.** P1 met (699 samples, **zero** deeper
   than 1 u off-mesh, vs r4a's 21 at 65–391 u); P2 met and stronger (**24/26** chords

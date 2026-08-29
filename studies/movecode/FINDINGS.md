@@ -5519,6 +5519,108 @@ geometry did not change, the grant content did.
 whether anything is walkable-through around the west bridge — needs a run whose
 `--stop` comes after it.
 
+## 1z-c. THE BRIDGE, AND THE STUCK CLIENT — a PLANE channel the arc has never scored, and the first captured client-side movement LOCK
+
+**OBSERVED 2026-08-29**, two operator-driven captures: `r5bridge` (45 s, the bridge
+walk the operator went back for) and `r5stuck` (23 s, armed *after* the client had
+already stopped responding to move commands). Both `--router --map 280`. Scored with
+`noclipscore.py`, which this section extends.
+
+### 1z-c.1 The instrument was blind again, in the other direction
+
+**§1w.7 established that plane-blindness is irrelevant to a carved HOLE.** That is
+true, and it is exactly what made this look settled. **A BRIDGE is the other case, and
+there the plane is the entire question**: `containing(x, y)` unions all 68 planes, so a
+body on a deck and a body on the ground *under* that deck are the same query and both
+score on-mesh.
+
+`noclipscore.py` section A read **0 off-mesh on a capture the operator took because
+they had just walked under a bridge twice.** New **section C** asks the plane-aware
+question — `m_point` has carried it all along (`float x, float y, int plane, int`):
+
+| capture | stacked samples | declares a plane the mesh lacks | section A |
+|---|---|---|---|
+| **r5bridge** | 10 | **6** | 0 |
+| r5 (§1z-b) | 0 | 0 — and it now says **ZERO EXPOSURE**, not "clean" | 0 |
+| r4a (`--click-echo`) | 13 | 5 | 21 deep |
+
+The r5bridge anomalies are the operator's two episodes: the body on **plane 37 where
+the mesh offers only 0** at (−1031.5, 6282.8) and (−1467.9, 6420.9), and on **plane 0
+where the mesh offers only 37** at (−2821.9, 6404.3). Deck-over-ground, both
+directions. **This channel is orthogonal to everything the arc has scored** — a plane
+anomaly is invisible to 2D coverage, and 2D depth is invisible to the plane test.
+
+*Two defects were found in `noclipscore.py` writing this: section B `return`ed when a
+capture had fewer than two clicks, which SILENTLY SKIPPED section C — a keyboard-only
+walk would have been scored with the one section that can see a bridge missing. And the
+zero case had to be given words: a run with no stacked geometry anywhere now says ZERO
+EXPOSURE rather than reporting a reassuring zero.* `toolkit/clientscan/test_noclipscore.py`
+holds all of it, including a control that a body on the plane the mesh DOES offer is
+not flagged, and fixtures that prove their own premise against the real mesh first.
+
+### 1z-c.2 THE STUCK CLIENT: the plane was impossible, and the client could not path out of it
+
+The operator got **stuck in open ground** — no move command worked — and armed the hook
+while stuck. It is the most diagnostic capture in the arc.
+
+**What the client did, OBSERVED:**
+
+* **The body never moved: 0 u of path in 22.9 s**, both copies.
+* **The walker NEVER RAN.** `agapi_setdest` **0 hits**, `chcli_advance` **0 hits** —
+  against 49 clicks that each reached `chcli_point` and each produced a `MapFindPath`.
+  The client solved a path for every click and drove the body with none of them.
+* **All 49 path queries start from plane 41 at (−2803.4, 509.4), where our decode
+  offers only plane 0** (46 of them asking for a plane-0 goal). **68 of 68 body samples
+  declare that same impossible plane.**
+* **The fence is SHUT on 110 of 110 reads** (`clientControlled == 0`), against
+  **804 OPEN / 11 SHUT** in the healthy run — the cleanest client-side discriminator
+  the arc has.
+* `m_timeStopMovement` is **0 on every one of the 186 display-body records**; in the
+  healthy run it varies.
+* **93 gateless reseeds** (`ResyncAllAsync`, the route §1s.1 could never catch firing
+  cold) re-install the position **at 0.0 u separation** — 93 no-ops that keep the bad
+  (x, y, plane) alive.
+
+**The mechanism, RECONSTRUCTION from pieces the arc already owns:** the client's
+point-resolve indexes `pt.plane` into its plane array (§1x.4's decode of `0x0072B840`,
+guarded by `Array.h`'s bounds assert), and B3-3 Q5 measured that on an install **"the
+plane rides along unchanged"** — `SetPosition`/teleport copy the 16-byte point, so a
+relocation can carry a STALE plane to a new (x, y). A start point whose plane does not
+contain it cannot resolve; the query yields no path; nothing calls `setdest`; the body
+cannot walk — and because it cannot walk, it can never re-plane itself. **A plane
+desync is a movement LOCK, where a position desync is only a warp.**
+
+**Our own router is MORE FORGIVING and cannot reproduce it:** `route()` from that point
+returns a 2-waypoint path from plane 41 *and* from plane 0. So the server would happily
+keep granting legal paths to a client that cannot move — which is exactly what the log
+shows.
+
+**What our server contributed, and it is not the cause:** 100 of 127 router rows are
+`kbd-drop` (79%, against 13% in the healthy run) — every click refused under believed
+keyboard authority — and 58 zero-lead grants pinned the frozen position. So *clicks*
+were dropped by us while *keyboard* movement was locked client-side. Both inputs dead,
+two different reasons.
+
+**REFUTED, by its own control:** the first hypothesis here was that zero-length grants
+(destination == the reported position) caused the lock. **The healthy run has 76 of 76
+zero-length grants and a 46.7 s stretch at one position**, and did not lock. The
+discriminator is the plane and the fence, not the grant length.
+
+### 1z-c.3 What is NOT established
+
+The causal chain from the impossible plane to the dead walker is **RECONSTRUCTION**: we
+observe the queries and the silence after them, not the client's failure to resolve.
+Plane indices are our decode's; they come from the same file the client reads, but the
+identity is assumed. **The onset is not captured** — the hook was armed after the lock
+— so what set plane 41 is unmeasured. `r4a` carries the mirror anomaly 200 u away
+(declaring plane 0 where the mesh offers 41), so this neighbourhood produces plane
+confusion under both policies.
+
+**The cheapest next measurement** is a `MapFindPath` RETURN tap (`0x00709F0F`,
+`0x00709F44`, `0x0070A0AD`, `0x0070A0D4` — named in `content/movecode.toml`'s own
+`limits` note): it would turn "the client asked from an impossible plane" into "the
+client got pathCount 0", which is the one link this section infers.
+
 ---
 
 ## 2. Corrections to the record

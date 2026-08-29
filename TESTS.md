@@ -6839,6 +6839,31 @@ Floor 75 against a green 75 with 5 declared skips (the archive-conditional
   goes red on a rebuild rather than letting the tool read a stale address, and
   SKIPs with its reason when the vault is absent; §4 pins that a NULL context
   is reported rather than dereferenced. Floor 7, instant),
+  `toolkit/clientscan/test_noclipscore.py` (**the no-clip scorer's PLANE channel,
+  and the blind spot that cost it two no-clips**). `noclipscore.py` came out of the
+  obstacle dig (FINDINGS §1x) and reproduced r4a's numbers exactly — then read
+  **section A: 0 off-mesh** on `r5bridge`, a capture the operator took *because* they
+  had just walked under a bridge twice. `containing(x, y)` UNIONS ALL 68 PLANES, so a
+  body on a deck and a body on the ground under it are the same query and both score
+  on-mesh. FINDINGS §1w.7 had established plane-blindness is irrelevant to a carved
+  HOLE — true, and precisely what made this look settled; a bridge is the other case.
+  So this file holds section C to three properties the old code fails: an anomalous
+  sample is **reported**; **section A stays blind to that same sample**, which is what
+  proves the two sections measure different things rather than one restating the other
+  (the two-instruments-one-theorem trap); and a run with no stacked geometry says
+  **ZERO EXPOSURE in those words** rather than a reassuring zero. A fourth check is the
+  control that matters — a body on the plane the mesh DOES offer must NOT be flagged,
+  or the detector would report every run as a no-clip. The fixtures are synthetic
+  captures over the REAL map-280 mesh built from `readhook._LAYOUTS` (so fixture and
+  parser share one description of the record, test_movehook §11's discipline), and
+  **each fixture proves its own premise first** — the coordinates came out of a
+  capture, so the file asserts the mesh really offers only the plane it claims before
+  asserting anything about the detector. Writing it found a second defect: section B
+  `return`ed on a capture with fewer than two clicks, which SILENTLY SKIPPED section C
+  — a keyboard-only walk would have been scored with the one section that can see a
+  bridge missing. 8 floor, 9 on a machine with the archive; skips whole if the archive
+  or `sites.h` is absent.
+
   `toolkit/clientscan/movehook/test_movehook.py` (**MOVECODE-B2's hook DLL, and
   the first test any hook in this repo has ever had.** `trnhook/` has none, and
   `srclint` therefore imposed nothing on it — which was *silence, not a ruling*,

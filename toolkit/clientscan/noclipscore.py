@@ -202,16 +202,21 @@ def main(argv=None):
     # ---- B. rapid-pair chords ----------------------------------------
     clicks = clicks_with_dests(cap, names)
     print(f"\nB. clicks with destinations: {len(clicks)}")
-    if len(clicks) < 2:
+    # A SECTION THAT CANNOT RUN MUST NOT TAKE THE OTHERS WITH IT. This used to
+    # `return 0` here, so a capture with fewer than two clicks -- a keyboard-only
+    # walk, or the synthetic fixtures in test_noclipscore.py -- printed sections
+    # A and B and SILENTLY SKIPPED the plane-aware section C, which is the one
+    # that can see a bridge. Say the section is unexercised and carry on.
+    do_chords = len(clicks) >= 2
+    if not do_chords:
         print("   fewer than 2 clicks -- chord section CANNOT RUN "
               "(not a zero; the section is unexercised)")
-        return 0
     ticks = [s[0] for s in sm]
     import bisect
     crossing = fully = 0
     pairs = 0
     worst = None
-    for i in range(1, len(clicks)):
+    for i in (range(1, len(clicks)) if do_chords else ()):
         t, dx, dy = clicks[i]
         if t - clicks[i - 1][0] > args.pair_ms:
             continue
@@ -234,16 +239,56 @@ def main(argv=None):
             crossing += 1
             if worst is None or frac < worst[0]:
                 worst = (frac, L, t)
-    print(f"   rapid pairs (gap <= {args.pair_ms} ms): {pairs}")
-    if pairs == 0:
-        print("   ZERO rapid pairs -- the repro manoeuvre was not exercised; "
-              "chord verdicts cannot be read from this run")
-        return 0
-    print(f"   chords fully covered: {fully}   crossing uncovered ground: "
-          f"{crossing}")
-    if worst:
-        print(f"   worst chord: {worst[0] * 100:.1f}% covered over "
-              f"{worst[1]:.0f} u at tick {worst[2]}")
+    if do_chords:
+        print(f"   rapid pairs (gap <= {args.pair_ms} ms): {pairs}")
+        if pairs == 0:
+            print("   ZERO rapid pairs -- the repro manoeuvre was not "
+                  "exercised; chord verdicts cannot be read from this run")
+        else:
+            print(f"   chords fully covered: {fully}   crossing uncovered "
+                  f"ground: {crossing}")
+            if worst:
+                print(f"   worst chord: {worst[0] * 100:.1f}% covered over "
+                      f"{worst[1]:.0f} u at tick {worst[2]}")
+    # ---- C. plane-aware: the case 2D coverage CANNOT see -------------
+    #
+    # THIS SECTION EXISTS BECAUSE SECTION A READ ZERO ON A CAPTURE THAT HAD
+    # TWO NO-CLIPS IN IT. `containing()` unions all 68 planes, so a body on a
+    # bridge DECK and a body on the ground UNDER that deck are the same (x, y)
+    # and both score on-mesh. FINDINGS §1w.7 established that plane-blindness
+    # is irrelevant to a carved HOLE -- true, and it made this look settled --
+    # but a bridge is the other case, and there it is the whole question.
+    # `m_point` has carried the plane all along: it is 16 bytes, `float x,
+    # float y, int plane, int`.
+    anom, stacked = [], 0
+    for tick, x, y, site in sm:
+        cont = pm.containing(x, y)
+        if not cont:
+            continue
+        offer = {t.plane for t in cont}
+        if len(offer) > 1:
+            stacked += 1
+        # The plane the body DECLARES is not one the mesh offers here.
+        rec_plane = None
+        for r in cap.recs:
+            if r["tick"] == tick and r.get("have_agent") and r["ecx"] == ecx:
+                rec_plane = r["point"][2]
+                break
+        if rec_plane is not None and rec_plane not in offer:
+            anom.append((tick, x, y, rec_plane, sorted(offer)))
+    print(f"\nC. plane-aware (the case 2D coverage cannot see)")
+    print(f"   samples standing on STACKED ground (>1 plane here): {stacked}")
+    print(f"   samples declaring a plane the mesh does NOT offer:  {len(anom)}")
+    if not stacked and not anom:
+        print("   no stacked geometry anywhere the body went -- this run had ZERO "
+              "EXPOSURE to the bridge/deck case, which is not the same as a clean "
+              "result")
+    for tick, x, y, p, offer in anom[:20]:
+        print(f"     tick {tick}  ({x:8.1f},{y:8.1f})  declares plane {p:3d}, "
+              f"mesh offers {offer[:6]}")
+    if len(anom) > 20:
+        print(f"     ... and {len(anom) - 20} more")
+
     print("\nReading: under a straight-line-granting policy the crossing count "
           "is the no-clip exposure; under --router the GRANTED legs are legal "
           "by construction, so a body still crossing uncovered ground deeper "
