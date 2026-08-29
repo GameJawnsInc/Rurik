@@ -1752,9 +1752,30 @@ This supersedes the two entries below it (each marked in place in FINDINGS):
   on 42 of 86 bent-path rows our route is a bare straight line. §17f pins it,
   floor 153 → 157. Also: the 63 OFF-MESH are NOT our decode gap (61 are
   unwalkable click destinations the client's own solver also refuses);
-  OURS-FAILED and BOTH-FAILED both read 0. Filed unfixed: `--map auto` ranks
-  the WRONG map first (no area term; the wrong map would show OFF-MESH 3 not
-  63) and its guard only fires in the looks-BAD direction; `readhook`'s motion
+  OURS-FAILED and BOTH-FAILED both read 0.
+* **★ THE MAP IDENTIFIER PICKED THE WRONG MAP — FIXED 2026-08-29 (§1z-j),
+  desk-only.** `--map auto` scored the fraction of endpoints landing on each
+  mesh, **which has an AREA TERM: a bigger mesh swallows any point cloud.** On
+  r7 (a map-280 capture) **Sparkfly Swamp scored 99.3 % against map 280's
+  81.8 % and WON**, refused only by the margin rule with 2.5 points to spare;
+  over five labelled captures the shipped score was right **2 of 5**, both of
+  those being ties at margin 0.000. Believed, it reports **OFF-MESH 3 instead
+  of 63** — the wrong map makes our decode look **20× better**, and OFF-MESH is
+  the Q2 signal the tool exists to produce. The guard beside it fired only
+  BELOW 50 % coverage, i.e. only when a wrong map looked BAD — **a guard that
+  only fires when the answer already looks wrong is not a guard.** FIX: a
+  second term with no area in it — the client's own PLANE word, conditioned on
+  the points that landed (so size cancels), restricted to NON-ZERO planes
+  (plane 0 exists on every mesh and agrees by coincidence; plain agreement
+  still reads 59–67 % on wrong meshes), falling back to all-plane agreement
+  when a capture has no plane signal. **2 of 5 → 5 of 5**, margins 0.799 /
+  0.875 / 0.613 / 0.438 / 0.071; Sparkfly now ranks **11th of 13** on r7.
+  **THE REFUSAL THRESHOLDS ARE UNCHANGED** — the score was the broken part, not
+  the guard, and §18 asserts that so a future loosening cannot pass as "making
+  the fix work". The explicit-`--map` cross-check now speaks in BOTH
+  directions and names the better-fitting mesh. `test_movehook.py` §18, 8
+  checks, pinned against the REAL impostor plus the control that a correct map
+  is not called out. Still filed unfixed: `readhook`'s motion
   denominator is off by 27 points from two `ptime == 0` records;
   `nearest_walkable` over-reports depth up to 3×; RET_MAX_POINTS should rise
   4 → 9.

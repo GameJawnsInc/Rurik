@@ -6506,13 +6506,8 @@ five-valued split of §1z-h.3 stands** — THEIRS-FAILED reads `out_count` direc
 
 ### 1z-i.6 Filed, not fixed
 
-* **`pathdiff --map auto` ranks the WRONG map first.** Sparkfly Swamp scores
-  99.3 % against map 280's 81.8 % on a map-280 capture, because the score has no
-  area term and Sparkfly's mesh is 4.6× larger. It refused only on its margin
-  rule, with 2.5 points to spare. Worse, the explicit-`--map` guard only fires
-  **below** 50 % coverage — it is built entirely for wrong-map-looks-BAD and is
-  silent on wrong-map-looks-GOOD, which is the direction a reader believes: the
-  wrong map would have shown OFF-MESH 3 instead of 63.
+* ~~**`pathdiff --map auto` ranks the WRONG map first.**~~ **FIXED, §1z-j
+  below.**
 * **`readhook`'s motion denominator** includes two `ptime == 0` records (the
   run's first setter/bake, a stamp never set), inflating the span 193.5 s →
   280.6 s and the printed "in motion" from **89.7 % to 61.8 %** — a 27-point
@@ -6525,6 +6520,82 @@ five-valued split of §1z-h.3 stands** — THEIRS-FAILED reads `out_count` direc
   confirmed live (arg4 is 9 or 4 and nothing else, 214/214), so at 9 the field
   can never truncate for either known caller. Cost: +2.5 MB of the client's
   address space. Sequence it after the metric fix, which is now done.
+
+---
+
+## 1z-j. THE MAP IDENTIFIER PICKED THE WRONG MAP — the score had an AREA TERM, and the guard beside it only looked one way
+
+**FIXED 2026-08-29, desk-only.** §1z-i.6 filed this; it is closed here.
+
+### 1z-j.1 The defect, in both halves
+
+`pathdiff --map auto` scored each candidate mesh by *the fraction of captured
+endpoints that land on it* — **which has an area term by construction: a bigger
+mesh swallows any point cloud.** On r7, a map-280 capture, **Sparkfly Swamp
+scored 99.3 % against map 280's own 81.8 % and WON.** `auto` refused only
+because of its 0.20 margin rule, with 2.5 points to spare.
+
+Measured over five labelled captures, the shipped score put the true map first
+in **2 of 5** — and both of those "wins" were ties at margin 0.000.
+
+The guard beside it could not catch this either. It warned only when coverage
+fell **below 50 %**, and its own text said *"a wrong map produces 100 % OFF-MESH
+and looks like a result"* — it was built entirely for the direction where a
+wrong map looks **BAD**. The direction that actually fools a reader is the
+other one: believed on r7, Sparkfly reports **OFF-MESH 3 (1.4 %) instead of 63
+(29.4 %)** — the wrong map makes our decode look **20× better**, and OFF-MESH is
+the MOVECODE-Q2 signal the tool exists to produce. **A guard that only fires
+when the answer already looks wrong is not a guard.**
+
+### 1z-j.2 The fix: a second term with no area in it
+
+The client's own **plane word**. Every query's from-point carries the plane the
+client believed it was on; on the right mesh that plane is one `containing()`
+offers there, and on a wrong mesh it is a coincidence. The term is
+**conditioned on the points that landed**, so mesh size cancels out of it.
+
+**Restricted to NON-ZERO planes**, and that restriction is what makes it sharp:
+plane 0 exists on every mesh and covers most of it, so a point declaring 0
+agrees with a wrong mesh by coincidence — plain plane agreement still reads
+59–67 % on wrong meshes. It falls back to all-plane agreement when a capture
+has no non-zero declarations, which is honest rather than clever: such a
+capture has no plane signal and should land under the refusal bar.
+
+Score = `on-mesh fraction × non-zero-plane agreement`. Measured over the same
+five labelled captures:
+
+| capture | true map | old score | new score | new margin |
+|---|---|---|---|---|
+| r7 | 0x287B3 | **WRONG** (Sparkfly) | ✅ | 0.799 |
+| run2-2026-08-27 | 0x1B97D | ✅ (tie, 0.000) | ✅ | 0.875 |
+| r6b | 0x287B3 | **WRONG** (Sparkfly) | ✅ | 0.613 |
+| r5bridge | 0x287B3 | **WRONG** (Ascalon) | ✅ | 0.438 |
+| run3-isle | 0x287B3 | ✅ (0.071) | ✅ | 0.071 |
+
+**2 of 5 → 5 of 5.** Under the new score Sparkfly ranks **11th of 13** on r7
+despite its 99.3 % coverage, because its plane agreement is 0 %.
+
+**THE REFUSAL THRESHOLDS ARE UNCHANGED** (`best < 0.6` or `margin < 0.2`
+refuses), and that is deliberate: *the score was the broken part, not the
+guard.* run3-isle — 7 queries with **zero** non-zero-plane points — still falls
+under the bar and is refused rather than guessed, which is the right answer for
+a capture with no plane signal. §18 asserts the thresholds are unchanged, so a
+future weakening cannot be smuggled in as "making the fix pass".
+
+### 1z-j.3 And the other half: the cross-check now speaks in both directions
+
+`cross_check_map()` scores the **named** map against every candidate with the
+same discriminator and says so when it loses. It never overrides the operator —
+an explicit `--map` is a decision — it only refuses to stay silent. On r7 with
+`--map 0x46305` it now prints `ANOTHER MESH FITS THIS CAPTURE BETTER` and names
+map 280, immediately above the flattering `OFF-MESH 3` it would otherwise have
+handed a reader unchallenged.
+
+`test_movehook.py` §18 pins both halves against a **real** known-bad arm rather
+than a constructed one — the mesh that actually beat the true map — plus the
+control that the correct map produces no warning (a guard that fires on the
+right answer too is noise). Eight checks; archive-dependent, so the floor does
+not move.
 
 ---
 

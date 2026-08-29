@@ -7207,8 +7207,32 @@ the same-tick ALIAS**: the
   `UNREADABLE` is checked separately from `pathCount == 0` for the reason
   `have_fence` exists: pathCount 0 IS §4.2's registered lock prediction, so merging
   "could not read it" into it would manufacture evidence for the thing being tested.
-  153 floor,
-  254 on a
+  **§17f and §18 are the two defects R7 found in our own scorers, each pinned
+  against a known-bad arm.** §17f: the shape metric was a TAUTOLOGY — it compared
+  our route's last point to the client's last waypoint, and the callee overwrites
+  that slot with the requested destination verbatim while `route()` ends at the goal
+  by construction, so both operands were the destination. The gap read exactly 0.0
+  on 129 of 131 live comparisons, DIFFER never fired once in 214 queries, and a
+  deliberate 800 u perpendicular detour scored PERFECT AGREEMENT. §17f asserts the
+  replacement (symmetric Hausdorff) ranks that same detour badly, and demonstrates
+  the disqualified last-point form scoring both identically right beside it.
+  **§18 is the map identifier, and it is the sharper lesson**: `--map auto` scored
+  the fraction of endpoints landing on each mesh — a score with an AREA TERM, so a
+  bigger mesh swallows any point cloud. On the r7 capture Sparkfly Swamp scored
+  99.3% against map 280's own 81.8% and WON; believed, it reports OFF-MESH 3 instead
+  of 63, making our decode look **20× better** in exactly the signal the tool exists
+  to produce. The old guard beside it fired only BELOW 50% coverage — built for the
+  direction where a wrong map looks BAD — and **a guard that only fires when the
+  answer already looks wrong is not a guard.** The fix adds the client's own PLANE
+  word, conditioned on the points that landed so size cancels, restricted to
+  non-zero planes because plane 0 agrees by coincidence on any mesh. §18's known-bad
+  arm is a REAL one rather than a constructed one — the mesh that actually beat the
+  true map — and it asserts the REFUSAL THRESHOLDS ARE UNCHANGED, so a future
+  loosening cannot be smuggled in as "making the fix pass". It carries the control
+  that a correct map produces no warning, because a guard that fires on the right
+  answer too is noise. Archive-dependent, so the floor does not move for it.
+  157 floor,
+  273 on a
   machine with the client, a compiler, an archive and a 32-bit `cmd.exe`; each other
   section declares a skip),
   `toolkit/clientscan/test_commandertrap.py` (the hardware-breakpoint trap, and

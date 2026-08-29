@@ -270,18 +270,38 @@ def score_paired(pm, pairs, list_n=0):
     return rows, tally
 
 
-def identify(qs):
-    """Work out WHICH map a capture came from, by asking every rowed mesh.
+def map_scores(qs):
+    """Score every rowed mesh against a capture. -> [(score, fid, pm, detail)].
 
-    A capture does not record its map, so `--map` is a value a human types from
-    memory -- and the wrong mesh does not error, it answers. Every point lands
-    off-mesh, `pathdiff` reports OFF-MESH for all of them, and that reads exactly
-    like the decode gap this tool exists to find. That is the worst possible failure
-    for an instrument whose interesting answer is "our mesh is wrong".
+    THE SHIPPED SCORE WAS THE FRACTION OF ENDPOINTS THAT LAND ON THE MESH, AND
+    IT HAS AN AREA TERM BY CONSTRUCTION -- a bigger mesh swallows any point
+    cloud. Measured on r7 (a map-280 capture): Sparkfly Swamp scored 99.3%
+    against map 280's own 81.8% and WON, and `auto` refused only on its margin
+    rule with 2.5 points to spare. Over five labelled captures that score put
+    the true map first in 2 of 5, and both of its "wins" were ties at margin
+    0.000. Had it been believed on r7 the reader would have seen OFF-MESH 3
+    instead of 63 -- the wrong map makes our decode look 20x BETTER, and
+    OFF-MESH is the MOVECODE-Q2 signal this tool exists to find.
 
-    So: score the captured endpoints against each candidate and let the data pick.
-    The right map puts nearly every point ON its mesh; a wrong one puts nearly none.
-    REFUSES when the winner is not clear-cut, rather than guessing.
+    THE FIX IS A SECOND TERM WITH NO AREA IN IT: the client's own PLANE word.
+    Every query's from-point carries the plane the client believed it was on
+    (`pt_a` slot 2). On the right mesh that plane is one `containing()` offers
+    there; on a wrong mesh it is a coincidence. The term is CONDITIONED on the
+    points that landed, so mesh size cancels out of it.
+
+    RESTRICTED TO NON-ZERO PLANES, and that restriction is what makes it sharp.
+    Plane 0 exists on every mesh and covers most of it, so a point declaring 0
+    agrees with a WRONG mesh by coincidence -- plain plane agreement still reads
+    59-67% on wrong meshes. Falls back to all-planes agreement when a capture
+    has no non-zero declarations, which is honest rather than clever: such a
+    capture has no plane signal and should land under the refusal bar.
+
+    MEASURED over five labelled captures (r7, run2-2026-08-27 = Ascalon, r6b,
+    r5bridge, run3-isle): the product ranks the true map FIRST in 5 of 5, with
+    winning margins 0.799 / 0.875 / 0.613 / 0.438 and one at 0.071 -- the last
+    being run3-isle, 7 queries with ZERO non-zero-plane points, which correctly
+    falls below the refusal bar rather than being guessed. THE THRESHOLDS BELOW
+    ARE UNCHANGED: the score was the broken part, not the guard.
     """
     from pathmap import PathingMap
     from archive import Archive, file_id_table
@@ -292,10 +312,7 @@ def identify(qs):
         if q.dst:
             pts.append((q.dst[0], q.dst[1]))
     if not pts:
-        print("")
-        print("cannot identify the map: no query in this capture carries "
-              "coordinates.")
-        return None, None
+        return None
     try:
         import content as content_mod
         t = content_mod.load()
@@ -303,9 +320,8 @@ def identify(qs):
         fids = sorted({r["file_id"] for r in (t.get("map") or {}).values()
                        if r.get("file_id")})
     except Exception as ex:
-        print("")
-        print(f"cannot identify the map: no content rows ({ex})")
-        return None, None
+        print(f"\ncannot score maps: no content rows ({ex})")
+        return None
 
     ar = Archive()
     table = file_id_table(ar)
@@ -315,18 +331,52 @@ def identify(qs):
             pm = PathingMap.load(fid, archive=ar, table=table)
         except Exception:
             continue
-        on = sum(1 for x, y in pts if pm.walkable(x, y))
-        scored.append((on / len(pts), fid, pm))
+        on = sum(1 for x, y in pts if pm.walkable(x, y)) / len(pts)
+        land = agree = nz_land = nz_agree = 0
+        for q in qs:
+            if not q.src:
+                continue
+            cont = pm.containing(q.src[0], q.src[1])
+            if not cont:
+                continue
+            offer = {t2.plane for t2 in cont}
+            land += 1
+            if q.src[2] in offer:
+                agree += 1
+            if q.src[2] != 0:
+                nz_land += 1
+                if q.src[2] in offer:
+                    nz_agree += 1
+        allp = (agree / land) if land else 0.0
+        plane = (nz_agree / nz_land) if nz_land else allp
+        scored.append((on * plane, fid, pm,
+                       f"{100.0 * on:5.1f}% on mesh x {100.0 * plane:5.1f}% "
+                       f"plane-agree (n={nz_land or land}"
+                       f"{'' if nz_land else ', all-plane fallback'})"))
     scored.sort(reverse=True, key=lambda r: r[0])
+    return scored or None
+
+
+def identify(qs):
+    """Work out WHICH map a capture came from, by asking every rowed mesh.
+
+    A capture does not record its map, so `--map` is a value a human types from
+    memory -- and the wrong mesh does not error, it answers. See `map_scores`
+    for what is scored and why the obvious score was wrong in the direction that
+    matters. REFUSES when the winner is not clear-cut, rather than guessing.
+    """
+    scored = map_scores(qs)
     if not scored:
         print("")
-        print("cannot identify the map: no candidate mesh loaded.")
+        print("cannot identify the map: no candidate mesh scored (no "
+              "coordinates in the capture, or no content rows).")
         return None, None
     print("")
-    print(f"identifying the map from {len(pts)} captured point(s):")
-    for frac, fid, _pm in scored[:5]:
-        print(f"   0x{fid:<7X} {100.0 * frac:5.1f}% on mesh")
-    best, runner = scored[0], (scored[1] if len(scored) > 1 else (0.0, 0, None))
+    print(f"identifying the map from {len(qs)} captured quer(y|ies):")
+    for sc, fid, _pm, detail in scored[:5]:
+        print(f"   0x{fid:<7X} score {sc:.3f}   {detail}")
+    best = scored[0]
+    runner = scored[1] if len(scored) > 1 else (0.0, 0, None, "")
     if best[0] < 0.6 or best[0] - runner[0] < 0.2:
         print("")
         print("REFUSING to pick: no candidate is a clear winner. Pass --map "
@@ -335,6 +385,48 @@ def identify(qs):
         return None, None
     print(f"   -> 0x{best[1]:X}")
     return best[1], best[2]
+
+
+def cross_check_map(qs, fid):
+    """When --map is EXPLICIT: does another mesh fit this capture better?
+
+    THE GUARD THIS REPLACES WAS POINTED ONE WAY ONLY. It warned when coverage
+    fell below 50%, and its own text said "a wrong map produces 100% OFF-MESH
+    and looks like a result" -- built entirely for the direction where a wrong
+    map looks BAD. The direction that actually fools a reader is the other one:
+    on r7 the wrong mesh looked BETTER (99.3% vs 81.8% on-mesh), and a reader
+    who typed it would have seen OFF-MESH 3 instead of 63 and concluded our
+    decode was fine. A guard that only fires when the answer already looks
+    wrong cannot catch the answer that looks right.
+
+    So this scores the named map against every other candidate with the same
+    discriminator and says so when it loses. It never overrides the operator --
+    an explicit --map is a decision -- it only refuses to stay silent.
+    """
+    scored = map_scores(qs)
+    if not scored:
+        return
+    rank = [r[1] for r in scored]
+    if fid not in rank:
+        print(f"\n!! map 0x{fid:X} is not in the content rows, so it could not "
+              f"be cross-checked against the alternatives.")
+        return
+    pos = rank.index(fid) + 1
+    mine = scored[pos - 1]
+    best = scored[0]
+    print(f"\nmap cross-check: 0x{fid:X} scores {mine[0]:.3f} "
+          f"({mine[3]}) -- rank {pos} of {len(scored)}")
+    if pos == 1:
+        return
+    print(f"!! ANOTHER MESH FITS THIS CAPTURE BETTER: 0x{best[1]:X} scores "
+          f"{best[0]:.3f} ({best[3]}).")
+    print("   A wrong map does not error, it ANSWERS -- and it can answer in "
+          "the flattering")
+    print("   direction: a larger mesh swallows the point cloud and every "
+          "OFF-MESH verdict")
+    print("   disappears. Check --map before reading anything below as a "
+          "finding about our")
+    print("   decode. `--map auto` prints the full ranking.")
 
 
 def main():
@@ -385,12 +477,13 @@ def main():
     else:
         fid = int(a.map, 0)
         pm = PathingMap.load(fid)
-        # CROSS-CHECK the map you were TOLD, because the wrong one does not error
-        # -- it reports every point OFF-MESH, which reads exactly like the decode
-        # gap this tool exists to find. `auto` alone cannot identify a map (meshes
-        # overlap in coordinate space; run 2's points sit on two different maps at
-        # 100%), but it can say "the one you named is not among the plausible ones",
-        # and that is the half worth having.
+        # CROSS-CHECK the map you were TOLD, IN BOTH DIRECTIONS. The wrong map
+        # does not error, it ANSWERS -- and it can answer either way round. The
+        # old check here fired only when coverage fell below 50%, i.e. only when
+        # the wrong map looked BAD; r7 proved the other direction is the one that
+        # fools a reader (a larger mesh scored 99.3% against the true map's 81.8%
+        # and would have shown OFF-MESH 3 instead of 63). `cross_check_map` ranks
+        # the named map against every candidate and says so when it loses.
         pts = [(q.src[0], q.src[1]) for q in qs if q.src]
         pts += [(q.dst[0], q.dst[1]) for q in qs if q.dst]
         if pts:
@@ -405,6 +498,9 @@ def main():
                       "anything below")
                 print("   as a finding -- a wrong map produces 100% OFF-MESH and "
                       "looks like a result.")
+        usable_for_check = [q for q in qs if q.src and q.dst]
+        if usable_for_check:
+            cross_check_map(usable_for_check, fid)
     print(f"our mesh: map file 0x{fid:X}, {len(pm.trapezoids)} trapezoid(s), "
           f"{len(pm.planes)} plane(s)")
 

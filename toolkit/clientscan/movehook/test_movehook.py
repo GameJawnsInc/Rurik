@@ -96,11 +96,11 @@ import checks                                                   # noqa: E402
 # ZERO, so a bare machine must still clear 105.
 #
 # 2026-08-29, THE RETURN TAP. Re-counted per section out of a real green run on
-# this machine, which is now 265 (was 215):
+# this machine, which is now 273 (was 215):
 #
 #   §1   6  §2  39  §3   4  §4  16  §5   6  §6   2  §7  11  §8   2  §9  13
 #   §10  8  §11  4  §12  6  §13  5  §14 63  §15  3  §15b 4  §16 25
-#   §17 37  §17e 7  §17f 4
+#   §17 37  §17e 7  §17f 4  §18 8
 #
 # CLIENT-DEPENDENT (opens the vaulted image): §1, §2, and the three
 # `gensites.verify()` blocks inside §14 and the six inside §17.
@@ -108,6 +108,10 @@ import checks                                                   # noqa: E402
 # PROCESS-FREE CORE, which is what the floor is:
 #   §3 4 + §4 16 + §5 6 + §9 13 + §11 4 + §12 6 + §13 5 + §14 54 + §15 3
 #   + §15b 4 + §17 31 + §17e 7 + §17f 4 = 157.
+#
+# §18 (map identification, 8 checks) needs the vaulted archive AND the r7
+# capture, so it is NOT in the core and the floor does not move for it --
+# it skips cleanly on a machine without them.
 #
 # §17 SPLITS the way §14 does and the split was read off the banner, not
 # reasoned about: 37 checks, of which 6 (the generator's own gate plus its five
@@ -2023,6 +2027,98 @@ def _flt(f):
     return struct.unpack("<I", struct.pack("<f", f))[0]
 
 
+# ---------------------------------------------------------------- §18
+def section_18():
+    """MAP IDENTIFICATION: the score must not be won by mesh SIZE.
+
+    THIS SECTION EXISTS BECAUSE THE SHIPPED SCORER PICKED THE WRONG MAP AND
+    THE GUARD BESIDE IT COULD NOT SEE THAT HAPPEN. `--map auto` scored the
+    fraction of captured endpoints landing on each candidate mesh, which has an
+    area term by construction -- a bigger mesh swallows any point cloud. On r7,
+    a map-280 capture, Sparkfly Swamp scored 99.3% against map 280's own 81.8%
+    and WON; `auto` refused only on its margin rule, with 2.5 points to spare.
+    Believed, it would have reported OFF-MESH 3 instead of 63 -- the wrong map
+    makes our decode look 20x BETTER, and OFF-MESH is the very signal this tool
+    exists to produce. The old cross-check could not catch it either: it fired
+    only below 50% coverage, i.e. only when a wrong map looked BAD.
+
+    The fix adds the client's own PLANE word as a second term -- conditioned on
+    the points that landed, so mesh size cancels -- restricted to NON-ZERO
+    planes, because plane 0 exists on every mesh and agrees by coincidence.
+
+    Both halves are checked here, and the second is the one that matters: a
+    guard that only fires when the answer already looks wrong is not a guard.
+    """
+    try:
+        import pathdiff
+        import readhook as rh
+        import pinned
+        if not pinned.find():
+            raise RuntimeError("no pinned client")
+    except BaseException as ex:                              # noqa: BLE001
+        LEDGER.skip("18. map identification", f"needs the vault: {ex}")
+        return
+    binp = os.path.join(r"C:\gd\Rurik\vault\research\movecode\r7", "movehook.bin")
+    if not os.path.isfile(binp):
+        LEDGER.skip("18. map identification", "the r7 capture is not in the vault")
+        return
+    try:
+        cap = rh.Capture(binp)
+        names = rh.site_names(cap)
+        qs = [q for q in (pathdiff.queries(cap, names) or []) if q.src and q.dst]
+        scored = pathdiff.map_scores(qs)
+    except Exception as ex:                                  # noqa: BLE001
+        LEDGER.skip("18. map identification", f"could not score: {ex}")
+        return
+    check(bool(scored), "18. the r7 capture scores against the candidate meshes")
+    if not scored:
+        return
+    TRUE, BIG = 0x287B3, 0x46305         # map 280; Sparkfly, the 99.3% impostor
+    rank = [r[1] for r in scored]
+    eq(rank[0], TRUE, "18. the TRUE map (0x287B3) ranks first")
+    # THE KNOWN-BAD ARM, and it is a real one rather than a constructed one:
+    # the mesh that beat the true map under the old score must now lose.
+    if BIG in rank:
+        big_pos = rank.index(BIG) + 1
+        check(big_pos > 1,
+              f"18. and the impostor mesh 0x{BIG:X} -- which WON under the "
+              f"area-biased score at 99.3% coverage -- now ranks #{big_pos}",
+              "a scorer that still prefers the larger mesh is the shipped bug")
+        big = scored[big_pos - 1]
+        check(big[0] < scored[0][0],
+              "18. the impostor's SCORE is below the true map's",
+              f"impostor {big[0]:.3f} vs true {scored[0][0]:.3f}")
+    # The margin must clear the module's own refusal bar, or `auto` refuses on
+    # a capture it can actually identify.
+    margin = scored[0][0] - (scored[1][0] if len(scored) > 1 else 0.0)
+    check(scored[0][0] >= 0.6 and margin >= 0.2,
+          f"18. and the win clears the refusal bar (score {scored[0][0]:.3f}, "
+          f"margin {margin:.3f}) -- thresholds UNCHANGED by the fix",
+          "the score was the broken part, not the guard; if this fails the "
+          "thresholds were loosened to make a weak score pass")
+    # THE OTHER HALF: the explicit-map cross-check must SPEAK when the named
+    # map loses. It printed nothing in the flattering direction before.
+    import io
+    import contextlib
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        pathdiff.cross_check_map(qs, BIG)
+    said = buf.getvalue()
+    check("ANOTHER MESH FITS THIS CAPTURE BETTER" in said,
+          "18. naming the impostor map explicitly is CALLED OUT",
+          f"the cross-check said:\n{said}")
+    check(f"0x{TRUE:X}" in said,
+          "18. and the warning names the mesh that fits better",
+          f"{said}")
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        pathdiff.cross_check_map(qs, TRUE)
+    quiet = buf.getvalue()
+    check("ANOTHER MESH FITS" not in quiet,
+          "18. CONTROL: naming the CORRECT map is not called out",
+          f"a guard that fires on the right answer too is noise:\n{quiet}")
+
+
 def _synth_capture(tmp, name, recs, nsites, ver=7):
     """A movehook capture built from readhook's OWN layout for `ver`.
 
@@ -2072,6 +2168,7 @@ def main():
     section_15()
     section_16(tmp)
     section_17(tmp)
+    section_18()
     return LEDGER.verdict()
 
 
