@@ -8,6 +8,8 @@
 > is still untried). Bonus: the echo census read 4/349 — all four the
 > operator's under-bridge GLITCH clicks relayed verbatim (a new subclass), and
 > the under-bridge itself is settled as a glitch, not a decode gap.
+> **The completion run is §6** — ordinary play to the 15-minute floor, hook ON
+> as lock insurance, fresh out dir `r6b`.
 
 **Written 2026-08-29, after §1z-e; four-skeptic review applied before it landed**
 (the review found the original watch-terminal-1 protocol unexecutable and the
@@ -275,3 +277,49 @@ due-ladder transitions around any event, section C's stacked and anomaly
 counts, P2's exposure verdict, and — if a lock happened — the operator's own
 words for what the body did after each release-paused click. That last sentence
 is the heal's verdict; no instrument substitutes for it.
+
+## 6. The COMPLETION RUN (R6b) — after §1z-f scored the first execution
+
+The first execution (§1z-f) left two floors short: P1 needs ≥15 minutes of
+play (R6 gave 7.8) and P2's wall slid instead of pinning. This section is that
+completion, simplified — **no bridge phase is required** (P3 is MET; more
+carry exposure is free bonus, not a floor) and there is nothing to provoke:
+the run is ordinary play, at length.
+
+**The hook is ON as lock insurance, not for any registered floor.** P1's whole
+readout is server-side, so `movehook` buys nothing this run is scored on —
+but a lock is the one event that cannot be scheduled, and with the hook armed
+a heal gets its MECHANICAL witness: r5stuck's client-side signature was 49
+clicks and queries with **zero** `agapi_setdest`/`chcli_advance`, so a
+post-fire click that makes the walker sites fire again is the walker
+demonstrably reviving — the nearest thing to §4.2's RETURN-tap answer the
+current instrument can give. Skipping the hook loses only that; if the
+two minutes of overhead are unwanted, run without it and a lock still scores
+per §3.4 (server-side + the operator's words).
+
+Terminals 1 and 1b: identical to §2. Terminal 2, **armed right after you are
+in the map** (no bridge-arrival wait — there is no exposure phase to cover),
+with a FRESH out dir — never re-point at `r6`, the first run's capture lives
+there:
+
+```
+python toolkit/clientscan/movehook/attach.py --minutes 16 --out vault/research/movecode/r6b
+```
+
+(16 min covers the 15-min floor from map entry; ring-safe — 32,768 records at
+16 min tolerates a 34 rec/s average against a measured corpus peak of ~30,
+and an ordinary session idles more than R6's bridge phase did. Ring-full is a
+truncation that still writes the bin, not a loss.)
+
+Play: **at least 15 minutes of ordinary walking and clicking, timed by the
+clock, not by feel.** Optionally, ONE more P2 attempt — a concave corner
+(two walls meeting) rather than a flat wall face, ~10 s, wall clock noted;
+if the body slides again, P2 is dropped at this site and that is the answer
+(one attempt, not a hunt — the control is optional, the floor is not). If the
+body locks, §3.4's protocol applies unchanged, release-paused clicks and all.
+
+Scoring: §5 unchanged (the one-liner, the ladder, the press-window check if
+attempted; with the hook on, `noclipscore.py --bin
+vault/research/movecode/r6b/movehook.bin` comes free). The healthy-branch
+deliverable is one line: ≥15 min, zero fires, ladder never armed — P1's floor
+finally met on a prospective session.
