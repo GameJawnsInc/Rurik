@@ -108,7 +108,16 @@ def pick_local(cap, names):
 
 
 def body_samples(cap, names, ecx):
-    """Deduped (tick, x, y) positions for one object, position-reporting sites."""
+    """Deduped (tick, x, y, site, plane) for one object, position-reporting sites.
+
+    The plane is the RECORD'S OWN `point[2]`, carried with the sample -- section C
+    used to re-find it by (tick, ecx) over cap.recs, which grabs the FIRST record
+    at that tick and can alias when records share a tick: on k2-2 that erased two
+    real anomalies (seq 436: own plane 31 on offered {0}; seq 472: own plane 0 on
+    offered {32}), each scored "ok" off an earlier same-tick record's plane. The
+    dedupe key includes the plane for the same reason -- a same-tick same-point
+    record declaring a DIFFERENT plane is a distinct fact, not a duplicate.
+    """
     keep = ("bake", "setter", "teleport", "setposition", "reseed", "agtrack",
             "snaptest")
     out = []
@@ -120,10 +129,11 @@ def body_samples(cap, names, ecx):
         x, y = _f(r["point"][0]), _f(r["point"][1])
         if not (finite(x) and finite(y)):
             continue
-        if out and out[-1][0] == r["tick"] and \
+        plane = r["point"][2]
+        if out and out[-1][0] == r["tick"] and out[-1][4] == plane and \
                 abs(out[-1][1] - x) < 1e-6 and abs(out[-1][2] - y) < 1e-6:
             continue
-        out.append((r["tick"], x, y, names[r["site"]]))
+        out.append((r["tick"], x, y, names[r["site"]], plane))
     return out
 
 
@@ -184,7 +194,7 @@ def main(argv=None):
     # ---- A. walked-sample census -------------------------------------
     sm = body_samples(cap, names, ecx)
     off = []
-    for tick, x, y, site in sm:
+    for tick, x, y, site, _plane in sm:
         if not pm.containing(x, y):
             nw = pm.nearest_walkable(x, y, 600.0)
             depth = nw[2] if nw else 600.0
@@ -224,7 +234,7 @@ def main(argv=None):
         j = bisect.bisect_right(ticks, t) - 1
         if j < 0:
             continue
-        _, ox, oy, _ = sm[j]
+        _, ox, oy, _, _ = sm[j]
         L = math.hypot(dx - ox, dy - oy)
         n = max(1, int(L / args.step))
         cov = 0
@@ -261,20 +271,19 @@ def main(argv=None):
     # `m_point` has carried the plane all along: it is 16 bytes, `float x,
     # float y, int plane, int`.
     anom, stacked = [], 0
-    for tick, x, y, site in sm:
+    for tick, x, y, site, rec_plane in sm:
         cont = pm.containing(x, y)
         if not cont:
             continue
         offer = {t.plane for t in cont}
         if len(offer) > 1:
             stacked += 1
-        # The plane the body DECLARES is not one the mesh offers here.
-        rec_plane = None
-        for r in cap.recs:
-            if r["tick"] == tick and r.get("have_agent") and r["ecx"] == ecx:
-                rec_plane = r["point"][2]
-                break
-        if rec_plane is not None and rec_plane not in offer:
+        # The plane the body DECLARES is not one the mesh offers here. The
+        # declared plane is the sample's OWN record's point[2] -- an earlier
+        # version re-found it by (tick, ecx) over cap.recs, which reads the
+        # FIRST record at the tick and erased two real k2-2 anomalies whose
+        # own plane differed from a same-tick sibling's (see body_samples).
+        if rec_plane not in offer:
             anom.append((tick, x, y, rec_plane, sorted(offer)))
     print(f"\nC. plane-aware (the case 2D coverage cannot see)")
     print(f"   samples standing on STACKED ground (>1 plane here): {stacked}")

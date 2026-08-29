@@ -6913,8 +6913,15 @@ Floor 75 against a green 75 with 5 declared skips (the archive-conditional
   asserting anything about the detector. Writing it found a second defect: section B
   `return`ed on a capture with fewer than two clicks, which SILENTLY SKIPPED section C
   — a keyboard-only walk would have been scored with the one section that can see a
-  bridge missing. 8 floor, 9 on a machine with the archive; skips whole if the archive
-  or `sites.h` is absent.
+  bridge missing. **§5 (2026-08-29, FINDINGS §1z-e.1) pins the same-tick ALIAS**: the
+  old section C re-found each sample's plane by (tick, ecx), reading the FIRST record
+  at the tick — which erased two real k2-2 anomalies whose own plane differed from a
+  same-tick sibling's. The fixture is two same-tick records where the first record's
+  plane is legal at the second's point; own-plane scoring flags both, the aliased
+  lookup flagged one, and the check was proven red against the pre-fix code before it
+  shipped. Under the fixed lookup the published §1z-c counts move deliberately
+  (r5bridge 6→8, r4a 5→8, r5 stays 0). Floor 9, 10 on a machine with the archive;
+  skips whole if the archive or `sites.h` is absent.
 
   `toolkit/clientscan/movehook/test_movehook.py` (**MOVECODE-B2's hook DLL, and
   the first test any hook in this repo has ever had.** `trnhook/` has none, and

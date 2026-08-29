@@ -5744,6 +5744,213 @@ client's plane-carry is the client's, we only heal its consequence.
 
 ---
 
+## 1z-e. THE CORPUS ALREADY HELD TWO MORE LOCKS — the sweep, the replay, and a poisoning loop on tape
+
+**OBSERVED 2026-08-29, desk-only** — no client run, two instruments over evidence that
+already existed: §1z-c's section-C question asked of **every** movehook capture in the
+corpus (13; it had only ever run on three), and the shipped `plane_repair_track`
+replayed over **every** gamesrv session JSONL (1,209 files). This is §4.3 of
+[HANDOFF-PLANE.md](HANDOFF-PLANE.md) executed, and the handoff's instinct ("mine
+before registering another run; the corpus often already holds the event") was right
+twice over. One correction first: §1z-d.2 above says `test_planerepair.py` "35
+checks, floor 30" — the shipped file declares **floor 36** and the handoff's "41
+checks, floor 36" is current; the smaller figures predate the review's additions.
+
+### 1z-e.1 The census: the plane-carry is COMMON, it self-heals, and it is not map-specific
+
+Method: same body-sample selection as `noclipscore.py` section C (position-reporting
+sites, local body by bake/setter census), but each record's **own** `point[2]` as its
+declared plane — section C dedupes same-tick samples and re-found the plane by tick,
+which aliases when records share a tick, so its counts were lower (k1-treatment: 48
+deduped anomalies vs 78 raw impossible records; same events, different denominators).
+The review showed the alias is not only a denominator difference: **on k2-2 it
+erased two real anomalies outright** (seq 436, own plane 31 on offered {0}; seq 472,
+own plane 0 on offered {32} — each scored "ok" off a same-tick sibling's plane).
+**Section C is fixed in this commit** — it now carries each record's own plane
+(`test_noclipscore.py` §5 pins the alias shape, red against the pre-fix code) — and
+the published §1z-c counts move under the fixed lookup, deliberately: **r5bridge
+6 → 8, r4a 5 → 8, r5 stays 0 (zero exposure)**. The mover is the fix, not the
+corpus.
+Consecutive impossible samples group into episodes; an episode closes on the first
+sample whose declared plane the mesh offers. Meshes pinned per capture from the run
+records (never selected): map 280's `0x287B3` for the r/k/isle/snap/v5 series,
+Ascalon's `0x1B97D` for run-1/run-2. Analyzer and per-capture output:
+`vault/research/movecode/plane-sweep/`.
+
+| capture | mesh | body records | impossible | episodes |
+|---|---|---|---|---|
+| r5stuck | 280 | 51 | **51** | 1 — the §1z-c lock, capture starts mid-lock |
+| k1-treatment | 280 | 362 | 78 | 2 — one server-stamped (§1z-e.4), one ends the capture INTO lock #3 |
+| k2 | 280 | 382 | 3 | 1 |
+| k2-2 | 280 | 168 | 24 | 4 |
+| r1b1 | 280 | 660 | 0 | 0 — with stacked-ground exposure (7 deduped samples on >1-plane ground) |
+| r1b2 | 280 | 1,257 | 0 | 0 — exposure 3 (thin, stated) |
+| r2 | 280 | 3,418 | 40 | 3 |
+| r3 | 280 | 947 | 0 | 0 — exposure 51, the solid null |
+| run3-isle | 280 | 1,314 | 7 | 1 |
+| run4-snap | 280 | 183 | 14 | 2 |
+| run5-v5 | 280 | 1,209 | 21 | 3 |
+| run-ascalon (§1c) | 148 | 1,168 | 31 | 4 — the last ends the capture INTO lock #2 |
+| run2 (§1e) | 148 | 78 | 6 | 2 |
+
+* **13 of the 22 non-lock episodes are strict carries**: the declared plane equals the
+  plane of the last legal sample — the body walks off plane-N ground and keeps saying
+  N. Durations 0.2–18.6 s; **20 of 22 self-heal on tape** (the client re-planes and
+  walks on); the two that do not are the two whose captures end inside them, and each
+  is the client-side face of a server-side lock below.
+* **The carry appears at one boundary in BOTH directions.** Around map 280's 0|17
+  boundary (x ≈ −6300..−5900), run4/run5 episodes declare 17 on {0} ground and
+  r2/run3/k2-2 episodes declare 0 on {17} ground — the declared plane follows where
+  the body CAME FROM, not a fixed side of the line. Two carry episodes also span
+  1,667 u and 2,717 u of walking. RECONSTRUCTION: these are temporal carries (the
+  client's plane word lagging its ground), not a spatial offset in our decode — a
+  decode offset predicts one fixed (declared, offered) pair per boundary regardless
+  of travel direction, and no plausible offset is 1,667 u wide. The 9-of-198
+  decode-hole class may still own individual episodes; nothing here rules a specific
+  episode either way.
+* **The remaining 9 episodes** are boundary tangles (multi-plane walks), two
+  cases where the declared plane matches nothing the body had recently stood on
+  (k1's dissolved under review into the client's own reseed machinery flapping at a
+  seam — §1z-e.4; run2's is unattributed), and the two lock onsets. The strict
+  SAME/other split also undercounts carries: the ascalon lock onset declares 29 held
+  from the episode before last, across one legal plane-0 touch — a carry by any
+  reasonable reading, "other" by the strict criterion.
+* The three zero captures had exposure (stacked-ground samples: 7 / 3 / 51), so the
+  nulls are non-vacuous — though r1b2's 3 is thin and is stated rather than leaned on.
+
+### 1z-e.2 The replay: three sessions fire, and all three are REAL
+
+`plane_repair_track`, exactly as shipped, fed every `position_report` row with
+`source == "0x003D"` in session order (`moving=1` throughout — the row does not
+record the movementType enum, and the arm's own census has never seen a pure-turn
+0x003D in 7,988 records; stop rows excluded exactly as the live call site excludes
+them). **The mesh is PINNED per session from the session's own tape** — word 3 of its
+`INSTANCE_LOAD_INFO` send, resolved through `content/maps.toml` — never voted: a
+13-mesh containment vote was tried first and collapsed eligibility 70 → 6, which is
+§1v.3's wrong-map selector measured from the other side (meshes overlap in world
+coordinates; Sparkfly contains map-280 walks).
+
+Coverage, with every skip counted — and CORRECTED by the pre-publication review,
+which found the first pass's label parse wanting: 1,209 files scanned; 112 sessions
+carry ≥ 6 0x003D reports. The first pass scored **47** under their pinned mesh and
+screened **63** "no-map-row" sessions under both arc meshes (zero fires; its one
+screen fire dissolved — a session starting at Ascalon's own spawn (9826, 8077),
+mis-screened under the 280 mesh, clean under its own). The review then showed the
+63-session pool was **manufactured by an exact-match on the `INSTANCE_LOAD_INFO`
+label** — 235 files carry suffixed labels (`INSTANCE_LOAD_INFO [is_explorable=1,
+FORCED]`), and with a prefix match **every session with position rows names its
+served map**. Re-screened under true served meshes: zero fires, unchanged. Even the
+two map-167 sessions (08-22, 114 + 24 rows; that map's mesh id is absent from the
+default archive) score zero fires under the authored ashcoil mesh in the run
+archive — every report claims plane 0, the mesh's only plane, so the streak never
+arms. The independent replay also reproduced the result on both clocks (`t` and
+`wall_unix`), found no other session whose streak held even 3.0 s, and measured the
+tightest fire margin at 72 ms over HOLD — the "exactly three" is not
+threshold-fragile.
+
+**Result: three sessions fire; zero fires anywhere else.**
+
+| session | map | fires (t, restamp, claimed plane) | what it is |
+|---|---|---|---|
+| `authsrv-20260829T091543` | 280 | 44.98 / 55.12 / 70.80 → 0, claimed 41 | **the §1z-c lock** — reproduces §1z-d's replay numbers exactly, from the shipped code, independently |
+| `authsrv-20260827T055221` | 148 | 339.56 → 0, claimed 29 | **lock #2**, §1z-e.3 |
+| `authsrv-20260827T212317` | 280 | 115.88 → 0, claimed 31 | **lock #3**, §1z-e.4 |
+
+The "zero fires in a healthy run" clause of §1z-d survives, sharpened: zero fires in
+every session that did not contain a real frozen-impossible-plane episode — and the
+trigger retro-discovered two locks nobody had reported.
+
+### 1z-e.3 Lock #2 — Ascalon, 2026-08-27 05:52, §1c's own session
+
+The session behind §1c's run 1 (`run-2026-08-27-ascalon`; no run doc names the
+session, so the pairing is fingerprinted: the frozen coordinate's float BIT patterns
+(x=1178283849, y=1176759779) appear in 35 bin records spanning 59.7 s — the same
+59.69 s window as the session's frozen reports — and the GetTickCount boot-epoch
+anchor (2026-08-20 20:53:44 ± 3 s, agreed by four captures) nests the bin's record
+window 05:54:01–05:58:24 inside this session and no other; the only other map-148
+sessions that day are two ~4 s aborted logins with zero position reports. Do not
+date these bins by mtime — both 08-27 bins' mtimes are copy-out artifacts). The client froze
+at (11979.82, 10491.47) declaring plane 29 where the mesh offers only {0}:
+**t=294.8..354.5, every report at one byte-identical coordinate, accepted, in mash
+bursts** — a burst, a **36 s pause**, a burst — while the zero-lead grants echoed
+plane 29 back throughout. Then the reports stop entirely at t=354.5 and the session
+sits silent for 9.2 minutes until the client force-closes the connection at t=907 —
+**10.2 minutes from freeze to kill**. The client-side capture ends inside the same episode (its v1 instrument had
+no click/query/walker sites, so §1z-c's dead-walker signature cannot be read from it;
+the server tape is the evidence here). Onset, same shape as §1z-d: plane 29 was
+carried through a 12.6 s WALKING episode (2,866 u), one legal plane-0 sample, then
+two client-side jumps (4,562 u and 4,393 u within 0.8 s — the first refused by trust,
+the second accepted) into the frozen point, still claiming 29.
+
+The replay consequence worth keeping: **the burst-pause-burst mash delays the first
+fire to ~45 s after freeze onset** — the 36 s silence exceeds `PLANE_REPAIR_GAP` and
+re-arms the clock, by design ("one keypress cannot inherit a minutes-old streak").
+The constants' REFUSED-IF does not trigger (the freeze is byte-identical, no drift),
+but §1z-d.3's "~5 s to first fire" is now known to hold only for a continuously
+mashing victim; a despairing one is healed on the next mash burst instead.
+
+### 1z-e.4 Lock #3 — the K1 treatment session, and a poison story REFUTED by its own review
+
+`authsrv-20260827T212317` is the K1 keep-alive re-grant treatment session (§1l's
+arm; the pairing is fingerprinted — the session's byte-exact
+(−5933.03955078125, −2195.1767578125) plane-0 rows sit on 6 byte-exact records in
+the k1 bin, only this session holds `keepalive_verdict` rows, and its two
+`fired: true` at t=79.69/80.86 are §1l.3's exact figures). Two things on this tape:
+
+* **A poison story this section's first draft told, and the pre-publication review
+  REFUTED — kept because the refutation is the finding.** The draft read: client
+  reports plane 22 (t=79.16, 0x003D) → keepalive re-grant emits plane 0 from stale
+  state (t=79.69) → client adopts 0 on {22} ground (t=79.97). The skeptic dumped the
+  window WITHOUT the draft's 0x003D-only filter and the story inverts: **the client
+  itself reported plane 0 first, in a 0x0047 stop-report at t=79.373 at that exact
+  coordinate** — the draft's dump had filtered out the stop arm — and the era's code
+  (ddff031) builds the keepalive from `state["plane"]`+`state["client_pos"]`,
+  written together on the accept path by that very stop. The client-side hook agrees:
+  the displayed body's plane flips 0↔22 by its OWN reseed/teleport machinery (first
+  flip t≈79.05, before any keepalive ever fired; only 2 keepalives fired in the whole
+  228.7 s session), the keepalive's 0x0029 lands on the **parked sync twin**, not the
+  displayed body, and the t=80.56 flip to 22 happens AGAINST the server's latest
+  plane word. **The server relays here too — §1z-d's "never invents a wrong plane"
+  survives a second test it could have failed.** The client flapping its own plane at
+  a boundary seam is itself a real observation (it is the carry class churning), and
+  one residue stays PLAUSIBLE and filed: the two later flips each landed on the same
+  frame as a `ZERO LEAD` whose field-4 carry word matched the flip's target — a
+  grant-triggered client reseed through THAT field is a different mechanism than the
+  refuted one and is worth its own probe; the first flip had no wire trigger at all.
+* **The lock.** t=110.66: with the body walking at carried plane 31 (the client
+  capture's second episode — 1,667 u of walking, declaring 31), the client reports
+  from (−5919, −165), **4,745 u away, with no server send in between** — a
+  client-side rollback, §1h's class — and keeps plane 31, which the mesh does not
+  offer there. It then mashes (move types 1/2/4, headings changing, position
+  byte-identical) for 6 s until the reports stop; the session sits silent and the
+  client force-closes at t=228.7. The client-side hook had been stopped at 109.7 s —
+  **seconds before the freeze** — so the capture ends into the lock (the §5.2
+  `--stop` trap, already biting on 08-27).
+
+### 1z-e.5 What this changes in §1z-d.3's registered prediction
+
+* **All three locks share the onset shape**: a legally-acquired plane carried across
+  a discontinuity — a walked boundary (§1z-d), or a client-side rollback jump (both
+  08-27 locks) — onto ground that does not offer it. The rollback variant is new:
+  the discontinuity does not have to be walked.
+* **"A healed lock shows exactly ONE fire" is WEAKENED as a discriminator.** Both
+  historical locks also show exactly one replayed fire — because the victim's report
+  stream ENDS (gives up, then force-closes), not because anything healed. A single
+  fire followed by stream-end is what an unhealed lock looks like too. The live
+  discriminator is unchanged from the part that mattered: **movement resumes after
+  fire #1**. Repeat fires still refute the agent+0x80 heal reconstruction.
+* **Prevalence**: 3 locks in the 112 movement sessions the corpus holds (all
+  scored, after the review closed the coverage holes) — but the
+  two 08-27 locks happened under refuted-and-retired policies (K1's keepalive
+  re-grant; §1c's era), so this is not a rate for the shipped default. Under the
+  router-era defaults the count is 1 (r5stuck), from one day of runs.
+* **The silent-lock blind spot has a measured grey zone**: lock #2's victim paused
+  36 s mid-lock. The repair heals such a victim on their next mash burst; a victim
+  who never presses again stays invisible, as §1z-d.3 already states — and both
+  08-27 sessions END in exactly that silent phase, minutes of it.
+
+---
+
 ## 2. Corrections to the record
 
 Each of these was in circulation and each is now measured against the bytes.

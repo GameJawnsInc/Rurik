@@ -28,6 +28,18 @@ impossible plane, and the walker never ran. **A plane desync is a LOCK where a p
 desync is only a warp**, because a client that cannot resolve its own position cannot
 walk to ground that would re-plane it.
 
+**UPDATE 2026-08-29, later the same day (§1z-e): §4.3 below was executed and the
+corpus already held TWO MORE LOCKS** — Ascalon 08-27 05:52 (§1c's own session, 10.2
+minutes from freeze to force-close) and the K1 treatment session 08-27 21:23. The
+shipped repair replayed over all 1,209 session JSONLs fires on exactly those three
+sessions and nowhere else (verified by an independent replay on both clocks; no
+other session's streak held even 3 s). A first-draft claim that the K1 tape showed
+the server POISONING the client's plane was **refuted in review** — the client's own
+0x0047 stop-report carried plane 0 first and the keepalive echoed it; the flap is
+the client's own reseed machinery (§1z-e.4 keeps the refutation). Read §1z-e before
+§4.1 — it weakens the "one fire = healed" discriminator (both historical locks show
+one fire because the victim GAVE UP, not because anything healed).
+
 ## 2. What is measured, and what is still inference
 
 Keep this split. §1z-d's headline rests on the left column; the right column is what the
@@ -41,6 +53,9 @@ next measurement is for.
 | The freeze: 82 accepted reports (81 `in-budget` + 1 `stop-report`), one byte-identical coordinate, plane 41, **40.4 s** (t=39.87..80.23) | |
 | The echo census: **43 of 65** outbound plane-bearing sends impossible in the stuck session, against **0 of 285** across three healthy ones (r5bridge 53, r5 128, 08-28 104) — r5bridge's 9 legitimate plane-37 deck grants are the positive control | |
 | Fence SHUT 110/110 in the lock vs 804 OPEN/11 SHUT healthy; `agapi_setdest`/`chcli_advance` **0 hits** against 49 clicks that each solved a path | |
+| **NEW (§1z-e):** two more locks in the historical corpus, both 08-27, both preceded by a client-side rollback jump carrying a stale plane; the replayed trigger fires on exactly the three lock sessions across 1,209 files, zero others | Whether either 08-27 victim experienced the freeze as a lock (the tape shape says yes — mash, silence, force-close — but nobody asked the operator) |
+| **NEW (§1z-e.4):** the K1 session's plane flap 0↔22 is the CLIENT's own reseed/teleport machinery — first flip precedes any keepalive; the keepalive's plane word is a verbatim echo of the client's own 0x0047 stop (a first-draft "server poisons the client" reading was REFUTED in review: the draft's dump filtered out the stop arm); §1z-d's "the server never invents a wrong plane" survives a second test | Whether ZERO LEAD's field-4 carry word contributes to the flap — two flips landed on the same frame as a matching carry word; the first flip had no wire trigger. A probe question, not a claim |
+| **NEW (§1z-e.1):** the plane-carry is common and self-healing — 13/22 corpus episodes are strict carries (declared = just-left plane), both directions at one boundary, 20/22 heal on tape; the 2 that do not are the two locks' onsets | That every carry episode is temporal rather than a decode hole — argued from direction-follows-travel and 1,667–2,717 u episode spans, but no specific episode is ruled either way |
 
 **Refuted by its own control, do not re-propose:** zero-length grants as the lock's
 cause. The healthy run has 76/76 zero-length grants and a 46.7 s stretch at one
@@ -86,12 +101,21 @@ it, because a healthy run is supposed to produce **zero** fires. Registered pred
 the `plane_repair_due` ladder reaches `plane-lock` within ~5 s of the first continuous
 report episode at a frozen point; numbered `PLANE-REPAIR` rows go out at most every
 10 s; and — the part no replay can score — **the client walks on the next click after
-fire #1, so a healed lock shows exactly ONE fire.** Repeat fire numbers refute the
-`agent+0x80` heal reconstruction, not the trigger.
+fire #1.** Repeat fire numbers refute the `agent+0x80` heal reconstruction, not the
+trigger. **REVISED by §1z-e.5: "exactly ONE fire" alone does NOT confirm the heal** —
+both historical locks show exactly one replayed fire because the victim's stream ends
+(gives up, force-closes). The heal's signal is specifically movement resuming after
+fire #1. And ~5 s holds only for a continuously mashing victim: lock #2's
+burst–36 s pause–burst cadence pushes the first fire to ~45 s after onset (the GAP
+re-arm working as designed; the victim is healed on their next burst instead).
 
 The offline replay of the shipped design over `r5stuck` fires at t=44.98, 55.12, 70.80
 — first fire 5.11 s after the freeze, and all three legitimate, since that client
-stayed locked for the whole capture with no repair in existence.
+stayed locked for the whole capture with no repair in existence. §1z-e.2 extends this
+replay to the whole session corpus: three lock sessions fire, zero of the other 109
+do — all 112 movement sessions scored once the review closed the first pass's
+label-parse holes (§1z-e.2), the two map-167 sessions included (clean under the
+run archive's own authored mesh).
 
 ### 4.2 The `MapFindPath` RETURN tap — the cheapest measurement left
 
@@ -110,13 +134,17 @@ neither. This is a real extension to `movehook.c`, testable offline the way §16
 queries return `pathCount == 0`, and the first post-repair query starts from the
 restamped plane and returns `pathCount > 0`.
 
-### 4.3 Sweep the corpus with section C
+### 4.3 Sweep the corpus with section C — ✅ DONE 2026-08-29, and it paid twice
 
-Cheap, no client. `noclipscore.py` section C has only ever run on three captures. The
-corpus holds many more, and `r4a` already carries the mirror anomaly 200 u from the lock
-site (declaring plane 0 where the mesh offers 41) — that neighbourhood produces plane
-confusion under both policies. Mine before registering another run; the corpus often
-already holds the event.
+**Executed as §1z-e** (client-capture census + whole-corpus repair replay), scripts
+and outputs in `vault/research/movecode/plane-sweep/`. Found: two more locks (both
+08-27), the carry-class census, and the whole-corpus false-positive validation of
+the shipped trigger (three lock sessions fire, zero others across 1,209 files).
+Also found, by the review: a first-draft "server poisons the client's plane" story
+refuted (the client's own 0x0047 stop carried the plane first — §1z-e.4), and a
+real alias defect in section C's plane lookup (it erases 2 real anomalies in k2-2).
+What it did NOT find: any lock under the router-era defaults other than r5stuck,
+and any fire that dissolves into trigger noise.
 
 ### 4.4 Known blind spots, none of them closed
 

@@ -1605,6 +1605,39 @@ This supersedes the two entries below it (each marked in place in FINDINGS):
   agent+0x80 heal reconstruction, not the trigger. Still open: the `MapFindPath`
   RETURN tap (now also scores whether the restamp revives the walker), the
   silent-lock case (no 0x003D stream, no evidence), NPC planes.
+* **★ THE CORPUS ALREADY HELD TWO MORE LOCKS, 2026-08-29 (§1z-e), desk-only.**
+  HANDOFF-PLANE §4.3 executed: section-C census over all 13 movehook captures +
+  the shipped `plane_repair_track` replayed over all 1,209 session JSONLs (mesh
+  pinned per session from its own INSTANCE_LOAD_INFO — a 13-mesh containment vote
+  was tried and collapses 70→6 eligible, §1v.3 from the other side). **Three
+  sessions fire, zero others: the r5stuck lock (t=44.98/55.12/70.80, reproducing
+  §1z-d's replay from the shipped code) and two RETRO-DISCOVERED locks from
+  08-27** — Ascalon 05:52 (§1c's session: frozen at (11979.82, 10491.47) claiming
+  29 on {0} for 60 s of mash bursts, 10.2 min freeze-to-force-close) and the K1
+  treatment session 21:23 (frozen at plane 31 after a 4,745 u client-side
+  rollback). A first-draft "the keepalive POISONED the client's plane" reading of
+  the K1 tape was **refuted by the pre-publication review** — the client's own
+  0x0047 stop-report carried plane 0 first (the draft's dump filtered out the stop
+  arm) and the flap 0↔22 is the client's own reseed machinery; §1z-d's "the server
+  never invents a wrong plane" survives a second test it could have failed
+  (§1z-e.4 keeps the refutation; ZERO LEAD's field-4 carry word stays a filed
+  probe question). Census: the plane-carry is common and self-healing (13/22
+  episodes are strict carries, both directions at one boundary, 20/22 heal on
+  tape; the 2 that don't are the locks' own onsets); r1b1/r1b2/r3 are non-vacuous
+  nulls. **Prediction revisions (§1z-e.5): "one fire = healed" is weakened — both
+  historical locks show one fire because the victim GAVE UP; the heal's live
+  signal is movement resuming after fire #1. "~5 s to first fire" holds only for
+  continuous mash — a burst–36 s pause–burst victim fires at ~45 s.** All three
+  locks share the onset: a legally-acquired plane carried across a discontinuity,
+  and the discontinuity can be a rollback jump, not just a walked boundary.
+  Scripts + outputs: `vault/research/movecode/plane-sweep/`. Coverage closed by
+  the review: all 112 movement sessions scored (the "63 no-map-row" pool was a
+  label-parse artifact; the two map-167 sessions are clean under the run
+  archive's authored mesh). Review bonus: section C's tick-based plane lookup
+  ERASES two real anomalies in k2-2 (alias) — fixed same commit, section C now
+  reads each record's own plane (`test_noclipscore.py` §5 pins it, floor 8→9),
+  and the §1z-c counts move under the fixed lookup, deliberately: r5bridge 6→8,
+  r4a 5→8, r5 stays 0.
 * **★ THE BRIDGE AND THE STUCK CLIENT, 2026-08-29 (§1z-c) — a PLANE channel nobody
   has scored, and the first captured movement LOCK.** `noclipscore.py` read 0 off-mesh
   on a capture taken *because* the operator had walked under a bridge twice: §1w.7's

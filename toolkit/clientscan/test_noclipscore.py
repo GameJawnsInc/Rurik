@@ -39,7 +39,7 @@ for _p in (TOOLKIT, HERE, os.path.join(HERE, "movehook"),
 import checks                                                  # noqa: E402
 import readhook                                                # noqa: E402
 
-LEDGER = checks.Ledger("noclipscore", floor=8)
+LEDGER = checks.Ledger("noclipscore", floor=9)
 check = checks.adopt(LEDGER)
 
 MAP_FID = 0x287B3
@@ -191,6 +191,46 @@ def main():
           "CONTROL: a body on the plane the mesh DOES offer is NOT flagged",
           f"a detector that fires on the correct plane too would report every "
           f"run as a no-clip:\n{c3}")
+
+    # ---- 5. the same-tick ALIAS: each sample scores its OWN plane --------
+    # The k2-2 shape (§1z-e.1's review): two records at ONE tick, where the
+    # FIRST record's plane happens to be legal at the SECOND record's point.
+    # The pre-fix section C looked the plane up by (tick, ecx), read the FIRST
+    # record's plane for both samples, and scored the second sample "ok" --
+    # erasing 2 real anomalies in k2-2 (seq 436, 472). Fixture: record 0 at the
+    # deck point declaring 0 (its own anomaly -- the mesh offers {37} there,
+    # and 0 is exactly what is offered at record 1's point); record 1 at the
+    # ground point declaring 37 (anomalous there, offers {0}). Own-plane
+    # scoring flags BOTH; the aliased lookup flags only the first.
+    x0, y0 = DECK_OVER_GROUND[0], DECK_OVER_GROUND[1]
+    xa, ya = GROUND_UNDER_DECK[0], GROUND_UNDER_DECK[1]
+    p4 = _capture(tmp, "alias.bin", [(x0, y0, DECK_OVER_GROUND[2]),
+                                     (xa, ya, GROUND_UNDER_DECK[2])])
+    # _capture spaces ticks 100 apart; collapse them to ONE tick by hand.
+    cap4 = readhook.Capture(p4)
+    recs = sorted(cap4.recs, key=lambda r: r["seq"])
+    with open(p4, "r+b") as fh:
+        data = bytearray(fh.read())
+        # tick is the field right after `seq` in every layout; rewrite record 2's
+        # to record 1's through the parsed offsets rather than magic numbers.
+        spec = readhook._LAYOUTS[cap4.version]
+        names_flat = []
+        for name, count in spec:
+            names_flat.extend([name] * count)
+        tick_ix = names_flat.index("tick")
+        rec_sz = struct.calcsize("<" + "I" * len(names_flat))
+        hdr = 4 + 20 + 8 * len(readhook.site_names(cap4))
+        for rec_no in (1,):
+            off = hdr + rec_no * rec_sz + tick_ix * 4
+            data[off:off + 4] = struct.pack("<I", recs[0]["tick"])
+        fh.seek(0)
+        fh.write(data)
+    c4 = section(_run(p4), "C")
+    check("does NOT offer:  2" in c4,
+          "a same-tick sibling's anomaly scores by ITS OWN plane (the k2-2 "
+          "alias, fixed)",
+          f"the pre-fix lookup read the first record's plane for both samples "
+          f"and reported 1 here, erasing the second anomaly:\n{c4}")
 
     return LEDGER.verdict()
 
