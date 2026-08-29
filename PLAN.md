@@ -1582,10 +1582,20 @@ This supersedes the two entries below it (each marked in place in FINDINGS):
   at the same rock; 108 reports / 1 off-mesh at 0.0 u (vs r4a's 21 at 65–391 u); the
   dissociation measured TOTAL — 34/34 direct chords cross the geometry, 0/37 granted
   legs do; on-rock clicks demote to walk-to-edge-and-stop; the compound's walls
-  confirmed by eye. New observation: a rapid re-click walks the body back to the
-  click-1 position first — §1z.2 diagnoses it as the two-copies divergence (sync walks
-  our corners, local walks its own), benign here. Registered, not built: the re-click
-  pin-leg (§1z.3). Still open: keyboard channel (client-free), mesh fattening, §1y.4's
+  confirmed by eye. **AND THE BACKTRACK IS A ROUTING DEFECT, FOUND AND FIXED
+  (§2a).** The operator refused "cosmetic" and was right: `_shared_edge` answered the
+  MIDPOINT of a shared trapezoid edge, so a body 43 u from stepping north into a corridor
+  was granted a waypoint **1,176 u WEST** — the midpoint of an edge spanning x∈[448,3936].
+  `_pull_corners` now slides each crossing to the local minimiser first; **7 of 34
+  backward first legs → 1**, median 253 u saved, 0 paths lost, 0 lengthened. Two
+  self-inflicted regressions were caught by measurement before it shipped (a wrong
+  minimiser lengthened 19/300; pulled points lost 4/300 until the midpoint answer became
+  a fallback CANDIDATE), and a third by `routerbench.py`, whose 2.0 u re-clip reddened on
+  a leg passing route()'s 16 u gate. Cost p95 12.9 → 23.3 ms, 0/300 over a 50 ms tick.
+  `test_pathmap.py` §13 (floor 75, control included), `test_router.py`, `test_routerbench.py`
+  all green. **UNFIXED and filed: movehook armed but wrote nothing on the R5 run** — the
+  DLL writes once at exit and its stop file was never cleared, so everything is scored
+  from the server log; it has no periodic flush and no error when `fopen` fails. Still open: keyboard channel (client-free), mesh fattening, §1y.4's
   third carve source, retail's waypoint vocabulary (§1p.6).
 
 ### ★★★★ MOVEMENT 2026-08-28 — SUPERSEDED by the §1x entry above — THE NO-CLIP CANNOT BE SCORED WITH OUR MESH, and now we know why

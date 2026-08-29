@@ -5213,7 +5213,18 @@ the server log alone — position reports are sparser than movehook samples and
   and the eyewitness; what survives is only §1p.6's waypoint vocabulary and the
   unmeasured fattening question.
 
-### 1z.2 The backtrack, diagnosed from the log
+### 1z.2 The backtrack — **THIS DIAGNOSIS IS WRONG. See §2a.** It is a routing defect
+
+> **SUPERSEDED 2026-08-28, hours later, by the operator: *"it's not a cosmetic bug, it's
+> mechanically broken. i shouldn't be backtracking."*** He was right and this section was
+> wrong twice over — wrong that it was benign, and wrong about the mechanism. The cause
+> is `_shared_edge` answering the MIDPOINT of a shared trapezoid edge, so a body near one
+> END of a long edge is routed to the middle of it first: **§2a**. The two-copies reading
+> below is left standing as a record of a plausible story that measurement killed; the
+> one thing it got right is that the server's origins were fresh, which is what pointed
+> the next look at `route()` instead of at state.
+
+### 1z.2-orig The backtrack, diagnosed from the log (REFUTED)
 
 **The server's origins were FRESH** — section 3 of `r5score.py` shows them advancing
 along the granted legs between reports (the world-tick integrator), with
@@ -5229,6 +5240,9 @@ where I was when I first clicked, then continue" is the two-world-copies mechani
 the same divergence that under `--click-echo` produced installs inside geometry.
 
 ### 1z.3 Registered candidate, NOT built: the re-click pin-leg
+*(Written under §1z.2's refuted diagnosis. It is NOT the backtrack's fix — §2a is —
+and it is not obviously needed at all now. Kept as a filed idea, demoted.)*
+
 
 On a re-click whose freshest client report is younger than ~2 s, grant **the client's
 own reported position as leg 0** before the routed corners — §1w.4 already measured
@@ -5244,6 +5258,102 @@ still client-free, and mesh fattening is still unmeasured.
 no-clip defect is closed as a grant-content defect** — opened §1n, mechanism §1t.2,
 scored §1w–§1x, fixed by ROUTER-B2, verified here. What remains on the arc is
 cosmetic (the backtrack, §1z.3's candidate) and channel-scoped (keyboard).
+
+## 2a. THE BACKTRACK IS A ROUTING DEFECT AND IT IS FIXED — `_shared_edge` aimed the walker at the MIDDLE of every edge it crossed
+
+**OBSERVED and FIXED, 2026-08-28.** The operator, after §1z called it cosmetic:
+
+> *"it's not a cosmetic bug, it's mechanically broken. i shouldn't be backtracking"*
+
+### 2a.1 The defect, in one line of code
+
+`pathmap._shared_edge` returned **`((lo + hi) * 0.5, y)`** — the midpoint of the interval
+two trapezoids share. On map 280 trapezoid **531** borders the corridor **1921** along
+`x ∈ [448, 3936]` at `y = 7008`. The body stood at **x = 3367.5**, forty-three units from
+stepping straight north into that corridor. The midpoint is **2192.0**, and 2192.0 is
+exactly the waypoint the server granted (`authsrv-20260828T214828-c1.jsonl`, t=116.48).
+**The walker was sent 1,176 u WEST to the middle of an edge it should have crossed beside
+itself.** That is the backtrack, and it is ours, not the mesh's.
+
+**Ruled out first, each by measurement:** the origin was the client's own report, age
+0.3 s, drift 1.4 u — not stale state (§1z.2's one correct finding). The graph is intact —
+531 and 1921 name each other, and 1921 is the *only* trapezoid bordering 531 above, so
+this is not the 4-neighbour-slot limitation. The mesh permits the step — `clip()` north
+43.5 u is CLEAR and the 3,317 u leg east along the corridor is CLEAR.
+
+**`_string_pull` could not repair it, and the reason generalises:** it only **drops**
+waypoints the previous one can already see, and here the corner after the midpoint is
+genuinely out of sight around real geometry (the direct line blocks at 529 u). *Dropping
+is not sliding.* A smoother built entirely out of one operation cannot fix a defect that
+needs the other.
+
+### 2a.2 The census, before and after
+
+| | backward first legs (cos < 0 toward the click) | worst cos |
+|---|---|---|
+| midpoints | **7 of 34** routed clicks | −0.917 |
+| corner pull | **1 of 34** | −0.526 |
+
+The survivor is plausibly legitimate: its direct line blocks after 176 u of 4,976 and the
+route is 1.31× — a real detour around real geometry. **Length saved: median 253 u, max
+3,218 u. Paths lost: 0. Paths lengthened: 0.** (R5's 34 clicks and a 300-route corpus
+sweep both.)
+
+### 2a.3 The fix, and the two reds it went through
+
+`_pull_corners` slides each crossing along **its own** interval to the point minimising
+`|A→P| + |P→B|`, Gauss-Seidel, before `_string_pull` runs. Every candidate stays inside
+the interval, hence inside both trapezoids. **Two real regressions were built and caught
+before this shipped**, and both are the reason it is a candidate contest rather than a
+replacement:
+
+1. **The first minimiser was wrong.** For neighbours on the same side of the edge it took
+   "the projection of the nearer endpoint", which is not the minimiser — **19 of 300
+   corpus paths got LONGER**. Fixed by the reflection construction (reflect B across the
+   edge line, cross to it, clamp — `f` is convex, so clamping the unconstrained optimum
+   is the constrained optimum).
+2. **A pulled point can cut a corner the midpoints rounded off** — **4 of 300 routes lost
+   their path** to route()'s own gate. So the midpoint answer is kept as a **fallback
+   candidate**: both are gated, the shorter legal one wins, and the pull can only ever
+   improve on the midpoint answer, never lose one.
+
+**And a third red the BENCH caught, which is the one worth carrying forward.**
+`clip()` is a sampler; the pull moves crossings toward edge *ends*, where sub-16 u slivers
+live. `routerbench.py` re-clips at **2.0 u** because `authsrv.A2_LEAD_CLIP_STEP` does
+before sending, and its "every routed specimen's legs clip-clean" **went red** on a leg
+that passed `route()`'s own 16 u gate. The pulled candidate now pays the 2.0 u gate; the
+fallback keeps 16.0, so the pre-existing answer is untouched. *Two of our own components
+disagreeing is the one kind of agreement this repo does not count as evidence — here it
+was the disagreement that was informative.*
+
+**Cost, measured, on the thread that owns the world:** corpus sweep p50 4.9 → 10.5 ms,
+p95 12.9 → 23.3 ms, max 20.8 → 30.4 ms, **0 of 300 over a 50 ms tick in either arm**;
+R5's real clicks 1.5 → 3.0 ms mean. Roughly double, inside budget, and the headroom is
+now the thing to watch — the named next lever is gating only the segments the pull
+actually moved.
+
+### 2a.4 Tests
+
+**`test_pathmap.py` §13**, seven checks, floor 68 → 75, and the first of them is the
+**control**: with `CORNER_PULL_ROUNDS = 0` the specimen must still route backward at
+cos < −0.5. A fix whose control cannot reproduce the bug is asserted, not tested. Then
+the fix (cos +0.85), no length paid (4,711 u against 7,930 u), every segment re-clipped,
+and the two no-loss properties over a 120-draw sweep **with an exposure guard** so a
+sweep that routed nothing cannot pass them vacuously. Green at 75 checks / 5 skips.
+`test_router.py` 68/68 and `test_routerbench.py` 48/48 green after the fine-step gate.
+
+### 2a.5 What this does NOT close
+
+The R5 run's **movehook capture was armed and produced nothing** — `attach.py` reported
+`LoadLibraryA returned 0x5EF90000 (loaded)`, the config named
+`vault/research/movecode/r5`, and **no directory was ever created**. The stop file was
+still on disk afterwards, un-cleared, and the DLL clears it only *after* its poll loop
+exits — so the worker never completed its exit path, and the client is gone, so it cannot
+be diagnosed post hoc. **Everything in §1z and §2a is scored from the server log alone.**
+The DLL writes exactly once, at the end; a run that ends any other way writes nothing.
+That is an instrument defect (no periodic flush, no `DLL_PROCESS_DETACH` write, no error
+if `fopen` fails) and it is UNFIXED — filed, and the next movehook run should not be
+planned as if the capture is guaranteed.
 
 ---
 

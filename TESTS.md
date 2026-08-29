@@ -2006,9 +2006,29 @@ on-mesh point at distance zero for an on-mesh query, leads a real ≤12u
 edge penetration back to a verified-walkable point no farther than the
 step off, and returns None in the middle of nowhere — run 3's
 218-second refusal lock-in stood on an 8u penetration this query now
-answers. Floor 69 against a green 73 (two archive-conditional §6
-checks and the stacked-point pair may skip-declare); ~105 s, `--routes`
-shrinks section 10),
+answers. Section 13 (2026-08-28, MOVECODE R5) is the CORNER PULL, and
+it is the section a reader should copy the shape of: `_shared_edge`
+answered the MIDPOINT of the interval two trapezoids share, so a body
+standing near one end of a long shared edge was routed to the middle of
+it first — on map 280, trapezoid 531 borders corridor 1921 along
+x∈[448,3936] and a player at x=3367, 43 units from stepping straight
+north, was sent **1,176 units WEST**; 7 of R5's 34 routed clicks granted
+a first leg pointing away from the click (cos to −0.92, detours to
+1.50×), and the operator reported it before any instrument saw it. The
+CONTROL is what makes the rest evidence: with `CORNER_PULL_ROUNDS = 0`
+the specimen must STILL route backward (cos < −0.5) — a fix whose
+control cannot reproduce the bug is asserted, not tested. Then the fix
+(first-leg cos +0.85), no length paid (4,711u against 7,930u), every
+segment re-clipped, and the two no-loss properties over a 120-draw
+sweep with an exposure guard so a sweep that routed nothing cannot pass
+them vacuously: **0 of 119 paths lost, 0 longer**. Both were REAL reds
+first — the first minimiser was wrong for same-side neighbours and made
+19 of 300 corpus paths longer, and pulled points can cut a corner the
+midpoints rounded off, which lost 4 of 300 until route() started scoring
+the midpoint answer as a fallback CANDIDATE rather than replacing it.
+Floor 75 against a green 75 with 5 declared skips (the archive-conditional
+§6 checks, and §13 skip-declares when map 280 is absent);
+~105 s, `--routes` shrinks section 10),
   `toolkit/mapdata/test_spawncheck.py` (the map-row spawn census, `spawncheck.py`,
   which answers a clause `PLAN.md` §3.2 had carried unmeasured since it was written:
   *"how many of the nine pass the trapezoid test has not been re-run, so the map figure

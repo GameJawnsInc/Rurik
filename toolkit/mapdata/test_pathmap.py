@@ -329,7 +329,7 @@ def all_valid(pm, paths):
 # ArenaNet stopped registering bit-31 file ids after 38797 (25 -> 0), so the
 # three checks about raw/masked pairing have nothing to be about. They are
 # declared skips there, not silent absences.
-LEDGER = checks.Ledger("pathing map", floor=68)
+LEDGER = checks.Ledger("pathing map", floor=75)
 check = checks.adopt(LEDGER)
 
 
@@ -971,6 +971,116 @@ def main():
     check(pre.nearest_walkable(9e6, 9e6, 16.0) is None,
           "a point with nothing in radius returns None",
           "refuse-to-guess: the caller must handle a true hole")
+
+    print("\n13. the corner pull (MOVECODE R5's backtrack)")
+    # THE DEFECT, in one sentence: _shared_edge answers the MIDPOINT of the
+    # interval two trapezoids share, so a body standing near one END of a long
+    # shared edge was routed to the middle of it before going on. On map 280
+    # trapezoid 531 borders the corridor 1921 along x in [448, 3936]; the
+    # operator, standing at x = 3367 and clicking east, was sent 1,176 units
+    # WEST first -- "the second click would make me path back to the original
+    # position of the first click" (R5, 2026-08-28).
+    #
+    # Every check here is run BOTH WAYS: with the pull on, and with
+    # CORNER_PULL_ROUNDS = 0, which restores the midpoint behaviour exactly.
+    # A fix whose control cannot reproduce the bug is not tested, it is
+    # asserted -- and this one CAN, which is what makes the rest evidence.
+    # Its OWN archive handle: `ar` is closed by the time this section runs, and
+    # a closed handle raises inside load() -- which the skip path would then
+    # report as "map 280 is not in this archive", a false statement about the
+    # content dressed as a measurement.
+    m280 = None
+    try:
+        with Archive() as ar13:
+            m280 = pathmap.PathingMap.load(0x287B3, archive=ar13,
+                                           table=file_id_table(ar13))
+    except Exception as exc:                                  # noqa: BLE001
+        LEDGER.skip("the corner pull",
+                    f"map 280 (0x287B3) did not load from this archive: {exc}")
+    if m280 is not None:
+        O, D = (3367.5, 6965.5), (7404.4, 4865.1)
+
+        def first_leg_cos(pm_, o, d):
+            r = pm_.route(o[0], o[1], d[0], d[1])
+            if not r or len(r) < 2:
+                return None, r
+            wx, wy = r[1][0] - o[0], r[1][1] - o[1]
+            cx, cy = d[0] - o[0], d[1] - o[1]
+            n = math.hypot(wx, wy)
+            if n <= 1.0:
+                return 1.0, r
+            return (cx * wx + cy * wy) / (math.hypot(cx, cy) * n), r
+
+        saved = pathmap.CORNER_PULL_ROUNDS
+        try:
+            pathmap.CORNER_PULL_ROUNDS = 0
+            cos_mid, path_mid = first_leg_cos(m280, O, D)
+            pathmap.CORNER_PULL_ROUNDS = saved
+            cos_new, path_new = first_leg_cos(m280, O, D)
+        finally:
+            pathmap.CORNER_PULL_ROUNDS = saved
+        # (a) THE CONTROL. Without the pull the specimen must still be broken,
+        # or this section is measuring a map that no longer poses the question.
+        check(cos_mid is not None and cos_mid < -0.5,
+              "CONTROL: with the pull off, the specimen still routes BACKWARD",
+              f"first-leg cos {cos_mid} (the midpoint rule; must stay < -0.5)")
+        # (b) the fix.
+        check(cos_new is not None and cos_new > 0.0,
+              "with the pull on, the first leg points AT the click",
+              f"first-leg cos {cos_new} against {cos_mid} unpulled")
+        # (c) it may not buy that with length.
+        if path_mid and path_new:
+            lm = sum(math.hypot(b[0] - a[0], b[1] - a[1])
+                     for a, b in zip(path_mid, path_mid[1:]))
+            ln = sum(math.hypot(b[0] - a[0], b[1] - a[1])
+                     for a, b in zip(path_new, path_new[1:]))
+            check(ln <= lm + 1.0,
+                  "and the pulled path is no longer than the midpoint path",
+                  f"{ln:.0f} u against {lm:.0f} u")
+        # (d) every segment still walkable -- the property the whole pull is
+        # allowed to risk, and the reason route() scores CANDIDATES rather than
+        # replacing the midpoints outright.
+        if path_new:
+            bad = [(a, b) for a, b in zip(path_new, path_new[1:])
+                   if m280.clip(*a, *b) != b]
+            check(not bad,
+                  "every segment of the pulled path is walkable end to end",
+                  f"{len(path_new) - 1} segments, {len(bad)} bad")
+        # (e) THE NO-LOSS GUARANTEE, over a corpus rather than the specimen:
+        # the pull must never turn a path into None, and never lengthen one.
+        rng = random.Random(7)
+        centres = [t.centre for t in m280.trapezoids]
+        lost = longer = pairs = 0
+        for _ in range(120):
+            a = rng.choice(centres)
+            b = rng.choice(centres)
+            pathmap.CORNER_PULL_ROUNDS = 0
+            r0 = m280.route(a[0], a[1], b[0], b[1])
+            pathmap.CORNER_PULL_ROUNDS = saved
+            r1 = m280.route(a[0], a[1], b[0], b[1])
+            if r0 is None:
+                continue
+            pairs += 1
+            if r1 is None:
+                lost += 1
+                continue
+            l0 = sum(math.hypot(q[0] - p[0], q[1] - p[1])
+                     for p, q in zip(r0, r0[1:]))
+            l1 = sum(math.hypot(q[0] - p[0], q[1] - p[1])
+                     for p, q in zip(r1, r1[1:]))
+            if l1 > l0 + 1.0:
+                longer += 1
+        pathmap.CORNER_PULL_ROUNDS = saved
+        check(pairs >= 30,
+              "the no-loss sweep actually routed something to compare",
+              f"{pairs} routable pairs of 120 draws (a sweep that routed "
+              f"nothing would pass (f) and (g) vacuously)")
+        check(lost == 0,
+              "the pull never turns a path into None",
+              f"{lost} of {pairs} lost")
+        check(longer == 0,
+              "the pull never makes a path longer",
+              f"{longer} of {pairs} longer")
 
     dt = time.perf_counter() - t0
     print(f"\nwalked the archive in {dt:.1f}s")

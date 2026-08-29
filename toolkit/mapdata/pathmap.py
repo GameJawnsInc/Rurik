@@ -220,6 +220,36 @@ CELL_SLACK = 1.0
 # asserted equal before and after in test_pathmap.py rather than assumed.
 PULL_SAMPLE_BUDGET = 20000
 
+# `_pull_corners`: how many Gauss-Seidel sweeps slide the crossings toward the
+# taut line, how far each stays off its interval's ends, and when to stop early.
+#
+# ROUNDS is a budget, not a convergence proof. One sweep already fixes the R5
+# specimen (a crossing whose neighbours are both fixed points needs exactly
+# one), and the sweep is O(waypoints) against _string_pull's quadratic
+# line-sampling, so this is noise in route()'s cost. More sweeps buy tautness on
+# long chains where each move shifts its neighbour's answer; EPS stops as soon
+# as a whole sweep moves nothing worth another pass.
+#
+# INSET keeps the answer off the exact interval end, which is the corner shared
+# with the NEXT trapezoid along and the place a float containment test can fall
+# either way -- sec.1w spent a lane's evidence on 1e-4 u excursions of exactly
+# that kind, seen from the other side. It is capped at a quarter-span so a
+# narrow doorway never insets itself shut.
+CORNER_PULL_ROUNDS = 4
+CORNER_PULL_INSET = 8.0
+CORNER_PULL_EPS = 0.5
+
+# The step the PULLED candidate's segments are re-sampled at before route()
+# accepts them. It is `authsrv.A2_LEAD_CLIP_STEP` and `routerbench.py`'s scoring
+# step, deliberately: the server re-clips every leg at 2.0 u before it sends,
+# so a path this file calls legal at 16 u and the server then refuses is a
+# disagreement between two of our own components -- which is the one kind of
+# agreement this repo does not count as evidence. Duplicated rather than
+# imported for the same reason CHASE_LO/HI are in test_pathmap.py: mapdata must
+# not depend on the server, and the number being written here is what makes a
+# future divergence findable.
+CORNER_PULL_GATE_STEP = 2.0
+
 
 NO_NEIGHBOUR = 0xFFFFFFFF
 NO_PORTAL = 0xFFFF
@@ -746,22 +776,92 @@ class PathingMap:
         # by construction.
         pts = [(x0, y0)]
         pls = [self.trapezoids[si].plane]
+        spans = [None]
         for a, b in zip(chain, chain[1:]):
-            pts.append(self._shared_edge(self.trapezoids[a],
-                                         self.trapezoids[b]))
+            pt, span = self._shared_edge(self.trapezoids[a],
+                                         self.trapezoids[b], span=True)
+            pts.append(pt)
+            spans.append(span)
             pls.append(self.trapezoids[b].plane)
         pts.append((x1, y1))
         pls.append(self.trapezoids[gi].plane)
-        path = self._string_pull(pts)
-        # Last gate, and it is not belt-and-braces. A cross-plane step joins two
-        # trapezoids that the file says share a crossing; where they do not also
-        # overlap in (x, y) -- about a fifth of them in Pre-Searing -- the
-        # waypoint falls back to the far trapezoid's centre and the straight line
-        # to it can leave the mesh. Returning nothing is a worse answer than a
-        # detour and a better one than a path through a wall.
-        for a, b in zip(path, path[1:]):
-            if self.clip(*a, *b) != b:
-                return None
+        spans.append(None)
+        # Slide each crossing along its own edge BEFORE dropping any: the
+        # midpoint rule aims a walker at the middle of an edge it should
+        # cross beside itself, and _string_pull can only drop, never slide.
+        # MOVECODE R5's backtrack -- see _pull_corners.
+        #
+        # THE PULL IS A CANDIDATE, NOT A REPLACEMENT, and that is the whole
+        # safety argument. Each pulled point is still inside both trapezoids
+        # it crosses between, but the SEGMENT between two pulled points can
+        # cut a corner the midpoints rounded off -- measured, 4 of 300 corpus
+        # routes lost their path to exactly that before this fallback existed.
+        # So both candidates are gated and the shorter survivor wins: the pull
+        # can only ever improve on the midpoint answer, never lose one.
+        # THE GATE, and it is not belt-and-braces -- it is also what makes the
+        # corner pull safe. A cross-plane step joins two trapezoids that the
+        # file says share a crossing; where they do not also overlap in (x, y)
+        # -- about a fifth of them in Pre-Searing -- the waypoint falls back to
+        # the far trapezoid's centre and the straight line to it can leave the
+        # mesh. And a PULLED point, while still inside both trapezoids it
+        # crosses between, can leave a segment that cuts a corner the midpoints
+        # rounded off: 4 of 300 corpus routes lost their path to exactly that
+        # before this became a candidate contest. So both candidates are gated
+        # and the shorter survivor wins -- the pull can only improve on the
+        # midpoint answer, never lose one. Returning nothing is a worse answer
+        # than a detour and a better one than a path through a wall.
+        # BOTH CANDIDATES ARE SCORED AND THE SHORTER LEGAL ONE WINS. The cheap
+        # version of this -- take the pulled path whenever it is legal, and only
+        # fall back when it is not -- was BUILT AND REJECTED BY ITS OWN
+        # MEASUREMENT: 7 of R5's 34 clicks came out LONGER that way, one of them
+        # 3,697 -> 5,228 u, which is the "no player would accept this" class the
+        # tour cap exists for. The tempting argument for it is wrong and worth
+        # writing down: each pull move is the local minimiser, so the pulled
+        # POLYLINE is never longer than the midpoints' -- but _string_pull runs
+        # afterwards and DROPS waypoints, and a taut polyline can offer it fewer
+        # droppable corners than a slack one. Shorter before the smoother does
+        # not survive the smoother.
+        #
+        # THE PRICE, measured rather than waved at, because this runs on the
+        # thread that owns the world and a 336 ms worst case here once cost the
+        # campaign an unattributable world freeze. Two costs: a second
+        # _string_pull (94% of route()), and the fine gate below. Over a
+        # 300-route corpus sweep of cross-map centroid pairs -- a far harsher
+        # distribution than clicks, whose routes run tens of thousands of units
+        # -- p50 4.9 -> 10.5 ms, p95 12.9 -> 23.3 ms, max 20.8 -> 30.4 ms, and
+        # **0 of 300 over a 50 ms tick in either arm**. Over R5's 34 real
+        # clicks, 1.5 -> 3.0 ms mean. It is roughly double, it is inside the
+        # budget, and the headroom is now the thing to watch: if a future map
+        # puts p95 near the tick, the first lever is gating only the segments
+        # the pull actually MOVED (the rest are the midpoint answer, already
+        # shipped at 16 u for a year) rather than the whole pulled path.
+        # THE PULLED CANDIDATE IS GATED AT THE FINER STEP, and this is not
+        # symmetry-breaking for its own sake. clip() is a SAMPLER: a segment
+        # that clears it at the default 16 u can still graze a sliver of
+        # blocked ground between samples, and the pull is precisely what moves
+        # crossings off the middle of an edge and out toward its ends, where
+        # slivers live. `routerbench.py` re-clips at CORNER_PULL_GATE_STEP
+        # because the server does before it sends -- and it CAUGHT this: the
+        # first version of the pull was gated at 16 u, and the bench's
+        # "every routed specimen's legs clip-clean" went red on a leg that
+        # passed here and failed there. The fallback keeps the default step,
+        # so the answer route() gave before the pull existed is untouched.
+        pulled = self._pull_corners(pts, spans)
+        best = None
+        for cand in ((pulled, pts) if pulled is not pts else (pts,)):
+            step = (CORNER_PULL_GATE_STEP if cand is pulled and pulled is not pts
+                    else 16.0)
+            cpath = self._string_pull(cand)
+            if any(self.clip(*a, *b, step=step) != b
+                   for a, b in zip(cpath, cpath[1:])):
+                continue
+            clen = sum(((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2) ** 0.5
+                       for a, b in zip(cpath, cpath[1:]))
+            if best is None or clen < best[0]:
+                best = (clen, cpath, cand)
+        if best is None:
+            return None
+        path, pts = best[1], best[2]
         if with_planes:
             # The pull returns an ordered subset of pts; walk a pointer to
             # recover each survivor's plane. Value-matching is exact: every
@@ -775,15 +875,20 @@ class PathingMap:
             return path, planes
         return path
 
-    def _shared_edge(self, a, b):
+    def _shared_edge(self, a, b, span=False):
         """A point on the edge `a` and `b` share, inside both.
 
         Across a portal the two trapezoids are the same physical place on two
         planes rather than neighbours on one, so there is no shared edge; the
         centre of where they overlap is inside both.
+
+        `span=True` also returns `(lo, hi, y)` -- the whole interval the two
+        share, which is what `_pull_corners` slides the crossing along. None
+        for a portal crossing, whose point is not on a straight edge.
         """
         if a.plane != b.plane:
-            return self._overlap_point(a, b)
+            pt = self._overlap_point(a, b)
+            return (pt, None) if span else pt
         slot = next((k for k, n in enumerate(a.neighbours)
                      if n == b.index), None)
         if slot is None or slot < 2:
@@ -797,7 +902,90 @@ class PathingMap:
         lo, hi = max(lo_a, lo_b), min(hi_a, hi_b)
         if lo > hi:                       # no overlap: stay on a's own edge
             lo, hi = lo_a, hi_a
-        return ((lo + hi) * 0.5, y)
+        pt = ((lo + hi) * 0.5, y)
+        return (pt, (lo, hi, y)) if span else pt
+
+    def _pull_corners(self, pts, spans, rounds=None):
+        """Slide each crossing along its own edge toward the taut line.
+
+        WHY THIS EXISTS, and it is a defect the operator felt before any
+        instrument saw it (MOVECODE R5, 2026-08-28). `_shared_edge` answers
+        the MIDPOINT of the interval two trapezoids share. That point is
+        inside both -- which is all it ever claimed -- but it is not where a
+        walker crosses. On map 280 trapezoid 531 borders the corridor 1921
+        along x in [448, 3936]; a body standing at x = 3367 is 43 units from
+        stepping straight north into it, and the midpoint rule sent it
+        **1,176 units WEST** to x = 2192 first. Seven of R5's 34 routed
+        clicks granted a first leg pointing away from the click (cos to
+        -0.92, detours to 1.50x), and the operator's report was exactly
+        that: "the second click would make me path back to the original
+        position of the first click, then continue walking towards the
+        second from there."
+
+        `_string_pull` could not repair it: it only DROPS waypoints the
+        previous one can already see, and here the corner after the midpoint
+        is genuinely out of sight around real geometry, so the midpoint
+        stayed. Dropping is not the same operation as sliding.
+
+        The pass is Gauss-Seidel: for each interior crossing take the point
+        on its own interval nearest the segment joining its neighbours, a
+        few times over. Every candidate stays inside the interval, so it
+        stays inside both trapezoids and the path stays as legal as the
+        midpoint version was -- and route()'s per-segment clip() gate still
+        has the last word. Endpoints never move. A crossing with no interval
+        (a portal) is held fixed and simply anchors its neighbours.
+        """
+        # Read at CALL time, not as a default argument: a default binds at
+        # definition and the A/B harness that tuned this silently compared the
+        # pull against itself until that was caught (both arms "before" and
+        # "after" printed the same 1-of-34, which is what a no-op looks like).
+        if rounds is None:
+            rounds = CORNER_PULL_ROUNDS
+        if len(pts) < 3 or rounds <= 0:
+            return pts
+        pts = list(pts)
+        for _ in range(rounds):
+            moved = 0.0
+            for i in range(1, len(pts) - 1):
+                span = spans[i]
+                if span is None:
+                    continue
+                lo, hi, y = span
+                # Keep off the exact corner: the interval's ends are shared
+                # with the NEXT trapezoid along, where a float boundary test
+                # can fall either way (sec.1w's 1e-4 u excursions were this
+                # class seen from the other side).
+                inset = min(CORNER_PULL_INSET, (hi - lo) * 0.25)
+                lo, hi = lo + inset, hi - inset
+                if lo > hi:
+                    lo = hi = (lo + hi) * 0.5
+                ax, ay = pts[i - 1]
+                bx, by = pts[i + 1]
+                # The point on y that minimises |A->P| + |P->B|. Getting this
+                # EXACTLY right is what keeps the pass monotone: the first
+                # version used "the projection of the nearer endpoint" when
+                # A and B sat on the same side, which is not the minimiser,
+                # and it made 19 of 300 corpus paths LONGER while fixing the
+                # backtrack. f(x) is convex, so clamping the unconstrained
+                # optimum into the interval gives the constrained optimum.
+                da, db = ay - y, by - y
+                if da * db < 0.0:
+                    # opposite sides: the straight line's own crossing
+                    want = ax + (bx - ax) * (y - ay) / (by - ay)
+                elif abs(da) < 1e-9 and abs(db) < 1e-9:
+                    # both already on this line: any x between them is optimal
+                    want = (ax + bx) * 0.5
+                else:
+                    # same side: reflect B across the line and cross to it
+                    den = (2.0 * y - by) - ay
+                    want = (ax if abs(den) < 1e-9
+                            else ax + (bx - ax) * (y - ay) / den)
+                nx = lo if want < lo else (hi if want > hi else want)
+                moved = max(moved, abs(nx - pts[i][0]))
+                pts[i] = (nx, y)
+            if moved < CORNER_PULL_EPS:
+                break
+        return pts
 
     @staticmethod
     def _x_at(t, y):
