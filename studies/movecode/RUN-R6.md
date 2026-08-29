@@ -280,6 +280,17 @@ is the heal's verdict; no instrument substitutes for it.
 
 ## 6. The COMPLETION RUN (R6b) — after §1z-f scored the first execution
 
+> **RAN 2026-08-29, scored — [FINDINGS §1z-g](FINDINGS.md). P1 MET** (16.33
+> min, zero fires, ladder never armed, echoes 30/797 all at the glitch
+> structures). P2 unread and proposed retired (both disarm clauses now have
+> live demonstrations from natural play). **The run's landmark was unplanned:**
+> an off-mesh S-press stuck — a SECOND lock class the repair structurally
+> cannot see — whose recovery corroborated the heal mechanism live (a routed
+> grant's plane word revived the dead walker in 81 ms), and the follow-up
+> census showed all three historical locks received ZERO fresh plane words
+> while locked. The repair's premise now has its evidence; its first fire is
+> still owed.
+
 The first execution (§1z-f) left two floors short: P1 needs ≥15 minutes of
 play (R6 gave 7.8) and P2's wall slid instead of pinning. This section is that
 completion, simplified — **no bridge phase is required** (P3 is MET; more

@@ -28,6 +28,21 @@ impossible plane, and the walker never ran. **A plane desync is a LOCK where a p
 desync is only a warp**, because a client that cannot resolve its own position cannot
 walk to ground that would re-plane it.
 
+**UPDATE 2026-08-29, night (§1z-g): R6b RAN and P1's floor is MET** — zero
+fires through 16.33 min, echo census 30/797, all at glitch structures. The
+landmark was unplanned: an **off-mesh S-press stuck** (11.16 s frozen stream
+the repair structurally cannot arm on — off-mesh disarms by design; a
+confirmed coverage gap, filed as an owner question) whose recovery
+**corroborated the heal mechanism live**: a routed grant's plane word revived
+the dead walker in 81 ms, and the all-locks census shows every historical lock
+received ZERO fresh plane words while locked (r5stuck 0/33, Ascalon 0/11, K1
+0/3 — kbd-drop suppressed every in-lock click; the zero-lead echo relays the
+poison by design). The 0x002C repair is the fresh-plane source that depends on
+neither idling nor luck; registered expectation for its first fire: heal
+within ~100 ms. Also: the NE bridge is the first BY-DESIGN stacked pair and
+our decode HOLDS it ({0,42} on 359/747 points) — the west bridge's
+{37}-only footprint is the contrast, not the norm.
+
 **UPDATE 2026-08-29, evening (§1z-f): RUN-R6 RAN.** The trigger stayed silent
 through 18 live carry episodes (P1 healthy on every observable; its 15-min
 floor unmet at 7.8 min), the operator's under-bridge walking turned out to be a

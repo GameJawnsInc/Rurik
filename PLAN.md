@@ -1666,6 +1666,33 @@ This supersedes the two entries below it (each marked in place in FINDINGS):
   legal; the glitch planes travelled only in click dests). Next: one
   full-length ordinary session completes P1's floor; a lock remains the only
   path to the heal.
+* **★★ R6b RAN 2026-08-29 (§1z-g) — P1 MET, a SECOND stuck class found, and
+  THE HEAL MECHANISM CORROBORATED LIVE.** 16.33 min, zero fires, ladder never
+  armed, echo census 30/797 (all at the two glitch structures; one new label
+  class, a routed chain's terminal leg). **The landmark was unplanned**: an
+  S-press inside the west bridge's under-path parked the body at an OFF-MESH
+  point streaming 31 byte-identical accepted reports for 11.16 s — freeze and
+  stream halves of the lock signature present, and the repair structurally
+  CANNOT arm (off-mesh disarms; `plane_at` = None — no authority, no fix; a
+  confirmed coverage gap, filed as owner question, mitigated by the class
+  self-healing on idle+click). The dead walker reproduced r5stuck's signature
+  in keyboard form (0 setdest ~20 s vs 30 queries), the mash sealed it (30
+  consecutive kbd-drops), and the recovery is on both tapes: **5.69 s idle →
+  first surviving click drew a ROUTED leg carrying plane 37 → sync bakes 37
+  +9 ms → walking channel flips +25 ms → setdest +72 ms → body moves
+  +81 ms — a heal-by-grant, the first live corroboration of the agent+0x80
+  reconstruction.** The all-locks census closes the story: r5stuck 0/33,
+  Ascalon 0/11, K1 0/3 fresh plane words in-lock (every send echoed the
+  poison; kbd-drop suppressed every in-lock click) — **a lock persists
+  exactly as long as no fresh plane arrives, and the 0x002C repair is the
+  source that depends on neither idling nor luck. Registered: its first fire
+  heals within ~100 ms.** Also: the NE bridge is the first BY-DESIGN stacked
+  pair and the decode HOLDS it ({0,42} on 359/747 points; the hill ascent
+  never left the mesh — the normal-entry barrier is a collision-layer
+  question, filed); snapbacks quantified at 2 hard jumps/0.13 per min, both
+  glitch-placed, zero in plain walking (7 % wire coverage caveat stated); P2
+  proposed RETIRED (both disarm clauses now have live demonstrations).
+  Scripts: `vault/research/movecode/r6b/scoring/`.
 * **★ THE BRIDGE AND THE STUCK CLIENT, 2026-08-29 (§1z-c) — a PLANE channel nobody
   has scored, and the first captured movement LOCK.** `noclipscore.py` read 0 off-mesh
   on a capture taken *because* the operator had walked under a bridge twice: §1w.7's

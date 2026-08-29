@@ -6103,6 +6103,149 @@ next reader.
 
 ---
 
+## 1z-g. R6b — P1's floor MET, a SECOND stuck class found and healed BY A GRANT, and all four locks now tell one story
+
+**OBSERVED 2026-08-29 evening (session `authsrv-20260829T142904`, 16.33 min of
+active play; client capture `vault/research/movecode/r6b/movehook.bin`, 19,058
+records, both controls FIRED, ring 58%, ended by its own timer — it ran 15 min
+against RUN-R6 §6's `--minutes 16`, a deviation nothing scored rests on;
+scripts in `r6b/scoring/`; alignment `t = tick/1000 − 754527.563`).** Scored by
+four lanes plus two follow-up censuses. Corrections to my own quick look, which
+the lanes caught: the session holds **30** echo rows, not 34; the stuck sits at
+t=951.9–969.2, not in the [990, 1118] window I guessed; and t=990–1004 is
+report-silent glitch movement with a LIVE walker, not a stuck. The JSONL was
+still growing during scoring (the `--hold` window); all numbers are from a
+frozen snapshot ending t=1526.37.
+
+**Operator context:** ~7:30 in they found the NE bridge (deck + shallow water,
+both meant to be walked); they saw "a lot of snapbacks"; and near the end they
+S-pressed to a stop inside the west bridge's inaccessible under-path, got
+stuck, and got unstuck by idling a few seconds.
+
+### 1z-g.1 The predictions, closed
+
+* **P1 — MET, floor and all.** 16.33 min of active play (floor ≥15). Zero
+  fires on all three surfaces; the ladder's 11 transitions are `plane-legal` ×6
+  / `off-mesh` ×5 — never armed. Echo census recomputed independently:
+  **30/797** wrong-plane sends (R6: 4/349; healthy corpus: 0/285), matched 1:1
+  to the tripwire; 29 are the known click-relay subclass and 1 is new in
+  label class only — a routed chain's TERMINAL leg carrying the click's dest
+  plane. All 30 sit at the two glitch structures; under the amended clause
+  they refute nothing. The 9/198 false-fire class stayed unreal in a session
+  whose operator DID get stuck.
+* **P2 — UNREAD, and proposed RETIRED.** No corner press was attempted (§6
+  allowed that). But the control's question is now answered by natural play:
+  the `plane-legal` disarm got R6's press-window flutter, and the `off-mesh`
+  disarm got an **11.16 s live demonstration** here (the stuck's own frozen
+  stream, disarmed on every row). Both disarm clauses have live evidence; a
+  synthetic control adds nothing they didn't.
+* **P3 — continuity numbers** (already MET in R6): 217 stacked / 221
+  impossible on 3,059 deduped samples. **New:** carries now appear on ordinary
+  ground far from any bridge — clusters declaring 29/24/31/32 on {0} across
+  the whole map (largest n=61 at (−6940, 3494)) where R6's 17 carries all
+  flanked the west bridge. Section A: 82 deep off-mesh, 73 of them the stuck
+  window (max 20.2 u, the under-path void); zero at the NE hill.
+* **P4 — UNREAD by the letter** (no fire, so the 0x002C heal is still
+  untried) — **but see §1z-g.3: the heal MECHANISM was corroborated live by a
+  grant that wasn't the repair.**
+
+### 1z-g.2 The stuck: a SECOND class, structurally invisible to the shipped repair
+
+t=951.911–963.073: **31 accepted 0x003D reports, one byte-identical coordinate
+(−2250.758, 6347.810), plane 0, 11.16 s, max gap 1.385 s** — the freeze and
+live-stream halves of the lock signature, fully present; replayed through the
+shipped tracker, an on-mesh point would have fired at +5.24 s. It never armed
+because the point is **OFF-MESH** (`containing()` = {}; the under-path void):
+every row hit the off-mesh disarm, and `plane_at()` returns None there — **the
+repair has neither authority nor a fix plane at an off-mesh freeze. Confirmed
+coverage gap**, filed as an owner policy question rather than patched: the
+off-mesh clause's reason is the 9/198 doctrine's "no authority to say
+anything", and arming there means inventing a plane. Two mitigations lower the
+severity: this class self-heals if the victim idles ~3 s and clicks (measured
+below), and the on-mesh lock class — the one that never self-heals — is the
+one the repair covers.
+
+Onset (RECONSTRUCTION on observed anchors): a catch-up teleport snapped the
+displayed body 756 u east onto the sync copy's position mid-grant-walk; the
+operator's S-press cancelled the click-walk and parked the body off-navmesh,
+where the walker could not resolve an origin. **The dead walker was then
+measured in keyboard form**: `agapi_setdest`/`chcli_advance` **0 hits for
+~20 s** against 34 `chcli_dir`, 30 clicks and 30 path queries — r5stuck's
+signature, reproduced live. And the operator's mash actively sealed it: **30
+consecutive clicks were kbd-dropped** by the 3.0 s keyboard-authority window.
+
+### 1z-g.3 The HEAL, corroborated by accident
+
+The recovery is on both tapes end to end: **5.69 s of idle** → the next click
+outlives the keyboard-authority window and draws a **ROUTED answer whose leg 1
+carries plane 37** (the server's copy had drifted; route() crossed the deck
+portal — that is where the fresh word came from) → the sync copy bakes 37 at
+**+9 ms** → the local walking channel flips 0→37 at **+25 ms**, still at the
+frozen point → first `agapi_setdest` at **+72 ms** → the body moves at
+**+81 ms**. The server then abandoned its leg on the next keyboard report and
+the body walked to the client's OWN click dest — **the grant's contribution
+was the PLANE WORD, not the destination.** §1z-d.2's heal reconstruction ("the
+plane word is what the path queries read") was UNVERIFIED; **it now has a live
+corroboration: a plane word delivered by a grant revives a dead walker within
+~100 ms.** (Why a plane heals an off-mesh origin: the word selects the layer —
+at that (x, y) the deck polygon exists and the ground does not.)
+
+### 1z-g.4 All four locks, one story
+
+The in-lock fresh-plane census, run over every lock on record
+(`r6b/scoring/r5stuck_grants.py`, `locks_grants.py`):
+
+| event | in-lock plane-bearing sends | fresh (≠ poison) | in-lock answered clicks | outcome |
+|---|---|---|---|---|
+| r5stuck (41) | 33 | **0** — all echo 41 | **0** (82 kbd-drops) | locked till give-up |
+| Ascalon 08-27 (29) | 11 | **0** — all echo 29 | 0 routed (zero-lead only) | locked till force-close |
+| K1 08-27 (31) | 3 | **0** — all echo 31 | 0 routed | locked till force-close |
+| r6b stuck (0, off-mesh) | — | **first fresh send heals** | 1 (after 5.69 s idle) | **healed in 81 ms** |
+
+**A lock persists exactly as long as every send echoes the poison — and a
+mashing victim structurally suppresses the one channel that could deliver a
+fresh plane** (kbd-drop eats every click within 3 s of keys), while the
+zero-lead echo path faithfully relays the poison by design. The 0x002C repair
+is the fresh-plane source that depends on neither idling nor luck; its premise
+now carries r6b's live corroboration. Registered expectation for the first
+true repair fire: **the restamp heals within ~100 ms of receipt**, the r6b
+timing. The folk remedy also falls out: "stop pressing and click" works for a
+click-capable victim because idling releases kbd-drop — r5stuck's victim
+mashed to the end and never got a click through.
+
+### 1z-g.5 The NE bridge — the first BY-DESIGN stacked pair, and it is DECODED
+
+Plane 42, 17 trapezoids: **its mid-span genuinely overlaps plane 0 — 359/747
+fine-scan points offer {0, 42}** (deck over shallow water, exactly as the
+operator described), with two portals (SW ramp, NE end). The arc's first
+confirmed by-design deck-over-walkable-ground, and our decode HOLDS it — the
+west bridge's {37}-only footprint is the contrast, not the norm. The two
+{42}-only echoes are ordinary click relays at deck-edge spots outside the
+water overlap. **The hill ascent stayed on mesh** — zero deep off-mesh among
+83 body samples covering it — so whatever blocks normal entry up the hill is
+invisible to the 2-D decode (RECONSTRUCTION: the client's slope/collision
+layer — possibly tag 13's skipped colliders, §1x; filed, not settled).
+
+### 1z-g.6 The snapbacks, quantified — and two instrument findings
+
+On movesync's two-arm bar over the accepted report stream: **2 hard jumps,
+0.13/min of span** (R6: 0; the R3-era configs: 1.31/5.69/11.88; retail: 0) —
+**both glitch-placed** (one IS the stuck-release; one trails a NE plane-42
+carry). Zero hard jumps in plain walking; P1's healthy claim stands with a
+stated caveat: the wire bar sees only 7 % of the span (report-silent click
+play is invisible to it), and the operator's rubber-banding lived there — 172
+client-side reseeds (88 % inside glitch states; §1z-f's "ALL 74/74 inside
+impossible-plane episodes" does not reproduce verbatim in r6b — the coupling
+holds over the union of glitch states), and 7 scoreable teleport drags ≥150 u,
+5 of them at the NE bridge. Instrument findings the next scorer needs:
+**bake/setter records carry click-dest installs** (4,680 of ~4,700 have a
+same-tick `agapi_setdest` prefix), so per-interval speed bars on the hook
+stream are disqualified (they flag known-good walking at 400–700 u/s), and
+section A's early "deep off-mesh transients" inside prop outlines are most
+plausibly dest-install records, not body positions.
+
+---
+
 ## 2. Corrections to the record
 
 Each of these was in circulation and each is now measured against the bytes.
