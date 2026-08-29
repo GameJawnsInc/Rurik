@@ -1776,6 +1776,29 @@ This supersedes the two entries below it (each marked in place in FINDINGS):
   directions and names the better-fitting mesh. `test_movehook.py` §18, 8
   checks, pinned against the REAL impostor plus the control that a correct map
   is not called out.
+* **★ `nearest_walkable` — AN AXIS CLAMP IS NOT A NEAREST POINT, FIXED
+  2026-08-29 (§1z-l), desk-only.** It clamped y into the trapezoid's span then
+  x into its edges AT THAT Y — the true nearest only when that edge is
+  axis-aligned; against a SLANTED edge it walks along y then along x instead of
+  projecting perpendicularly. The docstring's "error bounded by the edge slope
+  over the radius" was true of `authsrv`'s radius-16 origin rescue and **quietly
+  stopped holding when an offline scorer asked at radius 600** — and
+  `noclipscore.py` quotes this as "how far off-mesh", so the error rode into
+  every depth an r6/r6b-era pass published. Measured over r7's 67 off-mesh
+  endpoints against DENSE BOUNDARY SAMPLING (not another analytic formula):
+  worst ratio **2.967×** (77.43 u where truth is 26.10 u) and **64.91 u**
+  absolute → **1.000× and 0.00 u**. Fix: exact nearest point on the quad's
+  four edges, with a bounding-box lower bound paying for the extra projections.
+  A second pass was needed — once the 65 u error was gone the NUDGE dominated
+  (a flat 1e-3 toward the centre is ~0.5 u on a 500 u trapezoid), so it now
+  escalates 1e-6…1e-2 and takes the smallest step that clears the float
+  boundary. Also fixed: the distance was recorded BEFORE the nudge moved the
+  point. Server path unaffected — `test_pathmap` 80, `test_router` 68,
+  `test_routerbench` 48, `test_noclipscore` 10 all green, benchmark included.
+  §12d pins the geometry on a synthetic 45° trapezoid with the control that
+  the OLD arithmetic still reads 50.000 there; §12e pins point/distance over
+  596 probes after its first draft found ONE and would have passed vacuously.
+  Floor 75 → 80.
 * **★ THE MOTION WINDOW — ONE EXPRESSION, THREE DEFECTS, FIXED 2026-08-29
   (§1z-k), desk-only.** `readhook`'s world census computed
   `max(ptime) - min(ptime)` over every record. (1) **An unset stamp is not a
@@ -1797,9 +1820,7 @@ This supersedes the two entries below it (each marked in place in FINDINGS):
   reading zero motion** — and the v1 capture now says UNAVAILABLE with its
   reason. Exclusions are COUNTED AND PRINTED, never silent. `test_movehook.py`
   §19, 6 checks, with the control that the OLD expression must still inflate
-  the same fixture; floor 157 → 163. Still filed unfixed:
-  `nearest_walkable` over-reports depth up to 3×; RET_MAX_POINTS should rise
-  4 → 9.
+  the same fixture; floor 157 → 163. Still filed unfixed: RET_MAX_POINTS should rise 4 → 9.
 * **★ THE BRIDGE AND THE STUCK CLIENT, 2026-08-29 (§1z-c) — a PLANE channel nobody
   has scored, and the first captured movement LOCK.** `noclipscore.py` read 0 off-mesh
   on a capture taken *because* the operator had walked under a bridge twice: §1w.7's

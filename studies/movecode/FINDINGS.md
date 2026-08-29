@@ -6510,9 +6510,8 @@ five-valued split of §1z-h.3 stands** — THEIRS-FAILED reads `out_count` direc
   below.**
 * ~~**`readhook`'s motion denominator**~~ **FIXED, §1z-k below — and it was
   three defects, not one.**
-* **`nearest_walkable` over-reports off-mesh depth by up to 3×** (worst: true
-  26.1 u reported as 77.4 u) and returns the pre-nudge distance. Any prior
-  off-mesh depth quoted from it carries the error.
+* ~~**`nearest_walkable` over-reports off-mesh depth by up to 3×**~~ **FIXED,
+  §1z-l below.**
 * **`RET_MAX_POINTS` should rise 4 → 9** — 9 is click-to-move's own maxCount,
   confirmed live (arg4 is 9 or 4 and nothing else, 214/214), so at 9 the field
   can never truncate for either known caller. Cost: +2.5 MB of the client's
@@ -6644,6 +6643,76 @@ UNSET position stamp and are excluded"* — because "we ignored two records" and
 number. `test_movehook.py` §19 pins all three with the control that matters —
 the OLD expression, on the same fixture, must still produce the inflated
 denominator, or the section pins nothing. Floor 157 → 163.
+
+---
+
+## 1z-l. `nearest_walkable` — an AXIS CLAMP is not a nearest point, and the off-mesh depths were up to 3× too big
+
+**FIXED 2026-08-29, desk-only.** Closes the third defect §1z-i.6 filed.
+
+### 1z-l.1 The defect
+
+`nearest_walkable` found its candidate by clamping y into the trapezoid's span
+and then x into its edges **at that y**. That is an *axis clamp*, and it is the
+true nearest point only when the edge it lands on is axis-aligned. Against a
+**slanted** edge it walks along y and then along x instead of projecting
+perpendicularly.
+
+The docstring said the error was "bounded by the edge slope over the radius,
+and within the small radii this is for" — which was true of the caller it was
+written for (`authsrv`'s routable-origin rescue, radius 16) and **quietly
+stopped holding the moment an offline scorer asked at radius 600.**
+`noclipscore.py` quotes this value as *"how far off-mesh"*, so the error rode
+into every depth an r6/r6b-era scoring pass published.
+
+**Measured over r7's 67 off-mesh endpoints against dense boundary sampling**
+(deliberately not against another analytic formula — validating an analytic fix
+with the same analytic formula proves nothing):
+
+| | before | after |
+|---|---|---|
+| worst ratio vs truth | **2.967×** (77.43 u where truth is 26.10 u) | **1.000×** |
+| worst absolute over-report | **64.91 u** | **0.00 u** |
+
+A second, latent defect in the same function: the returned distance was
+recorded **before** the boundary nudge moved the point, so a caller could get a
+post-nudge point beside a pre-nudge distance. It did not manifest on r7's 67
+(0 of 67) but it was real, and it is fixed by recomputing after the nudge.
+
+### 1z-l.2 The fix, and the part that only mattered once the big error was gone
+
+The exact nearest point of a convex quad is the nearest point on its **four
+edges** (or the point itself when inside) — four perpendicular projections
+clamped to their segments. Cost is paid back by a **bounding-box lower bound**
+that skips a candidate before any projection, so the large-radius case this was
+wrong for is the one the early-out helps most.
+
+Then a second pass was needed. With the 65 u error gone, the **nudge** became
+the dominant term: a flat `1e-3` of the way to the trapezoid's centre is ~0.5 u
+on a 500 u trapezoid, and the worst ratio was still 6.78× at a point 0.08 u
+off-mesh. The nudge now **escalates** — 1e-6, 1e-5, 1e-4, 1e-3, 1e-2 — taking
+the smallest step that clears the float boundary. That is what took the worst
+over-report from 0.57 u to **0.00 u**.
+
+### 1z-l.3 What it does not change, and the tests
+
+`pathmap.py` is on the **server path**, and `authsrv`'s ROUTER-B5 origin rescue
+is the other caller. Nothing there moves: `test_pathmap` (80 checks),
+`test_router` (68), `test_routerbench` (48) and `test_noclipscore` (10) are all
+green, including the benchmark that guards route() latency against the 50 ms
+tick. The rescue asked for a *routable point* and still gets one; what changed
+is that the distance beside it is now true.
+
+`test_pathmap` §12d pins the geometry on a **synthetic 45° trapezoid**, because
+a real mesh cannot isolate the property: the exact answer is the perpendicular
+foot at 35.355 u and (25, 25), while the old axis clamp returns 50.000 u and
+(50, 50) — and the **control asserts the old arithmetic still produces 50.000
+on that same fixture**, so the check is pinning a real distinction rather than a
+tautology. §12e pins the point/distance pairing over **596** real boundary
+probes; its first draft found **one** probe and would have passed vacuously,
+because these trapezoids are hundreds of units wide and a fixed step off the
+centre never leaves them — the probe is now derived from each trapezoid's own
+edge. Floor 75 → 80.
 
 ---
 

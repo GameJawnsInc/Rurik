@@ -2006,7 +2006,26 @@ on-mesh point at distance zero for an on-mesh query, leads a real ≤12u
 edge penetration back to a verified-walkable point no farther than the
 step off, and returns None in the middle of nowhere — run 3's
 218-second refusal lock-in stood on an 8u penetration this query now
-answers. Section 13 (2026-08-28, MOVECODE R5) is the CORNER PULL, and
+answers. **§12d and §12e were added 2026-08-29 because the DISTANCE was
+wrong** (FINDINGS §1z-l): the query clamped y into the trapezoid's span
+then x into its edges *at that y*, which is the true nearest only when
+that edge is axis-aligned — against a slanted edge it walks along y then
+along x instead of projecting perpendicularly. The docstring's "error
+bounded by the edge slope over the radius" held for the radius-16 origin
+rescue it was written for and **quietly stopped holding when
+`noclipscore.py` asked at radius 600 and published the answer as "how far
+off-mesh"**; measured against dense boundary sampling it over-reported by
+up to **2.967×** (77.43u where the truth is 26.10u) and 64.91u absolute,
+now 1.000× and 0.00u. §12d pins the geometry on a **synthetic 45°
+trapezoid**, because a real mesh cannot isolate the property, and carries
+the control that decides whether the check means anything: the OLD
+arithmetic must still read 50.000u on that same fixture, 1.41× the exact
+35.355u. §12e pins that the returned distance describes the returned
+point — the boundary nudge used to move the point *after* the distance
+was taken — over 596 real probes; **its first draft found ONE probe and
+would have passed vacuously**, because these trapezoids are hundreds of
+units wide and a fixed step off the centre never leaves them, so the
+probe is now derived from each trapezoid's own edge. Floor 75 → 80. Section 13 (2026-08-28, MOVECODE R5) is the CORNER PULL, and
 it is the section a reader should copy the shape of: `_shared_edge`
 answered the MIDPOINT of the interval two trapezoids share, so a body
 standing near one end of a long shared edge was routed to the middle of

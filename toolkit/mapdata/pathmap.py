@@ -310,6 +310,43 @@ class Portal:
                 f"{self.neighbour}, {self.traps} trapezoid(s)>")
 
 
+def _nearest_on_segment(px, py, ax, ay, bx, by):
+    """(x, y, dist) -- the nearest point of segment AB to P. Perpendicular
+    projection clamped to the segment, which is what an axis clamp is not."""
+    dx, dy = bx - ax, by - ay
+    d2 = dx * dx + dy * dy
+    if d2 <= 0.0:
+        return ax, ay, ((px - ax) ** 2 + (py - ay) ** 2) ** 0.5
+    t = ((px - ax) * dx + (py - ay) * dy) / d2
+    if t < 0.0:
+        t = 0.0
+    elif t > 1.0:
+        t = 1.0
+    qx, qy = ax + t * dx, ay + t * dy
+    return qx, qy, ((px - qx) ** 2 + (py - qy) ** 2) ** 0.5
+
+
+def _nearest_on_trapezoid(t, x, y):
+    """(x, y, dist) -- the exact nearest point of a trapezoid to (x, y).
+
+    Zero when the point is inside. Otherwise the nearest point of a convex
+    region's exterior lies on its boundary, so it is the best of the four
+    edges -- corners included, because a segment projection clamps to them.
+    """
+    if t.contains(x, y):
+        return x, y, 0.0
+    cor = ((t.x_bottom_left, t.y_bottom), (t.x_bottom_right, t.y_bottom),
+           (t.x_top_right, t.y_top), (t.x_top_left, t.y_top))
+    best = None
+    for i in range(4):
+        ax, ay = cor[i]
+        bx, by = cor[(i + 1) & 3]
+        qx, qy, d = _nearest_on_segment(x, y, ax, ay, bx, by)
+        if best is None or d < best[2]:
+            best = (qx, qy, d)
+    return best
+
+
 class Trapezoid:
     """One walkable quad: a y span whose left and right edges are lines.
 
@@ -502,35 +539,76 @@ class PathingMap:
         the keyboard finally spoke). A caller that needs a routable origin
         asks for the nearest covered point instead of refusing outright.
 
-        Per candidate trapezoid the point is found by clamping y into the
-        trapezoid's span and x into its edges at that y -- not the exact
-        euclidean nearest against slanted edges, but within the small radii
-        this is for the error is bounded by the edge slope over the radius,
-        and every returned point is VERIFIED walkable() (a clamp landing on
-        a boundary float is nudged toward the trapezoid's centre first;
-        a candidate that still fails verification is skipped, never
-        returned)."""
+        THE DISTANCE IS EXACT AS OF 2026-08-29, AND IT WAS NOT BEFORE.
+        This used to find the candidate by clamping y into the trapezoid's
+        span and then x into its edges AT THAT Y -- an axis clamp, which is
+        the true nearest point only when the edge it lands on is axis-aligned.
+        Against a slanted edge it walks along y and then along x instead of
+        projecting perpendicularly, and the docstring's claim that "within the
+        small radii this is for the error is bounded" quietly stopped holding
+        the moment an offline scorer asked at radius 600: measured over r7's
+        67 off-mesh endpoints against dense boundary sampling, it over-reported
+        by up to 2.967x (77.43 u where the truth is 26.10 u) and by up to
+        64.91 u absolute. `noclipscore.py` quotes this value as "how far
+        off-mesh", so every depth in an r6/r6b-era scoring pass that cited it
+        carries that error.
+
+        Now it is the exact euclidean nearest point on the trapezoid, which
+        for a convex quad is the nearest point on its four EDGES (or the point
+        itself when inside). Cost is four segment projections per candidate
+        instead of one clamp, paid back by a bounding-box lower bound that
+        skips a candidate before any of them -- the large-radius case this was
+        wrong for is the one the early-out helps most.
+
+        Every returned point is still VERIFIED walkable() (a projection
+        landing on a boundary float is nudged toward the trapezoid's centre
+        first; a candidate that still fails verification is skipped, never
+        returned) -- and THE DISTANCE IS NOW RECOMPUTED AFTER THAT NUDGE, so
+        the point and the distance describe each other. It used to return the
+        pre-nudge distance beside a post-nudge point."""
         best = None
         b0 = int((y - radius) // BAND)
         b1 = int((y + radius) // BAND)
         for band in range(b0, b1 + 1):
             for t in self._bands.get(band, ()):
-                lo, hi = t.y_bottom, t.y_top
-                if lo > hi:
-                    lo, hi = hi, lo
-                cy = lo if y < lo else (hi if y > hi else y)
-                xl, xr = self._x_at(t, cy)
-                if xl > xr:
-                    xl, xr = xr, xl
-                cx = xl if x < xl else (xr if x > xr else x)
-                d = ((cx - x) ** 2 + (cy - y) ** 2) ** 0.5
+                # A cheap lower bound on the distance to this trapezoid: the
+                # distance to its bounding box. Skipping here costs two
+                # comparisons and saves four projections.
+                xlo = t.x_bottom_left if t.x_bottom_left < t.x_top_left \
+                    else t.x_top_left
+                xhi = t.x_bottom_right if t.x_bottom_right > t.x_top_right \
+                    else t.x_top_right
+                ylo, yhi = t.y_bottom, t.y_top
+                if ylo > yhi:
+                    ylo, yhi = yhi, ylo
+                dx = xlo - x if x < xlo else (x - xhi if x > xhi else 0.0)
+                dy = ylo - y if y < ylo else (y - yhi if y > yhi else 0.0)
+                lb = (dx * dx + dy * dy) ** 0.5
+                if lb > radius or (best is not None and lb >= best[0]):
+                    continue
+                cx, cy, d = _nearest_on_trapezoid(t, x, y)
                 if d > radius or (best is not None and d >= best[0]):
                     continue
                 if not self.walkable(cx, cy):
+                    # THE NUDGE ESCALATES FROM SMALL, and that matters to the
+                    # distance now that the distance is exact. A flat 1e-3 of
+                    # the way to the centre is ~0.5 u on a 500 u trapezoid --
+                    # which was invisible beside the old 65 u error and is the
+                    # dominant term once that is gone. Take the smallest step
+                    # that clears the float boundary rather than a fixed one.
                     ctr = t.centre
-                    cx += (ctr[0] - cx) * 1e-3
-                    cy += (ctr[1] - cy) * 1e-3
-                    if not self.walkable(cx, cy):
+                    for f in (1e-6, 1e-5, 1e-4, 1e-3, 1e-2):
+                        nx = cx + (ctr[0] - cx) * f
+                        ny = cy + (ctr[1] - cy) * f
+                        if self.walkable(nx, ny):
+                            cx, cy = nx, ny
+                            break
+                    else:
+                        continue
+                    # RECOMPUTE: the nudge moved the point, so the old `d`
+                    # described a point we are not returning.
+                    d = ((cx - x) ** 2 + (cy - y) ** 2) ** 0.5
+                    if d > radius or (best is not None and d >= best[0]):
                         continue
                 best = (d, cx, cy)
         if best is None:

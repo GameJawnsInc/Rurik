@@ -329,7 +329,7 @@ def all_valid(pm, paths):
 # ArenaNet stopped registering bit-31 file ids after 38797 (25 -> 0), so the
 # three checks about raw/masked pairing have nothing to be about. They are
 # declared skips there, not silent absences.
-LEDGER = checks.Ledger("pathing map", floor=75)
+LEDGER = checks.Ledger("pathing map", floor=80)
 check = checks.adopt(LEDGER)
 
 
@@ -971,6 +971,86 @@ def main():
     check(pre.nearest_walkable(9e6, 9e6, 16.0) is None,
           "a point with nothing in radius returns None",
           "refuse-to-guess: the caller must handle a true hole")
+
+    # (d) THE DISTANCE IS THE EXACT EUCLIDEAN NEAREST, 2026-08-29.
+    #
+    # It used to clamp y into the trapezoid's span and then x into its edges
+    # AT THAT Y -- an axis clamp, which is the true nearest only when the edge
+    # it lands on is axis-aligned. Against a SLANTED edge it walks along y and
+    # then along x instead of projecting perpendicularly, and the error is
+    # unbounded in the radius: measured over r7's 67 off-mesh endpoints
+    # against dense boundary sampling, it over-reported by up to 2.967x
+    # (77.43 u where the truth is 26.10 u) and by 64.91 u absolute.
+    # `noclipscore.py` quotes this as "how far off-mesh", so the error rode
+    # into every depth an r6/r6b-era scoring pass published.
+    #
+    # A SYNTHETIC TRAPEZOID, because the property is geometric and a real mesh
+    # cannot isolate it: one 45-degree edge, and a probe point off it.
+    import pathmap as _pm
+    slant = _pm.Trapezoid(plane=0, index=0, y_top=100.0, y_bottom=0.0,
+                          x_top_left=100.0, x_top_right=200.0,
+                          x_bottom_left=0.0, x_bottom_right=100.0)
+    # P sits off the left edge, which runs (0,0) -> (100,100). The exact
+    # nearest point is the perpendicular foot; the axis clamp gives the
+    # horizontal hit instead, which is farther by a factor of sqrt(2).
+    px, py = 0.0, 50.0
+    qx, qy, d = _pm._nearest_on_trapezoid(slant, px, py)
+    import math as _math
+    exact = 50.0 / _math.sqrt(2.0)          # perpendicular distance to y = x
+    check(abs(d - exact) < 1e-9,
+          f"12d. the nearest point on a SLANTED edge is the perpendicular "
+          f"foot ({exact:.3f} u)",
+          f"got {d:.6f} at ({qx:.3f},{qy:.3f}) -- an axis clamp gives "
+          f"50.000, which is the shipped bug")
+    check(abs(qx - 25.0) < 1e-9 and abs(qy - 25.0) < 1e-9,
+          "12d. and it is the foot itself, not the horizontal hit",
+          f"got ({qx:.6f},{qy:.6f}), expected (25,25); the axis clamp "
+          f"returns (50,50)")
+    # THE KNOWN-BAD ARM, stated as the arithmetic it replaced: the old
+    # expression, on this same trapezoid, must produce the WRONG answer -- or
+    # this check is pinning a distinction that never existed.
+    cy_old = 50.0                       # y clamped into [0,100] -- unchanged
+    xl_old = slant.x_bottom_left + (cy_old / 100.0) * (
+        slant.x_top_left - slant.x_bottom_left)
+    d_old = abs(xl_old - px)            # x clamped to the left edge at that y
+    check(abs(d_old - 50.0) < 1e-9 and d_old > d * 1.4,
+          "12d. CONTROL: the OLD axis clamp reads 50.000 u here, 1.41x the "
+          "truth",
+          f"old {d_old:.6f} vs exact {d:.6f} -- if these agree, the fixture "
+          f"no longer has a slanted edge and the check proves nothing")
+    # (e) THE RETURNED DISTANCE DESCRIBES THE RETURNED POINT. The boundary
+    # nudge used to move the point AFTER the distance was recorded, so a
+    # caller got a post-nudge point beside a pre-nudge distance.
+    # Probe from each trapezoid's OWN right edge rather than a fixed step off
+    # its centre -- these trapezoids are hundreds of units wide, so centre+12
+    # is still inside and the first draft of this check found ONE probe and
+    # would have passed vacuously.
+    bad = 0
+    tried = 0
+    for t in pre.trapezoids[:600]:
+        my = (t.y_top + t.y_bottom) * 0.5
+        span = t.y_top - t.y_bottom
+        f = 0.0 if span <= 0.0 else (my - t.y_bottom) / span
+        right = t.x_bottom_right + f * (t.x_top_right - t.x_bottom_right)
+        for step in (0.5, 2.0, 8.0):
+            px, py = right + step, my
+            if pre.walkable(px, py):
+                continue
+            nw = pre.nearest_walkable(px, py, 16.0)
+            if not nw:
+                continue
+            tried += 1
+            if abs(math.hypot(nw[0] - px, nw[1] - py) - nw[2]) > 1e-6:
+                bad += 1
+            break
+    check(tried >= 20,
+          f"12e. enough boundary probes to score the point/distance pairing "
+          f"({tried})",
+          "too few off-mesh probes found -- the check below would be vacuous")
+    check(bad == 0,
+          "12e. every returned distance is the distance to the returned point",
+          f"{bad} of {tried} disagree -- the nudge moved the point after the "
+          f"distance was taken")
 
     print("\n13. the corner pull (MOVECODE R5's backtrack)")
     # THE DEFECT, in one sentence: _shared_edge answers the MIDPOINT of the
