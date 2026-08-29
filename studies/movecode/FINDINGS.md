@@ -5102,12 +5102,83 @@ non-gating (§1x.4) → the body crosses carved prop holes (§1x.1–1x.2). Reta
 shows this because retail's server grants routed part-way points — the one link in the
 chain that is ours to change.
 
-**THE LEAD: server-side path-solved grants on our own mesh.** The mesh is now proven to
-carve props (97/98); `route()` string-pulls on it; the grant should be its waypoints,
-not the click echo. **The offline no-clip detector exists** (chord coverage + outline
-membership, `obstacle-dig/` scripts) for scoring any future run. Filed behind the lead:
-tag 13's client-side consumer; the collision-sub-mesh merge experiment (specimen named);
-+0x68's reader.
+**THE LEAD: server-side path-solved grants on our own mesh — WHICH ALREADY EXIST.**
+Corrected within the hour: `--router` (ROUTER-B2, `studies/movement/ROUTER.md`, owner's
+2026-08-26 ruling) is exactly this, five scored runs behind it, and its arc closed on a
+"mesh fidelity defect" that §1y now largely reverses. The lead is therefore not to BUILD
+the router but to RUN it against the no-clip repro — [RUN-R5.md](RUN-R5.md). **The
+offline no-clip detector is promoted to `toolkit/clientscan/noclipscore.py`** (validated:
+reproduces §1x.1's numbers bit-for-bit). Filed behind the lead: tag 13's client-side
+consumer; the collision-sub-mesh merge experiment (specimen named); +0x68's reader.
+
+## 1y. THE POCKET FORENSICS — the router arc's "wrong-mesh" closing largely REVERSED; the router is the no-clip fix, and R5 is registered
+
+**OBSERVED, 2026-08-28**, same session as §1x, desk-only. Trigger: §1x.6 recommended
+building what already exists — `--router` (ROUTER-B2) went through five scored runs on
+2026-08-26 and its arc closed on two mesh-fidelity specimens (`ROUTER.md` §10: run 4's
+`dest-off-mesh` refusals "a real decode gap"; run 5's "our decode reads the player's open
+ground as a pocket"). Both specimens re-examined with §1x's instruments, off the vault
+logs' own coordinates (`authsrv-20260826T211820/215206-c1.jsonl`). Scripts and renders:
+`vault/research/movecode/obstacle-dig/`.
+
+### 1y.1 Run 4's refusals were CORRECT
+
+Five of the six refused destinations are bare of any outline and 32–100 u past the mesh
+edge — **inside the building footprints of §1y.2's compound**; the sixth is inside prop
+505's authored outline. Clicks onto structures, refused. Not a decode gap.
+
+### 1y.2 Run 5's "pocket" is a WALLED COMPOUND
+
+The four clicks' direct east lines each cross exactly two ~200–290 u voids (`pocket.py`).
+The terrain under band 2 carries a **Δh ≈ 500 u** vertical feature (`pocket2.py`); band 1
+is at grade. The render (`edgevec.png`) shows the voids as crisp architectural footprints
+— rectangles, an L/U compound, long thin walls — with 14 prop placements on and around
+them, several centred on voids. **The west-then-east route (ratio 1.66) was a legal
+detour around a real compound.** And run 5's own client reports never place the body east
+of x ≈ −5300, so "the player walks freely east" never actually tested the bands — which,
+with a non-gating mover (§1x.4), would prove nothing anyway: a keyboard walk crosses
+anything.
+
+### 1y.3 The file holds no extra walkable geometry there
+
+A whole-chunk coordinate scan over band 1's box, with a positive control on known covered
+ground (`bandscan.py`/`bandclass.py`): the only structured hit is plane 23's **tag-1
+block, which decodes as the plane's boundary ring** — all 68 planes carry one, vertex
+count tracking trapezoid count (`edgevec.py`) — redundant with the trapezoids we already
+read, not extra area. Tag 11 "polyData" is 92 scattered points map-wide. **Our decode's
+voids are the FILE's voids.**
+
+What remains open of `ROUTER.md` §10's mesh-fidelity claim, stated exactly: **(a)**
+whether the voids are FATTER than the visible walls — the operator's eye answers this,
+R5 prediction P4; **(b)** §1p.6's waypoint-vocabulary mismatch (retail's part-way points
+are never ours, 0/11) — real and untouched by this; **(c)** B5's measured 0.25–8.0 u
+standing penetrations. The headline "our mesh reads open ground as a pocket" is not
+supported by the specimens that prompted it.
+
+### 1y.4 A third carve source exists (filed, not chased)
+
+Of the compound's 14 props, only 3 reference collision-mesh models and only 2 carry
+outlines — **most of these building voids carry NEITHER §1x.2 mechanism.** Something else
+carves structure footprints into the compiled mesh (render geometry at compile? a model
+sub-chunk our reader does not classify?). Filed with Q3's compile experiment. If R5's P4
+is refuted (the line east is visibly open), the next instrument is dumping the client's
+own imported mesh — §1x.4 already measured its runtime layout (planes at M+0x18, stride
+0x54, count at M+0x20).
+
+### 1y.5 The instrument is promoted and the run is registered
+
+**`toolkit/clientscan/noclipscore.py`** scores any movehook capture: body-sample off-mesh
+census with outline attribution, plus rapid-pair chord coverage. Validated on r4a — 655
+samples, **21 deep off-mesh naming THREE walked-into massifs (props 127, 179, 221)**;
+84 pairs, 39 crossing, worst 19.3% over 1,406 u — §1x.1's numbers bit-for-bit. The mesh
+is pinned by `--map-fid`, never selected (§1v.3's trap); the local body is picked by
+bake/setter count and printed (two-world-copies trap).
+
+**[RUN-R5.md](RUN-R5.md)** registers four predictions. The run's signature is a
+DISSOCIATION: section B's chords still cross the rock (the geometry did not change)
+while section A's body goes clean (only legal legs are granted). A body still deep
+off-mesh under click-only movement would indict the display/reconcile path, not grant
+content — and the reconcile is the mechanism §1t.2 already measured.
 
 ---
 

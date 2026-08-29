@@ -603,3 +603,16 @@ are off for this"). The router ships as it stands — opt-in, four runs
 of measured improvement behind it — and the next arc instruments the
 client instead of inferring from the wire. Handoff:
 [studies/movecode/PLAN.md](../movecode/PLAN.md).
+
+> **ADDENDUM 2026-08-28 — the two mesh-fidelity specimens above DISSOLVE on
+> re-examination** ([studies/movecode/FINDINGS.md](../movecode/FINDINGS.md)
+> §1y, with the obstacle dig §1x behind it): run 4's `dest-off-mesh` refusals
+> were clicks inside real building footprints (correct refusals), and run 5's
+> "pocket" is a walled compound the route legally detoured around — the
+> client reports never show the body crossing the "open ground east", and the
+> client's mover consults geometry non-gatingly, so a keyboard crossing would
+> not have validated it anyway. What SURVIVES of defect 2: possible footprint
+> fattening (RUN-R5 P4 tests it by eye), §1p.6's waypoint-vocabulary mismatch,
+> and B5's 0.25–8.0 u standing penetrations. Defect 1 (the snap/reconcile
+> rule) has since been measured by the MOVECODE arc — §1t.2's reseed formula
+> and §1x.4's non-gating walk chain.

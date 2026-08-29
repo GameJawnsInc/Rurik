@@ -1570,11 +1570,18 @@ This supersedes the two entries below it (each marked in place in FINDINGS):
   r 21–70 u, per-cell CSR proven 990/990) and is NOT this defect (0/1,199 samples inside
   any circle). Filed: likely `PathApi:753/754`'s data. Also filed: 14/92 prop models
   carry collision sub-meshes, merge UNRESOLVED, compile-experiment specimen named.
-* **THE LEAD:** the one changeable link in the measured chain is grant CONTENT — we echo
-  the verbatim click (55/55), retail grants routed part-way points. **Answer clicks with
-  `route()` waypoints on our own mesh** (now proven to carve props). Design question to
-  settle before building: waypoint cadence/spacing vs retail's 3-verbatim-to-6-part-way
-  pattern (§1w.4), and how the grant interacts with `--click-echo`'s remaining users.
+* **THE LEAD — corrected same day (§1y): the route()-grant policy ALREADY EXISTS**
+  (`--router`, ROUTER-B2, five scored runs). §1y re-examined the two specimens its arc
+  closed on and both dissolve: run 4's refusals were clicks inside real building
+  footprints; run 5's "pocket" is a walled compound legally detoured around; the file
+  holds no extra walkable geometry there (positive-controlled scan; the skipped tag-1
+  blocks are plane boundary rings). **The no-clip scorer is promoted to
+  `toolkit/clientscan/noclipscore.py`** (r4a: 21 deep off-mesh across THREE massifs —
+  props 127/179/221 — 39/84 chords crossing). **NEXT: [RUN-R5](studies/movecode/RUN-R5.md)**
+  — `--router` vs the corner-click repro, four registered predictions, the signature
+  being chords-still-cross while the body goes clean. Owner drives; ~6 min. Open behind
+  it: footprint fattening (P4, operator's eye), the third carve source (§1y.4), retail's
+  waypoint vocabulary (§1p.6).
 
 ### ★★★★ MOVEMENT 2026-08-28 — SUPERSEDED by the §1x entry above — THE NO-CLIP CANNOT BE SCORED WITH OUR MESH, and now we know why
 
