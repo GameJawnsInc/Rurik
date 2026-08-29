@@ -1,5 +1,14 @@
 # MOVECODE-R6 — the plane repair's first live trial: zero fires healthy, and if a lock comes, the HEAL
 
+> **RAN 2026-08-29, scored — [FINDINGS §1z-f](FINDINGS.md).** P1 healthy on
+> every observable (zero fires, ladder never armed, 0/202 reports impossible)
+> but its 15-min floor UNMET at 7.8 min; P2 UNREAD — the wall SLID (~94 u/s,
+> longest byte-identical streak 0.837 s; a future press needs a pinning
+> corner); P3 MET (73 stacked, 24 deck stints); P4 UNREAD (no lock — the heal
+> is still untried). Bonus: the echo census read 4/349 — all four the
+> operator's under-bridge GLITCH clicks relayed verbatim (a new subclass), and
+> the under-bridge itself is settled as a glitch, not a decode gap.
+
 **Written 2026-08-29, after §1z-e; four-skeptic review applied before it landed**
 (the review found the original watch-terminal-1 protocol unexecutable and the
 scoring one-liner a PowerShell SyntaxError — both fixed and tested below).

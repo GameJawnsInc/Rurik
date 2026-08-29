@@ -5951,6 +5951,158 @@ the k1 bin, only this session holds `keepalive_verdict` rows, and its two
 
 ---
 
+## 1z-f. RUN-R6 RAN — the trigger stayed silent through the heaviest plane exposure ever captured, the under-bridge is a GLITCH, and the carry's mechanism got its cleanest measurement
+
+**OBSERVED 2026-08-29 (session `authsrv-20260829T132441`, 7.8 min; client capture
+`vault/research/movecode/r6/movehook.bin`, 6,152 records, both controls FIRED,
+ended by `--stop`; scoring scripts beside the bin in `r6/scoring/`).** The
+[RUN-R6.md](RUN-R6.md) trial, scored by four parallel lanes (episodes, press,
+wire, mesh) whose load-bearing disagreement was settled by a fifth tabulation —
+see the mechanism bullet, where one lane's reconstruction is refuted by its own
+column. Hook↔session alignment: `t = tick/1000 − 750664.395`, derived from a
+222-match report↔sample histogram (p10–p90 spread 0.26 s); the hook covered
+t∈[186.4, 437.3].
+
+**Operator context that reframes §1z-c:** walking UNDER the bridge is not
+normally possible — it is a glitched state, replicated only 2–3 times this run,
+and the capture's final move command is one such crossing.
+
+### 1z-f.1 The registered predictions
+
+* **P1 — healthy on every observable, but its floor is UNMET.** Zero
+  `plane_repair` rows, zero 0x002C sends of any kind, zero `[plane-repair]`
+  prints; the due-ladder's 15 transitions are `plane-legal` ×8 / `off-mesh` ×7
+  and it **never even armed** — because not one of the 202 position reports
+  (170 0x003D + 32 stops, ALL accepted, zero trust refusals) ever claimed a
+  plane the mesh does not offer at its point. The 4 `plane_echo` rows fall
+  under P1's registered echo-without-fire clause and cross-check cleanly
+  (below). The shortfall the record keeps: the session is **7.8 min against the
+  registered ≥15-min floor** — §3.5's free-play extension did not happen, so
+  the first prospective healthy data point is real but under-exposed. The next
+  ordinary session at full length completes it.
+* **P2 — UNREAD, and the premise is the finding.** The wall-press control never
+  produced its signature: the pressed body **slid along the compound wall at
+  ~94 u/s** on a ~180 u diagonal instead of freezing — the longest
+  byte-identical accepted-report streak in the whole session is **0.837 s**
+  against the 8 s floor. Zero exposure to the freeze test, honestly unread. Two
+  live observations survive: the reported position poked in and out of the
+  compound's undecoded footprint (six of the seven `off-mesh` ladder
+  transitions are this window), so the disarm work was split between
+  `plane-legal` AND `off-mesh` — the ladder's healthy churn observed live for
+  the first time; and the blocked-client-streams-frozen premise (which the
+  08-22 session's 10.6 s frozen stream proves for SOME geometry) does not hold
+  at this wall. A future P2 needs a pinning corner, not a slidable wall.
+* **P3 — MET with two orders of magnitude to spare.** Section C on the bin:
+  1,064 deduped samples, **73 stacked-ground, 293 impossible** (the biggest
+  plane harvest the arc has taken; r5bridge's whole capture held 8); 24
+  distinct on-deck stints against a floor of 6 crossings.
+* **P4 — UNREAD, as the registration expected.** No lock. The heal remains
+  untried; the trigger's live silence through this run's exposure is the
+  specificity evidence, not the heal's.
+
+### 1z-f.2 The echo census found a NEW relay subclass — and "never invents" survives its third test
+
+Recomputed independently of the tripwire from all **349** plane-bearing sends
+(every one 0x0029, parsed off the wire, checked against the mesh at its own
+packet point): **4 wrong-plane, 7 off-mesh-point (the separate mild class, all
+in the press window), 338 legal** — and the 4 match the tripwire's `plane_echo`
+rows 1:1. Against the corpus: healthy 0/285 (§1z-d.1), the lock 43/65, **R6
+4/349 — the first nonzero census outside a lock session, and every one is the
+glitch on the wire.** All four are **router one-leg answers relaying the
+client's own `MOVE_TO_COORD` dest plane** — the client clicked under-deck
+points and named plane 0 for them; `router_answer_click` relayed the click's
+slot-2 verbatim. §1z-d measured the server as a faithful relay on the REPORT
+channel; this extends it to the CLICK channel. The server's own tracked plane
+(the send's second word) was the client's latest accepted report's plane every
+time — no stale state. **And the server never authored a leg into the
+under-deck volume**: 84/88 sends into the deck footprint are legal plane-37
+deck traffic, every router-computed waypoint is mesh-legal, and the final
+under-crossing's click was answered with a route OVER the deck (leg 1
+plane 37) — the client went under by its own click-driven, **report-silent**
+movement (a 62 s stretch around echo #4 has zero position reports).
+
+### 1z-f.3 The carry's mechanism: grants correct, walking channel stale — fully client-internal
+
+The episode census (per-record planes, no dedupe): **18 impossible-plane
+episodes totalling 60.7 s of the 251.0 s armed window** — 17 "declares 37 on
+{0}" flanking the bridge, 1 under-deck (§1z-f.4).
+
+* **Impossible plane alone does NOT break path resolution.** Walker sites
+  (`agapi_setdest`/`chcli_advance`) fired inside 13/18 episodes; the other
+  four show 139–607 u of live in-episode body drift; 67 clicks and 85 path
+  queries land inside the windows. **No episode reproduces the r5stuck
+  signature** (clicks+queries with a dead walker and a frozen body). The lock
+  needs more than a wrong plane word — consistent with §1z-e's corpus carries
+  and sharpening §1z-c's reconstruction: the lock's resolve failure is a
+  further condition, not a consequence of the word alone.
+* **These carries are NOT decode gaps.** The same ground scores CLEAN
+  (0/192 declared-37) before t+68 with re-planes exactly at the decoded landing
+  lines (x=−1643/−2852 — the client's own re-plane line coincides with our
+  portal columns to the unit, the strongest deck-decode corroboration yet);
+  afterwards the declared-37 smears up to **2,611 u past the east landing**
+  and flips 0↔37 mid-ground — no fixed undecoded surface produces that.
+* **The mechanism, settled by a per-site tabulation of the 60 mixed-plane
+  ticks** (`r6_tiebreak.py` — this is where one lane's reconstruction died: it
+  read the correction path as the poisoner, the other lane read it as the
+  corrector, and the columns decide). On points offering exactly {0}:
+  **`reseed` carries plane 0 in 17/17 records and `teleport` in 30/34 — the
+  grant-install channel wrote the CORRECT plane — while the client's own
+  `setter`/`bake` carry the stale 37 in 17/21.** ALL 74 of the run's reseeds
+  and 130/270 teleports fall inside the episode windows (24 % of the capture):
+  the correction machinery fires exactly while the walking channel misdeclares,
+  and loses. With 0/202 reports impossible and 4/349 sends impossible (all
+  click relays), **every wire input during the carries was clean — the stale
+  plane lives entirely client-side**, in the walking/bake channel, and the
+  sync copy shows the same 37 during the big carries. RECONSTRUCTION: the
+  walking channel's plane rides the client's own state (§1x's chain — movement
+  never reads the resolve), so no send-side policy can prevent a carry; the
+  repair's report-keyed trigger remains the only server-side handle.
+
+### 1z-f.4 The under-bridge is a GLITCH, and the 9/198 doctrine gets its boundary
+
+Mesh ground truth (trapezoid-level, no sampling): plane 37 is a closed
+17-trapezoid lens (x −2852..−1643, y 6301..6638) whose entire footprint offers
+ONLY {37} (581/581 fine-scan points, zero plane-0 overlap), with unmeshed void
+on the flanks and **exactly two portals, one at each landing line — there is no
+under-deck ground of any plane and no legal path into the under-deck region.**
+The displayed body's under-deck record: ONE episode (E18, the capture's final
+records — entry at (−1657.2, 6438.1) plane 0, 14 u inside the east landing, at
+t≈431, **open at capture end**: the operator's final crossing, with `--stop`
+landing mid-traversal). The other 1–2 replications left only their clicks on
+the wire (the four echoes at t=241–402, dests spanning the footprint) — under-
+deck movement is click-driven, report-silent, and commit-sparse
+(sample-and-hold), so the bin structurally under-samples it; 2–3 replications
+against 1 resolved episode is consistent, stated, and not a count.
+
+**RECONSTRUCTION, triply supported: retail's own mesh lacks under-deck
+walkable ground, and the under-deck client is OUTSIDE its own navmesh.**
+(a) our byte-exact parse of the client's own pathing chunk has no surface
+there; (b) the operator reports normal walking cannot enter — which an absent
+surface predicts and a real-but-undecoded floor would contradict; (c) while
+under, the client declares plane 0, which the location does not hold.
+**The 9/198 client-right-by-default doctrine is NOT touched on its own
+channel** — it was measured on position REPORTS, and this run's 202 reports
+were all legal (the under-deck points were never reported from, only clicked
+to). What R6 adds is the doctrine's boundary: a client-named plane in a CLICK
+dest can be a glitch-state's word, and the send path relays it. r5bridge's 8
+anomalies reclassify identically (6 east-side carries paired with correct
+plane-0 reseeds + 2 under-deck at (−2821.9, 6404.3) — the operator's original
+two under-walks): **§1z-c's "deck-over-ground, both directions" reading is
+revised — neither class was a decode gap.**
+
+### 1z-f.5 What this leaves
+
+The heal is still untried; the next trial is the same runsheet run to its
+15-minute floor (with the P2 wall swapped for a pinning corner or the control
+dropped). Filed: the ZERO-LEAD field-4 carry probe (§1z-e.4) still stands;
+whether the click-relay subclass should ever be answered differently at a
+{37}-only dest is a policy question the twice-refused rewrite doctrine says to
+leave alone absent behavioural evidence. The alignment constant
+(`tick/1000 − 750664.395`) and the lane scripts are in `r6/scoring/` for the
+next reader.
+
+---
+
 ## 2. Corrections to the record
 
 Each of these was in circulation and each is now measured against the bytes.

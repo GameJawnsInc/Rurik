@@ -1637,12 +1637,35 @@ This supersedes the two entries below it (each marked in place in FINDINGS):
   ERASES two real anomalies in k2-2 (alias) — fixed same commit, section C now
   reads each record's own plane (`test_noclipscore.py` §5 pins it, floor 8→9),
   and the §1z-c counts move under the fixed lookup, deliberately: r5bridge 6→8,
-  r4a 5→8, r5 stays 0. **The first live trial's runsheet is registered:
-  [studies/movecode/RUN-R6.md](studies/movecode/RUN-R6.md)** (four-skeptic
-  reviewed; the review caught that gamesrv fire prints never reach the harness
-  terminal — the sheet tails gamesrv.log — and that an un-paused heal-click
-  gets kbd-dropped by the 3 s keyboard-authority window). The run itself is
-  operator-driven and waits on the owner.
+  r4a 5→8, r5 stays 0.
+* **★ RUN-R6 RAN 2026-08-29 (§1z-f) — the repair's first live trial: SILENT
+  through the heaviest plane exposure ever captured, and the under-bridge is a
+  GLITCH.** [Runsheet](studies/movecode/RUN-R6.md) (four-skeptic reviewed
+  pre-run), scored by four lanes + a tie-break. **P1 healthy on every
+  observable** — zero fires, ladder never armed, **0/202 reports impossible**,
+  echo census recomputed 4/349 vs 0/285 healthy corpus — but its 15-min floor
+  UNMET (7.8 min; step 5 skipped). **P3 MET** (73 stacked samples, 24 deck
+  stints — r5bridge's whole capture held 8 anomalies; this one holds 293).
+  **P2/P4 UNREAD** — the compound wall SLID (~94 u/s; longest byte-identical
+  streak 0.837 s; the blocked-client-freezes premise fails at this wall, a
+  future press needs a pinning corner) and no lock occurred (**the heal is
+  still untried**). Findings beyond the predictions: (1) the 4 echoes are a
+  NEW subclass — router one-leg answers relaying the client's own
+  `MOVE_TO_COORD` dest plane at under-deck points ("never invents" extended to
+  the click channel; the server never authored a leg under the deck — the
+  client went under click-driven and report-silent); (2) the carry mechanism
+  is FULLY CLIENT-INTERNAL — on the 60 mixed-plane ticks the grant-install
+  channel wrote the correct plane (reseed 17/17, teleport 30/34) while the
+  client's own setter/bake re-asserted the stale 37 (17/21), all 74 reseeds
+  inside the 18 episode windows, and the walker stayed ALIVE through every
+  episode (no r5stuck signature — a wrong plane word alone does not lock);
+  (3) the under-bridge is a GLITCHED state (operator: not normally walkable;
+  mesh: {37}-only footprint, no under-deck ground, exactly two portals) —
+  §1z-c's r5bridge reading revised, NEITHER anomaly class was a decode gap,
+  and the 9/198 client-right doctrine keeps its own channel (all 202 REPORTS
+  legal; the glitch planes travelled only in click dests). Next: one
+  full-length ordinary session completes P1's floor; a lock remains the only
+  path to the heal.
 * **★ THE BRIDGE AND THE STUCK CLIENT, 2026-08-29 (§1z-c) — a PLANE channel nobody
   has scored, and the first captured movement LOCK.** `noclipscore.py` read 0 off-mesh
   on a capture taken *because* the operator had walked under a bridge twice: §1w.7's

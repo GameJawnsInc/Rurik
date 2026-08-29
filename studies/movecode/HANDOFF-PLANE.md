@@ -28,6 +28,16 @@ impossible plane, and the walker never ran. **A plane desync is a LOCK where a p
 desync is only a warp**, because a client that cannot resolve its own position cannot
 walk to ground that would re-plane it.
 
+**UPDATE 2026-08-29, evening (§1z-f): RUN-R6 RAN.** The trigger stayed silent
+through 18 live carry episodes (P1 healthy on every observable; its 15-min
+floor unmet at 7.8 min), the operator's under-bridge walking turned out to be a
+GLITCHED state and is settled as such (not a decode gap — §1z-c's reading of
+r5bridge's anomalies is revised in §1z-f.4), the carry mechanism measured
+fully client-internal (the grant channel wrote correct planes 17/17 while the
+client's own walk bake re-asserted stale ones), and the census found a new
+relay subclass: click-dest planes echoed verbatim (4/349). The HEAL is still
+untried — no lock has recurred under the shipped default.
+
 **UPDATE 2026-08-29, later the same day (§1z-e): §4.3 below was executed and the
 corpus already held TWO MORE LOCKS** — Ascalon 08-27 05:52 (§1c's own session, 10.2
 minutes from freeze to force-close) and the K1 treatment session 08-27 21:23. The
@@ -93,16 +103,21 @@ through it before you believe it.**
 
 ## 4. The next actions, in the order I would take them
 
-### 4.1 The repair's first live trial — opportunistic, costs one ordinary session
+### 4.1 The repair's first live trial — RAN 2026-08-29, scored as §1z-f; the heal is STILL untried
 
-**The registered runsheet is [RUN-R6.md](RUN-R6.md)** (2026-08-29, four-skeptic
-reviewed — among its findings: the gamesrv's fire prints do NOT reach the
-harness terminal under a plain launch, so the runsheet tails the gamesrv.log;
-and the heal-click must be release-paused or the server's 3 s keyboard-authority
-window kbd-drops it, exactly as it dropped 100/127 of the r5stuck victim's own
-clicks). It has never fired against a client. Any map-280 session on the shipped
-default scores it, because a healthy run is supposed to produce **zero** fires.
-Registered prediction
+**The runsheet is [RUN-R6.md](RUN-R6.md), and its first execution is scored in
+FINDINGS §1z-f**: the trigger stayed silent through the heaviest plane-anomaly
+exposure ever captured (18 carry episodes, 60.7 s; zero fires, the ladder never
+armed, 0/202 reports impossible), the tripwire caught a NEW echo subclass (4/349
+— router one-leg answers relaying the client's own under-bridge glitch clicks),
+and the carry mechanism measured fully client-internal (grants correct 17/17 on
+the reseed channel while the client's own walk bake re-asserts the stale
+plane). **Two floors fell short and the trial is not complete**: the session
+was 7.8 min against P1's 15, and P2's wall SLID instead of pinning. The next
+ordinary session at full length (and a pinning corner, or P2 dropped)
+completes the healthy branch; **a lock remains the only path to the heal
+measurement**, and no lock has occurred under the shipped default since
+r5stuck. The original registered prediction stands
 (FINDINGS §1z-d.3, timing restated from the offline replay, which is its authority):
 the `plane_repair_due` ladder reaches `plane-lock` within ~5 s of the first continuous
 report episode at a frozen point; numbered `PLANE-REPAIR` rows go out at most every
