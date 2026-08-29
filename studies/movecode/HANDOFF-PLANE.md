@@ -153,7 +153,25 @@ do — all 112 movement sessions scored once the review closed the first pass's
 label-parse holes (§1z-e.2), the two map-167 sessions included (clean under the
 run archive's own authored mesh).
 
-### 4.2 The `MapFindPath` RETURN tap — ✅ BUILT 2026-08-29, never yet run
+### 4.2 The `MapFindPath` RETURN tap — ✅ BUILT AND RUN 2026-08-29. **ANSWERED.**
+
+**§1z-i: the client's own pathfinder returns pathCount == 0 EXACTLY when its
+declared from-plane is one the mesh does not offer — exceptionless in both
+directions** (187 plane-matched → 0 zeros; 10 mismatched → 10 zeros; 17
+off-mesh-entirely → 0 zeros), with a decisive natural experiment: two queries
+1.2 s apart with **bit-identical from-point x/y dwords**, differing only in the
+plane word (37 vs 0), answered 1 and 0. And §1z-c.3's inferred link is now
+OBSERVED: `pathCount > 0` → setdest fires 0.95×; `pathCount == 0` → setdest
+**0.00, ten times out of ten**, with the correction machinery firing instead and
+the fence SHUT. The lock's middle term is supplied. Caveats: r7's state was
+transient and the body was not frozen, so "cannot resolve" is corroborated and
+"cannot move" is not.
+
+The instrument itself passed: 214/214 paired, zero esp mismatches, ~0.004 % cost.
+One defect of my own was found and fixed — the shape metric was a tautology
+(§1z-i.5). The rest of this section is the pre-run reasoning.
+
+### 4.2-built The RETURN tap — BUILT 2026-08-29
 
 **Landed as FINDINGS §1z-h**: four `mapfindpath_ret*` rows, a second emulation
 shape (`SHAPE_RET`), capture v7 carrying `out_count` (the client's own

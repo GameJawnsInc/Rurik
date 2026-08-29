@@ -6371,6 +6371,163 @@ live-run question, and the first ordinary session answers it.
 
 ---
 
+## 1z-i. R7 — THE RETURN TAP RAN, AND THE CLIENT'S OWN PATHFINDER FAILS EXACTLY WHEN ITS PLANE IS IMPOSSIBLE
+
+**OBSERVED 2026-08-29, the tap's first live run** (`vault/research/movecode/r7/`,
+capture v7, 5,627 records, both controls FIRED, ended by `--stop`; session
+`authsrv-20260829T163…`; scored by four lanes). The operator walked, clicked
+rocks, deliberately triggered under-bridge walks, and **ended the run standing
+underneath the west bridge** — which is why the capture contains what it does.
+
+### 1z-i.1 The instrument: it works, and the design's premise held on hardware
+
+* **214 entry hits, 214 `ret4` hits — exact 1:1**, and `ret1/ret2/ret3` fired
+  **zero** times. The sidecar shows no `NEVER ARMED` marker on any of them, so
+  the zeros are "never taken", not a dead patch — the distinction that census
+  exists for.
+* **214/214 paired on (tid, esp), ZERO esp mismatches.** The premise §1z-h.1
+  rests on — esp at a ret equals esp at the entry — held on every live
+  invocation. It is corroborated by a route that never touches esp: across the
+  214 pairs, `retaddr`, `arg1`, `arg3`, `arg4`, `arg5`, `arg6` are
+  **bit-identical** entry-vs-ret while **`arg2` differs 214/214** — the
+  clobber §1z-h.1 predicted, confirmed live. Five fields matching while the
+  sixth changes proves both records are live reads of the SAME addresses.
+* **The refuted half, made concrete:** the ret's arg2 slot holds 179 distinct
+  plausible float values (0.0 ×36, then 196.37, 987.93, 1703.37, …). Those are
+  the values that would have been dereferenced as point pointers had
+  `deref_arg_b = 2` been copied onto the ret rows.
+* **`ret1`'s zero is positively EXPLAINED, not merely observed**: its guard is
+  `dist²(from,to) ≤ FLT_EPSILON`, and the closest query in the whole run misses
+  it by a factor of **4.4e10** (minimum separation 72.6 u). That is the
+  strongest form an arm census can take.
+* **Cost**: on 211 of 214 invocations both int3 round trips *plus* the client's
+  own navmesh solve completed inside one 15.6 ms timer quantum. A
+  self-calibrating estimator (calibrated on `setter`→`bake`, an interval of
+  known trap content) puts one handler at ≲33 µs, the ret tap at ~7 ms over a
+  196 s run (**0.004 %**), and the whole 19-site instrument at ~0.09 %. The
+  naive "windows with a query vs without" comparison was **refused** as
+  uninterpretable — it is structurally blind (every ret is the next seq after
+  its entry), confounded (a query *is* a moment the player had stopped), and
+  r6b, which has **no ret sites at all**, shows the same or larger inflation.
+
+### 1z-i.2 THE RESULT: pathCount == 0 ⟺ an impossible from-plane, exceptionlessly
+
+The 10 `pathCount == 0` answers are not scattered. Classified by whether the
+declared from-plane is one our mesh offers at that (x, y):
+
+| from-point | n | pathCount == 0 |
+|---|---|---|
+| on our mesh, plane **matches** | 187 | **0** |
+| on our mesh, plane **mismatches** | 10 | **10** |
+| off our mesh entirely | 17 | **0** |
+
+**Exceptionless in both directions.** Nine of the ten are inside the plane-37
+deck lens declaring plane 0 — the operator's underwalks — in one 5.2 s window
+plus the capture's final query. And the internal control is decisive: inside
+that same footprint, **31 queries declaring plane 37 all returned > 0 while 9
+declaring plane 0 all returned 0**, and one pair 1.2 s apart (seq 4628 vs 4785)
+carries **bit-identical from-point x and y dwords** — `0xC508D354` /
+`0x45C92E61` — with only the plane word differing, 37 → 0, and pathCount going
+1 → 0. The discriminator is isolated to the plane word: not the location, not
+the destination, not the range.
+
+### 1z-i.3 §1z-c.3's inferred link is now OBSERVED
+
+§1z-c.3 said in terms: *"we observe the queries and the silence after them, not
+the client's failure to resolve."* Both halves are now on tape and joined. Mean
+site count in the 60 ms after the answer returns:
+
+* `pathCount > 0` (n=204) → `agapi_setdest` **0.95**, reseed 0.02, teleport 0.05
+* `pathCount == 0` (n=10) → `agapi_setdest` **0.00** (10/10), reseed **1.00**,
+  resync 0.70, setposition 1.10, teleport 0.70
+
+The complete chain, observed ten times: **click → query from a mismatched plane
+→ pathCount 0 → NO setdest → the correction machinery fires, fence SHUT.** The
+positive control sits 1.07 s after the last failure: same click→query path,
+from-plane 37, pathCount 1, setdest **fires**, fence open. The fence reproduces
+§1z-c's reading independently (43/43 SHUT in the mismatch window against 5/84,
+0/49, 0/32 in on-deck, recovery and healthy windows minutes apart), and the
+6.34 s `setdest` gap at t=165.3 is the only one of the capture's top eight long
+gaps that contains any query at all — it contains eight, every one pathCount 0.
+
+**This CORROBORATES the §1z-c LOCK reconstruction**, and it explains §1z-g's
+heal-by-grant: a fresh plane word restores the *input* the client's own solver
+needs. **Two caveats stated rather than found later:** r7's state was
+**transient** (5.2 s, self-clearing) where §1z-c's was persistent, and **the
+body was not frozen** — so "the client cannot resolve" is corroborated, "the
+body cannot move" is not. The run ends **on a failure, mid-onset, under the
+bridge.**
+
+### 1z-i.4 The OFF-MESH 29.4 % is NOT our decode gap
+
+61 of the 63 are off because the **click destination** is unwalkable — the
+operator clicking rocks, cliffs and water — and **the client's own solver
+agrees every one of them is unwalkable**. Quoting 29.4 % as a decode-gap rate
+would be wrong twice over: wrong about the cause, and taken from a run whose
+operator was deliberately clicking at scenery. `OURS-FAILED` and `BOTH-FAILED`
+both read **0**.
+
+### 1z-i.5 MY SHAPE METRIC WAS A TAUTOLOGY, and it is fixed
+
+The `AGREE 144` this run first reported was **vacuous**, and I suspected it
+because every row read "endpoints 0.0 u apart". Confirmed two ways: the callee
+**overwrites `outPath[count-1]` with the requested destination verbatim**
+(`0x0070A04E` / `0x0070A053`), and `route()` ends at the goal by construction —
+so the comparison was destination-vs-destination. Measured: the gap is exactly
+0.0 on 129 of 131 comparisons, **`DIFFER` never fired once in 214 queries**, and
+a deliberate **800 u** perpendicular detour scored PERFECT AGREEMENT.
+Disqualified under the repo's own rank-a-known-bad-arm rule.
+
+**Replaced with symmetric Hausdorff** over the two polylines, with the query's
+own from-point prepended to the client's buffer (measured: the client's
+`out_path` omits the start — its first waypoint equals the from-point in 1 of 86
+answers, p50 446 u away). The new metric ranks every known-bad arm worse than
+the truth and responds monotonically to displacement. Two other candidates were
+**rejected by the same rule**: first-waypoint ranks a known-bad straight line
+*better* than the truth (our route is a bare 2-point chord on 42 of 86 rows),
+and leg-count is blind to perpendicular displacement.
+
+**The honest re-score, and the finding the old metric hid:**
+
+| verdict | old | corrected |
+|---|---|---|
+| AGREE | 144 | **97** (45.3 %) |
+| DIFFER | 0 | **34** (15.9 %) |
+| UNCOMPARED (truncated) | — | **13** (6.1 %) |
+| OFF-MESH / THEIRS-FAILED / OURS-FAILED / BOTH-FAILED | 63 / 7 / 0 / 0 | unchanged |
+
+**On 42 of the 86 rows where the client returned a bent path, our route is a
+bare 2-point straight line** — all previously scored 0.0 u AGREE. Truncation is
+now its own verdict: scoring a non-comparison as agreement is what inflated the
+count by 13. `test_movehook.py` §17f pins the metric against the known-bad arm
+and demonstrates the disqualified form beside it (floor 153 → 157). **The
+five-valued split of §1z-h.3 stands** — THEIRS-FAILED reads `out_count` directly
+— only the shape axis was empty.
+
+### 1z-i.6 Filed, not fixed
+
+* **`pathdiff --map auto` ranks the WRONG map first.** Sparkfly Swamp scores
+  99.3 % against map 280's 81.8 % on a map-280 capture, because the score has no
+  area term and Sparkfly's mesh is 4.6× larger. It refused only on its margin
+  rule, with 2.5 points to spare. Worse, the explicit-`--map` guard only fires
+  **below** 50 % coverage — it is built entirely for wrong-map-looks-BAD and is
+  silent on wrong-map-looks-GOOD, which is the direction a reader believes: the
+  wrong map would have shown OFF-MESH 3 instead of 63.
+* **`readhook`'s motion denominator** includes two `ptime == 0` records (the
+  run's first setter/bake, a stamp never set), inflating the span 193.5 s →
+  280.6 s and the printed "in motion" from **89.7 % to 61.8 %** — a 27-point
+  error from 2 records in 1,785. The existing "impossible leg" guard cannot see
+  it: that tests the LEG, and this is a bad STAMP.
+* **`nearest_walkable` over-reports off-mesh depth by up to 3×** (worst: true
+  26.1 u reported as 77.4 u) and returns the pre-nudge distance. Any prior
+  off-mesh depth quoted from it carries the error.
+* **`RET_MAX_POINTS` should rise 4 → 9** — 9 is click-to-move's own maxCount,
+  confirmed live (arg4 is 9 or 4 and nothing else, 214/214), so at 9 the field
+  can never truncate for either known caller. Cost: +2.5 MB of the client's
+  address space. Sequence it after the metric fix, which is now done.
+
+---
+
 ## 2. Corrections to the record
 
 Each of these was in circulation and each is now measured against the bytes.

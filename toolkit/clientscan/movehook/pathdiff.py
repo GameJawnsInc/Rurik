@@ -79,6 +79,7 @@ sys.path.insert(0, os.path.join(TOOLKIT, "mapdata"))
 sys.path.insert(0, HERE)
 
 import readhook                                                # noqa: E402
+from readhook import RET_MAX_POINTS                           # noqa: E402
 
 
 def _f(dw):
@@ -169,6 +170,45 @@ def answered(cap, names):
     return out, {"unpaired-answer": orphan, "esp-mismatch": esp_bad}
 
 
+def _seg_dist(px, py, ax, ay, bx, by):
+    """Distance from a point to a segment -- polylines are lines, not vertices."""
+    dx, dy = bx - ax, by - ay
+    d2 = dx * dx + dy * dy
+    t = 0.0 if d2 == 0.0 else max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / d2))
+    return math.hypot(px - (ax + t * dx), py - (ay + t * dy))
+
+
+def _poly_gap(a, b):
+    """max over a's vertices of the distance to polyline b."""
+    worst = 0.0
+    for (px, py) in a:
+        best = min(_seg_dist(px, py, b[i][0], b[i][1], b[i + 1][0], b[i + 1][1])
+                   for i in range(len(b) - 1)) if len(b) > 1 else \
+            math.hypot(px - b[0][0], py - b[0][1])
+        worst = max(worst, best)
+    return worst
+
+
+def _hausdorff(a, b):
+    """Symmetric Hausdorff between two polylines."""
+    if not a or not b:
+        return float("inf")
+    return max(_poly_gap(a, b), _poly_gap(b, a))
+
+
+def _their_poly(q, r, n):
+    """The client's answer as a polyline, WITH the start prepended.
+
+    `out_path` OMITS the start -- measured on r7, the client's first waypoint
+    equals the query's from-point in 1 of 86 multi-point answers (p50 446 u
+    away) -- so comparing the raw buffer against our route would charge us for
+    an endpoint the client never claimed to include.
+    """
+    pts = [(_f(r["out_path"][i * 4]), _f(r["out_path"][i * 4 + 1]))
+           for i in range(n)]
+    return [(q.src[0], q.src[1])] + pts
+
+
 def score_paired(pm, pairs, list_n=0):
     """Five-valued scoring against the CLIENT's own answer. -> (rows, tally).
 
@@ -179,8 +219,9 @@ def score_paired(pm, pairs, list_n=0):
     registered prediction, so merging the two would destroy the measurement.
     """
     rows = []
-    tally = {"AGREE": 0, "DIFFER": 0, "OURS-FAILED": 0, "THEIRS-FAILED": 0,
-             "BOTH-FAILED": 0, "OFF-MESH": 0, "UNREADABLE": 0}
+    tally = {"AGREE": 0, "DIFFER": 0, "UNCOMPARED": 0, "OURS-FAILED": 0,
+             "THEIRS-FAILED": 0, "BOTH-FAILED": 0, "OFF-MESH": 0,
+             "UNREADABLE": 0}
     for q, r in pairs:
         if not (r.get("have_out", 0) & 1):
             tally["UNREADABLE"] += 1
@@ -201,16 +242,18 @@ def score_paired(pm, pairs, list_n=0):
                 # waypoints are truncated even though the COUNT is exact.
                 whole = (r.get("have_out", 0) & 2) and r["out_n"] >= theirs
                 if not whole:
-                    verdict = "AGREE"
+                    # ITS OWN VERDICT, not AGREE. Scoring a NON-COMPARISON as
+                    # agreement is how 13 of r7's 144 AGREE rows were rows
+                    # nothing had been compared on.
+                    verdict = "UNCOMPARED"
                     detail = (f"ours {len(ours)}, theirs {theirs} -- shape not "
-                              f"compared (path truncated at {r.get('out_n', 0)})")
+                              f"compared (path truncated at {r.get('out_n', 0)} "
+                              f"of {RET_MAX_POINTS})")
                 else:
-                    ex, ey = _f(r["out_path"][(theirs - 1) * 4]), \
-                             _f(r["out_path"][(theirs - 1) * 4 + 1])
-                    gap = math.hypot(ours[-1][0] - ex, ours[-1][1] - ey)
+                    gap = _hausdorff(ours, _their_poly(q, r, theirs))
                     verdict = "AGREE" if gap <= 16.0 else "DIFFER"
-                    detail = (f"ours {len(ours)}, theirs {theirs}, endpoints "
-                              f"{gap:.1f} u apart")
+                    detail = (f"ours {len(ours)}, theirs {theirs}, polylines "
+                              f"{gap:.1f} u apart (Hausdorff)")
             elif ours and not theirs:
                 verdict = "THEIRS-FAILED"
                 detail = "we routed; the client returned pathCount 0"
@@ -422,7 +465,8 @@ def main():
                 m = sum(ptally.values())
                 print(f"\nscored against the client's own answer ({m}):")
                 for k in ("OURS-FAILED", "BOTH-FAILED", "THEIRS-FAILED",
-                          "OFF-MESH", "DIFFER", "AGREE", "UNREADABLE"):
+                          "OFF-MESH", "DIFFER", "AGREE", "UNCOMPARED",
+                          "UNREADABLE"):
                     if ptally[k] or k in ("OURS-FAILED", "BOTH-FAILED"):
                         print(f"   {k:14} {ptally[k]:6}  "
                               f"{100.0 * ptally[k] / m if m else 0:5.1f}%")

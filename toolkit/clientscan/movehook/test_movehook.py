@@ -41,6 +41,7 @@ handler never ran is worse than no reader, so the refusal is exercised on purpos
 """
 import os
 import re
+import math
 import struct
 import subprocess
 import sys
@@ -95,18 +96,18 @@ import checks                                                   # noqa: E402
 # ZERO, so a bare machine must still clear 105.
 #
 # 2026-08-29, THE RETURN TAP. Re-counted per section out of a real green run on
-# this machine, which is now 254 (was 215):
+# this machine, which is now 265 (was 215):
 #
 #   §1   6  §2  39  §3   4  §4  16  §5   6  §6   2  §7  11  §8   2  §9  13
 #   §10  8  §11  4  §12  6  §13  5  §14 63  §15  3  §15b 4  §16 25
-#   §17 37  §17e 7
+#   §17 37  §17e 7  §17f 4
 #
 # CLIENT-DEPENDENT (opens the vaulted image): §1, §2, and the three
 # `gensites.verify()` blocks inside §14 and the six inside §17.
 # COMPILER / cmd.exe / ARCHIVE: §6, §7, §8, §10, §16.
 # PROCESS-FREE CORE, which is what the floor is:
 #   §3 4 + §4 16 + §5 6 + §9 13 + §11 4 + §12 6 + §13 5 + §14 54 + §15 3
-#   + §15b 4 + §17 31 + §17e 7 = 153.
+#   + §15b 4 + §17 31 + §17e 7 + §17f 4 = 157.
 #
 # §17 SPLITS the way §14 does and the split was read off the banner, not
 # reasoned about: 37 checks, of which 6 (the generator's own gate plus its five
@@ -116,7 +117,7 @@ import checks                                                   # noqa: E402
 # rather than dying when the image is absent -- `pinned.find()` exits the
 # process rather than raising, so an `except Exception` around it catches
 # nothing, which is a trap §2 is still standing in.
-LEDGER = checks.Ledger("movehook", floor=153)
+LEDGER = checks.Ledger("movehook", floor=157)
 check = checks.adopt(LEDGER)
 
 WOW64_CMD = r"C:\Windows\SysWOW64\cmd.exe"
@@ -1951,6 +1952,70 @@ def section_17(tmp):
     _rows, old = pathdiff.score(stub, [(5.0, 0.0, 10.0, 0.0)])
     eq(old["OURS-FAILED"], 1,
        "17e. CONTROL: the three-valued scorer calls that same query OURS-FAILED")
+
+    # ---- (f) THE SHAPE METRIC MUST RANK A KNOWN-BAD ARM BADLY -----------
+    #
+    # THIS SECTION EXISTS BECAUSE THE FIRST ONE SHIPPED A TAUTOLOGY. R7's
+    # scorer compared our route's LAST point to the client's LAST waypoint --
+    # and the callee OVERWRITES outPath[count-1] with the requested
+    # destination verbatim (0x0070A04E/0x0070A053), while route() ends at the
+    # goal by construction. Both operands were the destination, so the test
+    # could not fail: 129 of 131 comparisons read exactly 0.0 u, DIFFER never
+    # fired once in 214 live queries, and a deliberate 800 u detour scored
+    # PERFECT AGREEMENT. The repo's own rule is the check: a metric that
+    # cannot rank a known-bad arm badly is disqualified before it is used.
+    #
+    # The known-bad arm is the client's own answer with BOTH ENDPOINTS
+    # PRESERVED and the interior waypoints shoved sideways -- exactly what a
+    # last-point test cannot see and a shape test must.
+    def _ret_path(pts, count):
+        flat = []
+        for (px, py) in pts:
+            flat += [_flt(px), _flt(py), 0, 0]
+        flat += [0] * (16 - len(flat))
+        return {"have_out": 3, "out_count": count, "out_n": count,
+                "out_path": tuple(flat)}
+
+    class _BendMesh:
+        """route() returns a path that bends the SAME way the client's does."""
+        def walkable(self, x, y):
+            return True
+        def route(self, x0, y0, x1, y1):
+            return [(x0, y0), (50.0, 40.0), (x1, y1)]
+
+    q = _q(0.0, 0.0, 100.0, 0.0)
+    truthful = _ret_path([(50.0, 40.0), (100.0, 0.0)], 2)
+    # Same endpoints, interior waypoint displaced 200 u perpendicular.
+    known_bad = _ret_path([(50.0, -160.0), (100.0, 0.0)], 2)
+    bend = _BendMesh()
+    _r1, t_true = pathdiff.score_paired(bend, [(q, truthful)])
+    _r2, t_bad = pathdiff.score_paired(bend, [(q, known_bad)])
+    check(t_true["AGREE"] == 1,
+          "17f. the shape metric AGREES with a matching polyline",
+          f"scored {[k for k, v in t_true.items() if v]}")
+    check(t_bad["DIFFER"] == 1,
+          "17f. and RANKS A KNOWN-BAD ARM BADLY -- same endpoints, interior "
+          "waypoint moved 200 u",
+          f"scored {[k for k, v in t_bad.items() if v]} -- this is the exact "
+          f"shape the shipped last-point metric called perfect agreement")
+
+    # And the tautology itself, pinned: a last-point comparison CANNOT tell
+    # those two apart, which is why the check above is the one that matters.
+    last_true = math.hypot(100.0 - 100.0, 0.0 - 0.0)
+    last_bad = math.hypot(100.0 - 100.0, 0.0 - 0.0)
+    check(last_true == last_bad == 0.0,
+          "17f. CONTROL: a LAST-POINT metric scores both identically (0.0 u) "
+          "-- the disqualified form, demonstrated",
+          "if these differ the fixture no longer reproduces the tautology")
+
+    # Truncation is its own verdict, not agreement.
+    trunc = {"have_out": 3, "out_count": 6, "out_n": 4,
+             "out_path": tuple([_flt(1.0), _flt(1.0), 0, 0] * 4)}
+    _r3, t_tr = pathdiff.score_paired(bend, [(q, trunc)])
+    check(t_tr["UNCOMPARED"] == 1,
+          "17f. a TRUNCATED path scores UNCOMPARED, never AGREE",
+          f"scored {[k for k, v in t_tr.items() if v]} -- scoring a "
+          f"non-comparison as agreement inflated r7's AGREE by 13 rows")
 
 
 def _flt(f):

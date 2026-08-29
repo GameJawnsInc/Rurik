@@ -1722,6 +1722,42 @@ This supersedes the two entries below it (each marked in place in FINDINGS):
   a persistent `0xCC` at a `ret` resumes on real hardware** — §7/§16 inject where
   every site fails to arm by design. The DLL compiles, loads and injects green;
   the emulation is a live-run question the next ordinary session answers.
+* **★★★ R7 RAN 2026-08-29 (§1z-i) — THE RETURN TAP WORKS AND THE PLANE ARC'S
+  CENTRAL MECHANISM IS MEASURED: the client's OWN pathfinder returns
+  pathCount == 0 EXACTLY when its declared from-plane is impossible.**
+  Exceptionless both ways over 214 live queries — 187 plane-matched → 0 zeros,
+  10 mismatched → **10** zeros, 17 off-mesh-entirely → 0 zeros — with a natural
+  experiment as the control: two queries 1.2 s apart with **bit-identical
+  from-point x/y dwords** (`0xC508D354`/`0x45C92E61`), differing ONLY in the
+  plane word (37 vs 0), answered 1 and 0. The discriminator is the plane word
+  alone. **§1z-c.3's inferred link is now OBSERVED**: within 60 ms,
+  pathCount > 0 → `agapi_setdest` 0.95×, pathCount == 0 → **0.00, ten of ten**,
+  with reseed/resync/setposition/teleport firing instead and the fence 43/43
+  SHUT (against 5/84, 0/49, 0/32 in control windows minutes apart). The lock's
+  missing middle term is supplied, and §1z-g's heal-by-grant is explained — a
+  fresh plane word restores the INPUT the client's own solver needs. Caveats
+  kept: r7's state was transient (5.2 s, self-clearing) and the body was NOT
+  frozen, so "cannot resolve" is corroborated and "cannot move" is not.
+  **Instrument: 214 entries / 214 ret4 / ret1-3 zero (all armed — ret1's zero
+  positively explained, its guard missed by 4.4e10), 214/214 paired with ZERO
+  esp mismatches, arg2 differing 214/214 (the predicted clobber, live), cost
+  ~0.004 %** — and the naive cost comparison was REFUSED as uninterpretable
+  (r6b, with no ret sites, inflates the same statistic more). **MY OWN SHAPE
+  METRIC WAS A TAUTOLOGY AND IS FIXED**: it compared our last point to the
+  client's last waypoint, and the callee overwrites that slot with the
+  destination verbatim, so an 800 u deliberate detour scored PERFECT AGREEMENT
+  and DIFFER never fired in 214 queries. Replaced with symmetric Hausdorff
+  (two rival metrics rejected by the same known-bad-arm rule); honest re-score
+  **AGREE 144 → 97, DIFFER 0 → 34, UNCOMPARED 13** — and the finding it hid:
+  on 42 of 86 bent-path rows our route is a bare straight line. §17f pins it,
+  floor 153 → 157. Also: the 63 OFF-MESH are NOT our decode gap (61 are
+  unwalkable click destinations the client's own solver also refuses);
+  OURS-FAILED and BOTH-FAILED both read 0. Filed unfixed: `--map auto` ranks
+  the WRONG map first (no area term; the wrong map would show OFF-MESH 3 not
+  63) and its guard only fires in the looks-BAD direction; `readhook`'s motion
+  denominator is off by 27 points from two `ptime == 0` records;
+  `nearest_walkable` over-reports depth up to 3×; RET_MAX_POINTS should rise
+  4 → 9.
 * **★ THE BRIDGE AND THE STUCK CLIENT, 2026-08-29 (§1z-c) — a PLANE channel nobody
   has scored, and the first captured movement LOCK.** `noclipscore.py` read 0 off-mesh
   on a capture taken *because* the operator had walked under a bridge twice: §1w.7's
