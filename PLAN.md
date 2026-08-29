@@ -1570,6 +1570,12 @@ This supersedes the two entries below it (each marked in place in FINDINGS):
   r 21–70 u, per-cell CSR proven 990/990) and is NOT this defect (0/1,199 samples inside
   any circle). Filed: likely `PathApi:753/754`'s data. Also filed: 14/92 prop models
   carry collision sub-meshes, merge UNRESOLVED, compile-experiment specimen named.
+* **★ COLD-START HERE FOR THE PLANE WORK:
+  [studies/movecode/HANDOFF-PLANE.md](studies/movecode/HANDOFF-PLANE.md)** — what is
+  measured vs inferred in two columns, the next three actions priced, and §5's traps
+  (the first of which is the twice-refused "just don't emit an impossible plane" fix
+  that a cold session proposes within ten minutes). Same role for the plane channel
+  that `HANDOFF-WARP.md` has for the warp hunt.
 * **★ THE LOCK'S ONSET WAS IN THE SERVER LOG, AND THE LOCK NOW HAS A REPAIR,
   2026-08-29 (§1z-d).** Read the same day §1z-c called the onset unmeasured: the
   client reported plane 41 FIRST, from ground where 41 is CORRECT (strongest
