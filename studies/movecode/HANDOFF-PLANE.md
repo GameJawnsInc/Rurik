@@ -95,8 +95,14 @@ through it before you believe it.**
 
 ### 4.1 The repair's first live trial — opportunistic, costs one ordinary session
 
-It has never fired against a client. Any map-280 session on the shipped default scores
-it, because a healthy run is supposed to produce **zero** fires. Registered prediction
+**The registered runsheet is [RUN-R6.md](RUN-R6.md)** (2026-08-29, four-skeptic
+reviewed — among its findings: the gamesrv's fire prints do NOT reach the
+harness terminal under a plain launch, so the runsheet tails the gamesrv.log;
+and the heal-click must be release-paused or the server's 3 s keyboard-authority
+window kbd-drops it, exactly as it dropped 100/127 of the r5stuck victim's own
+clicks). It has never fired against a client. Any map-280 session on the shipped
+default scores it, because a healthy run is supposed to produce **zero** fires.
+Registered prediction
 (FINDINGS §1z-d.3, timing restated from the offline replay, which is its authority):
 the `plane_repair_due` ladder reaches `plane-lock` within ~5 s of the first continuous
 report episode at a frozen point; numbered `PLANE-REPAIR` rows go out at most every

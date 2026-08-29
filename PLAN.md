@@ -1637,7 +1637,12 @@ This supersedes the two entries below it (each marked in place in FINDINGS):
   ERASES two real anomalies in k2-2 (alias) — fixed same commit, section C now
   reads each record's own plane (`test_noclipscore.py` §5 pins it, floor 8→9),
   and the §1z-c counts move under the fixed lookup, deliberately: r5bridge 6→8,
-  r4a 5→8, r5 stays 0.
+  r4a 5→8, r5 stays 0. **The first live trial's runsheet is registered:
+  [studies/movecode/RUN-R6.md](studies/movecode/RUN-R6.md)** (four-skeptic
+  reviewed; the review caught that gamesrv fire prints never reach the harness
+  terminal — the sheet tails gamesrv.log — and that an un-paused heal-click
+  gets kbd-dropped by the 3 s keyboard-authority window). The run itself is
+  operator-driven and waits on the owner.
 * **★ THE BRIDGE AND THE STUCK CLIENT, 2026-08-29 (§1z-c) — a PLANE channel nobody
   has scored, and the first captured movement LOCK.** `noclipscore.py` read 0 off-mesh
   on a capture taken *because* the operator had walked under a bridge twice: §1w.7's
