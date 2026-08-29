@@ -79,7 +79,7 @@ sys.path.insert(0, os.path.join(TOOLKIT, "mapdata"))
 sys.path.insert(0, HERE)
 
 import readhook                                                # noqa: E402
-from readhook import RET_MAX_POINTS                           # noqa: E402
+from readhook import ret_capacity                             # noqa: E402
 
 
 def _f(dw):
@@ -248,7 +248,7 @@ def score_paired(pm, pairs, list_n=0):
                     verdict = "UNCOMPARED"
                     detail = (f"ours {len(ours)}, theirs {theirs} -- shape not "
                               f"compared (path truncated at {r.get('out_n', 0)} "
-                              f"of {RET_MAX_POINTS})")
+                              f"of {ret_capacity(r)})")
                 else:
                     gap = _hausdorff(ours, _their_poly(q, r, theirs))
                     verdict = "AGREE" if gap <= 16.0 else "DIFFER"

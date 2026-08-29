@@ -101,11 +101,28 @@
                                    * biased toward whatever happened early. */
 #define DEF_RUN_MS 600000u        /* 10 minutes, then disarm and write */
 #define CTLB_MS   8000u           /* how long control B waits for its own hit */
-#define RET_MAX_POINTS 4u         /* out_path capacity, in points. Sized to snap
-                                   * gate 2's maxCount = 4 (captured whole);
-                                   * click-to-move asks 9 and TRUNCATES, which
-                                   * `out_n < out_count` records rather than
-                                   * hides. See the note on rec_t. */
+#define RET_MAX_POINTS 9u         /* out_path capacity, in points. NINE, and it
+                                   * is not a percentile: it is the LARGER OF
+                                   * THE TWO CALLERS' OWN maxCount -- snap gate
+                                   * 2 pushes 4 (`006057F4 6a04`), click-to-move
+                                   * pushes 9 (`0081AF43 6a09`), read statically
+                                   * from both frames and confirmed live on r7
+                                   * where arg4 was 9 or 4 and nothing else,
+                                   * 214/214. At 9 the buffer CANNOT truncate
+                                   * for either known caller, which retires the
+                                   * standing "compare shapes only on the
+                                   * untruncated ones" caveat rather than
+                                   * shrinking it. Was 4 until 2026-08-29: that
+                                   * cost nothing for the pathCount question
+                                   * (the COUNT is exact at any capacity) and
+                                   * cost shape comparison on 16 of r7's 214.
+                                   * PRICE, stated: out_path sits in EVERY
+                                   * record of EVERY site, so this is
+                                   * 20 dwords x NCAP = 2.5 MiB more of the
+                                   * client's address space (10.75 -> 13.25 MiB)
+                                   * for a field only 3.8% of r7's records used.
+                                   * The ring is a fixed record COUNT, so it
+                                   * does not shorten a run. */
 #define DEFDIR    "C:\\gd\\Rurik\\vault\\research\\movecode"
 #define OUTENV    "RURIK_MOVEHOOK_OUT"
 #define MSENV     "RURIK_MOVEHOOK_MS"
@@ -358,15 +375,22 @@ typedef struct {
      *
      * `out_n` vs `out_count` makes TRUNCATION visible rather than silent:
      * out_count is the client's own answer, out_n is how many points this
-     * record kept. RET_MAX_POINTS is 4 because snap gate 2 asks maxCount = 4
-     * (`006057F4 push 4`) and is therefore captured WHOLE, while click-to-move
-     * asks 9 (`0081AF43 push 9`) and truncates -- 9 would cost 36 dwords on
-     * every record of every site to complete one caller. */
+     * record kept. RET_MAX_POINTS is 9 as of 2026-08-29 -- the larger of the
+     * two callers' own maxCount, so the buffer cannot truncate for either.
+     * See the define for the price and for why 9 rather than a percentile.
+     *
+     * THE BOUND IS THE LITERAL 36, NOT AN EXPRESSION, and that is a
+     * requirement rather than a style: test_movehook.py §11 parses this struct
+     * out of the C with `\[\s*(\d+)\s*\]` and compares it field-by-field to
+     * readhook's layout table. `[RET_MAX_POINTS * 4]` would not match that
+     * pattern, the field would drop silently out of §11's parse, and the one
+     * check that can catch a reader/writer disagreement would stop covering
+     * the widest field in the record. */
     DWORD esp;
     DWORD have_out;               /* bit 0 = out_count read, bit 1 = out_path */
     DWORD out_count;              /* *arg5 -- the client's own pathCount */
     DWORD out_n;                  /* points actually copied (<= out_count) */
-    DWORD out_path[16];           /* RET_MAX_POINTS * 4 dwords, {x,y,plane,w} */
+    DWORD out_path[36];           /* RET_MAX_POINTS * 4 dwords, {x,y,plane,w} */
 } rec_t;
 
 static DWORD  g_base;
@@ -895,7 +919,7 @@ static int write_bin(const char *dir, DWORD n)
 {
     char path[MAX_PATH];
     HANDLE h;
-    DWORD ver = 7, ns = NSITES, reclen = (DWORD)sizeof(rec_t);
+    DWORD ver = 8, ns = NSITES, reclen = (DWORD)sizeof(rec_t);
     unsigned i;
     int ok = 1;
 

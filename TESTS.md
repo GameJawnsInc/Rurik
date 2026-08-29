@@ -7274,8 +7274,23 @@ the same-tick ALIAS**: the
   records" and "there were none" are different facts and the first is the one
   that explains a number. Process-free (synthetic captures only), so the floor
   moves with it.
-  163 floor,
-  279 on a
+  **§17 also carries the v8 widening (2026-08-29, FINDINGS §1z-m).**
+  `RET_MAX_POINTS` went 4 → 9 -- the larger of the two callers' own maxCount,
+  confirmed live at 214/214 -- so `out_path` can no longer truncate for either
+  known caller. It landed as a NEW capture version rather than a wider v7, and
+  that is the part worth copying: r7 is a v7 file and the arc's only capture
+  carrying the client's own answers, so redefining v7 in place would have made
+  `reclen` disagree and ORPHANED it -- the same failure §4 pins with "a v1
+  capture still parses". §17 asserts BOTH layouts still exist (4 points and 9),
+  that the C and the reader agree on version 8, and that `ret_capacity()` reads
+  a v7 record as 4 and a v8 record as 9 -- because two readers had been quoting
+  the module constant as THIS record's capacity, which becomes a lie the moment
+  the writer moves. The C deliberately keeps the LITERAL `out_path[36]` rather
+  than `[RET_MAX_POINTS * 4]`: §11 parses `rec_t` with a digits-only pattern,
+  and an expression would drop the widest field in the record silently out of
+  the one check that can catch reader/writer drift.
+  169 floor,
+  285 on a
   machine with the client, a compiler, an archive and a 32-bit `cmd.exe`; each other
   section declares a skip),
   `toolkit/clientscan/test_commandertrap.py` (the hardware-breakpoint trap, and

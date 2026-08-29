@@ -96,18 +96,18 @@ import checks                                                   # noqa: E402
 # ZERO, so a bare machine must still clear 105.
 #
 # 2026-08-29, THE RETURN TAP. Re-counted per section out of a real green run on
-# this machine, which is now 279 (was 215):
+# this machine, which is now 285 (was 215):
 #
 #   §1   6  §2  39  §3   4  §4  16  §5   6  §6   2  §7  11  §8   2  §9  13
 #   §10  8  §11  4  §12  6  §13  5  §14 63  §15  3  §15b 4  §16 25
-#   §17 37  §17e 7  §17f 4  §18 8  §19 6
+#   §17 43  §17e 7  §17f 4  §18 8  §19 6
 #
 # CLIENT-DEPENDENT (opens the vaulted image): §1, §2, and the three
 # `gensites.verify()` blocks inside §14 and the six inside §17.
 # COMPILER / cmd.exe / ARCHIVE: §6, §7, §8, §10, §16.
 # PROCESS-FREE CORE, which is what the floor is:
 #   §3 4 + §4 16 + §5 6 + §9 13 + §11 4 + §12 6 + §13 5 + §14 54 + §15 3
-#   + §15b 4 + §17 31 + §17e 7 + §17f 4 + §19 6 = 163.
+#   + §15b 4 + §17 37 + §17e 7 + §17f 4 + §19 6 = 169.
 #
 # §18 (map identification, 8 checks) needs the vaulted archive AND the r7
 # capture, so it is NOT in the core and the floor does not move for it --
@@ -121,7 +121,7 @@ import checks                                                   # noqa: E402
 # rather than dying when the image is absent -- `pinned.find()` exits the
 # process rather than raising, so an `except Exception` around it catches
 # nothing, which is a trap §2 is still standing in.
-LEDGER = checks.Ledger("movehook", floor=163)
+LEDGER = checks.Ledger("movehook", floor=169)
 check = checks.adopt(LEDGER)
 
 WOW64_CMD = r"C:\Windows\SysWOW64\cmd.exe"
@@ -1835,23 +1835,46 @@ def section_17(tmp):
               f"got {hit or 'no refusal'} -- chcli_dir sets no deref, so only "
               f"the byte check can catch this one")
 
-    # ---- (c) v7 is APPENDED, not inserted --------------------------------
+    # ---- (c) the ret-tap layouts are APPENDED, not inserted ---------------
     v6 = readhook._LAYOUTS[6]
-    v7 = readhook._LAYOUTS[7]
     # A reorder keeps `reclen` plausible while shifting every field -- the
     # defect the v6 note in movehook.c was written for. Appending is what makes
     # a mismatched reader fail loudly instead.
-    check(v7[:len(v6)] == v6,
-          "17. v7 is v6 plus a tail -- APPENDED, never inserted",
-          f"v7's first {len(v6)} fields are {v7[:len(v6)]}, not v6's {v6}")
-    added = [n for n, _c in v7[len(v6):]]
-    eq(added, ["esp", "have_out", "out_count", "out_n", "out_path"],
-       "17. and the tail is exactly the ret tap's fields")
-    eq(readhook.CURRENT_VER, 7, "17. the writer's version is 7")
+    for ver in (7, 8):
+        lay = readhook._LAYOUTS[ver]
+        check(lay[:len(v6)] == v6,
+              f"17. v{ver} is v6 plus a tail -- APPENDED, never inserted",
+              f"v{ver}'s first {len(v6)} fields are {lay[:len(v6)]}, "
+              f"not v6's {v6}")
+        added = [n for n, _c in lay[len(v6):]]
+        eq(added, ["esp", "have_out", "out_count", "out_n", "out_path"],
+           f"17. and v{ver}'s tail is exactly the ret tap's fields")
+    # v8 WIDENS out_path AND KEEPS v7 READABLE. r7 -- the arc's only capture
+    # carrying the client's own answers -- is a v7 file, and redefining v7 in
+    # place would have made `reclen` disagree and ORPHANED it. That is the
+    # failure §4 pins with "a v1 capture still parses": versioning that
+    # orphans the evidence is worse than not versioning at all.
+    cap7 = dict(readhook._LAYOUTS[7])["out_path"]
+    cap8 = dict(readhook._LAYOUTS[8])["out_path"]
+    eq((cap7, cap8), (16, 36),
+       "17. v7 holds 4 points and v8 holds 9 -- BOTH layouts still exist")
+    eq(readhook.CURRENT_VER, 8, "17. the writer's version is 8")
     src_c = open(os.path.join(HERE, "movehook.c"), encoding="utf-8").read()
-    check("DWORD ver = 7" in src_c,
-          "17. and movehook.c writes version 7 into the header",
+    check("DWORD ver = 8" in src_c,
+          "17. and movehook.c writes version 8 into the header",
           "the C and the reader must agree or every parse shifts")
+    check("#define RET_MAX_POINTS 9u" in src_c,
+          "17. and RET_MAX_POINTS is 9 -- click-to-move's own maxCount, so "
+          "the buffer cannot truncate for either known caller",
+          "9 is not a percentile; it is read from both callers' frames")
+    # THE CAPACITY A READER QUOTES MUST COME FROM THE RECORD, NOT THE WRITER.
+    # `RET_MAX_POINTS` describes the CURRENT writer; a v7 record holds 4. A
+    # reader that quotes the module constant at a v7 record reports a capacity
+    # the file does not have.
+    eq(readhook.ret_capacity({"out_path": (0,) * 16}), 4,
+       "17. ret_capacity() reads a v7 record as 4 points")
+    eq(readhook.ret_capacity({"out_path": (0,) * 36}), 9,
+       "17. and a v8 record as 9 -- per record, never the global")
 
     # ---- (d) the OUT-PARAM semantics, on a synthetic capture -------------
     # `have_out` is the measurement, not bookkeeping: pathCount == 0 IS the

@@ -124,14 +124,35 @@ _LAYOUTS = {
 #              RECORDED, not hidden: RET_MAX_POINTS is 4, click-to-move asks 9.
 _LAYOUTS[7] = _LAYOUTS[6] + [("esp", 1), ("have_out", 1), ("out_count", 1),
                              ("out_n", 1), ("out_path", 16)]
+# v8, 2026-08-29: out_path grows 4 -> 9 POINTS, so it cannot truncate for
+# either known caller (9 is click-to-move's own maxCount, 4 is snap gate 2's).
+#
+# A NEW VERSION RATHER THAN A WIDER v7, and that is the whole point of the
+# scheme. r7 -- the arc's only capture carrying the client's own answers -- is
+# a v7 file with a 16-dword out_path. Redefining v7 in place would have made
+# `reclen` disagree and orphaned it, which is exactly the failure §4 pins with
+# "a v1 capture still parses": versioning that orphans the evidence is worse
+# than not versioning. Both layouts live here and both parse.
+_LAYOUTS[8] = _LAYOUTS[6] + [("esp", 1), ("have_out", 1), ("out_count", 1),
+                             ("out_n", 1), ("out_path", 36)]
 NPOINT = 4
 # The four MapFindPath exits, in one place. Anything keyed on the single name
 # "mapfindpath" sees the QUESTION only; these four carry the ANSWER.
 MFP_ENTRY = "mapfindpath"
 MFP_RETS = ("mapfindpath_ret1", "mapfindpath_ret2",
             "mapfindpath_ret3", "mapfindpath_ret4")
-# out_path holds RET_MAX_POINTS points of 4 dwords; movehook.c owns the 4.
-RET_MAX_POINTS = 4
+# The CURRENT writer's out_path capacity, in points; movehook.c owns the value.
+# NEVER use this to describe a record you are holding -- a v7 record has a
+# capacity of 4 and a v8 record 9, and quoting the writer's constant at a v7
+# record is how a reader ends up reporting a capacity the file does not have.
+# `ret_capacity(r)` asks the record instead.
+RET_MAX_POINTS = 9
+
+
+def ret_capacity(r):
+    """How many points THIS record's out_path can hold. Per record, not global."""
+    p = r.get("out_path")
+    return (len(p) // NPOINT) if p else 0
 # The facing value that, together with a non-zero m_timeStopMovement, returns
 # NO SNAP from snaptest before any gate runs (0x0060563A / 0x00605641).
 FACING_EARLY_OUT = 9
@@ -157,7 +178,7 @@ def _unpack(spec, vals):
 # The current writer's layout, for anything that builds a capture (the tests do).
 # Bump BOTH of these with the version, or the tests keep synthesising the OLD
 # record while the DLL writes the new one and every parse silently disagrees.
-CURRENT_VER = 7
+CURRENT_VER = 8
 FIELDS = [n for n, c in _LAYOUTS[CURRENT_VER] if c == 1]
 _SPEC5, REC_FMT, REC_LEN = _layout(CURRENT_VER)
 
@@ -985,7 +1006,8 @@ def report(cap, names, dump=0):
                      and r["out_n"] < r["out_count"]]
             if trunc:
                 a(f"      path TRUNCATED by the record : {len(trunc)}"
-                  f" (out_n < out_count; capacity {RET_MAX_POINTS} points)")
+                  f" (out_n < out_count; capacity "
+                  f"{ret_capacity(trunc[0])} points in a v{cap.version} record)")
                 a("          The COUNT is still exact -- only the stored waypoints")
                 a("          are short. Compare counts freely; compare shapes only")
                 a("          on the untruncated ones.")

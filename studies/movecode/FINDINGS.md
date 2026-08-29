@@ -6512,10 +6512,8 @@ five-valued split of §1z-h.3 stands** — THEIRS-FAILED reads `out_count` direc
   three defects, not one.**
 * ~~**`nearest_walkable` over-reports off-mesh depth by up to 3×**~~ **FIXED,
   §1z-l below.**
-* **`RET_MAX_POINTS` should rise 4 → 9** — 9 is click-to-move's own maxCount,
-  confirmed live (arg4 is 9 or 4 and nothing else, 214/214), so at 9 the field
-  can never truncate for either known caller. Cost: +2.5 MB of the client's
-  address space. Sequence it after the metric fix, which is now done.
+* ~~**`RET_MAX_POINTS` should rise 4 → 9**~~ **DONE, §1z-m below — as capture
+  v8, so the r7 capture stays readable.**
 
 ---
 
@@ -6713,6 +6711,59 @@ probes; its first draft found **one** probe and would have passed vacuously,
 because these trapezoids are hundreds of units wide and a fixed step off the
 centre never leaves them — the probe is now derived from each trapezoid's own
 edge. Floor 75 → 80.
+
+---
+
+## 1z-m. `RET_MAX_POINTS` 4 → 9 — capture v8, and v7 stays readable on purpose
+
+**DONE 2026-08-29, desk-only.** The last of the four defects §1z-i.6 filed.
+
+**Nine is not a percentile.** It is the larger of the two callers' own
+`maxCount` — snap gate 2 pushes 4 (`006057F4 6a04`), click-to-move pushes 9
+(`0081AF43 6a09`) — read statically from both frames and confirmed live on r7,
+where `arg4` was 9 or 4 and **nothing else, 214/214**. At 9 the buffer *cannot*
+truncate for either known caller, which **retires** the standing "compare
+shapes only on the untruncated ones" caveat rather than shrinking it. Sizing to
+a percentile of observed counts would have left a caveat alive for the sake of
+a few dwords.
+
+What 4 actually cost, stated rather than assumed: **nothing** for the registered
+`pathCount == 0` prediction (the COUNT is exact at any capacity, and snap gate 2
+— the caller that prediction is scored on — never truncated), and shape
+comparison on **16 of r7's 214**, which is the `UNCOMPARED` row §1z-i.5 had to
+introduce.
+
+**The price, stated:** `out_path` sits in every record of every site, so this is
+20 dwords × NCAP = **+2.5 MiB** of the client's address space (10.75 → 13.25
+MiB) for a field only **3.8 %** of r7's records used. The ring is a fixed record
+*count*, not a byte budget, so it does not shorten a run.
+
+### 1z-m.1 A NEW VERSION, not a wider v7 — and that was the whole call
+
+r7 is a **v7** capture with a 16-dword `out_path`, and it is the arc's only
+capture carrying the client's own answers. Redefining v7 in place would have
+made `reclen` disagree and **orphaned it** — precisely the failure §4 pins with
+*"a v1 capture still parses"*: versioning that orphans the evidence is worse
+than not versioning at all. So both layouts live in the table, and r7 still
+parses and still scores identically (AGREE 97 / DIFFER 34 / UNCOMPARED 13 /
+THEIRS-FAILED 7 / OFF-MESH 63).
+
+**A second version-coupling was fixed with it.** Two readers quoted the module
+constant `RET_MAX_POINTS` as *this record's* capacity — which becomes a lie the
+moment the writer moves, reporting "capacity 9" at a v7 record that holds 4.
+Capacity is now `ret_capacity(r)`, derived from the record's own `out_path`
+length, so it is right for every version by construction.
+
+The C keeps the **literal** `out_path[36]` rather than `[RET_MAX_POINTS * 4]`,
+and that is a requirement rather than a style: §11 parses `rec_t` out of the C
+with `\[\s*(\d+)\s*\]` to compare it field-by-field against the reader's table,
+and an expression would drop the widest field in the record silently out of the
+one check that can catch a reader/writer disagreement.
+
+Tests: §17 now asserts both layouts exist with 4 and 9 points, that the C and
+the reader agree on version 8, and that `ret_capacity` reads a v7 record as 4
+and a v8 record as 9. Floor 163 → 169. **The DLL was rebuilt and §6/§7/§16
+re-injected green**, so the widened record loads and runs.
 
 ---
 

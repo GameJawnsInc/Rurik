@@ -1776,6 +1776,27 @@ This supersedes the two entries below it (each marked in place in FINDINGS):
   directions and names the better-fitting mesh. `test_movehook.py` §18, 8
   checks, pinned against the REAL impostor plus the control that a correct map
   is not called out.
+* **★ RET_MAX_POINTS 4 → 9 AS CAPTURE v8, 2026-08-29 (§1z-m), desk-only.**
+  NINE is not a percentile — it is the larger of the two callers' own maxCount
+  (snap gate 2 pushes 4, click-to-move pushes 9), read from both frames and
+  confirmed live on r7 where arg4 was 9 or 4 and NOTHING ELSE, 214/214 — so the
+  buffer can no longer truncate for either known caller and §1z-i.5's
+  "compare shapes only on the untruncated ones" caveat is RETIRED rather than
+  shrunk. What 4 cost: nothing for the pathCount prediction (the COUNT is exact
+  at any capacity, and snap gate 2 never truncated) and shape comparison on 16
+  of r7's 214. Price stated: +2.5 MiB of the client's address space
+  (10.75 → 13.25 MiB) for a field 3.8% of records use; the ring is a record
+  COUNT so runs do not shorten. **A NEW VERSION rather than a wider v7, and
+  that was the call**: r7 is a v7 file and the arc's ONLY capture carrying the
+  client's answers, so redefining v7 in place would have made `reclen`
+  disagree and ORPHANED it — the exact failure §4 pins with "a v1 capture still
+  parses". Both layouts live; r7 still scores identically. Fixed with it: two
+  readers quoted the module constant as THIS record's capacity, which becomes
+  a lie the moment the writer moves — capacity is now derived per record. The
+  C keeps the literal `out_path[36]` because §11 parses the struct with a
+  digits-only pattern and an expression would drop the widest field out of the
+  one check that catches reader/writer drift. DLL rebuilt, §6/§7/§16
+  re-injected green; floor 163 → 169.
 * **★ `nearest_walkable` — AN AXIS CLAMP IS NOT A NEAREST POINT, FIXED
   2026-08-29 (§1z-l), desk-only.** It clamped y into the trapezoid's span then
   x into its edges AT THAT Y — the true nearest only when that edge is
@@ -1820,7 +1841,7 @@ This supersedes the two entries below it (each marked in place in FINDINGS):
   reading zero motion** — and the v1 capture now says UNAVAILABLE with its
   reason. Exclusions are COUNTED AND PRINTED, never silent. `test_movehook.py`
   §19, 6 checks, with the control that the OLD expression must still inflate
-  the same fixture; floor 157 → 163. Still filed unfixed: RET_MAX_POINTS should rise 4 → 9.
+  the same fixture; floor 157 → 163. **All four defects R7 found in our own tools are now FIXED** (§1z-j map identifier, §1z-k motion window, §1z-l `nearest_walkable`, §1z-m RET_MAX_POINTS → 9 as capture v8).
 * **★ THE BRIDGE AND THE STUCK CLIENT, 2026-08-29 (§1z-c) — a PLANE channel nobody
   has scored, and the first captured movement LOCK.** `noclipscore.py` read 0 off-mesh
   on a capture taken *because* the operator had walked under a bridge twice: §1w.7's
