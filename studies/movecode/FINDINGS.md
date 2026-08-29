@@ -5456,6 +5456,69 @@ host is the operator's own scenario if the WM_CLOSE path ever times out.
 
 **Suite:** `test_movehook.py` **180 checks green**, floor 105 → 118.
 
+## 1z-b. R5b — the run R5 should have been: instrument green, P1–P4 all read, and the operator could NOT reproduce the no-clip
+
+**OBSERVED 2026-08-29.** `vault/research/movecode/r5/movehook.bin` (3,933 records,
+1.0 MB, 126.8 s of local-body samples) + `authsrv-20260829T085952-c1.jsonl`.
+`--router --map 280`. This is R5 re-run with a working instrument: **9 successful
+writes, `last write error: 0`** — §2b's fix carrying a real run, and the first movehook
+capture of a router session.
+
+### 1z-b.1 The four predictions, all with exposure
+
+| | | |
+|---|---|---|
+| **P1** body never crosses a carved hole | **MET** | 699 deduped samples, **65 off-mesh but ZERO deeper than 1 u** — every one a trapezoid-boundary touch. r4a under `--click-echo`: 21 samples 65–391 u deep inside three massifs. |
+| **P2** the dissociation | **MET, and stronger than R5a** | **24 of 26** rapid-pair chords cross uncovered ground (worst **5.8% covered over 2,554 u**) while the body stays clean. R5a measured 34/34 vs 0/37 from the server log; this is the same split measured from the *client's own memory*. |
+| **P3** on-rock clicks are not granted into the hole | **MET, n = 17** | **17 `dest-off-mesh` verdicts** — 12 `clip-fallback`, 5 `refused`. The operator: *"clicking the rock itself walked me into its normal collision"* — the fallback walks straight at the click and stops at the geometry, and the client's own collision holds it at the face. That is the designed behaviour, seen from both ends. |
+| **P4** the compound is real | **CONFIRMED BY EYE** | Screenshot from the spawn: a walled stone structure with a green roof, east-north-east, on the line the router detoured around. `ROUTER.md` §10's "our decode reads open ground as a pocket" is now retired on all three of its supports. |
+
+**And the headline the operator supplied directly: the corner-click manoeuvre would
+not reproduce.** Under `--click-echo` it was, in their words, *easy to repro*.
+
+### 1z-b.2 The warps, and what changed about them
+
+**13 installs moved the displayed body, 40–550 u — and EVERY landing is on-mesh.**
+Under `--click-echo` (§1w.1) relocation landings were off-mesh **6 of 10** at median
+239 u inside blocked ground. Same mechanism, same reseed→`SetPosition` chain (§1t.2),
+now landing on legal ground every time, because what it dead-reckons from is a legal
+leg. The operator's *"small warp or two"* is the two 540–550 u steps at t+65.1 and
+t+126.4.
+
+### 1z-b.3 The bridge report is UNSCORED, and that is the honest word for it
+
+> *"then some terrain walking around the bridge to the west near the end of the
+> capture"* … *"some of the things i reported near the end of the run may not show up
+> on the wire"*
+
+The operator is right, and the log proves it: the first `--stop` **disarmed the hook**
+(status at that moment: 3,862 records, `running`), so play after it is not on the wire.
+Two further reasons this cannot be scored from what we have:
+
+* **Zero stacked-geometry exposure.** A bridge is the one shape our navmesh cannot
+  represent — `pathmap` has no height, so a deck over ground is the 0.2% stacked case
+  (§1w.7). Sweeping a 48 u grid over the walked region **plus 1,500 u of margin finds
+  ZERO stacked cells**, and **0 of 712 samples** stood on any. There is no bridge in
+  the region this capture covers, as our mesh sees it.
+* **All 712 samples are plane 0**, and none declares a plane the mesh lacks.
+
+**So this is zero exposure, not a null** — the standing rule. What it costs is a
+runsheet fix, not a finding: **`--stop` ends the capture, so it must be the LAST thing
+the operator does**, and RUN-R5 now says so.
+
+### 1z-b.4 Status
+
+**The click channel under `--router` is clip-free across two runs and two instruments**
+— server-log positions (R5a) and the client's own `m_point` samples (R5b) — with the
+repro attempt failing at the same rock that produced it under `--click-echo`. The
+straight lines still cross the geometry on 24 of 26 chords, which is the point: the
+geometry did not change, the grant content did.
+
+**Still open and unchanged:** the keyboard channel (client-free); mesh fattening;
+§1y.4's third carve source; retail's waypoint vocabulary (§1p.6). **New and small:**
+whether anything is walkable-through around the west bridge — needs a run whose
+`--stop` comes after it.
+
 ---
 
 ## 2. Corrections to the record

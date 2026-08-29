@@ -1570,6 +1570,15 @@ This supersedes the two entries below it (each marked in place in FINDINGS):
   r 21–70 u, per-cell CSR proven 990/990) and is NOT this defect (0/1,199 samples inside
   any circle). Filed: likely `PathApi:753/754`'s data. Also filed: 14/92 prop models
   carry collision sub-meshes, merge UNRESOLVED, compile-experiment specimen named.
+* **R5b RAN 2026-08-29 (§1z-b) — the instrument fix carried it (9 writes, error 0)
+  and ALL FOUR predictions read with exposure.** P1 met (699 samples, **zero** deeper
+  than 1 u off-mesh, vs r4a's 21 at 65–391 u); P2 met and stronger (**24/26** chords
+  cross while the body stays clean — measured from the client's own memory this time);
+  P3 met at n=17 `dest-off-mesh`; P4 confirmed by screenshot. **The operator could not
+  reproduce the corner-click no-clip that was easy under `--click-echo`.** 13 installs
+  moved the body 40–550 u and **every landing is on-mesh** (vs 6/10 off-mesh under
+  click-echo). UNSCORED, honestly: the west-bridge terrain walk happened after `--stop`
+  disarmed the hook, and there is zero stacked-geometry exposure in the capture anyway.
 * **THE LEAD — corrected same day (§1y): the route()-grant policy ALREADY EXISTS**
   (`--router`, ROUTER-B2, five scored runs). §1y re-examined the two specimens its arc
   closed on and both dissolve: run 4's refusals were clicks inside real building

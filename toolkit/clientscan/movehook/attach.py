@@ -82,6 +82,35 @@ def armed_outdir(explicit=None):
     return default_outdir()
 
 
+def status_state():
+    """The DLL's own `state:` line, or None if it left no status file."""
+    try:
+        with open(STATUS, encoding="ascii", errors="replace") as fh:
+            for line in fh:
+                if line.startswith("state:"):
+                    return line.split(":", 1)[1].strip()
+    except OSError:
+        pass
+    return None
+
+
+def run_finished():
+    """Has the armed run already ended?
+
+    Two independent witnesses, either sufficient: the DLL says so in its own
+    status file, or there is no client left to be running it. Deliberately NOT
+    decided by the presence of movehook.bin -- the periodic snapshot writes
+    that file mid-run, so existence proves the path works, never that the run
+    is over.
+    """
+    if (status_state() or "").startswith("finished"):
+        return True
+    try:
+        return not autoinject.find_pid("Gw.exe")
+    except Exception:
+        return False
+
+
 def report_status():
     """Print the DLL's own status file, if it left one.
 
@@ -236,6 +265,23 @@ def main(argv=None):
         outdir = armed_outdir(a.out)
         binpath = os.path.join(outdir, "movehook.bin")
         print(f"looking for the capture in {outdir}")
+        # A SECOND --stop ON A FINISHED RUN IS NOT A FAILURE, and the first
+        # version of this said it was: it demanded a FRESH write, so running
+        # --stop twice -- which the operator did, reasonably, on 2026-08-29 --
+        # reported "NO CAPTURE APPEARED" about a complete 1 MB capture sitting
+        # right there. Waiting for a new write is correct while a run is live
+        # and nonsense once it has ended, so establish which case this is
+        # BEFORE arming the wait.
+        if run_finished() and os.path.exists(binpath):
+            report_status()
+            size = os.path.getsize(binpath)
+            when = time.strftime("%H:%M:%S", time.localtime(
+                os.path.getmtime(binpath)))
+            print(f"\nthe run had ALREADY ENDED -- nothing to stop.")
+            print(f"capture: {binpath}  ({size:,} bytes, written {when})")
+            print("  python toolkit/clientscan/movehook/readhook.py "
+                  f"--bin {binpath}")
+            return 0
         before = os.path.getmtime(binpath) if os.path.exists(binpath) else None
         with open(stop, "w", encoding="ascii") as fh:
             fh.write("stop\n")

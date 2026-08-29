@@ -1392,6 +1392,29 @@ def section_16(tmp):
           "16. --stop resolves the output dir from the CFG, not from its default",
           "a bare --stop after `--out vault/.../r5` would look in the wrong "
           "place and call a good capture missing")
+    # A SECOND --stop ON A FINISHED RUN IS NOT A FAILURE. The first version
+    # demanded a FRESH write, so running --stop twice reported "NO CAPTURE
+    # APPEARED" about a complete capture sitting right there (2026-08-29).
+    # A false alarm from a tool whose whole job is telling you the truth about
+    # the artifact is worse than the silence it replaced.
+    check("run_finished" in stop_blk,
+          "16. --stop distinguishes a FINISHED run from a missing capture",
+          "waiting for a fresh write is right while a run is live and nonsense "
+          "once it has ended")
+    fin = asrc[asrc.index("def run_finished"):asrc.index("def report_status")]
+    # STRIP THE DOCSTRING AND COMMENTS FIRST. The first draft of this check
+    # grepped the whole function and went red on its own docstring, which says
+    # "NOT decided by the presence of movehook.bin" -- reading the PROSE that
+    # states the property as a violation of it. A structural check has to look
+    # at code.
+    fin = re.sub(r'""".*?"""', "", fin, flags=re.S)
+    fin = "\n".join(ln for ln in fin.splitlines()
+                    if not ln.strip().startswith("#"))
+    check("movehook.bin" not in fin and "binpath" not in fin,
+          "16. and it does NOT decide that from the .bin's existence",
+          "the periodic snapshot writes that file MID-RUN, so its presence "
+          "proves the path works and never that the run is over -- deciding "
+          "'finished' from it would stop a live run's wait immediately")
     try:
         cfgp = os.path.join(HERE, "movehook.cfg")
         saved_cfg = open(cfgp, encoding="ascii").read() \

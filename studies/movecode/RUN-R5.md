@@ -48,6 +48,13 @@ it did not appear):
 python toolkit/clientscan/movehook/attach.py --stop
 ```
 
+> **`--stop` ENDS THE CAPTURE. It is the LAST thing you do, after everything you
+> want measured.** On 2026-08-29 a run was stopped, then played on — and the most
+> interesting thing the operator saw (terrain walking near the west bridge) happened
+> after the hook had disarmed and is not on the wire. A second `--stop` is harmless
+> (it now reports the finished run and its capture), but it cannot bring the play
+> back.
+
 **The capture now survives either way the client goes down** — a snapshot every
 15 s covers a hard kill, and a `DLL_PROCESS_DETACH` write covers a graceful
 close (FINDINGS §2b). Killing the server before `--stop` is no longer fatal to
