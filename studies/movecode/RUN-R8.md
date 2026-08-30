@@ -84,13 +84,35 @@ python toolkit/clientscan/planecensus.py --armed
 
 That last one prints the empty cell this run exists to fill. **Read it before
 you launch** — but as of 2026-08-30 the armed-router-off cell is no longer a
-reliable staleness test: `authsrv-20260830T183051-c1.jsonl` IS an armed
-router-off capture and is **NOT R8** — it is the aborted first attempt
-(spontaneous carve-entry stuck at (−4314, −2206), walker dead 464 s, 117
-clicks all refused, client closed; zero plane-37 exposure, every floor unmet;
-see §7's last bullet). **The staleness test is the header's**: R8 ran iff
-FINDINGS has a §1z-p heading. Score the abort capture separately; never fold
-it into R8's predictions.
+reliable staleness test: TWO armed router-off captures exist and neither
+completes R8. **The staleness test is the header's**: R8 ran iff FINDINGS has
+a §1z-p heading.
+
+> **WHERE R8 STANDS, 2026-08-30 evening — partially read; only the bridge is
+> still owed.**
+>
+> * `authsrv-20260830T183051-c1.jsonl` — attempt 1, ABORTED: spontaneous
+>   carve-entry stuck at (−4314, −2206), walker dead 464 s, 117 clicks all
+>   refused, client closed. Every floor unmet. See §7's last bullet.
+> * `authsrv-20260830T185109-c1.jsonl` — attempt 2, banner CORRECT (armed,
+>   router off), 5.7 min, 228 reports, ended early after an `attach.py`
+>   mis-arm (a second attach is refused by design; the bin is only the
+>   client-side cross-check, so nothing scoreable was lost). Against §4's
+>   pre-registered floors:
+>   **P2 READ and CONFIRMED** — grants/report **0.59** (predicted ~0.56,
+>   refuted if >1.5, armed-router sessions 2.35; floor ≥100 reports met at
+>   228). The armed sessions' 4.2× grant density WAS the router.
+>   **P4 READ** — 0 echo rows against predicted <10 (floor = P2's, met);
+>   session shorter than the 15 min the prediction assumed, stated honestly.
+>   **P1 zero fires observed** but UNREAD — the ≥15-min full-sequence floor
+>   was not met.
+>   **P3 UNREAD** — zero plane-37 exposure; all 220 on-mesh reports sit on
+>   plane-[0] ground. The deck was never crossed.
+>
+> **What completes R8: the §3 step-3 bridge phase alone** — six crossings of
+> the west deck, ~10 min, hook optional — plus enough ordinary play to give
+> P1 its 15 minutes. Do not re-run what is already read; do fold attempt 2
+> into §1z-p when it is written.
 
 ## 2. The commands — R8
 
