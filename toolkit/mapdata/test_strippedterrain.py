@@ -567,8 +567,9 @@ def section4to8(check, led, args, dat):
     t0 = time.perf_counter()
     with Archive(dat) as ar:
         rows = corpus(ar)
-        led.ok(len(rows) == CORPUS_MAPS,
-               f"the archive holds {CORPUS_MAPS} map pairs", f"{len(rows)}")
+        led.ok(len(rows) >= CORPUS_MAPS,
+               f"the archive holds at least {CORPUS_MAPS} map pairs",
+               f"{len(rows)} in this archive (349 on 38797, 361 on 38833)")
         sel = rows if args.all else rows[::max(1, len(rows) //
                                                max(1, args.sample))][:args.sample]
         for head, partner in sel:

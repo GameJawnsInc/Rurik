@@ -20,22 +20,33 @@ two artifacts which have no reason to agree unless the reading is right:
 
   the resolved rows   Every tile id resolved through the archive's own file-id
                       table must land on a row whose head decompresses to magic
-                      `ATEX`. 484 of 484 do, on THREE archives with three
-                      different row counts. The client image cannot force that
-                      and neither can this reader.
+                      `ATEX`. Every one does, on FIVE archives with five
+                      different row counts -- 484 of 484 on the two older
+                      copies and 492 of 492 on the three newer. The client
+                      image cannot force that and neither can this reader.
 
-  the exact 8         Eight tile ids resolve on no archive in the vault, and
-                      they are the same eight on all three. The set is a
-                      LITERAL in this file (`test_agentlife.py`'s lesson: a
-                      symbol appearing in a test file is not a check), so the
-                      count and the membership both have to hold.
+  the eight, and      Eight tile ids resolved on no archive in the vault when
+  what they turned    this file was written, and they were the same eight on
+  out to be           all three copies then in it -- so the set was asserted as
+                      an EQUALITY. It was archive STATE: the newer copies have
+                      streamed all eight, at consecutive rows 177,601-177,608,
+                      each a real 512x512 ATEX. The eight stay a LITERAL here
+                      (`test_agentlife.py`'s lesson: a symbol appearing in a
+                      test file is not a check) but the assertion is now SUBSET
+                      + FLOOR + ARITHMETIC: at least 484 resolve, anything that
+                      does not is one of the named eight, and resolved plus
+                      unresolved accounts for all 492. A ninth absentee is
+                      still a defect; a copy that has streamed some of the
+                      eight is not. See MAY_BE_UNSTREAMED for the five-archive
+                      table.
 
   the dword-early     The control that makes all of the above mean something.
   control             Reading each pair record ONE DWORD EARLY, with a walker
                       written here out of `struct.unpack_from` that shares no
                       code with the module, must COLLAPSE: 0 of 492 resolve and
-                      492 of 492 trailers go non-zero, against 484 and 0. A
-                      check whose rival has never been run is not a check.
+                      492 of 492 trailers go non-zero, against the module's own
+                      count and 0. A check whose rival has never been run is
+                      not a check.
 
   consttable, not     Section 2 does NOT read `worldmap.WORLD_TABLE` and call it
   an address          proof. It plants a SECOND `s_worldData` in the fixture
@@ -227,10 +238,40 @@ EXPECT_TOTAL_TILES = 492
 EXPECT_GRIDS = 21
 EXPECT_SILENT_WORLDS = [7, 8, 9]
 EXPECT_WORLDS = 10
-# PLAN.md rung S3's prediction, stated before this module existed.
-EXPECT_UNRESOLVED = {387674, 387678, 387680, 387682, 387684,
-                     388093, 388095, 388097}
-EXPECT_RESOLVED = 484
+# THE EIGHT, and what they turned out to BE. PLAN.md rung S3's prediction,
+# stated before this module existed, was that eight of the atlas's 492 tile ids
+# resolve on NO archive in the vault. That held on three copies with three
+# different row counts, so it was written here as an EXACT set and an exact 484.
+#
+# IT WAS ARCHIVE STATE, AND THE VAULT PROVED IT WHEN dat_study WAS SWAPPED.
+# The same code, no edit, over five archives:
+#
+#   client/2026-04-30_b174de1f2d8d   177,310 rows   484 resolved, the eight absent
+#   client/2026-07-29_221c13772c7a   177,334 rows   484 resolved, the eight absent
+#   vault/dat_study (post-swap)      177,752 rows   492 resolved, none absent
+#   client/2026-08-13_64fae3b1369b   177,752 rows   492 resolved, none absent
+#   client/2026-08-20_21511009c460   177,783 rows   492 resolved, none absent
+#
+# In the three newer copies the eight sit at CONSECUTIVE rows 177,601-177,608
+# and every one decompresses to a real 512x512 ATEX -- a block appended by
+# streaming, which is what a local Gw.dat does as a player visits content. So
+# "the same eight on all three" was a fact about three copies of one vintage and
+# never about the atlas. Section 4's own skip message said so in advance -- "a
+# file id is archive STATE, so one copy cannot show the split is a property of
+# the atlas rather than of that copy" -- and the second vintage has now answered:
+# it is the copy's.
+#
+# THE ASSERTION THEREFORE MOVES FROM EQUALITY TO SUBSET + FLOOR + ARITHMETIC.
+# Re-pinning to "exactly 492, none absent" would be this same defect one
+# generation later, and a KNOWN-STATES list (test_pathmap.py's
+# KNOWN_HIGH_BIT_CENSUS) would go red on the legitimate copy that has streamed
+# three of the eight. What still cannot happen without a defect is a NINTH id
+# failing to resolve, or a tile falling out of the arithmetic altogether.
+MAY_BE_UNSTREAMED = frozenset({387674, 387678, 387680, 387682, 387684,
+                               388093, 388095, 388097})
+# Every OTHER tile resolves on every copy ever read, so this is a FLOOR that
+# holds on both vintages -- not a measurement of any one archive.
+EXPECT_RESOLVED_FLOOR = EXPECT_TOTAL_TILES - len(MAY_BE_UNSTREAMED)   # 484
 # The tiles that are NOT 512x512, which FINDINGS section 3.1 records as
 # "512x512" off a sample of 4. Named by file id, since a row index is a fact
 # about the archive copy and these hold on all three.
@@ -752,12 +793,15 @@ def section_archive(tiles, dats):
     # mistake as a guessed floor: it goes red for a reason that is not a defect.
     label, path = dats[0]
     fp, rows = _join(path, tiles)
-    LEDGER.ok(fp["resolved"] == EXPECT_RESOLVED
-              and fp["unresolved"] == EXPECT_UNRESOLVED,
-              f"{label}: {EXPECT_RESOLVED} tiles resolve and the unresolved set "
-              f"is EXACTLY the eight this file names as a literal",
-              f"{fp['resolved']} resolved, {len(fp['unresolved'])} missing, "
-              f"{rows:,} MFT rows")
+    LEDGER.ok(fp["unresolved"] <= MAY_BE_UNSTREAMED
+              and fp["resolved"] >= EXPECT_RESOLVED_FLOOR
+              and fp["resolved"] + len(fp["unresolved"]) == EXPECT_TOTAL_TILES,
+              f"{label}: at least {EXPECT_RESOLVED_FLOOR} of the "
+              f"{EXPECT_TOTAL_TILES} tiles resolve, every one that does NOT is "
+              f"one of the eight this file names as a literal, and resolved + "
+              f"unresolved accounts for all {EXPECT_TOTAL_TILES}",
+              f"{fp['resolved']} resolved, {len(fp['unresolved'])} missing "
+              f"{sorted(fp['unresolved'])}, {rows:,} MFT rows")
     LEDGER.ok(fp["all_atex"],
               f"{label}: LOAD-BEARING -- every resolved row's head decompresses "
               f"to magic ATEX, which neither the image nor this reader can force",
@@ -785,15 +829,37 @@ def section_archive(tiles, dats):
 
     others = dats[1:]
     if others:
+        # NOT `other_fp == fp` any more. Two of the six fields -- `resolved` and
+        # `unresolved` -- are archive STATE, and holding copies of different
+        # vintages to field-for-field equality reddens on a CONTENT GAIN. What
+        # every copy must still agree about is the atlas: the magic, the
+        # per-tile dimensions on every id both copies hold, and the absent
+        # scar. `shared` is required non-empty because `all()` over an empty
+        # intersection is True, which would exempt the whole comparison.
         agree, seen = [], []
+        base_dims = {f: (w, h) for f, w, h in fp["dims"]}
         for lbl, p in others:
             other_fp, other_rows = _join(p, tiles)
-            agree.append(other_fp == fp)
-            seen.append(f"{lbl} ({other_rows:,} rows)")
+            other_dims = {f: (w, h) for f, w, h in other_fp["dims"]}
+            shared = base_dims.keys() & other_dims.keys()
+            agree.append(
+                other_fp["unresolved"] <= MAY_BE_UNSTREAMED
+                and other_fp["resolved"] >= EXPECT_RESOLVED_FLOOR
+                and other_fp["resolved"] + len(other_fp["unresolved"])
+                == EXPECT_TOTAL_TILES
+                and other_fp["all_atex"] and other_fp["sizes"]
+                and other_fp["scar"] == fp["scar"] == 0
+                and bool(shared)
+                and all(base_dims[f] == other_dims[f] for f in shared))
+            seen.append(f"{lbl} ({other_rows:,} rows, {other_fp['resolved']} "
+                        f"resolved, {len(other_fp['unresolved'])} absent, "
+                        f"{len(shared)} ids shared with {label})")
         LEDGER.ok(all(agree) and len(agree) == len(others),
-                  f"{len(others)} further archive(s) agree field for field -- "
-                  f"same 484, same eight missing, same per-tile dimensions, at "
-                  f"different row counts",
+                  f"{len(others)} further archive(s) agree on every field that "
+                  f"is a fact about the ATLAS -- ATEX on all, the same "
+                  f"dimensions on every tile both copies hold, the same absent "
+                  f"scar -- while HOW MANY resolve is per COPY and only the "
+                  f"eight may be absent",
                   "; ".join(seen))
     else:
         LEDGER.skip("the second-archive agreement",
@@ -860,12 +926,28 @@ def section_dword_early(pe, tiles, dat):
               "passes every other check in this file",
               f"{len(mismatched)} disagree of {len(tiles)}")
 
+    # THE MODULE'S OWN ANSWER ON THIS SAME ARCHIVE, not a remembered number.
+    # This check's LABEL always said "reproduces the module's own answer" and
+    # its CONDITION compared the walker to 484 -- a count measured on a copy of
+    # the archive that is no longer the one in `vault/dat_study`. Swapping that
+    # copy reddened it while the two readings agreed perfectly with each other,
+    # which is a check failing for a reason that is not a defect. `t.file_id`
+    # is the MODULE's parse; `score(0)` re-derives the id from the record bytes
+    # with `struct.unpack_from` written here, so the two can still disagree.
+    # The floor is the vacuity guard: a mutual collapse to 0 must not pass.
+    # The trailer count stays a literal 0 -- that is a property of the pinned
+    # PE, not of the archive, and it does not move with a Gw.dat swap.
+    module_answer = sum(1 for t in tiles if t.file_id in table)
     base = score(0)
     early = score(-4)
     late = score(+4)
-    LEDGER.ok(base == (EXPECT_RESOLVED, 0),
-              "the independent walker reproduces the module's own answer",
-              f"{base[0]} resolve, {base[1]} non-zero trailers")
+    LEDGER.ok(base[0] == module_answer >= EXPECT_RESOLVED_FLOOR
+              and base[1] == 0,
+              "the independent walker reproduces the module's own answer on "
+              "this same archive -- two parses of one record, one of them "
+              "written here out of struct",
+              f"{base[0]} resolve vs the module's {module_answer}, "
+              f"{base[1]} non-zero trailers")
     LEDGER.ok(early[0] == 0 and early[1] == len(tiles),
               "read one dword EARLY it collapses to 0 resolved and every "
               "trailer goes non-zero",

@@ -1752,10 +1752,21 @@ Every one of these, in the order they were written:
   flipped payload byte vanish, and censusing on the wrong high bit finds NOTHING
   and prints **a clean confident zero**, which is why section 0 asserts the exact
   id SET. Section 7 reproduces the cross-copy population from real archives --
-  **29 install / 25 study / 9 run-live**, install->study clearing exactly 4 ids
-  over TWO rows with NEITHER a map row while install->run-live clears row 7982 --
-  and corroborates `customarea/FINDINGS.md`:967's correction of "two map rows" to
-  **four** from an archive that file never read.
+  **29 install / 9 run-live** exactly, and the STUDY census as one of two KNOWN
+  STATES -- **25 on a 38797-lineage copy, ZERO on 38833/38849**, because ArenaNet
+  dropped the dual registration between those builds and `vault/dat_study` was
+  resynced across it (`studies/maprows` sec.10.14). The asymmetry is deliberate:
+  `client/` and `run-live/` are dated snapshots that are never resynced, so a
+  move THERE is a real regression and must stay exact, while the study copy's
+  number is a per-generation fact. The install->study claim splits with it -- on
+  a 38797 copy it still clears exactly 4 ids over TWO rows with NEITHER a map
+  row (corroborating `customarea/FINDINGS.md`:967's correction of "two map rows"
+  to **four** from an archive that file never read), and on 38833 the assertion
+  worth making is the opposite one: the disappearance is TOTAL and clean, taking
+  the map rows with it, because a PARTIAL clearing would be a third state. The
+  two arms assert genuinely different propositions and must not be collapsed
+  into one parameterised check. Floor 85, plus one on a copy that still
+  registers, so neither generation carries slack.
   **Section 3 is the one an adversarial pass forced, and it is the file's
   argument**: the first version pinned 3 of ROW_FIELDS' entries, and a
   six-lens audit MEASURED that **seven of ten could be deleted with all 63
@@ -9550,16 +9561,28 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   requires C-8's figures to appear in the docstring citation and in NO other
   literal, with a control that they are in the docstring so the check cannot
   pass vacuously on a module that never heard of the correction. **Section 7 is
-  where C-8 comes apart**, on two real archives: `vault/dat_study` under
-  `entries` reproduces the larger census EXACTLY (38,633 = the "38,621+12" whose
-  +12 IS the twelve erased structural rows the USED convention drops, 138,708
-  comp-8, sum 177,341), and the pristine install copy under `used` reproduces
-  the smaller SUM exactly (177,321) with the compression split one row from what
-  was reported -- so the twenty rows are SEVEN of archive difference plus
-  THIRTEEN of convention, and the sixteen comp-8 rows are FIFTEEN of archive
-  difference plus one, and the reconciliation closes. Floors are two shapes with
-  ZERO headroom each, both MEASURED: 84 bare (`RURIK_VAULT` pointed at nothing),
-  95 with a vault, section 7 raising the floor itself as its last act. ~2 s),
+  where C-8 comes apart**, on real archives -- and since the 2026-08-27 resync
+  Route E is read from **`vault/dat_study_38797`**, the copy it was MEASURED on,
+  rather than from `vault/dat_study`, which is now 38833 (`studies/maprows`
+  sec.10.14). There it still reproduces the larger census EXACTLY (38,633 = the
+  "38,621+12" whose +12 IS the twelve erased structural rows the USED convention
+  drops, 138,708 comp-8, sum 177,341), and the pristine install copy under `used`
+  reproduces the smaller SUM exactly (177,321) with the compression split one row
+  from what was reported -- so the twenty rows are SEVEN of archive difference
+  plus THIRTEEN of convention, and the sixteen comp-8 rows are FIFTEEN plus one,
+  and the reconciliation closes. C8_ROUTE_E and C8_ROUTE_C are transcriptions of
+  a PUBLISHED correction, never measurements of ours, so re-pinning them to
+  whatever the current archive says would make the test agree with itself and
+  delete the only check that C-8's figures were right. Section 7a was rebuilt as
+  generation-INDEPENDENT relations for the same reason, which incidentally killed
+  three latent defects it had been carrying: a literal standing in for a live
+  census, a telescoping identity that could only fail when another check already
+  had, and a one-way guard whose message claimed "either copy". Floors are three
+  shapes with ZERO headroom each, all MEASURED: 84 bare (`RURIK_VAULT` pointed at
+  nothing), 94 with a vault, 97 when the Route E archive is present -- and the
+  ordering is load-bearing, the vault floor and the anomalies check sitting
+  BEFORE the early return so a machine without that copy keeps the vaulted guard
+  rather than silently dropping to the bare floor. ~2 s),
   `toolkit/mapdata/test_refindex.py` (the REVERSE-CLOSURE index -- "who else
   reads this row?", the question `unitassembly.py`'s forward walk cannot answer
   and the shared-skeleton hazard (`studies/unitmodels/FINDINGS.md` §3.11, six of

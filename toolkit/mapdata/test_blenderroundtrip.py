@@ -93,7 +93,8 @@ import mapbuild  # noqa: E402
 from test_blenderimport import (BLENDER_TIMEOUT, MEASURED_BLENDER,  # noqa: E402
                                 PYTHON_EXIT_CODE, find_blender)
 from test_mapexport import (PRESEARING_DIMS, PRESEARING_FILE_ID,  # noqa: E402
-                            PRESEARING_RECT, PRESEARING_ROW,
+                            PRESEARING_MFT_ROWS, PRESEARING_RECT,
+                            PRESEARING_ROW,
                             synthetic_terrain, SYN_X, SYN_Y)
 from test_mapbuild import placeholder_constants  # noqa: E402
 import checks  # noqa: E402
@@ -856,8 +857,10 @@ def _section5(check, led, blender, tmp, args):
           "own bytes ==")
     with Archive(dat) as ar:
         row = file_id_table(ar).get(PRESEARING_FILE_ID)
-        check(row == PRESEARING_ROW, "file id 0x%X resolves to row %d"
-              % (PRESEARING_FILE_ID, PRESEARING_ROW), "got %r" % row)
+        check(row in PRESEARING_MFT_ROWS,
+              "file id 0x%X resolves to one of the KNOWN Pre-Searing rows %r"
+              % (PRESEARING_FILE_ID, sorted(PRESEARING_MFT_ROWS)),
+              "got %r" % row)
         if row is None:
             led.skip("5. the real map", "the reference map did not resolve")
             return

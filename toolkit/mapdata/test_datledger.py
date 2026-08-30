@@ -36,13 +36,23 @@ and the verb apart: the census RAN and its headline is on screen, so whatever
 failed after it is not evidence about the archive. The pre-fix module reddens
 eight of those eleven checks.
 
-Sections 1-6b need no vault, no client and no socket. Section 7 censuses two
-real archives -- and takes C-8 apart on them, which is the reason it is a
-section and not a smoke test: the twenty rows come apart into SEVEN of archive
-difference (the two copies are not the same archive) plus THIRTEEN of
-convention, and the sixteen comp-8 rows into fifteen of archive difference plus
-one row's worth of where the compression split was drawn. It SKIPS whole without
-both copies.
+Sections 1-6b need no vault, no client and no socket. Section 7 censuses the
+vault's live copies and takes C-8 apart, which is the reason it is a section and
+not a smoke test: the twenty rows come apart into SEVEN of archive difference
+(the two copies are not the same archive) plus THIRTEEN of convention, and the
+sixteen comp-8 rows into fifteen of archive difference plus one row's worth of
+where the compression split was drawn. It SKIPS whole without the two live
+copies.
+
+AND C-8's ROUTE E IS READ FROM THE ARCHIVE IT WAS MEASURED ON. `vault/dat_study`
+is the SERVER'S LIVE reference archive and is resynced when the server's moves
+-- 38797 -> 38833 on 2026-08-27 -- so a historical correction read off it
+reddens the morning of a resync while saying nothing whatever about C-8. Section
+7a therefore keeps only what is generation-independent (the +12 is a CONVENTION,
+and the comp-8 count does not move between conventions on EITHER copy), and 7b
+reads the exact Route E census from the copy preserved for exactly that,
+`vault/dat_study_38797`, degrading to a NAMED skip where it is absent. Route C
+never needed the move: `client/` is a dated snapshot directory.
 
     python toolkit/mapdata/test_datledger.py
 """
@@ -132,7 +142,13 @@ import vaultpath  # noqa: E402
 # because the census had already succeeded on screen), and the control that a
 # genuinely unreadable archive still says "could not census".
 FLOOR_BARE = 84
-FLOOR_VAULT = 95
+# Two vaulted shapes. FLOOR_VAULT is sections 1..7b with the two LIVE copies;
+# FLOOR_VAULT_C8 adds the three checks that C-8's Route E census affords when
+# the preserved 38797 study copy is on this machine. Same arrangement as
+# test_bit31/test_archive, and for the same reason: one fixed number would let
+# a vaulted run carry the whole Route E arm as headroom.
+FLOOR_VAULT = 94
+FLOOR_VAULT_C8 = 97
 LEDGER = checks.Ledger("row census", floor=FLOOR_BARE)
 check = checks.adopt(LEDGER)
 
@@ -1003,6 +1019,10 @@ def section_vault():
     copies = {"study": os.path.join(root, "dat_study", "Gw.dat"),
               "install": os.path.join(root, "client",
                                       "2026-07-29_221c13772c7a", "Gw.dat")}
+    # The archive correction C-8's Route E census was MEASURED ON, kept out of
+    # `copies` because section 7b degrades to a named skip without it while
+    # the two above are what the section skips whole for.
+    c8_study = os.path.join(root, "dat_study_38797", "Gw.dat")
     missing = [k for k, p in copies.items() if not os.path.isfile(p)]
     if missing:
         LEDGER.skip("the real-archive census",
@@ -1035,7 +1055,7 @@ def section_vault():
           f"{sm['classes'].get('comp8', 0):,} comp-8 rows -- the numbers the "
           f"C-8 note is written from")
 
-    print("\n7a. C-8's two censuses, each reproduced as a NAMED convention")
+    print("\n7a. the counting CONVENTIONS, on whatever copies this vault holds")
     ins_led, ins_sm = censused(copies["install"])
     ins = ins_sm["conventions"]
     study_entries, study_used = con["entries"], con["used"]
@@ -1047,22 +1067,62 @@ def section_vault():
           f"(0={ins_used['by_compression']['0']:,}, "
           f"8={ins_used['by_compression']['8']:,})")
 
-    check(study_entries["count"] == C8_ROUTE_E["sum"]
-          and study_entries["by_compression"]["0"] == C8_ROUTE_E["comp0"]
-          and study_entries["by_compression"]["8"] == C8_ROUTE_E["comp8"],
-          f"the STUDY copy under the `entries` convention reproduces C-8's "
-          f"larger census exactly: {C8_ROUTE_E['comp0']:,} comp-0, "
-          f"{C8_ROUTE_E['comp8']:,} comp-8, sum {C8_ROUTE_E['sum']:,}",
-          f"got {study_entries['by_compression']}")
+    # THE +12 IS A CONVENTION, NOT A GENERATION -- and this check used to read
+    # the historical LITERAL where it meant the live census. While
+    # `vault/dat_study` WAS the archive C-8 was measured on the two were equal
+    # and the defect was invisible; the 2026-08-27 resync to 38833 reddened it
+    # while the convention itself had not moved an inch (entries-comp0 minus
+    # used-comp0 is 12 on 38797 AND on 38833, over the same twelve rows). Both
+    # sides are measured now, so the claim is generation-independent.
     ent_used = [d for d in sm["deltas"] if d["to"] == "used"][0]
-    check(C8_ROUTE_E["comp0"] - study_used["by_compression"]["0"] == 12
-          and ent_used["by_class"] == {"structural": 12},
-          "and C-8's comp-0 figure is written '38,621+12' -- the +12 IS the "
-          "twelve erased structural rows 4..15 that the USED convention drops. "
-          "That was always a convention, spelled out in the number itself",
+    comp0_gap = (study_entries["by_compression"]["0"]
+                 - study_used["by_compression"]["0"])
+    check(comp0_gap == 12 and ent_used["by_class"] == {"structural": 12},
+          "C-8's comp-0 figure is written '38,621+12' and the +12 IS the "
+          "twelve erased structural rows 4..15 that the USED convention "
+          "drops -- measured here as entries-comp0 minus used-comp0 on the "
+          "copy actually read. That was always a convention, spelled out in "
+          "the number itself",
           f"{study_entries['by_compression']['0']:,} - "
-          f"{study_used['by_compression']['0']:,} = 12, {ent_used['by_class']}")
+          f"{study_used['by_compression']['0']:,} = {comp0_gap}, "
+          f"{ent_used['by_class']}")
 
+    # A GUARD THAT WAS POINTED ONE WAY. The old check asserted comp-8
+    # convention-invariance on the INSTALL copy while its own message claimed
+    # it "on either copy", and bundled it with a `== 15` that is pure archive
+    # difference. Split: the invariant is measured on BOTH copies here, and 15
+    # is a fact about one pair of archives and lives in 7b with the rest of
+    # C-8's arithmetic.
+    check(study_entries["by_compression"]["8"]
+          == study_used["by_compression"]["8"]
+          and ins_entries["by_compression"]["8"]
+          == ins_used["by_compression"]["8"],
+          "and the comp-8 count does not move BETWEEN conventions on EITHER "
+          "copy -- which is what makes a comp-8 disagreement between two "
+          "censuses archive difference and never counting",
+          f"study {study_entries['by_compression']['8']:,} == "
+          f"{study_used['by_compression']['8']:,}, install "
+          f"{ins_entries['by_compression']['8']:,} == "
+          f"{ins_used['by_compression']['8']:,}")
+
+    # AND THE CONVENTION TERM IS A NAMED POPULATION. `archive_gap +
+    # convention_gap == 20` TELESCOPED: both gaps are taken against
+    # ins_entries, so their sum is identically study_entries - ins_used, which
+    # is exactly what 7b's two exact checks already assert. It could not fail
+    # on its own and it was not a second witness to anything. What is NOT a
+    # tautology is that the convention half equals the rows the install copy's
+    # own entries->used delta drops, by class.
+    ins_ent_used = [d for d in ins_sm["deltas"] if d["to"] == "used"][0]
+    convention_gap = ins_entries["count"] - ins_used["count"]
+    check(convention_gap == ins_ent_used["rows"]
+          and ins_ent_used["by_class"] == {"structural": 12, "spare": 1},
+          f"and the CONVENTION half of a two-copy disagreement is a named "
+          f"population rather than a subtraction: {convention_gap} rows on "
+          f"the install copy, which its own entries->used delta names as "
+          f"{ins_ent_used['by_class']}",
+          f"{convention_gap} == {ins_ent_used['rows']}")
+
+    print("\n7b. C-8's two censuses, each on the archive it was measured on")
     check(ins_used["count"] == C8_ROUTE_C["sum"],
           f"the INSTALL copy under the `used` convention reproduces C-8's "
           f"smaller SUM exactly: {C8_ROUTE_C['sum']:,}",
@@ -1077,25 +1137,6 @@ def section_vault():
           f"{C8_ROUTE_C['comp0']:,}/{C8_ROUTE_C['comp8']:,}, same total) -- so "
           f"the 16-row comp-8 gap is one row, not sixteen",
           f"off by {off_by}")
-
-    archive_gap = study_entries["count"] - ins_entries["count"]
-    convention_gap = ins_entries["count"] - ins_used["count"]
-    check(archive_gap + convention_gap == C8_ROUTE_E["sum"] - C8_ROUTE_C["sum"],
-          f"and the 20-row disagreement CLOSES: {archive_gap} rows of archive "
-          f"difference (the two copies have {led.row_count:,} and "
-          f"{ins_led.row_count:,} raw rows) plus {convention_gap} rows of "
-          f"convention (entries vs USED on the install copy) = "
-          f"{C8_ROUTE_E['sum'] - C8_ROUTE_C['sum']}",
-          f"{archive_gap} + {convention_gap}")
-    check(study_entries["by_compression"]["8"]
-          - ins_entries["by_compression"]["8"] == 15
-          and ins_entries["by_compression"]["8"]
-          == ins_used["by_compression"]["8"],
-          "and 15 of the 16 comp-8 rows are archive difference, not counting: "
-          "the comp-8 count does not move BETWEEN conventions on either copy, "
-          "only between copies",
-          f"study {study_entries['by_compression']['8']:,} - install "
-          f"{ins_entries['by_compression']['8']:,} = 15")
     # NO SLACK ON THE VAULTED SHAPE: with one fixed floor a vaulted run would
     # carry the whole reconciliation as headroom, and headroom in a floor is
     # where a deleted section hides.
@@ -1104,6 +1145,51 @@ def section_vault():
           "and neither real archive carries a single anomaly -- every row's "
           "fields agree with its class, which is what makes the counts above "
           "worth quoting")
+
+    # ROUTE E IS A 38797-PINNED MEASUREMENT, so it is read from the copy that
+    # was preserved to serve exactly that (`0fc0bd7`: "every 38797-pinned
+    # measurement ... RURIK_DAT at it reproduces an old number"). It used to
+    # be read off `vault/dat_study`, which is the SERVER'S LIVE reference
+    # archive and is resynced when the server's moves -- 38797 -> 38833 on
+    # 2026-08-27 -- so a historical correction was being taken off a moving
+    # target and reddened the morning of a resync while saying nothing
+    # whatever about C-8. Route C never needed this: `client/` is a dated
+    # snapshot directory and does not move.
+    if not os.path.isfile(c8_study):
+        LEDGER.skip("C-8's Route E census and the 20-row closure",
+                    "vault/dat_study_38797 is absent from this vault")
+        return
+    # THE FLOOR RISES WITH THE SUBJECT: three more checks are available when
+    # the Route E archive is here, so requiring them is what stops a machine
+    # that has it from quietly losing them.
+    LEDGER.floor = FLOOR_VAULT_C8
+    c8_led, c8_sm = censused(c8_study)
+    c8e = c8_sm["conventions"]["entries"]
+    print(f"    38797   entries {c8e['count']:,} "
+          f"(0={c8e['by_compression']['0']:,}, "
+          f"8={c8e['by_compression']['8']:,})")
+    check(c8e["count"] == C8_ROUTE_E["sum"]
+          and c8e["by_compression"]["0"] == C8_ROUTE_E["comp0"]
+          and c8e["by_compression"]["8"] == C8_ROUTE_E["comp8"],
+          f"the 38797 STUDY copy under the `entries` convention reproduces "
+          f"C-8's larger census exactly: {C8_ROUTE_E['comp0']:,} comp-0, "
+          f"{C8_ROUTE_E['comp8']:,} comp-8, sum {C8_ROUTE_E['sum']:,}",
+          f"got {c8e['by_compression']}")
+    archive_gap = c8e["count"] - ins_entries["count"]
+    check(archive_gap + convention_gap == C8_ROUTE_E["sum"] - C8_ROUTE_C["sum"],
+          f"and the 20-row disagreement CLOSES: {archive_gap} rows of archive "
+          f"difference (the two copies have {c8_led.row_count:,} and "
+          f"{ins_led.row_count:,} raw rows) plus {convention_gap} rows of "
+          f"convention (entries vs USED on the install copy) = "
+          f"{C8_ROUTE_E['sum'] - C8_ROUTE_C['sum']}",
+          f"{archive_gap} + {convention_gap}")
+    c8_gap = c8e["by_compression"]["8"] - ins_entries["by_compression"]["8"]
+    check(c8_gap == 15,
+          "and 15 of the 16 comp-8 rows are archive difference, not counting "
+          "-- 7a measured the comp-8 count to be convention-invariant on both "
+          "copies, so every row of this gap has to be archive",
+          f"38797 {c8e['by_compression']['8']:,} - install "
+          f"{ins_entries['by_compression']['8']:,} = {c8_gap}")
 
 
 def guarded(fn, *args):

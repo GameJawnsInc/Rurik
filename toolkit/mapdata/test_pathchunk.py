@@ -111,7 +111,7 @@ SMALL_GRID = (3, 3)
 # 65 -> 92 on 2026-08-12 with sections 7-9, the STRIPPED chunk 0x10000008 -- the
 # compiler's INPUT side, which rung E3 needs authorable and which nothing in this
 # tree could read. Section 7 is 16 checks and needs no vault.
-LEDGER = checks.Ledger("pathing chunk codec", floor=92)
+LEDGER = checks.Ledger("pathing chunk codec", floor=93)
 check = checks.adopt(LEDGER)
 
 
@@ -578,9 +578,13 @@ def sweep(ar, entries):
 
 def section34(ar, mi, picks, want_all):
     print(f"\n-- 3. the round trip over {len(picks)} retail maps")
-    check(len(mi.heads) == CORPUS_MAPS and len(mi.pairs) == CORPUS_MAPS,
-          "the population is what it should be before anything is measured",
+    check(len(mi.heads) == len(mi.pairs),
+          "every map head has a Stripped partner -- the structural claim, and "
+          "it does not depend on the count",
           f"{len(mi.heads)} map heads, {len(mi.pairs)} with a Stripped partner")
+    check(len(mi.pairs) >= CORPUS_MAPS,
+          f"and the population is at least {CORPUS_MAPS}",
+          f"{len(mi.pairs)} in this archive (349 on 38797, 361 on 38833)")
     check(0 < len(picks) <= len(mi.pairs),
           "the sample is non-empty and drawn from that population",
           f"{len(picks)} of {len(mi.pairs)}")
@@ -593,9 +597,9 @@ def section34(ar, mi, picks, want_all):
           f"{s.ok} of {s.files} in {dt:.0f}s")
 
     if want_all:
-        check(s.files == CORPUS_MAPS,
+        check(s.files == len(mi.pairs) and s.files >= CORPUS_MAPS,
               "--all really did sweep every map that has a pathing chunk",
-              f"{s.files} of {CORPUS_MAPS}")
+              f"{s.files} of {len(mi.pairs)} (at least {CORPUS_MAPS})")
         check(s.planes == CORPUS_PLANES and s.traps == CORPUS_TRAPS,
               "the corpus population is the one this study reports",
               f"{s.planes} planes (want {CORPUS_PLANES}), "
@@ -884,8 +888,9 @@ def section8(ar, mi, picks, want_all):
           f"{len(areas) - pos - neg} degenerate")
 
     if want_all:
-        check(files == CORPUS_MAPS,
-              "--all really did sweep every map", f"{files} of {CORPUS_MAPS}")
+        check(files == len(mi.pairs) and files >= CORPUS_MAPS,
+              "--all really did sweep every map",
+              f"{files} of {len(mi.pairs)} (at least {CORPUS_MAPS})")
         check(pos == STRIPPED_CCW and neg == STRIPPED_CW,
               "and the winding split is the measured population",
               f"{pos}/{neg}, want {STRIPPED_CCW}/{STRIPPED_CW}")

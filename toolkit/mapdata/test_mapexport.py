@@ -109,12 +109,22 @@ PROPS_CHUNK = 0x20000004
 PROPS_SIG = 0x39583392
 PROPS_VERSION = 17
 
-# The two reference maps. Each is REACHED through its file id -- the portable
-# key -- and section 5 then asserts the row it landed on, so a copy where the
-# rows moved goes red and names both numbers instead of skipping. (It has not:
-# both ids resolve to these rows in `vault/dat_study` and in
-# `vault/client/2026-04-30_b174de1f2d8d`, MEASURED 2026-08-13.) Nothing in this
-# file is gated on the archive's MFT row count any more -- see `_section6`.
+# The two reference maps, each REACHED through its file id -- the portable key.
+# The rows below are REPORTED, NEVER REQUIRED, and that is a correction: this
+# block used to say section 5 asserted the row too, "so a copy where the rows
+# moved goes red and names both numbers instead of skipping. (It has not.)"
+# It has now. Build 38833 rewrote Pre-Searing -- stored (size, crc) went
+# (1300036, 2695778314) -> (1300044, 871473801) and its row 7982 -> 177262 --
+# and the tripwire did NOT go red and name both numbers: ORACLE and MULTI_AXIS
+# were keyed by ROW and indexed with the FILE-ID-RESOLVED row, so section 5
+# died on a KeyError with no verdict, no ledger and no floor report. Both
+# tables are keyed by FILE ID now. The row pin protected nothing the content
+# checks do not: dims, rect, the props chunk, the walk closing on its own
+# declared size, the prop population and eight pinned oracle numbers all still
+# hold EXACTLY on the rewritten file, MEASURED 2026-08-29 on both archives.
+# An MFT-identity gate of test_mapfile's `resolve_pinned` shape would be WRONG
+# here for the same reason -- the file legitimately changed. Nothing in this
+# file is gated on the archive's MFT row count -- see `_section6`.
 KAMADAN_FILE_ID = 0x345CC
 KAMADAN_ROW = 22371
 KAMADAN_DIMS = (416, 448)
@@ -123,6 +133,17 @@ KAMADAN_PROPS = 516
 
 PRESEARING_FILE_ID = 0x1B97D
 PRESEARING_ROW = 7982
+# The FILE ID is portable across archive generations and the ROW is not -- this
+# map is the corpus's own proof of it. Build 38797 bound 0x1B97D only in its
+# renamed spelling (archive.file_id_table's FINDINGS 9.4 pending rename), so
+# the map sat at row 7982. Build 38833 completed the rename: DnArchive
+# re-linked the plain id to row 177262 and 7982 was recycled to an ATEX
+# texture, which is why deploy._donor_row resolves by id and keeps the index
+# only as a printed cross-check. Land on one of the KNOWN rows -- "any row"
+# would let a wrong map through, and one exact number is a pin to one copy.
+# Named _MFT_ROWS to stay distinct from test_contentids.PRESEARING_ROWS, which
+# is a pair of MAP IDS (146, 148) and an unrelated thing.
+PRESEARING_MFT_ROWS = {7982: 38797, 177262: 38833}
 PRESEARING_DIMS = (416, 512)
 PRESEARING_RECT = (-18432.0, -24576.0, 21504.0, 24576.0)
 PRESEARING_PROPS = 864
@@ -134,14 +155,14 @@ PRESEARING_PROPS = 864
 # a different sample. See the module docstring for why Kamadan sits low.
 #          layout        Kamadan frac   med     Pre-Searing frac   med
 ORACLE = {
-    "baseline":     {KAMADAN_ROW: (0.3043, 306.88),
-                     PRESEARING_ROW: (0.7338, 29.97)},
-    "y-flip":       {KAMADAN_ROW: (0.0698, 892.71),
-                     PRESEARING_ROW: (0.0775, 668.48)},
-    "x-flip":       {KAMADAN_ROW: (0.0330, 4799.79),
-                     PRESEARING_ROW: (0.1389, 573.51)},
-    "not-detiled":  {KAMADAN_ROW: (0.0853, 1107.91),
-                     PRESEARING_ROW: (0.1366, 507.76)},
+    "baseline":     {KAMADAN_FILE_ID: (0.3043, 306.88),
+                     PRESEARING_FILE_ID: (0.7338, 29.97)},
+    "y-flip":       {KAMADAN_FILE_ID: (0.0698, 892.71),
+                     PRESEARING_FILE_ID: (0.0775, 668.48)},
+    "x-flip":       {KAMADAN_FILE_ID: (0.0330, 4799.79),
+                     PRESEARING_FILE_ID: (0.1389, 573.51)},
+    "not-detiled":  {KAMADAN_FILE_ID: (0.0853, 1107.91),
+                     PRESEARING_FILE_ID: (0.1366, 507.76)},
 }
 CONTROLS = ("y-flip", "x-flip", "not-detiled")
 FRAC_TOL = 0.005          # the measurement is deterministic; this is slack, not noise
@@ -1087,8 +1108,10 @@ def _section5(check, led, ar, tmp):
             (PRESEARING_FILE_ID, PRESEARING_ROW, PRESEARING_DIMS,
              PRESEARING_RECT, PRESEARING_PROPS)):
         resolved = table.get(fid)
-        check(resolved == row,
-              f"file id 0x{fid:X} resolves to row {row}", f"got {resolved}")
+        check(resolved is not None,
+              f"file id 0x{fid:X} resolves in this archive -- the row it lands "
+              f"on is reported, never required (measured at {row})",
+              f"row {resolved}")
         if resolved is None:
             continue
         row = resolved
@@ -1137,7 +1160,7 @@ def _section5(check, led, ar, tmp):
               f"all four layouts")
 
         base_frac, base_med = results["baseline"][0], results["baseline"][1]
-        want_f, want_m = ORACLE["baseline"][row]
+        want_f, want_m = ORACLE["baseline"][fid]
         check(abs(base_frac - want_f) < FRAC_TOL,
               f"row {row}: baseline fraction within 100 units is {want_f}",
               f"{base_frac:.4f}")
@@ -1148,7 +1171,7 @@ def _section5(check, led, ar, tmp):
 
         for layout in CONTROLS:
             frac, med = results[layout][0], results[layout][1]
-            want_f, want_m = ORACLE[layout][row]
+            want_f, want_m = ORACLE[layout][fid]
             check(abs(frac - want_f) < FRAC_TOL,
                   f"row {row}: the {layout} control scores {want_f}",
                   f"{frac:.4f}")
@@ -1206,9 +1229,10 @@ def _section6(check, led, ar, args):
     # correction as `test_mapfile.py`'s `resolve_pinned` on the same day --
     # identity of the thing being read, never a census of the file it sits in.
     picks, all_rows = sample_rows(ar, args.sample, args.all)
-    check(len(all_rows) == CORPUS_MAPS,
-          f"the archive holds {CORPUS_MAPS} map rows (flags {MAP_FLAGS})",
-          f"{len(all_rows)}")
+    check(len(all_rows) >= CORPUS_MAPS,
+          f"the archive holds at least {CORPUS_MAPS} map rows "
+          f"(flags {MAP_FLAGS})",
+          f"{len(all_rows)} in this archive (349 on 38797, 361 on 38833)")
     check(len(picks) >= min(args.sample, CORPUS_MAPS) and len(picks) > 0,
           f"the sample is the {len(picks)} rows it claims to be")
 
@@ -1262,7 +1286,7 @@ BASIS_TOL = 5e-4                               # f32 chain vs our f64 rebuild
 # map whose props all rotate about one axis; `zyx` is the NEAREST rival (2,070
 # of 3,545 on the 12-map probe) and still failed 20 of Kamadan's 53 and 95 of
 # Pre-Searing's 179 on that run.
-MULTI_AXIS = {KAMADAN_ROW: 53, PRESEARING_ROW: 179}
+MULTI_AXIS = {KAMADAN_FILE_ID: 53, PRESEARING_FILE_ID: 179}
 
 
 # --- 8. rung T4 against the archive ------------------------------------------
@@ -1469,7 +1493,7 @@ def _section7(check, led, ar, tmp):
         frac, _med, n, outside = score_layout(
             exp.heights, exp.dim_x, exp.dim_y, exp.rect,
             [tuple(r["position"]) for r in pd["props"]], "baseline")
-        want_f, _ = ORACLE["baseline"][row]
+        want_f, _ = ORACLE["baseline"][fid]
         check(outside == 0 and n == pd["count"]
               and abs(frac - want_f) < FRAC_TOL,
               f"row {row}: the sidecar's own props-vs-heights fraction is "
@@ -1496,7 +1520,7 @@ def _section7(check, led, ar, tmp):
               f"row {row}: the ZXY composition reproduces the compiled basis "
               f"on ALL {pd['count']} records",
               f"{m_ok}/{multi} multi, {s_ok}/{pd['count'] - multi} single")
-        pinned = MULTI_AXIS[row]
+        pinned = MULTI_AXIS[fid]
         check(pinned is None or (multi == pinned and rival_ok < multi),
               f"row {row}: the rival order still fails on multi-axis records "
               f"-- the pin has power",

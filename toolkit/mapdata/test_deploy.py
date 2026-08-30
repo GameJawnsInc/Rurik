@@ -3011,8 +3011,28 @@ def section2(area):
     dim = int(area["dims"])
     heights, _worst = stx.snap_block(deploy.GENERATORS[area["heights"]](dim))
     with Archive(dat) as ar:
-        good = deploy.Donor(ar, BIOME_ROW, REFERENCE_ROW)
-        bad = deploy.Donor(ar, BIOME_ROW, BIOME_ROW)
+        # RESOLVE BY FILE ID, exactly as deploy.main() does. A row index is
+        # meaningful only against the copy it was measured on: build 38833
+        # recycled row 7982 (Pre-Searing moved to 177262; 7982 became an ATEX
+        # texture), so the pinned index made deploy.Donor raise Refused out of
+        # this section and kill the whole run before LEDGER.verdict() could
+        # print -- no verdict, no ledger, a traceback instead of a result.
+        # `deploy._donor_row` is the module's own answer to exactly that: it
+        # looks the row up by the PORTABLE key and keeps the pinned index as a
+        # printed cross-check, and this test was the one call site still going
+        # round it. The except turns a refusal back into a named FAIL.
+        try:
+            biome_row = deploy._donor_row(ar, area, "biome donor",
+                                          "donor_file_id", "donor_row")
+            const_row = deploy._donor_row(ar, area, "constants donor",
+                                          "constants_file_id",
+                                          "constants_row", REFERENCE_ROW)
+            good = deploy.Donor(ar, biome_row, const_row)
+            bad = deploy.Donor(ar, biome_row, biome_row)
+        except deploy.Refused as exc:
+            check(False, "both donors resolve to map heads in this archive",
+                  f"deploy.Refused: {exc}")
+            return
     n_good = sum(len(v) for v in good.constants.values())
     n_bad = sum(len(v) for v in bad.constants.values())
     check(n_good < n_bad,

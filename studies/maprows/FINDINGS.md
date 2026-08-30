@@ -1027,3 +1027,99 @@ far: `test_archive`'s map count (349 → 361; ArenaNet added twelve maps) and
 `test_pathmap`. `test_spawncheck` is unaffected, measured both ways. Each red is
 classified by re-running it against `dat_study_38797` — green there and red here
 means the resync caused it; red both ways means it was already broken.
+
+### 10.14 THE BILL IS PAID — twelve reds classified by that exact method, and two of them were NOT the resync
+
+**2026-08-29.** A full suite run scored **170 green / 19 red of 189**. Twelve of
+the reds were the price §10.13 predicted, and they are now fixed. Every one was
+classified by the method that section prescribes — re-run against
+`dat_study_38797` — and the classification earned its keep, because **two of the
+twelve were not drift at all.**
+
+**349 → 361 is not "twelve maps were added", and the difference matters.** By
+FILE ID the old 349 are a strict subset of the new 361: none lost, twelve added,
+and of the 349 common ids **347 are byte-identical by (size, crc)** — exactly two
+were rewritten, `0x1B97D` and `0x1C539`. By ROW the arithmetic is different:
+7982 and 20118 *left* the head set and 177262 and 177590 *joined* it, because
+those are the **same two maps relocated** by a completed `FcArchive`/`DnArchive`
+rename. 349 − 2 + 14 = 361. **The file id is portable and the row is not**, and
+the two rows most likely to be pinned as fixtures — the smallest heads — are
+exactly the two that moved.
+
+**The shape of the fix, per the standing rule (floor + signature, never an exact
+value), with the exceptions stated:**
+
+* **Population counts became FLOORS** (`>= CORPUS_MAPS`) plus the *structural*
+  claim split out of the conjunction — `len(heads) == len(pairs)` is
+  generation-independent and was the half that mattered. This is
+  `test_mapfile`'s existing shape, which is why that file **passed while its
+  seven siblings failed**: the answer was already written down in this repo and
+  the others had not followed it.
+* **Row-keyed tables were rekeyed BY FILE ID.** `test_mapexport`'s `ORACLE` and
+  `MULTI_AXIS` were keyed by ROW and indexed with a *file-id-resolved* row —
+  which is the actual defect, and it killed the module with a bare `KeyError`,
+  no verdict and no ledger. The pinned values are untouched: the rewritten
+  Pre-Searing still reproduces all eight oracle numbers, the dims, the rect and
+  864 props **exactly**, which is what proves the content is the same map.
+* **Per-generation KNOWN STATES** where an exact identity is the claim —
+  `test_bit31`'s study census becomes `in (25, 0)`, `test_pathmap`'s
+  `KNOWN_HIGH_BIT_CENSUS` shape. The `client/` and `run-live/` censuses stay
+  **exact**, deliberately: those are dated snapshots that are never resynced, so
+  a move there is a real regression and softening them would erase a live check.
+* **A vacuous population is SKIPPED, not passed.** On 38833 the bit-31 table
+  drains to zero, and `test_playerassembly`'s three rename-discriminator checks
+  are all *vacuously true* over an empty set. They now skip with the reason
+  named and the floor drops 35 → 32, raised back by `+= 3` on a copy that still
+  has a pending rename to discriminate — `test_archive` section 4's idiom, so
+  neither generation carries slack.
+
+**THE TWO THAT WERE NOT THE RESYNC**, and this is why the control is not
+optional:
+
+* **`test_mapscale` is a CODE change**, bisected to `b93ab1d` (WORLDMAPS-W24)
+  with `git archive` at nine commits over one unchanged archive. The tree
+  scatter's world y was `gy*96+48` while z was sampled from the authored cell,
+  standing every tree on terrain from a **different grid row**; W24 flipped it to
+  `(dim-1-gy)*96+48`. Verified on all five props (gy → 31−gy every time) with
+  the nine differing bytes lying entirely inside the props chunk. The constant
+  was stale **because the code was fixed**, so it is re-pinned as an equality —
+  a floor would pass a pipeline that had silently started emitting something
+  else, which is the whole failure that row exists to catch — with the bisect
+  recorded beside it.
+* **`test_mapbuild` exposed a latent test defect.** Section 8 selected a donor
+  by comparing against the section's donor but then called `build_like`, which
+  re-derives its *own* donor. With Water taking two corpus-wide values, "differs
+  from donor A" implies "differs from donor B" only when A and B share a value —
+  true on 38797 **by luck**, false on 38833. The baseline is now a control build
+  rather than the archive's bytes, and `build_like`'s donor is pinned to the one
+  selection used.
+
+**`test_worldmap` records a content GAIN, not a loss:** the eight world-map tiles
+this file named as permanently absent are **present** in the newer archive, at
+consecutive rows 177,601–177,608, each a real 512×512 ATEX. Its own section-4
+skip message had predicted exactly this — *"a file id is archive STATE, so one
+copy cannot show the split is a property of the atlas rather than of that copy"*
+— and the second vintage answered: it was the copy's. The equality became a
+subset plus a floor plus an arithmetic tie, keeping the eight as a named literal.
+
+**Not consolidated, deliberately.** `CORPUS_MAPS = 349` lives in eight files and
+the obvious tidy is one home. It was **refused** on the analysis's own argument:
+after this fix the constant is a *floor* at every site, and eight copies of a
+lower bound that stays true as the archive grows are harmless — while merging
+eight independent measurements into one turns them into a single witness counted
+eight times, which is the failure this repo names for `schema/messages.json` and
+OpenTyria. A single home changed 349 → 361 would be the identical defect one
+generation later. (The framing that this was a `PLAN.md` §7 Q12(a) violation was
+**wrong** and is withdrawn: Q12(a) is about client-derived constants belonging in
+`content/*.toml`, not about test-fixture pins.)
+
+**Still open, filed rather than fixed:** `test_envchunk`, `test_soundchunk`,
+`test_props` and `test_terrain` are green *by measuring less* — their
+completeness gates derive from the moved pin, so under `--all` they now SKIP
+where they used to ASSERT (`test_terrain` scores 50 against a floor of 49 with
+**six** declared skips). And `test_pathchunk`'s `--all` population constants
+(`CORPUS_PLANES`, `CORPUS_TRAPS`, `CORPUS_CHILDREN`, the stripped winding counts)
+have **no measured 38833 value yet** — re-pinning them without their own
+two-archive control is exactly what the standing rule forbids, and when someone
+measures them the right shape is the known-states tuple, not a floor, because for
+those the exactness *is* the claim.

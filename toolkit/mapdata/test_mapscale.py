@@ -101,7 +101,36 @@ COPY = "2026-07-29_221c13772c7a-c2"
 # it changes no byte COUNT and changes which bytes, and compression 8 notices.
 # At each rung's centre 64x64 measures 2,008; at plaza's own 1536,1536 it
 # measures 2,012, which is the docstring's number.
-INSTALL_BYTES_TABLE = {32: (3941, 1316), 64: (10654, 2012), 96: (21786, 2828)}
+#
+# 32x32's STREAM column moved 1,316 -> 1,312 on 2026-08-29, and it moved because
+# THE CODE MOVED -- not because an archive did, and not because the pipeline
+# regressed. This is the one number in this file that is deliberately EXACT
+# rather than a floor: the whole point of the row is byte identity with
+# `deploy.install_bytes`, and a floor here would pass a pipeline that had
+# silently started emitting something else. So it is re-pinned only with the
+# bisect that names the cause.
+#
+# MEASURED, same archive (vault/run/2026-07-29_221c13772c7a-c2/Gw.dat), same
+# donor (row 7982, constants row 46196), same 5 trees at seed 1536,1536, the
+# repo checked out at two commits:
+#
+#   6b3d31d and every commit before it ... 32x32 -> 1,316 B
+#   b93ab1d and every commit after it .... 32x32 -> 1,312 B
+#
+# b93ab1d is WORLDMAPS-W24, and the four bytes are a BUG FIX in `deploy.py`'s
+# tree scatter. Grid row 0 renders at world maxY, so the prop's world y must be
+# `(dim - 1 - gy) * 96 + 48`; it used to be `gy * 96 + 48` while z was sampled
+# from the authored cell, which stood every tree on terrain from a DIFFERENT
+# grid row. Verified as exactly that flip: the five props' y values go
+# 1488->1584, 2928->144, 144->2928, 2928->144, 144->2928, i.e. gy -> 31-gy on
+# all five, and the nine changed bytes lie entirely inside the props chunk
+# (0x10000004, body 0x4E..0xBE). The authored column is UNCHANGED at all three
+# rungs, so this is the same map with its trees in the right place.
+#
+# ALL THREE rungs' props chunks changed (9 bytes at 32, 13 at 64 and at 96) --
+# 64 and 96 compress to the same size by coincidence, not because W24 missed
+# them. Do not read 2,012 and 2,828 as evidence those rungs were untouched.
+INSTALL_BYTES_TABLE = {32: (3941, 1312), 64: (10654, 2012), 96: (21786, 2828)}
 TABLE_TREES = 5
 TABLE_SEED = (1536.0, 1536.0)
 

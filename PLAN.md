@@ -2422,6 +2422,27 @@ are identifiable by flags alone", is carried by its own sampling section).
 classified by re-running each against `dat_study_38797`: green there and red here
 means the resync caused it. Record: `studies/maprows` §10.13.
 
+**THE BILL IS PAID, 2026-08-29 — `studies/maprows` §10.14.** A full suite run
+scored 170 green / 19 red of 189; **twelve** were this resync and are fixed, each
+classified by the two-archive method above. Counts became FLOORS plus the
+structural relation (`test_mapfile`'s shape — it PASSED where its seven siblings
+failed, so the answer was already in the tree); row-keyed tables were rekeyed BY
+FILE ID (`test_mapexport`'s `ORACLE`/`MULTI_AXIS` were keyed by row and indexed
+with a file-id-resolved row — a bare `KeyError`, no verdict, no ledger); exact
+identities became per-generation KNOWN STATES; and a population that drains to
+zero now SKIPS rather than passing vacuously. **349 → 361 is not "twelve maps
+added"**: by file id the old 349 are a strict subset (347 byte-identical, two
+rewritten), but by ROW two maps *relocated* — the file id is portable and the row
+is not, which is what broke the row-pinned fixtures. **The control earned its
+keep twice: two of the twelve were NOT the resync** — `test_mapscale` bisected to
+`b93ab1d` (a real y-flip BUG FIX in the tree scatter, re-pinned as an equality
+with the bisect recorded) and `test_mapbuild` exposed a latent donor-selection
+defect that held on 38797 only by luck. `CORPUS_MAPS`'s eight homes were
+deliberately NOT consolidated (eight floors are harmless; merging eight
+independent measurements makes one witness counted eight times). Still open and
+filed: four tests now green *by measuring less* under `--all`, and
+`test_pathchunk`'s `--all` population constants have no measured 38833 value yet.
+
 ### DESK ARC 2026-08-27, second pass — the props `value` words are MEASURED, and an armour probe was overwriting live items
 
 **PROPS: tag 6's `value` is a prop INDEX; tag 4's is not.**

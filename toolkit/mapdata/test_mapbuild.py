@@ -101,7 +101,7 @@ GATE_COUNT = 18                         # 17 from FINDINGS 17.4/17.5, +1 from
                                         # FINDINGS 30: every REACHABLE plane
                                         # above 0 names a prop that exists
 
-LEDGER = checks.Ledger("map builder", floor=98)
+LEDGER = checks.Ledger("map builder", floor=99)
 check = checks.adopt(LEDGER)
 
 
@@ -531,14 +531,39 @@ def section5(ar, mi, source):
           f"all {len(heights or ())} of tag 1's floats, found by a walker "
           f"written in this file")
 
+    consts, donor = mapbuild.borrowed_constants(ar, exclude_row=TARGET_ROW,
+                                                index=mi)
+    # THE BASELINE IS A CONTROL BUILD, NOT THE ARCHIVE'S BYTES, and the reason
+    # is the whole point of these checks. `consts` comes from a DONOR map, and
+    # one of the five (Water) genuinely takes two values corpus-wide, so
+    # whether the donor's Water agrees with this target's is a property of
+    # which row happens to be the smallest map head in whichever Gw.dat is
+    # mounted. It changed when dat_study was regenerated at build 38833 -- the
+    # smallest head went 71496 -> 177749 and the donor landed on the OTHER of
+    # Water's two corpus-wide values -- and that reddened these two checks
+    # without a line of builder code moving. (The two values are deliberately
+    # not written here: section 9 refuses any borrowed payload appearing in
+    # this file, and it caught an earlier draft of this very comment.)
+    # Diffing two builds that
+    # share those constants isolates the one input that changed, which is the
+    # only thing these checks are for; the byte-identity against ArenaNet's own
+    # bytes is section 4's job and check 1 above, and the signature check right
+    # below keeps the archive tie here too.
+    ctl, _repc = build(spec_from_map(MapFile.decode(source)),
+                       constants=consts, donor_row=donor)
+    ctl_map = chunk_map(ctl.encode())
+    ctl_vs_archive = sorted(cid for cid in base if base[cid] != ctl_map.get(cid))
+    check(ctl_vs_archive in ([], [mapbuild.WATER_CHUNK]),
+          "the unchanged control build differs from the archive's own bytes in "
+          "NOTHING but the donor's Water chunk, if that",
+          f"differs: {[hex(c) for c in ctl_vs_archive]}; donor row {donor}")
+
     uid = bytes(range(16))
     spec = spec_from_map(MapFile.decode(source))
     spec.uuid = uid
-    consts, donor = mapbuild.borrowed_constants(ar, exclude_row=TARGET_ROW,
-                                                index=mi)
     mf3, _rep3 = build(spec, constants=consts, donor_row=donor)
     got3 = chunk_map(mf3.encode())
-    moved3 = sorted(cid for cid in base if base[cid] != got3.get(cid))
+    moved3 = sorted(cid for cid in ctl_map if ctl_map[cid] != got3.get(cid))
     check(moved3 == [MAP_PARAMS_CHUNK],
           "a changed content id moves chunk 0x2000000C and only that one",
           f"moved: {[hex(c) for c in moved3]} -- so 'only terrain ever moves' "
@@ -563,7 +588,7 @@ def section5(ar, mi, source):
                 and rep4.total == len(out4)),
           "the file and the report grow with it -- the chunk table's size "
           "field is DERIVED, not replayed", f"{len(out4)} vs {len(source)}")
-    check(holds(lambda: sorted(c for c in base if base[c] != got4.get(c))
+    check(holds(lambda: sorted(c for c in ctl_map if ctl_map[c] != got4.get(c))
                 == [TERRAIN_CHUNK]),
           "and still nothing outside 0x20000002 moved")
 
@@ -729,7 +754,12 @@ def section8(ar, mi, picks):
                     "no small map in this archive disagrees with the donor's "
                     "Water chunk, so the not-a-constant case was not exercised")
         return
-    mf2, rep2 = build_like(other, ar, index=mi)
+    # donor_row= PINNED to the donor `other` was SELECTED against. Without it
+    # build_like re-derives its own donor (exclude_row=other), and the two can
+    # land on opposite sides of Water's two values -- which is exactly what
+    # 38833 did (selection donor 177749, build_like's donor 46196), leaving the
+    # substitution path unexercised while four checks about it went red.
+    mf2, rep2 = build_like(other, ar, donor_row=donor, index=mi)
     check(mf2.encode() == other_src,
           f"row {other} rebuilds byte-identically too, and its Water chunk is "
           f"NOT the donor's",

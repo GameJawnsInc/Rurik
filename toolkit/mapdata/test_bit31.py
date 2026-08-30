@@ -56,9 +56,31 @@ import vaultpath  # noqa: E402
 # deleted with the run still printing ALL CHECKS PASSED. That is `test_archive`'s
 # shape, and it is here for the same reason.
 FLOOR_BARE = 76
-FLOOR_VAULT = 86
+FLOOR_VAULT = 85
 LEDGER = checks.Ledger("bit-31 census", floor=FLOOR_BARE)
 check = checks.adopt(LEDGER)
+
+# BIT-31 REGISTRATION IS A PROPERTY OF THE ARCHIVE GENERATION, and it stopped.
+# MEASURED over four archives 2026-08-27 (test_pathmap.py sec 6): 38519 and
+# 38797 register bit-31 ids, 38833 and 38849 register ZERO. ArenaNet dropped
+# the dual registration between 38797 and 38833, and the two map heads that
+# carried it -- Pre-Searing (row 7982) and The Northlands (row 20118) -- were
+# both rewritten in that patch, their replacement rows named by a single id.
+#
+# So the STUDY copy's census is not a constant, it is a per-generation
+# expectation: `vault/dat_study` is resynced when the server's reference
+# archive moves, and it went 38797 -> 38833 on 2026-08-27. A run must land on
+# one of the two KNOWN states rather than on any number -- an archive that
+# registered, say, 7 would be a third thing nobody has seen and is worth a red.
+#
+# THE OTHER TWO STAY EXACT, and the asymmetry is the point: `client/` and
+# `run-live/` are pinned, dated snapshot directories that are never resynced,
+# so a move THERE is a real regression and must not be softened into a range.
+STUDY_BIT31_38797 = 25
+STUDY_BIT31_38833 = 0
+KNOWN_STUDY_CENSUS = (STUDY_BIT31_38797, STUDY_BIT31_38833)
+INSTALL_BIT31 = 29
+LIVE_BIT31 = 9
 
 FILE_MAGIC = b"3AN\x1a"
 MFT_MAGIC = b"Mft\x1a"
@@ -653,26 +675,63 @@ def section_vault():
         return
 
     cen = {k: bit31.census(p) for k, p in copies.items()}
-    check(len(cen["install"]["bit31"]) == 29,
-          f"the pristine install carries 29 bit-31 ids "
-          f"(got {len(cen['install']['bit31'])})")
-    check(len(cen["study"]["bit31"]) == 25,
-          f"the study copy carries 25 (got {len(cen['study']['bit31'])})")
-    check(len(cen["live"]["bit31"]) == 9,
-          f"and run-live, the copy with a real content source, carries 9 "
-          f"(got {len(cen['live']['bit31'])})")
+    n_install = len(cen["install"]["bit31"])
+    n_study = len(cen["study"]["bit31"])
+    check(n_install == INSTALL_BIT31,
+          f"the pristine install carries {INSTALL_BIT31} bit-31 ids "
+          f"(got {n_install})")
+    check(n_study in KNOWN_STUDY_CENSUS,
+          f"the study copy's census is one of the two states we have seen -- "
+          f"{STUDY_BIT31_38797} on a 38797-lineage copy, "
+          f"{STUDY_BIT31_38833} on 38833/38849 (got {n_study}). A third "
+          f"number is a registration style nobody has looked at and is worth "
+          f"stopping for")
+    check(len(cen["live"]["bit31"]) == LIVE_BIT31,
+          f"and run-live, the copy with a real content source, carries "
+          f"{LIVE_BIT31} (got {len(cen['live']['bit31'])})")
 
-    cleared = [c for c in bit31.diff(cen["install"], cen["study"])
-               if c["kind"] == "cleared"]
-    check(len(cleared) == 4,
-          f"install -> study clears exactly 4 ids (got {len(cleared)})")
-    check(len({c["row"] for c in cleared}) == 2,
-          "over exactly TWO rows -- 'two in place and two aliases', which is "
-          "what datwrite/FINDINGS.md:589 recorded and this reproduces from "
-          "the bytes")
-    check(not any(c["is_map_row"] for c in cleared),
-          "and NEITHER is a map row: what a loopback history resolves and what "
-          "a live one resolves are different populations")
+    changes = bit31.diff(cen["install"], cen["study"])
+    cleared = [c for c in changes if c["kind"] == "cleared"]
+    newly = [c for c in changes if c["kind"] == "newly_set"]
+    # WHICH CLAIM IS AVAILABLE DEPENDS ON THE GENERATION, and the two arms are
+    # not one claim with a different number in it. On a 38797-lineage study
+    # copy the ids that clear are the ones a LOOPBACK WRITE HISTORY resolved,
+    # and the finding is WHICH ones. On 38833 ArenaNet dropped the
+    # registration style outright, so every id clears for a reason that has
+    # nothing to do with our writes -- and what is worth asserting there is
+    # that the disappearance is TOTAL and CLEAN rather than a decay, which is
+    # the claim 1ac7aee made from the four-archive table and nothing has
+    # checked from the bytes since.
+    if n_study == STUDY_BIT31_38797:
+        # THE FLOOR RISES WITH THE SUBJECT: a generation that still registers
+        # bit-31 ids affords one more check than one that does not, so
+        # requiring it is what stops a 38797 run from quietly losing it.
+        generation_extra = 1
+        check(len(cleared) == 4,
+              f"install -> study clears exactly 4 ids (got {len(cleared)})")
+        check(len({c["row"] for c in cleared}) == 2,
+              "over exactly TWO rows -- 'two in place and two aliases', which "
+              "is what datwrite/FINDINGS.md:589 recorded and this reproduces "
+              "from the bytes")
+        check(not any(c["is_map_row"] for c in cleared),
+              "and NEITHER is a map row: what a loopback history resolves and "
+              "what a live one resolves are different populations")
+    else:
+        generation_extra = 0
+        check(len(cleared) == n_install and not newly,
+              f"install -> study clears ALL {n_install} of the install's ids "
+              f"and sets none -- on a generation that dropped the "
+              f"registration the disappearance is TOTAL and clean, not a "
+              f"decay (got {len(cleared)} cleared, {len(newly)} newly set). A "
+              f"PARTIAL clearing would be a third state and reddens here")
+        check(sum(1 for c in cleared if c["is_map_row"])
+              == len(bit31.map_rows(cen["install"]))
+              and not bit31.map_rows(cen["study"]),
+              f"and it takes the MAP rows with it: all "
+              f"{len(bit31.map_rows(cen['install']))} of the install's "
+              f"map-flagged bit-31 ids are in the cleared set and the study "
+              f"copy has none left -- the counterpart of the loopback case "
+              f"above, which clears no map row at all, rather than its absence")
 
     live_cleared = [c for c in bit31.diff(cen["install"], cen["live"])
                     if c["kind"] == "cleared"]
@@ -681,8 +740,11 @@ def section_vault():
           "content/areas.toml row borrows from")
     # NO SLACK ON THE VAULTED SHAPE either. With a fixed floor of 55 a vaulted
     # run carried eight checks of headroom, and an auditor showed the whole
-    # sabotage section could be deleted with the run still green.
-    LEDGER.floor = FLOOR_VAULT
+    # sabotage section could be deleted with the run still green. FLOOR_VAULT
+    # is the 38833 shape -- the smaller of the two -- and `generation_extra` is
+    # the check a bit-31-registering copy affords on top of it, so NEITHER
+    # generation carries slack.
+    LEDGER.floor = FLOOR_VAULT + generation_extra
     check(bit31.map_rows(cen["install"]) and
           len(bit31.map_rows(cen["install"])) == 4,
           f"four bit-31 ids sit on map-flagged rows in the install copy "

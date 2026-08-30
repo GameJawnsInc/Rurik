@@ -130,7 +130,8 @@ from mapfile import MapFile  # noqa: E402
 # re-measured, the prediction below moves with it instead of quietly disagreeing.
 from test_mapexport import (ORACLE, PROPS_CHUNK, PRESEARING_DIMS,  # noqa: E402
                             PRESEARING_FILE_ID, PRESEARING_PROPS,
-                            PRESEARING_RECT, PRESEARING_ROW, PROPS_VERSION,
+                            PRESEARING_MFT_ROWS, PRESEARING_RECT,
+                            PRESEARING_ROW, PROPS_VERSION,
                             read_chunks, read_props, synthetic_terrain,
                             SYN_X, SYN_Y, _synth_pair, _TexArchive, _tex_deps)
 import atex  # noqa: E402
@@ -950,9 +951,9 @@ def _section3(check, led, blender, tmp, args):
 
     with Archive(dat) as ar:
         row = file_id_table(ar).get(PRESEARING_FILE_ID)
-        check(row == PRESEARING_ROW,
-              "file id 0x%X resolves to row %d" % (PRESEARING_FILE_ID,
-                                                   PRESEARING_ROW),
+        check(row in PRESEARING_MFT_ROWS,
+              "file id 0x%X resolves to one of the KNOWN Pre-Searing rows %r"
+              % (PRESEARING_FILE_ID, sorted(PRESEARING_MFT_ROWS)),
               "got %r" % row)
         if row is None:
             led.skip("3. the prop oracle", "the reference map did not resolve")
@@ -1034,7 +1035,7 @@ def _section3(check, led, blender, tmp, args):
           "loses on sample size" % len(props))
 
     base_frac, base_med = results[MESH_ORACLE_LAYOUT][:2]
-    want_f, want_m = ORACLE[MESH_ORACLE_LAYOUT][PRESEARING_ROW]
+    want_f, want_m = ORACLE[MESH_ORACLE_LAYOUT][PRESEARING_FILE_ID]
     # THE PREDICTION, stated in the module docstring before this ran: the mesh
     # must reproduce test_mapexport's number for the same map EXACTLY, not
     # approximately, because the lattice carries the cell grid unchanged.
@@ -1047,7 +1048,7 @@ def _section3(check, led, blender, tmp, args):
 
     for layout in MESH_CONTROLS:
         frac, med = results[layout][:2]
-        want_f, _wm = ORACLE[layout][PRESEARING_ROW]
+        want_f, _wm = ORACLE[layout][PRESEARING_FILE_ID]
         check(abs(frac - want_f) < FRAC_TOL,
               "the %s control on the mesh scores %r" % (layout, want_f),
               "%.4f" % frac)
@@ -1092,7 +1093,7 @@ def _section3(check, led, blender, tmp, args):
                  for o in ps["objects"]]
     frac, med, n, outside = score_mesh(zmap, dx, dy, exp.rect, obj_props,
                                        MESH_ORACLE_LAYOUT)
-    want_f, _wm = ORACLE[MESH_ORACLE_LAYOUT][PRESEARING_ROW]
+    want_f, _wm = ORACLE[MESH_ORACLE_LAYOUT][PRESEARING_FILE_ID]
     check(outside == 0 and n == PRESEARING_PROPS
           and abs(frac - want_f) < FRAC_TOL,
           "the proxy OBJECTS score the same baseline %r against the mesh"

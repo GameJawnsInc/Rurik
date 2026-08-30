@@ -20,9 +20,11 @@ import cpsdata       # noqa: E402
 import playerassembly  # noqa: E402
 import unitassembly  # noqa: E402
 
-# Floor set from a real green run (35 checks, 2026-08-23 -- 34 until §8 gained
-# FINDINGS §9.4's plain-twin discriminator).
-LEDGER = checks.Ledger("player assembly", floor=35)
+# Floor set from a real green run. 32 is what a run on ANY copy scores; §8's
+# three bit-31 checks raise it to 35 where the archive still has a pending
+# rename to discriminate (test_archive.py section 4's idiom). It was a flat 35
+# until build 38833's archive drained the bit-31 population to zero.
+LEDGER = checks.Ledger("player assembly", floor=32)
 check = checks.adopt(LEDGER)
 
 MONSTER_SHELLS = (116228, 116703, 116377, 116366)   # FINDINGS 5 sabotage 5
@@ -179,30 +181,54 @@ reserved = [i for i in ids if i & playerassembly.FILE_ID_RESERVED_BIT]
 check(not reserved and max(ids) < playerassembly.FILE_ID_RESERVED_BIT,
       "all composite file ids clear bit 31 -- authoring never trips the assert",
       f"n={len(ids)} max={max(ids)} reserved={len(reserved)}")
-# But the archive's raw id table DOES carry reserved-bit ids: the bit is a
-# real, distinct namespace, not merely hypothetical.
+# The archive's raw id table MAY carry reserved-bit ids -- and whether it does
+# is a per-generation fact, not a property of the format. 38797 carries 25
+# (29 on the pinned client copy); 38833 carries none, because DnArchive
+# installed every pending replacement.
 raw = archive.file_id_table(ar, raw=True)
 raw_reserved = [i for i in raw if i & playerassembly.FILE_ID_RESERVED_BIT]
-check(raw_reserved,
-      "the raw file-id table carries reserved-bit ids -- rows FcArchive has "
-      "renamed pending a content replacement (FINDINGS 9.4; 9.1 read these "
-      "as a second namespace and was WRONG)",
-      f"{len(raw_reserved)} such ids, max 0x{max(raw_reserved):08X}")
-res_rows = {raw[i] for i in raw_reserved}
-ord_rows = {raw[i] for i in raw if not (i & playerassembly.FILE_ID_RESERVED_BIT)}
-check(all(isinstance(raw[i], int) and raw[i] >= 0 for i in raw_reserved)
-      and not (res_rows & ord_rows),
-      "they resolve to real MFT rows unreachable from any ordinary id -- "
-      "which is what a PENDING RENAME looks like: the plain id binds nothing "
-      "until DnArchive installs the replacement, and 0 of these 25 has a "
-      "plain twin anywhere in this archive",
-      f"e.g. row {raw[raw_reserved[0]]}")
-plain_twins = [i for i in raw_reserved
-               if (i & ~playerassembly.FILE_ID_RESERVED_BIT) in raw]
-check(not plain_twins,
-      "NOT ONE reserved id has its plain twin bound -- the discriminator "
-      "between 9.1's 'parallel namespace' (twins would coexist) and 9.4's "
-      "'pending rename' (they cannot)", f"twins: {plain_twins}")
+if not raw_reserved:
+    LEDGER.skip(
+        "the three bit-31 checks below (FINDINGS 9.4's rename discriminator)",
+        f"this archive's raw id table ({len(raw)} ids) carries NO bit-31 id, "
+        f"so there is no pending rename left to discriminate. That is the "
+        f"population moving, not the decode: the same call reads 25 on "
+        f"vault/dat_study_38797 and 29 on the pinned 38797 client, and here "
+        f"the two Pre-Searing ids it used to hold are bound PLAINLY "
+        f"(0x1B97D -> row {archive.file_id_table(ar).get(0x1B97D)}, "
+        f"0x1C539 -> row {archive.file_id_table(ar).get(0x1C539)}), which is "
+        f"DnArchive installing the replacements. The three checks are skipped "
+        f"rather than passed because every one of them is VACUOUSLY true over "
+        f"an empty population -- and an empty population is itself FINDINGS "
+        f"9.4 rather than 9.1: a parallel NAMESPACE would not drain.")
+else:
+    # RAISE the floor by what this branch contributes, test_archive.py section
+    # 4's idiom. The module floor is what a run on ANY copy scores; leaving it
+    # three higher would hand a 38833 copy three checks of slack.
+    LEDGER.floor += 3
+    check(raw_reserved,
+          "the raw file-id table carries reserved-bit ids -- rows FcArchive has "
+          "renamed pending a content replacement (FINDINGS 9.4; 9.1 read these "
+          "as a second namespace and was WRONG)",
+          f"{len(raw_reserved)} such ids, max "
+          f"0x{max(raw_reserved, default=0):08X}")
+    res_rows = {raw[i] for i in raw_reserved}
+    ord_rows = {raw[i] for i in raw
+                if not (i & playerassembly.FILE_ID_RESERVED_BIT)}
+    check(all(isinstance(raw[i], int) and raw[i] >= 0 for i in raw_reserved)
+          and not (res_rows & ord_rows),
+          "they resolve to real MFT rows unreachable from any ordinary id -- "
+          "which is what a PENDING RENAME looks like: the plain id binds nothing "
+          "until DnArchive installs the replacement, and 0 of these "
+          f"{len(raw_reserved)} has a "
+          "plain twin anywhere in this archive",
+          f"e.g. row {raw[raw_reserved[0]]}")
+    plain_twins = [i for i in raw_reserved
+                   if (i & ~playerassembly.FILE_ID_RESERVED_BIT) in raw]
+    check(not plain_twins,
+          "NOT ONE reserved id has its plain twin bound -- the discriminator "
+          "between 9.1's 'parallel namespace' (twins would coexist) and 9.4's "
+          "'pending rename' (they cannot)", f"twins: {plain_twins}")
 # The authoring guard fires: a manifest whose record carries a reserved-bit
 # file id is refused before it becomes a seed.
 import cpsdata as _cps
