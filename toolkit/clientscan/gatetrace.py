@@ -138,6 +138,16 @@ sys.path.insert(0, os.path.join(HERE, "trnhook"))
 # is handled. Written as VAs because that is what every line of CANCELWALK.md
 # and every codescan invocation quotes; a table of bare RVAs would not be
 # checkable against the document that derived them.
+#
+# THESE THREE PLUS `BUILD` ARE THIS FILE'S ENTIRE BUILD-COUPLED LIABILITY --
+# the four rows `buildpins.py --live` charges it -- and where to check them is
+# `test_gatetrace.py` section 1, which since 2026-08-30 resolves its image
+# through `pinned.find(BUILD)`, matches a pattern at each VA that it MEASURES
+# to be unique in .text, and carries one control per pin. TO REBASE: bump
+# `BUILD`, run that file, and read the reds; the applier's own pattern is
+# unique in every vaulted build and locates it. Before that date section 1
+# guarded none of the four -- its byte patterns matched 14,765, 94 and 531
+# places -- so a green run there did not mean these numbers were right.
 IMAGE_BASE = 0x00400000
 VA_APPLIER = 0x0081A8F0        # entry; ecx = the controller
 VA_GATE_BAIL = 0x0081AD0F      # A, B and C all land here

@@ -1,5 +1,59 @@
 # HANDOFF — the plane channel and the movement LOCK, from a cold session
 
+> **⚠ THIS IS A DEEP-DIVE, NOT THE ENTRY POINT. Start at
+> [studies/movement/HANDOFF.md](../movement/HANDOFF.md)**, which is the arc's entry
+> point as of 2026-08-30 and carries the staleness table for every document here.
+>
+> **CURRENCY, stated so it cannot lie:** this file was last edited at `2882627`
+> (section 1z-i) and its old self-stamp claimed `dcf9484`, which was already wrong.
+> **Sections 4.1–4.3 below are current only through `2882627`.** Four commits landed
+> after it that this file does not otherwise record, all of them defects in the arc's
+> OWN instruments rather than findings about the client:
+>
+> | commit | what it was |
+> |---|---|
+> | `1ce0171` | 1z-j — the map identifier picked the WRONG map; a scoring pass believed it and read OFF-MESH 3 instead of 63 |
+> | `30055e0` | 1z-k — the motion window: one expression, three defects, and the reader had been CRASHING on run 1 |
+> | `d710a67` | 1z-l — `nearest_walkable`: an axis clamp is not a nearest point, and off-mesh depths were up to 3× too big |
+> | `131c84a` | 1z-m — `RET_MAX_POINTS` 4 → 9 as capture v8; v7 stays readable on purpose |
+>
+> **They did NOT move this arc's headline** — `pathdiff` on r7 still reproduces
+> AGREE 97 / DIFFER 34 / UNCOMPARED 13 / OFF-MESH 63 — but they moved older figures
+> **per figure, not as a blanket invalidation**: r4a's off-mesh depths moved
+> materially (median 239 → 228.2 u), while 1z-g.1's 20.2 u moved 0.5 %. Re-derive the
+> specific number you are about to lean on.
+
+> ## ⚠⚠ THE REPAIR'S ONLY LIVE ARMING WAS PROBABLY A FALSE FIRE — MEASURED 2026-08-30
+>
+> R7's server log carries three `arming` rows and two `holding` rows — the furthest
+> the shipped repair has ever advanced, and **scored nowhere**: section 1z-i reports
+> the return tap and says nothing about the repair, the ladder or the tripwire.
+>
+> All three arming points — (−1908.33, 6407.31), (−2006.48, 6424.53),
+> (−2067.12, 6515.66) — land inside a **single plane-37 trapezoid**, the west
+> bridge deck. The client declared plane **0** at each. Our mesh offers only 37 there,
+> so `plane_at` resolved unambiguously and the ladder armed. Had the streak reached
+> `PLANE_REPAIR_HOLD` (it peaked at 1.02 s of 5.0 s) the repair would have restamped
+> the player **onto the bridge above them**.
+>
+> **AND THE SAFETY TEST IS INVERTED, WHICH IS THE GENERAL FORM OF IT.** The repair
+> claims authority only on an unambiguous single candidate — so where our decode
+> HOLDS a stacked deck it returns two planes and DISARMS, and where our decode MISSES
+> the ground under a deck it returns one and ARMS. Fine scan at 8 u over both bridges
+> on map 280, bucketing each sample by `len(containing())`:
+>
+> | deck | our decode | offers ONE → **arms** | offers 2+ → disarms |
+> |---|---|---|---|
+> | west bridge, plane 37 | misses the under-deck ground (1z-f.4) | **4,671 / 4,723 = 98.9 %** | 52 = 1.1 % |
+> | NE bridge, plane 42 | holds the `{0,42}` stack (1z-g.5) | 3,572 / 6,821 = 52.4 % | 3,249 = 47.6 % |
+>
+> **The repair is most confident exactly where it is least entitled to be.** That is a
+> structural property of the design, not a tuning problem, and it is not in the
+> doctrine block, in section 5's traps, or in this file's constants note — which
+> prices the false-fire class as having "no measured instance". There is now a
+> candidate instance. The next action is the corpus-wide plane-disagreement census;
+> the reasoning is in the arc handoff's section D.
+
 **Written 2026-08-29 at commit `dcf9484`, tree clean, branch `main`.** This hands off
 two days of work on a channel the arc had never scored and a client failure mode it had
 never seen. Read §5 before you propose a fix — the most obvious one is refused twice in
@@ -119,6 +173,21 @@ through it before you believe it.**
 ## 4. The next actions, in the order I would take them
 
 ### 4.1 The repair's first live trial — RAN 2026-08-29, scored as §1z-f; the heal is STILL untried
+
+> **EXPOSURE, stated once because it has been quoted three different wrong ways**
+> (47 sessions; 27 minutes; 1,216 logs). The tracker only exists in builds after
+> `dcf9484`, and the set of sessions carrying any `plane_repair_due` row is exactly
+> the set started after it — a clean natural experiment. **Three sessions have ever
+> run armed: R6, R6b and R7.** That is **63.0 min wall**, of which only **23.9 min
+> carries position reports at all** (R6b's last ~23 min carry none). Never write a
+> bare minute figure without its denominator, and never write "47 sessions".
+>
+> **The streak IS readable from the log**, contrary to what this file used to imply:
+> the tracker keys on consecutive accepted 0x003D reports with a byte-identical
+> `reported`, so the report stream *is* the streak — R6 0.837 s, R6b 11.162 s
+> (swallowed by the off-mesh clause), R7 1.021 s, against a 5.0 s HOLD. No duration
+> field is needed. But note the ladder logs on reason **transition** only, so an
+> arming count read off the log is a floor, not a total.
 
 **The runsheet is [RUN-R6.md](RUN-R6.md), and its first execution is scored in
 FINDINGS §1z-f**: the trigger stayed silent through the heaviest plane-anomaly

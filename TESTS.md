@@ -4845,7 +4845,53 @@ Floor 75 against a green 75 with 5 declared skips (the archive-conditional
   and `BIT_GATE_B` together build `f6 43 64 01`, `BIT_GATE_C`'s bit index
   builds `shr eax,4`), with a control that moves `OFF_STATUS` to `0x110` and
   requires the match to break. Comparing a literal to a copy of itself would
-  pass forever. §2 drives all eight operand combinations and asserts the bail
+  pass forever. **AND UNTIL 2026-08-30 ALL OF THAT GUARDED THE WRONG
+  CONSTANTS**, found while paying the build-pin census bill: `buildpins.py
+  --live` charges `gatetrace.py` four pins -- `VA_APPLIER`, `VA_GATE_BAIL`,
+  `VA_NAVMESH_EXIT`, `BUILD` -- and §1 touched none of them. The four derived
+  rows above read their ADDRESSES from literals typed in the test
+  (`0x0081A925/931/93C/946`); the three rows that did use the counted VAs had
+  HAND-TYPED patterns -- `55 8b ec`, `ff 73 14`, `5f 5e 33 c0` -- occurring
+  **14,765, 94 and 531 times in `.text`**; and the control moved `OFF_STATUS`,
+  which is real but is not a pin. MEASURED: point all three VAs at decoys four
+  megabytes away and the section printed **9 of 9 PASS** under a line reading
+  "the byte checks above are load-bearing". The repair is three-part and each
+  part is separately checkable. (i) The four derived rows are now written as
+  `VA_APPLIER + 0x35/0x41/0x4C/0x56`, so the pin carries five rows instead of
+  none -- and that takes five class-(c) occurrences (four distinct addresses)
+  back out of the file, net minus three across the tree once the two call
+  targets below are counted in. (ii) The
+  three VA patterns are widened until each **occurs exactly once in `.text`**
+  (30, 8 and 21 bytes), which the section RE-MEASURES every run and prints, so
+  a pattern that stops identifying reddens rather than being asserted in a
+  comment; two of them assemble their `e8 <rel32>` FROM the VA under test
+  (`0x005FCA80` for the bail, `__security_check_cookie` for the exit), making
+  those rows position-DEPENDENT -- the same bytes read elsewhere decode to a
+  different callee -- and the exit's `ret` imm16 is built from `ARG_MT_ESP_OFF`,
+  which is not a coincidence to be tidied away: four dword args is why `mt` sits
+  at `[esp+0x10]`. `55 8b ec` needed widening past 24 bytes because the first 24
+  still match TWO functions (`0x00754EF0` is a near-twin: same `0xC0` frame,
+  same cookie load). (iii) Four controls, **one per counted pin**: each VA is
+  moved to another of the three and every row resting on it is required to go
+  red, and `BUILD` is exercised by reading every OTHER vaulted build through
+  the same `pinned.find` and requiring every row to fail there (it does, on
+  38519, 38833 and 38849). §1 also RESOLVES ITS IMAGE through
+  `pinned.find(gatetrace.BUILD)` now instead of `os.path.join(root, "client",
+  "2026-07-29_221c13772c7a", "Gw.exe")` under an `os.path.exists`: `BUILD` was
+  read by nothing at all (`git grep gatetrace.BUILD` empty, against six for the
+  positive control `git grep atex.TABLES_BUILD`), so bumping it for a rebase
+  moved nothing and the guard could never be aimed at the newer image it exists
+  to redden against -- `atex.TABLES_BUILD`'s own fix, one build later, and
+  `find()` additionally hashes what it returns where `os.path.exists` cannot.
+  The two failure modes are kept apart on purpose: a `BUILD` the registry does
+  not know is **this file's bug and a FAIL**, while a known build absent from
+  this machine's vault is a bare machine and a SKIP. An unplanned dividend,
+  MEASURED: the applier's 30-byte pattern is unique in the newer builds too
+  (`0x0081A940` on 38833, `0x0081A9C0` on 38849) and with `VA_APPLIER` moved
+  there all four gate rows match at the same offsets, with both exits still at
+  `+0x41F` and `+0x40A` byte for byte apart from their two rel32 displacements
+  -- so the function relocated as a unit twice and the pattern doubles as the
+  rebase instrument. §2 drives all eight operand combinations and asserts the bail
   list is in the client's own **test order** A,B,C -- a set would lose the only
   thing that explains the frame -- and that an unread operand yields no verdict
   rather than a plausible "no gates set". **§3 proves the file can contradict
@@ -4869,7 +4915,9 @@ Floor 75 against a green 75 with 5 declared skips (the archive-conditional
   explaining this exact failure). The refusal names both the blocker and the
   poll that replaces it, because a docstring warning above a `main()` that
   still runs is a file that gets run. Floor **35**, the BARE-MACHINE number; a
-  machine with the pinned snapshot executes 44. **That floor was wrong until
+  machine with the pinned snapshot executes 51 (44 before 2026-08-30, and 50
+  where the vault holds no build but the pinned one, the `BUILD` control
+  declaring a skip instead). **That floor was wrong until
   the same review caught it**: it declared 42 with §1 calling
   `LEDGER.skip(..., 9)` in the belief that a skip lowers the floor by its
   count -- `Ledger.skip(label, why)` takes two strings and lowers nothing, so
@@ -8644,6 +8692,50 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   Stdlib only, no vault, no socket, no client. 28 checks, floor 26 — section 4's two
   growth arms declare skips in the unreachable no-control-token case, per checks.py's
   mandatory-core guidance. ~1 s),
+  `toolkit/test_citelint.py` (**`file.py:NNN` citations in study prose actually
+  resolve.** Measured 2026-08-29 on `studies/movement/PROBE-GATEFIRE.md`: roughly 25 of
+  its ~30 citations pointed at the wrong line — `fence_verdict` cited at `movetap.py:3049`
+  and living at `:4691`, `INVALID_POS` cited at `:290` and living at `:512` — and **all
+  eight `movesync.py` citations were stale UNDER A GREEN sha256 PIN**, because the pin
+  says the file has not moved since it was taken and says nothing whatever about
+  citations that were already wrong when it was taken. That is the whole lesson: a byte
+  pin and a citation check are not the same instrument, and the document had the
+  stronger-looking one. The citations were deliberately NOT swept at the time and that
+  call was right — a sweep with no checker behind it buys a few days, and this repo has
+  already paid once for the eager version (`test_provlint.py`: 46 citations rewritten,
+  all 46 reverted the same day). So the checker came first and the sweep came second,
+  in that order and in one commit. **The parse is the design.** Most citations name a
+  SYMBOL beside the number, so the claim is machine-checkable; the pairing rule is a
+  MEASURED gap bound (every true pairing in the pilot normalizes to ≤13 characters,
+  every false one to ≥25, so the bar is 16) plus a refusal of sentence punctuation, and
+  a pairing it cannot make degrades to a line-exists check that is COUNTED, never
+  guessed at. Two rules were written only because running it over the corpus refuted the
+  first draft: **hard-wrapped lines must be joined** — a same-line reader passes
+  ```sep` is written at`` / ```movetap.py:791``` on line-exists and it is wrong, `sep` is at
+  `:1120` — and **a hex literal is not a symbol**, since `0x0056` scans as the
+  identifier `x0056` and opcode citations are everywhere in these documents. **TWO
+  POSTURES, on purpose.** PROBE-GATEFIRE.md is RULED ON at zero red with no headroom
+  (31 citations: 23 now resolve at the symbol tier, 7 at the line tier); every other
+  `studies/**/*.md` is COUNTED at **142 red, ceiling 210** — the same ~1.5x headroom
+  `test_provlint.py` used for 134→200 — because 142 is volatile by construction (one
+  commit near the top of `agents.py` moves every citation of it at once) and a checker
+  red on all of them is one nobody leaves switched on. **The 142 are not a fix list.**
+  Section 7 is the red proof and it runs every time rather than being asserted: a
+  scratch copy of the real document has ONE known-green citation moved by one line, and
+  the run requires the verdict to flip, the report to name the document, the document
+  line, the symbol AND the lines the symbol is really on, and the red count to rise by
+  exactly one and not cascade. Section 5 is the vacuity guard the shape demands —
+  three named citations pinned to their expected verdicts, two of which must come back
+  `ok-symbol`, because a resolver that silently matched nothing would leave every
+  "no red found" check in sections 6 and 8 green. The one historical exemption is
+  checked in BOTH directions: C4's row cites `movesync.py:602-606` *in order to say the
+  code is gone*, so fixing the number would assert the opposite of the row, and an
+  exemption the scanner stops producing fails too. NOT covered, said so a green run is
+  not over-read: only `studies/` — `CLAUDE.md`, `RUNBOOK.md`, `PLAN.md`, `HANDOFF.md`
+  and this file carry citations and are outside it; fenced blocks are skipped as tool
+  output rather than claims; and line numbers only, never whether the cited code says
+  what the document claims. Stdlib only, no vault, no socket, no client. 50 checks,
+  floor 50 — no optional section and no skip, so the floor is the whole run. ~3 s),
   `toolkit/test_derivlint.py` (the SECOND gate's checker, and it had never had one.
   `PLAN.md` §6.1 opens with `gwdat.py` landing as a port of an unlicensed repo the day
   after the plan forbade exactly that, and closes the paragraph "The rule was in the

@@ -1,108 +1,270 @@
-# Movement / the warp — handoff
+# Movement — the arc handoff, and the entry point for all of it
 
-**Written 2026-08-19, revised twice the same day** (corpus pass, then the
-mechanism round). Status authority is `PLAN.md` §3 and §8; the full record is
-[FINDINGS.md](FINDINGS.md) — read its last two sections first, they supersede
-everything above them. This file is what a cold session needs to pick the arc up
-without re-deriving it, and what it needs in order not to repeat the failures.
+**Rewritten 2026-08-30 at `201324c`, tree clean, branch `main`.** The header this
+replaces was written 2026-08-19 and last touched 2026-08-20; ten days and roughly
+forty commits of movement work landed after it, on a channel it does not mention.
+**Everything from §0 down is that older record**, kept because its mechanism decode is
+still the best statement of the warp and is still largely true — read it with §A's
+staleness table beside you.
 
-> ## ★ READ THIS BOX FIRST — the arc changed shape on 2026-08-19
+Status authority remains `PLAN.md` §3; the live next-actions list is `PLAN.md` §8. How
+far to trust any number here: [studies/method/FINDINGS.md](../method/FINDINGS.md).
+
+> ## ★ FOUR THINGS A COLD SESSION GETS WRONG HERE, ALL OF THEM OBSERVED
 >
-> **THE MECHANISM IS DECODED IN THE BINARY.** The snap is `0x006022B0`, copying
-> SYNC → ASYNC (the rendered copy is dragged onto the authoritative one). It is
-> reached from `0x00605FC0`, which has **exactly 3 callers, all message-driven —
-> the desync test is never evaluated per frame.** The test itself
-> (`0x006055E0`) returns "no snap" when the SYNC agent's own dead-reckoned
-> position (`+0x78`) lies within **100.0 u @0x00946560** of the client's recent
-> **history** chain — straight-line AND walkable; ⚠ **NOT our grant, and not a
-> prediction** (decoded 2026-08-20, FINDINGS "the AgTrack match test is
-> decoded" — it retired §4's starred shape 1). Otherwise it runs a FALLBACK of
-> **three gates, and ANY ONE of them snaps** (decoded 2026-08-20, FINDINGS
-> round 2): straight-line separation over **299.33 u** — the `300.0f
-> @0x00946564` is quantised upward by the client's LUT sqrt, so **exactly
-> 300.0 u snaps**; OR a walkable `pathCount == 0`, which reports that the
-> position OUR grant wrote is **off the navmesh** — narrower still: the START
-> point could not be **resolved**, and an out-of-range plane INDEX defeats
-> resolution before any geometry runs (`0x0072AE4F`). ⚠ **Gate 2 has n = 0
-> observed firings** — gate 1's 299.33 u fence subsumes all 24 measured snaps
-> (min before-separation 342.8 u); OR the sync agent unable to
-> take a first step. **"Under 300 u" is therefore NOT safe** — two of the three
-> gates are not distance tests at all. And the snap that follows reseeds
-> **every** async agent, not just the player's.
+> **1. There is no single entry point, there is a CYCLE — and this file is now the
+> top of it.** `HANDOFF-WARP.md` sends you to FINDINGS §1p.10; `HANDOFF-PLANE.md`
+> sends you to `PLAN.md` §8 and §3; §3's R3 row (unedited since `2d784d9`,
+> 2026-08-20) sends you *here*; and this file, until today, said nothing about the
+> plane channel at all — it does not contain the string "movecode". Two more files
+> each declare themselves an entry point (`studies/movecode/PLAN.md`,
+> `studies/movement/RETHINK.md`). Read §A before opening anything else.
 >
-> **THE WARP, in one sentence:** we answer a click with `0x0029` (a SYNC-ONLY
-> message), the authoritative copy glides there and PARKS, the player keyboards
-> away, nothing we send afterwards can reach the copy they see — **`0x0025`'s
-> async arm is gated shut for the client-controlled agent** — separation grows to
-> 3,648 u unwatched because nothing triggers the check, and the next grant or
-> arrival redeems the whole gap at once.
+> **2. The plane repair is ON BY DEFAULT, it has NEVER FIRED, and its only live
+> arming was probably a FALSE FIRE.** Measured 2026-08-30 and written down nowhere
+> before this: all three of R7's `arming` rows sit on the west bridge, where our
+> mesh offers **only the deck**. See ★3 — this is the arc's most important open
+> problem and it is a design property, not a bug.
 >
-> **THE SPEED CANDIDATE IS DEAD FOR THE BUILD WE SHIP:** **0% frequency** at the
-> fidelity-correct 0.66, measured two independent ways (the ceiling table and the
-> snap-trigger replay agree); the **−3.1% magnitude** is an n=1 measurement and
-> rides along as colour, not as a second witness. Do not
-> build it. `0x0027` at spawn is a measured no-op (the client already holds
-> maxSpeed 288.0 / moveSpeed 1.0 in 4,115/4,115 samples).
+> **3. The repair's safety test is INVERTED — it is most confident exactly where
+> our decode is worst.** It arms only when `plane_at` returns ONE unambiguous
+> candidate. Where our decode HOLDS a stacked deck it returns two planes and
+> DISARMS; where our decode MISSES the ground under a deck it returns one and ARMS.
+> Measured over both bridges on map 280 (fine scan at 8 u, `containing()` per
+> sample):
 >
-> **THE SCOREBOARD IS NOT A SCOREBOARD YET.** Observation coverage is 31% / 72% /
-> 89% across the three configurations, so per *observed* second the default build
-> is the WORST on displaced distance, not the best. Nothing can be scored against
-> "5.7/min" until denominators are stated. `movesync.py` was repaired this round;
-> re-derive before comparing.
+> | deck | our decode | offers ONE plane → **arms** | offers 2+ → disarms |
+> |---|---|---|---|
+> | west bridge, plane 37 | misses the under-deck ground | **4,671 / 4,723 = 98.9 %** | 52 = 1.1 % |
+> | NE bridge, plane 42 | holds the `{0,42}` stack (§1z-g.5) | 3,572 / 6,821 = 52.4 % | 3,249 = 47.6 % |
 >
-> Candidates 1-5 are dead (§2). Candidate 6 (the speed term) is dead above.
-> **Shape 1 — "make the grant match" — is dead too, as of 2026-08-20**: the test
-> it was aiming at never reads our grant (§4 item 1). The whole test is now
-> decoded, both halves, and **none of its gates is a server lever** — the one
-> real lever found is `0x002C`, which clears the tracking record and sets BOTH
-> copies, and which an earlier build already tried and removed as "the warp the
-> player described". Read §4 item 1's NEXT JOB before picking anything up.
+> R7's client declared plane **0** at each arming point while our mesh offered only
+> **37**; had the streak reached `PLANE_REPAIR_HOLD` the repair would have restamped
+> the player onto the bridge above them. It never got past 1.02 s of 5.0 s. This is
+> the false-fire class the doctrine block prices as "no measured instance in four
+> sessions" — there is now a candidate instance, and §D is what to do about it.
 >
-> ## ★★ THE WARP IS REPRODUCIBLE ON DEMAND (2026-08-20) — START HERE
->
-> **HOLD S AND SPAM-CLICK FORWARD.** That is the trigger, it takes 45 seconds,
-> and it is the thing this arc lacked all week. Holding a movement key keeps the
-> client's `0x003D` flowing, which defeats the click arm's staleness guard, so
-> every click is granted; 196 clicks became 140 grants and 5 hard jumps.
-> **The control is equally cheap: click and then keyboard**, and the guard
-> refuses every click (2.1 s was already too stale), no grant goes out, and the
-> desync test is never evaluated. **Zero grants, zero warps, twice.**
->
-> **WARPS APPEAR ONLY WHERE WE GRANT, AND SCALE WITH HOW MUCH WE GRANT.**
-> `--grant-suppress` (off by default) refuses the click grant while the player
-> is keyboarding. Measured A/B, same operator, same play, 100 s apart:
-> **199 grants → 2, hard rows 11.49 → 1.39/min, displacement 9,687 → 903 u/min**
-> (8.3× and 10.7×). It beat its own pre-registered prediction of 3.1×.
->
-> ⚠ **IT IS A PALLIATIVE, NOT THE FIX, and read this before quoting it.** Retail
-> grants CONTINUOUSLY while the player keyboards — 88.5% of 2,855 live player
-> grants answer a `0x003D`, median gap 0.492 s — and does not warp, because its
-> destination is the client's own endpoint. We stopped warping by going silent,
-> which costs us an authoritative position that `state["pos"]` consumers
-> (aggro radius, `clip_to_walkable`, interact range) still need.
-> ⚠ **And the timing evidence that motivated it is REFUTED** — "4 of 5 jumps
-> followed a grant" is grant density (rotation control 2.39/5, Fisher p = 0.64).
-> What carries it is the landing geometry (p = 3.0e-5), the reporting-controlled
-> 2×2 (P = 3.4e-10) and the decode. FINDINGS, "round 4".
->
-> ## ★ ROUND 5 (2026-08-20) — the invariant is stated, and the next build is NO lead
->
-> Research only, no client run: FINDINGS "round 5" and the buildable spec in
-> [REALFIX.md](REALFIX.md). Round 4's closing "a short, always-refreshed endpoint
-> grant … has never been tried" is REFUTED — `--client-endpoint` IS that, and it
-> was the worst of the three refuted runs. What survives is **zero lead**: grant
-> the client's just-reported position, tip dropped — the only family that
-> satisfies the decoded invariant with no assumption about player speed, because
-> the history polyline extends only BACKWARDS under keyboarding (lag is on it by
-> construction; lead is not). The offline scorer is a calibration, refusal and
-> exposure instrument and honestly CANNOT rank the lead family — the P2-vs-P3
-> question needs the one live A/B (REALFIX-L1, owner-driven, click-free, keyboard
-> held, a deliberate backpedal leg, the `0x0060580D`/`0x00605820` gate breakpoint
-> riding along). **Do NOT rebuild refuted things under new names**: a stop-arm
-> `0x0029` IS `--stop-echo`; an unclipped endpoint heading grant IS
-> `--client-endpoint`. Both are run, measured and killed.
+> **4. DO NOT make the server rewrite outbound grant planes.** "Never emit a plane
+> the mesh does not offer at the emitted point" is the obvious fix, it is wrong, and
+> it is refused repeatedly in `authsrv.py`'s own comment blocks — `plane_at`'s
+> 9-of-198 failure class is exactly *"the client's plane is CORRECT and our decode's
+> coverage is missing"*, one such send site was already reverted for overruling the
+> client in precisely the wrong place, and `test_position_trust` pins verbatim echo
+> at the zero-lead site **as design**. An instantaneous geometry test cannot tell a
+> deck we failed to decode from a stale plane. ★3 is the same fact from the other
+> side. Grep the graveyard before proposing anything:
+> `grep -n "REFUTED\|reverted\|do not re-propose" toolkit/authsrv/authsrv.py`.
 
 ---
+
+## A. Which document, and how stale — read this table before opening one
+
+| Document | What it is for | Currency |
+|---|---|---|
+| **this file** | the arc's entry point; where each thread stands and what to do next | current at `201324c` |
+| `studies/movecode/FINDINGS.md` | **the record.** Newest sections supersede everything above them | current; §1z-m is the newest |
+| `studies/movecode/HANDOFF-PLANE.md` | deep-dive on the plane channel and the lock | **stops at §1z-i**; misses `1ce0171`, `30055e0`, `d710a67`, `131c84a`, and its own "written at `dcf9484`" stamp is wrong (last edited `2882627`) |
+| `studies/movecode/HANDOFF-WARP.md` | deep-dive on the warp hunt and the candidate graveyard | lists `--router` REFUTED in two tables; §1y/§1z/§2a reversed that and every runsheet since passes it |
+| `studies/movement/CANCELWALK.md`, `REALFIX.md`, `ROUTER.md` | the shipped policy arms and their runs | see §C; several carry self-status headers that are wrong (§G) |
+| `studies/movement/PROBE-GATEFIRE.md` | the gate-fire operator procedure | §6 is pinned by `test_probedoc.py`; its prose is not — its "n = 0 captures" claim was corrected 2026-08-29 |
+| `studies/movecode/RUN-*.md` | per-run runsheets | **there is no `RUN-R7.md`** — the arc's most decisive run has no runsheet, and its scoring scripts are one-off files under `vault/research/movecode/r7/scoring/` |
+
+**The rule this table exists to enforce:** a document that asserts its own status lies
+within days. Four do it today — `RUN-B2.md` "nothing is armed", `RUN-R2.md` "UNRUN",
+`REALFIX.md` "NOTHING HERE HAS BEEN RUN AT A CLIENT", `studies/movecode/PLAN.md`'s B2
+site priority prescribing a site `movehook.c` refuses under owner ruling Q12(d). Where
+you must state status, state the **test**: *"this ran iff FINDINGS has a §1t heading —
+`grep -n '^### 1t' studies/movecode/FINDINGS.md`."*
+
+## B. Where each thread stands
+
+**The plane channel — the newest thread and the best-measured.** `m_point` is
+`float x, float y, int plane, int`, and the plane is a second channel the arc scored
+nothing on for two weeks. **A plane desync is a LOCK where a position desync is only a
+warp**: R7's return tap measured the client's own pathfinder returning `pathCount == 0`
+**exactly** when its declared from-plane is one the mesh does not offer — exceptionless
+over 214 live queries in both directions, with a natural experiment (two queries 1.2 s
+apart, bit-identical from-point x/y dwords, differing only in the plane word, answered 1
+and 0). A client that cannot resolve its own position cannot walk to ground that would
+re-plane it. Three locks exist in the corpus, all before the shipped default. The repair
+ships ON; it has never fired; the heal is **untried**, supported only by §1z-g.3's
+accident, where a routed grant's plane word revived a dead walker in 81 ms.
+
+**The warp / no-clip thread.** The mesh HAS the mountains — prop placements carry
+authored outline rings and the retail mesh carves them (97 of 98 ring interiors fully
+unwalkable on map 280; the rock the operator no-clipped through is carved edge-for-edge).
+The four earlier detectors died on 8.9–19.8 s event-sampling gaps sitting exactly over
+the repro windows, not on mesh content — **score chords and outline membership, never
+point samples.** The client's walker consults its pathing query every ~16 ms and
+**ignores the answer**: the result gates only the `+0x68` copy, while movement
+dead-reckons from `+0x78`. **Wall integrity on retail was always the server's grants.**
+
+**The shipped policy arms.** Five movement arms are ON by default, each by an owner
+ruling; `--router` and `--click-echo` are NOT (§C). The candidate graveyard is real and
+the tree currently states its size four different ways — do not quote a count, read the
+flags.
+
+## C. What is actually running — and how to find out without guessing
+
+**Do not grep the module globals.** They read `False` while `main()`'s argparse arms
+five of them, and `HANDOFF-PLANE.md`'s Terminal-1 command is only half right (it passes
+`--router`, which is `store_true` and **off** by default — so no live trial of the plane
+repair has ever run the shipped click policy).
+
+**The server's own startup banner is the authority.** It prints the resolved policy
+including the note that three separate senders can emit `0x002C`. Start it and read it.
+That is a statement that cannot go stale, because it names an artifact that regenerates.
+
+ON by default: `--zero-lead`, `--plane-carry`, `--grant-suppress`, `--cast-stop=pin`,
+plane repair. Each has a `--no-` revert. OFF: `--router`, `--click-echo`.
+**`--grant-suppress` and the heading arm share ONE rate-limit clock**, so between them
+they cannot exceed one grant per 0.50 s — say which flags were on when you report a run.
+
+**The plane repair has no owner ruling on record.** Q9–Q12 all have one; this does not.
+It puts a `0x002C` on the wire by default on the authority of a code comment. Given ★3,
+that is worth raising.
+
+## D. The next action, and why this one
+
+**Run the plane-disagreement census over the corpus that already exists.** For every
+accepted `position_report` carrying a declared plane, compare it against what our decoded
+mesh offers at the reported `(x, y)`; break the disagreements down by map, by geometry
+class (stacked deck / bridge underwalk / open ground), and by whether the declared plane
+is `0` or non-zero.
+
+Desk-only. No client, no owner, no new instrument, blocked on nothing. The join already
+exists in `pathdiff.py` pointed the other way (it uses plane agreement to *identify* a
+mesh; this uses a known mesh to *census* agreement).
+
+It settles, in order of value:
+
+1. **The false-fire base rate — the repair's licence.** The doctrine block defaults the
+   repair ON arguing the false-fire class "has no measured instance in four sessions".
+   Four sessions is not a measurement, and ★3 says the one arming we have is probably an
+   instance. This turns "we have not seen one" into a rate, per geometry class.
+2. **What a declared plane of `0` means** — and it is load-bearing both ways.
+   `pathdiff.py` explicitly refuses to reason from a declared 0 (its plane-agreement
+   discriminator is restricted to non-zero, because plain agreement reads 59–67 % on
+   *wrong* meshes), while the repair's trigger draws its strongest inference from exactly
+   that value: every R7 arming is "client declared 0". One instrument refuses to reason
+   from plane 0; the other acts on it. Nobody has established whether 0 is a valid index,
+   a null sentinel, or both depending on map.
+3. **The 9-of-198 `plane_at` failure class**, the load-bearing counterweight in every
+   refusal of the "never emit an impossible plane" fix. It has never been counted at
+   corpus scale.
+4. **A denominator for the `plane_echo` tripwire**, which currently has none.
+
+**Why not "score R7's server-side readout" first**, which is the obvious pick (its 9
+ladder rows and 9 echo rows are unpublished, and it reached `holding` twice — the
+furthest the shipped repair has ever advanced): because per ★3 that write-up should not
+be attempted before the census, or the arming gets published as encouraging when it is a
+near-miss on a false fire.
+
+**Why not a live run for the heal:** highest value if it works, but a lock is not
+provokable — zero fires in three armed sessions, and two of the three known lock classes
+are structurally invisible to the trigger (off-mesh disarms by design; and a *moving*
+client carrying an impossible plane re-arms the clock on every report and can never
+accumulate `HOLD`, which is precisely what R7 was). The census makes that run
+better-designed when it happens, by naming which geometry to press against.
+
+## E. Traps, from the record rather than from imagination
+
+1. **★4's refused fix.** A cold session proposes it within ten minutes.
+2. **`attach.py --stop` ENDS THE CAPTURE.** It is the last thing you do. On 2026-08-29 a
+   run was stopped and then played on, and the most interesting thing the operator saw is
+   not on the wire.
+3. **Establish which tree you are in** — `git rev-parse --show-toplevel` — and pin
+   subagents to *that* path with every command beginning `cd <tree> &&`. Naming a tree in
+   prose does not move the shell.
+4. **Never pick a client build by filename.** `sorted(exes)[-1]` has chosen wrong three
+   times, and `vault/run/` now also contains `reskin-roster`, which sorts last and is not
+   a build. Use the explicit path plus `python toolkit/clientpatch/dhbuild.py`.
+5. **A relative `--exe` fails in an agent shell and this is NOT a `session.py` bug.**
+   Agent shells export `NODEFAULTCURRENTDIRECTORYINEXEPATH=1`, which disables
+   CreateProcess's current-directory search. The runsheets are correct at the owner's
+   terminal. Use an absolute path and stop debugging.
+6. **movehook's observer effect is unmeasured.** Nineteen persistent `int3` taps, four on
+   `MapFindPath` returns and one at ~16 ms cadence. Every timing claim on this arc rides
+   through them — the 81 ms heal, the 1.02 s streak, the 5.2 s transient. No test
+   addresses it.
+7. **Four instrument defects were found in one day (§1z-j…§1z-m).** They did *not* move
+   the plane headline — `pathdiff` on r7 still reproduces AGREE 97 / DIFFER 34 /
+   UNCOMPARED 13 / OFF-MESH 63 — but they did move older published numbers, **per figure
+   and not as a blanket invalidation**: r4a's off-mesh depths moved materially (median
+   239 → 228.2 u), while §1z-g.1's 20.2 u moved 0.5 %. Re-derive the specific figure you
+   are about to lean on; do not assume it is either fine or void.
+8. **`--map auto` picked the WRONG map before `1ce0171`** (an area term ranked another
+   map above 280 on a map-280 capture, reporting OFF-MESH 3 instead of 63). Most
+   published numbers do not record which mesh they were scored against.
+
+## F. Commands
+
+Terminal 1 — the server. **Note `--router` is not the shipped default**; pass it only if
+you are reproducing R6/R6b/R7, and say so in the write-up:
+
+```bash
+python toolkit/harness/session.py --exe C:/gd/Rurik/vault/run/2026-07-29_221c13772c7a/Gw.exe --keep-open --hold 2400 --game-args="--router --map 280"
+```
+
+Terminal 2 — arm the client hook once you are in the map. Do **not** regenerate sites:
+
+```bash
+python toolkit/clientscan/movehook/attach.py --minutes 8 --out vault/research/movecode/r8
+```
+
+Last thing, after everything you want measured:
+
+```bash
+python toolkit/clientscan/movehook/attach.py --stop
+```
+
+Score the plane channel (section C; orthogonal to A and B):
+
+```bash
+python toolkit/clientscan/noclipscore.py --bin vault/research/movecode/r8/movehook.bin
+```
+
+The affected-test set for this arc — each prints its own count and floor and exits
+non-zero if short, so never quote a total:
+
+```bash
+python toolkit/authsrv/test_planerepair.py; python toolkit/authsrv/test_position_trust.py; python toolkit/authsrv/test_poschecksum.py; python toolkit/authsrv/test_cancelwalk.py; python toolkit/authsrv/test_router.py; python toolkit/authsrv/test_familyrate.py
+```
+
+Before touching the instrument:
+
+```bash
+python toolkit/clientscan/movehook/test_movehook.py
+```
+
+## G. How to read the numbers in this file
+
+**They rot in hours, and this arc has the receipts.** `HANDOFF-PLANE.md` went stale
+**76 minutes** after it was written: its opening paragraph says section C finds 6
+anomalies in `r5bridge`, and the same afternoon's commit moved it to 8.
+
+So: corpus counts here are **floors with a signature set**, never values. The repair's
+fire count is the one that matters — expect **0**, and expect at least three sessions
+carrying `plane_repair_due` rows with the signature set `{132441, 142904, 163930}`:
+
+```bash
+python -c "import glob,json;n=0;s=set();[ (n:=n+1) if r.get('kind')=='plane_repair' else s.add(f[-22:-16]) for f in glob.glob('vault/captures/gamesrv/*.jsonl') for r in (json.loads(l) for l in open(f,encoding='utf-8',errors='replace') if l.strip()) if r.get('kind') in ('plane_repair','plane_repair_due')];print('fires',n,'| sessions with a ladder',sorted(s))"
+```
+
+**A non-zero fire count is the arc's headline result, not a stale number.** State the
+glob you used — flat gives a different total from recursive, and both have been
+published.
+
+Anchor on grep-able strings, never on line numbers: `grep -n "PLANE_REPAIR_HOLD = "
+toolkit/authsrv/authsrv.py`, not `authsrv.py:4383`. Every line-number anchor in the older
+half of this file, and all four in `PLAN.md` §7 Q13, is already dead.
+
+---
+
+*What follows is the 2026-08-19/20 record — the warp mechanism decode and the candidate
+graveyard. Its mechanism sections are still the best statement of the snap and are
+largely current; its status claims, its `--router` verdict and its line-number anchors
+are not. Read §A above first.*
 
 ## 0. Before your second command
 
