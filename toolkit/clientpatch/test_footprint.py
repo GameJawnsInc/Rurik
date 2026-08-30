@@ -50,6 +50,18 @@ import pinned                                                  # noqa: E402
 # MEASURED from the green run of 2026-08-15. Every check here is unconditional
 # once a client is present; the client-less path declares a skip and goes red,
 # which is deliberate -- the whole file is about bytes in a real image.
+#
+# AND THE BARE-MACHINE PATH IS NOW MEASURED, 2026-08-30, rather than assumed:
+# `RURIK_VAULT` pointed at an empty directory gives **0 checks, 1 declared skip
+# ("everything"), rc=1**, and the reason printed is `checks.py`'s zero-checks
+# rule -- NOT the floor. So 21 is not a claim about a mandatory core: this file
+# HAS no client-free core -- not because it has no client-free CHECKS (§4 is
+# pure AST work and §3's four `sane_rect` calls touch nothing), but because
+# both sit after `main()`'s early return. And no floor could make the bare run
+# green anyway; `Ledger` refuses a floor below 1 for exactly this reason.
+# Before that day the same run gave rc=1 and NO verdict at all: `pinned.find()`
+# raises `SystemExit`, which the `except Exception` in `main()` did not catch,
+# so the skip this comment describes was unreachable and had never been walked.
 FLOOR = 21
 LEDGER = checks.Ledger("footprint patcher (PLAN A2)", floor=FLOOR)
 check = checks.adopt(LEDGER)
@@ -64,7 +76,12 @@ WANT = (960, 448, 1280, 992)
 def main():
     try:
         exe = pinned.find()[0]
-    except Exception as e:
+    except (Exception, SystemExit) as e:                        # noqa: BLE001
+        # SystemExit, and it has to be named: `pinned.find()` RAISES one when
+        # the build is not in the vault, and `Exception` does not catch it --
+        # so on a machine without the vault this file died here with rc=1 and
+        # NO verdict at all, instead of declaring the skip below and letting
+        # the floor rule name the shortfall.
         LEDGER.skip("everything", f"no pinned client to read: {e}")
         return LEDGER.verdict()
     pe = maprows.PE(exe)

@@ -51,6 +51,16 @@ import checks                                                   # noqa: E402
 # §3b (4), §4 (2) and §9 (6) a 32-bit `cmd.exe`. A whole green run is 71.
 # Ladder: 14 -> 26 -> 27 -> 29 -> 31, each step re-read off a green run and
 # never guessed.
+#
+# AND THE CORE IS NOW MEASURED, 2026-08-30, not just arithmetic. Two runs:
+#   * no vault, this machine's 32-bit cmd.exe present:
+#     **50 checks, 1 declared skip (§2), rc=0** -- 71 - 21, as the table says.
+#   * no vault AND `WOW64_CMD` pointed at a path that does not exist:
+#     **31 checks, 5 declared skips (§2, §3, §3b, §4, §9), rc=0** -- exactly
+#     the floor, with zero slack. The core above was right to the check.
+# Before that day neither run reached a verdict: `pinned.find()` raises
+# `SystemExit`, which the `except Exception` at §2 did not catch, so §1 printed
+# its five PASSes and the file then died with rc=1 and no banner at all.
 LEDGER = checks.Ledger("commandertrap", floor=31)
 
 WOW64_CMD = r"C:\Windows\SysWOW64\cmd.exe"
@@ -87,7 +97,12 @@ def main():
         import pinned
         path, why = pinned.find(38833)
         pe = PE(path)
-    except Exception as ex:
+    except (Exception, SystemExit) as ex:                       # noqa: BLE001
+        # SystemExit, and it has to be named: `pinned.find()` RAISES one when
+        # the build is not in the vault, and `Exception` does not catch it --
+        # so on a machine without the vault this file printed section 1 and
+        # then DIED with rc=1 and no verdict, rather than skipping section 2
+        # and running the process-free core the floor above describes.
         LEDGER.skip("section 2", f"needs the vaulted 38833 client: {ex}")
     else:
         print(f"   {path}\n   ({why})")

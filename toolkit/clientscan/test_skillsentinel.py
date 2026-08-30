@@ -23,8 +23,24 @@ sys.path.insert(0, os.path.join(os.path.dirname(HERE), "authsrv"))
 import checks       # noqa: E402
 import effects      # noqa: E402
 
-# Floor from a real green run (11 checks, 2026-08-22).
-LEDGER = checks.Ledger("skill duration sentinel", floor=11)
+# Floor from a real green run (11 checks, 2026-08-22) -- and 11 was the WHOLE
+# run, not the mandatory core, which is the defect `checks.py` warns about in
+# "HOW TO SET A FLOOR HONESTLY". Everything below §1 needs the pinned exe and
+# declares one skip; §1 alone is what a machine without the vault can run.
+#
+# MEASURED 2026-08-30 rather than reasoned: `RURIK_VAULT` pointed at an empty
+# directory gives **4 checks, 1 declared skip ("static witnesses")**. Against
+# floor 11 that printed `ONLY 4 OF A DECLARED FLOOR OF 11 CHECKS RAN -- 7 did
+# not execute, so this run is incomplete rather than passing`, which names the
+# wrong thing: nothing failed to execute, a section declared itself absent.
+# So the floor drops to the core, 4, per `checks.py`'s own guidance -- the same
+# correction `test_compositetrap.py` took, 80 -> 78. It loses
+# nothing that was being enforced, because the skip is printed either way.
+#
+# Before that day the bare run gave rc=1 and NO verdict: `pinned.find()` raises
+# `SystemExit`, which the `except Exception` below did not catch, so the skip
+# was unreachable and this whole paragraph had never been walked.
+LEDGER = checks.Ledger("skill duration sentinel", floor=4)
 check = checks.adopt(LEDGER)
 
 ENCHANTMENT_TYPE = 6
@@ -54,7 +70,11 @@ except effects.EffectError as ex:
 try:
     import pinned
     exe, _why = pinned.find()
-except Exception as exc:                                    # noqa: BLE001
+except (Exception, SystemExit) as exc:                      # noqa: BLE001
+    # SystemExit, and it has to be named: `pinned.find()` RAISES one when the
+    # build is not in the vault, and `Exception` does not catch it -- so on a
+    # machine without the vault this file printed section 1's four PASSes and
+    # then died with rc=1 and no verdict, instead of declaring this skip.
     LEDGER.skip("static witnesses", f"pinned client unavailable: {exc}")
     sys.exit(LEDGER.verdict())
 
