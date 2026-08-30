@@ -1570,7 +1570,20 @@ This supersedes the two entries below it (each marked in place in FINDINGS):
   r 21–70 u, per-cell CSR proven 990/990) and is NOT this defect (0/1,199 samples inside
   any circle). Filed: likely `PathApi:753/754`'s data. Also filed: 14/92 prop models
   carry collision sub-meshes, merge UNRESOLVED, compile-experiment specimen named.
-* **★ COLD-START HERE FOR THE PLANE WORK:
+* **★ COLD-START FOR ALL MOVEMENT WORK:
+  [studies/movement/HANDOFF.md](studies/movement/HANDOFF.md)**, rewritten 2026-08-30 at
+  `201324c`. It is the arc's ENTRY POINT and it exists because there was a cycle
+  instead of one: `HANDOFF-WARP` → FINDINGS §1p.10, `HANDOFF-PLANE` → this section
+  and §3, §3's R3 row → `studies/movement/HANDOFF.md`, which until that date did not
+  contain the string "movecode" — plus two more files each declaring themselves an
+  entry point. It carries the per-document staleness table, what is ON by default
+  (read the server BANNER, not the module globals), and the next action with its
+  reasoning. **Its ★ box carries the finding that changes this thread**: the plane
+  repair's only live arming was probably a FALSE FIRE, and its safety test is
+  INVERTED — it arms on an unambiguous single candidate, so it disarms where our
+  decode HOLDS a stacked deck (NE bridge, 47.6 % of samples) and ARMS where our
+  decode MISSES the ground under one (west bridge, 98.9 %). Measured 2026-08-30.
+* **The plane deep-dive:
   [studies/movecode/HANDOFF-PLANE.md](studies/movecode/HANDOFF-PLANE.md)** — what is
   measured vs inferred in two columns, the next three actions priced, and §5's traps
   (the first of which is the twice-refused "just don't emit an impossible plane" fix
