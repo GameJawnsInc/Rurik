@@ -8619,6 +8619,50 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   Stdlib only, no vault, no socket, no client. 28 checks, floor 26 — section 4's two
   growth arms declare skips in the unreachable no-control-token case, per checks.py's
   mandatory-core guidance. ~1 s),
+  `toolkit/test_citelint.py` (**`file.py:NNN` citations in study prose actually
+  resolve.** Measured 2026-08-29 on `studies/movement/PROBE-GATEFIRE.md`: roughly 25 of
+  its ~30 citations pointed at the wrong line — `fence_verdict` cited at `movetap.py:3049`
+  and living at `:4691`, `INVALID_POS` cited at `:290` and living at `:512` — and **all
+  eight `movesync.py` citations were stale UNDER A GREEN sha256 PIN**, because the pin
+  says the file has not moved since it was taken and says nothing whatever about
+  citations that were already wrong when it was taken. That is the whole lesson: a byte
+  pin and a citation check are not the same instrument, and the document had the
+  stronger-looking one. The citations were deliberately NOT swept at the time and that
+  call was right — a sweep with no checker behind it buys a few days, and this repo has
+  already paid once for the eager version (`test_provlint.py`: 46 citations rewritten,
+  all 46 reverted the same day). So the checker came first and the sweep came second,
+  in that order and in one commit. **The parse is the design.** Most citations name a
+  SYMBOL beside the number, so the claim is machine-checkable; the pairing rule is a
+  MEASURED gap bound (every true pairing in the pilot normalizes to ≤13 characters,
+  every false one to ≥25, so the bar is 16) plus a refusal of sentence punctuation, and
+  a pairing it cannot make degrades to a line-exists check that is COUNTED, never
+  guessed at. Two rules were written only because running it over the corpus refuted the
+  first draft: **hard-wrapped lines must be joined** — a same-line reader passes
+  ```sep` is written at`` / ```movetap.py:791``` on line-exists and it is wrong, `sep` is at
+  `:1120` — and **a hex literal is not a symbol**, since `0x0056` scans as the
+  identifier `x0056` and opcode citations are everywhere in these documents. **TWO
+  POSTURES, on purpose.** PROBE-GATEFIRE.md is RULED ON at zero red with no headroom
+  (31 citations: 23 now resolve at the symbol tier, 7 at the line tier); every other
+  `studies/**/*.md` is COUNTED at **142 red, ceiling 210** — the same ~1.5x headroom
+  `test_provlint.py` used for 134→200 — because 142 is volatile by construction (one
+  commit near the top of `agents.py` moves every citation of it at once) and a checker
+  red on all of them is one nobody leaves switched on. **The 142 are not a fix list.**
+  Section 7 is the red proof and it runs every time rather than being asserted: a
+  scratch copy of the real document has ONE known-green citation moved by one line, and
+  the run requires the verdict to flip, the report to name the document, the document
+  line, the symbol AND the lines the symbol is really on, and the red count to rise by
+  exactly one and not cascade. Section 5 is the vacuity guard the shape demands —
+  three named citations pinned to their expected verdicts, two of which must come back
+  `ok-symbol`, because a resolver that silently matched nothing would leave every
+  "no red found" check in sections 6 and 8 green. The one historical exemption is
+  checked in BOTH directions: C4's row cites `movesync.py:602-606` *in order to say the
+  code is gone*, so fixing the number would assert the opposite of the row, and an
+  exemption the scanner stops producing fails too. NOT covered, said so a green run is
+  not over-read: only `studies/` — `CLAUDE.md`, `RUNBOOK.md`, `PLAN.md`, `HANDOFF.md`
+  and this file carry citations and are outside it; fenced blocks are skipped as tool
+  output rather than claims; and line numbers only, never whether the cited code says
+  what the document claims. Stdlib only, no vault, no socket, no client. 50 checks,
+  floor 50 — no optional section and no skip, so the floor is the whole run. ~3 s),
   `toolkit/test_derivlint.py` (the SECOND gate's checker, and it had never had one.
   `PLAN.md` §6.1 opens with `gwdat.py` landing as a port of an unlicensed repo the day
   after the plan forbade exactly that, and closes the paragraph "The rule was in the
