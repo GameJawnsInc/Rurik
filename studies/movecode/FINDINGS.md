@@ -8249,3 +8249,180 @@ than a decode bug, and would move the arc's weight back onto route selection.
 6. **Bit 18 has no ArenaNet name.** `isWaypoint` is our reconstruction from
    behaviour. It is a good name and it should be used, but it should not be quoted
    as the client's own.
+
+---
+
+## 1z-q. The history chain, decoded whole — and why a SERVER-SIDE MIRROR is the derived fix
+
+> **Numbering note: this is `1z-q`, skipping `1z-p`.** `1z-p` is reserved as
+> `RUN-R8.md`'s staleness test (`grep -n '^## 1z-p'`); creating it here would
+> falsely signal R8 ran. R8 is still not run.
+
+**Why this section exists.** The warp is not fixable by choosing a better grant
+POINT — five candidates that each chose a point are dead (§2 scoreboard), and a
+head-to-head over the banner-labelled corpus (two-arm hard bar, active-time
+denominator, 2026-08-30) reads **router-ON 1.60/min vs router-OFF 2.44/min**:
+the router halves the warps and kills the no-clip, it does not stop the warps,
+and **no configuration this repo ships stops them.** The decoded mechanism says
+why (§1): the snap fires when the SYNC (authoritative) copy fails the client's
+own reprieve test — *is my current dead-reckoned position within 100 u of a
+segment of my recent HISTORY?* — and then the fallback gates snap. That history
+chain is the lever nobody has modelled. This section decodes it completely so
+the server can model it.
+
+**Method.** Four static lanes on the pinned pristine 38797 image
+(`capstone`/`pefile`, read-only, carve-out (1)) plus an adversarial verify lane
+that re-disassembled every load-bearing site itself. Built on — not re-derived
+from — the 2026-08-20 match-test decode (`studies/movement/FINDINGS.md` "THE
+AgTrack MATCH TEST IS DECODED") and HANDOFF §1/§4. **Zero offset disagreements
+across the four lanes**; the verify lane caught one real error (below) and one
+over-asserted cadence label. Every claim here is OBSERVED at an address unless
+tagged otherwise.
+
+### 1z-q.1 The structure — ArenaNet's own `history` of `historyPoint`s
+
+Module `P:\Code\Engine\Agent\AgTrack.cpp`. Their nouns, from single-citation
+asserts (measurement, not a dump): `history`, `historyState`, `historyPoint`,
+`returnedSegment` (AgTrack:447), `clientControlled` (457),
+`source.GetWorld() == WORLD_SYNC` (458). It is a singly-linked, push-front list
+— newest at the head — one per agent.
+
+**Node, 0x2C bytes** (each field's store address in the create path 0x00605A2F):
+
+| off | field | store |
+|---|---|---|
+| +0x00 | time (`now`) | 0x00604DCC (allocator) |
+| +0x04 | next (older) | 0x00605A5D; head = state+0x04, set 0x00605A93 |
+| +0x08..+0x14 | position x, y, plane, w4 | 0x00605A63/69/6F/75 |
+| +0x18/+0x1C | velocity x/y (= agent+0xB0/0xB4) | 0x00605A81/87 |
+| +0x20/+0x24 | speed factors (= agent+0x5C/0x60) | 0x00605A7B/8D |
+| +0x28 | facing (= agent+0xC4) | 0x00605A90 |
+
+**State record, 0x1C bytes**: +0x00 clientControlled, +0x04 history head
+(newest), +0x08..+0x14 position seed, +0x18 time. Array base [mgr+0x20], count
+[mgr+0x28], stride 0x1C; manager = agentMgr+0x1CC, from which [ctx-0xE4] = the
+SYNC array (agentMgr+0xE8) and [ctx-0x80] = the ASYNC array (agentMgr+0x14C).
+
+### 1z-q.2 What a node's position IS — and why one grant cannot forge a match
+
+**node.position = 0x005FF820(agent, now)** — OBSERVED, and sharper than the
+prior gloss. That resolver returns the **commanded destination** agent+0x88..+0x94
+when the agent has ARRIVED (0x005FF839, gated on the arrival tick agent+0x48),
+**else the +0x78 leg-start position DEAD-RECKONED to `now`** via 0x005FFB40
+(0x005FF868). The sampled agent is the **SYNC copy** (bulk sampler pushes
+[ctx-0xE4][id], 0x00604B05). So the chain is a trail of where the
+server-authoritative agent has been, sampled on the client's own world clock
+(agent+0x24 selects the per-world clock at [ctx + world*0x64 - 0x84]).
+
+The match test's tested point **q = sync+0x78, dead-reckoned to `now` at the
+caller** (0x00605643 reads it once; the bake 0x005FE9EA->0x005FF880 does the
+dead-reckon; 0x006055E0 contains no such call). **No single grant writes +0x78**
+— 0x0029 writes +0x88..+0x94/+0x80, n=0 to +0x78 — which is the whole content
+of HANDOFF §4 item 1's "no grant we can send makes this match by construction",
+now confirmed from writer, reader and layout at once. ⚠ **But that is a fact
+about ONE message, not about a grant SEQUENCE.** +0x78 evolves continuously by
+`+0x78 + vel*dt`, and our grants set `vel` and the destination the bake
+integrates toward. A sequence of grants therefore steers +0x78, the chain, and
+every future q. **The lever is the grant TRAJECTORY, not any one point** — which
+is exactly why every point-choosing candidate died.
+
+### 1z-q.3 Lifecycle — writers, the two timers, eviction, and the resets that matter
+
+**One writer** (recorder 0x00605840, 3 direct callers), **one allocator**
+(0x00604BB0, sole caller the recorder). A node is pushed only on a **7-field
+command change** — position x/y/plane vs the state seed, velocity/speed*2/facing
+vs the head node (0x00605945..0x006059B4) — OR the **forced 2.5 s re-sample**
+(0x0060593A `cmp eax,0x9c4`, eax = now - head.time). An identical command within
+2.5 s pushes **nothing** (fall-through 0x006059BA). A second, independent timer
+lives in the per-tick update loop: **3.333 s keep-alive** (0x00604AAE
+`cmp eax,0xd05`) that calls the recorder when the head is stale. RECONSTRUCTION:
+so a moving or parked agent drops a breadcrumb every ~2.5-3.3 s (~720 u at
+288 u/s) — the chain is **coarse**, a single click yields a one-segment chain.
+
+**Eviction is monotone pruning by the READERS, plus wholesale clears.** Neither
+the recorder nor the allocator ever trims by count or age; storage is
+slab-recycled (256 nodes/slab, reclaim at >5000 ms) independently of chain
+length. The visible chain shortens only when a reader truncates it — see §1z-q.4.
+
+⚠ **CORRECTION — a draft of this decode said snaps and 0x002C leave the chain
+intact. They do NOT** (verify lane C1, byte-proven). **AgTrack::Clear
+(0x00605F70) zeroes state+0x00 AND state+0x04** (0x00605FA7/0x00605FAE), and it
+is called on: the **0x002C** handler (0x005FDA78), **every match-test MISS**
+(dispatch 0x0060602E, plus the roster reseed loop clears each async agent), and
+**player-input re-arm** (0x00605F10). The teleport/reseed PRIMITIVES
+(0x006020B0/0x006022B0) really do leave state+0x04 alone — but the HANDLERS that
+call them clear first. **Consequence for the mirror: a snap and a 0x002C both
+RESET the chain**, and the mirror must model that reset (it is an event the
+server already knows it caused). Genuine agent-lifecycle clears
+(despawn 0x00605DA0, world teardown 0x00604700/0x00605E40) are the only OTHER
+resets, and the server already tracks both.
+
+### 1z-q.4 The walk — newest->oldest, no break, OLDEST match wins, then truncate
+
+The reprieve test 0x006055E0 (sole caller the dispatch 0x0060601C) walks the
+chain **newest->oldest** (0x00605732), tests each **segment** = (node[i].position
+-> node[i-1].position) against q with the decoded 100 u dual test, and **does not
+break on a match** — it records `lastMatch` and keeps going, so the **oldest**
+matching node wins (0x00605718). On any match it sets `lastMatch.next = NULL`
+(0x00605746), **dropping the older tail**. A second reader — the by-time render
+query 0x00604ED0 inside the update loop — prunes identically
+(`returnedSegment.next = NULL`, 0x006055C2). **Both readers only prune
+monotonically toward the newest matched node; neither edits node contents nor
+grows the chain.** NOT FOUND (by disasm): any path-replanner reading the chain,
+and any chain read by the 0x0047 stop handler (its handler 0x0091DB00 never
+touches AgTrack). The chain is **fully encapsulated in AgTrack.cpp**.
+
+### 1z-q.5 ★ THE STRATEGIC RESULT — a server-side AgTrack mirror is feasible, and it is the fix
+
+Everything the chain's contents depend on is **server-known and decoded**:
+the grant bake equations (§1), the dead-reckon formula, the 7-field push rule,
+the 2.5 s / 3.3 s timers, the seed-vertex selection, and the reset events
+(snap, 0x002C, re-arm, despawn, teardown). No external module contributes; the
+two readers' only side effect is a prune the server can compute. **Therefore the
+server can maintain a byte-faithful mirror of the player's sync-agent history
+chain and evaluate the client's own reprieve test BEFORE emitting a grant** —
+answering "will this grant keep the authoritative copy within 100 u of its own
+trail, or trip the snap?" This is the first movement lever that is a **property
+of a derived model, not a chosen point**, and it is what retail's denser grants
+were implicitly satisfying.
+
+⚠ **The residual uncertainty, stated plainly.** The mid-flight sample uses the
+client's world clock (~1.36 % slow, Q-noted). A byte-exact mirror would need
+that clock. But the test's tolerance is **100 u**, and 1.36 % clock error over a
+2.5 s window at 288 u/s is **~10 u** — an order of magnitude inside the band. So
+the mirror need only be ~100 u faithful, and the one thing it cannot reproduce
+exactly is ~10x too small to matter. RECONSTRUCTION, and the replay below is how
+it gets checked rather than asserted.
+
+⚠ **The graveyard caution the mirror EXPLAINS.** "Grant 3x denser like retail"
+is naively wrong — `--heading-grant` (12.8/min) and `--client-endpoint`
+(14.6/min) were density increases that made warps WORSE, because each re-grant
+baked a new velocity/destination that jumped +0x78's integration OFF its own
+trail. Density that follows the continuous path preserves the tube; density that
+jumps it breaks the tube. **Raw density cannot tell the two apart; the mirror's
+reprieve-test check is exactly the discriminator that can.** That is the
+retrodiction the fix must pass, and it passes it by construction.
+
+### 1z-q.6 NEXT — desk-only, and it needs no client run
+
+1. **Build the mirror** (`toolkit/authsrv/agtrack_mirror.py` or similar): the
+   node/state structs above, the recorder push rule, both timers, the walk, and
+   the reset events, driven by the grants the server already emits.
+2. **Replay it against the capture corpus** — every gamesrv JSONL carries our
+   grant stream and the client's reports. The mirror's predicted reprieve-test
+   verdict (match / miss) must equal the client's actual snap/no-snap at each
+   evaluation. **This is the validity check, and it is verbatim-first over data
+   that already exists — no new runs, no owner time.** A mirror that reproduces
+   the historical snaps is trusted; one that does not is wrong and says so.
+3. **Only then** derive the grant-insertion policy that keeps the mirror's
+   verdict at MATCH, and — per the arc's rule — one verbatim confirmation tap
+   against a live chain (the movehook can read AgTrack directly), not a run
+   campaign.
+
+**What this section does NOT settle.** Whether the mirror actually reproduces
+the corpus snaps (step 2, unrun); the sweep 0x00604880's exact cadence (verify
+lane C3, unresolved — bounded impact, it textures the re-sample rate but not the
+"nobody watches the desync" result); the meaning of `facing == 9`, a second
+server-invisible no-snap path (NOT FOUND); and 0x005FF820's world-clock table
+index (Q, bounds how non-reconstructible the mid-flight sample is — see the
+100 u argument above).

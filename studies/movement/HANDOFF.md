@@ -164,7 +164,7 @@ far to trust any number here: [studies/method/FINDINGS.md](../method/FINDINGS.md
 | Document | What it is for | Currency |
 |---|---|---|
 | **this file** | the arc's entry point; where each thread stands and what to do next | current at `201324c` |
-| `studies/movecode/FINDINGS.md` | **the record.** Newest sections supersede everything above them | current; **§1z-o** (R7's server side) is the newest — this row said §1z-n while the same commit added §1z-o below it, wrong at birth |
+| `studies/movecode/FINDINGS.md` | **the record.** Newest sections supersede everything above them | current; **§1z-q** (the history-chain decode, and the mirror) is the newest. ⚠ Numbering skips `1z-p` on purpose — that heading is `RUN-R8.md`'s staleness test and R8 is still not run |
 | `studies/movecode/HANDOFF-PLANE.md` | deep-dive on the plane channel and the lock | **stops at §1z-i**; misses `1ce0171`, `30055e0`, `d710a67`, `131c84a`, and its own "written at `dcf9484`" stamp is wrong (last edited `2882627`) |
 | `studies/movecode/HANDOFF-WARP.md` | deep-dive on the warp hunt and the candidate graveyard | lists `--router` REFUTED in two tables; §1y/§1z/§2a reversed that and every runsheet since passes it |
 | `studies/movement/CANCELWALK.md`, `REALFIX.md`, `ROUTER.md` | the shipped policy arms and their runs | see §C; several carry self-status headers that are wrong (§G) |
@@ -183,6 +183,35 @@ you must state status, state the **test**: *"this ran iff FINDINGS has a §1t he
 `grep -n '^### 1t' studies/movecode/FINDINGS.md`."*
 
 ## B. Where each thread stands
+
+> ### ★ THE ARC'S DIRECTION CHANGED 2026-08-30 — DERIVE, DO NOT ITERATE
+>
+> **Owner's direction, after two aborted R8 attempts:** stop tuning flags and
+> scoring runs; reverse-engineer a solution we are confident in. **No metric
+> scoreboards for this arc, no agent-harness warp repro, no repetitive
+> operator runs.** A client run here is now a SINGLE verbatim check of a
+> DERIVED object, and its purpose is stated before any minutes are asked for.
+>
+> **The measurement that forced it:** head-to-head over the banner-labelled
+> corpus (two-arm hard bar, active-time denominator) reads **router-ON
+> 1.60/min vs router-OFF 2.44/min**. The router halves warps and kills the
+> no-clip; **nothing this repo ships stops the warps.** "The router fixed the
+> warps" was never established — the no-clip result (§1z) was.
+>
+> **The derived lead: a server-side AgTrack MIRROR — `FINDINGS` §1z-q.** The
+> history chain the client's own reprieve test consults is now decoded whole
+> (node/state layout, the single writer, the 7-field push rule, the 2.5 s and
+> 3.3 s timers, the newest→oldest walk with oldest-match-wins and truncation,
+> every reset, and ArenaNet's own vocabulary), cross-verified with zero offset
+> disagreements. Everything the chain depends on is server-known, so the
+> server can mirror it and evaluate the client's reprieve test BEFORE emitting
+> a grant. **Next step is desk-only: build the mirror, replay it against the
+> existing corpus, and require it to reproduce the historical snaps** — the
+> five dead point-choosing candidates and the two density arms that made warps
+> WORSE are the retrodiction it must pass. Nothing here needs the owner.
+>
+> ⚠ **R8/R8b are SHELVED**, not cancelled — see §D′ and `RUN-R8.md`'s standing
+> block (P2 read and confirmed; only the bridge phase was ever owed).
 
 **The plane channel — the newest thread and the best-measured.** `m_point` is
 `float x, float y, int plane, int`, and the plane is a second channel the arc scored
