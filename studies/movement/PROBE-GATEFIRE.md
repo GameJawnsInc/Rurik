@@ -440,9 +440,9 @@ cd C:/gd/Rurik && python toolkit/clientscan/movetap.py --selftest
 cd C:/gd/Rurik && python toolkit/clientscan/movesync.py --selftest
 ```
 
-`movetap` ends `selftest passed -- 158 checks, floor 158`; `movesync` ends
+`movetap` ends `selftest passed -- 250 checks, floor 250`; `movesync` ends
 `selftest passed -- 80 checks, floor 80`. Both exit 0. **Those two totals are EXACT floors**
-(`SELFTEST_FLOOR` at `movetap.py:884` and `movesync.py:2652`), so any net loss of a check
+(`SELFTEST_FLOOR` at `movetap.py:1469` and `movesync.py:2759`), so any net loss of a check
 reddens them — and for `movetap` that is the **only** per-section guard there is (§12 item 9).
 
 > **NOT `gatetap.py` / `gatescore.py` / `studies/movement/gatefire.tsv`.** Those were
@@ -812,13 +812,23 @@ per block:
   an illustration and not an observation of the client**, and §12's closing rule applies to
   them exactly as it applied to the numbers they replaced.
 
-**There is no third tier, because there cannot be yet.** `vault/captures/movetap/` holds five
-files, all 2026-08-19, and **none carries `gate_reach`, `state_record` or `hist_head`**. No
-post-C9 movetap capture exists anywhere, n = 0. Until the run happens, **no real closing
-block from the tap can exist** — which is exactly why blocks 1–10 are fixtures and say so.
+**There WAS no third tier when this was written, and there is one now — CORRECTED
+2026-08-29, and read the correction rather than the claim.** This paragraph said
+`vault/captures/movetap/` holds five files, all 2026-08-19, that none carries `gate_reach`,
+`state_record` or `hist_head`, and that *"no post-C9 movetap capture exists anywhere,
+n = 0"*. **MEASURED over all 60 files and all 78,805 rows: 53 carry all three**, the
+earliest `movetap-20260821T081927.jsonl`, and 33 carry R5/R7's own fields as well. The run
+happened, 53 times. So *"no real closing block from the tap can exist"* is no longer a
+reason for anything, and blocks 1–10 are FIXTURE-DRIVEN today by inheritance rather than by
+necessity. **That is a debt, not a defect**: a fixture-driven block is still regenerated and
+still compared byte-for-byte by `test_probedoc.py`, so nothing here is unchecked — what is
+missing is that the shapes are hand-laid input rather than a real walk, and §12's closing
+rule still applies to them exactly as it always did. Re-deriving them from a real capture
+needs **both** witnesses moved together, the tier word here and `probedoc_fixtures.DOC_BLOCKS`,
+or §5 reddens.
 
-**How to tell if these blocks have gone stale:** they were produced at HEAD `0841f5e` against
-`movetap.py` sha256 `9ef4b98d4aa849fb96e4cf6864545feab6c98fd913b45362a442cc10a154146e` and
+**How to tell if these blocks have gone stale:** they were produced at HEAD `f62f668` against
+`movetap.py` sha256 `6bef2bb3b4c7663334ffb6af2f6d31515f536954be388401fb72c17e429fe443` and
 `movesync.py` sha256 `de282093612e7ae2c53a14d615f537f719c558aa141c0e54ad3b3aa7b580eb7c`. If
 either hash has moved, re-derive every block before quoting one — a printed sentence that
 changed upstream makes this whole section a description of code that no longer exists, which
@@ -842,6 +852,55 @@ checks. The one OUTPUT that changed is the run summary's chain-cost line, which 
 `chain_cost_line()` and whose delta now prints as a **Hz change** (`-47% Hz if the gate were
 removed`) rather than as an unsigned share — still new output, still not quoted below.
 `movesync.py` did not move; its hash is unchanged, which is the check working.
+
+⚠ **REPINNED A THIRD TIME, 2026-08-29, for CANCELWALK-R5 and R7 — and the verdict this
+time is ZERO DRIFT, which is worth as much as a hit.** `movetap.py` moved in three commits
+none of the notes above records: `1613863` (R5 Tier-1, the walk-start footprint), `f3acf81`
+(H8 refuted at a desk) and `f62f668` (the R7 review), 392 insertions over 2026-08-24.
+**Not one line of it is a printer this section quotes.** An AST comparison of every
+top-level function across `8ce07f5..HEAD` returns `fence_verdict`, `gate1_verdict`,
+`print_episodes`, `count_flips`, `chain_cost_line`, `history_chain` and `early_outs`
+**byte-identical**; three functions were added (`_r5_fields`, `controller_read`,
+`_selftest_r5`) and eight changed, and the two new decoders carry **zero `print` sites** —
+they return dict keys that ride into the stored row and are never rendered. `main()`'s only
+change is `sample(...)` gaining `ctx=_ctx`. The independent evidence is stronger than the
+argument: `test_probedoc.py` regenerated all **15 of 15** blocks and compared them
+byte-for-byte, with the hash as its single FAIL. The only output that moved is
+`--selftest`'s, which this section does not quote.
+
+⚠ **AND THE PIN WAS GREEN OVER THINGS THAT WERE ALREADY WRONG, which is the part to read
+before trusting the next green.** A sha over the source cannot see the prose between the
+blocks, and nobody swept it at either earlier re-pin:
+
+* **The sentence carrying the pin was self-inconsistent.** It said the blocks were produced
+  at HEAD `0841f5e` against these hashes — but `movetap.py` at `0841f5e` hashes to
+  `eedaf547…`, not to the `9ef4b98d…` that was written beside it. The hash was moved twice
+  by the two notes above while the HEAD token was left behind, so `0841f5e` had been stale
+  by two re-pins. `test_probedoc.py`'s `PIN_RE` matches only the sha, never the HEAD, so
+  nothing could catch it. Both now name `f62f668`.
+* **The third-tier paragraph above was false by 53 files.** It said
+  `vault/captures/movetap/` holds five files, all 2026-08-19, none carrying `gate_reach`,
+  `state_record` or `hist_head`, and that *"no post-C9 movetap capture exists anywhere,
+  n = 0"* — which was the stated reason blocks 1–10 are FIXTURE-DRIVEN. **MEASURED
+  2026-08-29 over all 60 files and all 78,805 rows: 53 carry all three fields**, the
+  earliest being `movetap-20260821T081927.jsonl` — which **predates the 12:23 re-pin of
+  that same day by four hours.** It was untrue when the hash was last bumped and nobody
+  looked. **33 carry R5/R7's own fields** (`reqtoken`, `async_reqtoken`, `ctrl_status`,
+  `walk_suppressed`, `gate_a`), first `movetap-20260824T163558.jsonl`. That paragraph has
+  been corrected above; whether blocks 1–10 should be re-derived from a real capture is a
+  decision this note does **not** make, but if it is made it must be made in **both**
+  witnesses at once — the document's tier word and `probedoc_fixtures.DOC_BLOCKS` — because
+  `test_probedoc.py` §5 reddens if they disagree, and relabelling was never a way out.
+* **About 25 of this document's ~30 `*.py:NNN` line citations are stale**, including
+  **all eight `movesync.py` ones, under a pin that is GREEN** — `movesync.py` has not
+  moved since the pin and its citations rotted before it. The substantive claims survive
+  (`grep -in white` still returns exactly one hit in `movetap.py` and it is still a comment;
+  `movesync.py` still returns none); only the line numbers moved. **They are deliberately
+  NOT swept here.** Nothing checks them, they rot again on the next commit, and a
+  25-citation sweep that buys a few days is the treadmill this repo has already paid for
+  once. The honest fix is a check that resolves a citation against the symbol named beside
+  it; until that exists, read every `file.py:NNN` in this document as approximate and grep
+  for the symbol instead.
 
 ⚠ **THIS SECTION WAS WRONG BEFORE 2026-08-20, in five separate ways, and the record of that
 is load-bearing.** The blocks it showed were written **before the instrument existed**, and
@@ -1614,8 +1673,9 @@ recent gamesrv captures; snap corpus **24 snaps / 351.4 s of tapping = 0.068 sna
 `dhbuild` all-ok; `cage` **7 client(s), 0 in the wrong state**; `buildid` 38797 from the
 getter at `0x004729E0` (16 callers); `select_run_exe` → the 38797 stamp directory, quoted
 character for character in step 7; `test_movesync` **150 checks / floor 100**;
-`movetap --selftest` **158 / floor 158**, `movesync --selftest` **80 / floor 80**; the suite
-is **139** `test_*.py` files on disk; `grep -c gate_reach` = **31** in `movetap.py`, **24**
+`movetap --selftest` **250 / floor 250**, `movesync --selftest` **80 / floor 80**; the suite
+is **189** `test_*.py` files on disk (counted with `run_suite.find_tests()`, which discovers
+from the DISK — never from this document or from CLAUDE.md); `grep -c gate_reach` = **31** in `movetap.py`, **24**
 in `movesync.py`, `shut:apply` **0**, `gate1` 87, `early_out_a` 17, `shut:append` 51, the
 `AGBASE+0x14C` read present — and the stale `gatefire-probe-plan-9c31de` worktree answers
 15 / 8 / 0 to the first three. **NOT re-derived for this rewrite:** `contentids.preflight`

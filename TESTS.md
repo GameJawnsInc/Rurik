@@ -4492,7 +4492,7 @@ Floor 75 against a green 75 with 5 declared skips (the archive-conditional
   its call site is deleted, and a coverage check reading the table would then
   certify a section nobody ran -- the same defect one level up; deleting one
   `_wrap(...)` call is one of the eleven mutations, and it reddens. §20 also runs each module's whole `--selftest` (movesync
-  **80**, movetap **231**) so the operator's pre-flight command cannot diverge
+  **80**, movetap **250** — 231 until CANCELWALK-R5 added section 14) so the operator's pre-flight command cannot diverge
   from the
   suite, with a control per module that raises its `SELFTEST_FLOOR` above what a
   green run executes and requires the module to refuse itself. (Both numbers
@@ -5176,7 +5176,17 @@ Floor 75 against a green 75 with 5 declared skips (the archive-conditional
   takes. **(d) earned its keep by finding a real hole in the first draft of this
   file**: a `continue` dropped a registry-side RECONSTRUCTION with no check AND
   no skip -- a block that quietly stopped being covered, this document's original
-  sin reproduced inside its own guard. §6's tally check is the fix. WHAT IT DOES
+  sin reproduced inside its own guard. §6's tally check is the fix — **and for
+  eight days it was not, because the fix was written where the bug is invisible.
+  REPAIRED 2026-08-29.** `handled += 1` sat as the FIRST statement of the loop
+  body, above both `continue`s, so `handled == n` counted ITERATIONS: it printed
+  `15 of 15 accounted for` and could not go red, which is a check-shaped no-op
+  guarding the one hole this file exists to remember. It now counts the LEDGER's
+  own movement — `(LEDGER.ran - ran0) + (len(LEDGER.skips) - skips0)` — so a block
+  that falls through emits neither a check nor a skip and the sum comes up SHORT,
+  wherever a future `continue` is put. Proved both ways by injecting the original
+  sin (a bare `continue` on block 0): **14 of 15, red**, where the old counter
+  said 15 of 15 and passed. WHAT IT DOES
   NOT COVER, named rather than implied: only §6's fenced blocks. §3's pre-flight
   greps (`gate_reach` = 31, `shut:apply` = 0), §5's build lines, §7's failure
   table and §10's addresses are prose and are NOT pinned. And the FIXTURE numbers
@@ -8032,8 +8042,14 @@ the same-tick ALIAS**: the
   instrument excludes itself and says so. `--diff` exits **1 for a changed
   census, which is a result**, 0 for unchanged, the same contract `datcheck.py`
   draws. **68/7 is the founding measurement and not today's**: the census pin is
-  a literal in the test and it is **99 across 14 files** as of 2026-08-19, with
-  1,012 prose citations and 299 test expectations. It had been RED at 86/13 —
+  a literal in the test and it is **233 across 21 files** as of 2026-08-29, with
+  1,812 prose citations and 446 test expectations — and note what this line's own
+  history says about itself, because it is the point. It read **99 across 14
+  files** for ten days and six census moves (113, 134, 135, 151, 156, 189, 204),
+  wrong the whole time, because **no test asserts a number in prose**. The two
+  test literals are on everyone's checklist and this sentence was on nobody's;
+  that is the same failure the changelog records against the literals themselves,
+  with a document standing in for the second witness. It had been RED at 86/13 —
   `framebus.py` 13 → 21, `movetap.py` 0 → 1 (`RVA_TLS_INDEX`, and the 14th file)
   and `pinned.py` 8 → 12 (`PATCHED_TEXT` gaining the key-tap's cave and jump when
   the patched-digest set was added). The docstring's changelog names each, which

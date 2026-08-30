@@ -215,10 +215,11 @@ if exe:
     check(state["schema"]["messages.json"]["validated_against_build"] == pinned.BUILD,
           "the schema stamp is read from where it actually lives",
           "nested under `provenance`; the top level answers None")
-    check(len(state["pins"]) == 204,
-          "and the class-(a) census rides along, at 204",
+    check(len(state["pins"]) == 233,
+          "and the class-(a) census rides along, at 233",
           f"{len(state['pins'])} -- and it must agree with test_buildpins.py's own "
-          f"literal, which is the same number asserted from the other side. Was 64 "
+          f"literal, which is the SAME MEASUREMENT and not a second one; see the "
+          f"end of this string. Was 64 "
           f"until 2026-08-14, when this tooling was cherry-picked onto a `main` that "
           f"had gained seven more build-coupled constants (modelfile.py's FVF stride "
           f"tables and accessor, atex.py's two level-codec VAs) while the branch sat "
@@ -282,6 +283,7 @@ if exe:
           f"not as a defect in your own change. Both literals "
           f"moved together, on purpose: a baseline that "
           f"quietly disagreed with the census it is a baseline OF is how an update "
-          f"report goes green over the wrong tree")
+          f"report goes green over the wrong tree. "
+          f"233 on 2026-08-29: +29 and two new files -- compositetrap.py 14 -> 27, gatetrace.py 0 -> 4 and movehook/readhook.py 0 -> 12, measured against a worktree at a41b5bd scanned with that tree's own instrument. The mitigation reading is on test_buildpins.py's copy and is worse than usual: nine of compositetrap's new pins are call-site VAs matched against return addresses and can never fire, and three of gatetrace's four are guarded by byte patterns that occur thousands of times. AND THE SENTENCE THIS DETAIL USED TO OPEN WITH WAS FALSE, so it has been struck rather than renumbered. It read \"it must agree with test_buildpins.py's own literal, which is the same number asserted from the other side\". THERE IS NO OTHER SIDE. updatecheck.capture() calls the same buildpins.scan(HERE) over the same directory, and buildpins.baseline() is a sorted() over a generator with no de-duplication, so its length equals the live-row count BY CONSTRUCTION -- measured, len(live) = len(baseline) = 233. Nothing an adversary can do to the tree reddens this check without also reddening test_buildpins.py. What it catches is a HUMAN who edits one file and not the other, which is worth catching and has happened twice, but it is a spelling check on the edit and not a second reading of the tree. Two instruments that share a sampler are one theorem; the honest version of this check is the one that says so.")
 
 sys.exit(LEDGER.verdict())

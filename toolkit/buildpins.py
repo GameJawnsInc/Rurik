@@ -90,8 +90,28 @@ def mask_shaped(value, text):
     Three tests, each of which removed real false positives from the first run:
     a single set bit (`0x00400000`, `0x00010000`), an all-ones run
     (`0x00FFFFFF`), and a literal written with two or fewer distinct hex digits
-    (`0x00FF00FF`, `0x00f00000`). No address in this tree is shaped like any of
-    them, and every constant that is turned out not to be an address.
+    (`0x00FF00FF`, `0x00f00000`).
+
+    THE THIRD TEST HAS A BLIND SPOT AND THIS DOCSTRING USED TO DENY IT. It said
+    "No address in this tree is shaped like any of them, and every constant that
+    is turned out not to be an address." MEASURED 2026-08-29, that is false in
+    exactly two places, and the sharper one is a line-neighbour of a counted pin:
+
+        movetap.py:1866   _bytes_at(buf, secs, 0x00605FF9, 7)   <- COUNTED
+        movetap.py:1867   _bytes_at(buf, secs, 0x00606000, 2)   <- INVISIBLE
+
+    Both are virtual addresses read out of the same image in the same
+    expression; the second is dropped because its digits are {0, 6}.
+    `compositetrap.TEXT_HI` 0x00a00000 is the other. The remaining five VA-range
+    literals the filter drops in non-test files ARE correctly excluded (three in
+    mapdata/gwdat.py's size table, two in authsrv/questdefs.py's masks), which is
+    why the heuristic stays: it is right far more often than it is wrong, and
+    tightening it would re-admit those.
+
+    So THE CENSUS TOTAL IS A FLOOR, NOT A COUNT, and the two known invisible
+    addresses are named above so the floor is a stated one. An address that
+    wanted to hide from this meter would only have to choose its digits; nothing
+    here would notice, and test_buildpins.py's literal would stay green.
     """
     if value <= 0:
         return True

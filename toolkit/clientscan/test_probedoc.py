@@ -380,14 +380,32 @@ def main():
     say("  FIXTURE-DRIVEN blocks are regenerated from probedoc_fixtures.py.")
     say("  OBSERVED blocks are re-run over the vault captures they name; the")
     say("  vault is gitignored, so a machine without it declares a skip.")
-    handled = 0
+    # THE TALLY IS READ OFF THE LEDGER, and that is the whole point of it.
+    # It was `handled = 0` here and `handled += 1` as the FIRST statement of the
+    # loop body -- above both `continue`s -- so it counted ITERATIONS and
+    # `handled == n` could not go red. It printed `15 of 15 accounted for` and
+    # always would have.
+    #
+    # That is worse than a dead check, because of WHAT this one is for. The
+    # docstring above credits this tally with catching this file's original
+    # sin: a `continue` that dropped a registry-side RECONSTRUCTION with no
+    # check AND no skip, a block that quietly stopped being covered. The repair
+    # put the counter where a recurrence of precisely that bug is invisible.
+    #
+    # Counting the LEDGER's own movement fixes it independently of where any
+    # future `continue` is placed: a block that falls through emits neither a
+    # check nor a skip, so the sum comes up SHORT. Exactly one of the two is
+    # emitted on every path today (RECONSTRUCTION -> skip; vault absent ->
+    # skip; FIXTURE-DRIVEN -> check; OBSERVED -> check; unknown tier ->
+    # check(False)), which is what makes the equality the right assertion
+    # rather than an inequality.
+    ran0, skips0 = LEDGER.ran, len(LEDGER.skips)
     for i in range(n):
         spec, tier = FIX.DOC_BLOCKS[i], tiers[i]
         a, b, _ = bare[i]
         body = lines[a + 1:b]
         label = f"§6 {spec['block']} == {spec['source']}"
         where = f"doc lines {a + 1}-{b + 1}"
-        handled += 1
 
         # EITHER witness saying RECONSTRUCTION is enough to stop the comparison.
         # The document's label is honoured so the block is never REPORTED as
@@ -423,9 +441,11 @@ def main():
             check(False, f"{label}: the registry names a tier nothing handles",
                   repr(spec["tier"]))
 
+    handled = (LEDGER.ran - ran0) + (len(LEDGER.skips) - skips0)
     check(handled == n,
           "every block in §6 was compared or declared skipped -- none fell through",
-          f"{handled} of {n} accounted for")
+          f"{handled} of {n} accounted for -- counted as checks and skips the "
+          f"loop actually emitted, so a block that falls through subtracts one")
 
     # ----------------------------------------------------------------- §7
     head("§7  EVERY FIXTURE IS DETERMINISTIC, AND THE UNQUOTED ONES STILL RUN")
