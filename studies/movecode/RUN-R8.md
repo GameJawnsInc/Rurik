@@ -83,8 +83,14 @@ python toolkit/clientscan/planecensus.py --armed
 ```
 
 That last one prints the empty cell this run exists to fill. **Read it before
-you launch** — if it already shows an armed router-off capture, R8 has been run
-and this sheet is stale.
+you launch** — but as of 2026-08-30 the armed-router-off cell is no longer a
+reliable staleness test: `authsrv-20260830T183051-c1.jsonl` IS an armed
+router-off capture and is **NOT R8** — it is the aborted first attempt
+(spontaneous carve-entry stuck at (−4314, −2206), walker dead 464 s, 117
+clicks all refused, client closed; zero plane-37 exposure, every floor unmet;
+see §7's last bullet). **The staleness test is the header's**: R8 ran iff
+FINDINGS has a §1z-p heading. Score the abort capture separately; never fold
+it into R8's predictions.
 
 ## 2. The commands — R8
 
@@ -116,6 +122,17 @@ It must contain `plane repair (default ON)` and must NOT contain
 premise — §C's rule is that the banner is the authority, and this sheet's whole
 subject is a flag combination nobody has recorded.
 
+> ⚠ **The banner scrolls past a `-Tail 5` attach** (observed 2026-08-30: the
+> operator's tail opened after it printed and the premise went unconfirmed).
+> If you missed it, check without disturbing the tail, in a separate window:
+>
+> ```bash
+> Select-String -SimpleMatch -Pattern 'plane repair (default ON)','--router ON' -Path (Get-ChildItem C:\gd\Rurik\vault\captures\harness\*\gamesrv.log | Sort-Object LastWriteTime)[-1].FullName
+> ```
+>
+> Exactly one hit — `plane repair (default ON)` — and no `--router ON` hit is
+> a pass.
+
 Terminal 2 — arm the hook on arrival at the bridge (§3 step 3), not at launch:
 the DLL's timer starts at injection.
 
@@ -137,7 +154,12 @@ python toolkit/clientscan/movehook/attach.py --stop
 ## 3. What to do in the map — R8. PROVOKE NOTHING.
 
 1. **Ordinary play, ~3 minutes.** Walk and click around spawn, mixing keys and
-   clicks. Terminal 1b should stay silent.
+   clicks. ⚠ The tail is the FULL gamesrv log and it is a firehose by design —
+   every keypress prints heading and grant traffic. **"Silent" means the plane
+   channel only: no line starting `[plane-echo]` and no line starting
+   `[plane-repair]`.** Everything else is noise. (Observed 2026-08-30: the
+   firehose was read as a step-1 failure; the run was healthy. The ladder never
+   prints to console at all — it is JSONL-only, scored afterward.)
 2. **The negative control, ~10 s.** On plain single-plane {0} ground — the
    walled compound east of spawn — hold a movement key INTO the wall for a slow
    ten-count, then release. **Note the wall clock.** This is the FREEZE half of
@@ -264,3 +286,22 @@ carry it either — say "provoked" beside every R8b fire count.
   on.
 - **Do not quit on a lock.** It is the jackpot. The heal is the one thing four
   armed sessions have not been able to try.
+- **A spontaneous CARVE-ENTRY STUCK is possible under this configuration, and
+  it has no rescue channel. It happened on the first attempt (2026-08-30,
+  `authsrv-20260830T183051-c1.jsonl`).** With `--router` off, a click the
+  server refuses is left to the client's own pathing, and the client
+  dead-reckons: on the abort tape it took a **530 u step in 0.27 s** toward a
+  refused click behind the compound wall, landed on rendered ground the mesh
+  deliberately carves out (off-mesh — RECONSTRUCTION for the step's mechanism,
+  OBSERVED for everything after), and its walker died: **464 s of
+  byte-identical reports with changing headings, 117 clicks all refused, 53
+  zero-lead grants echoing the stuck point back, zero ladder rows after the
+  entry transition, zero `[plane-echo]` lines** (the tripwire is off-mesh
+  blind by design), and the repair correctly DISARMED throughout (off-mesh
+  clause — there is no plane to restamp to). R6b's identical class was healed
+  in 81 ms by a routed grant; with the router off the only exit is closing the
+  client. If it happens: note the wall clock, try release-3s-then-click twice,
+  then close the client, Ctrl+C the harness, relaunch, and restart the sheet
+  from step 1 — the abort capture is still real data, scored on its own.
+  **Do not press M to orient** — the world map crashes the client on this map
+  (the FOG INIT SKIPPED line in the banner).
