@@ -2629,3 +2629,102 @@ same latent bug `test_compositetrap.py` had, corrected the same day.
 
 §4.6, §4.12, §9.1, §9.2, the REPLACE-vs-MERGE question, the writer outside
 `0x0082EDA0`, the two odd instances and their trigger, `row+0x08`, and this.
+
+## 9.25 The upstream map was keyed on CALL SITES for five days — nine of eleven could never fire, and no finding moves (2026-08-30)
+
+Found by the build-pin census on 2026-08-29 (`test_buildpins.py`'s 233 entry),
+logged there rather than fixed there, and paid here.
+
+`UPSTREAM_CALLERS` names which path produced a captured composite row. It is
+consumed at `compositetrap.py` `_cap_slotcache` against addresses walked off
+the EBP chain — `[ebp+4]`, i.e. **return** addresses. **Nine of its eleven keys
+were CALL-SITE VAs.** Decoding the pinned 38797 image puts an `E8 rel32` AT the
+address, not before it:
+
+| key | at the VA | targets |
+|---|---|---|
+| `0x004B1847` `0x004B1880` `0x004B18DE` `0x004B18F8` `0x004B1924` `0x004B193B` `0x004B194A` | `E8 rel32` | `SetSlotItem 0x0082D6A0` |
+| `0x004EE324` `0x00875BA8` | `E8 rel32` | the per-slot worker `0x004B1800` |
+| `0x004EEC34` `0x007F9F5F` | `E8 rel32` at **va−5** | `0x004EE240` / `0x007F8510` |
+
+**The two that work are the two §9.21 MEASURED off a live frame.** The nine
+that cannot were read off a disassembly, which names the `call`. That split is
+the whole tell, and it is the same shape as
+[[feedback-a-forwarder-names-the-messenger]] one level down: the disassembly
+answers "where is the call", the instrument asks "where does it return to",
+and nobody checked that the two questions had the same answer.
+
+### Why nothing caught it, and it is this arc's own rule
+
+Every reference to the map in `test_compositetrap.py` was a dict-membership,
+count or name check against fixtures carrying **the same literals** —
+`FRAMES` built its synthetic chain out of `0x004B1880` and `0x004EE324`, the
+call sites, so a fixture that could not match a real frame agreed with a map
+that could not match a real frame. A literal compared with a copy of itself
+cannot fail. `WRITER_CALLERS`, ten lines above it in the same module, has had
+the pinned-image byte check since the day it landed (`at(va - 5, 5)` must
+start `0xE8` and target the writer) — the technique was in the file, it was
+just never pointed at the second map. **CLAUDE.md's "a check that cannot fail
+is not a check", exactly.**
+
+And the failure was not silence. The consumer's `else` branch reports
+`NOT in UPSTREAM_CALLERS -- an unlisted path, which is a result`, so a chain
+whose outermost named frame was one of the nine would have printed a path this
+arc spent §9.21 and §9.22 identifying **as a new one** — a wrong answer shaped
+like a finding.
+
+### Repaired by re-keying, NOT by deleting, and the reason is the interesting part
+
+The census's own doctrine prefers a smaller liability, and deleting the nine
+was available at 233 → 224. It was **not taken**, because the evidence for it
+is the bug. They named nothing in any recorded run — §9.21 and §9.22 are the
+run log of record, no `compositetrap --out` report was ever written to the
+vault — but they named nothing because they *could* not:
+
+- Every function in the chain opens `push ebp; mov ebp,esp` — the writer
+  `0x0082EDA0`, `SetSlotItem 0x0082D6A0`, the worker `0x004B1800` and
+  `GmDoll`'s `0x004EE240`. Read out of the image, not assumed.
+- So `walk_frames(depth=4)` reaches four real returns, and the corrected keys
+  sit at **frame 1** (the seven inside the worker) and **frame 2** (its two
+  callers). They are live and reachable, not dead weight.
+- The consumer takes the **outermost** match, so the paper-doll path still
+  resolves to `0x004EEC34` and **no answer this arc published moves.**
+- Deleting would have made the wrong-answer mode *worse*: on the `UiChInfo`
+  path, frame 3 is a function nothing here has named, so without `0x00875BAD`
+  at frame 2 the report calls a known path unlisted.
+
+`0x004EE329` and `0x004EEC34` both name `GmDoll` and both are correct — the
+first is the return of `0x004EE240`'s call to the worker, one frame *inside*
+the second, which is `0x004EEC2F`'s return. The chain holds them together.
+
+### The guard, and it re-derives rather than compares
+
+`test_compositetrap.py` §6 now decodes **both** maps out of the pinned image
+and, for the upstream map, rebuilds the two caller sets from the bytes:
+
+1. every key is the byte after a `call rel32` (`0xE8` at `va − 5`); the
+   failure detail names the repair — *0xE8 sits AT the va … the key wants va+5*;
+2. the seven worker rows **are** every `call 0x0082D6A0` inside the worker's
+   `0x17E` bytes — exactly seven of `SetSlotItem`'s forty call sites, computed
+   from the image rather than compared with the list;
+3. the worker has **exactly two** callers in the whole image and both are
+   listed, which is what closes frame 2.
+
+`call rel32` is position-dependent, so there is no fixed byte pattern to
+hand-type and accidentally aim at a decoy — the scan computes targets, which
+is `codescan --xrefs`'s own method. All three redden on the original defect
+(verified by putting `0x004B1880` back, and by deleting `0x00875BAD`). 102 →
+105 checks; the census literal does not move, eleven keys before and after.
+
+### One more thing the bare-machine path was hiding
+
+§1 declares `LEDGER.skip("image sections", …)` under `except Exception`, but
+`pinned.find()` raises **`SystemExit`**, which `Exception` does not catch — so
+on a machine with no vault this file exited 1 with no verdict rather than
+skipping, and the floor comment's whole story about "four honest skips" had
+never been walked. Fixed in the same commit; measured, not reasoned: an empty
+`RURIK_VAULT` now gives **83 checks, 2 declared skips, rc=0**, so the floor of
+78 stays where it is with five checks of slack.
+
+**No finding in this document changes.** The instrument was under-guarded and
+one of its labels could have lied; nothing it reported did.

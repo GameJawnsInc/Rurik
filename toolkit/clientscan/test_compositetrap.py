@@ -29,6 +29,15 @@ three CpsBase offsets, it checks that they CLOSE -- `0x24 + 9*16 = 0xB4` and
 "+0x99/+0xA9 dye bytes" land inside the first of them, on rows 7 and 8 at byte
 1. Three independently-read displacements agreeing to the byte is an assertion
 the artifact can refute; a list of offsets copied out of a disassembly is not.
+§6 also owns BOTH caller maps, which is new on 2026-08-30 and is the reason
+this file did not catch a live defect for five days: `WRITER_CALLERS` had a
+pinned-image byte check from the start, `UPSTREAM_CALLERS` had only
+dict-membership and count checks against fixtures carrying the same literals,
+and NINE of its eleven keys were CALL-SITE VAs sitting in a map consumed
+against return addresses off `[ebp+4]`. A literal compared with a copy of
+itself cannot fail. §6 now decodes every key of BOTH maps out of the image and
+re-derives the two caller SETS from it -- `call rel32` has no fixed byte
+pattern to hand-type and point at a decoy, so the scan computes targets.
 §8 pins the slot tables to `authsrv.py`'s own source and `content/items.toml`,
 including the deliberately awkward one: `costume_body`'s dye tint is 0, which
 is also what an unwritten row holds, so the check exists to keep the module
@@ -64,7 +73,8 @@ def JOIN(ls):
 # Set from the run every time; guessed low five times before that stuck.
 #
 # AND THE FLOOR IS NOW THE MANDATORY CORE, WHICH IS LOWER THAN 80 WAS.
-# A whole green run is 102. Four sections need something this machine may not
+# A whole green run is 105 (102 until the UPSTREAM_CALLERS image checks landed
+# on 2026-08-30). Four sections need something this machine may not
 # have and declare skips: §1 (6) and §2 (4) the pinned client, §5 (1) and §8
 # (13) the vault's content -- 24 in all, leaving 78 that always run. The old
 # 80 was set from a full run and sat ABOVE that core, so a machine without a
@@ -74,6 +84,13 @@ def JOIN(ls):
 # sections declare skips", which is what `test_commandertrap.py` does; this
 # file was the outlier. Lowering it is deliberate and it loses nothing: the
 # skips are printed either way.
+#
+# MEASURED 2026-08-30 rather than reasoned: `RURIK_VAULT` pointed at an empty
+# directory gives **83 checks, 2 declared skips, rc=0**, so 78 is a floor with
+# five checks of slack and is left where it is. Before that day the same run
+# gave rc=1 and NO verdict -- `pinned.find()` raises `SystemExit`, which the
+# `except Exception` at §1 did not catch, so the bare-machine path this
+# paragraph describes had never actually been walked.
 LEDGER = checks.Ledger("composite trap", floor=78)
 check = checks.adopt(LEDGER)
 
@@ -83,7 +100,11 @@ try:
     import pinned
     exe, why = pinned.find()
     data = open(exe, "rb").read()
-except Exception as exc:                                    # noqa: BLE001
+except (Exception, SystemExit) as exc:                      # noqa: BLE001
+    # SystemExit, and it has to be named: `pinned.find()` RAISES one when
+    # the build is not in the vault, and `Exception` does not catch it --
+    # so on a machine without the vault this file died at line 1 with rc=1
+    # instead of declaring the skip the floor comment above describes.
     LEDGER.skip("image sections", f"pinned client unavailable: {exc}")
     data = None
 
@@ -328,6 +349,73 @@ if data is not None:
           f"are exactly six, which is what `codescan --xrefs` finds and what "
           f"makes an UNLISTED return address a result rather than a gap",
           f"{bad}")
+    # UPSTREAM_CALLERS IS THE SAME KIND OF MAP AND UNTIL 2026-08-30 IT HAD
+    # NONE OF THIS. It is looked up against addresses walked off `[ebp+4]`,
+    # so its keys must be return addresses too -- and NINE OF THE ELEVEN WERE
+    # CALL-SITE VAs, which can never equal one. Every check it had was a
+    # dict-membership or count check against a fixture carrying the same
+    # literals, i.e. a literal compared with a copy of itself, while the byte
+    # check above was never pointed here. And the failure was not silence: a
+    # chain whose outermost named frame was one of the nine printed "NOT in
+    # UPSTREAM_CALLERS -- an unlisted path, which is a result" for a path this
+    # arc had already spent three sections naming.
+    bad = {}
+    for va, why in sorted(t.UPSTREAM_CALLERS.items()):
+        ins, here = at(va - 5, 5), at(va, 5)
+        if not ins or ins[0] != 0xE8:
+            bad[hex(va)] = (
+                f"not a return: [va-5] = {ins.hex() if ins else None}"
+                + (f" -- 0xE8 sits AT the va, so this is the CALL SITE of "
+                   f"0x{va + 5 + struct.unpack_from('<i', here, 1)[0]:08X}, "
+                   f"and the key wants va+5"
+                   if here and here[0] == 0xE8 else ""))
+    check(not bad and len(t.UPSTREAM_CALLERS) == 11,
+          f"all {len(t.UPSTREAM_CALLERS)} entries of UPSTREAM_CALLERS are the "
+          f"byte after a `call rel32` in the pinned image -- the same check "
+          f"WRITER_CALLERS has had from the start, and the one whose absence "
+          f"let nine call-site VAs sit in a return-address map for five days",
+          f"{bad}")
+    # AND BOTH CALLER SETS RE-DERIVED FROM THE IMAGE rather than compared with
+    # a copy of themselves. `call rel32` is position-dependent, so there is no
+    # fixed byte pattern to hand-type and point at a decoy: scan the opcode at
+    # every alignment and COMPUTE the target, which is what `codescan --xrefs`
+    # does. Phantoms are possible in a non-linear scan and would show up here
+    # as a COUNT that is too high, which is a red rather than a silent pass.
+    SETSLOTITEM, WORKER = 0x0082D6A0, 0x004B1800
+
+    def call_sites(target):
+        out = []
+        for sva, vsize, rs, raw in secs:
+            if not (sva <= WORKER < sva + vsize):   # the section holding .text
+                continue
+            blob = data[raw:raw + rs]
+            i = blob.find(b"\xe8")
+            while 0 <= i <= len(blob) - 5:
+                va = sva + i
+                if va + 5 + struct.unpack_from("<i", blob, i + 1)[0] == target:
+                    out.append(va)
+                i = blob.find(b"\xe8", i + 1)
+        return out
+
+    wsize = at(WORKER, 0x400).find(b"\xcc\xcc")         # to the int3 padding
+    inner = {c + 5 for c in call_sites(SETSLOTITEM)
+             if WORKER <= c < WORKER + wsize}
+    listed = {k for k in t.UPSTREAM_CALLERS if WORKER <= k <= WORKER + wsize}
+    check(0 < wsize < 0x400 and len(inner) == 7 and inner == listed,
+          f"the seven `UiCharModel worker` rows ARE every `call 0x0082D6A0` "
+          f"inside the per-slot worker, re-derived from the image -- seven of "
+          f"SetSlotItem's 40 call sites lie in the worker's 0x{wsize:X} bytes, "
+          f"so a row that is missing or five bytes out reddens HERE instead of "
+          f"leaving the report unable to name a frame",
+          f"image {sorted(hex(v) for v in inner)} vs map "
+          f"{sorted(hex(v) for v in listed)}")
+    outer = {c + 5 for c in call_sites(WORKER)}
+    check(len(outer) == 2 and outer <= set(t.UPSTREAM_CALLERS),
+          "and the worker has exactly TWO callers in the whole image, both "
+          "listed -- which is what closes frame 2, where the UiChInfo path is "
+          "named. An unlisted address THERE is a genuinely new path rather "
+          "than a row somebody forgot to copy",
+          f"image {sorted(hex(v) for v in outer)}")
 
     orins = at(0x0082EFD4, 6)
     repl = at(0x0082EFDA, 3)
@@ -819,9 +907,13 @@ print("== 9. the frame walk, and the ordering scored per instance ==")
 # through a function with no frame pointer yields a plausible wrong caller,
 # and this arc has already paid once for a capture that confidently answered
 # the wrong question (heroes §36.6). So the refusals are checked first.
+# AND THESE ARE RETURN ADDRESSES, which is the whole point: until
+# 2026-08-30 this fixture held 0x004B1880 and 0x004EE324, the CALL sites,
+# so it agreed with an UPSTREAM_CALLERS that could never match a real
+# frame. A fixture built from the same wrong literal cannot refute it.
 FRAMES = {0x1000: (0x2000, 0x0082D6F6),      # writer   -> SetSlotItem
-          0x2000: (0x3000, 0x004B1880),      #          -> the per-slot worker
-          0x3000: (0x4000, 0x004EE324),      #          -> GmDoll
+          0x2000: (0x3000, 0x004B1885),      #          -> the per-slot worker
+          0x3000: (0x4000, 0x004EE329),      #          -> GmDoll
           0x4000: (0x0000, 0x00000000)}
 
 
@@ -836,12 +928,12 @@ def framereader(frames):
 
 
 chain = t.walk_frames(framereader(FRAMES), 0x1000, depth=4)
-check(chain == (0x0082D6F6, 0x004B1880, 0x004EE324),
+check(chain == (0x0082D6F6, 0x004B1885, 0x004EE329),
       "the EBP chain walks THREE deep and reaches GmDoll -- the frame that "
       "actually chose the slot ordering, which one frame could never name",
       f"{[hex(x) for x in chain]}")
-check(t.walk_frames(lambda a, n: struct.pack("<2I", 0x0500, 0x004EE324)
-                    if n == 8 else None, 0x1000, depth=4) == (0x004EE324,),
+check(t.walk_frames(lambda a, n: struct.pack("<2I", 0x0500, 0x004EE329)
+                    if n == 8 else None, 0x1000, depth=4) == (0x004EE329,),
       "a frame pointer that moves DOWN ends the chain instead of following "
       "it -- an unwinding stack walks up, and a descending link is the shape "
       "a garbage read produces")
@@ -852,7 +944,7 @@ check(t.walk_frames(lambda a, n: struct.pack("<2I", 0x9000, 0xDEADBEEF)
 check(t.walk_frames(framereader(FRAMES), 0x1002, depth=4) == (),
       "and an unaligned frame pointer is refused at the first step")
 check(t.walk_frames(framereader(FRAMES), 0x1000, depth=2)
-      == (0x0082D6F6, 0x004B1880),
+      == (0x0082D6F6, 0x004B1885),
       "depth is a real bound, not a suggestion -- the walk stops where it is "
       "told even when more frames are readable")
 
@@ -906,8 +998,8 @@ try:
 finally:
     t.OUR_SLOT_VALUE = _saved
 
-UP = {"stack (VAs)": ("0x0082D6F6", "0x004B1880", "0x004EE324"),
-      "upstream": "0x004EE324 " + t.UPSTREAM_CALLERS[0x004EE324],
+UP = {"stack (VAs)": ("0x0082D6F6", "0x004B1885", "0x004EE329"),
+      "upstream": "0x004EE329 " + t.UPSTREAM_CALLERS[0x004EE329],
       "caller (VA)": 0x0082D6F6, "agent": 0x0BADF00D}
 lines, _ = t._analyse_cache(CSITES, chits(GOOD_ROWS, extra=(),
                                           ids=GOOD_IDS))
@@ -926,7 +1018,7 @@ blob = "\n".join(lines)
 check("ordering: CpsBase (the permuted in-world order)" in blob,
       "the world instance's m_slotItemId scores as the PERMUTED order",
       blob[-700:])
-check("upstream 0x004EE324 GmDoll" in blob and "agent(s) 0x0BADF00D" in blob,
+check("upstream 0x004EE329 GmDoll" in blob and "agent(s) 0x0BADF00D" in blob,
       "and the upstream and the agent are both named on the instance line -- "
       "the two fields that separate 'the doll dressed it' from 'the world "
       "dressed it' without any interpretation at the desk")
@@ -959,12 +1051,20 @@ lines, _ = t._analyse_cache(CSITES, chits({2: GOOD_ROWS[2]},
 check("ordering: NEITHER" in "\n".join(lines),
       "and an item id belonging to no slot in either ordering is NEITHER, "
       "not silently absent")
-check(0x004EE324 in t.UPSTREAM_CALLERS and 0x00875BA8 in t.UPSTREAM_CALLERS
+# A SHAPE CHECK, AND IT SAYS SO, because for five days it was the ONLY check
+# this map had and it was green while nine of the eleven keys were call-site
+# VAs that could never match a walked frame. It counts rows and ranges; what
+# decides whether a key is a RETURN address is §6, against the pinned image.
+# Kept anyway: it runs on a machine with no vault, where §6 skips.
+check(len(t.UPSTREAM_CALLERS) == 11
       and len([k for k in t.UPSTREAM_CALLERS if 0x004B1800 <= k < 0x004B1A00])
-      == 7,
-      "the upstream map carries both callers of the per-slot worker AND all "
-      "seven of its own call sites, read from the image before the run so an "
-      "address means something the moment it arrives",
+      == 7
+      and 0x004EE329 in t.UPSTREAM_CALLERS
+      and 0x00875BAD in t.UPSTREAM_CALLERS,
+      "the upstream map carries the returns of both callers of the per-slot "
+      "worker AND of all seven `call SetSlotItem` inside it -- a SHAPE check "
+      "only: that these are returns rather than call sites is decided in §6 "
+      "out of the image, and nothing decided it before 2026-08-30",
       f"{sorted(hex(k) for k in t.UPSTREAM_CALLERS)}")
 # THE TWO ADDRESSES THE RUN ACTUALLY PRODUCED, and they are the answer to
 # §9.11: 0x004EEC34 is GmDoll (the paper doll, EQUIP-SLOT order) and
@@ -976,7 +1076,7 @@ for va, want in ((0x004EEC34, "GmDoll"), (0x007F9F5F, "AvChar")):
           f"0x{va:08X} is named as {want} -- MEASURED, not inferred",
           f"{t.UPSTREAM_CALLERS.get(va)!r}")
 check(t.walk_frames(framereader({0x1000: (0x2000, 0x0082D6F6),
-                                 0x2000: (0x3000, 0x004B1880),
+                                 0x2000: (0x3000, 0x004B1885),
                                  0x3000: (0x4000, 0x00600000)}),
                     0x1000, depth=4)[-1] == 0x00600000,
       "and an address in the code window but NOT in the map still reaches the "
