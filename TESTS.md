@@ -7510,7 +7510,27 @@ the same-tick ALIAS**: the
   `[8]+5` — byte 1 of each costume slot's own row — and that the override
   `or edx,0x20000006` really is opcode 0x81 /1 rather than a MOV, next to the
   `mov [ebp-8],eax` that overwrites the file id, which is why "replace or
-  merge" is a per-field question. **§7's fixture is the first live run's own
+  merge" is a per-field question. **§6 also owns BOTH caller maps, and that
+  half is new on 2026-08-30 because its absence hid a live defect for five
+  days.** `WRITER_CALLERS` had a pinned-image byte check from the start —
+  every key must be the byte after a `call 0x0082EDA0` — while
+  `UPSTREAM_CALLERS`, which is consumed the same way (looked up against
+  addresses walked off `[ebp+4]`), had only dict-membership and count checks
+  against fixtures carrying the same literals. NINE of its eleven keys were
+  CALL-SITE VAs, which can never equal a return address, so nine of eleven
+  could never fire; the two that ever named anything are the two that were
+  MEASURED off a live frame rather than read off a disassembly, and that split
+  is the tell. The failure mode was not silence — a chain ending on one of the
+  nine fell through to "NOT in UPSTREAM_CALLERS — an unlisted path, which is a
+  result", i.e. a wrong answer shaped like a finding. §6 now decodes every key
+  of BOTH maps out of the image and, for the upstream map, re-DERIVES the two
+  caller sets from it: every `call 0x0082D6A0` inside the per-slot worker's
+  0x17E bytes (exactly seven of SetSlotItem's forty call sites) and every
+  `call 0x004B1800` in the image (exactly two, both listed). `call rel32` is
+  position-dependent, so there is no fixed byte pattern to hand-type and aim
+  at a decoy — the scan computes targets. All three checks redden on the
+  original defect, and the failure detail names the repair ("0xE8 sits AT the
+  va … the key wants va+5"). **§7's fixture is the first live run's own
   reading, verbatim** — CpsBase's measured slot order, the override array it
   held, the thirteen rows it wrote — because synthesising a tidier arrangement
   would let the analyser pass on a shape the client does not produce, and the
@@ -7612,10 +7632,15 @@ the same-tick ALIAS**: the
   in the map still reaches the report, or the one path nobody predicted would
   be the one path a run could not show.
   Needs the pinned exe for §§1-2/§6 and the vault for §5, all SKIP-declared;
-  a whole green run is 102 and the floor is **78**, its MANDATORY CORE --
-  lowered from 76/80, which sat ABOVE it, so a machine without a vault would
-  have failed on the floor instead of reading four honest skips and the
-  shortfall would have named the wrong thing),
+  a whole green run is 105 (102 before the two caller maps got their image
+  checks) and the floor is **78**, its MANDATORY CORE -- lowered from 76/80,
+  which sat ABOVE it, so a machine without a vault would have failed on the
+  floor instead of reading four honest skips and the shortfall would have
+  named the wrong thing. **That bare-machine path had never been WALKED until
+  2026-08-30**, and it did not work: `pinned.find()` raises `SystemExit`,
+  which §1's `except Exception` does not catch, so an empty `RURIK_VAULT` gave
+  rc=1 and no verdict rather than a skip. Now measured rather than reasoned --
+  83 checks, 2 declared skips, rc=0 -- which is why 78 stays where it is),
   `toolkit/clientscan/test_msgshape.py` (the client's message-format tables,
   DERIVED from the image instead of remembered — `studies/crossbuild/PLAN.md` §3,
   and the reason that plan put this file first. `msgshape` underpins

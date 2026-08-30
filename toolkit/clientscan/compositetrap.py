@@ -369,9 +369,26 @@ WRITER_CALLERS = {
 #: safe to call the agent pointer rather than a guess.
 SETSLOTITEM_RET = 0x0082D6F6
 
-#: UPSTREAM of `SetSlotItem`, one and two frames further out. Read statically
-#: on 38797 before any run, so an address arriving here means something the
-#: moment it appears and an UNLISTED one is a result rather than a gap.
+#: RETURN ADDRESS -> the UPSTREAM path, one to three frames beyond
+#: `SetSlotItem`. Same convention as `WRITER_CALLERS` above, and it has to be
+#: the same one: the consumer walks the EBP chain and reads `[ebp+4]`, so every
+#: key here is compared against a RETURN address, and a CALL-SITE VA can never
+#: equal one.
+#:
+#: **NINE OF THESE ELEVEN WERE CALL SITES UNTIL 2026-08-30, SO NINE OF THEM
+#: COULD NEVER FIRE.** They were read off a disassembly, which names the
+#: `call`; the two that ever named an answer -- `0x004EEC34` and `0x007F9F5F`
+#: -- are the two that were MEASURED off a live frame, and that split is the
+#: whole tell. Nothing caught it because every test of this map was a
+#: dict-membership or count check against a fixture carrying the same
+#: literals, i.e. a literal compared with a copy of itself, while the pinned-
+#: image byte check that guards `WRITER_CALLERS` was never pointed here. And
+#: the failure mode was not silence: a chain whose outermost named frame was
+#: one of the nine fell through to the `NOT in UPSTREAM_CALLERS -- an unlisted
+#: path, which is a result` branch, so a path this arc had already named would
+#: have been reported as a NEW one. Repaired by re-keying to `call + 5`; the
+#: guard is now test_compositetrap.py §6, which decodes all eleven out of the
+#: pinned image and re-derives both caller sets from it.
 #:
 #: `codescan --xrefs 0x0082D6A0` gives SetSlotItem 40 direct callers and **not
 #: one passes a literal slot above 1** -- the armour slots always arrive in a
@@ -382,16 +399,37 @@ SETSLOTITEM_RET = 0x0082D6F6
 #: !m_compositeBasic`, `:661 !m_compositePlayer` and `:662 !m_model`, so it
 #: owns two composites and a model and creates them together -- which is the
 #: shape of §9.11's two-at-once and §9.17's three-at-once bursts.
+#:
+#: AND THE CHAIN IS FOUR DEEP AND WALKABLE, which is why the nine were worth
+#: repairing rather than deleting -- the cheaper move, and it would have been
+#: deleting them on the strength of the bug. Every function in the chain opens
+#: `push ebp; mov ebp,esp`: the writer `0x0082EDA0`, `SetSlotItem`, the worker
+#: `0x004B1800` and `GmDoll`'s `0x004EE240`. So `walk_frames(depth=4)` reaches
+#: SetSlotItem's return at frame 0, the worker's return at frame 1, the
+#: worker's caller's return at frame 2 and one frame past that. The consumer
+#: takes the OUTERMOST match, so on the paper-doll path `0x004EEC34` still
+#: wins and NO answer this arc has published moves. What the nine buy is every
+#: other case: a chain that stops short, and the `UiChInfo` path, whose frame 3
+#: is a function nothing here has named -- without `0x00875BAD` at frame 2 it
+#: reports itself as unlisted, which is a wrong answer that reads as a finding.
 UPSTREAM_CALLERS = {
-    0x004B1847: "UiCharModel worker -> clear slot (hide flag)",
-    0x004B1880: "UiCharModel worker -> dress slot (armour path)",
-    0x004B18DE: "UiCharModel worker -> slot 1 (two-handed)",
-    0x004B18F8: "UiCharModel worker -> slot 0",
-    0x004B1924: "UiCharModel worker -> slot 1",
-    0x004B193B: "UiCharModel worker -> slot 1",
-    0x004B194A: "UiCharModel worker -> slot 0",
-    0x004EE324: "GmDoll -- the equipment PAPER DOLL",
-    0x00875BA8: "UiChInfo / UiChModel",
+    # Frame 1: inside the per-slot dress worker `0x004B1800` (`UiCharModel`),
+    # the return of every one of its `call 0x0082D6A0`. Seven is the COMPLETE
+    # set, not a selection -- exactly seven of SetSlotItem's 40 call sites lie
+    # inside the worker's 0x17E bytes, and test §6 re-derives that from the
+    # image rather than from this list.
+    0x004B184C: "UiCharModel worker -> clear slot (hide flag)",
+    0x004B1885: "UiCharModel worker -> dress slot (armour path)",
+    0x004B18E3: "UiCharModel worker -> slot 1 (two-handed)",
+    0x004B18FD: "UiCharModel worker -> slot 0",
+    0x004B1929: "UiCharModel worker -> slot 1",
+    0x004B1940: "UiCharModel worker -> slot 1",
+    0x004B194F: "UiCharModel worker -> slot 0",
+    # Frame 2: the worker's two callers, and `codescan --xrefs 0x004B1800`
+    # says two is all of them, so this pair is closed as well.
+    0x004EE329: "GmDoll 0x004EE240 -> the per-slot worker -- one frame INSIDE "
+                "0x004EEC34, the same PAPER DOLL",
+    0x00875BAD: "UiChInfo / UiChModel",
     # MEASURED 2026-08-24, and these two are the answer to §9.11's question.
     # Neither was in the static list above, which is why that list prints an
     # unlisted address as a RESULT rather than swallowing it.
