@@ -14,7 +14,8 @@ far to trust any number here: [studies/method/FINDINGS.md](../method/FINDINGS.md
 >
 > **This ran iff `studies/movecode/FINDINGS.md` has a §1z-n heading —**
 > `grep -n '^## 1z-n' studies/movecode/FINDINGS.md`. The instrument is
-> `toolkit/clientscan/planecensus.py` (+ `test_planecensus.py`, 32 checks), so the
+> `toolkit/clientscan/planecensus.py` (+ `test_planecensus.py`, 54 checks — this
+> line said 32 for a day while the test grew), so the
 > numbers below regenerate instead of rotting:
 >
 > ```bash
@@ -227,7 +228,8 @@ they cannot exceed one grant per 0.50 s — say which flags were on when you rep
 
 **The plane repair has no owner ruling on record.** Q9–Q12 all have one; this does not.
 It puts a `0x002C` on the wire by default on the authority of a code comment. Given ★3,
-that is worth raising.
+that is worth raising. **Raised 2026-08-30: the question is now `PLAN.md` §7 Q14**,
+with the evidence both ways; it waits on the owner, not on a session.
 
 ## D. ~~The next action~~ — RAN 2026-08-30. Outcome, then the new next action
 
@@ -296,7 +298,8 @@ better-designed when it happens, by naming which geometry to press against.
    `ambiguous` safety clause engaging **0** times because the ground it protects is
    0.17% of the map. The arm's specificity is well evidenced; its SAFETY VALVE is
    decorative. That is the ruling-shaped question (Q9–Q12 all have rulings; this
-   does not).
+   does not). **FILED 2026-08-30 as `PLAN.md` §7 Q14** — the evidence both ways is
+   summarized there. This item now waits on the owner, not on a session.
 
    ⚠ **AND 95% OF THE CENSUS IS REPLAY, NOT OBSERVATION** (§1z-o.10). The repair
    shipped 2026-08-29 11:22:45; everything earlier ran DISARMED. Split on the

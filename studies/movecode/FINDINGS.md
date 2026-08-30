@@ -6787,7 +6787,7 @@ Everything below is re-runnable rather than quoted:
 python toolkit/clientscan/planecensus.py            # census + repair replay
 python toolkit/clientscan/planecensus.py --echo     # the tripwire's denominator
 python toolkit/clientscan/planecensus.py --identify # score the map identifier
-python toolkit/clientscan/test_planecensus.py       # 29 checks, floor 14
+python toolkit/clientscan/test_planecensus.py       # 54 checks, floor 54 (was 29/14 when first written)
 ```
 
 ### 1z-n.1 The mesh label was wrong for half the corpus, and the fix is IN BAND
