@@ -293,7 +293,16 @@ carry it either — say "provoked" beside every R8b fire count.
   dead-reckons: on the abort tape it took a **530 u step in 0.27 s** toward a
   refused click behind the compound wall, landed on rendered ground the mesh
   deliberately carves out (off-mesh — RECONSTRUCTION for the step's mechanism,
-  OBSERVED for everything after), and its walker died: **464 s of
+  OBSERVED for everything after), and its walker died. ⚠ **And the stuck was
+  not the session's only anomaly — the operator reported multiple warps, and
+  the tape confirms it**: three more warp-scale corrections during ~1.6 min of
+  ordinary click-heavy play (implied 476 / 664 / **3,198** u/s, the last one
+  backward — the drag-back), ~2.5/min against the pre-router default's
+  measured 2.67. RECONSTRUCTION: refused clicks starve the sync copy while
+  the client self-paths, and the desync test drags the body back — the
+  pre-router warp regime returns for click-driven play under this
+  configuration. **Expect visible warps in step 1; they are data, not a
+  failed run.** The park itself: **464 s of
   byte-identical reports with changing headings, 117 clicks all refused, 53
   zero-lead grants echoing the stuck point back, zero ladder rows after the
   entry transition, zero `[plane-echo]` lines** (the tripwire is off-mesh
