@@ -5180,7 +5180,7 @@ def _a2_family_rate(send, state, mt):
 
 
 def a2_matched_field4(plane, carried):
-    """(field4, matched) for one --d1-lead send: field 4 MATCHES field 3.
+    """(field4, matched): field 4 MATCHES field 3. TWO ARMS USE THIS, NOT ONE.
 
     The 2026-08-26 input-lock decode (REALFIX.md sec.0.11): plane-carry's
     one-grant lag leaves the SYNC copy stamped with the OLD plane across a
@@ -5189,12 +5189,51 @@ def a2_matched_field4(plane, carried):
     lead's click-walk regime then keeps shut (no 0x0047, no walk-start, no
     re-arm: the self-sustaining input lock the owner reproduced). Retail
     never creates the cross-plane state at all: its nonzero plane pairs are
-    bit-identical 222/222 (the sec.0.9 census). So under --d1-lead the
-    carry's value is OVERRIDDEN to match whenever it differs -- the sync
-    copy's plane word reconciles AT the crossing. Pure; `matched` marks the
-    rows where the override actually changed the wire (the census key for
-    sec.0.11's verification run). The carry machinery itself is untouched
-    for every other arm.
+    bit-identical 222/222 (the sec.0.9 census). So the carry's value is
+    OVERRIDDEN to match whenever it differs -- the sync copy's plane word
+    reconciles AT the crossing. Pure; `matched` marks the rows where the
+    override actually changed the wire (the census key for sec.0.11's
+    verification run).
+
+    ⚠ **THIS DOCSTRING SAID "for one --d1-lead send" UNTIL 2026-08-30 AND THAT
+    WAS WRONG THE DAY IT WAS WRITTEN.** `8cbcbc9` created the function for
+    --d1-lead; `995a515` (ROUTER-B2, SAME DAY) added four more call sites and
+    never revised the contract line. A reader who greps `D1_LEAD` then finds
+    three router sites calling this unconditionally concludes they leak, and
+    that conclusion is WRONG -- it was reached twice, by two separate analyses,
+    which is why this block exists. **Do not "fix" it by gating them.**
+
+    THE RULE, and it is about WHOSE plane field 3 is:
+
+      * Field 3 is a plane WE computed (the route's corridor plane, or
+        `_router_plane()`): field 4 MUST match it, UNGATED, on every arm. That
+        is the P-17 phasing door -- a routed leg with pd != pc snaps the body.
+        The three unconditional call sites are exactly these, and
+        `test_router.py` PINS them ("first leg carries the corridor's plane,
+        matched"; "interior leg planes are matched via plane_at"). Gating them
+        turns that test red -- measured, not assumed. And `test_d1lead.py` has
+        pinned the same fact since ROUTER-B2 landed: its call-site census names
+        the router's four and says outright that they "were added deliberately
+        (ROUTER.md sec.4 item 4: matched pairs everywhere, sec.0.11's own
+        protection)". THREE places said so before this docstring did.
+      * Field 3 is the CLIENT'S OWN named plane passed straight through (the
+        one-leg verbatim echo, "wire-identical to the shipped clear-line fire,
+        planes included"): the override is gated behind `if D1_LEAD:` so the
+        echo stays byte-verbatim outside the lead. That is the one gated site.
+
+    ⚠ **AND THE PREMISE HAS A MEASURED COUNTEREXAMPLE (FINDINGS 1z-o.6).** In
+    R7 the one-leg router path called this with plane=0, carried=37, and it
+    returned 0 -- overriding the carry off the body's TRUE plane 37 to the
+    route's first waypoint plane, before the body had crossed. (Written out
+    rather than shown as a call, because `test_d1lead.py` censuses this
+    helper's call sites by counting its name in the source, and an example
+    in a docstring reads as a tenth caller.) The SYNC copy took the 0,
+    the client's own snap gate 2 then queried from a plane-0 point it could not
+    resolve, returned `pathCount == 0`, and reseeded. Matching field 4 trades a
+    phasing snap for a plane the body is not yet on, and that trade is not free
+    on a route that crosses a seam. Not a bug to patch blind -- an open
+    question with one observation behind it. Do not change the rule without
+    reading 1z-o.6 and re-running R7's geometry.
     """
     if carried != plane:
         return plane, True

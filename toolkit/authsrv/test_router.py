@@ -28,8 +28,12 @@ import authsrv                                                 # noqa: E402
 # composition refusals, two fine-step source locks; +7 ROUTER-B4: planes
 # through route(), corridor planes on the grants, the tour cap and its
 # SLACK control; +4 ROUTER-B5: the origin snap answered-not-refused, the
-# streak counting, the true-hole refusal).
-LEDGER = checks.Ledger("router wiring", floor=68)
+# streak counting, the true-hole refusal; +5 2026-08-30: the
+# a2_matched_field4 gating pattern and its contract line, after a second
+# analysis read the three unconditional call sites as a leak and proposed
+# gating them -- which was measured to turn this file's corridor-plane
+# checks red).
+LEDGER = checks.Ledger("router wiring", floor=73)
 check = checks.adopt_named(LEDGER)
 
 SPEED_OP = authsrv.GAME_SMSG_AGENT_UPDATE_SPEED
@@ -426,6 +430,55 @@ def main():
     check("the clip-fallback samples at the fine step too",
           src.count("stop = pm.clip(origin[0], origin[1], dx, dy,\n"
                     "                       step=A2_LEAD_CLIP_STEP)") == 1)
+
+    # ---- the a2_matched_field4 gating pattern, and WHY it is asymmetric ----
+    # TWO SEPARATE ANALYSES have read the three unconditional router call
+    # sites as a leak ("a --d1-lead-only helper running with D1_LEAD False")
+    # and proposed gating them. That proposal is a REGRESSION: it reopens the
+    # P-17 phasing door on every routed leg, and the two behavioural checks
+    # above ("first leg carries the corridor's plane, matched" / "interior leg
+    # planes are matched via plane_at") go red -- measured by actually doing
+    # it, not assumed. The asymmetry is the point: where field 3 is a plane WE
+    # computed, field 4 must match it unconditionally; where field 3 is the
+    # client's own plane passed through verbatim, the override is gated so the
+    # echo stays byte-identical outside the lead. These locks make a future
+    # "fix" fail HERE, next to the reason, instead of in a live run.
+    calls = src.count("a2_matched_field4(")
+    gated = src.count("if D1_LEAD:\n            ps, _m = a2_matched_field4(")
+    check("router still calls a2_matched_field4 on the paths where WE "
+          "compute field 3",
+          "ps, _matched = a2_matched_field4(pf, chain[\"carry\"])" in src
+          and "pf = _router_plane(pm, stop, cur_plane)\n"
+              "            ps, _m = a2_matched_field4(pf, cur_plane)" in src
+          and "pf = leg_planes[0]\n"
+              "    ps, _m = a2_matched_field4(pf, cur_plane)" in src,
+          "these three are UNGATED BY DESIGN -- gating them turns the two "
+          "corridor-plane checks in this file red. See the function's "
+          "docstring and FINDINGS 1z-o.6 before changing them.")
+    check("the one-leg VERBATIM echo keeps its override gated",
+          gated == 1,
+          "the verbatim echo must stay wire-identical to the shipped "
+          "clear-line fire, planes included, outside --d1-lead")
+    check("the gating census is exactly 3 ungated + 1 gated in the router",
+          calls >= 4 and gated == 1,
+          f"a2_matched_field4( appears {calls}x, gated {gated}x -- if this "
+          f"drifts, re-read the docstring's RULE block rather than "
+          f"normalising the call sites")
+    # The SUMMARY LINE is the contract a reader acts on, so lock that and not
+    # the whole source -- the body deliberately QUOTES the old wording inside
+    # its correction block, and a naive substring check fires on the quote.
+    doc = (authsrv.a2_matched_field4.__doc__ or "").splitlines()
+    check("the helper's contract line no longer says --d1-lead-only",
+          bool(doc) and "--d1-lead" not in doc[0],
+          f"summary line is {doc[0]!r} -- it read 'for one --d1-lead send' "
+          f"until 2026-08-30, which was wrong the day it was written "
+          f"(8cbcbc9 created the helper, 995a515 added four router sites the "
+          f"same day) and is what both mis-readings started from")
+    check("and the docstring states the rule that replaces it",
+          "THIS DOCSTRING SAID" in (authsrv.a2_matched_field4.__doc__ or "")
+          and "test_router.py" in (authsrv.a2_matched_field4.__doc__ or ""),
+          "the correction block must name this file, so the next reader who "
+          "wants to gate the call sites finds the locks that say why not")
     return LEDGER.verdict()
 
 

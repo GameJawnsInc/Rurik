@@ -7076,6 +7076,74 @@ the same-tick ALIAS**: the
   (r5bridge 6→8, r4a 5→8, r5 stays 0). Floor 9, 10 on a machine with the archive;
   skips whole if the archive or `sites.h` is absent.
 
+  `toolkit/clientscan/test_planecensus.py` (**the plane census, and the four ways a
+  census lies without going red**). `planecensus.py` is `noclipscore.py` section C
+  pointed at the SERVER's corpus instead of a movehook capture — 11,754 scorable
+  `position_report` rows against a handful — and it answers HANDOFF §D. It made two
+  wrong turns getting there, and neither was catchable by reading the diff: it scored
+  the `plane_echo` tripwire from `grant_verdict.plane_dest` (a control against the live
+  tripwire's own three sessions read **0/0/5 against a logged 4/30/9** and refuted it),
+  then read `0x0029`'s trailing dword as ONE u32 and published 15.29% — the dword is
+  **two u16s**, and the tell was "we emit plane 1703962", which is `0x001A001A`, the
+  label's own "26->26". So the controls are what this file pins. **§1: the mesh pin is
+  IN BAND and TOTAL** — every capture names its own mesh via the server's opcode-405
+  `INSTANCE_LOAD_SPAWN_POINT(file N)`, no capture names two, and all 12,215 reports
+  attribute; the `version` record's `map_id` is 148 in 1,206 of 1,212 files and is the
+  LOGIN CONSTANT, so §1 goes red if it is ever reintroduced as the pin. The harness
+  `gamesrv.log` is kept as a **second witness** (165 agree, 1 disagrees — a known
+  438 s mispair), because two witnesses to one fact is how a pin stops rotting.
+  **§2: the wire field is settled by CONTROL, not inference** — planeA@14 reproduces
+  4/30/9 exactly where planeB@16 reads 237 corpus-wide. That check asserts its **row
+  count first** (`all([])` is True, and this repo has already shipped a no-collapse
+  control that judged zero rows) and separately proves it **discriminates**: the two
+  plane words differ in 218 sends, so reproducing the truth is not a coincidence of a
+  field that never varies. **§3: the mirrored trigger has not drifted** — the replay
+  copies `plane_repair_track` rather than importing it (importing `authsrv.py` opens
+  sockets), so it can go stale in silence; §3 re-reads authsrv's own
+  `PLANE_REPAIR_HOLD`/`GAP`/`MIN_INTERVAL` and every clause string it reproduces.
+  **§4: a stub mesh is not a finding** — `0x287D3` decodes to 27 trapezoids in
+  `dat_study`, and folding it in reports 61.3% OFF-MESH about a client that did nothing
+  unusual, so stub reports are excluded from the headline denominator and still
+  printed per-mesh. Live-fire over the real corpus; absent corpus or archive are
+  declared skips, and a skip under the floor is a failure. `--armed` splits every
+  headline by whether the repair was actually RUNNING (banner-read, not
+  date-inferred) — 3 captures prospective against 131 replayed, and the two
+  halves of the arm's case provably disjoint. `--focus <capture>`
+  scores ONE session against the corpus and prints an EXPOSURE block — who else
+  stood on the same offered planes, and whether they disagreed — because a
+  per-session count is uninterpretable without it (FINDINGS §1z-o.7: R7 owns
+  every `offered [37]` disagreement in the corpus, and three other sessions
+  stood on that ground, one with nearly twice the exposure, disagreeing zero
+  times). **§5 pins the one
+  invariance the headline rests on**: the five meshes that carry the corpus decode
+  identically in `dat_study` and `-probe`, while `0x287D3` really does move
+  between them — so the check cannot pass by comparing an archive with itself.
+  **A fifth lock was added 2026-08-30 for a defect this file's own
+  author shipped**: `label_captures` skipped any capture with zero
+  `position_report`s — correct for the census, which scores reports, and WRONG
+  for `--echo`, which scores sends. The corpus holds exactly one such capture and
+  it is not a curiosity: it carries the **only `0x002A` in the corpus** and that
+  send is a TRIP, so the published echo rate read 281/7,542 where the truth is
+  282/7,543. The lock asserts every send-only capture is still labelled.
+  **§6 was added 2026-08-30 after the FIFTH denominator error in this arc**: a
+  capture count left at 30 when the rate sharing its population had been fixed
+  to 282/7,543 — a population fix propagates to every figure drawn from it, and
+  nothing was checking the others. §6 pins three arithmetic identities
+  (on-mesh == AGREE + DISAGREE; scored == on + off; the direction classes
+  partitioning DISAGREE) and ten headline figures from §1z-n/§1z-o, each with a
+  message naming the section to re-check. **§7 followed the same day**, because
+  §6 would have caught none of the EIGHT further defects a denominator audit
+  then found — every one lived in a SENTENCE rather than a total: a ratio quoted
+  mid-paragraph (map 143's off-mesh rate read 69% for a week; it is 61.3%), a
+  histogram still scored on a pre-fix corpus, a claim about what one trace shows
+  that was simply false. §7 re-derives each prose figure and asserts the DOCUMENT
+  says it — and two of its checks are pure arithmetic ON the prose (the distance
+  buckets must sum to DISAGREE; the bimodality buckets to the clean scoreable
+  count), which costs nothing and catches a stale population. Writing §7 found a
+  ninth: "157 of 174 captures carry exactly zero" folded 40 captures on stub or
+  unbound meshes — which CANNOT disagree — into the clean pile. The honest split
+  is 134 scoreable, 17 disagreeing, 117 clean. 54 checks, floor 54.
+
   `toolkit/clientscan/movehook/test_movehook.py` (**MOVECODE-B2's hook DLL, and
   the first test any hook in this repo has ever had.** `trnhook/` has none, and
   `srclint` therefore imposed nothing on it — which was *silence, not a ruling*,
@@ -10083,5 +10151,20 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   lock-in, the answered click resets the refusal streak, a true hole
   deeper than the radius still refuses with the reason named, and
   consecutive refusals count a streak onto every row — the run-3
-  silence can never again be quiet. Floor 68 from the green run (51 at
-  the B2 landing, 57 after the review round, 64 after B4). ~1 s).
+  silence can never again be quiet. **2026-08-30 added five, and they exist
+  because a proposed fix was wrong**: two separate analyses read the three
+  UNCONDITIONAL `a2_matched_field4` call sites as a leak — a helper whose
+  docstring said "for one `--d1-lead` send" being called with `D1_LEAD =
+  False` — and proposed gating them. Gating them was actually *tried*, and it
+  turns this file's "first leg carries the corridor's plane, matched" red:
+  where field 3 is a plane WE computed, field 4 must match it unconditionally
+  or the P-17 phasing door reopens on every routed leg. Only the one-leg
+  VERBATIM echo gates the override, so it stays wire-identical to the shipped
+  clear-line fire. The five locks pin that asymmetry (3 ungated + 1 gated),
+  and pin the helper's SUMMARY LINE rather than its source — the body now
+  quotes the old wording inside its own correction block, and a substring
+  check fires on the quote. The real defect was the contract line, and it was
+  wrong the day it was written (`8cbcbc9` created the helper; `995a515`
+  added four router sites the same day and never revised it). Floor 73 from
+  the green run (51 at the B2 landing, 57 after the review round, 64 after
+  B4, 68 after B5). ~1 s).

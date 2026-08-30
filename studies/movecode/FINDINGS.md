@@ -6431,6 +6431,14 @@ carries **bit-identical from-point x and y dwords** — `0xC508D354` /
 1 → 0. The discriminator is isolated to the plane word: not the location, not
 the destination, not the range.
 
+> ⚠ **CORRECTED 2026-08-30 (§1z-o).** The last clause is FALSE. The two queries
+> share their from-point x/y dwords and differ in **caller, range, maxCount AND
+> destination** — `seq 4628` (ret `0x0081AF56`, range 10000, maxCount 9, dest
+> (−2062.85, 6422.47)) against `seq 4785` (ret `0x00605807`, range 300, maxCount 4,
+> dest (−2012.97, 6361.00)). Only the FROM-POINT is held identical. The pair is the
+> best single observation in the run and it is **not a controlled A/B**; say so
+> when quoting it.
+
 ### 1z-i.3 §1z-c.3's inferred link is now OBSERVED
 
 §1z-c.3 said in terms: *"we observe the queries and the silence after them, not
@@ -6764,6 +6772,1308 @@ Tests: §17 now asserts both layouts exist with 4 and 9 points, that the C and
 the reader agree on version 8, and that `ret_capacity` reads a v7 record as 4
 and a v8 record as 9. Floor 163 → 169. **The DLL was rebuilt and §6/§7/§16
 re-injected green**, so the widened record loads and runs.
+
+---
+
+## 1z-n. The plane-disagreement census — the repair's licence, priced
+
+HANDOFF §D asked for this and named four things it would settle. It settles all
+four, overturns the arc's own mesh-labelling practice on the way, and produces
+one result the handoff pre-registered as the headline: **a non-zero fire count.**
+
+Everything below is re-runnable rather than quoted:
+
+```bash
+python toolkit/clientscan/planecensus.py            # census + repair replay
+python toolkit/clientscan/planecensus.py --echo     # the tripwire's denominator
+python toolkit/clientscan/planecensus.py --identify # score the map identifier
+python toolkit/clientscan/test_planecensus.py       # 29 checks, floor 14
+```
+
+### 1z-n.1 The mesh label was wrong for half the corpus, and the fix is IN BAND
+
+**`version.map_id` is a login constant, not the live map.** It reads **148 in
+1,206 of 1,212 captures** while the corpus's real geometry spans at least
+`0x1B97D`, `0x287B3` and `0x287D3` — and map 148's own spawn is ~15,000 u from
+where most reports sit. It is emitted before `--map`/`--file-id` rewrite
+anything; grep `client asked for map` in `authsrv.py`.
+
+**The server records the mesh itself.** Every capture carries a `sent` record,
+opcode 405, labelled `INSTANCE_LOAD_SPAWN_POINT(file N)`. Over all 1,212 files:
+**zero captures name two ids, and all 12,215 position_reports are attributed.**
+That beats both prior practices — `noclipscore.py` hand-pins map 280 and
+`pathdiff.py` makes `--map` a value a human types from memory.
+
+Two further witnesses agree and are kept as cross-checks rather than sources:
+the harness `gamesrv.log`'s `MAP OVERRIDE: 280` / `[map] navmesh 0x287B3` line
+(**173 of 173 agree, 0 disagree**), and its `[c1] GAME version: … world_id=…
+player_id=…` line, which joins 1:1 to the capture's own `version` record across
+1,201 keys with zero collisions.
+
+⚠ **THE ARCHIVE IS PART OF THE PIN.** A file id does not name geometry alone.
+`0x287D3` decodes to **27 trapezoids in `dat_study`, 55 in `-c2`, 2 in `-probe`
+and 64 in `reskin-roster`** across the 17 vaulted archives, and `0x5F0B2` binds
+in `-probe` ALONE. Scoring map 143's 318 reports against a 1-plane stub reports
+**61.3% OFF-MESH** (195 of 318), which reads as a decode failure and is really an empty mesh.
+Stub meshes are named and excluded from the headline, never averaged in.
+
+**Why the headline survives that anyway:** the meshes that actually carry the
+corpus — `0x1B97D`, `0x287B3`, `0x345CC`, `0xB602` — decode **identically across
+all 17 archives** (`0x5D037` also does, but at 26 trapezoids it is a STUB and is
+excluded from the headline, not a carrier), and running the census against `-probe`
+instead of `dat_study` reproduces 11,754 / 670 / 259 / 208-51 / 239 unchanged.
+`test_planecensus.py` §5 pins that invariance, and pins that a stub really does
+move between the two, so the check cannot pass by comparing an archive with
+itself. **Numbers about `0x287D3` and `0x5F0B2` are archive-scoped and must name
+one; the headline is not.**
+
+### 1z-n.2 The census
+
+**11,754 reports scored.** Keep the two words apart: **12,215 are ATTRIBUTED**
+(every report has a mesh id from its own capture), **12,077 are SCOREABLE**
+against `dat_study`, and **11,754 enter the headline** once stub meshes are
+excluded. "174 of 174 captures" is a statement about map ids, not about usable
+geometry — 2 captures / 138 reports have no mesh in the default archive:
+
+| | n | of |
+|---|---|---|
+| off-mesh — the mesh offers nothing | 670 | 5.7% of scored |
+| on-mesh | 11,084 | 94.3% |
+| **AGREE** — declared plane is offered | **10,825** | **97.66% of on-mesh** |
+| **DISAGREE** | **259** | **2.34% of on-mesh** |
+
+**Item 3 answered — the 9-of-198 failure class at corpus scale.** `plane_at`'s
+docstring measures 189/198 = 95.5% agreement over four sessions. At corpus scale
+it is **97.66%**, so the small sample was if anything pessimistic. The failure
+splits two ways, both of which `test_noclipscore.py` already names
+(`DECK_OVER_GROUND` / `GROUND_UNDER_DECK`, §1z-c):
+
+* **208 (80.3%)** — client declares non-zero N, our mesh offers **only 0**. The
+  bridge-over-ground class the docstring describes ("client says 12, we find 0").
+* **51 (19.7%)** — client declares **0**, our mesh offers only non-zero N. The
+  inverse. 11 of these are specifically `offered [37]`, which is R7's signature.
+
+⚠ **CALL THEM DIRECTIONS, NOT CLASSES.** "Two classes" implies two mechanisms and
+there is one. **All 259 disagreements have `|offered| == 1`** — not one is the
+bridge-over-ground *stacking* the docstring pictures. It is a single coverage
+defect with the roles swapped, and the two directions alternate inside one
+capture — though NOT in `20260829T163930`, whose 11 rows are **all** the
+inverse direction. An earlier draft said that trace showed both within 10 s; it
+does not.
+
+**Item 2 answered — what a declared 0 means.** It is a **real geometric index,
+not a null sentinel**, and the numbers are asymmetric enough to act on:
+
+| declared | agree | disagree | disagreement rate |
+|---|---|---|---|
+| 0 | 9,422 | 51 | **0.54%** |
+| non-zero | 1,403 | 208 | **12.91%** |
+
+A declared non-zero plane is **24× more likely** to disagree with our decode
+than a declared 0. `pathdiff.py` refuses to reason from a declared 0 and the
+repair draws its strongest inference from it; this says the refusal is the
+better-calibrated of the two, but for the opposite reason to the one assumed —
+0 is not noisy, it is the value we almost always *agree* with.
+
+The bridge trace in capture `20260829T163930` shows the mechanism directly: the
+client declares **37** on the deck (mesh agrees), flips to **0** at a repeated
+byte-identical coordinate (mesh offers only 37), recovers to **37** (server-caused,
+§1z-o.6)
+8.9 s later, then declares **0** further on where the mesh does offer **[0]**.
+The plane word tracks geometry; the disagreements are transients over ground we
+have not decoded.
+
+### 1z-n.3 ★ THE DISARM CLAUSE HAS NEVER ENGAGED — 0 of 259
+
+**All 259 disagreements are unambiguous, and not one reaches the `ambiguous`
+disarm.** Two precisions the first draft of this section got wrong: only **239 of
+the 259 reach the trigger at all** (13 are `0x0047` stop-reports, 6 are refused,
+1 has a null source, and the track sees none of those), and **"arms" is the wrong
+verb** — passing the ambiguity door returns `"arming"`, which RESETS the hold
+clock rather than advancing it. The zero is still a zero, and it is neither
+reassuring nor an accident of sampling:
+
+1. **At the repair's call site `plane_at`'s `prefer` branch is DEAD BY
+   CONSTRUCTION.** The trigger calls `plane_at(x, y, prefer=plane)` only after
+   proving `plane not in offered`, so `prefer in planes` can never be true and
+   the function reduces to "one candidate, or None". The clause can therefore
+   only fire on genuinely STACKED ground.
+2. **Stacked ground is a fraction of a percent.** Whole-mesh scan at 8 u:
+   `0x287B3` has 6,367 stacked cells of 3,796,950 on-mesh (**0.17%**), and
+   `0x1B97D` 55,009 two-plane plus **3,529 genuine three-plane** cells of
+   11,838,541 (**0.50%**). The commonest stacked set on map 280 is exactly
+   `{0, 42}` — the NE bridge HANDOFF ★3 scanned. So "max |offered| is 2" is a
+   fact about **where one operator walked**, not about the meshes.
+   ⚠ And the walk **over-sampled** stacked ground — per map about **5.4× on
+   `0x287B3` and 3.5× on `0x1B97D`**; the "10×" an earlier draft quoted pooled
+   both meshes' visits against the SMALLER map's areal rate. Visited stacking is
+   **194/11,084 = 1.75%** of on-mesh (the earlier 1.73% divided by 11,208, which
+   still carried the stub meshes the headline excludes) against an areal
+   0.17–0.50%. More walking narrows this
+   zero's support; it does not confirm it.
+3. **On the west bridge the clause is geometrically impossible.** Fine scan at
+   8 u over 4,488 samples around R7's arming points: **plane 0 is offered
+   nowhere**, and 100% of on-mesh samples offer exactly one plane.
+
+**This CONFIRMS and sharpens HANDOFF ★3.** The safety test is not merely
+inverted — over the whole corpus it has never once engaged. `test_planerepair.py`
+proves the clause works on synthetic stacked geometry; what it has never had is
+corpus exposure.
+
+★2 is confirmed exactly. All three `arming` rows sit at points where the client
+declares **0** and the mesh offers only **[37]**, and `plane_at` returns 37 — a
+fire would have restamped the player up onto the bridge deck.
+
+### 1z-n.4 ITEM 1 — the replay reproduces §1z-e.2 independently, and NOTHING MORE
+
+> ⚠ **CORRECTION, SAME DAY, BEFORE ANYONE QUOTED THIS.** The first draft of this
+> subsection called the replayed fire count "★ THE HEADLINE" and read the fires as
+> members of ★4's *"the client is right and our decode's coverage is missing"*
+> class. **Both halves were wrong, and the section was written without reading
+> §1z-e** — the arc's own cycle trap, walked into while citing it.
+> **§1z-e.2 had already run this exact replay** ("three sessions fire; zero fires
+> anywhere else"), had already pinned the mesh per session in band, had already
+> rejected the containment vote as §1v.3's wrong-map selector, and had already
+> adjudicated all three sessions as **REAL LOCKS** — §1z-e.3's victim froze at one
+> byte-identical coordinate and force-closed the connection **10.2 minutes later**.
+> `RUN-R6.md` calls the same replay "the true-positive side".
+> What follows is therefore a **corroboration**, not a discovery: an independent
+> instrument, written without knowledge of §1z-e.2, reproducing its table to the
+> row. That is worth something — it is a second derivation from a different
+> code path — but it is not new, and calling a lock a false fire inverts the
+> record.
+
+Replaying `plane_repair_track` clause for clause over the corpus:
+
+| | |
+|---|---|
+| **live fires (`kind == "plane_repair"`)** | **0** |
+| **would-fire, replayed** — REPLICATES §1z-e.2 exactly | **5**, in 3 captures |
+| longest HOLD streak accumulated | **15.25 s** against a 5.0 s hold |
+| captures ever reaching `holding` | 4 |
+
+The three sessions are §1z-e.2's three, with the same times and the same claimed
+planes: `20260829T091543` (44.98 / 55.12 / 70.80, claimed 41 — the §1z-c lock),
+`20260827T055221` (339.56, claimed 29 — lock #2), `20260827T212317` (115.88,
+claimed 31 — lock #3). Two independent replays, written months apart in different
+files, agree to the row.
+
+**The live zero is not evidence of quiet.** The repair shipped
+**2026-08-29 11:22:45 (`dcf9484`)**; all three would-fire captures predate it and
+their harness logs carry no plane-repair banner. The trigger has never been armed
+during a session that would have fired it.
+
+All five would restamp the player **to plane 0**, and all five are "client
+declares non-zero N, mesh offers only [0]". ⚠ **That shape is NOT by itself ★4's
+class.** ★4 warns that an instantaneous geometry test cannot tell a deck we failed
+to decode from a stale plane — which means the shape is *ambiguous*, not that it
+resolves against the repair. §1z-e.2/e.3/e.4 resolved these three the other way,
+on behaviour rather than geometry: each victim froze at one byte-identical
+coordinate and stopped being able to play. Geometry supports that reading too:
+
+A useful discriminator, measured to the NEAREST EDGE of the declared plane's own
+trapezoids (a centroid reads hundreds of units away while a long thin deck passes
+underfoot — measure to the edge):
+
+| session | declares | mesh offers | nearest geometry of the DECLARED plane |
+|---|---|---|---|
+| `20260827T055221` | 29 | [0] | **1,563 u** |
+| `20260827T212317` | 31 | [0] | **3,761 u** |
+| `20260829T091543` | 41 | [0] | **90 u** |
+
+At 1,563 u and 3,761 u there is no coverage story to tell: the declared plane's
+geometry is nowhere near, so the plane word is stale and restamping to what the
+mesh does offer is the correct repair. `20260827T212317`'s victim was frozen
+byte-identically for 5.72 s while still emitting `0x003D` movement claims.
+
+⚠ **`20260829T091543` at 90 u is the one that stays open, and it is also the
+capture the repair was DERIVED FROM** — its 100 disagreements are **3 distinct
+points**, one carrying **82 byte-identical accepted reports**, and `authsrv.py`
+cites *"82 accepted reports, one coordinate"* in the trigger's own docstring.
+Three of the five would-fires are the mechanism replayed against its own training
+case, and its geometry is the one place a deck-edge coverage gap is plausible.
+§1z-c adjudicated it a real lock on its dead-walker signature; that evidence, not
+the geometry, is what carries it. **Do not quote "5 fires" without this.**
+
+⚠ **AND THE DISCRIMINATOR IS WEAK.** Run over all **259** disagreements it puts
+**114 in 50–200 u and 100 in 200–1,000 u** — a broad ambiguous middle — with
+**38 clearly stale (>1,000 u) and 7 clearly underfoot (<50 u)**. (An earlier
+draft quoted 113 / 100 / 17 / 7 over 237, which was the PRE-FIX 238-row corpus;
+re-scored on 259 the stale bucket more than doubles, which strengthens rather
+than weakens the reading.) It also **fails on
+R7**, whose armings read 265–374 u ("ambiguous") while the client's own pathfinder
+settles them outright (§1z-o). Geometry alone cannot adjudicate this class. The
+instrument that can is the movehook return tap, and it has been run once.
+
+### 1z-n.5 Item 4 — the `plane_echo` tripwire, with a denominator
+
+**282 trips / 7,543 on-mesh player-agent sends ≈ 3.7%.** (This read 281/7,542
+until 2026-08-30, when a defect in `planecensus.label_captures` was found: it
+dropped any capture with zero `position_report`s, and the echo channel scores
+SENDS. The one capture it dropped holds the corpus's **only `0x002A`**, and that
+send is a trip. `test_planecensus.py` now pins it.) The live tripwire has
+logged **43**, in 3 captures, because it was introduced at `dcf9484` and has
+watched three sessions. Its retrospective exposure is ~6.5× what it has seen.
+
+⚠ **Quote it as ≈3.7%, never to three significant figures.** Two careful
+independent measurements of this same quantity landed on 282/7,465 = 3.78% and
+282/7,543 = 3.74%, differing only on a capture-labelling convention. The rate is
+also **bimodal**: 75 of the 106 captures carrying player sends trip zero
+times, and `20260829T091543` alone trips **43 of 84 = 51%** — a pre-`dcf9484`
+capture, so the live tripwire missed the one session that would have supplied 43
+rows by itself.
+
+The decode was settled by CONTROL, not inference: it must reproduce the live
+tripwire at **4 / 30 / 9** on `{132441, 142904, 163930}` before any rate is
+quotable, and `planecensus.py --echo` prints that control first and prints a bare
+COUNT with no rate if it fails.
+
+### 1z-n.6 Is it a rate? Only if you say which denominator
+
+**Disagreement is not ambient — it is bimodal.** Against a homogeneous binomial
+null the dispersion ratio is **≈30, and ≈10 even after collapsing every frozen
+repeat to a single event** (an independent re-derivation on the on-mesh
+population got 35.0 and 11.1 against this section's original 29.2 and 9.3 — quote
+the magnitude, not the digits; both agree the overdispersion is an order of
+magnitude). The concentration is real, not an artifact of stuck clients
+re-reporting.
+
+⚠ **BUT SAY WHICH CAPTURES COULD HAVE DISAGREED. "157 of 174 carry exactly zero"
+is a population conflation and this section published it for a day.** Of the 174
+captures carrying reports, **40 sit on a stub or unbound mesh and CANNOT
+disagree** — zero exposure, not a clean run. The honest split:
+
+| | captures |
+|---|---|
+| carry `position_report`s | 174 |
+| — of those, unscoreable (stub or unbound mesh) | **40** |
+| **scoreable** | **134** |
+| — with ≥1 disagreement | **17** |
+| — genuinely clean | **117** |
+
+So the rate is **17 of 134 = 12.7% of scoreable captures**, not 17 of 174. Among
+the 117 clean ones, by ON-MESH report count — the only reports that *can*
+disagree — **1 has zero on-mesh reports, 16 have 1–4, 23 have 5–19, 53 have
+20–99, 24 have ≥100**, summing to 117. (Two earlier drafts printed
+11/38/27/55/24 summing to 155, then 41/16/23/53/24 summing to 157 — the first
+counted on-mesh with stubs in, the second folded the 40 unscoreable captures into
+the "clean" pile.) Say "24 captures of ≥100 on-mesh reports carry zero
+disagreements"; never "157 captures are clean".
+
+But the row count is the wrong unit for "how often": **259 disagreeing reports
+are 123 distinct points.** The split is visible per capture and there are two
+populations — `20260829T091543` is 100 rows over **3** points and
+`20260827T055221` is 19 rows over **1**, while `20260826T095804` is 39 rows over
+**39**. Quote points for frequency and rows only for exposure.
+
+### 1z-n.7 A fifth instrument defect, and one that is NOT identified
+
+`pathdiff.map_scores`' identifier can now be scored against real labels
+(`--identify`). Of **58** identifications it ACCEPTS, **16 are wrong**: 28
+accepted with non-zero plane signal, **0 wrong**; 30 accepted on the all-plane
+fallback, **16 wrong**. Its own docstring expects that fallback to be worthless
+and the refusal bar to catch it — at n = 3-5 points one mesh reaches 1.000 while
+the runner falls below 0.8, so the margin passes.
+
+⚠ **The cause is NOT identified and the obvious fix is not licensed.** All 16
+failures share a second property exactly: their true answer is `0x287D3`, the
+27-trapezoid stub. "No plane signal" and "the right mesh is nearly empty and
+loses on coverage to anything" are **perfectly collinear on this corpus**.
+Record the observation; do not ship "refuse when `nz_land == 0`" on the strength
+of it.
+
+### 1z-n.8 What this does NOT settle
+
+* **Whether the heal works.** Untried. The census names the geometry to press
+  against (the west bridge, where our mesh offers only the deck) but a lock is
+  still not provokable on demand.
+* **Whether the 51 inverse-class rows are decode holes or client transients.**
+  The bridge trace favours transient-over-undecoded-ground, n = 1 episode.
+* ~~**138 reports on `0x5F0B2`** are unscoreable and unknown.~~ **CORRECTED:**
+  they are unscoreable *in `dat_study`* only. Bound against
+  `vault/run/2026-07-29_221c13772c7a-probe/Gw.dat` the mesh loads (1 plane, 23
+  trapezoids) and **all 138 score: 0 off-mesh, 138 agree, 0 disagree.** The first
+  draft quoted a zero without asking what a non-zero would have required — this
+  arc's own trap, committed while auditing for it.
+* **Every timing figure still rides through movehook's 19 `int3` taps**
+  (HANDOFF trap 6) — though this census is desk-only over the server's own
+  records and does not depend on them.
+
+---
+
+## 1z-o. R7's SERVER side — the lock seen from both ends at once, and a morphology the trigger cannot catch
+
+HANDOFF §D′ item 2 asked for this: R7's *"9 ladder rows and 9 echo rows"* were the
+last unpublished part of the arc's most decisive run. They are published below.
+
+**Read §1z-i first — it is the other half of this run and it is already scored.**
+§1z-i.2 holds the client-side result (`pathCount == 0` ⟺ an impossible from-plane,
+187 / 10 / 17) and §1z-i.3 the causal chain. This section re-derived that table
+independently and reproduces it to the row — corroboration from a second
+instrument, not a new result. **What is new here is the SERVER side and the JOIN.**
+
+⚠ **Say "exceptionless" with the restriction attached, or it is false.** Scored
+over all 214 queries as *"the declared plane is not among those offered"*, the law
+breaks 17 times — but all 17 sit at from-points where `containing()` returns **[]**,
+so our mesh offers nothing and has no opinion to be wrong about; the client routed
+from them 17 of 17. The surviving form is sharper: **restricted to the 197 queries
+whose from-point our mesh can speak about, separation is perfect in both
+directions, 197/197** (Fisher exact two-sided p = 5.2e-17). The 17 are a
+measurement of OUR decode (MOVECODE-Q2), not a break in the plane law.
+
+⚠ **A framing this section was commissioned to write has been REFUTED by its own
+data.** HANDOFF §D′ item 2 prescribed writing R7 up as *"a near-miss on a false
+fire, not an encouraging arming"*. That is wrong. Plane 0 was not undecoded ground
+the client was standing on; it was **invalid at that point by the client's own
+navmesh** — the client's pathfinder answered `pathCount = 0` there seven
+consecutive times and started answering again the instant the declared plane
+flipped to 37 (§1z-o.4). Had the repair fired it would have restamped 0 → 37,
+which is what the client declared 8.9 s later — after OUR OWN grant put a 37 on the
+wire (§1z-o.6). **R7's arming was a TRUE POSITIVE.**
+
+⚠ **The "natural experiment" is suggestive, not a controlled A/B — state it that
+way.** The pair at `0xC508D354` / `0x45C92E61` shares its from-point x and y dwords
+bit-for-bit and answers 1 on plane 37 and 0 on plane 0, 1.19 s apart. But the two
+queries have **different callers** (`0x0081AF56` range 10000 vs `0x00605807` range
+300) and **different destinations**. Only the from-point is held identical. It is
+the best single pair in the run and it is not an experiment anyone designed.
+
+### 1z-o.1 The readout, in full — and it is a TRANSITION log
+
+R7 is `authsrv-20260829T163930-c1.jsonl` (map 280 / `0x287B3`; `--zero-lead`,
+`--grant-suppress`, `--cast-stop=pin`, **`--router`** and the plane repair all ON —
+204 `router_route` / 94 `router_leg` rows are on the tape, so clicks were answered
+by our own routes, same as R6/R6b). It carries 9 `plane_repair_due` rows and 9
+`plane_echo` rows. The ladder logs on a CHANGE of
+`why`, so "9 rows" is **9 transitions, not 9 reports** — every count taken from it
+must say so.
+
+```
+t=135.96  LADDER plane-legal  plane=0   (-5819.59,-313.15)
+t=255.07  LADDER arming       plane=0   (-1908.33,6407.31)   <- lock onset
+t=255.07  ECHO   op41 plane=0 offered=[37] (-1908.33,6407.31)
+t=255.26  LADDER holding      plane=0   (-1908.33,6407.31)
+t=255.81  ECHO   op41 plane=0 offered=[37] (-1908.33,6407.31)
+t=256.54  ECHO   op41 plane=0 offered=[37] (-2015.65,6426.14)
+t=256.91  LADDER arming       plane=0   (-2006.48,6424.53)   <- clock RESET
+t=257.43  ECHO   op41 plane=0 offered=[37] (-2015.65,6426.14)
+t=257.76  LADDER holding      plane=0   (-2015.65,6426.14)
+t=257.98  ECHO   op41 plane=0 offered=[37] (-2015.65,6426.14)
+t=258.55  ECHO   op41 plane=0 offered=[37] (-2119.76,6453.45)
+t=258.96  ECHO   op41 plane=0 offered=[37] (-2089.10,6531.36)
+t=259.23  ECHO   op41 plane=0 offered=[37] (-2075.07,6441.84)
+t=263.98  LADDER plane-legal  plane=37  (-1822.78,6424.68)   <- recovery (OURS, 1z-o.6)
+t=272.02  LADDER off-mesh     plane=0   (163.75,6572.05)
+t=272.04  LADDER plane-legal  plane=0   (161.83,6569.94)
+t=284.95  LADDER arming       plane=0   (-2067.12,6515.66)
+t=284.95  ECHO   op41 plane=0 offered=[37] (-2067.12,6515.66)
+```
+
+All 9 echoes are opcode `0x0029` and all carry plane **0** where the mesh offers
+only **[37]**.
+
+⚠ **They are NOT all zero-lead, and an earlier draft of this section said they
+were.** Decoding each echo's co-timed send (`<HIffHH` — op, agent, x, y, field3,
+field4; all joined within 0.2 ms) splits them **5 `ZERO LEAD` / 4
+`AGENT_MOVE_TO_POINT(… ROUTER one leg)`**. That matters because the design licence
+usually cited here — `test_position_trust` pinning verbatim echo — **covers the
+zero-lead site only**. The router leg is a separate sender.
+
+Provenance is still **100% client-supplied for all nine**: the one-leg send takes
+`pf, ps = plane_first, plane_second` and its override is gated behind
+`if D1_LEAD:`, and `D1_LEAD` is `False`. So five echo the client's *reported*
+plane and four echo the plane word off the client's own `MOVE_TO_COORD`. Three of
+the nine sit at points the client never reported, and one precedes the client's
+first report of its point by 0.9 s — so "echoing the report back" is the right
+picture for five of them and not for all.
+
+⚠ **THE TWO CHANNELS DO NOT COUNT THE SAME WAY, and "9 and 9" invites the error.**
+The ladder is gated on `if why != state.get("pr_why")` — a REASON TRANSITION.
+`plane_echo` has no such gate; `_note_wire_move` calls `rec.event` on every bad
+send and only the console print is transition-gated ("Logged per send, printed on
+transition"). So **9 echo rows are 9 sends; 9 ladder rows are 9 transitions over
+101 evaluated reports**, of which 9 disagreed. The two nines are a coincidence.
+
+⚠ **AND THE LADDER ALONE IS INCOHERENT — an instrument defect, filed here.**
+Replaying the trigger per report shows a `why == "arming"` at **t=257.4250** on
+(−2015.65, 6426.14) that is NEVER LOGGED, because the previous `why` was already
+`"arming"` on a *different* point (−2006.48, 6424.53). The capture therefore reads
+`arming @ A` → `holding @ B`, and `holding` requires `pr_point == pt`, so the
+logged sequence describes a state machine that cannot exist. **A transition log
+keyed on the reason string cannot represent a re-arm onto a new point.** Anyone
+reconstructing the streak from the ladder alone gets it wrong.
+
+⚠ **Which is why the 1.02 s below is NOT a ladder number.** The ladder's last
+logged `holding` for that streak sits at t=255.2553, **held = 0.185 s**. The 1.021 s
+peak is at t=256.0915 — a hidden row. Quoting the streak requires the
+`position_report` stream; the ladder cannot produce it.
+
+### 1z-o.2 Why it never fired: the streak decomposition
+
+Replaying the trigger over R7's own reports gives four streaks:
+
+| streak | window | held | at |
+|---|---|---|---|
+| 1 | 255.07 → 256.09 | **1.02 s** | (-1908.33, 6407.31) |
+| 2 | 256.91 → 256.91 | 0.00 s | (-2006.48, 6424.53) |
+| 3 | 257.43 → 257.98 | 0.55 s | (-2015.65, 6426.14) |
+| 4 | 284.95 → 284.95 | 0.00 s | (-2067.12, 6515.66) |
+
+Cause of death per streak, since "it never fired" is the arc's actual question:
+streaks 1 and 2 were killed by an `arming` on a NEW point (99.6 u and **9.3 u** of
+movement — the point test is exact float equality, so 9 u is as good as 99);
+streak 3 by `plane-legal` at t=263.98, with a 6.005 s report gap that would have
+produced `stale-stream` anyway had the point held; streak 4 because **no further
+`0x003D` report exists in the capture at all**.
+
+**Max 1.02 s against `PLANE_REPAIR_HOLD` = 5.0 s — 20% of the bar.** This
+confirms `HANDOFF-PLANE.md`'s "1.021 s" and adds the decomposition. Nothing here
+was near-miss luck, and the cause of death differs per streak (below). The track
+compares the reported point by EXACT equality, so a new coordinate re-arms.
+
+### 1z-o.3 ★ TWO LOCK MORPHOLOGIES, and `HOLD = 5.0` only catches one
+
+This is the section's decision-relevant finding.
+
+| | continuous freeze | intermittent freeze |
+|---|---|---|
+| example | `20260829T091543` (§1z-c), `20260827T055221` (§1z-e.3) | **R7** |
+| behaviour | one byte-identical coordinate for tens of seconds — the doctrine block's *"82 accepted reports over 33 s"* | freeze ~1 s, jump ~100 u, freeze ~0.55 s, jump |
+| longest hold | 15.25 s / 5.72 s | **1.02 s** |
+| does `HOLD = 5.0` catch it? | **yes** | **structurally NO** |
+
+R7's victim was locked on every other observable — its own pathfinder was
+answering `pathCount = 0` at those exact coordinates, `agapi_setdest` never fired
+after them (§1z-i.3) — and the repair could not have helped it, because between
+freezes it emitted a new coordinate and re-armed the clock. **The trigger's hold
+is calibrated on the morphology it was derived from.** Whether 5.0 s is the right
+bar is now a question with evidence on both sides rather than one.
+
+⚠ Do NOT read this as "lower `HOLD`". A shorter hold trades a miss for a false
+fire, and this section's n is **one intermittent lock**. It is a question to put
+to the owner beside the specificity evidence (§1z-e.2), not a change to ship.
+
+### 1z-o.4 ★ THE JOIN — one lock, two instruments, by coordinate AND by clock
+
+The server-side ladder and the client-side query failures are the SAME events, and
+proving it needs no clock alignment because the coordinates are exact floats:
+
+| | n |
+|---|---|
+| distinct client-side points answering `pathCount == 0` | 8 |
+| server-side echo points | 6 |
+| server-side `arming`/`holding` points | 4 |
+| **zero-answer points that are ALSO server echo points** | **3** |
+| **zero-answer points that are ALSO server arming/holding points** | **2** |
+| **CONTROL — points where the client's query SUCCEEDED that appear anywhere in the server's plane channel** | **0 of 192** |
+
+The control is what makes this a join rather than a coincidence: the server's plane
+channel does not light up wherever the client happens to query. It lights up on the
+failures, and only there. (-1908.33, 6407.31) and (-2015.65, 6426.14) are
+simultaneously the server's two `holding` coordinates and points where the
+client's own pathfinder could not resolve its position.
+
+**This is the first time the plane lock has been observed from both ends at the
+same coordinates**, and it closes §1z-c.3's original gap from the server side as
+§1z-i.3 closed it from the client side.
+
+**And with the clock offset adopted (§1z-o.14), the window reads as one story.**
+Inside `t = 255.070 … 263.981` — the server's arming → holding → `plane-legal`
+episode — the client issued 17 `MapFindPath` queries:
+
+```
+ 256.183  from (-1908.33,6407.31) p0  mesh[37]  pathCount=0
+ 256.526  from (-1908.33,6407.31) p0  mesh[37]  pathCount=0
+ 258.105  from (-2015.65,6426.14) p0  mesh[37]  pathCount=0
+ 258.542  from (-2015.65,6426.14) p0  mesh[37]  pathCount=0
+ 258.948  from (-2119.76,6453.45) p0  mesh[37]  pathCount=0
+ 259.230  from (-2093.19,6520.99) p0  mesh[37]  pathCount=0
+ 259.433  from (-2080.52,6465.44) p0  mesh[37]  pathCount=0   <- last zero
+ 260.495  from (-2092.27,6364.60) p37 mesh[37]  pathCount=1   <- plane flips, answers resume
+ 260.917 … 263.511   10 more, all plane 37, all pathCount >= 1
+```
+
+**Seven consecutive zeros, every one declaring plane 0 where the mesh offers only
+37, and the run of zeros ends on the report where the declared plane flips to 37.**
+The two server `holding` coordinates are the first two rows. An eighth zero sits
+0.90 s BEFORE the server's first `arming` — the client was already failing when the
+ladder began, which is what a transition log looks like from the other side.
+
+### 1z-o.5 ★ GATE 2 HAS FIRED — three times, in R7, and the cause is the plane word
+
+`HANDOFF.md` carries this in a starred block:
+
+> *"★ AND READ THIS BEFORE COSTING ANYTHING AGAINST GATE 2: it has n = 0 observed
+> firings. … Every snap we have ever measured is explained by gate 1 alone.
+> **Gate 2 is knowledge, not a lever. Do not build a fix against it.**"*
+
+**That is REFUTED by R7's own return tap.** The claim was an inference from snap
+statistics — 24 snaps, none beginning below gate 1's 299.33 u threshold, therefore
+gate 2 is never reached. R7 measures the gate site directly instead, and it *is*
+reached: `MapFindPath`'s two callers split **204 click-to-move (`0x0081AF56`) and
+10 snap-gate-2 (`0x00605807`)**, the split §1d.6 identified and §1z-h counted. What
+was never split by caller is the ANSWER:
+
+| caller | pathCount | n | a `reseed` (`0x006022B0`) follows |
+|---|---|---|---|
+| gate 2 `0x00605807` | **== 0** | **3** | **3 / 3** |
+| gate 2 `0x00605807` | > 0 | 7 | 0 / 7 |
+| click-to-move `0x0081AF56` | == 0 | 7 | 7 / 7 |
+| click-to-move `0x0081AF56` | > 0 | 197 | 0 / 197 |
+
+**Exceptionless at 214/214**, and the second row is the control that makes it a
+finding rather than a coincidence: gate 2's own queries do NOT produce a reseed
+when they answer normally. Each of the three zero-answers is followed by `reseed`
+**in the same client tick (Δ = 0 ms)**, then `teleport` and `setposition` — which
+is the snap, exactly as §1 decodes it ("any of the three resyncs *every* async
+agent via `0x006022B0`, a hard SetPosition").
+
+**Why this was never seen before, stated so it does not look like an oversight:**
+gate-2 queries are not rare — §1d.6's census counts them across all nine movehook
+captures — but until §1z-h built the four `ret` sites, movehook was an ENTRY-ONLY
+tap. The question was recorded and the answer was not. R7 is the return tap's only
+run, so R7 is the only capture in which a gate-2 firing *could* have been observed.
+The handoff's "n = 0" was true of the instruments that existed when it was written.
+
+Gate 2 being *reached* is itself informative: gate 1 runs first, so on all ten
+occasions separation was **below** 299.33 u. The handoff's inference fails not
+because its 24 snaps were mismeasured but because it generalised from snaps it
+could see to a gate whose site it was not watching.
+
+**What fired it was the plane word.** The three points are
+(−5880.50, 1492.71) declaring 17 where the mesh offers [0], and
+(−2189.21, 6437.80) and (−1787.27, 6530.05) declaring 0 where it offers [37] —
+the second of those being the natural-experiment coordinate itself, whose
+plane-37 twin answered `pathCount = 1` 1.19 s earlier and did **not** reseed.
+
+⚠ **This joins two threads the arc has kept apart.** The plane channel was filed
+as a LOCK ("a plane desync is a lock where a position desync is only a warp") and
+the snap as the WARP. They meet here: an impossible plane fails the client's own
+gate-2 query, and the gate reseeds every agent in world 1. The plane channel is a
+warp cause, not only a lock cause.
+
+⚠ **What this does NOT license.** It does not make gate 2 a server lever — the
+failing operand is still the client's own declared plane tested against the
+client's own navmesh, and nothing we send writes it. ★4's refusal of "never emit
+an impossible plane" is untouched. What changes is the costing: a fix aimed at the
+plane channel now has a measured warp consequence to weigh, where before the
+answer was "gate 2 never fires, ignore it".
+
+### 1z-o.6 ★ WHO PUT THE 0 THERE — an ordered chain, and it points at US
+
+R7's recovery is **not** the client healing itself, and an earlier draft of this
+section said twice that it was. Both halves of the episode have our traffic in
+them, and the ordering is by in-client `seq` — a monotonic counter — so it does
+**not** ride the ±10 ms clock alignment.
+
+**Recovery — server-caused, and this half is clean:**
+
+```
+259.445  OUR  ROUTER clip-fallback -> (-2092.27,6364.60)  f3=37 f4=37
+         pf = _router_plane(pm, stop, cur_plane) = pm.plane_at(...)   <- OUR MESH
+seq 4969 SYNC setter arg3=37   (+3 ms)
+seq 4970 SYNC bake plane 37, target (-2092.27,6364.60)
+seq 4986 LOCAL plane 37, m_point == (-2092.27,6364.60) bit-exact   (+1.05 s)
+260.496  the client's next MOVE_TO_COORD declares 37 -- its first 37 since onset
+```
+
+That is the **only** 37 on the wire in the interval, and we computed it from our
+own mesh. The client adopted our plane word and started answering its own
+pathfinder again.
+
+**Onset — probable, not proven, and it runs through our own plane-matching.**
+At the onset the router path ran `a2_matched_field4(0, 37) -> 0`, overriding the
+carry off the body's true plane 37 to the route's first waypoint plane, and the
+chain that follows is on tape in seq order:
+
+```
+253.756  client 0x0047 stop-report, plane 37
+254.157  client MOVE_TO_COORD -> values[2] = 0   (a DESTINATION plane, legitimately 0)
+254.159  OUR  ROUTER leg 1/2, f3=0 f4=0          (carry overridden off 37)
+seq 4781 SYNC setter arg3=0                       <- our f4 landing
+seq 4785 GATE 2 queries from SYNC m_point (-2189.21,6437.80) plane 0 -> pathCount 0
+seq 4787/4788/4790  LOCAL reseed -> teleport -> setposition   (the snap)
+seq 4792 LOCAL now plane 0
+```
+
+**The propagation mechanism is the gate-2 reseed of §1z-o.5** — the same three
+firings, and the middle one is SYNC's `m_point` at the instant of our own field-4
+write. That ties the warp finding to our own wire.
+
+⚠ **State it exactly this way and no stronger:** *our grant is the only identified
+author of the agent's plane-0 word, by an ordered on-tape chain; the write into
+the LOCAL copy is inferred, not observed.* Against a stronger claim: the client's
+own click 2 ms earlier already carried a plane-0 word (a destination plane,
+correctly 0); all 760 LOCAL `setter` calls pass `arg3 = 0xFFFFFFFF` ("leave
+`+0x80` alone") yet LOCAL's plane changes four times in the episode, so **the
+LOCAL copy's plane word is written by a path movehook does not hook**; and the
+whole onset sits inside one 16 ms tick, which the alignment cannot resolve.
+
+⚠ **AND THE OBVIOUS FIX IS A REGRESSION — this was tried, not reasoned about.**
+`a2_matched_field4`'s docstring said "**for one `--d1-lead` send**" while three
+router call sites invoke it with `D1_LEAD = False`, and that reads as a leak. It
+is not. **Gating those three was actually applied and the tests run: it turns
+`test_router.py`'s "first leg carries the corridor's plane, matched" RED.** The
+asymmetry is the design:
+
+* where field 3 is a plane **we** computed (the corridor plane, `_router_plane()`)
+  field 4 must match it **unconditionally**, or a routed leg with `pd != pc`
+  reopens the P-17 phasing door that ROUTER-B2 closed;
+* where field 3 is the **client's own** plane passed through (the one-leg verbatim
+  echo, "wire-identical to the shipped clear-line fire, planes included") the
+  override is gated so the echo stays byte-verbatim outside the lead.
+
+The real defect was the **contract line**, and it was wrong the day it was written
+— `8cbcbc9` created the helper for `--d1-lead`, `995a515` (ROUTER-B2, same day)
+added four router call sites and never revised it. **Fixed 2026-08-30**: the
+docstring now states the rule, carries this counterexample, and says "do not fix
+it by gating them"; `test_router.py` gained five locks pinning 3-ungated +
+1-gated and the summary line, so the next reader who tries lands on the reason.
+**Two independent analyses made this mistake; the third would have shipped it.**
+
+What remains genuinely open is the PREMISE, not the plumbing: matching field 4
+trades a phasing snap for a plane the body has not reached yet, and on a route
+that crosses a seam R7 shows that trade going wrong. One observation, no fix
+proposed.
+
+### 1z-o.7 R7 SCORED AGAINST THE CORPUS — and the exposure control is the finding
+
+§1z-o's numbers are a session's. §1z-n's are the corpus's. Neither means much
+until R7 is placed in the distribution, and placing it turns up something the
+single-session read could not: **R7's signature belongs to the session, not to
+the geometry, and not to the session either — it belongs to the pair.**
+
+Re-runnable, with the same instrument that produced the census:
+
+```bash
+python toolkit/clientscan/planecensus.py --focus 20260829T163930
+```
+
+⚠ **TWO DENOMINATORS, AND R7 READS DIFFERENTLY UNDER EACH.** §1z-o counts what
+the plane-repair TRIGGER evaluates — accepted `0x003D` reports only — and gets
+**9**. The census counts every `position_report` on a non-stub mesh and gets
+**11** (the extra two are `0x0047` stop-reports, which the trigger never sees).
+Neither is wrong. Say which rule is in force.
+
+**Position.** R7 is a *small* capture with an *outsized* signature:
+
+| | R7 | corpus | R7's rank |
+|---|---|---|---|
+| position_reports | 122 | 11,754 | 31 of 134 |
+| off-mesh | 1 | 670 | 37 of 134 |
+| DISAGREE (census rule) | 11 | 259 | **8 of 134** |
+| distinct disagreeing points | 4 | 123 | — |
+| direction N→0 | **0** | 208 | 15 of 134 |
+| direction 0→N | **11** | 51 | **2 of 134** |
+| `plane_echo` rows logged | 9 | 43 | 2 of 134 |
+
+**Rate: 9.09% of on-mesh reports against the corpus's 2.34% — about 4×.** But it
+supplies only 4.25% of the corpus's disagreeing rows and 3.25% of its distinct
+points, and seven captures carry more. **Outlier in rate, mid-pack in volume.**
+
+**★ R7 is 100% INVERSE where the corpus is 80% FORWARD.** The corpus splits
+208 "client declares N, mesh offers only 0" against 51 of the inverse. R7 is
+**0 and 11**. It therefore supplies **11 of the corpus's 51 inverse rows (21.6%)
+out of a 122-report session** — and every one of the corpus's `offered [37]`
+inverse rows. No other capture has a single one.
+
+**★ THE EXPOSURE CONTROL — and it is not vacuous.** "Only R7 disagreed on
+plane-37 ground" would be empty if only R7 stood there. It did not:
+
+| capture | reports on ground our mesh calls [37] | disagreeing |
+|---|---|---|
+| **R7** | 41 | **11 (26.8%)** |
+| R6 `20260829T132441` | **74** | 0 |
+| R6b `20260829T142904` | 16 | 0 |
+| `20260829T091845` | 5 | 0 |
+
+**R6 had nearly twice R7's exposure and never disagreed once. 11/41 against
+0/95, Fisher exact two-sided p = 6.5e-07.** ⚠ **The statistic stands; the reading
+below is CORRECTED in §1z-o.8** — §1z-f.4's trapezoid ground truth resolves the
+height ambiguity this paragraph hedges, and the answer is on-deck versus
+under-deck, not session versus session. R7's own
+disagreeing coordinates sit **18.6–50.4 u** from points those sessions stood on
+and agreed at — the same bridge structure, not a separate place. ⚠ The mesh has
+no height, so (x, y) proximity does not establish *physical* identity: R7 may
+have been under the deck where the others were on it. That is the arc's standing
+limitation and this control cannot lift it. What it does kill is the trivial
+explanation, "only R7 went there".
+
+**★ AND THE CONTROL RUNS THE OTHER WAY TOO.** R7 is not simply a
+"disagreeing session": on plane-[17] ground it reported **34 times and agreed
+34 times**, while `20260826T095804` disagreed **23 of 36** on that same plane
+set. And R7 agreed 44 of 44 on plane-[0] ground. **Neither the session nor the
+geometry alone predicts the signature; the pair does.** That is a sharper
+constraint on §1z-o.6's "our own grant" chain than §1z-o.6 could state on its
+own — whatever authored the plane-0 word was present in R7 and absent in three
+identically-configured sessions on the same ground.
+
+**Configuration does not explain it.** All three armed sessions ran the same
+banner: `MAP OVERRIDE: 280`, navmesh `0x287B3`, **`--router` ON**, plane repair
+ON. R6 and R6b are not a different policy; they are the same policy, more
+exposure, no event.
+
+**★ R7 IS THE ONLY ARMED SESSION THAT EVER DISAGREED AT ALL.**
+
+| session | reports | disagreements | echoes logged | points |
+|---|---|---|---|---|
+| R6 | 202 | **0** | 4 | 0 |
+| R6b | 225 | **0** | 30 | 0 |
+| R7 | 122 | **11** | 9 | 4 |
+
+Every prospective disagreement the repair has ever been in a position to see is
+R7's. Three armed sessions, 549 reports, one episode.
+
+**And the two channels are INDEPENDENT — do not use echoes as a lock proxy.**
+R6b logged **30** echoes with **zero** client disagreements, three times R7's
+echo count. The outbound channel measures what WE emit; the ladder measures what
+the CLIENT declares. R6b's 30 are server-originated at glitch structures
+(§1z-g); R7's 9 co-occur with a client that was failing its own pathfinder. A
+session can be loud on one channel and silent on the other, and R6b is the proof.
+
+### 1z-o.8 R6 AND R6b SCORED THE SAME WAY — two silences, and they are not the same silence
+
+```bash
+python toolkit/clientscan/planecensus.py --focus 20260829T132441   # R6
+python toolkit/clientscan/planecensus.py --focus 20260829T142904   # R6b
+```
+
+Both scored ZERO disagreements, and §1z-f/§1z-g already read them as healthy.
+What the corpus adds is **what each was in a position to disagree about**, which
+is the only thing that makes a zero worth anything.
+
+| | R6 | R6b | R7 | corpus rank (R6 / R6b) |
+|---|---|---|---|---|
+| position_reports | 202 | 225 | 122 | 13 / 12 of 134 |
+| off-mesh | 15 | **47** | 1 | 17 / **3** of 134 |
+| DISAGREE | **0** | **0** | 11 | — |
+| `plane_echo` rows logged | 4 | **30** | 9 | 3 / **1** of 134 |
+| reports on plane-[37] ground | **74** | 16 | 41 | — |
+| reports on STACKED ground | 0 | **5** | 0 | — |
+
+**R6 carries the corpus's heaviest plane-37 exposure and disagreed zero times.**
+Its 74 reports are **54% of the 136 plane-37 reports in the whole corpus**, which
+puts a number on §1z-f's own title claim ("the heaviest plane exposure ever
+captured") for the first time.
+
+**R6b has more echo rows than any other capture, and is the corpus's third most
+off-mesh**, with zero disagreements — 30 echo rows against R7's 9. ⚠ **"Loudest"
+is the wrong word and §1z-o.11 withdraws it:** R6b's echo RATE is 3.88% against
+the corpus's 3.73% — dead ordinary. It has the most rows because it granted 774
+times, more than any other armed session. R7, quiet by count, has the highest
+rate of the three at 5.11%. That pairing is the proof that
+**the two channels are independent**: the echo channel measures what WE emit, the
+ladder what the CLIENT declares, and R6b is loud on the first and silent on the
+second. Do not use one as a proxy for the other.
+
+**⚠ AND R6 CORRECTS §1z-o.7's INTERPRETATION — the statistic stands, the reading
+does not.** §1z-o.7 set R7's 11-of-41 against R6/R6b's 0-of-95 on "the same
+ground" (p = 6.5e-07) and hedged that the mesh has no height. **§1z-f.4 lifts the
+hedge, and the answer is not the one §1z-o.7 leaned toward.** Plane 37 is a closed
+17-trapezoid lens (x −2852..−1643, y 6301..6638 — re-derived here, identical),
+there is **no under-deck ground of any plane**, and the under-deck client is
+outside its OWN navmesh, reached by a glitch rather than by walking. R6's
+under-deck excursions were **click-driven and report-silent** — its 202 reports
+were all legal, and its 4 echoes are the clicks. R7 REPORTED from under the deck;
+R6 clicked under it and reported from on top.
+
+So the honest reading is **on-deck versus under-deck, not session versus
+session.** The two populations are not the same physical ground at all; they only
+share (x, y), which is exactly what a heightless mesh cannot distinguish. §1z-o.7's
+"whatever authored the plane-0 word was present in R7 and absent in three
+identically-configured sessions" is **withdrawn** — what was absent in R6/R6b was
+the glitch state, not the author.
+
+**What survives, and it is better:** §1z-f.4 reached "the under-deck plane-0
+declaration is a glitch-state word, not a decode gap" from MESH GROUND TRUTH, and
+§1z-o reached "R7's plane 0 was invalid at that point" from the CLIENT'S OWN
+PATHFINDER. Two independent instruments, one conclusion. **R7's arming was a true
+positive, and it is now doubly supported.**
+
+(One reconciliation, since a finer scan disagrees with §1z-f.4's wording: an 8 u
+sweep of the lens bounding box finds **43 of 4,561 points offering {0, 37}**
+against §1z-f.4's "zero plane-0 overlap, 581/581". All 43 sit at exactly
+**x = −2852**, a single scan column on the west landing line. It is a
+sample-on-the-edge artifact of the bounding-box sweep, not under-deck ground, and
+§1z-f.4's interior claim stands.)
+
+### 1z-o.9 ★ WHY THE DISARM HAS NEVER ENGAGED — the better answer
+
+§1z-n.3 explained the `ambiguous` disarm's 0-of-259 by rarity: stacked ground is
+0.17% of map 280. **That is true and it is not the main reason.** Scoring every
+report that landed on stacked ground, corpus-wide:
+
+| offered | reports | captures | disagreeing |
+|---|---|---|---|
+| `[0, 18]` | 154 | 14 | 0 |
+| `[0, 46]` | 16 | 3 | 0 |
+| `[0, 22]` | 11 | 1 | 0 |
+| `[0, 26]` | 5 | 1 | 0 |
+| `[0, 20]` | 5 | 3 | 0 |
+| `[0, 42]` | 3 | **1 (R6b)** | 0 |
+| **total** | **194** | | **0** |
+
+**194 reports have stood on stacked ground and not one of them disagreed.** The
+`[0, 18]` stack alone was visited 154 times by 14 different captures — this is not
+an unvisited corner of the map.
+
+**The structural reason: a stack offers TWO chances to be right.** The disarm
+requires a report that is on a stack AND declares a plane that is neither of the
+two offered. Offering two planes makes disagreement strictly less likely than
+offering one, so the safety valve is **anti-correlated with the hazard by
+construction** — it is least likely to be reachable exactly where it would be
+needed. That is a sharper statement of ★3's inversion than rarity alone, and it
+does not depend on how much of the map is stacked.
+
+R6b is the corpus's only witness to the `{0, 42}` NE-bridge pair (§1z-g.5's
+by-design stacked deck): **3 reports, all agreeing.** The entire live exposure of
+the geometry ★3's table was measured on is three reports in one session.
+
+### 1z-o.10 ★ THE CENSUS AGAINST THE ARMED CORPUS — 95% of it is replay, and the live 5% is confounded
+
+§1z-n reads over 134 captures and states rates as if they were one population.
+They are two. The repair shipped at `dcf9484`, **2026-08-29 11:22:45**; every
+session before that ran with the trigger DISARMED, so every claim the census
+makes about them is a REPLAY — what the repair would have done, not what it did.
+Splitting on the harness banner (`"plane repair (default ON)"`, an artifact,
+rather than on the timestamp, an inference):
+
+| | ARMED | replay-only | armed share |
+|---|---|---|---|
+| captures | **3** | 131 | 2.2% |
+| position_reports | 549 | 11,205 | 4.7% |
+| DISAGREE | **11** | 248 | **4.3%** |
+| distinct disagreeing points | 4 | 119 | 3.3% |
+| reports on stacked ground | 5 | 189 | 2.6% |
+| `plane_echo` rows LOGGED | **43** | **0** | **100%** |
+| fires | **0 observed** | 5 replayed | **0%** |
+
+**The two halves of the repair's case come from disjoint evidence.** Every firing
+observation is counterfactual — all 5 would-fires are in sessions where the
+trigger was not running. Every echo observation is prospective — the tripwire
+shipped with the repair, so 43 of 43 logged rows are armed. **Nothing in the
+record both fired and was watched.**
+
+**Four armed harness runs exist, not three.** `20260829T163038` is
+banner-confirmed armed and produced **no capture at all** — no `report.json`, no
+frames, its `gamesrv.log` stopping at the startup banner. An aborted launch. So
+"the repair has been armed four times" and "three armed sessions have data" are
+both true and neither substitutes for the other.
+
+**On rates, the armed slice looks REPRESENTATIVE — and that is the one
+reassuring number here.** Disagreement per on-mesh report reads **2.26% armed
+against 2.34% replay-only**; echo trips per on-mesh send, **3.33% against 3.81%**.
+Three sessions on one afternoon reproduce the corpus rate. That is worth stating
+because the opposite would have been easy to find.
+
+#### ★ But the arming is perfectly confounded with `--router`
+
+| | router OFF | router ON |
+|---|---|---|
+| **disarmed** | 055221 (1 fire), 212317 (1 fire), ~1,190 more | 091543 (**3 fires**), ~10 more |
+| **ARMED** | **— EMPTY —** | 132441, 142904, 163930 (**0 fires**) |
+
+**`--router` is ON in 14 of 1,210 banner-carrying runs (1.2%) — and in 4 of 4
+armed runs (100%).** The cell "armed, router off" is empty. **The plane repair
+has never once run without the router**, so its entire prospective record was
+taken under a click policy that 98.8% of the corpus did not use.
+
+That is not a small caveat, because the router is not a bystander on this
+channel: it is the arm that computes its own plane words and matches field 4 to
+them (§1z-o.6), and it makes the armed sessions **grant-dense** — 1,292 on-mesh
+`0x0029`-family sends across 549 reports (2.35 per report) against the
+replay-only corpus's 6,250 across 11,205 (0.56 per report), a **4.2× difference**.
+The armed sessions supply **17.1% of all on-mesh grants from 4.7% of reports**.
+So the echo rate's reassuring 3.33-vs-3.81 comparison is between populations whose
+grant behaviour differs fourfold, and the echo channel is a function of grants.
+
+The confound is not total, and the exception matters: **`20260829T091543` was
+router-ON and disarmed**, and it supplies 3 of the 5 would-fires. So the firing
+evidence is not purely a router-off phenomenon either. What has never been
+observed is the diagonal — armed without the router, or a fire while watched.
+
+#### What this means for the ruling
+
+HANDOFF §D′ item 1 asks the owner to rule on a default-ON arm that has no ruling.
+The census strengthens the *specificity* case (§1z-e.2's zero-fires-elsewhere
+replicates, and §1z-n's rates hold on the armed slice). It does **not** provide a
+prospective firing record, and it cannot separate the repair from `--router`.
+**Two cheap runs would fix that**: one armed session with `--no-router`, which
+fills the empty cell, and one press against §1z-n's named geometry, which is the
+only way the heal gets tried. Both are desk-cheap to specify and neither has been
+run.
+
+⚠ **And the mesh axis is narrow too**: all 3 armed captures are `0x287B3`
+(map 280), while the replay corpus is 71 captures on `0x1B97D`, 53 on `0x287B3`,
+6 on `0x345CC`, 1 on `0xB602`. Nothing prospective has ever been recorded on the
+mesh that carries the *plurality* of the corpus.
+
+### 1z-o.11 R6/R6b's ECHO ROWS scored against the corpus — and "loudest" was a volume artifact
+
+§1z-o.8 scored the three armed sessions on the INBOUND channel and noted R6b as
+"the corpus's loudest echo session" with 30 rows against R7's 9. Scoring the
+OUTBOUND channel properly changes that reading and supersedes a published claim.
+
+#### The funnel — and it reconciles §1z-f.2 exactly
+
+Every published echo number sits at a different stage of the same funnel, which
+is why they have looked inconsistent:
+
+| stage | R6 | R6b | R7 |
+|---|---|---|---|
+| sends on the tripwire's three opcodes | **349** | 797 | 176 |
+| not the player's agent | 0 | 0 | 0 |
+| non-finite point | 0 | 0 | 0 |
+| point OFF-MESH — **the tripwire is silent by design** | **7** | 23 | 0 |
+| ON-MESH — **the tripwire's real denominator** | **342** | 774 | 176 |
+| TRIP (= logged rows) | **4** | **30** | **9** |
+
+§1z-f.2 reports R6 as *"349 plane-bearing sends: 4 wrong-plane, 7
+off-mesh-point, 338 legal"*. That is this funnel exactly — 338 legal + 4 wrong =
+342 on-mesh — and the recomputation matches the live tripwire at **4 / 30 / 9**,
+the control that has already caught two bad parses on this channel.
+
+**The denominator for an echo RATE is the on-mesh row, not the 349.** The
+tripwire cannot speak when `offered` is empty, so those sends are a genuinely
+different class and counting them dilutes the rate — quote R6 as **4/342**, never
+4/349.
+
+Corpus-wide the same funnel reads **8,408 sends on the three opcodes → 424 not
+the player's agent (the tripwire's own first gate) → 442 off-mesh → 7,543 on-mesh
+→ 282 trips.** By opcode the trips are **281 × `0x0029`, 1 × `0x002A`, 0 ×
+`0x002C`** — the lone `0x002A` in the whole corpus is a trip. So **the tripwire is structurally blind to 442 of the player's
+7,984 grants — 5.5%** — and that number belongs beside its 3.73% rate every time,
+because a tripwire that cannot speak about off-mesh sends is silent exactly where
+our decode is weakest.
+
+#### ★ R6b is loud by VOLUME, not by rate
+
+| | trips | on-mesh sends | rate | rank by count |
+|---|---|---|---|---|
+| R6 | 4 | 342 | **1.17%** | 18 of 31 |
+| R6b | 30 | 774 | **3.88%** | **2 of 31** |
+| R7 | 9 | 176 | **5.11%** | 12 of 31 |
+| corpus | 282 | 7,543 | **3.74%** | — |
+
+**R6b's rate is the corpus rate.** It ranks second of 31 by echo
+COUNT and is entirely ordinary by rate — it granted 774 times, more than any
+other armed session, because it was long and routed. R7, the quiet one by count,
+has the *highest* rate of the three. **§1z-o.8's "loudest echo session" is
+withdrawn as a signal: it is a volume artifact.** Rank sessions by rate or say
+"most rows" and mean it.
+
+#### What the rows actually are
+
+**All 43 logged echoes in the entire corpus emit plane 0** — 41 where the mesh
+offers only `[37]`, 2 where it offers only `[42]`. The live echo record is one
+sentence: *we put plane 0 on the wire at a point our mesh calls a deck.*
+
+By sender, from each echo's co-timed send label:
+
+| | `ROUTER one leg` | `ROUTER leg` | `ZERO LEAD` |
+|---|---|---|---|
+| R6 | 4 | — | — |
+| R6b | 29 | 1 | — |
+| R7 | 4 | — | 5 |
+
+**38 of 43 are router paths and 5 are zero-lead** — so the design licence usually
+cited for the echo channel (`test_position_trust` pinning verbatim echo at the
+zero-lead site) covers **5 of 43**, and §1z-o.1's correction generalises: the
+router is the dominant echo sender, not the zero-lead arm.
+
+**★ AND §1z-f.2's FIELD-4 RULE EXTENDS, with exactly one exception.** That
+section observed of R6's four that *"the server's own tracked plane (the send's
+second word) was the client's latest accepted report's plane every time — no
+stale state"*. Replaying the report stream against every trip: **R6 4/4, R6b
+30/30, R7 8/9.** The single miss is R7's last echo, `t = 284.95`, whose label
+reads `ZERO LEAD (-2067,6516) plane 0 carry 37` — field 4 is supplied by the
+arrival **carry**, not by the tracked report plane, which is the documented
+behaviour of that arm rather than stale state. So across 43 trips the server's
+field 4 was **never** stale: the one deviation is a different mechanism writing
+it on purpose.
+
+#### ★ The exposure control — same deck, three very different rates
+
+Bucketing every corpus send by the plane-set our mesh offers at the send point:
+
+| offered `[37]` | sends | tripping | rate |
+|---|---|---|---|
+| R6 | 88 | 4 | **4.5%** |
+| R6b | 51 | 28 | **54.9%** |
+| R7 | 35 | 9 | **25.7%** |
+| `20260829T085952` | 3 | 0 | 0% |
+
+Three identically-configured sessions sending into the same decoded geometry trip
+at 4.5%, 54.9% and 25.7% — R6 against R6b is **4/88 versus 28/51, Fisher exact
+p = 1.6e-11**. **Deck geometry alone does not determine the echo rate** — and unlike the inbound case (§1z-o.8), no on-deck/under-deck distinction
+rescues a geometric reading here, because these are points WE chose to send to.
+What differs is which points each session's clicks and routes selected.
+
+And the complement is as sharp: **on plane-`[0]` ground R6 sent 248 times and R6b
+552, tripping ZERO** — while 97 other captures sent 5,981 times there and tripped
+**140**. The armed sessions' echoes are exclusively a deck phenomenon; the
+corpus's `[0]`-ground trips are the opposite direction (a non-zero plane emitted
+onto plane-0 ground) and belong to different sessions entirely.
+
+#### A published claim that no longer holds
+
+§1z-f.2 calls R6 *"4/349 — the first nonzero census outside a lock session"*.
+Scored corpus-wide, **31 captures carry at least one recomputed trip and 28 of
+them are not lock sessions.**
+
+> ⚠ **THAT COUNT READ 30 UNTIL A DENOMINATOR AUDIT, and the miss is instructive.**
+> When `label_captures`' send-only bug was fixed, the rate it broke was corrected
+> from 281/7,542 to 282/7,543 — but the CAPTURE COUNT drawn from the same
+> population was not, and the rank denominators in the table above kept saying
+> "of 30". **A population fix propagates to every figure drawn from that
+> population.** `test_planecensus.py` §6 now pins the identities and the ten
+> headline figures so the next such drift goes red instead of into a sentence. R6 was the first one *looked at*, not the first
+there is. The claim should read "the first non-lock session to be censused",
+which is a statement about the arc's attention rather than the corpus.
+
+⚠ **What the echo channel still cannot tell you.** It is observation-only and
+scoped to sends, so it says nothing about whether a bad emission was ADOPTED by
+the client — R6b emitted 30 and its client never once declared an impossible
+plane (§1z-o.8), which is the cleanest available demonstration that emitting one
+is not sufficient to cause one. With n = 3 armed sessions there is no usable
+correlation between echo count and disagreement count, and none should be
+computed.
+
+### 1z-o.12 THE CENSUS AGAINST THE MOVEHOOK CORPUS — and the LOCK inverts the channels
+
+The census (§1z-n) scores what the client REPORTS. The movehook corpus records
+what the client BELIEVES, from inside. Every session has both, so the same
+question can be asked twice.
+
+#### The in-band pin TRANSFERS — 19 of 19, and a hand-pin retires
+
+A movehook bin does not record its map, which is why `noclipscore.py` hand-pins
+map 280 and says in capitals that the coverage-score selector picks the wrong one
+(§1v.3). It does not have to: **pair each bin to its gamesrv capture by
+byte-exact float dwords and the census's in-band pin comes with it.** All **19**
+pin (20 `movehook.bin` files exist; `vault/research/movecode/movehook.bin` is a
+byte-identical copy of `k1-treatment`'s). Meshes: **17 x `0x287B3`, 2 x
+`0x1B97D`**.
+
+⚠ **THE RAW MATCH COUNT IS THE WRONG DISCRIMINATOR, and a first pass using it
+refused four captures.** Two coordinates are shared corpus-wide: map 148's spawn
+`(9826, 8077)` appears in **111** captures and map 280's `(-6036, -2519)` in
+**40** — the latter because it is what most map-280 reports carry in `ours`.
+Those two generate nearly every runner-up, so a raw-count margin measures shared
+spawns. **Score CORPUS-UNIQUE matches instead** — coordinates appearing in
+exactly one of 1,212 captures — and every pairing becomes decisive: 8 to 1,248
+uniques against a runner-up of 1. `r5stuck` goes from 1 raw match (refused) to
+**50 uniques against a runner-up of 0**.
+
+**The method reproduces every pairing the record made by hand** — §1z-e.3's
+`ascalon` -> `20260827T055221`, §1z-e.4's `k1-treatment` -> `20260827T212317`,
+§1z-c's `r5stuck` -> `20260829T091543` — as its top match.
+
+#### ⚠ A raw client-side rate is 2x too high: the SITE trap
+
+The first pass read **6.31%** client-side. Splitting by the site each sample came
+from shows why that is not the client's opinion:
+
+| site | on-mesh samples | disagree | rate |
+|---|---|---|---|
+| `setter` | 9,689 | 274 | **2.83%** |
+| `teleport` | 1,151 | 169 | 14.68% |
+| `reseed` | 264 | 129 | **48.86%** |
+| `setposition` | 88 | 74 | **84.09%** |
+| `bake` | 52 | 0 | 0.00% |
+
+`reseed`, `setposition` and `teleport` are the **correction machinery firing** — a
+sample there is the instant of a snap, not a belief held during play.
+`noclipscore.body_samples`' site list is right for *where is the body* and wrong
+for *what plane does the client think it is on*. Everything below is the walking
+channel only, and any client-side plane rate must say which filter produced it.
+
+#### ★ THE RESULT: the lock inverts the two channels
+
+| | client walking channel | server reports |
+|---|---|---|
+| **16 non-lock sessions** | 274 / 9,361 = **2.93%** | 13 / 1,303 = **1.00%** |
+| **the 3 lock sessions** | 49 / 655 = **7.48%** | 131 / 286 = **45.80%** |
+| all 19 | 323 / 10,016 = 3.22% | 144 / 1,589 = 9.06% |
+
+**Away from a lock the client's own state is ~3x more anomalous than its
+reports. Inside a lock the server's reports are ~6x more anomalous than the
+walking channel.** The two channels are sensitive to opposite failure modes:
+
+* **The CARRY is client-internal and report-silent.** r6 reads **16.29%**
+  client-side against **0.00%** on the wire; r6b 3.92% against 0.00%; k2-2 12.50%
+  against 0.00%. Already decoded for R6 in §1z-f.3 ("18 impossible-plane episodes
+  totalling 60.7 s... the stale plane lives entirely client-side, in the
+  walking/bake channel") and §1z-f.4's report-silent under-deck movement. New here
+  only in that it holds across sessions.
+* **The LOCK is report-loud and walking-silent.** `r5stuck` reads **100.00%**
+  client-side on **17** surviving walking samples against **81.97%** over **122**
+  reports — the walking channel has almost stopped producing samples at all,
+  which is what "the walker is dead" looks like from inside. `ascalon` is 0.83%
+  against 13.67%; `k1-treatment` 18.18% against 48.00%.
+
+**131 of this subset's 144 server-side disagreements — 91% — come from the three
+lock sessions.** That is where server-side plane disagreement lives.
+
+⚠ **AND THIS SUBSET IS NOT THE CORPUS.** It contains all three of the corpus's
+locks, so its server-side rate (9.06%) is four times the census's 2.34%. The
+channel comparison is valid within the subset; the subset is enriched. Quote the
+non-lock row against the census, not the total.
+
+#### Two corroborations
+
+**Off-mesh matches on both channels** — 6.51% client-side against 6.31%
+server-side — which is expected: off-mesh is a statement about our decode's
+coverage, not about anything the client declares. It is the control that says the
+two populations are looking at the same geometry.
+
+**The direction split is stable across instruments.** Client side: **598
+"declares N, mesh offers only 0" against 124 "declares 0, mesh offers only N"** =
+83 / 17. Server side (§1z-n): **208 / 51** = 80 / 20. Two independent
+instruments, two populations, the same ratio.
+
+⚠ **What this cannot settle.** The client-side "sample" is a choice — 6.31%
+unfiltered, 3.22% on the walking channel — so the filter travels with the number
+or the number is meaningless. `r5stuck`'s 100% rests on **17 samples**, which is
+the right order for a dead walker and far too few for a rate. And nothing here
+says which channel is *right* when they disagree: both are scored against OUR
+mesh, so a decode gap moves both together.
+
+### 1z-o.13 THE LADDER SCORED AGAINST THE CENSUS — and it is measuring seam contact
+
+The `plane_repair_due` ladder is the repair's own view of the plane channel; the
+census is the exhaustive view of the same channel. Per-session breakdowns are
+published already (§1z-f, §1z-g, §1z-o.1). This is the ladder measured AGAINST
+the census, and it does not come out well.
+
+**Control first.** Replaying `plane_repair_track` per report reproduces the live
+ladder exactly — **15 / 11 / 9** rows, and not only the counts: the ordered `why`
+string, the `plane` and the 2-dp coordinate match on all 35.
+
+#### The compression — on ONE denominator
+
+⚠ **A first draft of this section committed the arc's own denominator swap.** It
+priced compression off 549 `position_report`s while pricing the hidden count off
+the 474 the trigger actually evaluates (549 − 75 `0x0047` stop-reports, which
+`_maybe_plane_repair` never sees). 549 − 35 = 514, not 439. Stated on one
+denominator:
+
+| | |
+|---|---|
+| reports the trigger EVALUATES (0x003D) | **474** |
+| ladder rows | **35** |
+| **compression** | **13.5 evaluations per row** |
+| evaluations computed but not logged | **439** |
+
+Per-report clause outcomes: `plane-legal` 404, `off-mesh` 61, `holding` 5,
+`arming` 4 (+75 stop-reports never evaluated).
+
+**The ladder cannot express a rate.** 439 of 474 evaluations left no trace,
+because the reason string did not change. That is the design — a capture that
+cannot show the arming edge cannot answer "why didn't it fire" — but it means
+**no denominator is recoverable from the ladder**, and every rate in §1z-n had to
+come from the report stream. It is also how §1z-o.1's hidden `arming` row
+vanishes.
+
+#### What the 35 rows are — and pick your denominator
+
+| ladder `why` | rows | evaluations compressed | census category |
+|---|---|---|---|
+| `plane-legal` | 17 | 404 | AGREE |
+| `off-mesh` | 13 | 61 | OFF-MESH |
+| `arming` + `holding` | **5** | **9** | **DISAGREE** |
+
+The mapping holds by construction — the ladder's `offered` and the census's are
+the same `containing()` call on the same in-band-pinned mesh.
+
+**"5 of 35" is 14.3% of ROWS but 9 of 474 is 1.9% of EVALUATIONS**, and the row
+denominator is the one that flatters the ladder. Say which.
+
+#### ★ THE OFF-MESH CHANNEL IS MEASURING FLOAT SEAM CONTACT
+
+All **13** `off-mesh` ladder rows sit within **0.0056 u** of walkable ground —
+depths `0.0 ×6, 0.0009 ×3, 0.0019, 0.0033, 0.0045, 0.0056`. They are floats
+landing on a trapezoid edge. Meanwhile the armed set's 63 off-mesh reports split
+**30 seam touches (< 0.01 u) and 33 genuinely off-mesh (>= 10 u)** — and **the
+ladder spent all 13 rows on the seam half and none on the other.**
+
+The mechanism is the transition gate. R6b holds the armed corpus's one real
+excursion — **32 accepted reports parked at one point 20.1 u off-mesh over
+11 s** — and it produced **no ladder row at all**, because `why` was already
+`"off-mesh"`, set 16 reports earlier by a 0.0001 u seam touch somewhere else.
+**A transition log keyed on a reason string cannot distinguish a 0.0001 u edge
+kiss from an 11-second parked excursion**, and here it reported the first and
+hid the second.
+
+#### ★ AND THE LADDER CANNOT SCORE ITSELF
+
+`plane_repair_due` rounds `reported` to **2 decimal places**. Scoring each row
+against its OWN logged coordinates rather than joining back to the
+full-precision `position_report` moves **9 of 35 rows** across census categories
+(`plane-legal` -> `off-mesh` 3, `off-mesh` -> AGREE 6). The 17 / 13 / 5 split
+above is only correct **because it joins to the report stream**. Anyone
+re-deriving it from the ladder alone gets a different answer — which is the same
+lesson as §1z-o.1's 1.02 s, from a second direction.
+
+#### Coverage, and a vacuous zero named as one
+
+Replaying the trigger over all 134 non-stub captures as if armed throughout gives
+**657 rows**: `plane-legal` 355, `off-mesh` 199, `report-refused` 46, `arming`
+34, `holding` 11, **`plane-lock` 5**, `stale-stream` 4, `rate-limited` 3 — **54
+disagreement rows from 15 of 134 captures**. The shipped ladder's 35 rows are
+**5.3%** of that, and its 5 disagreement rows **9.3%**.
+
+The 5 counterfactual `plane-lock` transitions match the 5 known would-fires 1:1
+(1 / 1 / 3 across the sessions §1z-e.2 named), so the ladder can count fires.
+
+⚠ **But `plane-lock` is ZERO in every armed capture, and 9 of the trigger's 13
+clause strings never fire there — three of them UNREACHABLE, not merely
+unobserved**: `not-moving` cannot occur (movementType is never 0 across 474
+decodes), `report-refused` cannot occur (549/549 reports accepted), `off` cannot
+occur (`PLANE_REPAIR` is True). **The shipped ladder is a 35-row log of a trigger
+that never fired**, and most of its vocabulary has no live witness.
+
+⚠ **A DEFECT IN THIS SECTION'S OWN REPLAY, caught before publication.** A first
+pass omitted the `rate-limited` clause, so every post-`HOLD` report read
+`plane-lock` and a burst of fires collapsed into ONE transition — 4 for 5, and an
+invented claim that the ladder cannot count its fires. Modelling `MIN_INTERVAL`
+gives 5 and 5. Clause order is `holding` -> `rate-limited` -> `plane-lock`.
+
+### 1z-o.14 What R7 does NOT settle
+
+* **The HEAL is still untried.** Zero fires means the `0x002C` restamp has never
+  been tested on a live locked client. R7 came closest and stopped at 20%.
+* **Whether the echo prolonged the lock.** The server echoed plane 0 back nine
+  times while the client was stuck. Recovery was OURS, not the client's (§1z-o.6),
+  so the question is no longer "did the echo delay an unaided recovery" but "did our
+  own traffic cause the episode AND end it". A `--no-router` run would separate them.
+* **n = 1 for the intermittent morphology.** Everything in §1z-o.3 rests on one
+  episode in one session.
+* **What happened after the third arming is UNKNOWN.** The last `position_report`
+  of any kind is the arming itself at t=284.952902, and the capture then runs to
+  t=905.671 — **620.7 s with no position reports** while the connection stays up.
+  That is the shape §1z-e.3's lock #2 ends in (reports stop, session sits silent),
+  but R7's operator also stopped the hook by request at about the same moment, so
+  **the silence is equally consistent with the session simply being over.** The
+  capture cannot separate them. Do not read it as a third lock, and do not read it
+  as clean.
+* ~~The clock join was not needed and was not done.~~ **It has since been done,
+  and it is better than the coordinate join.** `tick` is `GetTickCount()` (grep
+  `r->tick = GetTickCount()` in `movehook.c`) — wall clock at a 15–16 ms quantum,
+  NOT the ~50 ms world clock 1.3% slow, which is `ptime`/`stop`. So alignment is a
+  constant offset, not a rate fit. Three independent anchors: 204 `MOVE_TO_COORD`
+  packets paired ordinally to the 204 click-to-move queries (**0 coordinate
+  mismatches in 204**), 117 of 122 `position_report` coordinates matched on exact
+  float32 identity, and 176 of 176 outbound grant destinations. **Adopted:
+  `t_server = tick_ms/1000 − 762353.145`, ±10 ms.** The anchors disagree by about
+  11 ms, which is the round trip and not error — the capture's own `ping_summary`
+  reads `last_ms: 11`. ⚠ **Anchor A is a lower bound** (it excludes the c2s leg)
+  and anchor C is method-dependent — an independent re-derivation got sd 0.34
+  against 0.012 — so quote A and B, not C. ⚠ **The band is wider than the
+  `GetTickCount` quantum (15–16 ms), so NO claim about which of two events within
+  ~16 ms happened first is supported by this alignment.** §1z-o.4's in-window
+  sequence is safe because its steps are hundreds of ms apart; a tighter ordering
+  claim would not be.
 
 ---
 

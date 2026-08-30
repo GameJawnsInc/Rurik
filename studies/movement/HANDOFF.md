@@ -10,6 +10,94 @@ staleness table beside you.
 Status authority remains `PLAN.md` §3; the live next-actions list is `PLAN.md` §8. How
 far to trust any number here: [studies/method/FINDINGS.md](../method/FINDINGS.md).
 
+> ## ✅ §D RAN. The census is done, and it moved the arc.
+>
+> **This ran iff `studies/movecode/FINDINGS.md` has a §1z-n heading —**
+> `grep -n '^## 1z-n' studies/movecode/FINDINGS.md`. The instrument is
+> `toolkit/clientscan/planecensus.py` (+ `test_planecensus.py`, 32 checks), so the
+> numbers below regenerate instead of rotting:
+>
+> ```bash
+> python toolkit/clientscan/planecensus.py
+> ```
+>
+> Four things changed, and the first invalidates a practice this file recommends:
+>
+> 1. **THE MESH LABEL WAS WRONG FOR HALF THE CORPUS, AND THE FIX IS IN BAND.**
+>    `version.map_id` reads **148 in 1,206 of 1,212 captures** and is a LOGIN
+>    CONSTANT. Every capture already names its own mesh — a `sent` record, opcode
+>    405, `INSTANCE_LOAD_SPAWN_POINT(file N)`. That attributes **all 12,215
+>    reports, zero captures naming two ids**. Stop hand-pinning and stop typing
+>    `--map` from memory. ⚠ And the ARCHIVE is part of the pin: `0x287D3` decodes
+>    to 27 trapezoids in `dat_study` and 2 in `-probe`, which reports 61.3% OFF-MESH
+>    about a client that did nothing.
+> 2. **★3 IS CONFIRMED AND SHARPER: the disarm has NEVER engaged — 0 of 259.**
+>    The clause is dead at the call site by construction (`prefer` can never match
+>    there), and stacked ground — the only place it *can* fire — is **0.17% of map
+>    280** and 0.50% of `0x1B97D`. On the west bridge plane 0 is offered
+>    **nowhere** across 4,488 samples at 8 u. ⚠ Two precisions: only **239 of the
+>    259 reach the trigger** (the rest are stop-reports or refused reports the
+>    track never sees), and the operator's walk **over-sampled** stacked ground
+>    ~10× (1.73% visited vs 0.17–0.50% areal), so more walking narrows this zero's
+>    support rather than confirming it.
+> 3. **The replayed fire count REPRODUCES `FINDINGS` §1z-e.2 — it is a second
+>    derivation, not a discovery.** Live fires remain **0** (the repair shipped
+>    2026-08-29 11:22:45, `dcf9484`, after the sessions in question). Replaying the
+>    trigger gives **5 would-fire across 3 captures** — the same three sessions,
+>    times and claimed planes §1z-e.2 published, from an instrument written without
+>    knowledge of it. ⚠ **A first draft of §1z-n called these false fires. That was
+>    wrong and is corrected in place**: §1z-e.2/e.3/e.4 adjudicated all three as
+>    REAL locks (§1z-e.3's victim froze at one coordinate and force-closed **10.2
+>    minutes** later), and `RUN-R6.md` calls the same replay "the true-positive
+>    side". Measured to the nearest edge of the declared plane's own geometry they
+>    read **1,563 u / 3,761 u / 90 u** — the first two leave no coverage story;
+>    only `20260829T091543` (90 u, and the capture the trigger was derived from)
+>    stays open.
+> 3c. **THE LADDER IS MEASURING FLOAT SEAM CONTACT** (§1z-o.13). It is a
+>    TRANSITION log: of the **474** evaluations it performed across the 3 armed
+>    sessions it left **439 unlogged** (13.5 per row), so **no denominator is
+>    recoverable from it**. Its 35 rows are 17 census AGREE, 13 OFF-MESH, **5
+>    DISAGREE** — 14.3% of rows but **1.9% of evaluations**; say which.
+>    ⚠ **All 13 `off-mesh` rows sit within 0.0056 u of walkable ground** — floats
+>    on a trapezoid edge — while the armed set's 63 off-mesh reports split 30
+>    seam-touches and **33 genuinely off-mesh, which got ZERO rows**. R6b's one
+>    real excursion (32 reports parked **20.1 u** off-mesh for 11 s) logged
+>    nothing, because `why` was already `off-mesh` from a 0.0001 u edge kiss 16
+>    reports earlier. ⚠ And the ladder **cannot score itself**: it rounds
+>    coordinates to 2 dp, and re-scoring rows against their own logged values
+>    moves **9 of 35** across categories. Join to the report stream or do not
+>    quote it. Counterfactually armed corpus-wide it would carry 657 rows, 54 of
+>    them disagreements, from 15 of 134 captures — the shipped ladder is 5.3% of
+>    that, and `plane-lock` is **zero** in every armed capture.
+> 3a. **THE LOCK INVERTS THE TWO CHANNELS** (§1z-o.12). All **19** movehook
+>    captures now pin their mesh IN BAND (fingerprint to a gamesrv capture), so
+>    `noclipscore.py`'s hand-pin is retired — but **score CORPUS-UNIQUE matches,
+>    not raw ones**: map 148's spawn appears in 111 captures and map 280's in 40,
+>    and a raw margin measures shared spawns. Scoring both sides of the same
+>    sessions: **away from a lock the client's own state is ~3x more anomalous
+>    than its reports (2.93% vs 1.00%) — the report-silent CARRY; inside a lock
+>    the reports are ~6x more anomalous than the walking channel (45.80% vs
+>    7.48%)** — the walker is dead, so there is almost nothing left to sample.
+>    **91% of that subset's server-side disagreements come from its 3 lock
+>    sessions**, and the subset holds all three the corpus has, so its 9.06% is
+>    NOT the census's 2.34%. ⚠ And a raw client-side rate reads 6.31% because
+>    `noclipscore.body_samples` includes the SNAP sites (`setposition` disagrees
+>    84% of the time, `reseed` 49%): those are our own corrections firing, not the
+>    client's belief. Filter to the walking channel and say which filter.
+> 3b. **THE DISARM'S ZERO HAS A BETTER EXPLANATION THAN RARITY** (§1z-o.9).
+>    **194 corpus reports have stood on stacked ground and NOT ONE disagreed** —
+>    the `[0,18]` stack alone was visited 154 times by 14 captures. A stack offers
+>    TWO chances to be right, so the disarm is **anti-correlated with the hazard by
+>    construction**, least reachable exactly where it would matter. R6b is the
+>    corpus's only witness to the `{0,42}` NE-bridge pair ★3's table was measured
+>    on: **3 reports, all agreeing.**
+> 4. **The `plane_echo` tripwire has a denominator at last: ~3.7%** (282 of 7,543
+>    on-mesh player-agent sends), against the 43 rows it has ever logged in its
+>    three sessions. Two careful re-derivations give 3.74% and 3.78%, so quote one
+>    significant figure. The rate is bimodal: 73 of 104 captures trip zero times.
+>
+> **What §D did NOT settle, and what to do next, is at the bottom of §D below.**
+
 > ## ★ FOUR THINGS A COLD SESSION GETS WRONG HERE, ALL OF THEM OBSERVED
 >
 > **1. There is no single entry point, there is a CYCLE — and this file is now the
@@ -44,6 +132,19 @@ far to trust any number here: [studies/method/FINDINGS.md](../method/FINDINGS.md
 > the false-fire class the doctrine block prices as "no measured instance in four
 > sessions" — there is now a candidate instance, and §D is what to do about it.
 >
+> > **★2/★3 UPDATED BY THE CENSUS (§1z-n) — both CONFIRMED, both sharper, and one
+> > number here is bounds-dependent.** The three arming points are verified: client
+> > declares 0, mesh offers exactly `[37]`, `plane_at` returns 37. But **the disarm
+> > column above is not a rate a player ever meets**: over the whole corpus the
+> > disarm fired **0 of 259** times, because stacked ground is **0.17% of map 280**
+> > and a disagreement never landed on any. The west-bridge row is also
+> > bounds-sensitive — an 8 u scan of x[-2400,-1700] y[6250,6650] finds **100% of
+> > on-mesh samples offering exactly one plane and plane 0 offered nowhere**, i.e.
+> > 0% disarm, not 1.1%. Quote the census, not this table, and say which bounds.
+> > And "it has NEVER FIRED" is true but not reassuring: **replayed, it would have
+> > fired 5 times** — the sessions that would have fired it predate the shipped
+> > default. See the ✅ block at the top.
+>
 > **4. DO NOT make the server rewrite outbound grant planes.** "Never emit a plane
 > the mesh does not offer at the emitted point" is the obvious fix, it is wrong, and
 > it is refused repeatedly in `authsrv.py`'s own comment blocks — `plane_at`'s
@@ -62,12 +163,16 @@ far to trust any number here: [studies/method/FINDINGS.md](../method/FINDINGS.md
 | Document | What it is for | Currency |
 |---|---|---|
 | **this file** | the arc's entry point; where each thread stands and what to do next | current at `201324c` |
-| `studies/movecode/FINDINGS.md` | **the record.** Newest sections supersede everything above them | current; §1z-m is the newest |
+| `studies/movecode/FINDINGS.md` | **the record.** Newest sections supersede everything above them | current; **§1z-n** (the plane census) is the newest |
 | `studies/movecode/HANDOFF-PLANE.md` | deep-dive on the plane channel and the lock | **stops at §1z-i**; misses `1ce0171`, `30055e0`, `d710a67`, `131c84a`, and its own "written at `dcf9484`" stamp is wrong (last edited `2882627`) |
 | `studies/movecode/HANDOFF-WARP.md` | deep-dive on the warp hunt and the candidate graveyard | lists `--router` REFUTED in two tables; §1y/§1z/§2a reversed that and every runsheet since passes it |
 | `studies/movement/CANCELWALK.md`, `REALFIX.md`, `ROUTER.md` | the shipped policy arms and their runs | see §C; several carry self-status headers that are wrong (§G) |
 | `studies/movement/PROBE-GATEFIRE.md` | the gate-fire operator procedure | §6 is pinned by `test_probedoc.py`; its prose is not — its "n = 0 captures" claim was corrected 2026-08-29 |
-| `studies/movecode/RUN-*.md` | per-run runsheets | **there is no `RUN-R7.md`** — the arc's most decisive run has no runsheet, and its scoring scripts are one-off files under `vault/research/movecode/r7/scoring/` |
+| `studies/movecode/RUN-*.md` | per-run runsheets | ~~there is no `RUN-R7.md`~~ — **written 2026-08-30**; its scoring scripts are still one-off files under `vault/research/movecode/r7/scoring/`. ⚠ **Two runs answer to "R7"** — MOVECODE-R7 (this one, §1z-i/§1z-o) and CANCELWALK-R7 (a 2026-08-24 gate trace), and the latter owns the grep |
+| **`toolkit/clientscan/planecensus.py`** | **the plane census — not a document. Run it.** | cannot go stale: it re-derives from the corpus every time, pins the mesh in band, and refuses to print a rate whose control failed |
+| **`studies/movecode/RUN-R7.md`** | the runsheet this table used to say did not exist | written 2026-08-30, retrospective and says so; §1z-i is its client half, §1z-o its server half |
+| **the movehook corpus** | 19 distinct captures (20 files; one is a byte-identical duplicate). **All 19 pin their mesh IN BAND** by fingerprinting to a gamesrv capture on CORPUS-UNIQUE coordinates — `noclipscore.py`'s hand-pin is retired | §1z-o.12 |
+| **`studies/movecode/RUN-R8.md`** | **the next two runs, pre-registered** — R8 fills the empty "armed, router off" cell (= the shipped default, never run armed); R8b provokes for the heal | NOT RUN. Test: `grep -n '^## 1z-p' studies/movecode/FINDINGS.md` |
 
 **The rule this table exists to enforce:** a document that asserts its own status lies
 within days. Four do it today — `RUN-B2.md` "nothing is armed", `RUN-R2.md` "UNRUN",
@@ -124,13 +229,23 @@ they cannot exceed one grant per 0.50 s — say which flags were on when you rep
 It puts a `0x002C` on the wire by default on the authority of a code comment. Given ★3,
 that is worth raising.
 
-## D. The next action, and why this one
+## D. ~~The next action~~ — RAN 2026-08-30. Outcome, then the new next action
+
+> **This section's action is DONE.** Test: `grep -n '^## 1z-n'
+> studies/movecode/FINDINGS.md`. Read §1z-n for the full write-up; the summary is
+> the ✅ block at the top of this file. The four items below are kept because they
+> state what the census was FOR, each now annotated with what it returned. **The
+> new next action is at the end of this section.**
 
 **Run the plane-disagreement census over the corpus that already exists.** For every
 accepted `position_report` carrying a declared plane, compare it against what our decoded
 mesh offers at the reported `(x, y)`; break the disagreements down by map, by geometry
 class (stacked deck / bridge underwalk / open ground), and by whether the declared plane
 is `0` or non-zero.
+
+> ⚠ **"By map" turned out to be the hard part, not a grouping key.** The census had
+> to establish which mesh each capture even belongs to before it could group by it,
+> and the obvious answer was wrong — see the ✅ block, item 1.
 
 Desk-only. No client, no owner, no new instrument, blocked on nothing. The join already
 exists in `pathdiff.py` pointed the other way (it uses plane agreement to *identify* a
@@ -166,6 +281,94 @@ are structurally invisible to the trigger (off-mesh disarms by design; and a *mo
 client carrying an impossible plane re-arms the clock on every report and can never
 accumulate `HOLD`, which is precisely what R7 was). The census makes that run
 better-designed when it happens, by naming which geometry to press against.
+
+---
+
+### D′. The new next action, in order — and the first one is a DECISION, not a measurement
+
+1. **★ RAISE THE REPAIR'S DEFAULT WITH THE OWNER** — but on the specificity
+   evidence, not on a false-fire scare. §C notes the plane repair is the one arm
+   with **no owner ruling on record** while putting a `0x002C` on the wire by
+   default on the authority of a code comment. What the census adds is not a
+   false-fire count (§1z-e.2 already adjudicated the three firing sessions as REAL
+   locks, and §1z-n's first draft was corrected for saying otherwise) but a
+   **denominator**: 259 disagreements, 239 reaching the trigger, and the
+   `ambiguous` safety clause engaging **0** times because the ground it protects is
+   0.17% of the map. The arm's specificity is well evidenced; its SAFETY VALVE is
+   decorative. That is the ruling-shaped question (Q9–Q12 all have rulings; this
+   does not).
+
+   ⚠ **AND 95% OF THE CENSUS IS REPLAY, NOT OBSERVATION** (§1z-o.10). The repair
+   shipped 2026-08-29 11:22:45; everything earlier ran DISARMED. Split on the
+   banner: **3 armed captures, 549 reports, 11 disagreements, 0 fires** against
+   131 captures and 11,205 reports of replay. **Every replayed fire is unwatched
+   and every logged echo is armed — nothing in the record both fired and was
+   watched.** The rates do transfer (disagreement 2.26% armed vs 2.34% replay),
+   which is the reassuring part.
+   **But the arming is perfectly confounded with `--router`:** it is ON in 14 of
+   1,210 banner runs (1.2%) and in **4 of 4 armed runs**. The cell "armed, router
+   off" is EMPTY, and the armed sessions grant 2.35 times per report against the
+   corpus's 0.56 — a 4.2x difference on the channel the echoes are drawn from.
+   All three armed captures are map 280; nothing prospective exists on `0x1B97D`,
+   which carries the corpus's plurality. **Two cheap runs close this, and they are now
+   SPECIFIED — `studies/movecode/RUN-R8.md`**: R8 is the shipped default run
+   armed for the first time (predictions on grant density, the disagreement rate
+   and the echo channel, with an exposure floor of 20 plane-37 reports), and R8b
+   is the deliberate under-deck press that tests §1z-o.6's authorship BY REMOVAL
+   and tries the heal. Two sessions on purpose: a provoked fire is unscoreable
+   against specificity, and mixing them contaminates both irrecoverably.
+
+   ⚠ **And there is a live counter-argument the other way, from R7 (§1z-o):** the
+   trigger's `HOLD = 5.0 s` is calibrated on the CONTINUOUS-freeze lock morphology
+   and **cannot fire on the intermittent one** — R7's victim froze ~1 s, jumped
+   ~100 u, froze again, and topped out at **1.02 s, 20% of the bar**, while its own
+   pathfinder was returning `pathCount == 0`. So the arm may be simultaneously too
+   quiet (misses intermittent locks) and unprotected (the disarm never engages).
+   Both belong in the same conversation.
+2. ~~**Score R7's server-side readout.**~~ **DONE — `FINDINGS` §1z-o and
+   `RUN-R7.md`.** Test: `grep -n '^## 1z-o' studies/movecode/FINDINGS.md`. The
+   framing this line prescribed ("a near-miss on a false fire") was **refuted by
+   the data**: R7's client-side return tap answers `pathCount == 1` on plane 37 and
+   `0` on plane 0 at a from-point whose x/y dwords are BIT-IDENTICAL, 1.19 s apart,
+   so a fire would have been CORRECT. Three armings, **true positives that never
+   came close** (max hold 1.02 s of 5.0 s).
+
+   ⚠ **The ladder breakdown this line used to quote — `plane-legal` 17 /
+   `off-mesh` 13 / `arming` 3 / `holding` 2 — is the CORPUS-WIDE total across the
+   three armed sessions, not R7's.** R7's own 9 rows are `plane-legal` 3,
+   `arming` 3, `holding` 2, `off-mesh` 1; R6 is 15 rows and R6b 11, both purely
+   `plane-legal`/`off-mesh`. **R7 is the only session that ever left those two
+   clauses.**
+
+   ⚠ **And two of §1z-o's findings outrank the framing question.** The snap's
+   **gate 2 has fired** (§1z-o.5, 3 times, exceptionless 214/214) against a ★ block
+   saying it never has — so the plane channel is a WARP cause. And R7's lock was
+   **ended by our own grant, and probably started by one** (§1z-o.6).
+
+   ⚠ **DO NOT "FIX" `a2_matched_field4`'s UNGATED CALL SITES.** Its docstring said
+   "for one `--d1-lead` send" while three router sites call it with `D1_LEAD =
+   False`, which reads as a leak; **two independent analyses proposed gating them
+   and both were wrong.** Gating was applied and measured: it turns
+   `test_router.py`'s "first leg carries the corridor's plane, matched" red and
+   reopens ROUTER-B2's P-17 phasing door on every routed leg. Where field 3 is a
+   plane WE computed, field 4 must match unconditionally; only the one-leg verbatim
+   echo gates it, so that echo stays wire-identical. The contract line was the
+   defect — fixed 2026-08-30, with five locks in `test_router.py` (floor 68 → 73)
+   so the next attempt lands on the reason.
+3. **Decide whether the `ambiguous` disarm earns its place.** It has never
+   engaged (0 of 259), it is dead by construction at its own call site, and the
+   ground it protects is 0.17% of map 280. It is not harmful — but the doctrine
+   currently leans on it as a safety property it does not deliver.
+4. ~~**The heal run, better aimed than before.**~~ **SPECIFIED — `RUN-R8.md` §6.**
+   Under the deck on the **west bridge, map 280**, and STAND STILL: R7 died at
+   1.02 s of 5.0 s because the client jumped ~100 u between freezes and the point
+   test is exact float equality. Release keys for 3 s before the heal-click or
+   `kbd-drop` eats it (`GRANT_LOCAL_WINDOW = 3.0`).
+5. **NOT: "refuse when `nz_land == 0`" in `pathdiff`.** The identifier really is
+   wrong 16 of the 58 times it accepts, and all 16 are all-plane-fallback rows —
+   but all 16 also have the 27-trapezoid stub as their true answer, so the two
+   explanations are **perfectly collinear on this corpus** and the fix is not
+   licensed by it. Priced, not recommended.
 
 ## E. Traps, from the record rather than from imagination
 
@@ -224,11 +427,18 @@ Score the plane channel (section C; orthogonal to A and B):
 python toolkit/clientscan/noclipscore.py --bin vault/research/movecode/r8/movehook.bin
 ```
 
+Census the plane channel over the whole gamesrv corpus — desk-only, no client, no
+map to type, and it prints its own controls before any rate:
+
+```bash
+python toolkit/clientscan/planecensus.py
+```
+
 The affected-test set for this arc — each prints its own count and floor and exits
 non-zero if short, so never quote a total:
 
 ```bash
-python toolkit/authsrv/test_planerepair.py; python toolkit/authsrv/test_position_trust.py; python toolkit/authsrv/test_poschecksum.py; python toolkit/authsrv/test_cancelwalk.py; python toolkit/authsrv/test_router.py; python toolkit/authsrv/test_familyrate.py
+python toolkit/authsrv/test_planerepair.py; python toolkit/authsrv/test_position_trust.py; python toolkit/authsrv/test_poschecksum.py; python toolkit/authsrv/test_cancelwalk.py; python toolkit/authsrv/test_router.py; python toolkit/authsrv/test_familyrate.py; python toolkit/clientscan/test_planecensus.py
 ```
 
 Before touching the instrument:
@@ -525,6 +735,20 @@ with:
 > **★ UPDATED 2026-08-20, round 3 — and the update mostly REMOVES work.** The two other callers of gate 2's query and gate 3's predicate are now decoded (`studies/movement/FINDINGS.md` §"round 3"). **`0x00709E90`'s other caller is `0x0081ADB0`, the LOCAL PLAYER's own move-to-point planner** (ChCliBase.cpp:248 `this == context->playerControlledChar`; input-driven, 19 functions / 32 edges upward, 0 in the AgMsg receive region with a 3/3 positive control — a controlled negative, **not** a proof, since `--xrefs` cannot see indirect calls). **`0x005FEF70`'s other caller is `0x00600500`, AgAgent's one-shot obstacle-sidestep computer**, and **both callers treat a zero return identically** ("that step is not takeable", discard the position under test, n = 2 of 2) — **the arc did not over-generalise the predicate.**
 >
 > **Three things this DELETES from the next-job list.** (a) The **4-vs-9 maxCount asymmetry is incidental**: `*pathCount` is the emitted count (`0x007297B2`–`0x007297C3`), overflow drops silently through a void `pop esi / ret` at `0x00726623`, and the fallback returns truncated results unvalidated at `0x0070A0C6`→`0x0070A0CE` — a 5-corner corridor gives gate 2 `count = 4`, which is NO SNAP. (b) The **300.0f-vs-10000.0f arg3 gap is incidental too**: arg3 is a march *budget* whose exhaustion jumps to the SUCCESS exit, tier 2 substitutes `|to−from| + 0.5` (`0x00709FB1`) and never sees it, and gate 1 fences gate 2 inside 299.33 u so it can never bind. (c) **The Tier-2/provider `*pathCount` hole is INERT**: that leg is `LoadLibraryA("PathEngine.dll")` + `GetProcAddress` ordinal 1 (`0x00737380`, imports confirmed), and no such DLL exists in the owner's install (vault `MANIFEST.json`, `source_dir = C:\gw`, only `Accounts.json` excluded) — with a `LoadLibrary` search-path caveat, so evidence rather than proof. Tiers 0/2/3 write on every exit.
+>
+> > ⚠ **REFUTED 2026-08-30 by R7's return tap — `FINDINGS` §1z-o.5. GATE 2 HAS
+> > FIRED, three times.** The paragraph below infers "never reached" from snap
+> > statistics; R7 watches the gate SITE instead. `MapFindPath`'s callers split
+> > 204 click-to-move / **10 snap-gate-2 (`0x00605807`)**, and splitting the
+> > ANSWER by caller gives gate 2 **3 zeros, each followed by `reseed`
+> > (`0x006022B0`) in the SAME client tick** — against 0 of its 7 normal answers.
+> > Exceptionless at 214/214. Gate 2 being reached at all means separation was
+> > BELOW 299.33 u on those ten occasions, so gate 1 did not pre-empt it. The
+> > cause was the plane word, which makes **the plane channel a WARP cause, not
+> > only a lock cause**. It is still not a server lever (★4 stands) — but "gate 2
+> > never fires, ignore it" is no longer true, and a plane-channel fix now has a
+> > measured warp consequence to price. Read the paragraph below as the
+> > superseded inference it is.
 >
 > **★ AND READ THIS BEFORE COSTING ANYTHING AGAINST GATE 2: it has n = 0 observed firings.** Gate 1 runs first and snaps above **299.332591 u straight-line**, so gate 2 is only reached below that — and this arc's own runtime lane measured **24 snaps over 623 paired intervals with 0 of 24 beginning below the gate, minimum before-separation 342.8 u straight-line.** Every snap we have ever measured is explained by gate 1 alone. **Gate 2 is knowledge, not a lever. Do not build a fix against it.**
 >
