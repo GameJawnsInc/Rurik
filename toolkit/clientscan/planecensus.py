@@ -135,6 +135,7 @@ for _p in (_TOOLKIT, os.path.join(_TOOLKIT, "mapdata")):
 
 from pathmap import PathingMap                          # noqa: E402
 from archive import Archive, file_id_table              # noqa: E402
+import vaultpath                                        # noqa: E402
 
 _TS = re.compile(r"(\d{8}T\d{6})")
 _OVERRIDE = re.compile(r"MAP OVERRIDE:\s*(\d+)")
@@ -179,14 +180,22 @@ PLAYER_AGENT_ID = 1
 
 # ---------------------------------------------------------------- corpus ----
 
-def default_root():
-    return os.path.dirname(_TOOLKIT)
+def default_vault():
+    """The vault, via toolkit/vaultpath.py -- never <this tree>/vault.
+
+    A git worktree has no vault of its own, so joining THIS tree's root with
+    "vault" names a directory that does not exist there, and the census refuses
+    having read zero captures (this happened on 2026-08-30, the day after this
+    file was written). vaultpath resolves the one real vault beside the main
+    working tree from any tree, and honours RURIK_VAULT.
+    """
+    return vaultpath.vault_root()
 
 
-def harness_labels(root):
+def harness_labels(vault):
     """-> {datetime: (map_id, navmesh_fid, dirname)} from harness gamesrv.logs."""
     out = {}
-    base = os.path.join(root, "vault", "captures", "harness")
+    base = os.path.join(vault, "captures", "harness")
     if not os.path.isdir(base):
         return out
     for d in sorted(os.listdir(base)):
@@ -279,18 +288,18 @@ def parse_move(plain):
     return (x, y, a, bb, op)
 
 
-def label_captures(root, max_lag):
+def label_captures(vault, max_lag):
     """-> ({capture: label}, [unlabelled], crosscheck).
 
     The label comes from the capture's OWN opcode-405 load message. The harness
     log is read too, but only to cross-check: two independent witnesses to the
     same fact, and a disagreement between them is a finding, not a tie to break.
     """
-    harness = harness_labels(root)
+    harness = harness_labels(vault)
     keys = sorted(harness)
     out, unlabelled = {}, []
     cross = collections.Counter()
-    pat = os.path.join(root, "vault", "captures", "gamesrv", "*.jsonl")
+    pat = os.path.join(vault, "captures", "gamesrv", "*.jsonl")
     for f in sorted(glob.glob(pat)):
         name = os.path.basename(f)
         reports, sends, _e, fids = read_capture(f)
@@ -580,7 +589,10 @@ def _bar(title):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--root", default=default_root())
+    ap.add_argument("--vault", default=default_vault(),
+                    help="the vault (default: resolved by toolkit/vaultpath.py, "
+                         "which finds the real one from inside a worktree; "
+                         "RURIK_VAULT overrides)")
     ap.add_argument("--archive",
                     help="Gw.dat to decode meshes from. The default binds every "
                          "mesh the corpus needs except 0x5F0B2 (138 reports); "
@@ -607,7 +619,7 @@ def main(argv=None):
     ap.add_argument("--json", help="write the full row set here")
     a = ap.parse_args(argv)
 
-    paired, unlabelled, cross = label_captures(a.root, a.max_lag)
+    paired, unlabelled, cross = label_captures(a.vault, a.max_lag)
     meshes = Meshes(a.archive)
 
     _bar("MESH PIN -- in band, from the server's own load message")
@@ -638,7 +650,7 @@ def main(argv=None):
         print(f"    0x{fid:<10X} reports={n:<6d} {note}")
 
     if a.armed:
-        return _armed(paired, meshes, a.root)
+        return _armed(paired, meshes, a.vault)
     if a.focus:
         return _focus(paired, meshes, a.focus)
     if a.identify:
@@ -832,7 +844,7 @@ def _echo(paired, meshes):
 ARMED_BANNER = "plane repair (default ON)"
 
 
-def armed_runs(root):
+def armed_runs(vault):
     """Harness dirs whose banner says the repair was ARMED.
 
     Read from the BANNER, never from the ship date: a run can pass
@@ -841,7 +853,7 @@ def armed_runs(root):
     default-ON status is the open question.
     """
     out = set()
-    base = os.path.join(root, "vault", "captures", "harness")
+    base = os.path.join(vault, "captures", "harness")
     if not os.path.isdir(base):
         return out
     for d in sorted(os.listdir(base)):
@@ -859,9 +871,9 @@ def armed_runs(root):
     return out
 
 
-def _armed(paired, meshes, root):
+def _armed(paired, meshes, vault):
     """Split the census by whether the trigger was running. See FINDINGS 1z-o.10."""
-    dirs = armed_runs(root)
+    dirs = armed_runs(vault)
     stamps = sorted(dt.datetime.strptime(d, "%Y%m%dT%H%M%S") for d in dirs)
 
     def is_armed(name):

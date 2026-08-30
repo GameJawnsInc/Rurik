@@ -7143,6 +7143,14 @@ the same-tick ALIAS**: the
   ninth: "157 of 174 captures carry exactly zero" folded 40 captures on stub or
   unbound meshes — which CANNOT disagree — into the clean pile. The honest split
   is 134 scoreable, 17 disagreeing, 117 clean. 54 checks, floor 54.
+  **2026-08-30, the day after it shipped: both census files found the corpus at
+  `<this tree>/vault` — the exact pattern CLAUDE.md forbids** — so from a git
+  worktree the census attributed zero reports and the test skipped everything
+  (loudly: the floor turned "no corpus" into NO CHECKS RAN, exit 1, which is the
+  guard doing its job). Both now resolve the vault via `toolkit/vaultpath.py`
+  (`planecensus.py --vault` replaces `--root`), while `FINDINGS.md` and
+  `authsrv.py` stay tree-relative, so a worktree session scores the real corpus
+  against its OWN tree's prose and trigger mirror.
 
   `toolkit/clientscan/movehook/test_movehook.py` (**MOVECODE-B2's hook DLL, and
   the first test any hook in this repo has ever had.** `trnhook/` has none, and

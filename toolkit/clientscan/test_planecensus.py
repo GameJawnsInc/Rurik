@@ -73,10 +73,13 @@ import planecensus as pc                                   # noqa: E402
 LEDGER = checks.Ledger("planecensus", floor=54)
 check = checks.adopt(LEDGER)
 
-ROOT = pc.default_root()
-CORPUS = os.path.join(ROOT, "vault", "captures", "gamesrv")
+# The vault via vaultpath (a worktree has no vault of its own); the documents
+# under test from THIS tree, so a worktree session tests its own prose.
+VAULT = pc.default_vault()
+CORPUS = os.path.join(VAULT, "captures", "gamesrv")
 AUTHSRV = os.path.join(TOOLKIT, "authsrv", "authsrv.py")
-FINDINGS = os.path.join(ROOT, "studies", "movecode", "FINDINGS.md")
+FINDINGS = os.path.join(os.path.dirname(TOOLKIT), "studies", "movecode",
+                        "FINDINGS.md")
 
 # The live tripwire's own sessions, and what it logged in each. This is the
 # control: any change to the wire decode must still reproduce these three.
@@ -93,7 +96,7 @@ def main():
         return LEDGER.verdict()
 
     # ---- §1 the pin is in band, and it is total ----------------------
-    labels, unlabelled, cross = pc.label_captures(ROOT, 600.0)
+    labels, unlabelled, cross = pc.label_captures(VAULT, 600.0)
     check(bool(labels), "captures with reports carry an in-band file id",
           f"labelled {len(labels)}, unlabelled {len(unlabelled)}")
     check(not unlabelled,
@@ -127,8 +130,7 @@ def main():
     # holds the corpus's ONLY 0x002A send, and that send is a TRIP. The bug
     # published 281/7,542 where the truth is 282/7,543.
     sendonly = []
-    for f in sorted(glob.glob(os.path.join(
-            ROOT, "vault", "captures", "gamesrv", "*.jsonl"))):
+    for f in sorted(glob.glob(os.path.join(CORPUS, "*.jsonl"))):
         reports, sends, _e, fids2 = pc.read_capture(f)
         if sends and not reports and fids2:
             sendonly.append(os.path.basename(f))
@@ -224,7 +226,7 @@ def main():
     # archives; the meshes that actually carry the corpus do not move at all.
     # If that ever stops being true the headline becomes archive-scoped and
     # every number in FINDINGS §1z-n needs an archive named beside it.
-    alt = os.path.join(ROOT, "vault", "run",
+    alt = os.path.join(VAULT, "run",
                        "2026-07-29_221c13772c7a-probe", "Gw.dat")
     if not os.path.isfile(alt):
         LEDGER.skip("archive invariance", "the -probe archive is not vaulted")
