@@ -63,6 +63,13 @@ EXPECT_PATHS = {
     # patch, which is consistent with everything else measured about that gap
     # (studies/crossbuild/FINDINGS.md §7.2).
     "2026-08-13_64fae3b1369b": 937,
+    # 38849, MEASURED 2026-08-29 by running this test's own `st.source_paths`
+    # over the image: 937 again, zero server-side translation units, the same
+    # two client-side `Srv`-named files, the same twelve Cli-split subsystems
+    # and one PDB path naming target 'Gw'. Three consecutive builds now agree,
+    # which is the census holding rather than the check going quiet -- every
+    # one of those five figures is re-derived per build.
+    "2026-08-20_21511009c460": 937,
 }
 BUILDS = [(b.stamp, EXPECT_PATHS.get(b.stamp)) for b in pinned.BUILDS]
 
@@ -97,7 +104,7 @@ MOCK_STRINGS = {("ascii", "mockDevice"), ("utf16", "mock"), ("utf16", "MockDevic
 # It was 30 over two builds until 2026-08-14, when 38833 was registered; the
 # per-build term is why registering a build moves this number by 9 rather than
 # by 1, and re-deriving it here beats bumping the constant.
-LEDGER = checks.Ledger("srctree", floor=39)
+LEDGER = checks.Ledger("srctree", floor=48)
 check = checks.adopt(LEDGER)
 
 

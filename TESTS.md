@@ -5184,6 +5184,53 @@ Floor 75 against a green 75 with 5 declared skips (the archive-conditional
   is pinned is the SHAPE the code prints; §6, §11 and §12 say so per block and
   this test does not upgrade them. Floor **72**, the bare-machine subset, against
   a green **74** with both captures present. No client, no server. ~1 s),
+  `toolkit/authsrv/test_handshake.py` (**the whole encrypted channel, end to end,
+  and the only test in the suite that launches the server as a subprocess and
+  speaks real protocol at it.** Sections: the vault-free key-binding regression
+  guard (the key must bind to the ANNOUNCED build on BOTH channels); the exe's
+  build matching the key file the server will load; the Diffie-Hellman exchange
+  and the ARC4 key both sides derive; the two computer messages sent as ONE
+  write containing TWO messages and then split across writes, because the real
+  client does both; and the login burst, whose ORDER is the assertion --- every
+  `CHARACTER_INFO` before `REQUEST_RESPONSE`, and `REQUEST_RESPONSE` last,
+  because it is the only message that advances the client's login state machine.
+  The negative control is an UNPATCHED client keying against ArenaNet's
+  compiled-in B: its ARC4 key must NOT match ours, and it declares a skip when
+  the vault holds no stock build with different parameters.
+  **The 2026-08-29 lesson is about the test's own plumbing and it is worth more
+  than the protocol coverage.** For four days this file reported
+  `[FAIL] server sent a login burst  0 bytes` and, in the server's log,
+  `ConnectionAbortedError: [WinError 10053]` --- which names a socket and reads
+  as a protocol or crypto fault, and was NEITHER. The server's stdout was a
+  `subprocess.PIPE` the parent read only at the END, in `drain_server`. A
+  child's stdout pipe on this machine holds **4,096 bytes** (measured; CPython
+  calls `CreatePipe` with `nSize=0`) and authsrv prints **3,822 bytes** of
+  pre-registration banner BEFORE it accepts a connection --- 274 bytes of
+  headroom, about four log lines, for the whole session. The server filled the
+  pipe and BLOCKED IN `print()` mid-burst; the client, which was fine and
+  reading, timed out after 10 s and closed; `drain_server` then read, the server
+  woke into a socket that had gone, and its next send raised 10053. Nothing
+  about it was specific to a build or a key --- it arrived when the BANNER grew
+  past 4 KB, which is why it looked like the unpinned client build and was not.
+  `start_log_reader` now pumps that pipe on a thread from the moment of spawn.
+  **What makes that a fix and not a hope is the guard, and the guard's FIRST
+  version was a check-shaped no-op**: it asserted the captured log was bigger
+  than the pipe, which passes under the broken arrangement too --- a read at the
+  end still returns every byte, because the child has exited and the pipe drains
+  in one go. Size cannot tell a concurrent reader from a late one. WHEN can, so
+  the guard reads how much the pump had already consumed at the moment the
+  session ended: **4,305 B with the fix, exactly 0 B without it**, both arms
+  measured 2026-08-29. Its capacity number is PROBED on the running machine
+  rather than pinned, so the check compares two measurements rather than a
+  literal, and it declares a skip --- naming itself VACUOUS, not passing ---
+  when the log fits the pipe and no stall was possible. The same audit run over
+  the tree found ONE other parent reading a child's pipe only at the end ---
+  `toolkit/portal/test_webgate.py`, whose child writes **1,644 B**, 40% of
+  capacity --- so it has real headroom and was left alone; the number is here
+  so the next person does not have to rediscover the mechanism to check it.
+  Floor **22**, the mandatory core; the pipe guard and the negative control are conditional and
+  each raises the floor from inside its own branch, so a green run here prints
+  **24**. Needs the vault and a free port 6112; ~9 s),
   `toolkit/authsrv/test_dispatch.py` (D9(a): that a schema-KNOWN c2s opcode with
   no handler is now VISIBLE rather than falling off the end of the chain --
   19 opcodes and 9.8% of our corpus did, and worse against live shapes. The
@@ -6614,13 +6661,21 @@ Floor 75 against a green 75 with 5 declared skips (the archive-conditional
   verdict over every root, naming any it failed to refuse, so each score above is
   one lower than before and the same in both environments. ~2.5 s),
   `toolkit/clientscan/test_skillcast.py`, `toolkit/clientscan/test_textrec.py`,
-  `toolkit/clientscan/test_srctree.py` (the Cli/Srv source-tree split, on both
-  vaulted builds — and it proves its own negative result can go red first. Since
-  2026-08-12 it takes the two STAMPS from `pinned.BUILDS` rather than spelling
+  `toolkit/clientscan/test_srctree.py` (the Cli/Srv source-tree split, on EVERY
+  vaulted build — and it proves its own negative result can go red first. Since
+  2026-08-12 it takes the STAMPS from `pinned.BUILDS` rather than spelling
   them again, and a build added to that registry with no expected path count here
   FAILS rather than being skipped: this is the only cross-ArenaNet-build test in
   the tree, so an unmeasured build sitting in the registry would leave it claiming
-  a coverage nothing provides),
+  a coverage nothing provides. That refusal is the shape `test_msgshape.py` and
+  `test_avevents.py` were given on 2026-08-29, when 38849 reached the registry
+  and those two died on a bare `KeyError` while this one named the build and
+  carried on. 38849's own row was measured by running this test's `source_paths`
+  over the image: 937 paths again, zero server-side translation units, the same
+  two client-side `Srv`-named files, the same twelve Cli-split subsystems and one
+  PDB path naming target `Gw`. Three consecutive builds now agree, which is the
+  census HOLDING rather than the check going quiet — every one of those five
+  figures is re-derived per build. Floor 48 (39 + 9 for the third build)),
   `toolkit/clientscan/test_sigcorpus.py` (every byte-shape anchor in the repo,
   counted on both vaulted builds — `studies/crossbuild/PLAN.md` §7.2. It is where
   that plan's two derived-but-never-landed signatures live: `WORKAROUNDS.md` §3.5

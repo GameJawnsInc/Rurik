@@ -61,7 +61,7 @@ from gwpe import PE                                          # noqa: E402
 
 # floor re-measured 2026-08-14 from a real green run: 37 -> 44, build 38833 joining pinned.BUILDS.
 # 2026-08-19, again from a real green run: 44 -> 73, §4 joining.
-LEDGER = checks.Ledger("msgshape table derivation", floor=73)
+LEDGER = checks.Ledger("msgshape table derivation", floor=89)
 check = checks.adopt(LEDGER)
 
 # The routine's real entry prologue -- `push ebp / mov ebp,esp / sub esp,0x20 /
@@ -78,6 +78,11 @@ EXPECT_ENTRY = {
     # shape and the -0x22 delta verified against an int3 boundary, so an
     # unchanged answer is a re-derivation that agreed, not a lookup.
     "2026-08-13_64fae3b1369b": 0x007DE010,
+    # 38849, MEASURED 2026-08-29 the same way: the anchor is still UNIQUE in
+    # .text (1 hit) and the -0x22 delta still lands on an int3 boundary, so
+    # this is a third re-derivation that agreed rather than a number copied
+    # down a column. The VA has now held across three consecutive builds.
+    "2026-08-20_21511009c460": 0x007DE010,
 }
 
 
@@ -115,9 +120,27 @@ for stamp, pe in PES.items():
           f"VERIFIED after a match, never searched for")
 
 for stamp, pe in PES.items():
+    # A BUILD IN THE REGISTRY WITH NO ROW HERE IS A NAMED FAILURE, NOT A
+    # KeyError. `pinned.BUILDS` is the vault's build registry, so a build added
+    # there reaches this loop the moment it is vaulted -- and this used to
+    # index EXPECT_ENTRY directly and die with `KeyError: '<stamp>'`, a
+    # traceback that names neither the build nor what to do about it and takes
+    # the whole file down before any verdict. test_srctree.py already had the
+    # right shape ("add one, measured from a real run -- never from a guess")
+    # and this is that shape. Failing beats skipping for the reason that file
+    # gives: the registry is what other tools consult to answer "which builds
+    # do we cover", and an unmeasured build sitting in it silently is the
+    # coverage gap this wiring exists to close.
+    want = EXPECT_ENTRY.get(stamp)
+    if want is None:
+        check(False, f"{stamp}: no RegisterMsgs VA in EXPECT_ENTRY",
+              "add one, measured by running MS.find_register_msgs over this "
+              "image -- never from a guess, and only once the int3-boundary "
+              "check below agrees for it")
+        continue
     va, off = MS.find_register_msgs(pe)
-    check(va == EXPECT_ENTRY[stamp],
-          f"{stamp}: RegisterMsgs resolves to 0x{EXPECT_ENTRY[stamp]:08X}",
+    check(va == want,
+          f"{stamp}: RegisterMsgs resolves to 0x{want:08X}",
           f"got 0x{va:08X}")
     check(pe.data[off - 1] == 0xCC,
           f"{stamp}: and the entry is preceded by an int3 pad",

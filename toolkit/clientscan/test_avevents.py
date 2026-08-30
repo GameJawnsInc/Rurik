@@ -56,7 +56,7 @@ import vaultpath                                             # noqa: E402
 # vaulted build (38833) adding 7. Per-build sections mean the floor tracks how
 # many builds the vault holds, which is the intent -- a run that silently saw
 # fewer builds measured less than a healthy one.
-LEDGER = checks.Ledger("AgentView event allocators", floor=26)
+LEDGER = checks.Ledger("AgentView event allocators", floor=33)
 check = checks.adopt(LEDGER)
 
 # MEASURED 2026-08-12. Class-(c) expectations: a new build SHOULD move these,
@@ -68,6 +68,10 @@ EXPECT = {
     # measurement, not a copy-paste. 38797 -> 38833 is a 15-day bugfix patch
     # that left the exe the same LENGTH and did not move this region at all.
     "2026-08-13_64fae3b1369b": {0x007F2E90: "action", 0x007F5340: "effect"},
+    # 38849, MEASURED 2026-08-29 -- again identical, and again a re-derivation
+    # rather than a copy: `Image.allocators` finds these by shape and this run
+    # still returns exactly two distinct addresses for the build.
+    "2026-08-20_21511009c460": {0x007F2E90: "action", 0x007F5340: "effect"},
 }
 EXPECT_ACTION_SITES = 23
 EXPECT_ACTION_KINDS = 22
@@ -106,9 +110,21 @@ IMGS = {stamp: AV.Image(p) for stamp, p in EXES.items()}
 print("\n1. the allocators derive to the recorded addresses on both builds")
 
 for stamp, img in IMGS.items():
+    # A BUILD IN THE REGISTRY WITH NO ROW HERE IS A NAMED FAILURE, NOT A
+    # KeyError -- see the same note in test_msgshape.py. `pinned.BUILDS` is the
+    # vault's build registry, so vaulting a build reaches this loop
+    # immediately, and indexing EXPECT directly took the file down with a
+    # traceback that named neither the build nor the fix.
+    want = EXPECT.get(stamp)
+    if want is None:
+        check(False, f"{stamp}: no allocator pair in EXPECT",
+              "add one, measured by running AV.Image(...).allocators over this "
+              "image -- never from a guess, and only once the two-distinct "
+              "check below agrees for it")
+        continue
     got = img.allocators
-    check(got == EXPECT[stamp],
-          f"{stamp}: derives {', '.join(f'0x{v:08X} {n}' for v, n in sorted(EXPECT[stamp].items()))}",
+    check(got == want,
+          f"{stamp}: derives {', '.join(f'0x{v:08X} {n}' for v, n in sorted(want.items()))}",
           f"got {{{', '.join(f'0x{v:08X} {n}' for v, n in sorted(got.items()))}}}")
     check(len(set(got)) == 2, f"{stamp}: two distinct addresses", str(len(set(got))))
 

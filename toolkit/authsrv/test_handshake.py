@@ -51,6 +51,7 @@ import socket
 import struct
 import subprocess
 import sys
+import threading
 import time
 import traceback
 
@@ -128,7 +129,124 @@ def _build_of_keyfile(keys):
     return None
 
 
-def drain_server(srv, timeout=20):
+def start_log_reader(srv):
+    """Read the child's stdout to EOF on a thread, STARTING NOW.
+
+    WHY A THREAD AND NOT `communicate()` AT THE END, measured 2026-08-29.
+    A child's stdout pipe is a fixed-size buffer, and a child that fills it
+    BLOCKS IN print() until somebody reads. Reading only after the session is
+    over means the session runs on whatever headroom the banner left it:
+
+        pipe capacity, measured on this machine  4,096 B
+        authsrv's banner before it even accepts    3,822 B
+        headroom for the entire session              274 B
+
+    274 bytes is about four log lines. The server got as far as CHARACTER_INFO,
+    blocked, and the client -- which was fine, and reading -- timed out after
+    10 s with an empty burst and closed. drain_server then read the pipe, the
+    server woke into a socket that had gone, and the run reported
+
+        [FAIL] server sent a login burst  0 bytes
+        [c1] ConnectionAbortedError: [WinError 10053]
+
+    which names the socket and the protocol and is about NEITHER. Nothing
+    about it was specific to a build or a key; it was the test's own plumbing,
+    and it arrived when the banner grew past 4 KB rather than when anything in
+    the handshake changed. That is the shape to remember: a pipe the parent
+    does not drain turns "the server is chatty" into "the protocol failed".
+
+    The thread also keeps drain_server's original job -- see its docstring for
+    the None-laundering `communicate()` bug this file was fixed for once
+    before. Reading here rather than there does not change that risk: the
+    decode is pinned at both ends, and anything the read raises is CARRIED to
+    the caller instead of vanishing with the thread.
+    """
+    # `seen` is what makes the guard below refutable. A single read() at the
+    # end returns the WHOLE log too -- the child has exited, the pipe drains in
+    # one go -- so the size of the log cannot tell a concurrent reader from a
+    # late one. How much had been read WHILE THE SESSION WAS STILL RUNNING can:
+    # concurrent, thousands; late, exactly zero. Counted in characters, which
+    # under-counts bytes for anything non-ASCII -- the conservative direction,
+    # since the guard has to clear a threshold.
+    box = {"text": "", "error": None, "seen": 0}
+
+    def pump():
+        parts = []
+        try:
+            # Line at a time rather than read(): readline() returns as soon as
+            # the newline is in the buffer, so `seen` tracks the session rather
+            # than lagging a chunk behind it. authsrv flushes every line.
+            for line in srv.stdout:
+                parts.append(line)
+                box["seen"] += len(line)
+        except BaseException as exc:            # noqa: BLE001 -- carried, not swallowed
+            box["error"] = f"{type(exc).__name__}: {exc}"
+        finally:
+            box["text"] = "".join(parts)
+
+    t = threading.Thread(target=pump, name="authsrv-log", daemon=True)
+    t.start()
+    return box, t
+
+
+def measure_pipe_capacity(timeout=5.0):
+    """Bytes a child can write into an UNDRAINED stdout pipe before blocking.
+
+    Measured, never assumed. It is what makes the guard below a comparison of
+    two measurements rather than a literal: the claim "the log could not have
+    fitted" needs this machine's number, not the one this machine had on the
+    day it was written. Returns None if the probe cannot answer, and the caller
+    declares a skip rather than passing quietly.
+    """
+    child = ("import sys, os\n"
+             "n = 0\n"
+             "for _ in range(4096):\n"
+             "    sys.stdout.write('x' * 256)\n"
+             "    sys.stdout.flush()\n"
+             "    n += 256\n"
+             "    open(os.environ['RURIK_PIPEMARK'], 'w').write(str(n))\n")
+    mark = os.path.join(SELFTEST_VAULT, "pipe-capacity.probe")
+    try:
+        os.makedirs(SELFTEST_VAULT, exist_ok=True)
+        with open(mark, "w", encoding="ascii") as fh:
+            fh.write("0")
+        p = subprocess.Popen([sys.executable, "-c", child],
+                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                             env=dict(os.environ, RURIK_PIPEMARK=mark))
+    except OSError:
+        return None
+    try:
+        deadline = time.time() + timeout
+        wrote = 0
+        while time.time() < deadline:
+            time.sleep(0.2)
+            try:
+                with open(mark, encoding="ascii") as fh:
+                    wrote = int(fh.read() or 0)
+            except (OSError, ValueError):
+                continue
+            if p.poll() is not None:
+                # It never blocked -- it wrote the lot. Then this probe has not
+                # found a capacity and must not report one.
+                return None
+        # Blocked with `wrote` bytes acknowledged. The last write is the one
+        # that blocked and it is only PARTLY in the pipe, so this is a floor on
+        # the capacity, which is the safe direction: the guard needs to know
+        # the log could NOT have fitted.
+        return wrote if wrote else None
+    finally:
+        try:
+            p.kill()
+            p.communicate(timeout=5)
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+        try:
+            os.unlink(mark)
+        except OSError:
+            pass
+
+
+def drain_server(srv, box, thread, timeout=20):
     """The server's log as a string, plus a reason it is short. Never None.
 
     WHY THIS IS A FUNCTION and not the `srv.communicate(timeout=20)[0]` it was
@@ -169,23 +287,26 @@ def drain_server(srv, timeout=20):
     `checks.py`'s own docstring closes on the mirror image of this bug: a test
     killed by printing the bytes it read. This one was killed READING them.
     """
+    short = ""
     try:
-        out, _ = srv.communicate(timeout=timeout)
+        srv.wait(timeout=timeout)
     except subprocess.TimeoutExpired:
         # The `--once` server should exit after one connection. If it has not,
         # the log so far is still worth having -- kill it and take what it wrote.
         srv.kill()
-        try:
-            out, _ = srv.communicate(timeout=5)
-        except subprocess.TimeoutExpired:
-            out = ""
-        return out or "", (f"the --once server had not exited {timeout}s after the "
-                           f"session ended; killed it and read what it had written")
-    if out is None:
-        return "", ("the server's stdout pipe decoded to None -- subprocess's "
-                    "reader thread raised while reading it (its traceback is "
-                    "above, ahead of this line) and the log is unrecoverable")
-    return out, ""
+        short = (f"the --once server had not exited {timeout}s after the "
+                 f"session ended; killed it and read what it had written")
+    # The child is gone (or killed), so the read side sees EOF and the pump
+    # returns. Join rather than sample: `box` is written by the other thread
+    # and reading it early is how a partial log becomes a mystery.
+    thread.join(timeout=5)
+    if thread.is_alive():
+        return box["text"] or "", (short or "the log reader did not finish 5s "
+                                   "after the server exited")
+    if box["error"] is not None:
+        return box["text"] or "", (short or f"reading the server's stdout raised "
+                                   f"{box['error']} -- the log is incomplete")
+    return box["text"] or "", short
 
 
 # The floor is what a completed handshake session executes. MEASURED 2026-08-06:
@@ -220,6 +341,15 @@ def drain_server(srv, timeout=20):
 # 21 was never 21 real checks; fixing it changed the count by zero and the floor
 # by zero, which is exactly why a floor cannot be the only guard. It counts
 # checks, and it cannot tell a check from a check-shaped no-op.
+#
+# STILL 22 on 2026-08-29, and deliberately. Teardown gained a second check --
+# that the server's log OUTGREW the stdout pipe and survived anyway, the
+# regression guard for the full-pipe stall start_log_reader() documents -- but
+# it is CONDITIONAL, like the negative control, and it raises the floor by one
+# from inside its own branch. A green run on this machine prints 24 (22
+# mandatory + the two conditionals). Putting 24 here instead would fail a
+# machine whose pipe is roomier than authsrv is chatty, which is a true skip
+# and not a shortfall.
 LEDGER = checks.Ledger("handshake", floor=22)
 check = checks.adopt_named(LEDGER)
 
@@ -406,6 +536,10 @@ def _run():
                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                            text=True, encoding="utf-8", errors="replace",
                            env=dict(os.environ, PYTHONIOENCODING="utf-8"))
+    # BEFORE the first connection, not after the last. See start_log_reader():
+    # authsrv writes 3,822 B of banner into a 4,096 B pipe, so a parent that
+    # reads at the end leaves the session 274 bytes of room to run in.
+    log_box, log_thread = start_log_reader(srv)
     ok = True
     try:
         for _ in range(60):
@@ -552,10 +686,51 @@ def _run():
                 ok &= check("character is named", ch[0][1][4] == "Test Warrior",
                             repr(ch[0][1][4]))
         s.close()
+        # BEFORE the drain, because after it every arrangement looks identical.
+        seen_during = log_box["seen"]
 
-        out, short = drain_server(srv)
+        out, short = drain_server(srv, log_box, log_thread)
         ok &= check("captured the server's log, which the next three checks read",
                     not short, short)
+        # AND PROVE THE CONCURRENT READ WAS NEEDED. Without this the drain
+        # thread is a change nothing tests: put `communicate()` back and every
+        # check above still describes a protocol failure rather than a full
+        # pipe. Two MEASUREMENTS, not a literal -- the capacity is probed on
+        # this machine, now, because the claim is about this machine's pipe.
+        cap = measure_pipe_capacity()
+        if cap is None:
+            LEDGER.skip("the full-pipe regression guard",
+                        "could not measure this machine's stdout pipe capacity "
+                        "-- the probe child either never blocked or never "
+                        "reported, so there is no number to compare the log "
+                        "against and the guard would be asserting nothing")
+        elif len(out) <= cap:
+            LEDGER.skip("the full-pipe regression guard",
+                        f"the server's log is {len(out)} B and the pipe holds "
+                        f"at least {cap} B, so this run would have completed "
+                        f"even with the end-of-session read that caused the "
+                        f"2026-08-29 failure. The guard is VACUOUS today, not "
+                        f"passing: it protects a run whose log outgrows the "
+                        f"pipe, and authsrv's banner alone was 3,822 B when "
+                        f"that happened.")
+        else:
+            # RAISE THE FLOOR BY WHAT THIS BRANCH CONTRIBUTES rather than
+            # baking it into the base: the two branches above are real skips on
+            # a machine whose pipe is bigger than authsrv is chatty, and a base
+            # of 23 would turn an honest skip into a shortfall. Same idiom as
+            # test_archive.py section 4 and test_playerassembly.py section 8.
+            LEDGER.floor += 1
+            ok &= check(
+                f"the log outgrew the pipe ({len(out)} B through a pipe that "
+                f"blocks the server at {cap} B) and the reader had ALREADY "
+                f"taken {seen_during} B of it before the session ended -- the "
+                f"one number that separates a concurrent read from a late one, "
+                f"because a late one reads the same total and reads it as "
+                f"ZERO until the child exits",
+                seen_during > cap and not short,
+                short or f"only {seen_during} B had been read when the session "
+                         f"ended, so the server spent the session blocked in "
+                         f"print() with a full pipe")
         srv_key = ""
         for line in out.splitlines():
             if "ARC4 key" in line:
