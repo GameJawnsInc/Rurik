@@ -6324,7 +6324,16 @@ Floor 75 against a green 75 with 5 declared skips (the archive-conditional
   record) then `cmp eax,0x20000` — an EXACT compare, so `0x30000` does not
   match; and in the full 3,443-row table all 27 skills carrying `0x20000` are
   Enchantments while `0x30000` spans 16 types (a no-duration default, not an
-  upkeep marker). Needs the pinned exe for §2–4, §1 runs bare; floor 11),
+  upkeep marker). Needs the pinned exe for §2–4, §1 runs bare. **Floor 4,
+  lowered from 11 on 2026-08-30 and MEASURED, not reasoned**: with `RURIK_VAULT`
+  pointed at an empty directory the bare run is **4 checks, 1 declared skip
+  ("static witnesses"), rc=0**; a whole green run is still 11. The old 11 was the
+  whole run rather than the mandatory core, so a machine without the vault went
+  red on `ONLY 4 OF A DECLARED FLOOR OF 11 CHECKS RAN`, which names the wrong
+  thing — nothing failed to execute, a section declared itself absent. Before the
+  same day the bare path never ran at all: `pinned.find()` raises `SystemExit`,
+  `except Exception` did not catch it, and the file died with rc=1 and no verdict.
+  Same correction `test_compositetrap.py` took, 80 → 78),
   `toolkit/clientscan/test_typenames.py` (**WHAT THE CLIENT CALLS EACH SKILL
   `type_code` — from the client's own switch, not from a wiki**.
   `studies/presearing/MANIFEST.md` §8 named ten of the thirty codes by Rosetta
@@ -7516,7 +7525,14 @@ the same-tick ALIAS**: the
   misread is reproduced on demand rather than argued about. Full audit:
   `studies/heroes/FINDINGS.md` §39. Floor 31 = the mandatory core
   (§1+§5+§6+§7+§8); §§2-4 and §9 need the vault and a 32-bit Windows and SKIP
-  with their reason; a whole green run is 71, ~20s),
+  with their reason; a whole green run is 71, ~20s. **The core is MEASURED as of
+  2026-08-30, not just arithmetic**: `RURIK_VAULT` at an empty directory gives
+  **50 checks, 1 declared skip (§2), rc=0** on a machine that still has its
+  32-bit `cmd.exe`, and with `WOW64_CMD` also pointed at a path that does not
+  exist, **31 checks, 5 declared skips (§2, §3, §3b, §4, §9), rc=0** — exactly
+  the floor, zero slack. Neither run reached a verdict before that day:
+  `pinned.find()` raises `SystemExit`, `except Exception` at §2 did not catch it,
+  so §1 printed its five PASSes and the file died with rc=1 and no banner),
   `toolkit/clientscan/test_compositetrap.py` (**the composite pipeline's runtime
   instrument, checked without a client** — `compositetrap.py` is the probe for
   playercomposite §4.12 ("nothing here was checked against a running client"),
@@ -8790,7 +8806,16 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   rect A leaves the adjacent B untouched, the output guard refuses the input itself,
   `C:\gw` and every checkout while PERMITTING the vault, and the guard is asserted on
   the SYNTAX TREE to be called exactly once from `main()` -- a guard that exists and is
-  never called being the failure `test_atex.py` §3 names),
+  never called being the failure `test_atex.py` §3 names. Floor 21 = a whole green run;
+  **this file has NO client-free core and going red without one is deliberate**,
+  which was MEASURED on 2026-08-30 rather than assumed: `RURIK_VAULT` at an empty
+  directory gives **0 checks, 1 declared skip ("everything"), rc=1**, and the
+  reason printed is `checks.py`'s zero-checks rule, not the floor — no floor could
+  make that run green, since `Ledger` refuses a floor below 1. §3 and §4 need no
+  client but sit after `main()`'s early return, so they do not run either. Before
+  that day the bare run gave rc=1 and NO verdict at all: `pinned.find()` raises
+  `SystemExit`, which `except Exception` did not catch, so the skip was
+  unreachable),
   `toolkit/mapdata/test_tilerender.py` (PLAN A3's atlas-tile renderer -- the step from
   "the client draws art we wrote" to "the compass draws OUR MAP". A picture is the
   easiest thing here to be confidently wrong about, because it looks like terrain
