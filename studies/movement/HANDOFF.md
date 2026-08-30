@@ -164,7 +164,7 @@ far to trust any number here: [studies/method/FINDINGS.md](../method/FINDINGS.md
 | Document | What it is for | Currency |
 |---|---|---|
 | **this file** | the arc's entry point; where each thread stands and what to do next | current at `201324c` |
-| `studies/movecode/FINDINGS.md` | **the record.** Newest sections supersede everything above them | current; **§1z-n** (the plane census) is the newest |
+| `studies/movecode/FINDINGS.md` | **the record.** Newest sections supersede everything above them | current; **§1z-o** (R7's server side) is the newest — this row said §1z-n while the same commit added §1z-o below it, wrong at birth |
 | `studies/movecode/HANDOFF-PLANE.md` | deep-dive on the plane channel and the lock | **stops at §1z-i**; misses `1ce0171`, `30055e0`, `d710a67`, `131c84a`, and its own "written at `dcf9484`" stamp is wrong (last edited `2882627`) |
 | `studies/movecode/HANDOFF-WARP.md` | deep-dive on the warp hunt and the candidate graveyard | lists `--router` REFUTED in two tables; §1y/§1z/§2a reversed that and every runsheet since passes it |
 | `studies/movement/CANCELWALK.md`, `REALFIX.md`, `ROUTER.md` | the shipped policy arms and their runs | see §C; several carry self-status headers that are wrong (§G) |

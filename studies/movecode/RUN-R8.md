@@ -3,7 +3,7 @@
 > **NOT RUN. This sheet is a pre-registration.** It ran iff
 > `studies/movecode/FINDINGS.md` grows a §1z-p heading —
 > `grep -n '^## 1z-p' studies/movecode/FINDINGS.md`. Until then every number
-> below is a prediction, and §4/§8 are the only places predictions live.
+> below is a prediction, and §4/§6.2 are the only places predictions live.
 
 **Written 2026-08-30, after [FINDINGS §1z-o.10](FINDINGS.md).** That section
 split the census by whether the repair was actually running and found the arm's
