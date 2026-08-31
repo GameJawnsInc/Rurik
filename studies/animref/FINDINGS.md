@@ -364,6 +364,89 @@ Captures: `20260831T092113` (auto-attack, moved), `20260831T092437` (arm A),
 `20260831T092714` (arm B, reverted), `20260831T093028` (spell — the one that
 dissolved it).
 
+### 11b. §11a's explanation was ALSO wrong — the player was DEAD, and the real regression reproduces on a living character
+
+**2026-08-31, same day.** §11a blamed the harness input path ("held `W` stops
+reaching the client after a number-key press"). The full timeline of the same
+captures refutes that too: **the Hatcher had killed the player before the `W`
+keydown in every blocked run.** `--enemy-hit` defaults to 0.10, the Hatcher
+lands a swing every ~1.37 s starting during map load, and death arrives ~7.5 s
+into the plan — between the skill press and the movement leg of every arm that
+pressed a skill:
+
+| run | W keydown at | player state at keydown |
+|---|---|---|
+| `20260831T092113` (auto-attack) | +0.0 / +10.2 | **ALIVE both legs** (run too short to die) — moved |
+| `20260831T092437` (arm A) | +8.5 | **DEAD** (died +7.6, revives +17.6) |
+| `20260831T092714` (arm B) | +8.5 | **DEAD** (died +7.5, revives +17.5) |
+| `20260831T093028` (spell) | +13.2 | **DEAD** (died +7.5, revives +17.6) |
+
+A corpse does not walk. The extractor that "checked" these runs filtered to
+movement opcodes and attack labels, so the `0x00F1 KILL the player` rows never
+reached the analysis — the safety-filter defect again, the filter deleting
+exactly the anomaly. Nothing about movement after a skill press was measured by
+those three runs, in either direction.
+
+**Consequences for §11's scoreboard, re-scored:**
+
+* §11a's input-path artifact: **WITHDRAWN**. `1:` and `W:` dispatch to the same
+  `hold_key` path, the `1` demonstrably arrived (0x0027 + E4 in both arms), and
+  the number key was never the discriminator — death was.
+* §11 result 2 (fix 3 cleared): **VOIDED, not restored.** Arm A vs arm B
+  compared corpse to corpse, which is vacuous for a movement question. What
+  survives of it is only the E5/E3 timing shift itself (+0.783 s → +0.042 s),
+  which was measured from the server sends. Fix 3 goes back to UNTESTED as a
+  movement-lock suspect — see the living-character run below, which retests
+  the shipped arm and reproduces the block, so the A/B rerun is still owed.
+* §11 result 3 (property 8 cleared): **SURVIVES** — the auto-attack run had the
+  hold set, a living player, and free movement.
+* The instrument note stands with a sharper spec: the missing check is not
+  "did the step yield messages" but **"was the subject alive, and did the
+  client's own reported position move"** — a walking client can legitimately
+  send almost no `0x003D` while in combat (the auto-attack W:6 leg traveled
+  767 u on one heading message and a stop report), so message counts score
+  wrongly in BOTH directions.
+
+**The regression itself: REPRODUCED, on a living character.** Run
+`20260831T102623` / capture `20260831T102651`, same shape plus
+`--enemy-hit 0.02` (~50 swings to a death — unkillable inside the run), with
+in-session controls. Travel is scored from the client's own reported
+coordinates, press verified (c2s `0x0027`, E4 for 322), zero deaths:
+
+| leg | keydown (post-press) | travel |
+|---|---|---|
+| `W:3` baseline (pre-combat) | — | **607 u** @ 202 u/s |
+| `W:6` | **+2.1 s** | **0.0 u** in 6 s |
+| `W:3` | **+12.5 s** | **618 u** @ 206 u/s |
+| `S:2` | +20 s | 372 u @ 186 u/s |
+
+OBSERVED, from the dead window's own traffic:
+
+* The client's input path is fine: at the +2.1 s keydown it **sent**
+  `0x003D`, the server answered `attack_stopped: the player moves` +
+  `action released` + the `0x0025` direction echo + a zero-lead pin — and the
+  client then stood still and went silent for six seconds, stop-reporting its
+  **unchanged** coordinates at keyup (server-side drift 767 u = the server
+  extrapolated, the client never left). The refusal is the client's.
+* The working leg at +12.5 s received the **identical** server response
+  (`0x0025` echo + zero-lead, same tags) and walked — so the discriminating
+  state is client-side, armed by the skill press.
+* The un-arm moment is bounded to **(+8.1 s, +12.5 s)** post-press for a fresh
+  keydown — OR earlier with a fresh-keydown requirement: E6 SKILL_RECHARGED
+  landed at +3.8 s *inside* the dead hold and movement did not start, so a
+  level-triggered unlock before +8 s is excluded.
+* **No server message at all arrived between +4.5 s and the keyup** (perf
+  pings aside), so whatever un-arms the client is **client-local** (a timer or
+  an animation completing), not a message we sent late.
+
+This matches the operator's report in kind — attacks block movement — and
+exceeds it in degree (they could move again by re-pressing; a single synthetic
+keydown never re-presses, so the harness sees the full lock where a human
+feels a delay). Open: what retail sends around a press→move sequence that we
+do not (corpus diff), and which client state field roots locomotion (decode).
+Instrument runs: `20260831T102623`; analysis in `studies/animref/` history and
+the leg scorer (travel + alive per leg) being folded into the harness.
+
 ## 12. What R1, R2 and R4 do NOT settle
 
 - The IAS/DAS interaction with the windup law (§1 caveat) — no modified-speed swing
