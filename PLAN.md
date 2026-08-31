@@ -1696,12 +1696,29 @@ emitter against the population, fix by derivation, tune never.
   sends them at the landing in retail's own batch slot for player and NPC
   casts alike. A skill with no row sends nothing. Pins: `test_castcycle` §2d,
   `test_guards` §4.
-* **NEXT, in cost order**: (1) The IAS windup
-  question (§1 caveat) via the client's `0x007F82C0` duration math,
-  desk-only. (2) Prop 55 (health_gain), value derivable — clean R3-style fix.
-  (3) The extractor's event model wants 0x00CF/0x00D0/0x00D2 (0x00D2 now
-  known to ride attack-skill activations). (4) D20: refuse a targetless
-  attack-skill press — retail refuses 41 in this corpus. (5) Props 22/23/28
+* **The IAS windup question is OFF the desk queue — REFUTED BY METHOD, not
+  deferred** (FINDINGS §17). `0x007F82C0` decoded: attack animation duration
+  = `base[+0xEC] × modifier[+0xF0]`, ×1.25 when `[ctx+0x3c]` is set (the
+  double at `0x00950990`, read exactly), per-weapon animation code, handed to
+  `0x007F3DA0`. **No additive term anywhere in it** — the −0.1 is ArenaNet's
+  server-side scheduling, invisible to this binary. And the corpus has **zero
+  exposure**, re-verified rather than inherited: 62 `0x0035` declarations,
+  **all modifier 1.0**, 0 landed swings under a modifier. Zero trials, not a
+  null. Settling it needs a live capture with an IAS stance running (Frenzy /
+  Flurry / Tiger Stance) — **one line in an R0b runsheet**, human-driven.
+  Meanwhile we ship candidate A (`m×base/2 − 0.1`) and §17 says so out loud.
+* **Prop 55 was STALE on this list and is struck** (FINDINGS §18): `heal_agent`
+  has sent it as a signed fraction of max health since the heal path existed,
+  and the R8 run shows it on the wire. R2's "effect-property channel absent"
+  covered 6/7/20/21/55/44 as a group and 55 was the member already present.
+  The corpus's double-55 batches (224 of 637 groups) are **two gains in one
+  instant** — mixed ordering, and one value recurring as the second member
+  across four different firsts — which is the one-per-gain rule we already
+  follow, not a shape we lack.
+* **NEXT, in cost order**:
+  (1) The extractor's event model wants 0x00CF/0x00D0/0x00D2 (0x00D2 now
+  known to ride attack-skill activations). (3) D20: refuse a targetless
+  attack-skill press — retail refuses 41 in this corpus. (4) Props 22/23/28
   (scripted animation) — the id-space method above may port, but their
   values were never shown to be per-skill and that must be tested first,
   not assumed from R8's success.
