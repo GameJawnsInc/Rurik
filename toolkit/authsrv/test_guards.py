@@ -339,12 +339,26 @@ def section_land_skill():
     # of 663 by the following message). A CAST grants the caster no strike --
     # that half of the wiki's rule says WEAPON hit -- so the only adrenaline
     # message here is the victim's, and it is the player's own.
-    check(len(sent) == 3 and agent["casting"] is None
+    # 4 since ANIMREF-R8: the on-body effect visual rides between the 58 and
+    # the target-facing properties, which is retail's own batch shape
+    # (['58','21','21','55','55'], R2 sec.9). Skill 312's client row carries a
+    # RECIPIENT visual (+0x7c = 556) and no caster one, so exactly one
+    # property-20 goes out, naming the player as the recipient and the
+    # caster second -- the victim-first order reading B settled.
+    vis = [(op, v) for op, v, _ in sent
+           if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
+           and v[0] == authsrv.agents.GV_EFFECT_ON_TARGET]
+    check(len(sent) == 4 and agent["casting"] is None
           and sent[0][0] == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
           and sent[0][1][0] == authsrv.agents.GV_SKILL_FINISHED
-          and sent[1][0] == authsrv.AGENT_ADRENALINE_GAIN,
-          "control: in-range lands the skill and clears the slot, 58 leading",
-          f"{[op for op, _, _ in sent]}, casting={agent['casting']}")
+          and vis == [(authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+                       [authsrv.agents.GV_EFFECT_ON_TARGET,
+                        authsrv.PLAYER_AGENT_ID, 10, 556])]
+          and sent[2][0] == authsrv.AGENT_ADRENALINE_GAIN,
+          "control: in-range lands the skill and clears the slot -- 58 "
+          "leading, then the on-body visual, then gain and damage",
+          f"{[op for op, _, _ in sent]}, visual={vis}, "
+          f"casting={agent['casting']}")
 
 
 def section_revive_due():

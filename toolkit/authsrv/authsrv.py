@@ -8993,6 +8993,14 @@ ATTACK_FINISH_BATCH = True    # False (--legacy-attack-finish): the old shape
 MOVE_KEEPS_CHAIN = False      # True (--move-keeps-chain): LAW A's wire, see ^
 CHAIN_RESTART_PACED = True    # False (--legacy-chain-restart): same-tick
 
+# ANIMREF-R8: the on-body effect visual (properties 20/21). R4 decoded the
+# channel and refused to wire it because the VALUE space was unread; FINDINGS
+# 16 reads it out of the client's own s_skill record (+0x78 caster, +0x7c
+# recipient) after the corpus named those two offsets. Default ON because the
+# ids are extracted per row rather than invented -- the exact condition R4's
+# refusal named.
+SKILL_VISUALS = True          # False (--no-skill-visuals)
+
 
 def swing_windup(attack_speed):
     """Seconds between ATTACK_STARTED and the landing, for a given attack base.
@@ -11609,6 +11617,12 @@ def cast_tick(send, state, conn_id):
                 send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
                      [agents.GV_SKILL_FINISHED, PLAYER_AGENT_ID, 0],
                      f"skill_finished: skill {cast['skill_id']} completes")
+            # AND THE ON-BODY VISUAL, in the corpus's own batch slot: behind
+            # the 58 and ahead of the target-facing properties, which is the
+            # ['58','21','21','55','55'] shape retail's finish batches carry
+            # (R2 sec.9's census). ANIMREF-R8.
+            send_skill_visual(send, state, PLAYER_AGENT_ID, cast["skill_id"],
+                              cast.get("target"), conn_id)
             # AND THE HIT LANDS HERE, at cast end rather than at the press.
             #
             # E5 is the cast completing -- it is what carries the recharge and
@@ -11761,6 +11775,70 @@ def effect_table(state):
     if table is None:
         table = state["effects"] = effects.EffectTable()
     return table
+
+
+def send_skill_visual(send, state, caster_id, skill_id, target_id, conn_id):
+    """The ON-BODY effect visual for one cast: properties 20 and 21.
+
+    ANIMREF-R8, the channel R4 decoded and refused to wire because the value
+    space was unread (FINDINGS 10). It is read now (FINDINGS 16): the ids sit
+    in the client's own `s_skill` record at +0x78 (a visual on the CASTER) and
+    +0x7c (one on the RECIPIENT), carried per row in `content/world.toml`'s
+    `skill_visual` block with the extractor and build that produced them. The
+    corpus scored the model at 656 of 658 attributable events, channel and
+    value together.
+
+    THE CHANNEL FOLLOWS THE BODY, which is the whole content of the 20/21
+    split and is measured rather than assumed:
+      * the caster visual always rides property 21 (INT, one agent);
+      * the recipient visual rides property 20 (INT_TARGET) when the
+        recipient is somebody else -- `[20, RECIPIENT, CASTER, id]`, victim
+        slot first, the same order `0x00A3` damage uses and the order the
+        corpus decided (reading A, caster-first, attributes NOTHING) -- and
+        property 21 when the skill is self-cast, which is why one id appears
+        on both channels for a heal aimed sometimes at an ally and sometimes
+        at yourself.
+
+    Silence is a real answer here. A skill whose row omits a slot plays
+    nothing on that body (the client's own 2077 default, 2567 of 3443 rows),
+    and a skill with no row at all is one we have not extracted -- both send
+    nothing rather than a substitute id, because an invented component id is
+    exactly what FINDINGS 10 refused.
+    """
+    if not SKILL_VISUALS:
+        return
+    try:
+        row = agents.WORLD.get("skill_visual", str(skill_id))
+    except Exception:
+        return
+    caster_vis = row.get("caster")
+    if caster_vis is not None:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.GV_EFFECT_ON_AGENT, caster_id, int(caster_vis)],
+             f"effect visual {int(caster_vis)} on the caster of skill "
+             f"{skill_id}")
+    recip_vis = row.get("recipient")
+    if recip_vis is None:
+        return
+    # WHO WEARS IT is the skill's own target byte, via the rule apply_effect
+    # already uses -- not `target_id or caster_id` inline, which would put a
+    # self-targeted skill's visual on whatever foe happened to be selected.
+    try:
+        skill_row = agents.WORLD.get("skills", str(skill_id))
+        recipient = effects.effect_recipient(skill_row, caster_id, target_id)
+    except Exception:
+        recipient = target_id or caster_id
+    if recipient == caster_id:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.GV_EFFECT_ON_AGENT, recipient, int(recip_vis)],
+             f"effect visual {int(recip_vis)} on the self-cast recipient of "
+             f"skill {skill_id}")
+    else:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+             [agents.GV_EFFECT_ON_TARGET, recipient, caster_id,
+              int(recip_vis)],
+             f"effect visual {int(recip_vis)} on agent {recipient}, the "
+             f"target of skill {skill_id}")
 
 
 def apply_effect(send, state, caster_id, skill_id, rank, target_id, conn_id):
@@ -13366,6 +13444,12 @@ def land_skill(send, state, agent_id, agent, conn_id):
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
          [agents.GV_SKILL_FINISHED, agent_id, 0],
          f"agent {agent_id} finishes casting {skill_id}")
+    # The on-body visual rides the same slot for an NPC's cast as for the
+    # player's -- behind the 58, ahead of the effect and the damage
+    # (ANIMREF-R8). An NPC skill aims at the player, so this is the channel's
+    # other half: property 20 naming the player as the recipient.
+    send_skill_visual(send, state, agent_id, skill_id, PLAYER_AGENT_ID,
+                      conn_id)
     # THE EFFECT NEXT, and the order is load-bearing rather than stylistic.
     # The one skill on this bar that opens an episode is Scourge Sacrifice
     # (253, a Hex), and it is one of the three the damage exit below turns
@@ -19979,6 +20063,17 @@ def main():
                          "held movement key after a press moves 0.0 u where "
                          "retail moves within ~0.25 s of E3 (FINDINGS 11b, "
                          "13).")
+    ap.add_argument("--no-skill-visuals", action="store_true",
+                    help="Stop sending the on-body effect visual (properties "
+                         "20/21) at a cast's landing. ON by default since "
+                         "ANIMREF-R8: the component ids are read from the "
+                         "client's own s_skill record (+0x78 caster, +0x7c "
+                         "recipient) and carried per row in "
+                         "content/world.toml's skill_visual block, so nothing "
+                         "here is invented -- which is the condition R4's "
+                         "refusal named. A skill with no row, or with the "
+                         "client's own 2077 'no visual' default, sends "
+                         "nothing either way.")
     ap.add_argument("--move-keeps-chain", action="store_true",
                     help="Opt into ANIMREF-R7a: movement stops closing the "
                          "attack chain (LAW A: 87 of 100 corpus mid-chain "
@@ -21378,6 +21473,11 @@ def main():
         print("[map] --legacy-attack-finish: attack-skill execution reverts "
               "to the pre-ANIMREF-R6 shape -- no property 46, damage through "
               "the interval-gated swing path.", flush=True)
+    if a.no_skill_visuals:
+        global SKILL_VISUALS
+        SKILL_VISUALS = False
+        print("[map] --no-skill-visuals: no property 20/21 on-body effect "
+              "visual at a cast's landing (pre-ANIMREF-R8).", flush=True)
     if a.move_keeps_chain:
         global MOVE_KEEPS_CHAIN
         MOVE_KEEPS_CHAIN = True

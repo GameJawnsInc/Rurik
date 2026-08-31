@@ -373,6 +373,85 @@ def section_attack_finish_batch():
         authsrv.PLAYER_SWING_DAMAGE = saved_dmg
 
 
+def section_skill_visual():
+    """ANIMREF-R8: the on-body effect visual, and the channel rule.
+
+    The ids come from `content/world.toml`'s `skill_visual` block (extracted
+    from the client's own s_skill row), so this section needs the content
+    store; it SKIPS loudly without it rather than passing on stubs. What it
+    pins is the part that is ours to get wrong -- which channel each visual
+    rides, and that a skill with no row sends nothing at all.
+    """
+    import authsrv
+
+    print("\n2d. ANIMREF-R8: the on-body effect visual and its channel rule")
+    try:
+        authsrv.agents.WORLD.get("skill_visual", "312")
+    except Exception as exc:
+        LEDGER.skip(f"no skill_visual content rows ({type(exc).__name__}) -- "
+                    f"the vault overlay is absent; the channel rule is "
+                    f"checked wherever content loads")
+        return
+
+    def fire(skill, caster, target):
+        sent = []
+        send = lambda op, vals, label="", quiet=False: \
+            sent.append((op, vals, label))
+        authsrv.send_skill_visual(send, {}, caster, skill, target, 0)
+        return [(op, v) for op, v, _ in sent]
+
+    INT = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
+    TGT = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
+    ON_AGENT = authsrv.agents.GV_EFFECT_ON_AGENT
+    ON_TARGET = authsrv.agents.GV_EFFECT_ON_TARGET
+
+    # 200 carries a CASTER visual only (+0x78 = 362, +0x7c is the client's
+    # own 2077 "none"): one property 21 on the caster, nothing on the target.
+    out = fire(200, 1, 10)
+    check(out == [(INT, [ON_AGENT, 1, 362])],
+          "a caster-only skill sends ONE property 21 on the caster and "
+          "nothing at the target -- the +0x7c sentinel is silence, not a "
+          "substitute id",
+          f"{out}")
+
+    # 312 carries a RECIPIENT visual only (+0x7c = 556): property 20, and the
+    # slot order is victim-first (reading B -- caster-first attributes
+    # nothing in the corpus).
+    out = fire(312, 10, 1)
+    check(out == [(TGT, [ON_TARGET, 1, 10, 556])],
+          "a recipient visual at another body rides property 20 as "
+          "[prop, RECIPIENT, CASTER, id] -- victim slot first, as 0x00A3 "
+          "damage does",
+          f"{out}")
+
+    # The same skill with no separate target: the recipient IS the caster, so
+    # the id moves to property 21. This is the branch that explains one id
+    # appearing on both channels in the corpus.
+    out = fire(312, 10, None)
+    check(out == [(INT, [ON_AGENT, 10, 556])],
+          "and self-cast, the SAME id rides property 21 instead -- the "
+          "channel follows the body, which is the whole content of the "
+          "20/21 split",
+          f"{out}")
+
+    # A skill we have not extracted sends nothing. Inventing a component id
+    # is exactly what R4 refused (FINDINGS sec.10).
+    out = fire(99999, 1, 10)
+    check(out == [],
+          "a skill with no skill_visual row sends NOTHING -- silence rather "
+          "than an invented component id",
+          f"{out}")
+
+    authsrv.SKILL_VISUALS = False
+    try:
+        out = fire(312, 10, 1)
+        check(out == [],
+              "--no-skill-visuals turns the whole channel off",
+              f"{out}")
+    finally:
+        authsrv.SKILL_VISUALS = True
+
+
 def section_order_pinned_when_inverted():
     import authsrv
 
@@ -489,6 +568,7 @@ def main():
     section_tick_order()
     section_attack_family()
     section_attack_finish_batch()
+    section_skill_visual()
     section_order_pinned_when_inverted()
     section_queue_law()
     section_real_content()

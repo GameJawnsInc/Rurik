@@ -9171,7 +9171,20 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   wire exactly, pinned DEFECT INCLUDED — no 46, and the mid-chain press
   deals nothing — so the movement-lock comparison (FINDINGS §11b/§13: a
   held W after a press traveled 0.0 u for 6 s against retail's move-within-
-  0.25 s-of-E3 bound) stays one flag away. The PROPERTY-8 ACTION HOLD (wired 2026-08-22 after
+  0.25 s-of-E3 bound) stays one flag away. §2d pins ANIMREF-R8, the ON-BODY
+  EFFECT VISUAL (properties 20/21) — the channel R4 decoded and refused to
+  wire until the id space was read (FINDINGS §16 reads it: `+0x78` a visual
+  on the caster, `+0x7c` one on the recipient, 2077 the client's own "none",
+  656/658 corpus events predicted including the CHANNEL). What §2d checks is
+  the half that is ours to get wrong: a caster-only skill (200) sends one
+  property 21 and nothing at the target; a recipient visual at another body
+  (312) rides property 20 as `[prop, RECIPIENT, CASTER, id]` — victim slot
+  first, the order reading B settled when caster-first attributed *nothing*
+  in the corpus; the SAME id moves to property 21 when the skill is self-cast
+  (which is why one id shows on both channels in the corpus); a skill with no
+  `skill_visual` row sends NOTHING rather than a substitute id — the
+  condition R4's refusal named; and `--no-skill-visuals` turns the channel
+  off. It SKIPS loudly without the content rows. The PROPERTY-8 ACTION HOLD (wired 2026-08-22 after
   the client-handler read, skillcast 16.2) is pinned through the same
   sections: `[8 → 1]` closes every immediate press burst with the `→ 0` half
   ELIDED when the flag was still 0 (the ranger's t=12.9508 shape,

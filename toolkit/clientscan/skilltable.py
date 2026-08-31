@@ -238,6 +238,27 @@ def parse_record(data: bytes, base: int, skill_id: int) -> dict:
         "scale15": u32(data, r + 0x60),
         "bonus_scale0": u32(data, r + 0x64),
         "bonus_scale15": u32(data, r + 0x68),
+        # THE ON-BODY VISUAL PAIR (+0x78, +0x7c), ANIMREF-R8. Named by the
+        # WIRE, not by an upstream doc: neither Tyria-Extractor nor GWCA maps
+        # these two, so the derivation runs the other way -- the live corpus
+        # supplies (skill -> id) pairs on properties 20/21, and exactly these
+        # two offsets reproduce them. The model, and it predicts the CHANNEL
+        # as well as the value, so it can be wrong:
+        #   +0x78  a visual played on the CASTER    -> property 21
+        #   +0x7c  a visual played on the RECIPIENT -> property 20 when the
+        #          recipient is somebody else, property 21 when the skill is
+        #          self-cast (which is why one id shows up on both channels
+        #          for a heal that is sometimes aimed at an ally and
+        #          sometimes at yourself)
+        #   2077   NO visual in that slot -- the table's own default, 2567 of
+        #          3443 rows at +0x7c and 2536 at +0x78
+        # SCORED over the whole live corpus: 656 of 658 attributable property
+        # 20/21 events predicted, 99.7%. Both misses are single events whose
+        # cast attribution is itself unsafe (studies/animref/FINDINGS.md 16).
+        # The ids index a visual-component space this repo does not otherwise
+        # read; nothing here interprets them, they are carried as opaque ids.
+        "visual_caster": u32(data, r + 0x78),
+        "visual_recipient": u32(data, r + 0x7C),
         "name_id": u32(data, r + 0x98),
         "concise_id": u32(data, r + 0x9C),
         "description_id": u32(data, r + 0xA0),
