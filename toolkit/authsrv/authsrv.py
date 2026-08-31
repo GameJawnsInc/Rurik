@@ -7557,8 +7557,11 @@ GAME_SMSG_SKILL_ACTIVATED = 0x00E3
 # the cast BEGINS when the caster frees, and E5 lands at begin + activation --
 # a model that fits all four Necromancer cycles to <= 14 ms. The two Ranger
 # cycles (attack skill 394, table activation 0.0, observed gap ~1.14 s) do NOT
-# fit it: an attack skill's timing rides the weapon's attack speed, which this
-# server does not model -- OURS, divergence recorded rather than papered over.
+# fit it: an attack skill's timing rides the weapon's attack speed. ~~which
+# this server does not model -- OURS~~ CLOSED 2026-08-30 (ANIMREF-R3): for a
+# zero-activation attack skill the E5 now lands at begin +
+# swing_windup(current weapon interval) -- the windup law's own prediction for
+# the ranger's 2.475 s bow is 1.1375 s against the observed 1.1374/1.1387.
 GAME_SMSG_SKILL_ACTIVATED_BROADCAST = 0x00E4
 GAME_SMSG_SKILL_RECHARGE = 0x00E5
 GAME_SMSG_SKILL_RECHARGED = 0x00E6
@@ -8919,19 +8922,38 @@ PLAYER_REVIVE_AFTER = 10.0 # seconds face-down. Longer than an agent's 8.0 on
 #     0.899-at-1.33, so the correction stands either way -- but a third speed
 #     inside one class is what would close it, and the corpus has no third: one
 #     agent declares 2.475 and never lands a paired swing.
-SWING_WINDUP_RATIO = 0.4458   # of the attacker's OWN declared attack base
-SWING_WINDUP_MIN = 0.4263     # the observed band, used only by the test
-SWING_WINDUP_MAX = 0.4600
+# AND THE RATIO MODEL FELL THE SAME WAY, 2026-08-30, when the third speed the
+# paragraph above asked for arrived -- with a fourth and a fifth. ANIMREF-R1
+# (studies/animref/FINDINGS.md sec.1) scored every landed swing in the live corpus
+# (n=1,042 across declared intervals 1.33/1.75/2.0/3.0) and the FRACTION RISES
+# WITH THE INTERVAL: 0.4250 at 1.33, 0.4408 at 1.75, 0.4502 at 2.0, 0.4719 at
+# 3.0. No constant ratio fits; the additive law does:
+#
+#     windup = interval/2 - 0.1 s
+#
+# Per-swing residuals are flat (6-16 ms mean) at every interval, where the 0.4458
+# constant is 28 ms off at 1.33 and 78 ms at 3.0, and a REFIT constant (0.4250)
+# is 141 ms off at 3.0 -- the overfit shape exactly. Cross-family retrodiction the
+# fit never saw: Power Shot's E4->E5 gaps (bow, 2.475 s) measure 1.1374/1.1387 s
+# against the law's 1.1375. The 0.4458 story above is one law sampled at two
+# intervals; it stays here as the --windup-ratio legacy arm and the test's
+# known-bad control. UNVERIFIED remainder: every corpus swing rides modifier 1.0,
+# so where the -0.1 attaches under IAS/DAS is not yet measured (sec.1 caveats).
+SWING_WINDUP_RATIO = 0.4458   # LEGACY (--windup-ratio): of the declared base
+WINDUP_MODEL = "additive"     # "additive" (derived law) | "ratio" (legacy arm)
 
 
 def swing_windup(attack_speed):
     """Seconds between ATTACK_STARTED and the landing, for a given attack base.
 
-    A FRACTION of the attacker's own declared speed rather than a constant. Our
-    Hatcher declares 1.33, so this returns 0.593 s where the old constant returned
-    0.899 -- a value no observation supports under either surviving model.
+    The derived law (ANIMREF-R1): half the declared interval, less 0.1 s. Our
+    Hatcher declares 1.33, so this returns 0.565 s (the ratio arm returned
+    0.593, the pre-2026-08-11 constant 0.899). The floor guards the degenerate
+    interval the corpus never shows (no declared base under 1.33 exists there).
     """
-    return SWING_WINDUP_RATIO * float(attack_speed)
+    if WINDUP_MODEL == "ratio":
+        return SWING_WINDUP_RATIO * float(attack_speed)
+    return max(0.5 * float(attack_speed) - 0.1, 0.05)
 
 # IT WALKS NOW. Until this, `AGGRO_RANGE` was doing two jobs -- deciding both when
 # a hostile notices the player and when it can reach them -- so a Hatcher rooted to
@@ -10835,6 +10857,25 @@ def refuse_press(send, skill_id, copy, conn_id, reason_id=None):
              "the bare slot release, no reason named"), flush=True)
 
 
+CAST_FORM = "follows-target"   # "legacy" (--legacy-cast-form): always 0x00A0
+
+
+def cast_anim_msg(prop, caster, target, skill_id):
+    """The cast-animation property in retail's own FORM (ANIMREF-R1 sec.2).
+
+    758 of 758 corpus cast opens obey one rule: THE CHANNEL FOLLOWS THE
+    TARGET. A cast that names a target rides 0x00A0 [prop, caster, target,
+    skill] (attack skills 222/222, targeted spells 227); one that does not
+    rides 0x009F [prop, caster, skill] (531). The form this replaces --
+    0x00A0 with target 0 -- appears ZERO times in the corpus: retail
+    switches channels rather than sending an empty slot.
+    """
+    if CAST_FORM == "legacy" or target:
+        return (GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+                [prop, caster, target or 0, skill_id])
+    return (GAME_SMSG_AGENT_PROPERTY_UPDATE_INT, [prop, caster, skill_id])
+
+
 def handle_skill_press(values, send, state, conn_id, opcode):
     """One skill press, either half (0x0046 USE_SKILL or 0x0027 ATTACK_SKILL).
 
@@ -10938,7 +10979,21 @@ def handle_skill_press(values, send, state, conn_id, opcode):
     # at begin + activation. `cast_busy_until` is only ever touched on this
     # thread -- the tick reads nothing from it.
     begin = max(now, state.get("cast_busy_until", 0.0))
-    e5_at = begin + activation
+    # AN ATTACK SKILL'S TIMING RIDES THE WEAPON, NOT THE ACTIVATION COLUMN.
+    # This was the divergence the E-series constants' comment recorded for
+    # two weeks ("which this server does not model -- OURS"): Power Shot's
+    # table activation is 0.0, but its two live E4->E5 gaps are 1.1374 and
+    # 1.1387 s -- and the windup law derived at ANIMREF-R1 (sec.1) lands on
+    # 1.1375 for the ranger's 2.475 s bow: the attack skill's E5 IS the
+    # skill-swing's hit instant, begin + swing_windup(current interval).
+    # Wired for the measured case only (table activation 0.0); a LISTED
+    # activation still wins, per the wiki's "activation replaces the weapon
+    # time" reading -- UPSTREAM, no corpus cycle exercises it yet.
+    if is_attack and activation == 0.0:
+        e5_at = begin + swing_windup(
+            ATTACK_INTERVAL * attack_interval_factor(state, PLAYER_AGENT_ID))
+    else:
+        e5_at = begin + activation
     state["cast_busy_until"] = e5_at + aftercast
     # A QUEUED PRESS DEFERS ITS WHOLE BURST TAIL TO CAST-BEGIN. Measured
     # from both directions (studies/castmech 3b/3c): skill 105's debit and
@@ -11224,10 +11279,11 @@ def handle_skill_press(values, send, state, conn_id, opcode):
                     send(GAME_SMSG_AGENT_STOP_MOVING,
                          agents.agent_stop_moving(PLAYER_AGENT_ID),
                          _cs_label)
-        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
-             [agents.GV_ATTACK_SKILL_ACTIVATED if is_attack
-              else agents.GV_SKILL_ACTIVATED,
-              PLAYER_AGENT_ID, target or 0, skill_id],
+        _op, _vals = cast_anim_msg(
+            agents.GV_ATTACK_SKILL_ACTIVATED if is_attack
+            else agents.GV_SKILL_ACTIVATED,
+            PLAYER_AGENT_ID, target, skill_id)
+        send(_op, _vals,
              f"cast animation: player "
              f"{'strikes with' if is_attack else 'casts'} {skill_id}")
         # [8 -> 1] closes the burst: the cast now holds the agent. Last in
@@ -11368,10 +11424,11 @@ def begin_cast(send, state, cast, conn_id):
             print(f"[c{conn_id}] skill {skill_id} costs {cost} energy at "
                   f"cast-begin: {pool.current:.2f}/{pool.maximum:.0f} left",
                   flush=True)
-    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
-         [agents.GV_ATTACK_SKILL_ACTIVATED if cast["attack"]
-          else agents.GV_SKILL_ACTIVATED,
-          PLAYER_AGENT_ID, cast.get("target") or 0, skill_id],
+    _op, _vals = cast_anim_msg(
+        agents.GV_ATTACK_SKILL_ACTIVATED if cast["attack"]
+        else agents.GV_SKILL_ACTIVATED,
+        PLAYER_AGENT_ID, cast.get("target"), skill_id)
+    send(_op, _vals,
          f"cast animation: player "
          f"{'strikes with' if cast['attack'] else 'casts'} {skill_id}, "
          f"at cast-begin")
@@ -12745,9 +12802,13 @@ def enemy_attack_tick(send, state, conn_id):
             agent["casting"] = slot
             agent["last_swing"] = now      # a cast is not a free swing
             face_player(send, state, agent_id, agent, conn_id)
-            send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-                 [agents.GV_SKILL_ACTIVATED, agent_id, skill_id],
-                 f"agent {agent_id} casts skill {skill_id}")
+            # The bar is single-target-always at the player (land_skill's own
+            # flag), so under the form rule this cast names its target -- the
+            # 0x009F shape it used to take matched the corpus's one NPC
+            # activation, but that one was a cast that names nobody.
+            _op, _vals = cast_anim_msg(agents.GV_SKILL_ACTIVATED, agent_id,
+                                       PLAYER_AGENT_ID, skill_id)
+            send(_op, _vals, f"agent {agent_id} casts skill {skill_id}")
             agent["cast_lands_at"] = now + activation
             print(f"[c{conn_id}] agent {agent_id} ({agent['name']}) casts skill "
                   f"{skill_id} (slot {slot + 1} of "
@@ -19749,6 +19810,22 @@ def main():
                          "its telemetry (agtrack_guard rows per grant, "
                          "agtrack_repin transitions) AND the active re-pin, "
                          "which cannot run without the guard.")
+    ap.add_argument("--windup-ratio", action="store_true",
+                    help="Revert the swing windup to the legacy constant "
+                         "fraction (0.4458 x declared interval). The default "
+                         "is the derived law interval/2 - 0.1 s (ANIMREF-R1, "
+                         "studies/animref/FINDINGS.md sec.1: residuals flat "
+                         "at every declared interval, Power Shot retrodicted "
+                         "to 1.3 ms; the constant was one law sampled at two "
+                         "intervals).")
+    ap.add_argument("--legacy-cast-form", action="store_true",
+                    help="Revert cast-animation properties to the old "
+                         "always-0x00A0 form (target 0 when none). The "
+                         "default follows retail's form rule (ANIMREF-R1, "
+                         "studies/animref/FINDINGS.md sec.2, 758/758): "
+                         "0x00A0 when the cast names a target, 0x009F when "
+                         "it does not -- retail never sends target 0 on the "
+                         "targeted channel.")
     ap.add_argument("--no-agtrack-repin", action="store_true",
                     help="Keep the guard's telemetry but disable its ACTIVE "
                          "arm (ON by default; MOVECODE-1z-s): the single "
@@ -21098,6 +21175,16 @@ def main():
               "--planecarry   (the offline counterfactual that pre-screened "
               "this policy, and the calibration gate it had to pass first)")
 
+    if a.windup_ratio:
+        global WINDUP_MODEL
+        WINDUP_MODEL = "ratio"
+        print("[map] --windup-ratio: swing windup reverts to the legacy "
+              "0.4458 fraction; the derived interval/2 - 0.1 law is OFF.")
+    if a.legacy_cast_form:
+        global CAST_FORM
+        CAST_FORM = "legacy"
+        print("[map] --legacy-cast-form: cast animations ride 0x00A0 with "
+              "target-or-0 again; the retail form rule is OFF.")
     if a.no_agtrack_shadow:
         global AGTRACK_SHADOW
         AGTRACK_SHADOW = False

@@ -24,6 +24,7 @@ trio for skill 153.
 
 import os
 import sys
+import time as _time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
@@ -59,7 +60,7 @@ def section_press_shape():
     saved = authsrv.skill_timing
     authsrv.skill_timing = lambda sid: (1.0, 0.75, 8.0)
     try:
-        _press(authsrv, send, state)
+        _press(authsrv, send, state, target=40)
         ops = [op for op, _, _ in sent]
         # 0x00A2 IS THE ENERGY DEBIT, wired 2026-08-20 -- skill 42 costs 10 and
         # the corpus puts property 62 inside 0.03-0.7 s of the USE_SKILL, so it
@@ -77,12 +78,30 @@ def section_press_shape():
               "elision -- and nothing else yet",
               f"ops={[hex(o) for o in ops]} -- E5/E3/E6 belong to the tick; "
               f"the old immediate 0x00E3 is gone from the press")
-        # sent[2], not [1]: the debit now sits between E4 and the animation
-        check(sent[2][1] == [authsrv.agents.GV_SKILL_ACTIVATED, PLAYER, 0, 42],
+        # sent[2], not [1]: the debit now sits between E4 and the animation.
+        # Target 40, not 0: every one of the 4/4 live opens named its real
+        # target, and 0x00A0-with-target-0 is a form retail uses ZERO times
+        # in 758 corpus opens (ANIMREF-R1 sec.2).
+        check(sent[2][1] == [authsrv.agents.GV_SKILL_ACTIVATED, PLAYER, 40, 42],
               "the animation carries the OBSERVED player shape (4/4 in the "
               "live corpus); GV 58 belongs to the cast END, not the press "
               "-- section 2 pins it riding the E5 (castmech 3c)",
-              f"vals={sent[1][1]}")
+              f"vals={sent[2][1]}")
+        # And the FORM RULE's other half: a press that names no target rides
+        # the untargeted 0x009F channel (531/531 untargeted retail opens) --
+        # the channel follows the target, never a zero in the target slot.
+        sent2 = []
+        send2 = lambda op, vals, label="", quiet=False: \
+            sent2.append((op, vals, label))
+        state2 = {"agents": {}}
+        _press(authsrv, send2, state2)
+        anim2 = [(op, vals) for op, vals, _ in sent2
+                 if vals and vals[0] == authsrv.agents.GV_SKILL_ACTIVATED]
+        check(anim2 == [(authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                         [authsrv.agents.GV_SKILL_ACTIVATED, PLAYER, 42])],
+              "a targetless press rides 0x009F [60, caster, skill] -- "
+              "retail's untargeted form, never 0x00A0 with an empty slot",
+              f"{[(hex(op), vals) for op, vals in anim2]}")
         casts = state["pending_casts"]
         c = casts[0]
         check(len(casts) == 1
@@ -170,10 +189,10 @@ def section_attack_family():
     # "not attack" (no rows), so the family split is pinned by forcing it.
     authsrv._is_attack_skill = lambda sid: True
     try:
-        _press(authsrv, send, state, skill=394)
+        _press(authsrv, send, state, skill=394, target=40)
         check([op for op, _, _ in sent] == [0x00E4, 0x00A2, 0x00A0, 0x009F]
               and sent[2][1] == [authsrv.agents.GV_ATTACK_SKILL_ACTIVATED,
-                                 PLAYER, 0, 394],
+                                 PLAYER, 40, 394],
               "the burst keeps its shape (the [8 -> 1] hold closes it, as "
               "every family's does) and the animation carries 50 "
               "(CastAttackSkill) -- both live Power Shot presses, and all "
@@ -193,6 +212,30 @@ def section_attack_family():
               "nor property 8, 0 of 2 each, so nothing of the spell "
               "family's cast end is borrowed (castmech 3c)",
               f"{[(hex(op), vals) for op, vals, _ in sent]}")
+        # THE TIMING LAW'S ATTACK-SKILL HALF (ANIMREF-R3 fix 3): a
+        # zero-activation attack skill's E5 rides the weapon, landing at
+        # begin + swing_windup(current interval) -- Power Shot's own two
+        # live gaps (1.1374/1.1387 over a 2.475 bow) against the law's
+        # 1.1375. A LISTED activation still wins (the branch above used
+        # activation 1.0 and scheduled begin + 1.0).
+        authsrv.skill_timing = lambda sid: (0.0, 0.0, 3.0)
+        state2 = {"agents": {}}
+        sent2 = []
+        send2 = lambda op, vals, label="", quiet=False: \
+            sent2.append((op, vals, label))
+        t0 = _time.time()
+        _press(authsrv, send2, state2, skill=394, target=40)
+        c2 = state2["pending_casts"][0]
+        expect = authsrv.swing_windup(
+            authsrv.ATTACK_INTERVAL
+            * authsrv.attack_interval_factor(state2, authsrv.PLAYER_AGENT_ID))
+        check(abs((c2["e5_at"] - t0) - expect) < 0.05,
+              "a ZERO-activation attack skill schedules its E5 a weapon "
+              "windup out, not instantly -- the activation-column model "
+              "left Power Shot's E5 at the press, 1.14 s early",
+              f"e5 in {c2['e5_at'] - t0:.4f}s, law says {expect:.4f}s "
+              f"(hammer {authsrv.ATTACK_INTERVAL}s -> "
+              f"{authsrv.swing_windup(authsrv.ATTACK_INTERVAL):.4f}s)")
     finally:
         authsrv.skill_timing = saved
         authsrv._is_attack_skill = saved_attack
@@ -239,10 +282,10 @@ def section_queue_law():
     saved = authsrv.skill_timing
     authsrv.skill_timing = lambda sid: (2.0, 0.75, 6.0)
     try:
-        _press(authsrv, send, state, skill=105)
+        _press(authsrv, send, state, skill=105, target=40)
         first = state["pending_casts"][0]
         sent.clear()
-        _press(authsrv, send, state, skill=105)
+        _press(authsrv, send, state, skill=105, target=40)
         second = state["pending_casts"][1]
         gap = second["e5_at"] - first["e5_at"]
         check(abs(gap - (0.75 + 2.0)) < 0.05,
@@ -270,11 +313,12 @@ def section_queue_law():
               f"{[(hex(op), vals) for op, vals, _ in sent]}")
         check(sent[5][1][0] == authsrv.agents.GV_ENERGY_SPENT
               and sent[6][1] == [authsrv.agents.GV_SKILL_ACTIVATED,
-                                 PLAYER, 0, 105]
+                                 PLAYER, 40, 105]
               and second["begun"],
               "the debit names the energy property and the animation names "
-              "the queued skill -- [60, 31, 40, 105] rode 153's E3 on the "
-              "live wire, deferred to the moment the caster freed",
+              "the queued skill AND its target -- [60, 31, 40, 105] rode "
+              "153's E3 on the live wire verbatim, deferred to the moment "
+              "the caster freed",
               f"debit={sent[5][1]}, animation={sent[6][1]}")
     finally:
         authsrv.skill_timing = saved

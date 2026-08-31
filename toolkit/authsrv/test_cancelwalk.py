@@ -664,7 +664,7 @@ def section_cast_stop():
               "halt: a spell press sends exactly one 0x0028 [player], the "
               "builder's own payload, R8-labelled, and NO 0x002C", f"{on}")
         anim = [i for i, (op, vals, _) in enumerate(on)
-                if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
+                if op in (authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT, authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET)
                 and vals[0] == agents.GV_SKILL_ACTIVATED]
         hold = [i for i, (op, vals, _) in enumerate(on)
                 if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
@@ -683,7 +683,7 @@ def section_cast_stop():
                              "heading": (766.0, 0.0), "heading_mt": 1,
                              "pathmap": _FakePM()})
         atk_anim = [i for i, (op, vals, _) in enumerate(atk)
-                    if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
+                    if op in (authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT, authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET)
                     and vals[0] == agents.GV_ATTACK_SKILL_ACTIVATED]
         check(stops(atk) == [] and pins(atk) == [] and len(atk_anim) == 1,
               "ATTACK skill under pin, even with a moving belief seeded: "
@@ -764,7 +764,7 @@ def section_cast_stop():
               "warp with -- and the console line carries the label",
               f"{pkst['_console']!r}")
         pk_anim = [i for i, (op, vals, _) in enumerate(pk)
-                   if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
+                   if op in (authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT, authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET)
                    and vals[0] == agents.GV_SKILL_ACTIVATED]
         check(len(pk_anim) == 1,
               "and the cast itself still goes out -- the suppression is "
@@ -778,7 +778,7 @@ def section_cast_stop():
                              seed=dict(seed, click_moving_at=_time.time()))
             ck_anim = [
                 i for i, (op, vals, _) in enumerate(ck)
-                if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
+                if op in (authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT, authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET)
                 and vals[0] == agents.GV_SKILL_ACTIVATED]
             check(stops(ck) == [] and pins(ck) == [] and len(ck_anim) == 1
                   and "[cancelwalk pin:click-walk]" in ckst["_console"],

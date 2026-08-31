@@ -9250,6 +9250,24 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   press and retarget orders, each door keeping the order measured at it.
   The tick now only removes a released entry; §1 asserts it announces nothing
   a second time. Floor 20),
+  `toolkit/authsrv/test_animgrammar.py` (the ANIMREF episode machines on
+  synthetic streams they cannot force — bare-machine, no vault. The corpus
+  run itself is guarded by `animgrammar.py --control` (P-CTRL: castgaps'
+  seven cycles, the 0.74–0.77 s aftercast gaps and the Power Shot windup
+  gaps reproduce to 0.1 ms), so THIS file proves mechanics: `prop_events`'
+  normalisation of all four property channels including 0x00A3's
+  victim-first slot order (the trap adrenjoin.py documents), the 0x0035
+  (base, modifier) declaration, signature tokens keeping the
+  targeted/untargeted cast-channel distinction (ANIMREF-Q1's observable),
+  the swing state machine (landed with SOURCE-slot damage pairing, stopped,
+  reopened, censored, ratio None without a declared speed), the self cast
+  machine opening on E4 so the queued-terminated family (E4→E2, no
+  animation property ever) survives extraction, batch signatures in stream
+  order, the `[8:0, 59, E2]` cancel burst, no E-tag reaching back before
+  its episode's open, interleaved skills keying independent episodes, the
+  other-agent machine (60/50 opens, 58 finish, 59 cancel, reopen, censor,
+  timeout sweep), 0x00F1 recorded as a mark and never a close, and the
+  property census keeping unknown ids. Floor 35),
   `toolkit/authsrv/test_cancelwalk.py` (everything AROUND the CANCELWALK
   runs — the walk-on-cancel experiment arms of `--cancel-answer`
   (`studies/movement/CANCELWALK.md` §5), whose verdicts are operator runs and
