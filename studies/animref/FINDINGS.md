@@ -944,8 +944,13 @@ All three keyboard gates jump to `0x0081AD0F`, which:
   `ecx = id*8 - id` scaled by 4 = **stride 0x1C, MOVECODE's state record exactly**,
   and zeroes `[record+0x00]` (**`clientControlled`**) and `[record+0x04]` (the
   history head);
-* writes a facing vector to `[ctx+0x694/+0x698]`, zeroes `[ctx+0x69c/+0x6a0]`;
+* writes a facing vector to `[esi+0x694/+0x698]`, zeroes `[esi+0x69c/+0x6a0]`;
 * and **returns `eax = 1` — success.**
+
+**CORRECTION (§22's verify pass):** `esi` there is `[ctx+0x2c]` (`0x0081A922`), **not**
+the context and not `playerControlledChar`. The correct spelling of the player is
+`[[ctx+0x2c]+0x680]`, which `0x0081AD1A cmp ebx, [esi+0x680]` proves. Sampling
+`+0x694` off `ChCliBase` would read a different struct.
 
 So a refused walk **turns the character, relinquishes local movement authority,
 and reports that it handled the input.** `ChCliBase:164
@@ -1010,9 +1015,13 @@ bit 8**, and bit 4 only on a real kill.
 * **Gate B — `[char+0x64] bit 0` — is the surviving candidate**, and `+0x64` is a
   real flags word on the char (bit 1 set at `0x0081B2D6`/`0x0081B85C`, bit 3
   tested at `0x0081B45F`, bit 5 at `0x0081796D`, a computed `or` at `0x0081B38E`
-  that sets bits 3–6 and provably **not** bit 0). **NOT FOUND: any writer of bit
-  0** in `ChCliApi`/`ChCliBase`/`ChCliInt`. That absence has no positive control
-  yet and must not be read as "nothing sets it".
+  that sets bits 3–6 and provably **not** bit 0). ~~**NOT FOUND: any writer of bit
+  0**~~ — **CLOSED by §22: `0x0081BD02` sets it and `0x0081BD14` clears it, both
+  in property 8's case body.** The search that missed them was bounded
+  `--in ChCliBase`, whose assert-derived range `0x0081AC3D..0x0081BA94` excludes
+  **both** the gate read at `0x0081A93C` and the gate write at `0x0081BD02`. A
+  module-bounded census can truncate at both ends and still read as a clean zero;
+  this one did.
 * **A fourth exit exists and is not a gate at all:** a path query returning zero
   waypoints leaves via `0x0081A987 je 0x0081ACFA`, a *different* address from the
   gate exit `0x0081AD0F`. That is MOVECODE §1z-c.2's plane-desync freeze class.
@@ -1040,6 +1049,149 @@ plane-desync class and this whole section is the wrong tree), or if it reaches
 the client took, which is a fact about the code path and not about feel
 ([[quarterstep-is-a-feel-thing]]).
 
+## 22. ANIMREF-RE step 2 concluded: GATE B's writer is PROPERTY 8 — and §15 is REFUTED
+
+A nine-agent static fan-out (four recon lanes, four adversarial skeptics, one
+synthesis) closed §21.4's open question and killed the arc's standing mechanism.
+**Every load-bearing claim below was re-derived by hand before being written
+here**, because it corrects prior published work — including §21's own.
+
+### 22.1 The writer, and the switch that reaches it
+
+`ChCliApi::SetAgentProperty 0x008128F0` fans one property id into **two**
+consumers: the AvChar animation dispatcher (`0x00812A0D call 0x007DFA00`, §15's
+territory) **and** a separate `ChCliBase` switch at `0x0081BC60` — the object that
+owns the walk gate.
+
+```
+0081BC69  add eax, -4
+0081BC6F  cmp eax, 0x38 / ja 0x0081BD29        ; props 0..3 -> default
+0081BC78  movzx eax, byte [eax + 0x0081BD44]   ; index table
+0081BC7F  jmp dword [eax*4 + 0x0081BD30]       ; jump table
+```
+
+Both tables read from the image (`scratchpad/sw2.py`, a 30-line PE walk carrying a
+byte-level control: the bytes at `0x0081BCF0` and `0x0081BD02` must equal
+`837d1000` and `894664`, and do):
+
+| prop | case body | effect |
+|---|---|---|
+| 4 attack_started, 50 attack_skill_activated | `0x0081BC86` | position/time anchor at `[esi+0xF0..0xFC]`; **touches neither gate** |
+| **8 DISABLED / action_hold** | **`0x0081BCF0`** | **writes `[esi+0x64]` bit 0** |
+| 13 | `0x0081BD23` | writes `[esi+0x20]` |
+| **1, 3, 46, 49** | `0x0081BD29` | **DEFAULT — executes nothing at all** |
+
+And the case body is unambiguous — the property VALUE is the gate:
+
+```
+0081BCF0  cmp dword [ebp+0x10], 0   ; the value
+0081BCF4  mov eax, [esi+0x64]
+0081BCFB  or  eax, 1                ; value != 0 -> SET   the walk gate
+0081BD02  mov [esi+0x64], eax
+0081BD11  and eax, 0xfffffffe       ; value == 0 -> CLEAR
+0081BD14  mov [esi+0x64], eax
+```
+
+**So `[char+0x64] bit 0` IS property 8, and property 8 is the only animation
+property that can reach either walk entry.** Corroborated structurally by
+`0x0081BE90` (the speed setter prop 8 calls on the set path), which refuses on
+`[+0x10C]` bit 4, `[+0x64]` bit 0 **set** and bit 1 **clear** — so the healthy
+word is 2 and the held word 3.
+
+### 22.2 What this kills
+
+* **§15's mechanism is REFUTED.** "Our client's locomotion is gated on an
+  animation state our attack-skill sequence leaves at 0x11/0x15" cannot be true:
+  no walk entry reads any animation-state field, and **props 46/49/50 — the trio
+  §15 built the whole model on — are a no-op on the gate object.** §15's *wire*
+  observations survive intact (the 87/100 mid-chain law, `after46.py`'s 40 events,
+  "no return-to-movable prop exists"); its causal reading does not.
+* **§15's "prop 8 is NOT the differentiator" is REFUTED** in the same stroke. §15
+  looked for prop 8 in the AvChar dispatcher, did not find a case body, and
+  concluded it was handled elsewhere and irrelevant. "Elsewhere" is
+  `0x0081BC60 → 0x0081BCF0`, and it is the entire mechanism.
+* **§14's "the client cannot START movement while its attack action is open"
+  SURVIVES, sharpened.** The "open attack action" is `[+0x64] bit 0`, which is
+  *our property 8* — not the client's chain, and not a state the client derives.
+* **The `0x003D` send is NOT a discriminator, and this weakens `RE-PLAN.md` §1.**
+  Every arm of `chcli_dir` — all three flag gates, all three no-path exits, and
+  the success path — converges on `0x0081649E cmp [ebp+0x18], 0`, and only that
+  operand (forwarded verbatim from MOVE-CMD at `0x0053546D`) decides the packer
+  `0x009206D9 mov [ebp-0x1c], 0x3d`. **"The client sent its `0x003D`" therefore
+  excludes input, focus and key delivery — but it does not narrow which exit the
+  applier took**, which §21.5's prediction had implicitly leaned on.
+
+### 22.3 THE ARM DIFFERENCE, from our own wire — no client run needed
+
+`action_hold` (`authsrv.py:9209`) is transition-only. It is called with **1** by
+the swing loop at `:9805` (`attack_tick`, behind every `attack_started`) and
+`:9944` (`hit_enemy`), and with **0** on movement at `:9353` — *outside* the
+`MOVE_KEEPS_CHAIN` branch, so the release goes out in both arms exactly as §15
+said. **What nobody looked at is the re-arm**, and the door at `:9356` is where
+the two arms part:
+
+```python
+if state.get("attacking") and not MOVE_KEEPS_CHAIN:
+    state["attacking"] = None          # default: the swing loop DIES
+```
+
+Under `--move-keeps-chain` the loop survives, `attack_tick` fires again, and
+`action_hold(1)` **re-arms the walk gate before the next keypress**. Prop-8
+transitions read out of the two captures §14 scored (OBSERVED):
+
+```
+frozen arm  20260831T110144  (--move-keeps-chain ON)
+  holds   11.702 18.166 21.569 23.348 25.128     <- three re-arms
+  release 18.165 20.234 22.354 24.488 29.379
+moving arm  20260831T110743  (shipped default)
+  holds   11.744 18.200                          <- never re-arms
+  release 18.200 20.234
+```
+
+The body agrees: in the frozen arm all four `MOVE_CANCEL_REPORT_POSITION` are
+**bit-identical to the press position**, 0.0 u, `accepted true`; the moving arm's
+tap at 22.386 ran 78.6 u in 0.384 s ≈ 205 u/s. **And the frozen arm carries its
+own positive control** — at `t=39.842`, ten seconds after the last release with
+the chain long dead and the gate clear, an S press walked **375 u**. Same arm,
+same build, same flag. *The arm does not freeze; the armed gate freezes.*
+
+**RECONSTRUCTION (high confidence):** attack skill → `action_hold(1)` →
+`0x0081BCF0` sets `[+0x64] bit 0` → the movement press dispatches once,
+`0x0081A93C` reads it set, `0x0081AD0F` halts the agent and returns success →
+`0x008164AD` sends `0x003D` anyway → and under LAW A the swing loop re-arms the
+bit before the next press. The prop-8 ⇒ bit ⇒ bail half is OBSERVED in CANCELWALK
+F22/F23 on the *cast* case; extending it to the attack-skill case is the
+reconstruction.
+
+### 22.4 What this DOES and DOES NOT claim about the owner's complaint
+
+**It explains why R7a froze**, and therefore unblocks LAW A — the retail-correct
+wire (87 of 100 mid-chain moves carry no `attack_stopped`), which is the shape
+that lets a player move *and keep attacking*, which is what a quarterstep is.
+
+**It does not explain the shipped default's residual.** The owner's standing
+verdict is against the **default**, which never re-arms — so §22.3's mechanism is
+not that complaint's cause. What it does is make the better fix reachable. Do not
+let this section be read as "the quarterstep is solved"; that verdict is the
+owner's and has not been given.
+
+### 22.5 Method notes worth keeping
+
+* **`--in <module>` truncates at BOTH ends.** `--bounds ChCliBase` =
+  `0x0081AC3D..0x0081BA94`, excluding both `0x0081A93C` (the gate read) and
+  `0x0081BD02` (the gate write). A `--in ChCliBase` census of `+0x64` misses the
+  entire mechanism and returns a clean, confident, wrong zero. This is
+  `studies/enemy` §6o arriving again by a fifth road.
+* **`+0xC4` is not the animation queue head.** It is `m_linkOffset` of an
+  intrusive `TList`; the head is `+0xCC`. §15's map said otherwise and every
+  document inheriting it needs the correction.
+* **A PE section walk must use RAW size, not `max(vsz, rsz)`.** `.data` here has
+  `vsz=0x5601B8` against `rsz=0x16A00`, so `max()` lets it swallow `.text` RVAs
+  and every table read comes back plausible-looking garbage. Caught only because
+  the reader carried a byte-level control on two known instructions.
+* **Padding hints were wrong twice more** (`0x0081A850` for `chcli_dir`,
+  `0x00816370` for the dispatcher). Confirm entries by `55 8b ec` plus `--xrefs`.
+
 ## Provenance
 
 All figures are measurements over the owner's own live captures via extractors in this
@@ -1053,7 +1205,7 @@ addresses are single-site measurements (one case body, one AvChar method each), 
 MEASUREMENT side of the provenance boundary — the extractor is `codescan.py`, the build
 is named, the values audit without the binary.
 
-§21 is the same kind: addresses, field displacements, a dispatch-table layout and two
+§21 and §22 are the same kind: addresses, field displacements, a dispatch-table layout and two
 opcode numbers, all read from the pinned build with `codescan.py`/`asserts.py` and a
 12-line struct walk over the PE section table — measurement, per-row, extractor in this
 repo, build named. The three asserts it quotes (`ChCliInt:254`, `ChCliBase:164`,
