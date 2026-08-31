@@ -30,7 +30,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
 import checks  # noqa: E402
 
-LEDGER = checks.Ledger("cast cycle", floor=20)
+LEDGER = checks.Ledger("cast cycle", floor=24)
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -206,11 +206,20 @@ def section_attack_family():
                     if op == 0x009F
                     and vals[0] in (authsrv.agents.GV_SKILL_FINISHED,
                                     authsrv.agents.GV_DISABLED)]
-        check([op for op, _, _ in sent][0] == 0x00E5 and not borrowed,
+        own46 = [vals for op, vals, _ in sent
+                 if op == 0x009F
+                 and vals[0] == authsrv.agents.GV_ATTACK_SKILL_FINISHED]
+        check([op for op, _, _ in sent][0] == 0x00E5 and not borrowed
+              and own46 == [[authsrv.agents.GV_ATTACK_SKILL_FINISHED,
+                             PLAYER, 0]],
               "the E5 fires with NO [58, agent, 0] and NO hold pulse -- "
-              "the ranger's two Power Shot E5s carry neither 58 nor 46 "
-              "nor property 8, 0 of 2 each, so nothing of the spell "
-              "family's cast end is borrowed (castmech 3c)",
+              "nothing of the spell family's cast end is borrowed -- and "
+              "WITH the attack family's own [46, agent, 0] (ANIMREF-R6): "
+              "castmech's 'neither 58 nor 46, 0 of 2' was the bow artifact "
+              "sec.3 refuted -- 46 rides the melee execution batch 40/40 in "
+              "the full corpus, and it goes out even on a whiff (this press "
+              "targets an agent the state does not hold), because it closes "
+              "the PLAYER's action, not the hit",
               f"{[(hex(op), vals) for op, vals, _ in sent]}")
         # THE TIMING LAW'S ATTACK-SKILL HALF (ANIMREF-R3 fix 3): a
         # zero-activation attack skill's E5 rides the weapon, landing at
@@ -259,6 +268,109 @@ def section_attack_family():
     finally:
         authsrv.skill_timing = saved
         authsrv._is_attack_skill = saved_attack
+
+
+def section_attack_finish_batch():
+    """ANIMREF-R6: the execution batch, both arms.
+
+    The referent is the live corpus (FINDINGS 13): 40 of 40 self prop-46
+    events open their batch with 0x009F [46, agent, 0], the adrenaline and
+    the damage follow, and NO swing bracket (attack_started, melee_finished)
+    rides along -- the skill replaces the swing its windup announced. The
+    legacy arm preserves the pre-R6 wire exactly, including its defect: the
+    interval-gated swing path, where a press mid-chain dealt nothing.
+    """
+    import authsrv
+
+    print("\n2c. ANIMREF-R6: the attack-skill execution batch, both arms")
+    saved = authsrv.skill_timing
+    saved_attack = authsrv._is_attack_skill
+    saved_dmg = authsrv.PLAYER_SWING_DAMAGE
+    authsrv.skill_timing = lambda sid: (1.0, 0.0, 3.0)
+    authsrv._is_attack_skill = lambda sid: True
+    authsrv.PLAYER_SWING_DAMAGE = (5, 5)
+    try:
+        def run_arm():
+            sent = []
+            send = lambda op, vals, label="", quiet=False: \
+                sent.append((op, vals, label))
+            agent = {"name": "target", "dead": False,
+                     "last_hit": _time.time(),        # MID-CHAIN, on purpose
+                     "max_health": 100.0, "health": 100.0, "pos": (0.0, 0.0)}
+            state = {"agents": {40: agent}, "pos": (0.0, 0.0)}
+            _press(authsrv, send, state, skill=394, target=40)
+            sent.clear()
+            _rewind(state, 1.0)
+            authsrv.cast_tick(send, state, 0)
+            return sent, agent, state
+
+        sent, agent, state = run_arm()
+        ops = [op for op, _, _ in sent]
+        vals46 = [v for op, v, _ in sent if op == 0x009F
+                  and v[0] == authsrv.agents.GV_ATTACK_SKILL_FINISHED]
+        dmg = [v for op, v, _ in sent if op ==
+               authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET
+               and v[0] in (authsrv.agents.PROP_DAMAGE,
+                            authsrv.agents.GV_CRITICAL)]
+        started = [v for op, v, _ in sent if op ==
+                   authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
+                   and v[0] == authsrv.agents.GV_ATTACK_STARTED]
+        finished = [v for op, v, _ in sent if op == 0x009F
+                    and v[0] == authsrv.agents.GV_MELEE_ATTACK_FINISHED]
+        check(vals46 == [[authsrv.agents.GV_ATTACK_SKILL_FINISHED,
+                          PLAYER, 0]]
+              and len(dmg) == 1 and dmg[0][1] == 40,
+              "default arm: [46, player, 0] goes out and the damage lands "
+              "IN THE BATCH despite a swing landed this instant -- the "
+              "windup was the interval, so the mid-chain press is not "
+              "swallowed (the old path's silent return)",
+              f"46={vals46}, dmg={dmg}, agent health={agent['health']}")
+        check(not started and not finished
+              and ops.index(0x00E5) < ops.index(0x009F)
+              and ops.index(0x00E3) == len(ops) - 1,
+              "and NO swing bracket rides the batch -- no attack_started, "
+              "no melee_attack_finished, 40/40 in the corpus -- with the "
+              "E5 opening and the E3 closing",
+              f"ops={[hex(o) for o in ops]}")
+        check(agent["health"] == 95.0,
+              "the strike is the weapon's own number (5 pinned) -- a real "
+              "hit, not a phantom",
+              f"health={agent['health']}")
+        # ANIMREF-R7b: the swing clock is stamped so the chain's next START
+        # opens one windup after the execution, LAW B's 0.749..0.783 cluster
+        # (21/38) against swing_windup(interval). The gate reads
+        # now - player_last_swing < interval, so the stamp is
+        # exec + windup - interval.
+        iv = authsrv.ATTACK_INTERVAL * authsrv.attack_interval_factor(
+            state, authsrv.PLAYER_AGENT_ID)
+        gap = (state.get("player_last_swing", 0.0) + iv) - _time.time()
+        check(abs(gap - authsrv.swing_windup(iv)) < 0.1,
+              "and the chain's next START is paced one windup out "
+              "(ANIMREF-R7b, LAW B) -- not reopened in the execution tick",
+              f"next START opens in {gap:.3f}s, windup is "
+              f"{authsrv.swing_windup(iv):.3f}s")
+
+        authsrv.ATTACK_FINISH_BATCH = False
+        try:
+            sent, agent, _state2 = run_arm()
+            vals46 = [v for op, v, _ in sent if op == 0x009F
+                      and v[0] == authsrv.agents.GV_ATTACK_SKILL_FINISHED]
+            dmg = [v for op, v, _ in sent if op ==
+                   authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET
+                   and v[0] in (authsrv.agents.PROP_DAMAGE,
+                                authsrv.agents.GV_CRITICAL)]
+            check(not vals46 and not dmg and agent["health"] == 100.0,
+                  "--legacy-attack-finish restores the pre-R6 wire exactly: "
+                  "no 46, and the mid-chain press deals NOTHING (the "
+                  "interval gate swallows it) -- the defect is the legacy "
+                  "arm's pinned shape, so the comparison stays one flag away",
+                  f"46={vals46}, dmg={dmg}, health={agent['health']}")
+        finally:
+            authsrv.ATTACK_FINISH_BATCH = True
+    finally:
+        authsrv.skill_timing = saved
+        authsrv._is_attack_skill = saved_attack
+        authsrv.PLAYER_SWING_DAMAGE = saved_dmg
 
 
 def section_order_pinned_when_inverted():
@@ -376,6 +488,7 @@ def main():
     section_press_shape()
     section_tick_order()
     section_attack_family()
+    section_attack_finish_batch()
     section_order_pinned_when_inverted()
     section_queue_law()
     section_real_content()

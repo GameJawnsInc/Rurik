@@ -25,7 +25,7 @@ import checks  # noqa: E402
 
 # FLOOR 20, from the green run of 2026-08-23 that landed section 6 (the
 # 0x0028 door; 15 when the file carried the movement door alone).
-LEDGER = checks.Ledger("cast cancel", floor=20)
+LEDGER = checks.Ledger("cast cancel", floor=21)
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -210,8 +210,8 @@ def section_clean_restart():
 def section_chain_half():
     import authsrv
 
-    print("\n5. the chain half: moving closes a live chain once and "
-          "forgets the target")
+    print("\n5. the chain half: movement KEEPS the chain (ANIMREF-R7a), "
+          "and the legacy door still closes it")
     sent = []
     send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))
     agent = {"name": "target", "dead": False, "last_hit": 0.0,
@@ -224,18 +224,39 @@ def section_chain_half():
     stops = [v for op, v, _ in sent
              if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
              and v[0] == authsrv.agents.GV_ATTACK_STOPPED]
-    check(stops == [[authsrv.agents.GV_ATTACK_STOPPED, PLAYER, 0]]
-          and state.get("attacking") is None,
-          "one STOPPED, and the target is forgotten -- a move REPLACES the "
-          "attack order (WIKI, Auto attack); re-clicking is what restarts "
-          "it, and 0x0026 is on the wire for exactly that",
-          f"stops={stops}, attacking={state.get('attacking')}")
-    sent.clear()
-    authsrv.attack_tick(send, state, 0)
-    check(state.get("player_swing") is None and sent == []
-          and agent["health"] == 100.0,
-          "the armed swing is dropped unlanded",
-          f"swing={state.get('player_swing')}, health={agent['health']}")
+    check(stops == [] and state.get("attacking") == 10
+          and state.get("player_swing") is not None
+          and not state.get("player_swing_cancel"),
+          "default arm: NO prop-3, the target and the armed swing survive "
+          "the move -- 87 of 100 corpus mid-chain moves carry no stop "
+          "(FINDINGS 14 LAW A); the range gate in attack_tick is the "
+          "deferred judge",
+          f"stops={stops}, attacking={state.get('attacking')}, "
+          f"swing={state.get('player_swing') is not None}")
+
+    # THE LEGACY DOOR, one flag away, old pins verbatim.
+    authsrv.MOVE_KEEPS_CHAIN = False
+    try:
+        sent.clear()
+        authsrv.cancel_on_move(send, state, 0)
+        stops = [v for op, v, _ in sent
+                 if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
+                 and v[0] == authsrv.agents.GV_ATTACK_STOPPED]
+        check(stops == [[authsrv.agents.GV_ATTACK_STOPPED, PLAYER, 0]]
+              and state.get("attacking") is None,
+              "--legacy-move-stops-chain: one STOPPED and the target is "
+              "forgotten -- the pre-R7a door, kept switchable",
+              f"stops={stops}, attacking={state.get('attacking')}")
+        sent.clear()
+        authsrv.attack_tick(send, state, 0)
+        check(state.get("player_swing") is None and sent == []
+              and agent["health"] == 100.0,
+              "and its armed swing is dropped unlanded",
+              f"swing={state.get('player_swing')}, health={agent['health']}")
+    finally:
+        authsrv.MOVE_KEEPS_CHAIN = True
+        state["player_swing"] = None
+        state["player_swing_cancel"] = None
 
     # The negative: a chain already paused by a cast gets no second close.
     saved = authsrv.skill_timing

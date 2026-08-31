@@ -8951,6 +8951,36 @@ WINDUP_MODEL = "additive"     # "additive" (derived law) | "ratio" (legacy arm)
 # derivation, it is an assertion.
 ATTACK_E5_WINDUP = True       # False (--legacy-attack-e5): E5 at the press
 
+# ANIMREF-R6: the attack-skill EXECUTION BATCH, as the corpus writes it.
+# MEASURED, 40 of 40 self prop-46 events across 60 live connections
+# (studies/animref FINDINGS 13): the batch opens with 0x009F [46, agent, 0]
+# -- the INT form, value 0, never the targeted form -- then the 0x00CF
+# adrenaline strike, then the damage (16, or 17 replacing it on a critical),
+# the victim's health bookkeeping, then the E3. NO attack_started and NO
+# melee_attack_finished ride the batch: the skill REPLACES the swing its
+# windup announced, it does not open a second one. Before this, the E5
+# branch called the ordinary swing path, which (a) was interval-gated, so a
+# press mid-chain dealt NO skill damage at all -- hit_enemy returned before
+# its first send -- and (b) never sent 46, leaving the client's attack-skill
+# action open forever. The client roots movement while that action is open:
+# a held W two seconds after a press traveled 0.0 u for six seconds while an
+# identical keydown at +12.5 s walked at full rate (FINDINGS 11b), against a
+# retail bound of first movement within +/-0.25 s of E3 (8 sub-second
+# press->move episodes, n=53 accepted attack-skill presses).
+ATTACK_FINISH_BATCH = True    # False (--legacy-attack-finish): the old shape
+
+# ANIMREF-R7, the two chain laws around the batch (FINDINGS 14, both measured
+# on the live corpus):
+# LAW A -- movement does not close the chain: 87 of 100 player moves within
+# 2 s of the player's own ATTACK_STARTED carry NO prop-3 within 0.5 s (the
+# whole corpus holds 28 self prop-3s; the old door sent one per move, 100%).
+# LAW B -- after an attack skill's execution the next chain START comes one
+# WINDUP later, not instantly: the 46 -> next-START gap clusters at
+# 0.749..0.783 s (21 of 38) against swing_windup(1.75) = 0.775; our old shape
+# opened it in the same tick.
+MOVE_KEEPS_CHAIN = True       # False (--legacy-move-stops-chain): old door
+CHAIN_RESTART_PACED = True    # False (--legacy-chain-restart): same-tick
+
 
 def swing_windup(attack_speed):
     """Seconds between ATTACK_STARTED and the landing, for a given attack base.
@@ -9220,13 +9250,23 @@ def cancel_on_move(send, state, conn_id):
     chain_live = (state.get("attacking") or state.get("player_swing")) \
         and not any(not c["e3_sent"]
                     for c in state.get("pending_casts") or ())
-    # THE SWING PAIR IS [3, then 8 -> 0], and that order is MEASURED on the
-    # movement door specifically: capture 20260824T074002, W mid-windup
-    # (t=114.641) and Esc mid-windup (t=119.425), 2 of 2. It is the OPPOSITE
-    # of the press and retarget bursts, which carry [8 -> 0, then 3] (3c, and
-    # the t=16.578 retarget) -- so each door keeps the order measured at IT,
-    # rather than one being tidied to match the other.
-    if chain_live:
+    # ANIMREF-R7a: MOVEMENT DOES NOT CLOSE THE CHAIN. The old rule -- every
+    # movement message sends [3, agent, 0] and forgets the target -- came
+    # from the wiki's sentence ("moving cancels auto-attacking") plus a
+    # 2-of-2 measured on OUR OWN movement door, one witness counted twice.
+    # The live corpus refutes it at scale (FINDINGS 14, LAW A): of 100
+    # player moves within 2 s of the player's own ATTACK_STARTED, 87 carry
+    # NO prop-3 within half a second -- the quarterstep rides the chain and
+    # the chain survives it (the retail player's next START follows the
+    # move). The 13 that do are the genuine closes. So movement alone now
+    # touches nothing of the chain: attack_tick's range gate is the deferred
+    # judge -- a player who actually leaves reach whiffs silently and
+    # resumes on return, which is the resume-on-return design that branch
+    # already documents. The CAST half below is untouched: the wiki's cancel
+    # contract for casts is separately corpus-backed (the bare E2, castmech
+    # 3/4). The legacy arm (--legacy-move-stops-chain) keeps the old door
+    # verbatim, defect included.
+    if chain_live and not MOVE_KEEPS_CHAIN:
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
              [agents.GV_ATTACK_STOPPED, PLAYER_AGENT_ID, 0],
              "attack_stopped: the player moves")
@@ -9237,7 +9277,9 @@ def cancel_on_move(send, state, conn_id):
     # Transition-only, so a flag already 0 sends nothing here -- which is also
     # what keeps this from duplicating the release inside the cast burst below.
     action_hold(send, state, 0, "the player moves")
-    if state.get("attacking"):
+    # ANIMREF-R7a: the target survives movement (LAW A above). The legacy
+    # arm forgets it, as the old door did.
+    if state.get("attacking") and not MOVE_KEEPS_CHAIN:
         state["attacking"] = None
     dropped = _mark_cancelled(state, "movement", now, spare_mid_attack=True)
     for cast in state.get("pending_casts") or ():
@@ -9692,8 +9734,22 @@ def attack_tick(send, state, conn_id):
 
 
 def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
-              exact=None, swing=True, label="one swing", armed=False):
+              exact=None, swing=True, label="one swing", armed=False,
+              skill_strike=False):
     """Land one swing on a hostile agent, if the swing timer allows it.
+
+    `skill_strike` TRUE is an ATTACK SKILL's execution (ANIMREF-R6): a full
+    weapon strike -- the roll, the armour exponent, the critical, the
+    adrenaline gain, the preparation -- with NO attack_started, NO
+    melee_attack_finished and NO interval gate. The corpus batch for an
+    attack skill landing carries neither swing bracket (40 of 40 self
+    prop-46 events), because the skill REPLACES the swing its own windup
+    announced rather than opening a second one; and the windup already spent
+    the interval, so gating here made a press mid-chain deal nothing at all
+    -- the return on line one fired before the first send, silently. The
+    swing timer is still CONSUMED (`last_hit`), which is what paces the
+    chain's next ordinary swing one interval after the skill, where the
+    corpus puts it.
 
     `armed` TRUE means this call is the SECOND half of a swing attack_tick
     already opened: the START was gated by `player_last_swing` and announced
@@ -9731,7 +9787,8 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
     if agent is None or agent["dead"]:
         return
     now = time.time()
-    if not armed and now - agent.get("last_hit", 0.0) < ATTACK_INTERVAL:
+    if not armed and not skill_strike \
+            and now - agent.get("last_hit", 0.0) < ATTACK_INTERVAL:
         return
 
     # THE GUARD RUNS BEFORE ANY EFFECT -- before the timer is consumed, before
@@ -9804,7 +9861,7 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
     # 0x00A3's first slot is the agent damaged, and 0x00A0 value 4's first slot
     # is the agent swinging. Same shape, different roles per value id, which is
     # exactly what GWCA's per-id note was trying to warn about.
-    if swing and not armed:
+    if swing and not armed and not skill_strike:
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
              [agents.GV_ATTACK_STARTED, PLAYER_AGENT_ID, target_id, 0],
              f"attack_started: player swings at {target_id}")
@@ -9844,8 +9901,9 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
          f"to agent {target_id}")
     # And close the swing. Harmless if the client ignores it; without it the
     # attack has a beginning and no end. Skipped for a spell, which never
-    # began one.
-    if swing:
+    # began one -- and for a skill strike, whose close is the property 46
+    # its caller already sent (the corpus batch carries no prop 1, 40/40).
+    if swing and not skill_strike:
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
              [agents.GV_MELEE_ATTACK_FINISHED, PLAYER_AGENT_ID, 0],
              "melee_attack_finished")
@@ -11568,10 +11626,48 @@ def cast_tick(send, state, conn_id):
             # resolves on its own terms, and a skill with nothing to resolve
             # does nothing to the target at all.
             found = skill_damage(cast["skill_id"], rank)
+            if cast["attack"] and ATTACK_FINISH_BATCH:
+                # ANIMREF-R6: 46 OPENS the execution batch, 40 of 40, and it
+                # goes out whether or not a hit lands below -- it closes the
+                # PLAYER's action, and a whiffed skill's action still ends.
+                # (The whiff case is RECONSTRUCTION; every corpus 46 rides a
+                # hit.) The client roots movement while this action is open,
+                # so the un-sent 46 was an 8+ second movement lock -- see the
+                # constant's comment.
+                send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                     [agents.GV_ATTACK_SKILL_FINISHED, PLAYER_AGENT_ID, 0],
+                     f"attack_skill_finished: skill {cast['skill_id']} "
+                     f"lands")
             if target and _is_attack_skill(cast["skill_id"]):
                 bonus = float(found[0]) if found and found[1] == "additive" \
                     else 0.0
-                hit_enemy(send, state, target, conn_id, bonus_damage=bonus)
+                # ANIMREF-R6: the strike the windup announced, not a second
+                # swing. skill_strike lands weapon damage + adrenaline with
+                # no attack_started, no melee_attack_finished and no interval
+                # gate -- the windup WAS the interval, and the corpus batch
+                # carries neither swing bracket. The legacy arm keeps the old
+                # call: interval-gated, so a press mid-chain dealt nothing.
+                if ATTACK_FINISH_BATCH:
+                    hit_enemy(send, state, target, conn_id,
+                              bonus_damage=bonus, skill_strike=True,
+                              label=f"skill {cast['skill_id']} strikes")
+                    # ANIMREF-R7b: the chain's next START comes one WINDUP
+                    # after this execution -- LAW B, the 46->START gap's
+                    # 0.749..0.783 cluster (21/38) against
+                    # swing_windup(1.75)=0.775. Expressed through the
+                    # START-to-START gate: stamp the swing clock so
+                    # attack_tick's `now - last < interval` opens exactly at
+                    # now + windup. Without this the gate saw only the
+                    # pre-press START and reopened the same tick -- the
+                    # verbatim check's client re-rooted at that instant.
+                    if CHAIN_RESTART_PACED:
+                        _iv = ATTACK_INTERVAL * attack_interval_factor(
+                            state, PLAYER_AGENT_ID)
+                        state["player_last_swing"] = (
+                            now + swing_windup(_iv) - _iv)
+                else:
+                    hit_enemy(send, state, target, conn_id,
+                              bonus_damage=bonus)
             elif target and found and found[1] == "standalone":
                 hit_enemy(send, state, target, conn_id, exact=float(found[0]),
                           swing=False,
@@ -13227,6 +13323,23 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # all four hurt the player identically; dealing a heal's magnitude AS
     # damage would be worse, not better. The player still dies to the ordinary
     # swing (land_swing), which is what R4a's criterion ever rested on.
+    # EVERY REFUSABLE COMPUTATION RUNS BEFORE THE FIRST SEND. The guard
+    # contract (test_guards section 4) is that a refused damage fraction
+    # leaves NOTHING on the wire -- and ANIMREF-R2's 58-first batch put the
+    # finish announcement in front of the guard for a day, so a refused
+    # fraction leaked a lone property 58. The fraction is computed HERE and
+    # only EMITTED below, which keeps both measured rules: refusal is atomic,
+    # and 58 still leads the emitted batch. (taker_damage runs before
+    # apply_effect as a consequence; no skill on this bar both hexes and
+    # damages, so nothing today can observe the reordering.)
+    damage = skill_damage(skill_id, ENEMY_SKILL_RANK)
+    dealt, conversion, frac = 0.0, None, None
+    if damage is not None:
+        dealt, conversion = taker_damage(state, PLAYER_AGENT_ID,
+                                         float(damage[0]))
+        if dealt > 0:
+            frac = _damage_fraction(dealt, player_max_health(state),
+                                    agents.PROP_DAMAGE, f"skill {skill_id}")
     # THE FINISH ANNOUNCEMENT OPENS THE BATCH -- ANIMREF-R2's cleanest yield
     # (studies/animref/FINDINGS.md sec.9). Retail closes EVERY other-agent
     # cast episode with a property-58 batch, 58 leading (709/709 finished
@@ -13269,7 +13382,10 @@ def land_skill(send, state, agent_id, agent, conn_id):
                    effects.effect_recipient(row, agent_id, agent_id),
                    agent_id, healed, conn_id)
 
-    damage = skill_damage(skill_id, ENEMY_SKILL_RANK)
+    # The damage and its fraction were computed BEFORE the 58 went out (the
+    # guard block at the top); from here on this is emission and bookkeeping
+    # only. The taker's episodes (Frenzy's "take double damage" doubles ALL
+    # damage received -- WIKI, not melee-only) were applied there too.
     if damage is None:
         agent["casting"] = None
         if episode is None and not healed and not inflicted:
@@ -13277,11 +13393,6 @@ def land_skill(send, state, agent_id, agent, conn_id):
                   f"modelled effect (its scale is not damage -- see "
                   f"content/world.toml skill_effect)", flush=True)
         return
-    dealt = float(damage[0])
-    # THE TAKER'S EPISODES, same pipeline as land_swing: Frenzy's "take double
-    # damage" doubles ALL damage received (WIKI, not melee-only), and a
-    # conversion catches a skill hit exactly as it catches a swing.
-    dealt, conversion = taker_damage(state, PLAYER_AGENT_ID, dealt)
     if conversion is not None:
         resolve_taker_conversion(send, state, conversion, conn_id)
     if dealt <= 0:
@@ -13289,13 +13400,6 @@ def land_skill(send, state, agent_id, agent, conn_id):
         print(f"[c{conn_id}] skill {skill_id}'s hit was fully converted -- "
               f"no damage message goes out", flush=True)
         return
-    # Guard before ANY mutation. This function's damage send was already its
-    # first send (the gate map's template for the others), but the cast slot
-    # and the player's health were consumed before the guard could refuse --
-    # a refused value would have cost real state for a message that never
-    # went out (test_guards section 4).
-    frac = _damage_fraction(dealt, player_max_health(state),
-                            agents.PROP_DAMAGE, f"skill {skill_id}")
     agent["casting"] = None
     state["player_health"] = max(0.0, state["player_health"] - dealt)
     # THE GAIN PRECEDES THE DAMAGE (see hit_enemy for the census). No strike
@@ -19848,6 +19952,31 @@ def main():
                          "window from 0 to ~0.775 s on a 1.75 s weapon, which "
                          "makes it the first suspect and therefore the thing "
                          "that has to be switchable.")
+    ap.add_argument("--legacy-attack-finish", action="store_true",
+                    help="Revert ANIMREF-R6: an attack skill's execution "
+                         "goes back to the old shape -- no property 46, and "
+                         "the damage through the interval-gated swing path "
+                         "(so a press mid-chain deals nothing). The default "
+                         "is the corpus batch (40/40): 46 opens, then "
+                         "adrenaline, damage, E3, with no swing brackets. "
+                         "This is also the movement-lock arm: without 46 the "
+                         "client's attack-skill action never closes, and a "
+                         "held movement key after a press moves 0.0 u where "
+                         "retail moves within ~0.25 s of E3 (FINDINGS 11b, "
+                         "13).")
+    ap.add_argument("--legacy-move-stops-chain", action="store_true",
+                    help="Revert ANIMREF-R7a: every movement message closes "
+                         "the attack chain again ([3, agent, 0] + target "
+                         "forgotten). The default keeps the chain through "
+                         "movement -- 87 of 100 corpus mid-chain moves carry "
+                         "no prop-3; attack_tick's range gate is the "
+                         "deferred judge (FINDINGS 14 LAW A).")
+    ap.add_argument("--legacy-chain-restart", action="store_true",
+                    help="Revert ANIMREF-R7b: the chain reopens in the same "
+                         "tick as an attack skill's execution again. The "
+                         "default paces the next START one weapon windup "
+                         "out, the corpus's 46->START law (0.749..0.783 s "
+                         "cluster, 21/38 -- FINDINGS 14 LAW B).")
     ap.add_argument("--legacy-cast-form", action="store_true",
                     help="Revert cast-animation properties to the old "
                          "always-0x00A0 form (target 0 when none). The "
@@ -21225,6 +21354,22 @@ def main():
         print("[map] --legacy-attack-e5: a zero-activation attack skill's E5 "
               "fires at the press again (pre-ANIMREF-R3 behaviour).",
               flush=True)
+    if a.legacy_attack_finish:
+        global ATTACK_FINISH_BATCH
+        ATTACK_FINISH_BATCH = False
+        print("[map] --legacy-attack-finish: attack-skill execution reverts "
+              "to the pre-ANIMREF-R6 shape -- no property 46, damage through "
+              "the interval-gated swing path.", flush=True)
+    if a.legacy_move_stops_chain:
+        global MOVE_KEEPS_CHAIN
+        MOVE_KEEPS_CHAIN = False
+        print("[map] --legacy-move-stops-chain: movement closes the attack "
+              "chain again (pre-ANIMREF-R7a door).", flush=True)
+    if a.legacy_chain_restart:
+        global CHAIN_RESTART_PACED
+        CHAIN_RESTART_PACED = False
+        print("[map] --legacy-chain-restart: the chain reopens in the "
+              "execution tick again (pre-ANIMREF-R7b).", flush=True)
     if a.legacy_cast_form:
         global CAST_FORM
         CAST_FORM = "legacy"

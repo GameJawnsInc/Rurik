@@ -477,9 +477,115 @@ the leg scorer (travel + alive per leg) being folded into the harness.
   matches signature-for-signature; the divergence rows are D15 (fixed), D18
   (recorded), D19 (fixed), and the effect-property channel (open).
 
+## 13. ANIMREF-R6: the execution batch, derived — and the movement lock it explains
+
+**2026-08-31, from §11b's reproduction.** The client-side movement root was
+chased into the corpus rather than tuned around, per the arc's method:
+
+**Retail's law (OBSERVED).** Across the live corpus, every ACCEPTED attack-skill
+press was aligned to its E4 on the s2c clock (per-connection offset from the
+press↔E4 histogram, 42-anchor refinement, consistent to ±3 ms) and scored for
+the gap to the player's next c2s movement message. n=53 accepted presses with a
+later move: the 8 sub-second cases all put the first move **within ±0.25 s of
+E3** (E3→move −0.147/+0.071/+0.249/+0.237/−0.087/+0.171 s…) — the root opens at
+the strike's execution, not at the press and not an aftercast later. The two
+small negatives say the client's un-root is its own animation clock, with E3 in
+flight. (First pass without E4 validation was WRONG and is kept as a lesson:
+its fastest "quarterstep", 0.568 s, was a press retail **refused** — no E4 —
+including a targetless press, which is D20 observed live. 41 refused presses in
+the corpus.)
+
+**Our divergence (OBSERVED, run `20260831T102651`).** Our client's W keydown at
+E3+1.26 s moved 0.0 u for six seconds; a fresh keydown at press+12.5 s walked at
+full rate; no server message arrived in between — the un-arm is client-local.
+The client's input path is fine (it sent its 0x3D; the server's reply is
+byte-identical in the dead and the working windows). The state that roots it is
+armed by the press and never disarmed by us.
+
+**The missing disarm, from the corpus (§3 + a 40/40 batch census).** Retail's
+attack-skill execution batch: `0x009F [46, agent, 0]` OPENS it — INT form,
+value 0, 40 of 40 self episodes across 60 connections — then the 0x00CF
+adrenaline strike, the damage (16, or 17 on a critical), the victim's health
+bookkeeping, then E3. **No attack_started, no melee_attack_finished**: the
+skill replaces the swing its windup announced. Our server: never sent 46
+(defined-unsent since castmech's bow artifact, §3), and delivered the damage
+through the interval-gated ordinary swing path — so a press mid-chain dealt
+**no skill damage at all** (hit_enemy's gate returned before its first send),
+and when the gate allowed, a second phantom swing opened.
+
+**Shipped (ANIMREF-R6, default ON, revert `--legacy-attack-finish`):** at the
+attack cast's E5 instant the server now sends `[46, PLAYER, 0]` first —
+unconditionally for attack casts, whiff included (it closes the player's
+ACTION, not the hit; the whiff case is RECONSTRUCTION, every corpus 46 rides a
+hit) — then the strike via `hit_enemy(skill_strike=True)`: full weapon terms
+(roll, armour, critical, adrenaline, preparation), no swing brackets, no
+interval gate, timer still consumed so the chain's next swing paces one
+interval later, where the corpus puts it. `test_castcycle` §2b/§2c pin both
+arms, legacy defect included; `land_skill`'s 58-first batch was reconciled
+with the guard contract in the same change (fraction computed before the
+first send, 58 still leading — test_guards §4).
+
+**The verbatim check ran (`20260831T105013`/`105042`) and REFUTED "46 is the
+whole disarm" — while confirming it is half of it.** The same protocol,
+fix ON: W:6 at press+2.1 s traveled **49.2 u** — from the keydown to
+**exactly** the client's next-swing instant (execution 14.75 + the 1.75
+interval = 16.50, to the centisecond) — where the pre-fix leg traveled 0.0 u
+ever. So 46 closed the skill state and the client resumed its AUTO-ATTACK
+CHAIN; what roots it now is the chain: the between-swings quarterstep window
+exists, and the swing instant consumes the held key. Consistently, `S:2`
+(backing out of melee) traveled at full rate while the second `W:3` froze —
+the client was chaining at a target our server had *stopped serving* (we
+declared `attack_stopped: the player moves` at the first 0x3D and killed our
+loop; the client kept its schedule). The remaining divergence was therefore
+the CHAIN's behaviour around movement — §14.
+
+## 14. ANIMREF-R7: the two chain laws around movement — the old door was one witness counted twice
+
+**2026-08-31, from §13's verbatim refutation.** The re-rooting agent is the
+auto-attack chain, so the chain's own grammar was put against the corpus.
+Both laws OBSERVED, live corpus only:
+
+**LAW A — movement does not close the chain.** Of 100 player movement
+messages sent within 2 s of the player's own `attack_started`, **87 carry no
+prop-3 within 0.5 s** (the entire corpus holds just 28 self prop-3s; the 13
+that do ride a move are the genuine closes). Our movement door sent
+`[3, agent, 0]` and forgot the target on **every** move — a rule built from
+the wiki's sentence ("moving cancels auto-attacking") plus a 2-of-2 measured
+on **our own** door (capture `20260824T074002` is ours-origin), one witness
+counted twice. The retail quarterstep rides the chain and the chain survives
+it.
+
+**LAW B — the post-execution restart is paced.** The gap from a self prop-46
+to the player's next `attack_started`: n=38, with a tight modal cluster at
+**0.749–0.783 s** (21/38) against `swing_windup(1.75) = 0.775` — one weapon
+windup, never the same instant. The tail (0.94–5.5 s) is the players who
+stepped or paused. Our server reopened the chain in the execution tick.
+
+**Shipped (ANIMREF-R7, default ON, one revert flag each):**
+
+* **R7a (`--legacy-move-stops-chain`):** `cancel_on_move`'s chain half is
+  gone from the default path — no prop-3, target and armed swing survive the
+  move; `attack_tick`'s existing range gate is the deferred judge (out of
+  reach ⇒ silent whiff + resume-on-return, retail's own truncation shape).
+  The CAST half — the bare-E2 cancel contract — is untouched; the prop-8
+  release on movement stays (corpus-backed, castmech 3c).
+* **R7b (`--legacy-chain-restart`):** after an attack skill's execution the
+  swing clock is stamped `exec + windup − interval`, so the START-to-START
+  gate opens exactly one windup out (LAW B), instead of the same tick.
+
+Pins: `test_castcancel` §5 (both arms of the door), `test_castcycle` §2c
+(the restart pacing rides the batch pin). **UNVERIFIED, next run:** with the
+server now keeping the chain fed through movement, whether the client's
+between-swing windows admit quarterstep TAPS at full stride, and what a HELD
+movement key does mid-chain (the S-vs-W asymmetry says held-forward may be
+attack-follow, which would be retail behaviour, not a defect — the operator
+can settle that by feel against stock).
+
 ## Provenance
 
 All figures are measurements over the owner's own live captures via extractors in this
 repo (`animgrammar.py`, this arc; `tape.py`/`codec.py`, prior arcs); scratch probes and
 the referent JSONL are under `vault/research/animref/`. No asset bytes, no client
-launch, no upstream derivation — no §6.1 register row required.
+launch, no upstream derivation — no §6.1 register row required. §13–14's corpus scans
+(`pressmove2`, `batch46`, `chainmove`) are session scratch over the same tapes; their
+laws and n's are restated in full above.

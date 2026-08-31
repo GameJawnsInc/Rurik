@@ -9157,9 +9157,21 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   family boundary from both ends: an ATTACK skill's press (family forced via a
   stubbed `_is_attack_skill`, because a bare machine has no content rows)
   animates with property 50, CastAttackSkill — both live Power Shot presses,
-  and all 39 adrenal 0x00D2s ride into a 50 — and its E5 sends NO finished
-  property, matching the ranger's two Power Shot E5s which carry neither 58
-  nor 46 — nor property 8. The PROPERTY-8 ACTION HOLD (wired 2026-08-22 after
+  and all 39 adrenal 0x00D2s ride into a 50 — and its E5 borrows NOTHING from
+  the spell family (no 58, no hold pulse) while sending the attack family's
+  OWN `[46, agent, 0]` (ANIMREF-R6, since 2026-08-31: castmech's "neither 58
+  nor 46, 0 of 2" was the bow artifact FINDINGS §3 refuted — 46 rides the
+  melee execution batch 40/40 across the full live corpus, and it goes out
+  even on a whiff because it closes the player's ACTION, not the hit). §2c
+  pins the R6 batch from both arms: default — 46 leads, the damage lands IN
+  the batch despite a swing landed the same instant (the windup was the
+  interval; the old path's interval gate silently swallowed a mid-chain
+  press), no attack_started and no melee_attack_finished ride along (40/40),
+  E5 opens and E3 closes; and `--legacy-attack-finish` restores the pre-R6
+  wire exactly, pinned DEFECT INCLUDED — no 46, and the mid-chain press
+  deals nothing — so the movement-lock comparison (FINDINGS §11b/§13: a
+  held W after a press traveled 0.0 u for 6 s against retail's move-within-
+  0.25 s-of-E3 bound) stays one flag away. The PROPERTY-8 ACTION HOLD (wired 2026-08-22 after
   the client-handler read, skillcast 16.2) is pinned through the same
   sections: `[8 → 1]` closes every immediate press burst with the `→ 0` half
   ELIDED when the flag was still 0 (the ranger's t=12.9508 shape,
@@ -9233,9 +9245,15 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   queued behind it both release, two E2s, no recharge for either. §4 proves
   the busy-window rollback: a press after a cancel schedules its E5 one
   activation out, not behind the cancelled cast's ghost. §5 is the chain
-  half: one GV_ATTACK_STOPPED and the target forgotten (a move REPLACES the
-  attack order), the armed swing dropped unlanded — and the negative, no
-  second STOPPED when the chain was already paused by a press. §6 is the
+  half, re-pinned by ANIMREF-R7a (2026-08-31): the DEFAULT door sends NO
+  prop-3 and the target and armed swing SURVIVE the move — 87 of 100 corpus
+  mid-chain player moves carry no stop within 0.5 s (FINDINGS §14 LAW A; the
+  old always-stop rule was the wiki's sentence plus a 2-of-2 measured on our
+  own door, one witness counted twice), with `attack_tick`'s range gate as
+  the deferred judge — while `--legacy-move-stops-chain` restores the old
+  pins verbatim (one GV_ATTACK_STOPPED, target forgotten, armed swing
+  dropped unlanded); and the negative still holds, no second STOPPED when
+  the chain was already paused by a press. §6 is the
   `0x0028` CANCEL_ACTION door, the arm the first operator run forced: the
   client sends NO movement c2s while it holds a cast — the operator's three
   cancel inputs each arrived as a header-only 0x0028 (run 20260823T101329),
