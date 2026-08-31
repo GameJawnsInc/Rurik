@@ -1732,10 +1732,23 @@ emitter against the population, fix by derivation, tune never.
   handles SHARED across agents (id 831757499 to agents 63, 550, 302, 658).
   Wiring them means inventing handles, with no `s_skill` field to read them
   from — the channel is not keyed by skill.
-* **NEXT, in cost order**:
-  (1) The extractor's event model wants 0x00CF/0x00D0/0x00D2 (0x00D2 now
-  known to ride attack-skill activations) — the last open instrument item,
-  and the enabler for §19's per-bar adrenaline simulation.
+* **R9 SHIPPED — the adrenaline family is in the event model** (0x00CF gain,
+  0x00D0 clear, 0x00D1 set, 0x00D2 spend; corpus now carries 921/28/0/40 of
+  them). Absent fields stay `None`, never 0. Carried but **not signed**: they
+  are filtered out of episode signatures by default (`SIGN_ADRENALINE` is the
+  opt-in), because letting them in would have silently rewritten every
+  published signature and every count in §3 and §8 — verified after the change
+  by re-scanning: 46×164, 49×12, 50×222, exactly §3's figures, and zero
+  polluted signatures. `test_animgrammar` 41→48 checks.
+* **THE ANIMREF DESK QUEUE IS EMPTY.** What remains is not desk work:
+  (a) §19's per-bar adrenaline simulation with cross-drain (R9 is its
+  enabler) to upgrade the charge-gate reading from RECONSTRUCTION;
+  (b) §17's IAS windup, which needs a **live capture with an attack-speed
+  stance running** — an R0b runsheet line, human-driven;
+  (c) §15's client movement-start gate, a client-behaviour study needing the
+  locomotion-input read instrumented;
+  (d) §16's visual ids are wired but their **appearance** is unverified — a
+  model-appearance verdict, which is the owner's call.
 
 ### ★★★★★ MOVEMENT 2026-08-28 — THE OBSTACLE DIG: the mesh HAS the mountains, the no-clip IS scored, the client ignores its own geometry check. THE LEAD IS SERVER-SIDE PATH-SOLVED GRANTS
 
