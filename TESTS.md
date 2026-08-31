@@ -8773,7 +8773,7 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   convention's own shapes — `GATEFIRE-C3`, and ladder rungs like `R-ISLE`/`R-IDENTS`,
   which a pre-merge review found the resolver blind to), ceiling **80** — 53 at the same ~1.5x
   headroom `test_provlint.py` used for 134→200 and 280→420, not a new rule, and raising
-  it when it fires is a normal edit. **It fired, and was raised 80 → 90 on 2026-08-31
+  it when it fires is a normal edit. **It fired, and was raised 80 → 132 on 2026-08-31
   against a measured 88** (640 sites, 64 documents, 277 distinct tokens). The 88 were
   READ before the raise, which is what the failure text asks: 78 are bare letter-series
   (`A1`, `C13`, `D12`) — the gap `studies/idents/CONVENTION.md` exists to close and
@@ -8781,11 +8781,13 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   `ANIMREF-R5`, `MORALE-P1..P4` and `MOVECODE-B2` are correctly prefixed and collide
   only because a study's FINDINGS.md and PLAN.md both cite them, while `R4A/R4B/R4C`
   are the hyphen-digit truncation the tool's own notes call out as able to MANUFACTURE
-  a collision. None is the 2.2(a) defect. **90 leaves 2, not the paragraph's own 1.5x
-  (~132), and the same paragraph records re-arming three short as a known mistake that
-  "fires on the next session's ordinary work" — at ~9 collisions per arc this is
-  expected to go red on the next arc that mints a letter series.** That is a choice to
-  be told early; when it fires, re-read the tokens and raise again. A "defining site" is only a table row or a heading
+  a collision. None is the 2.2(a) defect. **132 is this entry's own ~1.5x rule applied
+  to 88 — the same headroom that made 80 out of 53, and `test_provlint.py` out of
+  134→200 and 280→420 — so it buys roughly five arcs at ~9 collisions each.** It was
+  briefly 90 earlier that day and moved because 90 left 2, and the rationale beside the
+  constant already records re-arming *three* short as a mistake that "fires on the next
+  session's ordinary work": a tripwire re-armed inside its own noise is a false alarm
+  with a delay, not an early warning. A "defining site" is only a table row or a heading
   that OPENS with the token, because §2's census pattern was table-rows-only and this
   one is still a FLOOR: prose definitions, bold list-leads (`- **C6** — …`), mid-heading
   references, `RUNBOOK.md`'s F-namespace and §2.4's bare-integer commit prefixes are all

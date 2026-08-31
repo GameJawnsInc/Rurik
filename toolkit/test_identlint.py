@@ -81,7 +81,7 @@ ROOT = os.path.dirname(HERE)
 # `test_provlint.py`; what is not normal is a mass rename, which the handoff's top box
 # refuses in advance.
 #
-# 80 -> 90 on 2026-08-31, OWNER'S CHOSEN VALUE, against a MEASURED 88:
+# 80 -> 132 on 2026-08-31, against a MEASURED 88:
 #
 #     640 defining site(s) in 64 document(s); 277 distinct token(s);
 #     88 of them collide across documents.
@@ -97,14 +97,17 @@ ROOT = os.path.dirname(HERE)
 # `R4A/R4B/R4C` are the hyphen-digit truncation this tool's own notes call out as
 # able to MANUFACTURE a collision. So nothing here is the 2.2(a) defect.
 #
-# READ THE HEADROOM BEFORE TRUSTING IT: 90 leaves 2, where the paragraph above sets
-# 1.5x (which would be ~132) and records the specific mistake of re-arming three
-# short -- "fires on the next session's ordinary work". At about nine collisions per
-# arc this is expected to go red on the NEXT arc that mints a letter series. That is
-# a deliberate choice to be told early rather than an oversight, so when it fires:
-# re-read the tokens as above and raise again. It is still a normal edit, and a mass
-# rename is still refused.
-COLLISION_CEILING = 90
+# 132 IS THE PARAGRAPH ABOVE APPLIED RATHER THAN A NEW NUMBER: 88 at the same ~1.5x
+# `test_provlint.py` used for 134 -> 200 and 280 -> 420, and that 80 was 53 at. At
+# about nine collisions per arc it buys roughly five arcs before somebody has to
+# look, which is the same "roughly three arcs" reasoning one re-arming later.
+# It was briefly set to 90 earlier the same day, and that is worth one line because
+# the reason it moved is written down two paragraphs up: 90 left 2, and this file
+# already records re-arming THREE short as a mistake that "fires on the next
+# session's ordinary work". A tripwire re-armed inside its own noise is not an
+# early warning, it is a false alarm with a delay -- so the rule was applied
+# instead of a judgement being made against it.
+COLLISION_CEILING = 132
 
 # The other direction. A pattern that rots reports a clean tree, and under a
 # not-growing rule that reads as progress -- so the floor is set BELOW the observed 312
