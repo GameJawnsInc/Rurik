@@ -84,11 +84,23 @@ Labels per `studies/character/FINDINGS.md`; every row spot-checked in the tree 2
 
 Rows D2/D3/D4 are answerable **from disk today**. That is the arc's first move.
 
+**R1 UPDATE (2026-08-30, [FINDINGS.md](FINDINGS.md)):** D1's law is DERIVED
+(windup = interval/2 − 0.1 s — the E5 rides it for melee attack skills too);
+D2 is ANSWERED at n=1,042 (the "constant ratio" itself was the artifact);
+D3/D4 are ANSWERED (the form rule: channel follows the target, 758/758 — both
+our send sites break it); D6 MOVED (7 landed-no-damage misses found; a miss is
+FINISHED-without-damage, a cancel is 3); D7 has corpus witnesses (prop 63 ×3);
+D5 confirmed corpus-silent (35 at 0/all) — decode-only. NEW divergences:
+**D15** player cast sends A0-with-target-0 (a form retail never uses),
+**D16** melee attack-skill finish should carry 46+damage at E5 (we never send
+46/49), **D17** the instant-skill family (prop 48, one-batch cycle) is absent
+from our wire.
+
 ## 3. The ladder
 
 | Rung | Deliverable | Acceptance | Status |
 |---|---|---|---|
-| **ANIMREF-R1** | The episode extractor + the retail referent. `toolkit/authsrv/animgrammar.py` (+ test): walks every LIVE capture via `vaultpath`/`origin` (refuses to pool origins), extracts every cast episode (property-60/50-opened, any agent; E4-opened for self) and every swing episode (property-4-opened) as ordered event lists with dts; emits per-episode JSONL to `vault/research/animref/` and a grammar census | POSITIVE CONTROL: reproduces castmech's pinned figures on the overlap (the 6 E-cycles' gaps, 7 E4s, the 4/4 cancel burst). NEW: player windup at bench-capture scale (D2), other-agent cast grammar (D3/D4), swing census beyond n=42 | ⬜ |
+| **ANIMREF-R1** | The episode extractor + the retail referent. `toolkit/authsrv/animgrammar.py` (+ test): walks every LIVE capture via `vaultpath`/`origin` (refuses to pool origins), extracts every cast episode (property-60/50-opened, any agent; E4-opened for self) and every swing episode (property-4-opened) as ordered event lists with dts; emits per-episode JSONL to `vault/research/animref/` and a grammar census | POSITIVE CONTROL: reproduces castmech's pinned figures on the overlap (the 6 E-cycles' gaps, 7 E4s, the 4/4 cancel burst). NEW: player windup at bench-capture scale (D2), other-agent cast grammar (D3/D4), swing census beyond n=42 | ✅ **2026-08-30**, `a26d7b6` (extractor, control 7/7) + the test commit; results in [FINDINGS.md](FINDINGS.md) — the windup LAW (`interval/2 − 0.1 s`, replaces the ratio), the cast-open form rule (758/758), the attack-skill trio at scale, the instant-skill family, 7 misses, props 22/23/28/63 live, 45 at n=79 |
 | **ANIMREF-R2** | The same extractor over OUR wire (gamesrv `.jsonl` corpus + loopback capture `20260823T101329`), plus a `--diff` mode: missing/extra events, order flips, timing-law residuals, per row retail-count vs ours-count | KNOWN-BAD CONTROL: the diff over pre-castmech gamesrv logs must flag the divergences castmech fixed; a diff scoring old and new wire alike measures nothing | ⬜ |
 | **ANIMREF-R3** | Fixes derived from R1's referent, shipped default-ON, one revert flag each, tests in the same commit. First: D1 (attack-skill E5 = begin + windup×modified-interval — the law the Power Shot data already states). Then whatever R2's table surfaces, in derivation order, never tuning order | each fix cites the referent rows that derive it; suite floors updated | ⬜ |
 | **ANIMREF-R4** | The corpus-silent behaviors (D5/D6/D7/D8), decoded not invented: client-handler reads first (the skillcast §16 seven-switch map places the ids); where decode can't settle it, ONE pre-registered live capture ask (secondary account, marks plan, all four questions in a single session). No campaign | the ask names its predictions before the run | ⬜ |
