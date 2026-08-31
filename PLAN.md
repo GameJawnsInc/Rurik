@@ -1707,8 +1707,16 @@ emitter against the population, fix by derivation, tune never.
   null. Settling it needs a live capture with an IAS stance running (Frenzy /
   Flurry / Tiger Stance) — **one line in an R0b runsheet**, human-driven.
   Meanwhile we ship candidate A (`m×base/2 − 0.1`) and §17 says so out loud.
-* **NEXT, in cost order**: (1) Prop 55 (health_gain), value derivable — clean R3-style fix.
-  (2) The extractor's event model wants 0x00CF/0x00D0/0x00D2 (0x00D2 now
+* **Prop 55 was STALE on this list and is struck** (FINDINGS §18): `heal_agent`
+  has sent it as a signed fraction of max health since the heal path existed,
+  and the R8 run shows it on the wire. R2's "effect-property channel absent"
+  covered 6/7/20/21/55/44 as a group and 55 was the member already present.
+  The corpus's double-55 batches (224 of 637 groups) are **two gains in one
+  instant** — mixed ordering, and one value recurring as the second member
+  across four different firsts — which is the one-per-gain rule we already
+  follow, not a shape we lack.
+* **NEXT, in cost order**:
+  (1) The extractor's event model wants 0x00CF/0x00D0/0x00D2 (0x00D2 now
   known to ride attack-skill activations). (3) D20: refuse a targetless
   attack-skill press — retail refuses 41 in this corpus. (4) Props 22/23/28
   (scripted animation) — the id-space method above may port, but their

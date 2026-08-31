@@ -785,6 +785,38 @@ scales the interval and then applies the law — `swing_windup(ATTACK_INTERVAL
 and that choice is UNVERIFIED, inherited from the code's shape rather than
 measured. It is named here so it is visible rather than implied.
 
+## 18. Prop 55 is already wired, and the corpus's "double 55" is two gains, not a shape we lack
+
+**2026-08-31.** `PLAN.md` carried "prop 55 (health_gain) is the one R2
+divergence whose value IS derivable — a clean R3-style fix" as the next
+shippable item. **It is stale: `heal_agent` has sent property 55 on
+`0x00A3` as a signed fraction of maximum health since the heal path
+existed** (`authsrv.py`, `GV_HEALTH_GAIN`), and the R8 verbatim run shows it
+on the wire (`heal 22 on agent 10`). R2's "effect-property channel absent"
+line covered 6/7/20/21/55/44 as a group; 55 was the member already present,
+and nobody re-checked before queueing it.
+
+What the re-check did turn up is the batch shape. Census over the corpus:
+**861 prop-55 events; of 637 (batch, agent) groups, 413 carry one and 224
+carry TWO** — always the same source agent, always different values, mostly
+in a cast-finish batch (prop-set `(21, 55, 58)` ×191, `(20, 55, 58)` ×17).
+
+That looked like a shape we lack, and it is not, on the corpus's own
+evidence: the ordering is mixed (176 first-smaller, 48 first-larger, so not
+`(gain, running total)`), there are only 12 distinct value pairs, and **one
+value recurs as the second member across four different first members**
+(0.0757 pairs with 0.1135, 0.3441, 0.2901, 0.1568). A constant alongside a
+varying partner reads as **two independent health gains resolving in one
+instant** — one per gain, which is exactly the rule our server already
+follows; we would send two the same way if two heals landed in one tick.
+
+**So: no fix, and no divergence row.** Stated as the weaker claim it is —
+the two-gains reading explains the pairs and no rival survives the ordering
+and the recurring constant, but the skills behind them were not identified,
+so it is RECONSTRUCTION, not OBSERVED. What would settle it is attributing
+each 55 to its own cast, which needs the per-skill heal magnitudes the
+`skill_effect` table only covers for our 20 served skills.
+
 ## Provenance
 
 All figures are measurements over the owner's own live captures via extractors in this
