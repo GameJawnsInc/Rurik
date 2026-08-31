@@ -87,6 +87,61 @@ instrument says it moves, the residue is the first-tap partial engagement
 
 ---
 
+## CASE 3 — the one that decides the quarterstep fix (ANIMREF-R7a)
+
+> **Q: with `--move-keeps-chain`, auto-attack the Hatcher and then hold W.
+> Do you MOVE — and does your character keep swinging when you stop?**
+
+This is the fork the whole fix hangs on, and it cannot be settled from the
+desk. Retail keeps the chain alive through movement (87 of 100 mid-chain
+moves carry no `attack_stopped`) and that is what makes the slide work: you
+move AND keep attacking. Our server closes the chain on every movement
+message. Removing that is ANIMREF-R7a — and when it shipped default-ON the
+client froze completely, so it is opt-in today.
+
+**But that freeze was only ever measured after an attack-SKILL press**,
+where the client sits in animation state 0x11/0x15 (FINDINGS §15). A plain
+auto-attack sits in state 3. Whether state 3 moves without the stop message
+was never tested, and it is the difference between "LAW A ships for the
+auto-attack case and the quarterstep comes back" and "the client genuinely
+needs that message and the fix is somewhere else".
+
+**Arm A — chain kept alive (the retail wire):**
+
+```powershell
+python toolkit/harness/session.py --enemy --hold 90 --game-args "--map 146 --explorable --no-enemy-skills --enemy-hit 0.02 --move-keeps-chain"
+```
+
+**Arm B — as shipped, for contrast:**
+
+```powershell
+python toolkit/harness/session.py --enemy --hold 90 --game-args "--map 146 --explorable --no-enemy-skills --enemy-hit 0.02"
+```
+
+**Do, in each arm:** stand in open ground (NOT against a wall — a scripted
+run of mine wasted itself on exactly that), click the Hatcher to auto-attack,
+let a swing or two land, then hold W right as the damage hits.
+
+**NO INSTRUMENT SCORES THIS ONE.** The commands set up the two server arms
+and nothing else; the verdict is yours by feel. **Quarterstepping cannot be
+driven from the harness** — owner's ruling 2026-08-31, and it is a real
+boundary rather than a preference: a scripted plan can prove the body
+travelled N units, which is not the same claim as "the slide happens when I
+press at the damage and it feels like stock". Four scripted runs of mine
+measured travel and were each answering a slightly different question than
+the one asked. Travel is a necessary condition, not the finding.
+
+**Answer one line:** *"A slides / A frozen / A slides but stops attacking."*
+
+* **A slides** → LAW A ships for the auto-attack case, default ON, and your
+  stock quarterstep is back.
+* **A frozen** → our client needs the stop message to move at all, LAW A
+  cannot ship in any form, and the residue is client-side (§15's
+  movement-start gate) rather than a wire fix.
+* **A slides but stops attacking** → the movement is fine and the CHAIN is
+  what dies; the fix is then in `attack_tick`'s target handling, not in the
+  movement door.
+
 ## The one that needs a LIVE run, when you want it
 
 §17: the swing windup law is `interval/2 − 0.1 s`, but **every swing in the
