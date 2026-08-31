@@ -280,7 +280,61 @@ position known from the `['58','55']` finish signature) — deliberately left fo
 an R3 follow-up rather than folded into this decode rung, and gated behind R5's
 look at whether our heals already read correctly without it.
 
-## 11. What R1, R2 and R4 do NOT settle
+## 11. The quarterstep regression, reproduced UNATTENDED — and fix 3 is cleared
+
+**2026-08-31.** The R5 operator reported *"i can't quarterstep, attacks block
+movement longer than stock"* and then went away, so this was settled by three
+scripted harness runs with **no human in the loop and no visual judgement** —
+the readout is the CLIENT's own c2s movement messages under a mechanically held
+key. That removes the confound that made R5's own capture unable to answer it:
+a gap to the next movement message only BOUNDS the block, because it also
+contains the operator's reaction time.
+
+Method: `session.py --walk "attack:10 wait:3 1:0.3 W:6"` — order a swing at the
+Hatcher, press skill slot 1, then **hold W for six seconds**. The harness's step
+clock says when the key went down; the capture says when the client acted. No
+aiming is involved: `attack:10` orders the swing programmatically and a skill
+slot is a number key, so nothing needs a world-anchored click.
+
+| run | while W was held | client c2s movement msgs |
+|---|---|---|
+| **auto-attack only** (`--skills 0,0,0,0`) | client moved **0.2 s** after the key went down — the same latency as the no-attack baseline leg in the same session | **9** |
+| **attack skill, as shipped** | **nothing, for the whole 6 s** | **1** (the press itself) |
+| **attack skill, `--legacy-attack-e5`** | **nothing, for the whole 6 s** | **1** |
+
+**Three results, and the middle one is why the missing flag was worth adding
+before anything else:**
+
+1. **The regression is real and reproducible** — 2 of 2 attack-skill runs — and
+   it is specific to attack SKILLS. A plain auto-attack does not block movement
+   at all, which also clears the swing machinery and the windup law.
+2. **ANIMREF-R3 fix 3 is NOT the cause. Measured, not argued.** The block is
+   identical with the fix reverted, and the revert demonstrably works (E5/E3
+   move from +0.783 s to +0.042 s at the press). The mechanism agrees: fix 3
+   moves E5/E3 only, while property 50 and the `0x0035` attack-speed
+   declaration — the two things that could drive a client-side animation lock —
+   go out at the identical instant in both arms. Without the revert arm this
+   change would have stayed the prime suspect on plausibility alone.
+3. **Property 8 is cleared too.** The hold is set at the attack-skill press and
+   never released, which made it the obvious culprit — but the auto-attack run
+   sets the hold at 12.785 and the client moves anyway at 14.540. A flag that is
+   set in both runs and blocks in only one is not the blocker. That corroborates
+   `action_hold`'s own docstring (skillcast §16.2: animation plumbing, no
+   gameplay state) from the wire rather than from the disassembly.
+
+**NOT settled: which element of the press burst causes it.** The burst is E4 +
+`attack_stopped` + the energy debit + property 50 + the prop-8 hold, and this
+pass did not bisect them. Cheap next arms, all unattended and one flag apart:
+`--legacy-cast-form` (moves property 50's channel), a no-energy arm (drops the
+debit), and **a bar whose slot 1 is a non-attack SPELL** — which separates
+"attack skill" from "any skill press" and would also expose the mundane rival
+this pass cannot exclude, that the harness's held W simply stops reaching the
+client after any skill press.
+
+Captures: `20260831T092113` (auto-attack), `20260831T092437` (arm A),
+`20260831T092714` (arm B, reverted).
+
+## 12. What R1, R2 and R4 do NOT settle
 
 - The IAS/DAS interaction with the windup law (§1 caveat) — no modified-speed swing
   exists in the corpus. A derivation from the client's `0x007F82C0` duration math
