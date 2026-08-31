@@ -1740,6 +1740,19 @@ emitter against the population, fix by derivation, tune never.
   published signature and every count in §3 and §8 — verified after the change
   by re-scanning: 46×164, 49×12, 50×222, exactly §3's figures, and zero
   polluted signatures. `test_animgrammar` 41→48 checks.
+* **OWNER VERDICTS 2026-08-31.** R8 CONFIRMED on screen — *"effects render on
+  the target now too (in this case, the player)"*. The QUARTERSTEP IS NOT
+  FIXED — *"i can do it but it's unreliable and doesn't feel quite like
+  stock"*. R6/R7 are corpus-correct and insufficient; the arc's headline
+  problem is open, and the instrument overstated how close it was (travel
+  under a held key is a necessary condition, not the finding — the harness
+  cannot score a feel thing, owner's ruling).
+* **NEXT: [studies/animref/RE-PLAN.md](studies/animref/RE-PLAN.md) — a CLIENT
+  DIG, by owner's direction** ("a true reverse engineering approach rather
+  than more guesswork"). Localised: the client sends its `0x003D` and the
+  server answers identically in the frozen and moving arms, yet the body does
+  not translate — **the gate is the client's local movement application**.
+  Read the plan before proposing any further server change.
 * **THE ANIMREF DESK QUEUE IS EMPTY.** What remains is not desk work:
   (a) §19's per-bar adrenaline simulation with cross-drain (R9 is its
   enabler) to upgrade the charge-gate reading from RECONSTRUCTION;
