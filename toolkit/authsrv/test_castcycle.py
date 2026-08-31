@@ -16,8 +16,34 @@ entries' due-times are shifted into the past and cast_tick is asked what is
 due. A test that sleeps 8 seconds per cycle measures the wall clock, not the
 scheduler.
 
-Sections 1-3 and 5 stub `skill_timing`, so they run on a bare machine.
-Section 4 reads the real content rows (vault overlay) and SKIPS, loudly,
+EVERY SECTION BUT 5 RUNS ON A BARE MACHINE, and saying so cost three fixes
+on 2026-08-31 because the claim had never once been TRUE. It used to read
+"sections 1-3 and 5 stub `skill_timing`, so they run on a bare machine" --
+wrong about which section needs the vault (it is 5, not 4; the numbering
+went stale when 2b/2c/2d landed) and wrong that stubbing the timing was
+enough. With `RURIK_VAULT` pointed at nothing this file did not fail its
+floor, it died with a TRACEBACK before check 1, which is the outcome
+`checks.py` exists to prevent. Three separate defects, none of them this
+file's alone:
+
+  1. `authsrv.player_rank_for_skill` was the one lookup on the press path
+     with no bare-machine fallback, so `handle_skill_press` raised
+     `ContentError` on skill 42. That was a SERVER defect, not a test
+     defect -- fixed there, and guarded by test_bareimport.py section 3.
+  2. The press burst's 0x00A2 is `skill_cost`'s, a SECOND content read the
+     old claim never accounted for. Sections 1, 2b and 4 stub it now, for
+     the reason 2b already stubbed `_is_attack_skill`: what they pin is the
+     ORDER of the burst, not what a spell costs.
+  3. Both `LEDGER.skip` calls passed one argument to a two-argument
+     signature, so the skip paths raised `TypeError` the first time they
+     were ever reached. A skip path nothing has run is not a skip path.
+
+MEASURED, both ways, from green runs: 33 checks with the vault, 31 without
+plus one declared skip. The floor is the BARE-MACHINE number -- the shape
+test_armour.py and test_position_trust.py both use, so that a machine with
+no vault is called complete when it is, and short when it is not.
+
+Section 5 reads the real content rows (vault overlay) and SKIPS, loudly,
 when no vault is present -- the values it pins are the live-corroborated
 trio for skill 153.
 """
@@ -30,7 +56,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
 import checks  # noqa: E402
 
-LEDGER = checks.Ledger("cast cycle", floor=24)
+LEDGER = checks.Ledger("cast cycle", floor=31)
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -58,7 +84,17 @@ def section_press_shape():
     state = {"agents": {}}
 
     saved = authsrv.skill_timing
+    saved_cost = authsrv.skill_cost
     authsrv.skill_timing = lambda sid: (1.0, 0.75, 8.0)
+    # THE COST IS STUBBED FOR THE SAME REASON THE TIMING IS, and until
+    # 2026-08-31 it was not: the debit below is `skill_cost`'s, a SECOND
+    # content read the docstring's bare-machine claim never accounted for, so
+    # with no vault skill 42 cost 0, no 0x00A2 went out, and this section's
+    # exact op list was unreachable. 10 is skill 42's own vault figure, pinned
+    # here so the burst has the same shape on both machines -- what this
+    # section is about is the ORDER of the burst, not what a spell costs
+    # (test_pools sections 6-6c own the amount).
+    authsrv.skill_cost = lambda sid: (10, 0)
     try:
         _press(authsrv, send, state, target=40)
         ops = [op for op, _, _ in sent]
@@ -113,6 +149,7 @@ def section_press_shape():
               f"{ {k: round(v - c['e5_at'], 3) for k, v in c.items() if k.endswith('_at')} }")
     finally:
         authsrv.skill_timing = saved
+        authsrv.skill_cost = saved_cost
 
 
 def section_tick_order():
@@ -184,10 +221,14 @@ def section_attack_family():
     state = {"agents": {}}
     saved = authsrv.skill_timing
     saved_attack = authsrv._is_attack_skill
+    saved_cost = authsrv.skill_cost
     authsrv.skill_timing = lambda sid: (1.0, 0.0, 3.0)
     # Stubbed rather than read from content: on a bare machine every id is
     # "not attack" (no rows), so the family split is pinned by forcing it.
     authsrv._is_attack_skill = lambda sid: True
+    # And the cost, for the same reason and the same way -- the 0x00A2 in the
+    # op list below is a content read this stub set forgot until 2026-08-31.
+    authsrv.skill_cost = lambda sid: (10, 0)
     try:
         _press(authsrv, send, state, skill=394, target=40)
         check([op for op, _, _ in sent] == [0x00E4, 0x00A2, 0x00A0, 0x009F]
@@ -268,6 +309,7 @@ def section_attack_family():
     finally:
         authsrv.skill_timing = saved
         authsrv._is_attack_skill = saved_attack
+        authsrv.skill_cost = saved_cost
 
 
 def section_attack_finish_batch():
@@ -388,9 +430,9 @@ def section_skill_visual():
     try:
         authsrv.agents.WORLD.get("skill_visual", "312")
     except Exception as exc:
-        LEDGER.skip(f"no skill_visual content rows ({type(exc).__name__}) -- "
-                    f"the vault overlay is absent; the channel rule is "
-                    f"checked wherever content loads")
+        LEDGER.skip("2d. the on-body effect visual and its channel rule",
+                    f"no skill_visual content rows ({type(exc).__name__}) -- "
+                    f"the channel rule is checked wherever content loads")
         return
 
     def fire(skill, caster, target):
@@ -491,7 +533,14 @@ def section_queue_law():
     send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))
     state = {"agents": {}}
     saved = authsrv.skill_timing
+    saved_cost = authsrv.skill_cost
     authsrv.skill_timing = lambda sid: (2.0, 0.75, 6.0)
+    # The debit that rides the E3 batch below is a content read, so it is
+    # stubbed with the timing. Without this, a bare machine sent no 0x00A2,
+    # the batch was two opcodes short, and the LAST check here died with an
+    # IndexError off `sent[5]` -- a traceback, not a verdict, which is the one
+    # outcome checks.py exists to prevent.
+    authsrv.skill_cost = lambda sid: (10, 0)
     try:
         _press(authsrv, send, state, skill=105, target=40)
         first = state["pending_casts"][0]
@@ -533,6 +582,7 @@ def section_queue_law():
               f"debit={sent[5][1]}, animation={sent[6][1]}")
     finally:
         authsrv.skill_timing = saved
+        authsrv.skill_cost = saved_cost
 
 
 def section_real_content():
@@ -542,7 +592,8 @@ def section_real_content():
     try:
         authsrv.agents.WORLD.get("skills", "153")
     except Exception:
-        LEDGER.skip("no 'skills' content rows -- vault overlay absent on "
+        LEDGER.skip("5. the real numbers: skill 153 from the content store",
+                    "no 'skills' content rows -- vault overlay absent on "
                     "this machine; run skilltable.py --emit-content. The "
                     "values this section pins are checked in "
                     "test_skilltable.py section 6 wherever the vault exists.")

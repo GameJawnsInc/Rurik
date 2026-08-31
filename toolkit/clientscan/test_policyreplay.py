@@ -191,7 +191,15 @@ def main():
     g2 = vaultpath.vault_path("captures", "gamesrv",
                               "authsrv-20260826T143111-c1.jsonl")
     if not os.path.exists(g1):
-        LEDGER.skip("real log %s missing" % g1)
+        # Two arguments, not one. This read `LEDGER.skip("real log %s missing")`
+        # until 2026-08-31 and `Ledger.skip` takes (label, why), so the first
+        # machine to reach it -- any machine with no vault -- got a TypeError
+        # instead of the declared skip, and the file died with a traceback
+        # rather than the verdict this branch exists to produce. Same defect,
+        # same day, in test_castcycle.py's two skips.
+        LEDGER.skip("3a. the sec015 real log",
+                    "missing %s -- the capture corpus is vault-only, so this "
+                    "section measures nothing on this machine" % g1)
     else:
         s1 = policyreplay.build_streams(policyreplay.load_log(g1))
         o1 = policyreplay.replay(s1, policyreplay.POLICIES["sec015"])
@@ -212,7 +220,9 @@ def main():
               "if this drifts, either the engine changed or the corpus "
               "did; the corpus is frozen, so it names an engine change")
     if not os.path.exists(g2):
-        LEDGER.skip("real log %s missing" % g2)
+        LEDGER.skip("3b. the sec017 real log",
+                    "missing %s -- the capture corpus is vault-only, so this "
+                    "section measures nothing on this machine" % g2)
     else:
         s2 = policyreplay.build_streams(policyreplay.load_log(g2))
         o2 = policyreplay.replay(s2, policyreplay.POLICIES["sec017"])
@@ -235,8 +245,14 @@ def main():
               "expired -- both facts ride this pin, and the fidelity "
               "PASS above is what proves the engine reproduces them")
 
-    LEDGER.verdict()
+    return LEDGER.verdict()
 
 
+# `sys.exit(main())`, not a bare `main()`, and `main` RETURNS the verdict:
+# both halves were missing until 2026-08-31, so this file printed its FAIL
+# banner and exited 0. run_suite.py catches that as SUSPECT (exit 0 with no
+# ALL CHECKS PASSED line), which is the backstop working -- but a developer
+# running the file directly saw a clean exit code on a red run, and
+# CLAUDE.md's rule is that a test exits non-zero.
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

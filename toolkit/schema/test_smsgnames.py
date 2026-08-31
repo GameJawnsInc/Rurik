@@ -99,7 +99,8 @@ def section2_wire():
     print("\n2. the wire still behaves the way the names claim")
     rows = corpus()
     if rows is None:
-        LEDGER.skip("no live captures in the vault -- every wire invariant below "
+        LEDGER.skip("the live-capture wire invariants",
+                    "no live captures in the vault -- every wire invariant below "
                     "is unchecked, which is not the same as passing")
         return
     by = {}

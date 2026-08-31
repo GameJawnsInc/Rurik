@@ -2811,6 +2811,17 @@ def skill_damage(skill_id, rank):
 
     Returns None -- not zero -- when the skill is not a modelled damage skill,
     so a caller must decide what that means rather than silently dealing 0.
+
+    A MISSING `skills` ROW IS ALSO None, AND THE TWO TABLES SPLIT ACROSS THE
+    VAULT BOUNDARY -- which is why the guard below is not redundant with the
+    one above. `skill_effect` is REPO content (`content/world.toml`, 40 rows);
+    `skills` is vault-only, extracted by `skilltable.py`. So on a machine with
+    no overlay the `skill_effect` lookup SUCCEEDS and `skill_scale_value`'s
+    `skills` read raises straight through the caller -- which is how
+    `enemy_attack_tick` died on skill 276 on 2026-08-31 (test_agentlife), the
+    same defect as `player_rank_for_skill`'s one table over. `ContentError`
+    ONLY: `skill_scale_value` also raises `ValueError` for a disabled bitfield,
+    and that refusal is deliberate and must keep escaping.
     """
     try:
         row = agents.WORLD.get("skill_effect", str(skill_id))
@@ -2819,7 +2830,11 @@ def skill_damage(skill_id, rank):
     mode = SCALE_MEANS_DAMAGE.get(row.get("scale_means"))
     if mode is None or not _resolves_at_cast(skill_id):
         return None
-    return skill_scale_value(skill_id, rank), mode
+    try:
+        return skill_scale_value(skill_id, rank), mode
+    except agents.content.ContentError:
+        skill_timing(skill_id)          # announces the missing row, once
+        return None
 
 
 def skill_heal(skill_id, rank):
@@ -2848,7 +2863,13 @@ def skill_heal(skill_id, rank):
         return None
     if not _resolves_at_cast(skill_id):
         return None
-    return skill_scale_value(skill_id, rank)
+    # The vault-boundary guard `skill_damage` carries, for the same reason and
+    # with the same narrow catch -- this is the arm `land_skill` reaches.
+    try:
+        return skill_scale_value(skill_id, rank)
+    except agents.content.ContentError:
+        skill_timing(skill_id)          # announces the missing row, once
+        return None
 
 
 def player_rank_for_skill(skill_id):
@@ -2861,8 +2882,38 @@ def player_rank_for_skill(skill_id):
 
     An attribute the player has no rank in is 0 -- which is correct rather
     than missing: a Warrior really does have rank 0 in Smiting Prayers.
+
+    A SKILL WITH NO ROW AT ALL IS ALSO 0, and until 2026-08-31 it was an
+    unhandled `ContentError` -- the one lookup on the press path that did not
+    take the bare-machine fallback its four neighbours take (`skill_timing`,
+    `skill_cost`, `_is_attack_skill`, `_resolves_at_cast`). The effect was not
+    confined to a test: `handle_skill_press` calls this on every press with
+    `ENERGY` on, so on a machine with no vault overlay the server PRINTED
+    `skill_timing`'s "lifecycle timings fall back to 0" announcement and then
+    died on the same missing row two lines later, taking the connection thread
+    with it. `test_bareimport.py` section 3 is the guard, and its scanner could
+    not have caught this: it rules on module-level binds, and this one is in a
+    function body.
+
+    Zero is inert here rather than a guessed number, which is why it is the
+    honest fallback and not a paper-over: the fallback engages only when the
+    row is missing, and every consumer of the rank in that state -- both call
+    sites feed it to `skill_damage` / `energy_cost_for`, which read the same
+    absent row -- already resolves to nothing. The announcement is delegated to
+    `skill_timing` for exactly the reason `skill_cost` delegates it: they are
+    read together at every call site and a second copy would double every line.
+
+    The catch is NARROW on purpose. A `skills` row that exists but has no
+    `attribute` column, or one whose value will not parse, is a real defect on a
+    machine that HAS the vault, and it must stay loud -- so `KeyError` and
+    `ValueError` still escape. Only "there is no row" is answered with a rank.
     """
-    attribute = int(agents.WORLD.get("skills", str(skill_id))["attribute"])
+    try:
+        row = agents.WORLD.get("skills", str(skill_id))
+    except agents.content.ContentError:
+        skill_timing(skill_id)          # announces the missing row, once
+        return 0
+    attribute = int(row["attribute"])
     return dict(agents.PLAYER_ATTRIBUTE_RANKS).get(attribute, 0)
 
 

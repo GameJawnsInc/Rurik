@@ -160,7 +160,8 @@ def main():
         import textrec
         ix = textrec.TextIndex(args.exe)
     except Exception as exc:                                   # noqa: BLE001
-        LEDGER.skip(f"section 4: no readable archive ({exc!r}). The exe-side "
+        LEDGER.skip("section 4: the two-file partition",
+                    f"section 4: no readable archive ({exc!r}). The exe-side "
                     f"claims above still ran; the two-file partition did not.")
     else:
         with ix:

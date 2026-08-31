@@ -52,10 +52,16 @@ def main():
     print("\n2. the live corpus (skips loudly without the vault)")
     root = livewire.captures_root()
     if not os.path.isdir(root):
-        LEDGER.skip("no live capture corpus at %s -- the corpus sections "
+        # Two arguments (label, why), and the verdict is RETURNED. Both were
+        # wrong until 2026-08-31 and both only bite on a machine with no vault,
+        # which is the one this branch exists for: the one-argument `skip`
+        # raised TypeError, and had it not, the bare `return` handed `main` a
+        # None that `sys.exit` reads as success. Third instance of the same
+        # `skip` defect that day (test_castcycle x2, test_policyreplay x2).
+        LEDGER.skip("2. the live corpus",
+                    "no live capture corpus at %s -- the corpus sections "
                     "need the owner's vault" % root)
-        LEDGER.verdict()
-        return
+        return LEDGER.verdict()
     caps = livewire.live_captures()
     check(len(caps) >= 20,
           "the origin gate passes at least the 20 live captures the "
@@ -73,7 +79,8 @@ def main():
     capdir = os.path.join(root, "20260807T143055")
     gf = "game-10.0.0.210_62994-to-54.198.7.73_80.jsonl"
     if not os.path.exists(os.path.join(capdir, gf)):
-        LEDGER.skip("pinned connection %s missing" % gf)
+        LEDGER.skip("the pinned connection decode",
+                    "pinned connection %s missing" % gf)
     else:
         conn, merged, ok = livewire.decode_conn(capdir, gf)
         check(ok is True,
@@ -114,7 +121,8 @@ def main():
     print("\n4. the rung-7 capture: whole-capture closure")
     capdir = os.path.join(root, "20260818T132739")
     if not os.path.isdir(capdir):
-        LEDGER.skip("capture 20260818T132739 missing")
+        LEDGER.skip("capture 20260818T132739",
+                    "capture 20260818T132739 missing")
     else:
         conns = livewire.connections(capdir)
         check(len(conns) == 8,
@@ -128,8 +136,14 @@ def main():
               "decode reported as a full one is the suite's oldest defect "
               "class")
 
-    LEDGER.verdict()
+    return LEDGER.verdict()
 
 
+# `sys.exit(main())`, not a bare `main()`, and `main` RETURNS the verdict:
+# both halves were missing until 2026-08-31, so this file printed its FAIL
+# banner and exited 0. run_suite.py catches that as SUSPECT (exit 0 with no
+# ALL CHECKS PASSED line), which is the backstop working -- but a developer
+# running the file directly saw a clean exit code on a red run, and
+# CLAUDE.md's rule is that a test exits non-zero.
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

@@ -740,8 +740,14 @@ def main():
           "the [1.0,9] lands in +0x60, and every count stays green -- the "
           "review's one surviving mutation")
 
-    LEDGER.verdict()
+    return LEDGER.verdict()
 
 
+# `sys.exit(main())`, not a bare `main()`, and `main` RETURNS the verdict:
+# both halves were missing until 2026-08-31, so this file printed its FAIL
+# banner and exited 0. run_suite.py catches that as SUSPECT (exit 0 with no
+# ALL CHECKS PASSED line), which is the backstop working -- but a developer
+# running the file directly saw a clean exit code on a red run, and
+# CLAUDE.md's rule is that a test exits non-zero.
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

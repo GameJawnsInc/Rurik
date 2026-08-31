@@ -1281,6 +1281,21 @@ def section_enemy_skill():
     #     slot 0, which since step 8 is correctly inert: a heal lands nothing,
     #     so repeating it forever could never reach a death and the check
     #     would have been measuring an empty loop.
+    #
+    #     AND IT NEEDS THE VAULT, which nothing said until 2026-08-31: the
+    #     magnitude comes from `skills` (vault-only, skilltable.py), while the
+    #     `skill_effect` row naming 312 as damage is REPO content -- so a bare
+    #     machine got a None out of `skill_damage` and this block died on
+    #     `[0]`, a traceback rather than a verdict. Parts 7b on are pure
+    #     `pick_skill` and run anywhere, so the skip is scoped to THIS block
+    #     rather than to the section.
+    if authsrv.skill_damage(312, authsrv.ENEMY_SKILL_RANK) is None:
+        LEDGER.skip("7. the skill can kill, and the kill is the effects bit",
+                    "no 'skills' row for 312, so its damage magnitude is "
+                    "unknown on this machine -- the vault overlay is absent "
+                    "(run skilltable.py --emit-content). The rest of this "
+                    "section does not need it and runs below.")
+        return _section_enemy_skill_bar_order()
     kill_state = _world()
     sent = []
     keep = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))
@@ -1303,6 +1318,18 @@ def section_enemy_skill():
               f"{len(kills)} -- property 16 floors at 1 and cannot kill however "
               "it is dressed up")
 
+    return _section_enemy_skill_bar_order()
+
+
+def _section_enemy_skill_bar_order():
+    """Parts 7b on of `section_enemy_skill`: the bar selector and the
+    spawn wiring. Split out 2026-08-31 so part 7's vault dependency (312's
+    damage magnitude, a `skills` row) can SKIP without taking these with
+    it -- nothing below reads a magnitude, so all of it runs on a bare
+    machine. Called from both of that section's exits.
+    """
+    import authsrv
+    import agents
     # 7b. THE BAR IS A BAR: it works down the slots rather than repeating slot 1.
     #     Every recharge is rolled back except the one under test, so what is
     #     being measured is the ORDER and not the clock.

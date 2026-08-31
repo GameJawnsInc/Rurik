@@ -136,7 +136,8 @@ def main():
     try:
         kills = live_kills()
     except Exception as exc:                                   # noqa: BLE001
-        LEDGER.skip(f"sections 2-4: no readable captures ({exc!r}). Section 1's "
+        LEDGER.skip("sections 2-4: the capture-backed kill checks",
+                    f"sections 2-4: no readable captures ({exc!r}). Section 1's "
                     f"literals still ran, but nothing was checked against "
                     f"ArenaNet's own kills.")
         return LEDGER.verdict()

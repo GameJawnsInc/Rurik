@@ -251,7 +251,8 @@ def main():
                 section_order(ar)
                 section_whole(ar)
         else:
-            LEDGER.skip("sections 1-3 (FA8 append, key-order insert, whole "
+            LEDGER.skip("sections 1-3: FA8 append, key-order insert, whole edit",
+                        "sections 1-3 (FA8 append, key-order insert, whole "
                         "edit): no vault/dat_study/Gw.dat on this machine")
         section_archive(tmp)
     finally:
