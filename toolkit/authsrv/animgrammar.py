@@ -74,6 +74,30 @@ AGENT_STATUS = 0x00F1       # [op, agent, status] -- death/life transitions
 E_SERIES = {0x00E2: "E2", 0x00E3: "E3", 0x00E4: "E4",
             0x00E5: "E5", 0x00E6: "E6"}
 
+# THE ADRENALINE FAMILY, added 2026-08-31 (ANIMREF-R9). These four are not
+# properties -- they are their own opcodes -- and the extractor was blind to
+# them, which is why every spend-grammar question so far has had to re-decode
+# the tapes by hand. FINDINGS section 19 is the standing example: the corpus's
+# refused attack-skill presses look like a per-skill CHARGE GATE, and scoring
+# that properly needs the gains and the spends in the same event stream as the
+# presses. The right denominator is a per-bar simulation with cross-drain (in
+# Guild Wars ANY adrenal use drains EVERY bar), and that cannot be written
+# against an event model that does not carry the spends.
+#
+# Widths are authsrv.py's own declarations (0x00CF..0x00D2, and see msgshape):
+#   0x00CF gain  {agent, units}         0x00D0 clear {agent}
+#   0x00D1 set   {agent, skill, copy, units}
+#   0x00D2 spend {agent, skill, copy}
+# Self-scoped on the wire: every one of the 9 corpus connections carrying a
+# 0x00CF names exactly ONE agent, its own (authsrv.py's hit_enemy says so from
+# the other side), so an adrenaline event about somebody else is a finding
+# rather than routine -- `census` prints the agent set for that reason.
+ADRENALINE = {0x00CF: "adren_gain", 0x00D0: "adren_clear",
+              0x00D1: "adren_set", 0x00D2: "adren_spend"}
+ADREN_KINDS = frozenset(ADRENALINE.values())
+# Signatures stay as they were measured unless a caller opts in -- see sig_at.
+SIGN_ADRENALINE = False
+
 # The cast/attack lifecycle register as castmech SS3c + skillcast SS15 settled
 # it. Everything ELSE seen on the wire lands in the unknown-census -- printed,
 # never dropped.
@@ -130,6 +154,22 @@ def prop_events(msgs):
             yield {"t": t, "kind": E_SERIES[op], "agent": int(v[1]),
                    "skill": int(v[2]),
                    "copy": int(v[3]) if len(v) > 3 else 0}
+        elif op in ADRENALINE and len(v) >= 2:
+            # One shape for four opcodes, with the ABSENT fields left None
+            # rather than defaulted to 0: a spend names a skill and a gain
+            # does not, and `units = 0` would read as "gained nothing" where
+            # the truth is "this message has no units field at all". Same
+            # rule as origin.py's third value.
+            ev = {"t": t, "kind": ADRENALINE[op], "agent": int(v[1]),
+                  "skill": None, "copy": None, "units": None}
+            if op == 0x00CF and len(v) >= 3:
+                ev["units"] = int(v[2])
+            elif op == 0x00D2 and len(v) >= 4:
+                ev["skill"], ev["copy"] = int(v[2]), int(v[3])
+            elif op == 0x00D1 and len(v) >= 5:
+                ev["skill"], ev["copy"] = int(v[2]), int(v[3])
+                ev["units"] = int(v[4])
+            yield ev
 
 
 def assign_batches(evs, eps=0.0):
@@ -260,7 +300,18 @@ def cast_episodes(events, me=None):
     out = []
 
     def sig_at(bt, agent):
-        return tuple(token(x) for x in by_t[bt] if involves(x, agent))
+        # ADRENALINE EVENTS ARE CARRIED BUT NOT SIGNED, and the asymmetry is
+        # deliberate. R9 added 0x00CF..0x00D2 to the event stream so the spend
+        # grammar is readable at all; letting them into signatures would have
+        # silently rewritten every published one -- FINDINGS section 3's
+        # ['E5','46','dmg','E3'] becomes ['E5','46','adren_gain','dmg','E3']
+        # and every count in sections 3 and 8 stops meaning what it says. A new
+        # instrument must not invalidate the measurements taken with the old
+        # one without saying so. Read them from `events` (they are all there,
+        # in order); ask for them here with `--sign-adrenaline`.
+        return tuple(token(x) for x in by_t[bt]
+                     if involves(x, agent)
+                     and (SIGN_ADRENALINE or x["kind"] not in ADREN_KINDS))
 
     def close_self(key, t, how):
         ep = open_self.pop(key)

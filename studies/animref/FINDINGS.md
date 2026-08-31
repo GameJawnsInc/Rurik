@@ -742,6 +742,172 @@ sentinel play nothing, which is a fact about those skills rather than a gap.
 And prop 21's dominant-value purity (16/17) is one skill short of the prop-20
 figure; the residue is the same single stray event.
 
+## 17. The IAS windup question CANNOT be settled desk-only — the queue item is refuted, not deferred
+
+**2026-08-31.** `PLAN.md` §8 carried this as a decode that "may fall to the
+client's `0x007F82C0` duration math, desk-only." It does not, and the two
+halves of the reason are each worth having.
+
+**The client's attack-duration math, decoded (pinned 38797, no launch).**
+`0x007F82C0` asserts both operands non-zero (assert ids `0x12b7`, `0x12b8`),
+then computes
+
+> `duration = base[+0xEC] × modifier[+0xF0]`, and **× 1.25** when the
+> caller's context field `[ctx+0x3c]` is non-zero (a `double` at
+> `0x00950990`, read: exactly 1.25)
+
+selects a per-weapon animation code (0x0C–0x15, with 0x29–0x2B on the
+`[ctx+0x3c]`/`[ctx+0x38]` branches) and hands the float to the animation
+player `0x007F3DA0`. The two fields are stored straight off the wire's
+`0x0035` (`0x007FBD85`: `fld [ebp+8]; fstp [+0xEC]; fstp [+0xF0]`).
+**There is no additive term anywhere in it.** The client's arithmetic is
+purely multiplicative, so the −0.1 s of §1's law is not the client's
+animation math — it is ArenaNet's server-side scheduling, which this binary
+cannot show us. What `[ctx+0x3c]` means is NOT established; note only that
+the corpus's one cross-family datum shows the 1.25 did **not** apply to
+Power Shot (measured 1.1374/1.1387 against the law's 1.1375).
+
+**And the corpus has ZERO exposure, verified rather than inherited.** §1's
+caveat said every corpus swing rides modifier 1.0; re-scanned directly:
+**62 `0x0035` declarations, all modifier 1.0** — bases 1.75 (×27), 1.33
+(×23), 2.475 (×7), 2.0 (×3), 3.0 (×2) — and **0 landed swings at modifier
+≠ 1.0**. That is zero trials, not a null result: nothing in the corpus
+discriminates `m×base/2 − 0.1` from `m×(base/2 − 0.1)` from
+`(m×base − 0.2)/2`, and no amount of re-reading it will.
+
+**So the item leaves the desk queue as REFUTED-BY-METHOD.** What would
+settle it is exposure, not analysis: a live capture with an attack-speed
+stance actually running (Frenzy, Flurry, Tiger Stance) on the secondary
+account — one line in an R0b runsheet, human-driven, and the first swing
+under a modifier decides it. Until then, **note what we ship**: our server
+scales the interval and then applies the law — `swing_windup(ATTACK_INTERVAL
+× attack_interval_factor(...))`, i.e. candidate **A** (`m×base/2 − 0.1`) —
+and that choice is UNVERIFIED, inherited from the code's shape rather than
+measured. It is named here so it is visible rather than implied.
+
+## 18. Prop 55 is already wired, and the corpus's "double 55" is two gains, not a shape we lack
+
+**2026-08-31.** `PLAN.md` carried "prop 55 (health_gain) is the one R2
+divergence whose value IS derivable — a clean R3-style fix" as the next
+shippable item. **It is stale: `heal_agent` has sent property 55 on
+`0x00A3` as a signed fraction of maximum health since the heal path
+existed** (`authsrv.py`, `GV_HEALTH_GAIN`), and the R8 verbatim run shows it
+on the wire (`heal 22 on agent 10`). R2's "effect-property channel absent"
+line covered 6/7/20/21/55/44 as a group; 55 was the member already present,
+and nobody re-checked before queueing it.
+
+What the re-check did turn up is the batch shape. Census over the corpus:
+**861 prop-55 events; of 637 (batch, agent) groups, 413 carry one and 224
+carry TWO** — always the same source agent, always different values, mostly
+in a cast-finish batch (prop-set `(21, 55, 58)` ×191, `(20, 55, 58)` ×17).
+
+That looked like a shape we lack, and it is not, on the corpus's own
+evidence: the ordering is mixed (176 first-smaller, 48 first-larger, so not
+`(gain, running total)`), there are only 12 distinct value pairs, and **one
+value recurs as the second member across four different first members**
+(0.0757 pairs with 0.1135, 0.3441, 0.2901, 0.1568). A constant alongside a
+varying partner reads as **two independent health gains resolving in one
+instant** — one per gain, which is exactly the rule our server already
+follows; we would send two the same way if two heals landed in one tick.
+
+**So: no fix, and no divergence row.** Stated as the weaker claim it is —
+the two-gains reading explains the pairs and no rival survives the ordering
+and the recurring constant, but the skills behind them were not identified,
+so it is RECONSTRUCTION, not OBSERVED. What would settle it is attributing
+each 55 to its own cast, which needs the per-skill heal magnitudes the
+`skill_effect` table only covers for our 20 served skills.
+
+## 19. D20 tested: the premise is REFUTED, the fix is not shipped, and the refusals are a charge gate
+
+**2026-08-31.** §2 recorded D20 — "retail's client does not produce an
+attack-skill press without a target" — and filed the honest fix as *refuse a
+targetless attack-skill press*, unwired because our harness's own presses use
+target 0. Tested before building, and the premise does not survive.
+
+Every c2s `0x0027`/`0x0046` in the corpus, scored for whether the server
+answered with an E4 for that skill on the player's own agent (clocks aligned
+per connection, as §13):
+
+| | accepted | REFUSED |
+|---|---|---|
+| `0x0027` attack-skill, target ≠ 0 | 51 | **42** |
+| `0x0027` attack-skill, target = 0 | 0 | **1** |
+| `0x0046` use-skill, target ≠ 0 | 16 | 0 |
+| `0x0046` use-skill, target = 0 | **36** | 0 |
+
+**Three results, and the first two pull in opposite directions:**
+
+1. **The premise is REFUTED, n=1.** Retail's client *does* send a targetless
+   attack-skill press — `20260819T132414` t=238.50, skill 780,
+   `[…, 780, 0, 0, 0]`. §2's claim was made from an absence in a smaller
+   scan; one counterexample is enough to retire it.
+2. **The conclusion survives, also n=1**: that press was refused. So
+   "targetless attack-skill press → refused" is 1 for 1 — and one witness is
+   not a law. Non-attack skills are freely targetless (36 of 36 accepted), so
+   whatever the rule is, it is attack-specific.
+3. **Targetlessness is NOT what the server refuses.** 42 of the 43 refusals
+   carry a real target. The refusal population is a different mechanism
+   entirely, and D20 would explain 1 case of it.
+
+**What the refusals actually are.** They concentrate in exactly four skills —
+382 (22 accepted / 20 refused), 384 (14/13), 385 (8/8), 780 (3/2) — and
+**every other skill in the corpus has zero refusals** (364: 27/0, 105: 7/0,
+1: 6/0, 858: 6/0, …). The same skill is sometimes accepted and sometimes
+refused, so the discriminator is *state*, not the skill or the targeting: a
+per-skill **charge gate**, which is the adrenaline mechanic this server
+already implements (`refuse_press`, `REFUSE_NOT_ENOUGH_ADRENALINE`).
+
+The direction of the evidence agrees — summing the player's own `0x00CF`
+adrenaline gains between the previous accepted press of a skill and this one,
+accepted presses follow **median 206 units** against refused **137.5**, and
+only 2 of 33 accepted presses follow under 100 units against 6 of 28 refused.
+But the distributions **overlap and there is no threshold**, so this stays
+RECONSTRUCTION. The overlap is expected rather than embarrassing: in Guild
+Wars *any* adrenal use drains **every** adrenaline bar, so "units since the
+last press of this skill" is the wrong denominator — the right one needs a
+per-bar simulation with cross-drain, which is what would upgrade this.
+
+**Decision: the fix is NOT shipped, and the item leaves the queue.** Refusing
+targetless attack-skill presses would rest on a single witness, would cost us
+our own harness presses, and would address 1 of 43 refusals. Recording that
+is the whole return here — the item's premise was wrong, and building it
+first would have hidden that.
+
+## 20. Props 22/23/28 are NOT a per-skill id space — R8's method does not port
+
+**2026-08-31.** The queue carried these as "the id-space method may port,
+but test per-skill-ness first, do not assume R8's success." Tested; it does
+not port, and the reason is structural rather than a shortage of data.
+
+**They are not cast-driven.** Attributing each event to a cast the way §16
+did: **59 of 60 prop-22 events, 17 of 17 prop-23 and 17 of 17 prop-28 have
+no cast-open by the same agent within 6 s.** Property 20/21's whole method
+rests on that attribution, so there is nothing for it to bite on here. All
+three ride the untargeted `0x009F` channel exclusively (0 targeted, against
+prop 20's targeted-only form).
+
+**23 and 28 are a PAIR, and 23 is the parameter.** Every prop-23 event
+shares its batch and its agent with a prop-28: `23 → 8` (15 of 17; the other
+two are 10) immediately followed by `28 → 831757499`. That is exactly
+skillcast §15.2's sticky-parameter mechanism seen from the wire — 23 sets a
+small parameter, 28 consumes it — and it is the first corpus confirmation of
+that reading.
+
+**The values are 32-bit resource ids, shared across agents.** Prop 22: 60
+events, 16 distinct values, all large and unstructured (809791073,
+3200618694, 1470797158 — neither small ids nor sensible floats). Prop 28: 3
+distinct values over 17 events, and **the same id 831757499 goes to agents
+63, 550, 302 and 658** in one capture. A per-skill table cannot be behind
+that: the id is neither per-agent nor per-cast, and reads as a handle into an
+animation-resource space.
+
+**So: no fix, and the item leaves the queue.** Wiring 22/28 would mean
+inventing 32-bit resource handles — the same refusal condition §10 named for
+20/21, except that this time there is no `s_skill` field to read them out of,
+because the channel is not keyed by skill at all. What it would take is
+identifying the resource space those handles index, which is `Gw.dat`
+territory and a different arc's question, not a value we can derive.
+
 ## Provenance
 
 All figures are measurements over the owner's own live captures via extractors in this

@@ -1696,15 +1696,59 @@ emitter against the population, fix by derivation, tune never.
   sends them at the landing in retail's own batch slot for player and NPC
   casts alike. A skill with no row sends nothing. Pins: `test_castcycle` §2d,
   `test_guards` §4.
-* **NEXT, in cost order**: (1) The IAS windup
-  question (§1 caveat) via the client's `0x007F82C0` duration math,
-  desk-only. (2) Prop 55 (health_gain), value derivable — clean R3-style fix.
-  (3) The extractor's event model wants 0x00CF/0x00D0/0x00D2 (0x00D2 now
-  known to ride attack-skill activations). (4) D20: refuse a targetless
-  attack-skill press — retail refuses 41 in this corpus. (5) Props 22/23/28
-  (scripted animation) — the id-space method above may port, but their
-  values were never shown to be per-skill and that must be tested first,
-  not assumed from R8's success.
+* **The IAS windup question is OFF the desk queue — REFUTED BY METHOD, not
+  deferred** (FINDINGS §17). `0x007F82C0` decoded: attack animation duration
+  = `base[+0xEC] × modifier[+0xF0]`, ×1.25 when `[ctx+0x3c]` is set (the
+  double at `0x00950990`, read exactly), per-weapon animation code, handed to
+  `0x007F3DA0`. **No additive term anywhere in it** — the −0.1 is ArenaNet's
+  server-side scheduling, invisible to this binary. And the corpus has **zero
+  exposure**, re-verified rather than inherited: 62 `0x0035` declarations,
+  **all modifier 1.0**, 0 landed swings under a modifier. Zero trials, not a
+  null. Settling it needs a live capture with an IAS stance running (Frenzy /
+  Flurry / Tiger Stance) — **one line in an R0b runsheet**, human-driven.
+  Meanwhile we ship candidate A (`m×base/2 − 0.1`) and §17 says so out loud.
+* **Prop 55 was STALE on this list and is struck** (FINDINGS §18): `heal_agent`
+  has sent it as a signed fraction of max health since the heal path existed,
+  and the R8 run shows it on the wire. R2's "effect-property channel absent"
+  covered 6/7/20/21/55/44 as a group and 55 was the member already present.
+  The corpus's double-55 batches (224 of 637 groups) are **two gains in one
+  instant** — mixed ordering, and one value recurring as the second member
+  across four different firsts — which is the one-per-gain rule we already
+  follow, not a shape we lack.
+* **D20 is STRUCK — tested, premise REFUTED** (FINDINGS §19). "Retail's
+  client does not produce a targetless attack-skill press" is false (one
+  counterexample: skill 780, target 0, `20260819T132414`). That press WAS
+  refused, so the conclusion is 1-for-1 — and one witness is not a law. More
+  to the point, targetlessness is not what the server refuses: **42 of 43
+  refusals carry a real target**, concentrated in four skills each ~50/50
+  accepted/refused with every other skill at zero — a per-skill CHARGE GATE,
+  i.e. the adrenaline mechanic we already implement. Shipping D20 would rest
+  on one witness, cost our own harness presses, and address 1 of 43 cases.
+* **Props 22/23/28 are STRUCK — tested, the method does not port**
+  (FINDINGS §20). They are not cast-driven at all (59/60, 17/17, 17/17
+  unattributable), so §16's attribution has nothing to bite on; 23 and 28 are
+  a PAIR (`23 → 8` then `28 → <id>`, first corpus confirmation of skillcast
+  §15.2's sticky-parameter reading); and the values are 32-bit resource
+  handles SHARED across agents (id 831757499 to agents 63, 550, 302, 658).
+  Wiring them means inventing handles, with no `s_skill` field to read them
+  from — the channel is not keyed by skill.
+* **R9 SHIPPED — the adrenaline family is in the event model** (0x00CF gain,
+  0x00D0 clear, 0x00D1 set, 0x00D2 spend; corpus now carries 921/28/0/40 of
+  them). Absent fields stay `None`, never 0. Carried but **not signed**: they
+  are filtered out of episode signatures by default (`SIGN_ADRENALINE` is the
+  opt-in), because letting them in would have silently rewritten every
+  published signature and every count in §3 and §8 — verified after the change
+  by re-scanning: 46×164, 49×12, 50×222, exactly §3's figures, and zero
+  polluted signatures. `test_animgrammar` 41→48 checks.
+* **THE ANIMREF DESK QUEUE IS EMPTY.** What remains is not desk work:
+  (a) §19's per-bar adrenaline simulation with cross-drain (R9 is its
+  enabler) to upgrade the charge-gate reading from RECONSTRUCTION;
+  (b) §17's IAS windup, which needs a **live capture with an attack-speed
+  stance running** — an R0b runsheet line, human-driven;
+  (c) §15's client movement-start gate, a client-behaviour study needing the
+  locomotion-input read instrumented;
+  (d) §16's visual ids are wired but their **appearance** is unverified — a
+  model-appearance verdict, which is the owner's call.
 
 ### ★★★★★ MOVEMENT 2026-08-28 — THE OBSTACLE DIG: the mesh HAS the mountains, the no-clip IS scored, the client ignores its own geometry check. THE LEAD IS SERVER-SIDE PATH-SOLVED GRANTS
 
