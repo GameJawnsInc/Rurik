@@ -8329,7 +8329,20 @@ the same-tick ALIAS**: the
   existed and enforced by nothing — it names three tests that went unrun for days —
   and on the day the check was added a runner reported `51 of 51 green` over a tree
   holding 52 test files, which is the same defect from the other side and worse,
-  because the count was self-consistent),
+  because the count was self-consistent.
+  **§10 (2026-08-31) lints `LEDGER.skip` ARITY across the tree.** `Ledger.skip`
+  takes `(label, why)`; seven files across four packages called it with one
+  argument, so each raised `TypeError` instead of declaring the skip. None had
+  ever executed: every such call sits on the branch a machine takes when a
+  resource is MISSING — no vault overlay, no capture corpus, no pinned build —
+  and the suite runs where those exist, so the skip paths were dead code that
+  read as diligence. `test_castcycle.py` promised a bare machine in its
+  docstring and died in a traceback instead, which is neither a measurement nor
+  a verdict. This is a shape a linter can settle and a run cannot, since
+  reaching those branches means removing the vault. Its CONTROL plants a
+  one-argument call and requires that the correct two-argument call and a
+  non-Ledger `.skip` are BOTH left alone — a false positive here is worse than
+  a miss, per the top of that file. Floor 22 → **24**),
   `toolkit/test_scrub.py` (the credential scrub, that no secret survives it, that the
   one field it CANNOT clean — a `plain` frame payload, which carries the account email as
   UTF-16 and is therefore invisible to the ASCII leak check — is reported rather than
@@ -9206,7 +9219,27 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   E6 waits for its E3 because the corpus never shows them inverted; and the
   real-content section presses skill 153 and requires E5 to carry recharge 8,
   the value ArenaNet's own wire echoed — it SKIPS loudly on a machine with no
-  vault overlay, where sections 1–3 still run on a stubbed skill_timing),
+  vault overlay, where every other section still runs. **That sentence was
+  false here and in the file's own docstring until 2026-08-31, and it is worth
+  reading as a warning about this document rather than only as a fixed bug:
+  both said "runs on a bare machine" and neither had ever been tried, so a
+  vault-less run produced a TRACEBACK before check 1 — not a skip, not a floor
+  shortfall, no verdict at all.** Three defects stacked. (1) `handle_skill_press`
+  called `player_rank_for_skill`, the one lookup on the press path with no
+  bare-machine fallback, so the SERVER — not the test — raised `ContentError`
+  on skill 42 after having just logged `skill_timing`'s "falling back to 0" for
+  that same row; the fallback now lives beside its four neighbours' and
+  `test_bareimport.py` §3 executes a press with no vault to keep it there.
+  (2) The press burst's 0x00A2 debit is `skill_cost`'s, a second content read
+  the claim never accounted for; §§1, 2b and 4 stub it, as 2b already stubbed
+  `_is_attack_skill`. (3) Both `LEDGER.skip` calls passed one argument to a
+  two-argument signature, so the skip paths raised `TypeError` the first time
+  they were ever reached — seven files across four packages had that same
+  defect, all on branches only a resource-less machine takes, which is why the
+  suite never saw one; `test_srclint.py` §10 now lints the arity tree-wide.
+  Floor 24 → **31**, the MEASURED bare-machine subset, against a green 33 with
+  the vault (§5's two checks are the difference) — the shape `test_armour.py`
+  and `test_position_trust.py` use),
   `toolkit/authsrv/test_playerswing.py` (the player's auto swing is TWO
   phases — ATTACK_STARTED, then the damage `swing_windup(ATTACK_INTERVAL)`
   later — where until 2026-08-22 it was one instant, the last attacker in the
@@ -9286,7 +9319,16 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   keep animating — and the swing pair is `[3, 8→0]`, the opposite of the
   press and retarget orders, each door keeping the order measured at it.
   The tick now only removes a released entry; §1 asserts it announces nothing
-  a second time. Floor 20),
+  a second time. Floor **21** — this entry and the file's own header comment
+  both read 20 while the code said 21; the code was right and the run agrees.
+  NO VAULT, NO SOCKET, NO CLIENT: every section stubs `skill_timing` and
+  asserts on the cancel wire, which carries no content-derived value, so the
+  count is 21 with a vault and 21 without (MEASURED both ways 2026-08-31).
+  That property is one day old rather than original — until then a bare run
+  died in `handle_skill_press` on the same unguarded `player_rank_for_skill`
+  read that killed `test_castcycle.py`, with the difference that THIS file
+  never claimed a bare machine in prose. Both were equally broken, so an
+  unstated dependency is not a safer one, only a quieter one),
   `toolkit/authsrv/test_animgrammar.py` (the ANIMREF episode machines on
   synthetic streams they cannot force — bare-machine, no vault. The corpus
   run itself is guarded by `animgrammar.py --control` (P-CTRL: castgaps'
@@ -9849,8 +9891,25 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   to run the probe against. It would buy an import, not a capability, while the
   vault row overrode it by key everywhere the probe can actually run. The bind
   moved to call time instead (`probes.py` `_vault_npc`). Sabotage run and it
-  reddens 3 of 6 with the file and line named. Floor 6 = the healthy count:
-  nothing here can skip, which is the whole claim. <1 s),
+  reddens 3 of 6 with the file and line named.
+  **§3, added 2026-08-31, is the same defect one layer down: IMPORTING IS NOT
+  RUNNING.** §2 rules on module scope only, and its scanner docstring used to
+  justify that with a claim rather than a scope — "the same call inside a
+  function body is fine, because a machine that cannot resolve the row was
+  never going to reach that function". A bare machine reaches
+  `handle_skill_press` on the first skill any client presses, and
+  `player_rank_for_skill` read the vault-only `skills` table there with no
+  fallback, so the server logged `skill_timing`'s "lifecycle timings fall back
+  to 0" for skill 42 and then died on that same row two lines later, taking the
+  connection thread with it. No scan here could see it. So §3 EXECUTES a press
+  in a vault-less subprocess and requires the E4 to reach the wire, with a
+  CONTROL asserting `ENERGY` is on in that subprocess — because with the gate
+  off the press never performs the read, and a green §3 would then be exactly
+  what the defect produced. Reverting the server fix reddens §3 with the
+  `ContentError` quoted in the failure line, ON A MACHINE THAT HAS A VAULT,
+  which is the property that matters: the suite runs where the vault is.
+  Floor 6 → **8** = the healthy count: nothing here can skip, which is the
+  whole claim. <1 s),
   `toolkit/mapdata/test_datledger.py` (the ROW CENSUS, the counting convention
   it refuses to choose between, and WHICH VERB FAILED. Correction C-8 records
   two censuses of "the same" archive disagreeing by 16 comp-8 rows and 20 in the

@@ -13,6 +13,19 @@ whatever its type.
 `cancel_on_move` runs on the connection thread and only MARKS; the release
 itself is cast_tick's, on the world tick -- the same single-writer split
 every other phase of the cycle uses. Timing by rewinding, never sleeping.
+
+NO VAULT, NO SOCKET, NO CLIENT: every section stubs `skill_timing` and
+asserts on the CANCEL wire, which carries no content-derived value -- so the
+count is the same number with and without a vault (MEASURED both ways
+2026-08-31: 21 and 21) and the floor below is that number for real. This
+paragraph is new, and the property is one day old rather than original: until
+2026-08-31 a bare run died in `handle_skill_press` with a `ContentError` on
+skill 42, because `authsrv.player_rank_for_skill` was the one lookup on the
+press path taking no bare-machine fallback. That was a server defect and it
+is fixed there; test_bareimport.py section 3 is what keeps it fixed. The
+sibling file test_castcycle.py carried the bare-machine claim in prose while
+this one did not, and both were equally broken -- so an UNSTATED dependency
+is not a safer one, it is only a quieter one.
 """
 
 import os
@@ -23,8 +36,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
 import checks  # noqa: E402
 
-# FLOOR 20, from the green run of 2026-08-23 that landed section 6 (the
-# 0x0028 door; 15 when the file carried the movement door alone).
+# FLOOR 21, from the green run of 2026-08-23 that landed section 6 (the
+# 0x0028 door; 15 when the file carried the movement door alone). This comment
+# said 20 while the code said 21 until 2026-08-31 -- the code was right, and
+# the re-measurement that day (21 with a vault, 21 without) confirms it.
 LEDGER = checks.Ledger("cast cancel", floor=21)
 check = LEDGER.ok
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The server must IMPORT on a machine with no vault. Proves it, and names the line.
+"""The server must IMPORT and RUN on a machine with no vault. Proves it, names the line.
 
     python toolkit/test_bareimport.py
 
@@ -39,6 +39,17 @@ bare machine to find out. The control in section 0 is load-bearing: without it,
 "the server imported fine" would also be what you see if the fake vault were
 quietly resolving to the real one, and the check would assert nothing.
 
+SECTION 3 IS THE SAME DEFECT ONE LAYER DOWN, added 2026-08-31: importing is not
+running, and the second failure was on the press path rather than at module
+scope. `player_rank_for_skill` read a `skills` row with no fallback, so the
+server logged `skill_timing`'s "falling back to 0" announcement and then died on
+that same missing row two lines later -- and section 2's scanner is structurally
+unable to see it, because the read is inside a function. So section 3 EXECUTES a
+press instead of reading the source, with a control proving the energy gate that
+performs the read was actually on. The general lesson is the one this whole file
+is about and it now has two instances: the suite runs where a vault exists, so a
+bare-machine defect goes red nowhere until something reproduces a bare machine.
+
 NO VAULT, NO SOCKET, NO CLIENT -- and unlike the four files above, this one is
 in a position to prove it.
 """
@@ -59,7 +70,10 @@ import content                                                 # noqa: E402
 # told to have NO vault, which is the one fixture this file needs and it is a
 # path that does not exist. So the healthy count and the floor are the same
 # number, and if they ever differ this file has grown something that can skip.
-LEDGER = checks.Ledger("the server imports with no vault", floor=6)
+#
+# 6 -> 8 on 2026-08-31: section 3's press and its ENERGY control. Re-measured
+# from a green run, not incremented on faith.
+LEDGER = checks.Ledger("the server imports with no vault", floor=8)
 check = checks.adopt(LEDGER)
 
 SERVER_DIR = os.path.join(HERE, "authsrv")
@@ -151,15 +165,67 @@ def main():
           f"copy the row into content/ to make this green, because a machine "
           f"with no vault has no client either and could not use it")
 
+    print("\n3. and the server RUNS: a skill press with no vault")
+    # WHAT EARNS THIS SECTION, and it is the hole in section 2's own stated
+    # boundary. `_module_level_binds` rules on module level only, on the
+    # reasoning that "the same call inside a function body is fine, because a
+    # machine that cannot resolve the row was never going to reach that
+    # function". `handle_skill_press` is the counterexample: it is the hot path
+    # of every skill press, `ENERGY` is on by default, and until 2026-08-31
+    # `player_rank_for_skill` read `skills` there with no fallback -- so a bare
+    # machine got `skill_timing`'s "lifecycle timings fall back to 0" printed
+    # to the log and then a `ContentError` two lines later, killing the
+    # connection thread. Importing proved nothing about it. Nothing went red
+    # for as long as the defect existed, exactly as with `def_1480`: the suite
+    # runs on a machine that HAS a vault, and the two tests that drove this
+    # path (test_castcycle, test_castcancel) died in a traceback before
+    # checks.py could rule, one of them under a docstring promising a bare
+    # machine ran it.
+    r = _run("import authsrv\n"
+             "sent = []\n"
+             "send = lambda op, vals, label='', quiet=False: sent.append(op)\n"
+             "authsrv.handle_skill_press([0, 42, 7, 0], send, {'agents': {}},\n"
+             "                           0, authsrv.GAME_CMSG_USE_SKILL)\n"
+             "print('E4' if authsrv.GAME_SMSG_SKILL_ACTIVATED_BROADCAST\n"
+             "      in sent else 'no-e4')")
+    check(r.returncode == 0 and "E4" in r.stdout,
+          "a press runs the whole gate and reaches the wire with no vault",
+          f"rc={r.returncode} {_last_line(r.stderr)} -- a content read on the "
+          f"press path with no bare-machine fallback takes the connection "
+          f"thread down on any machine without the overlay. The fallback "
+          f"belongs in the server next to `skill_timing`'s, not in a test stub")
+
+    # CONTROL, and it is the arm that makes the check above mean something: the
+    # press must have gone through the ENERGY gate rather than around it. With
+    # `ENERGY` off the whole `player_rank_for_skill` call is skipped, so a
+    # green check above would also be what the ORIGINAL defect produced on a
+    # server with energy disabled -- passing for the wrong reason, which is the
+    # failure mode section 0's own control exists to rule out.
+    r = _run("import authsrv\nprint('on' if authsrv.ENERGY else 'off')")
+    check(r.returncode == 0 and "on" in r.stdout,
+          "CONTROL: `ENERGY` is on in that subprocess, so the press above "
+          "really did run the gate that reads the skill row",
+          f"rc={r.returncode} {_last_line(r.stdout)} -- with the gate off the "
+          f"check above cannot see the defect it exists to catch")
+
     return LEDGER.verdict()
 
 
 def _module_level_binds():
     """Every top-level `X = ...npc_template("k")` / `WORLD.get("kind", "k")`.
 
-    Module level ONLY, and that is the whole distinction this file exists for --
-    the same call inside a function body is fine, because a machine that cannot
-    resolve the row was never going to reach that function.
+    Module level ONLY, because that is what this scanner can rule on statically:
+    a module-level bind makes the vault a hard IMPORT dependency of everything
+    downstream, which is the `def_1480` failure.
+
+    THE SECOND SENTENCE HERE USED TO BE A CLAIM RATHER THAN A SCOPE, and it was
+    false: "the same call inside a function body is fine, because a machine that
+    cannot resolve the row was never going to reach that function". A bare
+    machine reaches `handle_skill_press` on the first skill any client presses,
+    and on 2026-08-31 that path had an unguarded `skills` read in it
+    (`player_rank_for_skill`) that no scan here could see. A call in a function
+    body is not fine -- it is merely out of THIS function's reach, and section 3
+    covers the one path that matters by executing it instead of reading it.
     """
     named = {"npc_template": "npc", "item_template": "item"}
     binds, dynamic = [], []

@@ -123,7 +123,8 @@ def main():
         import cmsgstream
         live = vaultpath.require_dir("captures", "live", why="modifier corpus")
     except Exception as exc:
-        LEDGER.skip(f"the live capture corpus is not reachable ({exc}); the "
+        LEDGER.skip("the 100%-dispatch check",
+                    f"the live capture corpus is not reachable ({exc}); the "
                     f"100%-dispatch check is the one that can refute the bit "
                     f"layout, so its absence is declared rather than passed "
                     f"over")
@@ -215,7 +216,8 @@ def main():
 
     print("\n7. CORPUS: 633's payload is an ATTRIBUTE and a RANK, or this fails")
     if live is None:
-        LEDGER.skip("the live corpus is not reachable, so the 570 chances "
+        LEDGER.skip("633's payload against the attribute space",
+                    "the live corpus is not reachable, so the 570 chances "
                     "for 633's payload to fall outside the attribute space "
                     "cannot be taken")
     else:
@@ -314,7 +316,8 @@ def main():
               f"that trips ItemName:1202 rather than one that renders")
 
     if live is None:
-        LEDGER.skip("the live corpus is not reachable, so the retail "
+        LEDGER.skip("the retail attribute-bonus replay",
+                    "the live corpus is not reachable, so the retail "
                     "attribute-bonus words cannot be replayed and the "
                     "constant-prefix measurement the composer rests on cannot "
                     "be taken")
@@ -400,7 +403,8 @@ def main():
         items = world.rows("item")
     except Exception as exc:
         items = None
-        LEDGER.skip(f"content/items.toml is not loadable ({exc}), so the one "
+        LEDGER.skip("the declared attribute_bonus guard",
+                    f"content/items.toml is not loadable ({exc}), so the one "
                     f"guard standing between a declared attribute_bonus and "
                     f"the modifier word that now says the same thing cannot "
                     f"run")
@@ -470,7 +474,8 @@ def main():
         across[b.number] = (c["total"], tuple(sorted({r["names"]
                                                       for r in c["named"]})))
     if len(across) < 2:
-        LEDGER.skip("fewer than two builds are in the vault, so the "
+        LEDGER.skip("617's out-of-sample half",
+                    "fewer than two builds are in the vault, so the "
                     "out-of-sample half of the 617 negative cannot run")
     else:
         vals = set(across.values())
@@ -490,7 +495,8 @@ def main():
                   "riding along with the claim")
 
     if live is None:
-        LEDGER.skip("the live corpus is not reachable, so 617's one positive "
+        LEDGER.skip("617 as a per-model constant",
+                    "the live corpus is not reachable, so 617's one positive "
                     "property -- that it is a per-MODEL constant -- cannot "
                     "be measured, and the arc would rest on the negative alone")
     else:

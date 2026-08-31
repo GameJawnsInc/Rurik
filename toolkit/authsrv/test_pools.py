@@ -89,6 +89,39 @@ LEDGER = checks.Ledger("the energy and adrenaline pools", floor=108)
 INT_OPS = (0x009F, 0x00A0)
 FLOAT_OPS = (0x00A2, 0x00A3)
 
+
+def _needs_skill_rows(label):
+    """True, and a declared skip, when the vault's `skills` table is absent.
+
+    THE COST IS THE SUBJECT HERE, WHICH IS WHY THESE SECTIONS SKIP RATHER THAN
+    STUB. `test_castcycle.py` faced the same missing table on 2026-08-31 and
+    stubbed `skill_cost`, correctly: what that file pins is the ORDER of the
+    press burst, and a stubbed cost keeps the order honest while making it
+    reproducible anywhere. This file pins the NUMBERS -- Flare costs 5, the
+    debit is f32(-0.2) = -(5/25), skills 780/814/858 all land on -0.2 -- and a
+    stub would make every one of them a statement about the stub. So the rows
+    are a real dependency of sections 4, 6, 7, 9, 10, 11 and 11j, and the
+    honest answer on a machine without them is to say so.
+
+    Before this, `section_gate` ran on into `spends[0]` against an empty list
+    and the file died with an `IndexError` -- no verdict, no named shortfall,
+    just a traceback, which is what CLAUDE.md's "a run that measured nothing
+    failed" is aimed at. The rows are vault-only (`skilltable.py
+    --emit-content`); `skill_effect` next door is repo content, so the two do
+    not go missing together and a guard on the wrong one proves nothing.
+    """
+    import agents
+    try:
+        agents.WORLD.get("skills", "194")      # Flare, this file's own example
+    except Exception:                                          # noqa: BLE001
+        LEDGER.skip(label,
+                    "no 'skills' content rows -- the vault overlay is absent "
+                    "on this machine (run skilltable.py --emit-content). "
+                    "These sections pin costs READ from that table, so a stub "
+                    "would only re-measure the stub")
+        return True
+    return False
+
 PROP_ENERGY_MAX = 41
 PROP_ENERGY_ABSOLUTE = 33       # the setter that does not exist -- see section 2
 
@@ -673,6 +706,8 @@ BAR = {317: 80, 318: 120, 319: 80, 382: 100}
 def section_adrenaline_pool():
     """Strikes, the floor on damage gain, and the 25-second forgetting."""
     print("\n4. AdrenalinePool -- raw units, one pool per skill")
+    if _needs_skill_rows("4. AdrenalinePool -- raw units, one pool per skill"):
+        return
     a = pools.AdrenalinePool(BAR)
     a.on_hit_landed(0.0)
     LEDGER.ok(all(a.units[s] == 25 for s in BAR),
@@ -866,6 +901,8 @@ def section_gate():
     no pending cast, nothing for the client to have to un-draw.
     """
     print("\n6. pressing a skill: the gate, then the debit")
+    if _needs_skill_rows("6. pressing a skill: the gate, then the debit"):
+        return
     import authsrv
     import agents
 
@@ -983,6 +1020,8 @@ def section_adrenaline_glue():
     one.
     """
     print("\n7. four swings, one Sever Artery")
+    if _needs_skill_rows("7. four swings, one Sever Artery"):
+        return
     import authsrv
 
     was_bar = list(authsrv.SKILLBAR)
@@ -1178,6 +1217,8 @@ def section_glyph():
     papers over.
     """
     print("\n9. the glyph hook, and the row it is waiting on")
+    if _needs_skill_rows("9. the glyph hook, and the row it is waiting on"):
+        return
     import authsrv
     import agents
 
@@ -1308,6 +1349,8 @@ def section_enemy_gate():
     our AI stops casting Restore Condition every 2 seconds forever.
     """
     print("\n10. the enemy's own gate -- a resource rule, not an AI rule")
+    if _needs_skill_rows("10. the enemy's own gate -- a resource rule, not an AI rule"):
+        return
     import authsrv
     import agents
 
@@ -1406,6 +1449,8 @@ def section_adrenaline_wire():
       * the client's RECHARGE SKIP, with its own control.
     """
     print("\n11. the adrenaline family on the wire")
+    if _needs_skill_rows("11. the adrenaline family on the wire"):
+        return
     import authsrv
     import agents
     from codec import Codec
@@ -1759,6 +1804,8 @@ def section_refusal_silent():
     So both directions are asserted here, in-process, with no socket.
     """
     print("\n11j. --refusal-silent suppresses the whole answer, both ways")
+    if _needs_skill_rows("11j. --refusal-silent suppresses the whole answer, both ways"):
+        return
     import authsrv
 
     def refuse_with(silent):

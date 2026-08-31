@@ -62,7 +62,12 @@ import srclint  # noqa: E402
 # check has a CONTROL because its first draft flagged two innocent files
 # (`help="...%d." % N`, already formatted) and the top of this file says a false
 # positive is worse than a miss.
-LEDGER = checks.Ledger("srclint", floor=22)
+# 22 -> 24 on 2026-08-31 with section 10, `LEDGER.skip` called with one of the
+# two arguments it takes. Seven files across four packages had it, and none had
+# ever executed: every such call is on the branch a machine takes when a
+# resource is MISSING, and the suite runs where the resources exist. Re-measured
+# from the green run, not incremented on faith.
+LEDGER = checks.Ledger("srclint", floor=24)
 
 
 def names(src):
@@ -419,6 +424,77 @@ def main():
                   "CONTROL: a planted lone `%` is detected",
                   "a checker that finds nothing is indistinguishable from a "
                   "clean tree, which is how the real one shipped")
+    finally:
+        os.unlink(probe)
+
+    print("\n10. every `LEDGER.skip(...)` passes the two arguments it takes")
+    # WHY THIS EARNED A SECTION. `checks.Ledger.skip(self, label, why)` takes
+    # two, and on 2026-08-31 SEVEN files across four packages called it with
+    # one. Every such call raises `TypeError` -- but only when REACHED, and
+    # every one of them sits on the branch a machine takes when a resource is
+    # missing (no vault overlay, no capture corpus, no pinned build). The suite
+    # runs where those exist, so not one of them had ever executed: the skip
+    # paths were dead code that read as diligence. `test_castcycle.py` promised
+    # in its docstring that sections ran on a bare machine and instead died in
+    # a traceback, which is the exact outcome `checks.py` exists to prevent --
+    # a run that measures nothing must FAIL naming the shortfall, and a
+    # traceback is neither a measurement nor a verdict.
+    #
+    # This is a shape a linter can settle and a test run cannot: reaching these
+    # branches means removing the vault, which the suite has no way to do.
+    def _skip_arity(path):
+        try:
+            tree = ast.parse(open(path, encoding="utf-8").read())
+        except (SyntaxError, UnicodeDecodeError):
+            return []
+        out = []
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Attribute)
+                    and node.func.attr == "skip"):
+                continue
+            recv = node.func.value
+            # The Ledger only -- matched by receiver NAME, the same way
+            # test_bareimport matches `WORLD.get`, because that is what the
+            # call sites actually write. Any other object's `.skip` is not ours
+            # to judge, and flagging one would be the false positive the top of
+            # this file calls worse than a miss.
+            name = getattr(recv, "id", None) or getattr(recv, "attr", None)
+            if not name or "LEDGER" not in str(name).upper():
+                continue
+            if len(node.args) + len(node.keywords) != 2:
+                out.append((os.path.basename(path), node.lineno,
+                            len(node.args) + len(node.keywords)))
+        return out
+
+    offenders = []
+    for d in (HERE, os.path.join(os.path.dirname(HERE), "tools")):
+        if os.path.isdir(d):
+            for p in srclint.python_files(d):
+                offenders += _skip_arity(p)
+    LEDGER.ok(not offenders,
+              "no declared skip in the tree raises TypeError when it fires",
+              f"WRONG ARITY: {offenders} -- `Ledger.skip` takes (label, why). "
+              f"A one-argument call is a landmine on the branch that only a "
+              f"machine MISSING the resource reaches, so it survives every "
+              f"green run and kills the first bare-machine one")
+    # CONTROL: the scan must find a planted one, and must NOT flag a good call
+    # or somebody else's `.skip`. A checker that matched nothing would report a
+    # clean tree exactly as this one does.
+    with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False,
+                                     encoding="utf-8") as fh:
+        fh.write('LEDGER.skip("one argument only")\n'
+                 'LEDGER.skip("label", "why")\n'
+                 'itertools.skip("not a Ledger")\n')
+        probe = fh.name
+    try:
+        found = _skip_arity(probe)
+        LEDGER.ok(len(found) == 1 and found[0][1] == 1,
+                  "CONTROL: a planted one-argument skip is caught, and "
+                  "neither the correct call nor a non-Ledger `.skip` is",
+                  f"{found} -- expected exactly the line-1 call. Flagging "
+                  f"line 2 would make the linter unusable; flagging line 3 "
+                  f"is the false positive this file refuses")
     finally:
         os.unlink(probe)
 
