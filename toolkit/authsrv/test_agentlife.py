@@ -41,7 +41,27 @@ import agents  # noqa: E402
 import checks  # noqa: E402
 from codec import Codec  # noqa: E402
 
-LEDGER = checks.Ledger("agent lifetime", floor=256)
+# MEASURED 2026-08-31, both ways, from real runs: 261 with the vault, 248
+# without (plus 4 declared skips, all printed). THE FLOOR IS THE BARE-MACHINE
+# NUMBER, 256 -> 248, which is `test_armour.py`'s precedent -- it calls lowering
+# to what a bare machine actually executes "the fix rather than a retreat", and
+# `test_quests.py` (73 against a healthy 83) is the same shape.
+#
+# It could not have been measured before that day, because a vault-less run of
+# this file never reached a verdict at all. It stopped THREE times, each one
+# hidden behind the last:
+#   1. `handle_skill_press` -> `player_rank_for_skill` raised ContentError (a
+#      SERVER defect; fixed there, guarded by test_bareimport.py section 3).
+#   2. `pinned.find()` raises `SystemExit`, which is BaseException -- so the
+#      `except Exception` guarding the skill-table read could not catch it and
+#      the skip it was written for had never once fired. test_compositetrap.py
+#      section 1 hit exactly this on 2026-08-30; same fix.
+#   3. `probes.check_encodable()` built every probe, and nine of them bind
+#      `def_1480` -- the vault NPC row test_bareimport.py exists about -- while
+#      their steps are built, outside that function's own try. Those are now
+#      SKIPPED and named rather than fatal, and the section asserts the walk
+#      encoded something, because 0 failures over 0 steps is not a pass.
+LEDGER = checks.Ledger("agent lifetime", floor=248)
 
 
 def section_weapon_damage():
@@ -1172,18 +1192,34 @@ def section_enemy_skill():
     state["agents"][10]["cast_lands_at"] = time.time() - 0.001
     land = _swings(state)
     fl = dmg_floats(land)
-    LEDGER.ok(not fl,
-              "slot 0 lands NO damage -- its scale is Healing, not damage",
-              f"{fl} -- 276 Restore Condition heals 10-70 (GWW). The old flat "
-              f"fraction made a heal hurt the player; dealing its magnitude AS "
-              f"damage would have been worse, not better")
-    # The damage skill on the same bar, to prove the path is not simply dead.
+    # THESE TWO SKIP AS A PAIR, and the pairing is the point. "Slot 0 lands no
+    # damage" is only evidence that 276 is a HEAL if some other skill on the
+    # same bar does land damage -- which is what the 312 check below is for, and
+    # what its own comment calls proving the path is not simply dead. On a
+    # machine with no vault overlay NOTHING has a `skills` row, so `not fl` is
+    # true because the damage path is inert, and the first check would pass for
+    # exactly the reason its control exists to rule out. Splitting them would
+    # trade a red control for a green vacuity, which is the worse direction:
+    # the control failing is visible, a heal-check passing on an empty table is
+    # not. (Found 2026-08-31, when the bare-machine path first ran this far.)
     holy = authsrv.skill_damage(312, authsrv.ENEMY_SKILL_RANK)
-    LEDGER.ok(holy is not None and holy[1] == "standalone"
-              and holy[0] == 46,
-              "while 312 Holy Strike on the same bar DOES damage, at 46",
-              f"{holy} -- scale 10->55 at rank {authsrv.ENEMY_SKILL_RANK} by the "
-              f"client's own interpolator; GWW calls the var `Holy damage`")
+    if holy is None:
+        LEDGER.skip("3. slot 0 lands no damage, and 312 on the same bar does",
+                    "no 'skills' rows -- the vault overlay is absent, so the "
+                    "damage path is inert for EVERY skill and the heal check "
+                    "would pass without its control (run skilltable.py "
+                    "--emit-content)")
+    else:
+        LEDGER.ok(not fl,
+                  "slot 0 lands NO damage -- its scale is Healing, not damage",
+                  f"{fl} -- 276 Restore Condition heals 10-70 (GWW). The old flat "
+                  f"fraction made a heal hurt the player; dealing its magnitude AS "
+                  f"damage would have been worse, not better")
+        # The damage skill on the same bar, to prove the path is not simply dead.
+        LEDGER.ok(holy[1] == "standalone" and holy[0] == 46,
+                  "while 312 Holy Strike on the same bar DOES damage, at 46",
+                  f"{holy} -- scale 10->55 at rank {authsrv.ENEMY_SKILL_RANK} by the "
+                  f"client's own interpolator; GWW calls the var `Holy damage`")
     land_ints = [v for op, v, _l in land
                  if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT]
     LEDGER.ok(not any(v[0] == agents.GV_MELEE_ATTACK_FINISHED
@@ -1582,11 +1618,22 @@ def section_constants():
         data = pathlib.Path(exe).read_bytes()
         base, count, _score = skilltable.locate_table(data)
         rows = {i: skilltable.parse_record(data, base, i) for i in range(count)}
-    except Exception as ex:                                    # pragma: no cover
+    except (Exception, SystemExit) as ex:                      # pragma: no cover
         # NAMED, not swallowed. The first version of this handler said "no
         # readable client build" for every failure and its actual cause was a
         # method name that does not exist -- a skip that lies about WHY is worse
         # than a red check, because it reads as an environment problem forever.
+        #
+        # AND `SystemExit`, WHICH IS THE HALF THAT NEVER WORKED. `pinned.find()`
+        # RAISES SystemExit when the build is not in the vault -- it inherits
+        # BaseException, not Exception -- so `except Exception` did not catch it
+        # and this handler was unreachable on the one machine it was written for.
+        # Until 2026-08-31 a vault-less run of this file printed pinned's refusal
+        # and died at rc=1 with NO verdict: the skip below had never once fired.
+        # `toolkit/clientscan/test_compositetrap.py` §1 hit exactly this on
+        # 2026-08-30 and its fix is the shape copied here; the paragraph beside
+        # its floor is the record. A handler that cannot catch what its own
+        # dependency throws is the same defect as a skip path nobody has run.
         LEDGER.skip("the bar vs the client's own skill table",
                     f"{type(ex).__name__}: {ex}")
         rows = None
@@ -2051,12 +2098,28 @@ def section_probe_encoding():
     probe would have been discovered by spending the run.
     """
     import probes
-    failures = probes.check_encodable(quiet=True)
+    counts = {}
+    failures = probes.check_encodable(quiet=True, counts=counts)
     LEDGER.ok(failures == 0,
               "every step of every probe encodes",
               f"{failures} failures -- an unencodable step is only discovered "
               f"by launching a client, which is the most expensive way to find "
               f"a typo in this repo")
+    # NOT REDUNDANT, and the reason is the same one `test_codec.py`'s fixture
+    # glob taught: `failures == 0` is ALSO what a machine that could build no
+    # probe at all reports. Some probes bind vault content while their steps are
+    # built, so on a bare machine the walk legitimately skips those -- but if it
+    # ever skips ALL of them, the check above passes having encoded nothing.
+    LEDGER.ok(counts["checked"] > 0,
+              "and the walk actually encoded something -- 0 failures over 0 "
+              "steps is not a pass",
+              f"checked={counts['checked']}, skipped={counts['skipped']} -- a "
+              f"green line above with nothing checked is the vacuity shape, not "
+              f"a clean tree")
+    if counts["skipped"]:
+        # Printed, never silent: these probes exist and were not measured here.
+        LEDGER.skip("probes whose steps need vault content to build",
+                    "; ".join(f"{n} ({why})" for n, why in counts["skipped"]))
 
     # A REFUSAL step sends nothing, so there is nothing to encode. This went red on
     # 2026-08-13 for the best possible reason: the all-zero sweep FINISHED, `remaining`

@@ -3276,7 +3276,32 @@ Floor 75 against a green 75 with 5 declared skips (the archive-conditional
   complete" would be indistinguishable from the fix. The flag stays DECLARED and
   never an `if not step.values` shape test, because a malformed valueless step
   that DOES claim to send is exactly what the encoder check exists to catch and
-  the two are identical in shape. Floor 214 against a green 223),
+  the two are identical in shape.
+  **Floor 248 against a green 261, MEASURED both ways 2026-08-31** — this entry
+  read "floor 214 against a green 223" and both numbers were long stale; the code
+  said 256. The floor is now the BARE-MACHINE subset (`test_armour.py`'s
+  precedent, `test_quests.py`'s shape), and it could not have been measured
+  before that day because a vault-less run of this file never reached a verdict
+  at all. It stopped THREE times, each hidden behind the last: (1)
+  `handle_skill_press` → `player_rank_for_skill` raised `ContentError` — a SERVER
+  defect, fixed there; (2) `pinned.find()` raises **`SystemExit`**, which is
+  `BaseException`, so the `except Exception` guarding the skill-table read could
+  not catch what it called and the skip it was written for had **never once
+  fired** — `test_compositetrap.py` §1 hit exactly this on 2026-08-30 and its
+  `except (Exception, SystemExit)` is the shape copied here; (3)
+  `probes.check_encodable()` built every probe outside its own try, and nine of
+  them bind `def_1480` — the vault NPC row `test_bareimport.py` exists about —
+  while their steps are built. Those nine are now SKIPPED and named rather than
+  fatal, and the section additionally asserts `counts["checked"] > 0`, because
+  **0 failures over 0 steps is what a machine that could build no probe at all
+  reports** — the `test_codec.py` fixture-glob shape. One more pairing was found
+  on the way: §3's "slot 0 lands NO damage" is only evidence that 276 is a HEAL
+  while some other skill on the bar DOES damage, so it and its 312 control now
+  skip together — bare, the damage path is inert for every skill and that check
+  would otherwise pass for precisely the reason its control exists to rule out.
+  Reverting the `SystemExit` catch returns the file to rc=1 with zero verdict
+  lines, run rather than assumed. 248 checks, 5 declared skips, rc=0 with no
+  vault),
   `toolkit/authsrv/test_interact.py` (the interact path — the walk order and the
   interact that is HELD rather than dropped. **Nothing exercised
   `_handle_interact` at all before 2026-08-19**; `test_dispatch.py` named it once

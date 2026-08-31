@@ -7549,7 +7549,7 @@ def names():
     return sorted(PROBES)
 
 
-def check_encodable(quiet=False):
+def check_encodable(quiet=False, counts=None):
     """Encode every step of every probe. Run this before spending a client run.
 
     A probe that fails to encode wastes a whole session -- the client has to be
@@ -7559,6 +7559,25 @@ def check_encodable(quiet=False):
     `quiet` suppresses the per-step lines so the suite can call this as one
     check. It was reachable only from `__main__` until 2026-08-12, which meant
     the guard against wasting a client run was itself never run by the suite.
+
+    A PROBE THAT CANNOT BE BUILT HERE IS SKIPPED, NOT FAILED, and that is a
+    different thing from a step that will not encode. Some probes bind vault
+    content when their steps are built -- `_dialog_icons_steps` reaches
+    `giver_npc()` -> `_vault_npc("def_1480")`, the row `test_bareimport.py` was
+    written about -- so on a machine with no overlay the BUILD raises before any
+    encoding happens. Until 2026-08-31 that escaped this function entirely
+    (`get()` sat outside the try below), which is one of the two things that
+    stopped `test_agentlife.py` reaching a verdict without a vault. Counting it
+    as a failure would be worse than crashing: it would report the probe as
+    broken when the machine is merely bare.
+
+    Pass a dict as `counts` to learn what actually happened -- it is filled with
+    `checked` / `skipped` / `failed`. The return value is still the failure count
+    alone, because four call sites in `test_agentlife.py` compare it to 0 and
+    two of those are sabotage arms. **A caller that only reads the return value
+    cannot tell "every probe encodes" from "no probe could be built":** both are
+    0. That is exactly the `test_codec.py` fixture-glob shape, so a caller on a
+    machine that might be bare should assert `counts["checked"] > 0` too.
     """
     import os
     import sys
@@ -7568,8 +7587,20 @@ def check_encodable(quiet=False):
 
     codec = Codec()
     bad = 0
+    checked = 0
+    skipped = []
     for name in names():
-        probe = get(name, 1)
+        try:
+            probe = get(name, 1)
+        except Exception as exc:                               # noqa: BLE001
+            # Building the steps needs something this machine does not have --
+            # a vault content row, in every case seen so far. NAMED, never
+            # silent, and never counted as a broken probe.
+            skipped.append((name, f"{type(exc).__name__}: {exc}"))
+            if not quiet:
+                print(f"  [SKIP] {name}: cannot be built here -- "
+                      f"{type(exc).__name__}: {exc}")
+            continue
         if not probe.steps:
             if not quiet:
                 print(f"  [ -- ] {name}: no packets, observation only")
@@ -7586,6 +7617,7 @@ def check_encodable(quiet=False):
                 continue
             try:
                 blob = codec.encode("GAME_SMSG", step.opcode, step.values)
+                checked += 1
                 if not quiet:
                     print(f"  [PASS] {name}: {step.label} -> "
                           f"0x{step.opcode:04X}, {len(blob)}B")
@@ -7593,6 +7625,10 @@ def check_encodable(quiet=False):
                 bad += 1
                 print(f"  [FAIL] {name}: {step.label} -> "
                       f"{type(exc).__name__}: {exc}")
+    if counts is not None:
+        counts["checked"] = checked
+        counts["skipped"] = skipped
+        counts["failed"] = bad
     return bad
 
 
