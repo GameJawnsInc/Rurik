@@ -9296,6 +9296,16 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   victim-first slot order (the trap adrenjoin.py documents), the 0x0035
   (base, modifier) declaration, signature tokens keeping the
   targeted/untargeted cast-channel distinction (ANIMREF-Q1's observable),
+  the ADRENALINE FAMILY added by ANIMREF-R9 (0x00CF gain / 0x00D0 clear /
+  0x00D1 set / 0x00D2 spend decode into one event shape where the absent
+  fields stay **None**, never 0 — a gain names no skill and a spend no
+  units, and a zero would read as a measurement never taken) **together
+  with the regression that matters**: an adrenaline event sharing a batch
+  does NOT enter the episode signature by default, because letting it in
+  would silently rewrite every published one (FINDINGS §3's
+  `['E5','46','dmg','E3']`) and every count in §3 and §8 — a new instrument
+  must not invalidate the measurements taken with the old one, so the
+  opt-in (`SIGN_ADRENALINE`) is explicit and pinned OFF,
   the swing state machine (landed with SOURCE-slot damage pairing, stopped,
   reopened, censored, ratio None without a declared speed), the self cast
   machine opening on E4 so the queued-terminated family (E4→E2, no
