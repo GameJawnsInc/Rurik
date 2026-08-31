@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.join(ROOT, "toolkit", "authsrv"))
 import checks  # noqa: E402
 import animgrammar as ag  # noqa: E402
 
-led = checks.Ledger("animgrammar episode machines", floor=41)
+led = checks.Ledger("animgrammar episode machines", floor=48)
 ok = checks.adopt(led)
 
 # --- f32 -------------------------------------------------------------------
@@ -62,6 +62,57 @@ ok(ag.token({"kind": "prop", "prop": 60, "target": 40}) == "60T",
    "targeted cast token keeps the channel distinction (ANIMREF-Q1)")
 ok(ag.token({"kind": "prop", "prop": 50, "target": 0}) == "50",
    "a zero target is NOT the targeted form")
+
+# --- the adrenaline family (ANIMREF-R9) ------------------------------------
+# Four opcodes, one event shape, and the ABSENT fields stay None: a gain names
+# no skill and a spend names no units, and `0` for either would read as a
+# measurement that was never taken.
+adren = list(ag.prop_events([
+    (1.0, 0x00CF, [0x00CF, 31, 25]),           # gain: agent, units
+    (2.0, 0x00D2, [0x00D2, 31, 382, 0]),       # spend: agent, skill, copy
+    (3.0, 0x00D0, [0x00D0, 31]),               # clear: agent
+    (4.0, 0x00D1, [0x00D1, 31, 384, 1, 75]),   # set: agent, skill, copy, units
+]))
+ok([e["kind"] for e in adren] ==
+   ["adren_gain", "adren_spend", "adren_clear", "adren_set"],
+   "all four adrenaline opcodes decode into the event stream",
+   f"{[e['kind'] for e in adren]}")
+ok(adren[0]["units"] == 25 and adren[0]["skill"] is None,
+   "a gain carries units and NO skill -- absent stays None, never 0",
+   f"{adren[0]}")
+ok(adren[1]["skill"] == 382 and adren[1]["units"] is None,
+   "a spend carries the skill and NO units",
+   f"{adren[1]}")
+ok(adren[3]["skill"] == 384 and adren[3]["units"] == 75,
+   "a set carries both", f"{adren[3]}")
+ok(adren[2]["units"] is None and adren[2]["skill"] is None,
+   "a clear carries neither", f"{adren[2]}")
+
+# AND THEY DO NOT ENTER SIGNATURES unless asked. This is the regression that
+# matters: letting them in would silently rewrite every published signature
+# (FINDINGS sec.3's ['E5','46','dmg','E3'] and every count in sec.3 and 8), so
+# the default is measured-as-before and the opt-in is explicit.
+_sig_evs = [
+    {"t": 1.0, "kind": "prop", "prop": 4, "agent": 40, "target": 31,
+     "value": 0},
+    {"t": 1.0, "kind": "adren_gain", "agent": 40, "skill": None,
+     "copy": None, "units": 25},
+]
+ag.assign_batches(_sig_evs, eps=0.0)
+_by = {}
+for _e in _sig_evs:
+    _by.setdefault(_e["bt"], []).append(_e)
+_toks = tuple(ag.token(x) for x in _by[1.0]
+              if ag.involves(x, 40)
+              and (ag.SIGN_ADRENALINE or x["kind"] not in ag.ADREN_KINDS))
+ok(_toks == ("4",),
+   "an adrenaline event in a batch does NOT enter the signature by default "
+   "-- a new instrument must not invalidate the measurements taken with the "
+   "old one", f"{_toks}")
+ok(ag.SIGN_ADRENALINE is False and ag.ADREN_KINDS == {
+       "adren_gain", "adren_clear", "adren_set", "adren_spend"},
+   "the opt-in switch exists and is OFF, and the kind set is the gate",
+   f"SIGN_ADRENALINE={ag.SIGN_ADRENALINE}")
 
 # --- swing machine ---------------------------------------------------------
 def P(t, prop, agent, target=None, value=0):
