@@ -203,7 +203,7 @@ def main():
         d = os.path.join(str(vaultpath.require_dir()), "captures", "live",
                          CAPTURE)
         cap_dir = d if os.path.isdir(d) else None
-    except Exception:
+    except (Exception, SystemExit):
         cap_dir = None
     if not cap_dir:
         LEDGER.skip("retail cross-check (5 checks)",

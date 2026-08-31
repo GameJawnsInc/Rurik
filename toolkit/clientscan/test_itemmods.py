@@ -71,7 +71,20 @@ LEDGER = checks.Ledger("item modifiers", floor=37)
 
 
 def main():
-    exe, why = pinned.find()
+    # GUARDED, and it had no guard at all until 2026-08-31 -- not a handler that
+    # could not catch, but no handler, which is why test_srclint.py section 11
+    # could not name it either (that lint judges try-blocks; there was none).
+    # `pinned.find()` raises SystemExit when the build is absent, so on a
+    # machine with no vault this file died on its first line of work and the
+    # five carefully-worded skips further down never got the chance to run.
+    try:
+        exe, why = pinned.find()
+    except (Exception, SystemExit) as exc:                     # noqa: BLE001
+        LEDGER.skip("the whole file",
+                    f"no pinned client image: {exc} -- every section below "
+                    f"reads the client's own dispatch tables, so there is "
+                    f"nothing here to measure without it")
+        return LEDGER.verdict()
     print(f"client: {exe}\n        ({why})")
     img = itemmods.Image(exe)
 
@@ -122,7 +135,7 @@ def main():
         import vaultpath
         import cmsgstream
         live = vaultpath.require_dir("captures", "live", why="modifier corpus")
-    except Exception as exc:
+    except (Exception, SystemExit) as exc:
         LEDGER.skip("the 100%-dispatch check",
                     f"the live capture corpus is not reachable ({exc}); the "
                     f"100%-dispatch check is the one that can refute the bit "

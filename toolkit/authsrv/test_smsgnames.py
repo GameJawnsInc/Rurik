@@ -128,7 +128,7 @@ def load(stamp):
 def main():
     try:
         vaultpath.require_dir()
-    except Exception as ex:                                    # pragma: no cover
+    except (Exception, SystemExit) as ex:                                    # pragma: no cover
         LEDGER.skip("the whole file", f"no vault: {ex}")
         return LEDGER.verdict()
 

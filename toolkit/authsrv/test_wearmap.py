@@ -92,7 +92,12 @@ try:
     sys.path.insert(0, os.path.join(os.path.dirname(HERE), "clientscan"))
     import composite
     t = composite.extract()
-except Exception as exc:                                    # noqa: BLE001
+# SystemExit too: `composite.extract()` reaches `pinned.find()`, which RAISES
+# one when the build is not in the vault. The call is INDIRECT, so
+# test_srclint.py section 11 cannot see it -- that lint reads the try body for a
+# direct call and is a floor, not a census. Found 2026-08-31 by running the file
+# with no vault, which is the only thing that finds this class reliably.
+except (Exception, SystemExit) as exc:                      # noqa: BLE001
     LEDGER.skip("exe cross-witness", f"pinned client unavailable: {exc}")
     t = None
 else:
@@ -119,7 +124,7 @@ try:
     import vaultpath    # noqa: E402
     from codec import Codec  # noqa: E402
     live = vaultpath.require_dir("captures", "live", why="the wear census")
-except Exception as exc:                                    # noqa: BLE001
+except (Exception, SystemExit) as exc:                                    # noqa: BLE001
     LEDGER.skip("wire census + archive join", f"vault unavailable: {exc}")
     sys.exit(LEDGER.verdict())
 

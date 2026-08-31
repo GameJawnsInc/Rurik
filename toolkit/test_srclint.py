@@ -67,7 +67,13 @@ import srclint  # noqa: E402
 # ever executed: every such call is on the branch a machine takes when a
 # resource is MISSING, and the suite runs where the resources exist. Re-measured
 # from the green run, not incremented on faith.
-LEDGER = checks.Ledger("srclint", floor=24)
+# 24 -> 26 later the same day with section 11, a try-block that guards a
+# SystemExit-raiser but catches only Exception -- nineteen of those, and the
+# fourteen fallbacks among them were `LEDGER.skip` calls that could never fire.
+# Section 10's own detector was rewritten in the same commit to match Ledgers by
+# BINDING rather than by receiver name, because the name form had missed five
+# calls through `led = checks.Ledger(...)`; its control now covers that shape.
+LEDGER = checks.Ledger("srclint", floor=26)
 
 
 def names(src):
@@ -442,10 +448,40 @@ def main():
     #
     # This is a shape a linter can settle and a test run cannot: reaching these
     # branches means removing the vault, which the suite has no way to do.
+    def _ledger_names(tree):
+        """Every name in this module bound to a `checks.Ledger()`, any scope.
+
+        BY BINDING, NOT BY NAME, and that correction is the whole reason this
+        helper exists. The first version of §10 matched receivers whose name
+        contained "LEDGER" -- and `test_trnblend.py` writes
+        `led = checks.Ledger(...)`, so five one-argument `led.skip()` calls sat
+        under a green §10 for the day between the two. A linter's own blind
+        spot reads exactly like a clean tree, which is this file's oldest
+        lesson (§4, the checker that scored the real defect zero) arriving in
+        a check §4 does not cover.
+        """
+        names = set()
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.Assign)
+                    and isinstance(node.value, ast.Call)):
+                continue
+            f = node.value.func
+            called = (f.attr if isinstance(f, ast.Attribute)
+                      else getattr(f, "id", None))
+            if called != "Ledger":
+                continue
+            for t in node.targets:
+                if isinstance(t, ast.Name):
+                    names.add(t.id)
+        return names
+
     def _skip_arity(path):
         try:
             tree = ast.parse(open(path, encoding="utf-8").read())
         except (SyntaxError, UnicodeDecodeError):
+            return []
+        names = _ledger_names(tree)
+        if not names:
             return []
         out = []
         for node in ast.walk(tree):
@@ -454,13 +490,10 @@ def main():
                     and node.func.attr == "skip"):
                 continue
             recv = node.func.value
-            # The Ledger only -- matched by receiver NAME, the same way
-            # test_bareimport matches `WORLD.get`, because that is what the
-            # call sites actually write. Any other object's `.skip` is not ours
-            # to judge, and flagging one would be the false positive the top of
-            # this file calls worse than a miss.
-            name = getattr(recv, "id", None) or getattr(recv, "attr", None)
-            if not name or "LEDGER" not in str(name).upper():
+            # Only a name this module bound to a Ledger. Any other object's
+            # `.skip` is not ours to judge, and flagging one would be the false
+            # positive the top of this file calls worse than a miss.
+            if not (isinstance(recv, ast.Name) and recv.id in names):
                 continue
             if len(node.args) + len(node.keywords) != 2:
                 out.append((os.path.basename(path), node.lineno,
@@ -481,20 +514,129 @@ def main():
     # CONTROL: the scan must find a planted one, and must NOT flag a good call
     # or somebody else's `.skip`. A checker that matched nothing would report a
     # clean tree exactly as this one does.
+    #
+    # THE `led` LINE IS THE ONE THAT EARNS ITS KEEP. It is the exact shape the
+    # name-matching first draft missed in `test_trnblend.py`, so this control
+    # now fails on that regression instead of blessing it -- a control is only
+    # worth its line if it covers how the checker ACTUALLY broke.
     with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False,
                                      encoding="utf-8") as fh:
-        fh.write('LEDGER.skip("one argument only")\n'
+        fh.write('import checks\n'
+                 'LEDGER = checks.Ledger("x", floor=1)\n'
+                 'led = checks.Ledger("y", floor=1)\n'
+                 'LEDGER.skip("one argument only")\n'
                  'LEDGER.skip("label", "why")\n'
+                 'led.skip("one argument, lowercase receiver")\n'
                  'itertools.skip("not a Ledger")\n')
         probe = fh.name
     try:
-        found = _skip_arity(probe)
-        LEDGER.ok(len(found) == 1 and found[0][1] == 1,
-                  "CONTROL: a planted one-argument skip is caught, and "
-                  "neither the correct call nor a non-Ledger `.skip` is",
-                  f"{found} -- expected exactly the line-1 call. Flagging "
-                  f"line 2 would make the linter unusable; flagging line 3 "
+        found = sorted(f[1] for f in _skip_arity(probe))
+        LEDGER.ok(found == [4, 6],
+                  "CONTROL: both planted one-argument skips are caught -- "
+                  "including the lowercase `led` receiver -- and neither the "
+                  "correct call nor a non-Ledger `.skip` is",
+                  f"lines {found}, expected [4, 6]. Missing 6 is the "
+                  f"name-matching blind spot that hid test_trnblend's five; "
+                  f"flagging 5 would make the linter unusable and flagging 7 "
                   f"is the false positive this file refuses")
+    finally:
+        os.unlink(probe)
+
+    print("\n11. a handler that guards a SystemExit-raiser must catch one")
+    # WHY THIS IS A SECTION AND NOT A CODE REVIEW. `vaultpath.require_dir()`,
+    # `pinned.find()` and `skilltable.find_exe()` all RAISE `SystemExit` when
+    # the resource is missing -- deliberately, so a tool dies loudly rather
+    # than reading the wrong build. `SystemExit` inherits `BaseException`, so
+    # `except Exception` does not catch it. Nineteen try-blocks across four
+    # packages guarded one of those calls with `except Exception` alone, and
+    # every one of their fallbacks -- fourteen `LEDGER.skip`s, a friendly
+    # `TapeError`, three `return None`s, one default path -- was therefore
+    # unreachable on the only machine it was written for. `test_agentlife.py`
+    # and `test_compositetrap.py` §1 are the two that were found by running
+    # into them; this finds the rest without a bare machine.
+    #
+    # `vaultpath.vault_path()` is NOT in the list and must not be: it RETURNS a
+    # path for a directory that does not exist and raises nothing, so its 21
+    # call sites are not defects. Scoring them would have been a 40-site
+    # "finding" that was 21 parts wrong.
+    EXITERS = {"find", "find_exe", "require_dir"}
+    EXITER_RECV = {"pinned", "skilltable", "vaultpath"}
+
+    def _calls_exiter(node):
+        for sub in ast.walk(node):
+            if not isinstance(sub, ast.Call):
+                continue
+            f = sub.func
+            if isinstance(f, ast.Attribute) and f.attr in EXITERS:
+                recv = (getattr(f.value, "id", None)
+                        or getattr(f.value, "attr", None))
+                if recv in EXITER_RECV:
+                    return f"{recv}.{f.attr}"
+        return None
+
+    def _catches_exit(h):
+        t = h.type
+        if t is None:                      # bare `except:` catches everything
+            return True
+        els = t.elts if isinstance(t, ast.Tuple) else [t]
+        return any((getattr(e, "id", None) or getattr(e, "attr", None))
+                   in ("SystemExit", "BaseException") for e in els)
+
+    def _uncatchable(path):
+        try:
+            tree = ast.parse(open(path, encoding="utf-8").read())
+        except (SyntaxError, UnicodeDecodeError):
+            return []
+        out = []
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Try) or not node.handlers:
+                continue
+            what = None
+            for stmt in node.body:
+                what = _calls_exiter(stmt)
+                if what:
+                    break
+            if what and not any(_catches_exit(h) for h in node.handlers):
+                out.append((os.path.basename(path), node.lineno, what))
+        return out
+
+    offenders = []
+    for d in (HERE, os.path.join(os.path.dirname(HERE), "tools")):
+        if os.path.isdir(d):
+            for p in srclint.python_files(d):
+                offenders += _uncatchable(p)
+    LEDGER.ok(not offenders,
+              "every try-block guarding a SystemExit-raiser can catch one",
+              f"UNCATCHABLE: {offenders} -- these call something that raises "
+              f"SystemExit and catch only Exception, so the fallback never "
+              f"runs on the machine it exists for. Write "
+              f"`except (Exception, SystemExit)`")
+    # CONTROL, both directions: the planted defect is found, and the widened
+    # form and a non-raising `vault_path()` are both left alone.
+    with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False,
+                                     encoding="utf-8") as fh:
+        fh.write('import vaultpath\n'
+                 'try:\n'
+                 '    vaultpath.require_dir("captures")\n'
+                 'except Exception:\n'
+                 '    pass\n'
+                 'try:\n'
+                 '    vaultpath.require_dir("captures")\n'
+                 'except (Exception, SystemExit):\n'
+                 '    pass\n'
+                 'try:\n'
+                 '    vaultpath.vault_path("a", "b")\n'
+                 'except Exception:\n'
+                 '    pass\n')
+        probe = fh.name
+    try:
+        found = sorted(f[1] for f in _uncatchable(probe))
+        LEDGER.ok(found == [2],
+                  "CONTROL: the narrow handler is caught; the widened one and "
+                  "a `vault_path()` that raises nothing are not",
+                  f"lines {found}, expected [2] -- flagging line 6 would "
+                  f"reject the fix itself, and flagging line 10 is the "
+                  f"21-site false positive the comment above rules out")
     finally:
         os.unlink(probe)
 

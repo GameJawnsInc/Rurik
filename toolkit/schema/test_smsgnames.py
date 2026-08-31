@@ -56,7 +56,7 @@ def corpus():
     try:
         root = vaultpath.require_dir("captures", "live",
                                      why="the names are checked against the wire")
-    except Exception:                                          # noqa: BLE001
+    except (Exception, SystemExit):                                          # noqa: BLE001
         return None
     import tape
     codec, out, seen = Codec(), [], 0

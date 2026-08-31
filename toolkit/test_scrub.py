@@ -1097,7 +1097,7 @@ def check_search_all_equals_the_naive_scan():
         snap = sc.Snapshot(vaultpath.require_dir("captures"), skip=SKIP)
         secrets = harvest_secrets(snap)
         text = "\n".join(snap.text(rel) for rel, _n in snap.jsonl())
-    except Exception as exc:                                       # noqa: BLE001
+    except (Exception, SystemExit) as exc:                                       # noqa: BLE001
         LEDGER.skip("real-corpus equivalence", f"corpus unreadable: {exc}")
         return
     probe = sorted(secrets)[:150]

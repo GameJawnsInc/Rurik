@@ -242,7 +242,7 @@ check(respawn.refuse_mixed([{"origin": "live"}, {"origin": "live"},
 print("== 15. the corpus pins -- per connection, so they survive growth ==")
 try:
     live = vaultpath.require_dir("captures", "live", why="respawn corpus pins")
-except Exception as exc:                                    # noqa: BLE001
+except (Exception, SystemExit) as exc:                                    # noqa: BLE001
     live = None
     LEDGER.skip("corpus pins", f"vault unavailable: {exc}")
 

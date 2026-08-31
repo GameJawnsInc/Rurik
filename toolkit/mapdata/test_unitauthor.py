@@ -65,7 +65,7 @@ NEW_ID = 0x5F200        # a file id no retail row uses
 def study_archive():
     try:
         return os.path.join(vaultpath.require_dir("dat_study"), "Gw.dat")
-    except Exception:
+    except (Exception, SystemExit):
         return None
 
 

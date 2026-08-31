@@ -99,7 +99,7 @@ def main():
         exe = os.path.join(vaultpath.require_dir("client"),
                            "2026-08-13_64fae3b1369b", "Gw.exe")
         blob = open(exe, "rb").read() if os.path.exists(exe) else None
-    except Exception:
+    except (Exception, SystemExit):
         blob = None
     if blob is None:
         LEDGER.skip("the context global matches 0x004E0B90",

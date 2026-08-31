@@ -8367,7 +8367,39 @@ the same-tick ALIAS**: the
   reaching those branches means removing the vault. Its CONTROL plants a
   one-argument call and requires that the correct two-argument call and a
   non-Ledger `.skip` are BOTH left alone — a false positive here is worse than
-  a miss, per the top of that file. Floor 22 → **24**),
+  a miss, per the top of that file.
+  **§10's detector was REWRITTEN the same day, and the reason is this section's
+  own lesson arriving late**: it matched receivers whose NAME contained
+  "LEDGER", and `test_trnblend.py` writes `led = checks.Ledger(...)` — so five
+  one-argument `led.skip()` calls sat under a green §10 for the day between the
+  two. It now collects every name the module BINDS to a `Ledger()` and judges
+  `.skip` on exactly those, and the control gained a lowercase-`led` line so it
+  fails on that regression instead of blessing it. A linter's own blind spot
+  reads exactly like a clean tree — §4's complaint, in a check §4 does not cover.
+  **§11 (2026-08-31) is the same "the fallback never fires" defect one level
+  down: a handler that guards a `SystemExit`-raiser but catches only
+  `Exception`.** `vaultpath.require_dir()`, `pinned.find()` and
+  `skilltable.find_exe()` all RAISE `SystemExit` when the resource is missing —
+  deliberately, so a tool dies loudly rather than reading the wrong build — and
+  `SystemExit` inherits `BaseException`, so `except Exception` never catches it.
+  **Nineteen try-blocks across four packages** did exactly that, and every
+  fallback behind them was unreachable on the only machine it was written for:
+  fourteen `LEDGER.skip`s, a friendly `TapeError`, three `return None`s and one
+  default path. `test_compositetrap.py` §1 and `test_agentlife.py` were the two
+  found by running into them; §11 finds the rest without a bare machine.
+  **`vaultpath.vault_path()` is deliberately NOT in its list** — it returns a
+  path for a directory that does not exist and raises nothing, so its 21 call
+  sites are not defects, and scoring them would have made a 40-site "finding"
+  that was 21 parts wrong. The control checks both directions: the narrow
+  handler is caught, the widened form and a `vault_path()` call are not.
+  **AND §11 IS A FLOOR, NOT A CENSUS** — say so before trusting it. It reads a
+  try-block body for a DIRECT call, so it is blind to two shapes the same sweep
+  found only by RUNNING the files: a locator called with **no try at all**
+  (`test_itemmods.py`'s `pinned.find()` opening `main`, which killed the file
+  before five carefully-worded skips below could run) and an **indirect** call
+  through a wrapper (`test_wearmap.py`'s `composite.extract()`, which reaches
+  `pinned.find()` inside). Both are fixed; neither would have been found here.
+  Floor 22 → 24 → **26**),
   `toolkit/test_scrub.py` (the credential scrub, that no secret survives it, that the
   one field it CANNOT clean — a `plain` frame payload, which carries the account email as
   UTF-16 and is therefore invisible to the ASCII leak check — is reported rather than

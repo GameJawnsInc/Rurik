@@ -175,7 +175,7 @@ def resolve_capture(capture_dir):
     import vaultpath
     try:
         root = vaultpath.require_dir(why="a tape lives in the capture vault")
-    except Exception as ex:
+    except (Exception, SystemExit) as ex:
         raise TapeError(f"{capture_dir!r} is not a directory, and no vault to look in: "
                         f"{ex}")
     parts = capture_dir.replace("\\", "/").strip("/").split("/")

@@ -46,6 +46,30 @@ from codec import Codec  # noqa: E402
 LEDGER = checks.Ledger("the effect channel", floor=74)
 
 
+
+def _needs_skill_rows(label):
+    """True, and a declared skip, when the vault-only `skills` table is absent.
+
+    Five sections here type real skills out of that table -- which stance 346
+    is, that 253 is a hex, that 319 replaces 346 -- so on a machine with no
+    overlay there is nothing for them to measure. Until 2026-08-31 they did not
+    skip, they CRASHED: section 3 on a bare `WORLD.get`, and section 4d on
+    `sent[0]` after `apply_effect` correctly did nothing for a skill it could
+    not type. An IndexError two frames from the missing row reads like a logic
+    bug, which is why this is a guard and not a comment.
+    """
+    import agents
+    try:
+        agents.WORLD.get("skills", "346")      # Frenzy, this file's exemplar
+    except Exception:                                          # noqa: BLE001
+        LEDGER.skip(label,
+                    "no 'skills' content rows -- the vault overlay is absent "
+                    "(run skilltable.py --emit-content), so the skills this "
+                    "section types cannot be read")
+        return True
+    return False
+
+
 def section_arithmetic():
     """The scaler, and the four branches of the duration rule.
 
@@ -129,13 +153,15 @@ def section_type_coverage():
     time. There is not one.
     """
     print("\n1c. does the TABLE agree that these five types are timed effects?")
+    if _needs_skill_rows("2. type coverage"):
+        return
     try:
         import skilltable
         from pathlib import Path
         exe, _why = skilltable.find_exe()
         data = Path(exe).read_bytes()
         base, count, _score = skilltable.locate_table(data)
-    except Exception as ex:                                    # noqa: BLE001
+    except (Exception, SystemExit) as ex:                                    # noqa: BLE001
         LEDGER.skip("the type-coverage check", f"no pinned client here ({ex})")
         return
     rows = [skilltable.parse_record(data, base, i) for i in range(count)]
@@ -198,7 +224,7 @@ def section_corpus_oracle():
         exe, why = skilltable.find_exe()
         data = Path(exe).read_bytes()
         base, count, _score = skilltable.locate_table(data)
-    except Exception as ex:                                    # noqa: BLE001
+    except (Exception, SystemExit) as ex:                                    # noqa: BLE001
         LEDGER.skip("the live-corpus oracle",
                     f"no vault captures or no pinned client here ({ex}). "
                     f"This is the section that carries the module -- a green "
@@ -292,12 +318,26 @@ def section_dispatch():
     two seconds are, so it opens nothing.
     """
     print("\n3. dispatch: a duration is not a licence to apply an effect")
+    if _needs_skill_rows("3. dispatch: a duration is not a licence to apply"):
+        return
     import agents
     import authsrv
 
     def row(sid):
         return agents.WORLD.get("skills", str(sid))
 
+    # The `skills` table is VAULT-ONLY (skilltable.py --emit-content), and every
+    # check in this section reads eleven rows out of it, so there is nothing
+    # here a bare machine can measure. Unguarded until 2026-08-31, when it was
+    # the last thing between this file and a verdict without a vault.
+    try:
+        row(317)
+    except Exception as exc:                                   # noqa: BLE001
+        LEDGER.skip("3. dispatch: a duration is not a licence to apply",
+                    f"no 'skills' content rows ({exc}) -- the vault overlay is "
+                    f"absent, so the eleven skills this section types cannot "
+                    f"be read")
+        return
     fam = {sid: effects.applies_effect(row(sid))
            for sid in (317, 319, 253, 289, 316, 318, 322, 323, 346, 135, 307)}
     LEDGER.ok(fam[317] == "stance" and fam[319] == "stance",
@@ -483,6 +523,8 @@ def section_exclusive():
     choices), so a replacement must be a real `0x0044` and then a `0x0042`.
     """
     print("\n4c. one stance / glyph / preparation at a time -- the wiki's rule")
+    if _needs_skill_rows("4. exclusivity: one stance per character"):
+        return
     import authsrv
 
     t = effects.EffectTable()
@@ -676,6 +718,8 @@ def section_wire():
     residual at zero -- which is the same verdict it gives 83 of retail's 88.
     """
     print("\n5. our own apply/remove pair, read by bufflog")
+    if _needs_skill_rows("6. the wire shape of an effect"):
+        return
     import authsrv
     codec = Codec()
 
@@ -752,6 +796,8 @@ def section_wire():
 def section_deaths():
     """A corpse carries no effects, on either side."""
     print("\n6. death strips, both halves")
+    if _needs_skill_rows("7. death clears the table"):
+        return
     import authsrv
 
     sent = []

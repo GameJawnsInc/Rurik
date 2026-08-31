@@ -47,7 +47,7 @@ check(g.get("62", {}).get("name") == "AGENT_VIEW_UNLINK",
 # ---------------------------------------------------------------- the walk
 try:
     live = vaultpath.require_dir("captures", "live", why="the name invariants")
-except Exception as exc:                                    # noqa: BLE001
+except (Exception, SystemExit) as exc:                                    # noqa: BLE001
     LEDGER.skip("corpus sections", f"vault unavailable: {exc}")
     sys.exit(LEDGER.verdict())
 

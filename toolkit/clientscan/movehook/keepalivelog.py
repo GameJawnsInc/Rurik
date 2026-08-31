@@ -76,7 +76,7 @@ def newest_log():
     try:
         import vaultpath
         base = vaultpath.require_dir("captures", "gamesrv", why="the K1 arm readout")
-    except Exception:
+    except (Exception, SystemExit):
         base = os.path.join("vault", "captures", "gamesrv")
     hits = glob.glob(os.path.join(base, "authsrv-*-c*.jsonl"))
     return max(hits, key=os.path.getmtime) if hits else None

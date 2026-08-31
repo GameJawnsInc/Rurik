@@ -1054,7 +1054,7 @@ def _run_live_builds():
     out = {}
     try:
         root = vaultpath.require_dir("run-live", why="naming the build that would work")
-    except Exception:                                          # noqa: BLE001
+    except (Exception, SystemExit):                                          # noqa: BLE001
         return out
     for name in sorted(os.listdir(root)):
         exe = os.path.join(root, name, "Gw.exe")

@@ -52,7 +52,7 @@ for key, name in (("350", "ITEM_LOW_DETAIL"), ("353", "ITEM_HIGH_DETAIL"),
 # ---------------------------------------------------------------- the walk
 try:
     live = vaultpath.require_dir("captures", "live", why="the name invariants")
-except Exception as exc:                                    # noqa: BLE001
+except (Exception, SystemExit) as exc:                                    # noqa: BLE001
     LEDGER.skip("corpus sections", f"vault unavailable: {exc}")
     sys.exit(LEDGER.verdict())
 

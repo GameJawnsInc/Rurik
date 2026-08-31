@@ -104,7 +104,7 @@ LEDGER = checks.Ledger("GAME_CMSG names vs ArenaNet's own client", floor=16)
 def main():
     try:
         vaultpath.require_dir()
-    except Exception as ex:                                    # pragma: no cover
+    except (Exception, SystemExit) as ex:                                    # pragma: no cover
         LEDGER.skip("the whole file", f"no vault: {ex}")
         return LEDGER.verdict()
 

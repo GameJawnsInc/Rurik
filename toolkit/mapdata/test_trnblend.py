@@ -277,15 +277,17 @@ def _section4(check, led):
     import vaultpath
     try:
         vault = vaultpath.require_dir()
-    except Exception as exc:
-        led.skip(f"selector-vs-client: no vault ({exc})")
+    except (Exception, SystemExit) as exc:
+        led.skip("selector-vs-client",
+                 f"no vault ({exc})")
         return
     caps = [("selector_lornars_tile8_18.bin", 8, 18),
             ("selector_lornars_run2.bin", 4, 2)]
     root = os.path.join(str(vault), "research", "terrain")
     present = [c for c in caps if os.path.exists(os.path.join(root, c[0]))]
     if not present:
-        led.skip("selector-vs-client: no captures under vault/research/terrain")
+        led.skip("selector-vs-client",
+                 "no captures under vault/research/terrain")
         return
 
     import archive as ar
@@ -293,7 +295,8 @@ def _section4(check, led):
     import mapexport
     dat = os.path.join(str(vault), "dat_study_38833", "Gw.dat")
     if not os.path.exists(dat):
-        led.skip("selector-vs-client: build-38833 archive absent")
+        led.skip("selector-vs-client",
+                 "build-38833 archive absent")
         return
     trn = trnmod.Terrain.from_row(34466, ar.Archive(dat))
     dx, dy = trn.dim_x, trn.dim_y
@@ -339,13 +342,15 @@ def _section5(check, led):
     import vaultpath
     try:
         vault = vaultpath.require_dir()
-    except Exception as exc:
-        led.skip(f"cover-vs-client: no vault ({exc})")
+    except (Exception, SystemExit) as exc:
+        led.skip("cover-vs-client",
+                 f"no vault ({exc})")
         return
     f = os.path.join(str(vault), "research", "terrain",
                      "layers_lornars_prng.bin")
     if not os.path.exists(f):
-        led.skip("cover-vs-client: no layers_lornars_prng.bin capture")
+        led.skip("cover-vs-client",
+                 "no layers_lornars_prng.bin capture")
         return
     d = open(f, "rb").read()
     n, lo, ln, _base = struct.unpack_from("<IIII", d, 0)
