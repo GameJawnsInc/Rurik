@@ -1724,12 +1724,18 @@ emitter against the population, fix by derivation, tune never.
   accepted/refused with every other skill at zero — a per-skill CHARGE GATE,
   i.e. the adrenaline mechanic we already implement. Shipping D20 would rest
   on one witness, cost our own harness presses, and address 1 of 43 cases.
+* **Props 22/23/28 are STRUCK — tested, the method does not port**
+  (FINDINGS §20). They are not cast-driven at all (59/60, 17/17, 17/17
+  unattributable), so §16's attribution has nothing to bite on; 23 and 28 are
+  a PAIR (`23 → 8` then `28 → <id>`, first corpus confirmation of skillcast
+  §15.2's sticky-parameter reading); and the values are 32-bit resource
+  handles SHARED across agents (id 831757499 to agents 63, 550, 302, 658).
+  Wiring them means inventing handles, with no `s_skill` field to read them
+  from — the channel is not keyed by skill.
 * **NEXT, in cost order**:
   (1) The extractor's event model wants 0x00CF/0x00D0/0x00D2 (0x00D2 now
-  known to ride attack-skill activations). (2) Props 22/23/28
-  (scripted animation) — the id-space method above may port, but their
-  values were never shown to be per-skill and that must be tested first,
-  not assumed from R8's success.
+  known to ride attack-skill activations) — the last open instrument item,
+  and the enabler for §19's per-bar adrenaline simulation.
 
 ### ★★★★★ MOVEMENT 2026-08-28 — THE OBSTACLE DIG: the mesh HAS the mountains, the no-clip IS scored, the client ignores its own geometry check. THE LEAD IS SERVER-SIDE PATH-SOLVED GRANTS
 
