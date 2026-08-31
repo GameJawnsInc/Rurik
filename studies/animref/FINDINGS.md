@@ -817,6 +817,62 @@ so it is RECONSTRUCTION, not OBSERVED. What would settle it is attributing
 each 55 to its own cast, which needs the per-skill heal magnitudes the
 `skill_effect` table only covers for our 20 served skills.
 
+## 19. D20 tested: the premise is REFUTED, the fix is not shipped, and the refusals are a charge gate
+
+**2026-08-31.** §2 recorded D20 — "retail's client does not produce an
+attack-skill press without a target" — and filed the honest fix as *refuse a
+targetless attack-skill press*, unwired because our harness's own presses use
+target 0. Tested before building, and the premise does not survive.
+
+Every c2s `0x0027`/`0x0046` in the corpus, scored for whether the server
+answered with an E4 for that skill on the player's own agent (clocks aligned
+per connection, as §13):
+
+| | accepted | REFUSED |
+|---|---|---|
+| `0x0027` attack-skill, target ≠ 0 | 51 | **42** |
+| `0x0027` attack-skill, target = 0 | 0 | **1** |
+| `0x0046` use-skill, target ≠ 0 | 16 | 0 |
+| `0x0046` use-skill, target = 0 | **36** | 0 |
+
+**Three results, and the first two pull in opposite directions:**
+
+1. **The premise is REFUTED, n=1.** Retail's client *does* send a targetless
+   attack-skill press — `20260819T132414` t=238.50, skill 780,
+   `[…, 780, 0, 0, 0]`. §2's claim was made from an absence in a smaller
+   scan; one counterexample is enough to retire it.
+2. **The conclusion survives, also n=1**: that press was refused. So
+   "targetless attack-skill press → refused" is 1 for 1 — and one witness is
+   not a law. Non-attack skills are freely targetless (36 of 36 accepted), so
+   whatever the rule is, it is attack-specific.
+3. **Targetlessness is NOT what the server refuses.** 42 of the 43 refusals
+   carry a real target. The refusal population is a different mechanism
+   entirely, and D20 would explain 1 case of it.
+
+**What the refusals actually are.** They concentrate in exactly four skills —
+382 (22 accepted / 20 refused), 384 (14/13), 385 (8/8), 780 (3/2) — and
+**every other skill in the corpus has zero refusals** (364: 27/0, 105: 7/0,
+1: 6/0, 858: 6/0, …). The same skill is sometimes accepted and sometimes
+refused, so the discriminator is *state*, not the skill or the targeting: a
+per-skill **charge gate**, which is the adrenaline mechanic this server
+already implements (`refuse_press`, `REFUSE_NOT_ENOUGH_ADRENALINE`).
+
+The direction of the evidence agrees — summing the player's own `0x00CF`
+adrenaline gains between the previous accepted press of a skill and this one,
+accepted presses follow **median 206 units** against refused **137.5**, and
+only 2 of 33 accepted presses follow under 100 units against 6 of 28 refused.
+But the distributions **overlap and there is no threshold**, so this stays
+RECONSTRUCTION. The overlap is expected rather than embarrassing: in Guild
+Wars *any* adrenal use drains **every** adrenaline bar, so "units since the
+last press of this skill" is the wrong denominator — the right one needs a
+per-bar simulation with cross-drain, which is what would upgrade this.
+
+**Decision: the fix is NOT shipped, and the item leaves the queue.** Refusing
+targetless attack-skill presses would rest on a single witness, would cost us
+our own harness presses, and would address 1 of 43 refusals. Recording that
+is the whole return here — the item's premise was wrong, and building it
+first would have hidden that.
+
 ## Provenance
 
 All figures are measurements over the owner's own live captures via extractors in this
