@@ -1119,8 +1119,13 @@ def section_enemy_skill():
     import authsrv
 
     def cast_msgs(sent):
+        # Both channels: since ANIMREF-R1 sec.2 the form follows the target,
+        # and this bar is single-target-always at the player (land_skill), so
+        # these ride 0x00A0 [60, agent, PLAYER, skill]. The skill id is the
+        # LAST value on either channel.
         return [(op, v) for op, v, _l in sent
-                if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
+                if op in (authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                          authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET)
                 and v and v[0] == agents.GV_SKILL_ACTIVATED]
 
     def dmg_floats(sent):
@@ -1133,9 +1138,11 @@ def section_enemy_skill():
     sent = _swings(state)
     casts = cast_msgs(sent)
     LEDGER.ok(len(casts) == 1 and casts[0][1][1] == 10
-              and casts[0][1][2] == authsrv.ENEMY_SKILL_BAR[0][0],
-              "a hostile opens with its SKILL, named on the int channel",
-              f"{casts} -- [GV_SKILL_ACTIVATED, agent, skill]")
+              and casts[0][1][2] == authsrv.PLAYER_AGENT_ID
+              and casts[0][1][-1] == authsrv.ENEMY_SKILL_BAR[0][0],
+              "a hostile opens with its SKILL, named on the TARGETED channel "
+              "at the player (the form follows the target, ANIMREF-R1 sec.2)",
+              f"{casts} -- [GV_SKILL_ACTIVATED, agent, target, skill]")
     ops = [op for op, _v, _l in sent]
     LEDGER.ok(authsrv.GAME_SMSG_SKILL_ACTIVATED not in ops,
               "and NOT on 0x00E3, which is the player's own cast confirmation",
@@ -1192,7 +1199,7 @@ def section_enemy_skill():
     after = _swings(state, n=1)
     second = cast_msgs(after)
     LEDGER.ok(len(second) == 1
-              and second[0][1][2] == authsrv.ENEMY_SKILL_BAR[1][0],
+              and second[0][1][-1] == authsrv.ENEMY_SKILL_BAR[1][0],
               "with slot 1 recharging it casts slot 2, not slot 1 again",
               f"{second} -- expected skill {authsrv.ENEMY_SKILL_BAR[1][0]}. "
               "Repeating the first skill is what a bar-shaped constant looks like "

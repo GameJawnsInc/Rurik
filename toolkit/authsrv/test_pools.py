@@ -1331,8 +1331,10 @@ def section_enemy_gate():
     state["player_dead"] = False
     broke = hostile(state, 0.0)
     authsrv.enemy_attack_tick(send, state, 0)
+    # 0x00A0, not 0x009F: since ANIMREF-R1 sec.2 the NPC's targeted cast
+    # rides the targeted channel (the form follows the target, 758/758).
     casts = [v for op, v, _w in sent
-             if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
+             if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
              and v and v[0] == agents.GV_SKILL_ACTIVATED]
     LEDGER.ok(casts == [] and broke.get("cast_lands_at") is None,
               "an agent with 0 energy does not cast its 5-energy heal",
@@ -1355,9 +1357,9 @@ def section_enemy_gate():
     rich = hostile(state2, 30.0)
     authsrv.enemy_attack_tick(send2, state2, 0)
     casts = [v for op, v, _w in sent2
-             if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
+             if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
              and v and v[0] == agents.GV_SKILL_ACTIVATED]
-    LEDGER.ok(len(casts) == 1 and casts[0][2] == 276,
+    LEDGER.ok(len(casts) == 1 and casts[0][3] == 276,
               "with 30 energy the cast goes out",
               f"{casts} -- so the check above discriminates between two "
               f"outcomes rather than agreeing with whatever it is handed")

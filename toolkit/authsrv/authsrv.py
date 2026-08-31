@@ -10854,6 +10854,25 @@ def refuse_press(send, skill_id, copy, conn_id, reason_id=None):
              "the bare slot release, no reason named"), flush=True)
 
 
+CAST_FORM = "follows-target"   # "legacy" (--legacy-cast-form): always 0x00A0
+
+
+def cast_anim_msg(prop, caster, target, skill_id):
+    """The cast-animation property in retail's own FORM (ANIMREF-R1 sec.2).
+
+    758 of 758 corpus cast opens obey one rule: THE CHANNEL FOLLOWS THE
+    TARGET. A cast that names a target rides 0x00A0 [prop, caster, target,
+    skill] (attack skills 222/222, targeted spells 227); one that does not
+    rides 0x009F [prop, caster, skill] (531). The form this replaces --
+    0x00A0 with target 0 -- appears ZERO times in the corpus: retail
+    switches channels rather than sending an empty slot.
+    """
+    if CAST_FORM == "legacy" or target:
+        return (GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+                [prop, caster, target or 0, skill_id])
+    return (GAME_SMSG_AGENT_PROPERTY_UPDATE_INT, [prop, caster, skill_id])
+
+
 def handle_skill_press(values, send, state, conn_id, opcode):
     """One skill press, either half (0x0046 USE_SKILL or 0x0027 ATTACK_SKILL).
 
@@ -11243,10 +11262,11 @@ def handle_skill_press(values, send, state, conn_id, opcode):
                     send(GAME_SMSG_AGENT_STOP_MOVING,
                          agents.agent_stop_moving(PLAYER_AGENT_ID),
                          _cs_label)
-        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
-             [agents.GV_ATTACK_SKILL_ACTIVATED if is_attack
-              else agents.GV_SKILL_ACTIVATED,
-              PLAYER_AGENT_ID, target or 0, skill_id],
+        _op, _vals = cast_anim_msg(
+            agents.GV_ATTACK_SKILL_ACTIVATED if is_attack
+            else agents.GV_SKILL_ACTIVATED,
+            PLAYER_AGENT_ID, target, skill_id)
+        send(_op, _vals,
              f"cast animation: player "
              f"{'strikes with' if is_attack else 'casts'} {skill_id}")
         # [8 -> 1] closes the burst: the cast now holds the agent. Last in
@@ -11387,10 +11407,11 @@ def begin_cast(send, state, cast, conn_id):
             print(f"[c{conn_id}] skill {skill_id} costs {cost} energy at "
                   f"cast-begin: {pool.current:.2f}/{pool.maximum:.0f} left",
                   flush=True)
-    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
-         [agents.GV_ATTACK_SKILL_ACTIVATED if cast["attack"]
-          else agents.GV_SKILL_ACTIVATED,
-          PLAYER_AGENT_ID, cast.get("target") or 0, skill_id],
+    _op, _vals = cast_anim_msg(
+        agents.GV_ATTACK_SKILL_ACTIVATED if cast["attack"]
+        else agents.GV_SKILL_ACTIVATED,
+        PLAYER_AGENT_ID, cast.get("target"), skill_id)
+    send(_op, _vals,
          f"cast animation: player "
          f"{'strikes with' if cast['attack'] else 'casts'} {skill_id}, "
          f"at cast-begin")
@@ -12764,9 +12785,13 @@ def enemy_attack_tick(send, state, conn_id):
             agent["casting"] = slot
             agent["last_swing"] = now      # a cast is not a free swing
             face_player(send, state, agent_id, agent, conn_id)
-            send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-                 [agents.GV_SKILL_ACTIVATED, agent_id, skill_id],
-                 f"agent {agent_id} casts skill {skill_id}")
+            # The bar is single-target-always at the player (land_skill's own
+            # flag), so under the form rule this cast names its target -- the
+            # 0x009F shape it used to take matched the corpus's one NPC
+            # activation, but that one was a cast that names nobody.
+            _op, _vals = cast_anim_msg(agents.GV_SKILL_ACTIVATED, agent_id,
+                                       PLAYER_AGENT_ID, skill_id)
+            send(_op, _vals, f"agent {agent_id} casts skill {skill_id}")
             agent["cast_lands_at"] = now + activation
             print(f"[c{conn_id}] agent {agent_id} ({agent['name']}) casts skill "
                   f"{skill_id} (slot {slot + 1} of "
@@ -19776,6 +19801,14 @@ def main():
                          "at every declared interval, Power Shot retrodicted "
                          "to 1.3 ms; the constant was one law sampled at two "
                          "intervals).")
+    ap.add_argument("--legacy-cast-form", action="store_true",
+                    help="Revert cast-animation properties to the old "
+                         "always-0x00A0 form (target 0 when none). The "
+                         "default follows retail's form rule (ANIMREF-R1, "
+                         "studies/animref/FINDINGS.md sec.2, 758/758): "
+                         "0x00A0 when the cast names a target, 0x009F when "
+                         "it does not -- retail never sends target 0 on the "
+                         "targeted channel.")
     ap.add_argument("--no-agtrack-repin", action="store_true",
                     help="Keep the guard's telemetry but disable its ACTIVE "
                          "arm (ON by default; MOVECODE-1z-s): the single "
@@ -21130,6 +21163,11 @@ def main():
         WINDUP_MODEL = "ratio"
         print("[map] --windup-ratio: swing windup reverts to the legacy "
               "0.4458 fraction; the derived interval/2 - 0.1 law is OFF.")
+    if a.legacy_cast_form:
+        global CAST_FORM
+        CAST_FORM = "legacy"
+        print("[map] --legacy-cast-form: cast animations ride 0x00A0 with "
+              "target-or-0 again; the retail form rule is OFF.")
     if a.no_agtrack_shadow:
         global AGTRACK_SHADOW
         AGTRACK_SHADOW = False
