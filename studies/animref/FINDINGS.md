@@ -908,6 +908,138 @@ because the channel is not keyed by skill at all. What it would take is
 identifying the resource space those handles index, which is `Gw.dat`
 territory and a different arc's question, not a value we can derive.
 
+## 21. ANIMREF-RE step 1+2: the walk entries are GATED, and the gate pair is named
+
+**All OBSERVED on the pinned build 38797, static, no launch.** `RE-PLAN.md` asked
+for the client's local movement application and what it tests. Both walk entries
+were found and decoded, and the answer is **not** the animation-state queue §15
+pointed at — it is a pair of flags on the player's own char object.
+
+### 21.1 Both walk entries refuse before they ever path
+
+`chcli_dir 0x0081A8F0` (keyboard, `ecx = this = the char`) tests three predicates
+in its first 30 bytes, all before the path query at `0x0081A96C`:
+
+| VA | instruction | refuses when |
+|---|---|---|
+| `0x0081A931` | `test eax, 0x100` on `[this+0x10c]` | **m_status bit 8 SET** |
+| `0x0081A93C` | `test byte [ebx+0x64], 1` | **`+0x64` bit 0 SET** |
+| `0x0081A94B` | `shr 4 / not / test al,1` on `[this+0x10c]` | **m_status bit 4 SET** |
+
+`chcli_point 0x0081ADB0` (click) tests **the same pair** thirty bytes apart —
+`0x0081AEE4 test dword [esi+0x10c], 0x100` and `0x0081AEF4 test byte [esi+0x64], 1`
+— and its caller `0x00816522` re-tests bit 4 in the identical
+`shr 4 / not / test al,1` idiom before it even calls in. **Two independent entry
+points, one gate pair.** That is the structural reason it presents as "the body
+will not translate" rather than as a pathing failure: the walk never starts.
+
+### 21.2 What the refusal DOES — it is not a silent return
+
+All three keyboard gates jump to `0x0081AD0F`, which:
+
+* `push [ebx+0x14]` (the agent id) → `call 0x005FCA80` → resolves
+  `context->[+8]`, adds **`0x1CC` — the AgTrack manager** (MOVECODE's decode) —
+  and calls `0x00605F70(agentId)`;
+* `0x00605F70` bounds-checks against `[mgr+0x28]`, indexes `[mgr+0x20]` at
+  `ecx = id*8 - id` scaled by 4 = **stride 0x1C, MOVECODE's state record exactly**,
+  and zeroes `[record+0x00]` (**`clientControlled`**) and `[record+0x04]` (the
+  history head);
+* writes a facing vector to `[ctx+0x694/+0x698]`, zeroes `[ctx+0x69c/+0x6a0]`;
+* and **returns `eax = 1` — success.**
+
+So a refused walk **turns the character, relinquishes local movement authority,
+and reports that it handled the input.** `ChCliBase:164
+"this == context->playerControlledChar"` sits on that path at `0x0081AD27`, which
+is what identifies `ebx` as the local player and `esi` as the context.
+
+This closes a loop with the sister arc: MOVECODE §1z-c.2 measured a frozen client
+with **`clientControlled` shut on 110 of 110 reads** against 804 open / 11 shut
+healthy, and called it "the cleanest client-side discriminator the arc has."
+**`0x00605F70` is a mechanism that shuts it, reached from a refused walk.**
+
+### 21.3 `m_status` is at `char+0x10c`, and it is SERVER-DRIVEN ONLY
+
+`0x00815830` is `ChCliInt:254 IS_TRUE(m_status & CHAR_STATUS_DEAD)`, guarded by
+`0x00815822 test byte [edi+0x10c], 0x10` — so **`m_status` is the dword at
+`+0x10c` and `CHAR_STATUS_DEAD = 0x10`**. (This half **replicates** rather than
+discovers: `schema/overrides.json:2145` already reached the same identification
+from the same assert. Recording it because the *gating* below is new and rests
+on it.)
+
+The runtime writer is `ChCliBase::SetStatus 0x0081C020`, and its shape matters:
+
+```
+eax = [this+0x10c] ^ newStatus        ; CHANGED
+test al,0x10 / test bl,0x10           ; became DEAD -> 0x005FC5C0(id,0) + zero speed 0x0081BE90
+eax = CHANGED & newStatus             ; bits that turned ON
+bt  eax, 8   -> 0x0081C069            ; bit 8 0->1 -> 0x005FC5C0(id, 0)   <-- SAME halt as death
+mov [this+0x10c], ebx                 ; commit
+```
+
+**Bit 8 turning on halts the agent through the identical AgApi call the client
+uses for death** (`0x005FC5C0`, which bumps the version hash at `[mgr+0xC8]` and
+indexes the async array `[mgr+0x14C]`). Then both walk entries refuse. That is a
+complete, coherent "movement disabled" mechanism.
+
+**And `m_status` has exactly three stores on the char object image-wide** —
+`0x0081A551` (clear), `0x0081A609` (construction, seeded from a template row at
+stride 0x34 field +0x30), `0x0081C076` (`SetStatus` commit) — with `SetStatus`
+called from exactly two sites, `0x00814CAE` and `0x00814D3E`, both message
+handlers. **Read off the dispatch table (`{fieldsPtr, count, handler}`, stride 12,
+slots `0x00BC9844`/`0x00BC9850`), those are opcodes `0x00F0` and `0x00F1`.**
+*Positive control:* the 305-row `--field 0x10c` census contains `chcli_dir`'s own
+read `0x0081A925` and the click path's `0x0081AEE4`, so its silence elsewhere is
+informative. Subject to the standing `--field` floor (a displacement in a
+register, a two-step address, or a biased `this` are all invisible).
+
+**Therefore the client cannot set `m_status` bit 8 on its own initiative.**
+
+### 21.4 What this ELIMINATES, and what it leaves
+
+Our server sends `0x00F1` with only `agents.EFFECT_DEAD` (`0x10`) or `0`
+(`authsrv.py:10038, 12127, 12635, 13630, 13982, 13988`) and `0x00F0` with the
+content row's `effects`, `0` for the player (`13881`, `18581`). **So we never set
+bit 8**, and bit 4 only on a real kill.
+
+* **Gate A (m_status bit 8) is NOT what freezes our player** — RECONSTRUCTION,
+  resting on 21.3's writer census and our own send sites.
+* **Gate C (m_status bit 4, DEAD) is not it either** while the player lives —
+  though note it *was* the whole of the `--walk` "number-key trap"
+  ([[rurik-harness-walk-numberkey-trap]]), so it must stay on the checklist for
+  any scripted arm.
+* **Gate B — `[char+0x64] bit 0` — is the surviving candidate**, and `+0x64` is a
+  real flags word on the char (bit 1 set at `0x0081B2D6`/`0x0081B85C`, bit 3
+  tested at `0x0081B45F`, bit 5 at `0x0081796D`, a computed `or` at `0x0081B38E`
+  that sets bits 3–6 and provably **not** bit 0). **NOT FOUND: any writer of bit
+  0** in `ChCliApi`/`ChCliBase`/`ChCliInt`. That absence has no positive control
+  yet and must not be read as "nothing sets it".
+* **A fourth exit exists and is not a gate at all:** a path query returning zero
+  waypoints leaves via `0x0081A987 je 0x0081ACFA`, a *different* address from the
+  gate exit `0x0081AD0F`. That is MOVECODE §1z-c.2's plane-desync freeze class.
+  Any dynamic run must distinguish the two exits, or it will confuse our freeze
+  with theirs.
+
+### 21.5 The dynamic step, with its prediction registered first
+
+The static work has narrowed four candidate exits to one instrument read, and
+this is where `RE-PLAN.md` step 3 now points. **Hook `chcli_dir 0x0081A8F0` at
+entry** (`movehook` already taps function entries; `ecx` is `this`, no chasing
+required) and record, per call: `[this+0x10c]`, `[this+0x64]`, and **which exit
+the call takes** — `0x0081AD0F` (gated), `0x0081ACFA` (no path), or through to
+`agapi_setdest`.
+
+**Prediction, registered before the run:** in the frozen arm `chcli_dir` is
+entered and leaves via `0x0081AD0F` with `[this+0x64] & 1` set and
+`[this+0x10c] & 0x110` clear; in the moving arm the same call reaches the path
+query. **Refuted if:** it leaves via `0x0081ACFA` (then our freeze is the
+plane-desync class and this whole section is the wrong tree), or if it reaches
+`agapi_setdest` in both arms (then the gate is downstream of the walk entry and
+21.1's pair is a red herring), or if `+0x64` reads identically in both arms.
+
+**No quarterstep verdict is available from this run** — it records which branch
+the client took, which is a fact about the code path and not about feel
+([[quarterstep-is-a-feel-thing]]).
+
 ## Provenance
 
 All figures are measurements over the owner's own live captures via extractors in this
@@ -920,3 +1052,11 @@ scratch over the same tapes; their laws and n's are restated in full above. §15
 addresses are single-site measurements (one case body, one AvChar method each), the
 MEASUREMENT side of the provenance boundary — the extractor is `codescan.py`, the build
 is named, the values audit without the binary.
+
+§21 is the same kind: addresses, field displacements, a dispatch-table layout and two
+opcode numbers, all read from the pinned build with `codescan.py`/`asserts.py` and a
+12-line struct walk over the PE section table — measurement, per-row, extractor in this
+repo, build named. The three asserts it quotes (`ChCliInt:254`, `ChCliBase:164`,
+`Array:587`) are single citations used as the evidence for specific claims, which the
+boundary permits and the crash dialog shows any player anyway; there is no bulk dump.
+No client launch, no upstream derivation, no §6.1 register row required.
