@@ -1715,10 +1715,18 @@ emitter against the population, fix by derivation, tune never.
   instant** — mixed ordering, and one value recurring as the second member
   across four different firsts — which is the one-per-gain rule we already
   follow, not a shape we lack.
+* **D20 is STRUCK — tested, premise REFUTED** (FINDINGS §19). "Retail's
+  client does not produce a targetless attack-skill press" is false (one
+  counterexample: skill 780, target 0, `20260819T132414`). That press WAS
+  refused, so the conclusion is 1-for-1 — and one witness is not a law. More
+  to the point, targetlessness is not what the server refuses: **42 of 43
+  refusals carry a real target**, concentrated in four skills each ~50/50
+  accepted/refused with every other skill at zero — a per-skill CHARGE GATE,
+  i.e. the adrenaline mechanic we already implement. Shipping D20 would rest
+  on one witness, cost our own harness presses, and address 1 of 43 cases.
 * **NEXT, in cost order**:
   (1) The extractor's event model wants 0x00CF/0x00D0/0x00D2 (0x00D2 now
-  known to ride attack-skill activations). (3) D20: refuse a targetless
-  attack-skill press — retail refuses 41 in this corpus. (4) Props 22/23/28
+  known to ride attack-skill activations). (2) Props 22/23/28
   (scripted animation) — the id-space method above may port, but their
   values were never shown to be per-skill and that must be tested first,
   not assumed from R8's success.
