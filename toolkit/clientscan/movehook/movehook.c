@@ -391,6 +391,41 @@ typedef struct {
     DWORD out_count;              /* *arg5 -- the client's own pathCount */
     DWORD out_n;                  /* points actually copied (<= out_count) */
     DWORD out_path[36];           /* RET_MAX_POINTS * 4 dwords, {x,y,plane,w} */
+    /* v9, 2026-08-31: THE TWO WALK GATES, read off `ecx` at a ChCliBase entry.
+     * ANIMREF-RE step 3 (studies/animref/FINDINGS.md §21.5).
+     *
+     * APPENDED, never inserted -- the v6 note above explains why a length check
+     * cannot catch a reorder, and this record has already been read one dword
+     * late for a whole run once.
+     *
+     * WHY THIS IS THE WHOLE MEASUREMENT. Every walk entry tests the same two
+     * words before it paths, and an entry hook cannot see which branch the
+     * function then took -- but these two words DETERMINE the first three of
+     * them, so reading them at the hit reconstructs the branch offline:
+     *   gate_status & 0x100 -> refused at 0x0081A931 (m_status bit 8)
+     *   gate_flags  & 0x001 -> refused at 0x0081A93C (the prop-8 walk gate)
+     *   gate_status & 0x010 -> refused at 0x0081A94B (CHAR_STATUS_DEAD)
+     * and if none is set the call reached the path query, where the EXISTING
+     * agapi_setdest site says whether a leg was issued or the query came back
+     * empty. Four outcomes, no new hook shape, no mid-function site -- which
+     * matters because 0x0081AD0F's first byte is 0xFF and gensites would
+     * (correctly) refuse it.
+     *
+     * `have_gate` is `have_fence`'s lesson for the third time, and here it is
+     * load-bearing in both directions: a CLEAR gate is the interesting reading
+     * on the moving arm, so "read it, both words were 0" and "could not read
+     * it" must not merge into the same zero. Bit 0 = flags read, bit 1 =
+     * status read; they are separate because the two readable() calls can
+     * genuinely disagree.
+     *
+     * c->Ecx IS the ChCliBase at both rows' entries -- chcli_dir does
+     * `0x0081A90E mov ebx, ecx` and then tests `[ebx+0x64]` and `[ebx+0x10c]`
+     * directly -- so no pointer chasing, and the guard is one readable() per
+     * word. The rows opt in with `deref_char_gate`; every other site leaves
+     * have_gate 0. */
+    DWORD have_gate;              /* bit 0 = gate_flags read, bit 1 = gate_status */
+    DWORD gate_flags;             /* [ecx + C_CHAR_FLAGS]  -- bit 0 is the gate */
+    DWORD gate_status;            /* [ecx + C_CHAR_STATUS] -- m_status */
 } rec_t;
 
 static DWORD  g_base;
@@ -666,6 +701,28 @@ static LONG CALLBACK on_bp(PEXCEPTION_POINTERS ep)
                         }
                     }
                 }
+                /* THE WALK GATES. Read off `ecx` -- which at a ChCliBase
+                 * entry IS the char object the gates are tested on -- under one
+                 * readable() per word, because this runs inside the vectored
+                 * handler and a null or wild `this` must not fault. A refusal
+                 * leaves the corresponding have_gate bit 0, which keeps
+                 * "could not read" distinct from "read it, it was clear" --
+                 * and on the moving arm CLEAR is the expected reading, so that
+                 * distinction is the measurement rather than bookkeeping. */
+                if (SITES[i].deref_char_gate && ag) {
+                    /* `ag` is this handler's name for c->Ecx. At the two ChCliBase
+                     * rows it is a CHARACTER, not an agent -- the variable's name
+                     * is historical and deref_agent is 0 for both rows, so nothing
+                     * else in this block treats it as one. */
+                    if (readable(ag + C_CHAR_FLAGS, 4)) {
+                        r->gate_flags = *(DWORD *)(ag + C_CHAR_FLAGS);
+                        r->have_gate |= 1u;
+                    }
+                    if (readable(ag + C_CHAR_STATUS, 4)) {
+                        r->gate_status = *(DWORD *)(ag + C_CHAR_STATUS);
+                        r->have_gate |= 2u;
+                    }
+                }
                 if (deref_arg(esp, SITES[i].deref_a, r->pt_a)) r->have_pts |= 1u;
                 if (deref_arg(esp, SITES[i].deref_b, r->pt_b)) r->have_pts |= 2u;
                 /* THE OUT-PARAMS, for the rows that name them -- table-driven
@@ -919,7 +976,7 @@ static int write_bin(const char *dir, DWORD n)
 {
     char path[MAX_PATH];
     HANDLE h;
-    DWORD ver = 8, ns = NSITES, reclen = (DWORD)sizeof(rec_t);
+    DWORD ver = 9, ns = NSITES, reclen = (DWORD)sizeof(rec_t);
     unsigned i;
     int ok = 1;
 

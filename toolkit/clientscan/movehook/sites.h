@@ -26,6 +26,8 @@ typedef struct {
     int           deref_b;
     int           deref_agent_arg; /* arg index holding a SECOND agent, 0=none */
     int           deref_fence;   /* read AgTrack's per-agent clientControlled */
+    int           deref_char_gate;/* ecx is a ChCliBase: read the two WALK GATE
+                                     words, +0x64 flags and +0x10C m_status. */
     unsigned      stride;        /* store 1 hit in N; 0/1 = every hit. The
                                     HIT COUNT is unaffected and is what the
                                     sidecar reports, so a strided site still
@@ -38,27 +40,27 @@ typedef struct {
 } site_t;
 
 /* rva, name, deref_agent, deref_a, deref_b, deref_agent_arg, deref_fence,
- * stride, deref_out, deref_out_path, shape */
+ * deref_char_gate, stride, deref_out, deref_out_path, shape */
 static const site_t SITES[NSITES] = {
-    { 0x001FC7A0u, "agapi_setdest", 0, 2, 0, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x005FC7A0 */
-    { 0x00205FC0u, "agtrack", 0, 0, 0, 1, 1, 0u, 0, 0, SHAPE_ENTRY },   /* 0x00605FC0 */
-    { 0x001FE950u, "bake", 1, 0, 0, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x005FE950 */
-    { 0x0041B580u, "chcli_advance", 0, 0, 0, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x0081B580 */
-    { 0x0041A8F0u, "chcli_dir", 0, 0, 0, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x0081A8F0 */
-    { 0x0041ADB0u, "chcli_point", 0, 0, 0, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x0081ADB0 */
-    { 0x00309E90u, "mapfindpath", 0, 1, 2, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x00709E90 */
-    { 0x00309F0Fu, "mapfindpath_ret1", 0, 1, 0, 0, 0, 0u, 5, 6, SHAPE_RET   },   /* 0x00709F0F */
-    { 0x00309F44u, "mapfindpath_ret2", 0, 1, 0, 0, 0, 0u, 5, 6, SHAPE_RET   },   /* 0x00709F44 */
-    { 0x0030A0ADu, "mapfindpath_ret3", 0, 1, 0, 0, 0, 0u, 5, 6, SHAPE_RET   },   /* 0x0070A0AD */
-    { 0x0030A0D4u, "mapfindpath_ret4", 0, 1, 0, 0, 0, 0u, 5, 6, SHAPE_RET   },   /* 0x0070A0D4 */
-    { 0x002022B0u, "reseed", 1, 0, 0, 1, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x006022B0 */
-    { 0x00205E40u, "resync", 0, 0, 0, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x00605E40 */
-    { 0x00202B20u, "setposition", 1, 1, 0, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x00602B20 */
-    { 0x00202A40u, "setter", 1, 0, 0, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x00602A40 */
-    { 0x002055E0u, "snaptest", 0, 0, 0, 2, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x006055E0 */
-    { 0x001FEF70u, "stepclear", 0, 0, 0, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x005FEF70 */
-    { 0x002020B0u, "teleport", 1, 0, 0, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x006020B0 */
-    { 0x00200140u, "tick", 1, 0, 0, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x00600140 */
+    { 0x001FC7A0u, "agapi_setdest", 0, 2, 0, 0, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x005FC7A0 */
+    { 0x00205FC0u, "agtrack", 0, 0, 0, 1, 1, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x00605FC0 */
+    { 0x001FE950u, "bake", 1, 0, 0, 0, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x005FE950 */
+    { 0x0041B580u, "chcli_advance", 0, 0, 0, 0, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x0081B580 */
+    { 0x0041A8F0u, "chcli_dir", 0, 0, 0, 0, 0, 1, 0u, 0, 0, SHAPE_ENTRY },   /* 0x0081A8F0 */
+    { 0x0041ADB0u, "chcli_point", 0, 0, 0, 0, 0, 1, 0u, 0, 0, SHAPE_ENTRY },   /* 0x0081ADB0 */
+    { 0x00309E90u, "mapfindpath", 0, 1, 2, 0, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x00709E90 */
+    { 0x00309F0Fu, "mapfindpath_ret1", 0, 1, 0, 0, 0, 0, 0u, 5, 6, SHAPE_RET   },   /* 0x00709F0F */
+    { 0x00309F44u, "mapfindpath_ret2", 0, 1, 0, 0, 0, 0, 0u, 5, 6, SHAPE_RET   },   /* 0x00709F44 */
+    { 0x0030A0ADu, "mapfindpath_ret3", 0, 1, 0, 0, 0, 0, 0u, 5, 6, SHAPE_RET   },   /* 0x0070A0AD */
+    { 0x0030A0D4u, "mapfindpath_ret4", 0, 1, 0, 0, 0, 0, 0u, 5, 6, SHAPE_RET   },   /* 0x0070A0D4 */
+    { 0x002022B0u, "reseed", 1, 0, 0, 1, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x006022B0 */
+    { 0x00205E40u, "resync", 0, 0, 0, 0, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x00605E40 */
+    { 0x00202B20u, "setposition", 1, 1, 0, 0, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x00602B20 */
+    { 0x00202A40u, "setter", 1, 0, 0, 0, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x00602A40 */
+    { 0x002055E0u, "snaptest", 0, 0, 0, 2, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x006055E0 */
+    { 0x001FEF70u, "stepclear", 0, 0, 0, 0, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x005FEF70 */
+    { 0x002020B0u, "teleport", 1, 0, 0, 0, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x006020B0 */
+    { 0x00200140u, "tick", 1, 0, 0, 0, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x00600140 */
 };
 
 /* Agent struct offsets the handler reads at each hit. */
@@ -74,5 +76,10 @@ static const site_t SITES[NSITES] = {
 #define A_VELOCITY             0xB0u   /* velocity x, y */
 #define A_WORLD                0x24u   /* m_world */
 #define A_X98                  0x98u   /* unnamed scalar */
+
+/* ChCliBase offsets -- a DIFFERENT object from the agent above, which is why
+ * these are C_ and those are A_. Confusing the two is the `+0xC4` mistake. */
+#define C_CHAR_FLAGS           0x064u   /* ChCliBase flags word -- bit 0 is the WALK GATE */
+#define C_CHAR_STATUS          0x10Cu   /* m_status -- ArenaNet's name */
 
 #endif /* MOVEHOOK_SITES_H */

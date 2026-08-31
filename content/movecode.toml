@@ -176,6 +176,54 @@ build = 38797
 verified = "ArenaNet's own name. Assert AgAgent:1144 `m_targetPoint.position != AGENT_INVALID_POSITION` at 0x00600287. The final destination; what the teleport copies into m_point."
 
 # --------------------------------------------------------------------------
+# ChCliBase OFFSETS, added 2026-08-31 for ANIMREF-RE. A SEPARATE TABLE from
+# `agent_offset` on purpose: these are fields of the client-side CHARACTER
+# object (`context->playerControlledChar`), not of an AgAgent, and the two are
+# different structures reached by different paths. Folding them into
+# `agent_offset` would emit them as `A_*` beside real agent fields and invite
+# exactly the confusion that costs this project published claims -- one
+# displacement meaning two things on two objects is how `+0xC4` was read as an
+# animation queue head for a week when it is a TList link offset.
+#
+# Both are the operands of the two flag gates every walk entry tests before it
+# paths -- studies/animref/FINDINGS.md §21.1 and §22.1.
+# --------------------------------------------------------------------------
+
+[char_offset.char_flags]
+offset = 0x64
+width = 4
+name = "ChCliBase flags word -- bit 0 is the WALK GATE"
+[char_offset.char_flags.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/codescan.py"
+build = 38797
+verified = """Bit 0 is READ by both walk entries and refuses the walk when set:
+`0x0081A93C test byte [ebx+0x64], 1` / `jne 0x0081AD0F` in chcli_dir, and
+`0x0081AEF4` in chcli_point. It is WRITTEN only by generic-property 8's case
+body in the ChCliBase property switch 0x0081BC60 -- `0x0081BD02` sets it when
+the property value is non-zero, `0x0081BD14` clears it when zero. Other bits of
+the same word are live and are NOT this gate (bit 1 set at 0x0081B2D6 and
+0x0081B85C, bit 3 tested at 0x0081B45F, bit 5 at 0x0081796D). Our name for the
+word; ArenaNet's name is not in any assert we can read. 2026-08-31."""
+
+[char_offset.char_status]
+offset = 0x10C
+width = 4
+name = "m_status -- ArenaNet's name"
+[char_offset.char_status.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/codescan.py"
+build = 38797
+verified = """ArenaNet's own name, from assert ChCliInt:254
+`IS_TRUE(m_status & CHAR_STATUS_DEAD)` at 0x00815830, whose guard is
+`0x00815822 test byte [edi+0x10c], 0x10` -- so the field is +0x10C and
+CHAR_STATUS_DEAD is 0x10. Bit 4 and bit 8 are both walk gates: chcli_dir tests
+bit 8 at 0x0081A931 and bit 4 at 0x0081A94B, chcli_point tests bit 8 at
+0x0081AEE4. Independently identified from the same assert by
+schema/overrides.json's 0x00F0 row, which this replicates rather than
+discovers. 2026-08-31."""
+
+# --------------------------------------------------------------------------
 # MOVECODE-B3's sites, added 2026-08-27 after run 1. All five are `push ebp`
 # entries like the four above, so the handler still emulates ONE shape.
 # --------------------------------------------------------------------------
@@ -344,13 +392,14 @@ rva = 0x0041A8F0
 first_byte = 0x55
 thiscall = false
 deref_agent = false
+deref_char_gate = true
 what = "the DIRECTIONAL begin-move: keyboard walking. Takes the agent's CURRENT position, traces the client's own navmesh along a requested heading for up to 9 waypoints, issues waypoint 0 and parks the rest in ChCliBase::m_path (this+0x70, 8 entries x 16 B). Its caller decodes two signed input axes into an 8-way octant."
 why_hooked = "to name what DRIVES the 525 re-issues -- a forwarder names the messenger, so the answer is one frame further out than agapi_setdest. Asserted to run only for the local player (ChCliBase:164)."
 [hook_site.chcli_dir.provenance]
 source = "client-table"
 extractor = "toolkit/clientscan/codescan.py"
 build = 38797
-verified = "--dis 0x0081A8F0 shows `55 push ebp`; calls agapi_setdest at 0x0081AC0F. Module from asserts inside 0x0081A8F0..0x0081ADB0: ChCliBase.cpp:154 `index < arrsize(m_path)` at 0x0081AC3D and ChCliBase.cpp:164 `this == context->playerControlledChar` at 0x0081AD27."
+verified = "--dis 0x0081A8F0 shows `55 push ebp`; calls agapi_setdest at 0x0081AC0F. Module from asserts inside 0x0081A8F0..0x0081ADB0: ChCliBase.cpp:154 `index < arrsize(m_path)` at 0x0081AC3D and ChCliBase.cpp:164 `this == context->playerControlledChar` at 0x0081AD27. deref_char_gate 2026-08-31: ecx at this entry IS the ChCliBase char (0x0081A90E mov ebx,ecx for chcli_dir), the same object whose +0x64 and +0x10C the gates test, so the two gate words are readable off ecx at the hit with no pointer chasing. ANIMREF-RE step 3."
 
 [hook_site.chcli_point]
 va = 0x0081ADB0
@@ -358,13 +407,14 @@ rva = 0x0041ADB0
 first_byte = 0x55
 thiscall = false
 deref_agent = false
+deref_char_gate = true
 what = "the POINT begin-move: click-to-move. Calls MapFindPath (0x0081AF51) with maxCount = 9 and range = 10000.0f, prunes leading waypoints, issues waypoint 0 and parks the rest in m_path. Asserted to run only for the local player (ChCliBase:248)."
 why_hooked = "this is where a click BECOMES a path. Pairing it with the mapfindpath site shows the query and the legs that came out of it in one capture."
 [hook_site.chcli_point.provenance]
 source = "client-table"
 extractor = "toolkit/clientscan/codescan.py"
 build = 38797
-verified = "--dis 0x0081ADB0 shows `55 push ebp`; calls agapi_setdest at 0x0081B04F. 2026-08-27."
+verified = "--dis 0x0081ADB0 shows `55 push ebp`; calls agapi_setdest at 0x0081B04F. 2026-08-27. deref_char_gate 2026-08-31: ecx at this entry IS the ChCliBase char (0x0081A90E mov ebx,ecx for chcli_dir), the same object whose +0x64 and +0x10C the gates test, so the two gate words are readable off ecx at the hit with no pointer chasing. ANIMREF-RE step 3."
 
 [hook_site.chcli_advance]
 va = 0x0081B580

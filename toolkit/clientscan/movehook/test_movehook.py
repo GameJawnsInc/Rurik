@@ -142,7 +142,7 @@ def section_1_2():
         LEDGER.skip("1-2. header vs rows vs binary", f"cannot import gensites: {ex}")
         return
     try:
-        sites, offs = gensites.rows()
+        sites, offs, _coffs = gensites.rows()
     except Exception as ex:
         LEDGER.skip("1-2. header vs rows vs binary", f"content store: {ex}")
         return
@@ -178,7 +178,7 @@ def section_1_2():
     # sites.h is the split the ruling refuses, and it would be invisible otherwise.
     hdr = os.path.join(HERE, "sites.h")
     if os.path.isfile(hdr):
-        want = gensites.emit(sites, offs, path)
+        want = gensites.emit(sites, offs, _coffs, path)
         got = open(hdr, encoding="utf-8").read()
         check(got.replace("\r\n", "\n") == want.replace("\r\n", "\n"),
               "1. the checked-in sites.h is exactly what gensites.py emits",
@@ -635,7 +635,7 @@ def section_10(tmp):
         LEDGER.skip("10. the pathdiff replay", f"cannot import: {ex}")
         return
     try:
-        rows, _offs = gensites.rows()
+        rows, _offs, _coffs = gensites.rows()
         names = sorted(rows)
         if "mapfindpath" not in names:
             LEDGER.skip("10. the pathdiff replay", "no mapfindpath row")
@@ -757,7 +757,7 @@ def section_12(tmp):
     import readhook as rh
     try:
         import gensites
-        rows, _offs = gensites.rows()
+        rows, _offs, _coffs = gensites.rows()
         names = sorted(rows)
     except Exception as ex:
         LEDGER.skip("12. the world-copy census", f"cannot read the rows: {ex}")
@@ -850,7 +850,7 @@ def section_13(tmp):
     import readhook as rh
     try:
         import gensites
-        rows, _offs = gensites.rows()
+        rows, _offs, _coffs = gensites.rows()
         names = sorted(rows)
     except Exception as ex:
         LEDGER.skip("13. the displacement count", f"cannot read the rows: {ex}")
@@ -940,7 +940,7 @@ def section_14(tmp):
     import readhook as rh
     try:
         import gensites
-        rows, offs = gensites.rows()
+        rows, offs, _coffs = gensites.rows()
         names = sorted(rows)
     except Exception as ex:
         LEDGER.skip("14. the 2026-08-28 sites", f"cannot read the rows: {ex}")
@@ -1858,10 +1858,17 @@ def section_17(tmp):
     cap8 = dict(readhook._LAYOUTS[8])["out_path"]
     eq((cap7, cap8), (16, 36),
        "17. v7 holds 4 points and v8 holds 9 -- BOTH layouts still exist")
-    eq(readhook.CURRENT_VER, 8, "17. the writer's version is 8")
+    # v9 APPENDS the two walk-gate words and must not orphan either older
+    # layout: r7 and r8 are real captures on disk and both must still parse.
+    eq(len(readhook._LAYOUTS[9]) - len(readhook._LAYOUTS[8]), 3,
+       "17. v9 appends exactly three fields (have_gate, gate_flags, gate_status)")
+    eq([n for n, _ in readhook._LAYOUTS[9]][:len(readhook._LAYOUTS[8])],
+       [n for n, _ in readhook._LAYOUTS[8]],
+       "17. and v9 is v8 with fields APPENDED, never inserted or reordered")
+    eq(readhook.CURRENT_VER, 9, "17. the writer's version is 9")
     src_c = open(os.path.join(HERE, "movehook.c"), encoding="utf-8").read()
-    check("DWORD ver = 8" in src_c,
-          "17. and movehook.c writes version 8 into the header",
+    check("DWORD ver = 9" in src_c,
+          "17. and movehook.c writes version 9 into the header",
           "the C and the reader must agree or every parse shifts")
     check("#define RET_MAX_POINTS 9u" in src_c,
           "17. and RET_MAX_POINTS is 9 -- click-to-move's own maxCount, so "
