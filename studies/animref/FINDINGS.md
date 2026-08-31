@@ -76,6 +76,21 @@ this rule (divergences D15/D4, `studies/animref/PLAN.md` §2):
 `0x009F [60, agent, skill]` untargeted for casts that have a target. The derived fix is
 mechanical: **A0 iff the cast names a target, else 9F.**
 
+**Every form the fix can emit has a retail witness — with one edge it does not, and
+auditing the fix is what found it.** Restricting the census to the OBSERVING PLAYER's
+own agent (the case our press path produces): prop 60 self-targeted 16, prop 60 self
+**untargeted 8** (skills 1 and 814, three captures), prop 50 self-targeted 45, prop 50
+self-untargeted **0**. So the targetless self spell — the form our fix newly emits where
+we used to send `A0`-with-target-0 — is retail's own shape, which is the fix's strongest
+single piece of evidence. But **prop 50 untargeted is a form retail never sends** (222/222
+targeted, self and other alike), and our pre-fix logs carried 12 attack-skill opens with
+no target, which the fix converts into exactly that unwitnessed shape. **D20, recorded:**
+retail's client does not produce an attack-skill press without a target, so those 12 are
+our own synthetic presses; the server currently accepts a press the real client would not
+make, and neither the old form nor the new one is right for it. The honest fix is upstream
+(refuse a targetless attack-skill press), not a third channel rule — filed, not wired,
+because the harness's own test presses use target 0 and would need moving first.
+
 ## 3. The attack-skill trio exists at scale — castmech's "silent E5" was a bow artifact
 
 castmech (two captures) had property 46 and 49 at zero occurrences and scoped the
@@ -199,16 +214,93 @@ session's R3 fixes, so the three fixed rows double as regression detectors):
   which the extractor does not yet track (future: add 0x00CF/0x00D0/0x00D2 to
   the event model before reading spend grammar off signatures).
 
-## 10. What R1+R2 do NOT settle
+## 10. ANIMREF-R4: the corpus-silent behaviours decoded — and why none ships yet
+
+Method: `genericvalue.py` maps each id to its case body, `codescan.py --dis`
+reads the handler, and the corpus supplies the value semantics. Pinned build
+38797 (`vault/client/2026-07-29_221c13772c7a/Gw.exe`); no client launched. The
+result is a **decode-complete, wire-nothing** rung — the disciplined outcome the
+plan named ("do not wire blind"): every candidate is either blocked on an
+undecoded id space or needs a game mechanic this server does not have.
+
+**Effect-on-agent visual (props 20/21) — DECODED, value UNDERIVABLE, do NOT wire.**
+Both case bodies call the same AvApi `0x007DFBF0`: prop 20 pushes `(agent,
+target, value)` at `0x00812B6C`, prop 21 pushes `(agent, agent, value)` at
+`0x00812B7E` — GWCA's `effect_on_target` / `effect_on_agent`, confirmed at the
+instruction (skillcast §15.2). `0x007DFBF0` resolves the agent and calls the
+AvChar method `0x007F6F70`, which allocates an **AgentView event of kind 9**
+(`push 9; call 0x007F5340`) storing target at +0x1C and value at +0x20 — a
+distinct visual event from property 60's cast animation (kind 0x19) and entirely
+separate from the `0x0042`/`0x0044` effect-table opcodes that draw the buff-bar
+icon. **So retail's on-body effect visual is a real channel our server is
+missing** (our `apply_effect` at `authsrv.py:11646` sends only `0x0042`). **But
+the value cannot be derived**: the corpus values are NOT the cast skill id —
+they are a wide id space (prop 20 top values 344×145, 284×60, 855×28; prop 21
+the pair 557/558 ×176 each riding cast 313), which reads as a per-skill
+**visual-component id table** (the `s_effect` space `studies/skillcast` §16 and
+`studies/anim`'s n3C tags explicitly left unread). Wiring 20/21 means inventing
+those ids or decoding that table first. Filed as the arc's next real decode
+target; NOT wired.
+
+**Interrupt (D5) and knockdown (D7) — DECODED, no server mechanic to drive them.**
+Props 35 and 63 call the same AvChar method `0x007E0490(agent, duration)`, and
+the two case bodies differ in exactly one respect — where the float comes from.
+Prop 35 (int switch, `0x00812D17`) loads a compiled-in `0.4f` from `0x00948DAC`
+(`fld [0x948dac]; fstp [esp]; push edi; call 0x7e0490`) — the interrupt stagger.
+Prop 63 (FLOAT switch, `0x00813239`) pushes the wire's own float
+(`fld [ebp+0x14]; fstp [esp]; push esi; call 0x7e0490`); the corpus carries
+**2.0 s on all three occurrences**, a real knockdown duration where 0.4 s is a
+stagger. One animation, two durations, and the value column is the
+discriminator — which settles skillcast's CONTESTED 35/63 pairing by mechanism
+and supports GWCA's naming (35 `interrupted`, 63 `knocked_down`) over
+OpenTyria's undifferentiated `Knockdown1`/`Knockdown2`. An interrupt on the wire is
+therefore the measured cancel burst `[8:0, 59, E2]` (R1 §8) **plus** a prop-35
+stagger on the interrupted agent. Both are fully decoded and both are unwireable
+today for the same reason: this server has **no interrupt mechanic and no
+knockdown mechanic** — nothing computes when a cast is interrupted or a body
+knocked down, so there is no event to attach the visual to. Decoded and parked;
+wiring waits on the mechanic, not on more reading.
+
+**Prop 45 — DECODED as NOT cast-lifecycle.** Case body `0x00812DE5` calls
+`0x007E0080`, which resolves the agent and tail-jumps `0x0047F480(this=agent)`
+with no value argument — a per-agent trigger of a game-object method well below
+the AvApi cast-family range (0x7DFA20–0x7E01B0). Corpus value is 0 on all 79
+occurrences (§7), cadence ~1 Hz on PvP casters. It is not a member of the
+finished/stopped family despite sitting between their case bodies; its semantics
+stay NOT FOUND, but it is now excluded from the cast register rather than an open
+question inside it.
+
+**The one derivable near-miss, and why it is R3 not R4: prop 55 (health_gain).**
+The R2 diff flagged 55 absent from our wire (861 live / 0 ours). Unlike 20/21 its
+value IS derivable — it rides `0x00A3` as a signed fraction of max health, the
+same encoding as damage prop 16 (necro capture `[55, 31, 31, f32≈0.18]`), i.e.
+the floating heal number. Our heal path sends the health mutation but not the
+number. This is a clean, corpus-grounded R3-style diff fix (value known, batch
+position known from the `['58','55']` finish signature) — deliberately left for
+an R3 follow-up rather than folded into this decode rung, and gated behind R5's
+look at whether our heals already read correctly without it.
+
+## 11. What R1, R2 and R4 do NOT settle
 
 - The IAS/DAS interaction with the windup law (§1 caveat) — no modified-speed swing
   exists in the corpus. A derivation from the client's `0x007F82C0` duration math
   (`modifier × base`, the 1.25 literal) may settle which term the −0.1 attaches to
   without any run.
-- Interrupt wire shape (35 at zero, E7/E8 unexamined here) — D5, client decode.
-- Prop 22/23/28 payload semantics (§6) and prop 45's trigger (§7) — R4 decode
-  targets; likewise whether effect-properties 20/21 drive visuals the dedicated
-  effect opcodes do not (§9) — do not wire blind.
+- ~~Interrupt wire shape~~ — R4 (§10) decoded the CLIENT half (prop 35's fixed
+  0.4 s stagger, `0x007E0490`); what is still open is the SERVER half, which is
+  a missing mechanic (nothing computes an interrupt) rather than a reading.
+  E7/E8 remain unexamined.
+- **Props 20/21's VALUE space** — §10 decoded the mechanism (AgentView event
+  kind 9) and refuted the obvious reading (the value is not the cast skill id);
+  the wide id space it does use (557/558 on cast 313, 344, 284, 855…) is the
+  per-skill visual-component table `studies/skillcast` §16 and `studies/anim`'s
+  n3C tags both leave unread. **That table is the arc's next decode target** —
+  and until it is read, 20/21 cannot be wired without inventing ids.
+- Prop 22/23/28 payload semantics (§6): §10 did not read these; skillcast §15.2
+  already has the sticky-parameter mechanism (23–27 store to +0x550..+0x560,
+  22 and 28 consume and clear), so what is missing is again the id space.
+- Prop 45 (§7): §10 excluded it from the cast register (it tail-jumps
+  `0x0047F480`, agent-only, value discarded) — its own semantics stay NOT FOUND.
 - The projectile-flight join for bow attack skills (§3) — needs a projectile-events
   extractor pass, desk-only. Add 0x00CF/0x00D0/0x00D2 to the event model first
   (§9's adrenal note).

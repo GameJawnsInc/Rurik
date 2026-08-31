@@ -1623,14 +1623,35 @@ emitter against the population, fix by derivation, tune never.
   retail's 709/709 58-led closes — **fixed**: `land_skill` now opens its landing
   batch with `[58, agent, 0]`, the fourth default-ON derived fix). Also mapped:
   the whole effect-property channel (6/7/20/21/55/44) absent from our wire.
-* **NEXT, in cost order**: (1) R4 decode targets now that the corpus said where
-  to dig: effect-props 20/21 (do they drive visuals the 0x0042/0x0044 opcodes
-  don't?), props 22/23/28 payloads, prop 45's ~1 Hz mark, the interrupt
-  consumption path (35/E7/E8 — corpus is silent, so it is decode or one
-  targeted capture). (2) The IAS windup question (§1 caveat) may fall to the
-  client's `0x007F82C0` duration math, desk-only. (3) R5: ONE caged loopback
-  acceptance look (castmech's own never-run NEXT item). (4) The extractor's
-  event model wants 0x00CF/0x00D0/0x00D2 before any spend-grammar reading.
+* **R4 RAN the same session and shipped NOTHING, which is the rule working**
+  (FINDINGS §10, `dcff62a`; pinned 38797, no client launched). Props 20/21 both
+  reach AvApi `0x007DFBF0` → AvChar `0x007F6F70`, which queues **AgentView event
+  kind 9** — a real on-body visual distinct from prop 60's cast animation (kind
+  0x19) and from the `0x0042`/`0x0044` buff-bar opcodes our `apply_effect`
+  sends. So the channel is real and we are missing it — **but the corpus refutes
+  the obvious value reading**: 20/21's values are not the cast skill id, they are
+  an unread per-skill visual-component id space (557/558 ×176 on cast 313), so
+  wiring means inventing ids. **That table is the arc's next decode target.**
+  Props 35/63 are one call `0x007E0490(agent, duration)` differing only in a
+  compiled `0.4f` vs the wire float (corpus 2.0 s, n=3) — settling skillcast's
+  CONTESTED 35/63 pairing, and unwireable for a different reason: no interrupt
+  or knockdown mechanic exists server-side to attach them to. Prop 45 is
+  excluded from the cast register (tail-jumps `0x0047F480`, agent-only).
+* **R5 IS STAGED AND WAITING ON THE OWNER — [studies/animref/RUN-R5.md](studies/animref/RUN-R5.md)**
+  (`7d50ca5`). One bounded command, six actions, ~6 minutes; P1–P8 pre-registered
+  with refutations; the wire half scored offline afterwards from the run's own
+  capture. **P1 is the point**: the form rule moved targetless self casts onto
+  `0x009F`, and only eyes catch "more retail-correct wire, visibly worse game"
+  (de-risked: retail sends that exact self form 8× across 3 captures).
+* **NEXT, in cost order**: (1) **R5** (the owner's ~6 minutes — everything else
+  below is desk work that does not need it). (2) The per-skill visual-component
+  id table — the decode that unblocks props 20/21 and 22/23/28 alike. (3) The
+  IAS windup question (§1 caveat) may fall to the client's `0x007F82C0` duration
+  math, desk-only. (4) Prop 55 (health_gain) is the one R2 divergence whose value
+  IS derivable (a signed fraction of max health, like damage prop 16) — a clean
+  R3-style fix, gated behind R5. (5) The extractor's event model wants
+  0x00CF/0x00D0/0x00D2 before any spend-grammar reading. (6) D20: refuse a
+  targetless attack-skill press (needs the harness's test presses moved first).
 
 ### ★★★★★ MOVEMENT 2026-08-28 — THE OBSTACLE DIG: the mesh HAS the mountains, the no-clip IS scored, the client ignores its own geometry check. THE LEAD IS SERVER-SIDE PATH-SOLVED GRANTS
 
