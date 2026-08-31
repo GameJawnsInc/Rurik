@@ -1121,7 +1121,7 @@ word is 2 and the held word 3.
   excludes input, focus and key delivery — but it does not narrow which exit the
   applier took**, which §21.5's prediction had implicitly leaned on.
 
-### 22.3 THE ARM DIFFERENCE, from our own wire — no client run needed
+### 22.3 THE ARM DIFFERENCE, from our own wire — CONTESTED, see §22.6
 
 `action_hold` (`authsrv.py:9209`) is transition-only. It is called with **1** by
 the swing loop at `:9805` (`attack_tick`, behind every `attack_started`) and
@@ -1155,7 +1155,8 @@ own positive control** — at `t=39.842`, ten seconds after the last release wit
 the chain long dead and the gate clear, an S press walked **375 u**. Same arm,
 same build, same flag. *The arm does not freeze; the armed gate freezes.*
 
-**RECONSTRUCTION (high confidence):** attack skill → `action_hold(1)` →
+**RECONSTRUCTION — and §22.6 DOWNGRADES THIS TO CONTESTED; read it before
+acting on this paragraph.** Attack skill → `action_hold(1)` →
 `0x0081BCF0` sets `[+0x64] bit 0` → the movement press dispatches once,
 `0x0081A93C` reads it set, `0x0081AD0F` halts the agent and returns success →
 `0x008164AD` sends `0x003D` anyway → and under LAW A the swing loop re-arms the
@@ -1191,6 +1192,56 @@ owner's and has not been given.
   the reader carried a byte-level control on two known instructions.
 * **Padding hints were wrong twice more** (`0x0081A850` for `chcli_dir`,
   `0x00816370` for the dispatcher). Confirm entries by `55 8b ec` plus `--xrefs`.
+
+### 22.6 THE CORPUS WEAKENS §22.3, and it killed the fix I was about to write
+
+Written after §22.1–22.5, and it walks part of them back. **The static chain
+(§22.1) stands — it is re-derived byte by byte. §22.3's dynamic reading does
+not, in the strong form I gave it.**
+
+The fix §22.3 implies is "under LAW A, stop re-arming property 8". Before writing
+it I measured retail's own prop-8 cadence (`scratchpad/p8d.py`, live corpus, 61
+connections). *Positive control:* the same walk reproduces R9's census exactly —
+prop 46×164, 49×12, 50×222.
+
+**Retail re-arms property 8 constantly: 193 re-arms, p50 gap 0.503 s, 143 of 193
+under 2 s.** "Do not re-arm" is not retail's rule, and shipping it would have been
+an invented rule wearing a derivation's clothes — the exact failure
+[[feedback-derive-dont-iterate]] names.
+
+Worse for the strong model, hold **durations** (`p8e.py`, split by agent so the
+player is not pooled with anyone else — 60 of 61 connections resolve a player,
+and non-player prop-8 holds are n=0):
+
+| | n | min | p50 | p90 | max | over 1.0 s |
+|---|---|---|---|---|---|---|
+| retail player holds | 213 | 0.000 | **1.032** | **22.618** | **92.775** | **117** |
+
+**A living retail player is not immobile for 22 seconds.** Death does not explain
+it either — `p8f.py` overlaps each hold with the `0x00F1` bit-4 windows and finds
+**116 of 118 long holds with the player ALIVE** (2 overlapping).
+
+So one of these must be true, and this dig has not settled which:
+1. those long windows are genuinely immobile in retail (long casts, knockdown,
+   cinematics, zoning) and the model survives intact; or
+2. `[+0x64] bit 0` is not the absolute walk block `chcli_dir`'s `jne` makes it
+   look like — some path re-clears it, or re-dispatches, that four lanes' xref
+   scans cannot see (the event bus `0x00633D70` is the named blind spot).
+
+**What I could NOT measure, stated rather than glossed:** whether the retail body
+travels during those holds. `p8g.py` attempted it and **its own control returned
+zero** — my guess at the position-stream opcodes and float layout was wrong, so
+its null is worth nothing ([[feedback-negative-needs-positive-control]]). That
+measurement is the cheapest thing that would discriminate 1 from 2, and it wants
+the arc's real position decoder rather than a fresh guess at one.
+
+**Consequence for the work: no server change ships from this dig.** §22.3 is
+downgraded from "RECONSTRUCTION (high confidence)" to **CONTESTED** — the
+mechanism is real and verified statically, its sufficiency as the cause of the
+R7a freeze is not established, and the corpus actively resists the simplest fix
+derived from it. The movehook run (§21.5, sharpened to four outcomes by the
+`0x0081ACFA` no-path exit) remains the settling step, and it is now *more* clearly
+worth its cost than before, because the desk cannot close this.
 
 ## Provenance
 
