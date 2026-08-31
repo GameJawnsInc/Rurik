@@ -10176,3 +10176,26 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   added four router sites the same day and never revised it). Floor 73 from
   the green run (51 at the B2 landing, 57 after the review round, 64 after
   B4, 68 after B5). ~1 s).
+
+`toolkit/authsrv/test_agtrack_mirror.py` (**the AgTrack mirror's transcription,
+  rule by rule -- MOVECODE-1z-q step 1's guard.** `agtrack_mirror.py` is a
+  server-side transcription of the client's history chain and reprieve test,
+  and every one of this file's checks pins one decoded behaviour to its
+  citation: the bake equations and the zero-distance short-circuit, the
+  dead-reckoner and its deliberately-absent destination clamp, the arrival
+  teleport's writes (including +0x48 cleared to keep AgAgent.cpp 2090's
+  invariant), the recorder's 7-field push rule with both timers and the
+  destination-vs-position seed arms, the walk's oldest-match-wins truncation
+  with the seed as segment 0's far end, seg_match's degenerate/lerp/verbatim
+  arms and their plane words, gate 1's exact 89600.0f squared threshold (a
+  true 300.0 u separation SNAPS), gate 2's off-mesh-start snap, the
+  clientControlled fences (a fence-closed grant APPENDS -- round 5's
+  "client only is REFUTED"), 0x002C's Clear-then-set-then-append order,
+  re-arm's edge trigger that nulls the head but never the seed, the MISS
+  consequence chain, 0x002B's store-only semantics, and reader 2's
+  parameterized prune. Synthetic throughout: no vault, no client, bare
+  machine. The corpus replay itself is `toolkit/clientscan/agtrack_replay.py`
+  -- a tool, not a suite test, because its ground truth is the growing
+  gamesrv corpus and a pinned count there goes stale the next time the owner
+  plays (the corpus-counts-redden rule). Floor 64 from the 2026-08-30 green
+  run. <1 s),
