@@ -742,6 +742,49 @@ sentinel play nothing, which is a fact about those skills rather than a gap.
 And prop 21's dominant-value purity (16/17) is one skill short of the prop-20
 figure; the residue is the same single stray event.
 
+## 17. The IAS windup question CANNOT be settled desk-only — the queue item is refuted, not deferred
+
+**2026-08-31.** `PLAN.md` §8 carried this as a decode that "may fall to the
+client's `0x007F82C0` duration math, desk-only." It does not, and the two
+halves of the reason are each worth having.
+
+**The client's attack-duration math, decoded (pinned 38797, no launch).**
+`0x007F82C0` asserts both operands non-zero (assert ids `0x12b7`, `0x12b8`),
+then computes
+
+> `duration = base[+0xEC] × modifier[+0xF0]`, and **× 1.25** when the
+> caller's context field `[ctx+0x3c]` is non-zero (a `double` at
+> `0x00950990`, read: exactly 1.25)
+
+selects a per-weapon animation code (0x0C–0x15, with 0x29–0x2B on the
+`[ctx+0x3c]`/`[ctx+0x38]` branches) and hands the float to the animation
+player `0x007F3DA0`. The two fields are stored straight off the wire's
+`0x0035` (`0x007FBD85`: `fld [ebp+8]; fstp [+0xEC]; fstp [+0xF0]`).
+**There is no additive term anywhere in it.** The client's arithmetic is
+purely multiplicative, so the −0.1 s of §1's law is not the client's
+animation math — it is ArenaNet's server-side scheduling, which this binary
+cannot show us. What `[ctx+0x3c]` means is NOT established; note only that
+the corpus's one cross-family datum shows the 1.25 did **not** apply to
+Power Shot (measured 1.1374/1.1387 against the law's 1.1375).
+
+**And the corpus has ZERO exposure, verified rather than inherited.** §1's
+caveat said every corpus swing rides modifier 1.0; re-scanned directly:
+**62 `0x0035` declarations, all modifier 1.0** — bases 1.75 (×27), 1.33
+(×23), 2.475 (×7), 2.0 (×3), 3.0 (×2) — and **0 landed swings at modifier
+≠ 1.0**. That is zero trials, not a null result: nothing in the corpus
+discriminates `m×base/2 − 0.1` from `m×(base/2 − 0.1)` from
+`(m×base − 0.2)/2`, and no amount of re-reading it will.
+
+**So the item leaves the desk queue as REFUTED-BY-METHOD.** What would
+settle it is exposure, not analysis: a live capture with an attack-speed
+stance actually running (Frenzy, Flurry, Tiger Stance) on the secondary
+account — one line in an R0b runsheet, human-driven, and the first swing
+under a modifier decides it. Until then, **note what we ship**: our server
+scales the interval and then applies the law — `swing_windup(ATTACK_INTERVAL
+× attack_interval_factor(...))`, i.e. candidate **A** (`m×base/2 − 0.1`) —
+and that choice is UNVERIFIED, inherited from the code's shape rather than
+measured. It is named here so it is visible rather than implied.
+
 ## Provenance
 
 All figures are measurements over the owner's own live captures via extractors in this
