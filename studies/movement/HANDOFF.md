@@ -322,22 +322,26 @@ better-designed when it happens, by naming which geometry to press against.
 
 ### D′. The new next action, in order — and the first one is a DECISION, not a measurement
 
-0. **★ THE RULE IS DERIVED AND SHADOWED — `FINDINGS` §1z-s — and the live
-   next step is the ACTIVE ARMS, off by default, priced by the shadow.**
-   Steps 1–3 are DONE (2026-08-30, commits `6dff112` + this arc): mirror
-   (§1z-q/§1z-r), then the derived policy (`toolkit/authsrv/agtrack_guard.py`
-   — three zones, three clauses, constants cross-pinned to authsrv's own
-   resync derivations, 41-check test). Retrodiction under live constraints
-   (`agtrack_replay.py --policy`): **217/251 corpus warps pre-empted (86.4%),
-   10/10 in the current regime**, residuals decomposed and named (§1z-s.3);
-   the 08-19 graveyard day retrodicts as 59/61. **SHADOW telemetry ships ON**
-   in authsrv (rows `agtrack_guard` per grant + `agtrack_repin` transitions;
-   fused; `--no-agtrack-shadow`) — every session the owner plays now prices
-   the active arms for free. NEXT: build the active veto/re-pin behind an
-   OFF-by-default flag and bring the shadow's numbers to the owner — the
-   behaviour-changing step is deliberately NOT taken unilaterally (the Q14
-   lesson). One movehook confirmation of the chain layout remains the single
-   verbatim client check, after the active arm exists.
+0. **★ THE RULE IS DERIVED, RETRODICTED, AND LIVE — `FINDINGS` §1z-s +
+   §1z-s.5.** Steps 1–4 are DONE (2026-08-30): mirror (§1z-q/§1z-r), the
+   derived policy (`toolkit/authsrv/agtrack_guard.py` — three zones, three
+   clauses, constants cross-pinned to authsrv's own resync derivations),
+   retrodiction under live constraints (**217/251 corpus warps pre-empted,
+   10/10 current regime, 59/61 on the 08-19 graveyard day**, residuals
+   decomposed §1z-s.3), and — owner's direction, §1z-s.5 — **the ACTIVE arm
+   ships ON by default**: one `AGTRACK RE-PIN 0x002C` at the client's own
+   fresh report whenever the next snap-test evaluation is predicted to fail,
+   fired from both report arms and the 2 Hz tick (the arrival-beating path).
+   ADDITIVE — no grant is ever suppressed or held; `--no-agtrack-repin`
+   restores the pre-§1z-s wire exactly; `--no-agtrack-shadow` removes the
+   guard entirely. Every session now scores the arm for free
+   (`agtrack_guard` / `agtrack_repin` / `agtrack_repin_fire` rows beside the
+   report stream). WATCH FOR in the next ordinary session: `AGTRACK RE-PIN`
+   lines in the gamesrv terminal where warps used to land; the residual warp
+   classes are §1z-s.3's blocked/unseen (report-starved moments, gate 3, the
+   non-AgTrack mechanism — that last one is the next decode target,
+   0x005FCAA0). One movehook confirmation of the chain layout remains the
+   single verbatim client check.
 1. **★ RAISE THE REPAIR'S DEFAULT WITH THE OWNER** — but on the specificity
    evidence, not on a false-fire scare. §C notes the plane repair is the one arm
    with **no owner ruling on record** while putting a `0x002C` on the wire by

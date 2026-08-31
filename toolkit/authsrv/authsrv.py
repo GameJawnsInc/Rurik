@@ -4221,16 +4221,32 @@ def _take_client_position(state, reported, plane, rec, source, now=None,
 # so a server-granted click-walk cannot be interrupted by this sender.
 RESYNC = False
 
-# THE AGTRACK GUARD, SHADOW MODE (MOVECODE-1z-s; module agtrack_guard.py).
-# Telemetry only, the same class as the plane-echo tripwire: it maintains the
-# decoded history-chain mirror per connection and RECORDS what the derived
-# pre-emit rule would have done (pass / gates-pass / veto, and whether the
-# 0x002C re-pin was due) -- it never changes a send.  Every call site is
-# fused: the first exception disables the guard for the session with one
-# loud line, because telemetry must never take down the server.  The ACTIVE
-# arms (actually vetoing, actually firing the re-pin) do not exist yet; when
-# built they ship behind their own OFF-by-default flag.
+# THE AGTRACK GUARD (MOVECODE-1z-s; module agtrack_guard.py).  Two arms:
+#
+# SHADOW (AGTRACK_SHADOW): maintains the decoded history-chain mirror per
+# connection and RECORDS what the derived pre-emit rule says (pass /
+# gates-pass / veto per grant, re-pin transitions).  Telemetry, the
+# plane-echo tripwire's class.
+#
+# RE-PIN (AGTRACK_REPIN): the ACTIVE arm -- when the guard predicts the
+# next evaluation snaps (repin_state == DUE: red separation, off-mesh sync,
+# a maturing arrival that would miss, or the budget crossing the cliff),
+# send ONE 0x002C carrying the CLIENT'S OWN last accepted report.  The
+# rendered body is already there, so the correction is invisible (bounded
+# by the freshness gate at <= 100 u); the handler Clears AgTrack first so
+# no test runs behind it, and every grant after it appends instead of
+# testing (the safe composition, FINDINGS 1z-s.1 clause 1).  ADDITIVE BY
+# DESIGN: no grant is ever suppressed or held -- the only wire change this
+# arm can make is an extra, derived 0x002C.  Owner's direction 2026-08-30:
+# ship the working rule, not a flag to ask about -- both arms default ON;
+# --no-agtrack-shadow / --no-agtrack-repin disable.
+#
+# Every call site is fused: the first exception disables the guard for the
+# session with one loud line, because no arm of this may take down the
+# server.  Guard state is touched from two threads (the recv loop and
+# world_tick), so every access goes through _agtrack_guard_call's lock.
 AGTRACK_SHADOW = True
+AGTRACK_REPIN = True
 # HOW FAR APART THE TWO COPIES MUST BE BEFORE WE ACT.  100.0 u is the CLIENT'S
 # OWN constant, not ours: 0x00946560, the radius inside which 0x00605AF0 calls
 # the authoritative position a match against the client's history and returns
@@ -4736,6 +4752,7 @@ def _agtrack_guard_seed(state, pos, plane, conn_id):
         g = _ag.AgTrackGuard(mesh=mesh)
         g.on_placement(pos[0], pos[1], plane, time.time())
         state["agtrack_guard"] = g
+        state["agtrack_guard_lock"] = threading.Lock()
     except Exception as e:
         state["agtrack_guard"] = None
         print(f"[c{conn_id}] [agtrack-guard] seed failed ({e!r}) -- shadow "
@@ -4743,19 +4760,65 @@ def _agtrack_guard_seed(state, pos, plane, conn_id):
 
 
 def _agtrack_guard_call(state, method, *args, **kw):
-    """One fused call: the first exception kills the guard for the session,
-    loudly, and the session continues untouched."""
+    """One fused, LOCKED call: the guard is fed from two threads (recv loop
+    and world_tick), so every access serialises here; the first exception
+    kills the guard for the session, loudly, and the session continues
+    untouched.  No caller nests two of these inside one lock hold."""
     g = state.get("agtrack_guard")
     if g is None:
         return None
+    lock = state.get("agtrack_guard_lock")
     try:
+        if lock is not None:
+            with lock:
+                return getattr(g, method)(*args, **kw)
         return getattr(g, method)(*args, **kw)
     except Exception as e:
         state["agtrack_guard"] = None
         print(f"[agtrack-guard] DISABLED after {method} raised {e!r} -- "
-              f"shadow telemetry ends here, the session continues",
-              flush=True)
+              f"the guard ends here, the session continues", flush=True)
         return None
+
+
+def _agtrack_maybe_repin(send, state, rec, now=None):
+    """The ACTIVE arm (MOVECODE-1z-s clause 1/2): send one 0x002C at the
+    client's own last accepted report when the guard says the next
+    evaluation would snap.  Returns whether it fired.
+
+    ADDITIVE: this never suppresses or holds anything.  The send goes
+    through the ordinary send() choke, so _note_wire_move re-seeds the
+    legacy sync model and the guard's own on_emit Clears both mirrors and
+    stamps the rate limiter -- one path, one bookkeeping.  The guard's
+    preconditions (accepted report fresher than 100/288 s, nothing refused
+    since, >= 0.5 s since the last re-pin) bound the correction the client
+    can see at <= 100 u -- its own "close enough" radius."""
+    if not AGTRACK_REPIN or state.get("agtrack_guard") is None:
+        return False
+    if now is None:
+        now = time.time()
+    got = _agtrack_guard_call(state, "repin_state", now)
+    if got is None:
+        return False
+    import agtrack_guard as _ag
+    code, why = got
+    if code != _ag.REPIN_DUE:
+        return False
+    g = state.get("agtrack_guard")
+    if g is None:
+        return False
+    pos, plane = g.client_pos, g.client_plane
+    if pos is None or not isinstance(plane, int) or not 0 <= plane <= 0xFFFF:
+        # The u16 wire field cannot say -1 (msgtable type 4 widens), so an
+        # out-of-range plane refuses rather than masking a surface.
+        return False
+    send(GAME_SMSG_AGENT_UPDATE_POSITION,
+         [PLAYER_AGENT_ID, [float(pos[0]), float(pos[1])], plane],
+         f"AGTRACK RE-PIN 0x002C at ({pos[0]:.0f},{pos[1]:.0f}) plane "
+         f"{plane} -- the client's own report; predicted snap ({why}) "
+         f"pre-empted [MOVECODE-1z-s]")
+    if rec is not None:
+        rec.event("agtrack_repin_fire", why=str(why))
+    return True
 
 
 def _agtrack_shadow_emit(state, opcode, values, rec, now=None):
@@ -4797,9 +4860,12 @@ def _agtrack_shadow_emit(state, opcode, values, rec, now=None):
                   if state.get("agtrack_guard") else None)
 
 
-def _agtrack_shadow_tick(state, rec):
+def _agtrack_shadow_tick(state, rec, send=None):
     """world_tick's feed: advance arrivals/sweep every tick; sample the
-    standing re-pin answer at 2 Hz and record TRANSITIONS only."""
+    standing re-pin answer at 2 Hz, record TRANSITIONS, and -- with a send
+    and the active arm on -- FIRE a due re-pin (clause 2's proactive path:
+    this is the only sender that can beat a maturing arrival, because it
+    runs on the server's own clock rather than the report stream)."""
     g = state.get("agtrack_guard")
     if g is None:
         return
@@ -4818,6 +4884,10 @@ def _agtrack_shadow_tick(state, rec):
         state["agtrack_guard_repin"] = code
         if rec is not None:
             rec.event("agtrack_repin", code=code, why=str(why))
+    if send is not None and AGTRACK_REPIN:
+        import agtrack_guard as _ag
+        if code == _ag.REPIN_DUE:
+            _agtrack_maybe_repin(send, state, rec, now)
 
 
 def plane_repair_track(state, reported, plane, accepted, moving, pm, now):
@@ -15118,8 +15188,9 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                     time.sleep(TICK_SECONDS)
                     # The AgTrack guard's clock: arrivals + the keep-alive
                     # sweep every tick; the standing re-pin answer sampled at
-                    # 2 Hz, transitions recorded. Fused -- can never raise.
-                    _agtrack_shadow_tick(state, rec)
+                    # 2 Hz, transitions recorded, and a DUE re-pin FIRED
+                    # (the active arm). Fused -- can never raise.
+                    _agtrack_shadow_tick(state, rec, send)
                     # Advance the client's simulation clock FIRST, every tick,
                     # whether or not anyone is moving -- that is what upstream
                     # does, and it is unconditional there.
@@ -16185,6 +16256,10 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # grant arms below so a fire and a grant in the same
                         # packet are ordered the way the client will apply them.
                         _maybe_resync(send, state, rec)
+                        # The active re-pin, at the freshest possible
+                        # instant (report age ~0): fires only on a
+                        # predicted snap. Additive; rate-bounded.
+                        _agtrack_maybe_repin(send, state, rec)
                         # THE PLANE REPAIR's only evaluation site: the lock
                         # signature is built from THIS arm's decode (0x003D is
                         # emitted only while moving), so this is where the
@@ -17732,6 +17807,10 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # measured, added a second one). 0x002C arms nothing --
                         # 0x00602B20 writes destination = current.
                         _maybe_resync(send, state, rec)
+                        # The active re-pin, at the freshest possible
+                        # instant (report age ~0): fires only on a
+                        # predicted snap. Additive; rate-bounded.
+                        _agtrack_maybe_repin(send, state, rec)
                         # CANCELWALK R4, and it is NOT --stop-echo: this fires
                         # only while a cancel leg granted under `,stop` is IN
                         # FLIGHT (the window armed at that send, sized to the
@@ -19665,14 +19744,19 @@ def main():
                          "anything else. OFF by default; independent of "
                          "--heading-grant and --client-endpoint, both REFUTED.")
     ap.add_argument("--no-agtrack-shadow", action="store_true",
-                    help="Disable the AgTrack guard's SHADOW telemetry (ON "
-                         "by default; MOVECODE-1z-s). The shadow maintains "
-                         "the decoded history-chain mirror and records what "
-                         "the derived pre-emit rule would have done -- "
-                         "agtrack_guard rows per grant, agtrack_repin rows "
-                         "on transitions. It changes no send and is fused "
-                         "to disable itself on any internal error. The "
-                         "ACTIVE arms do not exist yet.")
+                    help="Disable the AgTrack guard entirely (ON by "
+                         "default; MOVECODE-1z-s): the history-chain mirror, "
+                         "its telemetry (agtrack_guard rows per grant, "
+                         "agtrack_repin transitions) AND the active re-pin, "
+                         "which cannot run without the guard.")
+    ap.add_argument("--no-agtrack-repin", action="store_true",
+                    help="Keep the guard's telemetry but disable its ACTIVE "
+                         "arm (ON by default; MOVECODE-1z-s): the single "
+                         "0x002C re-pin at the client's own fresh report "
+                         "when the next snap-test evaluation is predicted "
+                         "to fail. Additive -- with or without this, no "
+                         "grant is ever suppressed or held. Disabling "
+                         "restores the pre-1z-s wire behaviour exactly.")
     ap.add_argument("--no-plane-repair", action="store_true",
                     help="Disable the plane-lock repair (ON by default). The "
                          "repair sends ONE labelled 0x002C -- the client's own "
@@ -21017,8 +21101,13 @@ def main():
     if a.no_agtrack_shadow:
         global AGTRACK_SHADOW
         AGTRACK_SHADOW = False
-        print("[map] --no-agtrack-shadow: the guard's telemetry is OFF; no "
-              "agtrack_guard/agtrack_repin rows this session.")
+        print("[map] --no-agtrack-shadow: the guard is OFF entirely -- no "
+              "mirror, no telemetry rows, and the active re-pin cannot run.")
+    if a.no_agtrack_repin:
+        global AGTRACK_REPIN
+        AGTRACK_REPIN = False
+        print("[map] --no-agtrack-repin: the guard observes and records but "
+              "sends nothing; pre-1z-s wire behaviour exactly.")
     if a.no_plane_repair:
         global PLANE_REPAIR
         PLANE_REPAIR = False

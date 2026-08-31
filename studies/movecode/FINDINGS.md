@@ -8701,3 +8701,44 @@ default, priced by the shadow's numbers); gate 3 (unmodelled, conservative
 direction); the older-era opcode vocabulary in the replay; the exact
 active-mode disturbance (shadow bounds it above); and the 0x005FCAA0
 attribution of the off-sync steps.
+
+### 1z-s.5 ADDENDUM, same night -- the active arm SHIPS, on by default
+
+**Owner's direction, verbatim intent: "i just want movement code that
+works."**  The staging split in 1z-s.4 (shadow now, active later, behind a
+conversation) is overruled -- the working rule is the deliverable, not a
+flag to ask about.  The active arm is therefore built and DEFAULT ON:
+
+- **What it does**: when `repin_state` says DUE -- predicted red
+  separation, off-mesh sync, a maturing arrival that would miss, or the
+  budget crossing the cliff -- authsrv sends ONE `AGTRACK RE-PIN 0x002C`
+  carrying the client's own last accepted report.  Fired from three
+  places: both report arms (age ~0, the freshest instant) and the world
+  tick at 2 Hz (the only sender that can beat a maturing arrival --
+  clause 2 needs the server's clock, not the report stream).
+- **What it can never do**: suppress, hold, or alter any grant.  The arm
+  is ADDITIVE -- the only wire change it can make is an extra 0x002C at
+  the client's own claimed position, correction bounded <= 100 u by the
+  freshness gate (the client's own "close enough" radius).  With
+  `--no-agtrack-repin` the wire behaviour is the pre-1z-s server exactly.
+- **Bookkeeping is one path**: the re-pin goes through the ordinary
+  send() choke, so `_note_wire_move` re-seeds the legacy sync model and
+  the guard's own `on_emit` Clears both mirrors and stamps the rate
+  limiter.  Guard state is fed from two threads (recv loop + world tick),
+  so every access serialises through `_agtrack_guard_call`'s lock.
+- **Tested**: `test_agtrack_guard.py` section 12 drives
+  `authsrv._agtrack_maybe_repin` with a choke-faithful fake send -- the
+  fire, its payload (the CLIENT's report, never ours), the post-fire
+  safe-composition state, the no-second-fire, the staleness refusal, the
+  flag-off restoration, and the unusable-plane refusal (floor 41 -> 49).
+  Affected authsrv suite green: 224/73/41/121/26/20.
+- **The verdict on whether it works comes from ordinary play**: every
+  session now writes `agtrack_guard` rows (per-grant predicted verdicts),
+  `agtrack_repin` transitions, and `agtrack_repin_fire` events beside the
+  warps-or-not of the report stream -- the same instruments that scored
+  every earlier candidate will score this one, with no dedicated run
+  asked of anyone.  Prediction, stated first (the probe rule): on the
+  retrodiction, sessions like tonight's two see their ~10 warps replaced
+  by re-pins at a rate well under `--resync`'s old 5.6/min, and the
+  residual warp classes are 1z-s.3's blocked/unseen (report-starved
+  moments, gate 3, the non-AgTrack mechanism).

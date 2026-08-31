@@ -24,8 +24,8 @@ import agtrack_mirror as am      # noqa: E402
 import agtrack_guard as ag       # noqa: E402
 import authsrv                   # noqa: E402
 
-# Floor from the 2026-08-30 green run: 41 checks, all unconditional.
-LEDGER = checks.Ledger("agtrack guard: the derived pre-emit rule", floor=41)
+# Floor from the 2026-08-30 green run: 49 checks, all unconditional.
+LEDGER = checks.Ledger("agtrack guard: the derived pre-emit rule", floor=49)
 check = checks.adopt_named(LEDGER)
 
 
@@ -203,6 +203,73 @@ def main():
     check("snapshot sums the shadow verdicts",
           snap["pass"] + snap["pass_gates"] + snap["veto"]
           + snap["not_ready"] == 2 and snap["seeded"])
+
+    # ---- 12. THE ACTIVE ARM (authsrv._agtrack_maybe_repin) --------------
+    # Driven with a fake send that replicates the real choke's guard feed
+    # (_agtrack_shadow_emit), so the fire's own bookkeeping -- both mirrors
+    # Cleared, the rate limiter stamped -- runs the same one path.
+    sent = []
+
+    def fake_send(op, values, label, quiet=False):
+        sent.append((op, values, label))
+        authsrv._agtrack_shadow_emit(state, op, values, None)
+
+    state = {"pathmap": None}
+    authsrv._agtrack_guard_seed(state, (0.0, 0.0), 0, conn_id=99)
+    check("active: seed built a live guard with its lock",
+          state.get("agtrack_guard") is not None
+          and state.get("agtrack_guard_lock") is not None)
+    # a red state with a FRESH accept: fire expected
+    authsrv._agtrack_guard_call(state, "on_report", 5000.0, 0.0, 0,
+                                ("head", 1.0, 0.0, 1), 2000.0,
+                                accepted=True)
+    fired = authsrv._agtrack_maybe_repin(fake_send, state, None, now=2000.1)
+    check("active: predicted snap + fresh report FIRES one 0x002C",
+          fired and len(sent) == 1
+          and sent[0][0] == authsrv.GAME_SMSG_AGENT_UPDATE_POSITION)
+    check("active: the payload is the CLIENT's own report, never ours",
+          sent[0][1] == [authsrv.PLAYER_AGENT_ID, [5000.0, 0.0], 0])
+    check("active: the fire Cleared both mirrors through the choke "
+          "(fence closed, safe-composition state)",
+          not state["agtrack_guard"].mirror.client_controlled
+          and not state["agtrack_guard"].twin.client_controlled)
+    fired = authsrv._agtrack_maybe_repin(fake_send, state, None, now=2000.2)
+    check("active: no second fire (fence closed -> nothing due; rate "
+          "would also block)", not fired and len(sent) == 1)
+    # stale report: wants to fire but must refuse
+    state2 = {"pathmap": None}
+    authsrv._agtrack_guard_seed(state2, (0.0, 0.0), 0, conn_id=99)
+    authsrv._agtrack_guard_call(state2, "on_report", 5000.0, 0.0, 0,
+                                ("head", 1.0, 0.0, 1), 3000.0,
+                                accepted=True)
+    fired = authsrv._agtrack_maybe_repin(fake_send, state2, None,
+                                         now=3000.6)
+    check("active: a stale report refuses the fire (harm bound)",
+          not fired and len(sent) == 1)
+    # flag off restores pre-1z-s wire behaviour
+    authsrv.AGTRACK_REPIN = False
+    try:
+        state3 = {"pathmap": None}
+        authsrv._agtrack_guard_seed(state3, (0.0, 0.0), 0, conn_id=99)
+        authsrv._agtrack_guard_call(state3, "on_report", 5000.0, 0.0, 0,
+                                    ("head", 1.0, 0.0, 1), 4000.0,
+                                    accepted=True)
+        fired = authsrv._agtrack_maybe_repin(fake_send, state3, None,
+                                             now=4000.1)
+        check("active: --no-agtrack-repin sends nothing", not fired
+              and len(sent) == 1)
+    finally:
+        authsrv.AGTRACK_REPIN = True
+    # invalid plane refuses (the u16 field cannot say -1)
+    state4 = {"pathmap": None}
+    authsrv._agtrack_guard_seed(state4, (0.0, 0.0), 0, conn_id=99)
+    authsrv._agtrack_guard_call(state4, "on_report", 5000.0, 0.0, None,
+                                ("head", 1.0, 0.0, 1), 5000.0,
+                                accepted=True)
+    fired = authsrv._agtrack_maybe_repin(fake_send, state4, None,
+                                         now=5000.1)
+    check("active: an unusable plane word refuses the fire",
+          not fired and len(sent) == 1)
 
     return LEDGER.verdict()
 

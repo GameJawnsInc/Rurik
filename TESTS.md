@@ -10219,7 +10219,11 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   0x00606002, so the replace sequence needs no luck); the two-world join (the
   main mirror applies every predicted reset, the TWIN only our own 0x002C --
   reality is bracketed and a red grant is vetoed if EITHER world says snap);
-  and that prediction is pure. Synthetic, bare machine. The corpus
-  retrodiction lives in `agtrack_replay.py --policy` (217/251 corpus warps
-  pre-empted, 10/10 in the current regime -- FINDINGS 1z-s). Floor 41 from
-  the 2026-08-30 green run. ~2 s),
+  and that prediction is pure; plus section 12, THE ACTIVE ARM --
+  `authsrv._agtrack_maybe_repin` driven with a choke-faithful fake send:
+  fires exactly one 0x002C on a predicted snap with a fresh report, payload
+  the CLIENT's own report never ours, both mirrors Cleared through the one
+  choke, no second fire, staleness/flag-off/bad-plane refusals. Synthetic,
+  bare machine. The corpus retrodiction lives in `agtrack_replay.py
+  --policy` (217/251 corpus warps pre-empted, 10/10 in the current regime
+  -- FINDINGS 1z-s). Floor 49 from the 2026-08-30 green run. ~2 s),
