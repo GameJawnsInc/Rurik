@@ -8919,19 +8919,38 @@ PLAYER_REVIVE_AFTER = 10.0 # seconds face-down. Longer than an agent's 8.0 on
 #     0.899-at-1.33, so the correction stands either way -- but a third speed
 #     inside one class is what would close it, and the corpus has no third: one
 #     agent declares 2.475 and never lands a paired swing.
-SWING_WINDUP_RATIO = 0.4458   # of the attacker's OWN declared attack base
-SWING_WINDUP_MIN = 0.4263     # the observed band, used only by the test
-SWING_WINDUP_MAX = 0.4600
+# AND THE RATIO MODEL FELL THE SAME WAY, 2026-08-30, when the third speed the
+# paragraph above asked for arrived -- with a fourth and a fifth. ANIMREF-R1
+# (studies/animref/FINDINGS.md sec.1) scored every landed swing in the live corpus
+# (n=1,042 across declared intervals 1.33/1.75/2.0/3.0) and the FRACTION RISES
+# WITH THE INTERVAL: 0.4250 at 1.33, 0.4408 at 1.75, 0.4502 at 2.0, 0.4719 at
+# 3.0. No constant ratio fits; the additive law does:
+#
+#     windup = interval/2 - 0.1 s
+#
+# Per-swing residuals are flat (6-16 ms mean) at every interval, where the 0.4458
+# constant is 28 ms off at 1.33 and 78 ms at 3.0, and a REFIT constant (0.4250)
+# is 141 ms off at 3.0 -- the overfit shape exactly. Cross-family retrodiction the
+# fit never saw: Power Shot's E4->E5 gaps (bow, 2.475 s) measure 1.1374/1.1387 s
+# against the law's 1.1375. The 0.4458 story above is one law sampled at two
+# intervals; it stays here as the --windup-ratio legacy arm and the test's
+# known-bad control. UNVERIFIED remainder: every corpus swing rides modifier 1.0,
+# so where the -0.1 attaches under IAS/DAS is not yet measured (sec.1 caveats).
+SWING_WINDUP_RATIO = 0.4458   # LEGACY (--windup-ratio): of the declared base
+WINDUP_MODEL = "additive"     # "additive" (derived law) | "ratio" (legacy arm)
 
 
 def swing_windup(attack_speed):
     """Seconds between ATTACK_STARTED and the landing, for a given attack base.
 
-    A FRACTION of the attacker's own declared speed rather than a constant. Our
-    Hatcher declares 1.33, so this returns 0.593 s where the old constant returned
-    0.899 -- a value no observation supports under either surviving model.
+    The derived law (ANIMREF-R1): half the declared interval, less 0.1 s. Our
+    Hatcher declares 1.33, so this returns 0.565 s (the ratio arm returned
+    0.593, the pre-2026-08-11 constant 0.899). The floor guards the degenerate
+    interval the corpus never shows (no declared base under 1.33 exists there).
     """
-    return SWING_WINDUP_RATIO * float(attack_speed)
+    if WINDUP_MODEL == "ratio":
+        return SWING_WINDUP_RATIO * float(attack_speed)
+    return max(0.5 * float(attack_speed) - 0.1, 0.05)
 
 # IT WALKS NOW. Until this, `AGGRO_RANGE` was doing two jobs -- deciding both when
 # a hostile notices the player and when it can reach them -- so a Hatcher rooted to
@@ -19749,6 +19768,14 @@ def main():
                          "its telemetry (agtrack_guard rows per grant, "
                          "agtrack_repin transitions) AND the active re-pin, "
                          "which cannot run without the guard.")
+    ap.add_argument("--windup-ratio", action="store_true",
+                    help="Revert the swing windup to the legacy constant "
+                         "fraction (0.4458 x declared interval). The default "
+                         "is the derived law interval/2 - 0.1 s (ANIMREF-R1, "
+                         "studies/animref/FINDINGS.md sec.1: residuals flat "
+                         "at every declared interval, Power Shot retrodicted "
+                         "to 1.3 ms; the constant was one law sampled at two "
+                         "intervals).")
     ap.add_argument("--no-agtrack-repin", action="store_true",
                     help="Keep the guard's telemetry but disable its ACTIVE "
                          "arm (ON by default; MOVECODE-1z-s): the single "
@@ -21098,6 +21125,11 @@ def main():
               "--planecarry   (the offline counterfactual that pre-screened "
               "this policy, and the calibration gate it had to pass first)")
 
+    if a.windup_ratio:
+        global WINDUP_MODEL
+        WINDUP_MODEL = "ratio"
+        print("[map] --windup-ratio: swing windup reverts to the legacy "
+              "0.4458 fraction; the derived interval/2 - 0.1 law is OFF.")
     if a.no_agtrack_shadow:
         global AGTRACK_SHADOW
         AGTRACK_SHADOW = False

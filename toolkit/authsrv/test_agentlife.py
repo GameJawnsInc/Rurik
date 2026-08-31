@@ -1440,8 +1440,12 @@ def section_constants():
          "agents.ATTACK_SPEED['axe']. The base x modifier FORMULA is corroborated "
          "against the client's own fmul; the 1.33 itself is the wiki's"),
         ("SWING_WINDUP_RATIO", 0.4458, "OBSERVED",
-         "mean of 42 paired windups over both live captures. THIS ONE IS "
-         "MEASURED -- see the band checks below"),
+         "mean of 42 paired windups over both live captures -- the LEGACY "
+         "arm (--windup-ratio). The shipped default is the additive law; "
+         "see the law checks below"),
+        ("WINDUP_MODEL", "additive", "OBSERVED",
+         "the derived law interval/2 - 0.1 s is the default arm "
+         "(ANIMREF-R1, studies/animref/FINDINGS.md sec.1, n=1,042)"),
     )
     for name, literal, label, why in PINNED:
         got = getattr(authsrv, name)
@@ -1455,33 +1459,49 @@ def section_constants():
               "turn rate, bit-identical, and the ONLY constant in this list the "
               "suite could already catch")
 
-    # --- the windup, which is a ratio because a constant was refuted -----------
+    # --- the windup, which is a LAW because both simpler models were refuted ---
     #
-    # The band is ArenaNet's, measured over both captures. A ratio outside it is
-    # not a tuning choice, it is a value no observation supports.
-    OBSERVED_MIN, OBSERVED_MAX = 0.4263, 0.4600
-    LEDGER.ok(OBSERVED_MIN <= authsrv.SWING_WINDUP_RATIO <= OBSERVED_MAX,
-              "the windup ratio sits inside the band ArenaNet's own swings drew",
-              f"{authsrv.SWING_WINDUP_RATIO} in [{OBSERVED_MIN}, {OBSERVED_MAX}] "
-              "-- 42 paired windups, 4 attackers, 2 declared speeds, both live "
-              "captures. The two windup CLUSTERS do not overlap (86 ms apart); "
-              "the two RATIO bands do, which is the whole argument")
+    # First the fixed 0.899 fell (2026-08-11, two declared speeds disagree in
+    # seconds), then the constant ratio fell (2026-08-30, ANIMREF-R1: four
+    # declared intervals disagree in ratio -- 0.4250 at 1.33 rising to 0.4719 at
+    # 3.0 -- while windup = interval/2 - 0.1 s holds them all to 6-16 ms and
+    # retrodicts Power Shot's bow interval to 1.3 ms). These checks are built to
+    # redden under BOTH refuted models, not just the older one.
     LEDGER.ok(not hasattr(authsrv, "SWING_WINDUP"),
-              "and the fixed SWING_WINDUP constant is GONE, not merely unused",
+              "the fixed SWING_WINDUP constant is GONE, not merely unused",
               "0.899 s paired with our declared 1.33 implies a ratio of 0.6759 -- "
               "47% above the largest ratio ever observed. Leaving the name bound "
               "invites a future call site to reach for it")
     slow, fast = authsrv.swing_windup(2.0), authsrv.swing_windup(1.0)
-    LEDGER.ok(slow > fast and abs(slow / fast - 2.0) < 1e-9,
-              "and a slower declared weapon winds up proportionally longer",
-              f"{fast:.4f}s at 1.0 against {slow:.4f}s at 2.0 -- a windup that "
-              "does NOT move with the declared speed is the refuted model, and "
-              "this check is what makes reverting to it cost a red run")
-    LEDGER.ok(abs(authsrv.swing_windup(1.33) - 0.5929) < 1e-3,
-              "our own Hatcher's windup is 0.593 s, not the 0.899 it shipped with",
-              f"{authsrv.swing_windup(1.33):.4f}s -- the number that actually "
-              "changed on the wire, named here so the behaviour change is visible "
-              "in the test and not only in the diff")
+    LEDGER.ok(abs((slow - fast) - 0.5) < 1e-9,
+              "one extra second of declared interval adds exactly half a "
+              "second of windup",
+              f"{fast:.4f}s at 1.0 against {slow:.4f}s at 2.0 -- the additive "
+              "law's slope. A FIXED windup fails this (delta 0), and so does "
+              "scoring the old constant back in by hand")
+    LEDGER.ok(abs(slow / fast - 2.0) > 0.05,
+              "and the windup is NOT proportional to the interval",
+              f"ratio {slow / fast:.4f} -- proportionality is the constant-"
+              "fraction model ANIMREF-R1 refuted at n=1,042 (residuals grow to "
+              "141 ms at interval 3.0 under the best-fit constant); a green "
+              "here under that model is impossible, which is the point")
+    LEDGER.ok(abs(authsrv.swing_windup(1.33) - 0.565) < 1e-9,
+              "our own Hatcher's windup is 0.565 s under the law",
+              f"{authsrv.swing_windup(1.33):.4f}s -- the corpus's n=998 bench "
+              "population lands at 0.5653 mean; the legacy ratio arm said "
+              "0.593, the pre-2026-08-11 constant 0.899")
+    LEDGER.ok(abs(authsrv.swing_windup(2.475) - 1.1375) < 1e-9,
+              "and Power Shot's bow interval retrodicts to 1.1375 s",
+              "measured 1.1374/1.1387 on the two live cycles (castmech M1) -- "
+              "the cross-family check the law was never fit to")
+    try:
+        authsrv.WINDUP_MODEL = "ratio"
+        LEDGER.ok(abs(authsrv.swing_windup(1.33) - 0.5929) < 1e-3,
+                  "the --windup-ratio legacy arm still answers 0.593",
+                  "the revert flag must restore the old wire exactly, or it "
+                  "is not a revert")
+    finally:
+        authsrv.WINDUP_MODEL = "additive"
 
     # --- the bar against the client's OWN table, not against our comment -------
     #
