@@ -25,7 +25,7 @@ the client is told about animation, and none of them has been seen:
 | windup law `interval/2 − 0.1 s` | ✅ timing in the capture | ✅ does the hit land mid-swing |
 | cast-open form rule (9F/A0) | ✅ channel per open | ✅ **does the animation still play** |
 | attack-skill E5 rides the weapon | ✅ E4→E5 gap | ✅ does the strike look timed |
-| NPC cast finish `[58, agent, 0]` | ✅ presence + batch order | ✅ does the caster return to ready |
+| NPC cast finish `[58, agent, 0]` | ✅ presence + batch order (**already green**, R2's diff) | deferred — the Hatcher's bar is emptied for this run, §2b |
 
 **The one genuinely risky change is the form rule.** It moved targetless self
 casts from `0x00A0`-with-target-0 onto `0x009F`. If the client's untargeted path
@@ -48,7 +48,7 @@ with anything. Each line names what refutes it.
 | P3 | The player's auto-attack **hit lands mid-swing**, not at the swing's start or end | damage numbers appear at the animation's first or last frame |
 | P4 | The Hatcher's swings look **unchanged** in rhythm (0.593 → 0.565 s windup is a 28 ms shift — below what an eye resolves) | the owner can *see* a difference; that would mean something other than the windup moved |
 | P5 | An attack skill's strike **connects at the strike**, not instantly on press | the number appears the instant the key goes down |
-| P6 | The Hatcher **returns to its ready stance at cast end** (the new prop-58) rather than holding the cast pose until its next action | it holds the pose, or the stance change is visibly late |
+| ~~P6~~ | ~~The Hatcher returns to its ready stance at cast end (the new prop-58)~~ | **NOT OBSERVABLE THIS RUN** — `--no-enemy-skills` empties the Hatcher's bar, so it never casts (§2b). Its wire half is already green from R2's offline diff; re-runnable in a minute by dropping the flag |
 | P7 | **No assert dialog, no disconnect, for the whole session** | any `Assertion:` box — capture the text verbatim, it names the file and line |
 | P8 (D11, exploratory) | after a cast ends there is a **brief hold before the body is ready again** (the property-8 250-unit deferral, `skillcast` §16.2) | nothing distinguishable — records as NOT OBSERVED, which is a real answer for a hedged static read |
 
@@ -58,47 +58,100 @@ here so a null is recorded as a null rather than read as a failed run.
 ## 2. The run
 
 **One command.** PowerShell, from `C:\gd\Rurik` (main — the fixes are merged).
-It brings the stack up, drives the client to the map, then holds for four
-minutes while the owner plays and screenshots every 15 s.
+It brings the stack up, drives the client into an explorable map, then holds for
+four minutes while the owner plays, screenshotting every 15 s.
 
 ```powershell
-python toolkit/harness/session.py --enemy --hold 240 --shots 15
+python toolkit/harness/session.py --enemy --hold 240 --shots 15 --game-args "--map 146 --explorable --no-enemy-skills --skills 105,153,148,322"
 ```
 
-- `--enemy` spawns the standing hostile (it engages on its own — 300 units out,
-  aggro 1200), which is what produces P4's and P6's material.
-- `--hold 240` **bounds the run**: the session tears itself down 4 minutes after
-  the map verdict. It will not park a window on the screen — no `--keep-open`
-  without a bound (`[[feedback-bound-the-client-run]]`).
-- `--shots 15` writes periodic screenshots, so reaching for a screenshot key is
-  never necessary mid-fight.
-- **Not** `--practice-target`: that makes the hostile neither chase nor attack,
-  which would delete P4 and P6 outright.
-- No `--account`: a loopback run uses the synthetic credential, no real account.
-- The launch is **caged and loopback-only** by the DH binding
-  (`cage.assert_launch_safe`); nothing here points at ArenaNet.
+Every argument, and why:
 
-**This is a test launch of the patched loopback client** — announcing it per
-`[[feedback-announce-harness-launches]]`, since the machine is shared.
+- **`--map 146 --explorable`** — Lakeside County. **Guild Wars forbids attacking
+  and casting in a town**, and the default spawn is an outpost, so without this
+  the run cannot produce P1–P5 at all. 146 is the map `authsrv.py`'s own `--map`
+  help calls "explorable and therefore the first place combat can be tested";
+  `--explorable` forces the map-type byte with it, which is the pairing the
+  CANCELWALK cast runs used. The hostile is placed **relative to the player's
+  arrival point** (`content/world.toml`: "300 units east … in any Guild Wars
+  map"), so changing the map does not lose it.
+- **`--no-enemy-skills`** — the Hatcher's bar is emptied: it swings and casts
+  nothing. Built for this run (`test_agentlife` §4b pins both halves: casts
+  nothing, and still swings). **This costs P6** — see §2b.
+- **`--skills 105,153,148,322`** — the bar the run needs, because the default
+  bar is all instants (types 14/15/16 and stances at activation 0.00) and
+  **cannot produce a cast animation at all**:
+
+  | slot | id | what it is | why it is here |
+  |---|---|---|---|
+  | 1 | **105** | foe spell, 2.00 s cast, 0.75 aftercast, 6 s recharge, 10 energy | **P2**, and it is the very skill castmech measured retail's own cycles on — the comparison is direct, not analogous |
+  | 2 | **153** | foe spell, 1.00 s cast, 8 s recharge | 105's live-corpus partner; a second, shorter targeted cast |
+  | 3 | **148** | **self** enchantment, 2.00 s cast, 5 s recharge, 5 energy | **P1** — a self-targeted spell is what makes the client send target 0, which is the untargeted-form path the whole run exists to check |
+  | 4 | **322** | attack skill, activation **0.00**, 3 s recharge | **P5** — a zero-activation attack skill is exactly the branch the E5 fix added |
+
+  Cross-profession is fine and **proven, not assumed**: the CANCELWALK runs cast
+  105 and 153 repeatedly on this same default Warrior character
+  (`studies/movement/CANCELWALK.md` §5 and §8.3f use `--skills 105,153,322`), so
+  the client does not gate casting on profession. Ids 105/153/148 are profession
+  4's; 322 is the default bar's own.
+- `--enemy` spawns the hostile; it engages on its own (300 u out, aggro 1200).
+- `--hold 240` **bounds the run** — the session tears itself down four minutes
+  after the map verdict, so no window is left parked
+  (`[[feedback-bound-the-client-run]]`).
+- `--shots 15` screenshots during the hold, so reaching for a screenshot key mid
+  fight is never necessary.
+- **Not** `--practice-target`: it stops the hostile chasing *and* attacking,
+  which would delete P3's NPC half and P4.
+- No `--account`: loopback uses the synthetic credential, no real account. The
+  launch is caged and loopback-only by the DH binding
+  (`cage.assert_launch_safe`) — nothing here points at ArenaNet.
+
+**This is a test launch of the patched loopback client**, announced per
+`[[feedback-announce-harness-launches]]` since the machine is shared.
+
+**Confirm before playing:** the gamesrv banner must print
+`ENEMY BAR: EMPTY` — if it does not, the bar is still loaded and P6's absence
+below is not what you are looking at.
+
+### 2b. What emptying the Hatcher's bar costs, stated
+
+**P6 cannot be observed this run.** P6 was the NPC cast finish — the fourth
+shipped fix (`land_skill` now opens its landing batch with `[58, agent, 0]`,
+where retail closes 709/709 other-agent casts with a 58-led batch). With an
+empty bar the Hatcher never casts, so nothing exercises it.
+
+That is an acceptable trade and not a silent one: **the fix's wire half is
+already validated offline** (R2's diff, FINDINGS §9 — our era had 0 finishes
+against retail's 709), and what P6 would have added is only the *visual*
+confirmation that the caster returns to its ready stance. It is re-runnable in
+sixty seconds whenever wanted — the same command with `--no-enemy-skills`
+dropped — and is better done separately anyway, since a casting Hatcher is the
+thing that makes the player's own cast observations noisy. **P8's NPC half goes
+with it**; P8 can still be attempted on the player's own casts.
 
 ## 3. What the owner does in those 4 minutes
 
-Six actions, in order. Nothing is timed; the point is that each happens once.
+Six actions, in order. Nothing is timed; each need happen only once.
 
 1. **Let the Hatcher reach you and swing a few times.** Watch *its* swings
-   (P4) — and whether its damage lands mid-swing (P3's NPC half).
+   (P4), and whether its damage lands mid-swing (P3's NPC half). It will only
+   ever swing now — no casting.
 2. **Attack it back** (click it). Watch your own swing: does the number land
    mid-animation (P3)?
-3. **Cast a spell with the Hatcher targeted** (P2).
-4. **Cast a spell with nothing targeted** — click empty ground first to clear
-   the target, then press the same skill. **This is P1, the run's whole
-   point.** Does your character perform the cast animation?
-5. **Press an attack skill** with the Hatcher targeted (P5).
-6. **Watch the Hatcher cast** (it casts from its own bar) and note what its
-   body does *at the end* of the cast (P6, P8).
+3. **Press slot 1 (skill 105) with the Hatcher targeted** — a 2-second cast,
+   the most visible animation on the bar (P2).
+4. **Press slot 3 (skill 148) with NOTHING targeted** — click empty ground
+   first to clear the target, then press it. It is a self-enchantment, so it
+   needs no target. **This is P1, the run's whole point.** Does your character
+   perform a cast animation?
+5. **Press slot 4 (skill 322)** with the Hatcher targeted (P5) — does the
+   strike connect at the strike, or instantly on the keypress?
+6. **After any of your own casts ends**, watch whether the body holds briefly
+   before it is ready again (P8, exploratory — "no difference" is a real
+   answer here).
 
 If the client asserts at any point, that is P7 and the run is over — the dialog
-text is the result, and it is worth more than the rest of the sheet.
+text is the result and is worth more than the rest of this sheet.
 
 ## 4. What I do afterwards, with no further ask
 
@@ -123,7 +176,13 @@ settles everything else.
   worktree checkout that is behind would test the old wire and look fine.
   Check with `git log --oneline -1` before launching — it should name the
   ANIMREF-R2 merge or later.
-- **Using `--practice-target`** (kills P4/P6, see above).
+- **Using `--practice-target`** (stops the hostile chasing and attacking, which
+  kills P3's NPC half and P4).
+- **Forgetting `--map 146 --explorable`.** In an outpost the game refuses
+  attacks and casts outright, and P1–P5 all evaporate — this is the correction
+  that produced this version of the sheet.
+- **Reading P6's absence as a failure.** It is designed out of this run (§2b),
+  not broken.
 - **Not clearing the target before action 4** — a targeted cast is P2, not P1,
   and the two are indistinguishable in the report if the target state is
   unrecorded. If unsure whether the target cleared, say so; an ambiguous P1 is

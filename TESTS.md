@@ -3220,7 +3220,11 @@ Floor 75 against a green 75 with 5 declared skips (the archive-conditional
   that an unframeable opcode stops the framer instead of being framed past, and
   the whole enemy: a hostile that swings back, chases, turns to face you and
   casts — each phase checked as a SHAPE the wire could contradict rather than as
-  a message count. Its last section is the one that earned the entry:
+  a message count. §4b is the `--no-enemy-skills` arm (ANIMREF-R5): an EMPTY
+  bar casts nothing **and still swings**, the second half being the control —
+  without it the section would pass just as well on an agent that had stopped
+  doing anything at all, which is the failure mode the rest of this file exists
+  to refuse. Its last section is the one that earned the entry:
   **every combat constant is asserted against a LITERAL written in the test
   file.** That exists because on 2026-08-11 the monster-AI dive sabotaged them
   one at a time and **twelve of fourteen could be set to a wrong value with all

@@ -20062,6 +20062,15 @@ def main():
                          "the same reason: changing what the enemy casts "
                          "should not need a content edit. Ids must exist in "
                          "the build being launched.")
+    ap.add_argument("--no-enemy-skills", action="store_true",
+                    help="Empty the standing hostile's bar: it swings and "
+                         "does nothing else. The content row could always "
+                         "express this (an empty `skills` list leaves the "
+                         "agent on plain swings) but the FLAG could not -- "
+                         "`--enemy-skills ''` is falsy and was silently "
+                         "ignored, leaving the default bar up while the "
+                         "command line said otherwise. Use this to isolate "
+                         "the swing channel from the cast channel.")
     ap.add_argument("--move-speed-effects", action="store_true",
                     help="declare the player's speed base (GAME_SMSG 0x0027) "
                          "from open movement-speed episodes -- Rush's +25%% "
@@ -21678,8 +21687,16 @@ def main():
         print("NO ARMOUR TERM: swings are the weapon's raw range, unscaled, "
               "and no swing can be a critical.")
 
-    if a.enemy_skills:
+    if a.no_enemy_skills and a.enemy_skills:
+        ap.error("--no-enemy-skills and --enemy-skills contradict: one empties "
+                 "the hostile's bar and the other fills it. Pass one.")
+    if a.no_enemy_skills:
         global ENEMY_SKILLS
+        ENEMY_SKILLS = ()
+        print("ENEMY BAR: EMPTY -- the hostile swings and casts nothing "
+              "(--no-enemy-skills). The cast channel is silent for agents; "
+              "the player's own is unaffected.", flush=True)
+    if a.enemy_skills:
         bar = []
         for token in a.enemy_skills.split(","):
             sid = int(token.strip(), 0)
@@ -21690,7 +21707,8 @@ def main():
             bar.append((sid, act, float(recharge)))
         ENEMY_SKILLS = tuple(bar)
         print(f"ENEMY BAR: {[row[0] for row in bar]} "
-              f"(activation and recharge from the client's own table)")
+              f"(activation and recharge from the client's own table)",
+              flush=True)
 
     if a.move_speed_effects:
         global MOVE_SPEED_EFFECTS
