@@ -305,9 +305,13 @@ slot is a number key, so nothing needs a world-anchored click.
 **Three results, and the middle one is why the missing flag was worth adding
 before anything else:**
 
-1. **The regression is real and reproducible** — 2 of 2 attack-skill runs — and
-   it is specific to attack SKILLS. A plain auto-attack does not block movement
-   at all, which also clears the swing machinery and the windup law.
+1. ~~**The regression is real and reproducible** — 2 of 2 attack-skill runs —
+   and it is specific to attack SKILLS.~~ **WITHDRAWN by §11a below: the same
+   block appears with a non-attack spell, and the common factor is the
+   harness's own input path, not the game.** What survives is the narrower
+   fact that a plain auto-attack does not block movement (9 client moves, 0.2 s
+   latency) — that run pressed no number key, so it is the one arm the artifact
+   does not touch.
 2. **ANIMREF-R3 fix 3 is NOT the cause. Measured, not argued.** The block is
    identical with the fix reverted, and the revert demonstrably works (E5/E3
    move from +0.783 s to +0.042 s at the press). The mechanism agrees: fix 3
@@ -322,17 +326,43 @@ before anything else:**
    `action_hold`'s own docstring (skillcast §16.2: animation plumbing, no
    gameplay state) from the wire rather than from the disassembly.
 
-**NOT settled: which element of the press burst causes it.** The burst is E4 +
-`attack_stopped` + the energy debit + property 50 + the prop-8 hold, and this
-pass did not bisect them. Cheap next arms, all unattended and one flag apart:
-`--legacy-cast-form` (moves property 50's channel), a no-energy arm (drops the
-debit), and **a bar whose slot 1 is a non-attack SPELL** — which separates
-"attack skill" from "any skill press" and would also expose the mundane rival
-this pass cannot exclude, that the harness's held W simply stops reaching the
-client after any skill press.
+### 11a. The bisect arm ran, and it DISSOLVES result 1 — read this before quoting the table
 
-Captures: `20260831T092113` (auto-attack), `20260831T092437` (arm A),
-`20260831T092714` (arm B, reverted).
+The named next arm — slot 1 a non-attack SPELL (148) instead of an attack
+skill — was run immediately (`20260831T093028`). It blocks **identically**:
+the press goes out at 10.777, the cast completes normally (E5 +2.05 s, E3
++2.76 s), and the held W produces **no `MOVE_SET_HEADING` at all**.
+
+So the discriminator is **not** "attack skill". It is not even "skill": the one
+run that moved freely is the one run that **pressed no number key**. Every
+blocked run pressed `1`. That makes the leading explanation the mundane rival
+named above — **the harness's held `W` stops reaching the client after a
+number-key press** — an input-path artifact, not a game behaviour.
+
+**Consequences, stated plainly rather than buried:**
+
+* **Result 1 above is WITHDRAWN.** "The regression is real and reproducible,
+  and specific to attack skills" is not supported: the same block appears with
+  a spell, and the common factor is the instrument. These three runs did not
+  reproduce the operator's complaint — they reproduced a property of the
+  harness. The operator pressed keys by hand, so this artifact does not
+  explain what they felt, and **their report stands unexplained**.
+* **Results 2 and 3 SURVIVE**, because both are within-instrument comparisons
+  that the artifact affects equally: arm A and arm B pressed the same key the
+  same way, so fix 3 is still cleared, and property 8 is still cleared by the
+  auto-attack run moving with the hold set.
+* **The instrument needs fixing before it is trusted again.** A `--walk` plan
+  whose key steps silently stop working after a number key makes every
+  subsequent step a false negative, and nothing in the harness reports it. The
+  check it lacks: a plan step that produces no client message at all should
+  say so, rather than being scored as "held for 6.00035 of 6".
+
+This is the whole reason the arm was run rather than assumed. One more run
+would have shipped a wrong cause into the record.
+
+Captures: `20260831T092113` (auto-attack, moved), `20260831T092437` (arm A),
+`20260831T092714` (arm B, reverted), `20260831T093028` (spell — the one that
+dissolved it).
 
 ## 12. What R1, R2 and R4 do NOT settle
 
