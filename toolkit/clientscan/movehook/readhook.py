@@ -135,6 +135,58 @@ _LAYOUTS[7] = _LAYOUTS[6] + [("esp", 1), ("have_out", 1), ("out_count", 1),
 # than not versioning. Both layouts live here and both parse.
 _LAYOUTS[8] = _LAYOUTS[6] + [("esp", 1), ("have_out", 1), ("out_count", 1),
                              ("out_n", 1), ("out_path", 36)]
+# v9, 2026-08-31: THE TWO WALK GATES (ANIMREF-RE step 3, FINDINGS §21.5/§22.1).
+# Spelled as `_LAYOUTS[8] + [...]` for the same reason v7 was: "APPENDED, never
+# inserted" should be structural, not a promise. v8 files still parse.
+#
+#   have_gate    bit 0 = gate_flags was read, bit 1 = gate_status was. The
+#                `have_fence` distinction a third time, and here it is
+#                load-bearing in BOTH directions -- a CLEAR gate is the
+#                expected reading on the moving arm, so "could not read it"
+#                and "read it, it was clear" must not merge.
+#   gate_flags   ChCliBase +0x64. BIT 0 IS THE WALK GATE: set means chcli_dir
+#                bails at 0x0081A93C. Written only by generic-property 8.
+#   gate_status  ChCliBase +0x10C, ArenaNet's m_status. Bit 8 bails at
+#                0x0081A931, bit 4 (CHAR_STATUS_DEAD) at 0x0081A94B.
+_LAYOUTS[9] = _LAYOUTS[8] + [("have_gate", 1), ("gate_flags", 1),
+                             ("gate_status", 1)]
+
+# The gate bits, named once. A reader that spells 0x100 inline is a reader that
+# will disagree with the next one; these are the operands of three specific
+# branches and the addresses are in the names' documentation above.
+GATE_WALK_BIT   = 0x1     # gate_flags  bit 0 -- property 8's walk gate
+STATUS_BIT8     = 0x100   # gate_status bit 8 -- refuses at 0x0081A931
+STATUS_DEAD     = 0x10    # gate_status bit 4 -- CHAR_STATUS_DEAD, 0x0081A94B
+
+
+def gate_verdict(r):
+    """Which early-out a chcli_* entry record implies, or None if unknowable.
+
+    The three flag gates are DETERMINED by the two words this record carries,
+    in the client's own order -- so the branch is reconstructable offline
+    without a mid-function hook (0x0081AD0F's first byte is 0xFF and gensites
+    would refuse it). Returns one of:
+
+        "E2-status-bit8" / "E3-walk-gate" / "E4-dead"  -- refused, returns 1
+        "passed-flag-gates"                            -- reached the path query
+
+    A record whose have_gate does not cover the word a verdict needs returns
+    None rather than a guess: an unread word is not a clear one.
+    """
+    have = r.get("have_gate") or 0
+    if not (have & 2):
+        return None
+    if r["gate_status"] & STATUS_BIT8:
+        return "E2-status-bit8"
+    if not (have & 1):
+        return None
+    if r["gate_flags"] & GATE_WALK_BIT:
+        return "E3-walk-gate"
+    if r["gate_status"] & STATUS_DEAD:
+        return "E4-dead"
+    return "passed-flag-gates"
+
+
 NPOINT = 4
 # The four MapFindPath exits, in one place. Anything keyed on the single name
 # "mapfindpath" sees the QUESTION only; these four carry the ANSWER.
@@ -178,7 +230,7 @@ def _unpack(spec, vals):
 # The current writer's layout, for anything that builds a capture (the tests do).
 # Bump BOTH of these with the version, or the tests keep synthesising the OLD
 # record while the DLL writes the new one and every parse silently disagrees.
-CURRENT_VER = 8
+CURRENT_VER = 9
 FIELDS = [n for n, c in _LAYOUTS[CURRENT_VER] if c == 1]
 _SPEC5, REC_FMT, REC_LEN = _layout(CURRENT_VER)
 

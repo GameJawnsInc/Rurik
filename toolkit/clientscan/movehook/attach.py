@@ -34,9 +34,11 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(HERE)), "harness"))
+sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))     # toolkit/
 
 import autoinject                                              # noqa: E402
 import inject                                                  # noqa: E402
+import vaultpath                                               # noqa: E402
 
 DLL = os.path.join(HERE, "movehook.dll")
 STATUS = os.path.join(HERE, "movehook.status")
@@ -45,12 +47,19 @@ STATUS = os.path.join(HERE, "movehook.status")
 # look for the artifact, and importing anything from the C source is not a
 # thing. If DEFDIR in movehook.c ever moves, this is the line that must move
 # with it -- and test_movehook.py checks the two agree rather than trusting it.
-DEFAULT_OUT = os.path.join(os.path.dirname(os.path.dirname(
-    os.path.dirname(HERE))), "vault", "research", "movecode")
-
-
+#
+# FOUND WITH vaultpath, NEVER WITH A RELATIVE WALK, 2026-08-31. This was
+# `dirname(dirname(dirname(HERE)))/vault/...`, which is correct in the main tree
+# and WRONG in every worktree: a worktree has no vault of its own, so the walk
+# resolved to a directory that does not exist while the DLL -- whose DEFDIR is
+# compiled in as an ABSOLUTE path -- kept writing to the real one. §16 is the
+# check that catches it and its own message names the cost: `--stop` reports a
+# missing capture that exists. CLAUDE.md's rule, and the reason it is a rule.
 def default_outdir():
-    return os.path.abspath(DEFAULT_OUT)
+    return os.path.abspath(vaultpath.vault_path("research", "movecode"))
+
+
+DEFAULT_OUT = default_outdir()
 
 
 def armed_outdir(explicit=None):
@@ -228,7 +237,7 @@ def verify_running_build(pid):
     """
     import keytap
     import gensites
-    sites, _offs = gensites.rows()
+    sites, _offs, _coffs = gensites.rows()
     base = keytap.module_base(pid, "Gw.exe")
     bad = []
     for name in sorted(sites):
