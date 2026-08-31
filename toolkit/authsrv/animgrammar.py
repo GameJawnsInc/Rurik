@@ -132,6 +132,24 @@ def prop_events(msgs):
                    "copy": int(v[3]) if len(v) > 3 else 0}
 
 
+def assign_batches(evs, eps=0.0):
+    """Stamp each event with its batch time `bt` (the batch's first t).
+
+    A live tape restores per-segment wall clock, so one wire batch shares ONE
+    t exactly and eps=0.0 groups it. Our gamesrv logs stamp every send with
+    its own perf_counter reading, so a burst written in one breath spreads
+    over tens of microseconds -- eps=0.005 re-clusters it. 5 ms is two orders
+    under the closest legitimate neighbours (swings 600+ ms apart, E5->E3
+    aftercasts 750 ms), so the tolerance cannot merge real instants.
+    """
+    start = None
+    for ev in evs:
+        if start is None or ev["t"] - start > eps:
+            start = ev["t"]
+        ev["bt"] = start
+    return evs
+
+
 def token(ev):
     """One event as a compact signature token, e.g. '8:0', '60T', 'E4', 'dmg'.
 
@@ -173,7 +191,7 @@ def swing_episodes(events):
     evs = list(events)
     by_t = collections.defaultdict(list)
     for ev in evs:
-        by_t[ev["t"]].append(ev)
+        by_t[ev.get("bt", ev["t"])].append(ev)
     speed = {}
     open_swing = {}
     out = []
@@ -206,7 +224,7 @@ def swing_episodes(events):
                              "t0": ev["t"]}
         elif ev["prop"] == 1 and a in open_swing:
             dmg = [(d["agent"], round(d["value"], 6))
-                   for d in by_t[ev["t"]]
+                   for d in by_t[ev.get("bt", ev["t"])]
                    if d["kind"] == "prop" and d["prop"] in SWING_DAMAGE
                    and d.get("target") == a]
             close(a, ev["t"], "landed", dmg)
@@ -236,13 +254,13 @@ def cast_episodes(events, me=None):
     evs = list(events)
     by_t = collections.defaultdict(list)
     for ev in evs:
-        by_t[ev["t"]].append(ev)
+        by_t[ev.get("bt", ev["t"])].append(ev)
     open_self = {}      # (caster, skill) -> episode
     open_other = {}     # caster -> episode
     out = []
 
-    def sig_at(t, agent):
-        return tuple(token(x) for x in by_t[t] if involves(x, agent))
+    def sig_at(bt, agent):
+        return tuple(token(x) for x in by_t[bt] if involves(x, agent))
 
     def close_self(key, t, how):
         ep = open_self.pop(key)
@@ -260,6 +278,7 @@ def cast_episodes(events, me=None):
 
     for ev in evs:
         t = ev["t"]
+        bt = ev.get("bt", t)
         if ev["kind"] == "E4" and me is not None and ev["agent"] == me:
             key = (me, ev["skill"])
             if key in open_self:
@@ -268,7 +287,7 @@ def cast_episodes(events, me=None):
             open_self[key] = {
                 "caster": me, "skill": ev["skill"], "self": True,
                 "family": None, "target": None,
-                "t0": t, "open_sig": sig_at(t, me),
+                "t0": t, "open_sig": sig_at(bt, me),
                 "e": {"E4": 0.0}, "status_marks": [],
             }
         elif ev["kind"] in ("E2", "E3", "E5", "E6") and me is not None \
@@ -277,7 +296,7 @@ def cast_episodes(events, me=None):
             if ep is not None and t >= ep["t0"]:
                 ep["e"].setdefault(ev["kind"], round(t - ep["t0"], 6))
                 if ev["kind"] == "E5":
-                    ep["finish_sig"] = sig_at(t, me)
+                    ep["finish_sig"] = sig_at(bt, me)
                 elif ev["kind"] == "E2":
                     close_self((me, ev["skill"]), t, "refused_or_terminated")
                 elif ev["kind"] == "E6":
@@ -297,14 +316,14 @@ def cast_episodes(events, me=None):
                         ep.setdefault("t_anim", t)
                         ep.setdefault("dt_anim", round(t - ep["t0"], 6))
                         if t != ep["t0"]:
-                            ep["begin_sig"] = sig_at(t, me)
+                            ep["begin_sig"] = sig_at(bt, me)
                     continue
                 if a in open_other:
                     close_other(a, t, "reopened")
                 open_other[a] = {
                     "caster": a, "target": ev.get("target"),
                     "skill": int(ev["value"]), "family": fam, "self": False,
-                    "t0": t, "open_sig": sig_at(t, a),
+                    "t0": t, "open_sig": sig_at(bt, a),
                     "e": {}, "status_marks": [],
                 }
             elif p == 58:
@@ -313,16 +332,16 @@ def cast_episodes(events, me=None):
                 if a in open_other:
                     ep = open_other[a]
                     ep["dt_finish"] = round(t - ep["t0"], 6)
-                    ep["finish_sig"] = sig_at(t, a)
+                    ep["finish_sig"] = sig_at(bt, a)
                     close_other(a, t, "finished")
             elif p == 59:
                 if me is not None and a == me:
                     for key, ep in list(open_self.items()):
                         if key[0] == a and "E5" not in ep["e"]:
-                            ep["cancel_sig"] = sig_at(t, a)
+                            ep["cancel_sig"] = sig_at(bt, a)
                             close_self(key, t, "cancelled")
                 elif a in open_other:
-                    open_other[a]["cancel_sig"] = sig_at(t, a)
+                    open_other[a]["cancel_sig"] = sig_at(bt, a)
                     close_other(a, t, "cancelled")
         elif ev["kind"] == "status":
             a = ev["agent"]
@@ -352,6 +371,120 @@ def prop_census(events):
     c = collections.Counter(ev["prop"] for ev in events if ev["kind"] == "prop")
     return {int(p): {"n": n, "name": KNOWN_PROPS.get(p, "UNKNOWN")}
             for p, n in sorted(c.items())}
+
+
+def connection_record(capture, conn, msgs, me, eps=0.0):
+    """One decoded connection through both episode machines.
+
+    `eps` is assign_batches' clustering tolerance: 0.0 for live tapes (a wire
+    batch shares one restored timestamp exactly), 0.005 for our gamesrv logs
+    (each send stamps its own clock).
+    """
+    evs = assign_batches(list(prop_events(msgs)), eps)
+    if not evs:
+        return None
+    return {
+        "capture": capture, "connection": conn, "me": me,
+        "events": evs,
+        "swings": swing_episodes(evs),
+        "casts": cast_episodes(evs, me=me),
+        "props": prop_census(evs),
+    }
+
+
+def scan_ours(after=None, before=None):
+    """ANIMREF-R2: OUR emitter's wire, from the gamesrv .jsonl corpus.
+
+    A separate entry point from scan_live BY DESIGN -- the two origins never
+    meet in one walk, and every output row is stamped. Each `sent` record
+    carries the whole plaintext of one s2c message (hex in `plain`), so the
+    same Codec frames it and the same episode machines run downstream.
+
+    Exclusions, all COUNTED: files whose own records do not classify OURS
+    (origin.origin_of -- the stamp is checked against the recorded peers,
+    never taken on trust); tape-replay connections (any `tape[...]` label --
+    a tape session's game channel is ArenaNet's stream played back, and
+    scoring it as our emitter would grade retail against retail); rows whose
+    plaintext the schema cannot frame (the whole connection is refused --
+    a partially-framed grammar invents shapes).
+
+    `after`/`before` filter on the filename stamp (authsrv-YYYYMMDDTHHMMSS),
+    which is what makes the KNOWN-BAD CONTROL possible: the pre-castmech era
+    (--before 20260822) must show the divergences castmech later fixed, or
+    the diff is measuring nothing.
+
+    `me` is PLAYER_AGENT_ID by construction: this server assigns the player
+    agent id 1 and there is exactly one player.
+    """
+    import origin as originmod
+    root = vaultpath.require_dir("captures", "gamesrv",
+                                 why="the ANIMREF ours-side grammar")
+    codec = Codec()
+    meta = {"root": root, "origin": "ours", "files": 0, "used": 0,
+            "skipped_origin": [], "skipped_tape": 0, "refused_partial": [],
+            "empty": 0}
+    conns = []
+    for name in sorted(os.listdir(root)):
+        if not name.endswith(".jsonl"):
+            continue
+        stamp = name.split("-")[1] if "-" in name else ""
+        if after and stamp < after:
+            continue
+        if before and stamp >= before:
+            continue
+        meta["files"] += 1
+        path = os.path.join(root, name)
+        org, why = originmod.origin_of(path)
+        if org != originmod.OURS:
+            meta["skipped_origin"].append({"file": name, "origin": org,
+                                           "why": why})
+            continue
+        rows = []
+        tape_session = False
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                try:
+                    rec = json.loads(line)
+                except (json.JSONDecodeError, ValueError):
+                    continue
+                if rec.get("kind") != "sent":
+                    continue
+                if str(rec.get("label", "")).startswith("tape["):
+                    tape_session = True
+                    break
+                rows.append(rec)
+        if tape_session:
+            meta["skipped_tape"] += 1
+            continue
+        msgs, bad = [], None
+        for rec in rows:
+            try:
+                blob = bytes.fromhex(rec.get("plain", ""))
+            except ValueError:
+                bad = f"seq {rec.get('seq')}: unhexable plain"
+                break
+            if not blob:
+                continue
+            decoded, consumed, err = codec.decode_stream_at(
+                "GAME_SMSG", blob, 0)
+            if err is not None or consumed != len(blob) or not decoded:
+                bad = (f"seq {rec.get('seq')} opcode 0x{rec.get('opcode', -1):04x}"
+                       f" ({rec.get('label', '')!r}): framed {consumed}/{len(blob)}"
+                       f" ({err})")
+                break
+            t = rec.get("t", 0.0)
+            for _off, op, vals in decoded:
+                msgs.append((t, op, vals))
+        if bad is not None:
+            meta["refused_partial"].append({"file": name, "why": bad})
+            continue
+        c = connection_record(name, name, msgs, me=1, eps=0.005)
+        if c is None:
+            meta["empty"] += 1
+            continue
+        meta["used"] += 1
+        conns.append(c)
+    return meta, conns
 
 
 def scan_live(stamps=None):
@@ -389,17 +522,9 @@ def scan_live(stamps=None):
                      "why": f"partial decode {consumed}/{total} ({err})"})
                 continue
             meta["decoded"] += 1
-            evs = list(prop_events(msgs))
-            if not evs:
-                continue
-            me = whose_agent(msgs)
-            conns.append({
-                "capture": stamp, "connection": conn, "me": me,
-                "events": evs,
-                "swings": swing_episodes(evs),
-                "casts": cast_episodes(evs, me=me),
-                "props": prop_census(evs),
-            })
+            c = connection_record(stamp, conn, msgs, whose_agent(msgs))
+            if c is not None:
+                conns.append(c)
     return meta, conns
 
 
@@ -460,11 +585,18 @@ def census(meta, conns):
 
     props = collections.Counter()
     unknown = collections.Counter()
+    forms = collections.Counter()
     for c in conns:
         for p, row in c["props"].items():
             props[p] += row["n"]
             if row["name"] == "UNKNOWN":
                 unknown[p] += row["n"]
+        for ev in c["events"]:
+            if ev["kind"] == "prop" and ev["prop"] in CAST_OPEN:
+                form = ("9F_untargeted" if ev["target"] is None
+                        else "A0_targeted" if ev["target"]
+                        else "A0_target0")
+                forms[(ev["prop"], form)] += 1
 
     return {
         "meta": {k: v for k, v in meta.items() if k != "refused_partial"},
@@ -497,6 +629,8 @@ def census(meta, conns):
                   "status_marks": ep["status_marks"], "close": ep["close"]}
                  for ep in status_marked_casts],
         },
+        "cast_open_forms": {f"{p}/{form}": n
+                            for (p, form), n in sorted(forms.items())},
         "props": {str(p): {"n": n, "name": KNOWN_PROPS.get(p, "UNKNOWN")}
                   for p, n in sorted(props.items())},
         "unknown_props": {str(p): n for p, n in sorted(unknown.items())},
@@ -542,6 +676,107 @@ def control(conns):
     return led.verdict()
 
 
+def grammar_diff(live, ours):
+    """ANIMREF-R2: the divergence table, retail's census against ours.
+
+    Ours' NPC casts land in the 'other' bucket (the extractor is symmetric),
+    so self compares to self and other to other. Every row names both
+    counts; a side at 0 where the other is populated is a vocabulary
+    divergence, a shifted distribution is a law divergence.
+    """
+    rows = []
+    lp, op_ = live["props"], ours["props"]
+    for p in sorted(KNOWN_PROPS, key=int):
+        ln = lp.get(str(p), {}).get("n", 0)
+        on = op_.get(str(p), {}).get("n", 0)
+        if ln == 0 and on == 0:
+            continue
+        flag = ""
+        if ln > 0 and on == 0:
+            flag = "NEVER-SENT-BY-US"
+        elif on > 0 and ln == 0:
+            flag = "OURS-ONLY (retail never sends it)"
+        rows.append({"prop": p, "name": KNOWN_PROPS[p],
+                     "live": ln, "ours": on, "flag": flag})
+
+    def sigtop(cen, table, family, who, n=3):
+        return [(r["n"], r["sig"]) for r in cen["casts"][table]
+                if r["family"] == family and r["who"] == who][:n]
+
+    sig_pairs = []
+    families = sorted({r["family"] for c in (live, ours)
+                       for r in c["casts"]["open_signatures"]})
+    for table in ("open_signatures", "finish_signatures", "cancel_signatures"):
+        for family in families:
+            for who in ("self", "other"):
+                lt, ot = sigtop(live, table, family, who), \
+                    sigtop(ours, table, family, who)
+                if lt or ot:
+                    sig_pairs.append({"table": table, "family": family,
+                                      "who": who, "live": lt, "ours": ot})
+
+    def law_residuals(cen):
+        out = {}
+        for iv, st in cen["swings"]["ratio_by_declared_interval"].items():
+            ivf = float(iv)
+            if st.get("n") and ivf > 0:
+                out[iv] = {"n": st["n"],
+                           "mean_windup_ms": round(st["mean"] * ivf * 1000, 1),
+                           "law_ms": round((0.5 * ivf - 0.1) * 1000, 1),
+                           "residual_ms": round(
+                               (st["mean"] * ivf - (0.5 * ivf - 0.1)) * 1000, 1)}
+        return out
+
+    return {
+        "props": rows,
+        "signatures": sig_pairs,
+        "swings": {
+            "live": {"by_close": live["swings"]["by_close"],
+                     "zero_gap": live["swings"]["landed_with_same_instant_damage"],
+                     "windup_vs_law": law_residuals(live)},
+            "ours": {"by_close": ours["swings"]["by_close"],
+                     "zero_gap": ours["swings"]["landed_with_same_instant_damage"],
+                     "windup_vs_law": law_residuals(ours)},
+        },
+        "cast_closes": {"live": live["casts"]["by_family_who_close"],
+                        "ours": ours["casts"]["by_family_who_close"]},
+        "cast_open_forms": {"live": live.get("cast_open_forms", {}),
+                            "ours": ours.get("cast_open_forms", {})},
+    }
+
+
+def print_diff(d):
+    print("== lifecycle property vocabulary (live n / ours n)")
+    for r in d["props"]:
+        mark = f"   <-- {r['flag']}" if r["flag"] else ""
+        print(f"  {r['prop']:>3} {r['name']:22s} {r['live']:6d} {r['ours']:6d}{mark}")
+    print("\n== swings")
+    for side in ("live", "ours"):
+        s = d["swings"][side]
+        print(f"  {side}: by_close {s['by_close']}  zero-gap "
+              f"{s['zero_gap']['n']}/{s['zero_gap']['of']}")
+        for iv, row in s["windup_vs_law"].items():
+            print(f"      iv={iv}: n={row['n']} windup {row['mean_windup_ms']}ms "
+                  f"law {row['law_ms']}ms residual {row['residual_ms']:+.1f}ms")
+    print("\n== cast-open forms (D15's observable: retail's A0_target0 row "
+          "is 0)")
+    fkeys = sorted(set(d["cast_open_forms"]["live"])
+                   | set(d["cast_open_forms"]["ours"]))
+    for k in fkeys:
+        print(f"  {k:20s} live {d['cast_open_forms']['live'].get(k, 0):5d}  "
+              f"ours {d['cast_open_forms']['ours'].get(k, 0):5d}")
+    print("\n== cast episode closes (family/who/close: n)")
+    keys = sorted(set(d["cast_closes"]["live"]) | set(d["cast_closes"]["ours"]))
+    for k in keys:
+        print(f"  {k:42s} live {d['cast_closes']['live'].get(k, 0):5d}  "
+              f"ours {d['cast_closes']['ours'].get(k, 0):5d}")
+    print("\n== top signatures, side by side")
+    for row in d["signatures"]:
+        print(f"  {row['table']}/{row['family']}/{row['who']}:")
+        print(f"     live: {row['live']}")
+        print(f"     ours: {row['ours']}")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--stamps", help="comma-separated capture stamps (default: all live)")
@@ -551,7 +786,57 @@ def main():
                     help="P-CTRL: enforce the castmech-overlap figures and exit")
     ap.add_argument("--json", action="store_true",
                     help="print the census as JSON instead of prose")
+    ap.add_argument("--ours", action="store_true",
+                    help="ANIMREF-R2: scan OUR gamesrv corpus instead of the "
+                         "live captures (origins never pool in one walk)")
+    ap.add_argument("--after", help="ours only: keep files stamped >= this "
+                                    "(YYYYMMDDTHHMMSS prefix ok)")
+    ap.add_argument("--before", help="ours only: keep files stamped < this -- "
+                                     "--before 20260822 is the known-bad "
+                                     "pre-castmech control era")
+    ap.add_argument("--diff", action="store_true",
+                    help="print the retail-vs-ours divergence table (scans "
+                         "both sides; --after/--before scope the ours side)")
     args = ap.parse_args()
+
+    if args.diff:
+        lm, lc = scan_live(None)
+        om, oc = scan_ours(args.after, args.before)
+        print(f"live: {lm['decoded']} connections; ours: {om['used']} files "
+              f"used, {om['skipped_tape']} tape sessions excluded, "
+              f"{len(om['skipped_origin'])} non-OURS skipped, "
+              f"{len(om['refused_partial'])} refused, {om['empty']} empty"
+              + (f"  [ours era {args.after or ''}..{args.before or ''}]"
+                 if args.after or args.before else ""))
+        for r in om["refused_partial"][:8]:
+            print(f"  REFUSED {r['file']}: {r['why']}")
+        d = grammar_diff(census(lm, lc), census(om, oc))
+        if args.json:
+            print(json.dumps(d, indent=1))
+        else:
+            print_diff(d)
+        if args.write:
+            outdir = os.path.join(vaultpath.require_dir(
+                "research", why="the ANIMREF referent"), "animref")
+            os.makedirs(outdir, exist_ok=True)
+            tag = f"{args.after or 'start'}_{args.before or 'now'}"
+            with open(os.path.join(outdir, f"diff_ours_{tag}.json"), "w",
+                      encoding="utf-8") as fh:
+                json.dump(d, fh, indent=1)
+            print(f"\nwrote {outdir}\\diff_ours_{tag}.json")
+        return
+
+    if args.ours:
+        meta, conns = scan_ours(args.after, args.before)
+        cen = census(meta, conns)
+        print(f"files used {meta['used']} of {meta['files']}  tape-excluded "
+              f"{meta['skipped_tape']}  non-OURS {len(meta['skipped_origin'])}"
+              f"  refused {len(meta['refused_partial'])}  empty {meta['empty']}")
+        for r in meta["refused_partial"][:8]:
+            print(f"  REFUSED {r['file']}: {r['why']}")
+        if args.json:
+            print(json.dumps(cen, indent=1))
+        return
 
     stamps = set(args.stamps.split(",")) if args.stamps else None
     meta, conns = scan_live(stamps)

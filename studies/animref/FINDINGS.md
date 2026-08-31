@@ -8,7 +8,7 @@ tail. Referent artifact: `vault/research/animref/episodes_live.jsonl` (2,354 epi
 + `census_live.json`. The tool's own correctness gates: `--control` pins the
 castmech-overlap figures (7 checks — castgaps' seven cycles, the four 0.74–0.77 s
 aftercast gaps, the Power Shot windup gaps to 0.1 ms), and
-`test_animgrammar.py` (35 bare-machine checks) pins the machines on synthetic streams.
+`test_animgrammar.py` (41 bare-machine checks) pins the machines on synthetic streams.
 Labels per `studies/character/FINDINGS.md`. Corpus counts below are FLOORS pinned
 as-of 2026-08-30 (the corpus grows); the two castmech captures are the immutable
 signature set.
@@ -144,18 +144,79 @@ now decodable with real n. Stays unsent.
 - **Zero-gap identity** extends: FINISHED and damage share the wire instant on
   1,035/1,042 landed swings (the 7 exceptions are §5's misses, not timing spread).
 
-## 9. What this run does NOT settle
+## 9. ANIMREF-R2: our own wire against the referent (2026-08-30, same session)
+
+Instrument: `animgrammar.py --ours / --diff` — `scan_ours()` walks the gamesrv
+`.jsonl` corpus (1,217 files; per-file origin check via `origin.origin_of`, 19
+tape-replay sessions excluded by their `tape[...]` labels — a tape's game channel
+is ArenaNet's stream played back, and scoring it as our emitter would grade
+retail against retail; 0 refused rows), decodes every `sent` row's plaintext
+through the same Codec, and runs the same episode machines. Ours-side batches
+are re-clustered at eps=5 ms (`assign_batches` — each of our sends stamps its
+own clock where a wire batch shares one; 5 ms is two orders under the closest
+legitimate neighbours). Era filters on the filename stamp make the control
+possible. Diff artifact: `vault/research/animref/diff_ours_20260822_now.json`.
+
+**The known-bad control PASSES** (`--before 20260822`, 1,045 files): the diff
+flags exactly what castmech later fixed — properties 3/8/58/59/50 all
+NEVER-SENT-BY-US, 21 cast opens in the `A0_target0` form retail never uses, the
+player's zero-windup era at −774.7 ms off the law and the NPC era at +130.5 ms
+(the pre-2026-08-11 fixed-0.899 mixture). A diff that scored this era clean
+would have been measuring nothing.
+
+**The current era** (`--after 20260822`, 122 files — all predating this
+session's R3 fixes, so the three fixed rows double as regression detectors):
+
+- **VALIDATED at signature level**: our self-cast grammar matches retail's
+  shape-for-shape — top open `['E4','62','60T','8:1']` (ours 59, live 9), top
+  finish `['E5','58','8:0','8:1']` (ours 22, live 6), cancel `['8:0','59','E2']`
+  both sides. The castmech wiring holds at population scale.
+- **D15's observable**: ours 12 (`50/A0_target0`) + 9 (`60/A0_target0`) vs
+  retail 0/758 — fixed this session (`5a8907e`); the rows must go to zero in
+  post-fix logs.
+- **D18 (NEW): the tick tail.** Our landed windups sit +16/+34 ms above our own
+  ratio model (iv 1.33 n=54, iv 1.75 n=12) — the 20 Hz world tick delays the
+  landing by 0–50 ms after `swing_lands_at` fires. Retail's residuals are ±6 ms
+  flat: its scheduler is finer than our tick. Post-fix wire will read
+  ≈ law + ~25 ms until the landing leaves the tick. Recorded, not yet fixed.
+- **D19 (NEW, FIXED same session): our NPC casts were OPEN-ONLY.** Retail
+  closes every other-agent cast with a 58-led batch (709/709 finished; top
+  shapes `['58','55']`, `['58','21','21','55','55']`); our NPC episodes closed
+  with NOTHING — 0 finishes, 145 closed only by the next cast opening. The
+  client's view of an NPC caster had no cast-end instant. `land_skill` now
+  opens its landing batch with `[58, agent, 0]` (test_agentlife pins it).
+- **The effect-property channel is absent from our wire**: 6/7/20/21/55/44 all
+  zero ours vs 539–916 live. We announce effects only on the dedicated
+  0x0042/0x0044 opcodes; retail sends BOTH the opcodes and the property rows,
+  and the property rows ride the finish batches. Whether 20/21 drive visuals
+  the opcodes don't is an R4 decode question — do not wire blind.
+- 46/48/49 (the attack-skill trio + instant family), 22/23/28 (scripted
+  animation), 63 (knockdown), 45 — never-sent confirmed in-era (§3/§4/§6).
+- Retail re-declares `atkspeed` (0x0035) inside 16 attack-skill open batches;
+  we declare it only at spawn. Minor, recorded.
+- **Instrument note resolved**: live attack-skill opens carry no `62` token
+  because the bench Warrior's attack skills are ADRENAL — spends ride 0x00D2,
+  which the extractor does not yet track (future: add 0x00CF/0x00D0/0x00D2 to
+  the event model before reading spend grammar off signatures).
+
+## 10. What R1+R2 do NOT settle
 
 - The IAS/DAS interaction with the windup law (§1 caveat) — no modified-speed swing
   exists in the corpus. A derivation from the client's `0x007F82C0` duration math
   (`modifier × base`, the 1.25 literal) may settle which term the −0.1 attaches to
   without any run.
 - Interrupt wire shape (35 at zero, E7/E8 unexamined here) — D5, client decode.
-- Prop 22/23/28 payload semantics (§6) and prop 45's trigger (§7) — R4 decode targets.
+- Prop 22/23/28 payload semantics (§6) and prop 45's trigger (§7) — R4 decode
+  targets; likewise whether effect-properties 20/21 drive visuals the dedicated
+  effect opcodes do not (§9) — do not wire blind.
 - The projectile-flight join for bow attack skills (§3) — needs a projectile-events
-  extractor pass, desk-only.
-- Whether our own wire matches ANY of this — that is ANIMREF-R2 (the gamesrv-corpus
-  extraction + diff), deliberately a separate entry point so origins cannot pool.
+  extractor pass, desk-only. Add 0x00CF/0x00D0/0x00D2 to the event model first
+  (§9's adrenal note).
+- The tick tail (D18, §9) — landing precision is bounded by the 20 Hz world
+  tick; fixing it means sub-tick scheduling, a server-architecture question.
+- ~~Whether our own wire matches ANY of this~~ — R2 ran (§9): self grammar
+  matches signature-for-signature; the divergence rows are D15 (fixed), D18
+  (recorded), D19 (fixed), and the effect-property channel (open).
 
 ## Provenance
 
