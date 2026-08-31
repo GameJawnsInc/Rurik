@@ -76,6 +76,21 @@ this rule (divergences D15/D4, `studies/animref/PLAN.md` §2):
 `0x009F [60, agent, skill]` untargeted for casts that have a target. The derived fix is
 mechanical: **A0 iff the cast names a target, else 9F.**
 
+**Every form the fix can emit has a retail witness — with one edge it does not, and
+auditing the fix is what found it.** Restricting the census to the OBSERVING PLAYER's
+own agent (the case our press path produces): prop 60 self-targeted 16, prop 60 self
+**untargeted 8** (skills 1 and 814, three captures), prop 50 self-targeted 45, prop 50
+self-untargeted **0**. So the targetless self spell — the form our fix newly emits where
+we used to send `A0`-with-target-0 — is retail's own shape, which is the fix's strongest
+single piece of evidence. But **prop 50 untargeted is a form retail never sends** (222/222
+targeted, self and other alike), and our pre-fix logs carried 12 attack-skill opens with
+no target, which the fix converts into exactly that unwitnessed shape. **D20, recorded:**
+retail's client does not produce an attack-skill press without a target, so those 12 are
+our own synthetic presses; the server currently accepts a press the real client would not
+make, and neither the old form nor the new one is right for it. The honest fix is upstream
+(refuse a targetless attack-skill press), not a third channel rule — filed, not wired,
+because the harness's own test presses use target 0 and would need moving first.
+
 ## 3. The attack-skill trio exists at scale — castmech's "silent E5" was a bow artifact
 
 castmech (two captures) had property 46 and 49 at zero occurrences and scoped the
