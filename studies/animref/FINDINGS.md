@@ -364,6 +364,89 @@ Captures: `20260831T092113` (auto-attack, moved), `20260831T092437` (arm A),
 `20260831T092714` (arm B, reverted), `20260831T093028` (spell — the one that
 dissolved it).
 
+### 11b. §11a's explanation was ALSO wrong — the player was DEAD, and the real regression reproduces on a living character
+
+**2026-08-31, same day.** §11a blamed the harness input path ("held `W` stops
+reaching the client after a number-key press"). The full timeline of the same
+captures refutes that too: **the Hatcher had killed the player before the `W`
+keydown in every blocked run.** `--enemy-hit` defaults to 0.10, the Hatcher
+lands a swing every ~1.37 s starting during map load, and death arrives ~7.5 s
+into the plan — between the skill press and the movement leg of every arm that
+pressed a skill:
+
+| run | W keydown at | player state at keydown |
+|---|---|---|
+| `20260831T092113` (auto-attack) | +0.0 / +10.2 | **ALIVE both legs** (run too short to die) — moved |
+| `20260831T092437` (arm A) | +8.5 | **DEAD** (died +7.6, revives +17.6) |
+| `20260831T092714` (arm B) | +8.5 | **DEAD** (died +7.5, revives +17.5) |
+| `20260831T093028` (spell) | +13.2 | **DEAD** (died +7.5, revives +17.6) |
+
+A corpse does not walk. The extractor that "checked" these runs filtered to
+movement opcodes and attack labels, so the `0x00F1 KILL the player` rows never
+reached the analysis — the safety-filter defect again, the filter deleting
+exactly the anomaly. Nothing about movement after a skill press was measured by
+those three runs, in either direction.
+
+**Consequences for §11's scoreboard, re-scored:**
+
+* §11a's input-path artifact: **WITHDRAWN**. `1:` and `W:` dispatch to the same
+  `hold_key` path, the `1` demonstrably arrived (0x0027 + E4 in both arms), and
+  the number key was never the discriminator — death was.
+* §11 result 2 (fix 3 cleared): **VOIDED, not restored.** Arm A vs arm B
+  compared corpse to corpse, which is vacuous for a movement question. What
+  survives of it is only the E5/E3 timing shift itself (+0.783 s → +0.042 s),
+  which was measured from the server sends. Fix 3 goes back to UNTESTED as a
+  movement-lock suspect — see the living-character run below, which retests
+  the shipped arm and reproduces the block, so the A/B rerun is still owed.
+* §11 result 3 (property 8 cleared): **SURVIVES** — the auto-attack run had the
+  hold set, a living player, and free movement.
+* The instrument note stands with a sharper spec: the missing check is not
+  "did the step yield messages" but **"was the subject alive, and did the
+  client's own reported position move"** — a walking client can legitimately
+  send almost no `0x003D` while in combat (the auto-attack W:6 leg traveled
+  767 u on one heading message and a stop report), so message counts score
+  wrongly in BOTH directions.
+
+**The regression itself: REPRODUCED, on a living character.** Run
+`20260831T102623` / capture `20260831T102651`, same shape plus
+`--enemy-hit 0.02` (~50 swings to a death — unkillable inside the run), with
+in-session controls. Travel is scored from the client's own reported
+coordinates, press verified (c2s `0x0027`, E4 for 322), zero deaths:
+
+| leg | keydown (post-press) | travel |
+|---|---|---|
+| `W:3` baseline (pre-combat) | — | **607 u** @ 202 u/s |
+| `W:6` | **+2.1 s** | **0.0 u** in 6 s |
+| `W:3` | **+12.5 s** | **618 u** @ 206 u/s |
+| `S:2` | +20 s | 372 u @ 186 u/s |
+
+OBSERVED, from the dead window's own traffic:
+
+* The client's input path is fine: at the +2.1 s keydown it **sent**
+  `0x003D`, the server answered `attack_stopped: the player moves` +
+  `action released` + the `0x0025` direction echo + a zero-lead pin — and the
+  client then stood still and went silent for six seconds, stop-reporting its
+  **unchanged** coordinates at keyup (server-side drift 767 u = the server
+  extrapolated, the client never left). The refusal is the client's.
+* The working leg at +12.5 s received the **identical** server response
+  (`0x0025` echo + zero-lead, same tags) and walked — so the discriminating
+  state is client-side, armed by the skill press.
+* The un-arm moment is bounded to **(+8.1 s, +12.5 s)** post-press for a fresh
+  keydown — OR earlier with a fresh-keydown requirement: E6 SKILL_RECHARGED
+  landed at +3.8 s *inside* the dead hold and movement did not start, so a
+  level-triggered unlock before +8 s is excluded.
+* **No server message at all arrived between +4.5 s and the keyup** (perf
+  pings aside), so whatever un-arms the client is **client-local** (a timer or
+  an animation completing), not a message we sent late.
+
+This matches the operator's report in kind — attacks block movement — and
+exceeds it in degree (they could move again by re-pressing; a single synthetic
+keydown never re-presses, so the harness sees the full lock where a human
+feels a delay). Open: what retail sends around a press→move sequence that we
+do not (corpus diff), and which client state field roots locomotion (decode).
+Instrument runs: `20260831T102623`; analysis in `studies/animref/` history and
+the leg scorer (travel + alive per leg) being folded into the harness.
+
 ## 12. What R1, R2 and R4 do NOT settle
 
 - The IAS/DAS interaction with the windup law (§1 caveat) — no modified-speed swing
@@ -394,9 +477,138 @@ dissolved it).
   matches signature-for-signature; the divergence rows are D15 (fixed), D18
   (recorded), D19 (fixed), and the effect-property channel (open).
 
+## 13. ANIMREF-R6: the execution batch, derived — and the movement lock it explains
+
+**2026-08-31, from §11b's reproduction.** The client-side movement root was
+chased into the corpus rather than tuned around, per the arc's method:
+
+**Retail's law (OBSERVED).** Across the live corpus, every ACCEPTED attack-skill
+press was aligned to its E4 on the s2c clock (per-connection offset from the
+press↔E4 histogram, 42-anchor refinement, consistent to ±3 ms) and scored for
+the gap to the player's next c2s movement message. n=53 accepted presses with a
+later move: the 8 sub-second cases all put the first move **within ±0.25 s of
+E3** (E3→move −0.147/+0.071/+0.249/+0.237/−0.087/+0.171 s…) — the root opens at
+the strike's execution, not at the press and not an aftercast later. The two
+small negatives say the client's un-root is its own animation clock, with E3 in
+flight. (First pass without E4 validation was WRONG and is kept as a lesson:
+its fastest "quarterstep", 0.568 s, was a press retail **refused** — no E4 —
+including a targetless press, which is D20 observed live. 41 refused presses in
+the corpus.)
+
+**Our divergence (OBSERVED, run `20260831T102651`).** Our client's W keydown at
+E3+1.26 s moved 0.0 u for six seconds; a fresh keydown at press+12.5 s walked at
+full rate; no server message arrived in between — the un-arm is client-local.
+The client's input path is fine (it sent its 0x3D; the server's reply is
+byte-identical in the dead and the working windows). The state that roots it is
+armed by the press and never disarmed by us.
+
+**The missing disarm, from the corpus (§3 + a 40/40 batch census).** Retail's
+attack-skill execution batch: `0x009F [46, agent, 0]` OPENS it — INT form,
+value 0, 40 of 40 self episodes across 60 connections — then the 0x00CF
+adrenaline strike, the damage (16, or 17 on a critical), the victim's health
+bookkeeping, then E3. **No attack_started, no melee_attack_finished**: the
+skill replaces the swing its windup announced. Our server: never sent 46
+(defined-unsent since castmech's bow artifact, §3), and delivered the damage
+through the interval-gated ordinary swing path — so a press mid-chain dealt
+**no skill damage at all** (hit_enemy's gate returned before its first send),
+and when the gate allowed, a second phantom swing opened.
+
+**Shipped (ANIMREF-R6, default ON, revert `--legacy-attack-finish`):** at the
+attack cast's E5 instant the server now sends `[46, PLAYER, 0]` first —
+unconditionally for attack casts, whiff included (it closes the player's
+ACTION, not the hit; the whiff case is RECONSTRUCTION, every corpus 46 rides a
+hit) — then the strike via `hit_enemy(skill_strike=True)`: full weapon terms
+(roll, armour, critical, adrenaline, preparation), no swing brackets, no
+interval gate, timer still consumed so the chain's next swing paces one
+interval later, where the corpus puts it. `test_castcycle` §2b/§2c pin both
+arms, legacy defect included; `land_skill`'s 58-first batch was reconciled
+with the guard contract in the same change (fraction computed before the
+first send, 58 still leading — test_guards §4).
+
+**The verbatim check ran (`20260831T105013`/`105042`) and REFUTED "46 is the
+whole disarm" — while confirming it is half of it.** The same protocol,
+fix ON: W:6 at press+2.1 s traveled **49.2 u** — from the keydown to
+**exactly** the client's next-swing instant (execution 14.75 + the 1.75
+interval = 16.50, to the centisecond) — where the pre-fix leg traveled 0.0 u
+ever. So 46 closed the skill state and the client resumed its AUTO-ATTACK
+CHAIN; what roots it now is the chain: the between-swings quarterstep window
+exists, and the swing instant consumes the held key. Consistently, `S:2`
+(backing out of melee) traveled at full rate while the second `W:3` froze —
+the client was chaining at a target our server had *stopped serving* (we
+declared `attack_stopped: the player moves` at the first 0x3D and killed our
+loop; the client kept its schedule). The remaining divergence was therefore
+the CHAIN's behaviour around movement — §14.
+
+## 14. ANIMREF-R7: the two chain laws around movement — the old door was one witness counted twice
+
+**2026-08-31, from §13's verbatim refutation.** The re-rooting agent is the
+auto-attack chain, so the chain's own grammar was put against the corpus.
+Both laws OBSERVED, live corpus only:
+
+**LAW A — movement does not close the chain.** Of 100 player movement
+messages sent within 2 s of the player's own `attack_started`, **87 carry no
+prop-3 within 0.5 s** (the entire corpus holds just 28 self prop-3s; the 13
+that do ride a move are the genuine closes). Our movement door sent
+`[3, agent, 0]` and forgot the target on **every** move — a rule built from
+the wiki's sentence ("moving cancels auto-attacking") plus a 2-of-2 measured
+on **our own** door (capture `20260824T074002` is ours-origin), one witness
+counted twice. The retail quarterstep rides the chain and the chain survives
+it.
+
+**LAW B — the post-execution restart is paced.** The gap from a self prop-46
+to the player's next `attack_started`: n=38, with a tight modal cluster at
+**0.749–0.783 s** (21/38) against `swing_windup(1.75) = 0.775` — one weapon
+windup, never the same instant. The tail (0.94–5.5 s) is the players who
+stepped or paused. Our server reopened the chain in the execution tick.
+
+**Built — and then the verbatim check REVERSED R7a's default.**
+
+* **R7b (`--legacy-chain-restart`, default ON):** after an attack skill's
+  execution the swing clock is stamped `exec + windup − interval`, so the
+  START-to-START gate opens exactly one windup out (LAW B), instead of the
+  same tick. Shipped.
+* **R7a (`--move-keeps-chain`, default OFF):** LAW A's wire — no prop-3 on
+  movement, target and armed swing survive, `attack_tick`'s range gate the
+  deferred judge; cast half and the movement prop-8 release untouched. The
+  tap-train verbatim check (`20260831T110116`/`110144`) ran it default-ON
+  and **every movement key died**: three `W:0.4` taps (one squarely in the
+  backswing window) and a held `W:6` all traveled **0.0 u** while `S:2`
+  walked 375 u — strictly worse than R6-alone, whose first W moved 49 u the
+  instant our prop-3 went out. Across all four instrumented runs one client
+  model survives: **the client cannot START movement while its attack
+  action is open, and the prop-3 LAW A removes is the only closer we send.**
+  Retail's client moves without that prop-3 (87/100), so retail feeds a
+  grant we have not identified — candidates, all absent from our wire at
+  the move instant: the `0x002B` speed that rides every retail movement
+  echo (`[43, me, 0.75, type 8]`, and `[43, me, 1.0, type 1]` at the
+  execution instant), the echo's `0x0028`, the prop-8 VALUES (our dumps
+  elided them). Shipping LAW A without its complement is "more
+  retail-correct wire, visibly worse game" — R5's P1 lesson — so the wire
+  fact is recorded, the flag exists, and the default keeps the door that
+  moves. **The client's movement-start gate is now the arc's sharpest
+  decode target**, alongside the visual-component id table.
+
+Pins: `test_castcancel` §5 (default door + the opt-in arm, with the
+measured reason in the check text), `test_castcycle` §2c (the restart
+pacing rides the batch pin).
+
+**The shipped default's own verbatim row (`20260831T110714`/`110743` — R6
+ON, R7b ON, R7a off).** Same protocol, zero deaths, press verified:
+baseline `W:3` 614 u @ 205 u/s; **tap at press+2.1 s: 19 u (moves — was
+0.0 u before R6)**; **tap at press+4.2 s: 79 u @ 196 u/s — full stride**;
+**held `W:6` at press+9 s: 1248 u @ 208 u/s for the entire hold** (was
+0.0 u); `S:2` 376 u. The operator's regression — every movement key dead
+after an attack-skill press — is resolved in the shipped configuration.
+The remaining gap to retail is the first tap's partial rate (the client
+engages partway through it, on our prop-3 close, where retail's client
+moves under its own control within ±0.25 s of E3 with the chain
+surviving) — that is the movement-start-gate decode, §14's named target.
+
 ## Provenance
 
 All figures are measurements over the owner's own live captures via extractors in this
 repo (`animgrammar.py`, this arc; `tape.py`/`codec.py`, prior arcs); scratch probes and
 the referent JSONL are under `vault/research/animref/`. No asset bytes, no client
-launch, no upstream derivation — no §6.1 register row required.
+launch, no upstream derivation — no §6.1 register row required. §13–14's corpus scans
+(`pressmove2`, `batch46`, `chainmove`) are session scratch over the same tapes; their
+laws and n's are restated in full above.

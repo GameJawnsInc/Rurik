@@ -332,14 +332,18 @@ def section_land_skill():
     state["player_health"] = float(authsrv.agents.PLAYER_HEALTH)
     agent["casting"] = 0
     authsrv.land_skill(send, state, 10, agent, 0)
-    # 2 since 2026-08-21: the 0x00CF the player earns for taking the damage,
-    # then the damage -- the gain first, as the corpus puts it (601 of 663 by
-    # the following message). A CAST grants the caster no strike -- that half
-    # of the wiki's rule says WEAPON hit -- so the only adrenaline message here
-    # is the victim's, and it is the player's own.
-    check(len(sent) == 2 and agent["casting"] is None
-          and sent[0][0] == authsrv.AGENT_ADRENALINE_GAIN,
-          "control: in-range lands the skill and clears the slot",
+    # 3 since ANIMREF-R2 (D19): the property-58 finish OPENS the batch (58
+    # leading, 709/709 finished other-agent episodes in the live corpus),
+    # then the 0x00CF the player earns for taking the damage, then the
+    # damage -- the gain immediately before it, as the corpus puts it (601
+    # of 663 by the following message). A CAST grants the caster no strike --
+    # that half of the wiki's rule says WEAPON hit -- so the only adrenaline
+    # message here is the victim's, and it is the player's own.
+    check(len(sent) == 3 and agent["casting"] is None
+          and sent[0][0] == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
+          and sent[0][1][0] == authsrv.agents.GV_SKILL_FINISHED
+          and sent[1][0] == authsrv.AGENT_ADRENALINE_GAIN,
+          "control: in-range lands the skill and clears the slot, 58 leading",
           f"{[op for op, _, _ in sent]}, casting={agent['casting']}")
 
 
