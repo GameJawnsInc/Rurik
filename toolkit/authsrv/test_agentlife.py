@@ -41,7 +41,7 @@ import agents  # noqa: E402
 import checks  # noqa: E402
 from codec import Codec  # noqa: E402
 
-LEDGER = checks.Ledger("agent lifetime", floor=254)
+LEDGER = checks.Ledger("agent lifetime", floor=256)
 
 
 def section_weapon_damage():
@@ -1211,6 +1211,30 @@ def section_enemy_skill():
               f"{second} -- expected skill {authsrv.ENEMY_SKILL_BAR[1][0]}. "
               "Repeating the first skill is what a bar-shaped constant looks like "
               "when the selector is not really reading the bar")
+
+    # 4b. AN EMPTY BAR MEANS PLAIN SWINGS (--no-enemy-skills, ANIMREF-R5).
+    #     content/world.toml's `skills` row could always express this ("an
+    #     EMPTY list leaves the agent on plain swings" -- ENEMY_SKILLS' own
+    #     comment); the FLAG could not, because `--enemy-skills ''` is falsy
+    #     and was silently ignored, leaving the default bar up while the
+    #     command line said otherwise. The pair below is the point: the same
+    #     world that casts with a bar must swing without one, so this cannot
+    #     pass by the agent simply doing nothing.
+    bare = _world(skills=(), skill_ready=[])
+    bare["agents"][10]["last_swing"] = time.time() - 100.0
+    bare_sent = _swings(bare, n=1)
+    LEDGER.ok(not cast_msgs(bare_sent),
+              "an empty enemy bar casts NOTHING",
+              f"{cast_msgs(bare_sent)} -- the --no-enemy-skills arm, which "
+              "R5 needs so the hostile's swing channel can be watched with "
+              "its cast channel silent")
+    started = [v for op, v, _l in bare_sent
+               if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
+               and v and v[0] == agents.GV_ATTACK_STARTED]
+    LEDGER.ok(len(started) == 1,
+              "and it SWINGS instead -- the control that stops this being a "
+              "test of an agent that does nothing at all",
+              f"{started}")
 
     # and only when the WHOLE bar is down does it swing
     busy = _world()
