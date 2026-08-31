@@ -873,6 +873,41 @@ our own harness presses, and would address 1 of 43 refusals. Recording that
 is the whole return here — the item's premise was wrong, and building it
 first would have hidden that.
 
+## 20. Props 22/23/28 are NOT a per-skill id space — R8's method does not port
+
+**2026-08-31.** The queue carried these as "the id-space method may port,
+but test per-skill-ness first, do not assume R8's success." Tested; it does
+not port, and the reason is structural rather than a shortage of data.
+
+**They are not cast-driven.** Attributing each event to a cast the way §16
+did: **59 of 60 prop-22 events, 17 of 17 prop-23 and 17 of 17 prop-28 have
+no cast-open by the same agent within 6 s.** Property 20/21's whole method
+rests on that attribution, so there is nothing for it to bite on here. All
+three ride the untargeted `0x009F` channel exclusively (0 targeted, against
+prop 20's targeted-only form).
+
+**23 and 28 are a PAIR, and 23 is the parameter.** Every prop-23 event
+shares its batch and its agent with a prop-28: `23 → 8` (15 of 17; the other
+two are 10) immediately followed by `28 → 831757499`. That is exactly
+skillcast §15.2's sticky-parameter mechanism seen from the wire — 23 sets a
+small parameter, 28 consumes it — and it is the first corpus confirmation of
+that reading.
+
+**The values are 32-bit resource ids, shared across agents.** Prop 22: 60
+events, 16 distinct values, all large and unstructured (809791073,
+3200618694, 1470797158 — neither small ids nor sensible floats). Prop 28: 3
+distinct values over 17 events, and **the same id 831757499 goes to agents
+63, 550, 302 and 658** in one capture. A per-skill table cannot be behind
+that: the id is neither per-agent nor per-cast, and reads as a handle into an
+animation-resource space.
+
+**So: no fix, and the item leaves the queue.** Wiring 22/28 would mean
+inventing 32-bit resource handles — the same refusal condition §10 named for
+20/21, except that this time there is no `s_skill` field to read them out of,
+because the channel is not keyed by skill at all. What it would take is
+identifying the resource space those handles index, which is `Gw.dat`
+territory and a different arc's question, not a value we can derive.
+
 ## Provenance
 
 All figures are measurements over the owner's own live captures via extractors in this
