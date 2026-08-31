@@ -7557,8 +7557,11 @@ GAME_SMSG_SKILL_ACTIVATED = 0x00E3
 # the cast BEGINS when the caster frees, and E5 lands at begin + activation --
 # a model that fits all four Necromancer cycles to <= 14 ms. The two Ranger
 # cycles (attack skill 394, table activation 0.0, observed gap ~1.14 s) do NOT
-# fit it: an attack skill's timing rides the weapon's attack speed, which this
-# server does not model -- OURS, divergence recorded rather than papered over.
+# fit it: an attack skill's timing rides the weapon's attack speed. ~~which
+# this server does not model -- OURS~~ CLOSED 2026-08-30 (ANIMREF-R3): for a
+# zero-activation attack skill the E5 now lands at begin +
+# swing_windup(current weapon interval) -- the windup law's own prediction for
+# the ranger's 2.475 s bow is 1.1375 s against the observed 1.1374/1.1387.
 GAME_SMSG_SKILL_ACTIVATED_BROADCAST = 0x00E4
 GAME_SMSG_SKILL_RECHARGE = 0x00E5
 GAME_SMSG_SKILL_RECHARGED = 0x00E6
@@ -10976,7 +10979,21 @@ def handle_skill_press(values, send, state, conn_id, opcode):
     # at begin + activation. `cast_busy_until` is only ever touched on this
     # thread -- the tick reads nothing from it.
     begin = max(now, state.get("cast_busy_until", 0.0))
-    e5_at = begin + activation
+    # AN ATTACK SKILL'S TIMING RIDES THE WEAPON, NOT THE ACTIVATION COLUMN.
+    # This was the divergence the E-series constants' comment recorded for
+    # two weeks ("which this server does not model -- OURS"): Power Shot's
+    # table activation is 0.0, but its two live E4->E5 gaps are 1.1374 and
+    # 1.1387 s -- and the windup law derived at ANIMREF-R1 (sec.1) lands on
+    # 1.1375 for the ranger's 2.475 s bow: the attack skill's E5 IS the
+    # skill-swing's hit instant, begin + swing_windup(current interval).
+    # Wired for the measured case only (table activation 0.0); a LISTED
+    # activation still wins, per the wiki's "activation replaces the weapon
+    # time" reading -- UPSTREAM, no corpus cycle exercises it yet.
+    if is_attack and activation == 0.0:
+        e5_at = begin + swing_windup(
+            ATTACK_INTERVAL * attack_interval_factor(state, PLAYER_AGENT_ID))
+    else:
+        e5_at = begin + activation
     state["cast_busy_until"] = e5_at + aftercast
     # A QUEUED PRESS DEFERS ITS WHOLE BURST TAIL TO CAST-BEGIN. Measured
     # from both directions (studies/castmech 3b/3c): skill 105's debit and

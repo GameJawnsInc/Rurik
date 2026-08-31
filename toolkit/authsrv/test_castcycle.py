@@ -24,6 +24,7 @@ trio for skill 153.
 
 import os
 import sys
+import time as _time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
@@ -211,6 +212,30 @@ def section_attack_family():
               "nor property 8, 0 of 2 each, so nothing of the spell "
               "family's cast end is borrowed (castmech 3c)",
               f"{[(hex(op), vals) for op, vals, _ in sent]}")
+        # THE TIMING LAW'S ATTACK-SKILL HALF (ANIMREF-R3 fix 3): a
+        # zero-activation attack skill's E5 rides the weapon, landing at
+        # begin + swing_windup(current interval) -- Power Shot's own two
+        # live gaps (1.1374/1.1387 over a 2.475 bow) against the law's
+        # 1.1375. A LISTED activation still wins (the branch above used
+        # activation 1.0 and scheduled begin + 1.0).
+        authsrv.skill_timing = lambda sid: (0.0, 0.0, 3.0)
+        state2 = {"agents": {}}
+        sent2 = []
+        send2 = lambda op, vals, label="", quiet=False: \
+            sent2.append((op, vals, label))
+        t0 = _time.time()
+        _press(authsrv, send2, state2, skill=394, target=40)
+        c2 = state2["pending_casts"][0]
+        expect = authsrv.swing_windup(
+            authsrv.ATTACK_INTERVAL
+            * authsrv.attack_interval_factor(state2, authsrv.PLAYER_AGENT_ID))
+        check(abs((c2["e5_at"] - t0) - expect) < 0.05,
+              "a ZERO-activation attack skill schedules its E5 a weapon "
+              "windup out, not instantly -- the activation-column model "
+              "left Power Shot's E5 at the press, 1.14 s early",
+              f"e5 in {c2['e5_at'] - t0:.4f}s, law says {expect:.4f}s "
+              f"(hammer {authsrv.ATTACK_INTERVAL}s -> "
+              f"{authsrv.swing_windup(authsrv.ATTACK_INTERVAL):.4f}s)")
     finally:
         authsrv.skill_timing = saved
         authsrv._is_attack_skill = saved_attack
