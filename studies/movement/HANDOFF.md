@@ -164,7 +164,7 @@ far to trust any number here: [studies/method/FINDINGS.md](../method/FINDINGS.md
 | Document | What it is for | Currency |
 |---|---|---|
 | **this file** | the arc's entry point; where each thread stands and what to do next | current at `201324c` |
-| `studies/movecode/FINDINGS.md` | **the record.** Newest sections supersede everything above them | current; **§1z-q** (the history-chain decode, and the mirror) is the newest. ⚠ Numbering skips `1z-p` on purpose — that heading is `RUN-R8.md`'s staleness test and R8 is still not run |
+| `studies/movecode/FINDINGS.md` | **the record.** Newest sections supersede everything above them | current; **§1z-r** (the mirror BUILT and REPLAYED — the sync sim confirmed by every warp in the corpus) is the newest, on §1z-q (the decode). ⚠ Numbering skips `1z-p` on purpose — that heading is `RUN-R8.md`'s staleness test and R8 is still not run |
 | `studies/movecode/HANDOFF-PLANE.md` | deep-dive on the plane channel and the lock | **stops at §1z-i**; misses `1ce0171`, `30055e0`, `d710a67`, `131c84a`, and its own "written at `dcf9484`" stamp is wrong (last edited `2882627`) |
 | `studies/movecode/HANDOFF-WARP.md` | deep-dive on the warp hunt and the candidate graveyard | lists `--router` REFUTED in two tables; §1y/§1z/§2a reversed that and every runsheet since passes it |
 | `studies/movement/CANCELWALK.md`, `REALFIX.md`, `ROUTER.md` | the shipped policy arms and their runs | see §C; several carry self-status headers that are wrong (§G) |
@@ -198,17 +198,22 @@ you must state status, state the **test**: *"this ran iff FINDINGS has a §1t he
 > no-clip; **nothing this repo ships stops the warps.** "The router fixed the
 > warps" was never established — the no-clip result (§1z) was.
 >
-> **The derived lead: a server-side AgTrack MIRROR — `FINDINGS` §1z-q.** The
-> history chain the client's own reprieve test consults is now decoded whole
-> (node/state layout, the single writer, the 7-field push rule, the 2.5 s and
-> 3.3 s timers, the newest→oldest walk with oldest-match-wins and truncation,
-> every reset, and ArenaNet's own vocabulary), cross-verified with zero offset
-> disagreements. Everything the chain depends on is server-known, so the
-> server can mirror it and evaluate the client's reprieve test BEFORE emitting
-> a grant. **Next step is desk-only: build the mirror, replay it against the
-> existing corpus, and require it to reproduce the historical snaps** — the
-> five dead point-choosing candidates and the two density arms that made warps
-> WORSE are the retrodiction it must pass. Nothing here needs the owner.
+> **The derived lead: a server-side AgTrack MIRROR — `FINDINGS` §1z-q, and
+> as of 2026-08-30 evening it is BUILT AND REPLAYED — §1z-r.** The mirror
+> (`toolkit/authsrv/agtrack_mirror.py`, 64-check transcription test) was
+> driven through 177 corpus captures by `toolkit/clientscan/agtrack_replay.py`
+> with no client run. **Result: the sync-agent simulation is CONFIRMED by the
+> client's own warps** — 223 of 251 hard-bar steps land within 150 u of the
+> mirror's simulated sync position (median 24 u); the 28 others are a second,
+> non-AgTrack displacement mechanism the replay now measures per step. In the
+> current-config regime the reprieve model's killing cell is EMPTY with
+> reader-2 pruning (10/10 covered on the 2026-08-30 captures), and the
+> freerun misses decompose into old-trail matches (invisible resets are real
+> — old history is NOT protection) plus one 0.6 u boundary case. **The policy
+> target is sharpened (§1z-r.4): keep q within 100 u of the CURRENT LEG —
+> segment 0 plus ~3 s — never the deep trail.** Next: derive the
+> grant-insertion rule from the mirror's evaluate() as a pre-emit check.
+> Nothing so far has needed the owner, and step 3 doesn't either.
 >
 > ⚠ **R8/R8b are SHELVED**, not cancelled — see §D′ and `RUN-R8.md`'s standing
 > block (P2 read and confirmed; only the bridge phase was ever owed).
@@ -317,6 +322,19 @@ better-designed when it happens, by naming which geometry to press against.
 
 ### D′. The new next action, in order — and the first one is a DECISION, not a measurement
 
+0. **★ DERIVE THE GRANT-INSERTION RULE FROM THE MIRROR — `FINDINGS` §1z-r.4,
+   step 3, and it is the arc's live desk item.** Steps 1 and 2 are DONE
+   (2026-08-30 evening, commit `6dff112`): the mirror is built
+   (`toolkit/authsrv/agtrack_mirror.py`, 64-check transcription test), and the
+   replay (`toolkit/clientscan/agtrack_replay.py`) validated the sync sim
+   against every warp in the corpus (223/251 hard steps land ≤150 u from
+   mirror-sync, median 24 u) and emptied the reprieve model's killing cell in
+   the current regime (10/10 covered with reader-2 pruning; §1z-r.2's
+   decomposition). The rule to derive: before emitting a grant, run
+   `mirror.evaluate()`; on a predicted MISS, emit a trajectory-following grant
+   that keeps q inside the CURRENT-LEG tube (segment 0 + ~3 s — never deeper
+   history, §1z-r.4). Only after the rule exists on paper: ONE verbatim
+   confirmation against a live chain via movehook. No run campaign.
 1. **★ RAISE THE REPAIR'S DEFAULT WITH THE OWNER** — but on the specificity
    evidence, not on a false-fire scare. §C notes the plane repair is the one arm
    with **no owner ruling on record** while putting a `0x002C` on the wire by

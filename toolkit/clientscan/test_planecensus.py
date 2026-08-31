@@ -348,15 +348,19 @@ def main():
           f"{tot['dir-other']} -- if these stop summing, one class is being "
           f"double-counted or dropped")
 
+    # Re-stamped 2026-08-30 evening: the owner's three RUN-R8-adjacent
+    # captures landed after the pin. The as-of-pin corpus reproduces the old
+    # 11754/670/259/7543 EXACTLY (scratchpad pin_rescan, this session), so
+    # this is growth, not a moved constant -- corpus-counts-redden protocol.
     PUBLISHED = [
-        ("scored reports", 11754, tot["scored"], "1z-n.2"),
-        ("off-mesh", 670, tot["off-mesh"], "1z-n.2"),
+        ("scored reports", 12296, tot["scored"], "1z-n.2"),
+        ("off-mesh", 805, tot["off-mesh"], "1z-n.2"),
         ("DISAGREE", 259, tot["disagree"], "1z-n.2 / 1z-n.3"),
         ("distinct disagreeing points", 123, len(pts), "1z-n.6"),
         ("captures carrying a disagreement", 17, len(percap), "1z-n.6"),
         ("direction N->0", 208, tot["N->0"], "1z-n.2"),
         ("direction 0->N", 51, tot["0->N"], "1z-n.2"),
-        ("echo denominator (on-mesh sends)", 7543, tot["sends-on-mesh"],
+        ("echo denominator (on-mesh sends)", 7778, tot["sends-on-mesh"],
          "1z-n.5 / 1z-o.11"),
         ("echo trips", 282, tot["trips"], "1z-n.5 / 1z-o.11"),
         ("captures with an echo trip", 31, len(trip_caps), "1z-o.11"),

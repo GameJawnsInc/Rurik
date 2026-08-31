@@ -6806,7 +6806,7 @@ That beats both prior practices — `noclipscore.py` hand-pins map 280 and
 
 Two further witnesses agree and are kept as cross-checks rather than sources:
 the harness `gamesrv.log`'s `MAP OVERRIDE: 280` / `[map] navmesh 0x287B3` line
-(**173 of 173 agree, 0 disagree**), and its `[c1] GAME version: … world_id=…
+(**176 of 176 agree, 0 disagree**), and its `[c1] GAME version: … world_id=…
 player_id=…` line, which joins 1:1 to the capture's own `version` record across
 1,201 keys with zero collisions.
 
@@ -6829,18 +6829,25 @@ one; the headline is not.**
 
 ### 1z-n.2 The census
 
-**11,754 reports scored.** Keep the two words apart: **12,215 are ATTRIBUTED**
-(every report has a mesh id from its own capture), **12,077 are SCOREABLE**
-against `dat_study`, and **11,754 enter the headline** once stub meshes are
+**12,296 reports scored.** Keep the two words apart: **12,757 are ATTRIBUTED**
+(every report has a mesh id from its own capture), **12,619 are SCOREABLE**
+against `dat_study`, and **12,296 enter the headline** once stub meshes are
 excluded. "174 of 174 captures" is a statement about map ids, not about usable
 geometry — 2 captures / 138 reports have no mesh in the default archive:
 
 | | n | of |
 |---|---|---|
-| off-mesh — the mesh offers nothing | 670 | 5.7% of scored |
-| on-mesh | 11,084 | 94.3% |
-| **AGREE** — declared plane is offered | **10,825** | **97.66% of on-mesh** |
-| **DISAGREE** | **259** | **2.34% of on-mesh** |
+| off-mesh — the mesh offers nothing | 805 | 6.5% of scored |
+| on-mesh | 11,491 | 93.5% |
+| **AGREE** — declared plane is offered | **11,232** | **97.75% of on-mesh** |
+| **DISAGREE** | **259** | **2.25% of on-mesh** |
+
+> Re-stamped 2026-08-30 evening (was 11,754 / 670 / 11,084 / 10,825): the
+> owner's three RUN-R8-adjacent captures landed after the pin (+227/+228/+87
+> scored, +135 off-mesh of which 127 are the abort's carve-park, **0 new
+> disagreements, 0 new trips**). Re-derived over the as-of-pin corpus first:
+> all four pinned figures reproduce EXACTLY, so this is corpus growth, not a
+> moved constant — the corpus-counts-redden protocol, followed.
 
 **Item 3 answered — the 9-of-198 failure class at corpus scale.** `plane_at`'s
 docstring measures 189/198 = 95.5% agreement over four sessions. At corpus scale
@@ -6907,7 +6914,8 @@ reassuring nor an accident of sampling:
    ⚠ And the walk **over-sampled** stacked ground — per map about **5.4× on
    `0x287B3` and 3.5× on `0x1B97D`**; the "10×" an earlier draft quoted pooled
    both meshes' visits against the SMALLER map's areal rate. Visited stacking is
-   **194/11,084 = 1.75%** of on-mesh (the earlier 1.73% divided by 11,208, which
+   **194/11,491 = 1.69%** of on-mesh (194/11,084 = 1.75% before the 2026-08-30
+   evening captures; the earlier 1.73% divided by 11,208, which
    still carried the stub meshes the headline excludes) against an areal
    0.17–0.50%. More walking narrows this
    zero's support; it does not confirm it.
@@ -7007,7 +7015,9 @@ instrument that can is the movehook return tap, and it has been run once.
 
 ### 1z-n.5 Item 4 — the `plane_echo` tripwire, with a denominator
 
-**282 trips / 7,543 on-mesh player-agent sends ≈ 3.7%.** (This read 281/7,542
+**282 trips / 7,778 on-mesh player-agent sends ≈ 3.6%.** (Denominator 7,778 as
+of the 2026-08-30 evening captures — was 7,543 at the pin, 0 new trips. This
+read 281/7,542
 until 2026-08-30, when a defect in `planecensus.label_captures` was found: it
 dropped any capture with zero `position_report`s, and the echo channel scores
 SENDS. The one capture it dropped holds the corpus's **only `0x002A`**, and that
@@ -7047,14 +7057,16 @@ disagree** — zero exposure, not a clean run. The honest split:
 |---|---|
 | carry `position_report`s | 174 |
 | — of those, unscoreable (stub or unbound mesh) | **40** |
-| **scoreable** | **134** |
+| **scoreable** | **137** |
 | — with ≥1 disagreement | **17** |
-| — genuinely clean | **117** |
+| — genuinely clean | **120** |
 
-So the rate is **17 of 134 = 12.7% of scoreable captures**, not 17 of 174. Among
-the 117 clean ones, by ON-MESH report count — the only reports that *can*
-disagree — **1 has zero on-mesh reports, 16 have 1–4, 23 have 5–19, 53 have
-20–99, 24 have ≥100**, summing to 117. (Two earlier drafts printed
+So the rate is **17 of 137 = 12.4% of scoreable captures**, not 17 of 174. Among
+the 120 clean ones, by ON-MESH report count — the only reports that *can*
+disagree — **1 has zero on-mesh reports, 16 have 1–4, 23 have 5–19, 54 have
+20–99, 26 have ≥100**, summing to 120. (Was 17 of 134 / buckets summing to 117
+before the three clean 2026-08-30 evening captures: on-mesh 87 → the 20–99
+bucket, 100 and 220 → ≥100.) (Two earlier drafts printed
 11/38/27/55/24 summing to 155, then 41/16/23/53/24 summing to 157 — the first
 counted on-mesh with stubs in, the second folded the 40 unscoreable captures into
 the "clean" pile.) Say "24 captures of ≥100 on-mesh reports carry zero
@@ -8426,3 +8438,127 @@ lane C3, unresolved — bounded impact, it textures the re-sample rate but not t
 server-invisible no-snap path (NOT FOUND); and 0x005FF820's world-clock table
 index (Q, bounds how non-reconstructible the mid-flight sample is — see the
 100 u argument above).
+
+---
+
+## 1z-r. The mirror is built and replayed -- the SYNC SIM is confirmed by every warp in the corpus, and the chain's replay taught three things the decode alone could not
+
+**What exists now** (commit `6dff112`, branch `claude/agtrack-mirror`):
+`toolkit/authsrv/agtrack_mirror.py` -- §1z-q step 1, the server-side
+transcription of the chain machinery, every rule carrying its citation and
+every model choice labelled in place; `toolkit/authsrv/test_agtrack_mirror.py`
+-- 64 synthetic checks pinning each transcribed rule, bare machine; and
+`toolkit/clientscan/agtrack_replay.py` -- §1z-q step 2, which drives the
+mirror through a gamesrv capture's own event stream (grants 0x0029/0x002A,
+0x002C, 0x002B, the c2s command stream 0x003E/0x003D/0x0047, synthetic
+100 ms ticks for arrivals and the keep-alive) and scores it against
+movesync's two-arm hard bar. No client was launched; every number below is
+this instrument over captures already on disk, and the instrument is in the
+tree.
+
+### 1z-r.1 ★ THE SYNC SIMULATION IS VALIDATED BY THE CLIENT'S OWN SNAPS
+
+A real AgTrack snap reseeds the rendered copy FROM the sync copy
+(§"THE SNAP IS A WHOLE-ROSTER RESEED", studies/movement/FINDINGS.md:3191),
+so at every observed warp the post-step report must land ON the mirror's
+simulated sync position -- a prediction the mirror had no access to when it
+was written, since the sim is built from the bake equations alone.
+
+**Measured (agtrack_replay over 177 scoreable captures, 2026-08-05..08-30):
+251 hard-bar steps; 223 of them land within 150 u of the mirror's sync
+position at that instant -- median 24 u, p90 173 u -- after starting
+440..6,124 u away.** On the two 2026-08-30 shipped-default captures it is
+10 of 10, 20.8..136.8 u. The bake, the settle, the dead-reckoner, the
+arrival teleport and the speed stores, composed over whole sessions,
+reproduce the client's authoritative copy to node-tolerance at every moment
+that matters. §1z-q.5's "everything the chain depends on is server-known"
+is CONFIRMED by retrodiction for the sync half.
+
+**The 28 steps that do NOT land on sync are a finding, not noise**: a
+hard-bar step that lands elsewhere (e.g. `20260827T212317`'s pair at
+~1,800-1,940 u off) was never an AgTrack reseed -- a second displacement
+mechanism, wire-invisible to the reseed model (candidates: the gate-free
+local-input snap route 0x005FCAA0, HANDOFF §4's named loose end; carve
+fall-throughs). The replay now measures this partition per step
+(`to_sync`), which no earlier instrument could.
+
+### 1z-r.2 The reprieve test, in the current regime: killing cell EMPTY
+
+The falsification cell was defined in advance: an observed warp whose
+window holds ONLY MATCH verdicts -- the mirror flatly contradicted (a MATCH
+jumps clean over all three gates, so it is sufficient for no-snap). On the
+two 2026-08-30 captures (shipped default + router):
+
+| model | covered | gates-blind | contradicted | false alarms | match rate |
+|---|---|---|---|---|---|
+| freerun (no reader-2 prune) | 7/10 | 0 | 3 | 4 | 93.7% |
+| prune 3000 ms | 10/10 | 0 | **0** | 33 | 80.4% |
+
+The three freerun misses decompose exactly, and the decomposition is the
+section's real payload:
+
+- **Two matched on OLD TRAIL** (segments 10.7 s and 23.6 s old): the sync
+  copy trails the player along the same route, so a long-lived chain always
+  holds a segment near q -- but the real client snapped, proving its chain
+  DID NOT hold those segments at those moments. Old trail is not
+  protection.
+- **One was a 0.6 u boundary case**: q-to-c measured 99.3 u against the
+  99.919968 u effective single-leg threshold (§round 5) -- inside the
+  replay's interpolation noise. Not a structural contradiction.
+
+Control arm (feedback: run the known-bad arm): forcing the radius to 10 u
+degrades false alarms 4 -> 45 (11x) and match rate to 70.6% -- the metric
+can go red on a broken mirror, so its green means something.
+
+### 1z-r.3 What the replay taught that the decode could not
+
+1. **Reader 2 was the missing rule.** The first mirror omitted the by-time
+   render query 0x00604ED0 (§1z-q.4 names it; its cadence is §1z-q's own
+   flagged unknown). Its effect -- continuous monotone pruning -- is now a
+   PARAMETER (`prune_ms`), and the corpus adjudicates: freerun leaves 62
+   attributable contradicted steps corpus-wide, prune=3000 leaves 49, and
+   prune <= 3000 empties the cell entirely in the current-config regime.
+   The parameter's true semantics (query time, per-agent applicability)
+   remain UNRESOLVED; the dial stands in for them honestly.
+2. **Invisible resets are real dynamics, and freerun chain state is
+   unknowable in principle.** A gate-2/gate-3 snap at small separation
+   reseeds invisibly (no hard step), Clears the chain, and closes the
+   fence; fence-closed grants then APPEND (round 5: "client only is
+   REFUTED"); the next player input re-arms and wipes the head. Gate 3 is
+   other-agents state the server cannot see, so no replay can track the
+   real chain exactly across such an event. RECONSTRUCTION, but it is the
+   only story consistent with all three freerun misses AND the
+   fence-closed no-snap stretches at 1,500-6,300 u separation. This is why
+   the mirror is deliberately CONSERVATIVE: over-predicting a snap costs a
+   trajectory-following grant; under-predicting costs a warp.
+3. **The corpus's older config eras expose unmodelled vocabulary.**
+   Attributable contradicted steps cluster in 08-19..08-27 captures --
+   the heading-grant/client-endpoint/pre-router eras, whose sessions carry
+   opcodes the replay does not yet model (0x0025 direction arms, 0x0027
+   re-issue, 0x0028 stops). Named residual, not hand-waved: the replay
+   models the shipped vocabulary and says so.
+
+### 1z-r.4 ★ THE POLICY TARGET, SHARPENED
+
+§1z-q.5 said the lever is the grant trajectory. The replay sharpens it:
+**the tube that protects the client is segment 0 plus at most ~3 s of
+nodes -- the CURRENT leg. A grant policy must keep q (the sync copy's own
+dead-reckoned position) within 100 u of the player's current command
+segment, and must never lean on deeper history**, because invisible resets
+delete it without notice. This retires, in advance, any policy shaped like
+"the player walked here 30 s ago, so granting near that trail is safe" --
+the two old-trail misses are the counterexamples, measured.
+
+**NEXT (step 3, desk-first)**: derive the grant-insertion rule from the
+mirror -- before emitting, evaluate; if MISS is predicted, emit a
+trajectory-following grant (one that lands q inside the current-leg tube)
+instead of the raw destination. The mirror's evaluate() is already the
+pre-emit check §1z-q.5 asked for. One verbatim confirmation against a live
+chain (movehook reads AgTrack directly) comes only after the rule exists on
+paper -- not a run campaign.
+
+**What this section does not settle**: reader 2's true semantics (the
+prune dial stands in); gate 3 (unmodelled, conservative direction); the
+older-era opcode vocabulary in the replay; the 26 gates-blind and 9
+no-eval steps corpus-wide; and the 0x005FCAA0 attribution of the 28
+off-sync steps.
