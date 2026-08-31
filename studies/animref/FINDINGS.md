@@ -561,25 +561,48 @@ to the player's next `attack_started`: n=38, with a tight modal cluster at
 windup, never the same instant. The tail (0.94–5.5 s) is the players who
 stepped or paused. Our server reopened the chain in the execution tick.
 
-**Shipped (ANIMREF-R7, default ON, one revert flag each):**
+**Built — and then the verbatim check REVERSED R7a's default.**
 
-* **R7a (`--legacy-move-stops-chain`):** `cancel_on_move`'s chain half is
-  gone from the default path — no prop-3, target and armed swing survive the
-  move; `attack_tick`'s existing range gate is the deferred judge (out of
-  reach ⇒ silent whiff + resume-on-return, retail's own truncation shape).
-  The CAST half — the bare-E2 cancel contract — is untouched; the prop-8
-  release on movement stays (corpus-backed, castmech 3c).
-* **R7b (`--legacy-chain-restart`):** after an attack skill's execution the
-  swing clock is stamped `exec + windup − interval`, so the START-to-START
-  gate opens exactly one windup out (LAW B), instead of the same tick.
+* **R7b (`--legacy-chain-restart`, default ON):** after an attack skill's
+  execution the swing clock is stamped `exec + windup − interval`, so the
+  START-to-START gate opens exactly one windup out (LAW B), instead of the
+  same tick. Shipped.
+* **R7a (`--move-keeps-chain`, default OFF):** LAW A's wire — no prop-3 on
+  movement, target and armed swing survive, `attack_tick`'s range gate the
+  deferred judge; cast half and the movement prop-8 release untouched. The
+  tap-train verbatim check (`20260831T110116`/`110144`) ran it default-ON
+  and **every movement key died**: three `W:0.4` taps (one squarely in the
+  backswing window) and a held `W:6` all traveled **0.0 u** while `S:2`
+  walked 375 u — strictly worse than R6-alone, whose first W moved 49 u the
+  instant our prop-3 went out. Across all four instrumented runs one client
+  model survives: **the client cannot START movement while its attack
+  action is open, and the prop-3 LAW A removes is the only closer we send.**
+  Retail's client moves without that prop-3 (87/100), so retail feeds a
+  grant we have not identified — candidates, all absent from our wire at
+  the move instant: the `0x002B` speed that rides every retail movement
+  echo (`[43, me, 0.75, type 8]`, and `[43, me, 1.0, type 1]` at the
+  execution instant), the echo's `0x0028`, the prop-8 VALUES (our dumps
+  elided them). Shipping LAW A without its complement is "more
+  retail-correct wire, visibly worse game" — R5's P1 lesson — so the wire
+  fact is recorded, the flag exists, and the default keeps the door that
+  moves. **The client's movement-start gate is now the arc's sharpest
+  decode target**, alongside the visual-component id table.
 
-Pins: `test_castcancel` §5 (both arms of the door), `test_castcycle` §2c
-(the restart pacing rides the batch pin). **UNVERIFIED, next run:** with the
-server now keeping the chain fed through movement, whether the client's
-between-swing windows admit quarterstep TAPS at full stride, and what a HELD
-movement key does mid-chain (the S-vs-W asymmetry says held-forward may be
-attack-follow, which would be retail behaviour, not a defect — the operator
-can settle that by feel against stock).
+Pins: `test_castcancel` §5 (default door + the opt-in arm, with the
+measured reason in the check text), `test_castcycle` §2c (the restart
+pacing rides the batch pin).
+
+**The shipped default's own verbatim row (`20260831T110714`/`110743` — R6
+ON, R7b ON, R7a off).** Same protocol, zero deaths, press verified:
+baseline `W:3` 614 u @ 205 u/s; **tap at press+2.1 s: 19 u (moves — was
+0.0 u before R6)**; **tap at press+4.2 s: 79 u @ 196 u/s — full stride**;
+**held `W:6` at press+9 s: 1248 u @ 208 u/s for the entire hold** (was
+0.0 u); `S:2` 376 u. The operator's regression — every movement key dead
+after an attack-skill press — is resolved in the shipped configuration.
+The remaining gap to retail is the first tap's partial rate (the client
+engages partway through it, on our prop-3 close, where retail's client
+moves under its own control within ±0.25 s of E3 with the chain
+surviving) — that is the movement-start-gate decode, §14's named target.
 
 ## Provenance
 

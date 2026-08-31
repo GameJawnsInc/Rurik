@@ -9245,15 +9245,17 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   queued behind it both release, two E2s, no recharge for either. §4 proves
   the busy-window rollback: a press after a cancel schedules its E5 one
   activation out, not behind the cancelled cast's ghost. §5 is the chain
-  half, re-pinned by ANIMREF-R7a (2026-08-31): the DEFAULT door sends NO
-  prop-3 and the target and armed swing SURVIVE the move — 87 of 100 corpus
-  mid-chain player moves carry no stop within 0.5 s (FINDINGS §14 LAW A; the
-  old always-stop rule was the wiki's sentence plus a 2-of-2 measured on our
-  own door, one witness counted twice), with `attack_tick`'s range gate as
-  the deferred judge — while `--legacy-move-stops-chain` restores the old
-  pins verbatim (one GV_ATTACK_STOPPED, target forgotten, armed swing
-  dropped unlanded); and the negative still holds, no second STOPPED when
-  the chain was already paused by a press. §6 is the
+  half, both doors since ANIMREF-R7a (2026-08-31): the DEFAULT door keeps
+  the old pins — one GV_ATTACK_STOPPED, target forgotten, armed swing
+  dropped unlanded — and the check text carries why that stays default
+  despite NOT being retail's wire (LAW A: 87/100 corpus mid-chain moves
+  carry no prop-3; but the tap-train verbatim check showed our client
+  cannot start moving until its action closes and that prop-3 is the only
+  closer we send, so LAW A alone froze every movement key — FINDINGS §14);
+  `--move-keeps-chain` is LAW A's wire opt-in, pinned too (no stop, target
+  and armed swing survive, range gate judges), waiting on the client-grant
+  decode; and the negative still holds, no second STOPPED when the chain
+  was already paused by a press. §6 is the
   `0x0028` CANCEL_ACTION door, the arm the first operator run forced: the
   client sends NO movement c2s while it holds a cast — the operator's three
   cancel inputs each arrived as a header-only 0x0028 (run 20260823T101329),

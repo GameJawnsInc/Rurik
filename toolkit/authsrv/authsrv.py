@@ -8978,7 +8978,19 @@ ATTACK_FINISH_BATCH = True    # False (--legacy-attack-finish): the old shape
 # WINDUP later, not instantly: the 46 -> next-START gap clusters at
 # 0.749..0.783 s (21 of 38) against swing_windup(1.75) = 0.775; our old shape
 # opened it in the same tick.
-MOVE_KEEPS_CHAIN = True       # False (--legacy-move-stops-chain): old door
+#
+# R7a ships DEFAULT OFF, and the reason is measured, not aesthetic
+# (FINDINGS 14, the tap-train verbatim check): with the chain kept alive our
+# client refuses EVERY movement key indefinitely -- taps in the backswing
+# window included -- because the client only starts moving once its attack
+# action closes, and the prop-3 this law removes was the only closer we
+# send. Retail's client moves WITHOUT that prop-3 (87/100), so retail feeds
+# a grant we have not identified yet (candidates: the 0x002B speed riding
+# every retail movement echo, the echo's 0x0028, the prop-8 values). Until
+# that complement is decoded, shipping LAW A alone is "more retail-correct
+# wire, visibly worse game" -- the R5 P1 lesson -- so the wire fact is
+# recorded, the flag exists, and the default keeps the door that moves.
+MOVE_KEEPS_CHAIN = False      # True (--move-keeps-chain): LAW A's wire, see ^
 CHAIN_RESTART_PACED = True    # False (--legacy-chain-restart): same-tick
 
 
@@ -9258,14 +9270,17 @@ def cancel_on_move(send, state, conn_id):
     # player moves within 2 s of the player's own ATTACK_STARTED, 87 carry
     # NO prop-3 within half a second -- the quarterstep rides the chain and
     # the chain survives it (the retail player's next START follows the
-    # move). The 13 that do are the genuine closes. So movement alone now
+    # move). The 13 that do are the genuine closes. Under LAW A movement
     # touches nothing of the chain: attack_tick's range gate is the deferred
     # judge -- a player who actually leaves reach whiffs silently and
     # resumes on return, which is the resume-on-return design that branch
     # already documents. The CAST half below is untouched: the wiki's cancel
     # contract for casts is separately corpus-backed (the bare E2, castmech
-    # 3/4). The legacy arm (--legacy-move-stops-chain) keeps the old door
-    # verbatim, defect included.
+    # 3/4). BUT LAW A ships OPT-IN (--move-keeps-chain), not default:
+    # MEASURED at the tap-train verbatim check, our client cannot START
+    # moving until its attack action closes, and this prop-3 is the only
+    # closer we send -- retail's client moves without it, on a grant not
+    # yet identified. See MOVE_KEEPS_CHAIN's comment.
     if chain_live and not MOVE_KEEPS_CHAIN:
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
              [agents.GV_ATTACK_STOPPED, PLAYER_AGENT_ID, 0],
@@ -9277,8 +9292,8 @@ def cancel_on_move(send, state, conn_id):
     # Transition-only, so a flag already 0 sends nothing here -- which is also
     # what keeps this from duplicating the release inside the cast burst below.
     action_hold(send, state, 0, "the player moves")
-    # ANIMREF-R7a: the target survives movement (LAW A above). The legacy
-    # arm forgets it, as the old door did.
+    # ANIMREF-R7a opt-in: under LAW A the target survives movement; the
+    # default door forgets it, as it always did.
     if state.get("attacking") and not MOVE_KEEPS_CHAIN:
         state["attacking"] = None
     dropped = _mark_cancelled(state, "movement", now, spare_mid_attack=True)
@@ -19964,13 +19979,16 @@ def main():
                          "held movement key after a press moves 0.0 u where "
                          "retail moves within ~0.25 s of E3 (FINDINGS 11b, "
                          "13).")
-    ap.add_argument("--legacy-move-stops-chain", action="store_true",
-                    help="Revert ANIMREF-R7a: every movement message closes "
-                         "the attack chain again ([3, agent, 0] + target "
-                         "forgotten). The default keeps the chain through "
-                         "movement -- 87 of 100 corpus mid-chain moves carry "
-                         "no prop-3; attack_tick's range gate is the "
-                         "deferred judge (FINDINGS 14 LAW A).")
+    ap.add_argument("--move-keeps-chain", action="store_true",
+                    help="Opt into ANIMREF-R7a: movement stops closing the "
+                         "attack chain (LAW A: 87 of 100 corpus mid-chain "
+                         "moves carry no prop-3; the range gate judges "
+                         "instead). OFF by default and MEASURED why "
+                         "(FINDINGS 14): without the prop-3 our client "
+                         "refuses every movement key while chaining -- "
+                         "retail's client is fed a grant we have not "
+                         "identified yet, so LAW A alone is retail's wire "
+                         "with a worse game.")
     ap.add_argument("--legacy-chain-restart", action="store_true",
                     help="Revert ANIMREF-R7b: the chain reopens in the same "
                          "tick as an attack skill's execution again. The "
@@ -21360,11 +21378,13 @@ def main():
         print("[map] --legacy-attack-finish: attack-skill execution reverts "
               "to the pre-ANIMREF-R6 shape -- no property 46, damage through "
               "the interval-gated swing path.", flush=True)
-    if a.legacy_move_stops_chain:
+    if a.move_keeps_chain:
         global MOVE_KEEPS_CHAIN
-        MOVE_KEEPS_CHAIN = False
-        print("[map] --legacy-move-stops-chain: movement closes the attack "
-              "chain again (pre-ANIMREF-R7a door).", flush=True)
+        MOVE_KEEPS_CHAIN = True
+        print("[map] --move-keeps-chain: movement no longer closes the "
+              "attack chain (ANIMREF-R7a LAW A wire; expect movement keys "
+              "refused while chaining until the client's grant is decoded).",
+              flush=True)
     if a.legacy_chain_restart:
         global CHAIN_RESTART_PACED
         CHAIN_RESTART_PACED = False
