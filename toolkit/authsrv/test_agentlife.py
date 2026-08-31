@@ -1184,12 +1184,19 @@ def section_enemy_skill():
               "while 312 Holy Strike on the same bar DOES damage, at 46",
               f"{holy} -- scale 10->55 at rank {authsrv.ENEMY_SKILL_RANK} by the "
               f"client's own interpolator; GWW calls the var `Holy damage`")
-    land_ops = [op for op, _v, _l in land]
-    LEDGER.ok(authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT not in land_ops,
+    land_ints = [v for op, v, _l in land
+                 if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT]
+    LEDGER.ok(not any(v[0] == agents.GV_MELEE_ATTACK_FINISHED
+                      for v in land_ints),
               "and a landing cast sends no MELEE_ATTACK_FINISHED",
-              f"{[hex(o) for o in land_ops]} -- that value names the end of a "
-              "SWING, and 40 of the 42 in the live corpus are followed by a "
-              "property-16 damage from the same agent. A cast is not a swing")
+              f"{land_ints} -- that value names the end of a SWING, and 40 "
+              "of the 42 in the live corpus are followed by a property-16 "
+              "damage from the same agent. A cast is not a swing")
+    LEDGER.ok(land_ints and land_ints[0] == [agents.GV_SKILL_FINISHED, 10, 0],
+              "what it DOES send is the finish: [58, agent, 0] opening the "
+              "landing batch (ANIMREF-R2: 709/709 retail other-agent casts "
+              "close with a 58-led batch; ours closed with NOTHING)",
+              f"{land_ints}")
 
     # 4. THE NEXT CAST IS A DIFFERENT SKILL, not slot 1 again. This is where the
     #    bar stops being decorative: with one skill the agent would fall back to

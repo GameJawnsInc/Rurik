@@ -1615,13 +1615,22 @@ emitter against the population, fix by derivation, tune never.
   three cast-animation send sites (the NPC cast now names its target); the
   zero-activation attack skill's E5 rides the weapon windup (was at the press,
   1.14 s early). 13 affected test files green (~900 checks).
-* **NEXT, in cost order**: (1) **ANIMREF-R2** — the same extractor over OUR gamesrv
-  `.jsonl` corpus + the grammar diff, known-bad control = pre-castmech logs (desk).
-  (2) R4 decode targets now that the corpus said where to dig: props 22/23/28
-  payloads, prop 45's ~1 Hz mark, the interrupt consumption path (35/E7/E8 — corpus
-  is silent, so it is decode or one targeted capture). (3) The IAS windup question
-  (§1 caveat) may fall to the client's `0x007F82C0` duration math, desk-only.
-  (4) R5: ONE caged loopback acceptance look (castmech's own never-run NEXT item).
+* **R2 RAN the same session** (FINDINGS §9): the known-bad control PASSES (the
+  pre-castmech era lights up exactly what castmech fixed), the current era
+  VALIDATES our self-cast grammar signature-for-signature, and it yielded two
+  new rows — **D18** (our landings carry a +~25 ms 20 Hz-tick tail retail does
+  not have; recorded) and **D19** (our NPC casts were OPEN-ONLY, 0 finishes vs
+  retail's 709/709 58-led closes — **fixed**: `land_skill` now opens its landing
+  batch with `[58, agent, 0]`, the fourth default-ON derived fix). Also mapped:
+  the whole effect-property channel (6/7/20/21/55/44) absent from our wire.
+* **NEXT, in cost order**: (1) R4 decode targets now that the corpus said where
+  to dig: effect-props 20/21 (do they drive visuals the 0x0042/0x0044 opcodes
+  don't?), props 22/23/28 payloads, prop 45's ~1 Hz mark, the interrupt
+  consumption path (35/E7/E8 — corpus is silent, so it is decode or one
+  targeted capture). (2) The IAS windup question (§1 caveat) may fall to the
+  client's `0x007F82C0` duration math, desk-only. (3) R5: ONE caged loopback
+  acceptance look (castmech's own never-run NEXT item). (4) The extractor's
+  event model wants 0x00CF/0x00D0/0x00D2 before any spend-grammar reading.
 
 ### ★★★★★ MOVEMENT 2026-08-28 — THE OBSTACLE DIG: the mesh HAS the mountains, the no-clip IS scored, the client ignores its own geometry check. THE LEAD IS SERVER-SIDE PATH-SOLVED GRANTS
 

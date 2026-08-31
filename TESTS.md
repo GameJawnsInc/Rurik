@@ -9267,7 +9267,7 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   its episode's open, interleaved skills keying independent episodes, the
   other-agent machine (60/50 opens, 58 finish, 59 cancel, reopen, censor,
   timeout sweep), 0x00F1 recorded as a mark and never a close, and the
-  property census keeping unknown ids. Floor 35),
+  property census keeping unknown ids; the batch clustering (eps=0 exact for live tapes, 5 ms for gamesrv logs whose sends stamp their own clocks); and scan_ours itself over a synthetic RURIK_VAULT -- hand-packed 0x009F rows the codec must frame, the tape-replay exclusion by label, and the era filter that makes the pre-castmech known-bad control possible. Floor 41),
   `toolkit/authsrv/test_cancelwalk.py` (everything AROUND the CANCELWALK
   runs — the walk-on-cancel experiment arms of `--cancel-answer`
   (`studies/movement/CANCELWALK.md` §5), whose verdicts are operator runs and

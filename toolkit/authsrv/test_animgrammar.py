@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.join(ROOT, "toolkit", "authsrv"))
 import checks  # noqa: E402
 import animgrammar as ag  # noqa: E402
 
-led = checks.Ledger("animgrammar episode machines", floor=35)
+led = checks.Ledger("animgrammar episode machines", floor=41)
 ok = checks.adopt(led)
 
 # --- f32 -------------------------------------------------------------------
@@ -181,5 +181,90 @@ ok(timeout[0]["close"] == "timeout",
 cen = ag.prop_census([P(1.0, 60, 8, 9, 313), P(1.1, 777, 8)])
 ok(cen[777]["name"] == "UNKNOWN" and cen[777]["n"] == 1,
    "a property id outside the register is counted, not dropped")
+
+# --- batch clustering (the ours-side timestamp granularity) ----------------
+evs = ag.assign_batches([P(1.0, 4, 40, 31), P(1.0004, 1, 40),
+                         P(1.2, 3, 40)], eps=0.005)
+ok(evs[0]["bt"] == evs[1]["bt"] == 1.0 and evs[2]["bt"] == 1.2,
+   "eps=5ms clusters a burst written in one breath; a later instant opens "
+   "a new batch")
+evs = ag.assign_batches([P(1.0, 4, 40, 31), P(1.0004, 1, 40)], eps=0.0)
+ok(evs[0]["bt"] != evs[1]["bt"],
+   "eps=0 (the live tape's exact-timestamp regime) does not merge them")
+clustered = ag.assign_batches(
+    [{"t": 0.0, "kind": "speed", "agent": 40, "base": 2.0, "modifier": 1.0},
+     P(1.0, 4, 40, 31), P(1.9, 16, 31, 40, -0.1), P(1.9004, 1, 40)],
+    eps=0.005)
+sw = ag.swing_episodes(clustered)
+ok(sw[0]["close"] == "landed" and sw[0]["damage"] == [(31, -0.1)],
+   "damage pairing rides the CLUSTER, so a log whose sends carry their own "
+   "clocks still pairs the FINISHED with its damage")
+
+# --- scan_ours over a synthetic vault (the reader itself) ------------------
+import json as _json
+import struct as _struct
+import tempfile
+
+with tempfile.TemporaryDirectory() as tmp:
+    gs = os.path.join(tmp, "captures", "gamesrv")
+    os.makedirs(gs)
+
+    def prop_int_blob(prop, agent, value):
+        return _struct.pack("<HIII", 0x009F, prop, agent, value).hex()
+
+    def write_log(name, rows, origin_kind=True):
+        with open(os.path.join(gs, name), "w", encoding="utf-8") as fh:
+            if origin_kind:
+                fh.write(_json.dumps(
+                    {"kind": "origin", "origin": "ours",
+                     "produced_by": "test", "peer": "127.0.0.1:1"}) + "\n")
+                fh.write(_json.dumps({"kind": "key_exchange_ok",
+                                      "peer": "127.0.0.1:1"}) + "\n")
+            for r in rows:
+                fh.write(_json.dumps(r) + "\n")
+
+    # Agent 10, not 1: agent 1 is self by construction in scan_ours, and a
+    # SELF episode opens on E4 -- a bare prop-60 for self opens nothing
+    # (that is the machine working, and the first draft of this test
+    # tripped over it).
+    write_log("authsrv-20260823T000000-c1.jsonl", [
+        {"kind": "sent", "seq": 0, "t": 1.0, "label": "anim",
+         "plain": prop_int_blob(60, 10, 42)},
+        {"kind": "sent", "seq": 1, "t": 2.0, "label": "finish",
+         "plain": prop_int_blob(58, 10, 0)},
+    ])
+    write_log("authsrv-20260820T000000-c2.jsonl", [
+        {"kind": "sent", "seq": 0, "t": 1.0, "label": "anim",
+         "plain": prop_int_blob(60, 1, 42)},
+    ])
+    write_log("authsrv-20260824T000000-c3.jsonl", [
+        {"kind": "sent", "seq": 0, "t": 1.0, "label": "tape[0]",
+         "plain": prop_int_blob(60, 7, 999)},
+    ])
+
+    saved_env = os.environ.get("RURIK_VAULT")
+    os.environ["RURIK_VAULT"] = tmp
+    try:
+        meta, conns = ag.scan_ours()
+        ok(meta["used"] == 2 and meta["skipped_tape"] == 1,
+           "scan_ours decodes the hand-packed 0x009F rows and excludes the "
+           "tape-replay connection by its label",
+           f"used={meta['used']} tape={meta['skipped_tape']}")
+        c1 = [c for c in conns if "c1" in c["capture"]][0]
+        ok(c1["casts"] and c1["casts"][0]["close"] == "finished"
+           and c1["casts"][0]["skill"] == 42,
+           "and the episode machines run on the decoded rows -- the codec "
+           "framed our hand-packed message, which also pins the 0x009F "
+           "layout this file assumes",
+           f"{c1['casts'][0]['close']}")
+        meta2, _ = ag.scan_ours(after="20260822")
+        ok(meta2["used"] == 1,
+           "the --after era filter drops the pre-castmech file (the "
+           "known-bad control's own mechanism)")
+    finally:
+        if saved_env is None:
+            os.environ.pop("RURIK_VAULT", None)
+        else:
+            os.environ["RURIK_VAULT"] = saved_env
 
 sys.exit(led.verdict())

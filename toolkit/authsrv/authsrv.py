@@ -13218,13 +13218,26 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # all four hurt the player identically; dealing a heal's magnitude AS
     # damage would be worse, not better. The player still dies to the ordinary
     # swing (land_swing), which is what R4a's criterion ever rested on.
-    # THE EFFECT FIRST, and the order is load-bearing rather than stylistic.
+    # THE FINISH ANNOUNCEMENT OPENS THE BATCH -- ANIMREF-R2's cleanest yield
+    # (studies/animref/FINDINGS.md sec.9). Retail closes EVERY other-agent
+    # cast episode with a property-58 batch, 58 leading (709/709 finished
+    # episodes across the live corpus; the top shapes are ['58','55'] and
+    # ['58','21','21','55','55']), while our NPC casts were OPEN-ONLY --
+    # 0 finishes in the whole gamesrv era census, 145 episodes closed by
+    # nothing but the NEXT cast opening. Without this row the client's view
+    # of the caster has no cast-end instant.
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+         [agents.GV_SKILL_FINISHED, agent_id, 0],
+         f"agent {agent_id} finishes casting {skill_id}")
+    # THE EFFECT NEXT, and the order is load-bearing rather than stylistic.
     # The one skill on this bar that opens an episode is Scourge Sacrifice
     # (253, a Hex), and it is one of the three the damage exit below turns
     # away -- so an effect applied after that `return` would never be applied
     # at all. A hex on the PLAYER is also the most visible thing this channel
     # can do: the client draws it in the player's own effect bar, where an
     # effect on a monster is a small icon over a body across the field.
+    # (Retail's finish batches carry their effect/heal properties BEHIND the
+    # 58, which is the order these lines now produce.)
     episode = apply_effect(send, state, agent_id, skill_id, ENEMY_SKILL_RANK,
                            PLAYER_AGENT_ID, conn_id)
 
