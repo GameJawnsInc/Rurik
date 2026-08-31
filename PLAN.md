@@ -1667,15 +1667,25 @@ emitter against the population, fix by derivation, tune never.
   the whole hold at baseline 208 u/s. Residue: the first tap engages partway
   through (on our prop-3, where retail self-authorizes within 0.25 s of E3
   with the chain surviving).
-* **NEXT, in cost order**: (1) **The client's movement-start gate decode** —
-  which state field the 0x3D/locomotion path checks and what disarms it; this
-  is now the sharpest target, it unblocks LAW A's wire, and the wire-side
-  candidates above narrow the search. (2) The per-skill visual-component id
-  table — unblocks props 20/21 and 22/23/28 alike. (3) The IAS windup
+* **The movement-start gate DECODED (§15), and it dissolved the "grant"
+  guess.** Each animation property enqueues a per-agent state via
+  `0x7F2E90(agent, N)`: prop 3→state 2, prop 46→0x11, prop 50→0x15, prop
+  1→0, prop 4→3, plus a global latch `0x10874AC/B0`. Empirically our client
+  is movable in state 2 (prop 3) and the auto-attack states 0/3, but NOT the
+  skill states 0x11/0x15 — while retail's client IS movable in 0x11 (the
+  corpus sends no return-to-movable prop after a skill; next self event is
+  the chain's own prop-4 restart, 27/40). So LAW A's no-prop-3 door cannot
+  be made to move our client by any server change — the shipped default
+  (send prop-3 → force state 2) is the correct resolution for THIS client,
+  not a stopgap. What's left is a client-behaviour question (why s11 passes
+  the local 0x003D gate on retail but not our build), addressable only by
+  instrumenting the locomotion-input read — deferred, not blocking.
+* **NEXT, in cost order**: (1) The per-skill visual-component id
+  table — unblocks props 20/21 and 22/23/28 alike. (2) The IAS windup
   question (§1 caveat) via the client's `0x007F82C0` duration math,
-  desk-only. (4) Prop 55 (health_gain), value derivable — clean R3-style fix.
-  (5) The extractor's event model wants 0x00CF/0x00D0/0x00D2 (0x00D2 now
-  known to ride attack-skill activations). (6) D20: refuse a targetless
+  desk-only. (3) Prop 55 (health_gain), value derivable — clean R3-style fix.
+  (4) The extractor's event model wants 0x00CF/0x00D0/0x00D2 (0x00D2 now
+  known to ride attack-skill activations). (5) D20: refuse a targetless
   attack-skill press — retail refuses 41 in this corpus.
 
 ### ★★★★★ MOVEMENT 2026-08-28 — THE OBSTACLE DIG: the mesh HAS the mountains, the no-clip IS scored, the client ignores its own geometry check. THE LEAD IS SERVER-SIDE PATH-SOLVED GRANTS

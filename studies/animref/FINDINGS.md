@@ -577,16 +577,14 @@ stepped or paused. Our server reopened the chain in the execution tick.
   instant our prop-3 went out. Across all four instrumented runs one client
   model survives: **the client cannot START movement while its attack
   action is open, and the prop-3 LAW A removes is the only closer we send.**
-  Retail's client moves without that prop-3 (87/100), so retail feeds a
-  grant we have not identified — candidates, all absent from our wire at
-  the move instant: the `0x002B` speed that rides every retail movement
-  echo (`[43, me, 0.75, type 8]`, and `[43, me, 1.0, type 1]` at the
-  execution instant), the echo's `0x0028`, the prop-8 VALUES (our dumps
-  elided them). Shipping LAW A without its complement is "more
-  retail-correct wire, visibly worse game" — R5's P1 lesson — so the wire
-  fact is recorded, the flag exists, and the default keeps the door that
-  moves. **The client's movement-start gate is now the arc's sharpest
-  decode target**, alongside the visual-component id table.
+  Retail's client moves without that prop-3 (87/100). This paragraph first
+  guessed retail sends "a grant we have not identified" (candidate `0x002B`
+  and friends) — **§15 decoded it and REFUTED that guess: there is no such
+  grant.** Retail sends no return-to-movable property after a skill; its
+  CLIENT is movable in the skill-finished animation state where ours is not.
+  Shipping LAW A without a client-side complement is "more retail-correct
+  wire, visibly worse game" — R5's P1 lesson — so the wire fact is
+  recorded, the flag exists, and the default keeps the door that moves.
 
 Pins: `test_castcancel` §5 (default door + the opt-in arm, with the
 measured reason in the check text), `test_castcycle` §2c (the restart
@@ -604,11 +602,75 @@ engages partway through it, on our prop-3 close, where retail's client
 moves under its own control within ±0.25 s of E3 with the chain
 surviving) — that is the movement-start-gate decode, §14's named target.
 
+## 15. The movement gate is a CLIENT animation state — decoded, and it dissolves §14's "grant" guess
+
+**2026-08-31, static read of the pinned client (38797) + a corpus scan; no
+launch.** §14 left the movement-start gate as the arc's sharpest target and
+guessed retail feeds an unidentified wire grant. Both halves resolved:
+
+**The generic-property switch dispatches each animation property into one
+call, `0x7F2E90(agent, N)`, that enqueues a per-agent animation-state node**
+(a linked-list splice at `[agent+0xC4]`, node = `{state N, [agent+0x2c],
+timestamp}`). The state code per property, read from the case bodies:
+
+| prop | GWCA name | AvChar body | state N | global `0x10874AC/B0` |
+|---|---|---|---|---|
+| 1 | melee_finished | `0x7F6BC0` | **0** | set AC=0, B0=agent |
+| 3 | attack_stopped | `0x7F6C00` | **2** | — |
+| 4 | attack_started | `0x7F6C10` | **3** | clear (B0=0, A8=0) |
+| 46 | attack_skill_finished | `0x7F74F0` | **0x11** | set AC=0x11, B0=agent |
+| 49 | attack_skill_stopped | `0x7F7510` | **0x12** | set AC=0x12, B0=agent |
+| 50 | attack_skill_activated | `0x7F7540` | **0x15** | clear |
+
+The FINISHED family (1/46/49) writes the global latch `0x10874AC` (the local
+player's standalone-animation slot); the STARTED family (4/50) clears it.
+Prop 8 (`disabled`) has **no case body in this switch** — it is the separate
+input-block flag, handled elsewhere, and its release (`[8→0]`) goes out on
+movement in both arms, so it is NOT the differentiator.
+
+**Empirically (the two verbatim captures, §14): our client becomes movable
+after a lone `0x003D` only when it also received prop 3 (state 2).** Frozen
+arm — `0x003D` + prop-8-release, no prop-3 → 0.0 u; moving arm — `0x003D` +
+**prop-3** + prop-8-release → walks. State 2 (and states 0/3, the ordinary
+auto-attack cycle, which move freely) are movable; the attack-SKILL states
+0x15/0x11 are not, **on our client**.
+
+**The corpus scan that kills the "grant" guess (`after46.py`, 40 self
+prop-46 events):** the next self animation-state property after a skill's
+execution is **prop 4 — the next auto-attack START (state 3) — 27 of 40**,
+prop 50 (another skill) 6, nothing-within-3 s 7. **A self prop-1 or prop-3
+appears zero times as the successor.** So retail sends NO return-to-movable
+property after a skill; the sequence is `46(s11) → 4(s3) → 1(s0) → 4 → 1…`,
+the chain simply resuming ~0.775 s later (LAW B). Retail's 87/100
+moves-without-prop-3 are the player moving *while the client sits in s11 or
+s3* — i.e. **retail's client is movable in the skill-finished state, and
+ours is not.** This is a client animation-state-machine difference, not a
+missing wire message.
+
+**Consequence for the arc.** There is no server-only wire change that makes
+LAW A's door (no prop-3) move our client — the block is that our client's
+locomotion input is gated on an animation state our attack-skill sequence
+leaves at 0x11/0x15, and only prop 3 (state 2) clears it for us. **The
+shipped default — send prop-3 on movement — is therefore not a stopgap but
+the correct pragmatic resolution given this client:** it forces state 2, the
+one our client treats as movable, and the verbatim row (§14) shows it
+restores the quarterstep. `--move-keeps-chain` stays as the recorded wire of
+LAW A for a future study that instruments the client's locomotion-input read
+directly (the open question narrows to: *which* field the local 0x003D path
+tests, and why s11 passes it on retail but not on our build — a client
+behaviour, possibly build-specific, not addressable from the server). The
+per-agent state node (`0x7F2E90`, field `[agent+0xC4]`) and the global latch
+`0x10874AC/B0` are the two concrete read targets for that dig.
+
 ## Provenance
 
 All figures are measurements over the owner's own live captures via extractors in this
-repo (`animgrammar.py`, this arc; `tape.py`/`codec.py`, prior arcs); scratch probes and
-the referent JSONL are under `vault/research/animref/`. No asset bytes, no client
-launch, no upstream derivation — no §6.1 register row required. §13–14's corpus scans
-(`pressmove2`, `batch46`, `chainmove`) are session scratch over the same tapes; their
-laws and n's are restated in full above.
+repo (`animgrammar.py`, this arc; `tape.py`/`codec.py`, prior arcs) and static reads of
+the pinned pristine client via `genericvalue.py`/`codescan.py` (carve-out 1, read-only,
+no launch); scratch probes and the referent JSONL are under `vault/research/animref/`.
+No asset bytes, no client launch, no upstream derivation — no §6.1 register row required.
+§13–15's corpus scans (`pressmove2`, `batch46`, `chainmove`, `after46`) are session
+scratch over the same tapes; their laws and n's are restated in full above. §15's
+addresses are single-site measurements (one case body, one AvChar method each), the
+MEASUREMENT side of the provenance boundary — the extractor is `codescan.py`, the build
+is named, the values audit without the binary.
