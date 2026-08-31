@@ -1590,6 +1590,39 @@ floors and aborts in `RUN-R8.md`; both are operator-driven client runs.
 
 ## 8. Immediate next actions
 
+### ★★★★ ANIMREF 2026-08-30 — attack/cast animations resume on the movement lesson: the retail referent FIRST, and it immediately re-derived three constants
+
+**[studies/animref/PLAN.md](studies/animref/PLAN.md)** (the arc + divergence census
+D1–D17) and **[studies/animref/FINDINGS.md](studies/animref/FINDINGS.md)** (the R1
+results). The movecode method ported whole: extract retail's complete attack/cast
+episode grammar from every live capture (desk-only, zero client runs), diff our
+emitter against the population, fix by derivation, tune never.
+
+* **R1 LANDED** (`a26d7b6`..`130457c`): `toolkit/authsrv/animgrammar.py` walks all 21
+  live captures (61/61 connections framed), 1,332 swings + 1,022 cast episodes; its
+  `--control` pins the castmech overlap to 0.1 ms and `test_animgrammar.py` (35
+  checks) pins the machines. Headlines: **the swing windup is a LAW, not a ratio —
+  `interval/2 − 0.1 s`** (flat residuals at four declared intervals, Power Shot
+  retrodicted to 1.3 ms; 0.4458 was one law sampled at two intervals); **the
+  cast-open form rule** (758/758: channel follows the target, never A0-with-target-0);
+  the attack-skill trio (46×164/49×12) fires at scale — castmech's "silent E5" was
+  Power Shot's arrow in flight; the instant-skill family (prop 48) is a one-batch
+  cycle we never emit; **7 misses exist** (FINISHED-without-damage — §17c's "zero
+  observed misses" falls at n=1,042); props 22/23/28 (scripted animation) and 63
+  (knockdown) are live in retail traffic; 35 (interrupt) is zero corpus-wide.
+* **R3's first three fixes SHIPPED, default ON, one revert flag each** (`fc24bd2`,
+  `5a8907e`, `ef7c268`): the windup law at every swing site; the form rule at all
+  three cast-animation send sites (the NPC cast now names its target); the
+  zero-activation attack skill's E5 rides the weapon windup (was at the press,
+  1.14 s early). 13 affected test files green (~900 checks).
+* **NEXT, in cost order**: (1) **ANIMREF-R2** — the same extractor over OUR gamesrv
+  `.jsonl` corpus + the grammar diff, known-bad control = pre-castmech logs (desk).
+  (2) R4 decode targets now that the corpus said where to dig: props 22/23/28
+  payloads, prop 45's ~1 Hz mark, the interrupt consumption path (35/E7/E8 — corpus
+  is silent, so it is decode or one targeted capture). (3) The IAS windup question
+  (§1 caveat) may fall to the client's `0x007F82C0` duration math, desk-only.
+  (4) R5: ONE caged loopback acceptance look (castmech's own never-run NEXT item).
+
 ### ★★★★★ MOVEMENT 2026-08-28 — THE OBSTACLE DIG: the mesh HAS the mountains, the no-clip IS scored, the client ignores its own geometry check. THE LEAD IS SERVER-SIDE PATH-SOLVED GRANTS
 
 **[studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1x** — four lanes + four
