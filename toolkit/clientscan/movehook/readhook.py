@@ -1223,6 +1223,54 @@ def report(cap, names, dump=0):
         a("        which is the subcount that read as clean while arm A warped "
           "to spawn.)")
 
+    # ---- ANIMREF-RE: THE WALK GATES, per chcli_* entry -------------------
+    #
+    # The registered question (FINDINGS §21.5): at a movement press that does
+    # not move the body, which early-out did the applier take? The two gate
+    # words determine the first three, so this is a decode and not a guess --
+    # and a record whose have_gate does not cover the word a verdict needs is
+    # reported as UNREADABLE rather than folded into "clear".
+    #
+    # THE CONTROL IS PRINTED WITH THE RESULT, not assumed. A capture in which
+    # NOTHING ever passed the flag gates is a capture where the instrument
+    # cannot be distinguished from a client that never walked -- so the
+    # passed-flag-gates count is the positive control, and it is named as one.
+    gated = [r for r in cap.recs
+             if names[r["site"]] in ("chcli_dir", "chcli_point")]
+    if gated:
+        a("")
+        a("ANIMREF-RE  the two WALK GATES at the begin-move entries")
+        seen = [r for r in gated if (r.get("have_gate") or 0)]
+        a(f"     {len(gated)} begin-move entr(ies); gate words read on {len(seen)}")
+        if len(seen) < len(gated):
+            a(f"     {len(gated) - len(seen)} could NOT be read -- reported, not "
+              f"counted as clear")
+        tally = {}
+        for r in gated:
+            tally[gate_verdict(r)] = tally.get(gate_verdict(r), 0) + 1
+        for k in ("passed-flag-gates", "E3-walk-gate", "E2-status-bit8",
+                  "E4-dead", None):
+            if k in tally:
+                lbl = "UNREADABLE" if k is None else k
+                a(f"       {lbl:20} {tally[k]}")
+        passed = tally.get("passed-flag-gates", 0)
+        if not passed:
+            a("     *** POSITIVE CONTROL FAILED: not one entry passed the flag")
+            a("     *** gates. A capture with no clear-gate press cannot tell a")
+            a("     *** real refusal from an instrument that reads a constant.")
+            a("     *** Re-run with an idle walk in it before scoring anything.")
+        else:
+            a(f"     positive control OK: {passed} entr(ies) passed the flag gates,")
+            a(f"     so a SET reading elsewhere is a fact about the client and not")
+            a(f"     about the instrument.")
+        byname = {}
+        for r in gated:
+            if not ((r.get("have_gate") or 0) & 1):
+                continue
+            byname.setdefault(names[r["site"]], []).append(r["gate_flags"] & 1)
+        for nm, xs in sorted(byname.items()):
+            a(f"       {nm:12} walk gate SET on {sum(xs)}/{len(xs)} entr(ies)")
+
     if dump:
         a(f"first {dump} record(s):")
         for r in cap.recs[:dump]:
@@ -1230,6 +1278,11 @@ def report(cap, names, dump=0):
             line = (f"  #{r['seq']:<5} t={r['tick']:<10} {nm:9} "
                     f"ret=0x{reb(r['retaddr']):08X} ecx=0x{r['ecx']:08X} "
                     f"a1=0x{r['arg1']:08X} a2=0x{r['arg2']:08X}")
+            if r.get("have_gate"):
+                line += (f" gate=0x{r['gate_flags']:08X}"
+                         f"{'!' if r['gate_flags'] & GATE_WALK_BIT else ' '}"
+                         f" status=0x{r['gate_status']:08X}"
+                         f" [{gate_verdict(r)}]")
             if r["have_agent"]:
                 line += (f" id={r['id']:<5} flags=0x{r['flags']:08X}"
                          f"{' WP' if r['flags'] & BIT_ISWAYPOINT else '   '}"
