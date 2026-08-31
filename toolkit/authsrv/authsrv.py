@@ -8942,6 +8942,15 @@ PLAYER_REVIVE_AFTER = 10.0 # seconds face-down. Longer than an agent's 8.0 on
 SWING_WINDUP_RATIO = 0.4458   # LEGACY (--windup-ratio): of the declared base
 WINDUP_MODEL = "additive"     # "additive" (derived law) | "ratio" (legacy arm)
 
+# ANIMREF-R3 fix 3's revert arm, added 2026-08-31 AFTER THE FACT and that is
+# the point of this comment. The arc's own rule is "shipped default-ON, one
+# revert flag each"; fixes 1 and 2 got theirs and this one did not, so when
+# the R5 operator reported "attacks block movement longer than stock" the one
+# change most likely to cause it was the one change that could not be turned
+# off for a comparison. A shipped behaviour with no revert arm is not a
+# derivation, it is an assertion.
+ATTACK_E5_WINDUP = True       # False (--legacy-attack-e5): E5 at the press
+
 
 def swing_windup(attack_speed):
     """Seconds between ATTACK_STARTED and the landing, for a given attack base.
@@ -10989,7 +10998,7 @@ def handle_skill_press(values, send, state, conn_id, opcode):
     # Wired for the measured case only (table activation 0.0); a LISTED
     # activation still wins, per the wiki's "activation replaces the weapon
     # time" reading -- UPSTREAM, no corpus cycle exercises it yet.
-    if is_attack and activation == 0.0:
+    if is_attack and activation == 0.0 and ATTACK_E5_WINDUP:
         e5_at = begin + swing_windup(
             ATTACK_INTERVAL * attack_interval_factor(state, PLAYER_AGENT_ID))
     else:
@@ -19831,6 +19840,14 @@ def main():
                          "at every declared interval, Power Shot retrodicted "
                          "to 1.3 ms; the constant was one law sampled at two "
                          "intervals).")
+    ap.add_argument("--legacy-attack-e5", action="store_true",
+                    help="Revert ANIMREF-R3 fix 3: a zero-activation attack "
+                         "skill's E5 fires AT THE PRESS again, instead of one "
+                         "weapon windup later. The A/B arm for 'attacks block "
+                         "movement longer than stock' -- the fix widened that "
+                         "window from 0 to ~0.775 s on a 1.75 s weapon, which "
+                         "makes it the first suspect and therefore the thing "
+                         "that has to be switchable.")
     ap.add_argument("--legacy-cast-form", action="store_true",
                     help="Revert cast-animation properties to the old "
                          "always-0x00A0 form (target 0 when none). The "
@@ -21202,6 +21219,12 @@ def main():
         WINDUP_MODEL = "ratio"
         print("[map] --windup-ratio: swing windup reverts to the legacy "
               "0.4458 fraction; the derived interval/2 - 0.1 law is OFF.")
+    if a.legacy_attack_e5:
+        global ATTACK_E5_WINDUP
+        ATTACK_E5_WINDUP = False
+        print("[map] --legacy-attack-e5: a zero-activation attack skill's E5 "
+              "fires at the press again (pre-ANIMREF-R3 behaviour).",
+              flush=True)
     if a.legacy_cast_form:
         global CAST_FORM
         CAST_FORM = "legacy"

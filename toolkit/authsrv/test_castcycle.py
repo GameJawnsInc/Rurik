@@ -236,6 +236,26 @@ def section_attack_family():
               f"e5 in {c2['e5_at'] - t0:.4f}s, law says {expect:.4f}s "
               f"(hammer {authsrv.ATTACK_INTERVAL}s -> "
               f"{authsrv.swing_windup(authsrv.ATTACK_INTERVAL):.4f}s)")
+        # AND THE REVERT ARM, added 2026-08-31 with the flag it tests. The
+        # window this widened (0 -> ~0.775 s on a 1.75 s weapon) is the first
+        # suspect for the R5 operator's "attacks block movement longer than
+        # stock", so the comparison has to be one flag away and has to stay
+        # working. A revert flag with no test is a revert flag that rots.
+        try:
+            authsrv.ATTACK_E5_WINDUP = False
+            state3 = {"agents": {}}
+            sent3 = []
+            send3 = lambda op, vals, label="", quiet=False: \
+                sent3.append((op, vals, label))
+            t3 = _time.time()
+            _press(authsrv, send3, state3, skill=394, target=40)
+            c3 = state3["pending_casts"][0]
+            check(abs(c3["e5_at"] - t3) < 0.05,
+                  "--legacy-attack-e5 puts that E5 back AT the press",
+                  f"e5 in {c3['e5_at'] - t3:.4f}s -- the pre-ANIMREF-R3 wire, "
+                  f"against {expect:.4f}s with the fix on")
+        finally:
+            authsrv.ATTACK_E5_WINDUP = True
     finally:
         authsrv.skill_timing = saved
         authsrv._is_attack_skill = saved_attack
