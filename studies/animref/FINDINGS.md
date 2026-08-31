@@ -662,6 +662,86 @@ behaviour, possibly build-specific, not addressable from the server). The
 per-agent state node (`0x7F2E90`, field `[agent+0xC4]`) and the global latch
 `0x10874AC/B0` are the two concrete read targets for that dig.
 
+## 16. ANIMREF-R8: the visual-component id space, READ — and the 20/21 channel wired
+
+**2026-08-31.** §10 decoded properties 20/21's mechanism, refuted the obvious
+value reading, and refused to wire the channel because the id space was
+unread — "wiring 20/21 means inventing those ids or decoding that table
+first," filed as the arc's next decode target. It is decoded. Nothing was
+invented.
+
+**Step 1 — the corpus says the value IS per-skill, and fixes a slot reading
+on the way.** Each prop-20/21 event was attributed to the cast that produced
+it (batch-tight: the event must share the cast-end batch of a caster whose
+cast-open named the skill). Prop 20 is `INT_TARGET`, so which of its two
+agent slots is the caster was an open question — §10 read it as
+`(agent, target, value)`. Scored both ways:
+
+| reading | attributed | skills | purity |
+|---|---|---|---|
+| A — `v[2]` is the caster | **0** | — | nothing attributes at all |
+| B — `v[3]` is the caster | 156 | 13 | **100%**: every skill one value, every value one skill |
+
+So **prop 20 is `[prop, RECIPIENT, CASTER, id]` — victim slot first**, the
+same order `0x00A3` damage uses and the opposite of §10's reading. Prop 21
+(`INT`, one agent) gave 17 skills, 16 with a ≥90% dominant value.
+
+**Step 2 — the ids are in the client's own skill record.** 26 measured
+(skill → id) pairs were tested against every offset of the `s_skill` record
+(0xA4 bytes, `skilltable.py`) as u32/u16/u8. Two offsets answer, and **2077
+is the table's own "no visual" default** (2567 of 3443 rows at +0x7c):
+
+* **+0x78 — a visual played on the CASTER**
+* **+0x7c — a visual played on the RECIPIENT**
+
+Skill 179 is the clean case: `+0x78 = 347`, exactly the id the corpus saw on
+the caster; `+0x7c = 348`, exactly the one on the recipient. **25 of 26
+skills have all their observed ids inside {+0x78, +0x7c}.**
+
+**Step 3 — the model predicts the CHANNEL too, which is what makes it
+refutable.** The caster visual rides prop 21; the recipient visual rides
+prop 20 when the recipient is somebody else and prop 21 when the skill is
+self-cast — which is why one id shows on both channels for a heal aimed
+sometimes at an ally, sometimes at yourself (281/282/288 do exactly that).
+Scored over the whole corpus, predicting field **and** channel:
+**656 of 658 attributable events, 99.7%.** Both misses are single events
+(skill 83 n=1; a stray value 11 on skill 282) whose cast attribution is
+itself unsafe — named, not smoothed away.
+
+**Shipped (ANIMREF-R8, default ON, revert `--no-skill-visuals`).**
+`skilltable.py` now emits `visual_caster`/`visual_recipient`;
+`content/world.toml` gains a `skill_visual` block — 12 rows, one per served
+skill that has a visual, each `source = "client-table"` with its extractor,
+build 38797, and the corpus corroboration in `verified`; `send_skill_visual`
+sends them at the cast's landing in the corpus's own batch slot (behind the
+58, ahead of the target-facing properties — retail's `['58','21','21','55',
+'55']` shape), for the player's casts and the NPC's alike. A skill whose row
+omits a slot, or that has no row, **sends nothing** — silence rather than a
+substitute id, which is the condition §10's refusal named.
+
+Pins: `test_castcycle` §2d (all four channel branches + the off switch),
+`test_guards` §4 (the NPC half, byte-exact: skill 312's `[20, player, 10,
+556]` between the 58 and the damage), `test_skilltable` (46 checks green with
+the two new fields).
+
+**Verbatim check (`20260831T120723`/`120752`).** A real client took the new
+channel without complaint: **0 undecodable, RUN VERDICT PASS, no assert and
+no disconnect** across four NPC casts that each fired their own id — 253→464,
+289→511, 276→491, 312→556 — in retail's batch order every time
+(`58 finishes casting` → `effect visual … the target of skill …` →
+`EFFECT_APPLY`/heal/damage). The player's own attack skill 322, whose client
+row is all sentinel, correctly sent **nothing**. What the run does NOT show
+is what the visuals look like on screen: that is a model-appearance verdict
+and belongs to the owner, so the ids remain OBSERVED-as-wire and unclaimed
+as pixels.
+
+**What this does NOT settle.** The ids are carried **opaque** — nothing here
+reads the visual-component space they index, so what any given id *looks
+like* is unknown and unclaimed. The 8 served skills whose rows are all
+sentinel play nothing, which is a fact about those skills rather than a gap.
+And prop 21's dominant-value purity (16/17) is one skill short of the prop-20
+figure; the residue is the same single stray event.
+
 ## Provenance
 
 All figures are measurements over the owner's own live captures via extractors in this

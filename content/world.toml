@@ -859,3 +859,119 @@ enabled = true
 source = "invented"
 verified = """Ours, expected to be refused. `sculpt_deep_farside`'s point with \
 bit 0 clear; 1,765 units from the nearest flags-0 ground."""
+
+# ---------------------------------------------------------------- skill_visual
+# The ON-BODY EFFECT VISUAL each skill plays, as two opaque component ids.
+# ANIMREF-R8, studies/animref/FINDINGS.md section 16.
+#
+# This is the id space section 10 refused to invent and filed as the arc's next
+# decode target. It was not invented in the end -- it was read out of the
+# client's own s_skill record, at two offsets NAMED BY THE WIRE: the live
+# corpus supplies (skill -> id) pairs on properties 20 and 21, and exactly
+# +0x78 and +0x7c reproduce them. The model predicts the CHANNEL as well as the
+# value (caster visual -> property 21; recipient visual -> property 20, or 21
+# when the skill is self-cast), which is what makes it refutable: 656 of 658
+# attributable corpus events predicted, 99.7%, both misses single events whose
+# cast attribution is itself unsafe.
+#
+# `caster` and `recipient` are OMITTED where the client's row holds its own
+# "no visual" default (2077) -- an absent key means the skill plays nothing on
+# that body, which is a fact about the skill and not a gap in this table. The
+# ids are carried opaque: nothing in this repo reads the component space they
+# index, and nothing needs to.
+
+[skill_visual.135]
+recipient = 245
+[skill_visual.135.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilltable.py"
+build = 38797
+verified = "s_skill row 135, +0x7c = 245; extracted 2026-08-31, corroborated against the live corpus's property 20/21 events (99.7% over n=658)."
+
+[skill_visual.200]
+caster = 362
+[skill_visual.200.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilltable.py"
+build = 38797
+verified = "s_skill row 200, +0x78 = 362; extracted 2026-08-31, corroborated against the live corpus's property 20/21 events (99.7% over n=658)."
+
+[skill_visual.253]
+recipient = 464
+[skill_visual.253.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilltable.py"
+build = 38797
+verified = "s_skill row 253, +0x7c = 464; extracted 2026-08-31, corroborated against the live corpus's property 20/21 events (99.7% over n=658)."
+
+[skill_visual.276]
+recipient = 491
+[skill_visual.276.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilltable.py"
+build = 38797
+verified = "s_skill row 276, +0x7c = 491; extracted 2026-08-31, corroborated against the live corpus's property 20/21 events (99.7% over n=658)."
+
+[skill_visual.289]
+recipient = 511
+[skill_visual.289.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilltable.py"
+build = 38797
+verified = "s_skill row 289, +0x7c = 511; extracted 2026-08-31, corroborated against the live corpus's property 20/21 events (99.7% over n=658)."
+
+[skill_visual.307]
+recipient = 545
+[skill_visual.307.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilltable.py"
+build = 38797
+verified = "s_skill row 307, +0x7c = 545; extracted 2026-08-31, corroborated against the live corpus's property 20/21 events (99.7% over n=658)."
+
+[skill_visual.312]
+recipient = 556
+[skill_visual.312.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilltable.py"
+build = 38797
+verified = "s_skill row 312, +0x7c = 556; extracted 2026-08-31, corroborated against the live corpus's property 20/21 events (99.7% over n=658)."
+
+[skill_visual.316]
+caster = 562
+[skill_visual.316.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilltable.py"
+build = 38797
+verified = "s_skill row 316, +0x78 = 562; extracted 2026-08-31, corroborated against the live corpus's property 20/21 events (99.7% over n=658)."
+
+[skill_visual.317]
+caster = 563
+[skill_visual.317.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilltable.py"
+build = 38797
+verified = "s_skill row 317, +0x78 = 563; extracted 2026-08-31, corroborated against the live corpus's property 20/21 events (99.7% over n=658)."
+
+[skill_visual.318]
+caster = 595
+[skill_visual.318.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilltable.py"
+build = 38797
+verified = "s_skill row 318, +0x78 = 595; extracted 2026-08-31, corroborated against the live corpus's property 20/21 events (99.7% over n=658)."
+
+[skill_visual.319]
+caster = 598
+[skill_visual.319.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilltable.py"
+build = 38797
+verified = "s_skill row 319, +0x78 = 598; extracted 2026-08-31, corroborated against the live corpus's property 20/21 events (99.7% over n=658)."
+
+[skill_visual.346]
+caster = 601
+[skill_visual.346.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/skilltable.py"
+build = 38797
+verified = "s_skill row 346, +0x78 = 601; extracted 2026-08-31, corroborated against the live corpus's property 20/21 events (99.7% over n=658)."

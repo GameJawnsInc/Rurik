@@ -1680,13 +1680,31 @@ emitter against the population, fix by derivation, tune never.
   not a stopgap. What's left is a client-behaviour question (why s11 passes
   the local 0x003D gate on retail but not our build), addressable only by
   instrumenting the locomotion-input read — deferred, not blocking.
-* **NEXT, in cost order**: (1) The per-skill visual-component id
-  table — unblocks props 20/21 and 22/23/28 alike. (2) The IAS windup
+* **R8 SHIPPED — the visual-component id space is READ, and props 20/21 are
+  WIRED** (FINDINGS §16). R4 had refused this channel because wiring meant
+  inventing ids; nothing was invented. The corpus first fixed a slot reading
+  (**prop 20 is `[prop, RECIPIENT, CASTER, id]`**, victim-first — the
+  caster-first reading attributes *zero* events), then 26 measured
+  (skill → id) pairs identified two unmapped offsets in the client's own
+  `s_skill` record: **+0x78 a visual on the caster, +0x7c one on the
+  recipient**, 2077 = none. The model predicts the CHANNEL as well as the
+  value — caster→prop 21, recipient→prop 20 unless self-cast — and scores
+  **656 of 658 corpus events (99.7%)**. Shipped default-ON
+  (`--no-skill-visuals`): `skilltable.py` emits both fields,
+  `content/world.toml` gains 12 `skill_visual` rows (`client-table`,
+  extractor + build + corpus corroboration per row), and `send_skill_visual`
+  sends them at the landing in retail's own batch slot for player and NPC
+  casts alike. A skill with no row sends nothing. Pins: `test_castcycle` §2d,
+  `test_guards` §4.
+* **NEXT, in cost order**: (1) The IAS windup
   question (§1 caveat) via the client's `0x007F82C0` duration math,
-  desk-only. (3) Prop 55 (health_gain), value derivable — clean R3-style fix.
-  (4) The extractor's event model wants 0x00CF/0x00D0/0x00D2 (0x00D2 now
-  known to ride attack-skill activations). (5) D20: refuse a targetless
-  attack-skill press — retail refuses 41 in this corpus.
+  desk-only. (2) Prop 55 (health_gain), value derivable — clean R3-style fix.
+  (3) The extractor's event model wants 0x00CF/0x00D0/0x00D2 (0x00D2 now
+  known to ride attack-skill activations). (4) D20: refuse a targetless
+  attack-skill press — retail refuses 41 in this corpus. (5) Props 22/23/28
+  (scripted animation) — the id-space method above may port, but their
+  values were never shown to be per-skill and that must be tested first,
+  not assumed from R8's success.
 
 ### ★★★★★ MOVEMENT 2026-08-28 — THE OBSTACLE DIG: the mesh HAS the mountains, the no-clip IS scored, the client ignores its own geometry check. THE LEAD IS SERVER-SIDE PATH-SOLVED GRANTS
 
