@@ -1637,21 +1637,46 @@ emitter against the population, fix by derivation, tune never.
   CONTESTED 35/63 pairing, and unwireable for a different reason: no interrupt
   or knockdown mechanic exists server-side to attach them to. Prop 45 is
   excluded from the cast register (tail-jumps `0x0047F480`, agent-only).
-* **R5 IS STAGED AND WAITING ON THE OWNER — [studies/animref/RUN-R5.md](studies/animref/RUN-R5.md)**
-  (`7d50ca5`). One bounded command, six actions, ~6 minutes; P1–P8 pre-registered
-  with refutations; the wire half scored offline afterwards from the run's own
-  capture. **P1 is the point**: the form rule moved targetless self casts onto
-  `0x009F`, and only eyes catch "more retail-correct wire, visibly worse game"
-  (de-risked: retail sends that exact self form 8× across 3 captures).
-* **NEXT, in cost order**: (1) **R5** (the owner's ~6 minutes — everything else
-  below is desk work that does not need it). (2) The per-skill visual-component
-  id table — the decode that unblocks props 20/21 and 22/23/28 alike. (3) The
-  IAS windup question (§1 caveat) may fall to the client's `0x007F82C0` duration
-  math, desk-only. (4) Prop 55 (health_gain) is the one R2 divergence whose value
-  IS derivable (a signed fraction of max health, like damage prop 16) — a clean
-  R3-style fix, gated behind R5. (5) The extractor's event model wants
-  0x00CF/0x00D0/0x00D2 before any spend-grammar reading. (6) D20: refuse a
-  targetless attack-skill press (needs the harness's test presses moved first).
+* **R5 RAN (owner, 2026-08-31) and its finding #4 became the day's arc**: "i
+  can't quarterstep, attacks block movement longer than stock". The chase is
+  FINDINGS §11–§14 and it corrected itself twice on the way down: §11a's
+  "harness input trap" was WRONG (the player was DEAD — default `--enemy-hit`
+  kills in ~7.5 s and the movement-opcode filter dropped the 0x00F1s), and the
+  §11b living-character protocol (`--enemy-hit 0.02`, travel scored from the
+  client's own coordinates) then reproduced the real lock: 0.0 u for any W
+  after an attack-skill press vs 618 u for the same keydown 12 s later.
+* **R6 SHIPPED (`6390322`) — the execution batch, from a 40/40 corpus law**:
+  retail opens it `0x009F [46, agent, 0]`, then adrenaline, damage, E3, NO
+  swing brackets. We never sent 46 (castmech's "0 of 2" was §3's refuted bow
+  artifact still living in the code) and the interval gate silently swallowed
+  a mid-chain press's damage entirely. `hit_enemy` grew `skill_strike`;
+  revert `--legacy-attack-finish`. Retail's movement law measured en route:
+  first move within ±0.25 s of E3 (n=53 accepted presses; the unvalidated
+  first scan died on refused presses — D20 observed live, 41 of them).
+* **R7 (`6390322`, `28974cd`) — the two chain laws, and a default REVERSED by
+  its own check**: LAW A (87/100 mid-chain moves carry no prop-3; our
+  stop-on-every-move door was the wiki plus a 2-of-2 measured on our own
+  door) ships **opt-in** (`--move-keeps-chain`) because run `20260831T110116`
+  showed our client cannot start moving until its action closes and that
+  prop-3 is the only closer we send — retail's client gets a grant we have
+  not identified (candidates: the per-echo `0x002B`, `0x0028`, prop-8
+  values). LAW B (post-execution START one windup out, 0.749–0.783 cluster)
+  ships default-ON (`--legacy-chain-restart`).
+* **THE SHIPPED DEFAULT IS MEASURED RESOLVED** (`20260831T110714`): tap at
+  press+2.1 s moves (was 0.0), tap at +4.2 s full stride, held W at +9 s runs
+  the whole hold at baseline 208 u/s. Residue: the first tap engages partway
+  through (on our prop-3, where retail self-authorizes within 0.25 s of E3
+  with the chain surviving).
+* **NEXT, in cost order**: (1) **The client's movement-start gate decode** —
+  which state field the 0x3D/locomotion path checks and what disarms it; this
+  is now the sharpest target, it unblocks LAW A's wire, and the wire-side
+  candidates above narrow the search. (2) The per-skill visual-component id
+  table — unblocks props 20/21 and 22/23/28 alike. (3) The IAS windup
+  question (§1 caveat) via the client's `0x007F82C0` duration math,
+  desk-only. (4) Prop 55 (health_gain), value derivable — clean R3-style fix.
+  (5) The extractor's event model wants 0x00CF/0x00D0/0x00D2 (0x00D2 now
+  known to ride attack-skill activations). (6) D20: refuse a targetless
+  attack-skill press — retail refuses 41 in this corpus.
 
 ### ★★★★★ MOVEMENT 2026-08-28 — THE OBSTACLE DIG: the mesh HAS the mountains, the no-clip IS scored, the client ignores its own geometry check. THE LEAD IS SERVER-SIDE PATH-SOLVED GRANTS
 
