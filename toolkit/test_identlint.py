@@ -80,7 +80,31 @@ ROOT = os.path.dirname(HERE)
 # somebody has to look. When it fires, RAISING IT IS A NORMAL EDIT, exactly as it is in
 # `test_provlint.py`; what is not normal is a mass rename, which the handoff's top box
 # refuses in advance.
-COLLISION_CEILING = 80
+#
+# 80 -> 90 on 2026-08-31, OWNER'S CHOSEN VALUE, against a MEASURED 88:
+#
+#     640 defining site(s) in 64 document(s); 277 distinct token(s);
+#     88 of them collide across documents.
+#
+# The tripwire had fired and the raise is the normal edit above. The 88 were READ
+# before it was raised, which is what the failure text asks for, and all 88 are
+# ordinary work: 78 are bare letter-series (`A1`, `C13`, `D12`) -- the exact gap
+# `studies/idents/CONVENTION.md` exists to close and which grandfathers every
+# existing token -- and the other nine are artifacts of how this tool NORMALISES
+# rather than ambiguity a reader would ever hit. `ANIMREF-R5` -> `ANIMREFR5`,
+# `MORALE-P1..P4`, `MOVECODE-B2` are correctly prefixed and collide only because a
+# study's FINDINGS.md and PLAN.md both cite them, which is cross-referencing working;
+# `R4A/R4B/R4C` are the hyphen-digit truncation this tool's own notes call out as
+# able to MANUFACTURE a collision. So nothing here is the 2.2(a) defect.
+#
+# READ THE HEADROOM BEFORE TRUSTING IT: 90 leaves 2, where the paragraph above sets
+# 1.5x (which would be ~132) and records the specific mistake of re-arming three
+# short -- "fires on the next session's ordinary work". At about nine collisions per
+# arc this is expected to go red on the NEXT arc that mints a letter series. That is
+# a deliberate choice to be told early rather than an oversight, so when it fires:
+# re-read the tokens as above and raise again. It is still a normal edit, and a mass
+# rename is still refused.
+COLLISION_CEILING = 90
 
 # The other direction. A pattern that rots reports a clean tree, and under a
 # not-growing rule that reads as progress -- so the floor is set BELOW the observed 312
