@@ -724,6 +724,17 @@ Pins: `test_castcycle` §2d (all four channel branches + the off switch),
 556]` between the 58 and the damage), `test_skilltable` (46 checks green with
 the two new fields).
 
+**Verbatim check (`20260831T120723`/`120752`).** A real client took the new
+channel without complaint: **0 undecodable, RUN VERDICT PASS, no assert and
+no disconnect** across four NPC casts that each fired their own id — 253→464,
+289→511, 276→491, 312→556 — in retail's batch order every time
+(`58 finishes casting` → `effect visual … the target of skill …` →
+`EFFECT_APPLY`/heal/damage). The player's own attack skill 322, whose client
+row is all sentinel, correctly sent **nothing**. What the run does NOT show
+is what the visuals look like on screen: that is a model-appearance verdict
+and belongs to the owner, so the ids remain OBSERVED-as-wire and unclaimed
+as pixels.
+
 **What this does NOT settle.** The ids are carried **opaque** — nothing here
 reads the visual-component space they index, so what any given id *looks
 like* is unknown and unclaimed. The 8 served skills whose rows are all
