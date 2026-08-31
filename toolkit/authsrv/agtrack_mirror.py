@@ -514,28 +514,24 @@ class AgTrackMirror(object):
 
     def _walk(self, qx, qy, qplane):
         """Newest -> oldest, prev seeded from state.position; guard tests
-        PREV only; NO break -- the OLDEST matching node wins; truncate its
-        older tail (studies/movement/FINDINGS.md:2707-2718)."""
-        prev = self.seed          # may be None (never seeded) -> skip seg 0
-        node = self.head
-        last_match = None
-        last_prev = None
-        while node is not None:
-            if prev is not None:
-                if seg_match(qx, qy, qplane, node.x, node.y, node.plane,
-                             prev[0], prev[1], prev[2], self.mesh):
-                    last_match = node
-                    last_prev = prev
-            prev = (node.x, node.y, node.plane)
-            node = node.nxt
-        return last_match, last_prev
+        PREV only; NO break -- the OLDEST matching node wins
+        (studies/movement/FINDINGS.md:2707-2718).  The walk itself is pure;
+        evaluate() applies the truncation.  Alias of _walk_pure so the
+        prediction path and the live path cannot drift apart."""
+        return self._walk_pure(qx, qy, qplane)
 
-    def evaluate(self, now_ms, async_pos, event=""):
+    def evaluate(self, now_ms, async_pos, event="", no_reset=False):
         """One dispatch on the world-0 (sync) copy: the reprieve test, then
         the gates on a miss.  `async_pos` is the rendered copy's position for
         gate 1 (the replay interpolates it from the report stream; live use
         would take the latest report).  Returns a Verdict; applies the
-        consequence chain (truncate on match; Clear + record on snap)."""
+        consequence chain (truncate on match; Clear + record on snap).
+
+        `no_reset=True` suppresses ONLY the miss-path Clear/record: the
+        guard's TWIN mirror models the world where the client never reset
+        on our predicted snaps (only 0x002C -- server-caused -- resets are
+        real there).  Match truncation still applies: it is a real client
+        behaviour in both worlds and only prunes the tail."""
         if not self.client_controlled:
             # fence 0x00606002: never tested; falls through to the appender
             # (0x0060610B -- studies/movement/FINDINGS.md:3701).
@@ -576,10 +572,12 @@ class AgTrackMirror(object):
         # gate 3 unmodelled (other agents' personal space) -- always passes.
         failed = (gate1 is False) or (gate2 is False)
         if failed:
-            # MISS adjudicated: Clear, then append one fresh node
-            # (0x00605F70 + 0x00605840, studies/movement/FINDINGS.md:3109-10).
-            self.clear()
-            self.record_sync(now_ms)
+            if not no_reset:
+                # MISS adjudicated: Clear, then append one fresh node
+                # (0x00605F70 + 0x00605840, studies/movement/
+                # FINDINGS.md:3109-10).
+                self.clear()
+                self.record_sync(now_ms)
             return Verdict(now_ms, SNAP, q=q, chain_len=self.chain_len,
                            gate1=gate1, gate2=gate2, gate1_sep=sep,
                            event=event)
@@ -589,14 +587,15 @@ class AgTrackMirror(object):
     # ---- wire events -----------------------------------------------------
 
     def on_grant(self, x, y, plane_first, plane_second, now_ms,
-                 async_pos=None, opcode=0x29):
+                 async_pos=None, opcode=0x29, no_reset=False):
         """A 0x0029/0x002A to the player: setter + bake, then the bake-tail
         dispatch (caller A, 0x005FEBEB) -- an EVALUATION when the fence is
         open, an append when it is closed."""
         self.sync.consume_arrival(now_ms)
         self.sync.bake_grant(x, y, plane_first, plane_second, now_ms)
         return self.evaluate(now_ms, async_pos,
-                             event="grant-0x%04X" % opcode)
+                             event="grant-0x%04X" % opcode,
+                             no_reset=no_reset)
 
     def on_update_position(self, x, y, plane, now_ms):
         """A 0x002C: AgTrack::Clear FIRST (0x005FDA78), then SetPosition on
@@ -625,6 +624,86 @@ class AgTrackMirror(object):
         self.re_arm()
         return self.record_async(now_ms, pos, plane, sig, dest, arrive_t)
 
+    # ---- pure prediction (no mutation) -----------------------------------
+
+    def predict(self, now_ms, async_pos, q=None, qplane=None):
+        """The reprieve test + gates as a PURE function: no truncation on a
+        match, no Clear on a miss, no record.  For the pre-emit guard --
+        a prediction must not edit the chain it predicts about.
+
+        Returns one of NOT_TESTED / MATCH / NOMATCH_PASS / SNAP with the same
+        semantics as evaluate(); q defaults to the live sync copy's +0x78."""
+        if not self.client_controlled:
+            return Verdict(now_ms, NOT_TESTED, chain_len=self.chain_len,
+                           event="predict")
+        if q is None:
+            q = (self.sync.x78, self.sync.y78)
+            qplane = self.sync.plane
+        if q[0] is None:
+            return Verdict(now_ms, NOT_TESTED, chain_len=self.chain_len,
+                           event="predict")
+        m, m_prev = self._walk_pure(q[0], q[1], qplane)
+        if m is not None:
+            return Verdict(now_ms, MATCH, q=q, chain_len=self.chain_len,
+                           matched_age_ms=now_ms - m.t, event="predict",
+                           matched=((m.x, m.y, m.plane), m_prev, m.sig))
+        a = self.sync.position(now_ms)
+        gate1 = None
+        sep = None
+        if async_pos is not None and a is not None:
+            dx, dy = a[0] - async_pos[0], a[1] - async_pos[1]
+            d2 = dx * dx + dy * dy
+            sep = math.sqrt(d2)
+            gate1 = d2 < GATE1_SNAP_DISTSQ
+        gate2 = None
+        if a is not None and not getattr(self.mesh, "straightline_only",
+                                         False):
+            gate2 = self.mesh.start_walkable(a[0], a[1])
+        code = SNAP if (gate1 is False or gate2 is False) else NOMATCH_PASS
+        return Verdict(now_ms, code, q=q, chain_len=self.chain_len,
+                       gate1=gate1, gate2=gate2, gate1_sep=sep,
+                       event="predict")
+
+    def predict_grant(self, x, y, plane_first, plane_second, now_ms,
+                      async_pos):
+        """What would delivering this 0x0029 do?  Bakes on a THROWAWAY copy
+        of the sync agent (the bake settles +0x78 and re-aims, so q at the
+        grant's own dispatch is the settled position), then runs the pure
+        prediction with that q.  The live mirror is untouched."""
+        s = SyncAgent()
+        s.x78, s.y78 = self.sync.x78, self.sync.y78
+        s.plane = self.sync.plane
+        s.dest = self.sync.dest
+        s.t_epoch = self.sync.t_epoch
+        s.t_arrive = self.sync.t_arrive
+        s.vx, s.vy = self.sync.vx, self.sync.vy
+        s.max_speed = self.sync.max_speed
+        s.move_speed = self.sync.move_speed
+        s.consume_arrival(now_ms)
+        s.bake_grant(x, y, plane_first, plane_second, now_ms)
+        if s.x78 is None:
+            return Verdict(now_ms, NOT_TESTED, chain_len=self.chain_len,
+                           event="predict-grant")
+        v = self.predict(now_ms, async_pos, q=(s.x78, s.y78), qplane=s.plane)
+        v.event = "predict-grant"
+        return v
+
+    def _walk_pure(self, qx, qy, qplane):
+        """The walk without the truncation side effect."""
+        prev = self.seed
+        node = self.head
+        last_match = None
+        last_prev = None
+        while node is not None:
+            if prev is not None:
+                if seg_match(qx, qy, qplane, node.x, node.y, node.plane,
+                             prev[0], prev[1], prev[2], self.mesh):
+                    last_match = node
+                    last_prev = prev
+            prev = (node.x, node.y, node.plane)
+            node = node.nxt
+        return last_match, last_prev
+
     def render_prune(self, now_ms):
         """READER 2 (see __init__): drop nodes older than now - prune_ms,
         keeping one older node as the returned segment's far end."""
@@ -648,14 +727,15 @@ class AgTrackMirror(object):
             n, node = n + 1, node.nxt
         self.chain_len = n
 
-    def tick(self, now_ms, async_pos=None):
+    def tick(self, now_ms, async_pos=None, no_reset=False):
         """Advance internal time: consume a due sync arrival (which fires a
         caller-B dispatch -> an EVALUATION, studies/movement/
         FINDINGS.md:3675), then the keep-alive sweep, then reader 2's
         prune."""
         v = None
         if self.sync.consume_arrival(now_ms):
-            v = self.evaluate(now_ms, async_pos, event="arrival")
+            v = self.evaluate(now_ms, async_pos, event="arrival",
+                              no_reset=no_reset)
         self.sweep(now_ms)
         self.render_prune(now_ms)
         return v

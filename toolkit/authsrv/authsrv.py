@@ -4128,6 +4128,12 @@ def _take_client_position(state, reported, plane, rec, source, now=None,
                   on_mesh=on_mesh,
                   kbd_age=(None if _kbd_at is None
                            else round(now - _kbd_at, 3)))
+    # The guard's report feed: accepted reports advance its async belief,
+    # refusals arm its refused-report gate; both re-arm its record.
+    if state.get("agtrack_guard") is not None:
+        _agtrack_guard_call(state, "on_report", reported[0], reported[1],
+                            plane, ("rep", source, bool(stop)), now,
+                            accepted=accept)
     return accept
 
 
@@ -4214,6 +4220,17 @@ def _take_client_position(state, reported, plane, rec, source, now=None,
 # guard. (c) MEASURED, a click-walk sends no position report for up to 12.9 s,
 # so a server-granted click-walk cannot be interrupted by this sender.
 RESYNC = False
+
+# THE AGTRACK GUARD, SHADOW MODE (MOVECODE-1z-s; module agtrack_guard.py).
+# Telemetry only, the same class as the plane-echo tripwire: it maintains the
+# decoded history-chain mirror per connection and RECORDS what the derived
+# pre-emit rule would have done (pass / gates-pass / veto, and whether the
+# 0x002C re-pin was due) -- it never changes a send.  Every call site is
+# fused: the first exception disables the guard for the session with one
+# loud line, because telemetry must never take down the server.  The ACTIVE
+# arms (actually vetoing, actually firing the re-pin) do not exist yet; when
+# built they ship behind their own OFF-by-default flag.
+AGTRACK_SHADOW = True
 # HOW FAR APART THE TWO COPIES MUST BE BEFORE WE ACT.  100.0 u is the CLIENT'S
 # OWN constant, not ours: 0x00946560, the radius inside which 0x00605AF0 calls
 # the authoritative position a match against the client's history and returns
@@ -4698,6 +4715,109 @@ def _maybe_resync(send, state, rec, now=None):
          f"-- the CLIENT's own report, {age * 1000:.0f} ms old, closing a "
          f"modelled {sep:.0f} u between the authoritative copy and it")
     return True
+
+
+# ---------------------------------------------------------------------------
+# AGTRACK GUARD shadow helpers.  See the AGTRACK_SHADOW block above.  All of
+# these no-op when the guard is absent or dead; none of them raises.
+# ---------------------------------------------------------------------------
+
+def _agtrack_guard_seed(state, pos, plane, conn_id):
+    """Create + seed the guard at character placement (its HOLE-D contract:
+    only placement may seed; a session that placed and has no guard prints
+    the fact once rather than staying silently inert)."""
+    if not AGTRACK_SHADOW:
+        return
+    try:
+        import agtrack_guard as _ag
+        import agtrack_mirror as _am
+        pm = state.get("pathmap")
+        mesh = _am.MeshAdapter(pm) if pm is not None else None
+        g = _ag.AgTrackGuard(mesh=mesh)
+        g.on_placement(pos[0], pos[1], plane, time.time())
+        state["agtrack_guard"] = g
+    except Exception as e:
+        state["agtrack_guard"] = None
+        print(f"[c{conn_id}] [agtrack-guard] seed failed ({e!r}) -- shadow "
+              f"telemetry OFF for this session", flush=True)
+
+
+def _agtrack_guard_call(state, method, *args, **kw):
+    """One fused call: the first exception kills the guard for the session,
+    loudly, and the session continues untouched."""
+    g = state.get("agtrack_guard")
+    if g is None:
+        return None
+    try:
+        return getattr(g, method)(*args, **kw)
+    except Exception as e:
+        state["agtrack_guard"] = None
+        print(f"[agtrack-guard] DISABLED after {method} raised {e!r} -- "
+              f"shadow telemetry ends here, the session continues",
+              flush=True)
+        return None
+
+
+def _agtrack_shadow_emit(state, opcode, values, rec, now=None):
+    """The send() choke point's feed: predict the grant's delivery verdict
+    (the record row), then apply the emit to the mirror pair.  Player-agent
+    messages only -- NPCs ride the same opcodes."""
+    g = state.get("agtrack_guard")
+    if g is None or not values or values[0] != PLAYER_AGENT_ID:
+        return
+    if now is None:
+        now = time.time()
+    if opcode == GAME_SMSG_AGENT_UPDATE_SPEED:
+        if len(values) >= 2:
+            _agtrack_guard_call(state, "on_speed", float(values[1]), now)
+        return
+    if opcode not in (GAME_SMSG_AGENT_MOVE_TO_POINT,
+                      GAME_SMSG_AGENT_UPDATE_DESTINATION,
+                      GAME_SMSG_AGENT_UPDATE_POSITION):
+        return
+    point = values[1]
+    p1 = values[2] if len(values) > 2 else None
+    p2 = values[3] if len(values) > 3 else None
+    if opcode == GAME_SMSG_AGENT_UPDATE_POSITION:
+        _agtrack_guard_call(state, "on_emit", 0x2C, float(point[0]),
+                            float(point[1]), p1, None, now)
+        return
+    v = _agtrack_guard_call(state, "pre_emit", float(point[0]),
+                            float(point[1]), p1, p2, now)
+    _agtrack_guard_call(state, "on_emit",
+                        0x29 if opcode == GAME_SMSG_AGENT_MOVE_TO_POINT
+                        else 0x2A,
+                        float(point[0]), float(point[1]), p1, p2, now)
+    if v is not None and rec is not None:
+        rec.event("agtrack_guard", code=v.code, why=v.why,
+                  budget=(None if v.sep_budget is None
+                          else round(v.sep_budget, 1)),
+                  repin=v.repin,
+                  chain=state["agtrack_guard"].mirror.chain_len
+                  if state.get("agtrack_guard") else None)
+
+
+def _agtrack_shadow_tick(state, rec):
+    """world_tick's feed: advance arrivals/sweep every tick; sample the
+    standing re-pin answer at 2 Hz and record TRANSITIONS only."""
+    g = state.get("agtrack_guard")
+    if g is None:
+        return
+    now = time.time()
+    _agtrack_guard_call(state, "tick", now)
+    n = state.get("agtrack_guard_ticks", 0) + 1
+    state["agtrack_guard_ticks"] = n
+    if n % 10:
+        return
+    got = _agtrack_guard_call(state, "repin_state", now)
+    if got is None:
+        return
+    code, why = got
+    prev = state.get("agtrack_guard_repin")
+    if code != prev:
+        state["agtrack_guard_repin"] = code
+        if rec is not None:
+            rec.event("agtrack_repin", code=code, why=str(why))
 
 
 def plane_repair_track(state, reported, plane, accepted, moving, pm, now):
@@ -14747,6 +14867,10 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                           GAME_SMSG_AGENT_UPDATE_DESTINATION,
                           GAME_SMSG_AGENT_UPDATE_POSITION):
                 _note_wire_move(state, opcode, values, time.time(), rec=rec)
+            if AGTRACK_SHADOW and state.get("agtrack_guard") is not None:
+                # Shadow only: predicts + records what the derived rule
+                # would have done, then feeds the emit to the mirror pair.
+                _agtrack_shadow_emit(state, opcode, values, rec)
             blob = codec.encode(smsg, opcode, values)
             with send_lock:
                 seq = next(s2c_seq)
@@ -14977,6 +15101,9 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
             state["sync_from"], state["sync_to"] = spawn[1], None
             state["sync_at"] = state["pos_seen"]
             state["pathmap"] = load_pathmap(spawn[0])
+            # The AgTrack guard's mirror pair starts from the same one
+            # known-true instant the sync model does (its own HOLE-D rule).
+            _agtrack_guard_seed(state, spawn[1], spawn[2], conn_id)
 
             def world_tick():
                 """Walk the agent toward its destination and say where it got to.
@@ -14989,6 +15116,10 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                 prev_tick = time.perf_counter()
                 while not stop.is_set():
                     time.sleep(TICK_SECONDS)
+                    # The AgTrack guard's clock: arrivals + the keep-alive
+                    # sweep every tick; the standing re-pin answer sampled at
+                    # 2 Hz, transitions recorded. Fused -- can never raise.
+                    _agtrack_shadow_tick(state, rec)
                     # Advance the client's simulation clock FIRST, every tick,
                     # whether or not anyone is moving -- that is what upstream
                     # does, and it is unconditional there.
@@ -16866,6 +16997,12 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # underneath instead of up the steps -- reported from play
                         # as ending up inside the hollow under the stairs.
                         dest_plane = values[2]
+                        # The guard's click feed: the async copy's own
+                        # destination (its silent-leg glide target).
+                        if state.get("agtrack_guard") is not None:
+                            _agtrack_guard_call(state, "on_click",
+                                                dest[0], dest[1],
+                                                dest_plane, time.time())
                         # The second field overwrites the client's own current
                         # plane, so a stale value here corrupts the thing the
                         # client collides against. READ OUT OF Gw.exe:
@@ -19527,6 +19664,15 @@ def main():
                          "sends the client's own figure and refuses to send "
                          "anything else. OFF by default; independent of "
                          "--heading-grant and --client-endpoint, both REFUTED.")
+    ap.add_argument("--no-agtrack-shadow", action="store_true",
+                    help="Disable the AgTrack guard's SHADOW telemetry (ON "
+                         "by default; MOVECODE-1z-s). The shadow maintains "
+                         "the decoded history-chain mirror and records what "
+                         "the derived pre-emit rule would have done -- "
+                         "agtrack_guard rows per grant, agtrack_repin rows "
+                         "on transitions. It changes no send and is fused "
+                         "to disable itself on any internal error. The "
+                         "ACTIVE arms do not exist yet.")
     ap.add_argument("--no-plane-repair", action="store_true",
                     help="Disable the plane-lock repair (ON by default). The "
                          "repair sends ONE labelled 0x002C -- the client's own "
@@ -20868,6 +21014,11 @@ def main():
               "--planecarry   (the offline counterfactual that pre-screened "
               "this policy, and the calibration gate it had to pass first)")
 
+    if a.no_agtrack_shadow:
+        global AGTRACK_SHADOW
+        AGTRACK_SHADOW = False
+        print("[map] --no-agtrack-shadow: the guard's telemetry is OFF; no "
+              "agtrack_guard/agtrack_repin rows this session.")
     if a.no_plane_repair:
         global PLANE_REPAIR
         PLANE_REPAIR = False

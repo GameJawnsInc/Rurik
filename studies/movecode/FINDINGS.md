@@ -8562,3 +8562,142 @@ prune dial stands in); gate 3 (unmodelled, conservative direction); the
 older-era opcode vocabulary in the replay; the 26 gates-blind and 9
 no-eval steps corpus-wide; and the 0x005FCAA0 attribution of the 28
 off-sync steps.
+
+---
+
+## 1z-s. The pre-emit grant rule, DERIVED -- three zones, three clauses, and a corpus retrodiction that pre-empts 217 of 251 historical warps
+
+**What exists now** (branch `claude/agtrack-guard`):
+`toolkit/authsrv/agtrack_guard.py` -- the policy layer over the mirror, every
+constant a decoded client constant or one arithmetic step from two of them;
+`toolkit/authsrv/test_agtrack_guard.py` (41 checks, bare machine, constants
+cross-pinned against authsrv's own resync derivations);
+`agtrack_replay.py --policy` -- the retrodiction; and SHADOW wiring in
+`authsrv.py` (telemetry rows `agtrack_guard` / `agtrack_repin`, ON by default
+like the plane-echo tripwire, fused to self-disable on any internal error,
+`--no-agtrack-shadow` to silence). **No active arm exists: nothing vetoes a
+real send and nothing fires a real re-pin.** Zero client runs in any of it.
+
+### 1z-s.1 The derivation -- the zones the decoded machinery forces
+
+The reprieve test and its gates (SS-1z-q/1z-r) force a three-zone structure
+on the sync copy's state, and every policy clause below is read off the
+zones rather than designed:
+
+- **GREEN** -- q within 100 u of the current-leg tube: MATCH, which jumps
+  clean over all three gates. NOTHING can snap. Retail lived here (its
+  stop-acks answered the client's own point at p50 34 ms).
+- **YELLOW** -- out of tube, separation < 299.332591 u, sync on-mesh:
+  evaluations run the gates; 1 and 2 pass; gate 3 (other agents) is the
+  residual. A path-following grant recovers the tube at 288 u/s.
+- **RED** -- separation >= 299.332591 u, or sync off-mesh: ANY evaluation
+  snaps -- **including the evaluation triggered by the grant that tries to
+  fix it** (the bake's tail dispatch tests q = the settled +0x78, which the
+  grant did not move). No 0x0029 recovers from red. The only exit is
+  0x002C, whose handler Clears FIRST so no test runs behind it
+  (p5-resync-disarm SS-1, measured live).
+
+**The three clauses** (each forced, none tuned):
+
+1. **VETO + REPLACE.** A grant whose own delivery evaluation predicts a
+   snap is never sent. With a fresh accepted report the re-pin goes first
+   -- and the held grant may follow IMMEDIATELY, because after a 0x002C
+   the fence is closed and a grant APPENDS instead of testing (dispatcher
+   fence 0x00606002; round 5's "client only is REFUTED"). The composition
+   is safe by the decode.
+2. **PROACTIVE ARRIVAL CHECK.** The evaluations the server does not
+   trigger are the sync copy's own arrivals -- and the mirror KNOWS every
+   arrival tick (it computed it at the bake). Predict the evaluation at
+   q = destination before the tick matures; a predicted snap re-pins
+   first, on the server's own clock. **This closes p5-resync-disarm's
+   HOLE A** (the report-driven sender could never reach an arrival inside
+   a report gap; the mirror is not report-driven).
+3. **TUBE-KEEPING IS AUDITED.** The shadow predicts every emitted grant's
+   delivery verdict, so "the router keeps the tube" is a per-capture
+   number, not a belief.
+
+**The error budget** (why the veto line is not the raw red line): veto when
+`modeled_sep + 288 * report_age + 10 >= 299.332591` -- the async copy can
+be up to speed*age past its last accepted report (corroborated as a real
+ceiling, authsrv's RESYNC_MAX_REPORT_AGE block), and the client's slow
+clock is worth ~10 u (1z-q.5). The re-pin preconditions inherit
+`_resync_verdict`'s derivations and are RE-DERIVED from R_MATCH and
+DEFAULT_RUN_SPEED (max age = 100/288 s exactly; min interval 0.5 s under
+the 299.33/576 s closing bound); `test_agtrack_guard.py` pins equality with
+authsrv's constants so the two derivations cannot drift. **This also
+answers p5-resync-disarm SS-4's open threshold dispute** (shipped 100 vs
+resyncscore's 299.33): both were half right -- 100 u is the TUBE (where
+MATCH protection lives), 299.33 is the CLIFF; the trigger is neither raw
+number but the predicted verdict, budget-discounted.
+
+### 1z-s.2 Two model corrections the retrodiction forced (and what they teach)
+
+- **The two-world bracket.** First wiring: after the guard's own predicted
+  snap it believed the fence closed, so grants "appended" unchecked -- and
+  two real snaps landed inside that blind window. The server is only
+  CERTAIN of Clears IT caused (1z-r.3's invisible resets cut both ways),
+  so the guard now runs TWO mirrors: the main one applies every predicted
+  reset, the TWIN applies only our own 0x002C. Reality is bracketed; a
+  grant is vetoed if EITHER world predicts its delivery snaps. Cost:
+  measured disturbance, below.
+- **The click-silence glide.** The client reports NOTHING while pathing a
+  click (silences to 37 s), so a raw last-report async belief goes stale
+  exactly when it matters, and a click node planted at the stale position
+  manufactured a false MATCH near the lagging sync copy. The guard now
+  glides its async belief toward a click-in-flight destination at the
+  granted speed (the client's own glide model applied to the async copy;
+  straight-line, labelled an estimate). With both corrections the
+  current-regime retrodiction is clean.
+
+### 1z-s.3 The retrodiction (agtrack_replay --policy, live constraints, no future knowledge)
+
+Corpus, 177 captures, 8,079 grants, 251 hard-bar warps:
+
+| | n | share |
+|---|---|---|
+| pre-empted by VETO (clause 1) | 193 | 76.9% |
+| pre-empted by RE-PIN due (clauses 1/2) | 24 | 9.6% |
+| **pre-empted total** | **217** | **86.4%** |
+| blocked (re-pin wanted, no fresh accepted report) | 8 | 3.2% |
+| unseen | 26 | 10.4% |
+
+Current regime (the two 2026-08-30 shipped-default captures): **10 of 10
+pre-empted, 0 blocked, 0 unseen.** The refuted-density era (08-19, the
+graveyard's `--heading-grant`/`--client-endpoint` day): 59 of 61 handled --
+the graveyard failure retrodicted by the mechanism (32.3% of that day's
+1,412 evaluations predicted MISS; the shipped+router day: 4.3%).
+
+**The 26 unseen decompose, and none is silent**: the non-AgTrack
+displacement mechanism (steps landing 1,800-1,940 u OFF the sync trajectory
+-- 1z-r.1's partition; candidate 0x005FCAA0), the 08-24..08-27 eras whose
+capture vocabulary the replay does not model (0x0025 direction arms,
+0x0027/0x0028), one sub-300 u step consistent with a yellow-zone gate-3
+snap (unguardable by construction -- gate 3 is other agents' state), and
+the abort session's carve-entry step. The 8 blocked are HOLE A/C's honest
+residual: the re-pin cannot fire on a position the server has no fresh
+accepted claim to.
+
+**Disturbance (the false-positive cost), stated as the UPPER BOUND it is**:
+16.5% of corpus grants vetoed in shadow, 5.45% of quiet time with the
+policy active; current regime 22.4% / 1.99%. Shadow over-states an active
+arm structurally: the first veto's re-pin collapses separation, so the
+grants after it -- counted as further vetoes in shadow -- would be green.
+The lock-session stretches (where the sync copy sat parked >1,000 u out
+for minutes) dominate the count, and vetoing there is CORRECT.
+
+### 1z-s.4 Staging, and what ships
+
+Shadow ships ON (telemetry only, plane-echo's class; fused; flag to
+disable). **The active arms are deliberately NOT built in this change**:
+actually vetoing sends and actually firing the re-pin change wire
+behaviour, which is a flagged, owner-visible step -- the plane repair's
+Q14 lesson is exactly about shipping a behaviour arm without that
+conversation. The shadow's own rows are the evidence that conversation
+needs: per-grant predicted verdicts against whatever the owner actually
+plays, accumulating with zero operator cost.
+
+**What this section does not settle**: the active arms (built next, OFF by
+default, priced by the shadow's numbers); gate 3 (unmodelled, conservative
+direction); the older-era opcode vocabulary in the replay; the exact
+active-mode disturbance (shadow bounds it above); and the 0x005FCAA0
+attribution of the off-sync steps.

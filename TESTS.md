@@ -10199,3 +10199,27 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   gamesrv corpus and a pinned count there goes stale the next time the owner
   plays (the corpus-counts-redden rule). Floor 64 from the 2026-08-30 green
   run. <1 s),
+
+`toolkit/authsrv/test_agtrack_guard.py` (**the derived pre-emit grant rule,
+  clause by clause -- MOVECODE-1z-s.** `agtrack_guard.py` is the policy layer
+  over the AgTrack mirror: the three-zone structure the decoded machinery
+  forces (green = in the 100 u tube, MATCH, nothing can snap; yellow = gates
+  territory; red = >= 299.332591 u or off-mesh, where ANY evaluation snaps and
+  no 0x0029 can recover -- only the 0x002C re-pin, which Clears first so no
+  test runs behind it). This file pins: the constants are DERIVATIONS,
+  cross-pinned against authsrv's own resync constants so two derivations of
+  one bound cannot drift (max report age = R_MATCH/288 exactly; min interval
+  under 299.33/576); HOLE D's seeding contract (unseeded = NOT_READY, never a
+  pass); the veto including the error-budget arm (modeled sep + 288*report_age
+  + 10 u clock skew crossing red vetoes a gates-pass); the re-pin
+  preconditions (freshness, the refused-report hole, rate -- each exercised
+  both ways); clause 2's arrival-risk check, which closes p5-resync-disarm's
+  HOLE A because the mirror KNOWS every arrival tick; the fence-closed
+  composition (re-pin then grant APPENDS -- safe by the dispatcher fence
+  0x00606002, so the replace sequence needs no luck); the two-world join (the
+  main mirror applies every predicted reset, the TWIN only our own 0x002C --
+  reality is bracketed and a red grant is vetoed if EITHER world says snap);
+  and that prediction is pure. Synthetic, bare machine. The corpus
+  retrodiction lives in `agtrack_replay.py --policy` (217/251 corpus warps
+  pre-empted, 10/10 in the current regime -- FINDINGS 1z-s). Floor 41 from
+  the 2026-08-30 green run. ~2 s),

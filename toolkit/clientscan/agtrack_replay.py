@@ -364,6 +364,147 @@ def replay_capture(path, mesh=None, prune_ms=None):
     }
 
 
+def replay_policy(path, mesh=None):
+    """MOVECODE-1z-s retrodiction: drive the GUARD (agtrack_guard) through a
+    capture under LIVE constraints -- the guard sees only what the live
+    server would have seen at each instant (its own emits, the c2s stream,
+    the last accepted report; no interpolation into the future) -- and score
+    whether the derived rule would have pre-empted each observed warp.
+
+    Per hard step, the window [t0 - PREEMPT_LOOKBACK, t1] is classed:
+      pre-empted-veto   -- the guard vetoed a grant in the window (clause 1)
+      pre-empted-repin  -- repin_state was DUE in the window (clause 1/2's
+                           replace/proactive arm would have fired)
+      blocked           -- the guard WANTED to act but the re-pin was
+                           BLOCKED throughout (stale/refused reports): the
+                           residual HOLE A/C class, counted not hidden
+      unseen            -- the guard never left green: the mirror's own
+                           blind spots (non-AgTrack mechanisms, invisible
+                           resets) land here
+    Disturbance: veto rate over all grants and DUE time on warp-free
+    stretches -- the false-positive cost an active default would pay.
+
+    Seeding: live wiring seeds from character placement; a capture's
+    placement predates its first wire rows, so the guard is seeded at the
+    FIRST wire report (documented divergence, conservative -- the guard
+    starts knowing less than live would).
+    """
+    sys.path.insert(0, os.path.join(TOOLKIT, "authsrv"))
+    import agtrack_guard as ag
+    events, fid = load_events(path)
+    reports, _walls, _src = movesync.load_wire_reports(path)
+    # the trust filter's refusals, by time, so on_report carries accepted
+    refused_ts = set()
+    pc_reports, _s, _e, _f = pc.read_capture(path)
+    for r in pc_reports:
+        if r.get("accepted") is False:
+            refused_ts.add(round(r["t"], 3))
+    guard = ag.AgTrackGuard(mesh=mesh)
+    verdicts = []            # mirror verdicts, same scoring as replay_capture
+    timeline = []            # (t, repin_code, why, vetoed)
+    n_grants = n_veto = 0
+    seeded = False
+    last_t = None
+    for t, kind, data in events:
+        if last_t is not None:
+            step = last_t + TICK_MS / 1000.0
+            while step <= t:
+                v = guard.tick(step)
+                if v is not None:
+                    verdicts.append(v)
+                code, why = guard.repin_state(step)
+                timeline.append((step, code, why, False))
+                step += TICK_MS / 1000.0
+        if kind == "grant":
+            x, y, plane_a, plane_b, op = data
+            vetoed = False
+            if seeded:
+                n_grants += 1
+                gv = guard.pre_emit(x, y, plane_a, plane_b, t)
+                if gv.code == ag.VETO:
+                    n_veto += 1
+                    vetoed = True
+                timeline.append((t, gv.repin, gv.why, vetoed))
+            v = guard.on_emit(op, x, y, plane_a, plane_b, t)
+            if v is not None:
+                verdicts.append(v)
+        elif kind == "setpos":
+            x, y, plane = data
+            v = guard.on_emit(0x2C, x, y, plane, None, t)
+            if v is not None:
+                verdicts.append(v)
+        elif kind == "speed":
+            guard.on_speed(data, t)
+        elif kind == "heading":
+            x, y, plane, hx, hy, mtype = data
+            if not seeded:
+                guard.on_placement(x, y, plane, t)
+                seeded = True
+            guard.on_report(x, y, plane,
+                            ("head", round(hx, 1), round(hy, 1), mtype),
+                            t, accepted=round(t, 3) not in refused_ts)
+        elif kind == "stop":
+            x, y, plane = data
+            if not seeded:
+                guard.on_placement(x, y, plane, t)
+                seeded = True
+            guard.on_report(x, y, plane, ("stop",), t,
+                            accepted=round(t, 3) not in refused_ts)
+        elif kind == "click":
+            x, y, dplane = data
+            if seeded:
+                guard.on_click(x, y, dplane, t)
+        last_t = t
+
+    steps = hard_steps(reports)
+    PREEMPT_LOOKBACK = 5.0
+    per_step = []
+    counts = {"pre-empted-veto": 0, "pre-empted-repin": 0,
+              "blocked": 0, "unseen": 0}
+    warp_windows = []
+    for (t0, t1, d, p0, p1) in steps:
+        lo = t0 - PREEMPT_LOOKBACK
+        warp_windows.append((lo, t1))
+        win = [row for row in timeline if lo <= row[0] <= t1]
+        if any(row[3] for row in win):
+            cls = "pre-empted-veto"
+        elif any(row[1] == ag.REPIN_DUE for row in win):
+            cls = "pre-empted-repin"
+        elif any(row[1] == ag.REPIN_BLOCKED for row in win):
+            cls = "blocked"
+        else:
+            cls = "unseen"
+        counts[cls] += 1
+        per_step.append({"t0": round(t0, 3), "t1": round(t1, 3),
+                         "dist": round(d, 1), "class": cls})
+    # disturbance on warp-free time
+    quiet_due = quiet_rows = 0
+    for row in timeline:
+        if any(lo <= row[0] <= hi for (lo, hi) in warp_windows):
+            continue
+        quiet_rows += 1
+        if row[1] == ag.REPIN_DUE or row[3]:
+            quiet_due += 1
+    return {
+        "capture": os.path.basename(path),
+        "fid": fid,
+        "mesh": ("loaded" if mesh is not None
+                 and not getattr(mesh, "straightline_only", False)
+                 else "straightline-only"),
+        "grants": n_grants,
+        "vetoes": n_veto,
+        "veto_rate": round(n_veto / n_grants, 4) if n_grants else None,
+        "hard_steps": len(steps),
+        "policy_classes": counts,
+        "quiet_rows": quiet_rows,
+        "quiet_active": quiet_due,
+        "quiet_active_rate": (round(quiet_due / quiet_rows, 4)
+                              if quiet_rows else None),
+        "steps": per_step,
+        "guard": guard.snapshot(),
+    }
+
+
 class _Meshes(object):
     """Load-once PathingMap cache keyed by file id; failure -> None once."""
 
@@ -409,6 +550,11 @@ def main(argv=None):
                     help="reader 2's prune horizon in ms (the by-time render "
                          "query 0x00604ED0; cadence unresolved in the decode "
                          "-- the corpus adjudicates). Omit = never prunes.")
+    ap.add_argument("--policy", action="store_true",
+                    help="MOVECODE-1z-s retrodiction: drive the GUARD "
+                         "(agtrack_guard) under live constraints and score "
+                         "whether the derived rule pre-empts each warp; "
+                         "reports the veto/re-pin disturbance cost too.")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args(argv)
 
@@ -444,7 +590,49 @@ def main(argv=None):
                             fid = int(m.group(1))
                         break
             mesh = meshes.get(fid)
-        results.append(replay_capture(p, mesh=mesh, prune_ms=args.prune_ms))
+        if args.policy:
+            results.append(replay_policy(p, mesh=mesh))
+        else:
+            results.append(replay_capture(p, mesh=mesh,
+                                          prune_ms=args.prune_ms))
+
+    if args.policy:
+        tot = {"captures": len(results),
+               "grants": sum(r["grants"] for r in results),
+               "vetoes": sum(r["vetoes"] for r in results),
+               "hard_steps": sum(r["hard_steps"] for r in results),
+               "quiet_rows": sum(r["quiet_rows"] for r in results),
+               "quiet_active": sum(r["quiet_active"] for r in results),
+               "policy_classes": {}}
+        for k in ("pre-empted-veto", "pre-empted-repin", "blocked",
+                  "unseen"):
+            tot["policy_classes"][k] = sum(r["policy_classes"][k]
+                                           for r in results)
+        if args.json:
+            print(json.dumps({"per_capture": results, "total": tot},
+                             indent=1))
+            return 0
+        for r in results:
+            print(f"\n=== {r['capture']}  (mesh: {r['mesh']})")
+            print(f"  grants {r['grants']}, vetoes {r['vetoes']} "
+                  f"({r['veto_rate']}), hard steps {r['hard_steps']} -> "
+                  f"{r['policy_classes']}")
+            print(f"  quiet-time activity: {r['quiet_active']}/"
+                  f"{r['quiet_rows']} rows ({r['quiet_active_rate']})")
+            for s in r["steps"]:
+                print(f"    step t={s['t0']}..{s['t1']} {s['dist']}u -> "
+                      f"{s['class']}")
+        gr = tot["grants"]
+        print(f"\nPOLICY TOTAL: {tot['captures']} captures, {gr} grants, "
+              f"{tot['vetoes']} vetoes "
+              f"({tot['vetoes'] / gr:.1%} of grants)" if gr else "")
+        print(f"hard steps {tot['hard_steps']} -> {tot['policy_classes']}")
+        qr = tot["quiet_rows"]
+        if qr:
+            print(f"quiet-time activity {tot['quiet_active']}/{qr} "
+                  f"({tot['quiet_active'] / qr:.2%}) -- the disturbance an "
+                  f"active default would cost")
+        return 0
 
     tot = {"captures": len(results),
            "evaluations": sum(r["evaluations"] for r in results),
