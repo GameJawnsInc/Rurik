@@ -1663,6 +1663,72 @@ direction never changed so F25 never re-dispatched), and the warp of §26.2, whi
 actively fights the slide by yanking the body the other way. The warp is the one
 with a derived candidate behind it.
 
+## 27. RUN 4 REFUTES R11 — and tells us the slide was the GRANT'S all along
+
+**2026-09-01, owner-driven, ~12 attempts (8 hold, 4 tap), R11 shipped
+(suppressing). Owner's verdict: "0 quartersteps."** Run 3, one day and one flag
+earlier, scored 1.
+
+### 27.1 What R11 actually changed, measured
+
+| | run 3 (grant sent) | run 4 (grant suppressed) |
+|---|---|---|
+| refusals | 13 | 13 |
+| recoveries within 1.0 s | 7 (54%) | 6 (46%) |
+| **recovery lag** | 47–172 ms, **p50 62** | 313–828 ms, **p50 406** |
+| begin-move dispatches | 333 | **59** |
+| owner's score | 1 slide | **0** |
+
+**Suppression did not cost recoveries — it cost their SPEED.** A 6.5× slower
+second dispatch, 5.6× fewer dispatches overall, and a slide that arrives 400 ms
+after the damage is not a slide. R11's default is reverted; the lever survives as
+`--suppress-grant-during-hold` because the A/B is worth repeating.
+
+### 27.2 THE FINDING, and it is bigger than the flag
+
+**Our client re-dispatches promptly because OUR GRANT hands it a destination.**
+Without one it waits for the input evaluator to notice a direction change
+(CANCELWALK F25, `0x005355C0`), which is an order of magnitude slower.
+
+So what we have been calling the quarterstep was substantially **our server
+yanking the body** — and that is why the owner has said, every single time, that
+it never felt like a stock slide. §26.2's relocation and §26.1's fast recovery
+were **the same event seen from two instruments.** Removing the yank removed the
+slide, because they were one thing.
+
+This retires a reading that has survived three runs: that we had a working-ish
+quarterstep with a latency problem. **We have never had one.** What we had was a
+server-driven relocation that happened to move the body in roughly the right
+direction, fast enough to read as motion.
+
+### 27.3 What that means for the arc
+
+* **§26's mechanism is unaffected and still correct** — the refused press, the
+  `0x003D` it sends anyway, our grant, the AgTrack `setposition`. That chain is
+  observed. What was wrong was assuming the *slide* was independent of it.
+* **§25's "ours is not distinguishable from retail at these n" is now suspect
+  from the other side.** Retail's 20.8% is a real client walking; a share of our
+  14.3% was a relocation. The two metrics are not measuring the same thing, and
+  the comparison should not be quoted again without this caveat.
+* **The real quarterstep is still absent, and it is a client-side re-dispatch
+  question.** Retail's client must re-issue movement after the gate clears
+  without needing a server destination. Ours does not. That is `0x005355C0`'s
+  latch, and it is the next target — a static one, needing no run.
+
+### 27.4 Method note: the fix was audited, correct, tested, and wrong anyway
+
+R11 was derived from two measurements with their denominators checked, shipped
+with a revert flag, guarded so its own bookkeeping could not fire, and covered by
+a test whose known-bad arm scored badly. **All of that was true and it was still
+the wrong change**, because every measurement behind it scored the *relocation*
+and none scored the *slide*. The run refuted it in one session.
+
+That is the argument for shipping and measuring rather than deliberating: the
+evidence that killed it was not available from the desk at any depth of analysis.
+It is also the second time in two days that a correct-looking derivation was
+refuted by the next measurement (§24.3 was the first, on a denominator).
+**Ship, then measure, then believe the measurement over the derivation.**
+
 ## Provenance
 
 All figures are measurements over the owner's own live captures via extractors in this

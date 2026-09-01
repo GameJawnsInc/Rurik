@@ -782,12 +782,14 @@ def main():
     # drive it through without a connection. The structure check pins that the
     # guard exists at the one send site; the predicate check below exercises
     # the condition itself in BOTH arms, including the known-bad one.
-    check(getattr(authsrv, "GRANT_DURING_HOLD", None) is False,
-          "GRANT_DURING_HOLD defaults to False -- the suppression is the "
-          "SHIPPED behaviour, not an opt-in",
-          "a movement report whose press the client refused looks identical "
-          "on the wire to one that moved (FINDINGS 22.2), so answering it "
-          "grants a destination for a move that never happened")
+    check(getattr(authsrv, "GRANT_DURING_HOLD", None) is True,
+          "GRANT_DURING_HOLD defaults to True -- R11 was REFUTED by its own "
+          "next run and the suppression is now OPT-IN",
+          "suppressing did remove the body relocation it targeted, and it "
+          "cost the slide with it: recovery lag p50 62 ms -> 406 ms, "
+          "dispatches 333 -> 59, and the owner scored 0 quartersteps. The "
+          "slide was the grant's. An experiment lever that defaults to a "
+          "refuted arm is a policy nobody ruled")
     check(src.count("zl_send_ok = (GRANT_DURING_HOLD") == 1
           and src.count('or not state.get("action_hold")') == 1
           and src.count("if zl_send_ok:") == 1,
@@ -800,10 +802,11 @@ def main():
           "this never fires has no exposure rather than a clean result",
           "the zero-exposure lesson: a treatment arm that never met its "
           "condition has run zero trials")
-    check("--legacy-grant-during-hold" in src
-          and "legacy_grant_during_hold" in src,
-          "and the revert flag exists and binds -- a shipped fix with no "
-          "revert arm is an assertion")
+    check("--suppress-grant-during-hold" in src
+          and "suppress_grant_during_hold" in src,
+          "and the A/B lever exists and binds -- the refuted arm stays "
+          "reachable so the experiment can be repeated, which is how it was "
+          "refuted in the first place")
 
     # THE PREDICATE, BOTH ARMS. This is the check that must FAIL on the
     # known-bad configuration; a guard that passes with the fix disabled is
@@ -812,16 +815,17 @@ def main():
         return bool(legacy or not {"action_hold": hold}.get("action_hold"))
 
     check(grants(0, False) is True and grants(1, False) is False,
-          "shipped arm: a report with the hold CLEAR is answered, one with "
-          "the hold SET is not -- 2 of 15 post-refusal grants relocated the "
-          "body against 0 of 29 otherwise, and retail suppresses 10:1 in "
-          "the same state (0.050/s held vs 0.519/s clear)",
-          "rates, not counts: the held and clear windows differ in length, "
-          "and that denominator already cost this arc one reverted fix")
+          "the OPT-IN arm still works: with suppression on, a hold-CLEAR "
+          "report is answered and a hold-SET one is not -- the lever must "
+          "keep doing what it did, or the A/B cannot be repeated",
+          "2 of 15 post-refusal grants relocated the body against 0 of 29 "
+          "otherwise, and retail suppresses 10:1 (0.050/s held vs 0.519/s "
+          "clear) -- rates, not counts, because the windows differ in length")
     check(grants(1, True) is True,
-          "KNOWN-BAD arm: --legacy-grant-during-hold answers the report even "
-          "with the hold set, restoring the relocation. The revert must "
-          "score badly here or this section is checking nothing")
+          "and the SHIPPED default answers the report even with the hold "
+          "set -- which is what keeps the second dispatch at p50 62 ms "
+          "instead of 406 ms",
+          "the two arms must differ here or the lever is inert")
 
 
     return LEDGER.verdict()

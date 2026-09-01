@@ -3440,7 +3440,11 @@ Floor 75 against a green 75 with 5 declared skips (the archive-conditional
   run said 23; the history is in the floor comment. No vault, no client.
   ~1 s),
   `toolkit/authsrv/test_d1lead.py` (REALFIX-A2's `--d1-lead` bundle, and since
-  2026-09-01 also **§R11: the grant is not sent while WE hold the action.**
+  2026-09-01 also **§R11: the grant-during-hold A/B lever.** SHIPPED suppressing and
+  REFUTED by the very next run -- the default is back to granting and the suppression
+  is now opt-in (`--suppress-grant-during-hold`). It removed the body relocation it
+  targeted and took the SLIDE with it (recovery lag p50 62 ms -> 406 ms, dispatches
+  333 -> 59, owner score 1 -> 0), because the slide WAS the grant (FINDINGS §27).
   ANIMREF FINDINGS §26 caught the whole chain in one movehook record, twice: a
   press the client REFUSED at its walk gate still emits a `0x003D` (§22.2), our
   server answers it with a destination grant, and the client applies that grant
