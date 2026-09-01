@@ -39,7 +39,8 @@ file's alone:
      were ever reached. A skip path nothing has run is not a skip path.
 
 MEASURED, both ways, from green runs (re-measured 2026-09-01 after the
-ANIMREF-RE checks landed): 36 checks with the vault, 34 without
+ANIMREF-RE checks landed and again after the same-day revert): 35 checks
+with the vault, 33 without
 plus one declared skip. The floor is the BARE-MACHINE number -- the shape
 test_armour.py and test_position_trust.py both use, so that a machine with
 no vault is called complete when it is, and short when it is not.
@@ -57,7 +58,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
 import checks  # noqa: E402
 
-LEDGER = checks.Ledger("cast cycle", floor=34)
+LEDGER = checks.Ledger("cast cycle", floor=33)
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -190,41 +191,41 @@ def section_tick_order():
         _rewind(state, 0.75)                     # aftercast over
         authsrv.cast_tick(send, state, 0)
         check([op for op, _, _ in sent] ==
-              [0x00E5, 0x009F, 0x009F, 0x009F, 0x00E3, 0x009F]
-              and sent[4][1] == [PLAYER, 42, 7],
-              "E3 fires an aftercast later, echoing the pending key",
+              [0x00E5, 0x009F, 0x009F, 0x009F, 0x00E3]
+              and sent[4][1] == [PLAYER, 42, 7]
+              and state.get("action_hold") == 1,
+              "E3 fires an aftercast later, echoing the pending key, and "
+              "the hold RIDES ON -- the default again since the 2026-09-01 "
+              "revert. The corpus says retail frees it here (19 of 19 "
+              "unmoved cycles, which also resolves castmech P10) and this "
+              "section pinned that release for half a day; it went back "
+              "because the operator scored the shipped pair 'very floaty' "
+              "and 'warping' (FINDINGS 29). The wire fact is not "
+              "withdrawn -- the DEFAULT is, pending a run that scores "
+              "--e3-release alone",
               f"{sent[4:]}")
-        check(sent[5][1] == [authsrv.agents.GV_DISABLED, PLAYER, 0]
-              and state.get("action_hold") == 0,
-              "and the E3 RELEASE rides behind it, E3 first (ANIMREF-RE): "
-              "[8 -> 0] at the caster-freed instant, 19 of 19 unmoved "
-              "corpus cycles. This section once pinned the OPPOSITE ('the "
-              "corpus's E3 instants never toggle property 8') off the "
-              "older corpus, whose E3s were silent because a movement "
-              "instant had already released the hold -- transition-only "
-              "elides a re-release, so the two corpora agree under one "
-              "rule (castmech P10, resolved)", f"{sent[5:]}")
 
         _rewind(state, 7.25)                     # recharge over
         authsrv.cast_tick(send, state, 0)
         check([op for op, _, _ in sent] ==
-              [0x00E5, 0x009F, 0x009F, 0x009F, 0x00E3, 0x009F, 0x00E6]
+              [0x00E5, 0x009F, 0x009F, 0x009F, 0x00E3, 0x00E6]
               and not state["pending_casts"],
               "E6 closes the cycle at E5+recharge and the entry is gone",
-              f"{sent[6:]}")
+              f"{sent[5:]}")
 
         authsrv.cast_tick(send, state, 0)
-        check(len(sent) == 7, "and a further tick fires NOTHING -- each "
+        check(len(sent) == 6, "and a further tick fires NOTHING -- each "
               "phase is once per cycle", f"{len(sent)} sends total")
 
-        # THE KNOWN-BAD ARM: --no-e3-release must reproduce the old shape,
-        # or the revert flag is an assertion rather than an arm. A guard
-        # that passes on the broken configuration measures the wrong thing.
+        # THE OTHER ARM, still exercised because the flag still has to
+        # WORK: --e3-release frees the hold at the E3. Both directions run
+        # in every suite pass, which is what makes the next A/B cheap --
+        # the arm is proven live before the operator ever launches.
         state2 = {"agents": {}}
         sent2 = []
         send2 = lambda op, vals, label="", quiet=False: \
             sent2.append((op, vals, label))
-        authsrv.ANIMREF_E3_RELEASE = False
+        authsrv.ANIMREF_E3_RELEASE = True
         try:
             _press(authsrv, send2, state2)
             _rewind(state2, 1.0)
@@ -232,18 +233,22 @@ def section_tick_order():
             _rewind(state2, 0.75)
             sent2.clear()
             authsrv.cast_tick(send2, state2, 0)
-            check([op for op, _, _ in sent2] == [0x00E3]
-                  and state2.get("action_hold") == 1,
-                  "--no-e3-release: E3 alone, the hold rides on -- the "
-                  "pre-RE root (a key held across the cast never gets its "
-                  "gate cleared) reproduced on purpose", f"{sent2}")
+            check([op for op, _, _ in sent2] == [0x00E3, 0x009F]
+                  and sent2[1][1] == [authsrv.agents.GV_DISABLED, PLAYER, 0]
+                  and state2.get("action_hold") == 0,
+                  "--e3-release: [8 -> 0] rides behind the E3, E3 first -- "
+                  "retail's shape (19/19 unmoved cycles) and the arm that "
+                  "ARMS the client's 250 ms resume poll via the walk-gate "
+                  "clear (0x0081C090). Live, and off by default until a "
+                  "run scores it alone", f"{sent2}")
         finally:
-            authsrv.ANIMREF_E3_RELEASE = True
-        check(authsrv.ANIMREF_E3_RELEASE is True,
-              "and the release is the SHIPPED default, not an opt-in -- "
-              "the client's 250 ms resume poll (0x0081C090) only arms at "
-              "a gate-clear, and this send is the only clear a held key "
-              "ever gets")
+            authsrv.ANIMREF_E3_RELEASE = False
+        check(authsrv.ANIMREF_E3_RELEASE is False,
+              "and the release is OPT-IN, not the default -- reverted "
+              "2026-09-01 on the operator's verdict ('very floaty', "
+              "'warping'), the same day it shipped. A default a feel "
+              "verdict rejected does not stay on because its derivation "
+              "was good")
     finally:
         authsrv.skill_timing = saved
 
@@ -412,16 +417,17 @@ def section_attack_finish_batch():
                and v[0] == authsrv.agents.GV_DISABLED and v[2] == 0]
         check(not started and not finished
               and ops.index(0x00E5) < ops.index(0x009F)
-              and sent[-1][0] == 0x009F
-              and sent[-1][1] == [authsrv.agents.GV_DISABLED, PLAYER, 0]
-              and ops[-2] == 0x00E3 and len(rel) == 1,
+              and ops[-1] == 0x00E3 and rel == [],
               "and NO swing bracket rides the batch -- no attack_started, "
               "no melee_attack_finished, 40/40 in the corpus -- with the "
-              "E5 opening and the E3 plus its hold release closing "
-              "(ANIMREF-RE: the release rides behind E3; the corpus's "
-              "attack-skill releases scatter 0.14-1.1 s after E5, n=16, "
-              "consistent with this placement and too few to pin tighter)",
-              f"ops={[hex(o) for o in ops]}")
+              "E5 opening and the E3 closing. NO hold release behind the "
+              "E3: that shipped as the default on 2026-09-01 and was "
+              "reverted the same day (operator: 'very floaty', "
+              "'warping'), so the attack family closes on its E3 again. "
+              "The corpus's own attack-skill releases scatter 0.14-1.1 s "
+              "after E5 (n=16) -- consistent with the release but far too "
+              "few to pin it, which is part of why it went back",
+              f"ops={[hex(o) for o in ops]}, rel={rel}")
         check(agent["health"] == 95.0,
               "the strike is the weapon's own number (5 pinned) -- a real "
               "hit, not a phantom",
@@ -565,9 +571,8 @@ def section_order_pinned_when_inverted():
         _rewind(state, 0.5)
         authsrv.cast_tick(send, state, 0)
         check([op for op, _, _ in sent] ==
-              [0x00E5, 0x009F, 0x009F, 0x009F, 0x00E3, 0x009F, 0x00E6],
-              "then E3 (with its ANIMREF-RE hold release riding behind) "
-              "and E6 land together on the next tick, in order",
+              [0x00E5, 0x009F, 0x009F, 0x009F, 0x00E3, 0x00E6],
+              "then E3 and E6 land together on the next tick, in order",
               f"{[hex(op) for op, _, _ in sent]}")
     finally:
         authsrv.skill_timing = saved

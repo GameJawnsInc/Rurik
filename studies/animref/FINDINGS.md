@@ -1824,6 +1824,78 @@ provenance, pinned build 38797), and a `pushedi` emulation shape added to the ho
 `test_movehook` 302 checks (floor 169). The owner's next normal run writes the
 capture; `readhook.py` reads the poll's arm/fire ratio with no further work.
 
+## 29. §28's DEFAULTS ARE REVERTED — the operator's verdict, same day
+
+> *"it's bad. very floaty."*
+> *"warping, etc. i think we may have to look at the movecode itself again."*
+> — operator, 2026-09-01, playing the §28 defaults
+
+**Both §28 defaults are opt-in again** (`--move-keeps-chain`, `--e3-release`).
+The decode in §28 is **not withdrawn** — the resume poll is read out of the
+binary and every address in it still audits. What is withdrawn is the claim that
+the *wire built on it* was an improvement. It was worse than the door it
+replaced, and a feel verdict outranks a derivation ([[quarterstep-is-a-feel-thing]]).
+
+### 29.1 The process error, which is the real finding
+
+**Two changes shipped in one commit, so neither is individually convicted.** LAW
+A and the E3 release went out together; the operator played once; both come back.
+That is the whole cost of the pairing — a single run could have convicted one of
+them if they had shipped one at a time, and instead it convicted the pair.
+`RUN-RE*.md`'s own discipline (one question, one A/B flag —
+[[feedback-ask-run-questions-before-the-run]]) was written for exactly this and
+was not followed here.
+
+Worse, **neither shipped with a prediction about MOVEMENT QUALITY**. §28 predicted
+the resume poll would fire; it did not predict what would happen to a body that
+our own server is simultaneously re-pinning. "Floaty" and "warping" are not
+outcomes any §28 check could have scored, because nothing measured the body.
+
+### 29.2 Two named suspects, neither yet measured
+
+**Suspect A — the walk-gate RE-HOLD on a walking body (explains "floaty").**
+Under LAW A, `state["attacking"]` survives a movement press, so `attack_tick`
+keeps opening swings while the player walks. Every open calls
+`action_hold(send, state, 1, ...)` → generic-property 8 = 1 → **sets the walk
+gate** (`ChCliBase+0x64` bit 0, `0x0081BCF0`) on a body that is mid-walk — against
+`cancel_on_move`'s own `action_hold(0)` on the next report. Set, clear, set,
+clear at the swing interval. A refused arm still runs `0x0081AD0F → 0x005FCA80 →
+0x00605F70`, which **turns the body and zeroes AgTrack's `clientControlled` and
+history head** — so the flicker is not merely a stutter, it also wipes the state
+our re-pin reads. RECONSTRUCTION; `test_castcancel` §5's LAW-A arm now pins the
+re-hold so it cannot go unnoticed twice.
+
+**Suspect B — the resume poll moving the body with no c2s report (explains
+"warping").** The E3 release exists to clear the gate, and the gate-clear arms
+the poll (`0x0081BD17 → 0x0081C090`). The payload `0x0081BA80` re-issues movement
+via `0x005FC900`. **Whether that path reaches the c2s send gate at `0x0081649E`
+was never checked** — §28 asserted the poll walks the body and simply did not ask
+whether the server is told. If it is not, our position belief goes stale and the
+**active re-pin** (`2f00ea5`, on by default since days earlier) yanks the body
+back. That is a discontinuous relocation: warping, by construction. UNVERIFIED —
+and it is the cheapest thing to settle, because it is static.
+
+### 29.3 What must NOT be concluded from this
+
+* **Not "the §28 decode was wrong."** The addresses, the guards, the 250 ms
+  deadline and the held-input bit are OBSERVED and re-derivable.
+* **Not "LAW A's corpus fact was wrong."** 87 of 100 mid-chain moves carry no
+  prop-3; that stands. What is now known is that removing our prop-3 without
+  removing the *re-hold* leaves the chain fighting the walk gate.
+* **Not "the E3 release is wrong."** 19 of 19 unmoved corpus cycles carry it.
+  Retail sends it *and* survives, which means retail has something we do not —
+  most likely a server that does not re-pin a body it cannot see.
+
+### 29.4 The next check is STATIC and needs no run
+
+**Does the resume-poll path reach the c2s send gate `0x0081649E`?** Trace
+`0x005FC900` (and `0x009207B0`) to a send or prove it cannot reach one, with the
+`chcli_dir → 0x0081649E` chain as the positive control. That single answer
+decides suspect B, and it decides whether the fix is *in our re-pin's trigger*
+(if the client walks silently) or *in the E3 release's placement* (if it does not
+walk at all). Only after that is a client run worth spending, and then on **one
+flag at a time**.
+
 ## Provenance
 
 All figures are measurements over the owner's own live captures via extractors in this

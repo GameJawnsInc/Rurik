@@ -17,8 +17,8 @@ every other phase of the cycle uses. Timing by rewinding, never sleeping.
 NO VAULT, NO SOCKET, NO CLIENT: every section stubs `skill_timing` and
 asserts on the CANCEL wire, which carries no content-derived value -- so the
 count is the same number with and without a vault (MEASURED both ways
-2026-09-01 after the ANIMREF-RE arms landed: 23 and 23) and the floor
-below is that number for real. This
+2026-09-01 after the ANIMREF-RE arms landed and again after the same-day
+revert: 24 and 24) and the floor below is that number for real. This
 paragraph is new, and the property is one day old rather than original: until
 2026-08-31 a bare run died in `handle_skill_press` with a `ContentError` on
 skill 42, because `authsrv.player_rank_for_skill` was the one lookup on the
@@ -37,11 +37,12 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
 import checks  # noqa: E402
 
-# FLOOR 23, from the green runs of 2026-09-01 that flipped LAW A to the
-# default and added its known-bad arm (21 before that; 15 when the file
-# carried the movement door alone). Measured both ways that day: 23 with a
-# vault, 23 without.
-LEDGER = checks.Ledger("cast cancel", floor=23)
+# FLOOR 24, from the green runs of 2026-09-01: LAW A went to the default
+# and back the same day (operator: 'very floaty', 'warping'), and the arm
+# came back richer than it left -- it now pins the walk-gate RE-HOLD that
+# shipping it unmeasured cost. 21 before that day; 15 when the file carried
+# the movement door alone. Measured both ways: 24 with a vault, 24 without.
+LEDGER = checks.Ledger("cast cancel", floor=24)
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -226,16 +227,18 @@ def section_clean_restart():
 def section_chain_half():
     import authsrv
 
-    print("\n5. the chain half: LAW A is the DEFAULT door since ANIMREF-RE; "
-          "--legacy-move-stops-chain is the pre-RE prop-3 arm")
-    check(authsrv.MOVE_KEEPS_CHAIN is True,
-          "MOVE_KEEPS_CHAIN defaults to True -- LAW A shipped once its "
-          "complement was decoded: the 'grant' retail feeds a mid-chain "
-          "mover is the client's own 250 ms resume poll, armed by prop 8's "
-          "gate-clear (0x0081C090), and the prop-3 the old door sent is "
-          "the message that cancels the attack ANIMATION (retail omits it "
-          "at 87/100 mid-chain moves; the owner's runs reported the cancel "
-          "as the thing that never felt like a stock slide)")
+    print("\n5. the chain half: the prop-3 door is the DEFAULT again after "
+          "the 2026-09-01 revert; --move-keeps-chain is LAW A's arm")
+    check(authsrv.MOVE_KEEPS_CHAIN is False,
+          "MOVE_KEEPS_CHAIN is OPT-IN. LAW A shipped as the default on "
+          "2026-09-01 once its complement was decoded (the 'grant' retail "
+          "feeds a mid-chain mover is the client's own 250 ms resume poll, "
+          "armed by prop 8's gate-clear 0x0081C090) and was REVERTED the "
+          "same day: the operator scored it 'very floaty' and 'warping'. "
+          "The corpus fact stands (87/100 mid-chain moves carry no prop-3) "
+          "and so does the decode; what was never measured is what LAW A "
+          "does to a WALKING body whose chain keeps re-holding property 8 "
+          "-- FINDINGS 29 names that suspect, and the arm below pins it")
     sent = []
     send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))
     agent = {"name": "target", "dead": False, "last_hit": 0.0,
@@ -251,28 +254,41 @@ def section_chain_half():
     holds = [v for op, v, _ in sent
              if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
              and v[0] == authsrv.agents.GV_DISABLED]
-    check(stops == [] and state.get("attacking") == 10
-          and state.get("player_swing") is not None
-          and not state.get("player_swing_cancel"),
-          "default door: NO prop-3, the target and the armed swing survive "
-          "the move; attack_tick's range gate is the deferred judge "
-          "(LAW A, 87/100)",
-          f"stops={stops}, attacking={state.get('attacking')}, "
-          f"swing={state.get('player_swing') is not None}")
+    check(stops == [[authsrv.agents.GV_ATTACK_STOPPED, PLAYER, 0]]
+          and state.get("attacking") is None,
+          "default door: one STOPPED and the target is forgotten. NOT "
+          "retail's wire (87/100 corpus mid-chain moves carry no prop-3) "
+          "and default anyway -- now on a FEEL verdict rather than the old "
+          "tap-train reading: LAW A shipped for half of 2026-09-01 and the "
+          "operator scored it 'very floaty' / 'warping'",
+          f"stops={stops}, attacking={state.get('attacking')}")
     check(holds == [[authsrv.agents.GV_DISABLED, PLAYER, 0]],
-          "and the hold STILL releases -- the [8 -> 0] this door sends is "
-          "what clears the client's walk gate and arms its 250 ms resume; "
-          "LAW A removes the animation-kill, never the release",
+          "and the hold releases either way -- the [8 -> 0] this door "
+          "sends is what clears the client's walk gate and arms its 250 ms "
+          "resume poll (0x0081C090). That send is NOT part of the revert; "
+          "it is the one piece of this door both arms share",
           f"holds={holds}")
+    sent.clear()
+    authsrv.attack_tick(send, state, 0)
+    check(state.get("player_swing") is None and sent == []
+          and agent["health"] == 100.0,
+          "and its armed swing is dropped unlanded",
+          f"swing={state.get('player_swing')}, health={agent['health']}")
     state["attacking"] = None
     state["player_swing"] = None
     state["player_swing_cancel"] = None
     state["action_hold"] = 0
 
-    # THE KNOWN-BAD ARM: the legacy door must still close the chain, or
-    # the revert flag is an assertion. This is the arm that cancels the
-    # animation on every mid-chain move.
-    authsrv.MOVE_KEEPS_CHAIN = False
+    # THE OTHER ARM, still exercised because the flag still has to WORK --
+    # and because it is now a NAMED SUSPECT rather than a shelved wire
+    # fact. Under LAW A `attacking` survives the move, so attack_tick keeps
+    # opening swings on a WALKING player, and each open calls
+    # action_hold(1), setting the walk gate against this door's own
+    # action_hold(0). That toggle is the leading candidate for "floaty"
+    # (FINDINGS 29), so this arm pins the SURVIVAL and the RE-HOLD it
+    # causes -- not just the absence of the prop-3, which is all it pinned
+    # when it shipped.
+    authsrv.MOVE_KEEPS_CHAIN = True
     try:
         authsrv.begin_attack(send, state, 10, 0)
         authsrv.attack_tick(send, state, 0)                # re-arm
@@ -281,22 +297,38 @@ def section_chain_half():
         stops = [v for op, v, _ in sent
                  if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
                  and v[0] == authsrv.agents.GV_ATTACK_STOPPED]
-        check(stops == [[authsrv.agents.GV_ATTACK_STOPPED, PLAYER, 0]]
-              and state.get("attacking") is None,
-              "--legacy-move-stops-chain: one STOPPED and the target is "
-              "forgotten -- the pre-RE door, reproduced on purpose",
-              f"stops={stops}, attacking={state.get('attacking')}")
+        check(stops == [] and state.get("attacking") == 10
+              and state.get("player_swing") is not None
+              and not state.get("player_swing_cancel"),
+              "--move-keeps-chain: NO prop-3, the target and the armed "
+              "swing survive the move; attack_tick's range gate is the "
+              "deferred judge",
+              f"stops={stops}, attacking={state.get('attacking')}, "
+              f"swing={state.get('player_swing') is not None}")
+        # AND THE COST THE ARM CARRIES, pinned so it cannot go unnoticed
+        # twice: the surviving chain re-holds property 8 on the next swing
+        # the tick opens -- a walk-gate SET on a body that just moved.
+        state["player_swing"] = None
+        state["player_last_swing"] = 0.0
         sent.clear()
         authsrv.attack_tick(send, state, 0)
-        check(state.get("player_swing") is None and sent == []
-              and agent["health"] == 100.0,
-              "and its armed swing is dropped unlanded",
-              f"swing={state.get('player_swing')}, health={agent['health']}")
+        rehold = [v for op, v, _ in sent
+                  if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
+                  and v[0] == authsrv.agents.GV_DISABLED and v[2] == 1]
+        check(rehold == [[authsrv.agents.GV_DISABLED, PLAYER, 1]],
+              "and the surviving chain RE-HOLDS property 8 one tick after "
+              "the move -- [8 -> 1] on a walking body, which SETS the "
+              "client's walk gate (ChCliBase+0x64 bit 0, written by prop "
+              "8's case body 0x0081BCF0). This check exists because the "
+              "toggle shipped unmeasured; it is the mechanism a "
+              "floaty-movement report points at",
+              f"rehold={rehold}")
     finally:
-        authsrv.MOVE_KEEPS_CHAIN = True
+        authsrv.MOVE_KEEPS_CHAIN = False
         state["attacking"] = None
         state["player_swing"] = None
         state["player_swing_cancel"] = None
+        state["action_hold"] = 0
 
     # The negative: a chain already paused by a cast gets no second close.
     saved = authsrv.skill_timing
