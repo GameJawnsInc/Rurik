@@ -9084,7 +9084,16 @@ ATTACK_FINISH_BATCH = True    # False (--legacy-attack-finish): the old shape
 # ATTACK ANIMATION, which retail does not send at 87/100 mid-chain moves
 # and which the owner's runs kept reporting as "cancelling the animation
 # instead of sliding while the animation plays".
-MOVE_KEEPS_CHAIN = True       # False (--legacy-move-stops-chain): pre-RE door
+# *** REVERTED TO OPT-IN 2026-09-01, SAME DAY IT SHIPPED. OPERATOR VERDICT ON
+# THE §28 DEFAULTS, VERBATIM: "it's bad. very floaty." / "warping, etc." The
+# §28 decode above is not withdrawn -- the resume poll is read out of the
+# binary and stands -- but the WIRE built on it made movement worse than the
+# door it replaced, and a feel verdict outranks a derivation
+# (studies/animref/FINDINGS.md §29). Two candidate mechanisms are named there
+# and neither was measured before this shipped; the flag is the arm that lets
+# the next run measure one at a time. Do NOT re-flip this default without a
+# run that scores the operator's two words.
+MOVE_KEEPS_CHAIN = False      # True (--move-keeps-chain): LAW A's wire, see ^
 CHAIN_RESTART_PACED = True    # False (--legacy-chain-restart): same-tick
 
 # ANIMREF-RE (2026-09-01): release the action hold in the E3 batch, the
@@ -9094,7 +9103,14 @@ CHAIN_RESTART_PACED = True    # False (--legacy-chain-restart): same-tick
 # of the binary (0x0081C090 arm, +0xFA ms deadline at ChCliBase+0x114,
 # payload 0x0081BA80). False = --no-e3-release, the revert arm: a key held
 # across a cast is never released and roots until its next edge.
-ANIMREF_E3_RELEASE = True     # False (--no-e3-release): the pre-RE hold
+# REVERTED TO OPT-IN with MOVE_KEEPS_CHAIN above, and for the same reason: the
+# two shipped together, so neither is individually convicted. This one is the
+# arm that ARMS the client's resume poll (the gate-clear at 0x0081C090), which
+# is exactly the mechanism that could move the body with no c2s report and let
+# the active re-pin (2f00ea5) yank it -- the leading candidate for "warping"
+# and unmeasured at ship time. --e3-release turns it back on ALONE, which is
+# the A/B this needs.
+ANIMREF_E3_RELEASE = False    # True (--e3-release): free the hold at E3, see ^
 
 # ANIMREF-R8: the on-body effect visual (properties 20/21). R4 decoded the
 # channel and refused to wire it because the VALUE space was unread; FINDINGS
@@ -9387,13 +9403,17 @@ def cancel_on_move(send, state, conn_id):
     # resumes on return, which is the resume-on-return design that branch
     # already documents. The CAST half below is untouched: the wiki's cancel
     # contract for casts is separately corpus-backed (the bare E2, castmech
-    # 3/4). LAW A IS THE DEFAULT since ANIMREF-RE (2026-09-01): the
-    # "grant not yet identified" that blocked it is decoded -- no grant at
-    # all, but the client's own 250 ms resume poll, armed by prop 8's
-    # gate-clear (0x0081C090; MOVE_KEEPS_CHAIN's comment has the decode),
-    # and the action_hold(0) this door already sends below is what arms
-    # it. The prop-3 the legacy arm restores is the message that cancels
-    # the attack ANIMATION, which retail omits at 87/100 mid-chain moves.
+    # 3/4). LAW A WAS THE DEFAULT FOR HALF A DAY (2026-09-01) and is OPT-IN
+    # again: the decode that unblocked it stands (no grant at all, but the
+    # client's own 250 ms resume poll armed by prop 8's gate-clear
+    # 0x0081C090 -- MOVE_KEEPS_CHAIN's comment has it), but the operator
+    # scored the shipped pair "very floaty" and "warping" and it went back.
+    # WHAT THIS BRANCH DOES UNDER LAW A, stated because it is a named
+    # suspect (FINDINGS §29): `attacking` survives, so attack_tick keeps
+    # opening swings while the player walks, and every open calls
+    # action_hold(1) -- which SETS the walk gate on a walking body, against
+    # this door's own action_hold(0). Unmeasured at ship time; that is the
+    # defect in the shipping, not in the wire fact.
     if chain_live and not MOVE_KEEPS_CHAIN:
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
              [agents.GV_ATTACK_STOPPED, PLAYER_AGENT_ID, 0],
@@ -11859,7 +11879,12 @@ def cast_tick(send, state, conn_id):
                  f"SKILL_ACTIVATED(skill {cast['skill_id']}, "
                  f"copy {cast['copy']})")
             cast["e3_sent"] = True
-            # THE E3 RELEASE (ANIMREF-RE, 2026-09-01): retail frees the hold
+            # THE E3 RELEASE (ANIMREF-RE, 2026-09-01) -- OPT-IN, and it was
+            # the DEFAULT for half of the day it landed. The corpus fact
+            # below stands; what does not is that it was shipped without
+            # measuring what arming the client's resume poll does to a body
+            # our server is also re-pinning. That is the FIRST thing to
+            # score with --e3-release ALONE (FINDINGS §29): retail frees the hold
             # in the E3 batch -- 19 of 19 unmoved cast cycles across the
             # live corpus carry [8 -> 0] riding the E3, E3 first (castmech
             # P10's t=69.670 was not a one-off; the older corpus's silent
@@ -20264,28 +20289,33 @@ def main():
                          "client's own 2077 'no visual' default, sends "
                          "nothing either way.")
     ap.add_argument("--move-keeps-chain", action="store_true",
-                    help="No-op since ANIMREF-RE (2026-09-01): LAW A is the "
-                         "default. Kept so existing runsheets still parse.")
+                    help="Opt into LAW A: movement stops closing the attack "
+                         "chain (87 of 100 corpus mid-chain moves carry no "
+                         "prop-3; the range gate judges instead). SHIPPED "
+                         "as the default on 2026-09-01 and REVERTED the "
+                         "same day -- the operator's verdict on the pair "
+                         "was 'very floaty' and 'warping'. The wire fact is "
+                         "still measured; what is missing is a run that "
+                         "scores this arm ALONE (FINDINGS 29).")
     ap.add_argument("--legacy-move-stops-chain", action="store_true",
-                    help="Revert ANIMREF-RE's LAW A flip: movement sends "
-                         "prop-3 again (closing the chain AND cancelling "
-                         "the attack animation -- the shape retail omits at "
-                         "87/100 mid-chain moves) and forgets the target. "
-                         "The old blocker on LAW A is resolved: the "
-                         "'unidentified grant' retail feeds a mid-chain "
-                         "mover is the client's own 250 ms resume poll, "
-                         "armed by prop 8's gate-clear (0x0081C090), and "
-                         "the tap-train freeze was retail-consistent tap "
-                         "behaviour -- the resume rescues held keys only.")
+                    help="No-op since the 2026-09-01 revert: the prop-3 "
+                         "door IS the default again. Kept so runsheets "
+                         "written during the half-day it shipped parse.")
+    ap.add_argument("--e3-release", action="store_true",
+                    help="Opt into the ANIMREF-RE E3 release: free the "
+                         "action hold in the E3 batch, the caster-freed "
+                         "instant (retail does, 19/19 unmoved corpus "
+                         "cycles). This is the arm that ARMS the client's "
+                         "250 ms resume poll via prop 8's gate-clear "
+                         "(0x0081C090) -- and therefore the arm that can "
+                         "move the body with no c2s report, which the "
+                         "active re-pin would then yank. Shipped default "
+                         "2026-09-01, reverted the same day; turn it on "
+                         "ALONE to convict or clear it (FINDINGS 29).")
     ap.add_argument("--no-e3-release", action="store_true",
-                    help="Revert ANIMREF-RE's E3 release: the action hold "
-                         "is no longer freed in the E3 batch (retail frees "
-                         "it there, 19/19 unmoved corpus cycles). With this "
-                         "set, a movement key held across a whole cast is "
-                         "never released -- the client latches input on "
-                         "edges, so no report arrives to release it -- and "
-                         "the player roots until the next key edge: run 3's "
-                         "46%% never-recover arm, reproduced on purpose.")
+                    help="No-op since the 2026-09-01 revert: the hold "
+                         "already rides through E3 by default. Kept so "
+                         "runsheets from that half-day parse.")
     ap.add_argument("--legacy-chain-restart", action="store_true",
                     help="Revert ANIMREF-R7b: the chain reopens in the same "
                          "tick as an attack skill's execution again. The "
@@ -21690,21 +21720,26 @@ def main():
         SKILL_VISUALS = False
         print("[map] --no-skill-visuals: no property 20/21 on-body effect "
               "visual at a cast's landing (pre-ANIMREF-R8).", flush=True)
-    if a.legacy_move_stops_chain:
+    if a.move_keeps_chain:
         global MOVE_KEEPS_CHAIN
-        MOVE_KEEPS_CHAIN = False
-        print("[map] --legacy-move-stops-chain: movement sends prop-3 and "
-              "forgets the target again (pre-ANIMREF-RE door; the attack "
-              "animation dies on every mid-chain move).", flush=True)
-    elif a.move_keeps_chain:
-        print("[map] --move-keeps-chain: no-op, LAW A is the default since "
-              "ANIMREF-RE.", flush=True)
-    if a.no_e3_release:
+        MOVE_KEEPS_CHAIN = True
+        print("[map] --move-keeps-chain: LAW A -- movement no longer closes "
+              "the attack chain. REVERTED from default 2026-09-01 after the "
+              "operator scored the §28 pair 'very floaty' / 'warping'; this "
+              "arm is under investigation, run it ALONE.", flush=True)
+    elif a.legacy_move_stops_chain:
+        print("[map] --legacy-move-stops-chain: no-op, the prop-3 door is "
+              "the default again since the 2026-09-01 revert.", flush=True)
+    if a.e3_release:
         global ANIMREF_E3_RELEASE
-        ANIMREF_E3_RELEASE = False
-        print("[map] --no-e3-release: the action hold is NOT freed at E3 "
-              "(pre-ANIMREF-RE; a key held across a cast roots until its "
-              "next edge).", flush=True)
+        ANIMREF_E3_RELEASE = True
+        print("[map] --e3-release: the action hold is freed in the E3 batch, "
+              "which ARMS the client's 250 ms resume poll (0x0081C090). "
+              "REVERTED from default 2026-09-01; leading suspect for the "
+              "warping, run it ALONE.", flush=True)
+    elif a.no_e3_release:
+        print("[map] --no-e3-release: no-op, the hold already rides through "
+              "E3 by default since the 2026-09-01 revert.", flush=True)
     if a.legacy_chain_restart:
         global CHAIN_RESTART_PACED
         CHAIN_RESTART_PACED = False
