@@ -9399,7 +9399,24 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   cycles; and a retarget stops the swing in flight with the corpus's
   standalone-stop shape (17c, n=1 — now pinned as the full `[8→0][3,agent,0]`
   pair) and opens on the new target the same tick.
-  Timing by rewinding the armed swing and the start gate, never by sleeping),
+  Timing by rewinding the armed swing and the start gate, never by sleeping.
+  **§5, added 2026-09-01, is ANIMREF-RE §31's chain pause, and it is scored on
+  RETAIL'S OWN METRIC rather than on a threshold somebody picked**: retail's
+  attack-started gaps are a metronome when the player stands still (n=816, p50
+  1.330 s, p10 1.318, p90 1.345) and stretch to 2.007 s when a move falls inside
+  (n=40) — ratio 1.51 — while ours scored **1.003**, a chain that never noticed
+  the player walking. The section drives the REAL `attack_tick` on a stubbed
+  clock through 240 ticks with a 1.5 s moving span and requires: the legacy arm
+  to score ~1.0, the shipped arm to stretch, the two to SEPARATE, and the
+  residual `gap − moving_span` to land back on the metronome — the corpus's own
+  signature for a pause rather than a re-stamp (retail 10/40 in band, while
+  `next − last_move` is 0/40). **The known-bad arm scores exactly 1.000, which
+  is the only thing that makes this a metric and not a formality.** That
+  residual check earned its keep immediately: the first implementation
+  accumulated the freeze BELOW the landing branch and silently skipped whatever
+  part of the moving span overlapped an in-flight swing's windup; the ratio
+  still looked fine and only the residual went red. Floor 24 → 30, and §5 is
+  fixture-free so 30 is the bare-machine number too),
   `toolkit/authsrv/test_castcancel.py` (movement cancels the cast, and the
   contract is the wiki's expressed as wire SILENCE: the connection thread
   MARKS (`cancel_on_move`) and sends only the movement's own `[8 → 0]` hold
@@ -9419,8 +9436,17 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   queued behind it both release, two E2s, no recharge for either. §4 proves
   the busy-window rollback: a press after a cancel schedules its E5 one
   activation out, not behind the cancelled cast's ghost. §5 is the chain
-  half, both doors. LAW A was the DEFAULT for half of 2026-09-01 and is
-  OPT-IN again (`--move-keeps-chain`): the operator scored the §28 pair
+  half, both doors — and since ANIMREF-RE §31 LAW A is the DEFAULT again,
+  **composed with the chain pause as one arm** (`--legacy-move-stops-chain`
+  reverts both, because they are meaningless apart: with the chain closed on
+  every move there is no chain to pace). The half that was missing turned out
+  not to be a movement gate at all — the client refuses a walk cycle by
+  ANIMATION PRIORITY while an attack animation is latched (table `0x00A92ED8`,
+  locomotion `0x0040` against `0x0110`/`0x0120`), and retail sends no
+  pose-ender: it stretches the chain so the animation finishes. The section
+  pins both arms and the fact that the `[8 → 0]` release rides on both. The
+  paragraph below is the history that got here — LAW A alone shipped for half
+  of 2026-09-01 and the operator scored the §28 pair
   "very floaty" and "warping", so the prop-3 door is default once more —
   now on a FEEL verdict rather than the old tap-train reading, which the
   §28 decode had already dismantled (the "unidentified grant" retail feeds
