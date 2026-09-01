@@ -1731,6 +1731,18 @@ refuted by the next measurement (§24.3 was the first, on a denominator).
 
 ## 28. THE RE-DISPATCH IS DECODED — the quarterstep is the client's own 250 ms resume poll, and §27.3's "static target, no run" is answered
 
+> **⚠ READ §30 BEFORE USING THIS SECTION. Its central claim is REFUTED.**
+> The 250 ms poll is real and every address below re-derives — but it resumes
+> **STEERING, not translation**. `0x005FC900` → `0x00602CC0`, which writes
+> `[agent+0xCC]` target heading and `[agent+0xC8]` angular rate and **never**
+> `[agent+0x48]` (the translation field its sibling `0x00602B20` installs); and
+> the payload's own guard at `0x0081BB08` requires the speed `[+0x100]` to be
+> **zero**, so it only ever fires on a body that is already standing still.
+> It turns a stationary body toward the held key and reports the turn as
+> `GAME_CMSG 0x0040`. **It does not walk a held key out of an aftercast**, which
+> is what this section says it does and what two shipped defaults were built on.
+> §30 has the correction, the evidence, and what it cost.
+
 §27.3 named the next target: retail's client re-issues movement after the walk
 gate clears with no server destination and no new key edge, and "ours does not."
 That is now read out of the binary rather than guessed, and two changes ship on
@@ -1895,6 +1907,157 @@ decides suspect B, and it decides whether the fix is *in our re-pin's trigger*
 (if the client walks silently) or *in the E3 release's placement* (if it does not
 walk at all). Only after that is a client run worth spending, and then on **one
 flag at a time**.
+
+## 30. §28 IS REFUTED, AND THE OPERATOR'S OWN CAPTURE NAMES THE CAUSE
+
+A 13-agent decode (four lanes, adversarial pass, synthesis) plus a direct read of
+the operator's own session. **Every claim submitted to the adversarial pass was
+refuted — 8 of 8.** The most important refutations are of my own §28 decode.
+
+### 30.1 The correction: the resume poll TURNS, it does not WALK
+
+`0x005FC900` → (validation, asserts `0x4D1`/`0x4D2`/`0x4D4`, singleton
+`0x0047F660`, roster index bound-checked against `[esi+0x154]`) → **`0x00602CC0`**
+at `0x005FCA6A`. `0x00602CC0` writes `[esi+0xCC]` (target heading) and
+`[esi+0xC8]` (angular rate) and calls `0x005FF880`; it **never writes
+`[esi+0x48]`** — the translation field its sibling `0x00602B20` installs. And the
+payload's own precondition at `0x0081BB08` is `fld [esi+0x100] / fldz / fucom /
+test ah,0x44 / jp 0x81BC43` — the MSVC "branch if not equal" idiom, so it
+**re-arms and returns unless the speed is exactly zero**, with the same test
+applied to both components of the motion vector from `0x005FC550`.
+
+**A turn-in-place on a body required to be stationary cannot resume a walk.**
+The poll also *does* report what it did (`GAME_CMSG 0x0040`, 12-byte struct via
+`0x00491DE0` → `0x007DCF00`), so §29.2's "suspect B — the client walks silently
+and the re-pin yanks it" is dead twice: it does not walk, and it does report.
+
+**And the axis that kills the whole family at once:** every element of the poll
+is static code in the pinned build. Neither default patches the client. The
+armer's call sites include `0x0081AED2` (every click-to-move) and `0x0081BE70`
+(every keyboard press), so it armed constantly in every prior session — 108
+`ROTATE_PLAYER` arrivals were logged 2026-08-13, nineteen days before the flip.
+**A constant cannot explain a change.** That test should have been applied to my
+own decode before it shipped; it is cheap and it is decisive.
+
+Two further corrections worth keeping: the poll is **not** a free-running 4 Hz
+clock (arm-while-armed is a no-op at `0x0081C0AD/B5`, the checker clears the bit
+at `0x0081B979`, and the *acting* path `0x0081BC0F → 0x0081BC42` contains zero
+re-arm calls — it is a one-shot deadline armed by input events; corpus seal: of
+63 consecutive `0x0040` gaps, **zero** fall in the [0.230, 0.270] s bin a 4 Hz
+free-run must populate). And `0x003D` is **not** the only c2s message carrying
+position — `GAME_CMSG 0x0047` is `header + vec2 + dword`, emitted by
+`0x00920940`.
+
+### 30.2 The operator's session is ON DISK, and it settles the cause
+
+The §28 defaults shipped 06:51:26 and were reverted 07:20:54.
+`vault/captures/gamesrv/authsrv-20260901T070557-c1.jsonl` opened **07:05:57 —
+inside that window**. This is not a replay: it is the traffic the operator scored
+"very floaty" and "warping", next to five sessions they did not.
+
+| run | span | grants/s | reports/s | grants/report | swing-caused gate SETs | `attack_stopped` |
+|---|---|---|---|---|---|---|
+| **07:05 (LAW A live)** | 35.4 s | **2.06** | 0.82 | **2.52** | 13 | **0** |
+| 05:57 pre-ship | 34.9 s | 1.43 | 0.89 | 1.61 | 13 | 13 |
+| 05:21 pre-ship | 39.0 s | 1.74 | 0.87 | 2.00 | 14 | 13 |
+| 04:51 pre-ship | 47.8 s | 1.69 | 0.96 | 1.76 | 14 | 13 |
+| 08-31 21:02 | 63.6 s | 1.75 | 0.82 | 2.13 | 14 | 14 |
+
+Positive control: 146 property-8 sends found across the six captures, so the
+label scan sees the channel. (Its first version scored 0 and said so — the
+records carry `opcode`/`label`, not `vals`.)
+
+**Three results, and two of them are refusals:**
+
+1. **The run is IDENTIFIED.** `attack_stopped` = 0 against 13/13/13/14. That is
+   LAW A's signature and nothing else produces it. OBSERVED.
+2. **`ANIMREF_E3_RELEASE` had ZERO EXPOSURE.** The session contains no cast at
+   all — all 13 holds are `the swing at 10` — so the E3 release never fired
+   once. It is **not** exonerated and **not** convicted: it ran zero trials
+   ([[feedback-zero-exposure-is-not-a-null]]). Any future claim about it starts
+   from nothing.
+3. **The synthesis's own rank-1 mechanism is REFUTED as a differential.**
+   Swing-caused gate SETs are **13 in the bad run and 13/14/14/14 in the
+   pre-ship runs** — identical. The claim was that LAW A *creates* gate sets on
+   a walking body where the old door created none; the simulation that produced
+   "6 sets vs 0" assumed a player who never re-clicks the target. The operator
+   re-clicks, the chain reopens, and the old arm set the gate just as often.
+   **The gate toggle is not new.** Same axis-4 test that killed my six claims,
+   applied to the workflow's own leading answer.
+
+### 30.3 What IS the differential, and it was written down a month ago
+
+The only clean difference is `attack_stopped`: **13 → 0**. And FINDINGS §14
+already recorded what that does, in the sentence LAW A shipped opt-in behind:
+
+> *our client cannot START moving until its attack action closes, and this
+> prop-3 is the only closer we send.*
+
+So under LAW A the client's attack action never closes; its movement is refused;
+and our server keeps granting — the highest grant rate of the six sessions, 2.06/s
+against 1.43–1.75, and 2.52 grants per report against 1.61–2.13. **A body moved
+by grants instead of by its own input is exactly "floaty", and a grant that
+relocates it is exactly "warping".** RECONSTRUCTION on the rate (n=1 session,
+and 21:02's 2.13 overlaps the bottom of the bad run's lead), OBSERVED on the
+`attack_stopped` differential and on §14's original measurement.
+
+**§14's blocker was correct. §28 removed it on a decode error.** The complement
+LAW A needs — something that closes the client's attack action without cancelling
+the animation — is still unidentified, and that is the arc's real open question,
+exactly where §14 left it.
+
+### 30.4 What retail actually does with property 8 — the one genuinely new fact
+
+From the 21-capture corpus (61 connections, 61 of 61 framed to the last byte):
+
+* **The release and the movement grant are ONE event.** Of 108 player point
+  messages that appear to fall inside a hold, **103 land within one microsecond
+  of the CLEAR instant** (|dt| p10 = p50 = p90 = 0.000000 s). Exactly **one**
+  message in the whole corpus sits strictly inside a hold away from both edges.
+* **Property 8 SET ⇒ essentially no grants**: 0.0039/s held (5 messages /
+  1279.19 s / 212 windows) against 0.4793/s clear (634 / 1322.67 s / 192
+  windows); paired sign test 11–0 across connections. Negative control passes:
+  *other* agents' position messages flow at 0.510/s vs 0.699/s in the same
+  windows (ratio 0.730) while the player's own ratio is 0.0082 — 89× more
+  player-specific than stream-wide.
+* **The §22.6 / §25 contradiction is settled with a third option.** Property 8
+  gates the **issuing of new destinations** and the client's two begin-move
+  *entries*; it does **not** cancel a leg already in flight. Long holds (≥5 s)
+  show no motion (0/29, in-corpus ceiling 0.47 % of long-hold time), but **11 of
+  200 short holds are arithmetically FORCED to contain travel** — a body cannot
+  cover d units in less than d/288 s. Largest: hold 2.253 s, bracket 753.6 u
+  needing ≥2.617 s of running with only 0.481 s outside the hold, so ≥2.136 s of
+  motion inside a 2.253 s hold (94.8 %), turn 0.0000 rad.
+
+**Our E3 release sent property 8 → 0 with nothing attached.** That is the inverse
+of retail's 103/103 invariant, and it is the reason the release should not be
+re-armed in its bare form even though its 19/19 corpus count was right.
+
+### 30.5 Shipped from this section
+
+* **Captures now record their own configuration.** `Recorder.__init__` emits a
+  `flags` record — every SCREAMING_CASE module global, *discovered* rather than
+  hand-listed, read from the live globals so a flag set by any route is caught.
+  Identifying which of six 35-second sessions ran the §28 defaults cost an hour
+  of inference from send labels, and it only ever worked for one of the two
+  flags. `test_replay.py` §5 pins it, including the check that can fail: flip a
+  real flag and the census must move. Floor 4 → 10.
+* **Nothing else.** No behaviour change ships on this section. The two §28
+  defaults stay opt-in.
+
+### 30.6 The next check, and it is not the one §29.4 proposed
+
+§29.4 proposed re-shipping LAW A with the swing re-hold suppressed on a moving
+body. **That is now unsupported** — §30.2 result 3 shows the re-hold is not the
+differential, so suppressing it would be a fix for a mechanism that did not fire.
+
+The question is §14's, unchanged: **what closes the client's attack action, if
+not property 3?** It is a client-side question about the attack action's own
+lifetime, and the instrument for it already exists — `movehook` with the sites
+built in §28.4 plus a tap on whatever clears that action. Static first: find the
+field the begin-move entries consult that property 3 currently clears for us, the
+same way `[+0x64] bit 0` was found. **No client run until that is answered**, and
+then one flag, one question.
 
 ## Provenance
 

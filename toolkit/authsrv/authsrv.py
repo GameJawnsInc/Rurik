@@ -14828,6 +14828,32 @@ def run_probe(name, send, conn_id, stop, origin=None):
     return thread
 
 
+def capture_flags():
+    """Every module-level behaviour switch, by name, as the capture header.
+
+    DISCOVERED, not listed: any module global that is a bare bool and whose
+    name is SCREAMING_CASE is a behaviour switch by this repo's own
+    convention, so a flag added tomorrow is recorded tomorrow without anyone
+    remembering to add it here. A hand-maintained list is the same defect as
+    a hand-maintained test catalog -- it goes stale silently, and the silence
+    looks like "that flag was off".
+
+    The three-value flags (`WINDUP_MODEL`, `CAST_STOP`) are strings or None
+    and are carried too, because "which arm" is the question this answers.
+    Nothing here reads content or the vault: it is our own configuration.
+    """
+    g = globals()
+    out = {}
+    for name in sorted(g):
+        if not name.isupper() or name.startswith("_"):
+            continue
+        v = g[name]
+        if isinstance(v, bool) or v is None or (
+                isinstance(v, str) and len(v) <= 32):
+            out[name] = v
+    return out
+
+
 class Recorder:
     def __init__(self, vault, conn_id):
         os.makedirs(vault, exist_ok=True)
@@ -14846,6 +14872,19 @@ class Recorder:
             "toolkit/authsrv/authsrv.py", origin.OURS,
             note="a Rurik listener; the peer is the client connecting to us")
         self.event(stamped.pop("kind"), **stamped)
+        # AND WHICH BEHAVIOUR FLAGS WERE LIVE, because on 2026-09-01 a capture
+        # could not say. Two defaults shipped and were reverted the same day
+        # (ANIMREF-RE §28/§29/§30) and identifying WHICH of six 35-second
+        # sessions had run them cost an hour of inference from send labels --
+        # `attack_stopped` being absent was the only tell, and it only works
+        # for one of the two flags. The header carried build, world, map and
+        # account and not one line of configuration, so every A/B this arc has
+        # ever run was self-identifying by luck. Emitted from the module
+        # globals at connect time, so it records what the process actually
+        # holds rather than what argparse was handed -- a flag flipped by any
+        # other route still shows up. Names only, no values from content: this
+        # is our own configuration, not client data.
+        self.event("flags", **capture_flags())
 
     def event(self, kind, **kw):
         kw["kind"] = kind
