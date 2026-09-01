@@ -2577,6 +2577,85 @@ probably not the entry the SET arm reaches. Check its address before relying on 
 hold was not the whole stall, and `0x005355C0`'s clocks are next. That branch is
 written down now so a surviving stall is a result rather than a surprise.
 
+## 34. THE SPACEBAR BUG — a regression §31 introduced, found in the operator's own capture
+
+> *"click-to-walk cancelled by spacebar [interact/attack] (which would normally
+> walk-to-and-attack in stock) doesn't start attacking. if the last move command
+> wasn't WASD, spacebar doesn't fire attacks at all."*
+
+Located in one pass, from `authsrv-20260901T125928-c1.jsonl` — the operator's own
+session, still warm.
+
+### 34.1 The client is not withholding anything
+
+| c2s opcode | name | count |
+|---|---|---|
+| `0x003D` | MOVE_SET_HEADING | 167 |
+| **`0x0026`** | **ATTACK** | **101** |
+| `0x0047` | MOVE_CANCEL_REPORT_POSITION | 66 |
+| `0x003E` | MOVE_TO_COORD | 20 |
+
+**101 attack messages arrived**, at a 90 % follow rate after click-moves (18/20)
+against 85 % after WASD moves (142/167) — so the client sends the attack in *both*
+regimes, and the "last move wasn't WASD" pattern is not the client withholding it.
+And we do handle `0x0026`: the arm at `authsrv.py:16508` calls `begin_attack`.
+**The order was accepted and then silently starved.** OBSERVED.
+
+### 34.2 The starver is `_player_body_moving`, and §31 built it
+
+`click_moving_at` is armed on **every** `0x003E` (`:17970`) and cleared **only** by a
+later movement report (`:16947`) or a stop report (`:18511`). A click leg that simply
+*arrives* clears nothing — the client reports nothing at all while click-walking,
+which is the measured fact the arming site itself cites. So after any completed
+click-to-walk the latch stays set forever.
+
+Before §31 that cost nothing, and the arming site says so in its own comment: *"a
+latch left stale by a completed click costs nothing, because the body it guards is
+then parked."* True — while its only readers were the cast-stop send site and
+`cast_stop_reckon`, **both of which want to refuse on a maybe-moving body.**
+
+**§31 added a reader with the opposite polarity** — `attack_tick`'s
+`if moving: return` — **and did not revisit that comment.** A stale latch now means
+no swing ever opens. That is the whole defect, and it is mine.
+
+### 34.3 The previous decode called this one wrong, and the reason is worth keeping
+
+§33.5 listed exactly this as **F5**, labelled *"ZERO TRIALS, not a null … latent, not
+your bug"*, on the evidence that all six `click_verdict` records were
+`fired:false / 'geo-unplaced'`. **That measured the wrong thing.** Those verdicts are
+about whether a click produced a *grant*; the latch is armed in the `0x003E` arm
+**regardless of the verdict**, and the capture holds 20 of them. A zero-trials call
+made on an adjacent quantity is not a zero-trials call — it is
+[[feedback-zero-exposure-is-not-a-null]] applied to the wrong denominator, which is
+the same defect the rule exists to prevent, one level up.
+
+### 34.4 SHIPPED: bound the latch, and check BOTH directions
+
+`_player_body_moving` now bounds the click latch by `GRANT_LOCAL_WINDOW` (3.0 s) —
+**the existing constant its sibling reader already applies to the keyboard latch**,
+not a new one. The keyboard latch stays unbounded deliberately: it has a real
+terminator, the `0x0047` stop report, which the client does send (36 of 36 in the
+corpus). Bounding only the latch that lacks one is the point.
+
+**Both directions are pinned**, because the obvious fix has an obvious failure mode:
+a latch that expires too eagerly stops §31's chain pause from pausing on click-walks
+and regresses the quarterstep the operator just approved. `test_playerswing` §7
+checks the fresh latch still reads as moving, the stale one does not, an ordered
+attack after a completed click-walk **opens a swing end to end**, and — the known-bad
+arm — a swing ordered during a live click leg still waits. 41 checks, floor 41,
+identical bare.
+
+### 34.5 A process note, because it happened twice in one turn
+
+This fix landed in `main` twice before reaching the worktree: once because the shell
+was in `main`, and once because a `sed` meant to repoint the patch script's path
+never matched (backslash escaping) and the script re-applied to `main` after I had
+reverted it. Both times a `grep -c` "confirmed" the worktree had it — **the pattern
+`click = state.get` matches `_cs_click = state.get` as a substring**, so the check
+that was supposed to catch the slip endorsed it. The tree was only settled by
+grepping for a string unique to the new code. A verification whose pattern is a
+substring of unrelated code is not a verification.
+
 ## Provenance
 
 All figures are measurements over the owner's own live captures via extractors in this
