@@ -70,8 +70,12 @@ HEADER = os.path.join(HERE, "sites.h")
 # pre-flight imports this map rather than restating the bytes (Q12(a) refuses two
 # homes for one fact), and a row naming a shape outside this dict is refused.
 SHAPE_BYTE = {
-    "entry": 0x55,      # push ebp -> esp -= 4; [esp] = ebp; eip = a + 1
-    "ret":   0xC3,      # ret      -> eip = [esp]; esp += 4
+    "entry":   0x55,    # push ebp -> esp -= 4; [esp] = ebp; eip = a + 1
+    "ret":     0xC3,    # ret      -> eip = [esp]; esp += 4
+    "pushedi": 0x57,    # push edi -> esp -= 4; [esp] = edi; eip = a + 1
+                        # (ANIMREF-RE 2026-09-01: resume_arm 0x0081C090 opens
+                        #  with push edi; same one-byte no-operand property
+                        #  that made the entry rule safe)
 }
 DEFAULT_SHAPE = "entry"     # every row that predates the shape column
 
@@ -185,6 +189,7 @@ def emit(sites, offs, coffs, exe_path):
     a(" * See PLAN.md §7 Q12(d) and content/movecode.toml's ret block. */")
     a("#define SHAPE_ENTRY 0u   /* 0x55 push ebp -> esp -= 4; [esp] = ebp; eip = a+1 */")
     a("#define SHAPE_RET   1u   /* 0xC3 ret      -> eip = [esp]; esp += 4           */")
+    a("#define SHAPE_PUSHEDI 2u /* 0x57 push edi -> esp -= 4; [esp] = edi; eip = a+1 */")
     a("")
     names = sorted(sites)
     a(f"#define NSITES {len(names)}u")
@@ -206,7 +211,7 @@ def emit(sites, offs, coffs, exe_path):
     a("                                    note at the stride test in movehook.c. */")
     a("    int           deref_out;     /* arg index of `int* outCount`, 0=none */")
     a("    int           deref_out_path;/* arg index of `point* outPath`, 0=none */")
-    a("    unsigned      shape;         /* SHAPE_ENTRY or SHAPE_RET -- selects which")
+    a("    unsigned      shape;         /* SHAPE_ENTRY, SHAPE_RET or SHAPE_PUSHEDI -- selects which")
     a("                                    ONE instruction the handler re-emulates. */")
     a("} site_t;")
     a("")
@@ -226,7 +231,7 @@ def emit(sites, offs, coffs, exe_path):
           f"{int(r.get('stride') or 0)}u, "
           f"{int(r.get('deref_out') or 0)}, "
           f"{int(r.get('deref_out_path') or 0)}, "
-          f"{'SHAPE_RET  ' if shape == 'ret' else 'SHAPE_ENTRY'} }},"
+          f"{'SHAPE_RET  ' if shape == 'ret' else 'SHAPE_PUSHEDI' if shape == 'pushedi' else 'SHAPE_ENTRY'} }},"
           f"   /* 0x{r['va']:08X} */")
     a("};")
     a("")

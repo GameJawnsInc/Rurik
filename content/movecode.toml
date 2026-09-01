@@ -457,6 +457,52 @@ extractor = "toolkit/clientscan/codescan.py"
 build = 38797
 verified = "--dis 0x008163A0 shows `55 push ebp`; --xrefs gives exactly one rel32 caller, 0x0053547B, inside MOVE-CMD. 2026-09-01."
 
+[hook_site.resume_arm]
+va = 0x0081C090
+rva = 0x0041C090
+first_byte = 0x57
+shape = "pushedi"
+thiscall = false
+deref_agent = false
+deref_char_gate = true
+what = "arms the 250 ms RESUME window: unless dead, gate bit 0 clear and bit 1 set required, then sets [this+0x110] bit 0 and writes [this+0x114] = clock() + 0xFA (250 ms), registering via 0x009217C0. Called by prop 8's gate-CLEAR arm (0x0081BD17), by the held-input bit-2 setter (0x0081BE70), by chcli_point (0x0081AED2), and by the resume payload's own retry exits (0x0081BA6C, 0x0081BC47) -- nine callers total."
+why_hooked = "the quarterstep's first half: this firing at our E3 release is the proof the server's gate-clear reaches the client's resume machinery. Never firing after a cast means our prop-8 economy is still wrong."
+[hook_site.resume_arm.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/codescan.py"
+build = 38797
+verified = "--dis 0x0081C090 shows `57 push edi; 8bf9 mov edi,ecx` then the m_status dead test (+0x10C shr 4), the +0x64 bit-0/bit-1 guards, the +0x110 bit-0 arm and the `05 fa 00 00 00 add eax, 0xfa` deadline into +0x114. --xrefs gives the nine callers incl. 0x0081BD17 (prop 8's clear arm). ecx IS the ChCliBase char, same object as chcli_dir's gates. 2026-09-01, ANIMREF-RE."
+
+[hook_site.resume_fire]
+va = 0x0081BA80
+rva = 0x0041BA80
+first_byte = 0x55
+thiscall = false
+deref_agent = false
+deref_char_gate = true
+what = "the RESUME payload, called by the timer callback (0x0081B984) when the 250 ms deadline lapses. Proceeds only when: gate bit 5 clear, latched input vector (+0x4C/+0x50) non-zero, gate bit 2 (held input) SET, not dead, gate bit 0 clear, speed (+0x100) ZERO and current motion vector zero -- i.e. the player HOLDS a direction while the body stands still with the gate open. Then atan2s the latched vector against the current heading (0x005FC310) and calls 0x005FC900 with the id and angle, storing the pair at +0x104/+0x108. Non-ripe conditions RE-ARM via 0x0081C090 (exits 0x0081BC43/45); no-input conditions let the poll die (exits 0x0081BC51/55)."
+why_hooked = "the quarterstep's second half: this is the client moving a held key with no new edge and no server destination. Its hit count against resume_arm's is the poll's live/die ratio, and its gate word at the hit shows WHICH guard passed or killed it."
+[hook_site.resume_fire.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/codescan.py"
+build = 38797
+verified = "--dis 0x0081BA80 shows `55 push ebp` and the ChCli assert (line 0x209, file strings 0xA95430/0xA95574) guarding gate bit 1. Caller read at 0x0081B984 (call 0x81ba80) inside the deadline callback 0x0081B940, which disarms +0x110 bit 0 first (0x0081B979). FPU idiom re-checked: `test ah,0x44; jp` after fucom jumps on NON-equal, so the speed-zero and motion-zero guards read as written above. 2026-09-01, ANIMREF-RE."
+
+[hook_site.heldbit]
+va = 0x0081BE50
+rva = 0x0041BE50
+first_byte = 0x55
+thiscall = false
+deref_agent = false
+deref_char_gate = true
+what = "the HELD-INPUT bit setter: arg != 0 ORs gate bit 2 and (via predicate 0x007E08C0 == 0) arms the 250 ms window itself; arg == 0 clears bit 2. Sole caller is the global wrapper 0x00816BF0 (singleton -> +0x2C -> +0x680 = the local player's ChCliBase), itself called only from the input transition manager at 0x004F3842/0x004F386C -- set on a movement control's activation, cleared on its release."
+why_hooked = "bit 2 is the resume payload's held-input guard. This site firing with arg 1 at a key-down and 0 at key-up is the client's own definition of `held`, and a capture where resume_fire dies on bit 2 needs this site to say why."
+[hook_site.heldbit.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/codescan.py"
+build = 38797
+verified = "--dis 0x0081BE50 shows `55 push ebp; cmp [ebp+8],0` then `83 c8 04 or eax,4` / `83 e0 fb and eax,~4` on [this+0x64]. --xrefs: one caller 0x00816C08; the wrapper's singleton chain read at 0x00816BF3..0x00816C08. The input-manager transitions read at 0x004F381B..0x004F3874 (old control torn down with 0x816BF0(0), new one raised with 0x816BF0(!bl)). 2026-09-01, ANIMREF-RE."
+
 [hook_site.chcli_dir]
 va = 0x0081A8F0
 rva = 0x0041A8F0

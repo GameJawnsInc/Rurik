@@ -9058,19 +9058,43 @@ ATTACK_FINISH_BATCH = True    # False (--legacy-attack-finish): the old shape
 # 0.749..0.783 s (21 of 38) against swing_windup(1.75) = 0.775; our old shape
 # opened it in the same tick.
 #
-# R7a ships DEFAULT OFF, and the reason is measured, not aesthetic
-# (FINDINGS 14, the tap-train verbatim check): with the chain kept alive our
-# client refuses EVERY movement key indefinitely -- taps in the backswing
-# window included -- because the client only starts moving once its attack
-# action closes, and the prop-3 this law removes was the only closer we
-# send. Retail's client moves WITHOUT that prop-3 (87/100), so retail feeds
-# a grant we have not identified yet (candidates: the 0x002B speed riding
-# every retail movement echo, the echo's 0x0028, the prop-8 values). Until
-# that complement is decoded, shipping LAW A alone is "more retail-correct
-# wire, visibly worse game" -- the R5 P1 lesson -- so the wire fact is
-# recorded, the flag exists, and the default keeps the door that moves.
-MOVE_KEEPS_CHAIN = False      # True (--move-keeps-chain): LAW A's wire, see ^
+# R7a shipped DEFAULT OFF while its complement was undecoded; ON since
+# 2026-09-01 (ANIMREF-RE) because the complement is now READ OUT OF THE
+# CLIENT, not guessed. The old blocker (FINDINGS 14, the tap-train verbatim
+# check): with the chain kept alive our client refused EVERY movement key --
+# "the client only starts moving once its attack action closes, and the
+# prop-3 this law removes was the only closer we send. Retail's client moves
+# WITHOUT that prop-3 (87/100), so retail feeds a grant we have not
+# identified yet." THE COMPLEMENT IS NOT A GRANT. It is prop 8 itself plus
+# client code: prop 8's ChCli case body (0x0081BCF0) writes the walk gate
+# (ChCliBase+0x64 bit 0), and the gate-CLEAR arm arms a 250 ms resume poll
+# (0x0081C090/0x0081B940/0x0081BA80) that re-starts a HELD key -- latched
+# direction at +0x4C/+0x50, held-input bit 2 set by the input bridge
+# (0x0081BE50, sole caller 0x00816C08) -- with no new edge and no server
+# destination. TWO consequences, both derived: (1) the tap-train's freeze
+# was retail-consistent, because the resume rescues HOLDS only -- a tap
+# clears bit 2 and zeroes the latched vector at key-up, so the poll dies at
+# its first tick (exit 0x81BC55, no re-arm); (2) the release economy this
+# law needs is complete once the E3 release exists (ANIMREF_E3_RELEASE
+# above the cast tick) -- the hold covers the CHAIN, not the swing
+# (castmech 3c "once per release", corpus alternation 120/120 with p90
+# hold length 10 s), and every chain-END door already releases: movement,
+# retarget, target-gone, cancel, press, and now E3. What this flip removes
+# is the prop-3 our movement door invented -- the message that CANCELS THE
+# ATTACK ANIMATION, which retail does not send at 87/100 mid-chain moves
+# and which the owner's runs kept reporting as "cancelling the animation
+# instead of sliding while the animation plays".
+MOVE_KEEPS_CHAIN = True       # False (--legacy-move-stops-chain): pre-RE door
 CHAIN_RESTART_PACED = True    # False (--legacy-chain-restart): same-tick
+
+# ANIMREF-RE (2026-09-01): release the action hold in the E3 batch, the
+# caster-freed instant -- 19 of 19 unmoved corpus cycles. The client arms its
+# own 250 ms resume poll at the gate-clear, which is what walks a HELD key
+# out of the aftercast with no grant: the quarterstep's mechanism, read out
+# of the binary (0x0081C090 arm, +0xFA ms deadline at ChCliBase+0x114,
+# payload 0x0081BA80). False = --no-e3-release, the revert arm: a key held
+# across a cast is never released and roots until its next edge.
+ANIMREF_E3_RELEASE = True     # False (--no-e3-release): the pre-RE hold
 
 # ANIMREF-R8: the on-body effect visual (properties 20/21). R4 decoded the
 # channel and refused to wire it because the VALUE space was unread; FINDINGS
@@ -9363,11 +9387,13 @@ def cancel_on_move(send, state, conn_id):
     # resumes on return, which is the resume-on-return design that branch
     # already documents. The CAST half below is untouched: the wiki's cancel
     # contract for casts is separately corpus-backed (the bare E2, castmech
-    # 3/4). BUT LAW A ships OPT-IN (--move-keeps-chain), not default:
-    # MEASURED at the tap-train verbatim check, our client cannot START
-    # moving until its attack action closes, and this prop-3 is the only
-    # closer we send -- retail's client moves without it, on a grant not
-    # yet identified. See MOVE_KEEPS_CHAIN's comment.
+    # 3/4). LAW A IS THE DEFAULT since ANIMREF-RE (2026-09-01): the
+    # "grant not yet identified" that blocked it is decoded -- no grant at
+    # all, but the client's own 250 ms resume poll, armed by prop 8's
+    # gate-clear (0x0081C090; MOVE_KEEPS_CHAIN's comment has the decode),
+    # and the action_hold(0) this door already sends below is what arms
+    # it. The prop-3 the legacy arm restores is the message that cancels
+    # the attack ANIMATION, which retail omits at 87/100 mid-chain moves.
     if chain_live and not MOVE_KEEPS_CHAIN:
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
              [agents.GV_ATTACK_STOPPED, PLAYER_AGENT_ID, 0],
@@ -11833,6 +11859,36 @@ def cast_tick(send, state, conn_id):
                  f"SKILL_ACTIVATED(skill {cast['skill_id']}, "
                  f"copy {cast['copy']})")
             cast["e3_sent"] = True
+            # THE E3 RELEASE (ANIMREF-RE, 2026-09-01): retail frees the hold
+            # in the E3 batch -- 19 of 19 unmoved cast cycles across the
+            # live corpus carry [8 -> 0] riding the E3, E3 first (castmech
+            # P10's t=69.670 was not a one-off; the older corpus's silent
+            # E3s were casts a movement instant had ALREADY released, which
+            # transition-only elides -- that resolves P10's "recorded, not
+            # resolved"). WHY IT MATTERS: prop 8's ChCli case body writes
+            # the WALK GATE (ChCliBase+0x64 bit 0, 0x0081BCF0), and the
+            # gate-CLEAR arm arms the client's own 250 ms resume poll
+            # (0x0081C090 -> 0x0081B940 -> 0x0081BA80), which re-starts a
+            # HELD movement key with no new edge and no server destination.
+            # Before this line, a key held across a whole cast produced no
+            # report (the client latches input on edges), so nothing ever
+            # released the hold and the resume polled forever against a set
+            # gate -- run 3's 46% never-recover arm, derived. For an ATTACK
+            # skill whose chain resumes at this instant, attack_tick's next
+            # swing re-holds one tick later; the corpus's own attack-skill
+            # releases scatter 0.14-1.1 s after E5 (n=16), consistent with
+            # this placement and too few to pin tighter. RESIDUAL, stated:
+            # that re-hold toggle pair is a wire shape retail may not emit.
+            # NOT when a QUEUED cast begins at this instant: the hold hands
+            # over cast-to-cast with no toggle -- "NO property 8 at the
+            # begin", 2 of 2 at skill 153's queued E3s (castmech 3b), and
+            # test_castcycle's queue section defends that shape.
+            queued_next = any(c is not cast and not c.get("cancelled")
+                              and c["begin_at"] <= now + 0.001
+                              for c in pending)
+            if ANIMREF_E3_RELEASE and not queued_next:
+                action_hold(send, state, 0,
+                            f"E3 frees the caster (skill {cast['skill_id']})")
         if cast["e3_sent"] and now >= cast["e6_at"]:
             send(GAME_SMSG_SKILL_RECHARGED,
                  [PLAYER_AGENT_ID, cast["skill_id"], cast["copy"]],
@@ -20208,15 +20264,28 @@ def main():
                          "client's own 2077 'no visual' default, sends "
                          "nothing either way.")
     ap.add_argument("--move-keeps-chain", action="store_true",
-                    help="Opt into ANIMREF-R7a: movement stops closing the "
-                         "attack chain (LAW A: 87 of 100 corpus mid-chain "
-                         "moves carry no prop-3; the range gate judges "
-                         "instead). OFF by default and MEASURED why "
-                         "(FINDINGS 14): without the prop-3 our client "
-                         "refuses every movement key while chaining -- "
-                         "retail's client is fed a grant we have not "
-                         "identified yet, so LAW A alone is retail's wire "
-                         "with a worse game.")
+                    help="No-op since ANIMREF-RE (2026-09-01): LAW A is the "
+                         "default. Kept so existing runsheets still parse.")
+    ap.add_argument("--legacy-move-stops-chain", action="store_true",
+                    help="Revert ANIMREF-RE's LAW A flip: movement sends "
+                         "prop-3 again (closing the chain AND cancelling "
+                         "the attack animation -- the shape retail omits at "
+                         "87/100 mid-chain moves) and forgets the target. "
+                         "The old blocker on LAW A is resolved: the "
+                         "'unidentified grant' retail feeds a mid-chain "
+                         "mover is the client's own 250 ms resume poll, "
+                         "armed by prop 8's gate-clear (0x0081C090), and "
+                         "the tap-train freeze was retail-consistent tap "
+                         "behaviour -- the resume rescues held keys only.")
+    ap.add_argument("--no-e3-release", action="store_true",
+                    help="Revert ANIMREF-RE's E3 release: the action hold "
+                         "is no longer freed in the E3 batch (retail frees "
+                         "it there, 19/19 unmoved corpus cycles). With this "
+                         "set, a movement key held across a whole cast is "
+                         "never released -- the client latches input on "
+                         "edges, so no report arrives to release it -- and "
+                         "the player roots until the next key edge: run 3's "
+                         "46%% never-recover arm, reproduced on purpose.")
     ap.add_argument("--legacy-chain-restart", action="store_true",
                     help="Revert ANIMREF-R7b: the chain reopens in the same "
                          "tick as an attack skill's execution again. The "
@@ -21621,13 +21690,21 @@ def main():
         SKILL_VISUALS = False
         print("[map] --no-skill-visuals: no property 20/21 on-body effect "
               "visual at a cast's landing (pre-ANIMREF-R8).", flush=True)
-    if a.move_keeps_chain:
+    if a.legacy_move_stops_chain:
         global MOVE_KEEPS_CHAIN
-        MOVE_KEEPS_CHAIN = True
-        print("[map] --move-keeps-chain: movement no longer closes the "
-              "attack chain (ANIMREF-R7a LAW A wire; expect movement keys "
-              "refused while chaining until the client's grant is decoded).",
-              flush=True)
+        MOVE_KEEPS_CHAIN = False
+        print("[map] --legacy-move-stops-chain: movement sends prop-3 and "
+              "forgets the target again (pre-ANIMREF-RE door; the attack "
+              "animation dies on every mid-chain move).", flush=True)
+    elif a.move_keeps_chain:
+        print("[map] --move-keeps-chain: no-op, LAW A is the default since "
+              "ANIMREF-RE.", flush=True)
+    if a.no_e3_release:
+        global ANIMREF_E3_RELEASE
+        ANIMREF_E3_RELEASE = False
+        print("[map] --no-e3-release: the action hold is NOT freed at E3 "
+              "(pre-ANIMREF-RE; a key held across a cast roots until its "
+              "next edge).", flush=True)
     if a.legacy_chain_restart:
         global CHAIN_RESTART_PACED
         CHAIN_RESTART_PACED = False

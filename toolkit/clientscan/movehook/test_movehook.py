@@ -577,17 +577,24 @@ def section_9():
         eq(base, 0x00400000, "9. and the image base is reported")
 
         # AND THE OTHER DIRECTION, which is the one this file's own history
-        # argues for: a client serving 0x55 at a RET site is a wrong client and
-        # must be refused. Before the shape column this was the accepted case.
-        nret = sum(1 for _r in _rows.values() if _r.get("shape") == "ret")
-        if nret:
+        # argues for: a client serving 0x55 at a NON-ENTRY site is a wrong
+        # client and must be refused. Before the shape column this was the
+        # accepted case. Counted over every shape whose byte is not 0x55 --
+        # the ret sites (0xC3) and, since ANIMREF-RE, resume_arm (0x57
+        # pushedi) -- so a new shape reddens the count rather than sliding
+        # under a literal `== "ret"`.
+        nnon55 = sum(1 for _r in _rows.values()
+                     if gensites.SHAPE_BYTE[
+                         _r.get("shape", gensites.DEFAULT_SHAPE)] != 0x55)
+        if nnon55:
             keytap.read_at = lambda pid, addr, n: b"\x55" * n
             bad, _ = attach.verify_running_build(1234)
-            check(len(bad) == nret,
-                  "9. a client serving 0x55 at the RET sites is REFUSED",
-                  f"expected {nret} refusal(s), got {bad}")
-            check(any("0xC3" in b for b in bad),
-                  "9. and the refusal names the byte the SHAPE required",
+            check(len(bad) == nnon55,
+                  "9. a client serving 0x55 at every non-entry site is "
+                  "REFUSED (the ret sites need 0xC3; resume_arm needs 0x57)",
+                  f"expected {nnon55} refusal(s), got {bad}")
+            check(all(any(tok in b for tok in ("0xC3", "0x57")) for b in bad),
+                  "9. and each refusal names the byte its SHAPE required",
                   f"{bad}")
 
         # One site wrong is enough: this is what a build bump looks like.
