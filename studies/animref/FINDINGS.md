@@ -1985,26 +1985,33 @@ records carry `opcode`/`label`, not `vals`.)
    **The gate toggle is not new.** Same axis-4 test that killed my six claims,
    applied to the workflow's own leading answer.
 
-### 30.3 What IS the differential, and it was written down a month ago
+### 30.3 What IS the differential — CORRECTED, see §30.7
 
-The only clean difference is `attack_stopped`: **13 → 0**. And FINDINGS §14
-already recorded what that does, in the sentence LAW A shipped opt-in behind:
+The only clean difference is `attack_stopped`: **13 → 0**. OBSERVED, and it is
+LAW A's signature.
+
+> **⚠ THE REST OF THIS SUBSECTION AS FIRST WRITTEN WAS WRONG, and §30.7 has the
+> correction.** It said the bad run showed "the highest grant rate of the six
+> sessions, 2.06/s against 1.43–1.75, and 2.52 grants per report". That rate was
+> computed over the POOLED op set `{0x0025, 0x0029, 0x002B, 0x002C}` — and
+> `0x0029`/`0x002B` are sent for **every agent in the instance**, so the pool is
+> mostly NPC traffic and its rate tracks how many hostiles were awake. On the
+> player's own destination sends the bad run is **0.565/s against 0.459–0.586**
+> (not an outlier; 04:51 is higher), and on `grant_verdict` fires it is
+> **0.424/s, the LOWEST of the five**. The bad run did not grant more.
+> Denominator error, mine, in a session where I had already written the
+> denominator lesson into memory.
+
+What survives from this subsection is §14's sentence, which LAW A shipped opt-in
+behind and which §28 removed on a decode error:
 
 > *our client cannot START moving until its attack action closes, and this
 > prop-3 is the only closer we send.*
 
-So under LAW A the client's attack action never closes; its movement is refused;
-and our server keeps granting — the highest grant rate of the six sessions, 2.06/s
-against 1.43–1.75, and 2.52 grants per report against 1.61–2.13. **A body moved
-by grants instead of by its own input is exactly "floaty", and a grant that
-relocates it is exactly "warping".** RECONSTRUCTION on the rate (n=1 session,
-and 21:02's 2.13 overlaps the bottom of the bad run's lead), OBSERVED on the
-`attack_stopped` differential and on §14's original measurement.
-
-**§14's blocker was correct. §28 removed it on a decode error.** The complement
-LAW A needs — something that closes the client's attack action without cancelling
-the animation — is still unidentified, and that is the arc's real open question,
-exactly where §14 left it.
+**§14's blocker was correct in the sense that matters — removing prop 3 changes
+the client's behaviour for the worse.** What §14 got wrong, and what §30.7
+establishes, is the LAYER: prop 3 does not gate movement at all. It is an
+animation event.
 
 ### 30.4 What retail actually does with property 8 — the one genuinely new fact
 
@@ -2045,19 +2052,95 @@ re-armed in its bare form even though its 19/19 corpus count was right.
 * **Nothing else.** No behaviour change ships on this section. The two §28
   defaults stay opt-in.
 
-### 30.6 The next check, and it is not the one §29.4 proposed
+### 30.7 CORRECTION AND DECODE: prop 3 is an ANIMATION EVENT, and that is what "floaty" is
+
+Two things, one wrong and one new, both from the same follow-up pass.
+
+**(a) The rate claim in §30.3 is refuted, by me, within the hour.** Three
+denominators over the same five captures, spans 34.9–63.6 s:
+
+| run | player destination sends/s | `grant_verdict` fired/s | POOLED/s *(what I published)* |
+|---|---|---|---|
+| **BAD 07:05 (LAW A)** | **0.565** | **0.424** | 2.063 |
+| 05:57 pre-ship | 0.459 | 0.459 | 1.433 |
+| 05:21 pre-ship | 0.513 | 0.513 | 1.743 |
+| 04:51 pre-ship | **0.586** | 0.502 | 1.694 |
+| 08-31 21:02 | 0.519 | 0.456 | 1.746 |
+
+The player-destination rate is flat and the bad run is not its maximum; the fired
+rate is the bad run's **minimum**. Positive control: the label census accounts
+for every destination send in every file, and every one of them is
+`AGENT_MOVE_DIRECTION` — there is no second grant family hiding in the mix. **So
+"we kept granting into a refused client" is dead as a description of this
+session.** It was a subcount-as-a-rate error of exactly the kind
+[[feedback-safety-filters-drop-the-anomalies]] names, and the pooled figure
+looked plausible because NPC traffic scales with the fight.
+
+**(b) What prop 3 actually is.** `ChCliApi::SetAgentProperty` fans id 3 into the
+AvChar side, `AvApi 0x007DFA60` → (agent→view lookup `0x00802160`) →
+`0x007F6C00`, whose entire body is `push 2 / call 0x007F2E90 / ret`. And
+`0x007F2E90` is not a flag-clear: it calls the allocator at `0x007E8D80`, writes
+the kind into `[node]`, `[ebx+0x2c]` into `[node+4]` and a float into `[node+8]`,
+then splices the node into the list at `[ebx+0xC4]`/`[ebx+0xC8]` (the
+`action->queueLink` / `action->sequenceLink` pair `AvChar:1243/1251` names, with
+the `0xDDDDDDDD` uninitialised-memory assert at `0x007F2EB3` guarding the link
+offset). **Property 3 APPENDS an "attack stopped" event to the animation action
+queue.** OBSERVED.
+
+It writes nothing the two begin-move entries read: those test `m_status`
+(`+0x10c`) and the walk gate (`+0x64` bit 0), and the ChCliBase property switch
+sends ids 1/3/46/49 to its DEFAULT no-op arm (§22). **Prop 3 cannot gate
+movement, and §14's "the client only starts moving once its attack action closes"
+is a reading of a correlation, not of this code path.**
+
+**So the mechanism for "floaty" is the animation layer, not the movement layer.**
+Under LAW A the attack-stopped event is never queued, so AvChar never learns the
+attack ended and the attack pose persists while the body translates. The result
+is a character sliding without a walk cycle — which is what "floaty" describes,
+and it is the exact thing the operator asked for one message earlier
+(*"it's cancelling the animation instead of sliding while the animation plays"*)
+delivered without the half that makes it look right. **RECONSTRUCTION**: the
+queue append is OBSERVED, the consumer that would blend a walk cycle is not yet
+read, and no frame of the bad run was scored visually.
+
+**(c) "Warping" is NOT explained, and it should not be papered over.** The only
+wire handle is the reports' own drift, and it is suggestive at best: the bad run
+has the highest p50 (**29.3 u** against 5.7–15.1) and the highest fraction over
+100 u (**10 of 29, 34.5 %** against 9.7/29.4/15.2/26.9 %), but 05:21 overlaps it
+on both and n = 1 session. Every report in all five runs was ACCEPTED — we
+refused none — so no server-side refusal produced a snap. UNVERIFIED. It may be
+the same animation defect read as a warp by a viewer with no walk cycle to
+anchor on, and that is a guess, recorded as one.
+
+### 30.6 The next check — REWRITTEN by §30.7, which moved the question
 
 §29.4 proposed re-shipping LAW A with the swing re-hold suppressed on a moving
-body. **That is now unsupported** — §30.2 result 3 shows the re-hold is not the
-differential, so suppressing it would be a fix for a mechanism that did not fire.
+body. **Unsupported** — §30.2 result 3 shows the re-hold is not the differential.
 
-The question is §14's, unchanged: **what closes the client's attack action, if
-not property 3?** It is a client-side question about the attack action's own
-lifetime, and the instrument for it already exists — `movehook` with the sites
-built in §28.4 plus a tap on whatever clears that action. Static first: find the
-field the begin-move entries consult that property 3 currently clears for us, the
-same way `[+0x64] bit 0` was found. **No client run until that is answered**, and
-then one flag, one question.
+This subsection then asked *"what closes the client's attack action, if not
+property 3?"*, framed as a hunt for a movement gate. **§30.7 dissolves that
+framing**: property 3 is an append to the AvChar animation queue and touches no
+field the begin-move entries read, so there is no movement gate to find. The
+question was mine and it was the wrong one — inherited from §14's correlation
+and never checked against the code path.
+
+**The question that replaces it is about the ANIMATION consumer.** Retail keeps
+the chain alive across a movement press (87 of 100) *and* the body walks looking
+right, so retail's client must end the attack pose from something other than
+property 3. Concretely, and both steps are static:
+
+1. **Read the consumer of the action queue at `[AvChar+0xC4]/[+0xC8]`** — what
+   retires an entry, and what selects the pose while one is live. That function
+   decides whether a walking body shows a walk cycle.
+2. **Then ask what a walk-start does to it.** If beginning a move retires or
+   overrides the attack action by itself, our defect is elsewhere and LAW A is
+   safe as wire; if it does not, retail sends a closer we have not identified,
+   and the corpus can be asked which property rides the 87 mid-chain moves that
+   carry no property 3.
+
+**No client run until those are answered** — and the run that follows is a LOOK,
+not a measurement ([[quarterstep-is-a-feel-thing]]): one arm,
+`--move-keeps-chain`, one question — does the body walk, or slide?
 
 ## Provenance
 
