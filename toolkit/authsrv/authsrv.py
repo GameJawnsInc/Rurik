@@ -9429,16 +9429,61 @@ def cancel_on_move(send, state, conn_id):
     # client's own 250 ms resume poll armed by prop 8's gate-clear
     # 0x0081C090 -- MOVE_KEEPS_CHAIN's comment has it), but the operator
     # scored the shipped pair "very floaty" and "warping" and it went back.
-    # WHAT THIS BRANCH DOES UNDER LAW A, stated because it is a named
-    # suspect (FINDINGS §29): `attacking` survives, so attack_tick keeps
-    # opening swings while the player walks, and every open calls
-    # action_hold(1) -- which SETS the walk gate on a walking body, against
-    # this door's own action_hold(0). Unmeasured at ship time; that is the
-    # defect in the shipping, not in the wire fact.
-    if chain_live and not MOVE_KEEPS_CHAIN:
+    # *** THE LANDING SPLIT (ANIMREF-RE §32) -- there are TWO REGIMES, and
+    # every previous version of this door had ONE rule and was wrong in half
+    # of them. OPERATOR, 2026-09-01, describing stock Guild Wars directly:
+    #
+    #   1. start attacking -> move BEFORE the attack lands (or the projectile
+    #      launches) -> the attack animation STOPS and normal movement
+    #      animation resumes.
+    #   2. start attacking -> WAIT for the landing -> then move -> the
+    #      animation PLAYS TO COMPLETION while the body slides. Keep the key
+    #      held and normal walking resumes once the animation ends.
+    #
+    # So THE DISCRIMINATOR IS THE LANDING INSTANT, which this server already
+    # holds exactly: `player_swing["lands_at"]`, stamped one
+    # `swing_windup(interval)` after the START. Before it, the swing is a
+    # windup that movement aborts; at or after it, the strike has happened
+    # and what is left is the follow-through the player slides through.
+    #
+    # THE TWO OLD DOORS WERE THE TWO HALVES OF THIS, each shipped alone:
+    # the legacy door cancelled ALWAYS (right in regime 1; in regime 2 it is
+    # the operator's "cancelling the animation instead of sliding while the
+    # animation plays"), and LAW A cancelled NEVER (right in regime 2; in
+    # regime 1 it is their "the legs don't move, the attack animation
+    # completes"). Neither is a wrong measurement -- they are one rule each.
+    #
+    # THE STRONGEST CORROBORATION IS INTERNAL: our CAST path has implemented
+    # exactly this split all along. `_mark_cancelled` skips any entry whose
+    # `e5_sent` is set, so a move before the cast completes releases it and a
+    # move after it leaves the aftercast alone (test_castcancel §2 pins that
+    # from the wiki's "the aftercast cannot be reduced or cancelled"). E5 is
+    # the cast's landing. The swing path was the one still all-or-nothing.
+    #
+    # CORPUS, and it is CORROBORATION rather than proof because its own
+    # positive control failed: over the mid-chain moves this scan could pair
+    # to a player (99, against the 343 the established denominator gives --
+    # the self-identification reaches only 18 of 61 connections, so the
+    # count does not reproduce), moves that CARRY property 3 sit earlier in
+    # the swing than moves that do not -- median offset 0.803 s against
+    # 1.099 s, and **42.9% (6/14) fall before the landing against 7.1%
+    # (6/85)**, a six-fold enrichment. The matcher is identical for both
+    # arms, so an undercount cannot manufacture that split; the thin n and
+    # the failed control are why this is labelled corroboration.
+    #
+    # AND THE CHAIN PAUSE (§31) IS THE THIRD PART, not a rival: in regime 2
+    # the chain survives, and freezing the swing clock while the body moves
+    # is what lets the follow-through finish before the next swing re-latches
+    # a high-priority attack animation -- which is the operator's own "if
+    # they keep holding the movekey, they'll go back into normal walking
+    # animation after the animation completes".
+    swing = state.get("player_swing")
+    pre_landing = swing is not None and now < swing["lands_at"]
+    if chain_live and (pre_landing or not MOVE_KEEPS_CHAIN):
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
              [agents.GV_ATTACK_STOPPED, PLAYER_AGENT_ID, 0],
-             "attack_stopped: the player moves")
+             "attack_stopped: the player moves"
+             + (" before the swing landed" if pre_landing else ""))
         state["player_swing_cancel"] = "movement"
     # MOVEMENT RELEASES THE HOLD whether or not a stop goes with it: the
     # corpus's movement instants carry [8, 31, 0] four times, twice with no
@@ -9446,9 +9491,12 @@ def cancel_on_move(send, state, conn_id):
     # Transition-only, so a flag already 0 sends nothing here -- which is also
     # what keeps this from duplicating the release inside the cast burst below.
     action_hold(send, state, 0, "the player moves")
-    # ANIMREF-R7a opt-in: under LAW A the target survives movement; the
-    # default door forgets it, as it always did.
-    if state.get("attacking") and not MOVE_KEEPS_CHAIN:
+    # THE TARGET FOLLOWS THE SAME SPLIT. A cancel is a real close -- the 18
+    # of 343 corpus mid-chain moves that DO carry property 3 are genuine
+    # chain ends -- so a pre-landing move forgets the target exactly as the
+    # legacy door always did. A post-landing move keeps it, which is what
+    # lets the chain resume when the player stops.
+    if state.get("attacking") and (pre_landing or not MOVE_KEEPS_CHAIN):
         state["attacking"] = None
     dropped = _mark_cancelled(state, "movement", now, spare_mid_attack=True)
     for cast in state.get("pending_casts") or ():

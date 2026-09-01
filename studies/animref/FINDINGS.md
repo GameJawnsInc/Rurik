@@ -2280,6 +2280,115 @@ default still slides, §31.1's priority reading survives but the pause is too
 short, and the next move is to measure the actual attack-animation duration
 rather than to lengthen the pause by guess.
 
+## 32. THE LANDING SPLIT — there are TWO regimes, and every door we ever shipped had ONE rule
+
+§31's run answered, and the answer was *"the legs don't move, the attack
+animation completes"* — plus the specification that makes sense of the whole arc.
+
+### 32.1 The operator's spec, verbatim
+
+> **note - this should only be the case when the attack actually hits.**
+>
+> stock behavior:
+>
+> 1. start casting/attacking → issue move command **before** attack lands (or
+>    projectile is launched for spears/bows/staffs etc.) → casting/attacking
+>    animation **stops**, and normal movement animation resumes
+> 2. start casting/attacking → **wait** for attack landing or projectile
+>    launching → issue move command → this is the quarterstep/slide. the
+>    casting/attacking animation plays to completion, while the player slides
+>    around the ground. if they keep holding the movekey, they'll go back into
+>    normal walking animation after the casting/attacking animation completes
+
+**The discriminator is the landing instant**, and this server already holds it
+exactly: `player_swing["lands_at"]`, stamped one `swing_windup(interval)` after
+the START. Nothing new had to be measured or invented.
+
+### 32.2 This retroactively explains every result in this arc
+
+**Both old doors were right — each about one regime, and each shipped as if it
+were the whole rule:**
+
+| door | regime 1 (pre-landing) | regime 2 (post-landing) | the operator's report |
+|---|---|---|---|
+| legacy (property 3 always) | ✅ cancels | ❌ cancels | *"cancelling the animation instead of sliding while the animation plays"* |
+| LAW A (property 3 never) | ❌ completes | ✅ slides | *"the legs don't move, the attack animation completes"* |
+
+Neither was a bad measurement. Each was **one rule where two are needed**, which
+is why every A/B in this arc produced a real complaint from a real improvement —
+and why §14's "the client only starts moving once its attack action closes"
+(regime 1) and LAW A's 325/343 corpus finding (regime 2) were both true and
+looked contradictory.
+
+### 32.3 The strongest corroboration is internal: our CAST path already does this
+
+`_mark_cancelled` skips any entry whose `e5_sent` is set. **E5 is the cast's
+landing.** So a move before the cast completes releases it; a move after it
+leaves the aftercast alone — the wiki's *"the aftercast cannot be reduced or
+cancelled"*, pinned since 2026-08-23 by `test_castcancel` §2. **The cast half has
+implemented the operator's rule all along; the swing half was the one still
+all-or-nothing.** OBSERVED, in our own source, with a test already defending it.
+
+### 32.4 The corpus corroborates the direction — and its control FAILED, so it is not proof
+
+Over the mid-chain moves this scan could pair to a player, moves that **carry**
+property 3 sit earlier in the swing than moves that do not:
+
+| arm | n | p10 | p25 | **p50** | p75 | p90 |
+|---|---|---|---|---|---|---|
+| **with** property 3 | 14 | 0.095 | 0.513 | **0.803** | 0.900 | 1.156 |
+| without | 85 | 0.662 | 0.790 | **1.099** | 1.518 | 1.806 |
+
+Against a landing at **0.612 s** (castmech M1's 0.4604 × retail's 1.330 s
+metronome): **42.9 % (6/14) of property-3-bearing moves fall before the landing,
+against 7.1 % (6/85) — a six-fold enrichment**, in the predicted direction.
+
+**But the positive control failed and that governs the label.** This scan pairs
+only **99** mid-chain moves against the established **343**, because its
+self-identification (`0x00E4`) reaches only 18 of 61 connections; a candidate
+sweep found no better marker that decodes (`0x00CF` reaches 12 and agrees with
+`0x00E4` on 8 of those). So the denominator does not reproduce. What survives:
+the matcher is **identical for both arms**, so an undercount cannot manufacture a
+6× split — the direction is CORROBORATION, the magnitude is UNVERIFIED, and
+n=14 is thin. The spec itself is **OBSERVED by the operator on stock**, which is
+the primary evidence here; the corpus is the supporting witness, not the case.
+
+### 32.5 Shipped
+
+`cancel_on_move` now splits on the landing:
+
+```python
+swing = state.get("player_swing")
+pre_landing = swing is not None and now < swing["lands_at"]
+if chain_live and (pre_landing or not MOVE_KEEPS_CHAIN):
+    send(GV_ATTACK_STOPPED, ...)          # regime 1: the animation stops
+```
+
+and the target follows the same split — a pre-landing move forgets it (a cancel
+is a real close; the 18 of 343 corpus moves that *do* carry property 3 are
+these), a post-landing move keeps it so the chain can resume.
+
+**§31's chain pause is the third part, not a rival.** In regime 2 the chain
+survives, and freezing the swing clock while the body moves is what lets the
+follow-through finish before the next swing re-latches a high-priority attack
+animation — which is precisely the operator's *"if they keep holding the
+movekey, they'll go back into normal walking animation after the animation
+completes"*. Three mechanisms, one behaviour.
+
+`test_castcancel` §7 pins **both regimes**, the known-bad arm (legacy cancels in
+both), and the cast-path cross-check. 30 checks, floor 30, identical bare.
+
+### 32.6 What is still unimplemented, and named rather than glossed
+
+The operator's spec says **"or projectile is launched for spears/bows/staffs"**.
+Our landing instant is the melee strike; for a ranged weapon the discriminator is
+the **launch**, which is earlier than the projectile's arrival. This server's
+`swing_windup` models the strike, and nothing distinguishes ranged from melee at
+this door. **NOT IMPLEMENTED** — it will read as regime 2 slightly too early for
+a bow. The fix needs the launch instant, which castmech M1 already touches
+(Power Shot's E4→E5 at 0.4601/0.4595 of the declared bow speed), so the number is
+probably already in hand; it is not wired.
+
 ## Provenance
 
 All figures are measurements over the owner's own live captures via extractors in this
