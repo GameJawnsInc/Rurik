@@ -1571,6 +1571,98 @@ wrong and the live run is justified.
 pooled** — a pooled bin ranked our known-bad arm as healthy, and a metric that
 passes on the broken arm is measuring the wrong quantity.
 
+## 26. RUN 3: holding WORKS (54% vs 14%) — and the warp is OURS, caught in the record
+
+**2026-09-01, owner-driven, loopback, shipped default, passive tap.** Owner's
+verdict: *"1 good slide but mostly either warping through the enemy or just not
+moving."* 2126 records, 333 begin-move entries, gate words read on all of them.
+
+### 26.1 All three registered predictions CONFIRMED
+
+| # | Prediction | Result |
+|---|---|---|
+| P1 | with the key HELD, most attempts slide | **CONFIRMED** — the refused press gets its second dispatch **7 of 13 (54%)** against run 2's tap-only **2 of 14 (14%)** |
+| P2 | the slide starts 50–200 ms after the clear | **CONFIRMED** — 47, 47, 47, 62, 63, 63, 172 ms |
+| P3 | the gate still reads SET at the press | **CONFIRMED** — `0x3` on all 13 refusals, `m_status` `0x00000000` throughout |
+
+**§25.2's reading is confirmed end to end**: the press is refused, the `0x003D`
+goes out anyway, the server clears property 8, and a *still-held* key re-dispatches
+within ~50 ms. Holding nearly quadruples the recovery rate. The mechanism is not
+in doubt any more.
+
+**And it is still not a stock slide** — the owner felt one good one out of ~8. So
+a second dispatch firing is NECESSARY and NOT SUFFICIENT, and §26.2 is why.
+
+### 26.2 THE WARP IS OURS, and the whole chain is in the record, twice
+
+Only **three** relocations of the player's displayed body occurred — `setposition`
+`0x00602B20`, 213/136/43 u, the "moved with its stamp standing still" detector.
+Two sit *inside the gap between a refusal and its recovery*, and their structure is
+identical:
+
+```
+2.922  chcli_dir     gate=0x3                                <- the press, REFUSED
+2.938  setter  ret=0x005FD918  obj=SYNC   tgt=(9931,8203)     <- OUR 0x0029 GRANT
+2.953  setposition   ret=0x00604A55  obj=LOCAL               <- THE BODY IS MOVED
+2.953  setter  ret=0x00604A48  obj=LOCAL
+2.953  bake    obj=LOCAL  pt=(9844,8099) tgt=(9931,8203)      <- re-aimed at our grant
+2.969  chcli_dir     gate=0x2 -> agapi_setdest  tgt=(10382,7552)  <- client's own, ELSEWHERE
+```
+
+and at t=4.95 the same five steps, our grant aiming **north** to (9968,7965) while
+the client's own walker then heads **south-east** to (10211,8434) — opposite
+directions, 0.015 s apart. **That is "warping through the enemy".**
+
+**The causal reading (RECONSTRUCTION on an OBSERVED sequence, 2 of 2 verified, 3 of
+3 by the same retaddr `0x00604A55`):** because `chcli_dir` sends its `0x003D` on
+*every* arm including the refusal (§22.2), **our server cannot tell a refused press
+from a real one.** It grants a destination for a move the client declined to make;
+the client applies that grant to the displayed body as a position correction; and
+then the client's own walker pulls somewhere else.
+
+Destination attribution for the run, by return address: **320 (80%) from the
+client's own walker `0x005FC8F5`, 44 (11%) from our wire grant `0x005FD918`, 36
+(9%) from the relocation path `0x00604A48`.**
+
+**DO NOT repeat §1d.3's error here:** this capture also shows nine 600–763 u
+"teleports" at `0x006025AB`, and they are **not** displacements. That is
+MOVECODE's halt-in-place path, whose distance is `m_point` against a *stale*
+`m_targetPoint` and measures nothing. The real count is three.
+
+### 26.3 The derived candidate — with the denominator stated, and NOT shipped
+
+Our server already knows the answer: it set the hold itself, so it knows the client
+will refuse. What does retail do with a movement message while its own hold is set?
+
+| retail `0x0029` grants to the player | count | window | **rate** |
+|---|---|---|---|
+| during a HELD window | 64 | 1279.2 s | **0.050 /s** |
+| while CLEAR | 1612 | 3104.9 s | **0.519 /s** |
+
+**Retail suppresses destination grants ~10:1 while the gate is held** — a rate, not
+a count, because the two windows are very different lengths and that is precisely
+the denominator error this arc has already made twice (§24.3).
+
+So the candidate rule is: **while `state["action_hold"] == 1`, do not grant a
+movement destination from a `0x003D`** — the press cannot have moved the body, so
+the grant can only relocate it. Retail's 10:1 is suppression, not prohibition (64
+grants do happen), so a total block would overshoot; the honest first form is to
+suppress and measure what breaks.
+
+**NOT SHIPPED, deliberately.** Two reasons, both earned today: a fix derived from a
+statistic was shipped and reverted within the hour (§24.3), and this one reaches
+into MOVECODE's grant path rather than ANIMREF's. It wants the owner's call and a
+revert flag, and its verdict is the owner's by feel.
+
+### 26.4 What this leaves
+
+The gate mechanism is closed: it refuses, the hold releases on the press, a held
+key recovers in ~50 ms, 54% of the time. **The residual "not a stock slide" is now
+two separable things** — the 46% that never recover (the key came up, or the
+direction never changed so F25 never re-dispatched), and the warp of §26.2, which
+actively fights the slide by yanking the body the other way. The warp is the one
+with a derived candidate behind it.
+
 ## Provenance
 
 All figures are measurements over the owner's own live captures via extractors in this
