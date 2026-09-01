@@ -58,7 +58,7 @@ import checks      # noqa: E402
 # the 2d cells, five row locks: lead_clip_why, the flush-hold row,
 # kbd_age, the a2_leg lifecycle, the watchdog-due transition) -> 86.
 # Each floor re-read off its own green run.)
-LEDGER = checks.Ledger("the REALFIX-A2 d1-lead bundle", floor=92)
+LEDGER = checks.Ledger("the REALFIX-A2 d1-lead bundle", floor=94)
 check = checks.adopt(LEDGER)
 
 
@@ -667,14 +667,49 @@ def main():
     check(src.count('state["a2_leg"] = a2_leg_note(') == 1,
           "ONE arming site, at the fired d1 grant",
           "a second armer would model legs that never went on the wire")
-    i_zllast = src.index('state["zl_last_grant_plane"] = plane\n'
-                         '                                    # sec.0.11')
+    # ANCHORED BY ADJACENCY, NOT BY INDENTATION. This used to be a literal
+    # `... = plane\n` + 36 spaces + `# sec.0.11`, which pinned the column the
+    # statement happened to sit in -- so ANIMREF-R11 wrapping the block in
+    # `if zl_send_ok:` re-indented it by four and this raised ValueError past
+    # the ledger, taking the file's exit code with it. There are three
+    # `zl_last_grant_plane` sites so the disambiguation is real; what it must
+    # key on is the sec.0.11 comment that follows, at whatever depth.
+    i_zllast = -1
+    _probe = 0
+    while True:
+        _probe = src.find('state["zl_last_grant_plane"] = plane', _probe)
+        if _probe < 0:
+            break
+        if "sec.0.11" in src[_probe:_probe + 120]:
+            i_zllast = _probe
+            break
+        _probe += 1
+    check(i_zllast >= 0,
+          "the post-send plane-slot advance is findable by its sec.0.11 "
+          "neighbour, at whatever indentation",
+          "the old literal anchor pinned a column, not a structure")
     i_arm = src.index('state["a2_leg"] = a2_leg_note(')
     check(i_zllast < i_arm,
           "and it sits in the post-send bookkeeping, after the "
           "plane-slot advance",
           "armed before the send, a refused grant would leave a phantom "
           "leg for the watchdog to answer")
+    # ANIMREF-R11 makes that phantom STRUCTURALLY impossible rather than
+    # merely ordered: the send and every line of its bookkeeping now sit
+    # inside one `if zl_send_ok:`, so a suppressed grant cannot advance the
+    # plane slot, arm a leg for the watchdog to answer, or move the arrival
+    # carry. The first cut of R11 guarded only the send and left all three
+    # running -- which would have armed a watchdog re-pin on exactly the
+    # press this fix exists to protect.
+    i_guard = src.index("if zl_send_ok:")
+    check(i_guard < i_zllast < i_arm
+          and src.index("if ARRIVAL_CARRY:", i_guard) > i_arm,
+          "and R11's guard opens BEFORE all of it -- the plane advance, the "
+          "leg arm and the arrival carry are inside the same `if "
+          "zl_send_ok:` as the send",
+          "guarding only the send would leave a suppressed grant arming a "
+          "leg whose ETA the watchdog then re-pins: the relocation R11 "
+          "exists to prevent, reintroduced one line below the fix")
     check(src.count("_a2_watchdog(send, state, rec)") == 1
           and src.count('if D1_LEAD and kind == "game":') == 1
           and src.count("[a2-watchdog]") == 2
@@ -753,8 +788,9 @@ def main():
           "a movement report whose press the client refused looks identical "
           "on the wire to one that moved (FINDINGS 22.2), so answering it "
           "grants a destination for a move that never happened")
-    check(src.count("if (GRANT_DURING_HOLD") == 1
-          and src.count('or not state.get("action_hold")') == 1,
+    check(src.count("zl_send_ok = (GRANT_DURING_HOLD") == 1
+          and src.count('or not state.get("action_hold")') == 1
+          and src.count("if zl_send_ok:") == 1,
           "exactly ONE guarded send site -- a second would be the "
           "two-arms-one-clock defect the composition matrix refuses",
           "the grant that relocated the body in run 3 came from this site "

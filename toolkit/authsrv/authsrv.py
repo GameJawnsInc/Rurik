@@ -17346,84 +17346,88 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                     # narrow form: skip only while the hold is
                                     # actually set. --legacy-grant-during-hold
                                     # restores the old unconditional send.
-                                    if (GRANT_DURING_HOLD
-                                            or not state.get("action_hold")):
+                                    # ANIMREF-R11 -- and the guard covers the SEND *and its
+                                    # bookkeeping*, which the first cut of this did not. Every
+                                    # line below advances state that must only move when a grant
+                                    # REALLY WENT OUT: `zl_last_grant_plane`'s own comment says
+                                    # "only after a send", `a2_leg` arms the ETA WATCHDOG (which
+                                    # would then re-pin -- the exact relocation this fix exists to
+                                    # prevent), and arrival_carry_advance is documented as the
+                                    # flag's only mutation so a send that never happened must
+                                    # leave the model where the last real grant left it.
+                                    zl_send_ok = (GRANT_DURING_HOLD
+                                                  or not state.get("action_hold"))
+                                    if not zl_send_ok:
+                                        # PRINTED, never silent: a grant that does not go out is a
+                                        # scorable event, and a run where this never fires has no
+                                        # exposure rather than a healthy result.
+                                        print(f"[c{conn_id}] R11 grant SUPPRESSED "
+                                              f"({zl_point[0]:.0f},{zl_point[1]:.0f}): action hold "
+                                              f"set, so the client refused this press -- granting "
+                                              f"would relocate the body", flush=True)
+                                    if zl_send_ok:
                                         send(GAME_SMSG_AGENT_MOVE_TO_POINT,
                                              [PLAYER_AGENT_ID, zl_point,
                                               plane, zl_plane_cur],
                                              zl_label)
-                                    else:
-                                        # The suppression is PRINTED, never
-                                        # silent: a grant that does not go out
-                                        # is a scorable event, and a run where
-                                        # this fires zero times is a run with
-                                        # no exposure rather than a healthy one.
-                                        print(f"[c{conn_id}] R11 grant "
-                                              f"SUPPRESSED "
-                                              f"({zl_point[0]:.0f},"
-                                              f"{zl_point[1]:.0f}): action "
-                                              f"hold set, so the client "
-                                              f"refused this press -- "
-                                              f"granting would relocate the "
-                                              f"body", flush=True)
-                                    # R4's LEG WINDOW. Any grant supersedes an
-                                    # in-flight cancel leg (a fresh order
-                                    # re-aims the body), so the window clears
-                                    # on every send -- and re-arms only when
-                                    # THIS send was a cancelwalk lead under
-                                    # `,stop`: leg time at the client's own
-                                    # 288 u/s plus 1 s of slack. The 0x0047
-                                    # arm consumes it.
-                                    state["cancelwalk_leg_until"] = 0.0
-                                    if cw_dest is not None and CANCEL_STOP:
-                                        cw_leg = math.hypot(
-                                            cw_dest[0] - reported[0],
-                                            cw_dest[1] - reported[1])
-                                        state["cancelwalk_leg_until"] = (
-                                            now_z + cw_leg / 288.0 + 1.0)
-                                    # AFTER THE SEND, and only after a send. See
-                                    # the block above: this slot is the plane
-                                    # that went out WITH the point the copy is
-                                    # now bound for, so it advances when a grant
-                                    # does and stays put when one is refused.
-                                    state["zl_last_grant_plane"] = plane
-                                    # sec.0.11 containment: arm the leg record
-                                    # the ETA watchdog and the click model
-                                    # read. Only a REAL d1 lead arms it -- a
-                                    # fallback grant is zero-length and models
-                                    # nothing.
-                                    if a2_src == "d1":
-                                        state["a2_leg"] = a2_leg_note(
-                                            reported, zl_point, plane,
-                                            moving, now_z)
-                                        # sec.0.19 (RETHINK #1c): the leg
-                                        # model's lifecycle as rows -- a
-                                        # run's trajectory through "is a
-                                        # leg armed" was unrecoverable
-                                        # after the fact (only watchdog
-                                        # FIRES were visible).
-                                        if rec is not None:
-                                            _lg = state["a2_leg"]
-                                            rec.event(
-                                                "a2_leg", act="arm",
-                                                dest=list(_lg["dest"]),
-                                                speed=_lg["speed"],
-                                                plane=_lg["plane"])
-                                    # REALFIX-F1b's queue, on the same rule and
-                                    # for the same reason. CONSUME what arrived,
-                                    # DISCARD the leg this grant just superseded
-                                    # (the copy re-aimed mid-leg and will never
-                                    # reach it), ARM this grant's entry. It is
-                                    # the flag's ONLY mutation, so a send that
-                                    # raises leaves the copy's modelled state
-                                    # exactly as the last grant that really went
-                                    # out left it. `ac_arrival` was computed
-                                    # BEFORE the send, from the sync model this
-                                    # send has now moved.
-                                    if ARRIVAL_CARRY:
-                                        arrival_carry_advance(
-                                            state, now_z, ac_arrival, plane,
-                                            reported)
+                                        # R4's LEG WINDOW. Any grant supersedes an
+                                        # in-flight cancel leg (a fresh order
+                                        # re-aims the body), so the window clears
+                                        # on every send -- and re-arms only when
+                                        # THIS send was a cancelwalk lead under
+                                        # `,stop`: leg time at the client's own
+                                        # 288 u/s plus 1 s of slack. The 0x0047
+                                        # arm consumes it.
+                                        state["cancelwalk_leg_until"] = 0.0
+                                        if cw_dest is not None and CANCEL_STOP:
+                                            cw_leg = math.hypot(
+                                                cw_dest[0] - reported[0],
+                                                cw_dest[1] - reported[1])
+                                            state["cancelwalk_leg_until"] = (
+                                                now_z + cw_leg / 288.0 + 1.0)
+                                        # AFTER THE SEND, and only after a send. See
+                                        # the block above: this slot is the plane
+                                        # that went out WITH the point the copy is
+                                        # now bound for, so it advances when a grant
+                                        # does and stays put when one is refused.
+                                        state["zl_last_grant_plane"] = plane
+                                        # sec.0.11 containment: arm the leg record
+                                        # the ETA watchdog and the click model
+                                        # read. Only a REAL d1 lead arms it -- a
+                                        # fallback grant is zero-length and models
+                                        # nothing.
+                                        if a2_src == "d1":
+                                            state["a2_leg"] = a2_leg_note(
+                                                reported, zl_point, plane,
+                                                moving, now_z)
+                                            # sec.0.19 (RETHINK #1c): the leg
+                                            # model's lifecycle as rows -- a
+                                            # run's trajectory through "is a
+                                            # leg armed" was unrecoverable
+                                            # after the fact (only watchdog
+                                            # FIRES were visible).
+                                            if rec is not None:
+                                                _lg = state["a2_leg"]
+                                                rec.event(
+                                                    "a2_leg", act="arm",
+                                                    dest=list(_lg["dest"]),
+                                                    speed=_lg["speed"],
+                                                    plane=_lg["plane"])
+                                        # REALFIX-F1b's queue, on the same rule and
+                                        # for the same reason. CONSUME what arrived,
+                                        # DISCARD the leg this grant just superseded
+                                        # (the copy re-aimed mid-leg and will never
+                                        # reach it), ARM this grant's entry. It is
+                                        # the flag's ONLY mutation, so a send that
+                                        # raises leaves the copy's modelled state
+                                        # exactly as the last grant that really went
+                                        # out left it. `ac_arrival` was computed
+                                        # BEFORE the send, from the sync model this
+                                        # send has now moved.
+                                        if ARRIVAL_CARRY:
+                                            arrival_carry_advance(
+                                                state, now_z, ac_arrival, plane,
+                                                reported)
                                 # AND NO `else` HOLDING IT. A refused heading
                                 # grant is DROPPED; the next 0x003D supersedes
                                 # it in ~0.29 s by construction. See

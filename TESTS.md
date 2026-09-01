@@ -3452,8 +3452,12 @@ Floor 75 against a green 75 with 5 declared skips (the archive-conditional
   because the windows differ in length and that denominator already cost this
   arc one reverted fix). Four structure checks (default False, exactly one
   guarded send site, the suppression PRINTS rather than going silent, the revert
-  flag exists and binds) plus a two-arm predicate check whose **known-bad arm
-  must score badly** -- `--legacy-grant-during-hold` restores the relocation, and
+  flag exists and binds), a two-arm predicate check whose **known-bad arm must
+  score badly**, and an audit lock that the guard opens BEFORE the plane advance,
+  the leg arm and the arrival carry -- because R11's own first cut guarded only
+  the send, which would have left a suppressed grant arming a leg whose ETA the
+  watchdog then re-pins: the relocation R11 exists to prevent, reintroduced one
+  line below the fix -- `--legacy-grant-during-hold` restores the relocation, and
   a guard that passed in both arms would be measuring the wrong quantity. It is
   a source-and-predicate check rather than a wire drive because the send lives
   inside `handle()`, the socket handler, with no seam to drive it through -- **the
