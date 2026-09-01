@@ -9117,6 +9117,14 @@ CHAIN_RESTART_PACED = True    # False (--legacy-chain-restart): same-tick
 # rules out are at attack_tick's own site. Reverts with LAW A as one arm.
 CHAIN_PAUSES_WHILE_MOVING = True   # False (--legacy-move-stops-chain)
 
+# ANIMREF-RE §33 F1: end the property-8 hold AT THE LANDING, so the client's
+# walk gate is open across exactly the window §32 already ruled movable. The
+# derivation, the measured 0.601/0.869/1.015 s stall it removes and the
+# pre-registered failure mode are at the landing site in attack_tick. Its own
+# flag and its own arm: this is the ONE behaviour change of §33, because two
+# defaults in one run convict the pair and clear neither (§29).
+LANDING_HOLD_RELEASE = True   # False (--no-landing-hold-release)
+
 # ANIMREF-RE (2026-09-01): release the action hold in the E3 batch, the
 # caster-freed instant -- 19 of 19 unmoved corpus cycles. The client arms its
 # own 250 ms resume poll at the gate-clear, which is what walks a HELD key
@@ -9894,6 +9902,28 @@ def attack_tick(send, state, conn_id):
     if state.get("player_swing_cancel"):
         state["player_swing"] = None
         state["player_swing_cancel"] = None
+    # ---- ANIMREF-RE §33 / F4: the pause accumulator resets HERE ----------
+    #
+    # CORRECTNESS ONLY, and it explains neither of the operator's symptoms --
+    # it delays SWINGS, never movement, and cannot relocate anything. It ships
+    # with F1 because it cannot affect the question F1's run scores, and it is
+    # named as such rather than smuggled in.
+    #
+    # THE BUG: §31's freeze accumulates `now - chain_pause_tick` into
+    # `player_last_swing` and resets the stamp to None only on the not-moving
+    # path -- which sits BELOW four early returns (dead, no target, target
+    # gone, out of range). Leave through any of those while moving, come back
+    # a while later, and the first tick charges the WHOLE absence to the swing
+    # clock, pushing `player_last_swing` into the future and refusing swings
+    # for the excess plus one interval. Death and out-of-range are the live
+    # paths; target-death and retarget are accidentally immune only because
+    # `begin_attack` resets the stamp to 0.0.
+    #
+    # RECONSTRUCTION -- found by reading, never observed firing. The fix is to
+    # clear the stamp before anything can leave, so the accumulator can only
+    # ever measure a contiguous run of ticks that reached it.
+    if not _player_body_moving(state):
+        state["chain_pause_tick"] = None
     if state.get("player_dead"):
         # A dead player does not keep hitting things, and does not land the
         # swing it was mid-way through either.
@@ -9957,6 +9987,47 @@ def attack_tick(send, state, conn_id):
         if now >= swing["lands_at"]:
             state["player_swing"] = None
             hit_enemy(send, state, swing["target"], conn_id, armed=True)
+            # ---- ANIMREF-RE §33 / F1: THE HOLD ENDS AT THE LANDING --------
+            #
+            # PROPERTY 8 IS THE MOVEMENT HALF OF THE LATCH §32 ALREADY SPLIT,
+            # and it never got the split. §32 shipped
+            # `pre_landing = swing is not None and now < swing["lands_at"]`
+            # as the predicate for property 3, on the operator's own rule that
+            # a post-landing move is LEGAL and slides. But the hold was still
+            # set at every swing open with NO release anywhere on a landing
+            # path -- so the walk gate ([ChCliBase+0x64] bit 0, written by
+            # property 8's case body 0x0081BCF0) stayed set straight through
+            # the window §32 declared movable, and BOTH begin-move entries
+            # refuse on that bit (0x0081A93C keyboard, 0x0081AEF4 click).
+            #
+            # THE COST, MEASURED on the operator's own 2026-09-01 sessions:
+            # hold -> first movement report p10 0.601 s, p50 0.869 s, p90
+            # 1.015 s (n=104 hold windows) -- which is their report verbatim,
+            # "a ~0.5-1s delay before the player actually moves". ZERO
+            # movement reports arrive strictly inside a hold window (188
+            # windows, 215.3 s); the report that ends a hold IS the one that
+            # releases it, because `cancel_on_move` clears the flag on that
+            # message. 79.3% of closed hold spans (257 of 324, whole gamesrv
+            # corpus) are ended by a movement press rather than by anything
+            # the chain does. Duty cycle over fight time: 39.3%.
+            #
+            # SO THE GATE'S LIVE WINDOW BECOMES EXACTLY [open, lands_at) --
+            # the same interval §32 uses for property 3, from the same
+            # predicate, which is why this is a derivation rather than a
+            # tuning. The release is transition-only, so a chain whose next
+            # swing re-opens immediately re-sets it and the wire cost is one
+            # extra property per swing at most.
+            #
+            # NOT CLAIMED: that this is the whole stall. If a post-landing
+            # press still lags after this, the hold was not the cause and the
+            # next target is the client's own dispatch driver 0x005355C0,
+            # whose 750 ms (0x00535647) and 100 ms (0x0053565B) clocks are
+            # where a client-side characteristic duration would live. That
+            # branch is pre-registered here so a surviving stall is a result
+            # rather than a surprise.
+            if LANDING_HOLD_RELEASE:
+                action_hold(send, state, 0,
+                            "the swing landed -- movement is legal now")
         return
     # NO NEW SWING WHILE A CAST IS SHORT OF ITS E3. Retail pauses the auto
     # attack for the cast plus its aftercast and resumes it the instant the
@@ -20523,6 +20594,22 @@ def main():
                          "active re-pin would then yank. Shipped default "
                          "2026-09-01, reverted the same day; turn it on "
                          "ALONE to convict or clear it (FINDINGS 29).")
+    ap.add_argument("--no-landing-hold-release", action="store_true",
+                    help="THE REVERT ARM for ANIMREF-RE 33's one behaviour "
+                         "change: keep the property-8 action hold set past "
+                         "the swing's landing, as every build before "
+                         "2026-09-01 did. The default RELEASES it at the "
+                         "landing, because property 8 drives the client's "
+                         "walk gate (ChCliBase+0x64 bit 0) and both "
+                         "begin-move entries refuse on that bit -- so a "
+                         "held gate makes the post-landing movement that "
+                         "ANIMREF-RE 32 declared legal impossible until a "
+                         "round trip clears it. MEASURED on the operator's "
+                         "own sessions: hold to first movement report p10 "
+                         "0.601s / p50 0.869s / p90 1.015s over 104 hold "
+                         "windows, ZERO reports arriving strictly inside a "
+                         "hold, and 39.3%% of fight time spent gated. Run "
+                         "this arm to reproduce that stall on purpose.")
     ap.add_argument("--no-e3-release", action="store_true",
                     help="No-op since the 2026-09-01 revert: the hold "
                          "already rides through E3 by default. Kept so "
@@ -21944,6 +22031,14 @@ def main():
         print("[map] --move-keeps-chain: no-op, LAW A is the default again "
               "since ANIMREF-RE §31 shipped its decoded complement.",
               flush=True)
+    if a.no_landing_hold_release:
+        global LANDING_HOLD_RELEASE
+        LANDING_HOLD_RELEASE = False
+        print("[map] --no-landing-hold-release: the action hold rides past "
+              "the swing landing, so the client's walk gate stays set "
+              "through the window ANIMREF-RE 32 declared movable. This is "
+              "the arm that reproduces the operator's measured 0.6-1.0 s "
+              "movement stall.", flush=True)
     if a.e3_release:
         global ANIMREF_E3_RELEASE
         ANIMREF_E3_RELEASE = True

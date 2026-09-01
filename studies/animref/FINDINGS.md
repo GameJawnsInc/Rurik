@@ -2389,6 +2389,194 @@ a bow. The fix needs the launch instant, which castmech M1 already touches
 (Power Shot's E4→E5 at 0.4601/0.4595 of the declared bow speed), so the number is
 probably already in hand; it is not wired.
 
+## 33. THE STALL IS OURS — property 8 holds the walk gate past the landing
+
+Twelve agents, four lanes, seven skeptic passes. **The `SURVIVED` set came back
+EMPTY — all seven reviewed claims were refuted**, including two "established
+facts" I put in the briefing myself. What follows is what the refutations left
+standing, which is a smaller and much better-founded result.
+
+### 33.1 The collision hypothesis: NO for this regime — and I was wrong that it was unexplored
+
+> *"i'm thinking it could have to do with unit collision, something we haven't
+> looked at too deeply as far as I'm aware"*
+
+**Three parts, and the middle one is my error.**
+
+**(a) You were right that the client does agent-vs-agent work.** `0x005FEF70` is a
+real per-candidate loop over other agents — bitset iterator `0x004736B0`, skip-self
+`cmp esi,[ebp-0x64]`, world-strided agent array `[edi+ebx+0xe8]` bounded by
+`[edi+ebx+0xf0]`, ArenaNet's own `AgAgent:716 checkPtr` and `AgAgent:717
+!(checkPtr->m_flags & AGENT_FLAG_INVISIBLE)`, each candidate dead-reckoned forward
+along its own velocity before the test. The combined-radius comparison is
+ArenaNet-named: **`AgAgent:1261 MathSqrt(combinedRadiusSq) + 1.0f >= distFromLine`**,
+radius field `[AgAgent+0xD0]`. OBSERVED, re-derived by two skeptics each trying to
+kill it.
+
+**(b) I told the workflow "nobody has ever checked whether it fires against AGENTS."
+That was false, and it is my claim, not a lane's.** `0x005FEF70` has been a movehook
+site the whole time — `toolkit/clientscan/movehook/sites.h:69`, named `stepclear` —
+firing 29–33 times across the captures that carry it, and
+`studies/movecode/FINDINGS.md` already records **REFUTED — "gate 3 is agent-vs-agent
+blocking, not a terrain test."** I asserted an unexplored area that the repo had
+already explored, and a lane spent its budget re-deriving it. **The lesson is the
+briefing's, not the lane's: an "established facts" block is exactly where an
+unchecked assumption does the most damage, because agents take it as given.**
+
+**(c) The mechanism did not fire in your session.** Your own movehook capture of
+2026-09-01 10:51, taken while you fought beside the enemy: **310 bakes, ZERO from the
+avoidance re-baker `0x00600B0F`** — 308 hard arrivals from the shared setter, 2 from
+the path solver. Both controls fired, the ring was not full (8,290 of 32,768), and 26
+other sites returned nonzero including `chcli_dir` ×296. Corpus-wide the re-baker is
+**24 of 9,857 bakes = 0.244%, with 16 of 21 runs at exactly zero** — and **19 of
+those 24 sit in captures predating the `stepclear` site**, so the corpus cannot
+attribute a single avoid bake to an agent either.
+
+**But your instinct about the LOCATION was right**, and `authsrv.py:1236` already
+says why: *the client collides for itself and does it better than our navmesh does*.
+A destination we grant that pushes you into an enemy is resisted by the client while
+our model walks straight through — divergence, reconciliation, snap. **The symptom
+lives where you said; the cause is our grant policy, not missing collision code.**
+
+**NOT FOUND, with the search bounded:** no agent-vs-agent separation exists anywhere
+on our server path (all 20 collision references in `authsrv.py` are terrain/navmesh).
+Between the input dispatch `0x00535380` and the walk gate `0x0081A93C` there is **no
+proximity test of any kind** — `chcli_dir` refuses on exactly three conditions
+(`m_status` bit 8 at `0x0081A931`, the walk gate at `0x0081A93C`, DEAD bit 4 at
+`0x0081A946`), none of which any other agent can set. And the corpus has **zero
+exposure, not a null**: every position-bearing movehook record in all 21 captures
+names agent id 1 (you, in two world copies), so the roster has literally never
+contained a second agent.
+
+### 33.2 The stall: it is OURS, it is property 8, and the number is your number
+
+> *"moving mid-windup: works some of the time, other times theres a ~0.5-1s delay"*
+
+`action_hold(1)` sets the client's walk gate. We send it at every swing open
+(`authsrv.py:10041`, `:10180`) and **nothing released it at a landing** — the whole
+`action_hold(...,0)` ledger is retarget, movement, cast-cancel, cancel-action,
+target-gone, skill-press, cast-completes, and the opt-in E3 release. So the gate sat
+shut straight through the window §32 had just declared movable.
+
+| quantity | value | denominator |
+|---|---|---|
+| hold → first movement report | p10 **0.601 s**, p50 **0.869 s**, p90 **1.015 s** | n=104 hold windows |
+| movement reports arriving *strictly inside* a hold | **0** | 188 windows / 215.3 s |
+| hold spans ended by a movement press | **257 of 324 = 79.3 %** | closed spans, whole gamesrv corpus |
+| property-8 duty cycle over fight time | **39.3 %** | 39.0 / 36.9 / 40.2 per run |
+
+**p50 0.869 s against your "~0.5-1s".** OBSERVED.
+
+**A lane disagreement, adjudicated rather than averaged.** One lane found 249
+keyboard reports arriving while our hold was set; another found zero reports inside a
+hold window. **Both are right and it is an identity**: the report that arrives during
+a hold *is the report that releases it*, because `cancel_on_move` clears the flag on
+that very message. The client is silent for the whole hold and then emits exactly one
+report — and by decode that report goes out **even on the refused arm**
+(`chcli_dir`'s refusal returns `mov eax,1` at `0x0081AD7D`, and `0x00816475 test
+eax,eax / jne 0x81649e` sends anyway). We were reading our own release as evidence
+the client was fine.
+
+### 33.3 The warp: the first leg out of a hold does not travel, while our model runs full speed
+
+Controlled on leg position — episode-opening legs against episode-opening legs:
+
+| arm (2026-09-01) | client ground speed p50 | our drift p50 / p90 | n |
+|---|---|---|---|
+| opens **out of a hold** | **103 u/s** | **86.4 u** / 201.6 u | 97 |
+| opens with **no hold** | 283 u/s | 8.1 u / 55.6 u | 33 |
+| 2026-08-31, out of a hold | **0 u/s** | 158.4 u | 58 |
+| 2026-08-31, no hold | 271 u/s | 20.3 u | 70 |
+
+**Negative control:** 2026-08-30 sent no property 8 at all, and its ordinary openers
+sit at 281 u/s / 18.5 u drift — the healthy place both "no hold" arms land. *The
+effect appears only where the mechanism exists.* Drift is re-seeded on every accepted
+report, so these are per-interval divergences once per swing, not accumulation.
+
+So the warp and the stall are the **same defect seen from two sides**: we gate the
+client, the client cannot travel, our model travels anyway, and the reconciliation is
+visible as a snap.
+
+### 33.4 SHIPPED: F1, one behaviour change, its own flag
+
+**Release the hold at the landing** (`LANDING_HOLD_RELEASE`, default ON, revert
+`--no-landing-hold-release`). The gate's live window becomes exactly
+`[swing open, lands_at)` — **the same interval §32 already uses for property 3, from
+the same predicate.** That is why this is a derivation and not a tuning: §32 shipped
+the predicate and simply never applied it to the movement half of the latch.
+
+Also shipped, **correctness only and named as such**: F4, the §31 pause accumulator
+now resets above `attack_tick`'s four early returns. Leaving through dead / no-target
+/ target-gone / out-of-range while moving used to charge the entire absence to the
+swing clock on re-entry. RECONSTRUCTION, never observed firing, and it delays
+**swings, not movement** — it cannot affect the question F1's run scores, which is
+the only reason it travels with it.
+
+`test_playerswing` §6 pins both arms; the known-bad arm reproduces the stall on
+purpose. **Section 1's old assertion — "a landing releases nothing (the chain still
+holds)" — was the defect written down as a test**, and it has been corrected in
+place. 35 checks, floor 35, identical bare.
+
+### 33.5 Derived and QUEUED, deliberately not shipped today
+
+**F2 — the R11 grant guard is dead twice over.** `GRANT_DURING_HOLD = True` at
+`:4325` short-circuits `zl_send_ok`, so the suppression has never evaluated and its
+print line has never fired: 201 `(True,'zero-lead')`, 73 `(False,'heading-rate')`,
+4 `(True,'grant')`, 2 `(False,'locally-moving')` — **zero suppressions**. And
+**247 of 249 (99.2 %)** keyboard reports arriving into a set hold were answered by a
+grant within 50 ms (p50 0.843 ms). **The second death is the one that matters:**
+`cancel_on_move` clears `action_hold` at `:16790`, and the guard reads it at
+`:17660` — ~870 lines later *in the same handler*. So flipping the constant alone
+returns a null that would read as clearing the mechanism. The fix must snapshot the
+flag at message arrival first. **This is the most valuable cross-lane result of the
+arc**: one lane proposed the one-line test, another proved it would lie.
+
+**F3 — `cancel_on_move` gate asymmetry.** `:9481` sends property 3 on
+`chain_live and (pre_landing or not MOVE_KEEPS_CHAIN)`; `:9499` forgets the target on
+`(pre_landing or not MOVE_KEEPS_CHAIN)` **alone**. With a cast pending short of its
+E3 we drop the swing server-side and send **no** stop — the client keeps an attack id
+latched at `[AvChar+0xDC]` and the walk cycle stays refused by animation priority.
+`test_castcancel` §7 cannot reach it: its rig has no `pending_casts`, so `chain_live`
+is always True there. Needs a new cell before it is believed.
+
+**F5 — `click_moving_at` is unbounded** in `_player_body_moving` (`:9857`) while
+every sibling reader bounds it. The comment licensing the sticky latch predates §31,
+which made `attack_tick` a consumer — a stale click latch now freezes the chain
+forever. **Zero trials** (all six click verdicts are `geo-unplaced`), so latent, not
+yours. The keyboard latch was **REFUTED as sticky**: the first alarm was a scorer bug
+counting `0x0047` as a stop; corrected, `kbd_age` is None on 36 of 36.
+
+**Why none of these ship today:** two defaults in one run convicts the pair and
+clears neither (§29). F1 is the arm.
+
+### 33.6 What could NOT be measured, and why that matters
+
+**No capture on disk carries the OFF arm of the §31 pause or the §32 landing split
+*with a flags record*.** Exactly three logs in the newest sixty carry both the
+111-key flags dump and combat, and all three are post-split; older logs carry a
+5-key config line. So "the landing split raised property 8's duty cycle" is
+**RECONSTRUCTION from source and cannot be closed retrospectively.** F1's revert arm
+produces the first such pair the arc has ever had — a further reason to ship it
+behind a flag rather than as an unconditional edit.
+
+### 33.7 The next check
+
+**Score F1, one arm, one question, using sites that already exist.** `chcli_dir`
+(296 hits in your last capture) reads the walk-gate word at entry, which answers it
+directly: was `[ChCliBase+0x64]` bit 0 **set** at the refused press (our hold — F1's
+target) or **clear** (a client-side re-dispatch failure, which would send the arc to
+the dispatch driver `0x005355C0` and its 750 ms / 100 ms clocks instead). No new
+instrumentation is proposed.
+
+**One caveat before that run:** the `heldbit` site recorded **0 hits** in the
+2026-09-01 capture while holds were demonstrably being sent, so as hooked it is
+probably not the entry the SET arm reaches. Check its address before relying on it —
+`chcli_dir` does not depend on it.
+
+**Pre-registered failure mode:** if the post-landing press still lags after F1, the
+hold was not the whole stall, and `0x005355C0`'s clocks are next. That branch is
+written down now so a surviving stall is a result rather than a surprise.
+
 ## Provenance
 
 All figures are measurements over the owner's own live captures via extractors in this
