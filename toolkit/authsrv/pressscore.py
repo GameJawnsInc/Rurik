@@ -4,7 +4,9 @@
     python toolkit/authsrv/pressscore.py CAP.jsonl [CAP...]  # named captures
     python toolkit/authsrv/pressscore.py --section36         # the three captures
                                                              # FINDINGS section 36 scored
-    options: --speed U/s (288)  --bound S (3.0)  --interval S (1.75)  --verbose
+    options: --speed U/s (288)  --bound S (3.0)  --interval S (1.75)
+             --reach U (1500, the shipped ATTACK_RANGE; a candidate shows
+             which presses it would refuse without an approach)  --verbose
 
 WHY THIS EXISTS. ANIMREF-RE section 36 is a correction: a fix for the
 operator's "spacebar after a click-walk does nothing" was shipped on a unit
@@ -342,10 +344,15 @@ def _match(a, b, tol):
 
 def score(flags, evs, spawns, mode=None, speed=DEFAULT_SPEED,
           bound=DEFAULT_BOUND, interval=DEFAULT_INTERVAL, say=print,
-          verbose=False):
+          verbose=False, reach=ATTACK_RANGE):
     """Score one capture. Returns a dict of the headline numbers so a test
-    can assert them; prints the report through `say`."""
+    can assert them; prints the report through `say`. `reach` is the range
+    gate the replay applies (the shipped ATTACK_RANGE by default); pass a
+    candidate to see which presses it would newly refuse -- the number an
+    approach would then have to answer."""
     windup = 0.5 * interval - 0.1          # the windup LAW (FINDINGS R1)
+    global ATTACK_RANGE
+    _saved_reach, ATTACK_RANGE = ATTACK_RANGE, float(reach)
     mode_why = "given"
     if mode is None:
         mode, mode_why = base_mode(flags)
@@ -555,6 +562,22 @@ def score(flags, evs, spawns, mode=None, speed=DEFAULT_SPEED,
     res["latency"] = (_p(lats, 0.5), _p(lats, 0.9))
     say(f"  answered-press latency: n={len(lats)} p50 {_p(lats, 0.5):.3f} "
         f"p90 {_p(lats, 0.9):.3f}")
+    # press-time separation from the target, from the leg model's position:
+    # what a candidate reach would refuse without an approach.
+    seps = []
+    for x, (idx, tp, r) in zip(rows, presses):
+        tp_pos = spawns.get(r["values"][1])
+        if tp_pos is None:
+            continue
+        p = snaps[idx][1].pos(tp)
+        seps.append(math.hypot(tp_pos[0] - p[0], tp_pos[1] - p[1]))
+    res["press_dist"] = (len(seps), _p(seps, 0.5), max(seps, default=0.0),
+                         sum(1 for s in seps if s > ATTACK_RANGE))
+    say(f"  press-time separation from the target (leg-model position): "
+        f"n={len(seps)} p50 {_p(seps, 0.5):.0f} u max "
+        f"{max(seps, default=0.0):.0f} u; beyond the reach gate "
+        f"({ATTACK_RANGE:.0f} u): {res['press_dist'][3]}")
+    ATTACK_RANGE = _saved_reach
     res["rows"] = rows if verbose else None
     return res
 
@@ -571,11 +594,14 @@ def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     speed, bound, interval, verbose, s36 = (DEFAULT_SPEED, DEFAULT_BOUND,
                                             DEFAULT_INTERVAL, False, False)
+    reach = ATTACK_RANGE
     paths = []
     i = 0
     while i < len(argv):
         a = argv[i]
-        if a == "--speed":
+        if a == "--reach":
+            reach, i = float(argv[i + 1]), i + 1
+        elif a == "--speed":
             speed, i = float(argv[i + 1]), i + 1
         elif a == "--bound":
             bound, i = float(argv[i + 1]), i + 1
@@ -607,7 +633,7 @@ def main(argv=None):
             continue
         flags, evs, spawns = load(p)
         r = score(flags, evs, spawns, speed=speed, bound=bound,
-                  interval=interval, verbose=verbose)
+                  interval=interval, verbose=verbose, reach=reach)
         if s36:
             exp = dict((f, h) for _t, f, h in SECTION36)[os.path.basename(p)]
             got = (r["CLICK"][0], r["CLICK"][1], r["STOP"][0], r["STOP"][1],
