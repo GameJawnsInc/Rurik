@@ -1366,6 +1366,115 @@ retail's 0.82 s** — roughly 40× over-granting — and 26 teleports fired with
 chaining. Neither is this arc's question; both are recorded here so the next
 MOVECODE session finds them rather than re-measuring.
 
+## 24. RUN 2 (the real quarterstep window) — the gate refuses 14/14, and a fix I derived, shipped and REVERTED
+
+**Owner-driven, loopback, shipped default, passive tap. The owner played and
+quartersteped BY FEEL; nothing about the timing was scripted.** Their verdict
+first, because it is the referent: *"got some quarterstep-ish results on hit 7
+(didn't feel like a proper stock slide though), but mostly i just stood still."*
+
+### 24.1 The capture matches that verdict exactly
+
+120 begin-move entries, gate words read on 120. **14 refusals, all `E3-walk-gate`,
+gate word `0x3`; 106 passes, gate `0x2`.** `m_status` `0x00000000` throughout.
+
+The 14 refusals run from t=21.30 to t=45.70 at a **~1.85 s cadence** — the swing
+interval — i.e. one per quarterstep attempt. And the owner's "hit 7" is in the
+data:
+
+| attempt | t | outcome |
+|---|---|---|
+| 1–6 | 21.30 … 31.08 | refused, **nothing follows** |
+| **7** | 32.94 | refused, then **22 passes 0.16 s later** (33.09–33.44) |
+| **8** | 34.83 | refused, then **28 passes 0.06 s later** (34.89–35.33) |
+| 9–14 | 36.47 … 45.70 | refused, **nothing follows** |
+
+So two of fourteen produced a **late** slide — the key was still down when the
+gate cleared a round trip later and a second dispatch went through. That delay is
+the *"didn't feel like a proper stock slide"*: a stutter-then-go, not a slide.
+
+### 24.2 The server side, and the clock alignment that proves the loop
+
+14 prop-8 hold windows, one per refusal. Aligning the hook's `GetTickCount` to the
+tape (offset **4.596 s, sd 0.0062**, from gap sequences that agree to the
+hundredth):
+
+```
+hold set   25.00 27.09 29.12 31.06 32.89 34.72 …
+player tap 25.90 28.05 30.08 31.98 33.80 35.68 …   0.82-0.96 s after the set
+release    25.90 28.05 30.09 31.97 33.79 35.68 …   SAME INSTANT as the tap
+```
+
+**Every one of the 14 releases in the tape reads "the player moves".** There is no
+other release reason anywhere in it. So the ~0.9 s "hold duration" is **the
+operator's reaction time, not a length we chose** — our hold has no natural end,
+and the player's press is spent unlocking it (`authsrv.py:9353` releases *from*
+the movement message; `chcli_dir` sends `0x003D` on every arm including the
+refusal, §22.2).
+
+### 24.3 ANIMREF-R10: derived, shipped, REFUTED and REVERTED in one sitting
+
+From §24.2 the fix looked obvious — release the hold when the swing ends, at
+`MELEE_ATTACK_FINISHED`, which we already send. I justified it with *"39 of
+retail's 213 prop-8 releases sit within 0.25 s of `melee_finished`"*, implemented
+it behind `--legacy-swing-hold`, wrote a both-arms test, and took the suite green.
+
+**That statistic has the wrong denominator and the fix is wrong.** The question is
+not "of the releases, how many are at a landing" but "of the landings, how many
+carry a release":
+
+| denominator | retail | ours |
+|---|---|---|
+| landings (`melee_finished`) carrying a release | **4.4%** (38/865) | 0% |
+| swings (`attack_started`) that set the hold | **11.2%** (101/903) | 100% |
+| **prop-8 state AT the landing: HELD** | **98.0%** (848/865) | **100%** (14/14) |
+| prop-8 state at `attack_started`: HELD | **100%** (903/903) | 100% |
+
+**Retail holds the gate through the landing, 98% of the time — we match it.** So
+releasing there is not retail's behaviour; R10 would have made us *diverge*.
+Reverted; the working tree carries no R10.
+
+Two separate errors produced it, both the same shape and both already named in
+this repo's own rules: a **subcount read as a rate**
+([[feedback-safety-filters-drop-the-anomalies]]), then a **transition rate read as
+a fraction of time** — `action_hold` is transition-only, so 11.2% of swings
+*toggling* is not 11.2% of time held (measured duty cycle: retail **29.2%**
+pooled, p50 19.1%; ours 49.7% across the batch).
+
+### 24.4 What is left is a CONTRADICTION, and it is the arc's real question
+
+Four measurements, each solid, that cannot all mean what they appear to:
+
+1. **Our client refuses a walk when `[ChCliBase+0x64]` bit 0 is set** — OBSERVED
+   at `0x0081A93C` (keyboard) and `0x0081AEF4` (click), and the bit is written
+   only by property 8 (`0x0081BCF0`).
+2. **14 of 14 refused in our client**, gate `0x3`, measured live.
+3. **Retail's gate is SET at 98% of landings** and 100% at swing start.
+4. **Retail players quarterstep at the damage instant.**
+
+Same binary. So a set gate refuses in our client and appears not to in retail.
+**At least one reading is wrong, or a mechanism is unfound.** Do not build a fix
+on §24.2 until this resolves — that is exactly the mistake §24.3 records.
+
+One static result already bears on it, and it cuts against the easiest escape:
+**a third consumer of the gate exists.** `0x0081BADC`'s function — a movement
+re-issue path — checks `m_status` bit 4, then `[+0x64] bit 0` at `0x0081BB02`,
+then the speed at `0x0081BB08 fld [esi+0x100]`, and skips everything if the gate
+is set. So the gate is not consulted only at begin-move. (`+0x100` is the char's
+speed word: one reader, `0x0081BB08`; writes at `0x0081BECA` and `0x0081C005`,
+the latter storing **zero** — and property 8's SET path reaches it, because
+`0x0081BE90` bails at `0x0081BEB1` precisely when bit 0 is set. *Positive control:
+the unbounded `--field 0x100` census contains both writes, which the
+`--in ChCliBase` census did NOT — its range ends at `0x0081BA94` and truncated
+them away.*)
+
+Open hypotheses, none established: the quarterstep never calls begin-move because
+the key is already held (F25: MOVE-CMD fires only on a direction CHANGE);
+something else clears the bit locally in retail; the corpus attribution
+(`whose_agent`) is wrong and finding 3 is void; retail's release lands
+milliseconds after the landing sample; or the gate blocks starting but not
+finishing a leg.
+
 ## Provenance
 
 All figures are measurements over the owner's own live captures via extractors in this
