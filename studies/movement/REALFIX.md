@@ -332,6 +332,12 @@ are the survivors of both.
    field (RECONCILED with CANCELWALK.md); every reconcile in the tape is
    grant-synchronous, so "warp at the press" is the reply grant 17–76 ms later. NEW:
    a conditionally-gated fallback exists — `0x008163A0` → `0x0081BDB0` → `0x005FCAA0`
+   (**CORRECTED 2026-09-01, ANIMREF-RE §37:** `0x0081BDB0` does NOT call
+   `0x005FCAA0` — the bytes at `0x0081BDB6` are `e8 c5 0c de ff` = `call 0x005FCA80`,
+   the AgTrack record clear. On `0x008163A0`'s plan-failure leg `0x0081BDB0`
+   (`0x0081647B`) and `0x005FCAA0` (`0x00816499`) are consecutive SIBLINGS, and on
+   the attack-press path `0x005FCAA0` is absent. The chain reads
+   `0x008163A0` → {`0x0081BDB0`, `0x005FCAA0`} → …)
    (**Q5's "gate-free reseed", now decoded**: a 3-instruction trampoline) →
    `0x00605E40` (an instruction-for-instruction twin of `0x00605FC0`'s sweep) →
    `0x006022B0`. Unexercised in this run; whether an ordinary press can reach it is

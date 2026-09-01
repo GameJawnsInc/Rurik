@@ -9170,6 +9170,33 @@ LANDING_HOLD_RELEASE = True   # False (--no-landing-hold-release)
 # auto swings, because transition-only elides a release of a flag already clear.
 SWING_HOLDS_WALK_GATE = False  # True (--swing-holds-walk-gate): the old shape
 
+# ANIMREF-RE 37 (2026-09-01): THE CLICK-WALK LATCH IS BOUNDED BY THE LEG'S OWN
+# TRAVEL TIME, not by a constant. 34 bounded it at GRANT_LOCAL_WINDOW (3.0 s)
+# because a sibling reader used that number, and 36 admitted the bound was
+# borrowed rather than derived. The derived bound: the client walks a click
+# as a straight segment from where it stood to the clicked point at the base
+# speed this server declared (0x0027; 288 u/s unless a speed effect changed
+# it), and an attack press does NOT stop that segment -- read out of the
+# binary: every c2s 0x0026 is preceded by 0x0081BDB0, which clears the queued
+# waypoints (m_path <- +INF, +0x68 <- 0) and disarms the AgTrack record but
+# writes no velocity or destination on the async agent (244 press-path
+# instructions, 0 agent-field stores, no call reaching 0x00602A40); the body
+# finishes the segment it is on and parks at its end (arrival -> ClearPath,
+# velocity 0), sending nothing (no packer on the arrival path; the 0x0047
+# keyboard-stop packer 0x00920940 is the positive control the same search
+# finds). On the 12:59 tape the client is SEEN continuing its click leg
+# through a press, 3 of 3 clean cases. So "has the click leg arrived?" is
+# t_click + |dest - start| / speed, computed from the 0x003E we received.
+# Retrodicted on the operator's three captures: every unanswered CLICK-last
+# press (13/13, 10/10, 36/36) opens under this bound, none opens while the
+# modelled leg is still in flight, and no answered press is newly refused.
+# The 3.0 s constant retrodicts those same tapes almost as well (a 1.5 s
+# constant would too -- every leg there was under 455 u), which is exactly
+# why a constant is not a derivation: the operator's next long click decides
+# between them, and the leg time is the shape the binary gives.
+# False = --click-latch-window, the revert arm: 34's constant.
+CLICK_LATCH_LEG_ETA = True
+
 # ANIMREF-RE (2026-09-01): release the action hold in the E3 batch, the
 # caster-freed instant -- 19 of 19 unmoved corpus cycles. The client arms its
 # own 250 ms resume poll at the gate-clear, which is what walks a HELD key
@@ -9894,6 +9921,64 @@ def handle_perf_report(values, send, state, conn_id):
          f"LATENCY_REPORT({elapsed_ms} ms)", quiet=True)
 
 
+def _click_leg_start(state, now, silent):
+    """Where the body is when a click arrives, on the server's own model.
+
+    Three sources, in the order the record trusts them: the previous click
+    leg, interpolated to `now` and capped at its end, when the client has
+    been SILENT since that click (`silent` -- the latch was still set when
+    this click arrived, so no report has placed the body since; the client
+    reports nothing while click-walking and nothing at arrival, so silence
+    after a finished leg means the body is parked at its end); else the last
+    accepted report; else the placement. Every position here is a model
+    except the report itself, and the error is stated at _click_leg_arm.
+    """
+    leg = state.get("click_leg")
+    if silent and leg is not None:
+        x0, y0 = leg["p0"]
+        dx, dy = leg["dest"][0] - x0, leg["dest"][1] - y0
+        span = leg["eta"] - leg["t0"]
+        if span <= 0.0 or now >= leg["eta"]:
+            return leg["dest"]
+        f = max(now - leg["t0"], 0.0) / span
+        return (x0 + dx * f, y0 + dy * f)
+    pos = state.get("client_pos") or state.get("pos")
+    return None if pos is None else (float(pos[0]), float(pos[1]))
+
+
+def _click_leg_arm(state, dest, now, silent):
+    """Record the leg a click starts: start, end, and the instant it arrives.
+
+    Straight line, at the base speed this server declared (0x0027,
+    `declared_speed_base`, 288 u/s unless a speed effect changed it) times
+    the 1.0 multiplier every 0x002B we send carries. Two known errors, both
+    on the side of opening a swing EARLY rather than holding a parked body
+    (the operator's symptom): the client paths around obstacles, so a bent
+    leg ends later than the straight line; and a press mid-leg truncates a
+    bent path to its current segment (0x0081BDB0 clears m_path), which ends
+    at that segment's waypoint. On open ground the segment IS the straight
+    line, and the operator's three captures (legs 11-455 u, 10 of 10
+    post-click reports within 3.5 u of the modelled end) are that case.
+    A third error runs the other way: a click thrown while a keyboard leg
+    was still running starts from a report up to one report interval
+    (~0.29 s, ~86 u) behind the body, which holds the swing that long past
+    the real arrival. `t0` is the latch stamp itself, so a reader can tell
+    the leg of THIS click from a leftover by identity rather than by age.
+    """
+    p0 = _click_leg_start(state, now, silent)
+    if p0 is None:
+        state["click_leg"] = None
+        return None
+    speed = float(state.get("declared_speed_base") or DEFAULT_RUN_SPEED)
+    dist = math.hypot(float(dest[0]) - p0[0], float(dest[1]) - p0[1])
+    leg = {"t0": now, "p0": p0,
+           "dest": (float(dest[0]), float(dest[1])),
+           "dist": dist, "speed": speed,
+           "eta": now + (dist / speed if speed > 0.0 else 0.0)}
+    state["click_leg"] = leg
+    return leg
+
+
 def _player_body_moving(state):
     """Is the player's BODY in motion right now, as the wire has told us?
 
@@ -9943,8 +10028,25 @@ def _player_body_moving(state):
     # genuinely in flight, or §31's chain pause stops pausing on click-walks
     # and the quarterstep regresses. That is the check test_playerswing §7
     # pins from both sides.
+    #
+    # ANIMREF-RE 37: THE PARAGRAPHS ABOVE DESCRIBE THE REVERT ARM. The
+    # constant answered "might a click leg still be in flight?" with a
+    # number picked for a different question, and the operator's post-34
+    # capture showed what that costs: a press after a 0.3 s click waited
+    # out the remaining 2.7 s on a parked body (CLICK-last presses answered
+    # 60.6% against ~91% for STOP-last), and the wire carried the constant's
+    # own fingerprint -- swings opening at 3.00, 3.02, 3.02, 3.12 s after a
+    # click and never earlier. The bound now is the leg's own travel time,
+    # recorded by the 0x003E arm (_click_leg_arm) with the latch stamp as
+    # its identity: the leg of THIS click, or the constant when no leg was
+    # recorded (a start position nobody could place; the revert flag).
     click = state.get("click_moving_at")
-    return click is not None and (now - click) <= GRANT_LOCAL_WINDOW
+    if click is None:
+        return False
+    leg = state.get("click_leg") if CLICK_LATCH_LEG_ETA else None
+    if leg is not None and leg["t0"] == click:
+        return now < leg["eta"]
+    return (now - click) <= GRANT_LOCAL_WINDOW
 
 
 def attack_tick(send, state, conn_id):
@@ -18052,7 +18154,17 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # --grant-suppress the sync copy sits parked at the
                         # click leg's start (corpus separation p50 1,164 u),
                         # so a 0x0028 here out-warps F31 by an order.
+                        _cl_prev = state.get("click_moving_at")
                         state["click_moving_at"] = time.time()
+                        # ANIMREF-RE 37: the leg this click starts, so the
+                        # latch above is bounded by its travel time rather
+                        # than by a constant (_player_body_moving). `_cl_prev`
+                        # is read BEFORE the restamp: a latch still set means
+                        # the client has not spoken since the previous click,
+                        # which decides whether this leg starts from that
+                        # leg's model or from the last report.
+                        _click_leg_arm(state, dest, state["click_moving_at"],
+                                       silent=_cl_prev is not None)
                         # A click ALSO stands the watchdog down -- via the
                         # click-in-flight clause reading the latch above, NOT
                         # by consuming the leg. READ, not popped (the review's
@@ -20693,6 +20805,16 @@ def main():
                          "this arm to reproduce that on purpose. The CAST "
                          "path keeps its hold either way -- that one is "
                          "retail-correct and corpus-backed.")
+    ap.add_argument("--click-latch-window", action="store_true",
+                    help="THE REVERT ARM for ANIMREF-RE 37: bound the "
+                         "click-walk latch by the 3.0 s GRANT_LOCAL_WINDOW "
+                         "constant again (34's shape) instead of by the "
+                         "click leg's own travel time. Under the constant "
+                         "a press after a short click waits out the rest "
+                         "of the 3 s on a parked body (every one of the 13 "
+                         "unanswered CLICK-last presses on the 14:32 "
+                         "capture), and a press 3 s into a long click opens "
+                         "a swing on a body still walking.")
     ap.add_argument("--no-landing-hold-release", action="store_true",
                     help="THE REVERT ARM for ANIMREF-RE 33's one behaviour "
                          "change: keep the property-8 action hold set past "
@@ -22138,6 +22260,14 @@ def main():
               "the whole swing. This is the arm that reproduces the "
               "measured pre-landing freeze -- 25 of 32 presses onto a set "
               "gate, 19%% of episodes under 5 u in 1.5 s.", flush=True)
+    if a.click_latch_window:
+        global CLICK_LATCH_LEG_ETA
+        CLICK_LATCH_LEG_ETA = False
+        print("[map] --click-latch-window: the click-walk latch is bounded "
+              "by the 3.0 s constant again, not by the leg's travel time. "
+              "This is the arm that reproduces the operator's spacebar-"
+              "after-click deficit (CLICK-last presses answered 60.6% "
+              "against ~91% for STOP-last).", flush=True)
     if a.no_landing_hold_release:
         global LANDING_HOLD_RELEASE
         LANDING_HOLD_RELEASE = False
