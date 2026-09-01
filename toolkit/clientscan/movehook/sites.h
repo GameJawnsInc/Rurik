@@ -15,8 +15,9 @@
  * See PLAN.md §7 Q12(d) and content/movecode.toml's ret block. */
 #define SHAPE_ENTRY 0u   /* 0x55 push ebp -> esp -= 4; [esp] = ebp; eip = a+1 */
 #define SHAPE_RET   1u   /* 0xC3 ret      -> eip = [esp]; esp += 4           */
+#define SHAPE_PUSHEDI 2u /* 0x57 push edi -> esp -= 4; [esp] = edi; eip = a+1 */
 
-#define NSITES 23u
+#define NSITES 26u
 
 typedef struct {
     unsigned long rva;
@@ -35,7 +36,7 @@ typedef struct {
                                     note at the stride test in movehook.c. */
     int           deref_out;     /* arg index of `int* outCount`, 0=none */
     int           deref_out_path;/* arg index of `point* outPath`, 0=none */
-    unsigned      shape;         /* SHAPE_ENTRY or SHAPE_RET -- selects which
+    unsigned      shape;         /* SHAPE_ENTRY, SHAPE_RET or SHAPE_PUSHEDI -- selects which
                                     ONE instruction the handler re-emulates. */
 } site_t;
 
@@ -48,6 +49,7 @@ static const site_t SITES[NSITES] = {
     { 0x0041B580u, "chcli_advance", 0, 0, 0, 0, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x0081B580 */
     { 0x0041A8F0u, "chcli_dir", 0, 0, 0, 0, 0, 1, 0u, 0, 0, SHAPE_ENTRY },   /* 0x0081A8F0 */
     { 0x0041ADB0u, "chcli_point", 0, 0, 0, 0, 0, 1, 0u, 0, 0, SHAPE_ENTRY },   /* 0x0081ADB0 */
+    { 0x0041BE50u, "heldbit", 0, 0, 0, 0, 0, 1, 0u, 0, 0, SHAPE_ENTRY },   /* 0x0081BE50 */
     { 0x001355C0u, "inputeval", 0, 0, 0, 0, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x005355C0 */
     { 0x00309E90u, "mapfindpath", 0, 1, 2, 0, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x00709E90 */
     { 0x00309F0Fu, "mapfindpath_ret1", 0, 1, 0, 0, 0, 0, 0u, 5, 6, SHAPE_RET   },   /* 0x00709F0F */
@@ -58,6 +60,8 @@ static const site_t SITES[NSITES] = {
     { 0x00135380u, "movecmd", 0, 0, 0, 0, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x00535380 */
     { 0x004163A0u, "movedispatch", 0, 0, 0, 0, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x008163A0 */
     { 0x002022B0u, "reseed", 1, 0, 0, 1, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x006022B0 */
+    { 0x0041C090u, "resume_arm", 0, 0, 0, 0, 0, 1, 0u, 0, 0, SHAPE_PUSHEDI },   /* 0x0081C090 */
+    { 0x0041BA80u, "resume_fire", 0, 0, 0, 0, 0, 1, 0u, 0, 0, SHAPE_ENTRY },   /* 0x0081BA80 */
     { 0x00205E40u, "resync", 0, 0, 0, 0, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x00605E40 */
     { 0x00202B20u, "setposition", 1, 1, 0, 0, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x00602B20 */
     { 0x00202A40u, "setter", 1, 0, 0, 0, 0, 0, 0u, 0, 0, SHAPE_ENTRY },   /* 0x00602A40 */

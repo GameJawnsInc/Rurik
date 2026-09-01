@@ -1271,6 +1271,52 @@ def report(cap, names, dump=0):
         for nm, xs in sorted(byname.items()):
             a(f"       {nm:12} walk gate SET on {sum(xs)}/{len(xs)} entr(ies)")
 
+    # ---- ANIMREF-RE: THE RESUME POLL, the quarterstep's own machinery ----
+    #
+    # The registered question (FINDINGS §27.3): does our client's own 250 ms
+    # resume window ever ARM, and when it does, does it FIRE? resume_arm is
+    # the armer (0x0081C090); resume_fire is the payload the deadline calls
+    # (0x0081BA80). The ratio is the poll's live/die rate, and it is what
+    # tells a held key that walked out of an aftercast (fire) from one that
+    # rooted (arm with no fire). heldbit (0x0081BE50) is the client's own
+    # definition of "held": arg 1 at a key-down, 0 at a key-up.
+    #
+    # WHY THIS IS NOT A GUESS: each site derefs the SAME ChCliBase char whose
+    # +0x64/+0x10C the walk gates test, so gate_flags at a resume hit is the
+    # live gate the payload's guards read. A fire on a SET walk gate would
+    # contradict the decode (the payload requires bit 0 CLEAR) and is flagged.
+    arm = [r for r in cap.recs if names[r["site"]] == "resume_arm"]
+    fire = [r for r in cap.recs if names[r["site"]] == "resume_fire"]
+    held = [r for r in cap.recs if names[r["site"]] == "heldbit"]
+    if arm or fire or held:
+        a("")
+        a("ANIMREF-RE  the RESUME POLL (the client's own held-key walk-out)")
+        a(f"     resume_arm  {len(arm)}   resume_fire  {len(fire)}   "
+          f"heldbit  {len(held)}")
+        if arm:
+            a(f"     poll live/die: {len(fire)} fire(s) out of {len(arm)} "
+              f"arm(s)"
+              + (f" ({100.0 * len(fire) / len(arm):.1f}% fired)"
+                 if len(arm) else ""))
+        else:
+            a("     resume_arm NEVER FIRED -- our prop-8 economy is not"
+              " reaching the client's resume machinery. That is the")
+            a("     quarterstep's absence, stated as the site that should"
+              " have hit and did not (FINDINGS §27.3).")
+        # a fire whose walk gate is SET contradicts the payload's own guard
+        bad_fire = [r for r in fire
+                    if (r.get("have_gate") or 0) & 1
+                    and r["gate_flags"] & GATE_WALK_BIT]
+        if bad_fire:
+            a(f"     !! {len(bad_fire)} resume_fire hit(s) entered with the WALK")
+            a(f"        GATE SET -- the payload requires it CLEAR (0x0081C0A2),")
+            a(f"        so either the decode is wrong or the deref is off.")
+        if held:
+            downs = sum(1 for r in held if r["arg1"])
+            ups = len(held) - downs
+            a(f"     heldbit: {downs} set (key-down), {ups} clear (key-up) -- "
+              f"the client's own held-input edges")
+
     if dump:
         a(f"first {dump} record(s):")
         for r in cap.recs[:dump]:

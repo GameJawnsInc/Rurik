@@ -19,8 +19,11 @@
  * whose displaced instruction is ONE BYTE and trivially re-emulable. A
  * persistent int3 must re-emulate whatever its 0xCC displaced:
  *
- *     SHAPE_ENTRY  `55 push ebp`  ->  esp -= 4; [esp] = ebp; eip = a + 1
- *     SHAPE_RET    `C3 ret`       ->  eip = [esp]; esp += 4
+ *     SHAPE_ENTRY   `55 push ebp`  ->  esp -= 4; [esp] = ebp; eip = a + 1
+ *     SHAPE_RET     `C3 ret`       ->  eip = [esp]; esp += 4
+ *     SHAPE_PUSHEDI `57 push edi`  ->  esp -= 4; [esp] = edi; eip = a + 1
+ *                   (ANIMREF-RE 2026-09-01: the resume-window armer
+ *                    0x0081C090 opens with push edi, not push ebp)
  *
  * Every site was SHAPE_ENTRY until 2026-08-29, when the MapFindPath RETURN tap
  * (HANDOFF-PLANE.md §4.2) needed the answer rather than the question. Both
@@ -802,6 +805,12 @@ static LONG CALLBACK on_bp(PEXCEPTION_POINTERS ep)
                 g_armed[i] = 0;
                 c->Eip = a;
             }
+        } else if (SITES[i].shape == SHAPE_PUSHEDI) {
+            /* `57 push edi`: same one-byte no-operand emulation as the
+             * entry shape, pushing Edi instead of Ebp. */
+            c->Esp -= 4;
+            *(DWORD *)c->Esp = c->Edi;
+            c->Eip = a + 1;
         } else {
             /* `55 push ebp`: then resume at site+1, the `mov ebp, esp`. */
             c->Esp -= 4;

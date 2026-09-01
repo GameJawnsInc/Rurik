@@ -1729,6 +1729,101 @@ It is also the second time in two days that a correct-looking derivation was
 refuted by the next measurement (§24.3 was the first, on a denominator).
 **Ship, then measure, then believe the measurement over the derivation.**
 
+## 28. THE RE-DISPATCH IS DECODED — the quarterstep is the client's own 250 ms resume poll, and §27.3's "static target, no run" is answered
+
+§27.3 named the next target: retail's client re-issues movement after the walk
+gate clears with no server destination and no new key edge, and "ours does not."
+That is now read out of the binary rather than guessed, and two changes ship on
+it. **No run was needed to find the mechanism — this whole section is static.**
+
+### 28.1 The mechanism, three functions
+
+Prop 8's ChCli case body (`0x0081BCF0`, §22) does more than flip the walk gate.
+The **gate-CLEAR arm** (`0x0081BD14 and eax,~1` then `0x0081BD17 call 0x0081C090`)
+calls a **resume-window armer**:
+
+* **`0x0081C090`** (opens `57 push edi`): unless dead, and only with gate bit 0
+  CLEAR and bit 1 SET, it ORs bit 0 into `[this+0x110]` and writes
+  `[this+0x114] = clock() + 0xFA` — a **250 ms deadline** — registering the timer
+  via `0x009217C0`. (`0x006044E0` resolves `clock()`: `[[singleton]+8]+0x148`.)
+* **`0x0081B940`** is the deadline checker. When `now - [this+0x120] >= 0x7D0`
+  (2000 ms) it calls, at `0x0081BA1E`, the payload; the `+0x110` bit is disarmed
+  first (`0x0081B979`).
+* **`0x0081BA80`** is the **payload**, and its guards are the whole finding. It
+  proceeds only when: gate bit 5 clear, the **latched input vector** at
+  `+0x4C/+0x50` is non-zero, **gate bit 2 (held input) is SET**, not dead, gate
+  bit 0 clear, the **speed `+0x100` is ZERO** and the current motion vector is
+  zero — i.e. *the player is holding a direction while the body stands still with
+  the walk gate open*. It then `atan2`s the latched vector against the current
+  heading (`0x005FC310`) and calls `0x005FC900` with the agent id and the angle —
+  **a fresh directional move with no server destination and no key edge.** Every
+  non-ripe branch RE-ARMS the 250 ms window (`0x0081BC43/45 → 0x0081C090`); the
+  no-input branches let the poll die (`0x0081BC51/55`, plain return).
+
+The **held-input bit 2** is set by `0x0081BE50(bool)` (sole caller `0x00816C08`,
+whose singleton chain `[[0x47F660]+0x2C]+0x680` is the local player's ChCliBase):
+arg≠0 ORs bit 2 **and arms the window itself** (via predicate `0x007E08C0`), arg=0
+clears bit 2. Its caller `0x004F3800` is the **input-transition manager** — it
+raises the bit when a movement control activates (`0x004F3842/0x004F386C`) and
+clears it when the control releases. That is the client's own definition of a key
+being *held*.
+
+### 28.2 What this explains, all of it derived
+
+* **Why holding W after a cast did nothing (run 3's 46% never-recover arm).** A
+  key held across a whole cast produces **no wire report** — the client latches
+  movement input on edges, and a hold has no edge after its keydown. So our server
+  never released the action hold (prop 8 stayed 1), the walk gate stayed SET, and
+  the resume poll's `gate bit 0 CLEAR` guard failed forever. The body rooted until
+  the next edge. **This is not a server timing bug; it is a missing gate-clear.**
+* **Why the "grant not yet identified" (the R7a/LAW-A blocker, FINDINGS §14) was
+  never a grant.** Retail feeds a mid-chain mover nothing on the wire; the client
+  walks the held key out of its own aftercast via this poll, armed by prop 8's
+  gate-clear. The complement LAW A was waiting on is **client code plus prop 8
+  itself**, both of which we already send.
+* **Why the tap-train froze under LAW A and that was retail-correct.** The resume
+  rescues **holds only** — a tap clears bit 2 and zeroes the latched vector at
+  key-up, so the poll dies at its first tick. A tapped key in a rooted window
+  genuinely does not resume in retail either; the freeze was tap behaviour, not a
+  defect.
+
+### 28.3 Two changes shipped, both derived, both with revert arms
+
+* **ANIMREF_E3_RELEASE (default ON, `--no-e3-release`).** Release the action hold
+  (`[8 → 0]`) in the **E3 batch** — the caster-freed instant — which is what
+  clears the client's walk gate and arms the resume poll for a held key. Corpus
+  evidence: **19 of 19** unmoved cast cycles carry `[8 → 0]` riding the E3, E3
+  first (a `prop8timeline.py` scan over all 21 live captures; positive control =
+  castmech P10's t=69.670 re-found). The older corpus's "silent E3s" were casts a
+  movement instant had *already* released — transition-only elides a re-release —
+  which **resolves castmech P10's "recorded, not resolved."** Not sent when a
+  QUEUED cast begins at the same instant (the hold hands over cast-to-cast with no
+  toggle, castmech 3b). Known-bad arm reproduces the root.
+* **MOVE_KEEPS_CHAIN flipped to default ON (`--legacy-move-stops-chain`).** LAW A
+  is now the default: movement no longer sends the prop-3 that **cancels the attack
+  animation** — the message retail omits at 87/100 mid-chain moves, and the one
+  the owner's runs kept reporting as "cancelling the animation instead of sliding
+  while it plays." The blocker that kept it opt-in (§14) is gone: the complement is
+  the resume poll above, and the `[8 → 0]` this door already sends is what arms it.
+
+### 28.4 Instrumentation: the next ordinary run PROVES the poll fires
+
+Three hook sites added to `content/movecode.toml` (via `codescan.py`, per-row
+provenance, pinned build 38797), and a `pushedi` emulation shape added to the hook
+(`movehook.c`/`gensites.py`) for `resume_arm`'s `57 push edi` entry:
+
+* **`resume_arm` (`0x0081C090`)** — arms fire count; if it never hits after a cast,
+  our prop-8 economy still isn't reaching the client's resume machinery.
+* **`resume_fire` (`0x0081BA80`)** — the payload; its hit ratio against `resume_arm`
+  is the poll's live/die rate, and its gate word at the hit shows which guard
+  passed. `readhook.py`'s new ANIMREF-RE section scores exactly this, and flags a
+  fire whose walk gate is SET (a decode contradiction).
+* **`heldbit` (`0x0081BE50`)** — arg 1 at key-down, 0 at key-up: the client's own
+  "held" edges, so a `resume_fire` that dies on bit 2 has its reason.
+
+`test_movehook` 302 checks (floor 169). The owner's next normal run writes the
+capture; `readhook.py` reads the poll's arm/fire ratio with no further work.
+
 ## Provenance
 
 All figures are measurements over the owner's own live captures via extractors in this
@@ -1749,3 +1844,12 @@ repo, build named. The three asserts it quotes (`ChCliInt:254`, `ChCliBase:164`,
 `Array:587`) are single citations used as the evidence for specific claims, which the
 boundary permits and the crash dialog shows any player anyway; there is no bulk dump.
 No client launch, no upstream derivation, no §6.1 register row required.
+
+§28 is the same again: six function addresses, the `+0x110/+0x114/+0x120` deadline
+fields, gate bits 2 and 5, and the singleton/input-manager chains, all read with
+`codescan.py` on build 38797 and recorded per-row in `content/movecode.toml`; the
+two asserts touched (`ChCli:0x209`, `ChCli:0x1F2`) are single citations. The corpus
+scan (`prop8timeline.py`, `swingbracket*.py`, `alonepairs.py` — session scratch over
+the 21 live tapes via `tape.py`/`codec.py`) reports the 19/19 E3-release count with
+its positive control named. No client launch on the RE side; the instrument runs on
+the owner's own next session.
