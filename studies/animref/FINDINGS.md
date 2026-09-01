@@ -2994,8 +2994,11 @@ reachable is `0x40` ROTATE behind `+0x64` bit 2, whose semantics a skeptic
 downgraded to UNVERIFIED — its setter's caller is a UI distance-band tracker, not
 a key). Positive control: the `0x47` packer `0x00920940` is found from the
 keyboard-stop body `0x008167F0` by the same search. **`0x0040` after a
-press-then-arrival is NOT DETERMINED and should be looked for on the next
-capture.**
+press-then-arrival is NOT DETERMINED statically** — and checked on the wire the
+same evening: c2s `0x0040` ROTATE_PLAYER appears **0 times on 14:32 and 15:17**
+(21 clicks between them) and 4 times on 12:59 (two of them 0.4 and 1.0 s after
+a click, two 68 s from any). Whatever bit 2 gates, it is not an arrival signal
+the server could read. OBSERVED.
 
 ### 37.3 Retail, read: the press supersedes the leg, and the server drives the body
 
