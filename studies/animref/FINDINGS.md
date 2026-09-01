@@ -1475,6 +1475,102 @@ something else clears the bit locally in retail; the corpus attribution
 milliseconds after the landing sample; or the gate blocks starting but not
 finishing a leg.
 
+## 25. THE CONTRADICTION IS RESOLVED — and §24.4's finding 4 was mine, mis-stated
+
+A nine-agent fan-out with adversarial verification (four lanes, four skeptics, one
+synthesis) closed §24.4. **There is no missing mechanism. A set gate refuses in
+retail too**; what was wrong was my inference from finding 4.
+
+### 25.1 The retail quarterstep is the SAME two-step ours performs
+
+Not "retail's gate permits the walk". Retail runs the identical sequence §24.2
+measured on us: the press is refused at `0x0081A93C`, `chcli_dir` emits its
+`0x003D` anyway (§22.2), the server clears property 8 — and the **still-held key**
+produces the walk on the next dispatch. Scored on both sides with one metric and
+one denominator (a prop-8 hold ending on a c2s move; unscorable attempts counted
+as 0 u, never dropped):
+
+| quarterstep attempts | n | travelled ≥50 u within 1.0 s |
+|---|---|---|
+| retail | 53 | **11 = 20.8%** |
+| ours (run 2) | 14 | **2 = 14.3%** |
+
+**Retail's own quarterstep succeeds about one time in five on the wire, and ours
+is not distinguishable from it at these n.** Those two successes are §24.1's
+attempts 7 and 8, and their client-side latency was **59 ms and 165 ms** after the
+clear — the mechanism worked both times it was given the chance.
+
+### 25.2 Why it looked like a paradox — three reading errors, no missing mechanism
+
+1. **"Hold W" was scored as a tap.** In 12 of our 14 attempts the gate went clear
+   within 10 ms of the refusal *and stayed clear*, yet nothing re-dispatched for
+   1.775–2.152 s. During an actual walk `chcli_dir` fires at frame rate (gap after
+   a gate-CLEAR entry: **p50 16 ms, 78/101 ≤20 ms**), so a held key would have
+   re-dispatched at once. The key was up. **H1 is refuted — and the reason the
+   attempts failed is that the press ended before the round trip did.**
+2. **The 92-second holds were read as "a living player who must be moving".**
+   §22.6's tension is settled, option 1, by three orders of magnitude: holds ≥5 s
+   are **29 of 212 spans but 81.1% of all held time (1038 s), carrying SIX c2s
+   movement messages, 23 of 29 carrying zero.** *Positive control:* the same
+   decoder over clear-state pairs returns **289.0 u/s** — GW's run speed — so the
+   instrument sees motion where motion exists. Long retail holds are immobile.
+3. **The wire was read as the body.** Measured on run 2: **97 `chcli_dir` entries
+   across five held-key bursts produced 5 wire messages — 19.4:1, ~2.6 msg/s of
+   walking.** A 200–300 ms slide leaves at most one sample and often none. **The
+   corpus cannot see a quarterstep by construction**, which is why four lanes
+   could not settle this from tape.
+
+### 25.3 What the server MUST NOT change, each with the number that forbids it
+
+* **Not R10.** Releasing at `MELEE_ATTACK_FINISHED` is refuted at 848/865. Stays
+  reverted (§24.3).
+* **Not "hold it for less time".** Retail p50 **1.041 s**; our windows are the
+  operator's reaction time, not a length we chose.
+* **Not "stop re-arming".** Retail re-arms 193 times, p50 gap 0.503 s.
+* **KEEP releasing on movement.** `authsrv.py:9353` *is* retail's rule —
+  **62 of 66** c2s moves inside a hold are followed by that hold's release within
+  0.25 s, **p50 34 ms**.
+
+### 25.4 The one divergence left, with its denominator and its confound
+
+**Retail's holds mostly end on something that is not the player moving; ours never
+do.** Independently measured twice, by different proxies, agreeing in direction
+and magnitude:
+
+| | retail | ours (run 2) |
+|---|---|---|
+| holds ending WITHOUT a player move nearby | **159/212 = 75.0%** (c2s proxy) / **141/212 = 66.5%** (grant proxy) | **0 of 14 = 0%** |
+
+Every `action_hold(send, state, 0, …)` site in our source is triggered by
+something external — `:9264` retarget, `:9353` movement, `:9409` cancel-cast,
+`:9487` cancel-action, `:9752` target gone, `:11185` skill press, `:11798` cast
+completes. **There is no release tied to the melee action's own termination**,
+where retail's 75% land on `attack_stopped` / skill-finished and friends.
+
+**CONFOUND, stated rather than buried:** the owner was hitting a practice target
+that never dies and never leaves range, so our chain had no natural end available.
+This may be scenario, not defect. It is the only live server-side thread, and it
+is **not R10 rephrased** — R10 asked "release at the landing" (refuted, 98–100%
+held there); this asks *what ends the other 159*.
+
+### 25.5 What is still unmeasured, and the cheap run before the expensive one
+
+Genuinely open: retail's body inside a hold at sub-300 ms resolution (the wire
+cannot supply it), and `m_flags` bit 2, which our client reads clear on 181/181
+samples and which has never been sampled in a retail client.
+
+The expensive answer is the movehook rig against `vault/run-live/` — a **live
+session on the secondary account**, needing the owner's explicit go-ahead.
+**Run RUN-RE3 first**, because it is loopback, free, and tests §25.2 item 1
+directly: *hold* the movement key through the damage rather than tapping it. If
+the slide then fires reliably, the mechanism is confirmed end to end and the
+residual is feel; if it still fails with the key demonstrably down, item 1 is
+wrong and the live run is justified.
+
+**And a scoring rule this dig earned:** score run captures **per file, never
+pooled** — a pooled bin ranked our known-bad arm as healthy, and a metric that
+passes on the broken arm is measuring the wrong quantity.
+
 ## Provenance
 
 All figures are measurements over the owner's own live captures via extractors in this
