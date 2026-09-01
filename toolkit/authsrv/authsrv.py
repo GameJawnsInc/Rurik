@@ -9855,15 +9855,51 @@ def _player_body_moving(state):
     The two latches the movement arc already maintains, and nothing new:
     `kbd_moving_at` (armed by the 0x003D arm, cleared by the 0x0047 stop)
     and `click_moving_at` (armed by every 0x003E click, cleared by the next
-    report of either kind). Deliberately NOT `state["walking"]`, for the
-    reason the zero-lead grant rule already gives at its own read of these:
-    that flag is a different question with a different lifetime.
+    report of either kind -- and therefore NOT cleared by a click leg that
+    merely arrives, which is why it is age-bounded below). Deliberately NOT
+    `state["walking"]`, for the reason the zero-lead grant rule already gives
+    at its own read of these: that flag is a different question with a
+    different lifetime.
 
     Read-only. Both latches are owned by the connection thread's arms; this
     is the same cross-thread read the pools and the hold mirror already do.
     """
-    return (state.get("kbd_moving_at") is not None
-            or state.get("click_moving_at") is not None)
+    now = time.time()
+    kbd = state.get("kbd_moving_at")
+    if kbd is not None:
+        return True
+    # THE CLICK LATCH IS BOUNDED, and this line is a REGRESSION FIX rather than
+    # a refinement. ANIMREF-RE §33 F5, confirmed by the operator the same day:
+    # "click-to-walk cancelled by spacebar doesn't start attacking. if the last
+    # move command wasn't WASD, spacebar doesn't fire attacks at all."
+    #
+    # `click_moving_at` is armed on EVERY 0x003E and cleared only by a later
+    # movement report (0x003D) or a stop report (0x0047). A click leg that
+    # simply ARRIVES clears nothing -- the client reports nothing at all while
+    # click-walking, which is the measured fact the arming site itself cites.
+    # So after any click-to-walk the latch stays set, and since §31 made
+    # `attack_tick` a CONSUMER of this function, `if moving: return` fires
+    # forever and NO SWING EVER OPENS. `begin_attack` had already run and set
+    # the target; the order was accepted and then silently starved.
+    #
+    # The arming site's licence for a sticky latch says it "costs nothing,
+    # because the body it guards is then parked" -- true when its only readers
+    # were the cast-stop send site and cast_stop_reckon, both of which want to
+    # refuse on a maybe-moving body. §31 added a reader with the OPPOSITE
+    # polarity and did not revisit the comment. That is the whole defect.
+    #
+    # GRANT_LOCAL_WINDOW is the bound its sibling reader at the zero-lead grant
+    # already uses for the keyboard latch, so this is the existing constant
+    # rather than a new one. It is an upper bound on "a click leg might still
+    # be in flight", not a claim about leg duration -- we cannot observe a
+    # click leg's end, which is exactly why an unbounded latch was wrong.
+    #
+    # A LOWER BOUND WOULD BE WRONG TOO: this must stay TRUE for a click leg
+    # genuinely in flight, or §31's chain pause stops pausing on click-walks
+    # and the quarterstep regresses. That is the check test_playerswing §7
+    # pins from both sides.
+    click = state.get("click_moving_at")
+    return click is not None and (now - click) <= GRANT_LOCAL_WINDOW
 
 
 def attack_tick(send, state, conn_id):

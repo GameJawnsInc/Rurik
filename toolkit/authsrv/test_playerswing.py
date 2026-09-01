@@ -27,12 +27,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
 import checks  # noqa: E402
 
-# FLOOR 35, from the green runs of 2026-09-01 that added section 6, the
-# ANIMREF-RE 33 landing hold release (30 with section 5's chain pause; 24
-# before that day; 13 when the file carried only the windup split). Both new
-# sections are fixture-free -- they stub the clock and drive the real
-# attack_tick -- so 35 is the BARE-MACHINE number too, measured both ways.
-LEDGER = checks.Ledger("player swing windup", floor=35)
+# FLOOR 41, from the green runs of 2026-09-01 that added section 7, the
+# ANIMREF-RE 33 F5 click-latch bound (35 with section 6's landing hold
+# release; 30 with section 5's chain pause; 24 before that day; 13 when the
+# file carried only the windup split). Sections 5-7 are all fixture-free --
+# they stub the clock and drive the real attack_tick -- so 41 is the
+# BARE-MACHINE number too, measured both ways that day.
+LEDGER = checks.Ledger("player swing windup", floor=41)
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -363,6 +364,96 @@ def section_retarget():
           f"swing={swing}, old health={state['agents'][10]['health']}")
 
 
+def section_click_latch_bound():
+    """ANIMREF-RE 33 F5: the click-walk latch is age-bounded, both ways.
+
+    THE OPERATOR'S BUG, reported the same day 31 shipped: "click-to-walk
+    cancelled by spacebar [interact/attack] doesn't start attacking. if the
+    last move command wasn't WASD, spacebar doesn't fire attacks at all."
+
+    MECHANISM: `click_moving_at` is armed on every 0x003E and cleared only by a
+    later movement report (0x003D) or a stop report (0x0047). A click leg that
+    merely ARRIVES clears nothing -- the client reports nothing at all while
+    click-walking. Before 31 that cost nothing, because the latch's only
+    readers wanted to refuse on a maybe-moving body. 31 made `attack_tick` a
+    reader with the OPPOSITE polarity, so a stale latch made `if moving:
+    return` fire forever and no swing ever opened. `begin_attack` had already
+    accepted the order; it was then silently starved.
+
+    BOTH DIRECTIONS MATTER, which is why this section checks both: a latch that
+    never expires breaks the attack, and a latch that expires too eagerly
+    breaks 31's chain pause on click-walks and regresses the quarterstep.
+    """
+    import authsrv
+    import time as _t
+
+    print("\n7. ANIMREF-RE 33 F5: the click-walk latch is bounded")
+
+    W = authsrv.GRANT_LOCAL_WINDOW
+    now = _t.time()
+    check(W > 0.5,
+          "the bound is the EXISTING GRANT_LOCAL_WINDOW, not a new constant -- "
+          "the same one the zero-lead grant already applies to the keyboard "
+          "latch",
+          f"GRANT_LOCAL_WINDOW = {W}")
+    check(authsrv._player_body_moving({"click_moving_at": now}) is True,
+          "a click leg JUST issued still reads as moving -- 31's chain pause "
+          "must keep pausing through a real click-walk, or the quarterstep "
+          "regresses",
+          "fresh click")
+    check(authsrv._player_body_moving(
+              {"click_moving_at": now - (W + 1.0)}) is False,
+          "and a click leg older than the window does NOT -- the operator's "
+          "bug: a completed click-walk left the latch set forever, so "
+          "`attack_tick` returned before opening any swing and spacebar did "
+          "nothing at all",
+          f"click {W + 1.0:.1f}s old")
+    check(authsrv._player_body_moving({"kbd_moving_at": now - 600.0}) is True,
+          "the KEYBOARD latch is deliberately NOT bounded here -- it is "
+          "cleared by the 0x0047 stop report, which the client does send "
+          "(36 of 36 in the corpus), so it has a real terminator and needs "
+          "no age guess. Bounding only the latch that lacks one is the whole "
+          "point",
+          "old kbd latch still reads moving")
+
+    # THE END-TO-END SHAPE: an attack ordered after a completed click-walk must
+    # actually swing. This is the operator's report as a test.
+    sent = []
+    send = lambda op, vals, label="", quiet=False: sent.append(
+        (op, vals, label))
+    state = _state()
+    state["click_moving_at"] = _t.time() - (W + 1.0)   # a click leg long done
+    authsrv.begin_attack(send, state, 10, 0)
+    sent.clear()
+    authsrv.attack_tick(send, state, 0)
+    started = [v for op, v, _l in sent
+               if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
+               and v[0] == authsrv.agents.GV_ATTACK_STARTED]
+    check(started == [[authsrv.agents.GV_ATTACK_STARTED, PLAYER, 10, 0]],
+          "END TO END: after a click-walk that finished, an ordered attack "
+          "OPENS A SWING. This is the operator's report as an assertion -- "
+          "before the bound it opened none, ever, and the order was accepted "
+          "and starved",
+          f"{started}")
+
+    # KNOWN-BAD ARM: with the latch fresh, the pause is still in force.
+    sent.clear()
+    state2 = _state()
+    state2["click_moving_at"] = _t.time()
+    authsrv.begin_attack(send, state2, 10, 0)
+    sent.clear()
+    authsrv.attack_tick(send, state2, 0)
+    started2 = [v for op, v, _l in sent
+                if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
+                and v[0] == authsrv.agents.GV_ATTACK_STARTED]
+    check(started2 == [],
+          "KNOWN-BAD ARM for the other direction: while the click leg is "
+          "genuinely in flight the swing STILL waits -- a fix that opened a "
+          "swing here would have traded the operator's bug for a regression "
+          "of 31's pause, and the test would not have noticed",
+          f"{started2}")
+
+
 def section_landing_hold_release():
     """ANIMREF-RE 33 F1: the action hold ENDS at the landing.
 
@@ -595,6 +686,7 @@ def main():
     section_retarget()
     section_chain_pause()
     section_landing_hold_release()
+    section_click_latch_bound()
     return LEDGER.verdict()
 
 
