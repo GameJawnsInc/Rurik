@@ -4296,13 +4296,33 @@ RESYNC = False
 # session with one loud line, because no arm of this may take down the
 # server.  Guard state is touched from two threads (the recv loop and
 # world_tick), so every access goes through _agtrack_guard_call's lock.
-# ANIMREF-R11, 2026-09-01: do NOT answer a movement report with a destination
-# grant while our own action hold is set. See the send site's block for the
-# measurement; the short form is that a refused press is indistinguishable from
-# a real one ON THE WIRE, and answering it relocates the displayed body through
-# the client's AgTrack roster walk. False = suppress (the default),
-# True = --legacy-grant-during-hold restores the old unconditional send.
-GRANT_DURING_HOLD = False
+# ANIMREF-R11, 2026-09-01: shipped suppressing, REFUTED BY THE NEXT RUN, and
+# now OPT-IN. Keeping the lever because the experiment is worth repeating and
+# because what it measured is the most useful thing this arc has learned.
+#
+# The reasoning was sound and the measurement was right: a refused press is
+# indistinguishable from a real one ON THE WIRE (FINDINGS 22.2), our grant
+# answers it, and the client applies that grant through AgTrack's roster walk
+# as a `setposition` -- RELOCATING the displayed body (2 of 15 post-refusal
+# grants did, 0 of 29 otherwise; retail suppresses 10:1 in the same state).
+#
+# WHAT THE RUN SAID, and it is a fact about our whole movement model rather
+# than about this flag. Suppressing the grant did NOT cost recoveries (6/13
+# against 7/13) -- it cost their SPEED: the second dispatch's lag went from
+# 47-172 ms (p50 62) to 313-828 ms (p50 406), a 6.5x slowdown, and total
+# begin-move dispatches fell 333 -> 59. The owner scored it 0 quartersteps
+# where the un-suppressed arm scored 1. A 400 ms slide is not a slide.
+#
+# SO THE SLIDE WE HAD WAS THE GRANT'S. Our client re-dispatches promptly
+# because our grant hands it a destination; without one it waits for the input
+# evaluator to notice a direction change (CANCELWALK F25). That is worth
+# stating plainly: what felt like a quarterstep was substantially our server
+# yanking the body, which is also why the owner said it never felt like a stock
+# slide. Removing the yank removed the slide, because they were the same event.
+#
+# True = grant as before (the DEFAULT, restored 2026-09-01).
+# False = --suppress-grant-during-hold, the refuted arm, kept for A/B.
+GRANT_DURING_HOLD = True
 
 AGTRACK_SHADOW = True
 AGTRACK_REPIN = True
@@ -20211,15 +20231,16 @@ def main():
                          "0x00A0 when the cast names a target, 0x009F when "
                          "it does not -- retail never sends target 0 on the "
                          "targeted channel.")
-    ap.add_argument("--legacy-grant-during-hold", action="store_true",
-                    help="Revert ANIMREF-R11: answer every movement report "
-                         "with a destination grant again, including reports "
-                         "from presses the client REFUSED because our own "
-                         "action hold was set. Those grants relocate the "
-                         "displayed body through the client's AgTrack walk "
-                         "(2 of 15 post-refusal grants did, against 0 of 29 "
-                         "otherwise -- FINDINGS sec.26). Retail suppresses "
-                         "10:1 in the same state.")
+    ap.add_argument("--suppress-grant-during-hold", action="store_true",
+                    help="ANIMREF-R11, REFUTED and kept as an A/B lever: do "
+                         "not answer a movement report with a destination "
+                         "grant while our own action hold is set. It removes "
+                         "the body relocation it was built to remove (2 of 15 "
+                         "post-refusal grants relocated, 0 of 29 otherwise; "
+                         "retail suppresses 10:1) -- and it costs the SLIDE, "
+                         "because the slide was the grant's: recovery lag "
+                         "47-172 ms becomes 313-828 ms and dispatches fall "
+                         "333 to 59 (FINDINGS sec.27). OFF by default.")
     ap.add_argument("--no-agtrack-repin", action="store_true",
                     help="Keep the guard's telemetry but disable its ACTIVE "
                          "arm (ON by default; MOVECODE-1z-s): the single "
@@ -21622,13 +21643,13 @@ def main():
         AGTRACK_SHADOW = False
         print("[map] --no-agtrack-shadow: the guard is OFF entirely -- no "
               "mirror, no telemetry rows, and the active re-pin cannot run.")
-    if a.legacy_grant_during_hold:
+    if a.suppress_grant_during_hold:
         global GRANT_DURING_HOLD
-        GRANT_DURING_HOLD = True
-        print("[map] --legacy-grant-during-hold: movement reports are "
-              "answered with a grant even while the action hold is set "
-              "(pre-ANIMREF-R11; expect the body to be relocated on a "
-              "refused press).", flush=True)
+        GRANT_DURING_HOLD = False
+        print("[map] --suppress-grant-during-hold: no destination grant "
+              "while the action hold is set (ANIMREF-R11, REFUTED -- expect "
+              "the body relocation to vanish AND the slide to go with it, "
+              "recovery lag p50 62 ms -> 406 ms).", flush=True)
     if a.no_agtrack_repin:
         global AGTRACK_REPIN
         AGTRACK_REPIN = False
