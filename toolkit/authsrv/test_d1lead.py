@@ -58,7 +58,7 @@ import checks      # noqa: E402
 # the 2d cells, five row locks: lead_clip_why, the flush-hold row,
 # kbd_age, the a2_leg lifecycle, the watchdog-due transition) -> 86.
 # Each floor re-read off its own green run.)
-LEDGER = checks.Ledger("the REALFIX-A2 d1-lead bundle", floor=86)
+LEDGER = checks.Ledger("the REALFIX-A2 d1-lead bundle", floor=92)
 check = checks.adopt(LEDGER)
 
 
@@ -739,6 +739,54 @@ def main():
           "for (0x0029 then 0x002B), the client bakes the re-pin BEFORE "
           "the [1.0,9] lands in +0x60, and every count stays green -- the "
           "review's one surviving mutation")
+
+    # ---------------------------------------------------------------- R11
+    print("R11. the grant is not sent while WE hold the action")
+    # WHY THIS IS A SOURCE CHECK AND A PREDICATE CHECK, not a wire drive: the
+    # send lives inside `handle()`, the socket handler, so there is no seam to
+    # drive it through without a connection. The structure check pins that the
+    # guard exists at the one send site; the predicate check below exercises
+    # the condition itself in BOTH arms, including the known-bad one.
+    check(getattr(authsrv, "GRANT_DURING_HOLD", None) is False,
+          "GRANT_DURING_HOLD defaults to False -- the suppression is the "
+          "SHIPPED behaviour, not an opt-in",
+          "a movement report whose press the client refused looks identical "
+          "on the wire to one that moved (FINDINGS 22.2), so answering it "
+          "grants a destination for a move that never happened")
+    check(src.count("if (GRANT_DURING_HOLD") == 1
+          and src.count('or not state.get("action_hold")') == 1,
+          "exactly ONE guarded send site -- a second would be the "
+          "two-arms-one-clock defect the composition matrix refuses",
+          "the grant that relocated the body in run 3 came from this site "
+          "and only this site (ret 0x005FD918, 44 grants, 3 relocations)")
+    check("R11 grant " in src and "SUPPRESSED" in src,
+          "and a suppressed grant is PRINTED, never silent -- a run where "
+          "this never fires has no exposure rather than a clean result",
+          "the zero-exposure lesson: a treatment arm that never met its "
+          "condition has run zero trials")
+    check("--legacy-grant-during-hold" in src
+          and "legacy_grant_during_hold" in src,
+          "and the revert flag exists and binds -- a shipped fix with no "
+          "revert arm is an assertion")
+
+    # THE PREDICATE, BOTH ARMS. This is the check that must FAIL on the
+    # known-bad configuration; a guard that passes with the fix disabled is
+    # measuring the wrong quantity.
+    def grants(hold, legacy):
+        return bool(legacy or not {"action_hold": hold}.get("action_hold"))
+
+    check(grants(0, False) is True and grants(1, False) is False,
+          "shipped arm: a report with the hold CLEAR is answered, one with "
+          "the hold SET is not -- 2 of 15 post-refusal grants relocated the "
+          "body against 0 of 29 otherwise, and retail suppresses 10:1 in "
+          "the same state (0.050/s held vs 0.519/s clear)",
+          "rates, not counts: the held and clear windows differ in length, "
+          "and that denominator already cost this arc one reverted fix")
+    check(grants(1, True) is True,
+          "KNOWN-BAD arm: --legacy-grant-during-hold answers the report even "
+          "with the hold set, restoring the relocation. The revert must "
+          "score badly here or this section is checking nothing")
+
 
     return LEDGER.verdict()
 
