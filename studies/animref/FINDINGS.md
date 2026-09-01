@@ -2656,6 +2656,149 @@ that was supposed to catch the slip endorsed it. The tree was only settled by
 grepping for a string unique to the new code. A verification whose pattern is a
 substring of unrelated code is not a verification.
 
+## 35. THE HOLD WAS NEVER RETAIL'S SHAPE — a denominator read backwards, and the mid-windup warp
+
+> *"quarterstepping feels nice now, but the mid windup is causing warps now while
+> still not moving out smoothly"* — operator, after §33/§34
+
+Ten agents, three lanes, a skeptic pass; **the `SURVIVED` set came back empty
+again — all six reviewed claims refuted.** What survived is one number.
+
+### 35.1 The root error: a census of HOLDS read as a rate over STARTS
+
+`studies/castmech/FINDINGS.md` §3c lists, under **"→1 (an action takes hold)"**,
+*"the player's own ATTACK_STARTED instants (`[4, 31, x, 0]`, **4 of 4** across
+three connections)"*. That is a census of the **property-8 holds observed**, and
+it says: of the holds we saw, all four rode an ATTACK_STARTED. **An ORDER fact.**
+
+We read it as a **rate over the starts** and sent a hold on every swing. Measured
+over the same quantity on both sides:
+
+| | holds sent | attack starts | rate |
+|---|---|---|---|
+| **retail** | 83 | 1,332 | **6.2 %** |
+| **ours** | 52 | 52 | **100.0 %** |
+
+So this was never a lifetime bug to be tuned — which is exactly how §33 F1 read
+it, and why F1 helped the post-landing case and did nothing at all for the
+pre-landing one. **The hold is not retail's shape for an auto attack.**
+
+### 35.2 What it cost, in the operator's own capture
+
+`authsrv-20260901T125928-c1.jsonl` — the only log on disk carrying
+`LANDING_HOLD_RELEASE`, arm identified from the `flags` header rather than the
+filename:
+
+| regime | n | gate SET | client speed p10 / p50 | our drift p50 | frozen (<5 u in 1.5 s) |
+|---|---|---|---|---|---|
+| **pre-landing (R1)** | 32 | **25/32** | **0.0** / 138.4 u/s | **108.0 u** | **6/32 = 19 %** |
+| post-landing (R2) | 111 | 4/111 | 108.1 / 189.8 | 54.8 u | 1/111 = 1 % |
+| opener, gate clear | 76 | 0/76 | — / 254.4 | 43.2 u | 3 % |
+
+**And the freeze is not passive.** The refused arm reports anyway (`0x0081AD7D`
+returns `eax=1`, `0x00816475` sends), we answer with a zero-lead grant at the
+client's own point, and CANCELWALK-F7 established on this build that the client
+executes that answer **as a click-order** — it walks the granted leg to
+completion with key state ignored, then parks. Zero-lead makes that leg zero
+long, so the body stops dead.
+
+**Worked example, t = 14.5610:** the client reports `[9987.918, 7988.302]`; we
+send property 3, property 8 → 0, `0x0025` and `ZERO LEAD`; the client then says
+**nothing for 0.80 s**, and its next message is a stop at the **identical
+coordinate**. Zero travel — while our integrator walked **216.0 u**. The visible
+snap is that divergence being reconciled.
+
+### 35.3 The "enter attack" warp: NOT FOUND as a relocation — but the presses are no-ops
+
+**We displaced the player zero times in that session.** 99 of 99 zero-lead grants
+landed **0.0000 u** from the position the client had just reported (dt +0.0003 s),
+including one fired while our model was 174.2 u adrift. `agtrack_repin` census:
+`{none: 105}`. **0 of 195** attack orders across the day have a `0x002C` within
+±1.5 s. 233 of 233 reports accepted. A grant to where you already are cannot warp
+you. **NOT FOUND.**
+
+**What IS found: 72 % of attack presses do nothing at all.** `begin_attack`
+(`:9336`) puts everything — the retarget close, `attacking`, `last_hit`,
+`player_last_swing`, even the console line — inside
+`if state.get("attacking") != target_id:`. A repeat press on a target already set
+is a total no-op. **101 presses → 28 effective, 73 no-ops (72 %)**, 37 of the 73
+with no `attack_started` within 3 s. The preceding pre-§33 run: 41 %. **§32 + §33
+roughly doubled it**, because §32 keeps `attacking` across a post-landing move and
+§33 moved presses out of the pre-landing bucket. That is "doesn't stop on a dime",
+mechanically — the press changes nothing, so the body keeps doing what it was.
+
+**And retail's server DOES drive an approach**, which kills the reading that our
+silence is correct: self-directed `0x002A AGENT_UPDATE_DESTINATION` in the 5–150 ms
+after a press — **61 against 7** in the matched window before, 1.632/s vs a
+baseline 0.0483/s (**33.8×**) — and **60 of the 61 name the attack's own target**.
+20 of those legs carry round-integer destinations against 0 before (server-computed
+waypoints, not an echo), and 80 of 85 move the player closer. **Not today's
+symptom** — 0 of 191 presses this session were beyond 1500 u — but the gap is real.
+
+### 35.4 SHIPPED: `SWING_HOLDS_WALK_GATE = False`
+
+The two auto-swing sites (`attack_tick`, `hit_enemy`) no longer send the hold.
+**The cast path keeps its hold** — that one is retail-correct and separately
+corpus-backed. Revert: `--swing-holds-walk-gate`.
+
+**§33 F1 is subsumed, not deleted.** With the hold restored by the revert flag,
+F1's landing release is still what opens the gate post-landing, so the two
+compose. `test_playerswing` §6 now pins **all three arms** — shipped (no hold at
+all), revert+F1 (held, released at the landing), and both-legacy (held, never
+released) — plus a check that a **cast still holds**, which a change that silenced
+the cast half too would otherwise pass.
+
+**Sixteen test assertions changed**, and they were not flipped blindly: each one
+encoded the backwards denominator. The corpus ORDER facts they cited are kept
+under test on the arm that still produces both halves — the release still precedes
+the stop in a press burst, and the `[3]`/`[8→0]` pair still fires in that order at
+the cancel door, **whenever a cast is what holds**. Only the trigger narrowed.
+
+playerswing 42, castcancel 31, guards 41, castcycle 35, pools 127, agentlife 261,
+d1lead 94, cancelwalk 121. Floors 42 / 31; identical bare.
+
+### 35.5 What is NOT known, stated rather than smoothed
+
+**6.2 % is not 0 %.** Retail holds on some attack starts and **the condition is
+NOT FOUND.** Zero is closer to retail than 100 % by every measure available, and
+it is still an approximation of a behaviour whose trigger we have not read. If a
+future session finds the condition, this is the section to correct.
+
+**`ATTACK_RANGE = 1500.0` has no client witness at all** — no float compare,
+distance, dot product or sqrt on any of the five candidate senders, with the click
+sender `0x008164C0` as the positive control showing the same method *does* find
+geometry where geometry exists. It has also never been exercised: 0 of 191 presses
+beyond 1500 u. **Do not tune it.**
+
+**The approach is not derivable yet.** We know retail pairs a `0x002A`(follow) with
+round-integer legs, and we know our one attempt sent a *lone* `0x002A` and dragged
+the body through a staircase. The measurement that would derive it is static:
+decode whether a `0x0029` leg arriving after a `0x002A` appends to the goal slots
+or clears the follow.
+
+### 35.6 Staged, deliberately not shipped with this
+
+**F2 — re-arm on a repeat press** (`ATTACK_PRESS_REARMS`): move `last_hit` and
+`player_last_swing` out of the `!=` branch so a repeat press re-arms the swing
+clock. Derived from the 72 % no-op rate. **Not shipped in the same arm as §35**,
+because both touch the swing clock and one run could not separate them (§29).
+
+**F3 — bound the keyboard latch**, mirroring §34's click fix. Retail's own
+`0x003D → 0x0047` distribution has **698 of 1,962 never cleared**, p50 11.8 s,
+max 214.8 s — so the unbounded read can freeze the chain pause indefinitely, the
+same shape as the spacebar bug.
+
+### 35.7 The next check
+
+**One question, one arm, existing instrumentation:** *does a mid-windup movement
+press still take the walk-gate refusal arm?* `chcli_dir` (`0x0081A8F0`, refusal
+test `@0x0081A93C`) with the gate word read at entry answers it directly.
+
+**Registered prediction:** refusals fall to **zero on the auto path** and appear
+only during casts, where the hold is retail-correct and stays. If they persist on
+auto swings, the gate has a second writer we have not found — a result, not a
+surprise.
+
 ## Provenance
 
 All figures are measurements over the owner's own live captures via extractors in this
