@@ -2577,7 +2577,14 @@ probably not the entry the SET arm reaches. Check its address before relying on 
 hold was not the whole stall, and `0x005355C0`'s clocks are next. That branch is
 written down now so a surviving stall is a result rather than a surprise.
 
-## 34. THE SPACEBAR BUG — a regression §31 introduced, found in the operator's own capture
+## 34. THE SPACEBAR BUG — a regression §31 introduced (PARTIAL FIX; see §36)
+
+> **⚠ THE FIX IN THIS SECTION IS INCOMPLETE AND THIS SECTION OVERCLAIMED.**
+> The mechanism is real, but the bound chosen for it was borrowed rather than
+> derived, and the operator reports the symptom persists. Measured after this
+> shipped: click-last attack presses are answered 60.6% of the time against
+> ~91% for stop-last. **§36 has the verification I should have run before
+> writing the word 'fixed' anywhere in here.**
 
 > *"click-to-walk cancelled by spacebar [interact/attack] (which would normally
 > walk-to-and-attack in stock) doesn't start attacking. if the last move command
@@ -2798,6 +2805,90 @@ test `@0x0081A93C`) with the gate word read at entry answers it directly.
 only during casts, where the hold is retail-correct and stays. If they persist on
 auto swings, the gate has a second writer we have not found — a result, not a
 surprise.
+
+## 36. CORRECTION — §34 did NOT fix the spacebar bug, and I claimed it did
+
+> *"spacebar/click-walk bug is not gone. there are still many problems. i can
+> also attack from far away. we need to develop each piece accurately, not skip
+> steps."* — operator, 2026-09-01, closing
+
+### 36.1 The claim I made, and what I actually had
+
+§34 said the spacebar bug was located and fixed. **What I had was a mechanism I
+hypothesised and a unit test I wrote against that same hypothesis** — two of our
+own components agreeing, which `CLAUDE.md` says proves nothing. **I never checked
+the symptom against a run.** The operator did, and it is still there.
+
+### 36.2 What the wire says, from their own runs
+
+Presses answered by an `attack_started` within 3 s, split by what the last
+movement input was:
+
+| last input | 12:59 (pre-§34) | 14:32 (post-§34 + §35) |
+|---|---|---|
+| **CLICK** | 18/54 = **33.3 %** | 20/33 = **60.6 %** |
+| STOP | 39/42 = 92.9 % | 10/11 = 90.9 % |
+| WASD | 5/5 = 100 % | 2/4 = 50 % (n=4, ignore) |
+| all | 62/101 = 61.4 % | 32/48 = 66.7 % |
+
+**The click-last deficit is real and it survives the fix.** 33.3 % → 60.6 % is a
+genuine improvement — the mechanism was not imaginary — but against STOP-last's
+~91 % it is still a large hole. And the newest run answers **23 `attack_started`
+to 48 presses**.
+
+### 36.3 The step I skipped, named exactly
+
+§34 bounded `click_moving_at` by `GRANT_LOCAL_WINDOW` (**3.0 s**) *because a
+sibling reader used that constant*. I never asked what the correct bound is for
+**this** question. A click-walk that finishes in 0.4 s still reads as "moving" for
+the remaining 2.6 s, and `attack_tick` refuses a swing for all of it. **I turned
+an unbounded block into a ≤3 s block and reported it as fixed.** A 60.6 % answer
+rate is exactly the shape that predicts.
+
+The right bound is not a constant borrowed from a neighbour. It is *"has the
+click leg arrived?"* — which we do not observe, and that is the actual open
+problem, not a number to pick.
+
+### 36.4 Also reported, and NOT investigated: "i can also attack from far away"
+
+`ATTACK_RANGE = 1500.0` (`authsrv.py`), whose own comment says *"Ours entirely;
+nothing measured it"*, and which §35.5 already recorded as having **no client
+witness at all** — no float compare, distance, dot product or sqrt on any of the
+five candidate senders, with the click sender `0x008164C0` as a positive control
+showing the method does find geometry where geometry exists. 1500 units is not a
+melee reach; it was never derived and has never been exercised (0 of 191 presses
+beyond it). **UNVERIFIED, untouched, and it needs deriving rather than guessing.**
+
+### 36.5 The standing correction to how this arc has been run
+
+Five sections shipped in one day, each partly invalidating the last: §28's pair
+reverted (§29), §28's decode refuted (§30), §33 F1 subsumed by §35, and now §34
+shown incomplete. **The pattern is shipping on a derivation and reporting the
+result as verified.** A derivation earns a *candidate*; only the operator's run
+closes a symptom they reported.
+
+**What this section changes going forward:**
+
+1. **A symptom the operator reported is closed by the operator, not by a test.**
+   Our test proves the code does what we intended. It cannot prove the intention
+   was the cause.
+2. **A borrowed constant is a placeholder, not a derivation.** If the right value
+   is unknown, say so in the ship and score it, or do not ship it.
+3. **One piece, finished, before the next.** The open list below is ordered and
+   nothing on it should start before the one above it is closed on a run.
+
+### 36.6 The open list, in order
+
+1. **The click-last attack deficit** — 60.6 % against ~91 %. Mechanism partly
+   found (§34), bound wrong. What is missing is a real answer to "has the click
+   leg arrived?"
+2. **The no-op press (F2, derived, staged)** — `begin_attack` gates everything on
+   `attacking != target_id`, so a repeat press changes nothing; 23 `attack_started`
+   from 48 presses in the newest run.
+3. **`ATTACK_RANGE`** — undederived, no client witness, and the operator can attack
+   from far away.
+4. **The approach** — retail's server drives it (`0x002A`, 33.8× enrichment,
+   60 of 61 naming the target); ours sends nothing.
 
 ## Provenance
 
