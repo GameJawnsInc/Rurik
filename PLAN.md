@@ -1747,6 +1747,22 @@ emitter against the population, fix by derivation, tune never.
   problem is open, and the instrument overstated how close it was (travel
   under a held key is a necessary condition, not the finding — the harness
   cannot score a feel thing, owner's ruling).
+* **ANIMREF-RE §21–§37 (2026-09-01, `e71ef82`) — the client dig ran, and the
+  status is: quarterstep approved by the operator (§29–§33), the spacebar-after-
+  click bug NOT closed (§36 corrects §34's overclaim), and §37 ships the derived
+  answer as a CANDIDATE.** The client's attack press clears its queued waypoints
+  and the AgTrack record but does not stop the segment the body is on
+  (`0x0081BDB0`, static; 3/3 seen continuing on tape), retail's server drives the
+  leg itself and supersedes it on a press (`0x002A` to the target's own position
+  at 26–123 ms), so the click latch is now bounded by the leg's own travel time
+  (`CLICK_LATCH_LEG_ETA`, revert `--click-latch-window`) — retrodicts 13/13,
+  10/10, 36/36 starved presses with none opened mid-leg, **and a 1.5 s constant
+  would retrodict those tapes equally**: only the operator's long click
+  ([SINGLECASE CASE 6](studies/animref/SINGLECASE.md)) separates them, scored
+  with `toolkit/authsrv/pressscore.py`. Also settled on the corpus: the no-op
+  repeat press is retail's own shape (F2 refuted, not shipped); retail's reach is
+  R ≈ 74–81 u (the `ATTACK_RANGE` seed); the approach's client hook is the AgTrack
+  handoff. **Nothing on the §36.6 list starts before CASE 6 answers.**
 * **NEXT: [studies/animref/RE-PLAN.md](studies/animref/RE-PLAN.md) — a CLIENT
   DIG, by owner's direction** ("a true reverse engineering approach rather
   than more guesswork"). Localised: the client sends its `0x003D` and the
