@@ -7243,13 +7243,21 @@ the same-tick ALIAS**: the
   byte-identical to what `gensites.py` emits, because a hand-edited generated
   header is exactly the two-homes split the ruling refuses and is otherwise
   invisible. §2 requires every site's first byte to be **its own SHAPE's byte** in
-  the pinned 38797 image — `0x55` for the `push ebp` entries and, since 2026-08-29,
-  `0xC3` for the four MapFindPath `ret` sites, because that byte IS the instruction
-  the handler will re-emulate. Note what it deliberately is NOT: a check that
-  accepts "0x55 or 0xC3" anywhere would let a ret's emulation be armed on an entry
-  byte, so the pairing is per row and is checked as a pair — a tighter gate than
-  the single global constant it replaced, since an entry that decayed into
-  something else is still caught. **§8 pins a bug that would
+  the pinned 38797 image — `0x55` for the `push ebp` entries, since 2026-08-29
+  `0xC3` for the four MapFindPath `ret` sites, and since ANIMREF-RE (2026-09-01)
+  `0x57` for the `resume_arm` site (`push edi`, a third one-byte no-operand
+  shape with the same safety the entry rule had) — because that byte IS the
+  instruction the handler will re-emulate. Note what it deliberately is NOT: a
+  check that accepts "any of the three" anywhere would let a ret's emulation be
+  armed on an entry byte, so the pairing is per row and is checked as a pair — a
+  tighter gate than the single global constant it replaced, since an entry that
+  decayed into something else is still caught. §9's 0x55-everywhere control
+  counts refusals over EVERY non-`0x55` shape (the four rets and `resume_arm`),
+  derived from the rows rather than a literal, so a new shape reddens the count
+  instead of sliding under it. The 2026-08-28 sites plus the ANIMREF-RE ones
+  (`movecmd`, `inputeval`, `movecache`, `movedispatch`, `resume_arm`,
+  `resume_fire`, `heldbit`) bring the full run to 302 checks; the bare-machine
+  floor stays 169. **§8 pins a bug that would
   otherwise have been invisible until a live run produced a ten-minute capture
   nobody asked for**: `GetEnvironmentVariableA` inside an injected DLL reads the
   *client's* environment, inherited from whatever launched `Gw.exe`, **not the
@@ -9298,8 +9306,17 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   sections: `[8 → 1]` closes every immediate press burst with the `→ 0` half
   ELIDED when the flag was still 0 (the ranger's t=12.9508 shape,
   transition-only), the spell E5's instant ends with the `[8→0][8→1]` pulse
-  (4 of 4 live), the E3 toggles nothing, and the queued press and begin carry
-  no property 8 at all. The section that earns the entry is the QUEUE LAW: skill 105's two
+  (4 of 4 live), and the queued press and begin carry
+  no property 8 at all. Since ANIMREF-RE (2026-09-01) the E3 batch DOES
+  toggle it — `[8 → 0]` riding behind the E3, the caster-freed instant, 19
+  of 19 unmoved corpus cycles; §2 and the attack-family §2c both pin the
+  release riding one slot behind the E3, and §2 also runs the KNOWN-BAD arm
+  (`--no-e3-release` reproduces the pre-RE root: E3 alone, hold rides on) so
+  the revert flag reddens rather than asserting. This retired the entry's
+  own former claim that "the E3 toggles nothing", which was read off the
+  older corpus whose E3s were silent because a movement instant had already
+  released the hold (castmech P10, resolved). Bare-machine floor 34, 36 with
+  the vault. The section that earns the entry is the QUEUE LAW: skill 105's two
   cycles both exceed its 2.0 s activation by exactly the previous cast's
   remaining aftercast, so E4 fires at accept but the cast begins when the
   caster FREES — the naive press+activation model is refuted by +0.64 s and
@@ -9344,7 +9361,9 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   split: the first tick sends the START with the `[8 → 1]` action hold riding
   behind it (4 of 4 live, castmech 3c), the landing a windup later is
   gain/damage/FINISHED with NO second START and no hold toggle — the chain
-  still holds. §2 pins the gate as
+  still holds. (Since ANIMREF-RE the mid-cast section's exact op list gains
+  the E3 release riding behind the E3 — the chain's next swing re-holds one
+  tick later.) §2 pins the gate as
   START-to-START — right after a landing nothing fires, because the backswing
   half of the interval is a wait with no wire event, and the next START opens
   one interval after the previous one. §3 drops an armed swing whose target
@@ -9387,17 +9406,19 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   queued behind it both release, two E2s, no recharge for either. §4 proves
   the busy-window rollback: a press after a cancel schedules its E5 one
   activation out, not behind the cancelled cast's ghost. §5 is the chain
-  half, both doors since ANIMREF-R7a (2026-08-31): the DEFAULT door keeps
-  the old pins — one GV_ATTACK_STOPPED, target forgotten, armed swing
-  dropped unlanded — and the check text carries why that stays default
-  despite NOT being retail's wire (LAW A: 87/100 corpus mid-chain moves
-  carry no prop-3; but the tap-train verbatim check showed our client
-  cannot start moving until its action closes and that prop-3 is the only
-  closer we send, so LAW A alone froze every movement key — FINDINGS §14);
-  `--move-keeps-chain` is LAW A's wire opt-in, pinned too (no stop, target
-  and armed swing survive, range gate judges), waiting on the client-grant
-  decode; and the negative still holds, no second STOPPED when the chain
-  was already paused by a press. §6 is the
+  half, both doors — and since ANIMREF-RE (2026-09-01) the arms are FLIPPED:
+  LAW A is now the DEFAULT door (no prop-3, target and armed swing survive,
+  range gate judges) and the section pins that the hold STILL releases
+  (`[8 → 0]`, which is what clears the client's walk gate and arms its 250 ms
+  resume — LAW A removes the animation-kill, never the release). The
+  KNOWN-BAD arm is `--legacy-move-stops-chain`: one GV_ATTACK_STOPPED, target
+  forgotten, armed swing dropped unlanded — the pre-RE door that cancels the
+  attack animation on every mid-chain move, reproduced on purpose so the
+  revert reddens. The blocker that kept LAW A opt-in is resolved: the
+  "unidentified grant" retail feeds a mid-chain mover is the client's own
+  250 ms resume poll (prop 8's gate-clear at 0x0081C090), and the tap-train
+  freeze was retail-consistent tap behaviour (the resume rescues held keys
+  only). Floor 23. §6 is the
   `0x0028` CANCEL_ACTION door, the arm the first operator run forced: the
   client sends NO movement c2s while it holds a cast — the operator's three
   cancel inputs each arrived as a header-only 0x0028 (run 20260823T101329),
