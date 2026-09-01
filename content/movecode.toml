@@ -386,6 +386,77 @@ extractor = "toolkit/clientscan/codescan.py"
 build = 38797
 verified = "--dis 0x005FC7A0 shows `55 push ebp`. Module and parameter NAMES are ArenaNet's own, from asserts inside the body: AgApi.cpp:1041 `targetPoint.position != AGENT_INVALID_POSITION` at 0x005FC7CD and AgApi.cpp:1043 `moveSpeed <= AGENT_MAX_MOVE_SPEED` at 0x005FC81D. deref_agent is false because arg1 is an agent ID, not a pointer, and ecx is not `this`."
 
+# --------------------------------------------------------------------------
+# ANIMREF-RE's input-side sites, added 2026-09-01. The arc needed to know why
+# our client does NOT re-dispatch a held movement key after its walk gate
+# clears (FINDINGS sec.27: suppressing our grant took the recovery lag from
+# p50 62 ms to 406 ms, because the re-dispatch was OUR GRANT's, not the
+# client's). These four bracket the decision: the per-frame evaluator, the
+# two paths that can commit the dispatch cache, and the octant dispatcher.
+#
+# THE CACHE IS THE POINT. 0x0053541F..0x00535447 skips the dispatch when the
+# new heading equals the cached one AND [0xC07C34] == -1, and 0x00535462
+# commits -1 on every keyboard dispatch. So a HELD key with an unchanged
+# heading re-dispatches only if something invalidates that cache -- and
+# 0x005354D5 is the one site that writes a value other than -1.
+# --------------------------------------------------------------------------
+
+[hook_site.movecmd]
+va = 0x00535380
+rva = 0x00135380
+first_byte = 0x55
+thiscall = false
+deref_agent = false
+what = "MOVE-CMD: computes the heading, then at 0x0053541F..0x00535447 compares it against the cached one ([0xC07C2C] x, [0xC07C30] y, [0xC07C34] type) and RETURNS WITHOUT DISPATCHING when all three match. On a dispatch it commits the new heading and writes type = -1 at 0x00535462."
+why_hooked = "the skip is invisible from every other instrument: a held key that produces no chcli_dir looks identical to a key that is not held. This site fires either way, so the two become distinguishable."
+[hook_site.movecmd.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/codescan.py"
+build = 38797
+verified = "--dis 0x00535380 shows `55 push ebp`. The equality gate re-read by hand 2026-09-01: two fucompp/test ah,0x44/jp pairs at 0x00535425 and 0x00535437, then `cmp dword [0xC07C34], -1` / `je 0x00535487` -- the skip. CANCELWALK F25 named this function; its entry was not re-derived there and is here."
+
+[hook_site.inputeval]
+va = 0x005355C0
+rva = 0x001355C0
+first_byte = 0x55
+thiscall = false
+deref_agent = false
+what = "the per-frame input evaluator. Reads the movement-mode globals ([0xC07CA8] & 7 == 1 selects the keyboard arm) and calls MOVE-CMD."
+why_hooked = "the denominator for the skip: how many frames evaluated input against how many produced a dispatch. Without it a low dispatch count cannot be told from a low frame count."
+[hook_site.inputeval.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/codescan.py"
+build = 38797
+verified = "--dis 0x005355C0 shows `55 push ebp`; reads [0xC07CB4], [0xC07C4C], [0xC07CA8], [0xC07CB0] and calls 0x005FC400 and 0x00815C60. 2026-09-01."
+
+[hook_site.movecache]
+va = 0x00535490
+rva = 0x00135490
+first_byte = 0x55
+thiscall = false
+deref_agent = false
+what = "the SECOND path that can commit the dispatch cache. Takes a struct {x, y, type, w} in arg1, compares all three cached words against it, and on a difference commits x/y/type/w into 0xC07C2C/30/34/38 and TAIL-JUMPS to 0x008164C0. It is the only site that writes [0xC07C34] a value other than -1 (0x005354D5), so it is the only cache INVALIDATOR."
+why_hooked = "if our client ever re-dispatches a held key without a heading change, this is the site that let it -- and if it never fires, the keyboard arm's cache is never invalidated and the 406 ms lag has its explanation."
+[hook_site.movecache.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/codescan.py"
+build = 38797
+verified = "--dis 0x00535490 shows `55 push ebp`; --xrefs gives 2 direct (0x005365B8 call, 0x00536A7C jmp) plus one .rdata word at 0x00BE5E14, so it is also reachable through a table. The four commits read by hand at 0x005354C5/CD/D5/DD. 2026-09-01."
+
+[hook_site.movedispatch]
+va = 0x008163A0
+rva = 0x004163A0
+first_byte = 0x55
+thiscall = false
+deref_agent = false
+what = "MOVE-DISPATCH: decodes two signed axes into an 8-way octant (0x0081645A setle/dec/and 7/inc), calls the applier chcli_dir, and then reaches the send gate at 0x0081649E -- which is where EVERY arm converges, refused or not (FINDINGS sec.22.2)."
+why_hooked = "it sits between the input evaluator and the applier, so pairing it with chcli_dir separates `the input never reached the applier` from `the applier refused`."
+[hook_site.movedispatch.provenance]
+source = "client-table"
+extractor = "toolkit/clientscan/codescan.py"
+build = 38797
+verified = "--dis 0x008163A0 shows `55 push ebp`; --xrefs gives exactly one rel32 caller, 0x0053547B, inside MOVE-CMD. 2026-09-01."
+
 [hook_site.chcli_dir]
 va = 0x0081A8F0
 rva = 0x0041A8F0
