@@ -1302,29 +1302,52 @@ refusal (§22.2). So the call that refused is the call that triggered the releas
 > **The player's movement press is consumed unlocking the gate instead of moving
 > the body.** One press, one round trip, no displacement.
 
-### 23.3 Why this reads as "unreliable" rather than "broken"
+### 23.3 WHAT THIS RUN MEASURED — and the scenario it did NOT (owner's catch)
 
-The hold is only **0.28–0.43 s** (n=5). Press movement inside that window and the
-press is eaten; press outside it and you walk normally — which is exactly the
-shape of the owner's verdict, *"I can do it but it's unreliable"*, and exactly why
-the earlier harness measurement ("a tap at +2.1 s moves") looked like a fix: 2.1 s
-is far outside a 0.3 s window, so the instrument was sampling the case that was
-never broken. **That is [[feedback-observed-context-is-part-of-the-claim]] and the
-reason §11's "RESOLVED" survived as long as it did.**
+**The runsheet asked for "press slot 1, immediately try to walk", and the owner
+did exactly that — move-at-START, in the first ~0.4 s after the skill press,
+before the swing resolves. That is NOT the quarterstep.** The quarterstep is a
+move timed to the moment the attack animation *completes* — a different instant,
+and the one that is "supposed to be enabled". The owner flagged this after the
+run, and they are right: nothing here measured the quarterstep window. §23.3 as
+first written tied the 0.3 s hold to the *"unreliable"* verdict; that connection
+is **withdrawn** until the right window is captured (RUN-RE2).
 
-And the eaten press does not retry. MOVE-CMD is called **only when the movement
-direction changes** (CANCELWALK F25, `0x005355C0`'s 50 ms evaluator) — so holding
-the same key after a refusal produces no second `chcli_dir` call. The gate clears
-a round trip later and nothing re-dispatches. **The player has to release the key
-and press again**, which is the felt difference from stock.
+What IS established, and it stands: **while the gate is set, a move press is
+eaten and clears the gate without moving the body** — measured for move-at-start,
+5/5. Whether the gate is *also* set at the quarterstep window (animation
+complete, chain still live) is the open question RUN-RE2 exists to answer.
+
+Two readings are now live and this run does not separate them:
+
+1. **move-at-start being blocked may be CORRECT** — stock does not let you abort
+   an attack-skill press by instantly walking off — in which case run 1 measured
+   expected behaviour and the real bug is entirely in the quarterstep window;
+2. **or the same gate is set across the whole swing**, in which case the
+   quarterstep press is eaten too and run 1 is the same bug sampled early.
+
+They predict different things at the animation-complete instant, so RUN-RE2
+distinguishes them directly.
+
+One mechanism detail that holds regardless of scenario: the eaten press does not
+retry. MOVE-CMD is called **only when the movement direction changes**
+(CANCELWALK F25, `0x005355C0`'s 50 ms evaluator) — so holding the same key after
+a refusal produces no second `chcli_dir` call; the player must release and
+re-press. That is a real friction, but it is not yet tied to the quarterstep
+*feel* and must not be quoted as if it were ([[feedback-observed-context-is-part-of-the-claim]]).
 
 ### 23.4 What is now settled, and what is NOT
 
 **SETTLED (OBSERVED):** the walk gate exists, is `[char+0x64]` bit 0, is written
 by property 8, is read by both begin-move entries, refuses the walk when set, and
-our server holds it across the exact window in which a quarterstep is attempted.
-§15's animation-state model stays REFUTED; §22's chain is now confirmed at both
-ends rather than statically at one.
+our server sets it for ~0.3 s after a skill press — where a **move-at-start**
+press lands and is eaten. §15's animation-state model stays REFUTED; §22's chain
+is now confirmed at both ends rather than statically at one.
+
+**NOT YET MEASURED (owner's catch, §23.3):** whether the gate is set at the
+**quarterstep window** — the move timed to the animation completing. That is the
+window the owner's verdict is actually about, and run 1 sampled a different one.
+RUN-RE2 captures it.
 
 **NOT SETTLED, and §22.6's tension is untouched:** retail holds property 8 for
 p50 1.03 s — *longer* than our 0.3 s — with the player alive, and retail players
