@@ -6235,7 +6235,19 @@ Floor 75 against a green 75 with 5 declared skips (the archive-conditional
   is now pinned by a check),
   `toolkit/authsrv/test_replay.py` (a captured .raw decrypts back to the plaintext that
   was logged, and does so all-or-nothing across the whole vault — the first reader of a
-  .raw, which closes R0a's standing caveat),
+  .raw, which closes R0a's standing caveat. §5, added 2026-09-01, pins a second thing a
+  capture must be able to say: **which configuration produced it.** Two behaviour defaults
+  shipped and were reverted the same day, and identifying which of six 35-second sessions
+  had actually run them cost an hour of inference from send labels — `attack_stopped`
+  being absent was the only tell, and it only ever identified one of the two flags. The
+  header carried build, world, map and account uuid and not one line of configuration, so
+  every A/B this project has run was self-identifying by luck. `Recorder.__init__` now
+  emits a `flags` record built by `capture_flags()`, which **discovers** every
+  SCREAMING_CASE module global rather than hand-listing them — a flag added tomorrow is
+  recorded tomorrow with nobody remembering — and reads the LIVE globals, so a flag set by
+  any route and not just argparse is caught. The load-bearing check is the one that can
+  fail: flip a real flag and the census must move, then prove the probe restored it. Floor
+  4 → 10, because §5 is fixture-free and runs on a bare machine; 16 with a vault),
   `toolkit/authsrv/test_cmsgnames.py` (the GAME_CMSG names of 2026-08-11, against
   ArenaNet's own CLIENT traffic — the direction nobody had read, because the client ORs
   0x8000 into every game-channel opcode it sends and without masking that off not one
