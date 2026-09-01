@@ -2142,6 +2142,144 @@ property 3. Concretely, and both steps are static:
 not a measurement ([[quarterstep-is-a-feel-thing]]): one arm,
 `--move-keeps-chain`, one question — does the body walk, or slide?
 
+## 31. THE WALK CYCLE IS REFUSED BY ANIMATION PRIORITY — and retail's answer is to STRETCH THE CHAIN, not to send anything
+
+§30.6 asked what selects the pose while an action is live. **It is not the action
+queue at all.** A 12-agent decode (four lanes, adversarial pass, 5 of 7 claims
+refuted) plus three independent spot-checks of my own. This section ships the
+change it derives.
+
+### 31.1 The mechanism, verified byte-exact
+
+The animation arbiter compares the **candidate's priority against the LATCHED
+animation id at `[AvChar+0xDC]`** through a static table at `0x00A92ED8`, stride
+`0x20`. The compare, hand-decoded from `0x007F34F9` (the disassembler desyncs on
+the entry, the bytes do not):
+
+```
+8b 8e dc 00 00 00     mov ecx, [esi+0xDC]              ; the LATCHED animation
+3b d1                 cmp edx, ecx
+74 47                 je  +0x47
+8b c2                 mov eax, edx
+c1 e1 05              shl ecx, 5                       ; x 0x20 stride
+c1 e0 05              shl eax, 5
+8b 80 d8 2e a9 00     mov eax, [eax + 0x00A92ED8]      ; candidate's priority
+3b 81 d8 2e a9 00     cmp eax, [ecx + 0x00A92ED8]      ; vs the latched one's
+72 31                 jb  +0x31                        ; REFUSE if lower
+```
+
+Priorities read out of the table (`0x00A92ED8 + id*0x20`, first dword), **my own
+spot-check, OBSERVED**: locomotion ids `0x11`, `0x14`, `0x1D` → `0x0040`; attack
+ids `0x23` → `0x0110`; `0x29`, `0x2C` → `0x0120`. So **while an attack animation
+is latched, every walk cycle loses the compare and is refused** — and the body
+keeps translating, because position (`+0x84/+0x88/+0x8C`) and velocity
+(`+0xA0/+0xA4`) live in entirely different fields. *That is a body sliding in an
+attack pose, which is the operator's word.*
+
+**The pose is not stuck forever.** When the attack animation completes, the
+kind-`0x0C` arm (`0x007FC700` → `0x007FC7A8` → `0x007FCE10` → index table
+`0x007FD0CC` → `0x007FCF42`) re-selects locomotion **with no priority test**. So
+the visual under a free-running chain is *swing → a few walk frames → swing*.
+Floaty, not frozen — and a much better fit for the report than a freeze.
+
+The subsystems are decoupled, exhaustively: forward BFS from seven movement roots
+(478–691 functions, 28,860–42,758 instructions each, depth ≤ 8) reaches **0**
+functions in the AgentView band `0x007DF000..0x00804500`; AvChar makes **0** calls
+to the game-context getter `0x0047F660` (positive control: the three movement
+dispatchers *are* in its 1,089 callers). No indirect-call escape hatch either — 0
+stored VA words for any of the six relevant entries.
+
+### 31.2 Retail sends NO pose-ender. It stretches the chain.
+
+| | n | p50 | p10 | p90 |
+|---|---|---|---|---|
+| retail attack-started gaps, **no move inside** | 816 | **1.330 s** | 1.318 | 1.345 |
+| retail gaps **containing a move** | 40 | **2.007 s** | — | 3.853 |
+| **ours** (as the operator played it), no move | 312 | 1.777 s | 1.771 | 1.781 |
+| **ours**, containing a move | 112 | 1.783 s | 1.475 | 2.089 |
+
+**Ratio of medians: retail 1.51, ours 1.003.** A chain that never noticed the
+player walking. Absolute intervals differ legitimately (our
+`WEAPON_ATTACK_SPEED` is the hammer's), so the dimensionless ratio is the
+comparable.
+
+It is a **pause, not a re-stamp**: `gap − moving_span` lands back on the
+metronome (p50 **1.330**, 10/40 in band) while `next − last_move` does not
+(**0/40** in band). Rate view on a shared denominator: attack-started **0.370/s
+while moving against 0.730/s while still, ratio 0.51** — and that is a *floor*,
+since mislabelled moving time can only dilute toward 1 (sweeping the episode tail
+0 → 0.5 → 1.0 s walks it 0.51 → 0.65 → 0.74, exactly as an under-measured span
+must).
+
+**And no message is missing.** Retail's self-scoped property ids: 34. Ours: 22
+observed on the wire, 35 emittable. Retail-minus-ours = {37, 39, 45, 57, 64, 65},
+**17 self events corpus-wide**, none differentiating. **NOT FOUND: any property
+retail sends about the player on a mid-chain move that we cannot emit.**
+
+**The rival is dead, checked not assumed.** `AvApi 0x007E00E0` is a byte-for-byte
+twin of property 3's entry, queues kind `0x13`, and its arm performs the
+*identical* six-animation cancellation — so retail could have ended the pose with
+that property instead. It is **property 49**, and it fires **3 times in the whole
+live corpus** against 325 mid-chain moves. It cannot be the pose-ender.
+
+### 31.3 SHIPPED: `CHAIN_PAUSES_WHILE_MOVING`, composed with LAW A as ONE arm
+
+While the player's body is moving, the swing clock **freezes**: the next
+attack-started fires one interval after motion *ends*, so `gap = interval +
+moving_span`. That lets the attack animation finish and hand the pose back to
+locomotion. **No new message; property 4's timing only.** Moving-ness comes from
+the two latches the movement arc already maintains (`kbd_moving_at`,
+`click_moving_at`) — nothing new to keep in sync.
+
+**Both halves default ON and revert together on `--legacy-move-stops-chain`**,
+because they are meaningless apart: with the chain closed on every move there is
+no chain to pace. That is §29's lesson wired in — one behaviour, one A/B, not two
+independent defaults a single run cannot separate.
+
+The freeze accumulates **above** the landing branch, which is measured rather
+than tidy: the first cut put it below and silently skipped whatever part of the
+moving span overlapped an in-flight swing's windup. `test_playerswing` §5's
+residual check caught it. A landing still lands — what pauses is the *opening* of
+the next swing.
+
+`test_playerswing` §5 scores the retail metric on both arms: **shipped 1.83,
+legacy 1.000** (fixed 1.5 s span against a 1.75 s interval, so 1.857 is the
+arithmetic ideal), separation required, and the residual invariant pinned.
+**The known-bad arm scores 1.000 — the metric ranks it badly, which is the only
+thing that makes it a metric.** 30 checks, floor 30, identical bare.
+
+### 31.4 Corrections this section forces
+
+1. **`87/100` does not reproduce as a denominator.** The pinned cell is
+   **325/343 = 94.8 %**; a 288-cell parameter grid puts every cell between 88 %
+   and 95 %. Direction and conclusion unchanged; cite 325/343.
+2. **`0x002C` never names the player** — 0 of 7,545 player move messages across
+   the corpus. It occurs for other agents. Earlier sections list it as a
+   player-move opcode; on this corpus it is not one.
+3. **`0x007FBC20` is named by its parameter, not itself** (`AvChar:7159
+   animation < CHAR_ANIMATIONS`, bound 0x3F). "PlayAnimation" stays
+   RECONSTRUCTION. It does third-witness `CHAR_ANIMATIONS = 63`.
+4. **`asserts.py --at` over-spans** in `0x007FD000..0x007FE000` — it attributed
+   `AvChar:8673` to a function ending 0x300 bytes earlier. Treat `--at` there as
+   a hint, not a naming.
+
+### 31.5 The one question left, and it is the operator's
+
+Everything static is answered. What remains is the thing only a person can score,
+and it gets **one arm and one question** ([[quarterstep-is-a-feel-thing]],
+[[feedback-ask-run-questions-before-the-run]]):
+
+> **When you start walking in the middle of a swing, does the body play a walk
+> cycle — or does it slide in the attack pose?**
+
+Revert arm, same map, same weapon: `--legacy-move-stops-chain`. The prediction,
+registered here so it can be falsified: **the default should now walk**, and the
+legacy arm should show the animation being cancelled outright on every move (the
+2026-09-01 report, *"cancelling the animation instead of sliding"*). If the
+default still slides, §31.1's priority reading survives but the pause is too
+short, and the next move is to measure the actual attack-animation duration
+rather than to lengthen the pause by guess.
+
 ## Provenance
 
 All figures are measurements over the owner's own live captures via extractors in this

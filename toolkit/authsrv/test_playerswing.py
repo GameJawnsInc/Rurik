@@ -27,10 +27,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
 import checks  # noqa: E402
 
-# FLOOR 24, from the green run of 2026-08-22 that pinned the property-8
-# action hold beside the swing paths (23 when sections 5-7 landed, 13 when
-# the file carried only the windup split).
-LEDGER = checks.Ledger("player swing windup", floor=24)
+# FLOOR 30, from the green runs of 2026-09-01 that added section 5, the
+# ANIMREF-RE 31 chain pause and its retail-derived ratio metric (24 before
+# that; 23 when sections 5-7 landed, 13 when the file carried only the
+# windup split). Section 5 is fixture-free -- it stubs the clock and drives
+# the real attack_tick -- so 30 is the BARE-MACHINE number too, measured
+# both ways that day.
+LEDGER = checks.Ledger("player swing windup", floor=30)
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -355,6 +358,128 @@ def section_retarget():
           f"swing={swing}, old health={state['agents'][10]['health']}")
 
 
+def section_chain_pause():
+    """ANIMREF-RE 31: the swing clock freezes while the body moves.
+
+    THE METRIC IS RETAIL'S OWN AND IT MUST RANK THE KNOWN-BAD ARM BADLY.
+    Retail's attack-started gaps are a metronome when the player stands still
+    (n=816, p50 1.330 s, p10 1.318, p90 1.345) and stretch to 2.007 s when a
+    move falls inside (n=40, p90 3.853) -- ratio of medians 1.51. OUR arm as
+    the operator played it scored 1.003 (move-containing n=112 p50 1.783
+    against no-move n=312 p50 1.777): a chain that never noticed the player
+    walking. So the check is the RATIO, measured on both arms of our own
+    scheduler, and the legacy arm must score ~1.0 or this section is
+    measuring the wrong quantity.
+
+    Absolute intervals differ from retail legitimately -- our
+    WEAPON_ATTACK_SPEED is the hammer's -- so the dimensionless ratio is the
+    comparable, exactly as the corpus lane argued.
+    """
+    import authsrv
+
+    print("\n5. ANIMREF-RE 31: the chain pauses while the body moves")
+
+    def gap_with_move(paused, move_span):
+        """Seconds between two ATTACK_STARTEDs with `move_span` of motion
+        inside, driven through the REAL attack_tick on a synthetic clock."""
+        sent = []
+        send = lambda op, vals, label="", quiet=False: \
+            sent.append((op, vals, label))
+        agent = {"name": "t", "dead": False, "last_hit": 0.0,
+                 "max_health": 1e9, "health": 1e9, "pos": (0.0, 0.0)}
+        state = {"agents": {10: agent}, "pos": (0.0, 0.0), "attacking": 10}
+        saved = authsrv.CHAIN_PAUSES_WHILE_MOVING
+        saved_time = authsrv.time.time
+        authsrv.CHAIN_PAUSES_WHILE_MOVING = paused
+        clock = [1000.0]
+        authsrv.time.time = lambda: clock[0]
+        try:
+            starts = []
+            # 12 s of 50 ms ticks; the body moves from t=+2.0 for move_span
+            for i in range(240):
+                clock[0] = 1000.0 + i * 0.05
+                t = i * 0.05
+                state["kbd_moving_at"] = (
+                    clock[0] if 2.0 <= t < 2.0 + move_span else None)
+                before = len(sent)
+                authsrv.attack_tick(send, state, 0)
+                for op, vals, _l in sent[before:]:
+                    if (op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
+                            and vals[0] == authsrv.agents.GV_ATTACK_STARTED):
+                        starts.append(clock[0])
+                # never let a landing end the chain: keep the target alive
+                agent["health"] = 1e9
+                state["player_swing_cancel"] = None
+            return starts
+        finally:
+            authsrv.CHAIN_PAUSES_WHILE_MOVING = saved
+            authsrv.time.time = saved_time
+
+    def ratio(paused, move_span=1.5):
+        quiet = gap_with_move(paused, 0.0)
+        moved = gap_with_move(paused, move_span)
+        if len(quiet) < 3 or len(moved) < 3:
+            return None, quiet, moved
+        # the gap that CONTAINS the move: the first gap whose span covers t=2.0
+        qg = [b - a for a, b in zip(quiet, quiet[1:])]
+        mg = [b - a for a, b in zip(moved, moved[1:])]
+        base = sorted(qg)[len(qg) // 2]
+        # the move-containing gap is the widest one in the moved arm
+        return (max(mg) / base if base else None), qg, mg
+
+    r_on, q_on, m_on = ratio(True)
+    r_off, q_off, m_off = ratio(False)
+
+    check(r_on is not None and r_off is not None,
+          "both arms produced enough ATTACK_STARTEDs to form gaps -- the "
+          "rig is not vacuous",
+          f"paused starts-gaps={m_on}, legacy={m_off}")
+    if r_on is None or r_off is None:
+        return
+
+    check(r_off < 1.10,
+          "KNOWN-BAD ARM: with the pause off the move-containing gap is "
+          "indistinguishable from the metronome -- the free-running chain "
+          "the operator played and called 'very floaty'. Retail scores 1.51 "
+          "here; a chain that never notices scores ~1.0, and ours measured "
+          "1.003 on the live wire",
+          f"legacy ratio {r_off:.3f} (gaps {m_off})")
+    check(r_on > 1.30,
+          "SHIPPED ARM: the move-containing gap stretches -- the swing "
+          "clock froze for the moving span, so the attack animation can "
+          "finish and hand the pose back to locomotion (priority table "
+          "0x00A92ED8: locomotion 0x0040 against an attack's 0x0110/0x0120)",
+          f"paused ratio {r_on:.3f} (gaps {m_on})")
+    check(r_on > r_off + 0.25,
+          "and the two arms SEPARATE -- a metric that scored them alike "
+          "would be measuring the wrong quantity, which is the whole reason "
+          "this section exists",
+          f"{r_on:.3f} against {r_off:.3f}")
+
+    # THE SHAPE OF THE PAUSE: gap - moving_span must land back on the
+    # metronome. Retail's residual p50 is 1.330 s, exactly its quiet median;
+    # `next - last_move` does NOT land there (0 of 40), which is what makes
+    # this a PAUSE rather than a re-stamp.
+    span = 1.5
+    base = sorted(q_on)[len(q_on) // 2]
+    residual = max(m_on) - span
+    check(abs(residual - base) < 0.20,
+          "and it is a PAUSE, not a re-stamp: gap minus the moving span "
+          "lands back on the metronome, the corpus's own signature "
+          "(residual p50 1.330 s against a 1.330 s quiet median, 10/40 in "
+          "band, while next-minus-last-move is 0/40)",
+          f"residual {residual:.3f}s against a {base:.3f}s metronome")
+
+    check(authsrv.CHAIN_PAUSES_WHILE_MOVING is True
+          and authsrv.MOVE_KEEPS_CHAIN is True,
+          "both halves are the SHIPPED default and revert together on "
+          "--legacy-move-stops-chain -- one behaviour, one A/B, which is "
+          "the ANIMREF-RE 29 lesson (two independent defaults meant one run "
+          "convicted the pair and cleared neither)",
+          f"pause={authsrv.CHAIN_PAUSES_WHILE_MOVING}, "
+          f"lawA={authsrv.MOVE_KEEPS_CHAIN}")
+
+
 def main():
     section_two_phases()
     section_start_to_start()
@@ -363,6 +488,7 @@ def main():
     section_press_stops_swing()
     section_pause_and_resume()
     section_retarget()
+    section_chain_pause()
     return LEDGER.verdict()
 
 

@@ -9093,8 +9093,29 @@ ATTACK_FINISH_BATCH = True    # False (--legacy-attack-finish): the old shape
 # and neither was measured before this shipped; the flag is the arm that lets
 # the next run measure one at a time. Do NOT re-flip this default without a
 # run that scores the operator's two words.
-MOVE_KEEPS_CHAIN = False      # True (--move-keeps-chain): LAW A's wire, see ^
+#
+# *** RE-SHIPPED 2026-09-01 AS ONE COMPOSED ARM (ANIMREF-RE §31), and the
+# missing half is now decoded rather than guessed. §29 reverted LAW A on the
+# operator's verdict; §30 found the reason was never a movement gate at all
+# (property 3 is an APPEND to the AvChar animation queue and touches nothing
+# the begin-move entries read); §31 found what the client actually does --
+# the walk cycle is refused by ANIMATION PRIORITY while an attack animation
+# is latched, and retail does not send a pose-ender, it STRETCHES THE CHAIN
+# so the animation completes. `CHAIN_PAUSES_WHILE_MOVING` below is that half.
+# The two are meaningless apart -- with the chain closed on every move there
+# is no chain to pace -- so they ship and revert TOGETHER, one arm, one flag
+# (`--legacy-move-stops-chain`). That is the §29 lesson applied: one
+# behaviour, one A/B, not two independent defaults nobody can separate.
+MOVE_KEEPS_CHAIN = True       # False (--legacy-move-stops-chain): the old door
 CHAIN_RESTART_PACED = True    # False (--legacy-chain-restart): same-tick
+
+# ANIMREF-RE §31, LAW A's decoded complement: freeze the swing clock while
+# the player's body is moving, so the next attack-started fires one interval
+# after motion ENDS. Retail's own ratio is 1.51 (move-containing gaps p50
+# 2.007 s, n=40, against a 1.330 s metronome, n=816); ours was 1.003. The
+# full derivation, the animation-priority table it serves and the rival it
+# rules out are at attack_tick's own site. Reverts with LAW A as one arm.
+CHAIN_PAUSES_WHILE_MOVING = True   # False (--legacy-move-stops-chain)
 
 # ANIMREF-RE (2026-09-01): release the action hold in the E3 batch, the
 # caster-freed instant -- 19 of 19 unmoved corpus cycles. The client arms its
@@ -9772,6 +9793,23 @@ def handle_perf_report(values, send, state, conn_id):
          f"LATENCY_REPORT({elapsed_ms} ms)", quiet=True)
 
 
+def _player_body_moving(state):
+    """Is the player's BODY in motion right now, as the wire has told us?
+
+    The two latches the movement arc already maintains, and nothing new:
+    `kbd_moving_at` (armed by the 0x003D arm, cleared by the 0x0047 stop)
+    and `click_moving_at` (armed by every 0x003E click, cleared by the next
+    report of either kind). Deliberately NOT `state["walking"]`, for the
+    reason the zero-lead grant rule already gives at its own read of these:
+    that flag is a different question with a different lifetime.
+
+    Read-only. Both latches are owned by the connection thread's arms; this
+    is the same cross-thread read the pools and the hold mirror already do.
+    """
+    return (state.get("kbd_moving_at") is not None
+            or state.get("click_moving_at") is not None)
+
+
 def attack_tick(send, state, conn_id):
     """Keep swinging at whatever the player last clicked -- in TWO phases.
 
@@ -9838,6 +9876,30 @@ def attack_tick(send, state, conn_id):
         state["player_swing"] = None
         return
     now = time.time()
+    # ---- ANIMREF-RE §31: FREEZE THE SWING CLOCK WHILE THE BODY MOVES ----
+    #
+    # ACCUMULATED HERE, ABOVE THE LANDING, and that placement is measured
+    # rather than tidy. The first cut put it below, so the freeze skipped
+    # whatever part of the moving span overlapped an armed swing's windup --
+    # the landing branch returns early. The corpus says the WHOLE span
+    # counts: `gap - moving_span` lands back on the quiet metronome (retail
+    # p50 1.330 s against a 1.330 s median, 10/40 in band) while
+    # `next - last_move` does not (0/40). test_playerswing §5's residual
+    # check is what caught it, and it is the check that can fail.
+    #
+    # A LANDING STILL LANDS. Retail's in-flight swing completes across a
+    # move -- what pauses is the OPENING of the next one, which is the whole
+    # point: the attack animation has to finish for the priority arbiter to
+    # hand the pose back to locomotion.
+    moving = CHAIN_PAUSES_WHILE_MOVING and _player_body_moving(state)
+    if moving:
+        since = state.get("chain_pause_tick")
+        if since is not None and now > since:
+            state["player_last_swing"] = \
+                state.get("player_last_swing", 0.0) + (now - since)
+        state["chain_pause_tick"] = now
+    else:
+        state["chain_pause_tick"] = None
     swing = state.get("player_swing")
     if swing is not None:
         # TWO PHASES, same discipline as the agent loop: a landing that is due
@@ -9864,6 +9926,58 @@ def attack_tick(send, state, conn_id):
     # arithmetic and the citation). Read fresh each swing so an episode
     # expiring mid-fight changes the NEXT swing, not a cached copy.
     interval = ATTACK_INTERVAL * attack_interval_factor(state, PLAYER_AGENT_ID)
+    # ---- ANIMREF-RE §31: THE CHAIN PAUSES WHILE THE BODY MOVES ----------
+    #
+    # WHY THIS EXISTS, and it is the answer to "very floaty". The client
+    # refuses a walk cycle by ANIMATION PRIORITY, not by any movement gate:
+    # the arbiter compares the candidate animation's priority against the
+    # LATCHED id at [AvChar+0xDC] through the table at 0x00A92ED8 (stride
+    # 0x20; `shl 5` then `cmp eax,[ecx+0xA92ED8]` / `jb` at 0x007F3504..),
+    # and locomotion ids 0x11..0x20 carry 0x0040 against an attack's 0x0110
+    # / 0x0120. So while an attack animation is latched the walk cycle is
+    # REFUSED -- while position and velocity live in different fields
+    # entirely and keep integrating. That is a body sliding in an attack
+    # pose, which is the operator's word.
+    #
+    # THE POSE IS NOT STUCK FOREVER: when the attack animation completes,
+    # the kind-0x0C arm (0x007FC700 -> 0x007FC7A8 -> 0x007FCE10 -> index
+    # table 0x007FD0CC -> 0x007FCF42) re-selects locomotion with no
+    # priority test. So the visual under a free-running chain is
+    # swing / brief walk / swing -- floaty, not frozen.
+    #
+    # AND RETAIL DOES NOT SEND A POSE-ENDER. Measured over the 21-capture
+    # corpus: consecutive attack-started gaps with NO move inside are a
+    # metronome (n=816, p50 1.330 s, p10 1.318, p90 1.345); gaps CONTAINING
+    # a player move run 2.007 s (n=40, p90 3.853) -- ratio of medians 1.51.
+    # Ours ran 1.003 (move-containing n=112 p50 1.783 against no-move n=312
+    # p50 1.777), i.e. a chain that never notices. The residual
+    # `gap - moving_span` lands back on the metronome (p50 1.330, 10/40 in
+    # band) and `next - last_move` does NOT (0/40 in band), so it is a
+    # PAUSE, not a re-stamp. Rate view on a shared denominator: attack-
+    # started 0.370/s while moving against 0.730/s while still, ratio 0.51
+    # -- and that is a FLOOR, because mislabelled moving time can only
+    # dilute toward 1 (sweeping the episode tail 0 -> 0.5 -> 1.0 s walks it
+    # 0.51 -> 0.65 -> 0.74, exactly as an under-measured span must).
+    #
+    # THE RIVAL IS DEAD, checked rather than assumed: AvApi 0x007E00E0 is a
+    # byte-for-byte twin of property 3's entry and queues kind 0x13, whose
+    # arm performs the identical six-animation cancellation -- so retail
+    # could have ended the pose with THAT property instead. It is property
+    # 49, and it fires 3 times in the whole live corpus against 325
+    # mid-chain moves. It cannot be the pose-ender.
+    #
+    # So the chain's clock FREEZES while the body moves: the next swing
+    # opens one interval after motion ENDS, which is what makes
+    # `gap = interval + moving_span` and lets the attack animation finish
+    # and hand the pose back to locomotion. No new message; property 4's
+    # timing only. `player_last_swing` is this thread's own (attack_tick
+    # is the single writer), so the stamp is advanced here and nowhere else.
+    # The freeze itself was accumulated ABOVE the landing branch, so that a
+    # moving span overlapping an in-flight swing's windup still counts (the
+    # corpus's `gap - moving_span` signature demands the whole span). The
+    # only job here is to REFUSE TO OPEN a new swing while the body moves.
+    if moving:
+        return
     if now - state.get("player_last_swing", 0.0) < interval:
         return
     state["player_last_swing"] = now
@@ -20328,18 +20442,28 @@ def main():
                          "client's own 2077 'no visual' default, sends "
                          "nothing either way.")
     ap.add_argument("--move-keeps-chain", action="store_true",
-                    help="Opt into LAW A: movement stops closing the attack "
-                         "chain (87 of 100 corpus mid-chain moves carry no "
-                         "prop-3; the range gate judges instead). SHIPPED "
-                         "as the default on 2026-09-01 and REVERTED the "
-                         "same day -- the operator's verdict on the pair "
-                         "was 'very floaty' and 'warping'. The wire fact is "
-                         "still measured; what is missing is a run that "
-                         "scores this arm ALONE (FINDINGS 29).")
+                    help="No-op since ANIMREF-RE 31: LAW A is the default "
+                         "again, composed with the chain pause. Kept so "
+                         "older runsheets parse.")
     ap.add_argument("--legacy-move-stops-chain", action="store_true",
-                    help="No-op since the 2026-09-01 revert: the prop-3 "
-                         "door IS the default again. Kept so runsheets "
-                         "written during the half-day it shipped parse.")
+                    help="THE REVERT ARM for the composed ANIMREF-RE 31 "
+                         "default: movement closes the attack chain with "
+                         "property 3 again AND the swing clock free-runs "
+                         "while the body moves. Both halves off together, "
+                         "because they are meaningless apart -- with the "
+                         "chain closed on every move there is no chain to "
+                         "pace. What the default does instead: keep the "
+                         "chain (325 of 343 corpus mid-chain moves carry no "
+                         "property 3) and freeze the swing clock while the "
+                         "body moves, so the next attack-started fires one "
+                         "interval after motion ends. Retail's ratio of "
+                         "move-containing to quiet gaps is 1.51 (2.007 s "
+                         "against a 1.330 s metronome); ours was 1.003. The "
+                         "point is the ANIMATION: the client refuses a walk "
+                         "cycle by priority while an attack animation is "
+                         "latched (table 0x00A92ED8, locomotion 0x0040 "
+                         "against 0x0110/0x0120), and retail sends no "
+                         "pose-ender -- it lets the animation finish.")
     ap.add_argument("--e3-release", action="store_true",
                     help="Opt into the ANIMREF-RE E3 release: free the "
                          "action hold in the E3 batch, the caster-freed "
@@ -21759,16 +21883,19 @@ def main():
         SKILL_VISUALS = False
         print("[map] --no-skill-visuals: no property 20/21 on-body effect "
               "visual at a cast's landing (pre-ANIMREF-R8).", flush=True)
-    if a.move_keeps_chain:
-        global MOVE_KEEPS_CHAIN
-        MOVE_KEEPS_CHAIN = True
-        print("[map] --move-keeps-chain: LAW A -- movement no longer closes "
-              "the attack chain. REVERTED from default 2026-09-01 after the "
-              "operator scored the §28 pair 'very floaty' / 'warping'; this "
-              "arm is under investigation, run it ALONE.", flush=True)
-    elif a.legacy_move_stops_chain:
-        print("[map] --legacy-move-stops-chain: no-op, the prop-3 door is "
-              "the default again since the 2026-09-01 revert.", flush=True)
+    if a.legacy_move_stops_chain:
+        global MOVE_KEEPS_CHAIN, CHAIN_PAUSES_WHILE_MOVING
+        MOVE_KEEPS_CHAIN = False
+        CHAIN_PAUSES_WHILE_MOVING = False
+        print("[map] --legacy-move-stops-chain: movement closes the chain "
+              "with property 3 again and the swing clock free-runs "
+              "(pre-ANIMREF-RE-§31). This is the REVERT ARM for the composed "
+              "LAW A + chain-pause default -- both halves off together.",
+              flush=True)
+    elif a.move_keeps_chain:
+        print("[map] --move-keeps-chain: no-op, LAW A is the default again "
+              "since ANIMREF-RE §31 shipped its decoded complement.",
+              flush=True)
     if a.e3_release:
         global ANIMREF_E3_RELEASE
         ANIMREF_E3_RELEASE = True
