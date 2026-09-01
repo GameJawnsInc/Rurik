@@ -9125,6 +9125,51 @@ CHAIN_PAUSES_WHILE_MOVING = True   # False (--legacy-move-stops-chain)
 # defaults in one run convict the pair and clear neither (§29).
 LANDING_HOLD_RELEASE = True   # False (--no-landing-hold-release)
 
+# ANIMREF-RE 35 F1: an AUTO SWING DOES NOT HOLD THE CLIENT'S WALK GATE.
+#
+# THE NUMBER THAT DECIDES IT, same denominator both sides: retail sends the
+# property-8 hold on 83 of 1,332 attack starts (6.2%). We sent it on 52 of 52
+# (100.0%) -- every swing, always, since the hold was wired. So this was never a
+# lifetime bug to be tuned, which is how 33 F1 read it. The hold is simply not
+# retail's shape for an auto attack, and the correct lifetime is ZERO.
+#
+# WHAT IT COST, measured on the operator's own post-33 capture
+# (authsrv-20260901T125928-c1.jsonl -- the only log on disk carrying
+# LANDING_HOLD_RELEASE, arm identified from the flags header, not the filename):
+#
+#   regime              n    gate SET   speed p10/p50   drift p50   frozen
+#   pre-landing  (R1)   32   25/32      0.0 / 138.4     108.0 u     6/32 = 19%
+#   post-landing (R2)  111    4/111     108.1 / 189.8    54.8 u     1/111 = 1%
+#   opener, gate clear  76    0/76        --  / 254.4     43.2 u          3%
+#
+# A pre-landing press meets a SET gate 25 times in 32, and a fifth of those
+# episodes travel under 5 u in 1.5 s. 33 F1 released the hold at the LANDING --
+# but a regime-1 press happens before there IS a landing, so it never helped
+# there. That is exactly the operator's "the mid windup is causing warps now
+# while still not moving out smoothly".
+#
+# AND THE FREEZE IS NOT PASSIVE. The refused arm reports anyway (0x0081AD7D
+# returns eax=1, 0x00816475 sends), we answer with a zero-lead grant at the
+# client's own point, and CANCELWALK-F7 established on this build that the
+# client executes that answer AS A CLICK-ORDER: it walks the granted leg to
+# completion with key state ignored, then parks. Zero-lead makes that leg zero
+# long, so the body stops dead. Worked example, t=14.5610: the client reports
+# [9987.918, 7988.302]; we send property 3, property 8 -> 0, 0x0025 and ZERO
+# LEAD; the client then says NOTHING for 0.80 s and its next message is a stop
+# at the identical coordinate. Zero travel -- while our integrator walked
+# 216.0 u. The visible snap is that divergence being reconciled.
+#
+# NOT THE SAME AS SUPPRESSING THE GRANT, which was tried and refuted
+# (ANIMREF-R11: recovery p50 62 ms -> 406 ms, 0 quartersteps against 1). This is
+# UPSTREAM of it -- do not put the gate into a state the press has to pay to
+# leave, and then there is nothing to suppress.
+#
+# THE CAST PATH KEEPS ITS HOLD. Property 8 around a cast is retail-correct and
+# separately corpus-backed (castmech 3c); only the two AUTO-SWING sites are
+# gated here. 33 F1's landing release stays live and simply becomes a no-op for
+# auto swings, because transition-only elides a release of a flag already clear.
+SWING_HOLDS_WALK_GATE = False  # True (--swing-holds-walk-gate): the old shape
+
 # ANIMREF-RE (2026-09-01): release the action hold in the E3 batch, the
 # caster-freed instant -- 19 of 19 unmoved corpus cycles. The client arms its
 # own 250 ms resume poll at the gate-clear, which is what walks a HELD key
@@ -10144,8 +10189,10 @@ def attack_tick(send, state, conn_id):
     # ATTACK_STARTED (4 of 4 across three connections, castmech 3c).
     # Transition-only means consecutive swings do not re-toggle, which is
     # also measured: the ranger's chain sets it once per release, not once
-    # per swing.
-    action_hold(send, state, 1, f"the swing at {target_id}")
+    # per swing. NOT SENT AT ALL since ANIMREF-RE 35 unless the flag
+    # is on: retail holds on 6.2% of attack starts, we held on 100%.
+    if SWING_HOLDS_WALK_GATE:
+        action_hold(send, state, 1, f"the swing at {target_id}")
     state["player_swing"] = {"target": target_id,
                              "lands_at": now + swing_windup(interval)}
 
@@ -10283,8 +10330,10 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
              [agents.GV_ATTACK_STARTED, PLAYER_AGENT_ID, target_id, 0],
              f"attack_started: player swings at {target_id}")
         # And the hold follows the START, as at attack_tick's site -- one
-        # rule for every player swing open (castmech 3c).
-        action_hold(send, state, 1, f"the swing at {target_id}")
+        # rule for every player swing open (castmech 3c) -- and since
+        # ANIMREF-RE 35 that rule is "do not send it for an auto swing".
+        if SWING_HOLDS_WALK_GATE:
+            action_hold(send, state, 1, f"the swing at {target_id}")
 
     agent["health"] = max(0.0, agent["health"] - dealt)
 
@@ -20630,6 +20679,20 @@ def main():
                          "active re-pin would then yank. Shipped default "
                          "2026-09-01, reverted the same day; turn it on "
                          "ALONE to convict or clear it (FINDINGS 29).")
+    ap.add_argument("--swing-holds-walk-gate", action="store_true",
+                    help="THE REVERT ARM for ANIMREF-RE 35: send the "
+                         "property-8 action hold on every auto swing "
+                         "again, as every build before 2026-09-01 did. "
+                         "The default sends NONE, because property 8 "
+                         "drives the client's walk gate and retail holds "
+                         "it on 83 of 1,332 attack starts (6.2%%) against "
+                         "our 52 of 52 (100%%). With the hold set a "
+                         "pre-landing movement press met a shut gate 25 "
+                         "times in 32, and a fifth of those episodes "
+                         "travelled under 5 units in 1.5 seconds. Run "
+                         "this arm to reproduce that on purpose. The CAST "
+                         "path keeps its hold either way -- that one is "
+                         "retail-correct and corpus-backed.")
     ap.add_argument("--no-landing-hold-release", action="store_true",
                     help="THE REVERT ARM for ANIMREF-RE 33's one behaviour "
                          "change: keep the property-8 action hold set past "
@@ -22067,6 +22130,14 @@ def main():
         print("[map] --move-keeps-chain: no-op, LAW A is the default again "
               "since ANIMREF-RE §31 shipped its decoded complement.",
               flush=True)
+    if a.swing_holds_walk_gate:
+        global SWING_HOLDS_WALK_GATE
+        SWING_HOLDS_WALK_GATE = True
+        print("[map] --swing-holds-walk-gate: every auto swing sends the "
+              "property-8 hold again, shutting the client's walk gate for "
+              "the whole swing. This is the arm that reproduces the "
+              "measured pre-landing freeze -- 25 of 32 presses onto a set "
+              "gate, 19%% of episodes under 5 u in 1.5 s.", flush=True)
     if a.no_landing_hold_release:
         global LANDING_HOLD_RELEASE
         LANDING_HOLD_RELEASE = False

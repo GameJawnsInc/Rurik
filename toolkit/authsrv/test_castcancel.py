@@ -43,7 +43,7 @@ import checks  # noqa: E402
 # two-regime rule. 24 earlier that day, 21 before it, 15 when the file
 # carried the movement door alone. Measured both ways: 30 with a vault, 30
 # without -- §7 stubs nothing it does not already stub.
-LEDGER = checks.Ledger("cast cancel", floor=30)
+LEDGER = checks.Ledger("cast cancel", floor=31)
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -274,10 +274,16 @@ def section_chain_half():
           "reproduce as a denominator; direction unchanged)",
           f"stops={stops}, attacking={state.get('attacking')}, "
           f"swing={state.get('player_swing') is not None}")
-    check(holds == [[authsrv.agents.GV_DISABLED, PLAYER, 0]],
-          "and the hold releases either way -- the [8 -> 0] this door "
-          "sends is the one piece both arms share, and it is NOT part of "
-          "the revert",
+    # NOTHING TO RELEASE since ANIMREF-RE 35: an auto swing no longer sets
+    # the hold at all (retail 83 of 1,332 attack starts = 6.2%, ours was
+    # 52 of 52), and `action_hold` is transition-only. The DOOR is unchanged
+    # -- it still calls action_hold(0) on every move, and still emits when a
+    # CAST set the flag, which is the case castmech 3c actually witnessed.
+    # What changed is what reaches it. Both arms of the flag agree here,
+    # which is why this check is not part of the revert either way.
+    check(holds == [],
+          "and no hold release rides the move -- the auto swing never set "
+          "one. A cast still does, and this same door still releases that",
           f"holds={holds}")
     state["attacking"] = None
     state["player_swing"] = None
@@ -558,19 +564,45 @@ def section_cancel_action_door():
     sent.clear()
     authsrv.cancel_action(send, state, 0)
     pair = [(op, v) for op, v, _ in sent]
-    check(pair == [(authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-                    [authsrv.agents.GV_ATTACK_STOPPED, PLAYER, 0]),
-                   (authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-                    [authsrv.agents.GV_DISABLED, PLAYER, 0])]
+    # THE ORDER IS STILL THE POINT and it is still pinned -- what changed
+    # is that the second half only exists when something SET the hold. An
+    # auto swing no longer does (ANIMREF-RE 35), so a chain closed by Esc
+    # sends the [3] alone. The corpus instants this cites (Esc t=119.425, W
+    # t=114.641) were both mid-WINDUP with a hold already riding, and the
+    # measurement was of the ORDER between the two, not of a rate at which
+    # the pair occurs -- the same distinction the 4-of-4 hold census turned
+    # on. When a cast holds, this door still emits both, in this order.
+    expect_stop = (authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                   [authsrv.agents.GV_ATTACK_STOPPED, PLAYER, 0])
+    check(pair == [expect_stop]
           and state.get("attacking") is None
           and state.get("player_swing_cancel") == "cancel action",
-          "a live chain closes with the stop pair in the order measured at "
-          "THIS door -- [3] then [8 -> 0], the live Esc mid-windup "
-          "(t=119.425) and W mid-windup (t=114.641), 2 of 2. The press and "
-          "retarget bursts keep their own opposite order; neither is tidied "
-          "to match. And the attack order is forgotten: Esc means stop",
+          "a live chain closes with the STOP -- and with no [8 -> 0] behind "
+          "it, because an auto swing no longer sets the hold to release. "
+          "The ORDER measured at this door ([3] then [8 -> 0], Esc "
+          "t=119.425 and W t=114.641, 2 of 2) is unchanged and still "
+          "applies whenever a cast is what holds. And the attack order is "
+          "forgotten: Esc means stop",
           f"{[(hex(o), v) for o, v in pair]}, "
           f"attacking={state.get('attacking')}")
+
+    # AND THE ORDER ITSELF, on the case that still produces both halves: set
+    # the hold the way a cast would, then close the chain. This keeps the
+    # corpus fact under test rather than deleting it with the swing hold.
+    state["attacking"] = 10
+    state["player_swing"] = {"target": 10, "lands_at": time.time() + 9.0}
+    state["player_swing_cancel"] = None
+    state["action_hold"] = 1
+    sent.clear()
+    authsrv.cancel_action(send, state, 0)
+    pair2 = [(op, v) for op, v, _ in sent]
+    check(pair2 == [expect_stop,
+                    (authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                     [authsrv.agents.GV_DISABLED, PLAYER, 0])],
+          "with a hold riding (as a cast leaves), the door emits BOTH in "
+          "the measured order -- [3] then [8 -> 0]. The corpus fact "
+          "survives ANIMREF-RE 35; only its trigger narrowed",
+          f"{[(hex(o), v) for o, v in pair2]}")
 
 
 def main():

@@ -22,6 +22,7 @@ Lakeside 7th swing, cut 0.24 s in by the target's death, no closing event)
 
 import os
 import sys
+import time as _tt
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
@@ -33,7 +34,7 @@ import checks  # noqa: E402
 # file carried only the windup split). Sections 5-7 are all fixture-free --
 # they stub the clock and drive the real attack_tick -- so 41 is the
 # BARE-MACHINE number too, measured both ways that day.
-LEDGER = checks.Ledger("player swing windup", floor=41)
+LEDGER = checks.Ledger("player swing windup", floor=42)
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -66,14 +67,18 @@ def section_two_phases():
     authsrv.begin_attack(send, state, 10, 0)
     authsrv.attack_tick(send, state, 0)
 
+    # THE DENOMINATOR THAT WAS READ BACKWARDS, and it is why the hold
+    # left this file: castmech 3c censuses the prop-8 HOLDS and finds 4 of
+    # 4 riding an ATTACK_STARTED -- an ORDER fact about the holds that
+    # occurred. It was read as a RATE over the STARTS, so this server sent
+    # one on every swing: 52 of 52 (100%) against retail's 83 of 1,332
+    # (6.2%). ANIMREF-RE 35 sends none on an auto swing.
     ops = [op for op, _, _ in sent]
-    check(ops == [authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
-                  authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT]
-          and sent[0][1] == [authsrv.agents.GV_ATTACK_STARTED, PLAYER, 10, 0]
-          and sent[1][1] == [authsrv.agents.GV_DISABLED, PLAYER, 1],
-          "the first tick sends ATTACK_STARTED, then [8 -> 1] -- the hold "
-          "rides immediately behind its own START, 4 of 4 in the corpus "
-          "(castmech 3c) -- and no damage",
+    check(ops == [authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET]
+          and sent[0][1] == [authsrv.agents.GV_ATTACK_STARTED, PLAYER, 10, 0],
+          "the first tick sends ATTACK_STARTED and NOTHING ELSE -- no hold, "
+          "no damage. The hold used to ride behind it here; see above for "
+          "the denominator that put it there",
           f"sent={[(hex(o), v) for o, v, _ in sent]}")
     swing = state.get("player_swing")
     expect = authsrv.swing_windup(authsrv.ATTACK_INTERVAL)
@@ -87,26 +92,23 @@ def section_two_phases():
           f"lands in {swing['lands_at'] - _t.time():.3f}s" if swing else "none")
 
     authsrv.attack_tick(send, state, 0)
-    check(len(sent) == 2, "an undue swing does not land early",
+    check(len(sent) == 1, "an undue swing does not land early",
           f"{len(sent)} sends")
 
     _rewind(state, expect + 0.01)
     authsrv.attack_tick(send, state, 0)
     ops = [op for op, _, _ in sent]
     check(ops == [authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
-                  authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
                   authsrv.AGENT_ADRENALINE_GAIN,
                   authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
-                  authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
                   authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT],
-          "the landing is gain, damage, FINISHED, then the HOLD RELEASE -- "
-          "and no second STARTED. This check used to end 'a landing releases "
-          "nothing (the chain still holds)', which was the ANIMREF-RE 33 "
-          "defect written down as an assertion: property 8 drives the "
-          "client's walk gate, so holding it past the landing shut the very "
-          "window ANIMREF-RE 32 had declared movable, and the operator "
-          "measured the cost at p50 0.869 s (n=104). Section 6 owns the "
-          "split; this one pins the batch it now rides in",
+          "the landing is gain, damage, FINISHED -- and no second STARTED "
+          "and NO property 8 in either direction. This check has moved "
+          "twice in a day and the trail is the record: it once ended 'a "
+          "landing releases nothing (the chain still holds)', which was the "
+          "ANIMREF-RE 33 defect written as an assertion; 33 F1 then added a "
+          "release here; 35 removed the hold that release existed for. "
+          "Section 6 owns the three arms",
           f"ops={[hex(o) for o in ops]}")
     check(state["player_swing"] is None
           and state["agents"][10]["health"] < 100.0,
@@ -166,12 +168,14 @@ def section_lost_target():
         wreck(state)
         _rewind(state, 10.0)                              # long past due
         authsrv.attack_tick(send, state, 0)
-        # The SWING drops silently either way (retail's truncation), but a
-        # DEAD target also releases the hold on the wire -- the one live
-        # target-death close carries [8, 31, 0] (t=20.1637, n=1, castmech
-        # 3c). Out-of-range has no witness and stays fully silent.
-        expected = ([(0x009F, [authsrv.agents.GV_DISABLED, PLAYER, 0])]
-                    if name == "dies" else [])
+        # The SWING drops silently either way (retail's truncation). The
+        # dead-target arm used to also carry [8, 31, 0] -- the one live
+        # target-death close, t=20.1637, n=1, castmech 3c -- but since
+        # ANIMREF-RE 35 an auto swing sets no hold, so `action_hold` is
+        # transition-only and there is nothing to release. The corpus
+        # instant remains true about a body that WAS holding; the door is
+        # unchanged and still fires when a cast is what held.
+        expected = []
         check(state["player_swing"] is None
               and [(op, v) for op, v, _ in sent] == expected,
               f"target {name}: the swing whiffs -- ArenaNet's own "
@@ -204,12 +208,13 @@ def section_direct_calls_unchanged():
     ops = [op for op, _, _ in sent]
     check(ops[0] == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
           and sent[0][1][0] == authsrv.agents.GV_ATTACK_STARTED
-          and sent[1][1] == [authsrv.agents.GV_DISABLED, PLAYER, 1]
-          and len(sent) == 5,
-          "a default (unarmed) call still opens with its own STARTED (the "
-          "hold riding behind it, as at every swing open) and lands in one "
-          "instant -- the attack-skill path's recorded divergence, "
-          "unchanged",
+          and not [v for op, v, _ in sent
+                   if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
+                   and v[0] == authsrv.agents.GV_DISABLED]
+          and len(sent) == 4,
+          "a default (unarmed) call still opens with its own STARTED -- and "
+          "NO hold behind it since ANIMREF-RE 35 -- and lands in one "
+          "instant: the attack-skill path's recorded divergence, unchanged",
           f"ops={[hex(o) for o in ops]}")
     sent.clear()
     state["agents"][10] = _fresh_agent()
@@ -247,17 +252,40 @@ def section_press_stops_swing():
     try:
         _press(authsrv, send, state)
         ops = [op for op, _, _ in sent]
-        check(ops[:3] == [authsrv.GAME_SMSG_SKILL_ACTIVATED_BROADCAST,
-                          authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+        # THE ORDER IS STILL PINNED, on the arm that still produces both
+        # halves. Since ANIMREF-RE 35 an auto swing sets no hold, so the
+        # [8 -> 0] is transition-only and elides -- the press burst opens
+        # with the STOPPED alone. The corpus order (release PRECEDES stop,
+        # necro t=18.511, ranger t=21.543, 2 of 2) is re-checked below on a
+        # state where a hold IS riding, which is what those instants were.
+        check(ops[:2] == [authsrv.GAME_SMSG_SKILL_ACTIVATED_BROADCAST,
                           authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT]
-              and sent[1][1] == [authsrv.agents.GV_DISABLED, PLAYER, 0]
-              and sent[2][1] == [authsrv.agents.GV_ATTACK_STOPPED, PLAYER, 0],
-              "the press burst carries [8 -> 0] then GV_ATTACK_STOPPED "
-              "[3, agent, 0] immediately after E4 -- retail's own order, "
-              "2 of 2 live presses with a chain running (necro t=18.511, "
-              "ranger t=21.543: the release PRECEDES the stop)",
+              and sent[1][1] == [authsrv.agents.GV_ATTACK_STOPPED, PLAYER, 0],
+              "the press burst carries GV_ATTACK_STOPPED [3, agent, 0] "
+              "immediately after E4, with no [8 -> 0] ahead of it -- the "
+              "auto swing never held",
               f"ops={[hex(o) for o in ops]}, "
               f"second={sent[1][1] if len(sent) > 1 else None}")
+        # The measured ORDER, on a body that IS holding (as a cast leaves it).
+        state2 = _state()
+        state2["action_hold"] = 1
+        state2["attacking"] = 10
+        state2["player_swing"] = {"target": 10, "lands_at": _tt.time() + 9.0}
+        sent2 = []
+        send2 = lambda op, vals, label="", quiet=False: sent2.append(
+            (op, vals, label))
+        _press(authsrv, send2, state2)
+        pair = [(op, v) for op, v, _ in sent2
+                if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT]
+        check(pair[:2] == [(authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                            [authsrv.agents.GV_DISABLED, PLAYER, 0]),
+                           (authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                            [authsrv.agents.GV_ATTACK_STOPPED, PLAYER, 0])],
+              "and with a hold riding, the release still PRECEDES the stop "
+              "-- retail's own order, 2 of 2 live presses with a chain "
+              "running. ANIMREF-RE 35 narrowed when the pair occurs; it did "
+              "not reorder it",
+              f"{[(hex(o), v) for o, v in pair[:2]]}")
         check(state.get("player_swing_cancel") == "skill press",
               "and asks the tick to drop the armed swing -- the entry itself "
               "is the tick's to touch", f"{state.get('player_swing_cancel')}")
@@ -347,10 +375,10 @@ def section_retarget():
           "the retarget sends one STOPPED -- the corpus's candidate cancel "
           "(17c): two target-selects, then the standalone stop 57-90 ms "
           "later, no damage for the opened swing", f"{stops}")
-    check([(op, v) for op, v, _ in sent[:2]] ==
-          [(0x009F, [authsrv.agents.GV_DISABLED, PLAYER, 0]),
-           (0x009F, [authsrv.agents.GV_ATTACK_STOPPED, PLAYER, 0])],
-          "and the stop is the corpus's PAIR: [8 -> 0] immediately before "
+    check([(op, v) for op, v, _ in sent[:1]] ==
+          [(0x009F, [authsrv.agents.GV_ATTACK_STOPPED, PLAYER, 0])],
+          "and the stop rides ALONE now -- the auto swing set no hold, so "
+          "the [8 -> 0] half elides. The corpus PAIR was [8 -> 0] before "
           "the [3, agent, 0] -- the t=16.578 retarget's own adjacency "
           "(castmech 3c)",
           f"{[(hex(op), v) for op, v, _ in sent[:2]]}")
@@ -455,103 +483,117 @@ def section_click_latch_bound():
 
 
 def section_landing_hold_release():
-    """ANIMREF-RE 33 F1: the action hold ENDS at the landing.
+    """ANIMREF-RE 35: an auto swing sends NO property-8 hold at all.
 
-    WHY: property 8 drives the client's walk gate (ChCliBase+0x64 bit 0,
-    written by property 8's case body 0x0081BCF0) and BOTH begin-move entries
-    refuse on that bit -- keyboard 0x0081A93C, click 0x0081AEF4. ANIMREF-RE 32
-    ruled that post-landing movement is LEGAL and slides; but the hold was set
-    at every swing open with no release on any landing path, so the gate stayed
-    shut across the very window the ruling declared movable.
+    THE DENOMINATOR THAT WAS READ BACKWARDS. castmech 3c censuses the prop-8
+    HOLDS and reports "4 of 4" of them riding an ATTACK_STARTED -- an ORDER
+    fact about the holds that occurred. It was read as a RATE over the STARTS,
+    so this server sent a hold on every swing. Measured over the same
+    quantity on both sides: retail 83 of 1,332 attack starts (6.2%), ours
+    52 of 52 (100.0%).
 
-    MEASURED on the operator's own 2026-09-01 sessions before this shipped:
-    hold to first movement report p10 0.601 s / p50 0.869 s / p90 1.015 s over
-    104 hold windows; ZERO movement reports arrive strictly inside a hold (188
-    windows, 215.3 s); 257 of 324 closed hold spans corpus-wide are ended by a
-    movement press rather than by the chain; 39.3%% of fight time gated. Their
-    report was "a ~0.5-1s delay before the player actually moves".
+    WHAT IT COST, from the operator's own post-33 capture: a pre-landing
+    movement press met a SET gate 25 times in 32, with p10 ground speed 0.0
+    u/s, drift p50 108.0 u and 6 of 32 episodes travelling under 5 u in 1.5 s
+    -- against 4 of 111 gate-set and 1 of 111 frozen post-landing. That is
+    the operator's "the mid windup is causing warps now while still not
+    moving out smoothly".
 
-    The gate's live window is therefore exactly [swing open, lands_at) -- the
-    same interval §32 already uses for property 3, from the same predicate.
+    33 F1 (release the hold at the landing) is SUBSUMED but not deleted: with
+    the hold restored by --swing-holds-walk-gate it is still what keeps the
+    gate open post-landing, and the two flags compose. This section pins all
+    three arms so neither can be changed without the other being scored.
+
+    WHAT IS NOT KNOWN, stated rather than smoothed: 6.2% is not 0%. Retail
+    DOES hold on some attack starts and the condition is NOT FOUND. Shipping
+    zero is closer to retail than 100% by every measure we have, and it is
+    still an approximation of a behaviour whose trigger we have not read.
     """
     import authsrv
 
-    print("\n6. ANIMREF-RE 33: the action hold ends at the landing")
+    print("\n6. ANIMREF-RE 35: an auto swing holds no walk gate")
 
-    def swing_cycle(release):
-        """One full swing through the real attack_tick; return the prop-8 trail."""
+    def swing_cycle(hold, release):
+        """One swing through the real attack_tick; return (open, landing)."""
         sent = []
         send = lambda op, vals, label="", quiet=False: sent.append(
             (op, vals, label))
         state = _state()
-        saved = authsrv.LANDING_HOLD_RELEASE
+        sh, lr = authsrv.SWING_HOLDS_WALK_GATE, authsrv.LANDING_HOLD_RELEASE
+        authsrv.SWING_HOLDS_WALK_GATE = hold
         authsrv.LANDING_HOLD_RELEASE = release
         try:
             authsrv.begin_attack(send, state, 10, 0)
-            authsrv.attack_tick(send, state, 0)                 # START + hold
+            authsrv.attack_tick(send, state, 0)
             opened = [v for op, v, _l in sent
                       if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
                       and v[0] == authsrv.agents.GV_DISABLED]
             sent.clear()
             _rewind(state, authsrv.swing_windup(authsrv.ATTACK_INTERVAL) + 0.01)
-            authsrv.attack_tick(send, state, 0)                 # the landing
+            authsrv.attack_tick(send, state, 0)
             landed = [v for op, v, _l in sent
                       if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
                       and v[0] == authsrv.agents.GV_DISABLED]
             return opened, landed, state
         finally:
-            authsrv.LANDING_HOLD_RELEASE = saved
+            authsrv.SWING_HOLDS_WALK_GATE = sh
+            authsrv.LANDING_HOLD_RELEASE = lr
 
-    opened, landed, st = swing_cycle(True)
-    check(opened == [[authsrv.agents.GV_DISABLED, PLAYER, 1]],
-          "the swing OPEN still sets the hold -- the pre-landing window is "
-          "the one §32 rules un-movable, and the gate belongs shut there",
-          f"{opened}")
-    check(landed == [[authsrv.agents.GV_DISABLED, PLAYER, 0]]
-          and st.get("action_hold") == 0,
-          "SHIPPED ARM: the LANDING releases it, so the walk gate is open "
-          "across exactly the window §32 declared movable. Without this the "
-          "operator's post-landing press waited on a round trip -- p50 "
-          "0.869 s, n=104",
-          f"{landed}, action_hold={st.get('action_hold')}")
+    # ARM 1 -- SHIPPED. No hold anywhere in the swing.
+    opened, landed, st = swing_cycle(False, True)
+    check(opened == [] and landed == [] and not st.get("action_hold"),
+          "SHIPPED ARM: the swing sends NO property 8, at the open or the "
+          "landing. The client's walk gate is never shut by an auto attack, "
+          "so a pre-landing movement press meets a clear gate -- the 25-of-32 "
+          "refusals the operator felt as a warp cannot occur",
+          f"open={opened}, landing={landed}, hold={st.get('action_hold')}")
 
-    opened2, landed2, st2 = swing_cycle(False)
+    # ARM 2 -- the revert, with 33 F1 still on: hold set, released at landing.
+    opened2, landed2, st2 = swing_cycle(True, True)
     check(opened2 == [[authsrv.agents.GV_DISABLED, PLAYER, 1]]
-          and landed2 == [] and st2.get("action_hold") == 1,
-          "KNOWN-BAD ARM (--no-landing-hold-release): the hold rides past "
-          "the landing and NOTHING releases it -- every build before "
-          "2026-09-01. This is the configuration that produced the measured "
-          "0.6-1.0 s stall, reproduced on purpose so the revert reddens "
-          "rather than asserting",
-          f"opened={opened2}, landed={landed2}, "
-          f"action_hold={st2.get('action_hold')}")
-    check(st.get("action_hold") != st2.get("action_hold"),
-          "and the two arms SEPARATE on the one number that matters -- the "
-          "gate's state at the instant movement becomes legal",
-          f"shipped={st.get('action_hold')}, legacy={st2.get('action_hold')}")
+          and landed2 == [[authsrv.agents.GV_DISABLED, PLAYER, 0]]
+          and st2.get("action_hold") == 0,
+          "--swing-holds-walk-gate: the hold returns at the open and 33 F1 "
+          "still releases it at the landing -- the two flags COMPOSE, which "
+          "is why F1 is subsumed rather than deleted",
+          f"open={opened2}, landing={landed2}")
 
-    # THE RELEASE IS TRANSITION-ONLY, so a chain whose next swing re-opens
-    # pays one property, not two. Checked because the wire cost is the one
-    # objection to releasing per swing rather than per chain.
-    sent3 = []
-    send3 = lambda op, vals, label="", quiet=False: sent3.append(
+    # ARM 3 -- KNOWN-BAD, both legacy: held at the open, never released.
+    opened3, landed3, st3 = swing_cycle(True, False)
+    check(opened3 == [[authsrv.agents.GV_DISABLED, PLAYER, 1]]
+          and landed3 == [] and st3.get("action_hold") == 1,
+          "KNOWN-BAD ARM (--swing-holds-walk-gate --no-landing-hold-release): "
+          "held at the open and never released -- every build before "
+          "2026-09-01, and the configuration that produced the measured "
+          "0.601/0.869/1.015 s movement stall over 104 hold windows",
+          f"open={opened3}, landing={landed3}, hold={st3.get('action_hold')}")
+
+    check(st.get("action_hold", 0) == 0 and st3.get("action_hold") == 1,
+          "and the shipped and known-bad arms SEPARATE on the one number "
+          "that matters -- the gate's state while the player is swinging",
+          f"shipped={st.get('action_hold', 0)}, legacy={st3.get('action_hold')}")
+
+    # THE CAST PATH IS UNTOUCHED, and that is the boundary of this change.
+    sentc = []
+    sendc = lambda op, vals, label="", quiet=False: sentc.append(
         (op, vals, label))
-    state3 = _state()
-    authsrv.begin_attack(send3, state3, 10, 0)
-    authsrv.attack_tick(send3, state3, 0)
-    _rewind(state3, authsrv.swing_windup(authsrv.ATTACK_INTERVAL) + 0.01)
-    authsrv.attack_tick(send3, state3, 0)                       # land + release
-    sent3.clear()
-    _rewind(state3, authsrv.ATTACK_INTERVAL)
-    authsrv.attack_tick(send3, state3, 0)                       # next START
-    reopen = [v for op, v, _l in sent3
-              if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
-              and v[0] == authsrv.agents.GV_DISABLED]
-    check(reopen == [[authsrv.agents.GV_DISABLED, PLAYER, 1]],
-          "the next swing re-sets it with exactly ONE property -- the wire "
-          "cost of releasing per swing is one message per swing at most, "
-          "which is the only objection this change has to answer",
-          f"{reopen}")
+    statec = {"agents": {}}
+    saved = authsrv.skill_timing
+    authsrv.skill_timing = lambda sid: (1.0, 0.75, 8.0)
+    try:
+        _press(authsrv, sendc, statec)
+        holds = [v for op, v, _l in sentc
+                 if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
+                 and v[0] == authsrv.agents.GV_DISABLED and v[2] == 1]
+        check(holds == [[authsrv.agents.GV_DISABLED, PLAYER, 1]],
+              "and a CAST still holds -- property 8 around a cast is "
+              "retail-correct and separately corpus-backed (castmech 3c). "
+              "ANIMREF-RE 35 narrows the AUTO-SWING sites only, and a change "
+              "that silenced the cast half too would pass every other check "
+              "in this section",
+              f"{holds}")
+    finally:
+        authsrv.skill_timing = saved
 
 
 def section_chain_pause():

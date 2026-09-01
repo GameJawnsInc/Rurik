@@ -112,9 +112,15 @@ def section_hit_enemy():
     # batch [159/prop1, 207, 163/prop16, 30], n=425. This check first shipped
     # asserting the gain was LAST "because a hit has to land before it earns
     # one", which is a plausible story about a sequence ArenaNet does not send.
-    # 5 since 2026-08-22: the [8 -> 1] action hold rides behind the STARTED
-    # (castmech 3c), joining the trio and the 0x00CF.
-    check(len(sent) == 5
+    # 4 since ANIMREF-RE 35, and the history is the point. It was 4, then 5
+    # from 2026-08-22 when the [8 -> 1] action hold was added "behind the
+    # STARTED (castmech 3c)", and now 4 again. THE ADDITION READ A DENOMINATOR
+    # BACKWARDS: castmech 3c censuses the prop-8 HOLDS and says 4 of 4 of them
+    # rode an ATTACK_STARTED -- an ORDER fact about the holds observed. We read
+    # it as a RATE over the starts and sent one on every swing. Retail's real
+    # rate is 83 of 1,332 attack starts (6.2%); ours was 52 of 52 (100%), and
+    # the cost was the client's walk gate shut for every swing.
+    check(len(sent) == 4
           and ops.index(authsrv.AGENT_ADRENALINE_GAIN)
               == ops.index(authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET) - 1,
           "control: the in-range path still sends the swing, gain before damage",
@@ -566,7 +572,10 @@ def section_overkill():
     # next change to the kill window names itself here. NOTHING is sent for
     # the dying AGENT's own adrenaline -- retail is self-scoped 9 of 9 -- and
     # the count is what would catch a later session "fixing" that asymmetry.
-    check(len(sent) == 8 and agent["dead"] is True and
+    # 7 since ANIMREF-RE 35 (was 8): the swing no longer carries a prop-8
+    # hold. See the in-range control above for the denominator that was read
+    # backwards.
+    check(len(sent) == 7 and agent["dead"] is True and
           damage_vals and damage_vals[0][3] == F32_MINUS_ONE,
           "an overkill swing sends -1.0 and the target dies",
           f"{len(sent)} messages (swing trio + kill window), "
