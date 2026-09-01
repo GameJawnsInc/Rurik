@@ -9307,15 +9307,18 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   ELIDED when the flag was still 0 (the ranger's t=12.9508 shape,
   transition-only), the spell E5's instant ends with the `[8→0][8→1]` pulse
   (4 of 4 live), and the queued press and begin carry
-  no property 8 at all. Since ANIMREF-RE (2026-09-01) the E3 batch DOES
-  toggle it — `[8 → 0]` riding behind the E3, the caster-freed instant, 19
-  of 19 unmoved corpus cycles; §2 and the attack-family §2c both pin the
-  release riding one slot behind the E3, and §2 also runs the KNOWN-BAD arm
-  (`--no-e3-release` reproduces the pre-RE root: E3 alone, hold rides on) so
-  the revert flag reddens rather than asserting. This retired the entry's
-  own former claim that "the E3 toggles nothing", which was read off the
-  older corpus whose E3s were silent because a movement instant had already
-  released the hold (castmech P10, resolved). Bare-machine floor 34, 36 with
+  no property 8 at all, and the E3 batch does not toggle it either. That
+  last clause went the OTHER way for half of 2026-09-01: ANIMREF-RE shipped
+  an E3 release (`[8 → 0]` behind the E3, the caster-freed instant, 19 of 19
+  unmoved corpus cycles — which also resolved castmech P10's "recorded, not
+  resolved", since the older corpus's silent E3s were casts a movement
+  instant had already released and transition-only elides a re-release). The
+  operator scored the shipped pair "very floaty" and "warping" and it was
+  REVERTED the same day (FINDINGS §29). The corpus fact is not withdrawn and
+  neither is the flag: §2 still runs BOTH arms, the default (E3 alone, hold
+  rides on) and `--e3-release`, because the arm has to be proven live before
+  the next A/B — the run that convicted it convicted a PAIR, so neither half
+  is individually cleared. Bare-machine floor 33, 35 with
   the vault. The section that earns the entry is the QUEUE LAW: skill 105's two
   cycles both exceed its 2.0 s activation by exactly the previous cast's
   remaining aftercast, so E4 fires at accept but the cast begins when the
@@ -9361,9 +9364,7 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   split: the first tick sends the START with the `[8 → 1]` action hold riding
   behind it (4 of 4 live, castmech 3c), the landing a windup later is
   gain/damage/FINISHED with NO second START and no hold toggle — the chain
-  still holds. (Since ANIMREF-RE the mid-cast section's exact op list gains
-  the E3 release riding behind the E3 — the chain's next swing re-holds one
-  tick later.) §2 pins the gate as
+  still holds. §2 pins the gate as
   START-to-START — right after a landing nothing fires, because the backswing
   half of the interval is a wait with no wire event, and the next START opens
   one interval after the previous one. §3 drops an armed swing whose target
@@ -9406,19 +9407,23 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   queued behind it both release, two E2s, no recharge for either. §4 proves
   the busy-window rollback: a press after a cancel schedules its E5 one
   activation out, not behind the cancelled cast's ghost. §5 is the chain
-  half, both doors — and since ANIMREF-RE (2026-09-01) the arms are FLIPPED:
-  LAW A is now the DEFAULT door (no prop-3, target and armed swing survive,
-  range gate judges) and the section pins that the hold STILL releases
-  (`[8 → 0]`, which is what clears the client's walk gate and arms its 250 ms
-  resume — LAW A removes the animation-kill, never the release). The
-  KNOWN-BAD arm is `--legacy-move-stops-chain`: one GV_ATTACK_STOPPED, target
-  forgotten, armed swing dropped unlanded — the pre-RE door that cancels the
-  attack animation on every mid-chain move, reproduced on purpose so the
-  revert reddens. The blocker that kept LAW A opt-in is resolved: the
-  "unidentified grant" retail feeds a mid-chain mover is the client's own
-  250 ms resume poll (prop 8's gate-clear at 0x0081C090), and the tap-train
-  freeze was retail-consistent tap behaviour (the resume rescues held keys
-  only). Floor 23. §6 is the
+  half, both doors. LAW A was the DEFAULT for half of 2026-09-01 and is
+  OPT-IN again (`--move-keeps-chain`): the operator scored the §28 pair
+  "very floaty" and "warping", so the prop-3 door is default once more —
+  now on a FEEL verdict rather than the old tap-train reading, which the
+  §28 decode had already dismantled (the "unidentified grant" retail feeds
+  a mid-chain mover is the client's own 250 ms resume poll, prop 8's
+  gate-clear at 0x0081C090, and the tap-train freeze was retail-consistent
+  tap behaviour since the resume rescues held keys only). Both arms still
+  run, and the LAW-A arm came back RICHER than it left: besides the absence
+  of the prop-3 it now pins the **walk-gate re-hold** — with the chain
+  surviving the move, `attack_tick` re-sends `[8 → 1]` one tick later on a
+  body that just walked, setting the gate against the movement door's own
+  clear. That toggle is FINDINGS §29's leading suspect for "floaty" and it
+  shipped unmeasured; the check exists so it cannot go unnoticed twice. The
+  section also pins what the revert does NOT touch: the `[8 → 0]` hold
+  release rides on both arms — it is the one piece of the door they share,
+  and it is what arms the client's resume poll. Floor 24. §6 is the
   `0x0028` CANCEL_ACTION door, the arm the first operator run forced: the
   client sends NO movement c2s while it holds a cast — the operator's three
   cancel inputs each arrived as a header-only 0x0028 (run 20260823T101329),
