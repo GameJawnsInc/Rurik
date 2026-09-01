@@ -55,6 +55,29 @@ STATUS = os.path.join(HERE, "movehook.status")
 # compiled in as an ABSOLUTE path -- kept writing to the real one. §16 is the
 # check that catches it and its own message names the cost: `--stop` reports a
 # missing capture that exists. CLAUDE.md's rule, and the reason it is a rule.
+# THE RECOVERY COMMANDS THIS TOOL PRINTS MUST RUN IN THE SHELL IT PRINTS THEM TO,
+# and on 2026-08-31 they did not. Both hints were `cd {HERE} && powershell ...`.
+# `&&` is a PARSER ERROR in Windows PowerShell 5.1 -- not a wrong result but a
+# refusal to run the line at all -- so the single instruction offered to an
+# operator who was mid-run could not be executed. `-File` takes an absolute path,
+# so the `cd` was never needed and neither was the chain.
+#
+# The gensites line is printed WITH the build line for the sha256 case
+# specifically. `sites.h` is generated with LF endings and hashed BY CONTENT,
+# while git checks it out with CRLF -- so a fresh checkout of an UNCHANGED file
+# hashes differently from the one the DLL was built against, and the mismatch
+# reads as "someone edited the sites" when nobody did. Regenerating normalises
+# it. `.gitattributes` now pins the file to LF so this stops happening at all;
+# the hint stays because a tree checked out before that pin still needs it.
+def _build_cmd():
+    return ("powershell -ExecutionPolicy Bypass -File "
+            f"\"{os.path.join(HERE, 'build.ps1')}\" movehook.c")
+
+
+def _gensites_cmd():
+    return f"python \"{os.path.join(HERE, 'gensites.py')}\""
+
+
 def default_outdir():
     return os.path.abspath(vaultpath.vault_path("research", "movecode"))
 
@@ -347,8 +370,7 @@ def main(argv=None):
 
     if not os.path.isfile(DLL):
         return print(f"no DLL at {DLL} -- build it:\n"
-                     f"  cd {HERE} && powershell -ExecutionPolicy Bypass "
-                     f"-File ./build.ps1 movehook.c") or 2
+                     f"  {_build_cmd()}") or 2
 
     pid = autoinject.find_pid(a.image)
     if not pid:
@@ -382,8 +404,8 @@ def main(argv=None):
         print("Rebuild it. If the build fails with LNK1104 the DLL is still loaded "
               "in a running")
         print("client -- close the client first; the hook does not unload itself.")
-        print(f"  cd {HERE} && powershell -ExecutionPolicy Bypass "
-              f"-File ./build.ps1 movehook.c")
+        print(f"  {_gensites_cmd()}")
+        print(f"  {_build_cmd()}")
         return 5
 
     # THE BUILD CHECK, against the running process and not against the pinned file.

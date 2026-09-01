@@ -1121,7 +1121,7 @@ word is 2 and the held word 3.
   excludes input, focus and key delivery — but it does not narrow which exit the
   applier took**, which §21.5's prediction had implicitly leaned on.
 
-### 22.3 THE ARM DIFFERENCE, from our own wire — CONTESTED, see §22.6
+### 22.3 THE ARM DIFFERENCE, from our own wire — CONTESTED (§22.6); the MECHANISM is confirmed in §23
 
 `action_hold` (`authsrv.py:9209`) is transition-only. It is called with **1** by
 the swing loop at `:9805` (`attack_tick`, behind every `attack_started`) and
@@ -1235,6 +1235,11 @@ its null is worth nothing ([[feedback-negative-needs-positive-control]]). That
 measurement is the cheapest thing that would discriminate 1 from 2, and it wants
 the arc's real position decoder rather than a fresh guess at one.
 
+**§23 CONFIRMED THE MECHANISM IN A LIVE CLIENT** — the gate fires, and the
+movement press is eaten unlocking it. What §22.6 says here still stands
+anyway: retail holds property 8 LONGER than we do, so the fix is not
+"hold it for less time" and may be the client's re-dispatch instead.
+
 **Consequence for the work: no server change ships from this dig.** §22.3 is
 downgraded from "RECONSTRUCTION (high confidence)" to **CONTESTED** — the
 mechanism is real and verified statically, its sufficiency as the cause of the
@@ -1242,6 +1247,101 @@ R7a freeze is not established, and the corpus actively resists the simplest fix
 derived from it. The movehook run (§21.5, sharpened to four outcomes by the
 `0x0081ACFA` no-path exit) remains the settling step, and it is now *more* clearly
 worth its cost than before, because the desk cannot close this.
+
+## 23. ANIMREF-RE RUN 1: the gate is CONFIRMED IN THE CLIENT, and the press is EATEN
+
+**2026-08-31, owner-driven, loopback, shipped default server with a read-only
+tap. All three registered predictions (`RUN-RE1.md`) CONFIRMED, and the run says
+something sharper than they asked.** 482 records, both hook controls FIRED, 61
+begin-move entries with the gate words read on **61 of 61**.
+
+### 23.1 The scoreboard, against predictions registered before the run
+
+| | Prediction | Result |
+|---|---|---|
+| P1 | non-moving presses report `E3-walk-gate` | **CONFIRMED** — 5 refusals, every one `gate & 1` SET |
+| P2 | idle walks report `passed-flag-gates`, gate CLEAR | **CONFIRMED** — 56 passes; the reader's own control says OK |
+| P3 | no `E4-dead` | **CONFIRMED**, and stronger: `m_status == 0x00000000` on **all 61** |
+
+**The gate word takes exactly two values and they partition the capture
+perfectly: `0x3` on all five refusals, `0x2` on all 56 passes.** §22.1 predicted
+those two literals *before the run*, statically, from `0x0081BE90`'s refusal
+conditions (bit 0 set, bit 1 clear) — "the healthy word is 2 and the held word
+3". Measured, to the bit.
+
+P3's by-product retires §21.4's inference: `m_status` reading zero on every
+entry means gates A (bit 8) and C (`CHAR_STATUS_DEAD`) are eliminated **by
+measurement in the client**, not by reasoning about our send sites.
+
+### 23.2 The refusal and the release are ONE EVENT — the press is spent on the gate
+
+Our server's own prop-8 transitions for the session
+(`gamesrv/authsrv-20260831T203836-c1.jsonl`) against the client's refusals:
+
+```
+server HOLD  0.00  4.20  8.60 18.82 23.02     hold durations 0.43 0.28 0.33 0.31 0.32
+server REL   0.43  4.48  8.93 19.13 23.34
+client E3    0.83  4.89  9.33 19.53 23.73
+```
+
+| pairing | offsets | sd |
+|---|---|---|
+| E3 − HOLD | 0.83, 0.69, 0.73, 0.71, 0.71 | 0.0496 |
+| **E3 − RELEASE** | **0.40, 0.41, 0.40, 0.40, 0.39** | **0.0063** |
+
+**The refusals lock to the RELEASE, 8× tighter than to the hold**, and the
+interval gaps agree without needing the offset at all (release 4.05/4.45/10.20/
+4.21 against E3 4.06/4.44/10.20/4.20). The residual 0.400 s is the constant skew
+between the hook's `GetTickCount` origin and the tape's.
+
+**The causal direction is not read off the clocks — it is in our own source.**
+`authsrv.py:9353` sends `action_hold(0, "the player moves")` *from the movement
+message*, and `chcli_dir` emits its `0x003D` on **every** arm including the
+refusal (§22.2). So the call that refused is the call that triggered the release:
+
+> **The player's movement press is consumed unlocking the gate instead of moving
+> the body.** One press, one round trip, no displacement.
+
+### 23.3 Why this reads as "unreliable" rather than "broken"
+
+The hold is only **0.28–0.43 s** (n=5). Press movement inside that window and the
+press is eaten; press outside it and you walk normally — which is exactly the
+shape of the owner's verdict, *"I can do it but it's unreliable"*, and exactly why
+the earlier harness measurement ("a tap at +2.1 s moves") looked like a fix: 2.1 s
+is far outside a 0.3 s window, so the instrument was sampling the case that was
+never broken. **That is [[feedback-observed-context-is-part-of-the-claim]] and the
+reason §11's "RESOLVED" survived as long as it did.**
+
+And the eaten press does not retry. MOVE-CMD is called **only when the movement
+direction changes** (CANCELWALK F25, `0x005355C0`'s 50 ms evaluator) — so holding
+the same key after a refusal produces no second `chcli_dir` call. The gate clears
+a round trip later and nothing re-dispatches. **The player has to release the key
+and press again**, which is the felt difference from stock.
+
+### 23.4 What is now settled, and what is NOT
+
+**SETTLED (OBSERVED):** the walk gate exists, is `[char+0x64]` bit 0, is written
+by property 8, is read by both begin-move entries, refuses the walk when set, and
+our server holds it across the exact window in which a quarterstep is attempted.
+§15's animation-state model stays REFUTED; §22's chain is now confirmed at both
+ends rather than statically at one.
+
+**NOT SETTLED, and §22.6's tension is untouched:** retail holds property 8 for
+p50 1.03 s — *longer* than our 0.3 s — with the player alive, and retail players
+quarterstep. So "hold it for less time" is not obviously the fix and may be
+exactly backwards. The candidate that this run newly makes attractive is the
+**re-dispatch**: if retail's client re-issues the movement after the gate clears
+and ours does not, the divergence is not the hold at all. That is a client
+question about `0x005355C0`'s latch, and it is the next cut.
+
+**Not asked, not answered:** whether any of this feels like stock. No fix shipped.
+
+### 23.5 A MOVECODE divergence this capture also carries, unclaimed
+
+Our grant cadence to the sync copy is **p50 0.02 s between setter calls against
+retail's 0.82 s** — roughly 40× over-granting — and 26 teleports fired with 6 not
+chaining. Neither is this arc's question; both are recorded here so the next
+MOVECODE session finds them rather than re-measuring.
 
 ## Provenance
 

@@ -1,0 +1,19 @@
+# GENERATED FILES THAT ARE HASHED BY CONTENT MUST NOT HAVE THEIR LINE ENDINGS
+# REWRITTEN, and this file exists because that cost an operator a run.
+#
+# 2026-08-31: `toolkit/clientscan/movehook/sites.h` is written by gensites.py with
+# LF endings, and build.ps1 stamps the sha256 of its BYTES into the DLL so that
+# attach.py can refuse to inject a DLL built against a different site table. That
+# refusal is correct and load-bearing -- arming a breakpoint from a stale table
+# puts an 0xCC somewhere that is no longer the instruction the row names.
+#
+# But git's autocrlf checked the file out as CRLF, so a fresh checkout of an
+# UNCHANGED file hashed differently from the one the DLL was built against. The
+# operator got "movehook.dll was built against a DIFFERENT sites.h" on a tree
+# where nothing had been edited, mid-run, and the recovery command printed with it
+# used `&&` and could not run in PowerShell either.
+#
+# Pinning the generated header to LF makes the hash a fact about the site table
+# rather than about which tree checked it out. Anything else generated-and-hashed
+# belongs here too.
+toolkit/clientscan/movehook/sites.h text eol=lf
