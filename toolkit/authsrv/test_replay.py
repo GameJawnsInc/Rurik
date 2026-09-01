@@ -24,6 +24,7 @@ it must decrypt clean. It is skip-guarded, because a worktree has no captures of
 
 Read-only. standard library only.
 """
+import io
 import os
 import struct
 import sys
@@ -36,12 +37,12 @@ import checks  # noqa: E402
 import replay  # noqa: E402
 from gwcrypto import ARC4  # noqa: E402
 
-# MEASURED 2026-08-07. Sections 2 and 3 are fixture-free -- section 2 needs one real
-# capture but degrades to a skip without one, section 3 builds its own bytes -- so the
-# floor is the synthetic round-trip's 4 checks, which run on a bare machine. Sections 1
-# and 4 depend on the vault and declare skips. A green run with the vault present is 12:
-# 3 (sec 1) + 2 (sec 2) + 4 (sec 3) + 3 (sec 4, one per verified capture, 1 here).
-LEDGER = checks.Ledger("replay", floor=4)
+# MEASURED 2026-08-07, RE-MEASURED 2026-09-01 when section 5 landed. Sections 2, 3
+# and 5 are fixture-free -- section 2 needs one real capture but degrades to a skip
+# without one, section 3 builds its own bytes, section 5 reads the server module --
+# so the floor is 4 (sec 3) + 6 (sec 5) = 10, which run on a bare machine. Sections 1
+# and 4 depend on the vault and declare skips. Green with the vault: 16.
+LEDGER = checks.Ledger("replay", floor=10)
 
 
 def _keyable_captures(root):
@@ -210,6 +211,70 @@ def main():
             LEDGER.ok(clean > 0,
                       "and the sweep is not vacuous: real captures decrypted clean",
                       f"{clean} of {keyable} reproduced their plaintext exactly")
+
+    # ---- 5. a capture says WHICH CONFIGURATION produced it ---------------
+    #
+    # THIS SECTION EXISTS BECAUSE A CAPTURE COULD NOT SAY. On 2026-09-01 two
+    # behaviour defaults shipped and were reverted the same day, and working
+    # out which of six 35-second sessions had actually run them took an hour
+    # of inference from send labels -- `attack_stopped` being absent was the
+    # only tell, and it identified one of the two flags. The header carried
+    # build, world, map and account uuid and not one line of configuration.
+    # Every A/B this project has run was self-identifying by luck.
+    #
+    # The property is: the flag census is DISCOVERED from the module, it
+    # REFLECTS A CHANGE, and it reaches the file. A census that returns a
+    # constant would pass a "the key is present" check and still be useless,
+    # so the middle one is the load-bearing check here.
+    print("\n5. the capture header records the behaviour configuration")
+    import json as _json
+    import authsrv  # noqa: E402  -- imported here; sections 1-4 need no server
+
+    flags = authsrv.capture_flags()
+    named = ("MOVE_KEEPS_CHAIN", "ANIMREF_E3_RELEASE", "GRANT_DURING_HOLD",
+             "ZERO_LEAD", "AGTRACK_REPIN", "PLANE_REPAIR")
+    missing = [n for n in named if n not in flags]
+    LEDGER.ok(not missing,
+              "the census carries the flags whose arms this arc actually "
+              "runs -- the ones a capture has to be able to distinguish",
+              f"missing {missing} from a census of {len(flags)}")
+    LEDGER.ok(len(flags) >= 20,
+              "and it is a SWEEP, not a hand-list -- every SCREAMING_CASE "
+              "bool in the module, so a flag added tomorrow is recorded "
+              "tomorrow with nobody remembering to add it",
+              f"{len(flags)} entries")
+
+    # THE CHECK THAT CAN FAIL: flip a real flag and the census must move.
+    was = authsrv.MOVE_KEEPS_CHAIN
+    try:
+        authsrv.MOVE_KEEPS_CHAIN = not was
+        flipped = authsrv.capture_flags()
+    finally:
+        authsrv.MOVE_KEEPS_CHAIN = was
+    LEDGER.ok(flipped.get("MOVE_KEEPS_CHAIN") == (not was)
+              and flags.get("MOVE_KEEPS_CHAIN") == was,
+              "flipping a flag MOVES the census -- it reads the live module "
+              "globals, so a flag set by any route (not just argparse) is "
+              "recorded",
+              f"census said {flags.get('MOVE_KEEPS_CHAIN')} then "
+              f"{flipped.get('MOVE_KEEPS_CHAIN')} for a global that went "
+              f"{was} -> {not was}")
+    LEDGER.ok(authsrv.MOVE_KEEPS_CHAIN is was,
+              "and the probe restored the global it flipped -- a test that "
+              "leaks a flag into the rest of the suite is worse than no test",
+              f"{authsrv.MOVE_KEEPS_CHAIN!r}")
+
+    # AND IT REACHES THE FILE: the Recorder emits it as its second record,
+    # right behind the origin stamp. Checked on the SOURCE rather than by
+    # opening a socket, because Recorder.__init__ writes to a real directory.
+    src = io.open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
+    LEDGER.ok(src.count('self.event("flags", **capture_flags())') == 1,
+              "and the Recorder writes exactly one `flags` record per "
+              "capture, at construction",
+              "a census nothing emits is a census nobody can read")
+    LEDGER.ok(len(_json.dumps(flags)) < 20000,
+              "the census fits one line without bloating the capture",
+              f"{len(_json.dumps(flags))} bytes, once per connection")
 
     return LEDGER.verdict()
 
