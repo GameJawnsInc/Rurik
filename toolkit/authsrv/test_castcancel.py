@@ -17,8 +17,8 @@ every other phase of the cycle uses. Timing by rewinding, never sleeping.
 NO VAULT, NO SOCKET, NO CLIENT: every section stubs `skill_timing` and
 asserts on the CANCEL wire, which carries no content-derived value -- so the
 count is the same number with and without a vault (MEASURED both ways
-2026-09-01, re-measured after ANIMREF-RE 31 re-shipped LAW A composed with
-the chain pause: 23 and 23) and the floor below is that number for real. This
+2026-09-01, re-measured after ANIMREF-RE 32 added the landing split: 30 and
+30) and the floor below is that number for real. This
 paragraph is new, and the property is one day old rather than original: until
 2026-08-31 a bare run died in `handle_skill_press` with a `ContentError` on
 skill 42, because `authsrv.player_rank_for_skill` was the one lookup on the
@@ -37,12 +37,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
 import checks  # noqa: E402
 
-# FLOOR 24, from the green runs of 2026-09-01: LAW A went to the default
-# and back the same day (operator: 'very floaty', 'warping'), and the arm
-# came back richer than it left -- it now pins the walk-gate RE-HOLD that
-# shipping it unmeasured cost. 21 before that day; 15 when the file carried
-# the movement door alone. Measured both ways: 24 with a vault, 24 without.
-LEDGER = checks.Ledger("cast cancel", floor=23)
+# FLOOR 30, from the green runs of 2026-09-01 that added §7, the LANDING
+# SPLIT -- the day LAW A went to the default, came back on the operator's
+# "very floaty", and went out again composed with the chain pause and the
+# two-regime rule. 24 earlier that day, 21 before it, 15 when the file
+# carried the movement door alone. Measured both ways: 30 with a vault, 30
+# without -- §7 stubs nothing it does not already stub.
+LEDGER = checks.Ledger("cast cancel", floor=30)
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -251,6 +252,11 @@ def section_chain_half():
     state = {"agents": {10: agent}, "pos": (0.0, 0.0)}
     authsrv.begin_attack(send, state, 10, 0)
     authsrv.attack_tick(send, state, 0)                    # arm the swing
+    # PAST THE LANDING before moving -- this section's claim is about the
+    # chain SURVIVING a move, and since ANIMREF-RE 32 that is regime 2's
+    # property, not a blanket one. A move inside the windup is regime 1 and
+    # cancels by design; §7 owns both regimes and pins the split itself.
+    state["player_swing"]["lands_at"] -= 5.0
     sent.clear()
     authsrv.cancel_on_move(send, state, 0)
     stops = [v for op, v, _ in sent
@@ -331,6 +337,137 @@ def section_chain_half():
               "STOPPED -- the press already closed the chain, the same "
               "negative the press path measured (necro press 2, t=9.85)",
               f"stops={stops}")
+    finally:
+        authsrv.skill_timing = saved
+
+
+def section_landing_split():
+    """ANIMREF-RE 32: the TWO REGIMES, split by the landing instant.
+
+    OPERATOR, 2026-09-01, on stock Guild Wars, verbatim:
+
+      1. start attacking -> move BEFORE the attack lands (or the projectile
+         launches) -> the attack animation STOPS and normal movement resumes.
+      2. start attacking -> WAIT for the landing -> then move -> the animation
+         PLAYS TO COMPLETION while the body slides.
+
+    Every previous version of this door had ONE rule and was therefore wrong in
+    one of the two regimes: the legacy door cancelled always (their "cancelling
+    the animation instead of sliding"), LAW A cancelled never (their "the legs
+    don't move, the attack animation completes"). This section pins BOTH
+    regimes, so neither can be fixed by breaking the other.
+
+    The discriminator is `player_swing["lands_at"]`, which this server already
+    stamps a `swing_windup(interval)` after the START -- no new state.
+    """
+    import authsrv
+    import time as _t
+
+    print("\n7. ANIMREF-RE 32: the landing splits movement into two regimes")
+
+    def move_at(offset_from_start):
+        """Open a swing, jump the clock `offset` seconds in, then move."""
+        sent = []
+        send = lambda op, vals, label="", quiet=False: \
+            sent.append((op, vals, label))
+        agent = {"name": "t", "dead": False, "last_hit": 0.0,
+                 "max_health": 100.0, "health": 100.0, "pos": (0.0, 0.0)}
+        state = {"agents": {10: agent}, "pos": (0.0, 0.0)}
+        authsrv.begin_attack(send, state, 10, 0)
+        authsrv.attack_tick(send, state, 0)              # START, arms the swing
+        # Move the swing's landing into the past or future by rewinding it.
+        sw = state["player_swing"]
+        windup = sw["lands_at"] - _t.time()
+        sw["lands_at"] -= offset_from_start
+        state["player_last_swing"] -= offset_from_start
+        sent.clear()
+        authsrv.cancel_on_move(send, state, 0)
+        stops = [v for op, v, _l in sent
+                 if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
+                 and v[0] == authsrv.agents.GV_ATTACK_STOPPED]
+        return stops, state, windup
+
+    # REGIME 1 -- the move lands INSIDE the windup. offset 0 means no time has
+    # passed since the START, so the landing is still ahead.
+    stops, st1, windup = move_at(0.0)
+    check(windup > 0.05,
+          "the rig has a real windup to sit inside -- not a degenerate zero",
+          f"windup {windup:.3f}s")
+    check(stops == [[authsrv.agents.GV_ATTACK_STOPPED, PLAYER, 0]],
+          "REGIME 1 (move BEFORE the landing): property 3 goes out -- the "
+          "attack animation STOPS and normal movement resumes, which is what "
+          "the operator described on stock. LAW A alone got this wrong: it "
+          "cancelled never, and they reported 'the legs don't move, the "
+          "attack animation completes'",
+          f"stops={stops}")
+    check(st1.get("attacking") is None
+          and st1.get("player_swing_cancel") == "movement",
+          "and a cancel is a real close -- the target is forgotten and the "
+          "armed swing is dropped, exactly as the legacy door always did. The "
+          "18 of 343 corpus mid-chain moves that DO carry property 3 are "
+          "these",
+          f"attacking={st1.get('attacking')}, "
+          f"cancel={st1.get('player_swing_cancel')}")
+
+    # REGIME 2 -- the move lands AFTER the strike. Rewinding past the windup
+    # puts `lands_at` in the past.
+    stops2, st2, _w = move_at(windup + 0.05)
+    check(stops2 == [],
+          "REGIME 2 (move AFTER the landing): NO property 3 -- the animation "
+          "plays to completion while the body slides. That is the "
+          "quarterstep, and the legacy door broke it by cancelling here",
+          f"stops={stops2}")
+    check(st2.get("attacking") == 10
+          and not st2.get("player_swing_cancel"),
+          "and the chain SURVIVES, so it can resume when the player stops -- "
+          "with the §31 pause holding the next swing off until then, which is "
+          "the operator's 'they'll go back into normal walking animation "
+          "after the animation completes'",
+          f"attacking={st2.get('attacking')}, "
+          f"cancel={st2.get('player_swing_cancel')}")
+
+    # THE SPLIT MUST BE THE LANDING, not the flag: with LAW A off the legacy
+    # door cancels in BOTH regimes, which is the known-bad arm for regime 2.
+    authsrv.MOVE_KEEPS_CHAIN = False
+    authsrv.CHAIN_PAUSES_WHILE_MOVING = False
+    try:
+        stops3, _st3, w3 = move_at(0.0)
+        stops4, _st4, _w4 = move_at(w3 + 0.05)
+        check(stops3 and stops4,
+              "KNOWN-BAD ARM (--legacy-move-stops-chain): property 3 in BOTH "
+              "regimes -- correct in regime 1 and wrong in regime 2, the "
+              "single-rule door this section replaces. A test that could not "
+              "tell the two arms apart would not be measuring the split",
+              f"regime1={stops3}, regime2={stops4}")
+    finally:
+        authsrv.MOVE_KEEPS_CHAIN = True
+        authsrv.CHAIN_PAUSES_WHILE_MOVING = True
+
+    # AND THE CAST HALF ALREADY DOES THIS, which is the internal corroboration
+    # the wire evidence leans on: E5 is the cast's landing, and §2 above pins
+    # that a completed activation is not marked. Restated here as an explicit
+    # cross-check rather than left implicit two sections away.
+    saved = authsrv.skill_timing
+    authsrv.skill_timing = lambda sid: (1.0, 0.75, 8.0)
+    try:
+        sentc = []
+        sendc = lambda op, vals, label="", quiet=False: \
+            sentc.append((op, vals, label))
+        statec = {"agents": {}}
+        _press(authsrv, sendc, statec)
+        pre = authsrv._mark_cancelled(statec, "movement", _t.time(),
+                                      spare_mid_attack=False)
+        statec2 = {"agents": {}}
+        _press(authsrv, sendc, statec2)
+        statec2["pending_casts"][0]["e5_sent"] = True      # past its landing
+        post = authsrv._mark_cancelled(statec2, "movement", _t.time(),
+                                       spare_mid_attack=False)
+        check(pre == 1 and post == 0,
+              "CROSS-CHECK: the CAST path splits on its own landing (E5) the "
+              "same way -- a cast short of E5 is cancelled by a move, one "
+              "past it is aftercast and untouched. The swing path was the "
+              "only one still all-or-nothing; this section closes that",
+              f"pre-landing marked {pre}, post-landing marked {post}")
     finally:
         authsrv.skill_timing = saved
 
@@ -442,6 +579,7 @@ def main():
     section_attack_skills()
     section_clean_restart()
     section_chain_half()
+    section_landing_split()
     section_cancel_action_door()
     return LEDGER.verdict()
 
