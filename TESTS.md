@@ -3439,7 +3439,24 @@ Floor 75 against a green 75 with 5 declared skips (the archive-conditional
   real green run -- the first draft declared 21 from a head-count and the
   run said 23; the history is in the floor comment. No vault, no client.
   ~1 s),
-  `toolkit/authsrv/test_d1lead.py` (REALFIX-A2's `--d1-lead` bundle -- **the
+  `toolkit/authsrv/test_d1lead.py` (REALFIX-A2's `--d1-lead` bundle, and since
+  2026-09-01 also **§R11: the grant is not sent while WE hold the action.**
+  ANIMREF FINDINGS §26 caught the whole chain in one movehook record, twice: a
+  press the client REFUSED at its walk gate still emits a `0x003D` (§22.2), our
+  server answers it with a destination grant, and the client applies that grant
+  through AgTrack's roster walk (`0x00604880`) as a `setposition` -- RELOCATING
+  the displayed body while the player's own walker pulls the other way. The
+  discriminator has its control: of grants FOLLOWING a refusal 2 of 15 relocated
+  the body, of grants not following one **0 of 29** did; and retail suppresses
+  10:1 in the same state (0.050 grants/s held against 0.519/s clear -- a RATE,
+  because the windows differ in length and that denominator already cost this
+  arc one reverted fix). Four structure checks (default False, exactly one
+  guarded send site, the suppression PRINTS rather than going silent, the revert
+  flag exists and binds) plus a two-arm predicate check whose **known-bad arm
+  must score badly** -- `--legacy-grant-during-hold` restores the relocation, and
+  a guard that passed in both arms would be measuring the wrong quantity. It is
+  a source-and-predicate check rather than a wire drive because the send lives
+  inside `handle()`, the socket handler, with no seam to drive it through -- **the
   accuracy campaign's lead rung, whose whole verdict lives in an owner run
   this file cannot perform** (the registered predictions P-1..P-5 and the
   REFUTED-IF lines are REALFIX.md §0.9 and the startup banner; P-1 is the

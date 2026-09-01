@@ -4296,6 +4296,14 @@ RESYNC = False
 # session with one loud line, because no arm of this may take down the
 # server.  Guard state is touched from two threads (the recv loop and
 # world_tick), so every access goes through _agtrack_guard_call's lock.
+# ANIMREF-R11, 2026-09-01: do NOT answer a movement report with a destination
+# grant while our own action hold is set. See the send site's block for the
+# measurement; the short form is that a refused press is indistinguishable from
+# a real one ON THE WIRE, and answering it relocates the displayed body through
+# the client's AgTrack roster walk. False = suppress (the default),
+# True = --legacy-grant-during-hold restores the old unconditional send.
+GRANT_DURING_HOLD = False
+
 AGTRACK_SHADOW = True
 AGTRACK_REPIN = True
 # HOW FAR APART THE TWO COPIES MUST BE BEFORE WE ACT.  100.0 u is the CLIENT'S
@@ -17304,10 +17312,60 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                             + (" PC-SPOOF" if pcs_fired
                                                else "")
                                             + f" [dir {dir_src}]")
-                                    send(GAME_SMSG_AGENT_MOVE_TO_POINT,
-                                         [PLAYER_AGENT_ID, zl_point,
-                                          plane, zl_plane_cur],
-                                         zl_label)
+                                    # ANIMREF-R11: NOT WHILE WE HOLD THE ACTION.
+                                    # A 0x003D whose press the CLIENT REFUSED
+                                    # looks identical on the wire to one that
+                                    # moved the body -- chcli_dir emits it on
+                                    # every arm including the refusal
+                                    # (FINDINGS sec.22.2) -- so this grant can
+                                    # answer a move that never happened, and
+                                    # the client applies it through AgTrack's
+                                    # roster walk (0x00604880) as a
+                                    # `setposition`, RELOCATING the displayed
+                                    # body. Caught whole in run 3's record,
+                                    # twice (sec.26.2).
+                                    #
+                                    # We do not have to guess whether the press
+                                    # was refused: WE set the hold, so we know
+                                    # the client's walk gate ([+0x64] bit 0,
+                                    # written by our own property 8) was shut.
+                                    #
+                                    # MEASURED, both sides. Ours: of grants
+                                    # following a refusal 2 of 15 relocated the
+                                    # body; of grants not following one, 0 of
+                                    # 29 did. Retail: 0.050 grants/s while its
+                                    # gate is held against 0.519/s clear, a
+                                    # 10:1 suppression -- a RATE, because the
+                                    # two windows differ in length and that
+                                    # denominator has already cost this arc one
+                                    # reverted fix (sec.24.3).
+                                    #
+                                    # Retail's 10:1 is suppression, NOT
+                                    # prohibition (64 grants do land inside
+                                    # holds), so this is deliberately the
+                                    # narrow form: skip only while the hold is
+                                    # actually set. --legacy-grant-during-hold
+                                    # restores the old unconditional send.
+                                    if (GRANT_DURING_HOLD
+                                            or not state.get("action_hold")):
+                                        send(GAME_SMSG_AGENT_MOVE_TO_POINT,
+                                             [PLAYER_AGENT_ID, zl_point,
+                                              plane, zl_plane_cur],
+                                             zl_label)
+                                    else:
+                                        # The suppression is PRINTED, never
+                                        # silent: a grant that does not go out
+                                        # is a scorable event, and a run where
+                                        # this fires zero times is a run with
+                                        # no exposure rather than a healthy one.
+                                        print(f"[c{conn_id}] R11 grant "
+                                              f"SUPPRESSED "
+                                              f"({zl_point[0]:.0f},"
+                                              f"{zl_point[1]:.0f}): action "
+                                              f"hold set, so the client "
+                                              f"refused this press -- "
+                                              f"granting would relocate the "
+                                              f"body", flush=True)
                                     # R4's LEG WINDOW. Any grant supersedes an
                                     # in-flight cancel leg (a fresh order
                                     # re-aims the body), so the window clears
@@ -20149,6 +20207,15 @@ def main():
                          "0x00A0 when the cast names a target, 0x009F when "
                          "it does not -- retail never sends target 0 on the "
                          "targeted channel.")
+    ap.add_argument("--legacy-grant-during-hold", action="store_true",
+                    help="Revert ANIMREF-R11: answer every movement report "
+                         "with a destination grant again, including reports "
+                         "from presses the client REFUSED because our own "
+                         "action hold was set. Those grants relocate the "
+                         "displayed body through the client's AgTrack walk "
+                         "(2 of 15 post-refusal grants did, against 0 of 29 "
+                         "otherwise -- FINDINGS sec.26). Retail suppresses "
+                         "10:1 in the same state.")
     ap.add_argument("--no-agtrack-repin", action="store_true",
                     help="Keep the guard's telemetry but disable its ACTIVE "
                          "arm (ON by default; MOVECODE-1z-s): the single "
@@ -21551,6 +21618,13 @@ def main():
         AGTRACK_SHADOW = False
         print("[map] --no-agtrack-shadow: the guard is OFF entirely -- no "
               "mirror, no telemetry rows, and the active re-pin cannot run.")
+    if a.legacy_grant_during_hold:
+        global GRANT_DURING_HOLD
+        GRANT_DURING_HOLD = True
+        print("[map] --legacy-grant-during-hold: movement reports are "
+              "answered with a grant even while the action hold is set "
+              "(pre-ANIMREF-R11; expect the body to be relocated on a "
+              "refused press).", flush=True)
     if a.no_agtrack_repin:
         global AGTRACK_REPIN
         AGTRACK_REPIN = False
