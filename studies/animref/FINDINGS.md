@@ -2881,7 +2881,8 @@ closes a symptom they reported.
 
 1. **The click-last attack deficit** — 60.6 % against ~91 %. Mechanism partly
    found (§34), bound wrong. What is missing is a real answer to "has the click
-   leg arrived?"
+   leg arrived?" **→ §37: derived (the leg's own travel time), shipped as a
+   CANDIDATE, closes on CASE 6.**
 2. **The no-op press (F2, derived, staged)** — `begin_attack` gates everything on
    `attacking != target_id`, so a repeat press changes nothing; 23 `attack_started`
    from 48 presses in the newest run.
@@ -2889,6 +2890,320 @@ closes a symptom they reported.
    from far away.
 4. **The approach** — retail's server drives it (`0x002A`, 33.8× enrichment,
    60 of 61 naming the target); ours sends nothing.
+
+## 37. THE CLICK LATCH ENDS WHEN THE LEG DOES — derived from the binary, retrodicted on three captures, NOT yet closed on a run
+
+> *"we need to develop each piece accurately, not skip steps."* — operator, §36.
+> This section is item 1 of §36.6 and nothing else. It ships a **candidate**;
+> the operator's CASE 6 run closes it or does not.
+
+### 37.1 What was asked, and how it was answered
+
+§36 left one question: *"has the click leg arrived?"* — the client sends nothing
+at a click leg's end, so the server never observes it, and §34's 3.0 s bound was
+a number borrowed from a neighbour. Twelve agents in one workflow: four lanes
+(retail's contract on the live tapes; the operator's three captures decomposed
+press by press; the client's attack-press path, static; the client's
+attack_started receive path and click-arrival path, static) and **two skeptics
+per lane** with distinct lenses (re-derive the instrument; find the alternative
+mechanism). **All four lanes survived; all eight skeptics returned corrections,
+and the corrections are in the numbers below**, not in a footnote.
+
+### 37.2 The client, read: an attack press does NOT stop the segment the body is on
+
+**The press path, whole.** key/click → GmView `0x004E2160` → resolver
+`0x004E6B20` → world-action switch `0x00514840` → table `0x00514984` arm 0 =
+`0x005148B1` → `0x00816090` (guarded on `MsCliApiGetMap() == MISSION_MAP_GAME`
+via `0x0084D9B0` and a live `playerControlledChar`) → **`call 0x0081BDB0`** →
+`jmp 0x00920120`, the `0x26` packer. The packer has **exactly one reference in the
+image** (the jmp at `0x008160B5`; every alignment, all five sections), so **every
+`0x0026` on the wire was preceded by `0x0081BDB0`.** OBSERVED (static, pristine
+38797; two skeptics re-decoded it byte for byte).
+
+**What `0x0081BDB0` does — four things, none of them a stop:**
+
+1. `0x005FCA80` → AgTrack `0x00605F70`: `rec[0] = 0` (clientControlled),
+   `rec[4] = 0` (history head), stride `0x1C`. The record is **disarmed**.
+2. `0x0081A6F0` ClearPath: `[this+0x68] = 0` and `m_path[0..7].x/y ← +INF`
+   (`0x00948654`, 33 stores; the array ArenaNet's own assert names —
+   `ChCliBase.cpp:154 index < arrsize(m_path)`). **The queued waypoints are
+   dropped.** There is no count field; the `+INF` sentinel terminates and
+   `+0x68` is a sequence token the arrival consumer compares
+   (`0x0081B58D cmp eax,[esi+0x68]`).
+3. `0x0081C150`: stamps `+0x120`, sets `+0x110 |= 2`, arms a 100 ms timer. The
+   lane cited this as "the client polls velocity waiting for the body to stop";
+   **a skeptic struck that** — the click planner arms the identical poll
+   unconditionally (`0x0081AEDF`), so it is the generic face-when-stopped
+   watcher and witnesses nothing.
+4. FrApi event `0x1000004F`, for the player's own char only. The lane reported
+   the handler NOT FOUND; **both skeptics located it in four static steps**:
+   `0x00633D70` is a synchronous listener dispatch (`call eax` at
+   `0x0064CA22`), GmView subscribes at `0x004ECD9E`, its frame-proc switch
+   (`0x004E368A`, base `0x10000007`) routes the id to arm 33 = `0x004E4CE3` →
+   `0x005368B0` = `or [0xC07C4C],2; [0xC07C58]=0; call 0x005355C0(0.0)` — the
+   GmWalk input evaluator, run once with **dispatch suppressed**. It cancels
+   autorun; with no key held it dispatches nothing. From the evaluator a
+   MOVE-CMD path to a mover *exists* (`0x00535380 → 0x008163A0 → 0x0081A8F0 →
+   0x005FC7A0`) behind the `[0xC07C4C]` gate, so the absence below is
+   UNVERIFIED for that edge and OBSERVED for the rest.
+
+**Write census over the eight press-path functions** (227–244 instructions,
+two independent decoders): **0 stores to any agent field, 0 to the walk gate
+`+0x64`, no call reaching `0x00602A40`** (the shared agent-move setter, all 8
+direct callers checked), the teleport `0x006020B0`, or the halt `0x00602540`.
+The async agent keeps the velocity its bake gave it and **finishes the segment
+it is on** — for a straight-line click the whole leg; for a bent path, the
+current segment (the `+0x68` mismatch at the next kind-5 arrival ends the walk at
+that waypoint, which a skeptic added: *a press mid-multi-waypoint path truncates
+the walk to one segment*). RECONSTRUCTION as a static absence — **CORROBORATED
+on the 12:59 tape**: a skeptic ran the test the lane had not, and in 3 of 3 clean
+in-flight presses the client's next report sat on the model's *continued*
+position (residuals 2.7 / 0.0 / 0.0 u, 151 / 77 / 184 u past the press-time
+position); the fourth case was the one click in the corpus thrown under a held
+walk gate and cannot be read either way.
+
+**The disarm is a handoff, not a no-op** (skeptic, press-path lane). A record
+with `clientControlled = 0` and `head ≠ 0` is exactly what the per-tick loop
+`0x00604880` drives from SYNC-world nodes through `0x00602A40` at `0x00604A43`.
+After a press it is dormant only because Clear also zeroed the head — **until a
+server movement message pushes a node.** That is the decoded mechanism by which
+retail's `0x002A` takes the body after a press, and by which any positional
+message *we* send after one would. Filed for item 4.
+
+**Correction to `studies/movement/REALFIX.md:334`:** `0x0081BDB0` does not call
+`0x005FCAA0`; the bytes at `0x0081BDB6` are `call 0x005FCA80`. On
+`0x008163A0`'s plan-failure leg the two are consecutive siblings. Marked in place.
+
+**attack_started on a walking body: SLIDE.** Property 4 leaves
+`ChCliApi::SetAgentProperty 0x008128F0` by exactly three routes (jump tables
+read from the image): the ChCliBase case `0x0081BC86` (stores the target's
+position/time anchor `+0xF0..+0xFC`, `+0x11C`; touches no path or gate field),
+the facing consumer `0x00817950 → 0x005FC900 → 0x00602CC0` (writes heading
+fields only — `+0xCC/+0xC8/+0xB8/+0x4C` — and its guard refuses even that on a
+moving agent when `m_flags` bit 2 is clear), and the AvChar node enqueue
+`0x007F6C10 → 0x007F2E90` (state 3). The eight translation mutators have **41
+direct call sites, 0 in the AgentView band, and 0 stored VAs** — so no vtable
+route exists to them. CORROBORATED, not OBSERVED: the per-frame consumer of the
+state-3 node was not located by either lane; §15's dynamic "our client is movable
+in state 3" is the other leg. Consequence: a swing opened on a walking body
+slides, which is what the bad arm in §37.4 counts.
+
+**Click arrival sends nothing on `0x0047`/`0x003D`** (seven arrival roots,
+depth-2 direct closure, 74–107 functions by two decoders; the one packer
+reachable is `0x40` ROTATE behind `+0x64` bit 2, whose semantics a skeptic
+downgraded to UNVERIFIED — its setter's caller is a UI distance-band tracker, not
+a key). Positive control: the `0x47` packer `0x00920940` is found from the
+keyboard-stop body `0x008167F0` by the same search. **`0x0040` after a
+press-then-arrival is NOT DETERMINED and should be looked for on the next
+capture.**
+
+### 37.3 Retail, read: the press supersedes the leg, and the server drives the body
+
+20 live captures, **61 connections, 61 decoded**, 267 presses, 32 clicks (the
+corpus is keyboard-driven: 3,079 `0x003D`). Positive control: §35.3's 61 / 7 / 60
+reproduces as **62 / 7 / 61** — the +1 is *not* a window edge (both conventions
+give 62) and stays unexplained. Player id per connection from four witnesses that
+never disagree.
+
+**The contract, on FREE presses** (137 of 267 land on a held body or a live chain
+and are no-ops; a skeptic found **32 more** — repeat presses on a target the
+server was already following — also no-ops; the free cell is what remains):
+
+| body at the press | first server reaction | attack_started |
+|---|---|---|
+| in reach (≤ 83 u) | none — the swing itself | **0.029–0.045 s** (n=8) |
+| out of reach (≥ 205 u) | `0x002A` follow to the **target's own position** at 26–123 ms, re-pathed every **0.500 s** while it moves | at reach: `(d − R)/288`, **R = 58–101 u** (n=8) |
+
+Joint fit over the eight stationary approaches: speed **280 u/s, R = 81 u,
+r² 0.983**; `R = 0` rejected (rms doubles). RECONSTRUCTION — every position
+between reports is dead-reckoned. The client sends **nothing** between a
+CLICK-last press and its attack_started (0/7). CLICK-last free presses: **5 of 5**
+answered (the lane said 7/7; two were the follow's own 0.500 s tick and its
+arrival, credited to a press by coincidence), four followed at 34–123 ms and one
+in reach — one target, two sessions, so **the retail-vs-ours CLICK contrast rests
+on the mechanism, not on this count** (P = 0.08 at n=5).
+
+**Zero clean presses during an unsuperseded in-flight click leg exist in the
+corpus.** The one candidate was held by a 3 s cast begun 21 ms earlier. The
+operator's exact symptom is a cell retail's wire has **never shown us** —
+UNVERIFIED there. The nearest analog is a press while the server drives a follow
+to a *different* target: re-pathed within ~50 ms in **11 of 13**.
+
+**And retail never needed an "arrived" predicate**: 30 of 32 clicks are echoed
+as `0x0029` waypoint legs at +30–65 ms (long clicks 3–12 legs, the last landing
+on the click dest), arrival silent both ways. Its server *owns* the leg. Ours does
+not drive it, so ours must model it — which is what §37.5 does.
+
+Three facts for the items below, all OBSERVED on the same tapes: **(a) a repeat
+press on the same target does not re-arm the swing clock** — 128 same-target
+held presses, chain cadence p50 1.335 s whatever the press phase (phase pairs
+sum to ~1.33); **(b)** reach `R ≈ 74–81 u` centre to centre; **(c)** 903
+attack_starts for the player, the `[8, me, 1]` hold on 83 of them = **9.2 %**
+(§35.1's 6.2 % was over all agents' 1,332).
+
+### 37.4 Ours, decomposed press by press
+
+**Positive controls first.** §36's headline reproduces to the digit (12:59 CLICK
+18/54, STOP 39/42, WASD 5/5; 14:32 CLICK 20/33, STOP 10/11, WASD 2/4), and 15:17
+scores **CLICK 13/23 = 56.5 %, STOP 7/7** — the same session shape. A replay of
+`begin_attack` / `cancel_on_move` / `_player_body_moving` / `attack_tick` driven
+by the c2s records at the capture's own tick instants **reproduces every
+attack_started and attack_stopped on the wire** (52/52, 23/23, 11/11; 27/27, 7/7,
+1/1, within 0.12 s), and forking it at each press with the shipped predicate
+agrees with the wire's answered/unanswered verdict on 101/101, 48/48, 30/30. That
+is two of our own components agreeing — what it earns is that the counterfactual
+machinery is exercised on cases with known answers before it is trusted on the
+unknown ones. (12:59 needed the §33-era *unbounded* predicate to reproduce; the
+bounded one would answer 48/54 against the wire's 18/54.)
+
+**The 13 unanswered CLICK-last presses on 14:32, by the first gate that refused
+after each press** (skeptic-corrected — the lane's majority-of-ticks bucket had
+mislabelled two):
+
+| first gate | n | who |
+|---|---|---|
+| click latch, leg still in flight at the press | 5 | the one 4-click chain 3.768 → 6.651 → 7.971 → 10.107, first swing at 13.111 = 10.107 + 3.004 |
+| click latch, leg **arrived** at the press, inside the 3.0 s bound | 6 | same chain, plus #18 (then an 8 ms window-edge miss) |
+| a swing already in flight, then the interval; latch clear at the press | 2 | #39, #40 (the next click re-armed it) |
+| keyboard latch / range / target state | 0 | range: 0 of 179 presses beyond 1500 u, target 10 stationary |
+
+**12 of the 13 are repeat presses, and repeat-ness is not the mechanism**: the
+chain was live and opens the instant the latch clears; the F2 fork (press acts as
+fresh) newly answers only **3 of 13** (#18, #39, #40 — the interval cases). The
+bound also delays the *answered* presses: **12 of 20 waited ≥ 1.0 s, 6 waited
+≥ 2.0 s** (wire p50 1.26 s against 0.24 s on the STOP-heavy 12:59). And the wire
+carries the constant's fingerprint: across 86 starts on three tapes, **none opens
+under 3.0 s after a click that was the last input, and four open at 3.00–3.12 s.**
+One skeptic's framing is worth keeping: the 13 are **three press runs** and the
+20 answered are **seven distinct swings** — the 60.6 % is press-weighted and
+inflated by one ten-press mash inside a single refusal; run-weighted it is 7/10
+against STOP-last's 10/11. The deficit survives; its magnitude is the operator's
+cadence.
+
+**The candidate bounds, forked at each CLICK-last press with the real inputs
+replayed forward** (`toolkit/authsrv/pressscore.py`):
+
+| capture | pred | answered | newly answered | newly refused | opened while the modelled leg walked |
+|---|---|---|---|---|---|
+| 14:32 (n=33) | P0 constant 3.0 s | 20 | 0 | 0 | 0 |
+| | **P1 leg time** | **33** | **13** | **0** | **0** |
+| | P2 press clears the latch | 31 | 11 | 0 | **5** |
+| | F2 press re-arms | 23 | 3 | 0 | 0 |
+| 15:17 (n=23) | P0 / **P1** / P2 / F2 | 13 / **23** / 23 / 15 | 0 / 10 / 10 / 2 | 0 | 0 / 0 / **2** / 0 |
+| 12:59 (n=54, base unbounded) | P0 / **P1** / P2 / F2 | 48 / **54** / 54 / 50 | 30 / 36 / 36 / 32 | 0 | 0 / 0 / **9** / 0 |
+
+Fork latency under P1: p50 0.05 s, p90 0.63 s (14:32) against P0's 1.46 / 2.50.
+
+**What the skeptics took away from that table, kept here as written:**
+
+* **P1's "0 opened while walking" is an identity**, not a measurement — the bad
+  arm is defined by the same 288 u/s model that defines P1. The evidence that
+  opening mid-leg is actually bad is §37.2's 3-of-3 continuation on 12:59 and the
+  binary's absence of a stop, not this column.
+* **A constant 1.5 s retrodicts these three tapes exactly as well as P1** (33/33,
+  23/23, 54/54 with one bad on 12:59). Every leg in them is 11–455 u. The tapes
+  select P1 over P0 = 3.0 s and over P2; **they cannot select it over a shorter
+  constant.** The leg time is shipped because it is the shape the binary gives, not
+  because the tapes demanded it — and CASE 6's long click is the run that can tell.
+* The 8/5 arrived/in-flight split on 14:32 is model-fragile (6/7 at 158 u/s;
+  unchanged at 211); the mechanism attribution does not depend on it.
+* Speed evidence for the model is **n = 1 clean** (284 u/s), not the lane's n=4 —
+  two of those clicks were thrown under an armed keyboard latch, one under a
+  held walk gate. Start latency is unmeasured. UNVERIFIED on both.
+* The brief's *"our server answers clicks with nothing"* was **34 of 41**: seven
+  clicks that followed a fresh report were granted (`0x0029` + `0x002B`), none
+  under an unanswered 14:32 press.
+
+### 37.5 SHIPPED: `CLICK_LATCH_LEG_ETA` — default ON, revert `--click-latch-window`
+
+The `0x003E` arm records the leg beside the latch it stamps (`_click_leg_arm`):
+**start** = the previous leg interpolated to now when the client has been silent
+since it (the latch was still set when this click arrived), else the last
+accepted report, else the placement; **speed** = the base this server declared
+(`0x0027`, `declared_speed_base` — 288 u/s unless `MOVE_SPEED_EFFECTS` changed it)
+times the 1.0 every `0x002B` we send carries; **eta** = t₀ + |dest − start| /
+speed; identity by the latch stamp, so a leftover leg from an earlier click never
+bounds a later latch. `_player_body_moving`'s click term is now `now < eta`; the
+3.0 s constant remains only as the revert arm and as the fallback for a click
+whose start nobody could place.
+
+**Errors stated, direction stated.** Straight line: a bent path ends *later*
+(opens early → a slide of the residual). Press-truncation: a bent path ends at its
+current waypoint, *earlier* (opens late). A click thrown under a running keyboard
+leg starts from a report up to ~0.29 s / ~86 u behind (opens late). On the three
+captures — open courtyard, legs 11–455 u — **10 of 10 post-click reports sit
+within 3.5 u of the modelled end.** No new message. The cast-stop readers still
+read the raw latch and are unchanged.
+
+**Tests.** `test_playerswing` §8 (55 checks, floor 55, bare): both failures of
+the constant pinned — a 1.0 s leg reads parked at 1.5 s, a 5.0 s leg still reads
+moving at 3.5 s — plus the chained-click start, the declared-speed leg (Rush's
+360 u/s), stamp identity, the revert arm, and end to end: a press 0.5 s after a
+0.3 s click opens on the first tick where the constant held it 2.5 s, while a
+press 0.5 s into a 1.0 s leg still waits. `test_cancelwalk` 121 and `test_d1lead`
+94 unchanged (they pin the latch's own arming and clearing sites). **New
+instrument:** `toolkit/authsrv/pressscore.py` (§36's rule as a tool: per-press
+last input, answer, latency, first refusing gate, and the fork table above, with
+the replay control printed and refused when it does not close) and
+`test_pressscore.py` (13 bare checks on a synthetic capture, plus the §36 headline
+and replay control on the three captures when the vault has them).
+
+### 37.6 The run that closes it — and the one that would refute it
+
+`studies/animref/SINGLECASE.md` **CASE 6**, two questions, one flag:
+
+* **Q6a** — short click, spacebar on arrival. Registered: arm A (shipped) fires on
+  arrival; arm B (`--click-latch-window`) reproduces the deficit. *This is the
+  operator's symptom.*
+* **Q6b** — a click at least four seconds long, spacebar three seconds in.
+  Registered: A **waits until the body stops**, B **fires at the 3.0 s mark while
+  the body is still walking**. *This is the question no capture so far could ask*,
+  and it is the one that separates the leg time from every constant.
+
+If A still waits on Q6a, the model's start or speed is wrong for that click and
+`pressscore.py` on the capture will show which. If A fires mid-walk on Q6b, the
+straight line is shorter than the path the client took — the stated error — and
+its size is the number to bring back. **Until that run, this section's status is
+CANDIDATE.**
+
+### 37.7 What this settles for the rest of the §36.6 list
+
+* **Item 2, the no-op press (F2), is REFUTED by retail and will not ship.** A
+  repeat press on the same target does not re-arm the swing clock on ArenaNet's
+  wire (§37.3a, 128 presses); our `begin_attack`'s `!= target_id` gate is retail's
+  own shape. "23 attack_started from 48 presses" was the bound, not the no-op:
+  under P1 the same 48 presses fork to 48 answered. The three interval cases
+  (#18, #39, #40) are the chain keeping its own cadence, which §31 measured as
+  retail's. **Closed as not-a-defect, on the corpus.**
+* **Item 3, `ATTACK_RANGE`**: retail opens the swing at **R ≈ 74–81 u centre to
+  centre** (joint fit R = 81 u at 280 u/s; per-row 58–101 u; n=8, RECONSTRUCTION
+  from dead-reckoned approach legs). That is the derivation seed; what remains is
+  the agent-radius term and the weapon's reach class, which the wiki's range table
+  can bracket and a client witness would settle.
+* **Item 4, the approach**: the mechanism is decoded from both sides — the
+  server's `0x002A` follow to the target's own position, re-pathed every 0.500 s,
+  attack_started at reach without any stop message; and on the client, the
+  AgTrack handoff (§37.2) that makes the async body follow SYNC-world nodes
+  after a press. What is still not decoded is the `0x0029`-after-`0x002A`
+  question §35.5 named.
+
+### 37.8 Process notes, so the next reader does not repeat them
+
+The lane that read the press path reported its one hiding place as "handler not
+located"; two skeptics located it in four static steps each, and it changed a
+CORROBORATED to an UNVERIFIED on one edge. A lane's NOT FOUND is a claim about
+its own search, and the skeptic lens that re-runs the search is the cheap one.
+The corpus lane's bucket function assigned by *majority of ticks* and mislabelled
+two presses that a *first-gate* rule gets right; `pressscore.py` uses first-gate.
+And the retail lane's "7/7" was 5/5 once the follow's own 0.500 s re-path tick was
+recognised as not press-attributable — the same sample-and-hold trap
+`movetap`'s point column taught, one level up.
+
+**Labels, in one line:** the press path and its absences OBSERVED (static, one
+edge UNVERIFIED); segment continuation CORROBORATED (3/3 on 12:59); SLIDE
+CORROBORATED; retail's supersede-and-drive contract OBSERVED on arrived clicks,
+UNVERIFIED on in-flight clicks (zero trials); the leg model RECONSTRUCTION with
+its speed and start latency UNVERIFIED; the fix a CANDIDATE until CASE 6.
 
 ## Provenance
 

@@ -20,6 +20,7 @@ Lakeside 7th swing, cut 0.24 s in by the target's death, no closing event)
 -- when the target or the player stops being able to carry it.
 """
 
+import math
 import os
 import sys
 import time as _tt
@@ -28,13 +29,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
 import checks  # noqa: E402
 
-# FLOOR 41, from the green runs of 2026-09-01 that added section 7, the
-# ANIMREF-RE 33 F5 click-latch bound (35 with section 6's landing hold
-# release; 30 with section 5's chain pause; 24 before that day; 13 when the
-# file carried only the windup split). Sections 5-7 are all fixture-free --
-# they stub the clock and drive the real attack_tick -- so 41 is the
-# BARE-MACHINE number too, measured both ways that day.
-LEDGER = checks.Ledger("player swing windup", floor=42)
+# FLOOR 55, from the green run of 2026-09-01 that added section 8, the
+# ANIMREF-RE 37 leg-time bound on the click latch (42 with section 7's
+# constant bound; 35 with section 6's landing hold release; 30 with section
+# 5's chain pause; 24 before that day; 13 when the file carried only the
+# windup split). Sections 5-8 are all fixture-free -- they stub the clock
+# and drive the real attack_tick -- so 55 is the BARE-MACHINE number too.
+LEDGER = checks.Ledger("player swing windup", floor=55)
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -718,6 +719,187 @@ def section_chain_pause():
           f"lawA={authsrv.MOVE_KEEPS_CHAIN}")
 
 
+def section_click_leg_eta():
+    """ANIMREF-RE 37: the click-walk latch ends when the LEG does.
+
+    34 bounded the latch by GRANT_LOCAL_WINDOW (3.0 s) because a sibling
+    reader used that constant; 36 measured what that costs on the operator's
+    own capture -- CLICK-last presses answered 60.6% against ~91% for
+    STOP-last, every unanswered one refused by the latch on a body that had
+    already arrived, and swings opening at 3.00/3.02/3.02/3.12 s after a
+    click and never earlier (the constant's fingerprint on the wire).
+
+    THE DERIVED BOUND is the leg's own travel time: the client walks a click
+    as a straight segment at the declared base speed, and a press does not
+    stop that segment (0x0081BDB0 clears the queued waypoints and the
+    AgTrack record, writes nothing on the async agent -- the body finishes
+    its segment and parks, silently). So the latch is TRUE until
+    t_click + |dest - start| / speed and FALSE after, whatever a constant
+    would have said in either direction. Both directions are pinned here:
+    a short leg releases before 3.0 s (the operator's bug) and a long leg
+    holds past 3.0 s (the constant's other failure, a swing on a walking
+    body). The leg starts where the model says the body stood: the previous
+    leg's interpolation when the client has been silent since it, else the
+    last report.
+    """
+    import authsrv
+    import time as _t
+
+    print("\n8. ANIMREF-RE 37: the click-walk latch ends when the LEG does")
+
+    check(authsrv.CLICK_LATCH_LEG_ETA is True,
+          "the leg bound is the SHIPPED default; --click-latch-window is "
+          "the revert arm (34's 3.0 s constant)",
+          f"CLICK_LATCH_LEG_ETA = {authsrv.CLICK_LATCH_LEG_ETA}")
+    W = authsrv.GRANT_LOCAL_WINDOW
+    now = _t.time()
+
+    # 8a. the leg record: 288 u at the declared 288 u/s is 1.0 s, from the
+    # last report when the client has spoken since the previous click.
+    st = {"client_pos": (0.0, 0.0), "pos": (0.0, 0.0)}
+    t0 = now - 0.5
+    st["click_moving_at"] = t0
+    leg = authsrv._click_leg_arm(st, (288.0, 0.0), t0, silent=False)
+    check(leg is not None and leg["p0"] == (0.0, 0.0)
+          and abs(leg["dist"] - 288.0) < 1e-9
+          and abs(leg["eta"] - (t0 + 1.0)) < 1e-6,
+          "a 288 u click at the declared 288 u/s base arrives 1.0 s after "
+          "the click, starting from the last accepted report",
+          f"p0={leg and leg['p0']} dist={leg and leg['dist']:.1f} "
+          f"eta-t0={leg and leg['eta'] - t0:.3f}")
+    check(authsrv._player_body_moving(st) is True,
+          "0.5 s into a 1.0 s leg the body is MOVING -- 31's chain pause "
+          "must keep pausing through a real click-walk (the known-bad arm "
+          "of the other direction)",
+          "in flight")
+    # 8b. the operator's bug in miniature: past the leg's end but inside
+    # the old 3.0 s window, the body is PARKED and the swing may open.
+    st["click_moving_at"] = now - 1.5
+    leg["t0"], leg["eta"] = now - 1.5, now - 0.5
+    check(authsrv._player_body_moving(st) is False,
+          "1.5 s after a 1.0 s click the body is PARKED -- under the 3.0 s "
+          "constant it read as moving for another 1.5 s and the press was "
+          "starved; this is the 60.6% deficit as one assertion",
+          f"click age 1.5 s < window {W:.1f} s, yet not moving")
+    # 8c. the constant's OTHER failure: a long leg is still walking at 3.5 s.
+    st2 = {"client_pos": (0.0, 0.0), "pos": (0.0, 0.0)}
+    t0 = now - 3.5
+    st2["click_moving_at"] = t0
+    leg2 = authsrv._click_leg_arm(st2, (1440.0, 0.0), t0, silent=False)
+    check(leg2 is not None and abs(leg2["eta"] - (t0 + 5.0)) < 1e-6
+          and authsrv._player_body_moving(st2) is True,
+          "3.5 s into a 1440 u (5.0 s) click the body is STILL MOVING -- "
+          "the constant declared it parked at 3.0 s and would open a "
+          "swing on a walking body",
+          f"click age 3.5 s > window {W:.1f} s, still moving")
+    # 8d. a chained click starts from the previous leg's model when the
+    # client has been silent since it (no report ends a click leg).
+    st3 = {"client_pos": (0.0, 0.0), "pos": (0.0, 0.0)}
+    t0 = now - 0.5
+    st3["click_moving_at"] = t0
+    authsrv._click_leg_arm(st3, (288.0, 0.0), t0, silent=False)
+    leg3 = authsrv._click_leg_arm(st3, (288.0, 288.0), now, silent=True)
+    check(leg3 is not None and abs(leg3["p0"][0] - 144.0) < 1e-6
+          and abs(leg3["p0"][1]) < 1e-9
+          and abs(leg3["dist"] - math.hypot(144.0, 288.0)) < 1e-6,
+          "a second click 0.5 s into a 1.0 s leg starts from the leg's "
+          "half-way point, not from the stale report -- the client reports "
+          "nothing while click-walking, so the model is the only start",
+          f"p0={leg3 and leg3['p0']}")
+    leg3b = authsrv._click_leg_arm(st3, (288.0, 288.0), now, silent=False)
+    check(leg3b is not None and leg3b["p0"] == (0.0, 0.0),
+          "and when the client HAS spoken since (silent=False), the report "
+          "is the start and the old leg is ignored",
+          f"p0={leg3b and leg3b['p0']}")
+    # 8e. the speed is the base this server DECLARED (0x0027), not 288 by
+    # assumption: under a +25% stance the same leg is shorter in time.
+    st4 = {"client_pos": (0.0, 0.0), "pos": (0.0, 0.0),
+           "declared_speed_base": 360.0}
+    leg4 = authsrv._click_leg_arm(st4, (360.0, 0.0), now, silent=False)
+    check(leg4 is not None and abs(leg4["eta"] - (now + 1.0)) < 1e-6
+          and leg4["speed"] == 360.0,
+          "the leg runs at the declared base (Rush's 360 u/s here): the "
+          "client moves at the 0x0027 base we sent, so the model must too",
+          f"speed={leg4 and leg4['speed']} eta-t0={leg4 and leg4['eta'] - now:.3f}")
+    # 8f. identity, not age: a leftover leg from an EARLIER click does not
+    # bound this latch -- the constant does, as before.
+    st5 = {"click_moving_at": now - 1.5, "click_leg": dict(leg, t0=now - 9.0,
+                                                          eta=now - 8.0)}
+    check(authsrv._player_body_moving(st5) is True,
+          "a leg whose stamp is not THIS latch's is a leftover: the latch "
+          "falls back to the constant (still inside 3.0 s -> moving), so a "
+          "click with no placeable start never reads as parked by accident",
+          "leftover leg ignored")
+    # 8g. the revert arm restores 34's constant exactly.
+    authsrv.CLICK_LATCH_LEG_ETA = False
+    try:
+        st6 = {"click_moving_at": now - 1.5,
+               "click_leg": {"t0": now - 1.5, "p0": (0.0, 0.0),
+                             "dest": (288.0, 0.0), "dist": 288.0,
+                             "speed": 288.0, "eta": now - 0.5}}
+        check(authsrv._player_body_moving(st6) is True,
+              "REVERT ARM --click-latch-window: the same parked leg reads "
+              "as moving until the 3.0 s constant expires -- 34's shape, "
+              "reproducible on purpose",
+              "constant bound in force")
+    finally:
+        authsrv.CLICK_LATCH_LEG_ETA = True
+
+    # 8h. END TO END, the operator's report as a test: click-walk 86 u
+    # (0.3 s), press spacebar 0.5 s after the click -> the swing OPENS NOW,
+    # not 2.5 s later.
+    sent = []
+    send = lambda op, vals, label="", quiet=False: sent.append(
+        (op, vals, label))
+    state = _state()
+    state["client_pos"] = (0.0, 0.0)
+    t0 = _t.time() - 0.5
+    state["click_moving_at"] = t0
+    authsrv._click_leg_arm(state, (86.4, 0.0), t0, silent=False)
+    authsrv.begin_attack(send, state, 10, 0)
+    sent.clear()
+    authsrv.attack_tick(send, state, 0)
+    started = [v for op, v, _l in sent
+               if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
+               and v[0] == authsrv.agents.GV_ATTACK_STARTED]
+    check(started == [[authsrv.agents.GV_ATTACK_STARTED, PLAYER, 10, 0]],
+          "END TO END: a press 0.5 s after a 0.3 s click-walk OPENS A "
+          "SWING on the first tick -- under the constant this exact press "
+          "waited 2.5 s on a parked body (14:32 rows 11-17: latencies "
+          "2.22, 2.07, 1.89, 1.72, 1.34 s, all on a 0.34 s leg)",
+          f"{started}")
+    # KNOWN-BAD ARM: the same press 0.5 s into a 1.0 s leg still waits.
+    sent.clear()
+    state2 = _state()
+    state2["client_pos"] = (0.0, 0.0)
+    t0 = _t.time() - 0.5
+    state2["click_moving_at"] = t0
+    authsrv._click_leg_arm(state2, (288.0, 0.0), t0, silent=False)
+    authsrv.begin_attack(send, state2, 10, 0)
+    sent.clear()
+    authsrv.attack_tick(send, state2, 0)
+    started2 = [v for op, v, _l in sent
+                if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
+                and v[0] == authsrv.agents.GV_ATTACK_STARTED]
+    check(started2 == [],
+          "KNOWN-BAD ARM: a press 0.5 s into a 1.0 s leg still WAITS -- the "
+          "body is walking (seen continuing through a press 3/3 on the "
+          "12:59 tape), and a swing here would slide",
+          f"{started2}")
+
+    # 8i. the 0x003E arm records the leg beside the latch it bounds -- a
+    # source pin, because the arm lives inside handle() and cannot be
+    # driven here. The string is the call with its arguments, not a
+    # substring another line could satisfy.
+    src = open(authsrv.__file__, encoding="utf-8").read()
+    check(src.count('_click_leg_arm(state, dest, state["click_moving_at"],')
+          == 1 and src.count('state["click_moving_at"] = time.time()') == 1,
+          "the click arm arms the leg record right after the latch stamp "
+          "(one arming site, one latch stamp -- test_cancelwalk pins the "
+          "latch's own count)",
+          "source pin")
+
+
 def main():
     section_two_phases()
     section_start_to_start()
@@ -729,6 +911,7 @@ def main():
     section_chain_pause()
     section_landing_hold_release()
     section_click_latch_bound()
+    section_click_leg_eta()
     return LEDGER.verdict()
 
 

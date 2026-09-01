@@ -133,6 +133,58 @@ the Hatcher casting. Stand back and watch it; do not fight.
 
 ---
 
+## CASE 6 — spacebar after a click-walk (ANIMREF-RE §37; the open item since §36)
+
+> **Q6a: click a spot two or three steps away, and as you arrive (or a beat
+> after) press spacebar with the Hatcher targeted. Does the swing start within
+> a beat of arriving? Arm A vs arm B.**
+
+> **Q6b: click a spot FAR away — at least a four-second walk — and press
+> spacebar about three seconds into the walk. Arm A: does the swing wait until
+> you arrive? Arm B: does it fire while you are still walking?**
+
+Q6a is the operator's symptom (§36: click-last presses answered 60.6 % against
+~91 % for stop-last). Q6b is the question that separates the derived bound
+from *any* constant: every leg on the three scored captures was under 455 u, so
+those tapes cannot tell a 1.5 s constant from the leg time. A four-second walk
+can.
+
+**Arm A — as shipped (the latch ends when the leg does):**
+
+```powershell
+python toolkit/harness/session.py --enemy --hold 120 --game-args "--map 146 --explorable --no-enemy-skills --skills 0,0,0,0,0,0,0,0"
+```
+
+**Arm B — the same run with §34's 3.0 s constant back:**
+
+```powershell
+python toolkit/harness/session.py --enemy --hold 120 --game-args "--map 146 --explorable --no-enemy-skills --skills 0,0,0,0,0,0,0,0 --click-latch-window"
+```
+
+**Do, in each arm:** Q6a three or four times (short click, spacebar on
+arrival), then Q6b twice (long click, spacebar mid-walk). Nothing else.
+
+**Answer two lines:** Q6a *"A fires on arrival / A still waits / no
+difference"*; Q6b *"A waits until arrival and B fires mid-walk / both wait /
+both fire mid-walk"*.
+
+**Registered predictions, written before the run:** A answers Q6a on
+arrival (the retrodiction says every one of the 13 starved presses on the
+14:32 capture opens under this bound) and waits on Q6b until the body stops;
+B reproduces the §36 deficit on Q6a and fires mid-walk on Q6b at the 3.0 s
+mark. **If A still waits on Q6a**, the leg model's start or speed is wrong for
+your click and the capture will show it — score it with
+
+```powershell
+python toolkit/authsrv/pressscore.py
+```
+
+which prints, for the newest capture, every press with its last input, the
+modelled leg, the latency to the swing, and which gate refused each tick.
+**If A fires mid-walk on Q6b**, the straight-line leg is shorter than the path
+the client took (a bend) — the error the model states, and the size of it is
+the number to bring back.
+
 ## Notes that apply to all of them
 
 - **Say "I did not get to it"** rather than guessing. A skipped case costs

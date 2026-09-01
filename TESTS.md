@@ -9368,6 +9368,26 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   Floor 24 → **31**, the MEASURED bare-machine subset, against a green 33 with
   the vault (§5's two checks are the difference) — the shape `test_armour.py`
   and `test_position_trust.py` use),
+  `toolkit/authsrv/test_pressscore.py` (the instrument ANIMREF-RE §36's rule
+  needs — "measure the symptom on the wire in their post-fix capture before
+  writing the word fixed" — checked before a number it prints is trusted.
+  `pressscore.py` finds every c2s 0x0026 press in a gamesrv capture, names its
+  last movement input, whether an attack_started answered it, and — by
+  replaying begin_attack / cancel_on_move / _player_body_moving / attack_tick
+  at the capture's own tick instants — which gate refused every unanswered
+  tick; then forks the state at each press to score the click-latch bounds
+  against each other in both directions. §1 is BARE: a synthetic capture (one
+  click, one press, the ticks, the wire's own swing) checks the last-input
+  classifier, the leg model's arithmetic, that the constant bound opens at
+  click + 3.0 s while the leg bound opens on the first tick after the leg
+  ends, that "the press ends the leg" opens while the modelled body is still
+  walking and is flagged as the bad arm, and that a capture stamped with the
+  leg flag whose wire carries a constant-bound swing FAILS the replay control
+  and says so — the tool refusing to score a capture its rules did not
+  produce. §2 re-runs the §36 headline on the three 2026-09-01 captures and
+  requires the replay control to close on each (52/52, 23/23, 11/11 starts),
+  declared skip without them. Floor 14, the bare half, measured both ways —
+  20 with the vault, 14 with `RURIK_VAULT` pointed at an empty directory),
   `toolkit/authsrv/test_playerswing.py` (the player's auto swing is TWO
   phases — ATTACK_STARTED, then the damage `swing_windup(ATTACK_INTERVAL)`
   later — where until 2026-08-22 it was one instant, the last attacker in the
@@ -9416,7 +9436,24 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   accumulated the freeze BELOW the landing branch and silently skipped whatever
   part of the moving span overlapped an in-flight swing's windup; the ratio
   still looked fine and only the residual went red. Floor 24 → 30, and §5 is
-  fixture-free so 30 is the bare-machine number too),
+  fixture-free so 30 is the bare-machine number too. **§6 (ANIMREF-RE §33/§35)**
+  pins all three arms of the auto-swing hold — shipped (no property-8 hold at
+  all), revert+F1 (held, released at the landing) and both-legacy (held, never
+  released) — plus a check that a CAST still holds. **§7 (§34)** pins the
+  click-walk latch from both sides: a fresh click reads as moving, a stale one
+  does not, an ordered attack after a finished click-walk opens a swing end to
+  end, and the known-bad arm — a swing ordered during a live click leg — still
+  waits. **§8 (§37)** replaces §7's borrowed 3.0 s constant with the leg's own
+  travel time and pins BOTH failures of the constant: a 1.0 s leg reads parked
+  at 1.5 s (the operator's 60.6 % deficit as one assertion) and a 5.0 s leg
+  still reads moving at 3.5 s (a swing on a walking body); the leg starts from
+  the previous leg's interpolation when the client has been silent since it,
+  from the report otherwise, runs at the DECLARED base (Rush's 360 u/s), is
+  matched to its latch by stamp identity rather than age, and the revert arm
+  `--click-latch-window` restores the constant exactly. End to end, a press
+  0.5 s after a 0.3 s click opens on the first tick where the constant held it
+  2.5 s, and the known-bad arm — a press 0.5 s into a 1.0 s leg — still waits.
+  Floor 42 → 55; §6–§8 are fixture-free so 55 is the bare-machine number),
   `toolkit/authsrv/test_castcancel.py` (movement cancels the cast, and the
   contract is the wiki's expressed as wire SILENCE: the connection thread
   MARKS (`cancel_on_move`) and sends only the movement's own `[8 → 0]` hold
