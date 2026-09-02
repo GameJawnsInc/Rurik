@@ -9314,8 +9314,17 @@ def swing_windup(attack_speed):
 # figures are about a mechanic (a moving circle, a leash back to a spawn anchor,
 # a call-to-arms radius) that none of this implements.
 ENEMY_MELEE_RANGE = 150.0  # close enough to swing. Ours.
-ENEMY_MOVE_RATE = 0.75     # fraction of the 288 u/s reference, so 216 u/s -- slower
-                           # than the player on purpose, so you can walk away
+# ENEMY_MOVE_RATE -- a hostile CHASES at FULL speed. OBSERVED, ANIMREF-RE 40.9:
+# all 6 retail NPCs that chased the player on the live tapes did so at mult 1.0
+# -- four never took a 0x002B at all (their 0x0020 declares f10 = 1.0), two
+# patrolled at 0.2778 and jumped to 1.0 within 2.5-7 s of their chase. The
+# 0.2778 / 0.3333 / 0.3472 mults monsterai 3.4 counted are the PRE-AGGRO walk,
+# and the client plays the WALK animation there -- which is exactly what the
+# operator saw on --enemy-chase-rate 0.35 ("a walk pace instead of a run").
+# Was 0.75 "so you can walk away": ours, and refuted -- a retail hostile keeps
+# pace with a running player until the leash. (Base 288 comes from the 0x0020's
+# f9; one retail chaser declares 360 there. Ours declares 288.)
+ENEMY_MOVE_RATE = 1.0      # fraction of the 0x0020's declared base. OBSERVED, 6/6.
 ENEMY_DEST_RESEND = 120.0  # how far the player must move before the destination is
                            # re-announced. Every tick would be 20 messages a second
                            # at a client that only needs the endpoint.
@@ -9348,6 +9357,19 @@ ENEMY_DEST_RESEND = 120.0  # how far the player must move before the destination
 # NPC separations are instrument-limited, so 92 is still an ASSUMPTION -- but the
 # 12 u margin over the halt is a deadband, not an invented reach.
 NPC_FOLLOW = True   # False (--legacy-npc-chase): 0x0029 to the point, 150 u.
+# ANIMREF-RE 40.9 -- THE HALT WAITS FOR THE CLOCK. sec.40.4 listed "the 0x0028 goes
+# out on the 50 ms tick the copy arrives, not on retail's half-second" as a
+# harmless deviation. CASE 8 v2 priced it: with the operator STANDING STILL and
+# the server's copy parked at exactly 80 u, the Hatcher swung seven times from
+# "long range" -- the client's RENDERED body trails its sync copy (the AgTrack
+# handoff, sec.37.2), and a 0x0028 sent the instant our copy arrived halted
+# both copies where the rendered one stood: short of the disc. Retail's halt
+# arrives p50 0.496 s after the last follow, on its AI tick (p10 0.398, p90
+# 0.537; 5/7 chases), which is the time the rendered body needs to reach the
+# disc the resolver parks it at -- after which the halt no-ops on a parked body
+# (CANCELWALK-R6). So the arrival is noted, and the 0x0028 goes out when the
+# follow's own half-second clock next fires; the swing opens on the tick after.
+HALT_ON_CLOCK = True   # False (--halt-on-arrival): the 0x0028 at the copy's arrival.
 
 # AND IT TURNS TO FACE YOU. GAME_SMSG_AGENT_UPDATE_ROTATION (0x002E) has been
 # defined and documented in this file for days and never once sent: an absolute
@@ -14183,15 +14205,18 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
     by the pathmap, and PARKS at follow_stop_radius() = r + r + 56 = 80 u,
     which is where the client's own resolver stops the body it is animating
     (sec.38.2). Arrival is a bare 0x0028 AGENT_STOP_MOVING [npc] -- retail's
-    tick-cut halt, 5/7 chases, p50 0.496 s after the last follow; ours goes
-    out on the 50 ms tick the copy arrives, not on a half-second clock -- and
-    the attack tick, which runs right behind this one, opens the swing on the
-    same tick (retail: 0.14-0.38 s after its halt; that gap is unmodelled and
-    said so). A chase that ends for any other reason -- leash, the player's
-    corpse -- halts with the same message where the copy stands. While a
-    follow is in flight enemy_attack_tick refuses to swing (0 of 4 retail
-    multi-follow chases open one between follows); the swing reach itself is
-    enemy_reach().
+    tick-cut halt, 5/7 chases, p50 0.496 s after the last follow -- and since
+    sec.40.9 ours waits for the same clock (HALT_ON_CLOCK): the copy parks, the
+    arrival is noted on the follow record, and the 0x0028 goes out when the
+    follow's half-second clock next fires, so the client's trailing rendered
+    body has reached the disc by then (the halt sent at the copy's arrival
+    froze it short -- CASE 8 v2's "long range attacks"). The attack tick opens
+    the swing on the tick after the halt (retail: 0.14-0.38 s after; that beat
+    is unmodelled and said so). A chase that ends for any other reason --
+    leash, the player's corpse -- halts at once where the copy stands. While a
+    follow is in flight, arrived or not, enemy_attack_tick refuses to swing
+    (0 of 4 retail multi-follow chases open one between follows); the swing
+    reach itself is enemy_reach().
     """
     px, py = player
     ax, ay = agent["pos"]
@@ -14237,9 +14262,21 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
              f"FOLLOW: agent {agent_id} -> player at ({px:.0f},{py:.0f}), "
              f"{dist:.0f} u out, halts at {stop:.0f} u [ANIMREF-RE 40]")
         return
-    # A follow in flight. Re-path on the half-second while the player's copy
-    # moves; never while it stands (retail: 0 of 31 spontaneous re-paths on a
-    # standing target, sec.38.3).
+    # A follow in flight. ARRIVED and waiting for the clock: no re-path, no
+    # step; the halt when the follow's half-second next fires -- unless the
+    # player has left reach meanwhile, in which case the walk resumes.
+    if fol.get("arrived_at") is not None:
+        if dist > enemy_reach():
+            fol.pop("arrived_at", None)
+        else:
+            if now - fol["sent_at"] >= FOLLOW_REPATH_INTERVAL:
+                _halt(f"arrived {now - fol['arrived_at']:.2f} s ago, "
+                      f"{dist:.0f} u from the player; the half-second clock")
+            agent["moved_at"] = now
+            return
+    # Re-path on the half-second while the player's copy moves; never while
+    # it stands (retail: 0 of 31 spontaneous re-paths on a standing target,
+    # sec.38.3).
     moved = math.hypot(px - fol["told"][0], py - fol["told"][1])
     if moved > FOLLOW_REPATH_MOVED and now - fol["sent_at"] >= FOLLOW_REPATH_INTERVAL:
         fol["told"] = (px, py)
@@ -14261,7 +14298,13 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
         agent["pos"] = (nx, ny)
         dist = math.hypot(px - nx, py - ny)
     if dist <= stop + 1e-6:
-        _halt(f"arrived, {dist:.0f} u from the player")
+        if not HALT_ON_CLOCK:
+            _halt(f"arrived, {dist:.0f} u from the player")
+            return
+        fol["arrived_at"] = now
+        if now - fol["sent_at"] >= FOLLOW_REPATH_INTERVAL:
+            _halt(f"arrived, {dist:.0f} u from the player; the half-second "
+                  "clock had already fired")
 
 
 def start_swing(send, agent_id, conn_id):
@@ -21345,15 +21388,22 @@ def main():
                          "opening when the body stops at r+r+56 = 80 u.")
     ap.add_argument("--enemy-chase-rate", type=float, default=None,
                     metavar="FRAC",
-                    help="Override ENEMY_MOVE_RATE (default 0.75 = 216 u/s) for "
-                         "the run. ANIMREF-RE 40.1 diagnostic arm for the CASE 8 "
-                         "'stutter-start of the walk during the arc': our NPC is "
-                         "fast enough (216 u/s) to reach its 0.5 s-stale follow "
-                         "destination before the next re-path, idle, and replay "
-                         "the walk-start; retail's hostiles run 0.28-0.35 "
-                         "(studies/monsterai 3.4) and never do. Try 0.35 to test "
-                         "whether the slower, retail-faithful chase removes the "
-                         "stutter -- if it does, the idle hypothesis holds.")
+                    help="Override ENEMY_MOVE_RATE (default 1.0 = the 0x0020's "
+                         "declared base, 288 u/s) for the run. ANIMREF-RE 40.9: "
+                         "retail's hostiles CHASE at 1.0 (6 of 6 on the tapes); "
+                         "0.2778-0.3472 is their pre-aggro walk, and the client "
+                         "plays the walk animation there. 0.75 was the 40.1 "
+                         "default (\"so you can walk away\", ours); 0.35 was "
+                         "CASE 8 v2's arm C.")
+    ap.add_argument("--halt-on-arrival", action="store_true",
+                    help="THE REVERT ARM for ANIMREF-RE 40.9: send a hostile's "
+                         "0x0028 halt the instant the server's copy reaches the "
+                         "80 u disc. The default waits for the follow's "
+                         "half-second clock, as retail does (halt p50 0.496 s "
+                         "after the last follow), because the client's rendered "
+                         "body trails its sync copy and an instant halt froze "
+                         "it short of the disc -- CASE 8 v2's 'long range "
+                         "attacks' with the server's copy at exactly 80 u.")
     ap.add_argument("--legacy-npc-chase", action="store_true",
                     help="THE REVERT ARM for ANIMREF-RE 40: a hostile chases "
                          "with a 0x0029 to the player's POINT, re-announced "
@@ -22853,6 +22903,12 @@ def main():
               f"{ENEMY_MOVE_RATE} ({ENEMY_MOVE_RATE * agents.DEFAULT_RUN_SPEED:.0f} "
               "u/s) -- ANIMREF-RE 40.1 arc-stutter diagnostic; retail's are "
               "0.28-0.35.", flush=True)
+    if a.halt_on_arrival:
+        global HALT_ON_CLOCK
+        HALT_ON_CLOCK = False
+        print("[map] --halt-on-arrival: a hostile's 0x0028 goes out the instant "
+              "the server's copy reaches the disc (ANIMREF-RE 40.9's revert; "
+              "the client's rendered body halts short).", flush=True)
     if a.legacy_npc_chase:
         global NPC_FOLLOW
         NPC_FOLLOW = False

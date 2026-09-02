@@ -61,7 +61,7 @@ from codec import Codec  # noqa: E402
 #      their steps are built, outside that function's own try. Those are now
 #      SKIPPED and named rather than fatal, and the section asserts the walk
 #      encoded something, because 0 failures over 0 steps is not a pass.
-LEDGER = checks.Ledger("agent lifetime", floor=265)
+LEDGER = checks.Ledger("agent lifetime", floor=268)
 
 
 def section_weapon_damage():
@@ -951,13 +951,30 @@ def section_chase():
               "the tick that starts the walk does not also move the agent",
               "moved_at is stamped when the walk begins, so the first step is "
               "measured from then -- an agent cannot have travelled before it set off")
-    halted = _walk(state, n=1, elapsed=30.0)
+    parked = _walk(state, n=1, elapsed=30.0)
     d = math.hypot(*state["agents"][10]["pos"])
     LEDGER.ok(abs(d - stop) < 1e-3,
               "and a huge step parks it at the disc, 80 u out, not on top of "
               "the player",
               f"{d:.1f} against a halt radius of {stop:.0f} -- the legacy "
               "arm parked at 150, which is the ~70 u the operator saw")
+    LEDGER.ok(not [op for op, _v, _l in parked if op == HALT]
+              and state["agents"][10]["follow"] is not None
+              and state["agents"][10]["follow"].get("arrived_at") is not None,
+              "the copy has ARRIVED but the halt WAITS for retail's half-second "
+              "clock (ANIMREF-RE 40.9)",
+              f"{[hex(op) for op, _v, _l in parked]} -- retail's 0x0028 lands "
+              "p50 0.496 s after the last follow (5/7); sent at the copy's "
+              "arrival it froze the client's trailing rendered body short of "
+              "the disc: CASE 8 v2's 'long range attacks' with the server's "
+              "copy at exactly 80 u")
+    state["agents"][10]["skills"] = ()       # the swing path, not the skill path
+    LEDGER.ok(not _swings(state),
+              "and it does not swing while it waits for the halt",
+              "the follow is still armed; the swing opens on the tick after "
+              "the 0x0028, never before the rendered body has stopped")
+    state["agents"][10]["follow"]["sent_at"] -= 0.6      # the clock fires
+    halted = _walk(state, elapsed=0.05)
     halts = [v for op, v, _l in halted if op == HALT]
     LEDGER.ok(halts == [[10]],
               "the arrival is ONE bare 0x0028 naming the agent -- retail's "
@@ -970,9 +987,8 @@ def section_chase():
               f"{[hex(op) for op, _v, _l in halted]}")
     LEDGER.ok(state["agents"][10].get("follow") is None
               and not state["agents"][10]["moving"],
-              "the follow is forgotten on arrival",
+              "the follow is forgotten at the halt",
               "a follow left armed here would refuse every swing below")
-    state["agents"][10]["skills"] = ()       # the swing path, not the skill path
     LEDGER.ok(bool(_swings(state)),
               "and having halted, it can swing",
               "the walk is only worth anything if the fight starts at the end of it")
@@ -1103,6 +1119,21 @@ def section_chase():
                   "on that arm, as they did before sec.40 split them")
     finally:
         authsrv.NPC_FOLLOW = True
+
+    # 10. --halt-on-arrival: the 40.1 shape, one flag away
+    authsrv.HALT_ON_CLOCK = False
+    try:
+        state = _world(dist=far)
+        _walk(state)
+        at_once = _walk(state, n=1, elapsed=30.0)
+        LEDGER.ok([v for op, v, _l in at_once if op == HALT] == [[10]],
+                  "--halt-on-arrival: the 0x0028 goes out the instant the copy "
+                  "reaches the disc",
+                  f"{[hex(op) for op, _v, _l in at_once]} -- the sec.40.1 "
+                  "shape, kept as the revert arm; it halts the client's "
+                  "rendered body short")
+    finally:
+        authsrv.HALT_ON_CLOCK = True
 
 
 def section_facing():
@@ -1692,9 +1723,11 @@ def section_constants():
         ("REVIVE_AFTER", 8.0, "OURS", "how long an agent stays dead"),
         ("PLAYER_REVIVE_AFTER", 10.0, "OURS",
          "a timer, not a resurrection shrine. n=0 player deaths in the corpus"),
-        ("ENEMY_MOVE_RATE", 0.75, "OURS",
-         "216 u/s. NEVER sent to a hostile in the corpus -- ArenaNet's hostiles "
-         "take 0.2778, 0.3333, 0.3472 and 1.0 (studies/monsterai 3.4)"),
+        ("ENEMY_MOVE_RATE", 1.0, "OBSERVED",
+         "a hostile CHASES at full speed: all 6 retail NPCs that chased the "
+         "player were at 1.0 (ANIMREF-RE 40.9); 0.2778 / 0.3333 / 0.3472 are "
+         "the pre-aggro walk (studies/monsterai 3.4). Was 0.75, ours, 'so you "
+         "can walk away' -- refuted"),
         ("ENEMY_DEST_RESEND", 120.0, "OURS",
          "bandwidth, not mechanics; the LEGACY arm's re-announce distance -- "
          "the default re-paths on retail's 0.5 s clock (FOLLOW_REPATH_INTERVAL)"),

@@ -418,6 +418,66 @@ state, not the mechanism. Score with
 python toolkit/authsrv/animgrammar.py --diff --after <stamp>
 ```
 
+**Result of CASE 8 v2, 2026-09-02 18:55 — NOT closed (§40.9).** Arm A
+(`…T185503`): *"still doing the long range attacks"* — and the capture shows
+the operator standing still for ten seconds while the server's copy of the
+Hatcher sat at exactly 80 u and swung seven times: the CLIENT's rendered
+Hatcher had been frozen short of the disc by our `0x0028`, sent the instant
+the server's copy arrived; retail sends it half a second later, after the
+rendered body has parked. Arm C (`…T185617`): *"good, though … a 'walk'
+pace"* — zero swings, the Hatcher at 0.35 never caught the operator; retail's
+chasers run at 1.0 (6/6). Shipped: chase at 1.0, halt on the half-second clock.
+The reach-92 fix from §40.1 was in force and stays.
+
+## CASE 8 v3 — chase at full speed, halt on the clock (ANIMREF-RE §40.9)
+
+Same Q8a / Q8b / Q8c as CASE 8. Two things changed underneath: the Hatcher
+now runs at your own speed (retail's 1.0; you will not outrun it), and its
+stop message waits for the half-second clock so the body you see has reached
+the disc before it is told to stop.
+
+**Arm A — as shipped now:**
+
+```powershell
+python toolkit/harness/session.py --enemy --hold 120 --game-args "--map 146 --explorable --no-enemy-skills --enemy-hit 0.02 --skills 0,0,0,0,0,0,0,0"
+```
+
+**Arm D — only if A still swings from far: the instant halt back on**
+
+```powershell
+python toolkit/harness/session.py --enemy --hold 120 --game-args "--map 146 --explorable --no-enemy-skills --enemy-hit 0.02 --skills 0,0,0,0,0,0,0,0 --halt-on-arrival"
+```
+
+**Arm E — only if A's arc stutters again: the old 0.75 chase back on**
+
+```powershell
+python toolkit/harness/session.py --enemy --hold 120 --game-args "--map 146 --explorable --no-enemy-skills --enemy-hit 0.02 --skills 0,0,0,0,0,0,0,0 --enemy-chase-rate 0.75"
+```
+
+**Do:** arm A — Q8a twice (stand still and let it come; the first ten seconds
+of the run are this, exactly as last time), Q8b once, Q8c once. Run D or E
+only on the branch above that names them. No spacebar.
+
+**Answer three lines for A** as in CASE 8, plus one word on speed: *"keeps
+pace / still slower than me / faster"*.
+
+**Registered predictions, written before the run.** A: the Hatcher runs up
+at your speed, stops about a body-width away roughly half a second after it
+gets there, and then swings — from close, every time, and the wire shows the
+halt 0.40–0.55 s after the last follow with the first swing on the next
+tick. On the runaway it keeps pace; on the arc it catches you and swings
+rather than stuttering. The warp when you issue move commands beside it is
+still there (unmodelled collision, §40.7). **If A still swings from far with
+you standing still**, the rendered body is not reaching the disc for a
+reason the halt timing does not cover (the resolver's own conditions, §38.2)
+— run D to confirm the halt is not it, and the next step is the
+rendered-position tap on agent 10, not a constant. **If A's arc stutters**,
+run E; if E is smooth, the stutter is the speed, not the halt. Score with
+
+```powershell
+python toolkit/authsrv/animgrammar.py --diff --after <stamp>
+```
+
 ## Notes that apply to all of them
 
 - **`--enemy-hit 0.02` is in every `--enemy` command on purpose.** `--enemy`

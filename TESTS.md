@@ -3301,7 +3301,7 @@ Floor 75 against a green 75 with 5 declared skips (the archive-conditional
   would otherwise pass for precisely the reason its control exists to rule out.
   Reverting the `SystemExit` catch returns the file to rc=1 with zero verdict
   lines, run rather than assumed. 248 checks, 5 declared skips, rc=0 with no
-  vault. **Floor 265 against a bare 265 / green 278 since 2026-09-02
+  vault. **Floor 268 against a bare 268 / green 281 since 2026-09-02
   (ANIMREF-RE §40)**: §chase was REWRITTEN with the new evidence rather than
   deleted when the hostile's chase became retail's follow — 32 checks that pin
   the `0x002A` naming the player in its fifth field, the half-second re-path
@@ -3320,7 +3320,11 @@ Floor 75 against a green 75 with 5 declared skips (the archive-conditional
   and the Hatcher stood and swung across an 80–144 u band; it is now the halt
   disc plus one radius (92) and §chase pins the deadband at ≤ one radius —
   `_world`'s default distance moved 100 → 85 with it, since 100 sat inside the
-  borrow and outside the correction),
+  borrow and outside the correction. **§40.9, on CASE 8 v2:** the chase rate is
+  1.0 (the registry row is OBSERVED now — 6 of 6 retail chasers) and the halt
+  waits for the follow's half-second clock; §chase pins the arrived-not-halted
+  state (no `0x0028`, no swing), the halt once the clock is aged, and the
+  `--halt-on-arrival` revert arm),
   `toolkit/authsrv/test_interact.py` (the interact path — the walk order and the
   interact that is HELD rather than dropped. **Nothing exercised
   `_handle_interact` at all before 2026-08-19**; `test_dispatch.py` named it once
