@@ -185,6 +185,73 @@ modelled leg, the latency to the swing, and which gate refused each tick.
 the client took (a bend) — the error the model states, and the size of it is
 the number to bring back.
 
+## CASE 7 — the walk-to-and-attack approach (ANIMREF-RE §38; run AFTER CASE 6)
+
+> **Q7a: stand three or four steps from the Hatcher — clearly farther than a
+> weapon's reach — and press spacebar. Arm A: does your body walk to it and
+> swing as it stops, without any jump? Arm B: does it swing from where you
+> stand?**
+
+> **Q7b: click-walk AWAY from the Hatcher, and when you have stopped at the
+> end of that walk, press spacebar. Arm A: does the body walk back and swing —
+> and was there any jump or hitch at the moment you pressed?**
+
+> **Q7c: stand within a step or two and press spacebar. Both arms: does it
+> swing at once, as before?**
+
+Q7a is the operator's "i can also attack from far away" (§36.4): the shipped
+reach was 1500 u, never measured; retail answers a standing press at once
+inside ~83–110 u and from ≥ 205 u sends a follow first, and the client's own
+collision stop ends the follow 80 u out. Q7b is the snap guard: after a
+click-walk the server's copy of you sits at the walk's START, and a follow
+sent from there would hand your body back to it — so under arm A a `0x002C`
+re-pin at the modelled end of your walk precedes the follow. On open ground
+that lands within a few units of where you stand; a bent path shows as a
+visible correction, and its size is what to report. Q7c is the control:
+nothing inside reach changed.
+
+**Arm A — `--attack-approach` (the candidate):**
+
+```powershell
+python toolkit/harness/session.py --enemy --hold 120 --game-args "--map 146 --explorable --no-enemy-skills --skills 0,0,0,0,0,0,0,0 --attack-approach"
+```
+
+**Arm B — today's default (the 1500 u reach, no approach):**
+
+```powershell
+python toolkit/harness/session.py --enemy --hold 120 --game-args "--map 146 --explorable --no-enemy-skills --skills 0,0,0,0,0,0,0,0"
+```
+
+**Do, in each arm:** Q7a twice, Q7b twice, Q7c once. Nothing else. Note the
+Hatcher chases you when you are within its aggro range and stops short of you
+on its own; that is fine — the follow re-paths to where it is every half
+second.
+
+**Answer three lines:** Q7a *"A walks and swings on stopping / A swings while
+still walking / A never swings; B swings from afar"*; Q7b *"A walks back with
+no jump / A jumps at the press (roughly how far) / A does nothing"*; Q7c
+*"both swing at once / something else"*.
+
+**Registered predictions, written before the run:** A walks to the Hatcher
+and the swing opens as the body stops about 80 u out, with no `0x0028` and no
+second movement message unless the Hatcher moved (then one re-path per
+0.5 s); B swings from wherever you stand, as every build before did. On Q7b, A
+re-pins once (a `0x002C` labelled `APPROACH RE-PIN` in the capture) and the
+body does not visibly move at the press on open ground. Q7c is identical in
+both arms. **If A swings before the body stops**, the server's copy arrived
+first — a start latency to measure from the capture (the follow's label says
+when the swing was due). **If A never swings**, the follow was refused or the
+client stopped short of 80 u; the capture holds the follow and your next
+report. Score with
+
+```powershell
+python toolkit/authsrv/animgrammar.py --diff --after <stamp>
+```
+
+`pressscore.py` reads the per-press table on an arm-A capture but refuses its
+fork table, because its replay does not transcribe the follow leg yet and says
+so.
+
 ## Notes that apply to all of them
 
 - **Say "I did not get to it"** rather than guessing. A skipped case costs

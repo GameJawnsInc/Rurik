@@ -7,6 +7,9 @@
     options: --speed U/s (288)  --bound S (3.0)  --interval S (1.75)
              --reach U (1500, the shipped ATTACK_RANGE; a candidate shows
              which presses it would refuse without an approach)  --verbose
+    A capture whose flags carry ATTACK_APPROACH = True (ANIMREF-RE 38, CASE 7)
+    gets its per-press table and a refusal of the forks: the replay does not
+    transcribe the follow leg, the re-pin or the target's chase.
 
 WHY THIS EXISTS. ANIMREF-RE section 36 is a correction: a fix for the
 operator's "spacebar after a click-walk does nothing" was shipped on a unit
@@ -427,7 +430,21 @@ def score(flags, evs, spawns, mode=None, speed=DEFAULT_SPEED,
     m_stopped = _match(rep_stopped, wire_stopped, 0.12)
     res["control"] = (m_started, len(wire_started), len(rep_started),
                       m_stopped, len(wire_stopped), len(rep_stopped))
-    control_ok = (m_started == len(wire_started) == len(rep_started))
+    # ANIMREF-RE 38: a capture that ran the approach (--attack-approach) was
+    # produced by rules this replay does not transcribe -- the follow leg
+    # that holds the chain, the re-pin, and the Hatcher's own chase (NPC
+    # positions here are spawns). Its per-press table still reads; its forks
+    # are refused, said in so many words rather than left to the control.
+    approach = bool(flags.get("ATTACK_APPROACH"))
+    res["approach"] = approach
+    control_ok = (m_started == len(wire_started) == len(rep_started)
+                  and not approach)
+    if approach:
+        say("  ATTACK_APPROACH was ON for this capture (ANIMREF-RE 38): the "
+            "replay does not transcribe the follow leg, the re-pin or the "
+            "target's chase, so the forks below are REFUSED as evidence. Read "
+            "the APPROACH / APPROACH RE-PIN labels on the wire and the "
+            "per-press table instead.")
     say(f"  REPLAY CONTROL: attack_started replayed {len(rep_started)} vs "
         f"wire {len(wire_started)}, matched within 0.12 s: {m_started}; "
         f"attack_stopped replayed {len(rep_stopped)} vs wire "

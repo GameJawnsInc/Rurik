@@ -1763,6 +1763,21 @@ emitter against the population, fix by derivation, tune never.
   repeat press is retail's own shape (F2 refuted, not shipped); retail's reach is
   R ≈ 74–81 u (the `ATTACK_RANGE` seed); the approach's client hook is the AgTrack
   handoff. **Nothing on the §36.6 list starts before CASE 6 answers.**
+* **ANIMREF-RE §38 (2026-09-02) — items 3 and 4 of §36.6 are DERIVED and BUILT,
+  behind `--attack-approach`, default OFF until CASE 6 answers.** The reach is
+  two numbers: the press-time test is bracketed DR-free on retail's wire (Sword
+  accepts ≤ 82.7 u, refuses ≥ 205.5; Daggers 109.7 / 146.3) with the wiki's 144
+  inside both — the client carries NO range table and its press path compares
+  no distance; and the approach's end is the client's own collision stop,
+  `r + r + 56` = 80 u (pad `56.0f` @`0x00A52D60`, `0x002A`'s fifth field is the
+  destination AGENT in `agent+0x98`, a `0x0029` clears it — §35.5 answered).
+  Retail's follow: the target's own position at ~38 ms, re-pathed every 0.500 s
+  while it moves, never while it stands, silent to the swing. Shipped as
+  `attack_tick → approach_tick` with a derived snap guard (a `0x002C` at the
+  modelled click-leg end when the sync copy is > 100 u off), `test_playerswing`
+  §9 (floor 82). Run: [SINGLECASE CASE 7](studies/animref/SINGLECASE.md), after
+  CASE 6. Next by the same derivation: our NPCs' chase (`0x0029`, stop at 150)
+  is the wrong shape too.
 * **NEXT: [studies/animref/RE-PLAN.md](studies/animref/RE-PLAN.md) — a CLIENT
   DIG, by owner's direction** ("a true reverse engineering approach rather
   than more guesswork"). Localised: the client sends its `0x003D` and the
