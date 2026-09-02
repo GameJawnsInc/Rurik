@@ -3452,6 +3452,7 @@ follow's label and the next report. **Until that run this section is CANDIDATE.*
    `ENEMY_MELEE_RANGE = 150` (ours), where retail chases with `0x002A` naming the
    player every 0.5 s and the client's disc stops them at 80 — so our hostiles
    "attack from far away" too, by 70 u. Same derivation, other side; not started.
+   **→ built, §40 (2026-09-02).**
 4. **The halt mechanism** (§38.4, CONTESTED) — one velocity tap across one
    approach.
 5. Smaller, stated: the legacy sync model glides `sync_to` to the *target's*
@@ -3674,6 +3675,133 @@ operator's screen, which is the instrument that matters here.
 **Status: CLOSED.** The two rules are the operator's specification, the tapes'
 corroboration and the run's confirmation, in that order. What remains open is
 listed in §39.5 and §38.7.
+
+## 40. THE HOSTILE'S CHASE IS A FOLLOW — item 1 of the 2026-09-02 handoff, built default ON, waiting on CASE 8
+
+### 40.1 What was asked
+
+The handoff's first item, in its own words: *our NPCs' chase is the wrong shape,
+by the same derivation.* They chased with a `0x0029` to the player's **point** and
+stopped at `ENEMY_MELEE_RANGE = 150` (ours, invented on 2026-08-11 when the chase
+was built); retail chases with a `0x002A` **naming the player** every 0.5 s and the
+client's own collision disc stops the body at `r + r + 56 = 80 u` (§38.2). So our
+hostiles swung from ~70 u further out than retail's ever stand — the Hatcher's
+half of the operator's "attack from far away". §38.7 item 3 called it *a build,
+not a dig*, and it was — with one exception: §38.3's sentence on NPC follows
+("the same message, 0.5 s cadence, dest = the server's copy of the player") was
+a lane's Q6 aside, not a shape read end to end. So the tapes were read first.
+
+### 40.2 Retail, read: message counts only, no dead-reckoning
+
+Two scratch scripts (`npcchase.py`, `timeline.py`, session scratch) over the
+previous session's `live_decoded.pkl` — every LIVE game connection decoded once,
+61 of them — with the retail-follow lane's own `derive_me`. **Positive control:
+that lane's Q6 said 45 NPC follows naming the player from 6 NPCs; this scan
+reproduces 45 and 6 exactly.** Population: the 33 connections with a derived
+player id; every s2c `0x002A` whose agent is not the player and whose fifth
+field is; a gap of more than 1.5 s between two follows by the same NPC starts a
+new chase. **7 chases, 6 NPCs, 4 models**, and every one of those NPCs carries
+`0x41400000 = 12.0` in field 11 of its `0x0020` — the radius the 80 u arithmetic
+assumes. Every number below is a count of messages; nothing is dead-reckoned.
+
+| what | OBSERVED |
+|---|---|
+| before the first follow (0.3 s, that NPC) | **nothing, 7/7** — no `0x002B` speed, no `0x002E` facing, no `0x0029` |
+| the follow | `[npc, (x, y), 0, 0, player]` — the fifth field names the player in 45/45, never 0; both plane words equal (205 of 206 NPC follows carry (0, 0)) |
+| its point | the **server's copy** of the player: 12–32 u from my own last report when that report was under 0.35 s old, 75–85 u when it was 0.5 s old; on the long chase (30 follows) consecutive points sit **144.0 u** apart 20+ times = 0.5 s × 288 u/s, i.e. the copy walks my own reported polyline one report late — §38.3's ~74 u lag, seen again |
+| cadence | 38 intervals, **p50 0.499 s**, 26 in [0.47, 0.53]; 5 pairs at dt = 0 (the same follow twice in one frame, all in the long chase — noted, not modelled) |
+| facing / speed during the chase | **none** — no `0x002E`, no `0x002B` inside any of the 7 |
+| a swing mid-chase | **0 of the 4 multi-follow chases** carry an attack_started npc→player between their first and last follow |
+| the natural end | a bare **`0x0028 AGENT_STOP_MOVING [npc]`** — one field, the id — **5/7**, dt after the last follow p10 0.398 / p50 0.496 / p90 0.537 s |
+| the other end | a `0x0029` to a far point, 2/7 — the NPC walks off (a leash or wander leg this server has no model of) |
+| the first swing | attack_started npc→player **0.159 / 0.242 / 0.139 / 0.379 / 0.153 s after the halt**, 5/5 halted chases; then the chain at the NPC's own interval (2.0 s, 1.9 s on the two long enough to show it) |
+| a mid-chase halt | chase 3: `0x0028` at 333.154, a fresh follow **0.23 s later** as I kept walking — the halt is the server's copy arriving, the player moving off restarts the follow |
+| the chain broken by movement | chase 2: swing at 330.825, I moved, the follow resumed at 331.651 with no press; then `0x0028` → swing again |
+
+**Reading.** Retail's hostile runs the same server routine as retail's player
+(§38.3–§38.5): out of reach, a follow naming the target at the server's copy of
+its position; re-path on the half-second while it moves; the client's disc parks
+the body; the server notices its own copy has arrived on its tick and sends the
+bare halt; the swing opens a beat later. **Nothing precedes the first follow**,
+which is worth stating because our legacy chase sent a speed *and* a facing
+first. That the NPC never swings while following is the same fact §38's player
+approach was built on (the swing opens on arrival, not on crossing 144 u) — now
+OBSERVED on the NPC side rather than assumed from the player's.
+
+### 40.3 The client side is §38.2's, unchanged
+
+`+0x98` is the destination agent; the resolver stops a moving follower against
+it at `(rA + rB + 56)²`; a `0x0029` clears the follow. The halt's handler is
+CANCELWALK-R6's: `0x0028` resolves both world copies and halts the body if in
+motion, cancelling the queued move at `agent+0x50`, and no-ops on a parked one
+(`agents.agent_stop_moving`'s docstring carries the row). No new decode was
+needed, and none was done.
+
+### 40.4 SHIPPED, default ON: `NPC_FOLLOW`, revert `--legacy-npc-chase`
+
+`enemy_move_tick` hands each hostile to `_npc_follow_tick`:
+
+* **Start.** Noticed (inside `AGGRO_RANGE` — ours, unchanged) and beyond the
+  swing reach: one `0x002A [npc, (px, py), plane, plane, PLAYER_AGENT_ID]` at
+  the server's copy of the player. No facing, no `0x0029`.
+* **Re-path.** Every `FOLLOW_REPATH_INTERVAL = 0.5 s` while the player's copy has
+  moved more than `FOLLOW_REPATH_MOVED = 1 u` since the last one; never on a
+  standing player. The same two constants the player's approach uses.
+* **The server's copy** walks toward the player at `ENEMY_MOVE_RATE`, clipped by
+  the pathmap, and parks at `follow_stop_radius() = 80 u` — where the client's
+  own resolver parks the body it animates.
+* **Arrival** is one bare `0x0028` (`agents.agent_stop_moving`), the follow is
+  forgotten, and `enemy_attack_tick` — which runs right behind — opens the swing
+  on the same tick. A chase ending for any other reason (leash, the player's
+  corpse) halts with the same message where the copy stands.
+* **No swing mid-follow**: `enemy_attack_tick` refuses while `agent["follow"]`
+  is set. Its reach is `enemy_reach()` = `ATTACK_REACH = 144` under the flag.
+
+**Stated deviations, each named rather than smuggled:** (1) the walk still opens
+with our `0x002B` speed message, because `ENEMY_MOVE_RATE` is ours and the
+client would otherwise walk the leg at the `0x0020`'s declared base — retail
+declares its hostiles' rates at spawn and sends nothing before the first follow;
+(2) the halt goes out on the 50 ms tick the copy arrives, not on retail's
+half-second clock; (3) the swing opens on the arrival tick — retail's opens
+0.14–0.38 s after its halt, and that gap is unmodelled; (4) the two `0x0029`
+ends are a wander this server does not have; (5) the doubled follows are not
+reproduced; (6) **the hostile's swing reach is the player's press-time reach by
+ASSUMPTION** — the server decides both (§38.4), the client carries no table on
+either side, and the NPC's attack_started separation is instrument-limited on
+the tapes (retail-follow Q6) — UNVERIFIED for hostiles, said so at the constant.
+
+**Tests.** `test_agentlife` §chase rewritten with the new evidence rather than
+deleted (trap 4 of the handoff): 32 checks — the follow's shape and fifth field,
+the cadence both ways (no re-path standing, none inside the half-second, one
+after it to the player's current position), the 80 u park, the bare halt with
+nothing riding it, the refusal to swing mid-follow, the 150 u case that used to
+swing now walking in, a follow ended by the player's death, the wall, and the
+legacy arm run under the flag (rate, facing, `0x0029`, 150). §facing was driven
+through the chase and now drives `face_player` directly, with two new pins that
+the chase carries no facing and the swing open still does. **Floor 248 → 264
+against a green 277** (main: 261). `test_castcancel`, `test_playerswing`,
+`test_srclint` green. Flag: `--legacy-npc-chase` restores the 2026-08-11 shape
+verbatim; `pressscore.py` is untouched because the NPC's chase never enters a
+player press.
+
+### 40.5 The run — CASE 8
+
+[SINGLECASE.md](SINGLECASE.md) CASE 8, three questions the operator can answer
+from the screen: does the Hatcher walk up to a body-width and only then swing;
+does it keep turning toward you on the half-second while you move and swing
+only after it stops; and inside reach, does it hold its ground while you take
+a step back and walk in again when you take several. Predictions registered
+there. The wire half scores from the capture's `FOLLOW:` / `halts at` /
+`attack_started: agent N swings at the player` labels.
+
+### 40.6 What this leaves
+
+§38.7 item 4 — whether the body halts at the disc or at the swing — is still
+one velocity tap away, and now matters on both sides. The hostile's reach is a
+stated assumption. The 0.5 s halt clock and the 0.14–0.38 s beat before the
+first swing are retail facts this build does not reproduce; if the operator sees
+the Hatcher swing "too soon" after stopping, that beat is the first suspect and
+the capture dates it.
 
 ## Provenance
 

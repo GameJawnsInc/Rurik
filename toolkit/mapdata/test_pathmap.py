@@ -117,6 +117,11 @@ MAP_FLAGS = 259
 # result. Duplicated rather than imported: toolkit/mapdata must not grow a
 # dependency on the server, and if the server's numbers ever move, this file
 # saying 150..1200 out loud is what makes the divergence findable.
+# AND THEY MOVED (ANIMREF-RE 40, 2026-09-02): the default chase now starts
+# beyond ATTACK_REACH = 144 and parks at follow_stop_radius() = 80, so the
+# walked band is 80..1200; 150 is the --legacy-npc-chase arm's stop. The
+# band below is left as MEASURED -- it is a timing benchmark over routes of
+# these lengths, and 150..1200 remains inside what the chase walks.
 CHASE_LO, CHASE_HI = 150.0, 1200.0
 TICK_MS = 50.0                 # authsrv.TICK_SECONDS, the world's whole budget
 TAIL_ROUTES = 1500

@@ -289,6 +289,74 @@ python toolkit/authsrv/animgrammar.py --diff --after <stamp>
 fork table, because its replay does not transcribe the follow leg yet and says
 so.
 
+## CASE 8 — the Hatcher's own approach (ANIMREF-RE §40)
+
+> **Q8a: stand still, well outside the Hatcher's reach, and let it come to
+> you. Does it walk right up — about a body-width away, where your own body
+> stops when you attack it (CASE 6's Q6b) — and only then swing? Or does it
+> stop a few steps out and swing from there?**
+
+> **Q8b: while it is still walking toward you, walk away at a right angle for
+> three or four seconds, then stop. Does it keep bending toward where you are,
+> roughly every half-second, and swing only after it has caught up and
+> stopped? Or does it swing while still walking?**
+
+> **Q8c: once it is on you and swinging, take one step back. Does it keep
+> swinging without walking? Now take five or six steps back: does it walk in
+> again, stop close, and only then swing?**
+
+Q8a is the Hatcher's half of "attack from far away": every build before this
+one parked it 150 u out — three or four steps — and swung from there, and
+retail's hostiles walk to the same 80 u the player's own approach ends at.
+Q8b is the follow's cadence and the no-swing-while-following rule (0 of 4
+retail chases open a swing between follows). Q8c is the two numbers being
+different: inside 144 u it holds its ground and swings; beyond, it walks in.
+
+**Arm A — as shipped (`NPC_FOLLOW`, the default):**
+
+```powershell
+python toolkit/harness/session.py --enemy --hold 120 --game-args "--map 146 --explorable --no-enemy-skills --enemy-hit 0.02 --skills 0,0,0,0,0,0,0,0"
+```
+
+**Arm B — `--legacy-npc-chase` (the 2026-08-11 shape: a `0x0029` to your point, stop at 150):**
+
+```powershell
+python toolkit/harness/session.py --enemy --hold 120 --game-args "--map 146 --explorable --no-enemy-skills --enemy-hit 0.02 --skills 0,0,0,0,0,0,0,0 --legacy-npc-chase"
+```
+
+**Do, in each arm:** Q8a twice (walk away and let it come again), Q8b once,
+Q8c once. Do not press spacebar for this case — your own attack is CASE 6/7's
+question and a press starts your approach on top of the Hatcher's. Nothing
+else.
+
+**Answer three lines:** Q8a *"A walks right up then swings / A stops short
+and swings / A walks INTO or past me; B stops a few steps out"*; Q8b *"A
+tracks me and swings only after stopping / A swings while walking / A lost
+me"*; Q8c *"A holds for one step, walks in after several / something else"*.
+
+**Registered predictions, written before the run:** A walks to about 80 u —
+the same distance your body stops from it on Q6b — halts, and swings on the
+same tick (retail waits 0.14–0.38 s after its halt; if A's swing looks
+*early* after the stop, that unmodelled beat is the first suspect). While you
+move it re-paths every 0.5 s (labels `FOLLOW re-path`) and does not swing.
+B stops ~150 u out and swings from there, turning to face you every tick, as
+every build before did. On Q8c, A keeps swinging inside 144 u without a
+single movement message and walks in again from beyond it, halting before
+the swing. **If A walks into or past you**, the client's disc did not stop it
+— §38.2's two limits (the resolver's forward cone and the moving-follower
+condition) are the suspects and the capture holds the halt's time against
+the follow. **If A halts and never swings**, the follow was not forgotten on
+arrival — the capture shows a `halts at` with no `attack_started` after it.
+Score with
+
+```powershell
+python toolkit/authsrv/animgrammar.py --diff --after <stamp>
+```
+
+and read the `FOLLOW:` / `FOLLOW re-path` / `halts at` / `attack_started:
+agent N swings at the player` labels in order. **Score the Hatcher's swings,
+not yours** (handoff trap 7).
+
 ## Notes that apply to all of them
 
 - **`--enemy-hit 0.02` is in every `--enemy` command on purpose.** `--enemy`
