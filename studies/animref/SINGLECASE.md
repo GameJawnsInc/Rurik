@@ -357,6 +357,67 @@ and read the `FOLLOW:` / `FOLLOW re-path` / `halts at` / `attack_started:
 agent N swings at the player` labels in order. **Score the Hatcher's swings,
 not yours** (handoff trap 7).
 
+**Result, 2026-09-02 18:04 (`authsrv-20260902T180441-c1`) — NOT closed.**
+Operator: *"inconsistent. sometimes he gets close to attack, sometimes far.
+sometimes he needs to chase you in between attacks, sometimes he'll keep
+attacking from a distance"*; the right-angle runaway *"does work"* but with
+*"a weird stutter-start of the walk animation during the arc"*; and *"some
+warping ... when issuing movement commands near the enemy"*. The wire agrees
+on the first: 15 of 18 halts at 80 u, then 1–6 standing swings per episode
+before any re-chase — the swing gate was the player's 144 u press reach, the
+halt was 80. Fixed the same day (§40.1: engage reach = halt + one radius =
+92 u). The stutter is diagnosed as our fast Hatcher reaching its 0.5 s-stale
+destination and idling (§40.7, arm C below tests it). The warp is unmodelled
+agent-versus-agent collision, correctly named by the operator; a client dig,
+not a flag (§40.7, symptom 3). FINDINGS §40.7 has the numbers.
+
+## CASE 8 v2 — after §40.1: the engage reach is the halt plus one radius (ANIMREF-RE §40.7)
+
+Same three questions as CASE 8, and one more:
+
+> **Q8d (arm C only): during the right-angle runaway and the arc, is the
+> stutter-start of the walk gone?**
+
+**Arm A — as shipped now (`NPC_FOLLOW`, reach 92, chase rate 0.75):**
+
+```powershell
+python toolkit/harness/session.py --enemy --hold 120 --game-args "--map 146 --explorable --no-enemy-skills --enemy-hit 0.02 --skills 0,0,0,0,0,0,0,0"
+```
+
+**Arm C — the same with the Hatcher at a retail-typical chase rate (0.35 = 101 u/s):**
+
+```powershell
+python toolkit/harness/session.py --enemy --hold 120 --game-args "--map 146 --explorable --no-enemy-skills --enemy-hit 0.02 --skills 0,0,0,0,0,0,0,0 --enemy-chase-rate 0.35"
+```
+
+Arm B (`--legacy-npc-chase`) is not needed again unless you want the old
+shape beside the new one.
+
+**Do:** arm A first — Q8a twice, Q8b once, Q8c once. Then arm C — Q8b (the
+runaway and an arc) and Q8d, and Q8a once so the slower approach is seen.
+No spacebar. Say "I did not get to it" rather than guess.
+
+**Answer, arm A, three lines as before.** **Arm C, two lines:** Q8d *"stutter
+gone / still there / different"*, and whether the Hatcher is now too easy to
+out-run to be worth keeping at 0.35.
+
+**Registered predictions, written before the run.** Arm A: the Hatcher now
+engages at about a body-width and re-chases the moment you step out past
+~92 u — no more standing and swinging as you drift; Q8c's one step back keeps
+it swinging, five steps back brings it in again; **the arc stutter is still
+there on arm A** at medium range (this fix did not touch it); the warp beside
+the Hatcher is still there on both arms (unmodelled collision). Arm C: the
+stutter is gone on the runaway and the arc, and the Hatcher falls behind at
+once when you run — if the stutter is *not* gone at 0.35, the idle mechanism
+is wrong and the walk-start is replaying on every re-path, which is a
+different fix. **If arm A still swings from far**, the capture shows a swing
+with the last halt more than ~92 u back — the reach constant or the follow
+state, not the mechanism. Score with
+
+```powershell
+python toolkit/authsrv/animgrammar.py --diff --after <stamp>
+```
+
 ## Notes that apply to all of them
 
 - **`--enemy-hit 0.02` is in every `--enemy` command on purpose.** `--enemy`

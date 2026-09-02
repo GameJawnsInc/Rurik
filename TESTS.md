@@ -3301,7 +3301,7 @@ Floor 75 against a green 75 with 5 declared skips (the archive-conditional
   would otherwise pass for precisely the reason its control exists to rule out.
   Reverting the `SystemExit` catch returns the file to rc=1 with zero verdict
   lines, run rather than assumed. 248 checks, 5 declared skips, rc=0 with no
-  vault. **Floor 264 against a bare 264 / green 277 since 2026-09-02
+  vault. **Floor 265 against a bare 265 / green 278 since 2026-09-02
   (ANIMREF-RE §40)**: §chase was REWRITTEN with the new evidence rather than
   deleted when the hostile's chase became retail's follow — 32 checks that pin
   the `0x002A` naming the player in its fifth field, the half-second re-path
@@ -3315,7 +3315,12 @@ Floor 75 against a green 75 with 5 declared skips (the archive-conditional
   drives the function directly with two new pins on the call site: the follow
   announces no facing and the swing open still does. The registry keeps
   `ENEMY_MELEE_RANGE = 150` and `ENEMY_DEST_RESEND = 120` as the LEGACY arm's
-  literals, re-worded to say so),
+  literals, re-worded to say so. **§40.1, same day, on the operator's CASE 8
+  capture:** the engage reach had been the player's 144 u press reach borrowed,
+  and the Hatcher stood and swung across an 80–144 u band; it is now the halt
+  disc plus one radius (92) and §chase pins the deadband at ≤ one radius —
+  `_world`'s default distance moved 100 → 85 with it, since 100 sat inside the
+  borrow and outside the correction),
   `toolkit/authsrv/test_interact.py` (the interact path — the walk order and the
   interact that is HELD rather than dropped. **Nothing exercised
   `_handle_interact` at all before 2026-08-19**; `test_dispatch.py` named it once
