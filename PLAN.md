@@ -1778,6 +1778,16 @@ emitter against the population, fix by derivation, tune never.
   §9 (floor 82). Run: [SINGLECASE CASE 7](studies/animref/SINGLECASE.md), after
   CASE 6. Next by the same derivation: our NPCs' chase (`0x0029`, stop at 150)
   is the wrong shape too.
+* **ANIMREF-RE §39 (2026-09-02) — the operator's CASE 6 verdict, built and
+  default ON: the press SUPERSEDES the click walk (one `0x002C` at the modelled
+  body, then the swing in reach or the follow out of reach) and a MOVE ENDS the
+  auto-attack.** The tapes back both: retail's player re-presses after every
+  mid-chain move (28/28 pairs; 39 chains end at a move; 0 resume) — §31's "the
+  chain survives" counted the absence of a close as survival. §37's wait was
+  the defect. Revert one at a time: `--press-waits-for-leg`,
+  `--move-keeps-target`, `--no-attack-approach`. `test_playerswing` §10, floor
+  96. Run: [SINGLECASE CASE 6](studies/animref/SINGLECASE.md), rewritten — three
+  questions, one flag each. CANDIDATE until it runs.
 * **NEXT: [studies/animref/RE-PLAN.md](studies/animref/RE-PLAN.md) — a CLIENT
   DIG, by owner's direction** ("a true reverse engineering approach rather
   than more guesswork"). Localised: the client sends its `0x003D` and the

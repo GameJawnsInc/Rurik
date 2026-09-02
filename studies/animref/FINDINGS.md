@@ -3526,6 +3526,127 @@ addendum:** the melee brackets OBSERVED; the 80 u stop CORROBORATED (58–91 on 
 corrected set); `ATTACK_REACH = 144` WIKI inside the bracket and UNVERIFIED as a
 universal number; the shipped behaviour still a CANDIDATE, default OFF.
 
+## 39. THE PRESS SUPERSEDES THE WALK AND A MOVE ENDS THE CHAIN — the operator's CASE 6 verdict, and what the tapes say about it
+
+> *"our behavior is wrong for case 6, and i want to focus on that. we're not
+> supposed to wait to arrive before attacking. spacebar should cancel the move
+> and either run to the target to get in range or start attacking immediately
+> if they're already in range. also, movement cancels attacks. right now, once
+> we start attacking, we'll attack through move commands — only stopping
+> autoattacking when pressing Esc. in stock game, once you issue a move command
+> you stop autoattacking."* — operator, 2026-09-02, on the first CASE 6 run.
+
+### 39.1 The first sentence: §37 built the wrong half of its own reading
+
+§37.3 read retail correctly — *the press supersedes the leg, and the server
+drives the body* — and §37.5 then shipped a latch that **held the swing until
+the modelled leg ended**. The retrodiction was honest (13/13, 10/10, 36/36
+starved presses opened) and it measured the wrong thing: on those tapes the
+operator's presses came after short legs, so "open when the leg ends" and "open
+at the press" were a few hundred milliseconds apart and both scored as answered.
+The operator's CASE 6 pressed mid-leg and saw the wait. **§37's leg record stays
+— it is the chain-pause term for the approach's own follow leg — but it no
+longer gates a press.**
+
+### 39.2 The second sentence: §31's "the chain survives a move" was re-presses, counted as survival
+
+§31/LAW A read *"of 100 player moves within 2 s of the player's own
+attack_started, 87 carry no property 3"* as the chain surviving the move, and
+§32 built the post-landing keep on it. Checked directly on the live tapes
+(`scratch/chainmove.py`, 33 connections with a derived player id, 803
+same-target swing pairs with no move inside):
+
+| consecutive same-target swings with a player move command between them | n |
+|---|---|
+| … and a **re-press** (c2s `0x0026`/`0x0033` on that target) between the move and the next swing | **28** (22 after a tap ≤ 0.5 s, 5 after 0.5–1.5 s, 1 after > 1.5 s) |
+| … and **no press** — the chain resumed on its own | **0** |
+| chains that **ended at a move**: a move within 2.8 s of a swing, no same-target swing in the next 6 s, no press | **39** |
+| … same, but a press later with no swing | 4 |
+
+**Every retail chain that continued across a move was re-pressed. None resumed.**
+The absence of a wire close (retail sends no property 3 on a move — that part of
+§31 stands) was never evidence of survival; the client ends the attack locally
+and the player presses again. The quarterstep is a tap **and a re-press** (22 of
+the 28 are taps), which is also what the swing-after-re-press latency says: p50
+0.29 s after the last press, 0.05–0.65 s p10–p90 — the follow walking the body
+back into reach, not a chain clock. OBSERVED. §31.3's chain pause keeps one job:
+holding the next swing through the approach's follow leg. §32's landing split
+keeps its job for the swing *in flight*: a pre-landing move still cuts it with
+the stop pair, a post-landing move lets it land — and in both regimes the target
+is now forgotten.
+
+### 39.3 SHIPPED, default ON, three flags to revert one at a time
+
+* **`PRESS_SUPERSEDES_LEG`** (revert `--press-waits-for-leg`). A `0x0026`
+  arriving while the click latch is set — a click leg in flight, or one that
+  arrived silently — **ends the leg**: latch and record cleared, the follow
+  forgotten, and **one `0x002C` at the modelled body** (§37's leg record, 10 of
+  10 post-click reports within 3.5 u of its end on open ground). `0x002C` is the
+  message that halts the client's segment *where the body is*: both copies land
+  on its point and `m_timeStopMovement` goes to 0 (p5-resync-disarm §1). A
+  `0x0028` would halt the SYNC copy where our grants left it — the leg's start
+  under `--grant-suppress` — and hand the body back there, the warp the
+  cast-stop site already refuses. The re-pin is a placement, so `client_pos`
+  follows it (left stale, the approach's own snap guard out-voted the re-pin and
+  sent the body back to the start — caught by §10b on its first run). The tick
+  then swings (in reach) or sends the follow from the re-pinned point (out of
+  reach). A press on the target our own follow is already walking to is left
+  alone — retail re-paths, it does not halt (11/13).
+* **`MOVE_ENDS_CHAIN`** (revert `--move-keeps-target`). `cancel_on_move`
+  forgets the target on **any** move command, pre- or post-landing, and ends our
+  follow (client steering wins on retail, 11/15). No close goes out on a
+  post-landing move (retail sends none); the pre-landing stop pair is unchanged.
+* **`ATTACK_APPROACH` is now `True`** (revert `--no-attack-approach`;
+  `--attack-approach` is a no-op kept for the CASE 7 command line). §38's reason
+  for default-off was CASE 6's registered wait, and the operator has refused the
+  wait.
+
+**Tests.** `test_playerswing` §10, 14 checks, floor 82 → **96**, bare: the three
+defaults; a press 1.0 s into a 500 u leg clears latch and record, re-pins once at
+288 u along, moves the copy there, and the next tick swings (target 62 u away) or
+follows from the re-pinned point (target 900 u away: 612 u out, 532 u to the
+stop); the revert arm leaves the leg alone; a repeat press on our own follow's
+target leaves the follow alone; a parked body gets no re-pin; a post-landing move
+forgets the target with no close and **the chain does not resume on the next
+three ticks**; a pre-landing move still sends the stop pair; a move ends our
+follow; the revert arm restores §32's keep; and the press arm calls the
+supersede before `begin_attack`, adjacent. Four older pins were the old rule
+stated as fact and were rewritten with the new evidence rather than deleted:
+§3's out-of-reach whiff now runs the no-approach arm (retail auto-chases, 16/24,
+§9's territory); §9's abandon-site count grew by the two new callers;
+`test_castcancel` §5's *"the target and the armed swing survive the move"* and
+§7's *"the chain SURVIVES, so it can resume"* now assert the swing lands and the
+target is forgotten; `test_cancelwalk`'s latch pin counts three clearing sites.
+d1lead 94, guards 41, castcycle 35, pools 127, pressscore 20, srclint 26 green.
+`pressscore.py` refuses its fork table on any capture whose flags carry the new
+keys, by name.
+
+### 39.4 The run — CASE 6, rewritten
+
+`studies/animref/SINGLECASE.md` **CASE 6** is now three questions on one arm:
+Q6a spacebar mid-walk with the Hatcher in reach (stops and swings at once, no
+jump); Q6b spacebar mid-walk with it out of reach (abandons the click, runs to
+it, swings on stopping ~80 u out, no jump); Q6c a click or key while
+auto-attacking (stops and stays stopped). One revert flag per question, so a
+miss names its own flag. CASE 7 stays as the approach's own check with arm B on
+`--no-attack-approach`. **Until that run this section is a CANDIDATE** — the
+operator's description is the specification, the tapes are the corroboration,
+and the run is what closes it.
+
+### 39.5 What this retires and what it leaves
+
+Retired: §37.6's Q6b ("A waits until arrival") — the wait was the defect;
+§37.4's "opened while the modelled leg walked" column as a *bad* arm — under
+the press it is the *intended* arm, with the re-pin making it a stop rather than
+a slide; §32.'s post-landing keep as the shipped default; §31.3's chain pause as
+a player-movement behaviour (it survives as the follow-leg hold). Left: the
+keyboard regime at a press is unchanged — a press while a key is held still
+waits for the `0x0047` (retail halts the moving body with `0x0028` + the swing
+in 26/32 such presses, from a server copy that trails the body by ~74 u, and
+what that looks like on screen is not known); the re-pin's residual on a bent
+path is the number CASE 6 brings back; and the NPC chase shape (§38.7) is still
+next.
+
 ## Provenance
 
 All figures are measurements over the owner's own live captures via extractors in this

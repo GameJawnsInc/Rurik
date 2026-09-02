@@ -265,13 +265,15 @@ def section_chain_half():
     holds = [v for op, v, _ in sent
              if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
              and v[0] == authsrv.agents.GV_DISABLED]
-    check(stops == [] and state.get("attacking") == 10
+    check(stops == [] and state.get("attacking") is None
           and state.get("player_swing") is not None
           and not state.get("player_swing_cancel"),
-          "default door: NO property 3, the target and the armed swing "
-          "survive the move (325 of 343 corpus mid-chain moves carry no "
-          "property 3 -- the 87/100 this file used to cite does not "
-          "reproduce as a denominator; direction unchanged)",
+          "default door: NO property 3 and the armed swing survives the "
+          "move (325 of 343 corpus mid-chain moves carry no property 3), "
+          "but since ANIMREF-RE 39 the TARGET is forgotten: a move command "
+          "ends the auto-attack -- retail's player re-presses after every "
+          "mid-chain move (28 of 28 pairs; 39 chains end at a move with no "
+          "press; 0 resume). The absence of a close was never survival",
           f"stops={stops}, attacking={state.get('attacking')}, "
           f"swing={state.get('player_swing') is not None}")
     # NOTHING TO RELEASE since ANIMREF-RE 35: an auto swing no longer sets
@@ -423,12 +425,13 @@ def section_landing_split():
           "plays to completion while the body slides. That is the "
           "quarterstep, and the legacy door broke it by cancelling here",
           f"stops={stops2}")
-    check(st2.get("attacking") == 10
+    check(st2.get("attacking") is None
           and not st2.get("player_swing_cancel"),
-          "and the chain SURVIVES, so it can resume when the player stops -- "
-          "with the §31 pause holding the next swing off until then, which is "
-          "the operator's 'they'll go back into normal walking animation "
-          "after the animation completes'",
+          "and the swing LANDS but the chain ENDS (ANIMREF-RE 39): the "
+          "target is forgotten without a close, and the next swing needs a "
+          "press -- retail's player re-presses after every mid-chain move "
+          "(28 of 28 on the live tapes), which is the operator's 'once you "
+          "issue a move command you stop autoattacking'",
           f"attacking={st2.get('attacking')}, "
           f"cancel={st2.get('player_swing_cancel')}")
 
