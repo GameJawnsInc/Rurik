@@ -3477,6 +3477,55 @@ cadence and silent end OBSERVED; the 80 u end CORROBORATED (client constants vs
 tapes 58–101); the melee brackets OBSERVED, 144 WIKI inside them; the halt
 mechanism CONTESTED; the shipped behaviour a CANDIDATE, default OFF, until CASE 7.
 
+### 38.9 Addendum — the eighth skeptic reported after the commit, and it refutes the reach's CONFIDENCE, not its numbers
+
+The skeptic re-run alone from the cached run (the reach-tapes lane's
+"alternative mechanism" lens) reproduces every count and separation in §38.4
+from its own code (16 exact rows: distance to 0.0 u, R to 0.1 u) and returns
+**refuted = true, medium**, on the *reading*. Kept here as written, because it
+changes labels and one row:
+
+* **"Two numbers" is one of THREE mechanisms the tapes cannot separate.** M1: a
+  universal press reach (~144) plus a separate follow stop — what §38.5 built.
+  M2: ONE reach per weapon/target pairing, re-checked on a movement tick — Sword
+  on the dummy X ≈ 83–95 u, Daggers on its target X in [109.7, ~140). M3: an
+  edge-to-edge reach plus collision radii, with the Daggers target ~20–25 u
+  larger than the dummy. Within one weapon only ONE number is ever needed (Sword:
+  immediate ≤ 82.7, followed ≥ 205.5, stops 58–91 — **no Sword press ever tests
+  144**); "two numbers" appears only when the Sword STOP set is compared with the
+  Daggers PRESS, and **weapon and target model are perfectly aliased in the exact
+  tier**. So `ATTACK_REACH = 144` is a value inside the bracket, chosen by the
+  wiki, and **UNVERIFIED between ~95 and 144 for a sword**; §38.5's comment
+  already says "bracketed, not selected", and this is the sharper form of it.
+* **The R = 100.8 row is a transit artifact.** Every live tape carries a server
+  clock — `0x001E [30, N]`, N = server milliseconds since the previous frame,
+  validated over 22,304 stamps (residual p50 0.000 s, p10/p90 ± 6 ms, no
+  drift) — and on that clock the row's `0x002A` frame arrived 60–80 ms late
+  while its attack_started frame was on time. Corrected, R = 77.6–83.6, and the
+  Sword approach set is **58–91 u with a maximum near 84** — a single Sword reach
+  test at X ≥ 110 is disfavoured (P ≤ 0.008 under a uniform tick) while X in
+  [83, 95] is not. §38.3's joint fit (278 u/s, 81 u) leaned on that row. **The
+  80 u stop is better corroborated than §38.4 said, and the 144 press reach is
+  less.** The `0x001E` clock is a new instrument for every future tape count;
+  none of this arc's earlier lanes used it.
+* **The Daggers 109.7 row is under-read: the swing LANDED** (`0x00A3 [16, 137,
+  27]` at +0.594 s) and two attack skills hit from the same spot, with the target
+  fixed at its create position by three independent witnesses — reach ≥ 109.7 u
+  for that pairing is OBSERVED as server-adjudicated hits, not merely an
+  attack_started.
+* Smaller: the "constant 0.226–0.262 s lag under H144" is `(144 − R)/v` per row
+  = 0.150–0.297 s, a spread identical to R's by construction, not a constant;
+  the Sword "n=6" immediate set is 5 distinct configurations (one stop pressed
+  twice); the bow's 2.475 s period is corroborated only as "not melee".
+
+**What would decide M1 against M2:** a Sword press on the dummy between ~95 and
+~200 u, a Daggers press on a `5368710xx` model, or a client-side range test — the
+last of which §38.4 already searched for and did not find. None of that is in the
+corpus; CASE 7 measures OUR behaviour, not retail's mechanism. **Labels after the
+addendum:** the melee brackets OBSERVED; the 80 u stop CORROBORATED (58–91 on the
+corrected set); `ATTACK_REACH = 144` WIKI inside the bracket and UNVERIFIED as a
+universal number; the shipped behaviour still a CANDIDATE, default OFF.
+
 ## Provenance
 
 All figures are measurements over the owner's own live captures via extractors in this
