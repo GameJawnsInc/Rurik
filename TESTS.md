@@ -3301,7 +3301,21 @@ Floor 75 against a green 75 with 5 declared skips (the archive-conditional
   would otherwise pass for precisely the reason its control exists to rule out.
   Reverting the `SystemExit` catch returns the file to rc=1 with zero verdict
   lines, run rather than assumed. 248 checks, 5 declared skips, rc=0 with no
-  vault),
+  vault. **Floor 264 against a bare 264 / green 277 since 2026-09-02
+  (ANIMREF-RE §40)**: §chase was REWRITTEN with the new evidence rather than
+  deleted when the hostile's chase became retail's follow — 32 checks that pin
+  the `0x002A` naming the player in its fifth field, the half-second re-path
+  (none standing, none inside 0.5 s, one after it to the player's CURRENT
+  position), the server's copy parking at `r + r + 56 = 80 u`, the bare
+  `0x0028` halt with nothing riding it, the refusal to swing mid-follow, the
+  150 u case that used to swing now walking in, a follow ended by the player's
+  death, the wall, and the `--legacy-npc-chase` arm run under the flag (rate,
+  facing, `0x0029`, 150). §facing had driven `face_player` through the chase,
+  which no longer calls it (retail's 7 live chases carry no `0x002E`), so it now
+  drives the function directly with two new pins on the call site: the follow
+  announces no facing and the swing open still does. The registry keeps
+  `ENEMY_MELEE_RANGE = 150` and `ENEMY_DEST_RESEND = 120` as the LEGACY arm's
+  literals, re-worded to say so),
   `toolkit/authsrv/test_interact.py` (the interact path — the walk order and the
   interact that is HELD rather than dropped. **Nothing exercised
   `_handle_interact` at all before 2026-08-19**; `test_dispatch.py` named it once

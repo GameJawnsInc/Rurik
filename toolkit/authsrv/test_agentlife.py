@@ -61,7 +61,7 @@ from codec import Codec  # noqa: E402
 #      their steps are built, outside that function's own try. Those are now
 #      SKIPPED and named rather than fatal, and the section asserts the walk
 #      encoded something, because 0 failures over 0 steps is not a pass.
-LEDGER = checks.Ledger("agent lifetime", floor=248)
+LEDGER = checks.Ledger("agent lifetime", floor=264)
 
 
 def section_weapon_damage():
@@ -842,46 +842,78 @@ class _Wall:
 
 
 def section_chase():
-    """It walks toward the player, and stops where it can reach them.
+    """It follows the player, and halts where the client's own disc parks it.
 
-    THE BUG THIS RUNG FIXES IS ONE OF OURS. `AGGRO_RANGE` was doing two jobs --
-    when a hostile NOTICES the player and when it can REACH them -- so a Hatcher
-    rooted to its spawn point swung at anything within 1200 units. It hit people
-    across a courtyard it never crossed. Splitting reach from notice is what makes
-    the chase necessary rather than decorative: without the walk, raising the reach
-    to a melee distance would simply mean nothing could ever hit anybody.
+    THREE SHAPES, IN ORDER. First `AGGRO_RANGE` did two jobs -- when a hostile
+    NOTICES the player and when it can REACH them -- so a Hatcher rooted to its
+    spawn swung at anything within 1200 units, across a courtyard it never
+    crossed. Then (2026-08-11) the chase: a 0x0029 to the player's point,
+    stopping at an invented 150 u to swing. Now (ANIMREF-RE 40, 2026-09-02)
+    retail's shape, OBSERVED on 7 live chases by 6 hostiles: ONE 0x002A whose
+    point is the server's copy of the player and whose fifth field NAMES the
+    player, re-pathed every 0.5 s while they move and never while they stand,
+    nothing else on the wire (no facing, no 0x0029), no swing while the follow
+    is in flight, the client's own resolver parking the body at r+r+56 = 80 u
+    (sec.38.2) and a bare 0x0028 marking the halt on the wire (5/7). The
+    legacy arm is one flag away (--legacy-npc-chase) and the last block here
+    runs it, so a run can convict either shape alone.
 
-    All three constants are ours and the docstring at the call site says so.
+    The reach a hostile swings from is the player's own derived 144 u --
+    symmetric BY ASSUMPTION (authsrv.NPC_FOLLOW's comment) -- and the 150 u
+    arm's constant stays pinned in section_constants as the LEGACY number.
     """
     import authsrv
 
-    far = authsrv.ENEMY_MELEE_RANGE + 450.0
+    reach = authsrv.enemy_reach()
+    stop = authsrv.follow_stop_radius()
+    far = reach + 450.0
+    FOLLOW = authsrv.GAME_SMSG_AGENT_UPDATE_DESTINATION
+    HALT = authsrv.GAME_SMSG_AGENT_STOP_MOVING
+    POINT = authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT
+    TURN = authsrv.GAME_SMSG_AGENT_UPDATE_ROTATION
+    SPEED = authsrv.GAME_SMSG_AGENT_UPDATE_SPEED
 
-    # 1. it starts moving, announces a rate and a destination, and does NOT swing
+    LEDGER.ok(authsrv.NPC_FOLLOW is True,
+              "retail's chase shape is the DEFAULT arm (ANIMREF-RE 40)",
+              f"NPC_FOLLOW = {authsrv.NPC_FOLLOW!r} -- the revert is "
+              "--legacy-npc-chase, and the operator's run scores the default")
+    LEDGER.ok(abs(reach - 144.0) < 1e-9 and abs(stop - 80.0) < 1e-9,
+              "a hostile swings from the player's own 144 u and halts at "
+              "r + r + 56 = 80 u",
+              f"reach {reach:.1f}, halt {stop:.1f} -- ATTACK_REACH and the "
+              "client's def pad; the legacy arm stood and swung at 150")
+
+    # 1. IT STARTS: the rate (ours, kept), then ONE follow naming the player.
+    #    No facing, no 0x0029, no swing. Retail sends nothing at all before the
+    #    first follow (7/7); the speed is the one stated deviation.
     state = _world(dist=far)
     sent = _walk(state)
     ops = [op for op, _v, _l in sent]
-    LEDGER.ok(ops == [authsrv.GAME_SMSG_AGENT_UPDATE_SPEED,
-                      authsrv.GAME_SMSG_AGENT_UPDATE_ROTATION,
-                      authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT],
-              "a hostile out of reach announces a rate, a facing and a destination",
-              f"{[hex(o) for o in ops]}")
-    rate = [v for op, v, _l in sent
-            if op == authsrv.GAME_SMSG_AGENT_UPDATE_SPEED][0]
+    LEDGER.ok(ops == [SPEED, FOLLOW],
+              "a hostile out of reach announces a rate and then ONE follow -- "
+              "no facing, no 0x0029",
+              f"{[hex(o) for o in ops]} -- retail's 7 chases carry no 0x002E "
+              "and no 0x0029 before or between their follows")
+    rate = [v for op, v, _l in sent if op == SPEED][0]
     LEDGER.ok(rate[0] == 10 and 0.0 < rate[1] <= agents.AGENT_MAX_MOVE_SPEED,
               "and the rate is a FRACTION inside the client's own asserted bounds",
               f"{rate} -- units/s here is the named mistake; "
               f"{authsrv.ENEMY_MOVE_RATE} x {agents.DEFAULT_RUN_SPEED} = "
               f"{authsrv.ENEMY_MOVE_RATE * agents.DEFAULT_RUN_SPEED:.0f} u/s")
-    dest = [v for op, v, _l in sent
-            if op == authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT][0]
-    LEDGER.ok(dest[0] == 10 and dest[1] == [0.0, 0.0],
-              "and the destination is where the player is standing",
-              f"{dest}")
+    fol = [v for op, v, _l in sent if op == FOLLOW][0]
+    LEDGER.ok(fol[0] == 10 and tuple(fol[1]) == (0.0, 0.0)
+              and fol[4] == authsrv.PLAYER_AGENT_ID,
+              "the follow's point is the player's position and its fifth "
+              "field NAMES the player",
+              f"{fol} -- 45 of 45 retail NPC follows name the player in the "
+              "fifth field, none carries 0; that field is agent+0x98, the "
+              "agent the client's resolver stops against (sec.38.2)")
+    LEDGER.ok(fol[2] == fol[3],
+              "and both plane words carry the same plane",
+              f"{fol[2]}/{fol[3]} -- (0,0) on 205 of 206 retail NPC follows")
     LEDGER.ok(not _swings(state),
               "and it does not swing from out there",
-              f"{far:.0f} units, reach is {authsrv.ENEMY_MELEE_RANGE:.0f} -- this "
-              "is the courtyard bug, and it read AGGRO_RANGE until today")
+              f"{far:.0f} units against a reach of {reach:.0f}")
 
     # 2. it actually closes the distance
     state = _world(dist=far)
@@ -893,59 +925,102 @@ def section_chase():
               f"{before:.0f} -> {after:.0f} units at "
               f"{authsrv.ENEMY_MOVE_RATE * agents.DEFAULT_RUN_SPEED:.0f} u/s")
 
-    # 3. IT STOPS AT REACH RATHER THAN WALKING THROUGH THE PLAYER. A long step is
-    #    the interesting case: without the cap the agent overshoots to distance 0
-    #    and stands inside them.
+    # 3. IT PARKS AT THE DISC, NOT ON THE PLAYER, and the halt is a bare 0x0028.
+    #    A long step is the interesting case: uncapped, a 30 s step lands at 0.
     state = _world(dist=far)
     _walk(state)                       # tick one only announces the intent
     LEDGER.ok(math.hypot(*state["agents"][10]["pos"]) == far,
               "the tick that starts the walk does not also move the agent",
               "moved_at is stamped when the walk begins, so the first step is "
               "measured from then -- an agent cannot have travelled before it set off")
-    _walk(state, n=1, elapsed=30.0)
+    halted = _walk(state, n=1, elapsed=30.0)
     d = math.hypot(*state["agents"][10]["pos"])
-    LEDGER.ok(abs(d - authsrv.ENEMY_MELEE_RANGE) < 1.0,
-              "and a huge step stops it exactly at reach, not on top of the player",
-              f"{d:.1f} against a reach of {authsrv.ENEMY_MELEE_RANGE:.0f} -- "
-              "uncapped, a 30 s step lands at 0 and the agent stands inside them")
+    LEDGER.ok(abs(d - stop) < 1e-3,
+              "and a huge step parks it at the disc, 80 u out, not on top of "
+              "the player",
+              f"{d:.1f} against a halt radius of {stop:.0f} -- the legacy "
+              "arm parked at 150, which is the ~70 u the operator saw")
+    halts = [v for op, v, _l in halted if op == HALT]
+    LEDGER.ok(halts == [[10]],
+              "the arrival is ONE bare 0x0028 naming the agent -- retail's "
+              "tick-cut halt",
+              f"{halts} -- 5 of 7 retail chases end in exactly this, p50 "
+              "0.496 s after the last follow; the other two end in a leash "
+              "leg. One field, no point, no plane (agents.agent_stop_moving)")
+    LEDGER.ok(not [op for op, _v, _l in halted if op in (POINT, FOLLOW, TURN)],
+              "and no 0x0029, no re-path and no facing ride the halt",
+              f"{[hex(op) for op, _v, _l in halted]}")
+    LEDGER.ok(state["agents"][10].get("follow") is None
+              and not state["agents"][10]["moving"],
+              "the follow is forgotten on arrival",
+              "a follow left armed here would refuse every swing below")
     state["agents"][10]["skills"] = ()       # the swing path, not the skill path
     LEDGER.ok(bool(_swings(state)),
-              "and having arrived, it can swing",
+              "and having halted, it can swing",
               "the walk is only worth anything if the fight starts at the end of it")
 
-    # 4. the stop is an ARRIVAL, never a zero rate -- agent_update_speed refuses
-    #    anything under AGENT_MIN_MOVE_SPEED and that refusal is a ValueError on
-    #    the world tick.
-    stop = _walk(state, n=2)
-    stop_ops = [op for op, _v, _l in stop]
-    LEDGER.ok(authsrv.GAME_SMSG_AGENT_UPDATE_SPEED not in stop_ops,
-              "stopping never sends a speed message",
-              f"{[hex(o) for o in stop_ops]} -- speed 0.0 is below the client's own "
-              f"floor of {agents.AGENT_MIN_MOVE_SPEED} (AgAgent.cpp:2366) and "
-              "agent_update_speed raises on it")
-    LEDGER.ok(len([o for o in stop_ops
-                   if o == authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT]) == 1,
-              "and it announces its arrival exactly once, not every tick",
-              f"{len(stop_ops)} message(s) over two ticks standing still")
+    # 4. standing in reach it sends NOTHING more -- no speed 0 (below the
+    #    client's own floor, AgAgent.cpp:2366), no repeated halt.
+    quiet = _walk(state, n=2)
+    LEDGER.ok(not quiet,
+              "a hostile standing in reach sends nothing more, tick after tick",
+              f"{[hex(op) for op, _v, _l in quiet]} over two ticks standing still")
 
-    # 5. the destination is not re-announced every tick while chasing
+    # 5. THE RE-PATH CADENCE: never on a standing player; on a moving one, once
+    #    the half-second has passed, to where they are NOW.
     state = _world(dist=far)
-    _walk(state)                                   # first announcement
+    _walk(state)                                   # the first follow
     quiet = _walk(state, n=4, elapsed=0.05)
-    LEDGER.ok(not [op for op, _v, _l in quiet
-                   if op == authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT],
-              "a stationary player is not re-announced on every tick",
-              f"{len(quiet)} message(s) over four ticks -- 20 a second is what "
-              "'tell the client where to go' becomes if this is not gated")
-    state["pos"] = (0.0, authsrv.ENEMY_DEST_RESEND + 50.0)
-    moved = _walk(state, elapsed=0.05)
-    LEDGER.ok(bool([op for op, _v, _l in moved
-                    if op == authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT]),
-              "but a player who has walked far enough IS re-announced",
-              f"moved {authsrv.ENEMY_DEST_RESEND + 50.0:.0f} units, threshold is "
-              f"{authsrv.ENEMY_DEST_RESEND:.0f}")
+    LEDGER.ok(not [op for op, _v, _l in quiet if op == FOLLOW],
+              "a standing player is never re-pathed",
+              f"{len(quiet)} message(s) over four ticks -- retail: 0 of 31 "
+              "spontaneous re-paths on a standing target (sec.38.3)")
+    state["pos"] = (0.0, 200.0)                    # the player moves
+    soon = _walk(state, elapsed=0.05)
+    LEDGER.ok(not [op for op, _v, _l in soon if op == FOLLOW],
+              "a player who moved is NOT re-pathed inside the half-second",
+              f"{[hex(op) for op, _v, _l in soon]} -- retail re-paths on a "
+              "0.500 s clock (38 NPC intervals, p50 0.499), not per tick")
+    state["agents"][10]["follow"]["sent_at"] -= 0.6
+    later = _walk(state, elapsed=0.05)
+    rp = [v for op, v, _l in later if op == FOLLOW]
+    LEDGER.ok(len(rp) == 1 and tuple(rp[0][1]) == (0.0, 200.0)
+              and rp[0][4] == authsrv.PLAYER_AGENT_ID,
+              "but IS re-pathed once it has, to where the player is now, "
+              "still naming them",
+              f"{rp} -- the dest is the target's CURRENT position each time "
+              "(bit-exact on retail's never-moved targets, sec.38.3)")
+    LEDGER.ok(not [op for op, _v, _l in later if op == TURN],
+              "and no facing message rides the chase",
+              f"{[hex(op) for op, _v, _l in later]} -- the leg orients the "
+              "body; the legacy arm faced the player every chasing tick")
 
-    # 6. the refusals
+    # 6. NO SWING MID-FOLLOW, and the 70 u the operator saw, made concrete.
+    state = _world(dist=120.0)                     # inside reach, standing
+    state["agents"][10]["skills"] = ()
+    LEDGER.ok(not _walk(state) and bool(_swings(state)),
+              "inside reach and standing, it swings at once and never walks",
+              "120 u: a follow here would walk it INTO the player")
+    state = _world(dist=120.0)
+    state["agents"][10]["skills"] = ()
+    state["agents"][10]["follow"] = {"told": (0.0, 0.0),
+                                     "sent_at": time.time(), "t0": time.time()}
+    state["agents"][10]["moving"] = True
+    LEDGER.ok(not _swings(state),
+              "but a hostile MID-FOLLOW does not swing, even inside reach",
+              "retail opens no attack_started between the follows of a chase "
+              "(0 of 4 multi-follow chases); the swing comes after the halt")
+    state = _world(dist=150.0)                     # where the legacy arm stood
+    state["agents"][10]["skills"] = ()
+    sent = _walk(state)
+    LEDGER.ok(any(op == FOLLOW for op, _v, _l in sent) and not _swings(state),
+              "from 150 u -- where the legacy arm stood and swung -- it walks "
+              "in instead",
+              f"{[hex(op) for op, _v, _l in sent]} -- 150 > 144, so this is a "
+              "follow, and the follow refuses the swing")
+
+    # 7. the refusals, and the halt that ends a chase for a reason other than
+    #    arrival
     for why, world in (("past the leash", _world(dist=authsrv.AGGRO_RANGE + 50.0)),
                        ("dead", _world(dist=far, dead=True)),
                        ("passive", _world(dist=far, attacks_back=False)),
@@ -961,8 +1036,20 @@ def section_chase():
               "and nothing chases a corpse",
               "the player is face-down; walking to them is the wrong picture "
               "and the swing that follows is worse")
+    state = _world(dist=far)
+    _walk(state)                                   # a follow in flight...
+    state["player_dead"] = True
+    state["player_health"] = 0.0
+    ended = _walk(state)
+    LEDGER.ok([op for op, _v, _l in ended] == [HALT]
+              and state["agents"][10].get("follow") is None,
+              "a follow in flight when the player dies halts with one bare "
+              "0x0028 and is forgotten",
+              f"{[hex(op) for op, _v, _l in ended]} -- the same message that "
+              "ends an arrival; retail's non-arrival ends are a 0x0029 leash "
+              "leg this server has no wander to send")
 
-    # 7. A WALL STOPS IT. pathmap.clip is sampled rather than solved, and it is
+    # 8. A WALL STOPS IT. pathmap.clip is sampled rather than solved, and it is
     #    the whole of our collision story -- pathmap.route is an A* and is NOT
     #    wired in, so an agent meets a wall and waits there.
     state = _world(dist=900.0)
@@ -974,6 +1061,29 @@ def section_chase():
               "a hostile is stopped by the pathmap rather than walking through it",
               f"x={x:.0f} against a wall at 400, clip asked "
               f"{state['pathmap'].asked} time(s)")
+
+    # 9. THE LEGACY ARM STILL RUNS, one flag away, so a run can convict either.
+    authsrv.NPC_FOLLOW = False
+    try:
+        state = _world(dist=far)
+        sent = _walk(state)
+        ops = [op for op, _v, _l in sent]
+        LEDGER.ok(ops == [SPEED, TURN, POINT],
+                  "--legacy-npc-chase: a rate, a facing and a 0x0029 to the "
+                  "player's point",
+                  f"{[hex(o) for o in ops]} -- the 2026-08-11 shape, kept "
+                  "verbatim as the revert arm")
+        _walk(state, n=1, elapsed=30.0)
+        d = math.hypot(*state["agents"][10]["pos"])
+        LEDGER.ok(abs(d - authsrv.ENEMY_MELEE_RANGE) < 1.0,
+                  "and it stops at the invented 150 u",
+                  f"{d:.1f} against {authsrv.ENEMY_MELEE_RANGE:.0f}")
+        LEDGER.ok(abs(authsrv.enemy_reach() - authsrv.ENEMY_MELEE_RANGE) < 1e-9,
+                  "with the swing reach back at 150 too",
+                  f"{authsrv.enemy_reach():.0f} -- the two numbers move together "
+                  "on that arm, as they did before sec.40 split them")
+    finally:
+        authsrv.NPC_FOLLOW = True
 
 
 def section_facing():
@@ -996,6 +1106,16 @@ def section_facing():
     that made an early test_smsgnames compare garbage against pi and pass a
     turn-rate check vacuously. Every check here reinterprets before asserting, and
     the last one fails if the code stops doing so.
+
+    DRIVEN DIRECTLY SINCE ANIMREF-RE 40. Until then every check here reached
+    face_player through the chase (`_walk`), which faced the player on every
+    chasing tick. Retail's chase carries no 0x002E at all (7 of 7 live chases,
+    before or between follows -- the leg orients the body), so the default
+    chase no longer calls face_player and the one remaining call site is the
+    swing open, which section_swing_back pins as TURN then ATTACK_STARTED.
+    The first two checks below pin that split; the rest call face_player as
+    the swing does, so the angle law, the epsilon and the seam wrap are still
+    checked on the code that runs -- not on the revert arm's.
     """
     import authsrv
 
@@ -1015,11 +1135,34 @@ def section_facing():
         return [v for op, v, _l in sent
                 if op == authsrv.GAME_SMSG_AGENT_UPDATE_ROTATION]
 
+    def face(state, force=False):
+        """One face_player call, as the swing open makes it."""
+        sent = []
+        authsrv.face_player(
+            lambda op, v, label="", quiet=False: sent.append((op, v, label)),
+            state, 10, state["agents"][10], 1, force=force)
+        return rots(sent)
+
+    # 0. THE CALL SITE. The chase carries no facing; the swing open does.
+    LEDGER.ok(not rots(_walk(_world(dist=600.0))),
+              "a hostile setting off on a follow announces NO facing "
+              "(ANIMREF-RE 40)",
+              "retail's 7 live chases carry no 0x002E before or between their "
+              "follows; the leg orients the body")
+    in_reach = _world(dist=100.0)
+    in_reach["agents"][10]["skills"] = ()
+    opened = _swings(in_reach)
+    LEDGER.ok(opened and opened[0][0] == authsrv.GAME_SMSG_AGENT_UPDATE_ROTATION
+              and opened[0][1][0] == 10,
+              "and the swing open is where the facing goes out, first",
+              f"{[hex(op) for op, _v, _l in opened]} -- the one call site left, "
+              "so every check below drives face_player as it does")
+
     # the fixture puts the agent due EAST of the player, so it must look WEST
     state = _world(dist=600.0)
-    r = rots(_walk(state))
+    r = face(state)
     LEDGER.ok(len(r) == 1 and r[0][0] == 10,
-              "setting off, the agent announces a facing for itself",
+              "asked to face the player, the agent announces one facing for itself",
               f"{len(r)} rotation(s)")
     LEDGER.ok(abs(angle_of(r[0])) < 1e-5,
               "the emitted angle is the bearing to the player PLUS pi",
@@ -1049,7 +1192,7 @@ def section_facing():
     # a quarter turn: player due NORTH of the agent must give +pi/2
     north = _world(dist=600.0)
     north["agents"][10]["pos"] = (0.0, -600.0)
-    r = rots(_walk(north))
+    r = face(north)
     LEDGER.ok(abs(angle_of(r[0]) + math.pi / 2.0) < 1e-5,
               "a player due north of the agent emits -pi/2, not +pi/2 or 0",
               f"{angle_of(r[0]):.5f} -- bearing +pi/2, emitted -pi/2. This is the "
@@ -1057,7 +1200,7 @@ def section_facing():
               "due-east case above cannot: swapping the arguments emits +pi here")
 
     # 2. it is NOT re-announced when nothing has changed
-    quiet = rots(_walk(state, n=5, elapsed=0.02))
+    quiet = [x for _ in range(5) for x in face(state)]
     LEDGER.ok(not quiet,
               "a facing that has not changed is not re-announced",
               f"{len(quiet)} over five ticks -- ungated this is 20 rotation "
@@ -1071,7 +1214,7 @@ def section_facing():
     # against a sabotaged (unwrapped) server until that was noticed: it was
     # asserting silence in a case where both versions are silent.
     state["pos"] = (0.0, -1.0)                    # a hair SOUTH: angle flips to -pi
-    wrapped = rots(_walk(state, n=3, elapsed=0.02))
+    wrapped = [x for _ in range(3) for x in face(state)]
     LEDGER.ok(not wrapped,
               "and a facing that crosses the +/-pi seam is still 'unchanged'",
               f"{len(wrapped)} -- the shortest way round from +3.1416 to -3.1383 "
@@ -1080,16 +1223,17 @@ def section_facing():
 
     # 4. a real turn IS announced
     state["pos"] = (0.0, 900.0)
-    turned = rots(_walk(state, n=1, elapsed=0.02))
+    turned = face(state)
     LEDGER.ok(len(turned) == 1,
               "but a player who has actually moved round does get a new facing",
               f"{len(turned)}")
 
     # 5. standing exactly on the player has no direction, and atan2(0, 0) is 0.0
     #    rather than an error -- so an ungurded version silently means "face east"
-    # CALLED DIRECTLY, because enemy_move_tick never gets there: an agent standing
-    # on the player is inside melee range, so the chase returns before facing is
-    # considered and the check passed without executing the code it names.
+    # force=True, so the epsilon gate cannot be what produces the silence (this
+    # was the one directly-driven check before sec.40, because the chase never
+    # reached facing inside melee range and the check passed without executing
+    # the code it names).
     on_top = _world(dist=600.0)
     on_top["agents"][10]["pos"] = (0.0, 0.0)
     direct = []
@@ -1109,7 +1253,7 @@ def section_facing():
     # nothing about marshalling either way.
     bits_world = _world(dist=600.0)
     bits_world["agents"][10]["pos"] = (0.0, -600.0)
-    raw = rots(_walk(bits_world))[0]
+    raw = face(bits_world)[0]
     LEDGER.ok(raw[1] > (1 << 30) and raw[2] > (1 << 29),
               "and both fields go out as float BITS, not as small integers",
               f"angle=0x{raw[1]:08X}, rate=0x{raw[2]:08X} -- a dword field holding "
@@ -1514,9 +1658,11 @@ def section_constants():
          "not even the right SHAPE -- it should be per-creature "
          "(studies/monsterai 4.2)"),
         ("ENEMY_MELEE_RANGE", 150.0, "OURS",
-         "reach. Refuted from both sides at once: ArenaNet's own models strike "
-         "from ~65, ~599 and ~706 units, so no single number is right "
-         "(studies/monsterai 3.3)"),
+         "the LEGACY arm's reach and stop (--legacy-npc-chase) since "
+         "ANIMREF-RE 40; the default swings from ATTACK_REACH = 144 and "
+         "halts at follow_stop_radius() = 80. Refuted from both sides at "
+         "once: ArenaNet's own models strike from ~65, ~599 and ~706 units, "
+         "so no single number is right (studies/monsterai 3.3)"),
         ("ENEMY_HIT_FRACTION", 0.10, "OURS", "damage per swing"),
         ("HIT_FRACTION", 0.15, "OURS",
          "the FALLBACK for a swing with no readable weapon, and nothing more "
@@ -1529,7 +1675,9 @@ def section_constants():
         ("ENEMY_MOVE_RATE", 0.75, "OURS",
          "216 u/s. NEVER sent to a hostile in the corpus -- ArenaNet's hostiles "
          "take 0.2778, 0.3333, 0.3472 and 1.0 (studies/monsterai 3.4)"),
-        ("ENEMY_DEST_RESEND", 120.0, "OURS", "bandwidth, not mechanics"),
+        ("ENEMY_DEST_RESEND", 120.0, "OURS",
+         "bandwidth, not mechanics; the LEGACY arm's re-announce distance -- "
+         "the default re-paths on retail's 0.5 s clock (FOLLOW_REPATH_INTERVAL)"),
         ("ENEMY_FACING_EPSILON", 0.15, "OURS", "bandwidth, not mechanics"),
         ("ENEMY_SKILL_RANK", 12, "OURS",
          "the rank the enemy casts at. Replaced ENEMY_SKILL_FRACTION = 0.25 at "

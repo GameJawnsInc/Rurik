@@ -9319,6 +9319,31 @@ ENEMY_MOVE_RATE = 0.75     # fraction of the 288 u/s reference, so 216 u/s -- sl
 ENEMY_DEST_RESEND = 120.0  # how far the player must move before the destination is
                            # re-announced. Every tick would be 20 messages a second
                            # at a client that only needs the endpoint.
+# ANIMREF-RE 40 -- THE CHASE WAS THE WRONG SHAPE, by sec.38's derivation turned
+# round, and the three numbers above are the LEGACY arm now. Retail's hostiles
+# chase with the message retail's player follows with: a 0x002A
+# AGENT_UPDATE_DESTINATION whose point is the SERVER'S copy of the player and
+# whose fifth field NAMES the player (45 rows, 6 NPCs, 7 chases over the 33
+# live connections with a derived player id; fifth field == 0 never), re-issued
+# every 0.500 s while that copy moves (38 intervals, p50 0.499 s, 26 in
+# [0.47, 0.53]) and NOTHING else in between: no speed, no rotation and no
+# 0x0029 precede the first follow (7/7), and no attack_started opens while a
+# follow is in flight (0 of the 4 multi-follow chases). The client's own
+# collision resolver stops the body at (r + r + 56)^2 from the named agent
+# (sec.38.2) -- 80 u for two 12 u radii, and all 6 of those NPCs carry
+# 0x41400000 = 12.0 in their 0x0020 -- and the chase ENDS on the wire with a
+# bare 0x0028 AGENT_STOP_MOVING [npc] p50 0.496 s after the last follow (5/7;
+# the other 2 end in a 0x0029 leash leg), the first attack_started npc->player
+# 0.14-0.38 s after that halt. Ours walked a 0x0029 to the player's POINT and
+# stopped at 150 u, so a hostile stood ~70 u further out than retail's ever
+# does and the operator saw it "attack from far away". OBSERVED, message
+# counts only, no dead-reckoning (studies/animref/FINDINGS.md sec.40; the
+# positive control is the retail-follow lane's own 45/6, reproduced exactly).
+# The swing REACH for a hostile is the player's own press-time reach,
+# ATTACK_REACH: the client carries no range table on either side (sec.38.4)
+# and the NPC's attack_started separation is instrument-limited on the tapes
+# -- symmetric BY ASSUMPTION, stated here, UNVERIFIED for hostiles.
+NPC_FOLLOW = True   # False (--legacy-npc-chase): 0x0029 to the point, 150 u.
 
 # AND IT TURNS TO FACE YOU. GAME_SMSG_AGENT_UPDATE_ROTATION (0x002E) has been
 # defined and documented in this file for days and never once sent: an absolute
@@ -10154,6 +10179,14 @@ def follow_stop_radius(target=None):
     exactly as the client's (rA + rB + 56)^2 would."""
     r_t = float((target or {}).get("radius", BOUNDING_RADIUS))
     return BOUNDING_RADIUS + r_t + FOLLOW_STOP_PAD
+
+
+def enemy_reach():
+    """How close a hostile must stand to swing, centre to centre: the
+    player's own derived press-time reach under NPC_FOLLOW (ANIMREF-RE 40,
+    symmetric by assumption -- see the constant), the invented 150 u on the
+    --legacy-npc-chase arm."""
+    return ATTACK_REACH if NPC_FOLLOW else ENEMY_MELEE_RANGE
 
 
 def _approach_abandon(state):
@@ -13800,7 +13833,11 @@ def enemy_attack_tick(send, state, conn_id):
         ax, ay = agent["pos"]
         # REACH, not notice. This read AGGRO_RANGE until the chase existed, which
         # let a rooted agent hit the player from 1200 units away.
-        if math.hypot(ax - px, ay - py) > ENEMY_MELEE_RANGE:
+        # ANIMREF-RE 40: and a hostile MID-FOLLOW does not swing -- retail opens
+        # no attack_started between the follows of a chase (0 of 4 multi-follow
+        # chases); the swing opens after the halt, on the tick the walk arrives.
+        if (math.hypot(ax - px, ay - py) > enemy_reach()
+                or (NPC_FOLLOW and agent.get("follow") is not None)):
             agent["swinging"] = False
             agent["swing_lands_at"] = None
             agent["cast_lands_at"] = None
@@ -14012,6 +14049,14 @@ def enemy_move_tick(send, state, conn_id):
     it cannot cross, so an agent meets a wall and waits rather than sliding through
     it. That is honest but it is not clever -- a hostile on the far side of a
     building will stand against the wall for as long as you stay there.
+
+    TWO SHAPES (ANIMREF-RE 40). Under NPC_FOLLOW the chase is retail's: a
+    0x002A naming the player, re-pathed on the half-second while they move,
+    parked by the client's own disc at 80 u and halted on the wire with a bare
+    0x0028 -- `_npc_follow_tick`, which this loop hands each hostile to. The
+    body below it is the legacy arm (--legacy-npc-chase): a 0x0029 to the
+    player's point, re-announced every ENEMY_DEST_RESEND, facing them every
+    tick, stopping at ENEMY_MELEE_RANGE.
     """
     player_pools(state)
     px, py = state.get("pos", (0.0, 0.0))
@@ -14022,6 +14067,7 @@ def enemy_move_tick(send, state, conn_id):
             continue
         if agent["dead"] or not agent.get("attacks_back"):
             agent["moving"] = False
+            agent["follow"] = None
             continue
         if agent.get("allegiance") != agents.ALLEGIANCE_HOSTILE:
             continue
@@ -14029,6 +14075,10 @@ def enemy_move_tick(send, state, conn_id):
             continue
         ax, ay = agent["pos"]
         dist = math.hypot(px - ax, py - ay)
+        if NPC_FOLLOW:
+            _npc_follow_tick(send, state, conn_id, agent_id, agent,
+                             (px, py), dist, now, pm)
+            continue
         chasing = (not state["player_dead"]
                    and ENEMY_MELEE_RANGE < dist <= AGGRO_RANGE)
         if not chasing:
@@ -14090,6 +14140,106 @@ def enemy_move_tick(send, state, conn_id):
             # the way, so a wall stops the agent instead of being walked through.
             nx, ny = pm.clip(ax, ay, nx, ny)
         agent["pos"] = (nx, ny)
+
+
+def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, pm):
+    """One hostile's chase, in retail's shape (ANIMREF-RE 40; NPC_FOLLOW).
+
+    A follow STARTS when the player is noticed (inside AGGRO_RANGE -- ours,
+    unchanged) and stands beyond the swing reach. It is one 0x002A naming the
+    player at the server's copy of their position, re-issued every
+    FOLLOW_REPATH_INTERVAL while that copy has moved by more than
+    FOLLOW_REPATH_MOVED since the last one, and nothing else on the wire: no
+    facing (the leg orients the body -- retail sends no 0x002E inside any of
+    its 7 chases), no 0x0029. The one thing kept from the legacy arm is the
+    speed message that opens the walk, because ENEMY_MOVE_RATE is ours and
+    the client would otherwise walk the leg at the 0x0020's declared base;
+    retail declares its hostiles' rates at spawn and sends nothing before the
+    first follow (7/7) -- a stated deviation, not a measured one.
+
+    The server's own copy walks toward the player at ENEMY_MOVE_RATE, clipped
+    by the pathmap, and PARKS at follow_stop_radius() = r + r + 56 = 80 u,
+    which is where the client's own resolver stops the body it is animating
+    (sec.38.2). Arrival is a bare 0x0028 AGENT_STOP_MOVING [npc] -- retail's
+    tick-cut halt, 5/7 chases, p50 0.496 s after the last follow; ours goes
+    out on the 50 ms tick the copy arrives, not on a half-second clock -- and
+    the attack tick, which runs right behind this one, opens the swing on the
+    same tick (retail: 0.14-0.38 s after its halt; that gap is unmodelled and
+    said so). A chase that ends for any other reason -- leash, the player's
+    corpse -- halts with the same message where the copy stands. While a
+    follow is in flight enemy_attack_tick refuses to swing (0 of 4 retail
+    multi-follow chases open one between follows); the swing reach itself is
+    enemy_reach().
+    """
+    px, py = player
+    ax, ay = agent["pos"]
+    fol = agent.get("follow")
+    plane = agent.get("plane", 0)
+
+    def _halt(why):
+        agent["follow"] = None
+        agent["moving"] = False
+        agent["moved_at"] = now
+        send(GAME_SMSG_AGENT_STOP_MOVING, agents.agent_stop_moving(agent_id),
+             f"agent {agent_id} halts at ({agent['pos'][0]:.0f},"
+             f"{agent['pos'][1]:.0f}): {why} [ANIMREF-RE 40]")
+
+    if state["player_dead"] or dist > AGGRO_RANGE:
+        if fol is not None:
+            _halt("the player is dead" if state["player_dead"]
+                  else f"{dist:.0f} u is past the {AGGRO_RANGE:.0f} u leash")
+        agent["moved_at"] = now
+        return
+    stop = follow_stop_radius(agent)
+    if fol is None:
+        if dist <= enemy_reach():
+            # In reach and standing: the attack tick's business, not a walk.
+            agent["moved_at"] = now
+            return
+        if not agent.get("moving"):
+            # The rate, once per walk. See the docstring: ours, kept.
+            agent["moving"] = True
+            send(GAME_SMSG_AGENT_UPDATE_SPEED,
+                 agents.agent_update_speed(agent_id, ENEMY_MOVE_RATE),
+                 f"agent {agent_id} speed {ENEMY_MOVE_RATE} "
+                 f"({ENEMY_MOVE_RATE * agents.DEFAULT_RUN_SPEED:.0f} u/s)")
+            print(f"[c{conn_id}] agent {agent_id} ({agent['name']}) follows "
+                  f"the player, {dist:.0f} u out, halts at {stop:.0f} u",
+                  flush=True)
+        agent["follow"] = {"told": (px, py), "sent_at": now, "t0": now}
+        # The first step is measured from here, not from before the walk
+        # was announced -- an agent cannot have travelled before it set off.
+        agent["moved_at"] = now
+        send(GAME_SMSG_AGENT_UPDATE_DESTINATION,
+             [agent_id, (float(px), float(py)), plane, plane, PLAYER_AGENT_ID],
+             f"FOLLOW: agent {agent_id} -> player at ({px:.0f},{py:.0f}), "
+             f"{dist:.0f} u out, halts at {stop:.0f} u [ANIMREF-RE 40]")
+        return
+    # A follow in flight. Re-path on the half-second while the player's copy
+    # moves; never while it stands (retail: 0 of 31 spontaneous re-paths on a
+    # standing target, sec.38.3).
+    moved = math.hypot(px - fol["told"][0], py - fol["told"][1])
+    if moved > FOLLOW_REPATH_MOVED and now - fol["sent_at"] >= FOLLOW_REPATH_INTERVAL:
+        fol["told"] = (px, py)
+        fol["sent_at"] = now
+        send(GAME_SMSG_AGENT_UPDATE_DESTINATION,
+             [agent_id, (float(px), float(py)), plane, plane, PLAYER_AGENT_ID],
+             f"FOLLOW re-path: agent {agent_id} -> player at ({px:.0f},{py:.0f}), "
+             f"{dist:.0f} u out [ANIMREF-RE 40]")
+    # Advance our own copy, capped so it parks at the disc rather than on top
+    # of the player -- the same arithmetic the legacy arm ran at 150 u.
+    elapsed = max(0.0, now - agent.get("moved_at", now))
+    agent["moved_at"] = now
+    step = min(ENEMY_MOVE_RATE * agents.DEFAULT_RUN_SPEED * elapsed, dist - stop)
+    if step > 0.0 and dist > 0.0:
+        nx = ax + (px - ax) / dist * step
+        ny = ay + (py - ay) / dist * step
+        if pm is not None:
+            nx, ny = pm.clip(ax, ay, nx, ny)
+        agent["pos"] = (nx, ny)
+        dist = math.hypot(px - nx, py - ny)
+    if dist <= stop + 1e-6:
+        _halt(f"arrived, {dist:.0f} u from the player")
 
 
 def start_swing(send, agent_id, conn_id):
@@ -21171,6 +21321,17 @@ def main():
                          "and retail's 0x002A follow to the target, "
                          "re-pathed every 0.5 s while it moves, the swing "
                          "opening when the body stops at r+r+56 = 80 u.")
+    ap.add_argument("--legacy-npc-chase", action="store_true",
+                    help="THE REVERT ARM for ANIMREF-RE 40: a hostile chases "
+                         "with a 0x0029 to the player's POINT, re-announced "
+                         "every 120 u, turning to face them every tick, and "
+                         "stops to swing at the invented 150 u. The default "
+                         "is retail's shape, read off 7 live chases: one "
+                         "0x002A NAMING the player at the server's copy of "
+                         "their position, re-pathed every 0.5 s while they "
+                         "move, no swing until the client's own disc parks "
+                         "the body at r+r+56 = 80 u, and a bare 0x0028 "
+                         "marking the halt.")
     ap.add_argument("--press-waits-for-leg", action="store_true",
                     help="THE REVERT ARM for ANIMREF-RE 39's first rule: "
                          "an attack press during a click-walk waits for "
@@ -22650,6 +22811,12 @@ def main():
               f"{ATTACK_RANGE:.0f} u again and no follow is sent -- the "
               "'attack from far away' arm (ANIMREF-RE 38's revert).",
               flush=True)
+    if a.legacy_npc_chase:
+        global NPC_FOLLOW
+        NPC_FOLLOW = False
+        print("[map] --legacy-npc-chase: hostiles walk a 0x0029 to the "
+              f"player's point and swing from {ENEMY_MELEE_RANGE:.0f} u "
+              "(ANIMREF-RE 40's revert).", flush=True)
     if a.press_waits_for_leg:
         global PRESS_SUPERSEDES_LEG
         PRESS_SUPERSEDES_LEG = False
