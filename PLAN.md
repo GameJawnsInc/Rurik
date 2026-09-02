@@ -1786,8 +1786,10 @@ emitter against the population, fix by derivation, tune never.
   chain survives" counted the absence of a close as survival. §37's wait was
   the defect. Revert one at a time: `--press-waits-for-leg`,
   `--move-keeps-target`, `--no-attack-approach`. `test_playerswing` §10, floor
-  96. Run: [SINGLECASE CASE 6](studies/animref/SINGLECASE.md), rewritten — three
-  questions, one flag each. CANDIDATE until it runs.
+  96. **CLOSED on the operator's run, 2026-09-02 14:06 ("all three worked as
+  intended")**: in-reach presses mid-walk swing at +32/+39 ms with one re-pin,
+  out-of-reach presses follow and swing on meeting, and 0 swings follow any of
+  six move commands before the next press (§39.6). Next: the NPC chase shape.
 * **NEXT: [studies/animref/RE-PLAN.md](studies/animref/RE-PLAN.md) — a CLIENT
   DIG, by owner's direction** ("a true reverse engineering approach rather
   than more guesswork"). Localised: the client sends its `0x003D` and the

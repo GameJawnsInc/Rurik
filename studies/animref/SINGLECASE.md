@@ -135,6 +135,9 @@ the Hatcher casting. Stand back and watch it; do not fight.
 
 ## CASE 6 — spacebar during a click-walk, and moving while attacking (ANIMREF-RE §39; supersedes the §37 version)
 
+> **RESULT 2026-09-02 14:06 — CLOSED.** *"all three worked as intended"* (arm A,
+> capture `authsrv-20260902T140659-c1`; the wire half is FINDINGS §39.6).
+
 > *"we're not supposed to wait to arrive before attacking. spacebar should
 > cancel the move and either run to the target to get in range or start
 > attacking immediately if they're already in range."* — operator, on the
