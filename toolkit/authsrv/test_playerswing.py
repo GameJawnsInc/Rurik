@@ -38,7 +38,10 @@ import checks  # noqa: E402
 # FLOOR 82 from the green run of 2026-09-02 that added section 9 (ANIMREF-RE
 # 38's reach and approach: 27 fixture-free checks driving the real attack_tick
 # with the flag forced on and restored), so 82 is the bare-machine number too.
-LEDGER = checks.Ledger("player swing windup", floor=82)
+# FLOOR 96 from the green run of 2026-09-02 that added section 10 (ANIMREF-RE
+# 39: the press supersedes the walk, a move ends the chain; 14 fixture-free
+# checks). 82 with section 9 alone.
+LEDGER = checks.Ledger("player swing windup", floor=96)
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -157,6 +160,12 @@ def section_lost_target():
     import authsrv
 
     print("\n3. an armed swing whose target is gone is dropped, silently")
+    # ANIMREF-RE 39: with the approach the DEFAULT, a target that walks out
+    # of reach is answered by retail's auto-chase (a 0x002A with no press,
+    # 16/24 chains on the live tapes) -- section 9 owns that. This section
+    # is about the swing's silent truncation, so it runs the no-approach arm.
+    saved_ap = authsrv.ATTACK_APPROACH
+    authsrv.ATTACK_APPROACH = False
     for name, wreck in (
             ("dies", lambda st: st["agents"][10].__setitem__("dead", True)),
             ("walks out of reach",
@@ -199,6 +208,7 @@ def section_lost_target():
     check(state["player_swing"] is None and sent == [],
           "and a dead player does not land the swing they were mid-way "
           "through", f"swing={state['player_swing']}, sent={sent!r}")
+    authsrv.ATTACK_APPROACH = saved_ap
 
 
 def section_direct_calls_unchanged():
@@ -949,10 +959,11 @@ def section_reach_and_approach():
         return [v for op, v, _l in sent if op == UP]
 
     # 9a. the constants and where they come from
-    check(authsrv.ATTACK_APPROACH is False,
-          "the approach ships DEFAULT OFF -- CASE 6 registered its predictions "
-          "against a server that does not supersede a click leg on a press; "
-          "CASE 7 runs the approach alone (29's lesson: one default per run)",
+    check(authsrv.ATTACK_APPROACH is True,
+          "the approach is the DEFAULT since ANIMREF-RE 39 (the operator on "
+          "CASE 6: 'spacebar should cancel the move and either run to the "
+          "target ... or start attacking immediately'); --no-attack-approach "
+          "is the 1500 u revert arm",
           f"ATTACK_APPROACH = {authsrv.ATTACK_APPROACH}")
     radius_on_wire = struct.unpack("<f", struct.pack("<I", 0x41400000))[0]
     check(radius_on_wire == authsrv.BOUNDING_RADIUS == 12.0,
@@ -983,16 +994,16 @@ def section_reach_and_approach():
           "the stop radius is inside the reach, so a follow that arrives is "
           "always in reach and the swing opens on arrival",
           f"{authsrv.follow_stop_radius({})} < {authsrv.ATTACK_REACH}")
-    check(authsrv.attack_reach() == authsrv.ATTACK_RANGE == 1500.0,
-          "REVERT ARM (the default today): the reach is still the old 1500 u, "
-          "so nothing changes for CASE 6",
-          f"attack_reach() = {authsrv.attack_reach()}")
-
     saved = authsrv.ATTACK_APPROACH
+    authsrv.ATTACK_APPROACH = False
+    check(authsrv.attack_reach() == authsrv.ATTACK_RANGE == 1500.0,
+          "REVERT ARM (--no-attack-approach): the reach is the old 1500 u and "
+          "no follow is sent",
+          f"attack_reach() = {authsrv.attack_reach()}")
     authsrv.ATTACK_APPROACH = True
     try:
         check(authsrv.attack_reach() == 144.0,
-              "under --attack-approach the reach is the derived 144 u",
+              "the shipped reach is the derived 144 u",
               f"attack_reach() = {authsrv.attack_reach()}")
 
         sent = []
@@ -1199,15 +1210,258 @@ def section_reach_and_approach():
     n_arms = src.count("_approach_abandon(state)   # ANIMREF-RE 38")
     n_all = (src.count("_approach_abandon(state)")
              - src.count("def _approach_abandon(state)"))   # the def is not a call
-    check(n_arms == 3 and n_all == 6,
+    check(n_arms == 3 and n_all == 8,
           "the 0x003D, 0x0047 and 0x003E arms each abandon the follow (3 "
-          "tagged sites), attack_tick's two target-loss branches do (2), and "
-          "approach_tick's retarget branch (1) -- 6 call sites, no more",
+          "tagged sites), attack_tick's two target-loss branches do (2), "
+          "approach_tick's retarget branch (1), and since ANIMREF-RE 39 a "
+          "move command (cancel_on_move) and the press that ends a click leg "
+          "(_press_supersedes) -- 8 call sites, no more",
           f"arms {n_arms}, all {n_all}")
     check(src.count('state["click_moving_at"] = now') == 1,
           "the follow stamps the latch once, with the tick's `now` -- not "
           "time.time(), which test_cancelwalk pins to the click arm alone",
           "source pin")
+
+
+def section_press_supersedes_and_move_ends():
+    """ANIMREF-RE 39: the operator on CASE 6, in two sentences.
+
+    "we're not supposed to wait to arrive before attacking. spacebar should
+    cancel the move and either run to the target to get in range or start
+    attacking immediately if they're already in range." -- and -- "once you
+    issue a move command you stop autoattacking."
+
+    Both are retail's contract. The first is 37.3's own reading (the press
+    supersedes the leg; the server drives the body), which 37.5 built as a
+    WAIT. The second is MEASURED on the live tapes (scratch chainmove.py):
+    of 28 consecutive same-target swing pairs with a player move command
+    between them, all 28 carry a re-press between the move and the next
+    swing, 0 chains resumed without one, 39 chains ended at a move with no
+    press. 31's "the chain survives a move" counted the absence of a wire
+    close as survival.
+
+    The press: a 0x0026 with a click leg in flight clears the latch and its
+    record, sends ONE 0x002C at the modelled body (the only message that
+    halts the client's segment without handing the body to a sync copy
+    parked at the leg's start), and lets the tick swing (in reach) or follow
+    (out of reach) that instant. The move: cancel_on_move forgets the target
+    on any move command; the swing in flight keeps 32's landing split.
+    """
+    import authsrv
+    import time as _t
+
+    print("\n10. ANIMREF-RE 39: the press supersedes the walk; a move ends "
+          "the chain")
+
+    UD = authsrv.GAME_SMSG_AGENT_UPDATE_DESTINATION
+    UP = authsrv.GAME_SMSG_AGENT_UPDATE_POSITION
+    STARTED = authsrv.agents.GV_ATTACK_STARTED
+    STOPPED = authsrv.agents.GV_ATTACK_STOPPED
+
+    def starts(sent):
+        return [v for op, v, _l in sent
+                if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
+                and v[0] == STARTED]
+
+    def stops(sent):
+        return [v for op, v, _l in sent
+                if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
+                and v[0] == STOPPED]
+
+    check(authsrv.PRESS_SUPERSEDES_LEG is True
+          and authsrv.MOVE_ENDS_CHAIN is True
+          and authsrv.ATTACK_APPROACH is True,
+          "all three are the SHIPPED default; --press-waits-for-leg, "
+          "--move-keeps-target and --no-attack-approach revert them one at a "
+          "time",
+          f"press={authsrv.PRESS_SUPERSEDES_LEG} move={authsrv.MOVE_ENDS_CHAIN} "
+          f"approach={authsrv.ATTACK_APPROACH}")
+
+    sent = []
+    send = lambda op, vals, label="", quiet=False: sent.append(
+        (op, vals, label))
+
+    def walking(target_xy, leg_len=500.0):
+        """A body 1.0 s into a click leg from (0,0) toward (leg_len, 0),
+        target at target_xy; the server's copy still at the leg's start."""
+        st = _state()
+        st["agents"][10]["pos"] = target_xy
+        st["pos"] = (0.0, 0.0)
+        st["client_pos"] = (0.0, 0.0)
+        st["plane"] = 0
+        t0 = _t.time() - 1.0
+        st["click_moving_at"] = t0
+        st["click_leg"] = authsrv._leg_record((0.0, 0.0), (leg_len, 0.0), t0,
+                                              288.0)
+        sent.clear()
+        return st
+
+    # 10a. IN REACH: a press mid-leg ends the leg, re-pins the body where the
+    # model puts it (288 u along), and the swing opens on the very next tick
+    st = walking((350.0, 0.0))
+    authsrv._press_supersedes(send, st, 0, 10)
+    authsrv.begin_attack(send, st, 10, 0)
+    repins = [v for op, v, _l in sent if op == UP]
+    check(st.get("click_moving_at") is None and st.get("click_leg") is None
+          and len(repins) == 1 and abs(repins[0][1][0] - 288.0) < 1.0
+          and abs(st["pos"][0] - 288.0) < 1.0,
+          "the press ENDS the click leg: latch and record cleared, ONE 0x002C "
+          "at the modelled body (1.0 s at 288 u/s = 288 u along), the "
+          "server's copy moved there",
+          f"latch {st.get('click_moving_at')}, repins {repins}, pos {st['pos']}")
+    sent.clear()
+    authsrv.attack_tick(send, st, 0)
+    check(len(starts(sent)) == 1 and not [v for op, v, _l in sent if op == UD],
+          "IN REACH (62 u from the re-pinned body): the swing opens on the "
+          "first tick, no follow -- 'start attacking immediately if they're "
+          "already in range'",
+          f"starts {len(starts(sent))}")
+
+    # 10b. OUT OF REACH: the same press, target 900 u out: re-pin, then the
+    # tick sends the follow from the re-pinned point and no swing yet
+    st = walking((900.0, 0.0))
+    authsrv._press_supersedes(send, st, 0, 10)
+    authsrv.begin_attack(send, st, 10, 0)
+    sent.clear()
+    authsrv.attack_tick(send, st, 0)
+    follows = [v for op, v, _l in sent if op == UD]
+    leg = st.get("click_leg")
+    check(follows == [[1, (900.0, 0.0), 0, 0, 10]] and starts(sent) == []
+          and leg is not None and abs(leg["p0"][0] - 288.0) < 1.0
+          and abs(leg["dist"] - (612.0 - 80.0)) < 1.0,
+          "OUT OF REACH: the follow goes out from the re-pinned body (612 u "
+          "to the target, 532 u to the stop), no swing until arrival -- "
+          "'run to the target to get in range'",
+          f"follows {follows}, leg {leg}")
+
+    # 10c. the revert arm: --press-waits-for-leg leaves the leg alone
+    saved = authsrv.PRESS_SUPERSEDES_LEG
+    authsrv.PRESS_SUPERSEDES_LEG = False
+    try:
+        st = walking((350.0, 0.0))
+        authsrv._press_supersedes(send, st, 0, 10)
+        check(st.get("click_moving_at") is not None and sent == [],
+              "REVERT ARM (--press-waits-for-leg): the press leaves the leg "
+              "in flight and sends nothing -- 37's wait",
+              f"latch {st.get('click_moving_at')}, sent {sent}")
+    finally:
+        authsrv.PRESS_SUPERSEDES_LEG = saved
+
+    # 10d. a press on the target our own follow is walking to is left alone
+    st = _state()
+    st["agents"][10]["pos"] = (900.0, 0.0)
+    st["pos"] = (0.0, 0.0)
+    st["client_pos"] = (0.0, 0.0)
+    st["plane"] = 0
+    authsrv.begin_attack(send, st, 10, 0)
+    authsrv.attack_tick(send, st, 0)        # starts the follow
+    t_follow = st["click_moving_at"]
+    sent.clear()
+    authsrv._press_supersedes(send, st, 0, 10)
+    check(st.get("click_moving_at") == t_follow and st.get("approach")
+          and sent == [],
+          "a repeat press on the target OUR follow is walking to leaves the "
+          "follow alone (retail re-paths rather than halts, 11/13)",
+          f"latch kept {st.get('click_moving_at') == t_follow}, sent {sent}")
+
+    # 10e. a parked body: the press sends nothing extra and the swing opens
+    st = _state()
+    st["agents"][10]["pos"] = (100.0, 0.0)
+    st["pos"] = (0.0, 0.0)
+    st["client_pos"] = (0.0, 0.0)
+    sent.clear()
+    authsrv._press_supersedes(send, st, 0, 10)
+    authsrv.begin_attack(send, st, 10, 0)
+    sent.clear()
+    authsrv.attack_tick(send, st, 0)
+    check(len(starts(sent)) == 1
+          and not [v for op, v, _l in sent if op == UP],
+          "a PARKED body gets no re-pin and swings at once -- the STOP-last "
+          "case that always worked",
+          f"starts {len(starts(sent))}")
+
+    # 10f. A MOVE ENDS THE CHAIN. Post-landing move: the target is forgotten,
+    # no close goes out (retail sends none: 87/100 moves carry no property
+    # 3), and nothing swings on the next tick.
+    st = _state()
+    st["agents"][10]["pos"] = (50.0, 0.0)
+    st["pos"] = (0.0, 0.0)
+    authsrv.begin_attack(send, st, 10, 0)
+    authsrv.attack_tick(send, st, 0)        # the swing opens
+    st["player_swing"]["lands_at"] = _t.time() - 0.01   # landed
+    sent.clear()
+    authsrv.cancel_on_move(send, st, 0)
+    check(st.get("attacking") is None and stops(sent) == [],
+          "POST-LANDING move: the target is FORGOTTEN and no attack_stopped "
+          "goes out -- retail's player re-presses (28/28), the wire carries "
+          "no close",
+          f"attacking {st.get('attacking')}, stops {stops(sent)}")
+    sent.clear()
+    for _ in range(3):
+        authsrv.attack_tick(send, st, 0)
+    check(starts(sent) == [],
+          "and the chain does NOT resume when the body stops: the next swing "
+          "needs a press ('once you issue a move command you stop "
+          "autoattacking')",
+          f"starts {starts(sent)}")
+
+    # 10g. pre-landing move: 32's split still holds -- the stop pair goes out
+    st = _state()
+    st["agents"][10]["pos"] = (50.0, 0.0)
+    st["pos"] = (0.0, 0.0)
+    authsrv.begin_attack(send, st, 10, 0)
+    authsrv.attack_tick(send, st, 0)
+    sent.clear()
+    authsrv.cancel_on_move(send, st, 0)
+    check(st.get("attacking") is None
+          and stops(sent) == [[STOPPED, PLAYER, 0]],
+          "PRE-LANDING move: the swing in flight is cancelled with the stop "
+          "pair and the target forgotten -- 32's landing split is untouched",
+          f"attacking {st.get('attacking')}, stops {stops(sent)}")
+
+    # 10h. a move ends OUR follow too
+    st = _state()
+    st["agents"][10]["pos"] = (900.0, 0.0)
+    st["pos"] = (0.0, 0.0)
+    st["client_pos"] = (0.0, 0.0)
+    authsrv.begin_attack(send, st, 10, 0)
+    authsrv.attack_tick(send, st, 0)
+    check(st.get("approach") is not None, "a follow is in flight", "")
+    sent.clear()
+    authsrv.cancel_on_move(send, st, 0)
+    check(st.get("approach") is None and st.get("dest") is None
+          and st.get("attacking") is None,
+          "a move command during the approach ends the follow, the copy's "
+          "walk and the order -- client steering wins (retail 11/15)",
+          f"approach {st.get('approach')}, dest {st.get('dest')}")
+
+    # 10i. the revert arm: --move-keeps-target restores 32's post-landing keep
+    saved = authsrv.MOVE_ENDS_CHAIN
+    authsrv.MOVE_ENDS_CHAIN = False
+    try:
+        st = _state()
+        st["agents"][10]["pos"] = (50.0, 0.0)
+        st["pos"] = (0.0, 0.0)
+        authsrv.begin_attack(send, st, 10, 0)
+        authsrv.attack_tick(send, st, 0)
+        st["player_swing"]["lands_at"] = _t.time() - 0.01
+        sent.clear()
+        authsrv.cancel_on_move(send, st, 0)
+        check(st.get("attacking") == 10,
+              "REVERT ARM (--move-keeps-target): a post-landing move keeps "
+              "the target, 32's shape",
+              f"attacking {st.get('attacking')}")
+    finally:
+        authsrv.MOVE_ENDS_CHAIN = saved
+
+    # 10j. source pin: the press arm calls the supersede BEFORE begin_attack
+    src = open(authsrv.__file__, encoding="utf-8").read()
+    i = src.find("_press_supersedes(send, state, conn_id, values[1])")
+    j = src.find("begin_attack(send, state, values[1], conn_id)")
+    check(i > 0 and j > i and j - i < 200,
+          "the 0x0026 arm supersedes the leg, then takes the order -- in that "
+          "order, adjacent",
+          f"offsets {i}, {j}")
 
 
 def main():
@@ -1223,6 +1477,7 @@ def main():
     section_click_latch_bound()
     section_click_leg_eta()
     section_reach_and_approach()
+    section_press_supersedes_and_move_ends()
     return LEDGER.verdict()
 
 

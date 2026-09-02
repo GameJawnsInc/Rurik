@@ -133,59 +133,93 @@ the Hatcher casting. Stand back and watch it; do not fight.
 
 ---
 
-## CASE 6 — spacebar after a click-walk (ANIMREF-RE §37; the open item since §36)
+## CASE 6 — spacebar during a click-walk, and moving while attacking (ANIMREF-RE §39; supersedes the §37 version)
 
-> **Q6a: click a spot two or three steps away, and as you arrive (or a beat
-> after) press spacebar with the Hatcher targeted. Does the swing start within
-> a beat of arriving? Arm A vs arm B.**
+> *"we're not supposed to wait to arrive before attacking. spacebar should
+> cancel the move and either run to the target to get in range or start
+> attacking immediately if they're already in range."* — operator, on the
+> first CASE 6 run, 2026-09-02.
 
-> **Q6b: click a spot FAR away — at least a four-second walk — and press
-> spacebar about three seconds into the walk. Arm A: does the swing wait until
-> you arrive? Arm B: does it fire while you are still walking?**
+> *"movement cancels attacks ... in stock game, once you issue a move command
+> you stop autoattacking."* — same run.
 
-Q6a is the operator's symptom (§36: click-last presses answered 60.6 % against
-~91 % for stop-last). Q6b is the question that separates the derived bound
-from *any* constant: every leg on the three scored captures was under 455 u, so
-those tapes cannot tell a 1.5 s constant from the leg time. A four-second walk
-can.
+Both are now the shipped default. The first is retail's contract as §37.3 read
+it and §37.5 got wrong (it built a wait); the second is measured on the live
+tapes (§39: 28 of 28 mid-chain moves are followed by a re-press before the
+next swing, none by a resumed chain, 39 chains end at a move). Three
+questions, three revert flags — one per behaviour, so a miss on one question
+names its own flag.
 
-**Arm A — as shipped (the latch ends when the leg does):**
+> **Q6a: click a spot two or three steps past the Hatcher, and while you are
+> still walking press spacebar with it targeted (it is in reach). Does the
+> walk stop and the swing start at once — and was there any jump or hitch at
+> the moment you pressed?**
+
+> **Q6b: click a spot far from the Hatcher (a good few seconds' walk) and
+> press spacebar a second or two into the walk with it targeted (it is out
+> of reach). Does your body abandon the click, turn, run to the Hatcher and
+> swing as it stops, without a jump?**
+
+> **Q6c: while auto-attacking the Hatcher, click somewhere or tap a movement
+> key. Does the auto-attack stop and STAY stopped until you press spacebar
+> again?**
+
+Q6a and Q6b are the press superseding the leg: the server re-pins your body
+where its model of the walk puts it (one `0x002C`, the only message that
+halts the client's segment without handing the body back to the walk's
+start) and then swings or follows. On open ground the re-pin lands within a
+few units of where you are; a bent path shows as a visible correction at the
+press, and its size is what to report. Q6c is the move rule.
+
+**Arm A — as shipped (all three rules on):**
 
 ```powershell
 python toolkit/harness/session.py --enemy --hold 120 --game-args "--map 146 --explorable --no-enemy-skills --enemy-hit 0.02 --skills 0,0,0,0,0,0,0,0"
 ```
 
-**Arm B — the same run with §34's 3.0 s constant back:**
+**Arm B — the run you already did, for the record (all three reverted):**
 
 ```powershell
-python toolkit/harness/session.py --enemy --hold 120 --game-args "--map 146 --explorable --no-enemy-skills --enemy-hit 0.02 --skills 0,0,0,0,0,0,0,0 --click-latch-window"
+python toolkit/harness/session.py --enemy --hold 120 --game-args "--map 146 --explorable --no-enemy-skills --enemy-hit 0.02 --skills 0,0,0,0,0,0,0,0 --press-waits-for-leg --move-keeps-target --no-attack-approach"
 ```
 
-**Do, in each arm:** Q6a three or four times (short click, spacebar on
-arrival), then Q6b twice (long click, spacebar mid-walk). Nothing else.
+Arm B is optional — it is the behaviour you refused, and its capture
+(`authsrv-20260902T...`) already exists if you ran it. If arm A misses on one
+question, the flag for that question alone is the next run:
+`--press-waits-for-leg` (Q6a/Q6b), `--no-attack-approach` (Q6b),
+`--move-keeps-target` (Q6c).
 
-**Answer two lines:** Q6a *"A fires on arrival / A still waits / no
-difference"*; Q6b *"A waits until arrival and B fires mid-walk / both wait /
-both fire mid-walk"*.
+**Do, in arm A:** Q6a twice, Q6b twice, Q6c twice (once with a click, once
+with a key). Nothing else. The Hatcher chases you and nibbles; that is fine.
 
-**Registered predictions, written before the run:** A answers Q6a on
-arrival (the retrodiction says every one of the 13 starved presses on the
-14:32 capture opens under this bound) and waits on Q6b until the body stops;
-B reproduces the §36 deficit on Q6a and fires mid-walk on Q6b at the 3.0 s
-mark. **If A still waits on Q6a**, the leg model's start or speed is wrong for
-your click and the capture will show it — score it with
+**Answer three lines:** Q6a *"stops and swings at once, no jump / swings but
+jumped roughly N steps / kept walking / did nothing"*; Q6b *"runs to it and
+swings on stopping, no jump / jumped at the press / kept walking the click /
+did nothing"*; Q6c *"stops and stays stopped / stops then resumes on its own
+/ keeps attacking"*.
+
+**Registered predictions, written before the run:** Q6a — the walk stops
+where you are and the swing opens within a beat, no visible jump on open
+ground. Q6b — the click is abandoned at the press, the body runs to the
+Hatcher and the swing opens as it stops about 80 u out, no jump; if the
+Hatcher is walking toward you the follow re-paths every half second and the
+two of you meet. Q6c — the auto-attack ends at the move and does not resume;
+the swing already in flight lands if it was past its landing and is cut if
+not (§32's split, unchanged). **If a jump shows on Q6a or Q6b**, the leg
+model's end is off by that much for that click — the capture holds the
+`PRESS ENDS THE WALK` re-pin and your next report, and the distance between
+them is the number.
+
+The wire half I score from the capture:
 
 ```powershell
-python toolkit/authsrv/pressscore.py
+python toolkit/authsrv/animgrammar.py --diff --after <stamp>
 ```
 
-which prints, for the newest capture, every press with its last input, the
-modelled leg, the latency to the swing, and which gate refused each tick.
-**If A fires mid-walk on Q6b**, the straight-line leg is shorter than the path
-the client took (a bend) — the error the model states, and the size of it is
-the number to bring back.
+`pressscore.py` reads the per-press table on these captures but refuses its
+fork table: its replay transcribes the §37 rules, and says so.
 
-## CASE 7 — the walk-to-and-attack approach (ANIMREF-RE §38; run AFTER CASE 6)
+## CASE 7 — the walk-to-and-attack approach, on its own (ANIMREF-RE §38; CASE 6's Q6b covers it too)
 
 > **Q7a: stand three or four steps from the Hatcher — clearly farther than a
 > weapon's reach — and press spacebar. Arm A: does your body walk to it and
@@ -210,16 +244,16 @@ that lands within a few units of where you stand; a bent path shows as a
 visible correction, and its size is what to report. Q7c is the control:
 nothing inside reach changed.
 
-**Arm A — `--attack-approach` (the candidate):**
-
-```powershell
-python toolkit/harness/session.py --enemy --hold 120 --game-args "--map 146 --explorable --no-enemy-skills --enemy-hit 0.02 --skills 0,0,0,0,0,0,0,0 --attack-approach"
-```
-
-**Arm B — today's default (the 1500 u reach, no approach):**
+**Arm A — as shipped (the approach is the default since §39):**
 
 ```powershell
 python toolkit/harness/session.py --enemy --hold 120 --game-args "--map 146 --explorable --no-enemy-skills --enemy-hit 0.02 --skills 0,0,0,0,0,0,0,0"
+```
+
+**Arm B — `--no-attack-approach` (the 1500 u reach, no follow):**
+
+```powershell
+python toolkit/harness/session.py --enemy --hold 120 --game-args "--map 146 --explorable --no-enemy-skills --enemy-hit 0.02 --skills 0,0,0,0,0,0,0,0 --no-attack-approach"
 ```
 
 **Do, in each arm:** Q7a twice, Q7b twice, Q7c once. Nothing else. Note the

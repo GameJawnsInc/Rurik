@@ -8959,7 +8959,31 @@ FOLLOW_REPATH_MOVED = 1.0      # u. A target that has not moved gets no re-path.
 # the wrong arm for the question CASE 6 asks. sec.29's lesson: two defaults
 # in one run convict the pair and clear neither. CASE 7 runs this alone;
 # when CASE 6 has answered, this flips to True and ATTACK_RANGE retires.
-ATTACK_APPROACH = False    # True (--attack-approach): reach 144 + the follow.
+ATTACK_APPROACH = True     # False (--no-attack-approach): the 1500 u arm.
+# ANIMREF-RE 39 -- the operator, running CASE 6: "we're not supposed to wait
+# to arrive before attacking. spacebar should cancel the move and either run
+# to the target to get in range or start attacking immediately if they're
+# already in range." That is retail's contract as sec.37.3 read it (the
+# press supersedes the leg; the server drives the body), and sec.37.5 built
+# the wait instead. PRESS_SUPERSEDES_LEG: a 0x0026 arriving while a click
+# leg is in flight (or silently arrived) ENDS the leg -- the latch and its
+# record are cleared, a 0x002C at the modelled body position halts the
+# client's segment where the model says the body is (0x002C lands both
+# copies on its point and zeroes m_timeStopMovement, p5-resync-disarm
+# sec.1), and the tick then swings (in reach) or follows (out of reach).
+PRESS_SUPERSEDES_LEG = True   # False (--press-waits-for-leg): sec.37's wait.
+# And: "once you issue a move command you stop autoattacking". MEASURED on
+# the live tapes, 2026-09-02 (scratch chainmove.py): of 28 consecutive same-
+# target swing pairs with a player move command between them, ALL 28 carry a
+# re-press between the move and the next swing; 0 chains resumed without one;
+# 39 chains ended at a move with no press. sec.31's "the chain survives a
+# move" (87 of 100 moves carry no property 3) counted the ABSENCE OF A CLOSE
+# as survival; retail closes nothing on the wire and the player presses again.
+# MOVE_ENDS_CHAIN: any player move command forgets the target; the swing in
+# flight still follows sec.32's split (pre-landing: the stop pair; post-
+# landing: it lands). The chain pause (sec.31) keeps its one remaining job,
+# holding the swing through the approach's own follow leg.
+MOVE_ENDS_CHAIN = True        # False (--move-keeps-target): sec.32's keep.
 
 # THE OTHER HALF OF R4a: something swings back. Until 2026-08-11 every combat
 # message this server sent flowed one way -- the player hit things and nothing
@@ -9622,8 +9646,20 @@ def cancel_on_move(send, state, conn_id):
     # chain ends -- so a pre-landing move forgets the target exactly as the
     # legacy door always did. A post-landing move keeps it, which is what
     # lets the chain resume when the player stops.
-    if state.get("attacking") and (pre_landing or not MOVE_KEEPS_CHAIN):
+    # ANIMREF-RE 39: NOT the same split any more. Retail's player re-presses
+    # after every mid-chain move (28 of 28 pairs; 39 chains end at a move
+    # with no press); the target is forgotten on ANY move command, and only
+    # the swing in flight keeps the landing split above. --move-keeps-target
+    # restores the post-landing keep.
+    if state.get("attacking") and (pre_landing or MOVE_ENDS_CHAIN
+                                   or not MOVE_KEEPS_CHAIN):
         state["attacking"] = None
+    if MOVE_ENDS_CHAIN:
+        # A move command ends OUR follow too -- the client's steering wins
+        # on retail (the 0x002A is replaced by the server's projection of
+        # the 0x003D, 11/15 chains withheld). The arms clear the latch;
+        # this forgets the follow record and the copy's walk.
+        _approach_abandon(state)
     dropped = _mark_cancelled(state, "movement", now, spare_mid_attack=True)
     for cast in state.get("pending_casts") or ():
         if cast.get("cancelled") == "movement" and not cast.get("released"):
@@ -10212,6 +10248,68 @@ def _approach_send(send, state, conn_id, target_id, agent, now, repath=False):
         print(f"[c{conn_id}] approach: player walks to agent {target_id} "
               f"({agent.get('name', '?')}), {dist:.0f} u out, swing at "
               f"{stop:.0f} u in {leg['eta'] - now:.2f} s", flush=True)
+
+
+def _press_supersedes(send, state, conn_id, target_id):
+    """A 0x0026 while the body is on a leg it walks silently: END the leg.
+
+    ANIMREF-RE 39. Retail's server never waits for a click leg: the press is
+    answered within ~40 ms by the swing (in reach) or a 0x002A follow (out
+    of reach), whatever the body was doing (sec.37.3: 7/7 CLICK-last free
+    presses, 20/23 WASD-in-motion presses re-pathed within 150 ms). Ours
+    held the swing until the modelled leg ended (sec.37.5) -- the operator:
+    "spacebar should cancel the move".
+
+    What the client does at the press (sec.37.2, OBSERVED): clears its
+    queued waypoints and the AgTrack record, and keeps walking the segment
+    it is on. Nothing stops that segment but a server message, and the one
+    that stops it WITHOUT a snap is 0x002C at the body's own position:
+    both copies land on the point and m_timeStopMovement goes to 0. A
+    0x0028 would halt the SYNC copy where our grants left it -- the leg's
+    START under --grant-suppress -- and hand the body back there (the
+    cast-stop site's own warning). So: model the body (sec.37's leg record,
+    10 of 10 post-click reports within 3.5 u of its end on open ground),
+    re-pin there, forget the leg. The tick then opens the swing this
+    instant (in reach) or sends the follow from the re-pinned point (out of
+    reach; approach_tick). A bent path shows as a visible correction of the
+    residual at the press, and its size is the number a run brings back.
+
+    A press on the target our own follow is already walking to is left
+    alone: retail answers it with a re-path, not a halt (11/13), and the
+    follow leg is the server's own, not a click.
+    """
+    if not PRESS_SUPERSEDES_LEG:
+        return
+    if state.get("click_moving_at") is None:
+        return                      # parked, or the keyboard regime
+    ap = state.get("approach")
+    if ap is not None and ap.get("target") == target_id \
+            and ap.get("t0") == state.get("click_moving_at"):
+        return                      # our follow to this target: keep it
+    now = time.time()
+    model = _click_leg_start(state, now, silent=True)
+    state["click_moving_at"] = None
+    state["click_leg"] = None
+    _approach_abandon(state)
+    if model is None:
+        return
+    plane = int(state.get("plane", 0))
+    send(GAME_SMSG_AGENT_UPDATE_POSITION,
+         [PLAYER_AGENT_ID, [float(model[0]), float(model[1])], plane],
+         f"PRESS ENDS THE WALK: 0x002C at the modelled body "
+         f"({model[0]:.0f},{model[1]:.0f}) plane {plane} -- the click leg "
+         f"is superseded, the swing or the follow comes next "
+         f"[ANIMREF-RE 39]")
+    state["pos"] = (float(model[0]), float(model[1]))
+    # A 0x002C is a PLACEMENT -- both copies land on its point -- so the
+    # belief the approach's own snap guard reads (client_pos, the last
+    # report) follows it too; left stale at the leg's start it would out-vote
+    # the re-pin and send the body back there.
+    state["client_pos"] = (float(model[0]), float(model[1]))
+    state["client_pos_at"] = now
+    print(f"[c{conn_id}] press supersedes the click leg: body re-pinned at "
+          f"({model[0]:.0f},{model[1]:.0f}); attacking agent {target_id}",
+          flush=True)
 
 
 def approach_tick(send, state, conn_id, target_id, agent, now):
@@ -16947,6 +17045,12 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # 0x0033 IS NOW DEAD ON OUR WIRE and is kept anyway --
                         # see its constant for the 0-of-17,770 measurement and
                         # for why deleting it would destroy the evidence.
+                        #
+                        # ANIMREF-RE 39: the press ENDS a click leg in
+                        # flight before the order is taken -- the swing
+                        # (in reach) or the follow (out of reach) is the
+                        # tick's next act, not the leg's arrival.
+                        _press_supersedes(send, state, conn_id, values[1])
                         begin_attack(send, state, values[1], conn_id)
                     elif opcode == GAME_CMSG_INTERACT_AGENT:
                         # "I clicked that agent meaning to interact with it" --
@@ -21055,18 +21159,33 @@ def main():
                          "capture), and a press 3 s into a long click opens "
                          "a swing on a body still walking.")
     ap.add_argument("--attack-approach", action="store_true",
-                    help="ANIMREF-RE 38: the press-time reach becomes the "
-                         "derived 144 u (retail accepts a standing press "
-                         "at <= 82.7 u Sword / 109.7 u Daggers and refuses "
-                         "146.3 / 205.5; 1500 was never measured), and a "
-                         "press from farther away is answered as retail "
-                         "answers it: a 0x002A follow to the target's own "
-                         "position, re-pathed every 0.5 s while it moves, "
-                         "the swing opening when the body stops at "
-                         "r+r+56 = 80 u (the client's own collision "
-                         "stop). Default OFF only until SINGLECASE CASE 6 "
-                         "has answered on the unsuperseded click leg; "
-                         "CASE 7 runs this alone.")
+                    help="No-op since ANIMREF-RE 39: the approach is the "
+                         "default. Kept so the CASE 7 command line still "
+                         "parses.")
+    ap.add_argument("--no-attack-approach", action="store_true",
+                    help="THE REVERT ARM for ANIMREF-RE 38: the press-time "
+                         "reach back to the unmeasured 1500 u and no "
+                         "follow -- a press from anywhere swings from where "
+                         "you stand (the operator's 'i can attack from far "
+                         "away'). The default is the derived 144 u reach "
+                         "and retail's 0x002A follow to the target, "
+                         "re-pathed every 0.5 s while it moves, the swing "
+                         "opening when the body stops at r+r+56 = 80 u.")
+    ap.add_argument("--press-waits-for-leg", action="store_true",
+                    help="THE REVERT ARM for ANIMREF-RE 39's first rule: "
+                         "an attack press during a click-walk waits for "
+                         "the modelled leg to end (37's shape) instead of "
+                         "ending it -- the behaviour the operator refused "
+                         "on CASE 6.")
+    ap.add_argument("--move-keeps-target", action="store_true",
+                    help="THE REVERT ARM for ANIMREF-RE 39's second rule: "
+                         "a post-landing move keeps the attack target and "
+                         "the chain resumes when the body stops (32's "
+                         "shape). The default forgets the target on ANY "
+                         "move command, as retail's player does: 28 of 28 "
+                         "mid-chain moves on the live tapes are followed by "
+                         "a re-press before the next swing, none by a "
+                         "resumed chain.")
     ap.add_argument("--no-landing-hold-release", action="store_true",
                     help="THE REVERT ARM for ANIMREF-RE 33's one behaviour "
                          "change: keep the property-8 action hold set past "
@@ -22521,13 +22640,29 @@ def main():
               "after-click deficit (CLICK-last presses answered 60.6% "
               "against ~91% for STOP-last).", flush=True)
     if a.attack_approach:
+        print("[map] --attack-approach: no-op, the approach is the default "
+              "since ANIMREF-RE 39 (--no-attack-approach reverts it).",
+              flush=True)
+    if a.no_attack_approach:
         global ATTACK_APPROACH
-        ATTACK_APPROACH = True
-        print("[map] --attack-approach: a press opens the swing from "
-              f"{ATTACK_REACH:.0f} u (not {ATTACK_RANGE:.0f}); farther out "
-              "the server sends a 0x002A follow to the target and the swing "
-              f"opens when the body stops at {follow_stop_radius():.0f} u. "
-              "ANIMREF-RE 38; CASE 7 is its run.", flush=True)
+        ATTACK_APPROACH = False
+        print("[map] --no-attack-approach: a press opens the swing from "
+              f"{ATTACK_RANGE:.0f} u again and no follow is sent -- the "
+              "'attack from far away' arm (ANIMREF-RE 38's revert).",
+              flush=True)
+    if a.press_waits_for_leg:
+        global PRESS_SUPERSEDES_LEG
+        PRESS_SUPERSEDES_LEG = False
+        print("[map] --press-waits-for-leg: an attack press during a click-"
+              "walk waits for the modelled leg to end (ANIMREF-RE 37's "
+              "shape, refused by the operator on CASE 6).", flush=True)
+    if a.move_keeps_target:
+        global MOVE_ENDS_CHAIN
+        MOVE_ENDS_CHAIN = False
+        print("[map] --move-keeps-target: a post-landing move keeps the "
+              "attack target and the chain resumes when the body stops "
+              "(ANIMREF-RE 32's shape; retail's player re-presses instead, "
+              "28 of 28).", flush=True)
     if a.no_landing_hold_release:
         global LANDING_HOLD_RELEASE
         LANDING_HOLD_RELEASE = False

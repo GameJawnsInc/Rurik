@@ -436,15 +436,24 @@ def score(flags, evs, spawns, mode=None, speed=DEFAULT_SPEED,
     # positions here are spawns). Its per-press table still reads; its forks
     # are refused, said in so many words rather than left to the control.
     approach = bool(flags.get("ATTACK_APPROACH"))
+    # ANIMREF-RE 39 changed the rules this replay transcribes: the press ends
+    # a click leg (PRESS_SUPERSEDES_LEG) and a move forgets the target
+    # (MOVE_ENDS_CHAIN). A capture whose flags carry either key was produced
+    # by rules this file does not model; its forks are refused the same way.
+    new_rules = bool(flags.get("PRESS_SUPERSEDES_LEG"))         or bool(flags.get("MOVE_ENDS_CHAIN"))
     res["approach"] = approach
+    res["new_rules"] = new_rules
     control_ok = (m_started == len(wire_started) == len(rep_started)
-                  and not approach)
-    if approach:
-        say("  ATTACK_APPROACH was ON for this capture (ANIMREF-RE 38): the "
-            "replay does not transcribe the follow leg, the re-pin or the "
-            "target's chase, so the forks below are REFUSED as evidence. Read "
-            "the APPROACH / APPROACH RE-PIN labels on the wire and the "
-            "per-press table instead.")
+                  and not approach and not new_rules)
+    if approach or new_rules:
+        say("  This capture ran rules this replay does not transcribe ("
+            + ", ".join(k for k in ("ATTACK_APPROACH", "PRESS_SUPERSEDES_LEG",
+                                     "MOVE_ENDS_CHAIN") if flags.get(k))
+            + "; ANIMREF-RE 38/39): the follow leg, the press ending a click "
+            "leg, a move forgetting the target, the re-pin and the target's "
+            "chase are not modelled, so the forks below are REFUSED as "
+            "evidence. Read the APPROACH / PRESS ENDS THE WALK labels on the "
+            "wire and the per-press table instead.")
     say(f"  REPLAY CONTROL: attack_started replayed {len(rep_started)} vs "
         f"wire {len(wire_started)}, matched within 0.12 s: {m_started}; "
         f"attack_stopped replayed {len(rep_stopped)} vs wire "

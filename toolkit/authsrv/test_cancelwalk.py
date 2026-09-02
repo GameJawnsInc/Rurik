@@ -812,12 +812,14 @@ def section_cast_stop():
           "branch), consulted once -- with the gate deleted the bare "
           "0x0028 returns and F34's 167.6 u parked-body warp with it")
     check(src.count('state["click_moving_at"] = time.time()') == 1
-          and src.count('state["click_moving_at"] = None') == 2
+          and src.count('state["click_moving_at"] = None') == 3
           and src.count('_cs_click = state.get("click_moving_at")') == 1
           and "pin:click-walk" in src,
           "B1's latch is wired where the review said it must be: armed "
-          "in ONE place (the 0x003E arm, every click), cleared in TWO "
-          "(the 0x003D and 0x0047 arms -- the client speaking again), "
+          "in ONE place (the 0x003E arm, every click), cleared in THREE "
+          "(the 0x003D and 0x0047 arms -- the client speaking again -- and "
+          "since ANIMREF-RE 39 the attack press, which ENDS the leg it "
+          "finds in flight: _press_supersedes), "
           "and the send site consults it before EITHER arm, printing the "
           "click-walk label the capture scores")
     check(src.count("_cs_mode, _cs_why, _cs_refusal = resolve_cast_stop_default(") == 1

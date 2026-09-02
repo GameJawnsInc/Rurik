@@ -9469,7 +9469,18 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   at 60 u, a leftover follow naming another target is abandoned, and source
   pins count the six `_approach_abandon` call sites (minus the `def` — the
   substring trap, caught on the first run).
-  Floor 42 → 55 → 82; §6–§9 are fixture-free so 82 is the bare-machine number),
+  **§10 (§39)** is the operator's CASE 6 verdict as 14 checks: a press 1.0 s into
+  a click leg clears the latch and its record, re-pins the body once at the
+  modelled point (`0x002C`), and the next tick swings (target in reach) or
+  follows from the re-pinned point (out of reach); `--press-waits-for-leg` leaves
+  the leg alone; a repeat press on our own follow's target is left alone; a
+  parked body gets no re-pin; a post-landing move forgets the target with no
+  close and the chain does NOT resume over three ticks (retail's player
+  re-presses, 28/28); a pre-landing move still sends the stop pair; a move ends
+  the follow; `--move-keeps-target` restores §32's keep; the press arm calls the
+  supersede before `begin_attack`. §3 now runs the no-approach arm (retail
+  auto-chases a target that walks out, §9's territory).
+  Floor 42 → 55 → 82 → 96; §6–§10 are fixture-free so 96 is the bare-machine number),
   `toolkit/authsrv/test_castcancel.py` (movement cancels the cast, and the
   contract is the wiki's expressed as wire SILENCE: the connection thread
   MARKS (`cancel_on_move`) and sends only the movement's own `[8 → 0]` hold
