@@ -3647,6 +3647,34 @@ what that looks like on screen is not known); the re-pin's residual on a bent
 path is the number CASE 6 brings back; and the NPC chase shape (§38.7) is still
 next.
 
+### 39.6 CLOSED on the operator's run — 2026-09-02, capture `authsrv-20260902T140659-c1`
+
+> *"all three worked as intended"* — operator, after CASE 6 on arm A.
+
+The wire half, scored from that capture (5 presses, 7 clicks, 10 player swings;
+the Hatcher chasing and nibbling throughout):
+
+| press | last input | age | what went out | first swing |
+|---|---|---|---|---|
+| Q6a #1 | CLICK, mid-leg | 0.32 s | one `0x002C` re-pin, no follow | **+0.032 s** |
+| Q6a #2 | CLICK, mid-leg | 0.30 s | one re-pin, no follow | **+0.039 s** |
+| Q6b #1 | CLICK, mid-leg, target 922 u out | 0.23 s | re-pin, follow, three re-paths as the Hatcher closed (679, 425, 172 u) | +1.90 s, at the meeting |
+| Q6b #2 | CLICK, target 381 u out | 1.08 s | re-pin, follow, one re-path (138 u) | +0.74 s |
+| control | STOP, parked | 0.82 s | nothing extra | +0.036 s |
+
+The in-reach presses open at 32–39 ms — retail's own 29–45 ms cell (§37.3).
+**Q6c: six move commands after a swing (three clicks, three key presses), and the
+player swung 0 times between each move and the next press, over windows of 0.3
+to 8.6 s**; the stop pair went out on the two pre-landing moves and on none of
+the four post-landing ones — §32's split, as shipped. No AgTrack re-pin fired.
+The re-pin's residual is not measurable from this capture (the client reported
+nothing between the re-pin and the next walk), so the "no jump" is the
+operator's screen, which is the instrument that matters here.
+
+**Status: CLOSED.** The two rules are the operator's specification, the tapes'
+corroboration and the run's confirmation, in that order. What remains open is
+listed in §39.5 and §38.7.
+
 ## Provenance
 
 All figures are measurements over the owner's own live captures via extractors in this
