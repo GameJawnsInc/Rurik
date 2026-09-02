@@ -3208,6 +3208,275 @@ CORROBORATED; retail's supersede-and-drive contract OBSERVED on arrived clicks,
 UNVERIFIED on in-flight clicks (zero trials); the leg model RECONSTRUCTION with
 its speed and start latency UNVERIFIED; the fix a CANDIDATE until CASE 6.
 
+## 38. THE REACH IS TWO NUMBERS AND THE APPROACH IS DECODED — item 3 and item 4 of §36.6, built behind a flag, waiting on CASE 6 and CASE 7
+
+> *"i can also attack from far away."* — operator, §36. This section is items 3
+> and 4 of §36.6 and nothing else. It ships a **candidate behind a flag**; §37's
+> CASE 6 is still unanswered and this must not change what that run measures.
+
+### 38.1 What was asked, and how it was answered
+
+§36.4 left `ATTACK_RANGE = 1500.0` with its own comment — *"ours entirely;
+nothing measured it"* — and §37.7 seeded it: retail opens the swing at R ≈ 74–81 u
+after an approach and needs a `0x002A` follow first from ≥ 205 u. Two workflows,
+four lanes, seven skeptics (an eighth died on a usage limit and was re-run):
+the client side of `0x002A`'s fifth field and the stop-at-reach it keys; retail's
+follow contract end to end on the live tapes; the client's range constants and
+agent radius, static; and the per-weapon reach bracket on the tapes. **Two of the
+four lanes were refuted by their skeptics on their headline** — one had reported
+a constant NOT FOUND that sits in `.rdata`, the other read the approach's end
+distance as the reach — and the corrections are what this section is built on.
+
+### 38.2 The client, read: `0x002A` names a destination AGENT, and the body stops itself at r + r + 56
+
+**`agent+0x98` is the id of the agent a move is directed at.** The `0x002A`
+handler `0x005FD930` passes `[msg+0x18]` — the fifth wire field — as the shared
+setter `0x00602A40`'s third argument, which lands in `+0x98` (`0x00602AA8`,
+`AgAgent.cpp:2334`); the `0x0029` handler `0x005FD890` passes **0** in the same
+slot. **So a `0x0029` after a `0x002A` CLEARS the follow** — §35.5's open decode,
+answered by the two handlers' arguments. The ctor seeds `+0x98` from
+`WORLD_CREATE_AGENT` field 21 (0 in 5,117 of 5,122 retail creates; the five
+non-zero rows are agents created mid-follow), the teleport `0x006020B0` zeroes it.
+All 11 in-module sites mapped, two skeptics re-decoded them byte for byte. The
+name "destination agent" is RECONSTRUCTION — no assert names the field.
+
+**The stop-at-reach.** In the collision resolver `0x006011F0`
+(`AgAgent.cpp:1656`), per neighbour inside a ±60° forward cone
+(`fcomp [0x009458BC] = 0.5`, a cosine — the skeptic upgraded `0x0046E530` from
+"inferred rsqrt" to a table-driven reciprocal square root) and not separating,
+with both agents' `m_flags` bit 0 set and the follower moving (`+0x48 ≠ 0`):
+`R² = 0x005FED20(other, this)`, and when `d² ≤ R²` **and the neighbour is the
+agent in `+0x98`** (`0x006017CB cmp ebx,[esi+0x98]`) the resolver posts a kind-5
+arrival and **teleports the body in place** (`0x006020B0`: velocity 0,
+`m_targetPoint` ← +INF, `+0x48` ← 0, `+0x98` ← 0). `0x005FED20` for same-def,
+different-team pairs is `(rA + rB + pad)²` with `pad = context->def[agentDef]
++0x20`; **the pad is `56.0f` at `0x00A52D60`**, written for every registered def
+by AgApi `0x005FC290` (`AgApi.cpp:328–329` name `agentDef`; five callers register
+defs 1–5, all with the same 56). The index `+0x1C` is `agentDef`, seeded from
+`0x0020` field 3 — **1 for every player and creature on retail's wire** (1,193 +
+3,037 rows), 2/3/4 for gadgets and items, which take the no-pad arm `(rA + rB)²`.
+Radii `+0xD0` come from field 11 (12.0 for the player and every creature the
+tapes' players attacked; 128 of 3,037 creature rows carry 42/52/10/1). **So a
+player following a creature stops at 12 + 12 + 56 = 80 u centre to centre**, and
+a radius-42 model would stop at 110 — a prediction nobody has run. OBSERVED
+(static, two independent decoders; the pad's writer was the reach lane's NOT
+FOUND, found by both its skeptics with a bounded SIB-form scan). Two limits the
+skeptics added: the cone test is unordered at `|v| = 0`, so **a follower already
+standing cannot self-stop** — a server that names a target without a leg gets no
+client stop; and the `0x002A` handler writes the SYNC copy, so the rendered copy
+stops through the AgTrack handoff (§37.2), not at the setter.
+
+**No local chase.** `SyncFrom 0x006022B0` (`AgAgent.cpp:2147`) and
+`SetMaxSpeed 0x00602910` (`:2317`, the `0x0027` handler's callee — the schema does
+carry `0x0027` as `[hdr, agent, float]`, entry "39"; the lane's "OpenTyria gap"
+was a table-number slip) re-issue the **stored** coordinate and only preserve
+`+0x98`; nothing reads `+0x98` to fetch the followed agent's current position.
+The client tracks a moving target only through the velocity extrapolation inside
+the reach test. **The server's re-path is the contract, not an optimisation.**
+
+### 38.3 Retail, read: the follow's destination, cadence and end
+
+20 live captures, 16 with game connections, 61 connections, 267 presses; the
+positive control (§35.3's 61/7/60) reproduces as 62/7/61 from three independent
+scanners. On the 61 follows that name the press target:
+
+| what | OBSERVED |
+|---|---|
+| destination | the target's **current** position — bit-exact on 16/16 never-moved targets; on moved targets the dest advances at the target's own speed (25 pairs, p50 285 u/s) |
+| latency | p50 37.7 ms, 28.6–146.8 (event-driven, not a tick) |
+| re-path | **0.500 s** while the target moves (35 intervals, p50 0.504, 24/35 on the half-second clock); **0 of 31** on a standing target (two "extras" were client skill presses re-answered at +34/+92 ms) |
+| plane words | equal in 61/61; (dest plane, mover plane) by the `0x0029` census — RECONSTRUCTION |
+| between swings | nothing on a standing target (0/30 chains; 0/19 strict); an auto-chase `0x002A` with **no press** when the target moves (16/24; 8/9 strict) |
+| the end, natural path | silent both ways from follow to attack_started (clean cell n=9: 0 c2s, 0 s2c naming the player); no server move in the second after the swing in 8/9 |
+| the end, tick-cut | `0x0028 AGENT_STOP_MOVING [player]` with the attack_started **exists** — but re-denominated by a skeptic: 3/28 on the strict population, and corpus-wide the 36 AS-riding `0x0028`s are halts of a **moving** body (34/36), mostly keyboard walks (47/80), p50 37 ms after a press; the press-free residual is n=3 |
+
+**Where the swing opens after an approach: 58–101 u from the target by
+dead-reckoning** (n=8; joint fit 81 u at 278 u/s, r² 0.98; with the follow's
+start pinned to the 33 ms cluster the spread halves and the mean is 69 u), and
+**the body's next report stands 68.7 / 74.5 / 85.2 u away** on the three clean
+halts. The lane's "per-character split" in `0x0028` (one character 0/27) is
+**exposure** — presses per chain start 1–2 against 6.5–8 — not a build
+difference; one skeptic found the lane's own table contradicting its "0/27".
+
+**NPC follows are the same message.** 45 `0x002A` from NPCs name the player,
+0.5 s cadence, dest = the server's copy of the player's position — which a
+skeptic showed **trails the rendered body by ~0.257 s ≈ 74 u on keyboard walks**
+(the chase dests sit on the player's own reported polyline at t − 0.257 s in 21
+rows ≤ 15 u, with a 36 ms round trip on that connection). DR-free, OBSERVED, and
+a MOVECODE fact in its own right: retail's server copy of a walking player lags
+one report interval behind the body.
+
+### 38.4 The reach is two numbers, and the client carries neither as a table
+
+**The press-time test, DR-free** (the reach lane and its skeptic, positions
+taken only from the player's own `0x0047` stop echoed by the server and the
+target's `0x0020` spawn): a **Sword** press is answered at once at 65.4, 67.0,
+79.3, 79.4, 82.7, 82.7 u (attack_started 0.031–0.045 s, no movement message) and
+followed first at 205.5 and beyond (n=9); a **Daggers** press is answered at once
+at 109.7 (its third witness: a party member's follow to the same target carries
+the spawn coordinate 0.23 s later) and followed at 146.3 (a reported position at
+the press instant). **Melee reach: Sword (82.7, 205.5], Daggers (109.7, 146.3].**
+Bow: immediate at 813 (n=1), no upper edge. Hammer and Wand: no exact rows — and
+the operator's starter weapon is a hammer, so its reach is the Sword bracket by
+assumption, stated here. OBSERVED brackets; the weapon names are UPSTREAM
+(GWCA item types) corroborated by the `0x0035` swing period per connection.
+
+**The client carries no range table.** Every section, every alignment: none of
+the wiki's 1248 / 1004 / 1273 / 1498 / 2512 / 5020 as f32, f64, imm32, imm16, or
+their squares (int32/int16 data-table clusters closed by a skeptic: 0). What it
+carries are **squared UI constants** — 144² and 1250² adjacent at
+`0x0095088C/90` (one TU's float pool, `GmCinematicEffects.cpp`), read by a chat
+distance readout (`0x0051D2C0`, `GmChat:1577`); 1250² is the auto-target
+candidate radius (`AvSelect:288–575`); 1500² the name-tag distance
+(`AvAgent:300`); 5000² the compass. **The press path compares no distance at
+all** — `0x004E6B20` to its `ret`, `0x00816090` (12 instructions), `0x007E6AF0`
+to its `ret`: zero float compares, zero square roots. **The server decides.** The
+wiki's melee range is 144 and it sits inside both brackets: **CORROBORATED by
+the bracket, selected by the wiki, not by the tapes** — a skeptic's exact words,
+kept: any value in (109.7, 146.3] fits, and 144 clears the Daggers refusal by
+2.3 u.
+
+**The approach's end is the OTHER number.** §37.7 called R ≈ 74–81 u "the
+reach"; the reach lane corrected it: *the same Daggers player is answered at once
+at 109.7 u on a standing press and halts at 84–85 u after an approach.* The
+approach ends where the client's own collision stop puts the body — 80 u by
+§38.2's arithmetic, 58–101 by the tapes' DR, 66–85 by the three halts. **Whether
+the body halts at the disc or at the swing is CONTESTED**: one skeptic reads the
+halts at 68.7 and 74.5 (5–11 u inside an armed 80 u disc, no message between
+follow and swing) as the disc *not* being the operative stop; the other lanes read
+the swing landing where the body stops. Both put the end at 66–85 u; a tap on the
+async agent's velocity (`+0xB0/+0xB4`) across one approach would separate them.
+
+### 38.5 SHIPPED, default OFF: `ATTACK_APPROACH` — reach 144 and the follow, revert is the default
+
+`--attack-approach` turns on **both**, because a reach with no approach is a dead
+press:
+
+* **`ATTACK_REACH = 144.0`** replaces 1500 as the press-time test
+  (`attack_reach()`); `ATTACK_RANGE` stays as the flag-off arm.
+* **`follow_stop_radius() = BOUNDING_RADIUS × 2 + FOLLOW_STOP_PAD = 80.0`**, with
+  `BOUNDING_RADIUS = 12.0` pinned to the `0x41400000` this server puts in every
+  `0x0020` field 11 (`test_playerswing` §9 unpacks it) and `FOLLOW_STOP_PAD =
+  56.0` the client's def pad. A target row carrying `radius` moves it, as the
+  client's `(rA + rB + 56)²` would.
+* **`approach_tick`**, from `attack_tick` before the range gate: out of reach with
+  no follow in flight → `_approach_send`: **`0x002A [player, target's own
+  position, plane, plane, target_id]`**, the click latch stamped and a **leg
+  record to the stop point** (§37's `_leg_record`, shared with the click leg) so
+  `_player_body_moving` holds the chain until the body stops; `state["dest"]` set
+  to the stop point so the world tick's integrator walks the server's copy there
+  at 288 u/s and parks it. In flight: a **re-path** when the target has moved and
+  0.500 s has passed (our hostiles chase, so it matters); arrival forgets the
+  follow and the range gate opens the swing on that tick — no `0x0028`, nothing
+  else, retail's natural path.
+* **The snap guard**, derived, not tuned. After a click-walk this server's copy
+  (and the client's SYNC copy, which only our grants move) sits where the leg
+  *started* — corpus separation p50 1,164 u under `--grant-suppress` — while the
+  rendered body stands at its end. A `0x002A` there hands the body to the SYNC
+  nodes (§37.2's handoff) and the client's reprieve test, off its tube by more than
+  `R_MATCH = 100 u`, snaps it back to the start: the warp the operator refused.
+  `0x002C` is the one message whose handler clears the history chain *first*
+  (p5-resync-disarm §1, measured on this machine), so when the modelled body
+  (§37's leg record) and the modelled sync copy disagree by more than the reprieve
+  radius, **a `0x002C` at the modelled leg end precedes the follow** and the
+  server's copy moves there. On open ground the model's end is within 3.5 u of
+  where the client reports next (10/10, §37); a bent path shows as a visible
+  correction of the residual, and its size is the number a run brings back.
+* **Ends.** The `0x003D`, `0x0047` and `0x003E` arms call `_approach_abandon`
+  where they clear or re-stamp the latch (retail: client steering after a press
+  wins, 11/15 chains withheld; our own zero-lead grants and projections clear the
+  client's follow exactly as retail's do, §38.2); `attack_tick`'s two target-loss
+  branches and a retarget do the same. A stale `dest` would march the model to a
+  point the body left, which is why the click arm never sets one.
+
+**Why default OFF, in one sentence:** CASE 6 registered its predictions against a
+server that does not supersede a click leg on a press, and a long click with the
+target more than 144 u away would now be superseded — retail's behaviour, but the
+wrong arm for the question CASE 6 asks (§29: two defaults in one run convict the
+pair and clear neither). When CASE 6 has answered, this flips to True and
+`ATTACK_RANGE` retires.
+
+**Tests.** `test_playerswing` §9 — 27 checks, floor 55 → **82**, bare: the
+constants and their provenance (the wire float, the pad sum, 144 inside both
+brackets, stop < reach, the flag-off arm still 1500); then the real `attack_tick`
+with the flag forced on: in reach opens at once with no follow; 400 u out sends
+exactly the retail-shaped `0x002A`, arms latch + leg to the stop point (320 u,
+1.111 s) and `dest`, and opens nothing; no re-path on a standing target; one
+re-path to a moved target on the 0.5 s tick and none inside it; arrival opens the
+swing, forgets the follow, sends no `0x0028`; a report abandons the follow and the
+next tick re-follows; a retarget re-follows the new target; **the snap guard**
+puts a `0x002C` at the modelled end before the `0x002A` when the copy is 500 u
+off and none when it is 60 u off; a leftover follow naming another target is
+abandoned; and source pins count the six `_approach_abandon` call sites (the
+count had to subtract the `def` line — the substring trap again, caught on the
+first run). `test_cancelwalk` 121, `test_d1lead` 94, `test_castcancel` 31,
+`test_guards` 41, `test_castcycle` 35, `test_pools` 127, `test_pressscore` 20:
+unchanged and green.
+
+**`pressscore.py` and a CASE 7 capture.** The replay transcribes the click
+latch, not the follow leg, and the Hatcher chases (our NPC positions are not
+replayed), so on a capture whose flags carry `ATTACK_APPROACH = True` the tool
+prints that it does not transcribe the approach and refuses the fork table rather
+than printing numbers from rules it does not model; its per-press table (last
+input, answer, latency) still reads, and the follows, re-pins and re-paths are on
+the wire with their own labels.
+
+### 38.6 The run that closes it — CASE 7
+
+`studies/animref/SINGLECASE.md` **CASE 7**, three questions, one flag, run **after
+CASE 6**:
+
+* **Q7a** — stand three or four steps from the Hatcher (past 144 u), press
+  spacebar. Registered: arm A (`--attack-approach`) walks the body to it and the
+  swing opens as the body stops, about 80 u out, with no jump; arm B (today's
+  default) swings from where you stand.
+* **Q7b** — click-walk away from it and, standing at the end of that walk, press
+  spacebar. Registered: A walks back and swings, **without a jump at the press**
+  on open ground (the re-pin lands on the modelled end, within a few units of the
+  body); a visible jump is the leg model's error and its size is the number.
+* **Q7c** — stand within a step or two and press. Registered: both arms swing at
+  once; nothing changed here.
+
+If A swings before the body stops, the server copy arrived before the client's
+did — the integrator runs the same 288 u/s the client bakes, so that is a start
+latency to measure. If A never swings, the follow was refused or the client
+stopped short of 80 u (a larger radius, a blocked cone); the capture holds the
+follow's label and the next report. **Until that run this section is CANDIDATE.**
+
+### 38.7 What is now on the list, in order
+
+1. **CASE 6** (§37) — still first. Nothing above changes it while the flag is off.
+2. **CASE 7** — this section's run.
+3. **Our NPCs' own approach** is the wrong shape by the same measurement: they
+   chase with `0x0029` to the player's position and stop at
+   `ENEMY_MELEE_RANGE = 150` (ours), where retail chases with `0x002A` naming the
+   player every 0.5 s and the client's disc stops them at 80 — so our hostiles
+   "attack from far away" too, by 70 u. Same derivation, other side; not started.
+4. **The halt mechanism** (§38.4, CONTESTED) — one velocity tap across one
+   approach.
+5. Smaller, stated: the legacy sync model glides `sync_to` to the *target's*
+   position, 80 u past where the body stops (inside the tube, but a known bias);
+   the plane words are sent equal (retail 61/61) with no per-plane test; ranged
+   reach (bow ≥ 813) is not derived and `ATTACK_REACH` is melee-only.
+
+### 38.8 Process notes
+
+Two of the three workflows this section rests on **died on a usage limit** with
+every lane lost — and every lane's notes survived in the scratchpad, so the
+relaunch handed each lane its predecessor's `NOTES.md` and lost minutes, not
+findings. A skeptic that died was re-run alone from the cached run. The lane that
+reported the pad "NOT FOUND" had bounded its writer search to three modules and
+the writer sits in a fourth, in SIB form; both its skeptics found it in one
+bounded scan each — §37.8's rule again, from the other side. And the count pin in
+the new test matched `def _approach_abandon(state)` as a call: the substring trap
+this arc keeps listing, caught by the test's own first run.
+
+**Labels, in one line:** `+0x98`, the stop-at-reach path, the pad and the
+`0x0029`-clears-follow answer OBSERVED (static); retail's follow destination,
+cadence and silent end OBSERVED; the 80 u end CORROBORATED (client constants vs
+tapes 58–101); the melee brackets OBSERVED, 144 WIKI inside them; the halt
+mechanism CONTESTED; the shipped behaviour a CANDIDATE, default OFF, until CASE 7.
+
 ## Provenance
 
 All figures are measurements over the owner's own live captures via extractors in this

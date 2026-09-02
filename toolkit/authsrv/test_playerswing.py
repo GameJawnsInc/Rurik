@@ -35,7 +35,10 @@ import checks  # noqa: E402
 # 5's chain pause; 24 before that day; 13 when the file carried only the
 # windup split). Sections 5-8 are all fixture-free -- they stub the clock
 # and drive the real attack_tick -- so 55 is the BARE-MACHINE number too.
-LEDGER = checks.Ledger("player swing windup", floor=55)
+# FLOOR 82 from the green run of 2026-09-02 that added section 9 (ANIMREF-RE
+# 38's reach and approach: 27 fixture-free checks driving the real attack_tick
+# with the flag forced on and restored), so 82 is the bare-machine number too.
+LEDGER = checks.Ledger("player swing windup", floor=82)
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -900,6 +903,313 @@ def section_click_leg_eta():
           "source pin")
 
 
+def section_reach_and_approach():
+    """ANIMREF-RE 38: the press-time reach, and the approach that walks the
+    body into it.
+
+    ATTACK_RANGE = 1500 was "ours entirely; nothing measured it" and the
+    operator could attack from far away (36.4). Two numbers replace it, both
+    derived: ATTACK_REACH, the press-time test (retail accepts a standing
+    Sword press at <= 82.7 u and refuses >= 205.5 u, Daggers 109.7 / 146.3;
+    the wiki's 144 sits inside both brackets), and the follow's stop radius
+    r + r + 56 = 80 u, read out of the client's own collision resolver
+    (0x006011F0 stops a follower dead when the agent named by 0x002A's fifth
+    field comes within (rA + rB + pad)^2, pad = 56.0f @0x00A52D60) and
+    matching retail's approaches opening at 58-101 u (fit 81 u).
+
+    The approach is retail's contract, OBSERVED on 61 live connections: a
+    press with the body out of reach gets a 0x002A follow to the TARGET'S
+    OWN position naming the target, re-pathed every 0.500 s while it moves
+    and never while it stands, the wire silent both ways until the swing
+    opens at reach. Shipped DEFAULT OFF (--attack-approach) for one reason:
+    CASE 6's registered predictions need an unsuperseded click leg. Every
+    check here drives the real attack_tick with the flag forced on and
+    restored after.
+    """
+    import authsrv
+    import struct
+    import time as _t
+
+    print("\n9. ANIMREF-RE 38: the reach, and the approach that walks the body "
+          "into it")
+
+    UD = authsrv.GAME_SMSG_AGENT_UPDATE_DESTINATION
+    UP = authsrv.GAME_SMSG_AGENT_UPDATE_POSITION
+    STARTED = authsrv.agents.GV_ATTACK_STARTED
+
+    def starts(sent):
+        return [v for op, v, _l in sent
+                if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
+                and v[0] == STARTED]
+
+    def follows(sent):
+        return [v for op, v, _l in sent if op == UD]
+
+    def repins(sent):
+        return [v for op, v, _l in sent if op == UP]
+
+    # 9a. the constants and where they come from
+    check(authsrv.ATTACK_APPROACH is False,
+          "the approach ships DEFAULT OFF -- CASE 6 registered its predictions "
+          "against a server that does not supersede a click leg on a press; "
+          "CASE 7 runs the approach alone (29's lesson: one default per run)",
+          f"ATTACK_APPROACH = {authsrv.ATTACK_APPROACH}")
+    radius_on_wire = struct.unpack("<f", struct.pack("<I", 0x41400000))[0]
+    check(radius_on_wire == authsrv.BOUNDING_RADIUS == 12.0,
+          "BOUNDING_RADIUS is the 0x0020 field-11 float this server sends "
+          "(agents.create_agent's 0x41400000), the value the client's ctor "
+          "stores at [AgAgent+0xD0] m_boundingRadius -- retail sends 12.0 for "
+          "the player and every creature it attacked",
+          f"0x41400000 = {radius_on_wire}")
+    check(authsrv.follow_stop_radius({}) == 12.0 + 12.0 + 56.0 == 80.0,
+          "the follow stops at r_self + r_target + 56: the client's def pad "
+          "(f32 @0x00A52D60, written for every def by AgApi 0x005FC290) added "
+          "in 0x005FED20 and tested in the resolver 0x006011F0 -- 80 u, "
+          "against retail's 58-101 u per row and 81 u joint fit",
+          f"{authsrv.follow_stop_radius({})}")
+    check(authsrv.follow_stop_radius({"radius": 42.0}) == 110.0,
+          "a target carrying its own radius moves the stop, as (rA + rB + 56)^2 "
+          "would (retail's radius-42 model 0x200013BC would stop at 110 u -- "
+          "a falsifiable prediction nobody has run)",
+          f"{authsrv.follow_stop_radius({'radius': 42.0})}")
+    check(authsrv.ATTACK_REACH == 144.0
+          and 82.7 < authsrv.ATTACK_REACH <= 205.5
+          and 109.7 < authsrv.ATTACK_REACH <= 146.3,
+          "ATTACK_REACH = 144 sits inside BOTH DR-free brackets retail's wire "
+          "gives -- Sword (82.7, 205.5], Daggers (109.7, 146.3] -- and is the "
+          "wiki's melee range; the tapes bracket it, they do not select it",
+          f"ATTACK_REACH = {authsrv.ATTACK_REACH}")
+    check(authsrv.follow_stop_radius({}) < authsrv.ATTACK_REACH,
+          "the stop radius is inside the reach, so a follow that arrives is "
+          "always in reach and the swing opens on arrival",
+          f"{authsrv.follow_stop_radius({})} < {authsrv.ATTACK_REACH}")
+    check(authsrv.attack_reach() == authsrv.ATTACK_RANGE == 1500.0,
+          "REVERT ARM (the default today): the reach is still the old 1500 u, "
+          "so nothing changes for CASE 6",
+          f"attack_reach() = {authsrv.attack_reach()}")
+
+    saved = authsrv.ATTACK_APPROACH
+    authsrv.ATTACK_APPROACH = True
+    try:
+        check(authsrv.attack_reach() == 144.0,
+              "under --attack-approach the reach is the derived 144 u",
+              f"attack_reach() = {authsrv.attack_reach()}")
+
+        sent = []
+        send = lambda op, vals, label="", quiet=False: sent.append(
+            (op, vals, label))
+
+        def fresh(target_xy, player_xy=(0.0, 0.0)):
+            st = _state()
+            st["agents"][10]["pos"] = target_xy
+            st["pos"] = player_xy
+            st["client_pos"] = player_xy
+            st["plane"] = 0
+            authsrv.begin_attack(send, st, 10, 0)
+            sent.clear()
+            return st
+
+        # 9b. a standing press in reach: the swing itself is the first
+        # reaction, no follow (retail 0.029-0.045 s, n=8, no 0x002A)
+        st = fresh((100.0, 0.0))
+        authsrv.attack_tick(send, st, 0)
+        check(len(starts(sent)) == 1 and follows(sent) == []
+              and st.get("approach") is None,
+              "IN REACH (100 u <= 144): the swing opens on the first tick and "
+              "no follow goes out -- retail's in-reach cell",
+              f"starts {len(starts(sent))}, follows {follows(sent)}")
+
+        # 9c. a press at 400 u: a follow to the TARGET'S OWN position naming
+        # it, the latch and leg armed to the stop point, the copy walking,
+        # and NO swing this tick
+        st = fresh((400.0, 0.0))
+        t_press = _t.time()
+        authsrv.attack_tick(send, st, 0)
+        f = follows(sent)
+        check(f == [[1, (400.0, 0.0), 0, 0, 10]] and starts(sent) == [],
+              "OUT OF REACH (400 u): one 0x002A [player, target's own point, "
+              "plane, plane, target] and no swing -- retail's shape (61/61 "
+              "name the target; the point is bit-exact on 16/16 never-moved "
+              "targets)",
+              f"follows {f}, starts {starts(sent)}")
+        leg = st.get("click_leg")
+        ap = st.get("approach")
+        check(leg is not None and ap is not None
+              and leg["t0"] == st.get("click_moving_at") == ap["t0"]
+              and abs(leg["dist"] - 320.0) < 1e-6
+              and abs((leg["eta"] - leg["t0"]) - 320.0 / 288.0) < 1e-6
+              and abs(leg["dest"][0] - 320.0) < 1e-6,
+              "the follow arms the click latch and a leg to the STOP POINT "
+              "(80 u short of the target: 320 u at 288 u/s), identity by the "
+              "latch stamp -- the same record a click leg uses",
+              f"leg {leg}")
+        check(st.get("dest") is not None
+              and abs(st["dest"][0] - 320.0) < 1e-6
+              and abs(st["dest"][1]) < 1e-6,
+              "and the server's own copy walks there: dest = the stop point "
+              "for the world tick's integrator (retail's server owns the leg)",
+              f"dest {st.get('dest')}")
+        check(authsrv._player_body_moving(st) is True,
+              "the chain pauses while the follow walks -- 31's rule through "
+              "the latch the follow armed",
+              "moving")
+        check(ap["target"] == 10 and ap["told"] == (400.0, 0.0)
+              and abs(ap["sent_at"] - t_press) < 1.0,
+              "the follow record names its target, the point it told, and "
+              "when",
+              f"approach {ap}")
+
+        # 9d. the next tick, target unmoved, inside the re-path interval:
+        # nothing more goes out (retail: 0 of 31 re-paths on a standing
+        # target)
+        sent.clear()
+        authsrv.attack_tick(send, st, 0)
+        check(follows(sent) == [] and starts(sent) == [],
+              "a standing target gets NO re-path and the swing still waits",
+              f"follows {follows(sent)}, starts {starts(sent)}")
+
+        # 9e. the target moves and the 0.5 s tick comes round: a re-path to
+        # its CURRENT position, the leg re-armed from the copy's position
+        st["agents"][10]["pos"] = (400.0, 50.0)
+        st["approach"]["sent_at"] -= authsrv.FOLLOW_REPATH_INTERVAL + 0.1
+        sent.clear()
+        authsrv.attack_tick(send, st, 0)
+        check(follows(sent) == [[1, (400.0, 50.0), 0, 0, 10]]
+              and starts(sent) == [] and st["approach"]["told"] == (400.0, 50.0),
+              "a MOVED target gets one re-path to where it is now, on the "
+              "0.500 s tick (retail p50 0.504 s, 35 intervals)",
+              f"follows {follows(sent)}")
+        # ... but not again before the interval has passed
+        st["agents"][10]["pos"] = (400.0, 100.0)
+        sent.clear()
+        authsrv.attack_tick(send, st, 0)
+        check(follows(sent) == [],
+              "and not again inside the interval, however far it moved",
+              f"follows {follows(sent)}")
+
+        # 9f. ARRIVAL: the integrator parks the copy at the stop point and
+        # the leg's eta passes -> the swing opens this tick, the follow is
+        # forgotten, and no stop message was sent (retail 8/9 clean rows)
+        st["pos"] = st["dest"]
+        st["dest"] = None
+        st["click_leg"]["eta"] = _t.time() - 0.01
+        st["approach"]["eta"] = st["click_leg"]["eta"]
+        sent.clear()
+        authsrv.attack_tick(send, st, 0)
+        stopmsgs = [v for op, v, _l in sent
+                    if op == authsrv.GAME_SMSG_AGENT_STOP_MOVING]
+        check(len(starts(sent)) == 1 and st.get("approach") is None
+              and follows(sent) == [] and stopmsgs == [],
+              "ARRIVAL: the swing opens on the first tick after the leg ends, "
+              "the follow is forgotten, no 0x0028 and no further movement -- "
+              "retail's natural path",
+              f"starts {len(starts(sent))}, approach {st.get('approach')}, "
+              f"stops {stopmsgs}")
+
+        # 9g. a client report ends the follow (retail: client steering after a
+        # press wins, 11/15 chains withheld): the arms clear the latch and call
+        # _approach_abandon, which forgets the follow AND the copy's walk
+        st = fresh((400.0, 0.0))
+        authsrv.attack_tick(send, st, 0)
+        st["click_moving_at"] = None       # what the 0x003D / 0x0047 arms do
+        authsrv._approach_abandon(st)
+        check(st.get("approach") is None and st.get("dest") is None,
+              "a report abandons the follow and stops the integrator walk -- a "
+              "stale dest would march the model to a point the body left",
+              f"approach {st.get('approach')}, dest {st.get('dest')}")
+        sent.clear()
+        authsrv.attack_tick(send, st, 0)
+        check(len(follows(sent)) == 1,
+              "and the next tick, still out of reach with the target kept, "
+              "starts a fresh follow from where the copy now is -- a press "
+              "after steering is answered again, as retail re-paths (11/13)",
+              f"follows {follows(sent)}")
+
+        # 9h. a retarget ends the follow it named and starts the new one
+        st = fresh((400.0, 0.0))
+        authsrv.attack_tick(send, st, 0)
+        st["agents"][11] = dict(_fresh_agent(), pos=(0.0, 400.0))
+        authsrv.begin_attack(send, st, 11, 0)
+        sent.clear()
+        authsrv.attack_tick(send, st, 0)
+        check(follows(sent) == [[1, (0.0, 400.0), 0, 0, 11]]
+              and st["approach"]["target"] == 11,
+              "a RETARGET forgets the old follow and sends one for the new "
+              "target the same tick",
+              f"follows {follows(sent)}")
+
+        # 9i. THE SNAP GUARD: after a click-walk the server's copy sits at the
+        # leg's START while the modelled body stands at its END; a 0x002A
+        # would hand the body to the sync nodes and snap it back (the client's
+        # reprieve radius is 100 u). The follow is preceded by a 0x002C re-pin
+        # at the modelled end, and the leg starts from there.
+        st = fresh((900.0, 0.0))
+        t0 = _t.time() - 3.0
+        st["click_moving_at"] = t0
+        st["click_leg"] = authsrv._leg_record((0.0, 0.0), (500.0, 0.0), t0,
+                                              288.0)
+        sent.clear()
+        authsrv.attack_tick(send, st, 0)
+        ops = [op for op, _v, _l in sent]
+        check(ops[:2] == [UP, UD] and repins(sent) == [[1, [500.0, 0.0], 0]],
+              "SNAP GUARD: the copy 500 u from the modelled click-leg end gets "
+              "a 0x002C AT THE MODELLED END before the 0x002A -- 0x002C's "
+              "handler clears the history chain first, so no reprieve test "
+              "runs behind it (p5-resync-disarm 1)",
+              f"ops {[hex(o) for o in ops[:3]]}, repins {repins(sent)}")
+        check(st["pos"] == (500.0, 0.0)
+              and abs(st["click_leg"]["dist"] - 320.0) < 1e-6
+              and st["click_leg"]["p0"] == (500.0, 0.0),
+              "and the follow leg starts from the re-pinned point: 400 u to "
+              "the target, 320 u to the stop",
+              f"pos {st['pos']}, leg {st['click_leg']}")
+        # inside the reprieve radius: no re-pin
+        st = fresh((900.0, 0.0))
+        t0 = _t.time() - 3.0
+        st["click_moving_at"] = t0
+        st["click_leg"] = authsrv._leg_record((0.0, 0.0), (60.0, 0.0), t0,
+                                              288.0)
+        sent.clear()
+        authsrv.attack_tick(send, st, 0)
+        check(repins(sent) == [] and len(follows(sent)) == 1,
+              "a copy within the 100 u reprieve of the modelled body gets no "
+              "re-pin -- the client's own test would pass",
+              f"repins {repins(sent)}")
+
+        # 9j. the copy already inside the stop radius but outside reach cannot
+        # happen (80 < 144); inside reach nothing is sent even with a stale
+        # follow record from another target
+        st = fresh((60.0, 0.0))
+        st["approach"] = {"target": 99, "t0": 1.0, "told": (0.0, 0.0),
+                          "sent_at": 0.0, "eta": 2.0}
+        st["dest"] = (30.0, 0.0)
+        sent.clear()
+        authsrv.attack_tick(send, st, 0)
+        check(st.get("approach") is None and st.get("dest") is None
+              and len(starts(sent)) == 1 and follows(sent) == [],
+              "a leftover follow naming another target is abandoned, its walk "
+              "stopped, and the in-reach swing opens",
+              f"approach {st.get('approach')}, starts {len(starts(sent))}")
+    finally:
+        authsrv.ATTACK_APPROACH = saved
+
+    # 9k. source pins: the three report/click arms end a follow, and the two
+    # target-loss branches of attack_tick do too. Exact strings, counted.
+    src = open(authsrv.__file__, encoding="utf-8").read()
+    n_arms = src.count("_approach_abandon(state)   # ANIMREF-RE 38")
+    n_all = (src.count("_approach_abandon(state)")
+             - src.count("def _approach_abandon(state)"))   # the def is not a call
+    check(n_arms == 3 and n_all == 6,
+          "the 0x003D, 0x0047 and 0x003E arms each abandon the follow (3 "
+          "tagged sites), attack_tick's two target-loss branches do (2), and "
+          "approach_tick's retarget branch (1) -- 6 call sites, no more",
+          f"arms {n_arms}, all {n_all}")
+    check(src.count('state["click_moving_at"] = now') == 1,
+          "the follow stamps the latch once, with the tick's `now` -- not "
+          "time.time(), which test_cancelwalk pins to the click arm alone",
+          "source pin")
+
+
 def main():
     section_two_phases()
     section_start_to_start()
@@ -912,6 +1222,7 @@ def main():
     section_landing_hold_release()
     section_click_latch_bound()
     section_click_leg_eta()
+    section_reach_and_approach()
     return LEDGER.verdict()
 
 

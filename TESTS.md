@@ -9453,7 +9453,23 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   `--click-latch-window` restores the constant exactly. End to end, a press
   0.5 s after a 0.3 s click opens on the first tick where the constant held it
   2.5 s, and the known-bad arm — a press 0.5 s into a 1.0 s leg — still waits.
-  Floor 42 → 55; §6–§8 are fixture-free so 55 is the bare-machine number),
+  **§9 (§38)** is the reach and the approach, 27 checks with `ATTACK_APPROACH`
+  forced on and restored: the constants and their provenance (`BOUNDING_RADIUS`
+  unpacked from the `0x41400000` every `0x0020` carries, the follow stop
+  `r + r + 56 = 80` from the client's def pad, `ATTACK_REACH = 144` inside both
+  DR-free retail brackets, the flag-off arm still 1500); then the real
+  `attack_tick`: in reach opens at once with no follow, 400 u out sends the
+  retail-shaped `0x002A [player, target's own point, plane, plane, target]`
+  and arms latch + leg to the stop point and `dest` with no swing, no re-path
+  on a standing target, one re-path to a moved target on the 0.5 s tick and
+  none inside it, arrival opens the swing and forgets the follow with no
+  `0x0028`, a report abandons the follow and the next tick re-follows, a
+  retarget re-follows the new target, the snap guard puts a `0x002C` at the
+  modelled click-leg end before the follow when the copy is 500 u off and none
+  at 60 u, a leftover follow naming another target is abandoned, and source
+  pins count the six `_approach_abandon` call sites (minus the `def` — the
+  substring trap, caught on the first run).
+  Floor 42 → 55 → 82; §6–§9 are fixture-free so 82 is the bare-machine number),
   `toolkit/authsrv/test_castcancel.py` (movement cancels the cast, and the
   contract is the wiki's expressed as wire SILENCE: the connection thread
   MARKS (`cancel_on_move`) and sends only the movement's own `[8 → 0]` hold

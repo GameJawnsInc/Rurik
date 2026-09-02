@@ -8914,6 +8914,52 @@ def player_weapon_rank(state):
 # client animates at are one number, and they were two.
 ATTACK_INTERVAL = WEAPON_ATTACK_SPEED
 ATTACK_RANGE = 1500.0      # units. Ours entirely; nothing measured it.
+# ANIMREF-RE 38 -- THE REACH IS TWO NUMBERS, and ATTACK_RANGE above is
+# neither. It is the --no-approach arm: the shape every build before
+# 2026-09-02 had, where a swing opens from 1500 u, which is the operator's
+# "i can also attack from far away" (sec.36.4). The two derived numbers:
+#
+#   ATTACK_REACH   -- the PRESS-TIME test, centre to centre: a press with
+#     the body inside it opens the swing at once (retail 0.029-0.045 s,
+#     n=8, no movement message); outside it the server drives an
+#     approach first. OBSERVED bracket on ArenaNet's wire, DR-free rows
+#     only: Sword accepts <= 82.7 u and refuses >= 205.5 u (n=6 / n=9);
+#     Daggers accepts 109.7 and refuses 146.3 (n=1 / n=1). The wiki's
+#     melee "adjacent" range, 144, sits inside both -- CORROBORATED by
+#     the bracket, selected by the wiki, not read from the client: the
+#     image carries NO range table (144 lives there only as 144^2 in a
+#     chat readout and as one skill's AoE column) and the press path
+#     compares no distance at all -- the SERVER decides.
+#   follow_stop_radius() -- where the APPROACH ends: r_self + r_target +
+#     FOLLOW_STOP_PAD. Read out of the client: the collision resolver
+#     0x006011F0 stops a follower dead (teleport-in-place 0x006020B0,
+#     velocity 0, m_targetPoint INF) when the agent named by its +0x98
+#     (0x002A's fifth field) comes within (rA + rB + def pad)^2, the pad
+#     being 56.0f at 0x00A52D60, written for every agent def by AgApi
+#     0x005FC290 (AgApi.cpp:328-329 name the def). With the 12.0 u radius
+#     this server sends in every 0x0020 (field 11 = 0x41400000) that is
+#     80 u, against retail's approaches opening the swing at 58-101 u
+#     (joint fit 81 u, n=8) and its bodies halting at 68.7/74.5/85.2 u.
+#     CORROBORATED. The same code runs server-side (Engine\Agent is
+#     shared), which is why retail's approach lands where the client's
+#     own stop does and needs no stop message on the natural path (8/9).
+ATTACK_REACH = 144.0       # units, centre to centre. WIKI, bracketed OBSERVED.
+FOLLOW_STOP_PAD = 56.0     # units. Client def pad, f32 @0x00A52D60. OBSERVED.
+BOUNDING_RADIUS = 12.0     # units. 0x0020 field 11 as we send it (0x41400000).
+# Retail re-paths a running follow on a 0.500 s tick while the target moves
+# (35 intervals, p50 0.504 s; 24/35 on the half-second clock) and NEVER on a
+# stationary one (0 of 31 spontaneous re-paths) -- the dest is the target's
+# CURRENT position each time (bit-exact on 16/16 never-moved targets).
+FOLLOW_REPATH_INTERVAL = 0.5   # s. OBSERVED.
+FOLLOW_REPATH_MOVED = 1.0      # u. A target that has not moved gets no re-path.
+# The approach is DEFAULT OFF for one measurement reason and no other: CASE 6
+# (sec.37.6) registered its predictions against a server that does NOT
+# supersede a click leg on a press, and a long click with the target more
+# than ATTACK_REACH away would now be superseded -- retail's behaviour, but
+# the wrong arm for the question CASE 6 asks. sec.29's lesson: two defaults
+# in one run convict the pair and clear neither. CASE 7 runs this alone;
+# when CASE 6 has answered, this flips to True and ATTACK_RANGE retires.
+ATTACK_APPROACH = False    # True (--attack-approach): reach 144 + the follow.
 
 # THE OTHER HALF OF R4a: something swings back. Until 2026-08-11 every combat
 # message this server sent flowed one way -- the player hit things and nothing
@@ -9970,13 +10016,21 @@ def _click_leg_arm(state, dest, now, silent):
         state["click_leg"] = None
         return None
     speed = float(state.get("declared_speed_base") or DEFAULT_RUN_SPEED)
-    dist = math.hypot(float(dest[0]) - p0[0], float(dest[1]) - p0[1])
-    leg = {"t0": now, "p0": p0,
-           "dest": (float(dest[0]), float(dest[1])),
-           "dist": dist, "speed": speed,
-           "eta": now + (dist / speed if speed > 0.0 else 0.0)}
+    leg = _leg_record(p0, dest, now, speed)
     state["click_leg"] = leg
     return leg
+
+
+def _leg_record(p0, dest, now, speed):
+    """One straight leg: start, end, and the instant it arrives. Shared by
+    the click leg (_click_leg_arm) and the approach's follow leg
+    (_approach_send) so the two are one model with one error statement."""
+    p0 = (float(p0[0]), float(p0[1]))
+    dist = math.hypot(float(dest[0]) - p0[0], float(dest[1]) - p0[1])
+    return {"t0": now, "p0": p0,
+            "dest": (float(dest[0]), float(dest[1])),
+            "dist": dist, "speed": speed,
+            "eta": now + (dist / speed if speed > 0.0 else 0.0)}
 
 
 def _player_body_moving(state):
@@ -10049,6 +10103,179 @@ def _player_body_moving(state):
     return (now - click) <= GRANT_LOCAL_WINDOW
 
 
+def attack_reach():
+    """How far a press opens a swing from, centre to centre: the derived
+    144 u under --attack-approach, the old 1500 u otherwise (ANIMREF-RE 38;
+    the two ship together because a reach with no approach is a dead
+    press)."""
+    return ATTACK_REACH if ATTACK_APPROACH else ATTACK_RANGE
+
+
+def follow_stop_radius(target=None):
+    """Where a follow ENDS, centre to centre: r_self + r_target + the client's
+    def pad (see ATTACK_REACH). 80 u for the 12 u radii this server sends;
+    a target row carrying its own `radius` (none does today) would move it,
+    exactly as the client's (rA + rB + 56)^2 would."""
+    r_t = float((target or {}).get("radius", BOUNDING_RADIUS))
+    return BOUNDING_RADIUS + r_t + FOLLOW_STOP_PAD
+
+
+def _approach_abandon(state):
+    """The follow leg is over for a reason other than arrival: the client
+    spoke (0x003D/0x0047 -- retail: client steering after a press wins,
+    the 0x002A is replaced by the server's projection of the 0x003D and no
+    chain starts, 11/15), it clicked (0x003E), or the target went away.
+    The three arms and attack_tick call this; the latch itself is theirs to
+    clear. Forgets the follow and stops the server copy's integrator walk
+    -- the click arm never sets `dest`, so a stale one here would march
+    the model to a point the body abandoned."""
+    if state.get("approach") is None:
+        return
+    state["approach"] = None
+    state["dest"] = None
+
+
+def _approach_send(send, state, conn_id, target_id, agent, now, repath=False):
+    """Send the follow and arm the leg it starts. See approach_tick."""
+    plane = int(state.get("plane", 0))
+    tx, ty = float(agent["pos"][0]), float(agent["pos"][1])
+    if not repath:
+        # THE SNAP GUARD, derived rather than tuned. After a click-walk this
+        # server's copy of the player (and the client's SYNC copy, which
+        # only our grants move) sits where the leg STARTED -- under
+        # --grant-suppress the corpus separation is p50 1,164 u -- while
+        # the rendered body stands at the leg's end. A 0x002A now would
+        # hand the rendered body to the SYNC nodes (the AgTrack handoff,
+        # sec.37.2) and the client's reprieve test, off its history tube by
+        # more than R_MATCH = 100 u (f32 @0x00946560), would SNAP it back
+        # to the start: the warp the operator refused. 0x002C is the one
+        # message whose handler calls AgTrack::Clear FIRST, so no test runs
+        # behind it and both copies land on its point (p5-resync-disarm
+        # sec.1, measured on this machine). So: when the modelled body and
+        # the modelled sync copy disagree by more than the reprieve radius,
+        # re-pin to the model first. The model is sec.37's leg record (10 of
+        # 10 post-click reports within 3.5 u of its end on open ground); a
+        # bent path shows here as a visible correction of the residual.
+        try:
+            import agtrack_mirror as _am
+            reprieve = float(_am.R_MATCH)
+        except Exception:
+            reprieve = 100.0
+        silent = state.get("click_moving_at") is not None
+        model = _click_leg_start(state, now, silent)
+        sync = _sync_position(state, now) or state.get("pos")
+        if model is not None and sync is not None:
+            sep = math.hypot(model[0] - sync[0], model[1] - sync[1])
+            if sep > reprieve:
+                send(GAME_SMSG_AGENT_UPDATE_POSITION,
+                     [PLAYER_AGENT_ID, [float(model[0]), float(model[1])],
+                      plane],
+                     f"APPROACH RE-PIN 0x002C at ({model[0]:.0f},"
+                     f"{model[1]:.0f}) plane {plane}: the server's copy sat "
+                     f"{sep:.0f} u from the modelled click-leg end, past the "
+                     f"client's {reprieve:.0f} u reprieve [ANIMREF-RE 38]")
+                state["pos"] = (float(model[0]), float(model[1]))
+    px, py = state.get("pos", (0.0, 0.0))
+    px, py = float(px), float(py)
+    dist = math.hypot(tx - px, ty - py)
+    stop = follow_stop_radius(agent)
+    run = max(dist - stop, 0.0)
+    f = run / dist if dist > 0.0 else 0.0
+    stop_point = (px + (tx - px) * f, py + (ty - py) * f)
+    speed = float(state.get("declared_speed_base") or DEFAULT_RUN_SPEED)
+    # The dest is the TARGET'S OWN position, not the stop point: that is the
+    # message retail sends (bit-exact on 16/16 never-moved targets) and it
+    # is what makes the client's own resolver stop the body at reach. Both
+    # plane words carry the mover's plane (61/61 equal on retail).
+    send(GAME_SMSG_AGENT_UPDATE_DESTINATION,
+         [PLAYER_AGENT_ID, (tx, ty), plane, plane, target_id],
+         f"APPROACH{' re-path' if repath else ''}: player -> agent "
+         f"{target_id} at ({tx:.0f},{ty:.0f}), {dist:.0f} u out, stops at "
+         f"{stop:.0f} u [ANIMREF-RE 38]")
+    # The body is on a leg it walks silently -- the click latch's exact
+    # meaning (the client sends nothing between a follow and its swing,
+    # 0/7 on retail), bounded by THIS leg's travel time to the stop point.
+    # A report of either kind ends it, as it ends a click leg.
+    state["click_moving_at"] = now
+    leg = _leg_record((px, py), stop_point, now, speed)
+    state["click_leg"] = leg
+    # And the server's own copy walks there: the world tick's integrator
+    # advances state["pos"] toward `dest` at DEFAULT_RUN_SPEED and clears
+    # it on arrival -- the same arithmetic the client's sync copy runs on
+    # the 0x002A. Retail's server owns this leg; ours must too, or the
+    # range gate would never see the body arrive.
+    state["dest"] = stop_point if run > 0.0 else None
+    state["approach"] = {"target": target_id, "t0": now,
+                         "told": (tx, ty), "sent_at": now,
+                         "eta": leg["eta"]}
+    if not repath:
+        print(f"[c{conn_id}] approach: player walks to agent {target_id} "
+              f"({agent.get('name', '?')}), {dist:.0f} u out, swing at "
+              f"{stop:.0f} u in {leg['eta'] - now:.2f} s", flush=True)
+
+
+def approach_tick(send, state, conn_id, target_id, agent, now):
+    """Walk the player's body into reach of its attack target, as retail's
+    server does (ANIMREF-RE 38; --attack-approach).
+
+    RETAIL'S CONTRACT, OBSERVED on 20 live captures (61 connections, 267
+    presses): a press with the body outside reach is answered within
+    28-147 ms by a self-directed 0x002A AGENT_UPDATE_DESTINATION whose
+    point is the TARGET'S OWN position and whose fifth field names the
+    target (62 after presses vs 7 in the matched window before, 61 naming
+    the press target); re-issued every 0.500 s while the target moves,
+    never while it stands; the wire is then silent both ways until
+    attack_started opens at reach, with no stop message on the natural
+    path (8/9 clean approaches). The client's side is decoded: 0x002A
+    stores the target in agent+0x98 and the collision resolver stops the
+    body itself at r+r+56 -- and it does NOT chase between re-paths
+    (SyncFrom and SetMaxSpeed re-issue the STORED coordinate), which is
+    why the server's re-path tick is the contract and not an optimisation.
+
+    Answers sec.35.5's open decode along the way: a 0x0029 after a 0x002A
+    CLEARS the follow -- the 0x0029 handler passes 0 where the 0x002A
+    handler passes [msg+0x18] as the shared setter 0x00602A40's +0x98
+    argument (0x005FD890 vs 0x005FD930). So our own zero-lead grants and
+    projections end an approach exactly as retail's do, and the arms that
+    send them call _approach_abandon.
+
+    Returns True while a follow is in flight (the caller's range gate then
+    waits on the leg), False when the body is in reach or nothing can be
+    done. Runs on the world-tick thread from attack_tick, which is the one
+    writer of `approach`; the arms only clear it.
+    """
+    ap = state.get("approach")
+    latch = state.get("click_moving_at")
+    if ap is not None and (ap["target"] != target_id or latch != ap["t0"]):
+        # A retarget (begin_attack), or a latch the arms cleared or re-
+        # stamped underneath us: the follow it named is over.
+        _approach_abandon(state)
+        ap = None
+    px, py = state.get("pos", (0.0, 0.0))
+    tx, ty = agent["pos"]
+    dist = math.hypot(float(tx) - float(px), float(ty) - float(py))
+    stop = follow_stop_radius(agent)
+    if ap is not None:
+        moved = math.hypot(float(tx) - ap["told"][0],
+                           float(ty) - ap["told"][1])
+        if (moved > FOLLOW_REPATH_MOVED
+                and now - ap["sent_at"] >= FOLLOW_REPATH_INTERVAL):
+            _approach_send(send, state, conn_id, target_id, agent, now,
+                           repath=True)
+            return True
+        if now >= ap["eta"] or dist <= stop:
+            # Arrived. The leg record has already released the latch; the
+            # integrator has parked the copy. Forget the follow and let the
+            # range gate open the swing this tick.
+            state["approach"] = None
+            return False
+        return True
+    if dist > attack_reach():
+        _approach_send(send, state, conn_id, target_id, agent, now)
+        return True
+    return False
+
+
 def attack_tick(send, state, conn_id):
     """Keep swinging at whatever the player last clicked -- in TWO phases.
 
@@ -10115,6 +10342,7 @@ def attack_tick(send, state, conn_id):
     target_id = state.get("attacking")
     if not target_id:
         state["player_swing"] = None
+        _approach_abandon(state)
         return
     agent = state.get("agents", {}).get(target_id)
     if agent is None or agent["dead"]:
@@ -10125,15 +10353,23 @@ def attack_tick(send, state, conn_id):
         action_hold(send, state, 0, f"target {target_id} is gone")
         state["attacking"] = None
         state["player_swing"] = None
+        _approach_abandon(state)
         return
+    if ATTACK_APPROACH:
+        # ANIMREF-RE 38: out of reach, the server walks the body in (the
+        # follow leg holds the chain through the click latch it arms; a
+        # re-pin here may move the model, so the position is re-read).
+        approach_tick(send, state, conn_id, target_id, agent, time.time())
     px, py = state.get("pos", (0.0, 0.0))
     ax, ay = agent["pos"]
-    if math.hypot(ax - px, ay - py) > ATTACK_RANGE:
-        # Out of range. Real Guild Wars would walk the player into range; we do
-        # not move the player, so the swing simply stops and resumes when they
-        # walk back. Keep the target so it picks up again without re-clicking
-        # -- but the swing IN FLIGHT whiffs, exactly as the agent loop drops
-        # `swing_lands_at` when the player leaves reach.
+    if math.hypot(ax - px, ay - py) > attack_reach():
+        # Out of reach. Under --attack-approach the follow above is walking
+        # the body in and the swing opens on arrival; otherwise (the old
+        # 1500 u arm) we do not move the player, so the swing simply stops
+        # and resumes when they walk back. Keep the target so it picks up
+        # again without re-clicking -- but the swing IN FLIGHT whiffs,
+        # exactly as the agent loop drops `swing_lands_at` when the player
+        # leaves reach.
         state["player_swing"] = None
         return
     now = time.time()
@@ -17132,6 +17368,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # Armed in the 0x003E arm; read by the cast-stop
                         # site and cast_stop_reckon (CANCELWALK-B1).
                         state["click_moving_at"] = None
+                        _approach_abandon(state)   # ANIMREF-RE 38
                         a2_pos_taken = _take_client_position(
                             state, reported, plane, rec, "0x003D")
                         # F-A's EAGER VOID (sec.0.14, the through-floor fix's
@@ -18154,6 +18391,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # --grant-suppress the sync copy sits parked at the
                         # click leg's start (corpus separation p50 1,164 u),
                         # so a 0x0028 here out-warps F31 by an order.
+                        _approach_abandon(state)   # ANIMREF-RE 38
                         _cl_prev = state.get("click_moving_at")
                         state["click_moving_at"] = time.time()
                         # ANIMREF-RE 37: the leg this click starts, so the
@@ -18706,6 +18944,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # click legs included -- arrival is a stop
                         # (CANCELWALK-B1; armed in the 0x003E arm).
                         state["click_moving_at"] = None
+                        _approach_abandon(state)   # ANIMREF-RE 38
                         was_clipped = state.get("clipped")
                         state["clipped"] = False
                         pm = state.get("pathmap")
@@ -20815,6 +21054,19 @@ def main():
                          "unanswered CLICK-last presses on the 14:32 "
                          "capture), and a press 3 s into a long click opens "
                          "a swing on a body still walking.")
+    ap.add_argument("--attack-approach", action="store_true",
+                    help="ANIMREF-RE 38: the press-time reach becomes the "
+                         "derived 144 u (retail accepts a standing press "
+                         "at <= 82.7 u Sword / 109.7 u Daggers and refuses "
+                         "146.3 / 205.5; 1500 was never measured), and a "
+                         "press from farther away is answered as retail "
+                         "answers it: a 0x002A follow to the target's own "
+                         "position, re-pathed every 0.5 s while it moves, "
+                         "the swing opening when the body stops at "
+                         "r+r+56 = 80 u (the client's own collision "
+                         "stop). Default OFF only until SINGLECASE CASE 6 "
+                         "has answered on the unsuperseded click leg; "
+                         "CASE 7 runs this alone.")
     ap.add_argument("--no-landing-hold-release", action="store_true",
                     help="THE REVERT ARM for ANIMREF-RE 33's one behaviour "
                          "change: keep the property-8 action hold set past "
@@ -22268,6 +22520,14 @@ def main():
               "This is the arm that reproduces the operator's spacebar-"
               "after-click deficit (CLICK-last presses answered 60.6% "
               "against ~91% for STOP-last).", flush=True)
+    if a.attack_approach:
+        global ATTACK_APPROACH
+        ATTACK_APPROACH = True
+        print("[map] --attack-approach: a press opens the swing from "
+              f"{ATTACK_REACH:.0f} u (not {ATTACK_RANGE:.0f}); farther out "
+              "the server sends a 0x002A follow to the target and the swing "
+              f"opens when the body stops at {follow_stop_radius():.0f} u. "
+              "ANIMREF-RE 38; CASE 7 is its run.", flush=True)
     if a.no_landing_hold_release:
         global LANDING_HOLD_RELEASE
         LANDING_HOLD_RELEASE = False
