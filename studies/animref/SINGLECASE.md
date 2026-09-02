@@ -61,7 +61,7 @@ arc and Case 2 takes over.
 > movement any longer than you expect from stock?**
 
 ```powershell
-python toolkit/harness/session.py --enemy --hold 90 --game-args "--map 146 --explorable --no-enemy-skills --skills 0,0,0,0,0,0,0,0"
+python toolkit/harness/session.py --enemy --hold 90 --game-args "--map 146 --explorable --no-enemy-skills --enemy-hit 0.02 --skills 0,0,0,0,0,0,0,0"
 ```
 
 **Do:** click the Hatcher to auto-attack, let two or three swings land, and try
@@ -152,13 +152,13 @@ can.
 **Arm A — as shipped (the latch ends when the leg does):**
 
 ```powershell
-python toolkit/harness/session.py --enemy --hold 120 --game-args "--map 146 --explorable --no-enemy-skills --skills 0,0,0,0,0,0,0,0"
+python toolkit/harness/session.py --enemy --hold 120 --game-args "--map 146 --explorable --no-enemy-skills --enemy-hit 0.02 --skills 0,0,0,0,0,0,0,0"
 ```
 
 **Arm B — the same run with §34's 3.0 s constant back:**
 
 ```powershell
-python toolkit/harness/session.py --enemy --hold 120 --game-args "--map 146 --explorable --no-enemy-skills --skills 0,0,0,0,0,0,0,0 --click-latch-window"
+python toolkit/harness/session.py --enemy --hold 120 --game-args "--map 146 --explorable --no-enemy-skills --enemy-hit 0.02 --skills 0,0,0,0,0,0,0,0 --click-latch-window"
 ```
 
 **Do, in each arm:** Q6a three or four times (short click, spacebar on
@@ -213,13 +213,13 @@ nothing inside reach changed.
 **Arm A — `--attack-approach` (the candidate):**
 
 ```powershell
-python toolkit/harness/session.py --enemy --hold 120 --game-args "--map 146 --explorable --no-enemy-skills --skills 0,0,0,0,0,0,0,0 --attack-approach"
+python toolkit/harness/session.py --enemy --hold 120 --game-args "--map 146 --explorable --no-enemy-skills --enemy-hit 0.02 --skills 0,0,0,0,0,0,0,0 --attack-approach"
 ```
 
 **Arm B — today's default (the 1500 u reach, no approach):**
 
 ```powershell
-python toolkit/harness/session.py --enemy --hold 120 --game-args "--map 146 --explorable --no-enemy-skills --skills 0,0,0,0,0,0,0,0"
+python toolkit/harness/session.py --enemy --hold 120 --game-args "--map 146 --explorable --no-enemy-skills --enemy-hit 0.02 --skills 0,0,0,0,0,0,0,0"
 ```
 
 **Do, in each arm:** Q7a twice, Q7b twice, Q7c once. Nothing else. Note the
@@ -253,6 +253,12 @@ fork table, because its replay does not transcribe the follow leg yet and says
 so.
 
 ## Notes that apply to all of them
+
+- **`--enemy-hit 0.02` is in every `--enemy` command on purpose.** `--enemy`
+  makes the Hatcher chase and attack back, which the cases need; the DEFAULT hit
+  kills you in about seven seconds, which no case needs. 0.02 is a nibble: it
+  still chases, still swings, you still live. (Added 2026-09-02 after the
+  operator was killed mid-CASE 6.)
 
 - **Say "I did not get to it"** rather than guessing. A skipped case costs
   nothing; a guessed one costs a wrong conclusion and the run that chases it.
