@@ -3891,6 +3891,79 @@ disc so the server's copy stays inside the client's reprieve. All three are
    `0x006011F0`: contact pad, stop-versus-slide, grant-path hook. MOVECODE-scale.
 3. §40.6's list, unchanged.
 
+### 40.9 CASE 8 v2 — the rendered body halts short, and retail chases at full speed (2026-09-02 18:55)
+
+Arm A `authsrv-20260902T185503-c1`, arm C `authsrv-20260902T185617-c1`. The
+operator: *"Arm A was still doing the long range attacks. Arm C was good, though
+the enemy is moving at a 'walk' pace instead of a 'run' pace (idk what speeds
+they're supposed to be in stock)."*
+
+**Arm A's first episode is the whole finding.** The operator sent **no movement
+for ten seconds** — no `0x003D`, and the first `0x0047` at 10.155 s reports the
+spawn point — so the server's copy of the player was exactly right. The
+server's copy of the Hatcher walked 300 → 80 u in 1.005 s, halted at 80 (the
+label says so), and swung seven times at 1.37 s intervals; the follow that ended
+the episode started at 97 u, past the 92 u reach, so §40.1's fix was in force.
+The server had the fight at 80 u and the operator watched it from "long range":
+**the client's rendered Hatcher was not at 80 u.** The wire cannot see an NPC's
+rendered position, but it can see what stopped it. Our `0x0028` went out at
+1.973 s, the instant our copy arrived. The rendered copy trails the sync copy
+(the AgTrack handoff, §37.2) and the `0x0028` halts both copies where they stand
+(CANCELWALK-R6) — so the rendered body froze wherever it had got to, short of
+the disc, and swung from there. Retail's halt comes p50 0.496 s after the last
+follow (§40.2), on the AI tick, by which time the resolver has parked the
+rendered body at the disc and the halt no-ops. **§40.4's deviation (2) was not
+harmless.** It also explains CASE 8's "sometimes close, sometimes far" better
+than the 144 band alone did: how far short the rendered body froze depends on
+where the handoff had it at the instant of the halt.
+
+**Arm C had zero swings and no halt but the leash** — at 0.35 (101 u/s) the
+Hatcher never caught the operator in 42 s. "Good" was the smooth chase; it says
+nothing about the attack distance, and the "walk pace" is the client's walk
+animation at that speed.
+
+**Retail's chasing hostiles run at 1.0.** Of the six NPCs whose chases §40.2
+counted, four (37, 103, 160, 36) carry no `0x002B` on their connection at all and
+their `0x0020` declares `f9 = 288.0, f10 = 1.0` — they chase at 288 u/s, the
+player's own speed; the other two (40, 41) took `0x002B 0.2778` after spawning
+and **`0x002B 1.0` 6.9 s and 2.5 s before their chases** (231.13 → 238.03;
+304.39 → 306.93), with `f9 = 360.0`. monsterai §3.4's 0.2778 / 0.3333 / 0.3472
+are the pre-aggro patrol walk; its "the jump to 1.0 is not an aggro signal" was
+read over four jumps, and two of the six chasers here are exactly that jump. So
+stock is a run at the declared base; our 0.75 was slower than stock, and 0.35 is
+the walk. This retires §40.7's idle-at-a-stale-point reading of the arc stutter:
+retail's NPC at 288 u/s has the same geometry against the same 0.5 s clock and
+does not stutter, so the early halt freezing the rendered body at every catch —
+a stutter-start on the next follow by construction — is the better suspect.
+
+**Two corrections, shipped default ON, one revert flag each.**
+
+1. `ENEMY_MOVE_RATE = 1.0` (was 0.75, "so you can walk away" — ours, refuted).
+   Revert: `--enemy-chase-rate 0.75`. Registry row now OBSERVED, 6/6.
+2. `HALT_ON_CLOCK = True`: the copy's arrival is noted on the follow record and
+   the `0x0028` goes out when the follow's own half-second clock next fires —
+   the re-path clock, so ≤ 0.5 s after the last follow, inside retail's
+   0.398–0.537 — and no swing opens until the halt has. A player who leaves
+   reach while it waits resumes the walk. Revert: `--halt-on-arrival`.
+
+Tests: §chase pins the arrived-not-halted state (no `0x0028`, no swing), the
+halt on the aged clock, and the revert arm; floor 268, green 281.
+
+**What would settle the residual without another guess:** a tap of the
+Hatcher's rendered position (`+0x78/+0x7C` on the async agent) against its sync
+copy across one approach — §38.4's velocity tap, extended to a non-player agent
+(`agentprobe.py --agent 10` already resolves the object; it does not yet poll).
+If CASE 8 v3 still shows far swings, build that before touching another
+constant.
+
+### 40.10 What is next, in order
+
+1. **CASE 8 v3** ([SINGLECASE](SINGLECASE.md)) — arm A is the default (rate 1.0,
+   halt on the clock); arms D/E revert one each.
+2. **The rendered-position tap on agent 10** if v3 is not clean.
+3. **Agent-versus-agent collision, server side** (§40.7 symptom 3) — unchanged.
+4. §40.6's list.
+
 ## Provenance
 
 All figures are measurements over the owner's own live captures via extractors in this
