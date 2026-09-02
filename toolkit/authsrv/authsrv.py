@@ -9339,10 +9339,14 @@ ENEMY_DEST_RESEND = 120.0  # how far the player must move before the destination
 # does and the operator saw it "attack from far away". OBSERVED, message
 # counts only, no dead-reckoning (studies/animref/FINDINGS.md sec.40; the
 # positive control is the retail-follow lane's own 45/6, reproduced exactly).
-# The swing REACH for a hostile is the player's own press-time reach,
-# ATTACK_REACH: the client carries no range table on either side (sec.38.4)
-# and the NPC's attack_started separation is instrument-limited on the tapes
-# -- symmetric BY ASSUMPTION, stated here, UNVERIFIED for hostiles.
+# The swing REACH for a hostile is its HALT disc plus one bounding radius --
+# enemy_reach() = follow_stop_radius() + BOUNDING_RADIUS = 92 u -- NOT the
+# player's 144 u press reach the first cut borrowed. sec.40.1 corrected that on
+# the operator's CASE 8 run: the tapes swing at the halt (~80 u), the 144 borrow
+# made the Hatcher stand and swing across an 80-144 u band ("attacks from a
+# distance"). The client carries no range table on either side (sec.38.4) and the
+# NPC separations are instrument-limited, so 92 is still an ASSUMPTION -- but the
+# 12 u margin over the halt is a deadband, not an invented reach.
 NPC_FOLLOW = True   # False (--legacy-npc-chase): 0x0029 to the point, 150 u.
 
 # AND IT TURNS TO FACE YOU. GAME_SMSG_AGENT_UPDATE_ROTATION (0x002E) has been
@@ -10182,11 +10186,29 @@ def follow_stop_radius(target=None):
 
 
 def enemy_reach():
-    """How close a hostile must stand to swing, centre to centre: the
-    player's own derived press-time reach under NPC_FOLLOW (ANIMREF-RE 40,
-    symmetric by assumption -- see the constant), the invented 150 u on the
-    --legacy-npc-chase arm."""
-    return ATTACK_REACH if NPC_FOLLOW else ENEMY_MELEE_RANGE
+    """How close a hostile must stand to swing, and beyond which it re-chases,
+    centre to centre.
+
+    ANIMREF-RE 40.1 -- CORRECTED after the operator's CASE 8 run. The first cut
+    borrowed the PLAYER's press-time reach (ATTACK_REACH = 144) for this, and
+    that was the wrong number: a press reach is what a single keypress opens a
+    swing from, an auto-attacker's engage distance is where its body stands. The
+    capture (authsrv-20260902T180441-c1) showed the cost -- the Hatcher halted
+    at the disc (80 u) but then STOOD and swung 1-6 times as the player drifted
+    out to 144 u, only re-chasing past 144: "sometimes he gets close, sometimes
+    far ... sometimes he'll keep attacking from a distance." The tapes put the
+    NPC's swing at its HALT (~80 u, sec.40.2), not 64 u beyond it.
+
+    So the engage reach is the halt disc plus one bounding radius of tolerance:
+    follow_stop_radius() + BOUNDING_RADIUS = 92 u for two 12 u radii. The margin
+    over the 80 u halt is the deadband that keeps a stationary fight from
+    chattering (halt lands at 80, re-chase triggers at 92) and covers the
+    natural spread of retail's own halts (68.7-85.2 u, sec.38.3). Still an
+    ASSUMPTION for the NPC -- the client carries no range table on either side
+    and the tapes' NPC separations are instrument-limited -- but a
+    better-motivated one than the 144 borrow. The --legacy-npc-chase arm keeps
+    the invented 150 u."""
+    return follow_stop_radius() + BOUNDING_RADIUS if NPC_FOLLOW else ENEMY_MELEE_RANGE
 
 
 def _approach_abandon(state):
@@ -21321,6 +21343,17 @@ def main():
                          "and retail's 0x002A follow to the target, "
                          "re-pathed every 0.5 s while it moves, the swing "
                          "opening when the body stops at r+r+56 = 80 u.")
+    ap.add_argument("--enemy-chase-rate", type=float, default=None,
+                    metavar="FRAC",
+                    help="Override ENEMY_MOVE_RATE (default 0.75 = 216 u/s) for "
+                         "the run. ANIMREF-RE 40.1 diagnostic arm for the CASE 8 "
+                         "'stutter-start of the walk during the arc': our NPC is "
+                         "fast enough (216 u/s) to reach its 0.5 s-stale follow "
+                         "destination before the next re-path, idle, and replay "
+                         "the walk-start; retail's hostiles run 0.28-0.35 "
+                         "(studies/monsterai 3.4) and never do. Try 0.35 to test "
+                         "whether the slower, retail-faithful chase removes the "
+                         "stutter -- if it does, the idle hypothesis holds.")
     ap.add_argument("--legacy-npc-chase", action="store_true",
                     help="THE REVERT ARM for ANIMREF-RE 40: a hostile chases "
                          "with a 0x0029 to the player's POINT, re-announced "
@@ -22811,6 +22844,15 @@ def main():
               f"{ATTACK_RANGE:.0f} u again and no follow is sent -- the "
               "'attack from far away' arm (ANIMREF-RE 38's revert).",
               flush=True)
+    if a.enemy_chase_rate is not None:
+        global ENEMY_MOVE_RATE
+        if not (0.0 < a.enemy_chase_rate <= 1.0):
+            raise SystemExit("--enemy-chase-rate must be in (0.0, 1.0]")
+        ENEMY_MOVE_RATE = a.enemy_chase_rate
+        print(f"[map] --enemy-chase-rate: hostiles chase at "
+              f"{ENEMY_MOVE_RATE} ({ENEMY_MOVE_RATE * agents.DEFAULT_RUN_SPEED:.0f} "
+              "u/s) -- ANIMREF-RE 40.1 arc-stutter diagnostic; retail's are "
+              "0.28-0.35.", flush=True)
     if a.legacy_npc_chase:
         global NPC_FOLLOW
         NPC_FOLLOW = False

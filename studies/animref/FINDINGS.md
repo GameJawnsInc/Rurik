@@ -3803,6 +3803,94 @@ first swing are retail facts this build does not reproduce; if the operator sees
 the Hatcher swing "too soon" after stopping, that beat is the first suspect and
 the capture dates it.
 
+### 40.7 CASE 8 — the operator's verdict, and what it convicted (2026-09-02 18:04)
+
+Capture `authsrv-20260902T180441-c1`: 118 s, 18 chases, 43 Hatcher swings. The
+operator, three sentences:
+
+1. *"it's inconsistent. sometimes he gets close to attack, sometimes far.
+   sometimes he needs to chase you in between attacks, sometimes he'll keep
+   attacking from a distance."*
+2. *"the right angle runaway chase does work, but he does a weird stutter-start
+   of the walk animation during the arc motion where he follows me"*
+3. *"i had some warping too, when issuing movement commands near the enemy.
+   i'm not sure we're modelling agent-to-agent collision accurately (if at all)"*
+
+**Not closed.** Three symptoms, three different standings.
+
+**Symptom 1 — CONVICTED on the capture, FIXED (§40.1, same day).** The wire says
+exactly what the operator saw: every natural halt lands at 80 u (15 of 18; the
+other three at 31 / 66 / 60 u, the player closing), and then the Hatcher **stands
+and swings 1–6 times** before the next follow — the 18 standing episodes carry
+3, 2, 5, 1, 2, 6, 3, 2, 1, 2, 3, 1, 1, 2, 2, 1, 2, 4 swings. Between those swings
+the player was drifting out to 144 u and the Hatcher never moved, because
+`enemy_reach()` was **the player's 144 u press reach, borrowed** (§40.4's
+deviation 6): the swing gate sat at 144 while the halt sat at 80, a 64 u band in
+which the Hatcher swung without walking and re-chased only past 144. That is
+"keeps attacking from a distance", and the 1-to-6 spread is "sometimes close,
+sometimes far". The tapes put the NPC's swing at its halt (§40.2), never 64 u
+beyond it. **The fix:** `enemy_reach() = follow_stop_radius() + BOUNDING_RADIUS
+= 92 u` — the halt disc plus one radius of deadband. Engage at ≤ 92, re-chase
+beyond 92, park at 80; the 12 u margin is what keeps a stationary fight from
+chattering and covers retail's own halt spread (68.7–85.2 u). Still an
+assumption for the NPC, but a deadband over a measured halt rather than a
+borrowed press reach. `test_agentlife` pins the deadband at ≤ one radius and
+`_world`'s default distance moves 100 → 85 (the old default sat inside the 144
+borrow and outside the corrected 92; three fixtures moved with it). Floor 265,
+green 278.
+
+**Symptom 2 — DIAGNOSED from the capture; a diagnostic arm ships, the default
+does not change.** The long chases are already retail's shape on the wire — the
+20 s pursuit at 60.8–81.2 s re-paths every 0.508 s with no halt and nothing else
+between, at 200–650 u — and those are the ones the operator says "work". The
+stutter lives in the medium band. Mechanism, derived from §38.2 and the numbers:
+the client walks to the FROZEN told point (SyncFrom re-issues the stored
+coordinate; only the reach test tracks the target), so between re-paths the
+body is heading for a 0.5 s-old position. Our Hatcher runs `ENEMY_MOVE_RATE =
+0.75` = 216 u/s = **108 u per re-path interval**; at 130–190 u out, the gap to
+that stale point's disc is 50–110 u, so the body reaches it, idles, and replays
+the walk-start when the next `0x002A` lands. Retail's chasing hostiles run
+0.28–0.35 (monsterai §3.4) — 40–50 u per interval — and never catch their stale
+point. Of the two numbers, the 0.5 s cadence is OBSERVED and the speed is ours,
+so the faithful fix is a retail-typical chase rate. It is also a feel and
+balance choice — a 0.35 Hatcher is out-run at will — so it ships as
+**`--enemy-chase-rate FRAC`** (default unchanged) and CASE 8 v2's arm C runs
+0.35: if the stutter goes, the idle mechanism is confirmed and the rate becomes
+a per-creature content value. **Rejected on purpose:** an adaptive "re-path
+before the copy reaches the told point". It would paper over our invented speed
+with an invented interval, and if the true cause is the walk-start replaying on
+*every* `0x002A` it would make the stutter worse. The capture argues against
+that cause (long chases re-path at the same cadence and are smooth) but does not
+exclude it; arm C separates them.
+
+**Symptom 3 — CONFIRMED as unmodelled; scoped, not fixed.** The operator's read
+is right. Nothing in `authsrv.py` clips the player against any agent: the
+player's own copy is advanced by the router, the grants and the integrator
+against `pathmap` (terrain) alone, and the enemy's against `pathmap.clip` alone.
+The client resolves agent-versus-agent collision itself — §38.2's resolver
+`0x006011F0` and its per-def discs — so beside the Hatcher the client blocks or
+slides the operator's body while the server's copy walks straight through, and
+the next grant or reconcile (the `R_MATCH` 100 u reprieve) puts the body where
+the server thinks it is: the warp. The movement arc already named this class
+("the client collides for itself and does it better than our navmesh",
+`authsrv.py` ~1236) for terrain; this is the same failure against a body. What a
+fix needs, and none of it exists yet: (a) which pad the resolver applies to a
+player walking INTO a standing agent — the follow-stop pad is 56 (→ 80 u), a
+plain contact may be `rA + rB` or another def pad; (b) whether the client stops
+or slides the body along the disc; (c) where in the grant path to apply the same
+disc so the server's copy stays inside the client's reprieve. All three are
+`codescan.py` reads on `0x006011F0` and its callers. **Do not guess a pad** —
+§38.2 found the follow pad only after two skeptics re-ran a bounded scan.
+
+### 40.8 What is next, in order
+
+1. **CASE 8 v2** ([SINGLECASE](SINGLECASE.md)): arm A (default, reach 92) closes
+   symptom 1 or not; arm C (`--enemy-chase-rate 0.35`) answers symptom 2's
+   mechanism. Both arms will still warp beside the Hatcher — note where.
+2. **Agent-versus-agent collision, server side** (symptom 3) — a client dig on
+   `0x006011F0`: contact pad, stop-versus-slide, grant-path hook. MOVECODE-scale.
+3. §40.6's list, unchanged.
+
 ## Provenance
 
 All figures are measurements over the owner's own live captures via extractors in this

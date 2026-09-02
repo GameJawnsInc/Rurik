@@ -61,7 +61,7 @@ from codec import Codec  # noqa: E402
 #      their steps are built, outside that function's own try. Those are now
 #      SKIPPED and named rather than fatal, and the section asserts the walk
 #      encoded something, because 0 failures over 0 steps is not a pass.
-LEDGER = checks.Ledger("agent lifetime", floor=264)
+LEDGER = checks.Ledger("agent lifetime", floor=265)
 
 
 def section_weapon_damage():
@@ -530,8 +530,13 @@ def main():
     return LEDGER.verdict()
 
 
-def _world(dist=100.0, **over):
-    """A player at the origin and one hostile `dist` units away."""
+def _world(dist=85.0, **over):
+    """A player at the origin and one hostile `dist` units away.
+
+    The default is 85 u -- inside the hostile's engage reach (enemy_reach() =
+    92 since ANIMREF-RE 40.1) so the swing and skill sections open a fight
+    without first walking. Was 100 u, which sat inside the old 144 u borrow
+    but outside the corrected 92; the chase section passes its own dist."""
     import authsrv
     entry = {"name": "hatcher", "dead": False, "died_at": 0.0,
              "health": 100.0, "max_health": 100.0, "last_hit": 0.0,
@@ -858,9 +863,13 @@ def section_chase():
     legacy arm is one flag away (--legacy-npc-chase) and the last block here
     runs it, so a run can convict either shape alone.
 
-    The reach a hostile swings from is the player's own derived 144 u --
-    symmetric BY ASSUMPTION (authsrv.NPC_FOLLOW's comment) -- and the 150 u
-    arm's constant stays pinned in section_constants as the LEGACY number.
+    The reach a hostile swings from is its HALT disc plus one bounding radius,
+    follow_stop_radius() + BOUNDING_RADIUS = 92 u -- CORRECTED sec.40.1 after
+    the operator's CASE 8 run: the first cut borrowed the player's 144 u press
+    reach and the Hatcher stood and swung across an 80-144 u band ("attacks
+    from a distance"). The tapes swing at the halt (~80); 92 is the halt plus
+    a 12 u deadband. The 150 u arm's constant stays pinned in
+    section_constants as the LEGACY number.
     """
     import authsrv
 
@@ -877,11 +886,20 @@ def section_chase():
               "retail's chase shape is the DEFAULT arm (ANIMREF-RE 40)",
               f"NPC_FOLLOW = {authsrv.NPC_FOLLOW!r} -- the revert is "
               "--legacy-npc-chase, and the operator's run scores the default")
-    LEDGER.ok(abs(reach - 144.0) < 1e-9 and abs(stop - 80.0) < 1e-9,
-              "a hostile swings from the player's own 144 u and halts at "
-              "r + r + 56 = 80 u",
-              f"reach {reach:.1f}, halt {stop:.1f} -- ATTACK_REACH and the "
-              "client's def pad; the legacy arm stood and swung at 150")
+    LEDGER.ok(abs(reach - 92.0) < 1e-9 and abs(stop - 80.0) < 1e-9,
+              "a hostile swings from the halt disc + one radius (92 u) and "
+              "halts at r + r + 56 = 80 u",
+              f"reach {reach:.1f}, halt {stop:.1f} -- follow_stop_radius() + "
+              "BOUNDING_RADIUS, NOT the 144 u press reach the first cut "
+              "borrowed (sec.40.1); the 12 u margin is the re-chase deadband, "
+              "the legacy arm stood and swung at 150")
+    LEDGER.ok(reach > stop and reach - stop <= authsrv.BOUNDING_RADIUS + 1e-9,
+              "and the engage reach is a SMALL deadband over the halt, not a "
+              "wide stand-and-swing band",
+              f"reach {reach:.1f} - halt {stop:.1f} = {reach - stop:.1f} u "
+              "deadband; the 144 borrow made this 64 u, which is the band the "
+              "capture caught the Hatcher swinging across (1-6 swings before a "
+              "re-chase, halt at 80 to drift at 144)")
 
     # 1. IT STARTS: the rate (ours, kept), then ONE follow naming the player.
     #    No facing, no 0x0029, no swing. Retail sends nothing at all before the
@@ -995,13 +1013,14 @@ def section_chase():
               f"{[hex(op) for op, _v, _l in later]} -- the leg orients the "
               "body; the legacy arm faced the player every chasing tick")
 
-    # 6. NO SWING MID-FOLLOW, and the 70 u the operator saw, made concrete.
-    state = _world(dist=120.0)                     # inside reach, standing
+    # 6. NO SWING MID-FOLLOW, and the 92 u engage reach, made concrete.
+    state = _world(dist=85.0)                       # inside reach (92), standing
     state["agents"][10]["skills"] = ()
     LEDGER.ok(not _walk(state) and bool(_swings(state)),
-              "inside reach and standing, it swings at once and never walks",
-              "120 u: a follow here would walk it INTO the player")
-    state = _world(dist=120.0)
+              "inside reach (85 < 92) and standing, it swings at once and "
+              "never walks",
+              "a follow here would walk it toward the player for nothing")
+    state = _world(dist=85.0)
     state["agents"][10]["skills"] = ()
     state["agents"][10]["follow"] = {"told": (0.0, 0.0),
                                      "sent_at": time.time(), "t0": time.time()}
@@ -1016,7 +1035,7 @@ def section_chase():
     LEDGER.ok(any(op == FOLLOW for op, _v, _l in sent) and not _swings(state),
               "from 150 u -- where the legacy arm stood and swung -- it walks "
               "in instead",
-              f"{[hex(op) for op, _v, _l in sent]} -- 150 > 144, so this is a "
+              f"{[hex(op) for op, _v, _l in sent]} -- 150 > 92, so this is a "
               "follow, and the follow refuses the swing")
 
     # 7. the refusals, and the halt that ends a chase for a reason other than
@@ -1149,7 +1168,7 @@ def section_facing():
               "(ANIMREF-RE 40)",
               "retail's 7 live chases carry no 0x002E before or between their "
               "follows; the leg orients the body")
-    in_reach = _world(dist=100.0)
+    in_reach = _world(dist=85.0)                  # inside enemy_reach() = 92
     in_reach["agents"][10]["skills"] = ()
     opened = _swings(in_reach)
     LEDGER.ok(opened and opened[0][0] == authsrv.GAME_SMSG_AGENT_UPDATE_ROTATION
@@ -1659,8 +1678,9 @@ def section_constants():
          "(studies/monsterai 4.2)"),
         ("ENEMY_MELEE_RANGE", 150.0, "OURS",
          "the LEGACY arm's reach and stop (--legacy-npc-chase) since "
-         "ANIMREF-RE 40; the default swings from ATTACK_REACH = 144 and "
-         "halts at follow_stop_radius() = 80. Refuted from both sides at "
+         "ANIMREF-RE 40; the default swings from enemy_reach() = "
+         "follow_stop_radius() + BOUNDING_RADIUS = 92 and halts at 80 "
+         "(sec.40.1 corrected the 144 borrow). Refuted from both sides at "
          "once: ArenaNet's own models strike from ~65, ~599 and ~706 units, "
          "so no single number is right (studies/monsterai 3.3)"),
         ("ENEMY_HIT_FRACTION", 0.10, "OURS", "damage per swing"),
