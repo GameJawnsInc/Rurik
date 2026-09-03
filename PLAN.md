@@ -1614,6 +1614,17 @@ floors and aborts in `RUN-R8.md`; both are operator-driven client runs.
 
 ## 8. Immediate next actions
 
+### ★★★ MOVEMENT 2026-09-03 — THE RERUN **REFUTES** (MOVECODE-1z-ad): the keyboard lead armed REALFIX §0.11's lock on five of eight legs, and §1z-ac's "no lock" was n = 1
+
+**[studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1z-ad,
+[studies/movecode/RUN-1zAB.md](studies/movecode/RUN-1zAB.md).** Same script, same build, same flags; prediction registered before launching (`55e4edc`). **The lead stays OFF.**
+
+* **REFUTED on both clauses registered to refute it:** ENSLAVED **48.3 %** (29 of 60) against a ≥ 25 % bar, and **five of eight legs parked** with a held key (35, 0, 0, 0, 0 u). Corroborated off the detector: **1 reported stop for 7 key legs** (run 1: 7 of 7), and total body travel 1,347 u against run 1's 5,869 u.
+* **The door, to the second:** a lead **matured while the key was still held**. The 16.80 s lead was 520 u of unclipped backpedal, maturing at 19.54 s; the release came at 19.80 s, 0.26 s too late. No `0x0047` was ever sent, the next report came back at our lead's endpoint exactly, and the client stayed locked for five legs while still reporting `mt` 7/8/4 — keys pressed, body still.
+* **No gate covers the arming path.** The FENCE GATE only acts on a fence *we* shut (it worked correctly afterwards, degrading four leads to `ZERO LEAD (fence-shut)`); the HOLD and the KILL had zero exposure. A lead maturing unanswered with the fence OPEN is uncovered — which is §1z-u.3's original mechanism.
+* **§1z-ac corrected:** the 26 u park and the lock are the SAME event; run 1 won every coin flip, run 2 lost one by 0.26 s. §1z-ab.2's refutation of the maturation margin is sound for the dropped-re-aim path and **INCOMPLETE** for this one — but **766 is not adopted**, because it moves the photo finish rather than removing it and was measured worse than shipping nothing on separation. The derived object is **a lead must never be left to mature** (a refresh before the arrival tick, or no lead); neither candidate is derived yet.
+* **No default-ON path is implicated** and no code changed. `test_w0score` 45, `test_leadmargin` 25, `test_kbdsync` 84 green.
+
 ### ★★★ MOVEMENT 2026-09-03 — RUN-1zAB RAN, **INCONCLUSIVE** (MOVECODE-1z-ac): the enslavement detector had a co-directional-lead blind spot, now closed; the residual is the lead maturing at the report boundary
 
 **[studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1z-ac,
