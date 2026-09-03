@@ -3964,6 +3964,90 @@ constant.
 3. **Agent-versus-agent collision, server side** (§40.7 symptom 3) — unchanged.
 4. §40.6's list.
 
+### 40.11 THE ENEMY IS A FAITHFUL VICTIM — the bug is the PLAYER's two-copy desync (2026-09-03, measured in the client)
+
+Three CASE 8 runs had steered the enemy's halt timing and chase speed around a
+body nobody had measured. §40.9 ended by naming the instrument to build before
+touching another constant. **It was built and run, and it moves the whole
+diagnosis off the enemy.**
+
+`toolkit/clientscan/agenttap.py` (new; movetap's read plumbing plus §38.2's
+`+0x98`) polls BOTH client copies of chosen agents while a session runs — the
+SYNC copy (world 0, `[[AGBASE+0xE8]+id*4]`, the one our `0x0029/0x002A/0x0028`
+write) and the ASYNC copy (world 1, `[[AGBASE+0x14C]+id*4]`, the one that is
+drawn). This is CLIENT-SIDE state the wire never carries: no capture, ours or
+live, holds a rendered agent position, which is why the earlier sections
+inferred it. Two runs, agents 1 (player) and 10 (Hatcher), 30 Hz, on the
+current default build.
+
+**Standing (`agenttap-20260902T213007`, 445/449 samples, player never moved):**
+the Hatcher's sync copy parks at **79 u** and its async copy at **84 u** from the
+player, both stable for 25 s, `+0x98` clears to 0 on arrival, flags `0x20009`
+(bit 0 set — the resolver's condition). The client parks the Hatcher at the disc
+on its own, both copies, and it stays. **The standing case is correct on the
+shipped build**, and §40.9's "the rendered body is frozen short of the disc" was
+wrong: the rendered (async) body sits at 84 u, not short. What §40.9 read as a
+standing-still capture was the operator moving.
+
+**Moving (`agenttap-20260902T213401`, scripted keyboard kite, Hatcher chasing):**
+the picture inverts, and it is the operator's three symptoms exactly.
+
+| quantity | standing | moving |
+|---|---|---|
+| player's own sync-vs-async copies | 0 u | **median 237 u, max 806 u** |
+| Hatcher's own sync-vs-async copies | 2 u | 0–32 u |
+| Hatcher→player, sync copies (the disc's frame) | 79 u | 46–300 u (near the disc every park) |
+| Hatcher→player, **async copies (what the operator SEES)** | 84 u | **2, 45, 59, 68, 73, 511, 534, 548, 563, 587 u** |
+
+The Hatcher's follow parks its sync copy ~80 u from the player's SYNC copy every
+single time — the chase is doing exactly what §40 built. But the `0x002A`
+handler writes only the SYNC world (§38.2), so the ASYNC Hatcher has no `+0x98`
+target of its own; it is dragged along behind its sync copy by the AgTrack
+handoff and never runs the disc against the async player. So the rendered Hatcher
+ends up ~80 u from the player's **networked** copy — and during movement that
+copy is a median 237 u (up to 806 u) from the player's **rendered** copy. Hence
+the swing lands 2 u to 587 u from the body the operator is looking at: 534/548/
+563 u is "attacks from range", 2 u is "warps into my body", and the spread
+across parks is "sometimes close, sometimes far". **One defect, all three
+symptoms, and it is not in the enemy.**
+
+**The defect is the PLAYER's world-0 copy going stale during movement.** Retail
+keeps it within ~74 u of the rendered body (§38.3: the server copy trails ~0.257 s
+≈ 74 u); ours drifts to 806 u. During a keyboard walk our server answers with a
+`0x0025` direction and the client moves its rendered (world-1) copy; nothing
+updates the client's world-0 self-copy, so it sits where the last grant left it.
+The enemy's collision disc — correctly — stops the rendered enemy relative to
+that stale copy. **This is the MOVECODE / movement-reconciliation arc's two-world
+problem** (`studies/movecode`, `studies/movement`: world 0 vs world 1, the
+`R_MATCH` reprieve, the grant/reconcile snap), seen from the enemy's side, and
+it is the same root as the operator's earlier "warp when I issue a move command
+near the enemy": the grant path resyncs the two copies and the body jumps.
+
+**No enemy-side change ships.** Aiming the follow better does not help — the
+disc references world 0 whatever point we send — and abandoning the retail
+follow to re-path a plain point at the rendered position reintroduces the
+arrival-idle §40.9 was about. The enemy chase is faithful; it must wait on the
+player-sync fix. The shipped enemy constants stand: `ENEMY_MOVE_RATE = 1.0` is
+independently confirmed (retail 6/6), and `HALT_ON_CLOCK`'s halt timing is
+retail-measured (§40.2) even though §40.9's justification for it was the misread
+above — kept as retail-faithful and harmless, not churned.
+
+### 40.12 What is next, in order
+
+1. **The player's world-0 sync during movement** — the MOVECODE dig, now with a
+   number to hit (retail ~74 u, ours 806 u) and an instrument that measures it
+   live (`agenttap.py --agents 1`). How does retail keep world 0 current for a
+   keyboard-walking player — a periodic position broadcast, and on the click
+   path the grant/reconcile? This is the arc that owns all three CASE 8 v3
+   residuals AND the player's own move-command warp.
+2. Agent-versus-agent collision (§40.7 symptom 3) — still unmodelled, still a
+   `0x006011F0` dig; lower priority than (1), which dominates the visible error.
+3. §40.6's list.
+
+The enemy arc's own desk work is done: the chase is retail's shape, the reach is
+the disc, the speed is 1.0, the halt is on the clock. What remains is not enemy
+work.
+
 ## Provenance
 
 All figures are measurements over the owner's own live captures via extractors in this
@@ -3993,3 +4077,5 @@ scan (`prop8timeline.py`, `swingbracket*.py`, `alonepairs.py` — session scratc
 the 21 live tapes via `tape.py`/`codec.py`) reports the 19/19 E3-release count with
 its positive control named. No client launch on the RE side; the instrument runs on
 the owner's own next session.
+
+sec.40.11's `agenttap.py` is the same class as `movetap.py`: a read-only cross-process `ReadProcessMemory` of the pinned loopback build (carve-out 1 territory, pure `ctypes` via `keytap`, no launch of ours), reading struct displacements `codescan` located and `movetap --selftest` re-checks, plus the one `+0x98` read sec.38.2 pinned. Its output is per-viewer client state, not ArenaNet's expression; it goes to `vault/research/animref/`.
