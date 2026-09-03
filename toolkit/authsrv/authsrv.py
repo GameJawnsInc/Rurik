@@ -4188,6 +4188,43 @@ def _take_client_position(state, reported, plane, rec, source, now=None,
     return accept
 
 
+def _forget_client_position(state, why):
+    """A MODEL-DERIVED PLACEMENT invalidates the last accepted report.
+
+    NOT a second writer of the client-sourced record -- the opposite of one.
+    When we send a 0x002C at a point OUR OWN leg model computed, the client's
+    last report describes somewhere the body provably is not, and we do not
+    know what the client would say instead. Every consumer of the triple has
+    to fail closed until the client speaks again, and removing it is what
+    makes them: `_resync_verdict` answers "no-client-report", `_keepalive_ok`
+    answers "no-report", the cast-stop reckon answers "no-report", and
+    `_click_leg_start`'s fallback (`client_pos or pos`) drops to state["pos"]
+    -- which the caller sets to the placement on the same breath, so the snap
+    guard in `_approach_send` reads the RE-PINNED point rather than the leg's
+    start. That last one is the behaviour the write this replaced existed for.
+
+    THIS IS `cast_stop_pin`'S PATTERN, not a new one. That field exists so a
+    pin WE sent out-ranks a report the client made before it, because
+    "reckoning from the stale pre-pin report would extrapolate a leg the body
+    never walked" -- the same event and the same answer, expressed by dropping
+    the stale fact rather than by overwriting it with our model. The field
+    keeps meaning "what the client said", and keeps its single writer.
+
+    THE TRIPLE GOES TOGETHER, exactly as `_take_client_position` writes it:
+    POSITION AND PLANE ARE ONE FACT. The write this replaced (ANIMREF-RE 39,
+    807ab89) set the position and the instant but NOT the plane, so the
+    cast-stop reckon -- which requires all three and type-checks the plane --
+    would have paired a modelled point with the plane of a report taken
+    somewhere else. That is the split `_take_client_position`'s own comment
+    was written to close, re-opened from the other end.
+    """
+    state.pop("client_pos", None)
+    state.pop("client_plane", None)
+    state.pop("client_pos_at", None)
+    if TRACE_MOVE:
+        print(f"[trace] client-sourced position forgotten: {why}", flush=True)
+
+
 # ---------------------------------------------------------------------------
 # THE RESYNC SENDER -- GAME_SMSG 0x002C AGENT_UPDATE_POSITION.  `--resync`.
 #
@@ -10523,12 +10560,22 @@ def _press_supersedes(send, state, conn_id, target_id):
          f"is superseded, the swing or the follow comes next "
          f"[ANIMREF-RE 39]")
     state["pos"] = (float(model[0]), float(model[1]))
-    # A 0x002C is a PLACEMENT -- both copies land on its point -- so the
-    # belief the approach's own snap guard reads (client_pos, the last
-    # report) follows it too; left stale at the leg's start it would out-vote
-    # the re-pin and send the body back there.
-    state["client_pos"] = (float(model[0]), float(model[1]))
-    state["client_pos_at"] = now
+    # A 0x002C is a PLACEMENT -- both copies land on its point -- so the belief
+    # the approach's own snap guard reads (client_pos, the last report) must
+    # NOT be left at the leg's start, where it out-votes the re-pin and sends
+    # the body back there. The first build of this fix (807ab89) got that by
+    # writing the MODEL into client_pos. The model is our integrator -- a lerp
+    # along the leg record, whose own arming function names three error terms
+    # (bent paths, a press truncating a bent path to its segment, a click
+    # thrown mid-keyboard-leg starting up to ~86 u behind the body) -- and the
+    # field it was written into is the one `_resync_verdict` and
+    # `_keepalive_ok` put on the wire under "NEVER OUR OWN POSITION" and "the
+    # report in hand, and nothing else, may be sent". FORGETTING the report
+    # gets the snap guard the identical answer, because `_click_leg_start`
+    # falls back to `client_pos or pos` and `pos` is the placement, set one
+    # line up -- without teaching two wire senders that our own extrapolation
+    # is something the client said.
+    _forget_client_position(state, "press superseded the click leg")
     print(f"[c{conn_id}] press supersedes the click leg: body re-pinned at "
           f"({model[0]:.0f},{model[1]:.0f}); attacking agent {target_id}",
           flush=True)
