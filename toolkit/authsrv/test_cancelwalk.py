@@ -11,6 +11,7 @@ verdict from a run is the run's business; a wrong ANSWER SHAPE from the
 server would be this file's.
 """
 
+import ast
 import os
 import sys
 
@@ -19,7 +20,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
 import checks  # noqa: E402
 
-# FLOOR 121, from the green run of 2026-08-25 that landed the
+# FLOOR 124, from the green run of 2026-09-03 that re-aimed the 0x0028
+# source lock: the old single check counted SEND SITES and went red
+# when ANIMREF-RE 40 landed retail's NPC chase halt (a THIRD site,
+# legitimately -- it names the npc, not the player). Split into four:
+# the R6 gate/label pair, the site census, the PLAYER-directed count
+# (the one carrying the safety argument), and the npc site's identity
+# and gate. 121 from the green run of 2026-08-25 that landed the
 # --resync-separation lever (P8's negative-control dial: refused alone,
 # refused non-positive/non-finite, allowed with --resync with the override
 # named in the note, the pin-x-resync cell still outranking it, and -- after
@@ -36,10 +43,80 @@ import checks  # noqa: E402
 # model-park REALs; 82 when R10's --cast-stop=pin arm landed; 59 after
 # the R8 review pass; 58 when R8's section landed; 43 with R1-R6's arms;
 # 29 with R1-R4's alone; 24 with R1-R3).
-LEDGER = checks.Ledger("cancelwalk arms", floor=121)
+LEDGER = checks.Ledger("cancelwalk arms", floor=124)
 check = LEDGER.ok
 
 PLAYER = 1
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+
+
+def _authsrv_src():
+    return open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
+
+
+def stop_moving_sites():
+    """Every `send(GAME_SMSG_AGENT_STOP_MOVING, ...)` in authsrv.py, by AST.
+
+    One row per site: `(line, chain, builder, agent)` -- `chain` the enclosing
+    def names outermost-first, `builder` the dotted name that built the
+    payload (None for a hand-built literal), `agent` the source text of that
+    builder's first argument.
+
+    An AST walk rather than the substring count this lock used to run,
+    because the invariant is about WHICH AGENT each site names, and that is
+    an argument expression rather than a line of text. The old count could
+    not tell a new player-halt from a new npc-halt; this can.
+    """
+    tree = ast.parse(_authsrv_src())
+    chain = {}
+
+    def walk(node, stack):
+        for child in ast.iter_child_nodes(node):
+            sub = stack
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                sub = stack + [child.name]
+            chain[child] = sub
+            walk(child, sub)
+
+    walk(tree, [])
+    sites = []
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "send"
+                and node.args
+                and isinstance(node.args[0], ast.Name)
+                and node.args[0].id == "GAME_SMSG_AGENT_STOP_MOVING"):
+            continue
+        payload = node.args[1] if len(node.args) > 1 else None
+        built = isinstance(payload, ast.Call)
+        sites.append((node.lineno,
+                      tuple(chain.get(node, ())),
+                      ast.unparse(payload.func) if built else None,
+                      ast.unparse(payload.args[0])
+                      if built and payload.args else None))
+    return sorted(sites)
+
+
+def npc_follow_call_gates():
+    """The `if` conditions guarding every call of `_npc_follow_tick`.
+
+    The npc halt sits in a closure inside that function, so the gate that
+    decides whether it can fire at all is on the CALL, not on the send.
+    """
+    tree = ast.parse(_authsrv_src())
+    gates = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.If):
+            continue
+        for stmt in node.body:
+            for sub in ast.walk(stmt):
+                if (isinstance(sub, ast.Call)
+                        and isinstance(sub.func, ast.Name)
+                        and sub.func.id == "_npc_follow_tick"):
+                    gates.append(ast.unparse(node.test))
+    return gates
 
 
 def section_parse():
@@ -297,18 +374,54 @@ def section_stop_answer():
     check(op == 0x0028 and vals[1] == PLAYER and used == 6,
           "and it decodes back to [0x0028, player] with zero residual",
           f"({op:#06x}, {vals}, {used})")
-    # Wiring. The send site exists once, gated on the global, inside the
-    # 0x0047 arm -- and the general stop arm stays otherwise silent.
+    # Wiring, in four locks. This USED TO BE one check counting send sites
+    # at TWO, and ANIMREF-RE 40 reddened it by landing a third -- retail's
+    # own NPC chase halt (studies/animref/FINDINGS.md 40.2: a bare
+    # `0x0028 AGENT_STOP_MOVING [npc]`, 5/7 chases, p50 0.496 s after the
+    # last follow). That site is legitimate and the old lock could not say
+    # so, because a site count cannot tell WHO a halt names. Re-aimed onto
+    # the invariant that actually carries the risk: 0x0028 halts BOTH client
+    # copies where they stand, so what must stay pinned is the number of
+    # sites that can name the PLAYER -- not the number of sites.
     src = open(os.path.join(here, "authsrv.py"), encoding="utf-8").read()
     check(src.count('if STOP_ANSWER == "ack":') == 1
-          and src.count("[cancelwalk R6 ") == 1
-          and src.count("send(GAME_SMSG_AGENT_STOP_MOVING,") == 2
-          and src.count("agents.agent_stop_moving(PLAYER_AGENT_ID)") == 2,
-          "ONE R6 gate, ONE R6-labelled send, and exactly TWO 0x0028 send "
-          "sites in the file (R6's stop-ack and R8's cast-stop, each behind "
-          "its own gate), every payload from the builder the wire-shape "
-          "check above drives -- a gate with the send deleted, a third "
-          "site, or a hand-built payload would each redden this")
+          and src.count("[cancelwalk R6 ") == 1,
+          "ONE R6 gate and ONE R6-labelled send -- a gate whose send was "
+          "deleted, or a second site borrowing R6's label, reddens this")
+    sites = stop_moving_sites()
+    check(len(sites) == 3
+          and all(b == "agents.agent_stop_moving" for _, _, b, _ in sites),
+          "THREE 0x0028 send sites, every payload from the builder the "
+          "wire-shape check above drives -- never a hand-built [agent] "
+          "literal, which would skip that builder's agent-id-0 refusal and "
+          "put a silent no-op on the wire", f"{sites}")
+    player = [s for s in sites if s[3] == "PLAYER_AGENT_ID"]
+    check(len(player) == 2
+          and sorted(s[1][-1] for s in player) == ["handle",
+                                                   "handle_skill_press"],
+          "and exactly TWO of them name the PLAYER: R6's stop-ack in the "
+          "0x0047 handler and R8/R10's cast-stop in handle_skill_press, "
+          "each behind its own gate. THIS is the count carrying the safety "
+          "argument -- studies/movement/FINDINGS.md's stop census is scoped "
+          "to the player's own stop window (0x0028 in 7 of 114 stops, "
+          "'a server author must not send 0x0028 on a stop'), and a third "
+          "player-directed site is a new warp channel into both copies",
+          f"{player}")
+    npc = [s for s in sites if s[3] != "PLAYER_AGENT_ID"]
+    check(len(npc) == 1
+          and npc[0][3] == "agent_id"
+          and npc[0][1] == ("_npc_follow_tick", "_halt")
+          and npc_follow_call_gates() == ["NPC_FOLLOW"],
+          "and the third names a NON-player agent: the chase halt in "
+          "_npc_follow_tick._halt, gated on NPC_FOLLOW (revert "
+          "--legacy-npc-chase). Retail sends this one -- 5/7 chases "
+          "(animref 40.2), and 187 of its 282 corpus-wide 0x0028s name a "
+          "non-player agent (movement FINDINGS 3.2's census: 95 are "
+          "player-directed). Its INSTANT is the audited part: animref 40.9 "
+          "moved it onto the follow's own half-second clock "
+          "(HALT_ON_CLOCK), which 40.11 re-affirmed as retail-measured "
+          "after retiring 40.9's own justification for it",
+          f"{npc} gates={npc_follow_call_gates()}")
     check("STOP_ANSWER = None" in src,
           "the global defaults to None -- defaults are an owner ruling in "
           "this repo and no diagnostic ships on")
