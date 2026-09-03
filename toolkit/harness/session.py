@@ -1964,6 +1964,60 @@ def main():
             if not a.exe:
                 raise SystemExit(why)
             print(f"client: {why}")
+        # ABSOLUTE, ONCE, BEFORE ANY CONSUMER SEES IT -- and this is a real
+        # defect that cost an operator session on 2026-09-03, not tidiness.
+        #
+        # `run_client` launches with `Popen([a.exe] + args,
+        # cwd=os.path.dirname(a.exe))`. Windows resolves a RELATIVE application
+        # name against the working directory it is handed, so
+        # `--exe vault/run/<build>/Gw.exe` made CreateProcess look for
+        # `vault/run/<build>/vault/run/<build>/Gw.exe` and die with
+        # `FileNotFoundError: [WinError 2]` -- AFTER the stack was up, the cage
+        # cleared and the 4 GB archive verified, so the failure arrived a good
+        # twenty seconds in and looked nothing like a bad path.
+        #
+        # WHY IT HID FOR SO LONG: every consumer ABOVE the Popen -- the DH
+        # binding check, `datcheck`, the `Gw.log` unlink -- reads the file
+        # through the ordinary open() path, which resolves relative names
+        # against the PROCESS cwd and therefore works fine. Only the spawn
+        # takes the new cwd, so the relative form is correct everywhere except
+        # the one line that matters, and whether it fires depends on the shell
+        # the operator launched from. The runsheets carry the relative form and
+        # it had worked repeatedly from PowerShell.
+        #
+        # Normalising here rather than at the Popen keeps ONE spelling of the
+        # path in the report, the console line and the cage's own error text --
+        # `sorted(exes)[-1]` picking the wrong build three times in this repo
+        # is the standing lesson about launch paths that differ from what the
+        # log says (project-rurik-sorted-last-defect).
+        # AND resolve a `vault/...`-relative spelling against the REAL vault,
+        # because a git worktree has no vault of its own. Every other tool here
+        # reaches the vault through vaultpath for exactly this reason; `--exe`
+        # was the one path a human types by hand, so it kept the cwd-relative
+        # behaviour and silently pointed at nothing from a worktree. That is
+        # already a recorded trap ("from a worktree, relative vault paths
+        # fail -- use absolute") and it is cheaper to honour the spelling than
+        # to keep the trap. Tried in order: as given, then under the vault.
+        _exe_given = a.exe
+        if not os.path.isfile(os.path.abspath(a.exe)):
+            _parts = a.exe.replace("\\", "/").split("/")
+            if _parts and _parts[0] == "vault":
+                _under = vault_path(*_parts[1:])
+                if os.path.isfile(_under):
+                    a.exe = _under
+                    print(f"client: resolved {_exe_given} under the vault "
+                          f"({vault_why()})")
+        a.exe = os.path.abspath(a.exe)
+        if not os.path.isfile(a.exe):
+            raise SystemExit(
+                f"--exe does not name a file: {a.exe}\n"
+                f"(resolved from the value you passed, against "
+                f"{os.getcwd()}). Refused BEFORE the client launch and before "
+                f"the DH-binding and archive checks -- the same mistake used "
+                f"to surface as a FileNotFoundError out of CreateProcess "
+                f"~20 s in, with the cage cleared and 4 GB of archive already "
+                f"verified, which looks nothing like a bad path. The stack "
+                f"above is torn down on the way out.")
         return run_client(a, outdir)
     except KeyboardInterrupt:
         print("\nstopping")
