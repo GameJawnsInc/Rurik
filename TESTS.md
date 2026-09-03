@@ -7454,6 +7454,34 @@ the same-tick ALIAS**: the
   Floor 28 from the bare-machine run; section 5 skips without the vault and lowers
   nothing. ~5 s with the vault),
 
+  `toolkit/clientscan/test_leadmargin.py` (**the keyboard lead's LENGTH argument,
+  MOVECODE-1z-ab / FINDINGS §1z-ab.** `leadmargin.py` holds the three extractors the
+  argument rests on, and this file drives each over synthetic rows in a temp dir with no
+  vault: the cruise-chord extractor's rules (same heading within 1.15°, same non-zero
+  movementType, a `0x0047` breaks the pair, the 1 s gap floor excludes the heartbeat, the
+  320 u/s bar excludes teleports, a malformed row is skipped and the pair around it
+  survives, an idle pair is nothing), the census (the in-band count and 1 u excess
+  histogram over the 512 u trigger, the ceiling, the tail split into LATE REPORTS under
+  1.15 triggers and SILENT WALKS at or over it, an empty corpus a census not a crash);
+  the per-leg reading on a tap (legs from the sync copy's own target fields, the live
+  position by the client's own clamp-then-dead-reckon rule so a walking leg's distance
+  to go is read from the live point and not the +0x78 origin, a matured leg's park from
+  the clamp, live-vs-live separation, the speed families off the velocity fields, a
+  100 u stub dropped, `until` cutting a contaminated tail); and the BOUNDS against
+  `authsrv`'s own constants — the module's decoded constants equal the server's (run
+  speed, gate 1, the reprieve radius), the hold window is floor + one tick, the shipped
+  520 u lead cannot mature inside it and outlasts the trigger, the hold's cross-family
+  residual is under gate 1 while its SAME-FAMILY residual is pinned as NOT under it
+  (316.8 vs 299.33 — §1z-ab's recorded residual; a floor or tick that silently changed
+  either goes red here), the order-walk cost is the lead itself so 766 costs 246 u more,
+  a measured ceiling enters as its own inequality, two KNOWN-BAD ARMS (400 u fails the
+  trigger, 100 u matures inside the hold), and the constant is 520. Section 4, vault-
+  gated with a loud skip: `leadmargin --check` reproduces the corpus figures as floors
+  and signatures — 1,126 in-band chords, ceiling in [517, 520), six hitches under 600 u,
+  28 silent walks, and on the two lead-ON taps no leg parked longer than one sample with
+  RUN-1zT's three cruise legs one of them at its point when the re-aim landed. Floor 24
+  from the bare-machine run; 25 with the vault.)
+
   `toolkit/clientscan/movehook/test_movehook.py` (**MOVECODE-B2's hook DLL, and
   the first test any hook in this repo has ever had.** `trnhook/` has none, and
   `srclint` therefore imposed nothing on it — which was *silence, not a ruling*,

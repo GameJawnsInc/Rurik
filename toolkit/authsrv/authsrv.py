@@ -5580,22 +5580,44 @@ def d1_lead_dest(reported, vec2):
 # (a 0x002C's Clear closes the fence; see the KBD_LEAD_KILL block); (b)
 # -- BUILT the same night, MOVECODE-1z-z: KBD_SYNC_MATCHED below; and (d),
 # the fence-shutter audit, MEASURED and BUILT as KBD_LEAD_FENCE_GATE below,
-# so all four gates stand and what remains is the length argument --
-# a2_matched_field4 runs on the
-# KBD grant and stop-echo path; (c) the lead length is argued on MATURATION
-# MARGIN -- 766 u leaves ~250 u over the ~515 u report chord where 520 leaves
-# 5 -- with the longer forced walk stated as its cost, not on any claim about
-# the client recognising its own proposal (refuted: retail's own wire has 40%
-# non-proposal grants with releases processed at the normal rate).
+# so all four gates stand -- a2_matched_field4 runs on the KBD grant and
+# stop-echo path; and (c) the lead's LENGTH, argued 2026-09-04 (MOVECODE-
+# 1z-ab, toolkit/clientscan/leadmargin.py, FINDINGS sec.1z-ab). The
+# "maturation margin" 1z-u.4 deferred it on is VOID: a lead's copy sits
+# outside the reprieve tube by construction (the AgTrack chain holds the
+# body's own command points, and the newest segment ends at the report
+# that triggered the lead), so every evaluation on it is gate 1, and a
+# dropped re-aim snapped at the next grant's own evaluation whatever the
+# length -- the 08:46 case snaps at ~500 u with 766 too. The hold now
+# bounds that silence at floor + tick = 0.55 s, inside which no lead
+# over 158 u can mature. What the length DOES govern: (i) cruise
+# maturation -- the copy reaches its point iff the lead is under the
+# chord; 520 sits one tap sample over the trigger's measured 517.5 u
+# ceiling (RUN-1zT's cruise legs had 0.7-13.9 u to go at the re-aim,
+# no park over one 33 ms sample), and a cruise park is NOMATCH_PASS in
+# the decode; (ii) the ORDER-WALK if a lead is ever walked as an order,
+# which is the lead itself and the one cost monotone in it. So 520
+# stands and 766 costs 246 u per such event while buying no mechanism.
+# Not a claim about the client recognising its own proposal (refuted:
+# retail's own wire has 40% non-proposal grants with releases processed
+# at the normal rate). Two residuals are the hold's, not the length's,
+# and are recorded in sec.1z-ab: a same-family turn refused within a
+# tick of a grant is evaluated at the re-bake at up to 2 x 288 x 0.55 =
+# 316.8 u (1 of 3,623 corpus refusals predicted over gate 1), and the
+# guard's clause 2 models a keyboard body as parked, so it predicts a
+# snap at every maturing lead and is blocked only by REPIN_MAX_REPORT_AGE.
 # The formula below is unchanged and is what `--kbd-lead` sends.
 KBD_SYNC = True
 KBD_SYNC_LEAD_ON = False
 KBD_SYNC_SPEED_ON = True
 KBD_SYNC_STOP_ON = True
-# The client's own 0x003D distance trigger, held-heading chord p99 = 515.1 u.
-# A lead shorter than this lets the arrival tick fire between re-aims -- and
-# 1z-u shows a lead only 5 u longer than it matures on the first dropped
-# re-aim. Opt-in only; see the block above.
+# The client's own 0x003D distance trigger: 512 u, measured spread [505,
+# 518) over 1,126 same-heading cruise chords, ceiling 517.5 u
+# (toolkit/clientscan/leadmargin.py, MOVECODE-1z-ab). A lead under the
+# chord lets the arrival tick fire between re-aims; over it, the only
+# quantity that grows with the length is the order-walk. So: the smallest
+# value over the ceiling, pinned against the server's own floor and tick
+# in test_leadmargin. Opt-in only; see the block above.
 KBD_SYNC_LEAD = 520.0
 # MOVECODE-1z-y (sec.1z-u.5 item a; FINDINGS sec.1z-y): the two gates the
 # lead waits behind, built. Both are additive and both ship ON.

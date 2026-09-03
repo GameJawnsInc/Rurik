@@ -268,7 +268,11 @@ zero-lead grant at the body, `--no-kbd-lead-kill`; the lead grant's field 4 is
 matched to field 3, `--no-kbd-matched-plane`, 1z-z; and no lead is ever sent into a
 fence the server shut with a 0x002C, `--no-kbd-lead-fence-gate`, 1z-aa — every
 server 0x002C shuts AgTrack's fence until the next keyboard walk-start, measured
-12/12 on the movetap corpus).
+12/12 on the movetap corpus). **Its LENGTH is argued (1z-ab, 2026-09-04): 520 stands,
+one tap sample over the trigger's 517.5 u ceiling; 766 is refuted as a margin and
+costs 246 u of order-walk; `python toolkit/clientscan/leadmargin.py --check`
+reproduces every figure. The lead's return waits on one scored run alone — with
+`--resync` OFF, whose model would read a whole lead of separation.**
 **`--grant-suppress` and the heading arm share ONE rate-limit clock**, so between them
 they cannot exceed one grant per 0.50 s — say which flags were on when you report a run.
 

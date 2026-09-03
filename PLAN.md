@@ -1506,8 +1506,10 @@ added the routing origin's own plane word and the cast abandon; §1z-x the
 enslavement detector, which withdraws RUN-1zT's confirmation; §1z-y the held
 re-aim and the lead kill, item (a) of the list before the lead returns; §1z-z
 the matched plane word on the lead grant, item (b); §1z-aa the fence-shutter
-audit, item (d), measured 12/12 and built as a gate. All four gates stand; the
-lead's return now waits on the length argument and one scored run.** The bundle
+audit, item (d), measured 12/12 and built as a gate. All four gates stand. §1z-ab
+(2026-09-04) argued the length: the maturation margin is void under the hold, 520
+stands at one tap sample over the trigger's 517.5 u ceiling, 766 is refuted as a
+margin, and the lead's return now waits on one scored run alone.** The bundle
 question Q13 poses (adopt `D1_LEAD`?) is unchanged by it. The session's felt symptoms were
 1z-t's keyboard lead, now opt-in.
 Raised 2026-08-27 by
@@ -1611,6 +1613,41 @@ floors and aborts in `RUN-R8.md`; both are operator-driven client runs.
 ---
 
 ## 8. Immediate next actions
+
+### ★★★ MOVEMENT 2026-09-04 — THE LEAD'S LENGTH ARGUED (MOVECODE-1z-ab): the maturation margin is void under the hold, 520 stands, 766 is refuted as a margin — the keyboard lead now waits on the run alone
+
+**[studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1z-ab.** Zero client
+runs; three extractors in `toolkit/clientscan/leadmargin.py` over the owner's own
+captures, and the decode already in `agtrack_mirror.py`. The constant does not move.
+
+* **What the numbers are:** 766 is the client's own proposal and it is a fixed ~768 u
+  ray on all eight movement types (= 1.5 × the 512 u trigger). The trigger: 1,126 of
+  1,160 same-heading cruise chords over 505 u sit in [505, 518), ceiling **517.5 u**;
+  the 34 over it are 6 late reports (frame hitches, 525–573 u) and **28 silent walks**
+  of 1.2–12 triggers — a body walking without reporting, §0.11's lock readable from
+  the server log alone.
+* **The margin premise is refuted by the transcription:** a lead's copy sits outside
+  the reprieve tube by construction (the chain holds the body's own command points),
+  so every evaluation on it is gate 1 and a dropped re-aim snapped at the next grant's
+  own evaluation whatever the length — the 08:46 case snaps at ~500 u with 766 too.
+  The hold bounds that silence at 0.55 s, inside which no lead over 158 u can mature.
+* **What the length governs, on tape:** cruise maturation — at 520 RUN-1zT's three
+  cruise legs had 13.9 / 0.7 / 3.9 u to go when the re-aim landed, no park over one
+  33 ms sample; at 766 (625 D1 legs) 5 zero-length parks, all clipped stubs. A cruise
+  park is `NOMATCH_PASS` in the decode. The one cost monotone in the length is the
+  order-walk: 766 costs 246 u more per event than 520 and buys no mechanism.
+* **Residuals recorded, not built:** the hold's same-family wide turn (2 × 288 × 0.55 =
+  316.8 u over gate 1; 1 of 3,623 corpus refusals predicted over); the guard's clause 2
+  predicts a snap at every maturing keyboard lead (no keyboard glide in `_async_est`),
+  blocked 8/8 by `REPIN_MAX_REPORT_AGE`; `--resync` must stay off on a lead run (its
+  model holds the client at its last report); the silent-walk verdict as the next
+  instrument.
+* **Tests:** `test_leadmargin` new (25, floor 24; bare-machine + the vault
+  reproduction), `test_kbdsync` 84 and `test_d1lead` 94 unchanged, `test_srclint`
+  green. `KBD_SYNC`'s (c) paragraph and the constant's comment rewritten to the derived
+  result.
+* **What remains:** RUN-1zT's script under `--kbd-lead` with the four gates on,
+  scored by `w0score.py` with the enslavement detector. Then `0x005FCAA0`.
 
 ### ★★★ MOVEMENT 2026-09-03 night — THE FENCE-SHUTTER AUDIT (MOVECODE-1z-aa): every server 0x002C shuts the fence, the fence re-arms only at a keyboard walk-start, and a lead is never sent into the window — §1z-u.5's four gates are all built
 
