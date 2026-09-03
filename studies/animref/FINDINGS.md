@@ -4301,6 +4301,162 @@ to set up: every press now leaves a row.
   grant's point) was in the same rows and unread. A peer's skeptic lane read it.
   Read every column of the instrument before narrating a path.
 
+## 42. ANIMREF-RE 42 — the Hatcher under the stairs: the follow's plane words are the SPAWN plane, frozen; retail's are the MOVER's plane, tracked
+
+**Owner's report, 2026-09-04, watching RUN-1zAB on map 146:** the hostile Hatcher
+(agent 10) *"terrain-walks UNDER the stairs — its pathing ignores the stair geometry /
+z-height."* Deferred that day because it did not touch the run's question. Read here
+from the run's own captures, the mesh, and the live corpus — **zero client runs**. It is
+not a z problem and it is not a clipping problem: this server has no z anywhere. It is
+the two plane words of the NPC's `0x002A`, where they come from, and that nothing ever
+refreshes them.
+
+### 42.1 What the wire said, and what the client did with it — OBSERVED
+
+The hand-off's grep string (`Hatcher SYNC`) matches nothing in
+`vault/captures/gamesrv/authsrv-20260903T183941-c1.jsonl`; the Hatcher's rows are the
+`FOLLOW:` / `FOLLOW re-path:` / `agent 10 halts at` labels (`0x002A` / `0x0028`), and
+the two client copies are `agenttap-20260903T183943.jsonl`'s `sync` / `async` blocks.
+Decoded from the payload hex (`vault/research/animref/hatcherplane_join-20260904.py`):
+
+| | n |
+|---|---|
+| `0x002A` orders to agent 10 over the 60 s run | **48** |
+| plane words on every one of them | **(0, 0)** |
+| orders whose destination the mesh places on **plane 29 only** (no plane 0 beneath) | **24** |
+| … of which the player's own report, ≤ 0.04 s old, named plane 29 | 21 |
+| orders to a point on no trapezoid at all | 7 |
+| halts (`0x0028`); halts at a plane-29-only point | 11; **7** |
+| agenttap samples with the Hatcher's sync copy on plane-29-only ground | 231 of 624 |
+| moving samples: heading deviation between the copy's velocity and (target − position) | **0.00° p50, 0.00° max** over 180, at 288.0 u/s |
+
+Map 146's plane 29 is five trapezoids (x 10,069..11,183, y 8,279..9,385) reached from
+plane 0 through two portals (pairs 96 and 97); a 40 u grid over its bounding box finds
+**0 cells on both planes** — it is a raised surface, not a bridge over ground. The player
+climbed onto it at t ≈ 11.9 s (report `(10370, 8283)` plane 29, the gap at `(10300, 8212)`
+on no trapezoid) and the follow re-paths from 11.94 s on ordered the Hatcher to plane-29
+points with words `(0, 0)`. The client walked the body along the straight chord to each
+point at full speed — no routing — and parked it 73–79 u from the player's x, y.
+
+The harness's own screenshots show the rest. `walk2-keyW.png` (t ≈ 15.5 s): the player
+mid-staircase taking `-3`, no attacker in frame. `walk3-keyS.png` (t ≈ 21.3 s): the
+selected target's health bar and marker drawn over the treads a body-length from the
+player, and **no body under them**. The server's copy of the Hatcher was parked at
+`(10194, 8603)`, 73 u away, on plane-29-only ground.
+
+### 42.2 The mechanism is the decode already in the tree — OBSERVED (binary), RECONSTRUCTION (render)
+
+`0x002A` and `0x0029` share the goal setter `0x00602A40`
+(`schema/overrides.json` 42; `studies/movement/FINDINGS.md`, "`0x0029` field 3/4 —
+CONFIRMED and CLOSED"): **field 3 is the destination plane**, written to `agent+0x90`;
+**field 4 is the mover's current plane**, written to `agent+0x80` unless it is −1; and the
+arrived arm of `0x005FF820` copies `agent+0x88..+0x94` verbatim into the position block,
+so **at arrival the agent's plane becomes field 3**. Nothing in the handler is
+player-specific — the agent id is bounds-checked against the array and that is all.
+
+So with `(0, 0)` to a plane-29 point: every re-path (each 0.5 s while the player moves)
+re-stamps the Hatcher's current plane to 0, and every arrival sets it to 0 at a point that
+has no plane 0. The one writer the client has of its own — arrival — copies our field 3.
+The rendered height following the plane word is the same fact the player arc measured
+from the other side: a stale plane in the `0x002C` hard-set *"drops the player onto the
+floor underneath"* (`studies/movement/FINDINGS.md` §Click-to-move; `CANCELWALK.md`
+"fall-through-under-stairs"). RECONSTRUCTION here because agenttap reads x, y, velocity
+and target and **has no plane column** — the Hatcher's `agent+0x80` was never read, only
+its consequence seen. Which `MapFindPath` tier produced the straight chord (the goal at
+plane 0 cannot resolve at a plane-29-only point; "start must resolve exactly, goal gets
+snapped") is UNREAD; the chord itself is measured.
+
+### 42.3 Ours, player path against NPC path — the check is not a clip
+
+| the player's walk has | the NPC's chase has |
+|---|---|
+| a **live plane source**: `state["plane"]` from every `0x003D`/`0x003E` | `agent["plane"]` written once at spawn (`spawn_population`, `spawn_enemy`, `respawn.py`) and **never again**; its only NPC-side readers are the three movement senders |
+| **mesh resolution at the destination**: `_router_plane()` = `pm.plane_at(dest, prefer=carry)` on routed grants; the click arm passes the client's own named plane through | none — `_npc_follow_tick` sends `plane, plane` = the spawn value on the follow and every re-path; the legacy arm's two `0x0029` sends do the same |
+| **plane repair** for the copy (`plane_repair_track`) | none |
+| `clip_to_walkable` / `pm.clip` — **plane-blind** (`walkable()` asks "inside any trapezoid, on any plane?") | the same `pm.clip`, equally plane-blind |
+
+The last row is why the server did not notice: its own copy of the Hatcher climbed in
+x, y through the union of planes and parked at plane-29-only points — the server believed
+the Hatcher was on the plateau and swung from 80 u — while its record still said plane 0
+and its wire said so twice per order. "The z-plane check the player fix added" is not a
+clip; it is that the player's words are *sourced* (report and mesh) and *refreshed*
+(every grant), and the NPC's are a spawn constant.
+
+### 42.4 Retail, read — OBSERVED over 61 live connections
+
+`vault/research/animref/npcplane_census-20260904.py`, through `livewire.py`
+(origin-gated); the player id per connection from the click echo, the follow-target mode
+as fallback. Positive control: §40.2's 45 hostile follows from 6 NPCs (radius-12
+criterion) sit inside this cut's 63 from 10 (swung-at-the-player criterion).
+
+| | n |
+|---|---|
+| NPC `0x002A` naming the player, any allegiance | 156 — words `(0,0)` 154, `(13,13)` 1, `(19,19)` 1 |
+| the same, movers that swing at the player | **63 from 10 NPCs — `(0,0)` 62, `(13,13)` 1** |
+| NPC-addressed `0x0029` | 8,160 — **1,164 with field 3 ≠ field 4** |
+| NPC agents with grants; whose plane words CHANGE over their grants | 377; **128** |
+
+**The two nonzero follows are the mover's plane, not the target's.** NPC 11
+(`20260817T231139`, map 15): the `0x0029` legs before its `(13,13)` follow read `(13, 0)`
+— destination 13, mover on 0 — the follow reads `(13, 13)` once it is there, and the leg
+after reads `(0, 13)`; the player it followed reported plane 0 throughout (1.56 s fresh).
+Its `(19,19)` follow is the same shape: `(19, 0)` before, `(0, 19)` after. NPC 25's
+sequence `(0,0) (0,0) (17,0) (17,17) (0,17) (0,17)` is a climb and a descent written out
+in plane words. Retail's server **tracks each NPC's current plane** and its follow carries
+it twice — the same `(cur, cur)` the player's own approach follows carry (§38, 61/61
+equal). Ours equals that only while the mover stays on its spawn plane, which Lakeside's
+flat ground made true for every earlier run: this symptom had **zero exposure** until an
+operator took the enemy up the stairs.
+
+**And the question that matters has zero exposure in the corpus too.** Hostile follows
+sent while the player stood off plane 0: **3**, all NPC 25 in `20260818T132739`, all to
+the *identical* point `(-5915, 2079)` twenty minutes apart, with the player 790 / 1,405 /
+1,415 u away and its report 24.6 / 1.9 / 1.9 s stale — a return-to-home leg that names the
+player, not a chase. No retail hostile ever chased the player across a plane in these 21
+captures. *How retail's client climbs the stairs after you* is not in the tapes.
+
+### 42.5 The fix, derived — NOT shipped
+
+Two words, two sources, both already in the tree:
+
+1. **Field 4 = the mover's current plane, tracked.** As the server's copy steps
+   (`_npc_follow_tick`'s integrator, and the legacy arm's), resolve
+   `pm.plane_at(nx, ny, prefer=agent["plane"])` — `_router_plane`'s exact call — and
+   keep the previous value when it returns None. Retail's `(dest, cur)` census is this
+   rule applied 8,160 times.
+2. **Field 3 = the destination's plane.** For the follow, the player's reported plane
+   where the mesh offers it at the point (`pm.plane_at(px, py, prefer=state["plane"])`,
+   the client's fresh report never overruled by the mesh — `movement/FINDINGS` "Do not
+   retry" #4), else the mover's. The decode says field 3 is what the arrival copies into
+   the agent's plane; retail's crossing legs carry `(dest, cur)` 1,164 times; retail's
+   follows are `(cur, cur)` 63/63 but with no cross-plane chase to show what they do at a
+   staircase. `(dest, cur)` is the derived shape; `(cur, cur)` is the fallback if the
+   client refuses it.
+
+What moves: `test_agentlife.py` §chase pins `fol[2] == fol[3]` ("both plane words carry
+the same plane") — true on a same-plane order, false on a crossing order under item 2; the
+pin becomes "field 4 is the mover's current plane". The halt `0x0028` carries no plane and
+needs nothing. Do **not** reach for −1: the word field's extension is undecidable
+(`movement/FINDINGS`, "65535 is UNDECIDABLE").
+
+**The one run that scores it** is the RUN-1zAB route again — W up the stairs, S back —
+with agenttap given a `plane` column (`agent+0x80`, the dword after y). PASS: a `(29, 0)`
+follow at the foot, `(29, 29)` after the crossing, the Hatcher's copies on plane-29 ground
+with plane 29 in the new column, and one screenshot with the body on the treads. REFUTED
+if the Hatcher does not move on the `(29, 0)` order, or snaps — the P-17 phasing door is a
+controlled-agent (AgTrack) mechanism and whether an NPC has one is UNREAD.
+
+### 42.6 Process notes
+
+* The hand-off's grep string did not exist. The rows were found by opcode and agent
+  id, not by label; label text is the least stable key in these logs.
+* The first retail cut (156) counted allies' formation follows naming the player; the
+  hostile cut is the one with a positive control (§40.2's 45/6 inside 63/10). The three
+  "cross-plane hostile" rows survived that cut and still were not chases — read the
+  window, not the count.
+* agenttap has every column but the one this question needed. The plane word sits four
+  bytes past the y it already reads.
+
 ## Provenance
 
 All figures are measurements over the owner's own live captures via extractors in this
@@ -4339,3 +4495,5 @@ the c2s side rebuilt from `wire.jsonl` with `load_tape`'s own byte accounting �
 every n restated in full above; its ours-side census reads the gamesrv captures the
 same way, and the tap join reads `agenttap.py`'s existing output. No client launch, no
 new extraction, no upstream derivation — no §6.1 register row required.
+
+§42 is a re-read of the RUN-1zAB captures already in the vault (the gamesrv capture, `agenttap.py`'s output, the harness screenshots), a mesh query through `pathmap.py` against the vault's `dat_study` archive (file 0x1B97D, the same read `load_pathmap` makes), and a corpus scan over the 21 live tapes through `livewire.py` — `npcplane_census-20260904.py` and `hatcherplane_join-20260904.py`, session scratch kept under `vault/research/animref/`, every n restated in full above. Its binary claims cite sections already in the tree (`movement/FINDINGS`, `schema/overrides.json`) and add none. No client launch, no new extraction, no upstream derivation — no §6.1 register row required.

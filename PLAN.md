@@ -1614,6 +1614,30 @@ floors and aborts in `RUN-R8.md`; both are operator-driven client runs.
 
 ## 8. Immediate next actions
 
+### ★ ENEMY 2026-09-04 — the Hatcher walks UNDER the stairs on map 146 (ANIMREF-RE 42): the NPC follow's plane words are the SPAWN plane, frozen; retail's are the MOVER's plane, tracked. Investigated, NOT fixed
+
+**[studies/animref/FINDINGS.md](studies/animref/FINDINGS.md) §42.** Zero runs: the
+RUN-1zAB captures, map 146's mesh, and the live corpus. Owner's report while watching
+RUN-1zAB; deferred that day, read the next.
+
+* **Ours:** 48 `0x002A` orders to the Hatcher, every one `(0, 0)`; **24 to points the
+  mesh holds on plane 29 only** (a raised surface — no plane 0 beneath, 0 stacked cells
+  on a 40 u grid). The client walked the straight chord at 288 u/s (heading deviation
+  0.00° over 180 samples); two harness screenshots show the hit and the target bar with
+  no body. Field 4 re-stamps the mover's plane to 0 every half-second and the arrival
+  copies field 3 (= 0) into it — the decode already in `movement/FINDINGS`.
+* **Player vs NPC:** the player's words are sourced (report + `plane_at`) and refreshed
+  every grant; `agent["plane"]` is written at spawn and read only by the three senders.
+  `pm.clip` is plane-blind for both, so the server's own copy climbed and never noticed.
+* **Retail (61 connections):** hostile follows 63 from 10 NPCs, `(0,0)` on 62; the one
+  nonzero `(13,13)` is the **mover's** plane (legs `(13,0)` before, `(0,13)` after) with
+  the player on 0. 1,164 of 8,160 NPC `0x0029` carry `(dest, cur)`; 128 of 377 NPCs
+  change plane words. **Zero exposure** of a hostile chasing the player across a plane.
+* **Derived fix, not shipped:** field 4 = `plane_at(copy, prefer=agent["plane"])` as the
+  copy walks; field 3 = the destination's plane (`plane_at(player, prefer=state["plane"])`).
+  `test_agentlife` §chase's `fol[2] == fol[3]` pin moves. One run scores it, agenttap
+  needs a `plane` column (`agent+0x80`) first.
+
 ### ★★★ MOVEMENT 2026-09-03 — RUN-1zAB RAN, **INCONCLUSIVE** (MOVECODE-1z-ac): the enslavement detector had a co-directional-lead blind spot, now closed; the residual is the lead maturing at the report boundary
 
 **[studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1z-ac,
