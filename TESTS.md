@@ -9822,7 +9822,36 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   pairwise cell asserted to outrank the modifier, and -- after the
   review's mutation pass showed the main() rebind unpinned -- the
   `RESYNC_SEPARATION = a.resync_separation` assignment source-locked
-  by name, CAST_STOP-style. Floor 121),
+  by name, CAST_STOP-style. **Re-aimed 2026-09-03: the 0x0028 source
+  lock counted SEND SITES, and ANIMREF-RE §40 legitimately reddened
+  it.** The old single check asserted "exactly TWO 0x0028 send sites";
+  §40 landed a third -- retail's own NPC chase halt
+  (`studies/animref/FINDINGS.md` §40.2: a bare `0x0028
+  AGENT_STOP_MOVING [npc]`, **5/7** chases, p50 0.496 s after the last
+  follow) in `_npc_follow_tick._halt`, gated on `NPC_FOLLOW`. A site
+  count cannot tell WHO a halt names, so it could not distinguish that
+  from the hazard it existed to catch: 0x0028 halts BOTH client copies
+  where they stand. Re-aimed onto the invariant that carries the risk
+  and split into four AST-based locks (`stop_moving_sites()` walks the
+  calls and reports `(line, def-chain, builder, agent-expression)`):
+  the R6 gate/label pair; THREE sites, every payload from
+  `agents.agent_stop_moving` (never a hand-built `[agent]` literal,
+  which would skip that builder's agent-id-0 refusal); exactly **TWO
+  naming `PLAYER_AGENT_ID`**, in `handle` (R6 stop-ack) and
+  `handle_skill_press` (R8/R10 cast-stop) -- the count carrying the
+  safety argument, since `studies/movement/FINDINGS.md` §3.2's "a
+  server author must not send `0x0028` on a stop" is scoped to the
+  PLAYER's own stop window (0x0028 in 7 of 114 stops) and **187 of
+  retail's 282 corpus-wide 0x0028s name a non-player agent** (95 are
+  player-directed); and the third asserted to name `agent_id` inside
+  `_npc_follow_tick._halt` behind `NPC_FOLLOW`, its INSTANT being the
+  audited part (§40.9 moved it onto the follow's own half-second clock,
+  `HALT_ON_CLOCK`, which §40.11 re-affirmed as retail-measured after
+  retiring §40.9's own justification). A 5-mutation probe went 5 of 5
+  RED with the exact locks predicted: a fourth site naming the player,
+  the npc site re-aimed at the player, a hand-built npc payload, the
+  `NPC_FOLLOW` gate removed, and the R6 send deleted under a standing
+  gate. Floor 124),
   `toolkit/authsrv/test_killwindow.py` (the kill window, checked against
   ArenaNet's own kills. Our server sent one message when an agent died —
   `0x00F1` with the death bit — where the real service sends three: status,
