@@ -3700,7 +3700,16 @@ Floor 75 against a green 75 with 5 declared skips (the archive-conditional
   fence). Six source locks: the press and click call sites, the three poll sites
   beside the held click, the hold stored between the verdict row and the fire,
   the leg armed at the fire site and popped by both report arms, the stop arm's
-  clear. Floor 33 → 60 from the green run. No vault, no client. ~1 s),
+  clear. **Section 12 (MOVECODE-1z-z, same night) added nine:** the matched plane
+  word on the KBD lead grant ships ON with its revert; a crossing lead (report
+  plane 29 over a carried 0) goes out dest 29 / cur 29 with `pc_matched` TRUE on
+  its row; the known-bad arm `--no-kbd-matched-plane` sends dest 29 / cur 0 (the
+  073121 12.358 s shape); a same-plane lead records the override as not fired; a
+  refused crossing re-aim is HELD with the matched word; the zero-lead default's
+  F1 lag is pinned UNCHANGED (scoped out, stated); the stop echo's two words are
+  the report's plane by construction; and the match sits inside the KBD lead
+  branch before the lead point. Floor 33 → 60 → 69 from the green runs. No
+  vault, no client. ~1 s),
   `toolkit/authsrv/test_livewire.py` (the committed retail-decode recipe,
   RETHINK instrument #2 — the campaign's referee moved out of a deletable
   scratchpad. Guards `toolkit/authsrv/livewire.py`: the no-vault doors

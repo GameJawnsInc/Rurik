@@ -9722,3 +9722,69 @@ is to be argued on maturation margin (§1z-u.4). The hold's live effect under ze
 is a prediction, not a measurement: the operator's next keyboard session scores it for
 free (`HELD HEADING` lines and `deferred-heading` rows where a re-aim used to vanish).
 No client launch, no static reads, no upstream derivation.
+
+---
+
+## 1z-z. The matched plane word on the keyboard lead grant — §1z-u.5 item (b), built; the stop echo was already matched by construction
+
+**Asked:** "do the matched plane word on the keyboard path next." Zero client runs; one
+constant, one call, one flag, nine checks through the shipped arm's own bytes. Ident
+`MOVECODE-1z-z`.
+
+### 1z-z.1 What was wrong, and what shipped
+
+§1z-t left the keyboard lead branch's plane words untouched *"to change one
+variable"*, and §1z-u.4 measured the cost: `pc_matched` False on all 14 fired KBD rows,
+and 073121's 12.358 s lead carrying **dest 29 / cur 0** — a sync copy sent 520 u across
+a seam stamped with the plane it left, which is the stale-stamped copy stage 1 of the
+input lock needs (REALFIX §0.11: *"plane-carry's one-grant lag leaves the SYNC copy
+stamped with the OLD plane across a seam … a same-direction crossing re-report fires a
+full lead with pd ≠ pc, and within ~80 ms the client's plane-mismatch reconcile snaps the
+drawn body onto the sync copy and clears clientControlled: fence shut"*). §0.11's
+armer-kill (e2) was built for D1 only: *"under `--d1-lead`, field 4 always MATCHES field
+3 — on grants AND on the stop-repin."*
+
+**Built:** `KBD_SYNC_MATCHED` (`--no-kbd-matched-plane` reverts; `--legacy-kbd-sync`
+clears it with the rest). Inside the KBD lead branch, before the lead point and after
+the carry — the D1 branch's own order — `a2_matched_field4(plane, zl_plane_cur)`
+overrides the carried word to the report's plane and the row's `pc_matched` records
+where it changed the wire. A refused crossing re-aim is held with the matched word (§1z-y
+composes: the hold stores `zl_plane_cur` after the match). **The KBD stop echo needed
+nothing**: it sends the report's plane in both words — a zero-distance echo has one plane
+— matched by construction, and the send's own comment says so; the test pins it.
+
+### 1z-z.2 Scope, stated as a pin
+
+The item names the **KBD lead grant**. The shipped zero-lead default still sends
+`--plane-carry`'s one-grant lag at a crossing (dest 29 / cur 0), and `test_kbdsync` §12
+pins that **unchanged**: F1 is an owner-ruled arm, §0.11's control era shows the
+zero-lead crossing snap *recovering* on the next press (3/3 fence re-arm cycles — the lock
+needs the lead's click-walk regime composed with the snap, and zero-lead has no such
+regime), and the plane repair stands behind it. Whether the default should match too is a
+question about F1, filed, not decided here.
+
+Two recorded facts sit either side of this word and neither moved: retail's nonzero
+pairs are bit-identical 222/222 (REALFIX §0.9), and its half-zero pairs show the one-grant
+lag (79.7% of 306 crossings) — ROUTER-Q7's deviation, now also the keyboard lead's; and
+§1z-o.6's counterexample (matching to a dest plane the copy's point cannot resolve, gate 2
+firing) is the helper's own open question and applies to this caller exactly as to the
+router's. `a2_matched_field4` now has ten call sites and its def; `test_d1lead`'s census
+names the tenth.
+
+### 1z-z.3 Tests, and what remains before the lead returns
+
+`test_kbdsync.py` 60 → 69 (floor 69): ON with its flag; a crossing lead goes out
+dest 29 / cur 29 with `pc_matched` TRUE; the known-bad arm sends dest 29 / cur 0 (the
+073121 shape); a same-plane lead records no override; the held re-aim carries the matched
+word; the zero-lead default's lag pinned unchanged; the stop echo's words; the match's
+position inside the branch. `test_d1lead` 94 (its call-site census updated to ten),
+`test_router` 114, `test_position_trust` 235, `test_playerswing` 116, `test_cancelwalk`
+124, `test_familyrate` 26, `test_clickecho` 25, `test_planerepair` 41, `test_grantsim`
+86, `test_srclint` 26 — green.
+
+Of §1z-u.5's list, (a) and (b) and (c) are built; **(d) remains** — the audit of the
+two `0x002C` senders (`AGTRACK RE-PIN`, `PRESS ENDS THE WALK`) as fence-shutters, which
+§1z-y made more pointed (a `0x002C`'s Clear closes the fence until the next movement
+command) — and the lead's length is still to be argued on maturation margin (§1z-u.4).
+The lead stays opt-in until then. No client launch, no static reads, no upstream
+derivation.

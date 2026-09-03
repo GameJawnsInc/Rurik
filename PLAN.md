@@ -1504,7 +1504,9 @@ shipped with a revert each (`--no-router`, `--router-raw-leg`,
 the operator's 40 refused clicks retrodict to 40 answered. §1z-w (same night)
 added the routing origin's own plane word and the cast abandon; §1z-x the
 enslavement detector, which withdraws RUN-1zT's confirmation; §1z-y the held
-re-aim and the lead kill, item (a) of the list before the lead returns.** The bundle
+re-aim and the lead kill, item (a) of the list before the lead returns; §1z-z
+the matched plane word on the lead grant, item (b). Only (d), the fence-shutter
+audit, remains.** The bundle
 question Q13 poses (adopt `D1_LEAD`?) is unchanged by it. The session's felt symptoms were
 1z-t's keyboard lead, now opt-in.
 Raised 2026-08-27 by
@@ -1608,6 +1610,30 @@ floors and aborts in `RUN-R8.md`; both are operator-driven client runs.
 ---
 
 ## 8. Immediate next actions
+
+### ★★ MOVEMENT 2026-09-03 night — the MATCHED PLANE WORD on the keyboard lead grant (MOVECODE-1z-z): §1z-u.5 item (b) built; the stop echo was already matched by construction
+
+**[studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1z-z.** Zero client
+runs; one constant, one call, one flag.
+
+* **`KBD_SYNC_MATCHED` (`--no-kbd-matched-plane` reverts):** inside the KBD lead branch,
+  in the D1 branch's own order, `a2_matched_field4` overrides the carried plane word to
+  the report's plane and the row's `pc_matched` records where it changed the wire. 1z-t
+  had skipped it "to change one variable" and §1z-u.4 measured the skip as the §0.11
+  lock armer live on this path (dest 29 / cur 0 on 073121's 12.358 s lead). The held
+  re-aim (1z-y) inherits the matched word. **The stop echo needed nothing** — it sends
+  the report's plane in both words already.
+* **Pinned, not changed:** the zero-lead default keeps `--plane-carry`'s one-grant lag
+  at a crossing (F1 is an owner-ruled arm; §0.11's control era shows the zero-lead
+  crossing snap recovering). Whether F1 should match too is a question about F1, filed.
+  §1z-o.6's counterexample stays the helper's open question, for this caller as for the
+  router's.
+* **Tests:** `test_kbdsync` 60 → 69 (floor 69), `test_d1lead`'s call-site census now
+  names ten sites; ten files green.
+* **Of §1z-u.5's list, (a) (b) (c) are built.** Remaining before the lead returns: (d)
+  the fence-shutter audit of `AGTRACK RE-PIN` and `PRESS ENDS THE WALK` (a `0x002C`'s
+  Clear closes the fence until the next movement command, 1z-y), and the length argued on
+  maturation margin (§1z-u.4). Then `0x005FCAA0`.
 
 ### ★★★ MOVEMENT 2026-09-03 night — HOLD, NOT DROP, and the lead KILLED on a press or a click (MOVECODE-1z-y): §1z-u.5 item (a) built, the kill as a grant rather than a 0x002C
 

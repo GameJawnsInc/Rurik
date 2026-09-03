@@ -48,15 +48,17 @@ from test_position_trust import receive_arm, Sent, FakeRec   # noqa: E402
 
 # Floor read off the first green run of this file, per CLAUDE.md -- never
 # guessed from a head-count, which this arc has got wrong three times.
-# 33 at 1z-t; +27 at 1z-y (sections 10-11: the held heading, the lead kill).
-LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=60)
+# 33 at 1z-t; +27 at 1z-y (sections 10-11: the held heading, the lead kill);
+# +9 at 1z-z (section 12: the matched plane word on the lead grant).
+LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=69)
 check = checks.adopt(LEDGER)
 
 SRC = open(authsrv.__file__, encoding="utf-8").read()
 
 
 def drive_heading(values, *, kbd_sync=True, lead=True, speed=True,
-                  d1=False, state=None, since=10.0, hold=True, kill=True):
+                  d1=False, state=None, since=10.0, hold=True, kill=True,
+                  carry=False, matched=True):
     """One 0x003D through the SHIPPED heading arm. Returns (state, wire).
     `since` is the age of the last grant when the report arrives: 10 s
     clears the rate floor, 0.1 s is refused `heading-rate` (1z-y)."""
@@ -67,12 +69,14 @@ def drive_heading(values, *, kbd_sync=True, lead=True, speed=True,
                       ("values", "state", "rec", "send", "conn_id"))
     saved = (authsrv.ZERO_LEAD, authsrv.KBD_SYNC, authsrv.KBD_SYNC_LEAD_ON,
              authsrv.KBD_SYNC_SPEED_ON, authsrv.D1_LEAD, authsrv.PLANE_CARRY,
-             authsrv.KBD_SYNC_HOLD, authsrv.KBD_LEAD_KILL)
+             authsrv.KBD_SYNC_HOLD, authsrv.KBD_LEAD_KILL,
+             authsrv.KBD_SYNC_MATCHED)
     authsrv.ZERO_LEAD = True
     authsrv.KBD_SYNC, authsrv.D1_LEAD = kbd_sync, d1
     authsrv.KBD_SYNC_LEAD_ON, authsrv.KBD_SYNC_SPEED_ON = lead, speed
     authsrv.KBD_SYNC_HOLD, authsrv.KBD_LEAD_KILL = hold, kill
-    authsrv.PLANE_CARRY = False
+    authsrv.KBD_SYNC_MATCHED = matched
+    authsrv.PLANE_CARRY = carry
     try:
         import time as _t
         w.now = _t.time() - since
@@ -83,7 +87,7 @@ def drive_heading(values, *, kbd_sync=True, lead=True, speed=True,
         (authsrv.ZERO_LEAD, authsrv.KBD_SYNC, authsrv.KBD_SYNC_LEAD_ON,
          authsrv.KBD_SYNC_SPEED_ON, authsrv.D1_LEAD,
          authsrv.PLANE_CARRY, authsrv.KBD_SYNC_HOLD,
-         authsrv.KBD_LEAD_KILL) = saved
+         authsrv.KBD_LEAD_KILL, authsrv.KBD_SYNC_MATCHED) = saved
     return st, w
 
 
@@ -532,6 +536,80 @@ def main():
     i_stop = SRC.index('rec.event("kbd_leg", act="clear", by="0x0047"')
     check('state["heading_hold"] = None' in SRC[i_stop:i_stop + 400],
           "the stop arm clears the held heading beside the leg pop")
+
+    print("\n12. MOVECODE-1z-z: the sec.0.11 armer-kill on the KBD lead grant")
+    check(authsrv.KBD_SYNC_MATCHED is True
+          and "--no-kbd-matched-plane" in SRC
+          and "KBD_SYNC_MATCHED = not a.no_kbd_matched_plane" in SRC
+          and SRC.count("global KBD_SYNC_HOLD, KBD_LEAD_KILL, KBD_SYNC_MATCHED") == 1,
+          "the matched word ships ON with its revert flag, rebound through a "
+          "declared global",
+          "1z-t skipped the armer-kill 'to change one variable'; 1z-u.4 "
+          "measured the skip as a decoded lock cause")
+    REPORT_29 = [1, [1000.5, 2000.25], 29, [766.0, 0.0], 1]
+
+    def crossing(plane_prev=0):
+        return {"pos": (1000.0, 2000.0), "plane": 0, "pos_seen": 0.0,
+                "zl_last_grant_plane": plane_prev}
+    st, w = drive_heading(REPORT_29, lead=True, carry=True, state=crossing())
+    mv = w.of(MOVE)
+    row = st["_rec"].of("grant_verdict")[-1]
+    check(len(mv) == 1 and mv[0][1][2] == 29 and mv[0][1][3] == 29,
+          "a crossing lead grant carries MATCHED words -- dest 29 / cur 29 -- "
+          "not 073121's dest 29 / cur 0",
+          f"sent {mv[0][1] if mv else None}")
+    check(row["fired"] is True and row["pc_matched"] is True
+          and row["plane_cur"] == 29 and row["plane_dest"] == 29
+          and row["plane_differs"] is False,
+          "and the row's pc_matched -- sec.0.11's verification key -- is TRUE "
+          "where the override changed the wire",
+          f"row {row}")
+    st, w = drive_heading(REPORT_29, lead=True, carry=True, state=crossing(),
+                          matched=False)
+    mv = w.of(MOVE)
+    row = st["_rec"].of("grant_verdict")[-1]
+    check(len(mv) == 1 and mv[0][1][2] == 29 and mv[0][1][3] == 0
+          and row["pc_matched"] is False and row["plane_differs"] is True,
+          "KNOWN-BAD ARM (--no-kbd-matched-plane): the raw carry goes out, "
+          "dest 29 / cur 0 -- the 073121 12.358 s shape",
+          f"sent {mv[0][1] if mv else None}")
+    st, w = drive_heading(REPORT_29, lead=True, carry=True,
+                          state=crossing(plane_prev=29))
+    row = st["_rec"].of("grant_verdict")[-1]
+    check(w.of(MOVE)[0][1][3] == 29 and row["pc_matched"] is False,
+          "on a same-plane lead the words already agree and the override is "
+          "recorded as NOT having fired",
+          f"row {row}")
+    st, w = drive_heading(REPORT_29, lead=True, carry=True, state=crossing(),
+                          since=0.1)
+    hold = st.get("heading_hold")
+    check(hold is not None and hold["plane"] == 29 and hold["plane_cur"] == 29,
+          "a refused crossing re-aim is HELD with the matched word, so the "
+          "re-bake at the floor carries it too (1z-y x 1z-z)",
+          f"hold {hold}")
+    st, w = drive_heading(REPORT_29, lead=False, carry=True, state=crossing())
+    mv = w.of(MOVE)
+    check(len(mv) == 1 and mv[0][1][2] == 29 and mv[0][1][3] == 0,
+          "SCOPED OUT, pinned: under zero-lead (the shipped default) the grant "
+          "keeps --plane-carry's one-grant lag, dest 29 / cur 0 -- F1's ruled "
+          "wire, unchanged by this item",
+          "the item names the KBD lead grant; the zero-lead crossing snap "
+          "recovers on the next press (0.11's control era, 3/3) and is filed")
+    check('[PLAYER_AGENT_ID, list(reported),\n'
+          '                                  plane, plane],\n'
+          '                                 f"KBD STOP-ECHO' in SRC,
+          "the stop echo sends the report's plane in BOTH words -- matched by "
+          "construction, the item's other half already true",
+          "a zero-distance echo has one plane; a carry there would import a "
+          "lag into a site that cannot need one")
+    i_branch = SRC.index("elif KBD_SYNC and KBD_SYNC_LEAD_ON:")
+    i_match = SRC.index("if KBD_SYNC_MATCHED:")
+    i_kbd = SRC.index("a2_dest, a2_src = kbd_lead_dest(")
+    check(i_branch < i_match < i_kbd,
+          "the match sits inside the KBD lead branch, before the lead point, "
+          "after the carry -- the D1 branch's own order",
+          "after the point it would still be right; outside the branch it "
+          "would change the zero-lead default")
     return LEDGER.verdict()
 
 

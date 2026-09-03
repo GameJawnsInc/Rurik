@@ -5575,6 +5575,7 @@ def d1_lead_dest(reported, vec2):
 # MOVECODE-1z-y: KBD_SYNC_HOLD / heading_hold_tick and KBD_LEAD_KILL /
 # _kbd_lead_kill below, the kill as a zero-lead GRANT rather than a 0x002C
 # (a 0x002C's Clear closes the fence; see the KBD_LEAD_KILL block); (b)
+# -- BUILT the same night, MOVECODE-1z-z: KBD_SYNC_MATCHED below --
 # a2_matched_field4 runs on the
 # KBD grant and stop-echo path; (c) the lead length is argued on MATURATION
 # MARGIN -- 766 u leaves ~250 u over the ~515 u report chord where 520 leaves
@@ -5628,6 +5629,23 @@ HEADING_HOLD_MAX_AGE = 1.0
 # stays open. A lead that has already matured is not re-granted (its
 # arrival has already been evaluated); the row says so.
 KBD_LEAD_KILL = True          # False (--no-kbd-lead-kill): the lead outlives.
+# MOVECODE-1z-z (sec.1z-u.5 item b): the sec.0.11 ARMER-KILL on the KBD lead
+# grant -- field 4 MATCHES field 3 through a2_matched_field4, the D1
+# branch's own call (REALFIX 0.11 (e2): "under --d1-lead, field 4 always
+# MATCHES field 3 -- on grants AND on the stop-repin -- so the sync copy's
+# plane word reconciles AT the crossing and the cross-plane state never
+# exists"). 1z-t skipped it on this branch "to change one variable" and
+# 1z-u.4 measured the cost: pc_matched False on all 14 fired KBD rows, and
+# 073121's 12.358 s lead carried dest 29 / cur 0 -- a sync copy sent 520 u
+# across a seam stamped with the plane it left, the stale word stage 1 of
+# the input lock needs. The KBD stop echo already sends the report's plane
+# in both words (matched by construction; the send below says so). Retail:
+# nonzero pairs bit-identical 222/222 (REALFIX 0.9); its half-zero pairs
+# show the one-grant lag (79.7% of 306 crossings), so ROUTER-Q7's recorded
+# deviation applies here as it does under D1, and 1z-o.6's counterexample
+# (matching to a dest plane the copy's point cannot resolve) stays the
+# helper's own open question. Inert without --kbd-lead.
+KBD_SYNC_MATCHED = True       # False (--no-kbd-matched-plane): 1z-t's raw carry.
 
 
 def heading_hold_note(reported, point, plane, plane_cur, moving, a2_src,
@@ -19121,13 +19139,21 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                     # overshoots by +513 u signed p95 against
                                     # +342 at 520.
                                     #
-                                    # PLANE WORDS DELIBERATELY UNTOUCHED. The
-                                    # D1 branch runs a2_matched_field4 first;
-                                    # this one does not, so the only thing
-                                    # 1z-t changes on this arm is the POINT.
-                                    # One variable, so one run can convict it
-                                    # -- and sec.0.11's armer-kill is a
-                                    # separate claim with its own evidence.
+                                    # PLANE WORDS: 1z-t left them UNTOUCHED
+                                    # ("the D1 branch runs a2_matched_field4
+                                    # first; this one does not, so the only
+                                    # thing 1z-t changes on this arm is the
+                                    # POINT") and 1z-u.4 measured what that
+                                    # skip cost: the sec.0.11 lock armer live
+                                    # on this path, pc_matched False on all
+                                    # 14 fired KBD rows. MOVECODE-1z-z runs
+                                    # the armer-kill here as the D1 branch
+                                    # does, with its own revert; the
+                                    # KBD_SYNC_MATCHED block has the record.
+                                    if KBD_SYNC_MATCHED:
+                                        zl_plane_cur, a2_matched = (
+                                            a2_matched_field4(plane,
+                                                              zl_plane_cur))
                                     a2_dest, a2_src = kbd_lead_dest(
                                         reported, heading)
                                     if a2_src == "kbd":
@@ -22639,6 +22665,13 @@ def main():
                          "arm the counterfactual says is WORSE than the "
                          "shipped default (p50 425 u against 237), because "
                          "the lead's overshoot has nothing to collect it.")
+    ap.add_argument("--no-kbd-matched-plane", action="store_true",
+                    help="MOVECODE-1z-z OFF: the keyboard lead grant "
+                         "carries the plane-carry word raw again (dest 29 "
+                         "/ cur 0 at a crossing, 1z-u.4's shape) instead "
+                         "of field 4 matched to field 3 (REALFIX 0.11's "
+                         "armer-kill, retail's 222/222). Inert without "
+                         "--kbd-lead. Diagnostic arm.")
     ap.add_argument("--no-kbd-hold", action="store_true",
                     help="MOVECODE-1z-y (a1) OFF: a rate-refused heading "
                          "report is DROPPED again instead of held and "
@@ -24255,11 +24288,12 @@ def main():
     # capture whose header cannot say which policy produced it costs a later
     # session a reconstruction (REALFIX-Q8).
     global KBD_SYNC, KBD_SYNC_LEAD_ON, KBD_SYNC_SPEED_ON, KBD_SYNC_STOP_ON
-    global KBD_SYNC_HOLD, KBD_LEAD_KILL
+    global KBD_SYNC_HOLD, KBD_LEAD_KILL, KBD_SYNC_MATCHED
     if a.legacy_kbd_sync:
         KBD_SYNC = False
         KBD_SYNC_HOLD = False
         KBD_LEAD_KILL = False
+        KBD_SYNC_MATCHED = False
         print("[map] --legacy-kbd-sync: MOVECODE-1z-t OFF. The keyboard wire "
               "is the pre-1z-t one exactly -- heading grants at the reported "
               "point verbatim, no player 0x002B, nothing on a 0x0047. The "
@@ -24273,6 +24307,7 @@ def main():
         KBD_SYNC_STOP_ON = not a.no_kbd_stop_echo
         KBD_SYNC_HOLD = not a.no_kbd_hold
         KBD_LEAD_KILL = not a.no_kbd_lead_kill
+        KBD_SYNC_MATCHED = not a.no_kbd_matched_plane
         _terms = [n for n, on in (("lead 520 u + navmesh clip (OPT-IN)",
                                    KBD_SYNC_LEAD_ON),
                                   ("0x002B family rate", KBD_SYNC_SPEED_ON),
@@ -24286,7 +24321,10 @@ def main():
                                    "at the floor", KBD_SYNC_HOLD),
                                   ("an in-flight lead KILLED on press/click "
                                    "by a zero-lead grant at the body",
-                                   KBD_LEAD_KILL)) if on]
+                                   KBD_LEAD_KILL),
+                                  ("the lead grant's field 4 MATCHED to "
+                                   "field 3 (the 0.11 armer-kill)",
+                                   KBD_SYNC_MATCHED)) if on]
         print(f"      1z-y GATES  {', '.join(_gates) if _gates else 'NONE'}")
         if KBD_SYNC_LEAD_ON:
             print("      THE LEAD IS ON (--kbd-lead) -- an OPT-IN arm since "
