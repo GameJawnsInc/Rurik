@@ -9191,8 +9191,9 @@ PRESS_SUPERSEDES_LEG = True   # False (--press-waits-for-leg): sec.37's wait.
 # ANIMREF-RE 41 (2026-09-03): THE PRESS SUPERSEDES THE KEYBOARD BELIEF TOO.
 # The operator's "couldn't resume attacking after some point" (RUN-FEEL): the
 # point was the session's first 0x003D. Five keyboard reports arrived
-# (23.56-24.16 s), NO 0x0047 ever followed -- our own 0x0029 grant had turned
-# the walk into a click-order leg, and click arrival is silent (sec.37.2) --
+# (23.56-24.16 s), NO 0x0047 ever followed -- the tap shows the drawn body
+# snapped ~498 u onto our own 520 u keyboard lead's endpoint at 26.85 s and the
+# release never reported (why is MOVECODE 1z-u's, FINDINGS sec.41.2) --
 # and `kbd_moving_at` stayed armed for the remaining 16.6 s. Every one of the
 # 22 presses after it went unanswered (2 got a follow, none a swing) while the
 # tap showed the body PARKED from 26.8 s and the Hatcher swinging at it. The

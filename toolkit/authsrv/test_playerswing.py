@@ -1488,10 +1488,11 @@ def section_press_ends_kbd_latch():
 
     THE SYMPTOM (RUN-FEEL, 2026-09-03 08:46): "couldn't resume attacking
     after some point". The point was the session's first 0x003D at 23.56 s:
-    five keyboard reports, then NO 0x0047 for the remaining 16.6 s -- our own
-    0x0029 grant had turned the walk into a click-order leg, and click
-    arrival is silent (37.2) -- so `kbd_moving_at` stayed armed while the
-    tap showed the body parked from 26.8 s and the Hatcher swinging at it.
+    five keyboard reports, then NO 0x0047 for the remaining 16.6 s -- the
+    tap shows the drawn body snapped ~498 u onto our own 520 u keyboard
+    lead's endpoint at 26.85 s, and the release never reported (why is
+    MOVECODE 1z-u's, FINDINGS 41.2) -- so `kbd_moving_at` stayed armed while
+    the body stood parked from 26.85 s and the Hatcher swung at it.
     22 presses after that point: 2 got a follow, 0 got a swing. Before it:
     4 of 5 fresh presses swung, the fifth lost its order to a click 1 ms
     behind it (retail-faithful, MOVE_ENDS_CHAIN). The handed-down diagnosis

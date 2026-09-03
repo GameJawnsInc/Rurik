@@ -234,12 +234,15 @@ presses that swung all came behind refused-click runs; the starved presses had
 no click within 215 ms of them. The split is at **23.56 s, the first keyboard
 report of the session** — which is what "after some point" meant. Five reports,
 then silence: a `grant_verdict` fired at 24.09 s with dest (9412, 8041), 518 u
-from the reported body; the tap shows the body walking away from the Hatcher
-(86 → 486 u) and parked at **that exact point** by 26.8 s, speed 0; and click
-arrival is silent (§37.2), so no stop report ever cleared `kbd_moving_at`
-(RECONSTRUCTION: our own `0x0029` turned the keyboard walk into a click-order
-leg — the comment at `SWING_HOLDS_WALK_GATE` already describes the client doing
-exactly that with key state ignored). `_player_body_moving` read that latch
+from the reported body; the tap shows the DRAWN body walking the operator's own
+north-west diagonal at 216 u/s (24.08–24.40 s, its target never the grant's
+point) while the SYNC copy walked the lead, then at 26.85 s the drawn body
+**relocated ~498 u onto the sync copy's parked point** — both at (9412, 8041),
+speed 0, the Hatcher 405–486 u away — and no stop report ever cleared
+`kbd_moving_at`. (This paragraph first said the body "walked the granted leg as
+a click-order and parked silently"; the tap's target column refutes the walk —
+FINDINGS §41.2's correction — and why the release went unreported after that
+snap is MOVECODE 1z-u's reconstruction.) `_player_body_moving` read that latch
 UNBOUNDED and `attack_tick` returned on it for the remaining 16.6 s. The
 instrument gap was real; the diagnosis behind it was not.
 
@@ -268,8 +271,8 @@ capture's own shape (floor 96 → 116). The operator's next ordinary session
 scores it for free: "couldn't resume attacking" would now show as
 `press_verdict` rows with `fired: false` and a named branch. The grant that
 silenced the stop is **MOVECODE-1z-t's own KBD LEAD** (flags `KBD_SYNC_LEAD_ON`,
-`lead_src: "kbd"` on both fired rows) — a server-chosen ~520 u endpoint the
-client executes as a click-order with a silent arrival — being corrected by
-rurik-f2 as MOVECODE 1z-u (the client's own proposed endpoint); it is untouched
-here, and §41's rule stays necessary above it because a stop can still go
-missing.
+`lead_src: "kbd"` on both fired rows) — a server-chosen ~520 u endpoint onto
+which the drawn body was snapped when the leg matured unanswered — being
+corrected by rurik-f2 as MOVECODE 1z-u (the client's own proposed endpoint); it
+is untouched here, and §41's rule stays necessary above it because a stop can
+still go missing.
