@@ -58,6 +58,39 @@ owner's call, not a session's.
 
 ---
 
+## ★ RERUN — registered 2026-09-03 before launching, on the §1z-ac detector
+
+Same script, same build, same flags, verbatim. The only change is the instrument:
+the enslavement test is now the two world targets being **bit-identical**
+(§1z-ac), not the body's target being within `GRANT_EPS` of the grant.
+
+**Why rerun at all.** The first run's only failing clause was scored by an
+instrument with a known false positive, and the fixed instrument has never been
+exercised on a capture it did not help produce. A second sample also puts a
+number on the maturation photo finish, which is a per-leg coin flip by
+construction.
+
+**The original bounds in §2 stand and are NOT relaxed.** FREE confirms, ENSLAVED
+refutes, MIXED is inconclusive. What follows is an additional prediction, so a
+MIXED result cannot be talked into agreeing with §1z-ac afterwards.
+
+| registered before the run | |
+|---|---|
+| **Expected verdict** | FREE, or MIXED **under 5 %** — the first run read 2.2 % on the fixed detector |
+| **Every flagged sample will be a MATURATION PARK** | both copies bit-identical, the body **resumes** on the next grant, and that leg's release is **reported** |
+| **Which legs** | the flagged leg(s) will differ from the first run's (Q strafe) — maturation vs the re-aim is a photo finish, 520/speed within 0.01 s of the report gap in every family |
+| **p50** | under 150 u (first run 1.0 u) |
+| **Travel scales with hold** | W ≈ 1,050–1,155 u at 5 s, S ≈ 540–680 at 4 s, Q/E ≈ 590–650 at 3 s |
+| **REFUTES the §1z-ac reading** | any flagged run whose leg has an **unreported release**, or a held-key leg moving ≤ 50 u, or travel not scaling — that is the lock, not a park |
+| **REFUTES the fix** | ENSLAVED (≥ 25 %) |
+| **Would surprise me** | 0 flagged samples on every leg — the photo finish says maturation should win sometimes |
+
+**Exposure floors unchanged** (§3): 500 u over 20 moving samples, ≥ 8 `KBD LEAD`,
+≥ 3 lead legs ≥ 300 u. KILL and FENCE GATE again have zero exposure by the
+script's construction and are reported as zero, not as passes.
+
+---
+
 ## 1. The question
 
 > With the four gates on, does the keyboard lead keep the client's WORLD-0 copy
