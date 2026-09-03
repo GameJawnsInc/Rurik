@@ -231,8 +231,25 @@ import grantsim   # noqa: E402
 # 223 with RURIK_VAULT at an empty directory, which also printed its 2 declared
 # skips. The 8-check difference is still exactly section 10's 4 and section
 # 13's 4, so the fixture accounting above is unchanged.
-FLOOR_BARE = 223
-FLOOR_FULL = 231
+#
+# 2026-09-03, the SECOND modelled placement: section 11 gained 4 more
+# fixture-free checks, closing the site the block above named as deliberately
+# left out. `_approach_send`'s snap re-pin sends a 0x002C at a point that may
+# be OURS or the CLIENT'S, so the four are the forget, the positive control
+# that the re-pin still reaches the follow leg it arms, and BOTH controls the
+# asymmetry needs -- a re-pin at the client's own report forgets nothing, and
+# the `repath=True` arm, which runs no guard at all, forgets nothing either.
+# Each was shown red on its own mutation before this line moved, and the
+# attribution was clean: deleting the forget reddens only the forget (that is
+# HEAD's behaviour), dropping `state["pos"] = model` reddens only the positive
+# control, dropping the `src == "leg"` test reddens only the report control,
+# and hoisting the forget to the top of the function reddens both controls and
+# neither of the first two. Read off real green runs of their own
+# configuration: 235 from a normal run, 227 with RURIK_VAULT at an empty
+# directory, which also printed its 2 declared skips. The 8-check difference
+# is still exactly section 10's 4 and section 13's 4.
+FLOOR_BARE = 227
+FLOOR_FULL = 235
 LEDGER = checks.Ledger("the position-trust policy: refuse, but never latch",
                        floor=FLOOR_BARE)
 check = checks.adopt(LEDGER)
@@ -1216,6 +1233,125 @@ def main():
           f"check above passes on a `_press_supersedes` that clears the "
           f"triple unconditionally, including on the arm that never moved "
           f"the body")
+
+    # THE SECOND MODELLED PLACEMENT, and the ASYMMETRY that tells it from the
+    # three that are not. `_approach_send`'s snap guard sends its own 0x002C at
+    # `_click_leg_start`'s point when the server's copy has fallen more than the
+    # client's 100 u reprieve behind the modelled body. It is NOT a client_pos
+    # writer, so the source lock above cannot see it -- and until 2026-09-03 it
+    # left exactly the stale report the press-supersede arm used to launder.
+    #
+    # WHY THAT MATTERS, stated as the failure and not as a tidiness argument:
+    # the send re-seeds the sync model onto its OWN point (`_note_wire_move`
+    # sets sync_from = point, sync_to = None), so `_keepalive_ok` next computes
+    # sep = hypot(client_pos - sync) with client_pos still at the click leg's
+    # START. That is the separation which just fired this re-pin, so it is over
+    # KEEPALIVE_SEPARATION by construction, and the grant goes out at the leg
+    # start -- walking the body back down the leg it just walked.
+    # `_resync_verdict` has the same shape and hard-SETS both copies there.
+    # Both consumers ship OFF, so these four checks are the only thing standing
+    # between the defect and the flag that turns it on.
+    #
+    # AND THIS SITE IS THE ONLY ONE THAT CAN GO EITHER WAY, which is the whole
+    # reason it asks `_click_leg_source` rather than forgetting outright:
+    # "leg" is our dead-reckoned lerp and CONTRADICTS the report, while
+    # "report" IS the report and agrees with it -- the `_agtrack_maybe_repin` /
+    # `_maybe_resync` case, where forgetting would fail every consumer closed
+    # over a fact we still hold. Checks 3 and 4 are that half.
+    TARGET = {"pos": (2000.0, 0.0), "name": "a test dummy"}
+
+    def approach_mid_leg():
+        """A body 1.0 s into a 500 u click leg from (0,0); the server's SYNC
+        model still parked at the leg's start, and the client's last report
+        there too -- the state the guard's own comment describes."""
+        t0 = time.time() - 1.0
+        return {"pos": (0.0, 0.0), "plane": 0,
+                "client_pos": (0.0, 0.0), "client_plane": 3,
+                "client_pos_at": t0,
+                "click_moving_at": t0,
+                "click_leg": authsrv._leg_record((0.0, 0.0), (500.0, 0.0),
+                                                 t0, 288.0),
+                "sync_from": (0.0, 0.0), "sync_to": None, "sync_at": t0}
+
+    def approach_run(st, repath=False):
+        """Drive the guard and hand back every 0x002C it emitted."""
+        pins = []
+
+        def send(opcode, values, _label=None):
+            if opcode == authsrv.GAME_SMSG_AGENT_UPDATE_POSITION:
+                pins.append(values)
+
+        authsrv._approach_send(send, st, 0, 10, TARGET, time.time(),
+                               repath=repath)
+        return pins
+
+    st3 = approach_mid_leg()
+    pins3 = approach_run(st3)
+    check(len(pins3) == 1 and "client_pos" not in st3
+          and "client_plane" not in st3 and "client_pos_at" not in st3,
+          "the approach snap re-pin FORGETS the client-sourced triple too, "
+          "for the same reason the press-supersede does",
+          f"{len(pins3)} re-pins, pos={st3.get('client_pos')} "
+          f"plane={st3.get('client_plane')} at={st3.get('client_pos_at')} -- "
+          f"a report left at the leg's START after a placement at its END is "
+          f"what `_keepalive_ok` then measures its separation against, and it "
+          f"grants AGENT_MOVE_TO_POINT back at the start. The lock above "
+          f"cannot catch this: the site writes nothing, it merely fails to "
+          f"drop what it has invalidated")
+    check(len(pins3) == 1 and abs(pins3[0][1][0] - 288.0) < 2.0
+          and abs(pins3[0][1][1]) < 1e-6
+          and st3.get("click_leg") is not None
+          and abs(st3["click_leg"]["p0"][0] - 288.0) < 2.0,
+          "and the guard still re-pins at the modelled leg end AND the follow "
+          "it arms starts from there -- the behaviour, either side of the "
+          "forget",
+          f"pin={pins3[0][1] if pins3 else None} "
+          f"follow p0={(st3.get('click_leg') or {}).get('p0')} -- the payload "
+          f"is read BEFORE `state['pos'] = model` and the follow's start is "
+          f"read AFTER it, so this brackets the write the forget depends on: "
+          f"drop that line and the 0x002C still says 288 while the follow "
+          f"walks from 0, which is the leg re-walked. Expected 288 u along "
+          f"the leg (1.0 s at 288 u/s) on both")
+
+    def approach_report_point():
+        """Parked after a KEYBOARD leg: no click leg, so `_click_leg_source`
+        answers "report" -- a fresh report 400 u from where the sync copy
+        parked at the last grant. The guard fires at the CLIENT's own point."""
+        t0 = time.time() - 0.2
+        return {"pos": (400.0, 0.0), "plane": 0,
+                "client_pos": (400.0, 0.0), "client_plane": 3,
+                "client_pos_at": t0,
+                "click_moving_at": None, "click_leg": None,
+                "sync_from": (0.0, 0.0), "sync_to": None, "sync_at": t0}
+
+    st4 = approach_report_point()
+    pins4 = approach_run(st4)
+    check(len(pins4) == 1 and abs(pins4[0][1][0] - 400.0) < 1e-6
+          and st4.get("client_pos") == (400.0, 0.0)
+          and st4.get("client_plane") == 3,
+          "CONTROL: a re-pin that fires at the CLIENT'S OWN REPORT forgets "
+          "NOTHING -- the placement agrees with the record, so the record "
+          "still holds",
+          f"{len(pins4)} re-pins at {pins4[0][1] if pins4 else None}, "
+          f"pos={st4.get('client_pos')} plane={st4.get('client_plane')} -- "
+          f"this is `_agtrack_maybe_repin`'s and `_maybe_resync`'s case "
+          f"reached through the approach, and it is what makes the forget "
+          f"above attributable to the point's SOURCE rather than to the site. "
+          f"Without it, an unconditional forget passes every check above and "
+          f"fails every consumer closed over a report nothing contradicted")
+
+    st5 = approach_mid_leg()
+    pins5 = approach_run(st5, repath=True)
+    check(not pins5 and st5.get("client_pos") == (0.0, 0.0)
+          and st5.get("client_plane") == 3,
+          "CONTROL: the re-path arm runs no snap guard, sends no 0x002C and "
+          "so forgets nothing",
+          f"{len(pins5)} re-pins, pos={st5.get('client_pos')} "
+          f"plane={st5.get('client_plane')} -- `repath=True` is the 0.5 Hz "
+          f"re-issue while the target moves, and the guard is inside "
+          f"`if not repath:`. Hoist the forget out of that block and a moving "
+          f"target blows away a fresh report twice a second, on an arm that "
+          f"placed nothing")
     resync_sends = []
     for node in ast.walk(src):
         if not (isinstance(node, ast.FunctionDef)
