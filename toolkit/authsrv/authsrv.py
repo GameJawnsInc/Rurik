@@ -4679,6 +4679,9 @@ def _note_wire_move(state, opcode, values, now, rec=None):
         state["sync_from"] = point
         state["sync_to"] = None
         state["sync_at"] = now
+        # MOVECODE-1z-aa: a 0x002C SHUTS AgTrack's fence (12/12 on the
+        # movetap corpus); the 0x003D arm clears this at a walk-start.
+        state["fence_shut_at"] = now
         # AND REALFIX-F1b's ARRIVAL QUEUE DIES WITH THE LEG. The binary is
         # explicit that it must: 0x00602B20's ARMED arm hands off to the
         # teleport primitive 0x006020B0, which CLEARS THE ARRIVAL TICK at
@@ -5575,7 +5578,9 @@ def d1_lead_dest(reported, vec2):
 # MOVECODE-1z-y: KBD_SYNC_HOLD / heading_hold_tick and KBD_LEAD_KILL /
 # _kbd_lead_kill below, the kill as a zero-lead GRANT rather than a 0x002C
 # (a 0x002C's Clear closes the fence; see the KBD_LEAD_KILL block); (b)
-# -- BUILT the same night, MOVECODE-1z-z: KBD_SYNC_MATCHED below --
+# -- BUILT the same night, MOVECODE-1z-z: KBD_SYNC_MATCHED below; and (d),
+# the fence-shutter audit, MEASURED and BUILT as KBD_LEAD_FENCE_GATE below,
+# so all four gates stand and what remains is the length argument --
 # a2_matched_field4 runs on the
 # KBD grant and stop-echo path; (c) the lead length is argued on MATURATION
 # MARGIN -- 766 u leaves ~250 u over the ~515 u report chord where 520 leaves
@@ -5646,6 +5651,46 @@ KBD_LEAD_KILL = True          # False (--no-kbd-lead-kill): the lead outlives.
 # (matching to a dest plane the copy's point cannot resolve) stays the
 # helper's own open question. Inert without --kbd-lead.
 KBD_SYNC_MATCHED = True       # False (--no-kbd-matched-plane): 1z-t's raw carry.
+# MOVECODE-1z-aa (sec.1z-u.5 item d, THE FENCE-SHUTTER AUDIT, FINDINGS
+# sec.1z-aa). MEASURED on the movetap corpus (fence_state is AgTrack's own
+# clientControlled dword, read at the record): every server 0x002C under a
+# fence-reading tape shut the fence at the next sample -- 12 of 12, two
+# senders (CAST-STOP PIN x6, RESYNC x6), one handler -- and the fence
+# re-armed only at a LATER moving 0x003D that followed a park (a keyboard
+# walk-start, 7 of 8), never at the 0x002C itself and never at a 0x0047
+# (0 of 4): shut spans 1.9-5.8 s, i.e. until the operator's next key
+# press. That is the transcription's Clear (agtrack_mirror.
+# on_update_position -> client_controlled = False) with its re-arm rule
+# corrected by the tape (the mirror also re-arms on a stop; CONTESTED,
+# recorded, not changed here). While shut, every 0x0029 is an ORDER, and
+# REALFIX 0.11 stage 2 is what a LEAD does inside that window: the body
+# walks it as a click-order, releases go unreported, the walk-start
+# applier -- the only re-armer -- never runs, and the fence never re-opens.
+# The six senders (RESYNC, AGTRACK RE-PIN, PLANE-REPAIR, APPROACH RE-PIN,
+# PRESS ENDS THE WALK, CAST-STOP PIN) therefore compose with a lead into
+# the lock by construction -- AGTRACK RE-PIN worst of all, since it fires
+# from the report arm ABOVE the lead site, so the lead of the same report
+# lands in the window it just opened. The derived gate: the server tracks
+# the fence it shut (`fence_shut_at`, stamped at every player 0x002C in
+# _note_wire_move, cleared at a walk-start report -- moving, after the
+# latch was clear -- and by nothing else: not a stop, not a click, which
+# the tape did not measure), and a keyboard or D1 lead computed while it is
+# shut degrades to the zero-lead point with lead_clip_why="fence-shut".
+# Zero-lead grants under a shut fence are orders to the body's own point
+# and the tape shows them landing on parked bodies without effect. Inert
+# without a lead arm; ON so the lead cannot return without it.
+KBD_LEAD_FENCE_GATE = True    # False (--no-kbd-lead-fence-gate): leads into a shut fence.
+
+
+def _fence_gate_lead(state, reported, dest, src, clip_why):
+    """(dest, src, clip_why) with a LEAD degraded to the zero-lead point
+    while the fence is shut by our own 0x002C (KBD_LEAD_FENCE_GATE). Pure
+    apart from the read; fallbacks pass through untouched."""
+    if not KBD_LEAD_FENCE_GATE or src not in ("d1", "kbd"):
+        return dest, src, clip_why
+    if state.get("fence_shut_at") is None:
+        return dest, src, clip_why
+    return [float(reported[0]), float(reported[1])], "fallback", "fence-shut"
 
 
 def heading_hold_note(reported, point, plane, plane_cur, moving, a2_src,
@@ -18563,7 +18608,20 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # us it is moving under the keyboard", and it told us
                         # that whether or not we believed the coordinates it
                         # attached -- a refused report is still a report.
+                        _kbd_was_moving = state.get("kbd_moving_at") is not None
                         state["kbd_moving_at"] = time.time() if moving else None
+                        # MOVECODE-1z-aa: the fence we shut RE-ARMS at a
+                        # keyboard walk-start -- a moving report after the
+                        # latch was clear (the tape: 7 of 8 such reports,
+                        # 0 of 4 stops). A mid-walk re-report is not one.
+                        if (moving and not _kbd_was_moving
+                                and state.get("fence_shut_at") is not None):
+                            if rec is not None:
+                                rec.event("fence", act="rearm", by="walk-start",
+                                          shut_for=round(
+                                              time.time()
+                                              - state["fence_shut_at"], 3))
+                            state["fence_shut_at"] = None
                         # And the click-in-flight latch CLEARS on any
                         # 0x003D, moving or not: MEASURED, the client
                         # reports nothing at all while click-walking, so
@@ -19128,6 +19186,12 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                                          a2_dest))
                                     elif a2_src == "fallback":
                                         a2_clip_why = "fallback"
+                                    # MOVECODE-1z-aa: never a lead into a
+                                    # fence we shut (the audit's gate).
+                                    a2_dest, a2_src, a2_clip_why = (
+                                        _fence_gate_lead(state, reported,
+                                                         a2_dest, a2_src,
+                                                         a2_clip_why))
                                 elif KBD_SYNC and KBD_SYNC_LEAD_ON:
                                     # MOVECODE-1z-t term 1. Same shape as the
                                     # D1 branch above and the SAME clip, with
@@ -19163,6 +19227,12 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                                          a2_dest))
                                     else:
                                         a2_clip_why = "fallback"
+                                    # MOVECODE-1z-aa: never a lead into a
+                                    # fence we shut (the audit's gate).
+                                    a2_dest, a2_src, a2_clip_why = (
+                                        _fence_gate_lead(state, reported,
+                                                         a2_dest, a2_src,
+                                                         a2_clip_why))
                                 if rec is not None:
                                     # EVERY evaluation, fired or refused, on the
                                     # SAME channel the click arm uses -- a log
@@ -22665,6 +22735,15 @@ def main():
                          "arm the counterfactual says is WORSE than the "
                          "shipped default (p50 425 u against 237), because "
                          "the lead's overshoot has nothing to collect it.")
+    ap.add_argument("--no-kbd-lead-fence-gate", action="store_true",
+                    help="MOVECODE-1z-aa OFF: a keyboard or D1 lead may "
+                         "be sent into a fence the server itself shut with "
+                         "a 0x002C (AGTRACK RE-PIN, PRESS ENDS THE WALK, "
+                         "CAST-STOP PIN, ...) -- REALFIX 0.11's lock "
+                         "armer. With the gate ON such a lead degrades to "
+                         "the zero-lead point (lead_clip_why fence-shut) "
+                         "until a walk-start report re-arms the fence. "
+                         "Inert without a lead arm. Diagnostic arm.")
     ap.add_argument("--no-kbd-matched-plane", action="store_true",
                     help="MOVECODE-1z-z OFF: the keyboard lead grant "
                          "carries the plane-carry word raw again (dest 29 "
@@ -24288,12 +24367,13 @@ def main():
     # capture whose header cannot say which policy produced it costs a later
     # session a reconstruction (REALFIX-Q8).
     global KBD_SYNC, KBD_SYNC_LEAD_ON, KBD_SYNC_SPEED_ON, KBD_SYNC_STOP_ON
-    global KBD_SYNC_HOLD, KBD_LEAD_KILL, KBD_SYNC_MATCHED
+    global KBD_SYNC_HOLD, KBD_LEAD_KILL, KBD_SYNC_MATCHED, KBD_LEAD_FENCE_GATE
     if a.legacy_kbd_sync:
         KBD_SYNC = False
         KBD_SYNC_HOLD = False
         KBD_LEAD_KILL = False
         KBD_SYNC_MATCHED = False
+        KBD_LEAD_FENCE_GATE = False
         print("[map] --legacy-kbd-sync: MOVECODE-1z-t OFF. The keyboard wire "
               "is the pre-1z-t one exactly -- heading grants at the reported "
               "point verbatim, no player 0x002B, nothing on a 0x0047. The "
@@ -24308,6 +24388,7 @@ def main():
         KBD_SYNC_HOLD = not a.no_kbd_hold
         KBD_LEAD_KILL = not a.no_kbd_lead_kill
         KBD_SYNC_MATCHED = not a.no_kbd_matched_plane
+        KBD_LEAD_FENCE_GATE = not a.no_kbd_lead_fence_gate
         _terms = [n for n, on in (("lead 520 u + navmesh clip (OPT-IN)",
                                    KBD_SYNC_LEAD_ON),
                                   ("0x002B family rate", KBD_SYNC_SPEED_ON),
@@ -24324,7 +24405,10 @@ def main():
                                    KBD_LEAD_KILL),
                                   ("the lead grant's field 4 MATCHED to "
                                    "field 3 (the 0.11 armer-kill)",
-                                   KBD_SYNC_MATCHED)) if on]
+                                   KBD_SYNC_MATCHED),
+                                  ("no lead into a fence we shut with a "
+                                   "0x002C (the fence-shutter audit)",
+                                   KBD_LEAD_FENCE_GATE)) if on]
         print(f"      1z-y GATES  {', '.join(_gates) if _gates else 'NONE'}")
         if KBD_SYNC_LEAD_ON:
             print("      THE LEAD IS ON (--kbd-lead) -- an OPT-IN arm since "

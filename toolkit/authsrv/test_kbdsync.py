@@ -49,8 +49,9 @@ from test_position_trust import receive_arm, Sent, FakeRec   # noqa: E402
 # Floor read off the first green run of this file, per CLAUDE.md -- never
 # guessed from a head-count, which this arc has got wrong three times.
 # 33 at 1z-t; +27 at 1z-y (sections 10-11: the held heading, the lead kill);
-# +9 at 1z-z (section 12: the matched plane word on the lead grant).
-LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=69)
+# +9 at 1z-z (section 12: the matched plane word on the lead grant); +15 at
+# 1z-aa (section 13: the fence-shutter gate).
+LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=84)
 check = checks.adopt(LEDGER)
 
 SRC = open(authsrv.__file__, encoding="utf-8").read()
@@ -58,7 +59,7 @@ SRC = open(authsrv.__file__, encoding="utf-8").read()
 
 def drive_heading(values, *, kbd_sync=True, lead=True, speed=True,
                   d1=False, state=None, since=10.0, hold=True, kill=True,
-                  carry=False, matched=True):
+                  carry=False, matched=True, fence=True):
     """One 0x003D through the SHIPPED heading arm. Returns (state, wire).
     `since` is the age of the last grant when the report arrives: 10 s
     clears the rate floor, 0.1 s is refused `heading-rate` (1z-y)."""
@@ -70,12 +71,13 @@ def drive_heading(values, *, kbd_sync=True, lead=True, speed=True,
     saved = (authsrv.ZERO_LEAD, authsrv.KBD_SYNC, authsrv.KBD_SYNC_LEAD_ON,
              authsrv.KBD_SYNC_SPEED_ON, authsrv.D1_LEAD, authsrv.PLANE_CARRY,
              authsrv.KBD_SYNC_HOLD, authsrv.KBD_LEAD_KILL,
-             authsrv.KBD_SYNC_MATCHED)
+             authsrv.KBD_SYNC_MATCHED, authsrv.KBD_LEAD_FENCE_GATE)
     authsrv.ZERO_LEAD = True
     authsrv.KBD_SYNC, authsrv.D1_LEAD = kbd_sync, d1
     authsrv.KBD_SYNC_LEAD_ON, authsrv.KBD_SYNC_SPEED_ON = lead, speed
     authsrv.KBD_SYNC_HOLD, authsrv.KBD_LEAD_KILL = hold, kill
     authsrv.KBD_SYNC_MATCHED = matched
+    authsrv.KBD_LEAD_FENCE_GATE = fence
     authsrv.PLANE_CARRY = carry
     try:
         import time as _t
@@ -87,7 +89,8 @@ def drive_heading(values, *, kbd_sync=True, lead=True, speed=True,
         (authsrv.ZERO_LEAD, authsrv.KBD_SYNC, authsrv.KBD_SYNC_LEAD_ON,
          authsrv.KBD_SYNC_SPEED_ON, authsrv.D1_LEAD,
          authsrv.PLANE_CARRY, authsrv.KBD_SYNC_HOLD,
-         authsrv.KBD_LEAD_KILL, authsrv.KBD_SYNC_MATCHED) = saved
+         authsrv.KBD_LEAD_KILL, authsrv.KBD_SYNC_MATCHED,
+         authsrv.KBD_LEAD_FENCE_GATE) = saved
     return st, w
 
 
@@ -610,6 +613,111 @@ def main():
           "after the carry -- the D1 branch's own order",
           "after the point it would still be right; outside the branch it "
           "would change the zero-lead default")
+
+    print("\n13. MOVECODE-1z-aa: the fence-shutter audit's gate -- no lead into a "
+          "fence we shut")
+    PIN = authsrv.GAME_SMSG_AGENT_UPDATE_POSITION
+    check(authsrv.KBD_LEAD_FENCE_GATE is True
+          and "--no-kbd-lead-fence-gate" in SRC
+          and "KBD_LEAD_FENCE_GATE = not a.no_kbd_lead_fence_gate" in SRC
+          and SRC.count("global KBD_SYNC_HOLD, KBD_LEAD_KILL, KBD_SYNC_MATCHED, "
+                        "KBD_LEAD_FENCE_GATE") == 1,
+          "the gate ships ON with its revert flag, rebound through a declared "
+          "global",
+          "12 of 12 server 0x002Cs on the movetap corpus shut the fence at the "
+          "next sample; a lead into that window is REALFIX 0.11's lock armer")
+    # the tracker: a player 0x002C stamps it, a grant or an NPC 0x002C does not
+    st = {"pos": (0.0, 0.0), "plane": 0}
+    w = Sent(st)
+    w(authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT, [1, [10.0, 0.0], 0, 0], "grant")
+    check(st.get("fence_shut_at") is None,
+          "a 0x0029 does not stamp the fence tracker")
+    w(PIN, [10, [10.0, 0.0], 0], "an NPC placement")
+    check(st.get("fence_shut_at") is None,
+          "an NPC 0x002C does not stamp it -- the fence is the player's")
+    w(PIN, [1, [10.0, 0.0], 0], "PRESS ENDS THE WALK: 0x002C ...")
+    check(st.get("fence_shut_at") is not None,
+          "a player 0x002C stamps fence_shut_at, whatever sender labelled it")
+    # a lead computed while shut degrades to the zero-lead point
+    st = {"pos": (1000.0, 2000.0), "plane": 7, "pos_seen": 0.0,
+          "fence_shut_at": _t.time() - 0.2, "kbd_moving_at": _t.time() - 0.3}
+    st, w = drive_heading(REPORT, lead=True, state=st)
+    mv = w.of(MOVE)
+    row = st["_rec"].of("grant_verdict")[-1]
+    check(len(mv) == 1 and mv[0][1][1] == [1000.5, 2000.25]
+          and row["lead_src"] == "fallback"
+          and row["lead_clip_why"] == "fence-shut"
+          and "ZERO LEAD" in mv[0][2],
+          "MID-WALK under a fence we shut: the keyboard lead degrades to the "
+          "zero-lead point and the row says fence-shut",
+          f"sent {mv[0] if mv else None} row {row}")
+    check(st.get("fence_shut_at") is not None and st.get("kbd_leg") is None,
+          "the tracker stays set (a mid-walk report is not a walk-start) and "
+          "no keyboard leg record is armed for a degraded lead")
+    # a WALK-START report re-arms the fence and the lead fires again
+    st = {"pos": (1000.0, 2000.0), "plane": 7, "pos_seen": 0.0,
+          "fence_shut_at": _t.time() - 2.0, "kbd_moving_at": None}
+    st, w = drive_heading(REPORT, lead=True, state=st)
+    mv = w.of(MOVE)
+    frows = st["_rec"].of("fence")
+    check(st.get("fence_shut_at") is None and frows
+          and frows[-1]["act"] == "rearm" and frows[-1]["by"] == "walk-start"
+          and 2.0 <= frows[-1]["shut_for"] < 30.0,   # the arm extraction is slow
+          "a moving report after the latch was clear is a walk-start: it "
+          "re-arms the fence with a row naming how long it was shut",
+          f"fence rows {frows}")
+    check(len(mv) == 1 and mv[0][1][1] == [1520.5, 2000.25]
+          and "KBD LEAD" in mv[0][2],
+          "and the lead of that same report fires -- the applier ran before "
+          "the report was sent (the tape's 7 of 8)",
+          f"sent {mv[0] if mv else None}")
+    # the hold stores the degraded point
+    st = {"pos": (1000.0, 2000.0), "plane": 7, "pos_seen": 0.0,
+          "fence_shut_at": _t.time() - 0.2, "kbd_moving_at": _t.time() - 0.3}
+    st, w = drive_heading(REPORT, lead=True, state=st, since=0.1)
+    hold = st.get("heading_hold")
+    check(hold is not None and hold["point"] == [1000.5, 2000.25]
+          and hold["a2_src"] == "fallback" and hold["clip_why"] == "fence-shut",
+          "a refused re-aim under a shut fence is HELD with the degraded "
+          "point (1z-y x 1z-aa): the re-bake cannot lead into the window "
+          "either", f"hold {hold}")
+    # the D1 lead takes the same gate
+    st = {"pos": (1000.0, 2000.0), "plane": 7, "pos_seen": 0.0,
+          "fence_shut_at": _t.time() - 0.2, "kbd_moving_at": _t.time() - 0.3}
+    st, w = drive_heading(REPORT, lead=False, d1=True, state=st)
+    row = st["_rec"].of("grant_verdict")[-1]
+    check(w.of(MOVE)[0][1][1] == [1000.5, 2000.25]
+          and row["lead_src"] == "fallback"
+          and row["lead_clip_why"] == "fence-shut"
+          and st.get("a2_leg") is None,
+          "the D1 lead degrades the same way (0.11 was discovered under it) "
+          "and arms no a2_leg", f"row {row}")
+    # known-bad arm
+    st = {"pos": (1000.0, 2000.0), "plane": 7, "pos_seen": 0.0,
+          "fence_shut_at": _t.time() - 0.2, "kbd_moving_at": _t.time() - 0.3}
+    st, w = drive_heading(REPORT, lead=True, state=st, fence=False)
+    check(w.of(MOVE)[0][1][1] == [1520.5, 2000.25],
+          "KNOWN-BAD ARM (--no-kbd-lead-fence-gate): the 520 u lead goes into "
+          "the shut fence -- the 08:46 lock's shape",
+          f"sent {w.of(MOVE)[0][1]}")
+    # source locks: stamped in the send choke, cleared in ONE place, never by a stop
+    check(SRC.count('state["fence_shut_at"] = now') == 1
+          and SRC.index('state["fence_shut_at"] = now')
+          > SRC.index("def _note_wire_move("),
+          "the tracker is stamped in the send choke, once, so every sender "
+          "counts", "a per-sender stamp would miss the next sender")
+    check(SRC.count('state["fence_shut_at"] = None') == 1
+          and SRC.index('state["fence_shut_at"] = None')
+          > SRC.index("_kbd_was_moving = state.get(\"kbd_moving_at\") is not None"),
+          "cleared in ONE place, the 0x003D arm's walk-start test",
+          "the tape: 0 of 4 stops re-armed; a click is unmeasured, so neither "
+          "clears it")
+    i_stop = SRC.index('rec.event("kbd_leg", act="clear", by="0x0047"')
+    check("fence_shut_at" not in SRC[i_stop - 3000:i_stop + 3000],
+          "and the stop arm does not touch it")
+    check(SRC.count("_fence_gate_lead(state, reported,") == 3,
+          "both lead branches pass through the gate, after their clip chains "
+          "(the def and two call sites)")
     return LEDGER.verdict()
 
 
