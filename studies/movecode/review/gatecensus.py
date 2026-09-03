@@ -53,6 +53,9 @@ def census(path):
             C["heading arm (arm, fired, reason, lead_src, lead_clip_why)"][
                 (r.get("arm"), r.get("fired"), r.get("reason"),
                  r.get("lead_src"), r.get("lead_clip_why"))] += 1
+        if k == "grant_verdict" and r.get("reason") == "deferred-heading":
+            # the hold's re-bake is a verdict row with this reason (1z-y)
+            C["held re-aims (kind, act/reason)"][("re-baked", r.get("lead_src"))] += 1
         elif k == "heading_hold":
             C["held re-aims (kind, act/reason)"][(k, r.get("act") or r.get("reason"))] += 1
         elif k == "kbd_leg":
