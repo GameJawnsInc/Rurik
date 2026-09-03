@@ -261,7 +261,10 @@ ON by default: `--zero-lead`, `--plane-carry`, `--grant-suppress`, `--cast-stop=
 plane repair, **and the router (MOVECODE-1z-v/1z-w, 2026-09-03; `--no-router` reverts;
 `--router-raw-leg` reverts the click-leg re-arm, `--router-report-plane` reverts both
 mesh-derived plane words — the sync copy's and the origin's)**. Each has a
-`--no-` revert. OFF: `--click-echo`, the keyboard lead (`--kbd-lead` opts in).
+`--no-` revert. OFF: `--click-echo`, the keyboard lead (`--kbd-lead` opts in; its two
+1z-y gates ship ON regardless — a rate-refused re-aim is HELD and re-baked at the
+floor, `--no-kbd-hold`, and an in-flight lead is killed on a press or a click by a
+zero-lead grant at the body, `--no-kbd-lead-kill`).
 **`--grant-suppress` and the heading arm share ONE rate-limit clock**, so between them
 they cannot exceed one grant per 0.50 s — say which flags were on when you report a run.
 

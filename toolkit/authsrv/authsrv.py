@@ -5571,7 +5571,11 @@ def d1_lead_dest(reported, vec2):
 # this order and each with its own test: (a) a rate-refused heading is HELD
 # and re-baked at the floor, never dropped, and an in-flight keyboard lead is
 # killed by the zero-distance re-pin on any press or click (what PRESS ENDS
-# THE WALK already does for click legs); (b) a2_matched_field4 runs on the
+# THE WALK already does for click legs) -- (a) BUILT 2026-09-03 night,
+# MOVECODE-1z-y: KBD_SYNC_HOLD / heading_hold_tick and KBD_LEAD_KILL /
+# _kbd_lead_kill below, the kill as a zero-lead GRANT rather than a 0x002C
+# (a 0x002C's Clear closes the fence; see the KBD_LEAD_KILL block); (b)
+# a2_matched_field4 runs on the
 # KBD grant and stop-echo path; (c) the lead length is argued on MATURATION
 # MARGIN -- 766 u leaves ~250 u over the ~515 u report chord where 520 leaves
 # 5 -- with the longer forced walk stated as its cost, not on any claim about
@@ -5587,6 +5591,180 @@ KBD_SYNC_STOP_ON = True
 # 1z-u shows a lead only 5 u longer than it matures on the first dropped
 # re-aim. Opt-in only; see the block above.
 KBD_SYNC_LEAD = 520.0
+# MOVECODE-1z-y (sec.1z-u.5 item a; FINDINGS sec.1z-y): the two gates the
+# lead waits behind, built. Both are additive and both ship ON.
+# (a1) HOLD, NOT DROP. `_heading_grant_ok`'s docstring says a rate-refused
+# heading grant is dropped because "the next report carries a fresher
+# position" -- a premise the 08:46 session broke: the re-aim 66 ms after a
+# lead was refused `heading-rate` and no 0x003D followed for 2.7 s / 567 u,
+# so the lead matured unanswered, the arrival reconcile snapped the body
+# 498 u and shut the AgTrack fence (1z-u.3). The refused report's OWN point
+# and heading are now HELD -- the grant the arm would have sent, computed
+# at refusal from the report in hand -- and re-baked the instant the floor
+# opens (heading_hold_tick, polled beside grant_flush_tick), unless a newer
+# report fired or replaced it, a stop or a click superseded it, or it aged
+# past the click hold's own expiry. Under zero-lead the held point is the
+# report itself, so the sync copy gets the freshest anchor instead of
+# waiting a whole silent interval (1z-t.3's lag is report_gap x speed, and
+# a dropped report doubles the gap); under --kbd-lead it is the re-aimed
+# lead, which is what keeps the copy from maturing on the old heading.
+KBD_SYNC_HOLD = True          # False (--no-kbd-hold): the pre-1z-y drop.
+# Same expiry as the held click (GRANT_PENDING_MAX_AGE = 2 x the floor);
+# test_kbdsync pins the equality. Written out because that constant is
+# defined further down the file.
+HEADING_HOLD_MAX_AGE = 1.0
+# (a2) KILL ON PRESS OR CLICK. A keyboard lead in flight is a sync-copy leg
+# the body may not be walking any more; when the player presses or clicks
+# the copy must not be left to mature 520 u away. The kill is a ZERO-LEAD
+# GRANT at the modelled body (a2_leg_position: report + heading x elapsed
+# at the family speed, clamped at the lead), NOT the 0x002C the 1z-u.5
+# text named: a 0x002C runs AgTrack::Clear first, and Clear closes the
+# fence (agtrack_mirror.on_update_position -> clear(): client_controlled =
+# False) until the client's next movement command -- so a 0x002C kill would
+# make every grant between it and that command an ORDER, the enslavement
+# the kill exists to prevent. A grant on the body's own trail is the
+# reprieve test's MATCH (1z-r, zero-lead's warp-safety by construction):
+# the copy re-aims to where the body is, arrives beside it, and the fence
+# stays open. A lead that has already matured is not re-granted (its
+# arrival has already been evaluated); the row says so.
+KBD_LEAD_KILL = True          # False (--no-kbd-lead-kill): the lead outlives.
+
+
+def heading_hold_note(reported, point, plane, plane_cur, moving, a2_src,
+                      lead_clipped, clip_why, dir_src, now):
+    """The held heading grant: everything the send would have used, as it
+    was at refusal. Pure constructor."""
+    return {"at": now,
+            "reported": (float(reported[0]), float(reported[1])),
+            "point": [float(point[0]), float(point[1])],
+            "plane": plane, "plane_cur": plane_cur, "moving": moving,
+            "a2_src": a2_src, "lead_clipped": bool(lead_clipped),
+            "clip_why": clip_why, "dir_src": dir_src}
+
+
+def heading_hold_tick(send, state, conn_id, rec=None, now=None):
+    """Re-bake the HELD heading grant once the rate floor opens (1z-y a1).
+
+    Polled beside grant_flush_tick at its three sites. Returns whether it
+    sent. NEWEST WINS and there is never more than one: the arm overwrites
+    the hold on every refused report and clears it on every fired one, the
+    stop arm and the click arm clear it, and a hold older than
+    HEADING_HOLD_MAX_AGE is dropped with a row. The send is the arm's own
+    pair -- the family rate (edge-triggered, so a no-op when unchanged) and
+    the 0x0029 with the words computed at refusal -- and the bookkeeping the
+    arm does after a real send (zl_last_grant_plane, the leg record).
+    NOT under --d1-lead: that bundle has its own containment (the a2_leg
+    watchdog, the deferred-click flush) and test_d1lead pins its one leg
+    arm site; the arm stores no hold under it."""
+    if not KBD_SYNC_HOLD:
+        return False
+    hold = state.get("heading_hold")
+    if hold is None:
+        return False
+    if now is None:
+        now = time.time()
+    age = now - hold["at"]
+    pt = hold["point"]
+    if age < 0.0 or age > HEADING_HOLD_MAX_AGE:
+        state["heading_hold"] = None
+        if rec is not None:
+            rec.event("grant_verdict", fired=False,
+                      reason="heading-hold-expired", arm="zero-lead",
+                      deferred=True, age=round(age, 3), dest=list(pt))
+        return False
+    ok, _why, since = _heading_grant_ok(state, now)
+    if not ok:
+        return False                     # still inside the floor; keep it
+    if state.get("kbd_moving_at") is None:
+        # The client has stopped (the 0x0047 arm clears the hold too, this
+        # is the belt): a held heading for a parked body would order a walk.
+        state["heading_hold"] = None
+        if rec is not None:
+            rec.event("grant_verdict", fired=False,
+                      reason="heading-hold-stopped", arm="zero-lead",
+                      deferred=True, age=round(age, 3), dest=list(pt))
+        return False
+    if state.get("action_hold") and not GRANT_DURING_HOLD:
+        # ANIMREF-R11, the same guard the arm's own send has (spelled
+        # differently: test_d1lead censuses the arm's spelling as ONE site).
+        state["heading_hold"] = None
+        print(f"[c{conn_id}] held heading ({pt[0]:.0f},{pt[1]:.0f}) "
+              f"SUPPRESSED: action hold set [R11]", flush=True)
+        if rec is not None:
+            rec.event("grant_verdict", fired=False,
+                      reason="heading-hold-action-hold", arm="zero-lead",
+                      deferred=True, age=round(age, 3), dest=list(pt))
+        return False
+    state["heading_hold"] = None
+    if KBD_SYNC and KBD_SYNC_SPEED_ON:
+        _a2_family_rate(send, state, hold["moving"], tag="KBD SPEED-TRUTH")
+    if rec is not None:
+        rec.event("grant_verdict", fired=True, reason="deferred-heading",
+                  arm="zero-lead", deferred=True, age=round(age, 3),
+                  since_last=(None if since is None else round(since, 3)),
+                  direction=hold["dir_src"], dest=list(pt),
+                  lead_src=hold["a2_src"], lead_clipped=hold["lead_clipped"],
+                  lead_clip_why=hold["clip_why"], plane_dest=hold["plane"],
+                  plane_cur=hold["plane_cur"],
+                  plane_differs=bool(hold["plane_cur"] != hold["plane"]))
+    rp = hold["reported"]
+    send(GAME_SMSG_AGENT_MOVE_TO_POINT,
+         [PLAYER_AGENT_ID, list(pt), hold["plane"], hold["plane_cur"]],
+         f"HELD HEADING ({pt[0]:.0f},{pt[1]:.0f}) from ({rp[0]:.0f},{rp[1]:.0f}) "
+         f"plane {hold['plane']}"
+         + (f" carry {hold['plane_cur']}"
+            if hold["plane_cur"] != hold["plane"] else "")
+         + f" [{hold['a2_src'] or 'zero-lead'}] re-baked {age * 1000:.0f} ms "
+         f"after the floor refused it [MOVECODE-1z-y]")
+    state["zl_last_grant_plane"] = hold["plane"]
+    if hold["a2_src"] == "kbd" and KBD_LEAD_KILL:
+        state["kbd_leg"] = a2_leg_note(rp, pt, hold["plane"], hold["moving"],
+                                       now)
+        if rec is not None:
+            rec.event("kbd_leg", act="arm", src="held", dest=list(pt),
+                      speed=state["kbd_leg"]["speed"], plane=hold["plane"])
+    return True
+
+
+def _kbd_lead_kill(send, state, conn_id, rec, why, now=None):
+    """(1z-y a2) A press or a click ENDS an in-flight keyboard lead: a
+    zero-lead grant at the modelled body re-aims the sync copy to where the
+    body is, so the lead's 520 u arrival never fires (the block at
+    KBD_LEAD_KILL says why this is a 0x0029 and not a 0x002C). Returns
+    whether it sent; the leg record is consumed either way."""
+    if not KBD_LEAD_KILL:
+        return False
+    leg = state.pop("kbd_leg", None)
+    if leg is None:
+        return False
+    if now is None:
+        now = time.time()
+    dist = math.hypot(leg["dest"][0] - leg["x0"], leg["dest"][1] - leg["y0"])
+    eta = leg["t0"] + (dist / leg["speed"] if leg["speed"] > 0.0 else 0.0)
+    age = now - leg["t0"]
+    if now >= eta:
+        # Matured: the copy has arrived and its dispatch has already run;
+        # a grant at the dest would re-bake nothing. Say so.
+        if rec is not None:
+            rec.event("kbd_leg", act="kill", why=why, matured=True,
+                      age=round(age, 3), dest=list(leg["dest"]))
+        return False
+    x, y, plane = a2_leg_position(leg, now)
+    remaining = math.hypot(leg["dest"][0] - x, leg["dest"][1] - y)
+    send(GAME_SMSG_AGENT_MOVE_TO_POINT,
+         [PLAYER_AGENT_ID, [float(x), float(y)], plane, plane],
+         f"KBD LEAD KILLED on {why}: zero-lead grant at the modelled body "
+         f"({x:.0f},{y:.0f}) plane {plane}, {remaining:.0f} u of the lead "
+         f"unwalked [MOVECODE-1z-y]")
+    state["zl_last_grant_plane"] = plane
+    if rec is not None:
+        rec.event("kbd_leg", act="kill", why=why, matured=False,
+                  point=[float(x), float(y)], remaining=round(remaining, 1),
+                  age=round(age, 3), dest=list(leg["dest"]))
+    print(f"[c{conn_id}] KBD LEAD KILLED on {why}: the copy re-aimed to the "
+          f"modelled body ({x:.0f},{y:.0f}), {remaining:.0f} u of the lead "
+          f"unwalked", flush=True)
+    return True
 
 
 def kbd_lead_dest(reported, vec2):
@@ -17420,6 +17598,9 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # opening (REV-3's starvation, same fix).
                         if not D1_LEAD:
                             grant_flush_tick(send, state, conn_id, rec)
+                            # MOVECODE-1z-y: the held heading rides the
+                            # same poll as the held click.
+                            heading_hold_tick(send, state, conn_id, rec)
                         # The timed three quarters of every skill cycle
                         # (E5/E3/E6), before the swings so a cast completing
                         # this tick is visible to everything after it.
@@ -17615,6 +17796,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                 if D1_LEAD and kind == "game":
                     _a2_watchdog(send, state, rec)
                     grant_flush_tick(send, state, conn_id, rec)
+                    heading_hold_tick(send, state, conn_id, rec)
                 # ROUTER-B2: the chain scheduler rides the same quiet
                 # ticks (recv-thread-only sending, same as the flush).
                 if ROUTER and kind == "game":
@@ -17645,6 +17827,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
             # every player-grant sender is serialized on this one thread.
             if D1_LEAD and kind == "game" and msgs:
                 grant_flush_tick(send, state, conn_id, rec)
+                heading_hold_tick(send, state, conn_id, rec)
             # ROUTER-B2: a due leg gets the same pre-batch claim -- the
             # batch may carry the very input that abandons the chain, and
             # a leg whose ETA passed before that input arrived was owed.
@@ -17937,6 +18120,9 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # flight before the order is taken -- the swing
                         # (in reach) or the follow (out of reach) is the
                         # tick's next act, not the leg's arrival.
+                        # MOVECODE-1z-y (a2): a press ends an in-flight
+                        # keyboard lead before it ends the click leg.
+                        _kbd_lead_kill(send, state, conn_id, rec, "press")
                         _press_supersedes(send, state, conn_id, values[1],
                                           rec=rec)
                         begin_attack(send, state, values[1], conn_id, rec=rec)
@@ -18326,6 +18512,14 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # the ETA watchdog stands down (sec.0.11 containment;
                         # the leg re-arms at the next fired d1 grant below).
                         _old_leg = state.pop("a2_leg", None)
+                        # MOVECODE-1z-y: a report of either kind ends the
+                        # keyboard lead's leg record (the client is
+                        # speaking; the same ground as the a2_leg pop).
+                        _old_kleg = state.pop("kbd_leg", None)
+                        if _old_kleg is not None and rec is not None:
+                            rec.event("kbd_leg", act="clear", by="0x003D",
+                                      age=round(time.time()
+                                                - _old_kleg["t0"], 3))
                         # sec.0.19 (RETHINK #1c): the clear half of the
                         # leg's lifecycle, logged only when a leg existed.
                         if _old_leg is not None and rec is not None:
@@ -19085,6 +19279,29 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                               pc_spoofed=(pcs_fired
                                                           if zero_ok
                                                           else None))
+                                # MOVECODE-1z-y (a1): a rate-refused report
+                                # is HELD with the exact grant it would have
+                                # sent -- the lead or the point, both
+                                # computed above the verdict row from the
+                                # report in hand -- and re-baked at the
+                                # floor by heading_hold_tick. Newest wins:
+                                # every refused report overwrites, every
+                                # fired one clears. Not under the CANCELWALK
+                                # lead arms or the PC spoof: those wires are
+                                # pre-registered diagnostics.
+                                if (not zero_ok and zero_why == "heading-rate"
+                                        and KBD_SYNC_HOLD and not D1_LEAD
+                                        and cw_dest is None
+                                        and PC_SPOOF is None):
+                                    state["heading_hold"] = heading_hold_note(
+                                        reported,
+                                        (a2_dest if a2_dest is not None
+                                         else reported),
+                                        plane, zl_plane_cur, moving, a2_src,
+                                        a2_lead_clipped, a2_clip_why, dir_src,
+                                        now_z)
+                                elif zero_ok:
+                                    state["heading_hold"] = None
                                 if zero_ok:
                                     if cw_dest is not None:
                                         # CANCELWALK's lead arms, this one
@@ -19251,6 +19468,21 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                                     dest=list(_lg["dest"]),
                                                     speed=_lg["speed"],
                                                     plane=_lg["plane"])
+                                        elif a2_src == "kbd" and KBD_LEAD_KILL:
+                                            # MOVECODE-1z-y (a2): the leg the
+                                            # kill consults on a press or a
+                                            # click; popped by any report.
+                                            state["kbd_leg"] = a2_leg_note(
+                                                reported, zl_point, plane,
+                                                moving, now_z)
+                                            if rec is not None:
+                                                _kl = state["kbd_leg"]
+                                                rec.event(
+                                                    "kbd_leg", act="arm",
+                                                    src="kbd",
+                                                    dest=list(_kl["dest"]),
+                                                    speed=_kl["speed"],
+                                                    plane=_kl["plane"])
                                         # REALFIX-F1b's queue, on the same rule and
                                         # for the same reason. CONSUME what arrived,
                                         # DISCARD the leg this grant just superseded
@@ -19433,6 +19665,13 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # click leg's start (corpus separation p50 1,164 u),
                         # so a 0x0028 here out-warps F31 by an order.
                         _approach_abandon(state)   # ANIMREF-RE 38
+                        # MOVECODE-1z-y (a2): a click ends an in-flight
+                        # keyboard lead (the router's own answer supersedes
+                        # the copy's leg too, but a kbd-dropped or refused
+                        # click sends nothing and the lead would mature),
+                        # and supersedes any held heading.
+                        _kbd_lead_kill(send, state, conn_id, rec, "click")
+                        state["heading_hold"] = None
                         _cl_prev = state.get("click_moving_at")
                         state["click_moving_at"] = time.time()
                         # ANIMREF-RE 37: the leg this click starts, so the
@@ -19930,6 +20169,15 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # longer applies (sec.0.11 containment, same clear as
                         # the 0x003D arm).
                         _old_leg = state.pop("a2_leg", None)
+                        # MOVECODE-1z-y: a stop ends the keyboard lead's leg
+                        # record AND the held heading -- a held re-aim for a
+                        # body that has stopped would order a walk.
+                        _old_kleg = state.pop("kbd_leg", None)
+                        if _old_kleg is not None and rec is not None:
+                            rec.event("kbd_leg", act="clear", by="0x0047",
+                                      age=round(time.time()
+                                                - _old_kleg["t0"], 3))
+                        state["heading_hold"] = None
                         # ROUTER-B2: a stop report abandons the click
                         # chain too (retail's supersession rule; arrival
                         # is a stop).
@@ -22391,6 +22639,18 @@ def main():
                          "arm the counterfactual says is WORSE than the "
                          "shipped default (p50 425 u against 237), because "
                          "the lead's overshoot has nothing to collect it.")
+    ap.add_argument("--no-kbd-hold", action="store_true",
+                    help="MOVECODE-1z-y (a1) OFF: a rate-refused heading "
+                         "report is DROPPED again instead of held and "
+                         "re-baked at the floor -- the pre-1z-y behaviour "
+                         "whose premise (the next report is 0.3 s away) "
+                         "failed in the 08:46 session. Diagnostic arm.")
+    ap.add_argument("--no-kbd-lead-kill", action="store_true",
+                    help="MOVECODE-1z-y (a2) OFF: an in-flight keyboard "
+                         "lead (--kbd-lead only) is left to mature on a "
+                         "press or a click instead of being ended by a "
+                         "zero-lead grant at the modelled body. Inert "
+                         "without --kbd-lead. Diagnostic arm.")
     ap.add_argument("--no-router", action="store_true",
                     help="MOVECODE-1z-v: turn the router OFF (it is the "
                          "default click policy since 2026-09-03). Restores "
@@ -23995,8 +24255,11 @@ def main():
     # capture whose header cannot say which policy produced it costs a later
     # session a reconstruction (REALFIX-Q8).
     global KBD_SYNC, KBD_SYNC_LEAD_ON, KBD_SYNC_SPEED_ON, KBD_SYNC_STOP_ON
+    global KBD_SYNC_HOLD, KBD_LEAD_KILL
     if a.legacy_kbd_sync:
         KBD_SYNC = False
+        KBD_SYNC_HOLD = False
+        KBD_LEAD_KILL = False
         print("[map] --legacy-kbd-sync: MOVECODE-1z-t OFF. The keyboard wire "
               "is the pre-1z-t one exactly -- heading grants at the reported "
               "point verbatim, no player 0x002B, nothing on a 0x0047. The "
@@ -24008,6 +24271,8 @@ def main():
         KBD_SYNC_LEAD_ON = bool(a.kbd_lead) and not a.no_kbd_lead
         KBD_SYNC_SPEED_ON = not a.no_kbd_speed_truth
         KBD_SYNC_STOP_ON = not a.no_kbd_stop_echo
+        KBD_SYNC_HOLD = not a.no_kbd_hold
+        KBD_LEAD_KILL = not a.no_kbd_lead_kill
         _terms = [n for n, on in (("lead 520 u + navmesh clip (OPT-IN)",
                                    KBD_SYNC_LEAD_ON),
                                   ("0x002B family rate", KBD_SYNC_SPEED_ON),
@@ -24017,6 +24282,12 @@ def main():
               "client's WORLD-0 copy of the player near the body it draws. "
               "--legacy-kbd-sync reverts the whole behaviour.")
         print(f"      TERMS LIVE  {', '.join(_terms) if _terms else 'NONE'}")
+        _gates = [n for n, on in (("rate-refused re-aims HELD and re-baked "
+                                   "at the floor", KBD_SYNC_HOLD),
+                                  ("an in-flight lead KILLED on press/click "
+                                   "by a zero-lead grant at the body",
+                                   KBD_LEAD_KILL)) if on]
+        print(f"      1z-y GATES  {', '.join(_gates) if _gates else 'NONE'}")
         if KBD_SYNC_LEAD_ON:
             print("      THE LEAD IS ON (--kbd-lead) -- an OPT-IN arm since "
                   "1z-u, not the shipped default: a lead that matures "
