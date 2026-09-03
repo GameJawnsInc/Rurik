@@ -9521,3 +9521,114 @@ clicks with a cast in flight.
 `test_grantsim.py` 86, `test_policyreplay.py` 14, `test_srclint.py` 26 — all green.
 Measurements over the owner's own capture via the harness in this repo; the mesh from
 the owner's own archive at run time; no new static reads, no client launch.
+
+---
+
+## 1z-x. THE ENSLAVEMENT DETECTOR — §1z-u.5 item (c) built into `w0score.py`, and RUN-1zT re-scored by it
+
+**Asked:** "do the enslavement detector next." Zero client runs. Built at a desk over the
+four taps already in the vault; the detector's two controls were fixed before it was
+written and it passes both. Ident `MOVECODE-1z-x`.
+
+### 1z-x.1 The question, and the signal that answers it
+
+§1z-u.3: *world-0 vs the drawn body cannot distinguish "world-0 follows the body" from
+"the body follows world-0."* Once the client's AgTrack fence is shut, every `0x0029` we
+send is walked as an order (REALFIX §0.10/0.11/0.17), the drawn body's walk target
+becomes **our granted point to the unit**, and the two copies agree because the body is
+enslaved — the p50 0.0 of RUN-1zT's registered arm. The number is a measurement; the
+confirmation needs a second witness.
+
+The witness is the ASYNC copy's own walk target, `+0x9C`, which `agenttap.py` already
+records as `tx, ty`. `w0score.py` now joins each tap to the gamesrv capture that
+produced it (the newest `authsrv-*-c1.jsonl` whose wall span overlaps; `--grants`
+overrides) and classifies every player `0x0029` by the client's **own** last click and
+last report before it — the point decoded from the row's plaintext bytes, never the
+label's rounded text:
+
+| kind | the granted point is | following it is |
+|---|---|---|
+| `own-click` | the client's last `0x003E` point, to 1 u | the client's own choice, not enslavement |
+| `at-report` | within 50 u of its last `0x003D`/`0x0047` | a zero-lead grant at the body, not enslavement |
+| `server-chosen` | anything else — a keyboard lead, a routed waypoint | **enslavement**, when the body's target equals it |
+
+A moving sample is ENSLAVED when its target equals, to `GRANT_EPS = 1.0` u, a
+server-chosen grant sent at or before it (50 ms of slack for the two recorders' write
+order; on RUN-1zT the matched samples agree to **0.00 u**, 115 of 115). The onset is the
+first **sustained** run of three enslaved moving samples — RUN-1zT carries one matched
+sample at 8.00 s, the first lead firing at the walk's start, and that blip is not the
+onset. Capture-level: ENSLAVED at ≥ 25% of moving samples, FREE at zero, MIXED between;
+per harness leg (`--legs`): ENSLAVED at ≥ 50% of the leg's moving samples, plus a
+**HELD KEY, BODY PARKED** flag when a key held ≥ 1 s moved the body under 50 u — the
+other face of the same symptom. The scorer prints all of it beside THE NUMBER, and a
+contaminated capture gets **MEASURED, CONTAMINATED** (exit 3) instead of CONFIRMED; a
+tap with no gamesrv capture to join gets **MEASURED, NOT CONFIRMED** (exit 3), never a
+silent pass.
+
+### 1z-x.2 The four taps, re-scored — the detector reads what the record said
+
+| capture | regime | server-chosen grants | enslaved moving samples | onset (tap clock) | verdict |
+|---|---|---|---|---|---|
+| `agenttap-20260903T073122` (RUN-1zT, registered arm) | scripted keyboard, lead ON | 8 of 13 | **115 of 193 (59.6%)** | **17.77 s** | **ENSLAVED** |
+| `agenttap-20260902T213401` (the baseline) | scripted keyboard, zero-lead | 0 of 10 | 0 of 130 | — | FREE |
+| `agenttap-20260903T084632` (RUN-FEEL) | mouse, lead ON | 2 of 2 | 0 of 94 | — | FREE |
+| `agenttap-20260903T072932` (first attempt) | scripted + operator input, lead ON | 54 of 63 | 19 of 516 (3.7%) | 6.18 s | MIXED |
+
+**RUN-1zT per leg** (with `--legs`): opening W 868 u, 2.3% (the 8.00 s blip); S 743 u,
+25.0% (the onset lies inside it); **third W: 2.9 u in a 5.0 s hold — HELD KEY, BODY
+PARKED**; Q 509 u / E 513 u / S 504 u at **100%** each against free-walk expectations of
+648 / 648 / 760 u (the body travels the granted leg, not the hold); the closing W: 0 u in
+4.0 s, parked again. That is §1z-u.3's claim as a table — the five later targets equal
+our dests to the unit and the per-leg travel is ~510 u whatever the hold — with the
+parked W legs, which the record had only as "one release in seven produced a `0x0047`".
+
+**The baseline's zero is not vacuous**: its ten grants are all `at-report` (zero-lead),
+so the body's target could not have equalled a server-chosen point; the detector's
+positive control is RUN-1zT and its negative control is this capture, and `--baseline`
+now asserts both beside the scorer's own p50 237 / max 516 reproduction.
+
+**RUN-FEEL reads FREE, which is correct and worth saying.** Its two leads were
+server-chosen and the drawn body followed neither — it walked its own north-west heading
+((9553.5, 8705.1), the tap's most frequent target) and was **snapped**, not walked, onto
+the sync copy, exactly as §1z-u.3 and §41.2 corrected. The fence shut after that snap,
+but no later `0x0029` arrived for the body to follow (the session's remaining grants were
+`0x002C` re-pins), so the detector has nothing to flag. Enslavement is "follows an
+order"; a shut fence with no order is invisible to it, and the parked-key flag is the
+instrument for that regime when a runsheet supplies legs.
+
+### 1z-x.3 A clock correction to the record
+
+§1z-u.3 and RUN-1zT.md date the arrival snap **18.65 s**. On the tap's clock it is
+**17.69 s**: the body lands on the 14.7 s lead's endpoint (10001.1, 8430.3) with v = 0 and
+an infinite target, and from 17.77 s its target is the 17.7 s lead (9481.1, 8430.3). The
+two figures are the same instant on two recorders — the gamesrv recorder's `t` starts
+~1.0 s before the tap's `head.t0` (07:31:21 vs 07:31:22). Neither is wrong; a reader
+joining the two files must say which axis a stamp is on. `w0score.py`'s constant carries
+the tap-clock value with this note.
+
+### 1z-x.4 What this settles and what it does not
+
+- **RUN-1zT's confirmation is withdrawn by its own scorer**, as §1z-u.3 said it must be:
+  `w0score.py` on that capture now prints MEASURED, CONTAMINATED. §1z-t's *mechanism*
+  (the law, the cause, term 2's `[190, 216, 288]`) stands; the lead term stays opt-in.
+- **Any future lead run is scored with this in place** — §1z-u.5 (c) is done. The
+  remaining gates before the lead returns are (a) hold-not-drop and kill-on-press, (b)
+  `a2_matched_field4` on the keyboard path, (d) the fence-shutter audit.
+- **The detector sees orders, not fences.** A body that was snapped and then parked with
+  the fence shut but received no further grant reads FREE. The parked-key flag catches the
+  keyboard face of that regime given a runsheet; the mouse face has no leg stamps and is
+  filed.
+- **A routed multi-leg click chain will read as enslavement by construction**: interior
+  waypoints are server-chosen and the body follows them as orders — that is the router's
+  design and retail's. On a click session under the router default, read the per-sample
+  fraction against the chain rows before calling it contamination; the one-leg verbatim
+  answer is `own-click` and reads FREE.
+
+### 1z-x.5 Tests and provenance
+
+`test_w0score.py` — new, 38 checks with the vault (floor 35 from the vault-less run;
+section 5 skips and lowers nothing): the classification, the join's causality and band,
+the onset rule, the three bars, the per-leg table and the parked flag, the plumbing, and
+the two real controls. `test_srclint.py` green. All figures are measurements over the
+owner's own captures via extractors in this repo; no client launch, no static reads, no
+upstream derivation.

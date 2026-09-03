@@ -35,6 +35,15 @@ floor: 3,572 u of body translation over 193 moving samples.
 > zero-length clip fallbacks. The measurement stands; the *confirmation* does
 > not until a lead run is scored with an enslavement detector (async target ==
 > granted dest; per-leg travel vs hold). The lead term is OPT-IN as of §1z-u.
+>
+> **THE DETECTOR EXISTS (MOVECODE-1z-x, same night) AND IT READS THIS CAPTURE
+> ENSLAVED.** `python toolkit/clientscan/w0score.py <this tap> --legs <report.json>`
+> now prints **MEASURED, CONTAMINATED** for it: the drawn body's target equals a
+> server-chosen grant to the unit on **115 of 193 moving samples (59.6%)**, onset
+> **17.77 s on the tap's clock** (= the 18.65 s above, which is the gamesrv
+> recorder's clock, ~1.0 s ahead), Q / E / S at 100%, and BOTH later W holds moved
+> the body nothing (2.9 u and 0 u — HELD KEY, BODY PARKED). The baseline reads FREE
+> (0 of 130). The p50 0.0 stands as a number; the confirmation is withdrawn.
 
 **Term 2 is visible as a number rather than an inference.** World-0's own speed
 set went from a bare `[288]` on the baseline — against a body running
