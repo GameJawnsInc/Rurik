@@ -1647,7 +1647,11 @@ captures, and the decode already in `agtrack_mirror.py`. The constant does not m
   green. `KBD_SYNC`'s (c) paragraph and the constant's comment rewritten to the derived
   result.
 * **What remains:** RUN-1zT's script under `--kbd-lead` with the four gates on,
-  scored by `w0score.py` with the enslavement detector. Then `0x005FCAA0`.
+  scored by `w0score.py` with the enslavement detector — **SET UP 2026-09-04 as
+  [studies/movecode/RUN-1zAB.md](studies/movecode/RUN-1zAB.md)** (registered
+  prediction, exposure floors, the exact commands, `review/gatecensus.py` for the
+  gates' rows; not yet run — it needs no human aiming and a go-ahead). Then
+  `0x005FCAA0`.
 
 ### ★★★ MOVEMENT 2026-09-03 night — THE FENCE-SHUTTER AUDIT (MOVECODE-1z-aa): every server 0x002C shuts the fence, the fence re-arms only at a keyboard walk-start, and a lead is never sent into the window — §1z-u.5's four gates are all built
 

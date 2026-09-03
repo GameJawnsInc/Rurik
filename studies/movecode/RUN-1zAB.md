@@ -1,0 +1,189 @@
+# RUN-1zAB — the keyboard lead under its four gates: is the body FREE?
+
+**One question, one arm, ~90 seconds of client time, no human aiming.**
+Registered before the run, per the probe rule. This is the run
+`studies/movecode/FINDINGS.md` §1z-u.5 named as the last step before `--kbd-lead`
+can be argued for as the default, and §1z-ab confirmed as the only step left.
+
+Behaviour under test: `MOVECODE-1z-t` term 1 (`--kbd-lead`, 520 u) composed with the
+four gates built for it — §1z-y (a rate-refused re-aim HELD and re-baked at the
+floor; an in-flight lead KILLED on a press or a click), §1z-z (the lead grant's
+field 4 MATCHED to field 3), §1z-aa (no lead into a fence the server shut with a
+`0x002C`) — and §1z-ab's length (520 unchanged). Everything else is the shipped
+default of `main` at `bdb010f` or later: the router, the plane repair, the AgTrack
+guard and its re-pin, the stop echo, the family rate.
+
+**Status: SET UP 2026-09-04, NOT RUN.** Nothing was launched to write this sheet.
+
+---
+
+## 1. The question
+
+> With the four gates on, does the keyboard lead keep the client's WORLD-0 copy
+> near the body BECAUSE world-0 follows the body — not because the body has been
+> enslaved to world-0?
+
+RUN-1zT asked only the first half and read p50 0.0 u; §1z-x's detector then read
+that capture ENSLAVED from 17.77 s (115 of 193 moving samples), and §1z-u made the
+lead opt-in. The number is not the verdict; the detector's verdict is.
+
+## 2. The prediction, registered
+
+| | |
+|---|---|
+| **Prior, same script, no gates** (`agenttap-20260903T073122`, RUN-1zT) | ENSLAVED, 59.6 %, onset 17.77 s; p50 0.0 / max 198.9 u |
+| **Prior, zero-lead default** (`agenttap-20260902T213401`) | FREE, 0 of 130; p50 237 / max 516 u |
+| **CONFIRMS** | `w0score` verdict **FREE** for the whole capture, **and** world-0 vs body p50 **< 150 u**, **and** every held W/S/Q/E leg's body travel scales with its hold (a W:5 leg ≈ 1,300–1,440 u, an S:4 leg ≈ 700–760 u — not ~520 u regardless of hold) |
+| **REFUTES** | **ENSLAVED** at any onset, or any held-key leg that moved the body ≤ 50 u (HELD KEY, BODY PARKED) |
+| **INCONCLUSIVE** | MIXED (the detector's 15 % bar), or exposure under the floor in §3 — say so, do not round |
+| The decode says | no arrival can snap in cruise or at a turn under the hold (§1z-ab.2); the copy has 0–14 u to go at each cruise re-aim (§1z-ab.3) |
+
+**Not a scoreboard and not a length sweep.** If it refutes, the length is not
+tuned (§1z-ab.4): the rows in §5 localise WHICH door opened, and the first enslaved
+sample is where to read.
+
+## 3. The exposure floor — this run can fail by measuring nothing
+
+- `w0score` refuses a verdict under **500 u** of body translation across **20**
+  moving samples (RUN-1zT had 3,572 u over 193).
+- The wire must carry **≥ 8 `KBD LEAD`** grants (RUN-1zT: 12 fired, 3 refused,
+  7 `KBD SPEED-TRUTH`, 1 `KBD STOP-ECHO`) — under 8 the lead was barely on the
+  wire and the verdict is about something else.
+- `leadmargin --tap` must find **≥ 3 lead legs ≥ 300 u** for the maturation
+  reading.
+- **A and D turn in place; Q and E strafe.** The walk is W/S for translation and
+  Q/E for strafe for that reason, and it includes backpedal so a non-1.0 family
+  occurs (world-0's speed set must contain 190, as it did on RUN-1zT).
+
+**The gates' own exposure is reported, never assumed.** The script has no press
+and no click, so the KILL has **zero exposure by design**; the HOLD fires only
+if a re-aim is rate-refused (RUN-1zT: 3); the FENCE GATE fires only if a `0x002C`
+lands during a walk (RUN-1zT: one `AGTRACK RE-PIN` at 12.93 s). A zero in §5's
+census is zero exposure for that gate, not a pass for it.
+
+## 4. The run
+
+**Announce it first — the machine is shared and `Gw.exe` fights for input focus.**
+Pre-flight on 2026-09-04: nothing bound on 6112/6601, no `Gw.exe` running, the
+build is `ours` (`dhbuild.py`), the scorer's positive control passes.
+
+> ### ⚠ HANDS OFF THE KEYBOARD ONCE THE CLIENT IS UP
+>
+> **`--walk` drives every keypress. The script's own presses ARE the arm.** The
+> run opens with `wait:3` and the character stands still — it is not waiting for
+> you. A helpful press produces a double-driven regime (RUN-1zT's first attempt:
+> 720 u of travel no script asked for, max separation 854 u). There is nothing
+> to do while it runs but watch — and it needs no human aiming, so it does not
+> have to be handed over at all (§8).
+
+**Terminal A — the scorer's control, then the tap.** The tap waits for a client
+to reach a map, so starting it early is free.
+
+```powershell
+python toolkit/clientscan/w0score.py --baseline
+```
+
+Must print `[PASS] control reproduces: live p50 237.0 / max 516.1`, `the zero-lead
+baseline reads FREE` and `RUN-1zT's registered arm reads ENSLAVED from 17.77 s`.
+If any of the three is missing, stop: the detector cannot find the known
+contamination and cannot clear a new run.
+
+```powershell
+python toolkit/clientscan/agenttap.py --agents 1,10 --seconds 75
+```
+
+**Terminal B — the session.** The same script as RUN-1zT, verbatim, plus one
+flag. Total ≈ 90 s from launch to the window closing; nothing is left parked.
+
+```powershell
+python toolkit/harness/session.py --exe vault/run/2026-07-29_221c13772c7a/Gw.exe --enemy --walk "wait:3 W:5 S:4 W:5 Q:3 E:3 S:4 W:4" --hold 8 --game-args "--map 146 --explorable --no-enemy-skills --enemy-hit 0.02 --skills 0,0,0,0,0,0,0,0 --kbd-lead"
+```
+
+`--exe` is not optional (every address in this arc is build 38797).
+`--enemy-hit 0.02` keeps the Hatcher chasing without killing the player.
+**Do not add `--resync`**: its model holds the client at its last report and reads
+a whole lead of separation on every leg (§1z-ab.3 ii).
+
+**Watch the gamesrv console for the banner.** It must say all of:
+
+```
+[map] MOVECODE-1z-t KBD_SYNC ON by default -- ...
+      TERMS LIVE  lead 520 u + navmesh clip, 0x002B family rate, 0x0047 stop echo
+      1z-y GATES  rate-refused re-aims HELD and re-baked at the floor, an in-flight lead KILLED on press/click by a zero-lead grant at the body, the lead grant's field 4 MATCHED to field 3 (the 0.11 armer-kill), no lead into a fence we shut with a 0x002C (the fence-shutter audit)
+      THE LEAD IS ON (--kbd-lead) -- an OPT-IN arm since 1z-u ...
+```
+
+If `1z-y GATES` names fewer than four, or `TERMS LIVE` fewer than three, the run
+is a diagnostic arm and not this sheet's — say so.
+
+## 5. Scoring
+
+Three commands, all read-only, in this order.
+
+```powershell
+python toolkit/clientscan/w0score.py --legs vault/captures/harness/<stamp>/report.json
+```
+
+The verdict against §2 (FREE / MIXED / ENSLAVED with the onset), the separation
+number, the per-leg table with each leg's travel against its hold, and the two
+speed sets. The newest tap and the gamesrv capture whose wall span overlaps it
+are found by default.
+
+```powershell
+python toolkit/clientscan/leadmargin.py --tap vault/research/animref/agenttap-<stamp>.jsonl
+```
+
+The maturation reading per lead leg: distance still to go when the re-aim
+landed, any park and its length, separation. §1z-ab predicts 0–14 u to go in
+cruise and no park over one 33 ms sample.
+
+```powershell
+python studies/movecode/review/gatecensus.py
+```
+
+The gates' rows from the newest gamesrv capture: the heading arm's verdicts with
+`lead_src` / `lead_clip_why` (a `fence-shut` row is the 1z-aa gate degrading a
+lead), the held re-aims, the kills, the fence re-arms, every AgTrack guard row,
+every `0x002C` by sender, and the wire labels. §1z-ab.5b predicts
+`agtrack_repin blocked arrival-risk` about once per cruise leg — a `due` or a fire
+with that reason is the guard's keyboard-glide gap firing live, and is reported
+as such whatever the verdict.
+
+## 6. What each outcome means
+
+- **CONFIRMED (FREE, p50 < 150, travel scales with hold).** §1z-t's confirmation
+  is restored on a clean read and the lead's four gates held under the shipped
+  composition. Whether `--kbd-lead` becomes the default is then `PLAN.md` §7
+  Q13's bundle question for the owner, with this capture as its evidence. Next
+  is `0x005FCAA0`.
+- **REFUTED (ENSLAVED).** Read the first enslaved sample's time and the rows
+  around it in §5's census: a `0x002C` before it names the shutter and whether
+  the gate degraded the next lead; a `heading_hold` re-bake before it is the
+  hold's residual (§1z-ab.5a); an `agtrack` `snap` or `veto` before it is a
+  gate-1 evaluation the decode said could not happen — that refutes §1z-ab.2,
+  which matters more than the verdict. The length is not tuned.
+- **INCONCLUSIVE (MIXED or under floor).** Say so. A second identical run is the
+  only follow-up; no parameter moves.
+- **The enemy control** (agent 10's two copies) should stay small (p50 5.2 / max
+  27.9 on RUN-1zT); a change there is a separate finding.
+
+## 7. Honest limits, before the fact
+
+- **n is one map, one route, one build.** It is the same route as RUN-1zT, on
+  purpose: the comparison is per leg on identical input.
+- **Two of the four gates cannot fire here** by the script's construction (the
+  kill needs a press or click; the fence gate needs a `0x002C` during a walk).
+  Their absence in the census is not evidence for them.
+- **The route has no wall.** The clip's wall behaviour (§1z-ab.3 iii) is not in
+  play; a clipped lead's early park is unmeasured by this run.
+- **This run cannot price the click path.** Nothing here clicks.
+
+## 8. Who should drive this
+
+**Nobody needs to aim, so it does not have to be handed over.** Every input is
+scripted, the tap sends nothing (read-only `ReadProcessMemory`), and the session
+closes itself. The repo's boundary is aiming, not seeing. RUN-1zT §8 records what
+handing it over cost. The session that set this up can drive it on a go-ahead
+(the machine is shared: the launch is announced first, ≈ 90 s of client time,
+the window closes on its own). If the operator would rather watch, §4's block
+says the one thing there is to do.

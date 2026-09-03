@@ -10023,7 +10023,8 @@ unchanged (the `KBD_SYNC` block's (c) paragraph and the constant's comment rewri
 derived result; the formula and the constant untouched), `test_d1lead` 94, `test_srclint`
 26 — green. TESTS.md, PLAN.md §8 + Q13, HANDOFF.md §C.
 
-**What remains before `--kbd-lead` becomes the default is the run:** RUN-1zT's script
+**What remains before `--kbd-lead` becomes the default is the run** (set up 2026-09-04 as
+`RUN-1zAB.md`, not yet run)**:** RUN-1zT's script
 under `--kbd-lead` with the four gates on (HANDS OFF THE KEYBOARD), scored by `w0score.py`
 with the enslavement detector and, per §1z-ab.5a, with `--resync` off. Then `0x005FCAA0`.
 No client launch, no static reads, no upstream derivation; every figure above is
