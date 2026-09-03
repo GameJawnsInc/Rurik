@@ -211,8 +211,28 @@ import grantsim   # noqa: E402
 # vaulted, each read off a real green console run of its own configuration
 # (219 from a normal run, 211 with RURIK_VAULT at an empty directory,
 # which also printed its 2 declared skips).
-FLOOR_BARE = 211
-FLOOR_FULL = 219
+# 2026-09-03, the client_pos source lock: section 11 gained 3 fixture-free
+# checks -- the press-supersede FORGETS the client-sourced triple, the snap
+# guard still reads the re-pinned point (the positive control: it is the whole
+# behaviour the second writer existed to produce), and the --press-waits-for-leg
+# arm forgets nothing. Each was shown red on its own mutation before the floor
+# moved: reverting to ANIMREF-RE 39's write reddens the count AND the forget,
+# dropping `state["pos"] = model` reddens the snap guard, and forgetting ahead
+# of the flag guard reddens the control.
+#
+# AND THE FLOORS WERE ALREADY 9 BELOW A GREEN RUN, said out loud rather than
+# absorbed into the +3. The declared 211/219 last matched reality on 2026-08-25;
+# checks landed after it without the bump this block exists to record, so the
+# pre-change run printed 228 vaulted against a floor of 219. A floor 9 light
+# still catches a run that measured NOTHING, which is why nothing went red --
+# but it is 9 checks of "fewer than a healthy run executes" that no longer had
+# a guard, which is the hole the floor is for. Both figures below are read off
+# real green console runs of their own configuration: 231 from a normal run,
+# 223 with RURIK_VAULT at an empty directory, which also printed its 2 declared
+# skips. The 8-check difference is still exactly section 10's 4 and section
+# 13's 4, so the fixture accounting above is unchanged.
+FLOOR_BARE = 223
+FLOOR_FULL = 231
 LEDGER = checks.Ledger("the position-trust policy: refuse, but never latch",
                        floor=FLOOR_BARE)
 check = checks.adopt(LEDGER)
@@ -1122,7 +1142,80 @@ def main():
     check(len(writers) == 1,
           "exactly one line in the whole file writes state['client_pos']",
           f"{len(writers)} -- two writers is two policies, and the second one "
-          f"is where an integrator's opinion gets in")
+          f"is where an integrator's opinion gets in. This has gone red once "
+          f"for real: ANIMREF-RE 39 (807ab89) added a write in "
+          f"_press_supersedes carrying `_click_leg_start`'s dead-reckoned "
+          f"point, which is the server's integrator by construction -- and "
+          f"it wrote client_pos and client_pos_at but NOT client_plane, "
+          f"splitting the triple _take_client_position writes as one fact "
+          f"and leaving the cast-stop reckon (which requires all three) free "
+          f"to pair a modelled point with a plane measured somewhere else")
+
+    # THE COUNT IS NOT THE POINT, AND ON ITS OWN IT IS A RULE NOTHING CHECKS.
+    # A line count cannot see WHY the second writer existed, and that reason
+    # was real: `_click_leg_start`'s fallback is `client_pos or pos`, so after
+    # a press ends a click leg, a client_pos left at the leg's START is what
+    # `_approach_send`'s snap guard reads -- and it would re-pin the body back
+    # there, the warp ANIMREF-RE 39 was built to remove. The fix is to FORGET
+    # the report rather than to overwrite it with the model: a 0x002C at a
+    # modelled point means we no longer know what the client would say, and
+    # every consumer of the triple fails closed until it speaks again. These
+    # three checks pin the mechanism, so a reorder that puts the forget before
+    # `state["pos"]` is set -- or a revert to the write -- goes red HERE and
+    # not only in the count above.
+    def mid_leg():
+        """A body 1.0 s into a 500 u click leg from (0,0), server copy at the
+        start, and a client report at the start with its own plane."""
+        t0 = time.time() - 1.0
+        return {"pos": (0.0, 0.0), "plane": 0,
+                "client_pos": (0.0, 0.0), "client_plane": 3,
+                "client_pos_at": t0,
+                "click_moving_at": t0,
+                "click_leg": authsrv._leg_record((0.0, 0.0), (500.0, 0.0),
+                                                 t0, 288.0)}
+
+    st = mid_leg()
+    authsrv._press_supersedes(lambda *a, **k: None, st, 0, 10)
+    check("client_pos" not in st and "client_plane" not in st
+          and "client_pos_at" not in st,
+          "a press that supersedes the click leg FORGETS the whole "
+          "client-sourced triple rather than overwriting it with the model",
+          f"pos={st.get('client_pos')} plane={st.get('client_plane')} "
+          f"at={st.get('client_pos_at')} -- the placement is OUR point, so "
+          f"the last report is now known-wrong AND unreplaceable: "
+          f"_resync_verdict answers 'no-client-report', _keepalive_ok "
+          f"'no-report', the cast-stop reckon 'no-report'. Overwriting "
+          f"instead would hand both wire senders our own extrapolation "
+          f"stamped `now`, which passes the RESYNC_MAX_REPORT_AGE freshness "
+          f"gate the report's own age exists to bound")
+    model = authsrv._click_leg_start(st, time.time(), False)
+    check(model is not None and abs(model[0] - 288.0) < 2.0
+          and abs(model[1]) < 1e-6,
+          "and the snap guard still reads the RE-PINNED point, which is the "
+          "whole behaviour the second writer existed to produce",
+          f"{model} -- `_click_leg_start`'s fallback is `client_pos or pos` "
+          f"and the press set `pos` to the placement one line above the "
+          f"forget, so dropping the stale report yields 288 u along the leg "
+          f"(1.0 s at 288 u/s) by the SAME arithmetic the write produced it "
+          f"with. Left at the leg's start this reads (0, 0) and "
+          f"`_approach_send` re-pins the body 288 u backwards")
+    saved_press = authsrv.PRESS_SUPERSEDES_LEG
+    authsrv.PRESS_SUPERSEDES_LEG = False
+    try:
+        st2 = mid_leg()
+        authsrv._press_supersedes(lambda *a, **k: None, st2, 0, 10)
+    finally:
+        authsrv.PRESS_SUPERSEDES_LEG = saved_press
+    check(st2.get("client_pos") == (0.0, 0.0) and st2.get("client_plane") == 3,
+          "CONTROL: the revert arm (--press-waits-for-leg) forgets NOTHING, "
+          "so the forget is attributable to the supersede and not to the "
+          "fixture",
+          f"pos={st2.get('client_pos')} plane={st2.get('client_plane')} -- "
+          f"this arm sends no 0x002C, so no placement has contradicted the "
+          f"report and it must survive intact. Without this control the "
+          f"check above passes on a `_press_supersedes` that clears the "
+          f"triple unconditionally, including on the arm that never moved "
+          f"the body")
     resync_sends = []
     for node in ast.walk(src):
         if not (isinstance(node, ast.FunctionDef)

@@ -3922,7 +3922,55 @@ Floor 75 against a green 75 with 5 declared skips (the archive-conditional
   most of the section exists to make that keystroke red: the payload is asserted
   behaviourally against a state where the two DISAGREE, the send site's vec2 is
   asserted as the syntax-tree node `list(payload)`, and `state["client_pos"]` is
-  asserted to have **exactly one writer in the file** — the accept path. It also
+  asserted to have **exactly one writer in the file** — the accept path.
+
+  **That lock went red for real on 2026-09-02, and the fix is worth reading
+  before the next one.** ANIMREF-RE §39 (`807ab89`) added a second writer in
+  `_press_supersedes`: when a press ends a click leg the server sends a 0x002C
+  at the body's modelled position, and that build wrote the model into
+  `client_pos` too. The reason was real — `_click_leg_start` falls back to
+  `client_pos or pos`, so a report left at the leg's START is what
+  `_approach_send`'s snap guard reads, and it would re-pin the body back
+  there — but the value is `_click_leg_start`'s own dead-reckoned lerp, i.e.
+  the integrator, landing in the field two wire senders read under "NEVER OUR
+  OWN POSITION" (`_resync_verdict`) and "the report in hand, and nothing else,
+  may be sent" (`_keepalive_ok`). Three things make it a second POLICY rather
+  than a split assignment: it stamped `client_pos_at = now`, so a modelled
+  value passed the `RESYNC_MAX_REPORT_AGE` freshness gate whose whole job is
+  to bound how far the client could have moved since it SPOKE; it fed
+  `_click_leg_start`'s own fallback, so the integrator became its own input
+  wearing the client's label; and **it wrote position and instant but not
+  `client_plane`**, splitting the triple `_take_client_position` writes as one
+  fact and leaving the cast-stop reckon — which requires all three and
+  type-checks the plane — free to pair a modelled point with a plane measured
+  somewhere else. That is the exact split `_take_client_position`'s own
+  comment was written to close, re-opened from the other end.
+
+  The fix FORGETS the report instead of overwriting it
+  (`_forget_client_position`, popping all three keys): a 0x002C at a modelled
+  point means we no longer know what the client would say, so every consumer
+  fails closed until it speaks again — `_resync_verdict` "no-client-report",
+  `_keepalive_ok` "no-report", the cast-stop reckon "no-report" — while
+  `_click_leg_start` drops to `state["pos"]`, which the caller sets to the
+  placement one line above, so the snap guard gets §39's answer by the same
+  arithmetic. This is `cast_stop_pin`'s pattern, not a new one: that field
+  already exists so a pin WE sent out-ranks a report made before it. The
+  section now pins the MECHANISM as well as the count — the triple is gone
+  after a supersede, the snap guard still reads the re-pinned point (the
+  positive control), and `--press-waits-for-leg` forgets nothing (the arm
+  that sends no 0x002C must not clear a report nothing contradicted). Each
+  was shown red on its own mutation: reverting to §39's write reddens the
+  count and the forget, dropping `state["pos"] = model` reddens the snap
+  guard, forgetting ahead of the flag guard reddens the control.
+
+  **Still open, and deliberately not fixed in the same commit:**
+  `_approach_send`'s own snap re-pin sends a 0x002C at a modelled point and
+  does NOT forget the report, so it leaves the same stale value the
+  supersede arm used to launder. It is not a `client_pos` writer, so the lock
+  cannot see it, and both consumers that would be hurt (`--resync`,
+  `--keepalive-grant`) ship OFF — but the day either is turned on, a
+  keep-alive re-grant after an approach re-pin would grant to the leg's
+  start. It also
   asserts the flag ships OFF and that with it off a state that *would* fire
   sends nothing **and records nothing**; that the three constants carry
   derivations rather than choices (the trigger is the client's own 100.0 u
