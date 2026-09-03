@@ -10023,9 +10023,139 @@ unchanged (the `KBD_SYNC` block's (c) paragraph and the constant's comment rewri
 derived result; the formula and the constant untouched), `test_d1lead` 94, `test_srclint`
 26 — green. TESTS.md, PLAN.md §8 + Q13, HANDOFF.md §C.
 
-**What remains before `--kbd-lead` becomes the default is the run** (set up 2026-09-04 as
+**What remains before `--kbd-lead` becomes the default is the run** (set up 2026-09-03 as
 `RUN-1zAB.md`, not yet run)**:** RUN-1zT's script
 under `--kbd-lead` with the four gates on (HANDS OFF THE KEYBOARD), scored by `w0score.py`
 with the enslavement detector and, per §1z-ab.5a, with `--resync` off. Then `0x005FCAA0`.
 No client launch, no static reads, no upstream derivation; every figure above is
 reproducible with `python toolkit/clientscan/leadmargin.py --check`.
+
+
+---
+
+## 1z-ac. RUN-1zAB RAN — INCONCLUSIVE by its own registration; the detector had a co-directional-lead blind spot (closed), and the residual is the lead maturing at the report boundary
+
+**Asked:** "set up the --kbd-lead run" then "go ahead and drive it". Driven 2026-09-03 18:39
+on the loopback stack, agent-driven, RUN-1zAB.md's script verbatim. Capture
+`agenttap-20260903T183943`, gamesrv `authsrv-20260903T183941-c1`, harness
+`20260903T183905`. Ident `MOVECODE-1z-ac`.
+
+### 1z-ac.1 The registered verdict, stated first
+
+RUN-1zAB §2 required **FREE for the whole capture AND p50 < 150 u AND travel scaling
+with hold**. Two of the three held. The detector did not read FREE.
+
+| | registered | measured |
+|---|---|---|
+| world-0 vs the drawn body, p50 | < 150 u confirms | **1.0 u** ✅ |
+| per-leg travel scales with hold | required | **W 1,062 / 1,155 / 1,045 u (5 s), S 543 / 677 u (4 s), Q 620, E 589 u (3 s)** ✅ |
+| enslavement verdict | FREE confirms | **MIXED** ❌ |
+
+**⇒ INCONCLUSIVE.** Not REFUTED either: nothing read ENSLAVED, no held-key leg parked
+(the ≤ 50 u clause), no new warp class. Exposure well over floor — 5,869 u of body
+translation over 278 moving samples, 22 `KBD LEAD` on the wire (floor 8), 13 lead legs
+≥ 300 u (floor 3). The banner named all three terms and all four gates. **The bar is not
+moved after the fact**; what follows is why MIXED, split into a detector defect and a real
+residual.
+
+### 1z-ac.2 The detector's co-directional-lead blind spot (OBSERVED, and it is ours)
+
+As shipped, the detector read **MIXED, 50 of 278 (18.0 %)**. Reading the flagged samples
+raw refutes 44 of them. On the S leg (14.91–17.30 s), every flagged sample has:
+
+| | |
+|---|---|
+| the drawn copy's target `+0x9C` | (10105.2, 8604) |
+| world-0's target `+0x9C` | (10105.4, 8604) |
+| our granted dest | (10105.4, 8604) |
+| body target vs grant | **0.53 u** — inside `GRANT_EPS`, so flagged |
+| body target vs world-0's target | **0.2 u apart — NOT the same value** |
+
+**The two copies point at two different places.** World-0 carries our grant exactly
+(0.00 u); the drawn copy carries its own backpedal projection. The detector flagged it
+because our lead lands 0.53 u from the client's own co-directional target — and that is
+**by construction**: §1z-t.6 derived the 520 u length from the client's own ~512 u report
+chord, so on any straight lead leg our grant dest and the client's own target nearly
+coincide. The instrument built to resolve §1z-u.3's "world-0 vs body cannot tell" was
+confounded by the very tuning that makes the lead work.
+
+**The discriminator, from the decode.** A `0x0029` with the AgTrack fence **OPEN** is
+applied to world-0 only (sync-only handler `0x005FD890`, §0.11), so world-0's target
+becomes the grant and the drawn copy keeps its own; with the fence **SHUT** the full
+applier writes **both** copies to the grant. So the body is enslaved to a grant **iff its
+target is bit-identical to world-0's target** — not merely within `GRANT_EPS` of the
+grant. Validated against both controls and the run:
+
+| capture | flagged by the loose join | bit-identical | distinct |
+|---|---|---|---|
+| RUN-1zT (known ENSLAVED) | 114 | **113** | 1 |
+| RUN-1zAB (this run) | 50 | 6 | **44** (0.53–0.75 u) |
+| the zero-lead baseline (known FREE) | 0 | 0 | 0 |
+
+**Built:** `TGT_SAME = 0.1` and the `both_agree` / `enslaved` split in `w0score.py`; the
+loose count is kept and printed beside it so a report names what was excluded. Controls
+after the change: baseline **FREE**, RUN-1zT **ENSLAVED 113 of 193 (58.5 %)** from the
+same 17.77 s onset — the known positive survives. This run re-reads **6 of 278 (2.2 %)**
+and **seven of its eight legs FREE**.
+
+### 1z-ac.3 The residual six are REAL, and they are the lead maturing (OBSERVED)
+
+The remaining six samples are not a confound. On the Q strafe leg both copies carry
+(11146.4, 10073.3) bit-identically, and one sample earlier — 29.23 s — the drawn body sits
+at **(11145.9, 9561.9) with velocity 0 and no target**: our *previous* granted endpoint,
+exactly 520 u from the leg's start. The drawn body reached our lead's end and parked for
+one sample; the next grant re-aimed it and it walked on.
+
+**Why it happens, and it is structural rather than bad luck.** 520 u divided by each
+family's speed lands within 0.01 s of that family's own measured report gap:
+
+| family | 520 / speed | report gap |
+|---|---|---|
+| forward, 288 u/s | 1.81 s | 1.80 s |
+| backpedal, 190 u/s | 2.74 s | 2.74 s |
+| side, 216 u/s | 2.41 s | 2.40 s |
+
+Maturation and the re-aim are a **photo finish in every family** — which is §1z-ab.4's
+"520 sits one tap sample over the trigger's ceiling" seen from the other side. When
+maturation wins, the drawn body parks momentarily on our point. Cost, measured: the Q leg
+travelled 620.4 u against a 646 u free-walk expectation, **~26 u and one sample of stall**.
+
+**It is not a lock, and this is the part that matters.** The player's release was reported
+(`0x0047`) on that leg and on all seven; the body stopped where the player let go — 385 u
+short of our grant on the Q leg, 34 u short on the S leg — no `0x002C` was sent all run,
+no re-pin fired, and the maximum `position_at` separation was 155.6 u with no ~500 u
+arrival snap. §0.11 stage 2's signature (releases swallowed, the applier never running) is
+**absent**. The four gates composed as designed; the enemy control stayed p50 0.6 / max
+63.6 u.
+
+### 1z-ac.4 What is NOT concluded
+
+- **`--kbd-lead` is not promoted.** The run was registered to confirm on FREE and did not.
+  It stays opt-in.
+- **The length is NOT tuned.** §1z-ab.4 refuses a length sweep and this run does not
+  reopen it: the residual is the boundary the length argument already named, its measured
+  cost is ~26 u with no lock, and moving the constant to dodge a photo finish is the
+  treadmill the 2026-08-30 direction exists to refuse. If it is ever revisited, the object
+  is the re-aim cadence, not the lead.
+- **Two gates had zero exposure by construction** (no press or click, so no KILL; no
+  `0x002C`, so no FENCE GATE) — reported as zero, not as passes. The HOLD fired **12**
+  times (`deferred-heading` re-bakes) and is the one gate this run exercised.
+- **`agtrack_repin blocked arrival-risk` fired 6 times**, as §1z-ab.5b predicted: the
+  guard models a keyboard body as parked and wants a re-pin at every maturing lead. Still
+  latent, still blocked by `REPIN_MAX_REPORT_AGE`.
+
+### 1z-ac.5 Tests and the next step
+
+`test_w0score` 38 → **45** (floor 44): section 6 drives the confound (a drawn copy whose
+own target is inside `GRANT_EPS` of a server-chosen grant while world-0 carries the grant
+reads FREE, and the loose count still names it), real enslavement (both copies identical
+reads ENSLAVED with an onset), the threshold's position between float identity and the
+measured 0.53 u floor, a known-bad arm at twice the threshold, and a parked world-0
+enslaving nothing. `test_leadmargin` 25, `test_kbdsync` 84, `test_d1lead` 94 green.
+`studies/movecode/review/gatecensus.py` gained the hold's re-bake row (it counts
+`deferred-heading` verdicts, which is how the hold reports itself).
+
+**Next:** the run that would settle `--kbd-lead` is a rerun on the fixed detector — the
+same script, whose only registered failure was an instrument defect now closed. That is a
+judgement call for the owner rather than a session, because it spends operator machine
+time on an arm that is already opt-in and already measured p50 1.0 u. Then `0x005FCAA0`.

@@ -5581,7 +5581,7 @@ def d1_lead_dest(reported, vec2):
 # -- BUILT the same night, MOVECODE-1z-z: KBD_SYNC_MATCHED below; and (d),
 # the fence-shutter audit, MEASURED and BUILT as KBD_LEAD_FENCE_GATE below,
 # so all four gates stand -- a2_matched_field4 runs on the KBD grant and
-# stop-echo path; and (c) the lead's LENGTH, argued 2026-09-04 (MOVECODE-
+# stop-echo path; and (c) the lead's LENGTH, argued 2026-09-03 (MOVECODE-
 # 1z-ab, toolkit/clientscan/leadmargin.py, FINDINGS sec.1z-ab). The
 # "maturation margin" 1z-u.4 deferred it on is VOID: a lead's copy sits
 # outside the reprieve tube by construction (the AgTrack chain holds the

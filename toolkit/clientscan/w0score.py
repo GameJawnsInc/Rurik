@@ -88,6 +88,26 @@ MIN_MOVING_SAMPLES = 20
 # ours at 520, so 50 separates "where you are" from "where we sent you".
 GRANT_EPS = 1.0
 LEAD_MIN = 50.0
+# MOVECODE-1z-ac: the bit-identity discriminator, and why GRANT_EPS alone
+# is not enough on a LEAD run. Our lead's LENGTH was derived to match the
+# client's own ~512 u report chord (sec.1z-t.6), so on a straight leg our
+# grant dest sits ~0.5 u from the client's OWN async target -- inside
+# GRANT_EPS -- whether or not the body is enslaved. RUN-1zAB (2026-09-03,
+# --kbd-lead with the four gates) read MIXED 18% under GRANT_EPS alone,
+# and 44 of those 50 samples were a FREE body whose own backpedal target
+# merely coincided with our co-directional lead. The mechanism separates
+# them: a 0x0029 with the AgTrack fence OPEN is applied to WORLD-0 ONLY
+# (handler 0x005FD890, sec.0.11), so world-0's target becomes the grant
+# and the DRAWN copy keeps its own; with the fence SHUT the full applier
+# writes BOTH copies to the grant. So the body is enslaved to a grant iff
+# its target is BIT-IDENTICAL to world-0's target -- both copies pointing
+# at one place -- not merely within GRANT_EPS of the grant. Validated: on
+# RUN-1zT (known ENSLAVED) 113 of 114 flagged samples are bit-identical;
+# on RUN-1zAB (free body) 44 of 50 are DISTINCT (0.53-0.75 u apart, the
+# client's own target); the baseline has no server-chosen grant at all.
+# The threshold sits below the confound's 0.53 u floor and above float
+# noise (both copies get the SAME f32 when shut, so the true gap is 0).
+TGT_SAME = 0.1
 # Capture-level: above this fraction of moving samples the world-0 number is
 # CONTAMINATED and no CONFIRMED verdict is printed. RUN-1zT reads 59.6%;
 # the baseline and the 08:46 mouse session read 0.0%; the double-driven
@@ -256,10 +276,12 @@ def targets(head, rows, aid=1):
         if not a:
             continue
         ay = a.get("async")
+        sy = a.get("sync") or {}
         if not ay or "x" not in ay or ay.get("tx") is None:
             continue
         out.append({"w": head["t0"] + s["t"], "t": s["t"],
                     "tgt": (ay["tx"], ay["ty"]),
+                    "sync_tgt": (sy.get("tx"), sy.get("ty")),
                     "body": live(ay, s.get("clock1")),
                     "v": math.hypot(ay.get("vx", 0.0), ay.get("vy", 0.0))})
     return out
@@ -278,15 +300,29 @@ def enslavement(head, rows, G, aid=1, slack=0.05):
             if g["w"] <= p["w"] + slack and math.dist(p["tgt"], g["dest"]) < GRANT_EPS:
                 hit = g
         p["hit"] = hit
+        # MOVECODE-1z-ac: the body is enslaved to this grant only if the
+        # grant was written into the DRAWN copy too -- both world targets
+        # bit-identical. `both_agree` is that read; `enslaved` requires it
+        # AND a server-chosen hit. A loose hit without agreement is the
+        # co-directional-lead confound.
+        st = p.get("sync_tgt")
+        p["both_agree"] = (st is not None and st[0] is not None
+                            and math.isfinite(st[0]) and math.isfinite(st[1])
+                            and math.isfinite(p["tgt"][0])
+                            and math.dist(p["tgt"], st) <= TGT_SAME)
+        p["enslaved"] = (hit is not None and hit["kind"] == "server-chosen"
+                          and p["both_agree"])
     moving = [p for p in per if p["v"] > 1.0]
-    ens = [p for p in moving if p["hit"] is not None
-           and p["hit"]["kind"] == "server-chosen"]
+    ens = [p for p in moving if p["enslaved"]]
+    # the loose join, kept so the report can name the confound it excludes
+    loose = [p for p in moving if p["hit"] is not None
+             and p["hit"]["kind"] == "server-chosen"]
     own = [p for p in moving if p["hit"] is not None
            and p["hit"]["kind"] != "server-chosen"]
     frac = len(ens) / len(moving) if moving else 0.0
     first_t, run, run_t = None, 0, None
     for p in moving:
-        if p["hit"] is not None and p["hit"]["kind"] == "server-chosen":
+        if p["enslaved"]:
             run += 1
             run_t = p["t"] if run == 1 else run_t
             if run >= SUSTAIN:
@@ -295,6 +331,7 @@ def enslavement(head, rows, G, aid=1, slack=0.05):
         else:
             run, run_t = 0, None
     return per, {"moving": len(moving), "enslaved": len(ens), "own": len(own),
+                 "loose": len(loose), "confound": len(loose) - len(ens),
                  "frac": frac, "first_t": first_t,
                  "first_any_t": (ens[0]["t"] if ens else None),
                  "grants": len(G),
@@ -318,8 +355,7 @@ def leg_verdicts(per, walk):
         mv = [p for p in seg if p["v"] > 1.0]
         bt = travel([p["body"] for p in seg]) if len(seg) > 1 else 0.0
         vmed = sorted(p["v"] for p in mv)[len(mv) // 2] if mv else 0.0
-        ens = sum(1 for p in mv if p["hit"] is not None
-                  and p["hit"]["kind"] == "server-chosen")
+        ens = sum(1 for p in mv if p.get("enslaved"))
         frac = ens / len(mv) if mv else 0.0
         parked = (w.get("kind") == "key" and (a1 - a0) >= 1.0
                   and bt < HELD_KEY_PARKED_U)
@@ -451,9 +487,13 @@ def score(path, legs=None, quiet=False, grants_path=None):
             print(f"  grants joined               {os.path.basename(gpath)}: "
                   f"{ens['grants']} player 0x0029, {ens['server_chosen']} "
                   f"server-chosen")
-            print(f"  body target == server-chosen grant (to {GRANT_EPS:.0f} u) on "
-                  f"{ens['enslaved']} of {ens['moving']} moving samples "
-                  f"({100.0 * ens['frac']:.1f}%)")
+            print(f"  body target == a server-chosen grant AND both world "
+                  f"copies agree (bit-identical) on {ens['enslaved']} of "
+                  f"{ens['moving']} moving samples ({100.0 * ens['frac']:.1f}%)")
+            if ens.get("confound"):
+                print(f"  ({ens['confound']} more matched a co-directional "
+                      f"lead within {GRANT_EPS:.0f} u but the DRAWN copy kept "
+                      f"its own target -- free, sec.1z-ac)")
             if ens["first_t"] is not None:
                 print(f"  onset (first {SUSTAIN} consecutive)  t={ens['first_t']:.2f} s"
                       + (f"   (first single match t={ens['first_any_t']:.2f} s)"

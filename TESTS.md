@@ -7451,7 +7451,17 @@ the same-tick ALIAS**: the
   read FREE with zero server-chosen grants, and RUN-1zT's registered arm ENSLAVED
   from 17.77 s on the tap's clock (18.65 s on the gamesrv clock) with its scorer
   number still p50 0.0 — the contamination is in who follows whom, not in the number.
-  Floor 28 from the bare-machine run; section 5 skips without the vault and lowers
+  Section 6 is the MOVECODE-1z-ac DISCRIMINATOR, and it is the one that keeps this
+  file honest about its own false positives: a drawn copy whose OWN target sits
+  inside `GRANT_EPS` of a server-chosen grant while world-0 carries the grant reads
+  FREE (the co-directional-lead confound, which flagged 44 free samples on RUN-1zAB
+  because the 520 u lead was derived from the client's own report chord), the loose
+  count still names what was excluded, both copies BIT-IDENTICAL on the grant reads
+  ENSLAVED with an onset (what a fence-shut grant actually writes), the threshold
+  sits between float identity and the measured 0.53 u confound floor, a known-bad
+  arm at twice the threshold is refused because the test is identity and not
+  proximity, and a world-0 with no leg armed enslaves nothing.
+  Floor 44 from the bare-machine run; section 5 skips without the vault and lowers
   nothing. ~5 s with the vault),
 
   `toolkit/clientscan/test_leadmargin.py` (**the keyboard lead's LENGTH argument,
