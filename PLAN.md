@@ -1503,7 +1503,8 @@ shipped with a revert each (`--no-router`, `--router-raw-leg`,
 `--router-report-plane`), and the press and the follow abandon a live chain;
 the operator's 40 refused clicks retrodict to 40 answered. §1z-w (same night)
 added the routing origin's own plane word and the cast abandon; §1z-x the
-enslavement detector, which withdraws RUN-1zT's confirmation.** The bundle
+enslavement detector, which withdraws RUN-1zT's confirmation; §1z-y the held
+re-aim and the lead kill, item (a) of the list before the lead returns.** The bundle
 question Q13 poses (adopt `D1_LEAD`?) is unchanged by it. The session's felt symptoms were
 1z-t's keyboard lead, now opt-in.
 Raised 2026-08-27 by
@@ -1607,6 +1608,32 @@ floors and aborts in `RUN-R8.md`; both are operator-driven client runs.
 ---
 
 ## 8. Immediate next actions
+
+### ★★★ MOVEMENT 2026-09-03 night — HOLD, NOT DROP, and the lead KILLED on a press or a click (MOVECODE-1z-y): §1z-u.5 item (a) built, the kill as a grant rather than a 0x002C
+
+**[studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1z-y.** Zero client
+runs. Both gates additive and ON, each with a revert.
+
+* **(a1) `KBD_SYNC_HOLD` (`--no-kbd-hold` reverts):** a heading report refused
+  `heading-rate` is HELD with the exact grant the arm had computed (the point under
+  zero-lead, the lead under `--kbd-lead`, plane words as computed) and re-baked by
+  `heading_hold_tick` the instant the shared floor opens, polled where the held click
+  is. Newest wins; cleared by a fired report, a stop, a click; dropped with a row on
+  expiry (the click hold's own), a stopped body, or R11's action hold. **Live under the
+  shipped default**: a dropped report doubled §1z-t.3's report gap.
+* **(a2) `KBD_LEAD_KILL` (`--no-kbd-lead-kill` reverts; inert without `--kbd-lead`):**
+  a fired keyboard lead arms `kbd_leg`; a press or a click while it is in flight sends
+  a **zero-lead grant at the modelled body** so the copy re-aims to the body and the
+  520 u arrival never fires; a matured lead is not re-granted. **Not the 0x002C the
+  item named:** `agtrack_mirror.on_update_position` runs Clear, which closes the fence
+  until the client's next movement command — a 0x002C kill would make the following
+  grants orders. A grant on the body's own trail is the reprieve test's MATCH.
+* **Tests:** `test_kbdsync` 33 → 60 (floor 60), through the shipped arm's own bytes,
+  both known-bad arms driven; `test_d1lead` 94 and ten more green.
+* **Remaining before the lead returns:** (b) `a2_matched_field4` on the keyboard path,
+  (d) the fence-shutter audit of the two `0x002C` senders, and the length argued on
+  maturation margin (§1z-u.4). Then `0x005FCAA0`. The operator's next keyboard session
+  scores (a1) for free: `HELD HEADING` lines and `deferred-heading` rows.
 
 ### ★★★ MOVEMENT 2026-09-03 night — THE ENSLAVEMENT DETECTOR (MOVECODE-1z-x): `w0score.py` now says who follows whom, and RUN-1zT's confirmation is withdrawn by its own scorer
 

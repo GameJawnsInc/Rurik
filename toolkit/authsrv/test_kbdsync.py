@@ -48,35 +48,42 @@ from test_position_trust import receive_arm, Sent, FakeRec   # noqa: E402
 
 # Floor read off the first green run of this file, per CLAUDE.md -- never
 # guessed from a head-count, which this arc has got wrong three times.
-LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=33)
+# 33 at 1z-t; +27 at 1z-y (sections 10-11: the held heading, the lead kill).
+LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=60)
 check = checks.adopt(LEDGER)
 
 SRC = open(authsrv.__file__, encoding="utf-8").read()
 
 
 def drive_heading(values, *, kbd_sync=True, lead=True, speed=True,
-                  d1=False, state=None):
-    """One 0x003D through the SHIPPED heading arm. Returns (state, wire)."""
+                  d1=False, state=None, since=10.0, hold=True, kill=True):
+    """One 0x003D through the SHIPPED heading arm. Returns (state, wire).
+    `since` is the age of the last grant when the report arrives: 10 s
+    clears the rate floor, 0.1 s is refused `heading-rate` (1z-y)."""
     st = state if state is not None else {
         "pos": (1000.0, 2000.0), "plane": 7, "pos_seen": 0.0}
     w, r = Sent(st), FakeRec()
     arm = receive_arm("GAME_CMSG_TURN_TO_DIRECTION",
                       ("values", "state", "rec", "send", "conn_id"))
     saved = (authsrv.ZERO_LEAD, authsrv.KBD_SYNC, authsrv.KBD_SYNC_LEAD_ON,
-             authsrv.KBD_SYNC_SPEED_ON, authsrv.D1_LEAD, authsrv.PLANE_CARRY)
+             authsrv.KBD_SYNC_SPEED_ON, authsrv.D1_LEAD, authsrv.PLANE_CARRY,
+             authsrv.KBD_SYNC_HOLD, authsrv.KBD_LEAD_KILL)
     authsrv.ZERO_LEAD = True
     authsrv.KBD_SYNC, authsrv.D1_LEAD = kbd_sync, d1
     authsrv.KBD_SYNC_LEAD_ON, authsrv.KBD_SYNC_SPEED_ON = lead, speed
+    authsrv.KBD_SYNC_HOLD, authsrv.KBD_LEAD_KILL = hold, kill
     authsrv.PLANE_CARRY = False
     try:
         import time as _t
-        w.now = _t.time() - 10.0
+        w.now = _t.time() - since
         st["grant_at"] = w.now
+        st["_rec"] = r
         arm(values, st, r, w, 0)
     finally:
         (authsrv.ZERO_LEAD, authsrv.KBD_SYNC, authsrv.KBD_SYNC_LEAD_ON,
          authsrv.KBD_SYNC_SPEED_ON, authsrv.D1_LEAD,
-         authsrv.PLANE_CARRY) = saved
+         authsrv.PLANE_CARRY, authsrv.KBD_SYNC_HOLD,
+         authsrv.KBD_LEAD_KILL) = saved
     return st, w
 
 
@@ -313,6 +320,218 @@ def main():
           "a scorer that counts turn legs as movement measures a frozen "
           "residual and calls it drift; Q/E are the strafe keys")
 
+
+    print("\n10. MOVECODE-1z-y: a refused re-aim is HELD, and a press or a click "
+          "KILLS an in-flight lead")
+    import inspect
+    import time as _t
+    MOVE = authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT
+    check(authsrv.KBD_SYNC_HOLD is True and authsrv.KBD_LEAD_KILL is True
+          and authsrv.HEADING_HOLD_MAX_AGE == authsrv.GRANT_PENDING_MAX_AGE,
+          "both gates ship ON, and the held heading expires exactly when a "
+          "held click does",
+          "one expiry for the two holds; a second constant is a second place "
+          "to disagree")
+    check("--no-kbd-hold" in SRC and "--no-kbd-lead-kill" in SRC
+          and "KBD_SYNC_HOLD = not a.no_kbd_hold" in SRC
+          and "KBD_LEAD_KILL = not a.no_kbd_lead_kill" in SRC
+          and SRC.count("global KBD_SYNC_HOLD, KBD_LEAD_KILL") == 1,
+          "each gate has its revert flag, rebound through a declared global",
+          "a behaviour with no revert arm is an assertion")
+
+    # (a1) HOLD: a report refused `heading-rate` stores the grant the arm
+    # would have sent -- the LEAD from the report's own heading.
+    st, w = drive_heading(REPORT, lead=True, since=0.1)
+    hold = st.get("heading_hold")
+    check(not w.of(MOVE) and hold is not None
+          and hold["point"] == [1520.5, 2000.25] and hold["a2_src"] == "kbd"
+          and hold["plane"] == 7 and hold["plane_cur"] == 7
+          and hold["reported"] == (1000.5, 2000.25) and hold["moving"] == 1,
+          "a rate-refused report sends no 0x0029 and is HELD with the lead "
+          "its own heading names, plane words as the arm computed them",
+          f"hold={hold}")
+    rec, w2 = FakeRec(), Sent(st)
+    t_floor = st["grant_at"] + authsrv.GRANT_MIN_INTERVAL
+    check(authsrv.heading_hold_tick(w2, st, 0, rec, now=t_floor - 0.05) is False
+          and not w2.rows and st.get("heading_hold") is not None,
+          "inside the floor the hold is kept and nothing is sent",
+          "the flush is the coalescing half of the rate limit, not a bypass")
+    fired = authsrv.heading_hold_tick(w2, st, 0, rec, now=t_floor + 0.01)
+    moves = w2.of(MOVE)
+    rows = [x for x in rec.events if x.get("kind") == "grant_verdict"]
+    check(fired is True and len(moves) == 1
+          and moves[0][1] == [1, [1520.5, 2000.25], 7, 7]
+          and "HELD HEADING" in moves[0][2] and "[kbd]" in moves[0][2],
+          "at the floor the HELD grant goes out with the words computed at "
+          "refusal",
+          f"sent {moves}")
+    check(len(rows) == 1 and rows[0]["fired"] is True
+          and rows[0]["reason"] == "deferred-heading"
+          and rows[0]["deferred"] is True and rows[0]["arm"] == "zero-lead"
+          and rows[0]["lead_src"] == "kbd" and rows[0]["plane_cur"] == 7,
+          "the row is a DEFERRED fire on the heading arm, reason "
+          "deferred-heading, so grantsim's replay filter (zero-lead / "
+          "heading-rate) leaves it alone",
+          f"rows {rows}")
+    speeds = w2.of(authsrv.GAME_SMSG_AGENT_UPDATE_SPEED)
+    check(st.get("heading_hold") is None and st.get("kbd_leg") is not None
+          and st["kbd_leg"]["dest"] == (1520.5, 2000.25)
+          and st["zl_last_grant_plane"] == 7
+          and (not speeds or w2.rows.index(speeds[0]) < w2.rows.index(moves[0])),
+          "the hold is consumed, the keyboard leg record is armed from the "
+          "held send, the plane slot advances, and any family row precedes "
+          "the move",
+          f"kbd_leg={st.get('kbd_leg')} speeds={speeds}")
+    # newest wins: a second refused report overwrites; a fired one clears
+    st, w = drive_heading(REPORT, since=0.1)
+    REPORT_UP = [1, [1010.5, 2000.25], 7, [0.0, 766.0], 1]
+    st, w = drive_heading(REPORT_UP, since=0.1, state=st)
+    check(st["heading_hold"]["point"] == [1010.5, 2520.25],
+          "a second refused report REPLACES the hold (newest wins, never a "
+          "queue)", f"{st['heading_hold']['point']}")
+    st, w = drive_heading(REPORT, since=10.0, state=st)
+    check(st.get("heading_hold") is None and len(w.of(MOVE)) == 1,
+          "a fired report clears the hold", f"{st.get('heading_hold')}")
+    # zero-lead (lead OFF): the held point is the report itself
+    st, w = drive_heading(REPORT, lead=False, since=0.1)
+    check(st["heading_hold"]["point"] == [1000.5, 2000.25]
+          and st["heading_hold"]["a2_src"] is None,
+          "under zero-lead the hold is the REPORT: the copy gets the freshest "
+          "anchor at the floor instead of waiting out a silent interval",
+          f"{st['heading_hold']}")
+    # expiry, stop, action hold
+    st, w = drive_heading(REPORT, since=0.1)
+    st["heading_hold"]["at"] -= 5.0
+    rec = FakeRec()
+    check(authsrv.heading_hold_tick(Sent(st), st, 0, rec,
+                                    now=_t.time() + 1.0) is False
+          and st.get("heading_hold") is None
+          and rec.events and rec.events[-1]["reason"] == "heading-hold-expired",
+          "a hold older than the expiry is dropped with a row",
+          f"{rec.events}")
+    st, w = drive_heading(REPORT, since=0.1)
+    st["kbd_moving_at"] = None
+    rec = FakeRec()
+    check(authsrv.heading_hold_tick(Sent(st), st, 0, rec,
+                                    now=st["grant_at"] + 1.0) is False
+          and st.get("heading_hold") is None
+          and rec.events[-1]["reason"] == "heading-hold-stopped",
+          "a hold whose body has stopped is dropped -- never a walk order for "
+          "a parked body", f"{rec.events}")
+    st, w = drive_heading(REPORT, since=0.1)
+    st["action_hold"] = 1
+    saved_gdh = authsrv.GRANT_DURING_HOLD
+    authsrv.GRANT_DURING_HOLD = False
+    try:
+        rec = FakeRec()
+        import contextlib
+        import io
+        with contextlib.redirect_stdout(io.StringIO()):
+            r_ah = authsrv.heading_hold_tick(Sent(st), st, 0, rec,
+                                             now=st["grant_at"] + 1.0)
+        check(r_ah is False and st.get("heading_hold") is None
+              and rec.events[-1]["reason"] == "heading-hold-action-hold",
+              "R11's action hold guards the held send as it guards the arm's",
+              f"{rec.events}")
+    finally:
+        authsrv.GRANT_DURING_HOLD = saved_gdh
+    # known-bad arm
+    st, w = drive_heading(REPORT, since=0.1, hold=False)
+    check(st.get("heading_hold") is None and not w.of(MOVE),
+          "KNOWN-BAD ARM (--no-kbd-hold): the refused report is dropped, "
+          "nothing held, nothing sent -- the 08:46 shape",
+          f"{st.get('heading_hold')}")
+
+    # (a2) KILL: a fired lead arms the keyboard leg record; a press or a
+    # click ends it with a zero-lead grant at the modelled body.
+    st, w = drive_heading(REPORT, lead=True, since=10.0)
+    leg = st.get("kbd_leg")
+    check(leg is not None and leg["dest"] == (1520.5, 2000.25)
+          and leg["speed"] == 288.0 and leg["plane"] == 7
+          and any(x.get("kind") == "kbd_leg" and x.get("act") == "arm"
+                  for x in st["_rec"].events),
+          "a fired kbd lead arms the leg record the kill consults, with a row",
+          f"{leg}")
+    w3, rec = Sent(st), FakeRec()
+    killed = authsrv._kbd_lead_kill(w3, st, 0, rec, "press", now=leg["t0"] + 1.0)
+    mv = w3.of(MOVE)
+    check(killed is True and len(mv) == 1
+          and mv[0][1] == [1, [1288.5, 2000.25], 7, 7]
+          and "KBD LEAD KILLED on press" in mv[0][2],
+          "1.0 s into a 520 u lead at 288 u/s the kill grants the modelled "
+          "body, 288 u along the heading, on its own plane both words",
+          f"{mv}")
+    krow = [x for x in rec.events if x.get("kind") == "kbd_leg"]
+    check(st.get("kbd_leg") is None and krow
+          and krow[-1]["act"] == "kill" and krow[-1]["why"] == "press"
+          and krow[-1]["matured"] is False
+          and abs(krow[-1]["remaining"] - 232.0) < 0.1,
+          "the leg is consumed and the row names the cause and the unwalked "
+          "remainder", f"{krow}")
+    st, w = drive_heading(REPORT, lead=True, since=10.0)
+    leg = st["kbd_leg"]
+    w4, rec = Sent(st), FakeRec()
+    check(authsrv._kbd_lead_kill(w4, st, 0, rec, "click",
+                                 now=leg["t0"] + 10.0) is False
+          and not w4.rows and st.get("kbd_leg") is None
+          and rec.events[-1]["matured"] is True,
+          "a MATURED lead is not re-granted (its arrival already ran); the "
+          "record is consumed and the row says matured",
+          f"{rec.events}")
+    st = {"pos": (0.0, 0.0), "plane": 0}
+    check(authsrv._kbd_lead_kill(Sent(st), st, 0, FakeRec(), "press") is False,
+          "no leg, nothing sent")
+    st, w = drive_heading(REPORT, lead=True, since=10.0, kill=False)
+    check(st.get("kbd_leg") is None,
+          "KNOWN-BAD ARM (--no-kbd-lead-kill): no leg record is armed, so the "
+          "lead outlives any press", f"{st.get('kbd_leg')}")
+    st = {"pos": (0.0, 0.0), "plane": 0,
+          "kbd_leg": authsrv.a2_leg_note((0.0, 0.0), (520.0, 0.0), 0, 1,
+                                         _t.time())}
+    saved_kill = authsrv.KBD_LEAD_KILL
+    authsrv.KBD_LEAD_KILL = False
+    try:
+        w5 = Sent(st)
+        check(authsrv._kbd_lead_kill(w5, st, 0, FakeRec(), "press") is False
+              and not w5.rows and st.get("kbd_leg") is not None,
+              "and with the flag off an armed record is left alone")
+    finally:
+        authsrv.KBD_LEAD_KILL = saved_kill
+    # the kill is a GRANT, never a 0x002C
+    ksrc = inspect.getsource(authsrv._kbd_lead_kill)
+    check("GAME_SMSG_AGENT_MOVE_TO_POINT" in ksrc
+          and "GAME_SMSG_AGENT_UPDATE_POSITION" not in ksrc,
+          "the kill is a zero-lead 0x0029 at the body, NOT a 0x002C -- a "
+          "0x002C runs AgTrack::Clear and closes the fence until the next "
+          "movement command, which would make the following grants orders",
+          "agtrack_mirror.on_update_position -> clear(): client_controlled = "
+          "False. The reprieve test MATCHES a grant on the body's own trail")
+
+    print("\n11. 1z-y source locks")
+    check(SRC.count('_kbd_lead_kill(send, state, conn_id, rec, "press")') == 1
+          and SRC.count('_kbd_lead_kill(send, state, conn_id, rec, "click")') == 1,
+          "the press arm and the click arm each kill once",
+          "a third caller is a third opinion about when a lead ends")
+    check(SRC.count("heading_hold_tick(send, state, conn_id, rec)") == 3
+          and SRC.count("grant_flush_tick(send, state, conn_id, rec)") == 3,
+          "the held heading is polled at the three sites the held click is",
+          "a hold nobody polls is a drop with extra steps")
+    i_row = SRC.index('rec.event("grant_verdict", fired=zero_ok')
+    i_hold = SRC.index('state["heading_hold"] = heading_hold_note(')
+    i_fire = SRC.index("                                if zero_ok:\n"
+                       "                                    if cw_dest is not None:")
+    check(i_row < i_hold < i_fire,
+          "the hold is stored after the verdict row and before the fire, "
+          "inside the heading arm",
+          "stored earlier it would hold refused-for-other-reasons reports; "
+          "later it would sit inside the fire branch")
+    check(SRC.count('elif a2_src == "kbd" and KBD_LEAD_KILL:') == 1
+          and SRC.count('_old_kleg = state.pop("kbd_leg", None)') == 2,
+          "the kbd leg is armed at the fire site and popped by both report arms",
+          "an unpopped record would kill a lead the client already ended")
+    i_stop = SRC.index('rec.event("kbd_leg", act="clear", by="0x0047"')
+    check('state["heading_hold"] = None' in SRC[i_stop:i_stop + 400],
+          "the stop arm clears the held heading beside the leg pop")
     return LEDGER.verdict()
 
 

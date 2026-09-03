@@ -3685,7 +3685,22 @@ Floor 75 against a green 75 with 5 declared skips (the archive-conditional
   ever sends `0x0028` on a stop. Imports `receive_arm`/`Sent`/`FakeRec` from
   `test_position_trust` rather than copying them, because two copies of a
   subtle source-extractor drifting apart is a failure this repo has already
-  recorded. No vault, no client. ~1 s),
+  recorded. **Sections 10–11 (2026-09-03 night, MOVECODE-1z-y) added 27:** a
+  report refused `heading-rate` is HELD with the grant the arm had computed
+  (the lead its own heading names, plane words as computed), kept inside the
+  floor and fired at it with a `deferred-heading` row, the keyboard leg record
+  and the plane-slot advance; newest wins; a fired report clears; zero-lead
+  holds the report itself; expiry, a stopped body and R11's action hold each
+  drop with their row; the known-bad arm `--no-kbd-hold` drops and sends nothing
+  (the 08:46 shape); a fired lead arms `kbd_leg`; the kill 1.0 s into a 520 u
+  lead grants the modelled body 288 u along the heading on its own plane, consumes
+  the record and rows the unwalked 232 u; a matured lead is not re-granted; no
+  leg, no send; `--no-kbd-lead-kill` arms nothing and leaves an armed record
+  alone; and the kill's source is a `0x0029`, never a `0x002C` (Clear closes the
+  fence). Six source locks: the press and click call sites, the three poll sites
+  beside the held click, the hold stored between the verdict row and the fire,
+  the leg armed at the fire site and popped by both report arms, the stop arm's
+  clear. Floor 33 → 60 from the green run. No vault, no client. ~1 s),
   `toolkit/authsrv/test_livewire.py` (the committed retail-decode recipe,
   RETHINK instrument #2 — the campaign's referee moved out of a deletable
   scratchpad. Guards `toolkit/authsrv/livewire.py`: the no-vault doors

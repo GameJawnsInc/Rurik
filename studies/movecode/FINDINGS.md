@@ -9632,3 +9632,93 @@ the onset rule, the three bars, the per-leg table and the parked flag, the plumb
 the two real controls. `test_srclint.py` green. All figures are measurements over the
 owner's own captures via extractors in this repo; no client launch, no static reads, no
 upstream derivation.
+
+---
+
+## 1z-y. HOLD, NOT DROP — and the lead KILLED on a press or a click: §1z-u.5 item (a) built, with one derived correction to its text
+
+**Asked:** "do the hold-not-drop and kill-on-press next." Zero client runs; the two gates
+§1z-u.5 (a) named before the keyboard lead may return, built additive and ON, each with
+its revert, each driven through the shipped heading arm's own bytes in `test_kbdsync`.
+Ident `MOVECODE-1z-y`.
+
+### 1z-y.1 (a1) A rate-refused heading grant is HELD and re-baked at the floor
+
+`_heading_grant_ok`'s docstring dropped a rate-refused heading report on a premise —
+*"the next report carries a fresher position"* (median 0.28–0.30 s) — and §1z-u.3 is the
+premise failing: the re-aim 66 ms after the 24.09 s lead was refused `heading-rate`,
+no `0x003D` followed for 2.7 s / 567 u, the lead matured on the old heading, and the
+arrival reconcile snapped the body 498 u and shut the fence. Now the refused report's
+**own** grant — the point or the lead the arm had already computed above its verdict
+row, with the plane words as computed — is stored (`heading_hold_note`) and
+`heading_hold_tick`, polled at the three sites `grant_flush_tick` is, sends it the
+instant the shared floor opens: the family row (edge-triggered, a no-op when unchanged)
+then the `0x0029`, with the arm's own post-send bookkeeping. **Newest wins, never a
+queue**: every refused report overwrites, every fired one clears, the stop arm and the
+click arm clear, a body that has stopped drops it, R11's action hold suppresses it, and
+a hold older than the click hold's own expiry (`HEADING_HOLD_MAX_AGE` =
+`GRANT_PENDING_MAX_AGE`, the equality pinned) is dropped — each with a
+`grant_verdict` row (`deferred-heading` on a fire; `heading-hold-expired` /
+`-stopped` / `-action-hold` otherwise), a reason vocabulary disjoint from the arm's
+own so grantsim's replay filter is untouched.
+
+**This is live under the shipped zero-lead default, not only under `--kbd-lead`.**
+Under zero-lead the held point is the report itself, so the sync copy gets the freshest
+anchor at the floor instead of waiting out a silent interval — §1z-t.3's law is
+separation = report_gap × speed, and a dropped report doubles the gap. Under the lead
+it is the re-aimed lead, which is what keeps the copy from maturing on a heading the
+body left. Not under `--d1-lead` (that bundle has its own containment and `test_d1lead`
+pins its one leg-arm site) and not under the CANCELWALK lead arms or the PC spoof
+(pre-registered diagnostic wires). `--no-kbd-hold` reverts.
+
+### 1z-y.2 (a2) A press or a click kills an in-flight keyboard lead — with a grant, not a 0x002C
+
+A fired keyboard lead now arms `state["kbd_leg"]` (the D1 leg record's shape, own key,
+own rows, popped by either report arm). On a `0x0026` press or a `0x003E` click while
+that leg is in flight, `_kbd_lead_kill` sends a **zero-lead grant at the modelled
+body** — `a2_leg_position`: report + heading × elapsed at the family speed, clamped at
+the lead — with the body's own plane in both words, so the sync copy re-aims to where
+the body is and the lead's 520 u arrival never fires. A lead that has already matured
+is not re-granted (its arrival has already been evaluated); the row says `matured`.
+`--no-kbd-lead-kill` reverts; inert without `--kbd-lead`.
+
+**The correction to §1z-u.5's text, derived from the mirror.** The item said *"killed by
+the zero-distance re-pin … what PRESS ENDS THE WALK already does"* — a `0x002C`. The
+mirror's own transcription (`agtrack_mirror.on_update_position`) is why that is the
+wrong primitive here: a `0x002C` runs `AgTrack::Clear` first, and `clear()` sets
+`client_controlled = False` — **the fence closes** — until the client's next movement
+command re-arms it. Every grant between a `0x002C` kill and that command would be an
+ORDER, which is the enslavement the kill exists to prevent (and the reason §1z-u.5 (d)
+asks for the two `0x002C` senders to be audited). A `0x0029` on the body's own trail is
+the reprieve test's MATCH — zero-lead's warp-safety by construction (§1z-r) — so the
+copy arrives beside the body and the fence stays open. `test_kbdsync` locks the kill's
+source to `AGENT_MOVE_TO_POINT` and against `AGENT_UPDATE_POSITION`.
+
+The click case is worth stating: under the router a click's own answer supersedes the
+copy's leg anyway, but a click inside the 3.0 s keyboard-authority window is dropped by
+retail's contract and a refused click sends nothing — exactly when the lead would
+mature. The kill runs before the router answers.
+
+### 1z-y.3 Tests, and what this does not settle
+
+`test_kbdsync.py` 33 → 60 checks (floor 60): the hold stored with the lead its own
+heading names and the words as computed; kept inside the floor; fired at the floor
+with the row, the leg record and the plane slot; newest-wins; a fired report clears;
+zero-lead holds the report; expiry, stopped body and R11 each drop with their row; the
+known-bad arm drops and sends nothing (the 08:46 shape); the kill at 1.0 s into a 520 u
+lead grants (1288.5, 2000.25) with 232 u unwalked, consumes the record and rows it; a
+matured lead is not re-granted; no leg, no send; the known-bad arm arms no record and
+leaves an armed one alone; the kill is a grant and not a `0x002C`; and six source
+locks (the two call sites, the three poll sites, the hold's position inside the arm,
+the leg's arm and pops, the stop arm's clear). `test_d1lead` 94 (its one-arm-site and
+one-guarded-send censuses hold — the flush spells R11's guard differently for that
+reason), `test_position_trust` 235, `test_router` 114, `test_playerswing` 116,
+`test_cancelwalk` 124, `test_familyrate` 26, `test_clickecho` 25, `test_planerepair`
+41, `test_grantsim` 86, `test_castcancel` 31, `test_guards` 41 — green.
+
+Not settled: the lead stays **opt-in**. Item (a) is built; (b) `a2_matched_field4` on
+the keyboard path and (d) the fence-shutter audit are still owed, and the lead's length
+is to be argued on maturation margin (§1z-u.4). The hold's live effect under zero-lead
+is a prediction, not a measurement: the operator's next keyboard session scores it for
+free (`HELD HEADING` lines and `deferred-heading` rows where a re-aim used to vanish).
+No client launch, no static reads, no upstream derivation.
