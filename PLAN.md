@@ -1498,7 +1498,12 @@ refuted as a default on three lenses (does not fix the session, plane-lock
 hazard off map 146, no-clip on long clicks). **The click path's derived answer
 is `--router` as default**, with the click-leg record re-armed to the routed
 first leg and a plane word from the modelled copy's mesh plane; that is its own
-arc. The session's felt symptoms were 1z-t's keyboard lead, now opt-in.
+arc. **BUILT 2026-09-03 evening, §1z-v: the router IS the default, both conditions
+shipped with a revert each (`--no-router`, `--router-raw-leg`,
+`--router-report-plane`), and the press and the follow abandon a live chain;
+the operator's 40 refused clicks retrodict to 40 answered.** The bundle question
+Q13 poses (adopt `D1_LEAD`?) is unchanged by it. The session's felt symptoms were
+1z-t's keyboard lead, now opt-in.
 Raised 2026-08-27 by
 [studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1i.**
 
@@ -1600,6 +1605,48 @@ floors and aborts in `RUN-R8.md`; both are operator-driven client runs.
 ---
 
 ## 8. Immediate next actions
+
+### ★★★★ MOVEMENT 2026-09-03 late — THE ROUTER IS THE DEFAULT CLICK POLICY (MOVECODE-1z-v): §1z-u's derived answer built with its two conditions, the press/follow composition it never had, and the operator's 40 refused clicks retrodicting to 40 answered
+
+**[studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1z-v.** Zero client
+runs. One desk retrodiction, prediction registered first, held.
+
+* **`--router` is the default** (`ROUTER = True`); `--no-router` restores the pre-1z-v
+  click path byte-for-byte (the 1.0 s freshness gate and its `geo-stale` refusals);
+  `--router` still parses as a no-op; the nine pairwise refusals carry the
+  `--zero-lead` precedent's hint (*pass `--no-router`*) when the router was not asked
+  for explicitly. The derivation is §1z-u's and is not restated.
+* **Condition (a), `--router-raw-leg` reverts:** the click-leg record — armed on the RAW
+  click chord by the 0x003E arm *before* the router runs — is re-aimed at the routed leg,
+  and every chain leg re-arms it from the reached waypoint at its own grant instant
+  (`start`; the click's `t0` kept as identity). Without it a mid-chain press would
+  hard-set BOTH copies onto the unclipped chord via PRESS ENDS THE WALK — the
+  composition §1z-u.2 lens 3 warned had never been exercised. The known-bad arm is
+  driven in `test_router` §5 (re-pin at the chord's (144, 0) vs on the routed leg).
+* **Condition (b), `--router-report-plane` reverts:** the one-leg verbatim answer's
+  field 4 is the mesh's plane under the MODELLED sync copy (`_sync_position`, the
+  mirror's own equation), preferring the report's plane where the mesh offers it there
+  and carrying it where the mesh cannot say — §1z-u.2 lens 2's derived word, built.
+  The routed/chain/fallback matched pairs and §1z-o.6 stand untouched.
+* **The press and the follow abandon a live chain** (`router_leg` rows, cause `press` /
+  `approach`) — ROUTER-Q8 decided for those two opcodes by our own press contract (a
+  `0x002C` then a swing or a `0x002A` within the tick; a chain still granting legs
+  behind it is two movement orders for one body). Casts remain Q8's remainder.
+* **Retrodiction, `studies/movecode/review/clickretro.py` over the 08:46 capture:**
+  40 clicks → **40 `verbatim`** (was 0 answered / 40 `geo-stale`), 0 refused, 0
+  dropped; (a) and (b) have **zero exposure** on map 146's open ground (0 multi-leg
+  answers, 0 of 28 presses inside a chain, field 4 = the report plane on 40/40) — said
+  as zero exposure, not as evidence. The separation counterfactual for the session is
+  §1z-u.2's K2 sim (wire-identical here): a wash inside the tube; the session's tail
+  was the lead's.
+* **Readout changes:** a routed click writes NO `click_verdict` row — score
+  `router_route` / `router_leg` (verbatim rows carry `plane4` beside `plane4_report`);
+  the banner prints the conditions' state and warns when an arm is off.
+* **Next:** the operator's next ordinary session is the router's first as the default,
+  at zero cost (`ROUTER click … ROUTER one leg` where `geo-stale` used to print;
+  `agenttap.py` + `w0score.py` for the separation). Filed: the origin's own plane word
+  for `route(start_plane=…)` and the fallback carry (same construction over the body
+  model); casts abandoning a chain; the §1z-u.5 list before the keyboard lead returns.
 
 ### ★★★★ MOVEMENT 2026-09-03 evening — THE FRESHNESS GATE DERIVED (refuted as asked), 1z-t's LEAD CONVICTED BY THE OPERATOR'S RUN AND MADE OPT-IN, and a correction to it refuted before merging
 

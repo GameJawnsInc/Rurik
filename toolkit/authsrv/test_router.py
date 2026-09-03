@@ -9,6 +9,14 @@ abandon rules, the retail wire grammar (speed ONCE per chain, matched
 plane pairs, per-waypoint planes), and the source locks that keep the
 recv-loop attach points, the handler branch, and the composition refusals
 from drifting. Bare-machine: no vault, no client, no sockets.
+
+Section 5 (MOVECODE-1z-v, 2026-09-03): the router is the DEFAULT, and the
+two conditions 1z-u named ship with it -- (a) the click-leg record is
+re-armed to the routed leg (chain legs included), so PRESS ENDS THE WALK
+re-pins the body on the leg it walks and not on the raw click chord; (b)
+the one-leg verbatim answer's field 4 is the mesh's plane under the
+modelled sync copy. Both known-bad arms are driven, and a press or a
+follow now abandons a live chain.
 """
 
 import math
@@ -62,10 +70,12 @@ class StubPM:
     cross it detour through (150.0, 500.0); everything else is a straight
     line. plane 3 everywhere."""
 
-    def __init__(self, route_result="auto", route_planes=None):
+    def __init__(self, route_result="auto", route_planes=None,
+                 plane_fn=None):
         self.route_result = route_result
         self.route_planes = route_planes
         self.last_planes = None
+        self.plane_fn = plane_fn      # (x, y, prefer) -> plane or None
 
     def walkable(self, x, y):
         return not (100.0 < x < 200.0) or y > 400.0
@@ -74,6 +84,8 @@ class StubPM:
         return [1] if self.walkable(x, y) else []
 
     def plane_at(self, x, y, prefer=None):
+        if self.plane_fn is not None:
+            return self.plane_fn(x, y, prefer)
         return 3
 
     def clip(self, x0, y0, x1, y1, step=16.0):
@@ -479,6 +491,194 @@ def main():
           and "test_router.py" in (authsrv.a2_matched_field4.__doc__ or ""),
           "the correction block must name this file, so the next reader who "
           "wants to gate the call sites finds the locks that say why not")
+
+    print("== 5: MOVECODE-1z-v -- the router is the DEFAULT, with two conditions ==")
+    check("the router is the default click policy, both conditions on",
+          authsrv.ROUTER is True and authsrv.ROUTER_LEG_REARM is True
+          and authsrv.ROUTER_SYNC_PLANE is True)
+    check("--no-router is the revert, --router still parses as a no-op",
+          '"--no-router"' in src and '"--router"' in src
+          and "ROUTER = not a.no_router" in src
+          and "router=not a.no_router," in src)
+    check("each condition has its own revert flag",
+          '"--router-raw-leg"' in src and '"--router-report-plane"' in src
+          and "ROUTER_LEG_REARM = ROUTER and not a.router_raw_leg" in src
+          and "ROUTER_SYNC_PLANE = ROUTER and not a.router_report_plane" in src)
+    check("the pairwise refusals carry the default-flip hint",
+          "pass --no-router to run this arm" in src)
+
+    # ---- (a) the click-leg record follows the ROUTED leg -------------------
+    # The 0x003E arm arms the record on the raw click chord BEFORE the router
+    # runs (its order of operations); the body walks the routed leg. Every
+    # reader of the record -- the press re-pin, the approach snap guard, the
+    # swing gate's ETA -- must see the routed leg.
+    st = base_state()
+    st["client_pos"] = (0.0, 0.0)
+    t_click = time.time()
+    st["click_moving_at"] = t_click
+    raw = authsrv._click_leg_arm(st, (300.0, 0.0), t_click, silent=False)
+    check("before the router runs the record is the raw chord",
+          raw is not None and raw["dest"] == (300.0, 0.0))
+    handled, sent, rows = answer(st, (300.0, 0.0))
+    leg = st.get("click_leg")
+    check("a routed click re-arms the record to waypoint 1",
+          leg is not None and leg["dest"] == (100.0, 500.0)
+          and leg["p0"] == (0.0, 0.0))
+    check("the record keeps the click's own stamp as its identity",
+          leg is not None and leg["t0"] == t_click and "start" in leg)
+    check("its ETA is the routed leg's own travel time at the declared speed",
+          leg is not None and abs((leg["eta"] - leg["start"])
+                                  - math.hypot(100.0, 500.0) / 288.0) < 1e-6)
+    mid = authsrv._click_leg_start(st, leg["start"] + 0.5, silent=True)
+    check("mid-leg the modelled body lies on the routed leg, not the chord",
+          mid is not None and mid[1] > 100.0 and mid[0] <= 100.0 + 1e-6,
+          f"model {mid}; the chord's point would be (144, 0)")
+    check("the swing gate reads the body as moving on the routed ETA",
+          authsrv._player_body_moving(st) is True)
+    send2, rec2 = FakeSend(), FakeRec()
+    t_leg2 = time.time() + 999.0
+    authsrv.router_chain_tick(send2, st, 1, rec2, now=t_leg2)
+    leg2 = st.get("click_leg")
+    check("a chain leg re-arms the record FROM the waypoint the body reached",
+          leg2 is not None and leg2["p0"] == (100.0, 500.0)
+          and leg2["dest"] == (200.0, 500.0) and leg2["start"] == t_leg2
+          and leg2["t0"] == t_click)
+    mid2 = authsrv._click_leg_start(st, t_leg2 + 0.1, silent=True)
+    check("and its lerp runs from the leg's OWN start, not the click's",
+          mid2 is not None and abs(mid2[0] - 128.8) < 1e-3
+          and abs(mid2[1] - 500.0) < 1e-9)
+    authsrv.ROUTER_LEG_REARM = False
+    try:
+        st = base_state()
+        st["client_pos"] = (0.0, 0.0)
+        st["click_moving_at"] = t_click
+        authsrv._click_leg_arm(st, (300.0, 0.0), t_click, silent=False)
+        answer(st, (300.0, 0.0))
+        check("KNOWN-BAD ARM (--router-raw-leg): the record stays on the chord",
+              st["click_leg"]["dest"] == (300.0, 0.0))
+    finally:
+        authsrv.ROUTER_LEG_REARM = True
+    st = base_state(StubPM(route_result=None))
+    st["client_pos"] = (0.0, 0.0)
+    st["click_moving_at"] = t_click
+    authsrv._click_leg_arm(st, (300.0, 0.0), t_click, silent=False)
+    handled, sent, rows = answer(st, (300.0, 0.0))
+    stop = sent[-1][1][1]
+    check("the clip-fallback re-arms the record to its own stop",
+          st["click_leg"]["dest"] == (stop[0], stop[1]))
+    st = base_state()
+    st["client_pos"] = (0.0, 0.0)
+    st["click_moving_at"] = t_click
+    authsrv._click_leg_arm(st, (50.0, 50.0), t_click, silent=False)
+    answer(st, (50.0, 50.0))
+    check("a verbatim answer leaves the record alone -- its leg IS the chord",
+          st["click_leg"]["dest"] == (50.0, 50.0)
+          and "start" not in st["click_leg"])
+    st = base_state()
+    st["click_leg"] = None
+    authsrv._router_rearm_leg(st, (1.0, 1.0), time.time())
+    check("a record that was never armed stays unarmed",
+          st["click_leg"] is None)
+
+    # ---- the press and the follow end the ROUTE ---------------------------
+    st = base_state()
+    st["client_pos"] = (0.0, 0.0)
+    t_click = time.time() - 0.5
+    st["click_moving_at"] = t_click
+    authsrv._click_leg_arm(st, (300.0, 0.0), t_click, silent=False)
+    handled, sent, rows = answer(st, (300.0, 0.0))
+    st["click_leg"]["start"] -= 0.5           # the press lands mid-leg
+    st["approach"] = None
+    send3, rec3 = FakeSend(), FakeRec()
+    authsrv._press_supersedes(send3, st, 1, 77, rec=rec3)
+    pins = [p for op, p, _l in send3.sent
+            if op == authsrv.GAME_SMSG_AGENT_UPDATE_POSITION]
+    check("a press mid-chain abandons the chain, cause named",
+          st.get("router_chain") is None
+          and any(r["kind"] == "router_leg" and r["act"] == "abandon"
+                  and r["cause"] == "press" for r in rec3.rows))
+    check("and PRESS ENDS THE WALK re-pins the body ON THE ROUTED LEG",
+          len(pins) == 1 and pins[0][1][1] > 100.0
+          and pins[0][1][0] <= 100.0 + 1e-6,
+          f"re-pin {pins}; on the raw chord it would be (144, 0)")
+    st = base_state()
+    st["client_pos"] = (0.0, 0.0)
+    st["sync_from"] = (0.0, 0.0)
+    st["click_moving_at"] = time.time()
+    authsrv._click_leg_arm(st, (300.0, 0.0), st["click_moving_at"],
+                           silent=False)
+    answer(st, (300.0, 0.0))
+    send4, rec4 = FakeSend(), FakeRec()
+    authsrv._approach_send(send4, st, 1, 77,
+                           {"pos": (1000.0, 0.0), "name": "hatcher"},
+                           time.time(), rec=rec4)
+    check("a follow abandons the chain too, cause named",
+          st.get("router_chain") is None
+          and any(r["kind"] == "router_leg" and r["act"] == "abandon"
+                  and r["cause"] == "approach" for r in rec4.rows))
+
+    # ---- (b) the verbatim answer's field 4 --------------------------------
+    def planes_fn(x, y, prefer):
+        offered = {5} if x < 0.0 else {3}
+        if prefer in offered:
+            return prefer
+        return next(iter(offered))
+    pm = StubPM(plane_fn=planes_fn)
+    st = base_state(pm)
+    st["sync_from"] = (-50.0, 0.0)
+    handled, sent, rows = answer(st, (50.0, 50.0))
+    check("verbatim field 4 is the mesh's plane under the SYNC COPY when the "
+          "report's plane is not offered there",
+          sent[-1][1][2] == 3 and sent[-1][1][3] == 5)
+    row = next(r for r in rows if r["kind"] == "router_route")
+    check("the row carries both words",
+          row.get("plane4") == 5 and row.get("plane4_report") == 3)
+    st = base_state(pm)
+    st["sync_from"] = (10.0, 0.0)
+    handled, sent, rows = answer(st, (50.0, 50.0))
+    check("where the mesh offers the report's plane under the copy, the wire "
+          "is unchanged", sent[-1][1][3] == 3)
+    st = base_state(StubPM(plane_fn=lambda x, y, prefer: None))
+    st["sync_from"] = (-50.0, 0.0)
+    handled, sent, rows = answer(st, (50.0, 50.0))
+    check("where the mesh cannot say, the report's plane is carried "
+          "(refuse to guess)", sent[-1][1][3] == 3)
+    st = base_state(pm)
+    handled, sent, rows = answer(st, (50.0, 50.0))
+    check("an unseeded sync model carries the report's plane",
+          sent[-1][1][3] == 3)
+    st = base_state(pm)
+    st["sync_from"], st["sync_to"] = (-400.0, 0.0), (400.0, 0.0)
+    st["sync_at"] = time.time() - 1.0
+    handled, sent, rows = answer(st, (50.0, 50.0))
+    check("the sync copy is modelled MID-LEG (1 s into an 800 u leg it still "
+          "stands on plane 5's ground)", sent[-1][1][3] == 5)
+    authsrv.ROUTER_SYNC_PLANE = False
+    try:
+        st = base_state(pm)
+        st["sync_from"] = (-50.0, 0.0)
+        handled, sent, rows = answer(st, (50.0, 50.0))
+        check("KNOWN-BAD ARM (--router-report-plane): field 4 is the frozen "
+              "report plane", sent[-1][1][3] == 3)
+    finally:
+        authsrv.ROUTER_SYNC_PLANE = True
+
+    # ---- source locks for 1z-v ---------------------------------------------
+    check("chain grants, the routed first leg and the fallback all re-arm "
+          "the record",
+          src.count('_router_rearm_leg(state, nxt, now, p0=chain["cur"])') == 1
+          and src.count("_router_rearm_leg(state, first_wp, now)") == 1
+          and src.count("_router_rearm_leg(state, (float(stop[0]), "
+                        "float(stop[1])), now)") == 1)
+    check("the press and the follow abandon the chain, once each",
+          src.count('router_abandon(state, rec, "press", now)') == 1
+          and src.count('router_abandon(state, rec, "approach", now)') == 1)
+    check("the verbatim field 4 goes through the sync-plane helper BEFORE "
+          "the gated match",
+          src.index("ps = _router_sync_plane(state, pm, plane_second, now)")
+          < src.index("if D1_LEAD:\n            ps, _m = a2_matched_field4("))
+    check("the leg model lerps from the leg's own start",
+          'leg.get("start", leg["t0"])' in src)
     return LEDGER.verdict()
 
 

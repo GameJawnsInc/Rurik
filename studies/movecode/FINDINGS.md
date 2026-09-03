@@ -9301,3 +9301,149 @@ repo (`w0score.py`, `agenttap.py`, `tape.py`/`codec.py`, `livewire.py`,
 `readhook.py` on the K2 movehook bin) plus read-only static reads of the pinned
 38797 client via `codescan.py`. No asset bytes, no client launch, no upstream
 derivation.
+
+---
+
+## 1z-v. THE ROUTER IS THE DEFAULT CLICK POLICY — §1z-u's derived answer built, with its two conditions, and the composition the router never had
+
+**Asked:** "continue the movement arc: do the router fix" — the click path's derived
+answer from §1z-u.2: *`--router` as the default, with (a) the click-leg record re-armed
+to the routed first leg so the press re-pin stops placing the body on the raw chord,
+and (b) the derived plane word.* **Built at a desk, zero client runs**, one retrodiction
+over the operator's own 08:46 capture with its prediction registered first, and the
+affected suite green. Ident `MOVECODE-1z-v`.
+
+### 1z-v.1 What shipped, and why each piece is derived rather than chosen
+
+- **`ROUTER = True`.** The derivation is §1z-u.1–.2 and is not restated: the freshness
+  gate cannot be widened (click ages 15–21 s; only ≥ 23 s answers all 40, past retail's
+  20.99 s max), it protects no plane word, retail has no freshness precondition
+  (26/26), `--click-echo` is refused as a default on three lenses, and the router is the
+  one click policy in the file that answers every processed click with a **legal leg**
+  over our own mesh — five scored runs (ROUTER.md §§6–10), the no-clip dead under it
+  (§1z), warps ~1.5× fewer than the refusal regime (HANDOFF §B). `--no-router` restores
+  the pre-1z-v click path byte-for-byte (the gate, the `geo-stale` refusals, the
+  hold/void/rate tower); `--router` still parses as a no-op so every runsheet written
+  before today keeps its meaning; the nine pairwise refusals (`--click-sweep`,
+  `--arrival-carry`, `--cancel-answer`, `--stop-answer`, `--family-rate-probe`,
+  `--checksum-probe`, `--pc-spoof`, `--interact-walk`, `--move-speed-effects`) now
+  carry the `--zero-lead` precedent's hint — *pass `--no-router` to run this arm* —
+  only when the router was not asked for explicitly, so the advice is followable.
+- **(a) `ROUTER_LEG_REARM` (`--router-raw-leg` reverts).** The 0x003E arm arms the
+  click-leg record (ANIMREF-RE §37, `_click_leg_arm`) on the **raw click chord before the
+  router runs** — its order of operations — while the body walks the **routed** leg.
+  Every reader of the record then models a straight line the client is not walking:
+  PRESS ENDS THE WALK's `0x002C` at the modelled body (ANIMREF-RE §39), the approach's
+  snap guard, the swing gate's ETA. The press is the dangerous one: a `0x002C` lands
+  **both** copies on its point, so a mid-chain press would hard-set the body onto the
+  unclipped chord the router exists to keep off the wire — §1z-u.2 lens 3's warning,
+  *"every router run predates `PRESS_SUPERSEDES_LEG` … and had zero attack presses"*:
+  the composition had never been exercised. Now the router re-aims the record at the
+  leg it grants (first leg, or the clip-fallback's stop; a verbatim answer's leg *is* the
+  chord and is left alone), and **every chain leg re-arms it again from the waypoint the
+  body reached, at its own grant instant** — the record gains a `start` and keeps the
+  click's stamp `t0` as its identity, which is what `_player_body_moving` and the
+  approach's own check read. `test_router` §5 drives the known-bad arm: without (a) a
+  mid-chain press re-pins at the chord's (144, 0); with it, on the routed leg.
+- **(b) `ROUTER_SYNC_PLANE` (`--router-report-plane` reverts).** The one-leg verbatim
+  answer's field 4 is the SYNC copy's plane word (`agent+0x80`; `0x0029` is sync-only,
+  §1z-t.2). It was `state["plane"]`, the last accepted report's plane — frozen for the
+  whole click walk because the client reports nothing while click-walking, while the
+  walk crosses seams; §1z-u.2 lens 2 measured the cost on K2's own bin (16 of 18 SYNC
+  stamps 0 while 5 of 8 echoed legs crossed non-zero planes) and corpus-wide (709
+  incoherent stamps in 36 of 116 click sessions, 0 on map 146), and §1z-i is why it
+  matters: a from-plane the ground does not offer is `pathCount == 0`, exceptionless.
+  The derived word, as §1z-u.2 wrote it: **the mesh's plane under the MODELLED sync
+  copy** — `_sync_position`'s lerp of the last granted leg at 288 u/s (the same equation
+  the validated mirror runs, §1z-r) — via `plane_at(prefer=report plane)`, so the wire is
+  unchanged wherever the mesh offers the report's plane there, the mesh's single plane
+  where it does not, and the report's plane where the mesh cannot say or the model is
+  unseeded (refuse to guess). The routed / chain / fallback sites keep their matched
+  pairs — `a2_matched_field4`'s RULE block and §1z-o.6's counterexample stand.
+- **The press and the follow now abandon a live chain** (`router_leg` rows,
+  `cause=press` / `cause=approach`). ROUTER-Q8 left interaction/cast/attack opcodes
+  out of the abandon set "in v1" because retail's corpus never fired them mid-chain
+  (zero exposure). It is decided for these two by **our own** press contract rather
+  than by retail's wire: `_press_supersedes` sends a `0x002C` and the tick swings or
+  sends a `0x002A` follow within the same tick, and a chain that kept granting its
+  remaining `0x0029` legs at cadence behind that would be two movement orders for one
+  body — exactly the two-sender fight `--interact-walk`'s refusal names. Casts are still
+  Q8's remainder.
+- **Readout.** A routed click writes **no `click_verdict` row** — `router_route` rows
+  carry the verdict (verbatim / routed / clip-fallback / refused / kbd-drop, reason, ms),
+  verbatim rows now carry `plane4` beside `plane4_report`, and `router_leg` rows carry
+  every grant and abandon with its cause. A scorer that counts `click_verdict` rows
+  reads zero on a default session; `keepalivelog.py` already reads the router rows.
+  The startup banner prints `ROUTER ON by default` with the two conditions' state and
+  warns when a condition or the router is off — say so when reporting a run.
+
+### 1z-v.2 The retrodiction — the operator's 40 refused clicks, replayed through the shipped router
+
+**Registered before running:** 40 of 40 answered `verbatim` (§1z-u.2 measured
+`route()` one leg for 40/40 on these clicks), 0 refused, 0 `kbd-drop`; (a) and (b) with
+**zero exposure** on this capture (open ground, map 146, plane 0 everywhere). Harness:
+`studies/movecode/review/clickretro.py` — drives `authsrv.router_answer_click` as it
+ships, on the map-146 mesh from the owner's own archive, from the router's **own origin
+model** (the integrator walking the last granted leg at 288 u/s, reset by each accepted
+report — ROUTER-B1's origin result), with the keyboard latch armed by the capture's five
+`0x003D`s exactly as the 0x003D arm arms it.
+
+| capture `authsrv-20260903T084616-c1` | shipped then | router now |
+|---|---|---|
+| clicks | 40 | 40 |
+| answered | **0** (40 × `geo-stale`) | **40** (40 × `verbatim`, n_wp 1) |
+| refused / dropped / clip-fallback | 40 / 0 / 0 | 0 / 0 / 0 |
+| origin → click distance | — | 25–385 u |
+| (a) multi-leg or fallback answers; presses inside a live chain | — | 0; 0 of 28 |
+| (b) verbatim rows where field 4 ≠ the report's plane | — | 0 of 40 |
+
+**Held.** The keyboard drop did not fire: the five `0x003D`s at 23.56–24.16 s armed the
+latch and no `0x0047` ever cleared it (ANIMREF §41's cell), but the next click came at
+27.99 s — 3.8 s later, past `GRANT_LOCAL_WINDOW`'s 3.0 s — so retail's contract dropped
+nothing here. Under a stuck latch a click inside 3.0 s of the last report IS dropped;
+that is retail's measured behaviour (§0.15), bounded by the window, and it is why §41's
+latch fix matters to the click path too.
+
+**What the retrodiction does not show, said plainly.** It is a verdict census, not a
+separation counterfactual. The separation counterfactual for this session already
+exists — §1z-u.2 lens 1's K2 sim, whose echoes are wire-identical to the router's
+verbatim one-leg answers (same point, same words on this map): drag-phase p50 23 → 36–57 u,
+p90 138 → 98 u, a wash inside the 100 u tube. This session's tail was the keyboard
+lead's (§1z-u.3), now opt-in. The router's value on this map is the one §1i priced —
+grant density 1.40 per 1,000 u against retail's 4.30 median and 1.70 minimum, the sync
+copy never left standing at the last grant while the body walks away — and its value
+elsewhere is the dead no-clip and the halved warps, both measured on map 280.
+
+### 1z-v.3 What this does not settle
+
+- **The origin's plane.** `route(start_plane=…)` and the clip-fallback's `_router_plane`
+  carry still read `state["plane"]`, the frozen report plane, for the **body** model's
+  surface. The derived word is the same construction over `state["pos"]`; it is scoped
+  out of (b) because (b) names the SYNC copy and the preference falls back rather than
+  refusing on an unmatched plane. Filed, not built.
+- **§1z-o.6 stands.** The routed / chain / fallback field 4 still matches field 3
+  unconditionally, with its one measured counterexample (R7: 0 over a true 37).
+- **Casts do not abandon a chain** (ROUTER-Q8's remainder); `--cast-stop=pin`'s own
+  click-walk suppression still fires on every mid-chain cast, conservatively.
+- **The re-armed record's error terms are §37's, now per leg**: a body stopped by the
+  client's own collision short of a waypoint is modelled at the waypoint; a bent client
+  path ends later than our straight leg. ROUTER-Q9's µs dest race is unchanged.
+- **The operator's next ordinary session scores this at zero cost.** Expect
+  `ROUTER click to (x, y): … ROUTER one leg` where `geo-stale` used to be, and
+  `router_route` rows in the capture; the felt questions are RUN-FEEL's four, with the
+  keyboard lead off. Separation via `agenttap.py` and `w0score.py`; the enslavement
+  caveat of §1z-u.3 does not arise on a verbatim one-leg answer (the granted point is
+  the client's own click, which the body was walking to anyway), and does arise on a
+  multi-leg chain, whose legs are orders.
+
+### 1z-v.4 Tests and provenance
+
+`test_router.py` 103 checks (floor 73 → 103; §5 is new), `test_playerswing.py` 116
+(one source lock updated for the press arm's `rec=rec`), `test_d1lead.py` 94 (its
+call-site censuses unchanged: `a2_matched_field4` 10, family-edge 7,
+`a2_click_answered_at` 4), `test_grantsim.py` 86, `test_policyreplay.py` 14,
+`test_kbdsync.py` 33, `test_familyrate.py` 26, `test_cancelwalk.py` 124,
+`test_position_trust.py` 235, `test_planerepair.py` 41, `test_clickecho.py` 25,
+`test_srclint.py` 26 — all green. The retrodiction is a measurement over the owner's
+own capture via a harness in this repo; the mesh is read from the owner's own archive
+at run time; no new static reads, no client launch, no upstream derivation.
