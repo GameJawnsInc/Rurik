@@ -9887,3 +9887,144 @@ chord where 520 leaves 5), and one scripted keyboard run under `--kbd-lead` scor
 `w0score.py` with the detector — which now cannot read an enslaved body as a
 confirmation. No client launch, no static reads, no upstream derivation; all figures over
 the owner's own captures via extractors in this repo.
+
+
+---
+
+## 1z-ab. THE LEAD'S LENGTH — the maturation-margin question is void under the hold, the operative bounds are the trigger below and the order-walk above, and 520 stands
+
+**Asked:** "do the lead length argument next" — §1z-u.4's deferred question, the last item
+before `--kbd-lead` can be argued for as a default: 520 u (§1z-t.6, the report chord + 5)
+or retail's 766 u (the client's own proposal), "on maturation margin — 766 leaves ~250 u
+over the ~515 u report chord where 520 leaves 5". Zero client runs; three extractors over
+the owner's own captures, in one module (`toolkit/clientscan/leadmargin.py`, with
+`test_leadmargin.py`), and the decode already in `agtrack_mirror.py`. Ident
+`MOVECODE-1z-ab`. **The constant does not move.**
+
+### 1z-ab.1 What the two numbers are (OBSERVED)
+
+- **766 is the client's own proposal, and it is a fixed ray.** `|vec2|` on every decoded
+  `0x003D` is 765.0–768.0 u on all eight movement types (8,442 forward reports p50 766.79;
+  4,047 backpedal p50 767.39; side 766.98–767.18) — not a time at a speed but ~768 u =
+  **1.5 × the 512 u trigger**. Retail grants that (clipped on 40%, REALFIX §3.2), so
+  retail's copy carries a 256 u (0.89 s at cruise) margin over its next report.
+- **The trigger.** 1,126 of the 1,160 same-heading cruise chords at or over 505 u (≥ 1 s
+  apart, ≤ 320 u/s so warps are excluded — a 6,182 u "chord" in 21.8 s is a teleport) lie
+  in [505, 518); the excess over 512 in 1 u bins: −7:2 −6:2 −5:4 −4:3 −3:54 −2:56 −1:103
+  +0:303 +1:300 +2:183 +3:69 +4:45 **+5:2**; **ceiling 517.5 u**. Types 4/7/8 (190/216 u/s)
+  chord the same 512–515 — distance, not time, REALFIX-W2 corroborated on 1,255 logs.
+  Another 225 same-heading pairs under 505 u are reports a sub-degree heading nudge fired
+  (the 7-field command change), not the trigger; counted, excluded from the band.
+- **The tail over 518 u, 34 chords, splits in two** and neither is the trigger: 6 late
+  reports of 525–573 u (13–61 u late — a frame hitch of 45–210 ms, all type 1), and
+  **28 silent walks** of 619–6,182 u = 1.2–12 triggers over 2.2–31 s at cruise speed, a
+  body walking without reporting — §0.11 stage 2's *"releases go unreported"*, and eight
+  of them within 2 u of 765.5–767.5 u: a D1 order walked end to end (§1z-ab.5c).
+
+### 1z-ab.2 The maturation-margin premise, refuted by the decode
+
+§1z-u.4's margin is protection against a DROPPED re-aim: the copy keeps walking the old
+heading, and a longer lead gives the next natural report time to re-aim it before it
+matures. Two things kill that premise, and the first was in the transcription all along:
+
+**(a) A lead's copy sits outside the reprieve tube by construction.** The AgTrack chain
+holds the body's own command points (`record_async` at each `0x003D`/`0x003E`/`0x0047`)
+and the newest segment ends at the report that triggered the lead, so a copy ≥ 100 u down
+the ray misses the match test, and **every** evaluation on it — every grant with the fence
+open (caller A), every arrival (caller B), the sweep — goes to gate 1: |copy − body| <
+299.33 u. A dropped re-aim therefore snaps at the **next grant's own evaluation** whenever
+the turn is wide enough (separation = closing speed × silence; a reversal at 576 u/s
+crosses 299 u in 0.52 s), whatever the length. The 08:46 case (§1z-u.3: refusal at
+24.155 s, 2.7 s of silence, a 498 u snap at the arrival): with 766 the copy matures 0.86 s
+later and the 26.85 s re-aim's evaluation snaps at ~500 u anyway. The margin bought
+nothing; the mechanism was gate 1, not maturation.
+
+**(b) The hold (§1z-y) bounds the silence at floor + tick = 0.55 s**, inside which no lead
+over 158 u can mature (`bounds: no_mature_in_hold`, 520 > 288 × 0.55). The dropped-re-aim
+case the margin was for no longer exists on the shipped path.
+
+### 1z-ab.3 What the length does govern (MEASURED)
+
+**(i) Cruise maturation.** In cruise the re-aim lands one chord after the grant; the copy
+trails the body by the loop lag and both run the same family — the client's own velocity
+fields hold exactly {190, 216, 288} u/s (933 moving samples over five taps, no slow plateau:
+FINDINGS:1201's ½/⅓ plateaus are a report-derived artifact) — so the copy reaches its point
+before the re-aim **iff the lead is under the chord plus the frame jitter**. On tape at 520:
+
+| capture | lead legs ≥ 300 u | distance to go when the re-aim landed | matured | park |
+|---|---|---|---|---|
+| RUN-1zT (`agenttap-20260903T073122`, before the 17.77 s onset) | 3 | 13.9 / **0.7** / 3.9 u | 1 (at its point within the last sample) | 0.00 s |
+| RUN-FEEL (`agenttap-20260903T084632`, operator, lead ON) | 2 | 465.9 (re-aimed at 0.44 s) / 7.5 u | 0 | — |
+| the twelve 08-26 D1 sessions at 766 (movetap, 625 legs ≥ 600 u) | 625 | p50 642 u | 5, all clipped stubs | 0.00 s |
+
+So 520 sits **at** the edge: one tap sample (33 ms, 6–10 u) over the trigger's ceiling. The
+copy reaches its point on the +5 u chords and the six hitched reports, for ≤ 0.2 s.
+
+**(ii) A cruise park is benign in the decode.** Arrival → miss → gate 1 (separation ≈ the
+lag, 4–74 u on the legs above) passes → gate 2 (the clipped endpoint is on-mesh) passes →
+`NOMATCH_PASS`, no Clear, no record. `RESYNC` is off by default — and must stay off on any
+lead run: its model holds the client at its *last report*, so under any lead it reads up to
+a whole lead of separation and would fire on every leg. The one live consumer is the guard's
+clause 2: `arrival_risk` models a keyboard body as parked at its last report (`_async_est`
+glides only toward a click), so it **predicts a snap at every maturing lead** — RUN-1zT's
+log: `agtrack_repin blocked arrival-risk` ×7, RUN-FEEL ×1 — and was blocked every time by
+`REPIN_MAX_REPORT_AGE` (0.347 s; a cruise re-aim's report is 1.8 s old). Latent, and
+recorded (§1z-ab.5b): the guard needs a keyboard glide term before that precondition is
+ever loosened.
+
+**(iii) The one cost monotone in the length is the order-walk.** If a lead is ever walked
+as an order — a fence shut by something the 1z-aa tracker does not see — the body walks
+the lead. 766 costs 246 u more per event than 520. Nothing else in the decode depends on
+the length above the trigger: the hold's residual is the hold's (§1z-ab.5a); a wall nearer
+than the chord clips both lengths to the same stop; the stop echo re-pins the copy at the
+stop and the copy *trails* the body, so §1z-t.6's echo-less overshoot rows (766 "worse than
+shipping nothing") are the copy walking on after the body stopped, not a length effect.
+
+### 1z-ab.4 The derived answer: 520 stands
+
+The length must exceed the trigger's ceiling (517.5 u) — 520 does, by one tap sample — and
+should be the smallest such value, because the only quantity that grows with it is the walk
+in the failure mode the four gates exist to prevent. 766 is refuted as a margin and costs
+246 u; no number between them buys a mechanism; a number under the ceiling parks the copy
+every chord. The bounds are pinned in `test_leadmargin` against `authsrv`'s own constants
+(the lead, the floor, the tick, gate 1, the reprieve radius), so a lead or a floor moved
+without this argument goes red. **Not changed:** `KBD_SYNC_LEAD`. **Not added:** a length
+knob — nobody has a derived reason to turn one, and a run-stat loop over it is what the
+2026-08-30 direction refuses.
+
+### 1z-ab.5 Residuals, recorded
+
+- **(a) The hold's same-family wide turn** (the hold's, not the length's; lead-only). Two
+  copies can separate for the whole window before the re-bake is evaluated: cross-family
+  (W↔S, 288 + 190) × 0.55 s = 262.9 u, under gate 1 by 36 u; **same-family** (a camera
+  swing under a held W, 2 × 288) × 0.55 = **316.8 u, over it**. Corpus: 3,623 rate-refused
+  heading re-aims in 123 sessions (2,018 under 30°, 1,019 at 30–90°, 309 at 90–150°, 277 at
+  ≥ 150°); predicted separation at the re-bake, closing speed × (0.5 − since_last + 0.08):
+  **1 ≥ 299.33** (310 u — a 137° forward-family turn at since_last 0.000,
+  `20260826T104840` t=100.1), 26 ≥ 250. Under zero-lead the re-bake's point is a chain node
+  and MATCHes, so this is the lead's exposure alone. Not built; the derived fix is a re-bake
+  that sends the zero-lead point when the modelled separation is within `CLOCK_SKEW_U` of
+  gate 1 — filed for the run's scoring.
+- **(b) The guard's keyboard-glide gap** (§1z-ab.3 ii). Filed.
+- **(c) The SILENT-WALK signature.** 28 same-heading cruise chords of 1.2–12 triggers in
+  the server logs alone, 08-10 → 09-01, eight of them a D1 order walked end to end. This is
+  §0.11's lock readable **without a tape** — `w0score`'s detector needs the drawn body's
+  target, which only a tap holds. Filed as the next instrument (a silent-walk verdict from
+  the gamesrv log), not built here.
+- **(d)** The 225 sub-505 u same-heading pairs are nudge reports, not the trigger, and the
+  extractor's 1.15° cosine tolerance is what admits them; they are counted as `below`.
+
+### 1z-ab.6 Tests, docs, and what remains
+
+`toolkit/clientscan/test_leadmargin.py`, new: 25 checks (floor 24, bare-machine sections
+1–3 over synthetic gamesrv and tap rows; section 4 reproduces the corpus figures as floors
+and signatures when the vault is present and skips loudly otherwise). `test_kbdsync` 84
+unchanged (the `KBD_SYNC` block's (c) paragraph and the constant's comment rewritten to the
+derived result; the formula and the constant untouched), `test_d1lead` 94, `test_srclint`
+26 — green. TESTS.md, PLAN.md §8 + Q13, HANDOFF.md §C.
+
+**What remains before `--kbd-lead` becomes the default is the run:** RUN-1zT's script
+under `--kbd-lead` with the four gates on (HANDS OFF THE KEYBOARD), scored by `w0score.py`
+with the enslavement detector and, per §1z-ab.5a, with `--resync` off. Then `0x005FCAA0`.
+No client launch, no static reads, no upstream derivation; every figure above is
+reproducible with `python toolkit/clientscan/leadmargin.py --check`.
