@@ -1614,6 +1614,16 @@ floors and aborts in `RUN-R8.md`; both are operator-driven client runs.
 
 ## 8. Immediate next actions
 
+### ★★★ MOVEMENT 2026-09-03 — REFRESH BEFORE MATURATION (MOVECODE-1z-ae): the lead's own arrival is a §0.11 stage-1 armer, and the server now pre-empts it
+
+**[studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1z-ae.** The fix §1z-ad named, built. **Not yet run**; the registered prediction is §1z-ae.6. Inert under the shipped default — the lead it guards is still opt-in.
+
+* **The armer §0.11 did not name.** §0.11 needs a snap to clear `clientControlled` and names one route (plane-carry's stale word, killed by §1z-z). The client's own memory already says `agent+0x48` *"is set ONCE at the grant and never re-armed, and at that exact millisecond the client SNAPS to the granted point"* — so a maturing lead IS a snap, and composed with the lead's own click-walk regime it completes the lock with no plane mismatch. That is §1z-ad's five dead legs.
+* **The fix:** at ETA − 2 ticks, push the leg's own destination a lead further along the ray it is already on, clipped, matched words. `+0x48` re-arms a full leg out and the snap never fires. **Not** a re-pin at the modelled body (at the ETA that is a zero-distance grant — it moves the same arrival one tick) and **not** a longer lead (§1z-ab.4's refusal stands; `KBD_SYNC_LEAD` untouched).
+* **★ The first draft aimed from the model and `test_d1lead`'s clip census caught it** — `--heading-grant`'s graveyard, R2-1. The corrected shape extends the EXISTING leg: origin and `t0` untouched, only `dest` moves, so the ray keeps the client's own report as its anchor and `a2_leg_position` stays continuous across the refresh. The census moved 2 → 3 with the third site NAMED, not bumped.
+* **Bounded:** once per report, only while the keyboard latch says moving, never into a fence we shut, clipped (and `refresh-blocked` when the mesh refuses), and `refresh-late` recorded once if the arrival wins anyway. Known side effect stated: the refresh usually fires ~0.06 s before the report it pre-empts and stamps the shared grant clock, so §1z-y's HOLD re-bakes that report's lead at the floor.
+* **Tests:** `test_kbdsync` 84 → 106 (floor 106), `test_d1lead` 94 (census re-aimed), position_trust 235, router 114, playerswing 116, cancelwalk 124, srclint 26.
+
 ### ★★★ MOVEMENT 2026-09-03 — THE RERUN **REFUTES** (MOVECODE-1z-ad): the keyboard lead armed REALFIX §0.11's lock on five of eight legs, and §1z-ac's "no lock" was n = 1
 
 **[studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1z-ad,

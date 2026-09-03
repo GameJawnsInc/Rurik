@@ -5715,6 +5715,188 @@ def _fence_gate_lead(state, reported, dest, src, clip_why):
     return [float(reported[0]), float(reported[1])], "fallback", "fence-shut"
 
 
+# MOVECODE-1z-ae (FINDINGS sec.1z-ae): REFRESH BEFORE MATURATION -- the fix for
+# the lock RUN-1zAB's rerun measured (sec.1z-ad).
+#
+# WHAT 1z-ad ESTABLISHED, to the second: a 520 u backpedal lead was sent at
+# t=16.80 and matured at 16.80 + 520/190 = 19.54 s; the player released S at
+# 19.80, 0.26 s too late; no 0x0047 was ever sent; the next report came back AT
+# OUR LEAD'S ENDPOINT and the client stayed locked for five legs while still
+# reporting movementType 7/8/4 -- keys pressed, body still.
+#
+# WHY THE ARRIVAL IS THE ARMER. REALFIX sec.0.11 decodes the lock as two stages
+# and says "neither alone suffices": stage 1 is a SNAP whose dispatcher clears
+# clientControlled (fence shut), stage 2 is the lead's click-walk regime, under
+# which "every press acquires a fresh click-order, releases are ignored, no
+# 0x0047 is emitted, and the keyboard walk-start applier -- the only fence
+# re-armer -- never runs". sec.0.11 named ONE stage-1 route (plane-carry's stale
+# word across a seam), and 1z-z's matched field 4 kills that one. This is a
+# SECOND route to the same stage, and it is measured in the client's own memory
+# by the HEADING_GRANT block below: "agent+0x48 is set ONCE at the grant and
+# never re-armed, and at that exact millisecond the client SNAPS to the granted
+# point" (seven arrivals, 98-5,238 u, every one within a 20 ms sample of
+# schedule). A maturing lead IS a snap, so it can arm stage 1 by itself.
+#
+# WHY IT IS A RACE RATHER THAN A CONSTANT. The client's 0x003D is DISTANCE
+# triggered at ~512 u (REALFIX-W2) and the lead is 520 u, so on a held key the
+# next report is due at 512/S and the arrival at 520/S -- 8 u apart, which is
+# 0.028 s at 288 u/s and 0.042 s at 190. Normally the report wins and its own
+# re-aim re-arms +0x48; when it loses, the arrival fires. That is why RUN-1zAB
+# ran clean once and locked once on the identical script (1z-ac corrected by
+# 1z-ad), and it is why a run-stat loop cannot settle it.
+#
+# THE FIX: do not let the lead reach its arrival. At ETA minus a margin the
+# server PUSHES THE LEG'S OWN DESTINATION KBD_SYNC_LEAD further along the ray
+# it is already on, clipped by a2_clip_lead and carrying matched plane words.
+# The new grant re-bakes and re-arms +0x48 a full leg further out, so the snap
+# never fires.
+#
+# AND THE RAY IS ANCHORED ON THE REPORT, NOT ON THE MODEL. The first draft of
+# this aimed a fresh lead from a2_leg_position -- where the model puts the
+# player now -- and `test_d1lead`'s clip lock went red on it, correctly: that
+# is `--heading-grant`'s epitaph (R2-1), a ray from the model's belief aiming
+# the lead from somewhere the client is not. Extending the EXISTING leg keeps
+# the anchor the client itself reported: the record's origin and t0 are
+# untouched, only `dest` moves, so a2_leg_position stays continuous across the
+# refresh and every clip in this file is still report-anchored, verbatim --
+# spelled `reported` like the other two, because test_d1lead's census reads
+# the spelling and that census is what caught the first draft.
+#
+# WHY NOT A RE-PIN AT THE MODELLED BODY, which is what 1z-y's kill sends: at the
+# ETA the model puts the body AT the lead's endpoint (a2_leg_position clamps
+# there), so a re-pin would be a zero-distance grant -- the distSq <= 1.0
+# short-circuit, which arms +0x48 = now+1 and simply moves the same arrival one
+# tick later. Only an EXTENSION postpones it. The kill stays what it is: the
+# answer to a press or a click, where the player has told us the leg is over.
+#
+# WHY NOT LENGTHEN THE LEAD INSTEAD (1z-u.4's "maturation margin", which would
+# also have avoided 1z-ad's lock at 766 u): 1z-t.6 measured 766 alone as WORSE
+# than shipping nothing on the separation the lead exists to fix (p50 425 u
+# against 237), and a longer lead still matures inside any hold longer than
+# length/speed -- it moves the photo finish rather than removing it. 1z-ab.4
+# refuses the length sweep and this does not reopen it: the constant is
+# untouched.
+#
+# THE BOUNDS, and they are what keep this from becoming a runaway. (1) ONCE PER
+# REPORT: the counter lives in the leg record and every 0x003D clears the leg,
+# so a silent client gets one extension and no more. (2) Only while the keyboard
+# latch says MOVING -- a reported stop clears it. (3) Never while our own 0x002C
+# has the fence shut (1z-aa's tracker, the same read the lead itself takes).
+# (4) The extension is CLIPPED against the navmesh from the modelled position,
+# so a blocked body -- the case where the model drifts fastest -- shortens it.
+# (5) Past the ETA it sends NOTHING and says so (`refresh-late`): the arrival has
+# already fired, a grant at the dest would re-bake nothing, and a silent miss
+# would hide the very event 1z-ad measured.
+#
+# KNOWN SIDE EFFECT, stated rather than discovered later: the margin is two
+# server ticks and the report/arrival race is ~0.03 s, so the refresh will
+# usually fire ~0.06 s BEFORE the report that would have pre-empted it. Its send
+# stamps the shared grant clock (_note_wire_move), so that report's own lead can
+# be refused `heading-rate` -- and 1z-y's HOLD then re-bakes it at the floor.
+# That path is already shipped and tested; the copy runs on the refreshed lead,
+# computed from the model, for at most one floor interval.
+#
+# Inert without --kbd-lead, like every other gate in this block.
+KBD_LEAD_REFRESH = True       # False (--no-kbd-lead-refresh): let it mature.
+# Two server ticks. The poll granularity is TICK_SECONDS, so a margin below it
+# cannot be met at all, and the race this covers is ~0.03 s -- narrower than one
+# tick, which is exactly why the margin cannot be tuned to sit inside it.
+KBD_LEAD_REFRESH_MARGIN = 2.0 * TICK_SECONDS
+# One extension per report (the leg record carries the count and every 0x003D
+# arms a fresh record). A second consecutive silence is not a race any more --
+# it is a client that has stopped reporting, and the answer there is to stop
+# extending, not to chase it.
+KBD_LEAD_REFRESH_MAX = 1
+
+
+def kbd_lead_refresh_due(state, leg, now):
+    """(due, why) -- pure. Should the in-flight keyboard lead be re-aimed
+    before its arrival fires?  `why` names the refusal for the row, because a
+    backstop that only logs its successes cannot be scored against the races
+    it did not catch."""
+    if not (KBD_SYNC and KBD_SYNC_LEAD_ON and KBD_LEAD_REFRESH):
+        return False, "off"
+    if not leg:
+        return False, "no-leg"
+    speed = leg.get("speed") or 0.0
+    dx = leg["dest"][0] - leg["x0"]
+    dy = leg["dest"][1] - leg["y0"]
+    dist = math.hypot(dx, dy)
+    if speed <= 0.0 or dist <= 1.0:
+        return False, "no-walk"
+    eta = leg["t0"] + dist / speed
+    if now >= eta:
+        return False, "late"
+    if now < eta - KBD_LEAD_REFRESH_MARGIN:
+        return False, "early"
+    if leg.get("refreshed", 0) >= KBD_LEAD_REFRESH_MAX:
+        return False, "spent"
+    if state.get("kbd_moving_at") is None:
+        return False, "stopped"
+    if state.get("fence_shut_at") is not None:
+        return False, "fence-shut"
+    return True, "due"
+
+
+def kbd_lead_refresh_tick(send, state, conn_id, rec=None, now=None):
+    """MOVECODE-1z-ae: re-aim an in-flight keyboard lead before it matures.
+
+    Polled beside grant_flush_tick and heading_hold_tick. Returns whether it
+    sent. See the KBD_LEAD_REFRESH block for the derivation.
+    """
+    leg = state.get("kbd_leg")
+    if leg is None:
+        return False
+    if now is None:
+        now = time.time()
+    due, why = kbd_lead_refresh_due(state, leg, now)
+    if not due:
+        if why == "late" and rec is not None and not leg.get("refresh_late"):
+            # ONCE per leg, and never silent: this is 1z-ad's own event.
+            leg["refresh_late"] = True
+            rec.event("kbd_leg", act="refresh-late",
+                      age=round(now - leg["t0"], 3),
+                      dest=[round(leg["dest"][0], 1), round(leg["dest"][1], 1)])
+        return False
+    x, y, plane = a2_leg_position(leg, now)
+    reported = (leg["x0"], leg["y0"])        # the REPORT this leg was armed on
+    dx = leg["dest"][0] - reported[0]
+    dy = leg["dest"][1] - reported[1]
+    mag = math.hypot(dx, dy)
+    reach = mag + KBD_SYNC_LEAD
+    dest = [reported[0] + reach * dx / mag, reported[1] + reach * dy / mag]
+    dest, clipped, clip_why = a2_clip_lead(state, reported, dest)
+    grew = math.hypot(dest[0] - reported[0], dest[1] - reported[1]) - mag
+    if grew <= 1.0:
+        # The mesh refuses the extension (a wall ahead), so the arrival
+        # cannot be postponed by moving the dest. Say so and leave it: a
+        # grant that re-bakes the same point would only re-arm the same
+        # tick, and the clip is the one term that knows about the wall.
+        if rec is not None and not leg.get("refresh_late"):
+            leg["refresh_late"] = True
+            rec.event("kbd_leg", act="refresh-blocked", why=clip_why,
+                      grew=round(grew, 1))
+        return False
+    # The plane words are MATCHED by construction (1z-z's armer-kill): field 4
+    # is field 3, so this send cannot recreate sec.0.11's stage-1 route either.
+    send(GAME_SMSG_AGENT_MOVE_TO_POINT,
+         [PLAYER_AGENT_ID, [float(dest[0]), float(dest[1])], plane, plane],
+         f"KBD LEAD REFRESH ({dest[0]:.0f},{dest[1]:.0f}): the leg from "
+         f"({reported[0]:.0f},{reported[1]:.0f}) pushed {grew:.0f} u further, "
+         f"plane {plane}, the arrival was {KBD_LEAD_REFRESH_MARGIN:.2f}s out "
+         f"[MOVECODE-1z-ae]")
+    state["zl_last_grant_plane"] = plane
+    # ORIGIN AND t0 UNTOUCHED: only the destination moves, so the position
+    # model is continuous across the refresh and the ray keeps its report.
+    state["kbd_leg"] = dict(leg, dest=(float(dest[0]), float(dest[1])),
+                            refreshed=leg.get("refreshed", 0) + 1)
+    if rec is not None:
+        rec.event("kbd_leg", act="refresh", clip_why=clip_why,
+                  n=state["kbd_leg"]["refreshed"], grew=round(grew, 1),
+                  dest=[round(dest[0], 1), round(dest[1], 1)])
+    return True
+
+
 def heading_hold_note(reported, point, plane, plane_cur, moving, a2_src,
                       lead_clipped, clip_why, dir_src, now):
     """The held heading grant: everything the send would have used, as it
@@ -17686,6 +17868,10 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             # MOVECODE-1z-y: the held heading rides the
                             # same poll as the held click.
                             heading_hold_tick(send, state, conn_id, rec)
+                            # MOVECODE-1z-ae: and so does the lead's own
+                            # refresh -- the arrival it pre-empts is on
+                            # the client's clock, not on a report.
+                            kbd_lead_refresh_tick(send, state, conn_id, rec)
                         # The timed three quarters of every skill cycle
                         # (E5/E3/E6), before the swings so a cast completing
                         # this tick is visible to everything after it.
@@ -17882,6 +18068,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                     _a2_watchdog(send, state, rec)
                     grant_flush_tick(send, state, conn_id, rec)
                     heading_hold_tick(send, state, conn_id, rec)
+                    kbd_lead_refresh_tick(send, state, conn_id, rec)
                 # ROUTER-B2: the chain scheduler rides the same quiet
                 # ticks (recv-thread-only sending, same as the flush).
                 if ROUTER and kind == "game":
@@ -17913,6 +18100,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
             if D1_LEAD and kind == "game" and msgs:
                 grant_flush_tick(send, state, conn_id, rec)
                 heading_hold_tick(send, state, conn_id, rec)
+                kbd_lead_refresh_tick(send, state, conn_id, rec)
             # ROUTER-B2: a due leg gets the same pre-batch claim -- the
             # batch may carry the very input that abandons the chain, and
             # a leg whose ETA passed before that input arrived was owed.
@@ -22757,6 +22945,15 @@ def main():
                          "arm the counterfactual says is WORSE than the "
                          "shipped default (p50 425 u against 237), because "
                          "the lead's overshoot has nothing to collect it.")
+    ap.add_argument("--no-kbd-lead-refresh", action="store_true",
+                    help="MOVECODE-1z-ae OFF: let an in-flight keyboard "
+                         "lead reach its arrival. The arrival is a SNAP "
+                         "(agent+0x48 fires once and the client snaps to "
+                         "the granted point) and it arms REALFIX 0.11 "
+                         "stage 1, which the lead's own click-walk regime "
+                         "then keeps shut -- RUN-1zAB's rerun locked five "
+                         "of eight legs that way. Inert without --kbd-lead. "
+                         "Diagnostic arm.")
     ap.add_argument("--no-kbd-lead-fence-gate", action="store_true",
                     help="MOVECODE-1z-aa OFF: a keyboard or D1 lead may "
                          "be sent into a fence the server itself shut with "
@@ -24390,12 +24587,14 @@ def main():
     # session a reconstruction (REALFIX-Q8).
     global KBD_SYNC, KBD_SYNC_LEAD_ON, KBD_SYNC_SPEED_ON, KBD_SYNC_STOP_ON
     global KBD_SYNC_HOLD, KBD_LEAD_KILL, KBD_SYNC_MATCHED, KBD_LEAD_FENCE_GATE
+    global KBD_LEAD_REFRESH
     if a.legacy_kbd_sync:
         KBD_SYNC = False
         KBD_SYNC_HOLD = False
         KBD_LEAD_KILL = False
         KBD_SYNC_MATCHED = False
         KBD_LEAD_FENCE_GATE = False
+        KBD_LEAD_REFRESH = False
         print("[map] --legacy-kbd-sync: MOVECODE-1z-t OFF. The keyboard wire "
               "is the pre-1z-t one exactly -- heading grants at the reported "
               "point verbatim, no player 0x002B, nothing on a 0x0047. The "
@@ -24411,6 +24610,7 @@ def main():
         KBD_LEAD_KILL = not a.no_kbd_lead_kill
         KBD_SYNC_MATCHED = not a.no_kbd_matched_plane
         KBD_LEAD_FENCE_GATE = not a.no_kbd_lead_fence_gate
+        KBD_LEAD_REFRESH = not a.no_kbd_lead_refresh
         _terms = [n for n, on in (("lead 520 u + navmesh clip (OPT-IN)",
                                    KBD_SYNC_LEAD_ON),
                                   ("0x002B family rate", KBD_SYNC_SPEED_ON),
@@ -24430,7 +24630,10 @@ def main():
                                    KBD_SYNC_MATCHED),
                                   ("no lead into a fence we shut with a "
                                    "0x002C (the fence-shutter audit)",
-                                   KBD_LEAD_FENCE_GATE)) if on]
+                                   KBD_LEAD_FENCE_GATE),
+                                  ("an in-flight lead REFRESHED before its "
+                                   "arrival can snap (1z-ad's lock)",
+                                   KBD_LEAD_REFRESH)) if on]
         print(f"      1z-y GATES  {', '.join(_gates) if _gates else 'NONE'}")
         if KBD_SYNC_LEAD_ON:
             print("      THE LEAD IS ON (--kbd-lead) -- an OPT-IN arm since "

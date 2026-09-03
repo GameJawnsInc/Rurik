@@ -439,12 +439,13 @@ def main():
                    - src.count("def a2_clip_lead("))
     _clip_anchored = (src.count("a2_clip_lead(state, reported,")
                       - src.count("def a2_clip_lead(state, reported,"))
-    check(_clip_calls == 2
+    check(_clip_calls == 3
           and src.count("def a2_clip_lead(state, reported, dest)") == 1
           and _clip_anchored == _clip_calls
           and "a2_clip_lead(state, state[" not in src,
-          "the D2 clip has its def and TWO call sites (D1's and 1z-t's), "
-          "and EVERY call is anchored on the REPORT in hand, verbatim",
+          "the D2 clip has its def and THREE call sites (D1's, 1z-t's and "
+          "1z-ae's refresh), and EVERY call is anchored on the REPORT in "
+          "hand, verbatim",
           "state['pos']-anchored is --heading-grant's graveyard (R2-1): "
           "a ray from the model's belief aims the lead from somewhere "
           "the client is not -- a warp with a plausible destination")

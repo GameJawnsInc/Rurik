@@ -285,7 +285,12 @@ player released, the release was swallowed and the client locked for five legs
 (§1z-ad). The "~26 u and no lock" reading was n = 1 and is corrected: the park and
 the lock are the same event. NO gate covers a lead maturing with the fence OPEN.
 The lead stays OPT-IN and OFF; the derived object is that a lead must never be left
-to mature, and the length is NOT the fix.**
+to mature, and the length is NOT the fix.** **BUILT the same day as §1z-ae (`--no-kbd-lead-refresh` reverts): at ETA − 2 ticks the server pushes the leg's own
+destination a lead further along the ray it is already on, so `+0x48` re-arms a full
+leg out and the arrival snap never fires. Bounded to one extension per report, only
+while the keyboard latch says moving, never into a fence we shut, clipped — and it
+says `refresh-late` if the arrival wins anyway. NOT RUN yet; §1z-ae.6 registers the
+prediction.**
 **`--grant-suppress` and the heading arm share ONE rate-limit clock**, so between them
 they cannot exceed one grant per 0.50 s — say which flags were on when you report a run.
 
