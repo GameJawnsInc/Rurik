@@ -214,3 +214,62 @@ by the interval / moving / target branches leaves **no row and no console line**
 Two of the four silent presses have literally nothing within 0.7 s of them in the
 capture. The R11 lesson ("a suppressed grant is PRINTED, never silent") has not
 been applied to the swing.
+
+### CORRECTED the same day — the starver is the KEYBOARD latch, and it is FIXED at the swing gate (ANIMREF-RE §41, `47f0cdc`)
+
+The mechanism above was read from source, and **the capture it was written about
+refutes it.** Re-joined press by press — all **28** presses, not the ten that
+carry a `PRESS ENDS THE WALK`:
+
+| presses | last movement input before them | swung within 0.2 s |
+|---|---|---|
+| 16.42, 19.42, 21.06, 22.51 | a run of REFUSED clicks (latch and leg armed) | **4 of 4**, at 12–32 ms |
+| 21.86 | refused clicks, and a click **1 ms behind** the press | 0 — the click forgot the order (`MOVE_ENDS_CHAIN`; retail-faithful) |
+| 22.74 | a repeat press on the running chain | no-op, correct (§37.3 fact (a)) |
+| **24.44 … 40.16, 22 presses** | **the session's five `0x003D` at 23.56–24.16 s — and NO `0x0047`, ever** | **0 of 22** (two got a follow: 29.73, 36.27) |
+
+So the click latch was never the starver: every press ENDS it
+(`_press_supersedes`, the very `0x002C` the table above lists), and the four
+presses that swung all came behind refused-click runs; the starved presses had
+no click within 215 ms of them. The split is at **23.56 s, the first keyboard
+report of the session** — which is what "after some point" meant. Five reports,
+then silence: a `grant_verdict` fired at 24.09 s with dest (9412, 8041), 518 u
+from the reported body; the tap shows the body walking away from the Hatcher
+(86 → 486 u) and parked at **that exact point** by 26.8 s, speed 0; and click
+arrival is silent (§37.2), so no stop report ever cleared `kbd_moving_at`
+(RECONSTRUCTION: our own `0x0029` turned the keyboard walk into a click-order
+leg — the comment at `SWING_HOLDS_WALK_GATE` already describes the client doing
+exactly that with key state ignored). `_player_body_moving` read that latch
+UNBOUNDED and `attack_tick` returned on it for the remaining 16.6 s. The
+instrument gap was real; the diagnosis behind it was not.
+
+**The fix, derived (§41).** Retail answers a press whose last movement input was
+a keyboard report without waiting for a stop: of 48 live presses no older than
+0.5 s after a `0x003D`, 9 opened a swing and 15 a follow within 0.2 s (the rest
+are §37.3's held/repeat no-ops). And under `MOVE_ENDS_CHAIN` the keyboard latch
+had no job at the swing gate anyway — a `0x003D` forgets the target, so
+`attacking` is set again only by a press. So the press stamps `attack_press_at`
+and the swing gate reads a keyboard latch older than the stamp as ended; a newer
+report re-arms it and ends the chain (client steering wins, 11/15). Rule 1 and
+the cast-stop keep the raw latch. Revert arm `--press-waits-for-stop`.
+**Candidate (i) above — do not arm the click latch on a refused click — would
+have been wrong**: the client walks a refused click (tap: 288 u/s on every
+refused-click leg), and the arm's stamp-before-verdict order is now pinned as
+intended (`test_playerswing` §11).
+
+**The instrument gap is closed**: every press leaves a `press_verdict` row —
+`swing` / `follow` with its latency, or the FIRST refusing branch (`moving` with
+the latch and its age, `interval`, `reach`, `cast`, `move-ended-order`,
+`target-gone`, `dead-player`), plus `repeat` / `no-target` / `dead-target` from
+the order itself — and the first refusal prints.
+
+**Not closed on a run.** This is a derivation plus 20 checks against the
+capture's own shape (floor 96 → 116). The operator's next ordinary session
+scores it for free: "couldn't resume attacking" would now show as
+`press_verdict` rows with `fired: false` and a named branch. The grant that
+silenced the stop is **MOVECODE-1z-t's own KBD LEAD** (flags `KBD_SYNC_LEAD_ON`,
+`lead_src: "kbd"` on both fired rows) — a server-chosen ~520 u endpoint the
+client executes as a click-order with a silent arrival — being corrected by
+rurik-f2 as MOVECODE 1z-u (the client's own proposed endpoint); it is untouched
+here, and §41's rule stays necessary above it because a stop can still go
+missing.

@@ -9655,7 +9655,26 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   the follow; `--move-keeps-target` restores §32's keep; the press arm calls the
   supersede before `begin_attack`. §3 now runs the no-approach arm (retail
   auto-chases a target that walks out, §9's territory).
-  Floor 42 → 55 → 82 → 96; §6–§10 are fixture-free so 96 is the bare-machine number),
+  **§11 (§41)** is the operator's "couldn't resume attacking" as 20 checks, after
+  the capture REFUTED the click-latch reading (every press ends the click latch;
+  the starve began at the session's first `0x003D`, whose `0x0047` never came,
+  and `_player_body_moving` read the keyboard latch unbounded): the reader both
+  ways (a keyboard latch older than the press no longer moves the body; a newer
+  or equal one does; no press at all leaves the raw latch, so rule 1 and the
+  cast-stop are unchanged), the 24.44 s press end to end (latch 0.29 s old, no
+  stop, target 86 u → swing on the first tick, row `swing`), the known-bad arm
+  `--press-waits-for-stop` (waits; ONE `moving` row naming latch `kbd` and its
+  age across three ticks; then the stop releases it and the answer row carries
+  `refused_by: moving, ticks: 3`), a move between press and tick
+  (`move-ended-order`, terminal), a REFUSED click NOT starving a press inside
+  reach — with the arm's stamp-before-verdict order pinned as intended, since the
+  client walks a refused click — the `repeat` / `no-target` / `dead-target` /
+  `follow` / `interval` rows, rec=None still resolving the press, and source pins
+  on the three recorder hand-overs, the stamp's one writer and one reader, and
+  `kbd_moving_at`'s unchanged two writers (by AST, not by text — a docstring
+  quotes the arm). §7's "the client sends the stop 36 of 36" is rewritten with
+  its refutation; §10j's call-site pin now names the recorder argument.
+  Floor 42 → 55 → 82 → 96 → 116; §6–§11 are fixture-free so 116 is the bare-machine number),
   `toolkit/authsrv/test_castcancel.py` (movement cancels the cast, and the
   contract is the wiki's expressed as wire SILENCE: the connection thread
   MARKS (`cancel_on_move`) and sends only the movement's own `[8 → 0]` hold

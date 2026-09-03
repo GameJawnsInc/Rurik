@@ -9216,6 +9216,33 @@ ATTACK_APPROACH = True     # False (--no-attack-approach): the 1500 u arm.
 # copies on its point and zeroes m_timeStopMovement, p5-resync-disarm
 # sec.1), and the tick then swings (in reach) or follows (out of reach).
 PRESS_SUPERSEDES_LEG = True   # False (--press-waits-for-leg): sec.37's wait.
+# ANIMREF-RE 41 (2026-09-03): THE PRESS SUPERSEDES THE KEYBOARD BELIEF TOO.
+# The operator's "couldn't resume attacking after some point" (RUN-FEEL): the
+# point was the session's first 0x003D. Five keyboard reports arrived
+# (23.56-24.16 s), NO 0x0047 ever followed -- our own 0x0029 grant had turned
+# the walk into a click-order leg, and click arrival is silent (sec.37.2) --
+# and `kbd_moving_at` stayed armed for the remaining 16.6 s. Every one of the
+# 22 presses after it went unanswered (2 got a follow, none a swing) while the
+# tap showed the body PARKED from 26.8 s and the Hatcher swinging at it. The
+# earlier sessions carry the same cell at smaller cost: 10 presses 0.05-1.5 s
+# after a 0x003D on 12:59/14:32/06:54, 0 swings, each waiting for the stop.
+# RETAIL DOES NOT WAIT FOR THE STOP. Live corpus, 267 presses: of the 48
+# whose last movement input was a 0x003D no older than 0.5 s, 9 opened a swing
+# and 15 a follow within 0.2 s (the rest are sec.37.3's held/repeat no-ops);
+# 94 of 218 KBD-last presses were answered inside 0.2 s overall. And under
+# MOVE_ENDS_CHAIN the keyboard latch had NO remaining job at the swing gate:
+# a 0x003D forgets the target, so `attacking` is set again only by a press --
+# which retail answers whatever the body was doing. So the swing gate reads the
+# keyboard latch as ENDED by a newer press: the press stamps `attack_press_at`
+# (begin_attack) and _player_body_moving ignores a `kbd_moving_at` older than
+# it. The client's next 0x003D (the key still held) re-arms the latch AND ends
+# the chain, which is retail's client-steering-wins (11/15, sec.39). Nothing
+# else reads the stamp: rule 1 (the grant gate) and cast_stop_reckon keep the
+# raw latch, so a press changes no grant and no cast-stop decision. A swing
+# opened on a body still walking under a held key slides for at most one
+# report interval (0.50 s modal) before the next 0x003D ends it -- the same
+# SLIDE sec.37.2 reads for retail's own attack_started on a walking body.
+PRESS_ENDS_KBD_LATCH = True   # False (--press-waits-for-stop): the 0x0047 wait.
 # And: "once you issue a move command you stop autoattacking". MEASURED on
 # the live tapes, 2026-09-02 (scratch chainmove.py): of 28 consecutive same-
 # target swing pairs with a player move command between them, ALL 28 carry a
@@ -9770,19 +9797,37 @@ def action_hold(send, state, value, why):
          f"action {'holds' if value else 'released'}: {why}")
 
 
-def begin_attack(send, state, target_id, conn_id):
+def begin_attack(send, state, target_id, conn_id, rec=None):
     """A click on a hostile agent starts an attack that the tick keeps up.
 
     Previously this dealt one hit per click, which is where "press to deal
     damage" came from. Clicking an enemy in Guild Wars orders an attack; it does
     not BE one.
+
+    ANIMREF-RE 41: every press leaves a `press_verdict` row (`rec`, the
+    connection's recorder; None from the tests). An order the tick takes is
+    stamped as PENDING here and resolved by attack_tick -- the row names the
+    branch that answered it (swing, follow) or the first branch that refused
+    it -- and an order refused HERE (no such agent, a corpse, a repeat press
+    on the running chain) is a row of its own. Two of the four silent presses
+    in the 08:46 capture had nothing within 0.7 s of them; a press is never
+    silent again.
     """
+    now = time.time()
     agent = state.get("agents", {}).get(target_id)
     if agent is None or agent["dead"]:
         # Clicking anything else -- scenery, a corpse -- stops the swing rather
         # than leaving the player hitting a thing that is no longer there.
         state["attacking"] = None
+        _press_row(rec, fired=False,
+                   reason=("no-target" if agent is None else "dead-target"),
+                   target=target_id, age=0.0)
         return
+    # THE PRESS SUPERSEDES THE KEYBOARD BELIEF (ANIMREF-RE 41): read by
+    # _player_body_moving against `kbd_moving_at`, nowhere else. Stamped on
+    # every accepted order, repeats included -- a repeat press on a starved
+    # chain is still the player's hands speaking after the last report.
+    state["attack_press_at"] = now
     if state.get("attacking") != target_id:
         # A RETARGET STOPS THE SWING IN FLIGHT. The corpus's one candidate
         # cancel (studies/combat 17c) is exactly this shape: two c2s
@@ -9809,6 +9854,35 @@ def begin_attack(send, state, target_id, conn_id):
         state["player_last_swing"] = 0.0
         print(f"[c{conn_id}] attacking agent {target_id} ({agent['name']})",
               flush=True)
+        # A previous order still unanswered is superseded by this one: its
+        # row closes as `retarget` so it is never left open.
+        pend = state.get("press_pending")
+        if pend is not None and pend.get("answered") is None:
+            _press_row(rec, fired=False, reason="retarget", target=pend["target"],
+                       age=round(now - pend["t"], 3),
+                       refused_by=pend.get("refused"), new_target=target_id)
+        state["press_pending"] = {"t": now, "target": target_id,
+                                  "refused": None, "ticks": 0,
+                                  "answered": None}
+    else:
+        # A REPEAT PRESS on the target the chain already holds: retail does
+        # not re-arm the swing clock (128 same-target held presses, chain
+        # cadence p50 1.335 s whatever the press phase, sec.37.3), and this
+        # server never did either -- but until 41 the press vanished without
+        # a trace. The row says what the chain was doing: a swing in flight,
+        # or how far the next START is, or that an earlier press on this
+        # target is still refused (and by which branch).
+        pend = state.get("press_pending")
+        swing = state.get("player_swing")
+        last = state.get("player_last_swing", 0.0)
+        _press_row(rec, fired=False, reason="repeat", target=target_id,
+                   age=0.0, swing_in_flight=swing is not None,
+                   since_last_swing=(None if not last else round(now - last, 3)),
+                   pending_refused=(pend.get("refused")
+                                    if pend is not None
+                                    and pend.get("answered") is None
+                                    and pend.get("target") == target_id
+                                    else None))
 
 
 def cancel_on_move(send, state, conn_id):
@@ -10408,7 +10482,18 @@ def _player_body_moving(state):
     now = time.time()
     kbd = state.get("kbd_moving_at")
     if kbd is not None:
-        return True
+        # ANIMREF-RE 41: the keyboard latch is ENDED, for this reader only, by
+        # an attack press newer than it. Its terminator (0x0047) can go
+        # missing -- the 2026-09-03 08:46 session: 5 reports, 0 stops, the
+        # body parked for 14 s with the latch armed and 22 presses starved --
+        # and retail answers a press 0.15-0.5 s after a keyboard report with
+        # the swing or a follow (24 of 48 live, the rest no-ops) rather than
+        # waiting for a stop. A report NEWER than the press re-arms it (and
+        # ends the chain: MOVE_ENDS_CHAIN). `>=` so an equal stamp counts as
+        # the report speaking last. The flag's revert arm keeps the wait.
+        press = state.get("attack_press_at") if PRESS_ENDS_KBD_LATCH else None
+        if press is None or kbd >= press:
+            return True
     # THE CLICK LATCH IS BOUNDED, and this line is a REGRESSION FIX rather than
     # a refinement. ANIMREF-RE §33 F5, confirmed by the operator the same day:
     # "click-to-walk cancelled by spacebar doesn't start attacking. if the last
@@ -10766,7 +10851,70 @@ def approach_tick(send, state, conn_id, target_id, agent, now):
     return False
 
 
-def attack_tick(send, state, conn_id):
+def _press_row(rec, **kw):
+    """One `press_verdict` telemetry row (ANIMREF-RE 41). `rec` may be None
+    (the tests, the harness control slot before a recorder exists)."""
+    if rec is not None:
+        try:
+            rec.event("press_verdict", **kw)
+        except Exception:      # telemetry must never take the tick down
+            pass
+
+
+def _press_refused(state, rec, conn_id, branch, **detail):
+    """attack_tick found a PENDING press and did not open its swing this
+    tick. The FIRST refusal writes the row and prints -- the R11 rule, "a
+    suppressed grant is PRINTED, never silent", applied to the swing -- and
+    every later tick only counts. `terminal` closes the press: nothing will
+    ever answer it (the order was forgotten or the target went)."""
+    pend = state.get("press_pending")
+    if pend is None or pend.get("answered") is not None:
+        return
+    pend["ticks"] += 1
+    if pend.get("refused") is not None:
+        if detail.pop("terminal", False):
+            pend["answered"] = branch
+            _press_row(rec, fired=False, reason=branch, target=pend["target"],
+                       age=round(time.time() - pend["t"], 3),
+                       refused_by=pend["refused"], ticks=pend["ticks"],
+                       **detail)
+            state["press_pending"] = None
+        return
+    terminal = detail.pop("terminal", False)
+    pend["refused"] = branch
+    age = round(time.time() - pend["t"], 3)
+    _press_row(rec, fired=False, reason=branch, target=pend["target"],
+               age=age, ticks=pend["ticks"], **detail)
+    why = ", ".join(f"{k} {v}" for k, v in detail.items())
+    print(f"[c{conn_id}] press REFUSED at the tick: {branch}"
+          f"{' (' + why + ')' if why else ''} -- agent {pend['target']}, "
+          f"{age:.3f} s after the press [ANIMREF-RE 41]", flush=True)
+    if terminal:
+        pend["answered"] = branch
+        state["press_pending"] = None
+
+
+def _press_answered(state, rec, conn_id, how, **detail):
+    """The pending press got its answer: `swing` (ATTACK_STARTED went out) or
+    `follow` (the approach's 0x002A did). The row carries the latency and,
+    when the press was refused first, which branch held it and for how many
+    ticks -- so a capture shows the starve AND its release."""
+    pend = state.get("press_pending")
+    if pend is None or pend.get("answered") is not None:
+        return
+    now = time.time()
+    age = round(now - pend["t"], 3)
+    pend["answered"] = how
+    _press_row(rec, fired=True, reason=how, target=pend["target"], age=age,
+               refused_by=pend.get("refused"), ticks=pend["ticks"], **detail)
+    if pend.get("refused") is not None:
+        print(f"[c{conn_id}] press ANSWERED by the {how} {age:.3f} s after "
+              f"it, first refused by {pend['refused']} for {pend['ticks']} "
+              f"tick(s) [ANIMREF-RE 41]", flush=True)
+    state["press_pending"] = None
+
+
+def attack_tick(send, state, conn_id, rec=None):
     """Keep swinging at whatever the player last clicked -- in TWO phases.
 
     The player's swing is the agent model's now: ATTACK_STARTED opens it, the
@@ -10828,11 +10976,17 @@ def attack_tick(send, state, conn_id):
         # A dead player does not keep hitting things, and does not land the
         # swing it was mid-way through either.
         state["player_swing"] = None
+        _press_refused(state, rec, conn_id, "dead-player", terminal=True)
         return
     target_id = state.get("attacking")
     if not target_id:
         state["player_swing"] = None
         _approach_abandon(state)
+        # A press still pending with no target: a move command arrived
+        # between the press and this tick and forgot the order
+        # (MOVE_ENDS_CHAIN). The 08:46 capture's 21.859 s press: the click
+        # landed 1 ms behind it. Retail-faithful, and now a row.
+        _press_refused(state, rec, conn_id, "move-ended-order", terminal=True)
         return
     agent = state.get("agents", {}).get(target_id)
     if agent is None or agent["dead"]:
@@ -10844,12 +10998,23 @@ def attack_tick(send, state, conn_id):
         state["attacking"] = None
         state["player_swing"] = None
         _approach_abandon(state)
+        _press_refused(state, rec, conn_id, "target-gone", terminal=True)
         return
     if ATTACK_APPROACH:
         # ANIMREF-RE 38: out of reach, the server walks the body in (the
         # follow leg holds the chain through the click latch it arms; a
         # re-pin here may move the model, so the position is re-read).
         approach_tick(send, state, conn_id, target_id, agent, time.time())
+        # A follow that started since the press IS its answer (retail:
+        # the 0x002A at 26-123 ms, sec.37.3).
+        pend = state.get("press_pending")
+        ap = state.get("approach")
+        if (pend is not None and pend.get("answered") is None
+                and ap is not None and ap.get("t0", 0.0) >= pend["t"]):
+            _press_answered(state, rec, conn_id, "follow",
+                            dist=round(math.hypot(
+                                float(agent["pos"][0]) - float(state.get("pos", (0.0, 0.0))[0]),
+                                float(agent["pos"][1]) - float(state.get("pos", (0.0, 0.0))[1])), 1))
     px, py = state.get("pos", (0.0, 0.0))
     ax, ay = agent["pos"]
     if math.hypot(ax - px, ay - py) > attack_reach():
@@ -10861,6 +11026,9 @@ def attack_tick(send, state, conn_id):
         # exactly as the agent loop drops `swing_lands_at` when the player
         # leaves reach.
         state["player_swing"] = None
+        _press_refused(state, rec, conn_id, "reach",
+                       dist=round(math.hypot(ax - px, ay - py), 1),
+                       reach=attack_reach())
         return
     now = time.time()
     # ---- ANIMREF-RE §31: FREEZE THE SWING CLOCK WHILE THE BODY MOVES ----
@@ -10889,6 +11057,8 @@ def attack_tick(send, state, conn_id):
         state["chain_pause_tick"] = None
     swing = state.get("player_swing")
     if swing is not None:
+        _press_refused(state, rec, conn_id, "swing-in-flight",
+                       lands_in=round(swing["lands_at"] - now, 3))
         # TWO PHASES, same discipline as the agent loop: a landing that is due
         # is always resolved before a new swing starts, so a slow tick cannot
         # start twice and land once. The landing goes to the target the swing
@@ -10946,6 +11116,9 @@ def attack_tick(send, state, conn_id):
     # nothing the connection thread owns -- deliberately NOT cast_busy_until,
     # which belongs to the press path alone.
     if any(not c["e3_sent"] for c in state.get("pending_casts") or ()):
+        _press_refused(state, rec, conn_id, "cast",
+                       pending=sum(1 for c in state.get("pending_casts") or ()
+                                   if not c["e3_sent"]))
         return
     # THE STANCE SPEAKS HERE: an open attack-speed episode scales the whole
     # attack DURATION -- the start-to-start gate and the windup both, because
@@ -11005,13 +11178,30 @@ def attack_tick(send, state, conn_id):
     # corpus's `gap - moving_span` signature demands the whole span). The
     # only job here is to REFUSE TO OPEN a new swing while the body moves.
     if moving:
+        # WHICH latch, and how old: the number that told the 08:46 story
+        # (a keyboard latch 0.29-16.0 s old with no stop behind it).
+        kbd_at = state.get("kbd_moving_at")
+        click_at = state.get("click_moving_at")
+        ap = state.get("approach")
+        latch = ("follow" if ap is not None and click_at == ap.get("t0")
+                 else "kbd" if kbd_at is not None
+                 and (click_at is None or kbd_at >= click_at)
+                 else "click")
+        at = kbd_at if latch == "kbd" else click_at
+        _press_refused(state, rec, conn_id, "moving", latch=latch,
+                       latch_age=(None if at is None else round(now - at, 3)))
         return
     if now - state.get("player_last_swing", 0.0) < interval:
+        _press_refused(state, rec, conn_id, "interval",
+                       remaining=round(
+                           interval - (now - state.get("player_last_swing", 0.0)),
+                           3))
         return
     state["player_last_swing"] = now
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
          [agents.GV_ATTACK_STARTED, PLAYER_AGENT_ID, target_id, 0],
          f"attack_started: player swings at {target_id}")
+    _press_answered(state, rec, conn_id, "swing")
     # The hold follows the START, in that order -- every player [8, 31, 1]
     # outside a press burst rides immediately behind its own
     # ATTACK_STARTED (4 of 4 across three connections, castmech 3c).
@@ -17016,7 +17206,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                               f"real; the CLICK is what did not happen.",
                               flush=True)
                         try:
-                            begin_attack(send, state, foe, conn_id)
+                            begin_attack(send, state, foe, conn_id, rec=rec)
                         except Exception as exc:      # a probe must not die here
                             print(f"[c{conn_id}] harness attack failed: "
                                   f"{type(exc).__name__}: {exc}", flush=True)
@@ -17090,7 +17280,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # has: an isolated clear 25.00 s after the last gain,
                         # 15 of 15.
                         energy_tick(send, state, conn_id)
-                        attack_tick(send, state, conn_id)
+                        attack_tick(send, state, conn_id, rec)
                         revive_due(send, state, conn_id)
                         agent_refill_due(send, state, conn_id)
                         # Both halves of the fight, and the order matters. The
@@ -17581,7 +17771,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # (in reach) or the follow (out of reach) is the
                         # tick's next act, not the leg's arrival.
                         _press_supersedes(send, state, conn_id, values[1])
-                        begin_attack(send, state, values[1], conn_id)
+                        begin_attack(send, state, values[1], conn_id, rec=rec)
                     elif opcode == GAME_CMSG_INTERACT_AGENT:
                         # "I clicked that agent meaning to interact with it" --
                         # arm 2 of the same switch, and 3.2% of ArenaNet's own
@@ -21831,6 +22021,15 @@ def main():
                          "the modelled leg to end (37's shape) instead of "
                          "ending it -- the behaviour the operator refused "
                          "on CASE 6.")
+    ap.add_argument("--press-waits-for-stop", action="store_true",
+                    help="THE REVERT ARM for ANIMREF-RE 41: the swing gate "
+                         "keeps reading the keyboard latch until a 0x0047 "
+                         "clears it, even when an attack press is newer. "
+                         "The 2026-09-03 08:46 shape -- a keyboard walk our "
+                         "own grant turned into a silent click-order leg, "
+                         "no stop ever sent, and 22 presses starved on a "
+                         "parked body. Retail answers such a press within "
+                         "0.2 s (24 of 48 live, the rest no-ops).")
     ap.add_argument("--move-keeps-target", action="store_true",
                     help="THE REVERT ARM for ANIMREF-RE 39's second rule: "
                          "a post-landing move keeps the attack target and "
@@ -23361,6 +23560,13 @@ def main():
         print("[map] --press-waits-for-leg: an attack press during a click-"
               "walk waits for the modelled leg to end (ANIMREF-RE 37's "
               "shape, refused by the operator on CASE 6).", flush=True)
+    if a.press_waits_for_stop:
+        global PRESS_ENDS_KBD_LATCH
+        PRESS_ENDS_KBD_LATCH = False
+        print("[map] --press-waits-for-stop: the swing gate waits for a "
+              "0x0047 to clear the keyboard latch even after a newer attack "
+              "press (the 2026-09-03 08:46 starve, ANIMREF-RE 41, "
+              "reproducible on purpose).", flush=True)
     if a.move_keeps_target:
         global MOVE_ENDS_CHAIN
         MOVE_ENDS_CHAIN = False
