@@ -4110,33 +4110,48 @@ runs, and the starved presses had no click within 215 ms of them — four ticks.
 split is at **23.56 s, the first keyboard report of the session**. That is "after
 some point". OBSERVED.
 
-### 41.2 Why the stop never came — RECONSTRUCTION, corroborated by the tap
+### 41.2 Why the stop never came — the tap's OBSERVATION, the mechanism MOVECODE 1z-u's
 
 Five `0x003D` (movementType 4, 6, 4, 5, 7) at 23.556–24.155 s, the reported body
 moving (9992, 8016) → (9913, 7961). Two `grant_verdict` rows fired inside that
 run, at 23.557 s (dest (9474, 8061)) and 24.090 s (dest **(9412, 8041)**, 518 u
 from the reported body). Then silence from the keyboard for the remaining 16.6 s.
-The tap: the rendered body ran at 216 u/s (the side family's rate) from 24.4 s,
-**away** from the Hatcher (86 → 486 u), and stood at **(9412, 8041)** — the second
-grant's destination to within 1 u — with speed 0 from 26.8 s to the end, the
-Hatcher swinging at it eleven times without re-chasing.
+The tap (tap t = capture t − 16.296), both copies of the player, OBSERVED:
 
-So the keyboard walk ended by arriving at a point our own `0x0029` named, not by a
-key release the client reported. The comment at `SWING_HOLDS_WALK_GATE` already
-describes the client doing exactly this with a grant (*"executes that answer AS A
-CLICK-ORDER: it walks the granted leg to completion with key state ignored, then
-parks"*), and §37.2 read the arrival roots: **click arrival sends nothing** on
-`0x0047`/`0x003D` (seven roots, depth-2 closure; the `0x0047` packer `0x00920940`
-lives on the keyboard-stop body `0x008167F0`, which a replaced keyboard walk never
-reaches). The grant is **MOVECODE-1z-t's KBD LEAD** (the capture's flags carry
-`KBD_SYNC_LEAD_ON`, both fired rows carry `lead_src: "kbd"`): a server-chosen
-~520 u endpoint the client never proposed, which it therefore executes as a
-click-order with a silent arrival. rurik-f2 is correcting it as MOVECODE 1z-u
-(the lead becomes the client's own proposed endpoint, retail's D1 formula) —
-their desk numbers per keyboard burst closed by a `0x0047`: the 520 u lead
-1 of 9, zero-lead 4 of 9, D1's own endpoint 17/29, 16/17, 27/38, 15/18, 8/12.
-§41's press rule stays necessary on top of it: a stop can still go missing,
-and the swing gate must not depend on one. What is answered here: `kbd_moving_at` was armed at 24.155 s and **nothing ever
+| capture t | drawn (async) copy | sync copy |
+|---|---|---|
+| 24.08–24.40 | (9913, 7961) → (9879, 8012), v = (−92, 195) = 216 u/s, target **its own** north-west heading point (9463–9554, 8580–8705) | (9924, 7986), v = (−189, 20), target **(9412, 8041)** — the grant's point |
+| 26.85 → end | **(9412, 8041)**, v = 0 | (9412, 8041), v = 0 |
+
+The drawn body never headed for the grant's point: it walked the operator's own
+diagonal (movementType 7) at the side family's rate while the SYNC copy walked
+the 520 u lead, and at 26.85 s the drawn body was **relocated ~498 u onto the
+sync copy's parked point** — both copies at (9412, 8041), speed 0, the Hatcher
+now 405–486 u away and swinging at the sync copy eleven times without
+re-chasing. That is a snap, not an arrival, and no `0x0047` followed it.
+
+**CORRECTED 2026-09-03 (rurik-f2's skeptic lane, on their own 1z-u attempt):**
+this section first read the tap as "the body walked the granted leg as a
+click-order with key state ignored and parked, silently" — the mechanism the
+`SWING_HOLDS_WALK_GATE` comment describes for a zero-length grant. The table
+above refutes the walk, and the "not its proposal, therefore a click-order" step
+had no decode behind it (REALFIX §0.10/0.11/0.17 and RETHINK §2: every fired
+`0x0029` is an order-walk once the AgTrack fence is shut, own-endpoint leads
+included; retail's wire carries ~40 % non-proposal grants with releases reported
+at the normal rate). Their reading of WHY the stop went unreported — the 520 u
+leg matured unanswered (the 24.155 s report was heading-rate refused and
+dropped), the arrival reconcile snapped the drawn body onto the sync copy's
+point, and that snap shut the AgTrack fence, after which key releases go
+unreported — is MOVECODE 1z-u's RECONSTRUCTION and is recorded there, not here.
+What this section keeps is the observation: the grant is **MOVECODE-1z-t's KBD
+LEAD** (flags `KBD_SYNC_LEAD_ON`, `lead_src: "kbd"` on both fired rows), a
+server-chosen ~520 u endpoint; the drawn body was relocated onto its point;
+and no stop report ever came. rurik-f2 is replacing the lead with the client's
+own proposed endpoint (retail's D1 formula) as 1z-u — their desk numbers per
+keyboard burst closed by a `0x0047`: the 520 u lead 1 of 9, zero-lead 4 of 9,
+D1's own endpoint 17/29, 16/17, 27/38, 15/18, 8/12. §41's press rule stays
+necessary on top of it: a stop can still go missing, and the swing gate must
+not depend on one. What is answered here: `kbd_moving_at` was armed at 24.155 s and **nothing ever
 cleared it**, and `_player_body_moving` reads that latch with no bound at all —
 
 ```
@@ -4280,6 +4295,11 @@ to set up: every press now leaves a row.
   instrument over): the async copy's x, y sat at (9879, 8012) for 2.2 s with
   vx, vy = 216 u/s. The "parked from 26.8 s" reading rests on the speed-0 samples
   and the Hatcher's standing distance, never on the point column.
+* And the first reading of that same tap was wrong in the other direction: a
+  body with speed 216 that ends at the grant's point "walked there". The
+  velocity's TARGET column (the drawn copy's own north-west heading, never the
+  grant's point) was in the same rows and unread. A peer's skeptic lane read it.
+  Read every column of the instrument before narrating a path.
 
 ## Provenance
 
