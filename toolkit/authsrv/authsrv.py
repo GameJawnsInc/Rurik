@@ -5953,8 +5953,53 @@ def _a2_watchdog(send, state, rec, now=None):
 # protection -- retail's own both-nonzero pairs are bit-identical 222/222;
 # its one-grant-lag pattern on half-zero pairs is a recorded approximation
 # we do NOT reproduce, ROUTER-Q7).
-# =========================================================================
-ROUTER = False
+#
+# THE DEFAULT SINCE 2026-09-03 (MOVECODE-1z-v, studies/movecode/FINDINGS.md
+# sec.1z-v). 1z-u derived the click path's answer and it is this flag:
+# the 1.0 s freshness gate below cannot be widened (the operator's click
+# ages were 15-21 s; only >= 23 s answers all 40, past retail's own
+# 20.99 s maximum), the gate protects no plane word, retail has no
+# freshness precondition at all (26/26 answered), --click-echo was refused
+# as a default on three lenses, and the router is the one click policy in
+# this file that answers every processed click with a LEGAL leg over our
+# own mesh: five scored runs (ROUTER.md sec.6-10), the no-clip DEAD under
+# it (sec.1z), warps ~1.5x fewer than the refusal regime (HANDOFF sec.B).
+# `--no-router` restores the pre-1z-v click path exactly -- the freshness
+# gate and its geo-stale refusals -- and the diagnostic arms the
+# composition matrix refuses beside the router need it. `--router` still
+# parses (a no-op) so every runsheet written before 1z-v keeps its meaning.
+ROUTER = True
+# Two conditions ship WITH the default (1z-u.2: "--router as the default,
+# with (a) the click-leg record re-armed to the routed first leg so the
+# press re-pin stops placing the body on the raw chord, and (b) the derived
+# plane word"), one revert each -- sec.29's rule, a run convicts one term:
+# (a) The click-leg record (ANIMREF-RE 37, `_click_leg_arm`) is written by
+# the 0x003E arm BEFORE the router runs, on the RAW click chord. The body
+# walks the ROUTED leg. Every reader of the record -- PRESS ENDS THE WALK's
+# 0x002C at the modelled body (ANIMREF-RE 39), the approach's snap guard,
+# the swing gate's ETA -- would place the body on a straight line the
+# client is not walking, and the press re-pin would hard-set BOTH copies
+# onto the unclipped chord this flag exists to keep off the wire (1z-u.2
+# lens 3: every router run predates PRESS_SUPERSEDES_LEG and had zero
+# presses, so the composition was never exercised). The router re-aims the
+# record at the leg it grants, and each chain leg re-aims it again at its
+# own grant instant, keeping the click's stamp as the record's identity.
+ROUTER_LEG_REARM = True       # False (--router-raw-leg): the raw-chord record.
+# (b) The one-leg verbatim answer's field 4 is the SYNC copy's plane word
+# (agent+0x80; 0x0029 is sync-only, sec.1z-t). It was `state["plane"]`, the
+# last accepted report's plane -- frozen for the whole click walk, because
+# the client reports nothing while click-walking, while the walk itself
+# crosses seams. K2's own client bin: 16 of 18 SYNC plane stamps were 0
+# while 5 of 8 echoed legs crossed non-zero planes; corpus counterfactual
+# 709 incoherent stamps in 36 of 116 click sessions (0 on map 146). A
+# plane the ground under the copy does not offer is exactly gate 2's
+# `pathCount == 0` (1z-i: exceptionless 10/10) and the lock's middle term.
+# The derived word: the mesh's plane under the MODELLED sync copy,
+# preferring the report's plane where the mesh offers it there and falling
+# back to it where the mesh cannot say (plane_at's refuse-to-guess). The
+# routed / chain / fallback sites keep their matched pairs -- read
+# a2_matched_field4's RULE block and FINDINGS 1z-o.6 before touching those.
+ROUTER_SYNC_PLANE = True      # False (--router-report-plane): field 4 = report.
 
 # THE TOUR CAP (ROUTER-B4, verification run 2, 20260826T194505): a route is
 # refused as a route when its length exceeds CAP x the direct distance plus
@@ -6015,6 +6060,48 @@ def _router_plane(pm, wp, carry):
     return carry if p is None else p
 
 
+def _router_sync_plane(state, pm, carry, now):
+    """Field 4 for the one-leg verbatim answer (ROUTER_SYNC_PLANE, 1z-v
+    condition b): the mesh's plane under the MODELLED SYNC COPY, `carry`
+    (the last report's plane) where the mesh offers it there or cannot
+    say. The sync copy is `_sync_position`'s lerp of the last granted leg
+    at DEFAULT_RUN_SPEED, parking on its point -- the same equation the
+    validated mirror runs (1z-r: 223 of 251 corpus warps land within 150 u
+    of it) -- seeded at placement, so before any grant it is the spawn and
+    the answer is the spawn's own plane. Pure apart from the reads."""
+    if not ROUTER_SYNC_PLANE or pm is None:
+        return carry
+    sync = _sync_position(state, now)
+    if sync is None:
+        return carry
+    return _router_plane(pm, sync, carry)
+
+
+def _router_rearm_leg(state, dest, now, p0=None):
+    """ROUTER_LEG_REARM (1z-v condition a): re-aim the click-leg record at
+    the leg the router actually granted. `_click_leg_arm` ran before the
+    router (the 0x003E arm's order) and recorded the RAW click chord; the
+    body walks the routed leg, and that is what the record's readers must
+    model. The record keeps the click's own stamp (`t0` -- the identity
+    `_player_body_moving` and the approach check read) and gets a `start`
+    of its own, so a chain leg granted later lerps from ITS grant instant
+    and not from the click's. `p0` is the leg's start when the caller knows
+    it (a chain leg starts at the waypoint the body just reached); the
+    first leg keeps the record's own modelled start. A record that was
+    never armed (no placeable start) stays unarmed. Returns the record."""
+    if not ROUTER_LEG_REARM:
+        return None
+    leg = state.get("click_leg")
+    if leg is None:
+        return None
+    start = leg["p0"] if p0 is None else (float(p0[0]), float(p0[1]))
+    new = _leg_record(start, dest, now, leg["speed"])
+    new["t0"] = leg["t0"]
+    new["start"] = now
+    state["click_leg"] = new
+    return new
+
+
 def router_chain_tick(send, state, conn_id, rec, now=None):
     """Grant the next leg of the live chain when the current one completes.
 
@@ -6049,6 +6136,8 @@ def router_chain_tick(send, state, conn_id, rec, now=None):
         pf = chain["click_plane"] if terminal else nxt_plane
         ps, _matched = a2_matched_field4(pf, chain["carry"])
         state["dest"], state["clipped"] = (nxt[0], nxt[1]), False
+        # (a) the body now walks THIS leg from the waypoint it reached.
+        _router_rearm_leg(state, nxt, now, p0=chain["cur"])
         send(GAME_SMSG_AGENT_MOVE_TO_POINT,
              [PLAYER_AGENT_ID, [nxt[0], nxt[1]], pf, ps],
              f"ROUTER leg {chain['i']}/{chain['n']} "
@@ -6177,6 +6266,8 @@ def router_answer_click(send, state, conn_id, rec, dest, dest_plane,
             state["grant_pending"] = None
             state["dest"], state["clipped"] = (float(stop[0]),
                                                float(stop[1])), False
+            # (a) the body walks the clipped leg, not the raw chord.
+            _router_rearm_leg(state, (float(stop[0]), float(stop[1])), now)
             pf = _router_plane(pm, stop, cur_plane)
             ps, _m = a2_matched_field4(pf, cur_plane)
             if D1_LEAD:
@@ -6236,7 +6327,11 @@ def router_answer_click(send, state, conn_id, rec, dest, dest_plane,
         # class (16/29 live; ALL 13 scoreable reproduced bit-identically
         # by route() on our meshes, ROUTER.md sec.3). Wire-identical to
         # the shipped clear-line fire, planes included.
-        pf, ps = plane_first, plane_second
+        pf = plane_first
+        # (b) ROUTER_SYNC_PLANE: field 4 is the mesh's plane under the
+        # modelled sync copy, the report's plane where the mesh offers it
+        # there (the common case -- wire unchanged) or cannot say.
+        ps = _router_sync_plane(state, pm, plane_second, now)
         if D1_LEAD:
             ps, _m = a2_matched_field4(pf, ps)
         state["dest"], state["clipped"] = (dx, dy), False
@@ -6250,7 +6345,8 @@ def router_answer_click(send, state, conn_id, rec, dest, dest_plane,
         state["router_refusal_streak"] = 0
         if rec is not None:
             rec.event("router_route", verdict="verbatim", n_wp=1,
-                      dest=[dx, dy], snapped=snapped_d, ms=round(ms, 2))
+                      dest=[dx, dy], snapped=snapped_d, ms=round(ms, 2),
+                      plane4=ps, plane4_report=plane_second)
         return True
     first_wp = legs[0]
     # Corridor-true plane (ROUTER-B4): the route's own trapezoid chain
@@ -6259,6 +6355,8 @@ def router_answer_click(send, state, conn_id, rec, dest, dest_plane,
     pf = leg_planes[0]
     ps, _m = a2_matched_field4(pf, cur_plane)
     state["dest"], state["clipped"] = first_wp, False
+    # (a) the record now describes the leg the body walks: waypoint 1.
+    _router_rearm_leg(state, first_wp, now)
     send(GAME_SMSG_AGENT_UPDATE_SPEED,
          agents.agent_update_speed(PLAYER_AGENT_ID, 1.0),
          "AGENT_UPDATE_SPEED(player, 1.0 = 288 u/s)")
@@ -10427,10 +10525,13 @@ def _click_leg_start(state, now, silent):
         leg = state["click_leg"]
         x0, y0 = leg["p0"]
         dx, dy = leg["dest"][0] - x0, leg["dest"][1] - y0
-        span = leg["eta"] - leg["t0"]
+        # `start` is the leg's own grant instant (a router chain leg,
+        # _router_rearm_leg); `t0` stays the click's stamp, the identity.
+        t_start = leg.get("start", leg["t0"])
+        span = leg["eta"] - t_start
         if span <= 0.0 or now >= leg["eta"]:
             return leg["dest"]
-        f = max(now - leg["t0"], 0.0) / span
+        f = max(now - t_start, 0.0) / span
         return (x0 + dx * f, y0 + dy * f)
     if src is None:
         return None
@@ -10618,9 +10719,15 @@ def _approach_abandon(state):
     state["dest"] = None
 
 
-def _approach_send(send, state, conn_id, target_id, agent, now, repath=False):
+def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
+                   rec=None):
     """Send the follow and arm the leg it starts. See approach_tick."""
     plane = int(state.get("plane", 0))
+    # MOVECODE-1z-v: the 0x002A follow is a movement order of its own, so
+    # a live router chain must not keep granting legs behind it (the
+    # --interact-walk refusal's two-sender fight, closed here for the
+    # follow the same way the press closes it).
+    router_abandon(state, rec, "approach", now)
     tx, ty = float(agent["pos"][0]), float(agent["pos"][1])
     if not repath:
         # THE SNAP GUARD, derived rather than tuned. After a click-walk this
@@ -10732,7 +10839,7 @@ def _approach_send(send, state, conn_id, target_id, agent, now, repath=False):
               f"{stop:.0f} u in {leg['eta'] - now:.2f} s", flush=True)
 
 
-def _press_supersedes(send, state, conn_id, target_id):
+def _press_supersedes(send, state, conn_id, target_id, rec=None):
     """A 0x0026 while the body is on a leg it walks silently: END the leg.
 
     ANIMREF-RE 39. Retail's server never waits for a click leg: the press is
@@ -10773,6 +10880,13 @@ def _press_supersedes(send, state, conn_id, target_id):
     state["click_moving_at"] = None
     state["click_leg"] = None
     _approach_abandon(state)
+    # MOVECODE-1z-v: the press ends the ROUTE as well as the leg. A live
+    # chain would otherwise keep granting its remaining 0x0029 legs at
+    # cadence behind the swing or the follow -- two movement orders for
+    # one body, the composition ROUTER-Q8 left open and this file's own
+    # press contract (above) decides for the 0x0026 opcode. Read BEFORE
+    # the model is placed on the wire so the row precedes the re-pin.
+    router_abandon(state, rec, "press", now)
     if model is None:
         return
     plane = int(state.get("plane", 0))
@@ -10804,7 +10918,7 @@ def _press_supersedes(send, state, conn_id, target_id):
           flush=True)
 
 
-def approach_tick(send, state, conn_id, target_id, agent, now):
+def approach_tick(send, state, conn_id, target_id, agent, now, rec=None):
     """Walk the player's body into reach of its attack target, as retail's
     server does (ANIMREF-RE 38; --attack-approach).
 
@@ -10851,7 +10965,7 @@ def approach_tick(send, state, conn_id, target_id, agent, now):
         if (moved > FOLLOW_REPATH_MOVED
                 and now - ap["sent_at"] >= FOLLOW_REPATH_INTERVAL):
             _approach_send(send, state, conn_id, target_id, agent, now,
-                           repath=True)
+                           repath=True, rec=rec)
             return True
         if now >= ap["eta"] or dist <= stop:
             # Arrived. The leg record has already released the latch; the
@@ -10861,7 +10975,7 @@ def approach_tick(send, state, conn_id, target_id, agent, now):
             return False
         return True
     if dist > attack_reach():
-        _approach_send(send, state, conn_id, target_id, agent, now)
+        _approach_send(send, state, conn_id, target_id, agent, now, rec=rec)
         return True
     return False
 
@@ -11019,7 +11133,8 @@ def attack_tick(send, state, conn_id, rec=None):
         # ANIMREF-RE 38: out of reach, the server walks the body in (the
         # follow leg holds the chain through the click latch it arms; a
         # re-pin here may move the model, so the position is re-read).
-        approach_tick(send, state, conn_id, target_id, agent, time.time())
+        approach_tick(send, state, conn_id, target_id, agent, time.time(),
+                      rec=rec)
         # A follow that started since the press IS its answer (retail:
         # the 0x002A at 26-123 ms, sec.37.3).
         pend = state.get("press_pending")
@@ -17785,7 +17900,8 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # flight before the order is taken -- the swing
                         # (in reach) or the follow (out of reach) is the
                         # tick's next act, not the leg's arrival.
-                        _press_supersedes(send, state, conn_id, values[1])
+                        _press_supersedes(send, state, conn_id, values[1],
+                                          rec=rec)
                         begin_attack(send, state, values[1], conn_id, rec=rec)
                     elif opcode == GAME_CMSG_INTERACT_AGENT:
                         # "I clicked that agent meaning to interact with it" --
@@ -22238,8 +22354,36 @@ def main():
                          "arm the counterfactual says is WORSE than the "
                          "shipped default (p50 425 u against 237), because "
                          "the lead's overshoot has nothing to collect it.")
+    ap.add_argument("--no-router", action="store_true",
+                    help="MOVECODE-1z-v: turn the router OFF (it is the "
+                         "default click policy since 2026-09-03). Restores "
+                         "the pre-1z-v click path exactly: the 1.0 s "
+                         "freshness gate, its geo-stale refusals (40 of 40 "
+                         "clicks in the operator's 08:46 session), and the "
+                         "hold/void/rate tower. Needed beside the diagnostic "
+                         "arms the composition matrix refuses with the "
+                         "router (--click-sweep, --arrival-carry, "
+                         "--cancel-answer, --stop-answer, "
+                         "--family-rate-probe, --checksum-probe, --pc-spoof, "
+                         "--interact-walk, --move-speed-effects).")
+    ap.add_argument("--router-raw-leg", action="store_true",
+                    help="MOVECODE-1z-v condition (a) OFF: the click-leg "
+                         "record stays on the RAW click chord instead of "
+                         "being re-aimed at the routed leg. PRESS ENDS THE "
+                         "WALK then re-pins the body onto the unclipped "
+                         "chord on a mid-chain press. Diagnostic arm only.")
+    ap.add_argument("--router-report-plane", action="store_true",
+                    help="MOVECODE-1z-v condition (b) OFF: the one-leg "
+                         "verbatim answer's field 4 is the last accepted "
+                         "report's plane again (frozen across the click "
+                         "walk) instead of the mesh's plane under the "
+                         "modelled sync copy. Diagnostic arm only.")
     ap.add_argument("--router", action="store_true",
-                    help="ROUTER-B2 (studies/movement/ROUTER.md; the "
+                    help="NO-OP since 2026-09-03 (MOVECODE-1z-v): the "
+                         "router is the default click policy and needs no "
+                         "flag; kept so runsheets written before 1z-v still "
+                         "parse. --no-router turns it off. "
+                         "ROUTER-B2 (studies/movement/ROUTER.md; the "
                          "owner's 2026-08-26 ruling on RETHINK-H3): answer "
                          "clicks the way retail measurably does -- a route "
                          "over OUR navmesh (pathmap.route(): A* + "
@@ -22253,7 +22397,7 @@ def main():
                          "bypass the hold/void/rate tower (Rule 1's "
                          "keyboard drop stays); no-route clicks get a "
                          "clip-fallback leg or a LOGGED refusal, never the "
-                         "unclipped point. Off by default; composes with "
+                         "unclipped point. Composes with "
                          "--d1-lead; refused with the probe/diagnostic "
                          "arms. Bench: toolkit/clientscan/routerbench.py "
                          "(13/13 retail-verbatim clicks reproduced "
@@ -22980,7 +23124,7 @@ def main():
         cast_stop=_cs_mode, resync_separation=a.resync_separation,
         family_rate_probe=a.family_rate_probe,
         checksum_probe=a.checksum_probe,
-        pc_spoof=a.pc_spoof, d1_lead=a.d1_lead, router=a.router,
+        pc_spoof=a.pc_spoof, d1_lead=a.d1_lead, router=not a.no_router,
         interact_walk=a.interact_walk,
         move_speed_effects=a.move_speed_effects,
         plane_repair=not a.no_plane_repair)
@@ -22994,6 +23138,15 @@ def main():
             and "--zero-lead cannot be combined" in _zl_refusal):
         _zl_refusal += ("\n(--zero-lead is ON BY DEFAULT since 2026-08-22; "
                         "pass --no-zero-lead to run this arm without it.)")
+    # The same hint for the router's pairwise family (MOVECODE-1z-v): a
+    # runsheet written when --router was opt-in passes a diagnostic arm
+    # alone and now meets a refusal it never asked for. Only when the
+    # router was NOT asked for explicitly -- then the advice is followable.
+    if (_zl_refusal and not a.router and not a.no_router
+            and "--router and " in _zl_refusal):
+        _zl_refusal += ("\n(--router is ON BY DEFAULT since 2026-09-03, "
+                        "MOVECODE-1z-v; pass --no-router to run this arm "
+                        "on the legacy click path.)")
     if _zl_refusal:
         raise SystemExit(_zl_refusal)
     if zero_lead:
@@ -23896,13 +24049,45 @@ def main():
               "change or stop. A same-family stretch after a click reads "
               "as a P-3 failure when it is a protocol violation; the c2s "
               "census (zero 0x003E) is the definitive guard.")
-    if a.router:
-        global ROUTER
-        ROUTER = True
-        print("[map] --router ON (ROUTER-B2, studies/movement/ROUTER.md -- "
-              "the owner's ruling on RETHINK-H3). Clicks are answered by a "
-              "route over our own mesh; every granted leg is re-clipped at "
-              "the 2.0u step before it goes on the wire.")
+    global ROUTER, ROUTER_LEG_REARM, ROUTER_SYNC_PLANE
+    ROUTER = not a.no_router
+    ROUTER_LEG_REARM = ROUTER and not a.router_raw_leg
+    ROUTER_SYNC_PLANE = ROUTER and not a.router_report_plane
+    if not ROUTER:
+        print("[map] --no-router: the LEGACY click path (pre-1z-v). Clicks "
+              "are gated on a report under 1.0 s old -- unsatisfiable "
+              "during click-to-move, so expect geo-stale refusals on every "
+              "click of a click-walk (40/40 in the 2026-09-03 08:46 session) "
+              "and the sync copy left standing wherever the last grant put "
+              "it. A diagnostic arm, not the shipped default; say so when "
+              "you report the run.")
+    else:
+        print("[map] ROUTER ON by default (MOVECODE-1z-v, 2026-09-03; "
+              "ROUTER-B2, studies/movement/ROUTER.md). Clicks are answered "
+              "by a route over our own mesh -- first leg now, further legs "
+              "at leg-completion cadence, every granted leg re-clipped at "
+              "the 2.0u step before it goes on the wire; a click under "
+              "keyboard authority is dropped (retail's contract). "
+              "--no-router reverts to the legacy freshness-gated path.")
+        if a.router:
+            print("      (--router passed: a no-op since 1z-v, the router "
+                  "needs no flag.)")
+        _rc = [n for n, on in (("(a) click-leg record re-armed to the "
+                                "routed leg", ROUTER_LEG_REARM),
+                               ("(b) verbatim field 4 from the mesh under "
+                                "the modelled sync copy",
+                                ROUTER_SYNC_PLANE)) if on]
+        print(f"      CONDITIONS {', '.join(_rc) if _rc else 'NONE'}")
+        if not (ROUTER_LEG_REARM and ROUTER_SYNC_PLANE):
+            print("      A 1z-v CONDITION IS OFF -- this is a diagnostic arm, "
+                  "not the shipped default. Say so when you report the run.")
+        print("      READOUT    router_route rows (one per click: "
+              "verbatim/routed/clip-fallback/refused/kbd-drop, the refusal "
+              "reason, route ms; verbatim rows carry plane4 beside "
+              "plane4_report) and router_leg rows (grant/abandon per leg, "
+              "the cause named: new-click / 0x003D / 0x0047 / press / "
+              "approach). There are NO click_verdict rows for routed "
+              "clicks -- a scorer that counts them reads zero.")
         if a.tape:
             print("      INERT UNDER --tape: the tape dispatch never "
                   "reaches the click arm, no chain can form, and tape "

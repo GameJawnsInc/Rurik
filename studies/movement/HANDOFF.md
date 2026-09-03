@@ -239,24 +239,28 @@ point samples.** The client's walker consults its pathing query every ~16 ms and
 **ignores the answer**: the result gates only the `+0x68` copy, while movement
 dead-reckons from `+0x78`. **Wall integrity on retail was always the server's grants.**
 
-**The shipped policy arms.** Five movement arms are ON by default, each by an owner
-ruling; `--router` and `--click-echo` are NOT (§C). The candidate graveyard is real and
+**The shipped policy arms.** Six movement arms are ON by default, each by an owner
+ruling or a derivation — **`--router` among them since 2026-09-03 (MOVECODE-1z-v)**;
+`--click-echo` is NOT (§C). The candidate graveyard is real and
 the tree currently states its size four different ways — do not quote a count, read the
 flags.
 
 ## C. What is actually running — and how to find out without guessing
 
 **Do not grep the module globals.** They read `False` while `main()`'s argparse arms
-five of them, and `HANDOFF-PLANE.md`'s Terminal-1 command is only half right (it passes
-`--router`, which is `store_true` and **off** by default — so no live trial of the plane
-repair has ever run the shipped click policy).
+five of them (`ROUTER` reads `True` since 1z-v, and `--no-router` clears it), and
+`HANDOFF-PLANE.md`'s Terminal-1 command passes `--router`, a no-op since 2026-09-03
+(before that it was `store_true` and off by default, so every armed plane-repair run
+before 1z-v ran an opt-in click policy — and after 1z-v that policy IS the default).
 
 **The server's own startup banner is the authority.** It prints the resolved policy
 including the note that three separate senders can emit `0x002C`. Start it and read it.
 That is a statement that cannot go stale, because it names an artifact that regenerates.
 
 ON by default: `--zero-lead`, `--plane-carry`, `--grant-suppress`, `--cast-stop=pin`,
-plane repair. Each has a `--no-` revert. OFF: `--router`, `--click-echo`.
+plane repair, **and the router (MOVECODE-1z-v, 2026-09-03; `--no-router` reverts;
+`--router-raw-leg` / `--router-report-plane` revert its two conditions)**. Each has a
+`--no-` revert. OFF: `--click-echo`, the keyboard lead (`--kbd-lead` opts in).
 **`--grant-suppress` and the heading arm share ONE rate-limit clock**, so between them
 they cannot exceed one grant per 0.50 s — say which flags were on when you report a run.
 
@@ -459,8 +463,9 @@ better-designed when it happens, by naming which geometry to press against.
 
 ## F. Commands
 
-Terminal 1 — the server. **Note `--router` is not the shipped default**; pass it only if
-you are reproducing R6/R6b/R7, and say so in the write-up:
+Terminal 1 — the server. **`--router` is the shipped default since 2026-09-03
+(MOVECODE-1z-v) and the flag below is a no-op**; `--no-router` is the diagnostic arm
+now, and say so in the write-up if you pass it:
 
 ```bash
 python toolkit/harness/session.py --exe C:/gd/Rurik/vault/run/2026-07-29_221c13772c7a/Gw.exe --keep-open --hold 2400 --game-args="--router --map 280"

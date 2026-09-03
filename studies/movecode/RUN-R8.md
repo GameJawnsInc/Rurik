@@ -1,5 +1,10 @@
 # MOVECODE-R8 — the empty cell, and the heal: the shipped default has NEVER been run armed
 
+> **2026-09-03 late (MOVECODE-1z-v): the router is now the DEFAULT click policy.**
+> This sheet's "armed, router off" cell — the shipped default when it was written —
+> now needs `--no-router` to reproduce, and the "armed, router on" cell IS the
+> shipped default. Read every `--router` below with that inversion.
+>
 > **NOT RUN. This sheet is a pre-registration.** It ran iff
 > `studies/movecode/FINDINGS.md` grows a §1z-p heading —
 > `grep -n '^## 1z-p' studies/movecode/FINDINGS.md`. Until then every number

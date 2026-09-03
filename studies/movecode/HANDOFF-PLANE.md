@@ -336,6 +336,12 @@ configuration the lock happened under:
 python toolkit/harness/session.py --exe vault/run/2026-07-29_221c13772c7a/Gw.exe --keep-open --hold 2400 --game-args="--router --map 280"
 ```
 
+(`--router` is a no-op since 2026-09-03 — the router is the default click policy,
+MOVECODE-1z-v; kept here so the sheet reads as it ran.)
+
+```bash
+```
+
 Terminal 2, arm the client-side hook once you are in the map (the DLL and sites are
 unchanged — **do not** regenerate sites):
 

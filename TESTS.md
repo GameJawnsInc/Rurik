@@ -10687,7 +10687,8 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   reproduced as our one-leg case bit-identically (corpus-level counts are
   ≥-floors because the live corpus grows; bit-exact locks stay on the
   anchor files). Floor 48 from the green run. ~15 s warm),
-  `toolkit/authsrv/test_router.py` (ROUTER-B2, the `--router` click policy —
+  `toolkit/authsrv/test_router.py` (ROUTER-B2, the router click policy — **the
+  DEFAULT since 2026-09-03, MOVECODE-1z-v; `--no-router` reverts** —
   the wiring's own checks, bare-machine (no vault, no client, no sockets;
   routerbench validates the pathfinder against retail, THIS file validates
   the plumbing). Section 1 drives `router_answer_click` on a stub mesh with
@@ -10744,9 +10745,27 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   quotes the old wording inside its own correction block, and a substring
   check fires on the quote. The real defect was the contract line, and it was
   wrong the day it was written (`8cbcbc9` created the helper; `995a515`
-  added four router sites the same day and never revised it). Floor 73 from
-  the green run (51 at the B2 landing, 57 after the review round, 64 after
-  B4, 68 after B5). ~1 s).
+  added four router sites the same day and never revised it). **Section 5
+  (2026-09-03, MOVECODE-1z-v) added thirty: the router is the DEFAULT with
+  both conditions on, `--no-router` / `--router-raw-leg` /
+  `--router-report-plane` exist and the pairwise refusals carry the
+  default-flip hint; condition (a) — the click-leg record, armed on the raw
+  chord by the 0x003E arm before the router runs, is re-aimed at the routed
+  first leg (stamp kept as identity, its own `start`, ETA = the leg's travel
+  time), each chain leg re-arms it FROM the reached waypoint and lerps from
+  its own start, the clip-fallback re-arms to its stop, a verbatim answer
+  leaves it alone, an unarmed record stays unarmed, and the known-bad arm
+  keeps the chord; a press mid-chain abandons the chain (cause `press`) and
+  PRESS ENDS THE WALK re-pins the body ON THE ROUTED LEG, not at the chord's
+  (144, 0); a follow abandons it too (cause `approach`); condition (b) — the
+  one-leg verbatim answer's field 4 is the mesh's plane under the modelled
+  sync copy when the report's plane is not offered there, the report's
+  plane where it is (wire unchanged), where the mesh cannot say, and on an
+  unseeded model; the copy is modelled MID-LEG; the known-bad arm sends the
+  frozen report plane; plus four source locks (the three re-arm sites, the
+  two abandons, the helper before the gated match, the leg model's own
+  start).** Floor 103 from the green run (51 at the B2 landing, 57 after
+  the review round, 64 after B4, 68 after B5, 73 after 2026-08-30). ~1 s).
 
 `toolkit/authsrv/test_agtrack_mirror.py` (**the AgTrack mirror's transcription,
   rule by rule -- MOVECODE-1z-q step 1's guard.** `agtrack_mirror.py` is a

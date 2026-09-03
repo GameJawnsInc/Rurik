@@ -616,3 +616,16 @@ client instead of inferring from the wire. Handoff:
 > and B5's 0.25–8.0 u standing penetrations. Defect 1 (the snap/reconcile
 > rule) has since been measured by the MOVECODE arc — §1t.2's reseed formula
 > and §1x.4's non-gating walk chain.
+
+> **ADDENDUM 2026-09-03 late — THE ROUTER IS THE DEFAULT (MOVECODE-1z-v,
+> [studies/movecode/FINDINGS.md](../movecode/FINDINGS.md) §1z-v).** §4's "opt-in
+> flag, shipped default byte-identical" expired: §1z-u derived the click path's answer
+> as this router (the freshness gate cannot be widened, retail has no such
+> precondition, the echo is refused as a default on three lenses), and it now ships
+> ON — `--no-router` reverts, `--router` parses as a no-op. Two conditions ship with
+> it, each with a revert: the click-leg record is re-armed to the routed leg and again
+> at every chain grant (`--router-raw-leg`), and the one-leg verbatim answer's field 4
+> is the mesh's plane under the modelled sync copy (`--router-report-plane`). ROUTER-Q8
+> is decided for two opcodes — a press and a follow abandon a live chain — and open for
+> casts. The nine composition refusals stand and now print a `--no-router` hint.
+> `test_router.py` floor 73 → 103.

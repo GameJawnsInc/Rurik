@@ -1461,7 +1461,7 @@ def section_press_supersedes_and_move_ends():
 
     # 10j. source pin: the press arm calls the supersede BEFORE begin_attack
     src = open(authsrv.__file__, encoding="utf-8").read()
-    i = src.find("_press_supersedes(send, state, conn_id, values[1])")
+    i = src.find("_press_supersedes(send, state, conn_id, values[1],")
     j = src.find("begin_attack(send, state, values[1], conn_id, rec=rec)")
     check(i > 0 and j > i and j - i < 200,
           "the 0x0026 arm supersedes the leg, then takes the order -- in that "
