@@ -1502,7 +1502,8 @@ arc. **BUILT 2026-09-03 evening, §1z-v: the router IS the default, both conditi
 shipped with a revert each (`--no-router`, `--router-raw-leg`,
 `--router-report-plane`), and the press and the follow abandon a live chain;
 the operator's 40 refused clicks retrodict to 40 answered. §1z-w (same night)
-added the routing origin's own plane word and the cast abandon.** The bundle
+added the routing origin's own plane word and the cast abandon; §1z-x the
+enslavement detector, which withdraws RUN-1zT's confirmation.** The bundle
 question Q13 poses (adopt `D1_LEAD`?) is unchanged by it. The session's felt symptoms were
 1z-t's keyboard lead, now opt-in.
 Raised 2026-08-27 by
@@ -1606,6 +1607,33 @@ floors and aborts in `RUN-R8.md`; both are operator-driven client runs.
 ---
 
 ## 8. Immediate next actions
+
+### ★★★ MOVEMENT 2026-09-03 night — THE ENSLAVEMENT DETECTOR (MOVECODE-1z-x): `w0score.py` now says who follows whom, and RUN-1zT's confirmation is withdrawn by its own scorer
+
+**[studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1z-x.** Zero client
+runs; §1z-u.5 item (c) done.
+
+* **The signal:** the ASYNC copy's walk target (`+0x9C`, already in every `agenttap`
+  row) equals, to 1 u, a SERVER-CHOSEN `0x0029` — one that is neither the client's own
+  last click nor within 50 u of its last report. The tap is joined to the gamesrv
+  capture that produced it (auto by wall overlap, `--grants` overrides); the onset is
+  the first sustained run of three; ≥ 25% of moving samples is ENSLAVED and the
+  scorer prints **MEASURED, CONTAMINATED** instead of CONFIRMED; per leg (`--legs`)
+  the verdict rides each row with a **HELD KEY, BODY PARKED** flag.
+* **The four taps:** RUN-1zT's registered arm **ENSLAVED, 115 of 193 (59.6%), onset
+  17.77 s tap-clock** (= the record's 18.65 s on the gamesrv clock — a clock note, not
+  a contradiction), Q/E/S legs 100%, both later W holds parked; the zero-lead baseline
+  FREE (0 of 130, zero server-chosen grants); RUN-FEEL FREE (the body walked its own
+  heading and was snapped, not walked — §41.2 confirmed by a third instrument); the
+  double-driven first attempt MIXED (3.7%). `--baseline` asserts both controls beside
+  the p50 237 / max 516 reproduction. `test_w0score.py` is new (38 checks, floor 35).
+* **Limits, stated:** the detector sees ORDERS, not fences — a snapped body with no
+  later grant reads FREE; a routed multi-leg chain reads as enslavement by construction
+  (its waypoints are orders, retail's too), so read a click session's fraction against
+  the chain rows first.
+* **Next, unchanged:** hold-not-drop + kill-on-press for the keyboard lead (§1z-u.5 a),
+  `a2_matched_field4` on the keyboard path (b), the fence-shutter audit (d), then
+  `0x005FCAA0`.
 
 ### ★★★ MOVEMENT 2026-09-03 night — the routing ORIGIN's plane word and the CAST abandon (MOVECODE-1z-w): §1z-v.3's two filed items built, zero exposure on the operator's map, said as such
 

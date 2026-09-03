@@ -7393,6 +7393,34 @@ the same-tick ALIAS**: the
   `authsrv.py` stay tree-relative, so a worktree session scores the real corpus
   against its OWN tree's prose and trigger mirror.
 
+  `toolkit/clientscan/test_w0score.py` (**the MOVECODE-1z-t scorer's ENSLAVEMENT
+  DETECTOR, MOVECODE-1z-u.5 item c / FINDINGS §1z-x.** `w0score.py`'s number —
+  world-0 vs the drawn body — cannot tell "world-0 follows the body" from "the body
+  follows world-0": once the client's AgTrack fence is shut every `0x0029` is walked
+  as an order and the two copies agree because the body is enslaved, which is what
+  made RUN-1zT's p50 0.0 a measurement and not a confirmation. The detector joins the
+  tap to the gamesrv capture that produced it and reads, per moving sample, whether
+  the ASYNC copy's walk target (+0x9C) equals a SERVER-CHOSEN grant to the unit — a
+  `0x0029` that is neither the client's own last click nor within 50 u of its last
+  report. Sections 1–4 are bare-machine over synthetic rows: the grant classification
+  (at-report / own-click / server-chosen, the point decoded from the row's plaintext
+  bytes, NPC grants excluded, the 50 u band from a stop report), the join's
+  causality (a grant sent after the sample cannot be the one it follows), the 1.0 u
+  band from both sides, own points excepted, parked samples not trials, the onset as
+  the first SUSTAINED run of three (two in a row is not one), the three verdicts at
+  their bars (FREE at zero, MIXED at 15%, ENSLAVED at 30% and at 29%), zero samples
+  and zero grants never crashing, the per-leg table (free leg with its travel and
+  median-speed expectation, enslaved leg at 100%, a stampless leg skipped, a leg with
+  no moving samples unjudged, a HELD KEY that moved the body under 50 u flagged
+  parked, two W legs staying two rows by their start stamp), `find_gamesrv` finding
+  nothing for a synthetic epoch, and `score()` joining an explicit `--grants` file or
+  saying NOT MEASURED. Section 5 is the vault: the 2026-09-02 zero-lead baseline must
+  read FREE with zero server-chosen grants, and RUN-1zT's registered arm ENSLAVED
+  from 17.77 s on the tap's clock (18.65 s on the gamesrv clock) with its scorer
+  number still p50 0.0 — the contamination is in who follows whom, not in the number.
+  Floor 28 from the bare-machine run; section 5 skips without the vault and lowers
+  nothing. ~5 s with the vault),
+
   `toolkit/clientscan/movehook/test_movehook.py` (**MOVECODE-B2's hook DLL, and
   the first test any hook in this repo has ever had.** `trnhook/` has none, and
   `srclint` therefore imposed nothing on it — which was *silence, not a ruling*,
