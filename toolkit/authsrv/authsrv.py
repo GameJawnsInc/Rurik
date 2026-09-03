@@ -5476,8 +5476,10 @@ def d1_lead_dest(reported, vec2):
 # THE THREE TERMS, each derived, none tuned. They are ONE behaviour because the
 # counterfactual says they are not separable -- the lead ALONE is worse than
 # shipping nothing (p50 425 u against 237) because it overshoots every stop.
-#   1. LEAD the heading grant by KBD_SYNC_LEAD along the client's own reported
-#      heading, then clip it to the navmesh (a2_clip_lead, sec.0.17's D2 term).
+#   1. LEAD the heading grant to the CLIENT'S OWN proposed endpoint (reported +
+#      vec2 + 0.5*unit -- d1_lead_dest's formula; it was a server-chosen 520 u
+#      until the same-day correction below), then clip it to the navmesh
+#      (a2_clip_lead, sec.0.17's D2 term).
 #   2. SPEED TRUTH: the edge-triggered 0x002B family rate, so world-0 walks at
 #      the family the client is actually using.
 #   3. STOP ECHO: at every 0x0047, 0x002B [1.0, 9] then a zero-distance 0x0029
@@ -5499,6 +5501,10 @@ def d1_lead_dest(reported, vec2):
 # Independently, on ArenaNet's own nine live captures with only the destination
 # changed, retail's dests hold p50 62.2 u where ZERO_LEAD holds p50 387.5 u.
 #
+# [SUPERSEDED the same day -- the paragraph below chose 520 on an offline
+# sweep that ASSUMED the stop echo fires; the correction after it shows the
+# 520 u point silences the very 0x0047 the echo needs. Kept as the record of
+# how a well-measured number was still the wrong operand.]
 # WHY 520 AND NOT D1_LEAD's 766. The lead must cover the most ground the body
 # can travel between two re-aims, or +0x48 fires and the copy parks. The
 # client's 0x003D is DISTANCE-triggered: held-heading chords run p95 513.8 u,
@@ -5538,39 +5544,61 @@ def d1_lead_dest(reported, vec2):
 # as three defaults nobody can tell apart afterwards.
 # D1_LEAD wins if both are set: it is the explicit experiment arm and it
 # carries its own registered predictions.
+#
+# CORRECTED 2026-09-03, SAME DAY, ON THE OPERATOR'S FIRST ORDINARY SESSION
+# (studies/animref/RUN-FEEL.md; MOVECODE-1z-u). The lead LENGTH above was
+# 520 u -- the client's report-trigger chord, a number the SERVER chose. That
+# choice is what turned a keyboard tap into a forced walk. The client treats a
+# 0x0029 whose destination is NOT its own proposal as a CLICK-ORDER: it walks
+# there with key state ignored and reports NOTHING at arrival -- no 0x0047 --
+# so the stop echo (term 3) never fires and the keyboard latch is never
+# cleared. Measured on captures already on disk, per keyboard burst, "did a
+# 0x0047 follow within 3 s":
+#     520 u lead, server-chosen point:   1 of 9 bursts (RUN-1zT), 0 of 1 (08:46)
+#     zero-lead, the point reported:     4 of 9
+#     D1, the client's OWN endpoint:     17/29, 2/8, 16/17, 27/38, 15/18, 8/12
+#                                        (REALFIX A2's six runs, ~70% pooled,
+#                                        two runs above 83%)
+# In the 08:46 session the one 520 u lead sent world-0 518 u west; the next
+# heading report 66 ms later was rate-refused and dropped; the body walked to
+# the lead's endpoint at 216 u/s AWAY from the enemy and was snapped 498 u onto
+# it at arrival -- both of that session's long-range swings, its 495 u tail and
+# its stuck attack (the kbd latch, ANIMREF-RE 41) trace to that one grant.
+# Retail's D1 formula (dest = reported + vec2 + 0.5*unit, bit-exact on
+# 1,650 of 3,037 live grants) is therefore not a stylistic choice about
+# distance: it is what keeps the client in KEYBOARD mode. So the lead is now
+# the client's own proposed endpoint, the same formula d1_lead_dest carries,
+# and there is no server-chosen length any more. The offline sweep that
+# preferred 520 (p75 4.4 vs 4.2 at 766) was scored with the stop echo
+# ASSUMED to fire; it is the 0x0047 that decides whether it can.
 KBD_SYNC = True
 KBD_SYNC_LEAD_ON = True
 KBD_SYNC_SPEED_ON = True
 KBD_SYNC_STOP_ON = True
-# The client's own 0x003D distance trigger, held-heading chord p99 = 515.1 u.
-# A lead shorter than this lets the arrival tick fire between re-aims.
-KBD_SYNC_LEAD = 520.0
 
 
 def kbd_lead_dest(reported, vec2):
     """MOVECODE-1z-t's heading lead: (dest, src) for one report. Pure.
 
-    dest = reported + KBD_SYNC_LEAD * unit(vec2). The LENGTH is ours (the
-    client's report-trigger chord); the DIRECTION is the client's own, never
-    a model belief -- `--heading-grant`'s epitaph is a state["pos"]-anchored
-    ray and this is the same lesson D1's `reported`-anchoring already carries.
+    dest = reported + vec2 + 0.5*unit(vec2) -- THE CLIENT'S OWN PROPOSED
+    ENDPOINT, retail's D1 formula, computed by d1_lead_dest so the two
+    cannot drift. Both the length and the direction are the client's; the
+    ray is anchored on the report in hand, never a model belief
+    (`--heading-grant`'s epitaph).
 
-    `src` is "kbd" when |vec2| sits in the verified proposal band, else
-    "fallback": the grant carries the zero-lead point and the verdict row
-    records which. REFUSE, DO NOT CLAMP -- a clamped wrong vector is still a
-    wrong destination, and the band check is d1_lead_dest's, reused rather
-    than restated so the two cannot drift apart.
+    It USED to be reported + 520 * unit(vec2) -- a server-chosen length --
+    and that is the 2026-09-03 regression recorded above KBD_SYNC: a
+    destination the client did not propose is executed as a click-order,
+    which silences the 0x0047 the stop echo depends on. The only thing this
+    function adds to d1_lead_dest is the "kbd" src, so the verdict row and
+    the wire label can still say which arm produced the point.
+
+    "fallback" on anything outside the verified proposal band: the grant
+    carries the zero-lead point and the row records which. REFUSE, DO NOT
+    CLAMP.
     """
-    try:
-        vx, vy = float(vec2[0]), float(vec2[1])
-    except (TypeError, ValueError, IndexError):
-        return [float(reported[0]), float(reported[1])], "fallback"
-    mag = math.hypot(vx, vy)
-    if (not math.isfinite(mag) or mag < D1_VEC2_FLOOR
-            or mag > D1_VEC2_CEILING):
-        return [float(reported[0]), float(reported[1])], "fallback"
-    return ([float(reported[0]) + KBD_SYNC_LEAD * vx / mag,
-             float(reported[1]) + KBD_SYNC_LEAD * vy / mag], "kbd")
+    dest, src = d1_lead_dest(reported, vec2)
+    return dest, ("kbd" if src == "d1" else "fallback")
 
 
 # The D2 clip's sampling interval, and it is deliberately FINER than
@@ -21965,8 +21993,11 @@ def main():
                          "verbatim, no player 0x002B, nothing at all on a "
                          "0x0047). The default keeps the client's WORLD-0 "
                          "copy of the player near the body it draws: the "
-                         "heading grant is LED 520 u along the client's own "
-                         "reported heading and clipped to the navmesh, the "
+                         "heading grant is LED to the client's OWN proposed "
+                         "endpoint (reported + vec2 + 0.5u, retail's D1 "
+                         "formula -- a server-chosen 520 u until 2026-09-03, "
+                         "which the client executed as a silent click-order) "
+                         "and clipped to the navmesh, the "
                          "0x002B family rate rides the burst edge-triggered, "
                          "and every 0x0047 draws retail's stop reply "
                          "(0x002B [1.0,9] + a zero-distance 0x0029). Measured "
@@ -23552,7 +23583,7 @@ def main():
         KBD_SYNC_LEAD_ON = not a.no_kbd_lead
         KBD_SYNC_SPEED_ON = not a.no_kbd_speed_truth
         KBD_SYNC_STOP_ON = not a.no_kbd_stop_echo
-        _terms = [n for n, on in (("lead 520 u + navmesh clip",
+        _terms = [n for n, on in (("lead to the client's own endpoint + navmesh clip",
                                    KBD_SYNC_LEAD_ON),
                                   ("0x002B family rate", KBD_SYNC_SPEED_ON),
                                   ("0x0047 stop echo", KBD_SYNC_STOP_ON))

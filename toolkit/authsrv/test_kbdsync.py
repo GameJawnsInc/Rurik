@@ -95,18 +95,31 @@ def main():
           "derived + flagged + tested means ship it (derive-dont-iterate); "
           "an arm that defaults OFF after its derivation passed is a "
           "question nobody asked the owner")
-    check(authsrv.KBD_SYNC_LEAD == 520.0,
-          "the lead is 520 u -- the client's OWN 0x003D distance trigger, "
-          "held-heading chord p95 513.8 / p99 515.1 u",
-          "NOT tuned: the lead must cover the most ground the body can "
-          "travel between two re-aims or the arrival tick +0x48 fires and "
-          "the copy parks. Corroborates REALFIX-W2's ~515 u from a "
-          "different corpus. D1_LEAD's 766 is the client's PROPOSED "
-          "endpoint, 1.49x the trigger distance, and overshoots")
-    check(authsrv.KBD_SYNC_LEAD > 288.0 * 1.5,
-          "and it exceeds one grant-interval of travel by a real margin",
-          "at 288 u/s a 0.5 s interval is 144 u; a lead under the report "
-          "chord is the shipped defect with a smaller number")
+    # 2026-09-03, SAME DAY, INVERTED. These two checks used to pin a
+    # server-chosen lead LENGTH of 520 u (the client's report-trigger chord)
+    # and its margin over a grant interval. The operator's first ordinary
+    # session refuted the operand, not the number: a 0x0029 whose destination
+    # the client did NOT propose is executed as a click-order -- key state
+    # ignored, silent arrival, NO 0x0047 -- so the stop echo never fires and
+    # the keyboard latch is never cleared (a 518 u forced walk away from the
+    # enemy and a 498 u arrival snap, ANIMREF-RE 41's starved attack). Per
+    # keyboard burst closed by a 0x0047: 520 u lead 1 of 9, zero-lead 4 of 9,
+    # the client's OWN endpoint (REALFIX A2) 17/29, 16/17, 27/38, 15/18, 8/12.
+    # So there is no server-chosen length any more, and the pin is that one
+    # must not come back.
+    check(not hasattr(authsrv, "KBD_SYNC_LEAD"),
+          "there is NO server-chosen lead length -- the constant is gone, "
+          "and a run that reinstates one must re-derive past this check",
+          "a destination the client did not propose is walked as a "
+          "click-order with a silent arrival; the 0x0047 the stop echo "
+          "depends on never comes. The number was well measured (chord p99 "
+          "515.1 u) and was still the wrong operand")
+    check(authsrv.kbd_lead_dest([1000.5, 2000.25], [766.0, 0.0])[0]
+          == authsrv.d1_lead_dest([1000.5, 2000.25], [766.0, 0.0])[0],
+          "the lead IS retail's D1 formula, bit-identical to d1_lead_dest -- "
+          "the client's own proposed endpoint, reported + vec2 + 0.5*unit",
+          "bit-exact on 1,650 of 3,037 live grants; it is what keeps the "
+          "client in KEYBOARD mode, not a stylistic choice about distance")
     check(authsrv.FAMILY_RATE[4] == 0.66 and authsrv.FAMILY_RATE[1] == 1.00
           and abs(0.66 * 288.0 - 190.08) < 1e-9,
           "term 2's operand is the SAME corpus table the watchdog uses, and "
@@ -118,25 +131,29 @@ def main():
     print("\n2. kbd_lead_dest: the length is OURS, the direction is THEIRS")
     f = authsrv.kbd_lead_dest
     d, s = f([100.0, 200.0], [766.0, 0.0])
-    check(s == "kbd" and d == [620.0, 200.0],
-          "axis-aligned: dest = reported + 520 * unit(vec2)",
-          f"{d} -- 100 + 520 = 620, and the y is untouched")
+    check(s == "kbd" and d == [866.5, 200.0],
+          "axis-aligned: dest = reported + vec2 + 0.5*unit -- the client's "
+          "own endpoint, half a unit past it",
+          f"{d} -- 100 + 766 + 0.5 = 866.5, and the y is untouched")
     d2, s2 = f([100.0, 200.0], [0.0, -766.0])
-    check(s2 == "kbd" and d2 == [100.0, -320.0],
+    check(s2 == "kbd" and d2 == [100.0, -566.5],
           "and the sign of the client's own vector is carried",
           f"{d2}")
     d3, s3 = f([0.0, 0.0], [383.0, 383.0 * math.sqrt(3.0)])
-    check(s3 == "kbd" and abs(math.hypot(*d3) - 520.0) < 1e-6,
-          "DIAGONAL: the lead's LENGTH is exactly 520 u regardless of the "
-          "vec2's own magnitude -- this is the whole difference from "
-          "d1_lead_dest, which carries the client's 766 u endpoint",
-          f"{d3} -> |d| = {math.hypot(*d3):.6f}. A lead that inherited the "
-          f"vec2's length would be D1 with extra steps")
-    check(abs(math.hypot(*f([0.0, 0.0], [700.0, 0.0])[0]) - 520.0) < 1e-6
-          and abs(math.hypot(*f([0.0, 0.0], [768.0, 0.0])[0]) - 520.0) < 1e-6,
-          "and it is 520 at BOTH ends of the accepted band",
-          "the length must not vary with the client's own magnitude, or the "
-          "lead is a function of a number we did not choose")
+    check(s3 == "kbd" and abs(math.hypot(*d3) - 766.5) < 1e-6
+          and d3 == authsrv.d1_lead_dest([0.0, 0.0],
+                                         [383.0, 383.0 * math.sqrt(3.0)])[0],
+          "DIAGONAL: the lead's LENGTH is the client's own |vec2| + 0.5, and "
+          "the point is d1_lead_dest's to the bit -- the opposite of the "
+          "pin this check carried until 2026-09-03",
+          f"{d3} -> |d| = {math.hypot(*d3):.6f}. A server-chosen length here "
+          f"is the operand the operator's session refuted")
+    check(abs(math.hypot(*f([0.0, 0.0], [700.0, 0.0])[0]) - 700.5) < 1e-6
+          and abs(math.hypot(*f([0.0, 0.0], [768.0, 0.0])[0]) - 768.5) < 1e-6,
+          "and the length TRACKS the client's magnitude at BOTH ends of the "
+          "accepted band -- 700 -> 700.5, 768 -> 768.5",
+          "the lead is a function of a number the CLIENT chose; a constant "
+          "length is precisely what turned a tap into a 518 u forced walk")
 
     print("\n3. refuse, do not clamp -- the band and the fallback")
     for bad, why in (([5.0, 0.0], "mid-magnitude, below the floor"),
@@ -176,10 +193,10 @@ def main():
     print("\n5. the wire, term by term")
     grants = w_ks.of(authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT)
     check(len(grants) == 1
-          and abs(grants[0][1][1][0] - (1000.5 + 520.0)) < 1e-6
+          and abs(grants[0][1][1][0] - (1000.5 + 766.0 + 0.5)) < 1e-6
           and abs(grants[0][1][1][1] - 2000.25) < 1e-6,
-          "TERM 1: exactly one 0x0029, led 520 u along the client's own "
-          "heading FROM THE REPORT IN HAND",
+          "TERM 1: exactly one 0x0029, led to the client's OWN proposed "
+          "endpoint (reported + vec2 + 0.5u) FROM THE REPORT IN HAND",
           f"{grants} -- anchored on `reported`, never state['pos']: a ray "
           f"from the model's belief aims the lead from somewhere the client "
           f"is not, which is --heading-grant's epitaph (R2-1)")
