@@ -174,9 +174,43 @@ BEFORE the fix, not after it.
   the run 24 s long, the predicted split (3 staying while 1 and 2 go) never got a
   fair test.
 
-### Carried forward, unresolved
+### Carried forward — "couldn't resume attacking": DIAGNOSED to a mechanism, not fixed
 
-- **"couldn't resume attacking after some point"** — a symptom §6's four questions
-  did not ask about. The capture holds 10 × `PRESS ENDS THE WALK`, 28
-  `attack_started`, 26 `melee_attack_finished`. Not diagnosed here; it is an
-  attack-chain question, not a movement one.
+A symptom §6's four questions did not ask about, and the same capture explains
+it. **Ten attack presses; only the first two produced a player swing.** Joined to
+the tap, every press's `0x002C` re-pin lands within 0.2–24 u of the DRAWN body, so
+the first hypothesis — that the re-pin was teleporting the body backwards — is
+**REFUTED**. What the join shows instead:
+
+| press (t) | body→Hatcher | what followed |
+|---|---|---|
+| 16.42 / 19.42 / 22.51 | 77 / 73 / 86 u | swing ✓ |
+| 21.06 | 44 u | swing, then `attack_stopped: the player moves before the swing landed` |
+| **21.86 / 31.77 / 33.17 / 37.64** | **85 / 84 / 21 / 39 u — all inside 144 u reach** | **nothing: no swing, no approach, no row, no console line** |
+| 29.73 / 36.27 | 203 / 113 u | APPROACH (correct — out of reach) |
+
+**The mechanism, from source (RECONSTRUCTION, load-bearing links verified):**
+
+1. The click arm abandons the approach and re-stamps `click_moving_at` at its
+   **top** (`authsrv.py:19049-19051`), *before* the freshness verdict at `:19168`
+   — so a click the server then REFUSES `geo-stale` still counts as a move.
+2. `_player_body_moving` (`:10365`) reads that latch, and its own comment says it
+   is "armed on EVERY 0x003E".
+3. `attack_tick` defers the swing clock while the body is "moving"
+   (`player_last_swing += now - since`) and cancels an in-flight swing on a move
+   (`MOVE_ENDS_CHAIN`, §39 — the 21.06 row above is exactly that).
+4. The press's `0x002C` clears the latch; the next click re-arms it ~200 ms later
+   — 40 clicks in 20 s — before the tick can open a swing.
+
+So **click-spam starves the swing, and the clicks doing it are ones the server
+refused to act on.** The server believes a body is moving that it declined to
+move. This is the SAME root as the gate refusal seen from the attack side, and it
+means answering clicks (the gate fix) changes this too — but it is a separate
+defect with its own fix (a refused click must not arm the moving latch, or the
+latch must expire), and it is **not** built here.
+
+**Instrument gap, recorded:** a press that reaches `attack_tick` and is refused
+by the interval / moving / target branches leaves **no row and no console line**.
+Two of the four silent presses have literally nothing within 0.7 s of them in the
+capture. The R11 lesson ("a suppressed grant is PRINTED, never silent") has not
+been applied to the swing.
