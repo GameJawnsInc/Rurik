@@ -1648,13 +1648,37 @@ nothing here substitutes for it.**
   rule gives **516.1**; the 237 median is robust), and **every A/D leg of that
   kite travelled 0 u** because A/D turn in place in Guild Wars — so a future run
   must drive **W/S**, and Q/E to strafe.
-* **Registered prediction, before the run:** `agenttap.py --agents 1` reads world-0
-  vs world-1 **p50 under 150 u**. **REFUTED IF** it stays above 200 u, or the
-  operator reports a new visible warp class. **Open and named**: the guard's
-  behaviour under a lead is UNVERIFIED (additive by construction, so the worst
-  case is extra ≤100 u re-pins — score it from the first capture's
-  `agtrack_guard` rows); n is four translation legs on one map; a re-grant timer
-  that dead-reckons its anchor is REFUTED before being built (p90 → 2,416 u).
+* **★ RAN 2026-09-03 AND CONFIRMED** (§1z-t.9, [studies/movecode/RUN-1zT.md](studies/movecode/RUN-1zT.md)).
+  Registered bound was p50 < 150 u; the hands-off arm reads **p50 0.0**, p90
+  **17.7**, max **198.9** against a 237 / 431 / 516 baseline, on 3,572 u of body
+  translation. **Term 2 became a measurement**: world-0's own speed set went from
+  a bare `[288]` to `[190, 216, 288]` — the `0x002B` family rate reaches the
+  client, and the retail corpus called that term inert only because it never
+  leaves cruise. The residual is an **acquisition transient on the first leg**
+  (which carries the whole 198.9 max); every later leg tracks within ~6 u. Enemy
+  control unchanged at p50 5.2 u, so §40.11's "the enemy was a faithful victim"
+  survives its own test.
+* **The UNVERIFIED item resolved in the predicted direction**: a lead stops
+  grants being past-trail nodes, so the guard stopped MATCHing trivially —
+  baseline 10/10 `pass/match` with zero fires, this run 12 `pass/match` plus one
+  `veto/gate2-offmesh` and one real `agtrack_repin_fire`. It is additive by
+  construction, so that is the guard working. **Two exposures now open**: the
+  clip's `origin-unwalkable` door opened on **3 of 12** grants (our mesh's
+  coverage debt; the fallback is a safe zero-distance lead), and
+  `agtrack_repin blocked/arrival-risk` fired **7** times — clause 2 wanting a
+  re-pin with no fresh accepted report.
+* **What is NOT closed**: the operator's *felt* symptoms. This run scored client
+  memory, not experience. Whether §40.7's swing-distance and warp-beside-the-enemy
+  reports go with the world-0 fix is ANIMREF-RE §40.13's question and wants an
+  ordinary session, not an instrumented one. Also standing: a re-grant timer that
+  dead-reckons its anchor is REFUTED before being built (p90 → 2,416 u).
+* **Process, recorded because it cost a run:** this check needed no human aiming
+  — scripted `--walk`, a read-only tap, a self-closing session — and was handed
+  over as a runsheet anyway. The operator supplied keyboard input alongside the
+  script on the first attempt, producing an arm whose max separation read *worse*
+  than the baseline (854 u) on a fix that works. A run with no aiming in it
+  should be driven, not delegated; if it is delegated, the HANDS-OFF note belongs
+  in the command block.
 
 ### ★★★★ ANIMREF 2026-08-30 — attack/cast animations resume on the movement lesson: the retail referent FIRST, and it immediately re-derived three constants
 

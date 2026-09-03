@@ -9030,7 +9030,69 @@ arc's substring trap, for the fifth time.
   that conclusion is regime-bound. We send neither today; only `0x002B` is added
   here.
 
-### 1z-t.9 Provenance
+### 1z-t.9 ★ RUN-1zT RAN 2026-09-03 AND CONFIRMED — p50 237 u → 0.0 u
+
+Runsheet and full readout: [RUN-1zT.md](RUN-1zT.md). Registered bound was p50
+< 150 u to confirm, > 200 u to refute.
+
+**The registered arm** (`agenttap-20260903T073122`, scripted walk, hands off):
+
+| | baseline 09-02 | run |
+|---|---|---|
+| world-0 vs drawn body p50 | 237.0 | **0.0** |
+| p75 / p90 | 340.7 / 431.3 | **1.0 / 17.7** |
+| max | 516.1 | **198.9** |
+
+Exposure 3,572 u of body translation over 193 moving samples, well over floor.
+Wire: 12 `KBD LEAD`, 7 `KBD SPEED-TRUTH`, 1 `KBD STOP-ECHO`.
+
+**Term 2 is now a measurement rather than an inference.** World-0's own speed set
+went from a bare `[288]` — against a body running `{190, 288}` — to
+**`[190, 216, 288]`**. The `0x002B` family rate reaches the client and world-0
+walks the family the body is using. This is the term the retail corpus called
+inert (§1z-t.6); it is not, and a forward-running corpus simply cannot see it.
+
+**The residual is an acquisition transient, not a standing error.** Per leg:
+the opening `W` runs body 868 / world-0 962 u and carries the whole run's 198.9 u
+maximum; every leg after it tracks to within a few units — `S` 743/722 (sep ≤
+24.6), `Q` 509/509 (≤ 6.5), `E` 513/509 (≤ 6.5), `S` 504/510 (≤ 6.3). The law of
+§1z-t.3 predicted the *steady state* and the steady state is what collapsed.
+
+Enemy control unchanged: agent 10's own two copies p50 5.2 / max 27.9 u.
+**§40.11's reading — that the enemy was a faithful victim — survives its own
+test**, since nothing enemy-side changed and the enemy stayed faithful.
+
+**★ THE §1z-t.8 UNVERIFIED ITEM RESOLVED, IN THE PREDICTED DIRECTION.** A lead
+stops grants being past-trail nodes, so the AgTrack reprieve test should stop
+MATCHing trivially. It did: baseline 10/10 `pass/match` with **zero** re-pin
+fires; this run 12 `pass/match` **plus one `veto/gate2-offmesh` and one real
+`agtrack_repin_fire`**. The guard is now doing work it could not do before, on
+an off-mesh grant, and it remains additive by construction. **Two exposures to
+watch, neither yet a defect:** the clip's `origin-unwalkable` door opened on
+**3 of 12** grants (the client's reported position off *our* mesh — known
+coverage debt; the door's fallback is a safe zero-distance lead), and
+`agtrack_repin blocked/arrival-risk` fired **7** times — clause 2 wanting a
+re-pin with no fresh accepted report to carry it.
+
+**A second, unregistered arm exists and is NOT the result.** The first attempt
+(`agenttap-20260903T072932`) had the operator supplying keyboard input alongside
+the script, so two sources drove one body. It confirms on the median (p50
+**123.0** u) but its maximum separation is **854 u, worse than the baseline it
+beats** — a fix that works reading as a regression on the tail because the arm
+was contaminated. Recorded as a free second regime and as the reason the runsheet
+now carries a HANDS-OFF block. **Process note, and it is the session's own
+mistake:** this run needed no human aiming at all — scripted `--walk`, a
+read-only tap, a self-closing session — and handing it over as a runsheet rather
+than driving it is what created the opportunity to contaminate it.
+
+**What this closes and what it does not.** It closes §1z-t as a mechanism: the
+law, the cause and the three terms are confirmed against the client's own copy.
+It does **not** yet close the operator's *felt* symptoms — the swing-distance and
+warp-beside-the-enemy reports of §40.7 — because this run scored memory, not
+experience. That is ANIMREF-RE §40.13's question and wants an ordinary session,
+not an instrumented one.
+
+### 1z-t.10 Provenance
 
 All figures are measurements over the owner's own captures via extractors in this
 repo (`agenttap.py`, `movetap.py`'s `position_at`, `tape.py`/`codec.py`,

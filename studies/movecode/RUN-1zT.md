@@ -9,6 +9,57 @@ Behaviour under test: `MOVECODE-1z-t` / `KBD_SYNC`, shipped default ON
 
 ---
 
+## ★ RESULT — RAN 2026-09-03 07:29 and 07:31, **CONFIRMED**
+
+**`agenttap-20260903T073122` (the registered arm, hands off the keyboard):**
+
+| | baseline 09-02 | **this run** |
+|---|---|---|
+| world-0 vs drawn body, p50 | 237.0 u | **0.0 u** |
+| p75 | 340.7 | **1.0** |
+| p90 | 431.3 | **17.7** |
+| max | 516.1 | **198.9** |
+
+Registered bound was p50 < 150 to confirm. **p50 is 0.0.** Exposure well over
+floor: 3,572 u of body translation over 193 moving samples.
+
+**Term 2 is visible as a number rather than an inference.** World-0's own speed
+set went from a bare `[288]` on the baseline — against a body running
+`{190, 288}` — to **`[190, 216, 288]`**. The `0x002B` family rate is reaching the
+client and world-0 now walks the family the body is actually using. The wire
+carried 12 `KBD LEAD`, 7 `KBD SPEED-TRUTH`, 1 `KBD STOP-ECHO`.
+
+**Per leg, and this is the shape of the fix:** after the opening `W` leg (body
+868 u, world-0 962 u, separation peaking at the run's 198.9 max) every subsequent
+leg tracks to within a few units — `S` 743/722 u sep ≤ 24.6, `Q` 509/509 sep
+≤ 6.5, `E` 513/509 sep ≤ 6.5, `S` 504/510 sep ≤ 6.3. **The residual is an
+acquisition transient on the first leg, not a standing error.**
+
+Enemy control (agent 10's own two copies) stayed p50 5.2 / max 27.9 u — faithful,
+as it was before; §40.11's reading that the enemy was never the bug holds.
+
+**The first attempt (`agenttap-20260903T072932`) is a DIFFERENT ARM and is not
+the result.** The operator supplied keyboard input alongside the script, so two
+input sources drove one body. It confirms too (p50 **123.0** u) but its own max
+separation is **854 u — worse than the baseline it beats on the median** — and
+its `wait` leg recorded 720 u of travel no script asked for. Kept as a free
+second regime (a fix holding its median under double-driven input is worth
+knowing) and as the reason §4 now carries a HANDS OFF block.
+
+**The UNVERIFIED item resolved, and in the predicted direction.** §1z-t.8 flagged
+that a lead makes grants stop being past-trail nodes, so the AgTrack guard would
+stop MATCHing trivially. It did: the baseline was 10/10 `pass/match` with zero
+re-pin fires; this run is 12 `pass/match` **plus one `veto/gate2-offmesh` and one
+actual `agtrack_repin_fire`**. That is the guard doing its job on an off-mesh
+grant, and the arm is additive by construction so it cannot suppress a grant.
+**Two things to watch, neither a defect yet:** the clip's `origin-unwalkable`
+door opened on **3 of 12** grants (the client's reported position off *our* mesh
+— known coverage debt, and the door's fallback is a safe zero-distance lead), and
+`agtrack_repin blocked/arrival-risk` fired **7** times, meaning clause 2 wanted a
+re-pin and had no fresh accepted report to use.
+
+---
+
 ## 1. The question
 
 > During an ordinary keyboard walk, is the client's WORLD-0 copy of the player
@@ -79,6 +130,23 @@ python toolkit/clientscan/agenttap.py --agents 1,10 --seconds 75
 **Terminal B — the session.** This launches the patched loopback client, drives
 a scripted keyboard walk, and closes itself. **Total ≈ 90 s from launch to the
 window closing**; nothing is left parked on screen.
+
+> ### ⚠ HANDS OFF THE KEYBOARD ONCE THE CLIENT IS UP
+>
+> **`--walk` drives every keypress. The script's own presses ARE the arm.** The
+> run opens with `wait:3`, so the character stands still for three seconds and
+> looks exactly like a run waiting for you — it is not. A helpful press races
+> the script, and the two input sources together produce a regime nobody
+> registered.
+>
+> **This happened on the first attempt of 2026-09-03** and cost a whole run: the
+> operator supplied inputs, the `wait` leg recorded 720 u of body travel that no
+> script asked for, and the arm's own maximum separation came out at 854 u —
+> *worse than the shipped baseline it was meant to beat*, on a fix that in fact
+> works. It still confirmed on the median, which was luck.
+>
+> There is nothing to do while it runs but watch. Better still: **this run needs
+> no human aiming at all, so it does not have to be handed over** — see §8.
 
 ```powershell
 python toolkit/harness/session.py --exe vault/run/2026-07-29_221c13772c7a/Gw.exe --enemy --walk "wait:3 W:5 S:4 W:5 Q:3 E:3 S:4 W:4" --hold 8 --game-args "--map 146 --explorable --no-enemy-skills --enemy-hit 0.02 --skills 0,0,0,0,0,0,0,0"
@@ -155,3 +223,21 @@ matter is fires clustering where the operator sees something.
 - **The scorer's model is not in play here** — `w0score.py` reads the client's
   own memory through the client's own accessor. The counterfactual numbers in
   §2 come from a model, and the model is not what is being tested.
+
+## 8. Who should drive this — and it is not the operator
+
+**This run needs no human aiming, and handing it over was a mistake.** Every
+input is scripted (`--walk`), the tap sends nothing (read-only
+`ReadProcessMemory`), and the session closes itself. The repo's own boundary is
+AIMING, not seeing: world-anchored clicks and appearance verdicts need the
+operator, a scripted keyboard walk plus a memory tap does not.
+
+On 2026-09-03 this was written up as a two-terminal runsheet and handed over
+anyway. The operator, seeing the opening `wait:3` and no note that the inputs
+were scripted, supplied their own — costing one run and producing an arm whose
+max separation read WORSE than the baseline on a fix that works. The two-terminal
+shape also made the operator the scheduler, which is invented work.
+
+**Next time: offer to drive it.** If the operator would rather watch, they still
+should not touch the keyboard, and §4's block says so where the commands are
+rather than in prose above them.
