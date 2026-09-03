@@ -278,8 +278,14 @@ scaling with hold, but the enslavement detector read MIXED — and 88 % of that 
 the detector's own co-directional-lead blind spot, since the 520 u lead lands
 0.53 u from the client's own target. Closed in §1z-ac (enslavement is now the two
 world targets being BIT-IDENTICAL, which is what a fence-shut grant writes); the
-residual is the lead maturing at the report boundary, ~26 u and no lock. The lead
-stays OPT-IN.
+residual is the lead maturing at the report boundary. **The RERUN (19:12, same
+script) REFUTES: ENSLAVED 48.3 %, five of eight legs parked with a held key, one
+reported stop for seven legs — a 520 u backpedal lead matured 0.26 s BEFORE the
+player released, the release was swallowed and the client locked for five legs
+(§1z-ad). The "~26 u and no lock" reading was n = 1 and is corrected: the park and
+the lock are the same event. NO gate covers a lead maturing with the fence OPEN.
+The lead stays OPT-IN and OFF; the derived object is that a lead must never be left
+to mature, and the length is NOT the fix.**
 **`--grant-suppress` and the heading arm share ONE rate-limit clock**, so between them
 they cannot exceed one grant per 0.50 s — say which flags were on when you report a run.
 

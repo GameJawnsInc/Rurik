@@ -10120,7 +10120,7 @@ Maturation and the re-aim are a **photo finish in every family** — which is §
 maturation wins, the drawn body parks momentarily on our point. Cost, measured: the Q leg
 travelled 620.4 u against a 646 u free-walk expectation, **~26 u and one sample of stall**.
 
-**It is not a lock, and this is the part that matters.** The player's release was reported
+**It is not a lock, and this is the part that matters.** ⚠ **CORRECTED 2026-09-03 by §1z-ad, and this whole paragraph is why n = 1 was not enough:** the rerun of this same script armed the lock on five of eight legs. The park and the lock are the SAME event — a lead maturing — and this run merely won every coin flip. Read §1z-ad before quoting anything below. The player's release was reported
 (`0x0047`) on that leg and on all seven; the body stopped where the player let go — 385 u
 short of our grant on the Q leg, 34 u short on the S leg — no `0x002C` was sent all run,
 no re-pin fired, and the maximum `position_at` separation was 155.6 u with no ~500 u
@@ -10159,3 +10159,110 @@ enslaving nothing. `test_leadmargin` 25, `test_kbdsync` 84, `test_d1lead` 94 gre
 same script, whose only registered failure was an instrument defect now closed. That is a
 judgement call for the owner rather than a session, because it spends operator machine
 time on an arm that is already opt-in and already measured p50 1.0 u. Then `0x005FCAA0`.
+
+
+---
+
+## 1z-ad. THE RERUN REFUTES — the same script, same build, same flags, and the lead armed REALFIX §0.11's lock on five of eight legs; §1z-ac's "no lock" was n = 1 and is CORRECTED
+
+**Asked:** "rerun it on the fixed detector." Registered before launching (RUN-1zAB's
+rerun block, committed `55e4edc`), driven 2026-09-03 19:12, agent-driven, hands off.
+Capture `agenttap-20260903T191321` / `authsrv-20260903T191320-c1` / harness
+`20260903T191246`. Ident `MOVECODE-1z-ad`. **The lead stays OFF.**
+
+### 1z-ad.1 The verdict: REFUTED, on both clauses that were registered to refute
+
+| registered | measured |
+|---|---|
+| REFUTES the fix: **ENSLAVED ≥ 25 %** | **ENSLAVED, 29 of 60 moving samples (48.3 %)**, onset t = 15.40 s |
+| REFUTES the §1z-ac reading: a held-key leg moving ≤ 50 u, or an unreported release | **five of eight legs parked** (35 u, 0, 0, 0, 0) and **one reported stop for seven key legs** |
+| expected FREE or MIXED under 5 %, every flag a maturation park | wrong on both counts |
+| travel scales with hold | **fails**: body translated 1,347 u total against run 1's 5,869 u |
+
+Not a marginal call and not an instrument artifact: the flags are the **strict**
+bit-identity test §1z-ac shipped, and they are corroborated by three independent
+signatures the detector does not use — travel that does not scale, five parked
+held-key legs, and six of seven releases never reaching the wire.
+
+### 1z-ad.2 The door that opened, to the second (OBSERVED)
+
+Not a `0x002C`, not a dropped re-aim, not a gate failing. **A lead matured while the
+key was still held.**
+
+| gamesrv t | |
+|---|---|
+| 15.82 | `S` pressed; the fence re-arms at the walk-start; lead `(9850,8283)`, 520 u backpedal |
+| 16.80 | re-aim, lead `(9724,8318)`, 520 u, `clip=clear` — **matures at 16.80 + 520/190 = 19.54 s** |
+| 19.80 | the player releases `S` — **0.26 s after the lead matured** |
+| — | **no `0x0047` is ever sent.** The release is swallowed |
+| 21.55 | the next report is at `(9724,8318)` — **our lead's endpoint, exactly** |
+| 28.26 → 37.72 | reports keep arriving with `mt` 7, 8, 4 — keys ARE being pressed and the client says so — and the body does not move |
+
+That is REALFIX §0.11 stage 2 verbatim: the body walks the lead as a click-order, the
+release goes unreported, the walk-start applier never runs, the fence never re-opens.
+The client is locked for the remaining five legs.
+
+**The four gates could not have stopped it, and this is a coverage gap rather than a
+bug in any of them.** The FENCE GATE (§1z-aa) degrades a lead only when *we* shut the
+fence with a `0x002C`; here the fence was open and we shut nothing — it worked
+correctly *after* the lock, degrading four later leads to `ZERO LEAD (fence-shut)`. The
+HOLD (§1z-y) had **zero exposure** (no rate-refused re-aim all run). The KILL had zero
+exposure (no press, no click). The MATCHED WORD does not bear on maturation. **No gate
+covers a lead maturing unanswered while the fence is open** — which is §1z-u.3's
+original mechanism, the one that made the lead opt-in in the first place.
+
+### 1z-ad.3 §1z-ac is CORRECTED: the 26 u park and the lock are the same event
+
+§1z-ac read six flagged samples on run 1, found the drawn body had reached our endpoint
+and parked for one sample before resuming, and concluded "**~26 u and one sample of
+stall. NOT A LOCK**", citing the reported releases. **That conclusion was drawn from
+n = 1 and is falsified by n = 2.** The maturation park *is* the lock's arming event; run
+1 simply won every coin flip and run 2 lost one. Both runs show the same photo finish
+(§1z-ac.3: 520/speed within 0.01 s of each family's report gap) — what differs is
+whether the key was released before or after the arrival tick. On run 1 every release
+beat the maturation; on run 2 one release lost by **0.26 s** and cost the session.
+
+The reported-stop count is the cleanest discriminator between the two runs and it is
+free from the wire: **7 stops for 7 key legs (run 1) against 1 (run 2).**
+
+### 1z-ad.4 §1z-ab's refutation of the maturation margin is INCOMPLETE (CONTESTED)
+
+§1z-ab.2 declared the maturation margin "void", on the ground that a lead's copy is
+outside the reprieve tube so **a dropped re-aim** snaps at the next grant's own
+evaluation whatever the length. That argument is sound for the path it addresses and
+**does not cover this one**: nothing was dropped here, no re-aim was due, and the
+failure was the arrival tick firing mid-hold. The length does govern that timing
+directly — at 766 u the same lead matures at 16.80 + 766/190 = **20.83 s, after the
+19.80 release**.
+
+**This is recorded, not acted on, and 766 is NOT adopted.** It would move the photo
+finish, not remove it: a longer lead still matures inside any hold longer than
+`length/speed`, and §1z-t.6 measured 766 alone as *worse than shipping nothing* on the
+separation the lead exists to fix. Tuning the constant against a two-run sample is the
+treadmill the 2026-08-30 direction refuses. What this run establishes is the **object**
+a fix must address, and it is not the length: **a lead must never be left to mature.**
+The server knows when it sent one and at what family speed, so the maturation instant is
+computable — `authsrv.py` already carries exactly this idea for another arm
+(`HEADING_GRANT`: *"REFRESH THE CLIENT'S ARMED DESTINATION. It is the only thing that
+stops a stale one maturing into a teleport"*). A refresh before maturation, or no lead
+at all, are the two candidates; neither is derived yet and neither ships here.
+
+### 1z-ad.5 What stands, and what this run cost
+
+- **`--kbd-lead` stays OPT-IN and OFF.** The opt-in discipline (§1z-u.5) is what kept
+  this out of the operator's ordinary session; it is vindicated, not revised.
+- **No default-ON path is implicated.** The gates are inert without the lead; `AGTRACK
+  RE-PIN` (gate1-red) and `PLANE-REPAIR #1` fired *on* the locked client, downstream of
+  the lock, and neither caused it.
+- **The §1z-ac discriminator is unaffected and is doing its job** — it read this capture
+  ENSLAVED on the strict test, and the two samples it excluded as co-directional
+  confound were genuinely that.
+- **Method note.** One run said "probably fine"; two runs said "the lock is live." A
+  single scored run of a stochastic failure is a point estimate, and §1z-ac published a
+  mechanism claim ("no lock") on one. Two runs of a coin flip are not many either — what
+  makes this one decisive is that the failure it found is a *mechanism* with a timeline,
+  not a shifted statistic.
+
+`test_w0score` 45, `test_leadmargin` 25, `test_kbdsync` 84 — unchanged and green; no
+code changed in this section. The next object is the one named in §1z-ad.4, and choosing
+between its two candidates is the owner's call.

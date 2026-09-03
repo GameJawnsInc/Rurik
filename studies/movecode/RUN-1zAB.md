@@ -13,7 +13,9 @@ field 4 MATCHED to field 3), §1z-aa (no lead into a fence the server shut with 
 default of `main` at `bdb010f` or later: the router, the plane repair, the AgTrack
 guard and its re-pin, the stop echo, the family rate.
 
-**Status: RAN 2026-09-03 18:39 — INCONCLUSIVE.** See the result block below.
+**Status: RAN TWICE. 2026-09-03 18:39 INCONCLUSIVE; the 19:12 rerun on the fixed
+detector **REFUTES** — the lead armed REALFIX §0.11's lock on five of eight legs.
+Both result blocks are below; `--kbd-lead` stays OFF.**
 
 ---
 
@@ -54,6 +56,67 @@ arrival-risk` ×6 as §1z-ab.5b predicted. Enemy control p50 0.6 / max 63.6 u.
 **`--kbd-lead` stays opt-in.** The registered confirmation did not land, and the only
 failing clause was an instrument defect now closed — a rerun on the fixed detector is the
 owner's call, not a session's.
+
+
+---
+
+## ★ RERUN — registered 2026-09-03 before launching, on the §1z-ac detector
+
+Same script, same build, same flags, verbatim. The only change is the instrument:
+the enslavement test is now the two world targets being **bit-identical**
+(§1z-ac), not the body's target being within `GRANT_EPS` of the grant.
+
+**Why rerun at all.** The first run's only failing clause was scored by an
+instrument with a known false positive, and the fixed instrument has never been
+exercised on a capture it did not help produce. A second sample also puts a
+number on the maturation photo finish, which is a per-leg coin flip by
+construction.
+
+**The original bounds in §2 stand and are NOT relaxed.** FREE confirms, ENSLAVED
+refutes, MIXED is inconclusive. What follows is an additional prediction, so a
+MIXED result cannot be talked into agreeing with §1z-ac afterwards.
+
+| registered before the run | |
+|---|---|
+| **Expected verdict** | FREE, or MIXED **under 5 %** — the first run read 2.2 % on the fixed detector |
+| **Every flagged sample will be a MATURATION PARK** | both copies bit-identical, the body **resumes** on the next grant, and that leg's release is **reported** |
+| **Which legs** | the flagged leg(s) will differ from the first run's (Q strafe) — maturation vs the re-aim is a photo finish, 520/speed within 0.01 s of the report gap in every family |
+| **p50** | under 150 u (first run 1.0 u) |
+| **Travel scales with hold** | W ≈ 1,050–1,155 u at 5 s, S ≈ 540–680 at 4 s, Q/E ≈ 590–650 at 3 s |
+| **REFUTES the §1z-ac reading** | any flagged run whose leg has an **unreported release**, or a held-key leg moving ≤ 50 u, or travel not scaling — that is the lock, not a park |
+| **REFUTES the fix** | ENSLAVED (≥ 25 %) |
+| **Would surprise me** | 0 flagged samples on every leg — the photo finish says maturation should win sometimes |
+
+**Exposure floors unchanged** (§3): 500 u over 20 moving samples, ≥ 8 `KBD LEAD`,
+≥ 3 lead legs ≥ 300 u. KILL and FENCE GATE again have zero exposure by the
+script's construction and are reported as zero, not as passes.
+
+### ★★ RERUN RESULT — RAN 2026-09-03 19:12, **REFUTED**
+
+`agenttap-20260903T191321` / `authsrv-20260903T191320-c1` / harness `20260903T191246`.
+Full record: FINDINGS §1z-ad.
+
+| registered above | measured |
+|---|---|
+| REFUTES the fix: ENSLAVED ≥ 25 % | **ENSLAVED, 29 of 60 (48.3 %)**, onset 15.40 s |
+| REFUTES the §1z-ac reading: a held-key leg ≤ 50 u, or an unreported release | **five of eight legs parked** (35, 0, 0, 0, 0 u); **1 reported stop for 7 key legs** |
+| expected FREE or MIXED < 5 %, every flag a maturation park | wrong on both counts |
+| travel scales with hold | fails — 1,347 u total against run 1's 5,869 u |
+
+**The door, to the second.** Not a `0x002C` and not a dropped re-aim: **a lead matured
+while the key was still held.** The 16.80 s lead was 520 u of backpedal, unclipped, so it
+matured at 16.80 + 520/190 = **19.54 s**; the player released `S` at **19.80 s**, 0.26 s
+too late. No `0x0047` was ever sent, the next report came back at our lead's endpoint
+exactly, and the client stayed locked for the remaining five legs while still reporting
+`mt` 7/8/4 — keys pressed, body still. That is REALFIX §0.11 stage 2 verbatim.
+
+**No gate covers this.** The FENCE GATE only acts on a fence *we* shut (it worked
+correctly afterwards, degrading four leads to `ZERO LEAD (fence-shut)`); the HOLD and the
+KILL had zero exposure. The arming path — a lead maturing unanswered with the fence open —
+is uncovered.
+
+**§1z-ac's "~26 u and no lock" is corrected**: the maturation park and the lock are the
+same event, and run 1 merely won every coin flip. **`--kbd-lead` stays OFF.**
 
 
 ---
