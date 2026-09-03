@@ -267,5 +267,9 @@ the order itself — and the first refusal prints.
 capture's own shape (floor 96 → 116). The operator's next ordinary session
 scores it for free: "couldn't resume attacking" would now show as
 `press_verdict` rows with `fired: false` and a named branch. The grant that
-silenced the stop is MOVECODE's question (`PLAN.md` §7 Q13, §1z-t's keyboard
-arm on a click-playing operator, above) and is untouched here.
+silenced the stop is **MOVECODE-1z-t's own KBD LEAD** (flags `KBD_SYNC_LEAD_ON`,
+`lead_src: "kbd"` on both fired rows) — a server-chosen ~520 u endpoint the
+client executes as a click-order with a silent arrival — being corrected by
+rurik-f2 as MOVECODE 1z-u (the client's own proposed endpoint); it is untouched
+here, and §41's rule stays necessary above it because a stop can still go
+missing.

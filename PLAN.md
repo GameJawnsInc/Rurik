@@ -1956,7 +1956,11 @@ emitter against the population, fix by derivation, tune never.
   rule 1 and the cast-stop. Instrument: a `press_verdict` row per press, the
   first refusal printed. `test_playerswing` floor 96 → 116, bare. Scores itself
   on the operator's next ordinary session. The 518 u grant that silenced the
-  stop is MOVECODE's (Q13 / §1z-t on a click-playing operator).
+  stop is **MOVECODE-1z-t's own KBD LEAD** (`lead_src: "kbd"`, flags
+  `KBD_SYNC_LEAD_ON`), a server-chosen endpoint the client executes as a
+  click-order with a silent arrival — being corrected as MOVECODE 1z-u (the
+  client's own proposed endpoint) in worktree-playersync; §41 stays necessary
+  above it.
 * **NEXT: [studies/animref/RE-PLAN.md](studies/animref/RE-PLAN.md) — a CLIENT
   DIG, by owner's direction** ("a true reverse engineering approach rather
   than more guesswork"). Localised: the client sends its `0x003D` and the

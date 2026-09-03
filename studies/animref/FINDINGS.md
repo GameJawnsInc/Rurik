@@ -4128,9 +4128,15 @@ CLICK-ORDER: it walks the granted leg to completion with key state ignored, then
 parks"*), and §37.2 read the arrival roots: **click arrival sends nothing** on
 `0x0047`/`0x003D` (seven roots, depth-2 closure; the `0x0047` packer `0x00920940`
 lives on the keyboard-stop body `0x008167F0`, which a replaced keyboard walk never
-reaches). Which of the grant's own arms produced a 518 u destination on a
-"zero-lead" row is MOVECODE's question (`PLAN.md` §7 Q13) and is not answered
-here. What is answered: `kbd_moving_at` was armed at 24.155 s and **nothing ever
+reaches). The grant is **MOVECODE-1z-t's KBD LEAD** (the capture's flags carry
+`KBD_SYNC_LEAD_ON`, both fired rows carry `lead_src: "kbd"`): a server-chosen
+~520 u endpoint the client never proposed, which it therefore executes as a
+click-order with a silent arrival. rurik-f2 is correcting it as MOVECODE 1z-u
+(the lead becomes the client's own proposed endpoint, retail's D1 formula) —
+their desk numbers per keyboard burst closed by a `0x0047`: the 520 u lead
+1 of 9, zero-lead 4 of 9, D1's own endpoint 17/29, 16/17, 27/38, 15/18, 8/12.
+§41's press rule stays necessary on top of it: a stop can still go missing,
+and the swing gate must not depend on one. What is answered here: `kbd_moving_at` was armed at 24.155 s and **nothing ever
 cleared it**, and `_player_body_moving` reads that latch with no bound at all —
 
 ```
