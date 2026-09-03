@@ -64,7 +64,7 @@ sys.path.insert(0, TOOLKIT)
 sys.path.insert(0, os.path.join(TOOLKIT, "clientpatch"))
 sys.path.insert(0, os.path.join(TOOLKIT, "mapdata"))
 from tcptable import connections  # noqa: E402
-from vaultpath import vault_path  # noqa: E402
+from vaultpath import vault_path, vault_why  # noqa: E402
 from livecapture import CaptureTail, by  # noqa: E402
 import drive_client as dc  # noqa: E402
 import control  # noqa: E402
