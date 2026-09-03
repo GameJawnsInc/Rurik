@@ -4085,6 +4085,196 @@ here. What an ANIMREF reader needs:
   enemy arc has a second cause and §40.12 item 2 (agent-vs-agent collision,
   the `0x006011F0` dig) moves up.
 
+## 41. THE PRESS SUPERSEDES THE KEYBOARD BELIEF — "couldn't resume attacking" was `kbd_moving_at` with no stop behind it, not the click latch (2026-09-03, `47f0cdc`)
+
+### 41.1 The symptom, re-joined: the split is the session's first keyboard report
+
+RUN-FEEL carried the operator's *"couldn't resume attacking after some point"*
+forward with a mechanism read from source: refused clicks arm `click_moving_at`,
+the press clears it, the next click re-arms it before the tick can open a swing.
+Every link in that chain is true and the conclusion is wrong. The capture
+(`authsrv-20260903T084616-c1`) holds **28** presses, not the ten RUN-FEEL tabled
+(it counted the presses that carry a `PRESS ENDS THE WALK`), and joined to the tap
+(`agenttap-20260903T084632`) they split cleanly:
+
+| presses | last movement input before them | swung within 0.2 s |
+|---|---|---|
+| 16.42, 19.42, 21.06, 22.51 | a run of REFUSED clicks (latch and leg armed) | **4 of 4**, at 12–32 ms |
+| 21.86 | refused clicks, and a click **1 ms behind** the press | 0 — the click forgot the order (`MOVE_ENDS_CHAIN`, §39; retail-faithful) |
+| 22.74 | a repeat press on the running chain | no-op, correct (§37.3 fact (a)) |
+| **24.44 … 40.16, 22 presses** | **five `0x003D` at 23.56–24.16 s, and NO `0x0047` ever** | **0 of 22** (two got a follow: 29.73, 36.27) |
+
+Every press ENDS the click latch (`_press_supersedes`, the `0x002C` re-pin the
+table itself lists), the four presses that swung all came behind refused-click
+runs, and the starved presses had no click within 215 ms of them — four ticks. The
+split is at **23.56 s, the first keyboard report of the session**. That is "after
+some point". OBSERVED.
+
+### 41.2 Why the stop never came — RECONSTRUCTION, corroborated by the tap
+
+Five `0x003D` (movementType 4, 6, 4, 5, 7) at 23.556–24.155 s, the reported body
+moving (9992, 8016) → (9913, 7961). Two `grant_verdict` rows fired inside that
+run, at 23.557 s (dest (9474, 8061)) and 24.090 s (dest **(9412, 8041)**, 518 u
+from the reported body). Then silence from the keyboard for the remaining 16.6 s.
+The tap: the rendered body ran at 216 u/s (the side family's rate) from 24.4 s,
+**away** from the Hatcher (86 → 486 u), and stood at **(9412, 8041)** — the second
+grant's destination to within 1 u — with speed 0 from 26.8 s to the end, the
+Hatcher swinging at it eleven times without re-chasing.
+
+So the keyboard walk ended by arriving at a point our own `0x0029` named, not by a
+key release the client reported. The comment at `SWING_HOLDS_WALK_GATE` already
+describes the client doing exactly this with a grant (*"executes that answer AS A
+CLICK-ORDER: it walks the granted leg to completion with key state ignored, then
+parks"*), and §37.2 read the arrival roots: **click arrival sends nothing** on
+`0x0047`/`0x003D` (seven roots, depth-2 closure; the `0x0047` packer `0x00920940`
+lives on the keyboard-stop body `0x008167F0`, which a replaced keyboard walk never
+reaches). Which of the grant's own arms produced a 518 u destination on a
+"zero-lead" row is MOVECODE's question (`PLAN.md` §7 Q13) and is not answered
+here. What is answered: `kbd_moving_at` was armed at 24.155 s and **nothing ever
+cleared it**, and `_player_body_moving` reads that latch with no bound at all —
+
+```
+kbd = state.get("kbd_moving_at")
+if kbd is not None:
+    return True
+```
+
+— so `attack_tick` returned on `if moving: return` at every one of the 20 ticks
+after every one of the 22 presses. `test_playerswing` §7 had pinned the latch as
+*"deliberately NOT bounded here — cleared by the 0x0047 stop report, which the
+client does send (36 of 36 in the corpus)"*. REFUTED: 5 reports, 0 stops, 14 s
+parked.
+
+**Exposure in our own corpus** (13 gamesrv captures 2026-08-30 → 09-03 with the
+chain pause on): 32 presses arrived with the keyboard latch armed; **0** got a
+swing within 0.3 s, 2 got a follow. On 12:59 / 14:32 / 06:54 (10 presses, latch
+0.05–1.52 s old) the `0x0047` came 0.8–2.6 s later and the swing waited for it;
+on 08:46 it never came. The latch's own failsafe exists one reader over:
+`GRANT_LOCAL_WINDOW`'s census (3,420 gaps between moving reports, 99.74 % under
+3.0 s) is rule 1's answer to *"a stop we never heard"*. The swing gate had none.
+
+### 41.3 Retail, read: a press after a keyboard report is answered, stop or no stop
+
+The c2s side of the 21 live captures, rebuilt from `wire.jsonl` segments the way
+`tape.load_tape` rebuilds s2c (the residual against the decrypted plaintext is the
+handshake; a connection whose bytes do not account exactly is refused; one
+connection refused for having no self id), framed as ONE stream with the `0x8000`
+client-opcode mask, self id by `adrenjoin.whose_agent`. **Positive control: 267
+presses, §37.3's own count.** For each press, the last movement input before it
+and the first server answer within 0.2 s — `attack_started` naming the observer,
+or a `0x002A` whose mover is the observer:
+
+| last input | swing | follow | none |
+|---|---|---|---|
+| CLICK | 3 | 5 | 7 |
+| **KBD, ≤ 0.5 s old** | **9** | **15** | 24 |
+| KBD, 0.5–3 s | 6 | 17 | 34 |
+| KBD, > 3 s | 21 | 26 | 66 |
+| STOP | 11 | 9 | 14 |
+
+The `none` column is §37.3's no-op population (137 held presses and 32 repeats of
+the 267) and is not decomposed again here. What is decisive is the second row:
+**24 presses no older than half a second after a keyboard report, no `0x0047`
+between, answered inside 0.2 s** — nine by the swing itself, fifteen by a follow.
+Retail does not gate the press on any keyboard belief. OBSERVED. (Examples:
+33.53 s on 20260817T231139/54071, latch 0.20 s, follow at +38 ms; 48.41 s, latch
+1.19 s, swing at +34 ms; 5.33 s on 20260807T143055/64103, latch 0.87 s, swing at
++39 ms.)
+
+### 41.4 Ours, decomposed: three readers of one latch, and why only one changes
+
+`kbd_moving_at` has three readers and two writers (the `0x003D` and `0x0047`
+arms, `test_position_trust`'s AST lock):
+
+* **Rule 1** (`_grant_verdict`): refuse a click while the player is keyboarding.
+  Bounded by `GRANT_LOCAL_WINDOW`. Over-refusing costs a grant the client did not
+  need — measured at zero; the fail-safe direction.
+* **`cast_stop_reckon`**: dead-reckon the body from the heading and the census
+  rate. Refuses on doubt (R8, F34, the owner's no-warp ruling) — fail-safe.
+* **`_player_body_moving` → `attack_tick`**: REFUSE THE SWING. The opposite
+  polarity — the exact defect shape §33 F5 named for the click latch (*"§31 added
+  a reader with the OPPOSITE polarity and did not revisit the comment"*) — and the
+  one reader with no bound and no fallback terminator.
+
+And under `MOVE_ENDS_CHAIN` (§39) the latch has **no remaining job** at that
+reader: a `0x003D` runs `cancel_on_move`, which forgets the target, so
+`attacking` is set again only by a press. "Is the body moving?" is asked at the
+swing gate only ever about a press that arrived after the last report — and §41.3
+is what retail does with that press.
+
+### 41.5 SHIPPED, default ON: `PRESS_ENDS_KBD_LATCH` — revert `--press-waits-for-stop`
+
+`begin_attack` stamps `attack_press_at` on every accepted order (repeats
+included); `_player_body_moving` treats a `kbd_moving_at` **older** than the stamp
+as ended, for this reader only. A report newer than the press (or equal — the
+report speaks last) re-arms it, and ends the chain: client steering wins, 11/15.
+Rule 1 and the cast-stop keep the raw latch, the latch keeps its two writers, and
+no grant or cast-stop decision changes. No re-pin on the keyboard press path — the
+click leg's `0x002C` (§39) halts a segment the client walks silently; retail sends
+nothing on a keyboard-last press and neither do we. A body still walking under a
+held key gets a swing that slides for at most one report interval (0.50 s modal)
+before the next `0x003D` ends it — §37.2's SLIDE, which retail's own
+`attack_started` on a walking body produces too.
+
+**Not done, and why.** (a) Bounding this reader's keyboard latch by
+`GRANT_LOCAL_WINDOW`: derived for rule 1's question, and it would still hold a
+press up to 3 s on a parked body — §34's deficit ported to the keyboard.
+(b) Clearing `kbd_moving_at` at the press: a third writer, and a policy change for
+rule 1 and the cast-stop with no measured gain. (c) RUN-FEEL's candidate (i), *do
+not arm the click latch on a refused click*: **wrong** — the client walks a refused
+click (tap: 288 u/s on every refused-click leg; the arm's own 5-of-5), and the
+stamp-before-verdict order is now pinned as intended (§11e).
+
+**The instrument.** A `press_verdict` row per press: `swing` / `follow` with the
+latency, `refused_by` and the tick count when it was held first; or the FIRST
+refusing branch — `moving` (which latch, `kbd` / `click` / `follow`, and its age),
+`interval` (remaining), `reach` (dist), `cast`, `swing-in-flight`,
+`move-ended-order`, `target-gone`, `dead-player` — written once, with a console
+line (R11's rule applied to the swing); plus `repeat` (swing in flight, seconds
+since the last START, an earlier press still refused), `no-target` and
+`dead-target` from the order itself. `attack_tick` and `begin_attack` take the
+recorder; the world tick, the harness slot and the `0x0026` arm pass it. Two of
+the 08:46 capture's silent presses had nothing within 0.7 s of them; none can be
+silent now.
+
+**Tests.** `test_playerswing` §11, 20 checks, floor 96 → **116**, bare. §7's
+"36 of 36" claim rewritten with its refutation; §10j's call-site pin updated.
+castcancel 31, cancelwalk 124, d1lead 94, kbdsync 32, position_trust 235,
+pressscore 20, guards 41, cmsgnames 16 green.
+
+### 41.6 What refutes it, and the run that scores it
+
+Scored on the operator's **next ordinary session** — no scripted run, nothing
+to set up: every press now leaves a row.
+
+* **REFUTED if** a press with the body inside reach leaves a `press_verdict`
+  `fired: false` row on the `moving` branch with latch `kbd` under the shipped
+  default, or a press leaves no row at all.
+* **REFUTED the other way if** in-reach presses open swings on a body visibly
+  running for longer than one report interval — the client holding a key and
+  reporting less often than 0.5 s — and the operator says the slide costs more
+  than the starve did. `--press-waits-for-stop` is that A/B.
+* **UNREAD here:** the follow arriving on a body the client parked elsewhere
+  (29.73 s, 36.27 s: the follow went out, the swing at arrival was then refused
+  by the same latch). The fix covers it by construction — the press stamp is
+  older than the follow's own latch, which reads through the leg — and §11g
+  pins the follow as the answer, but no capture shows the arrival swing yet.
+
+### 41.7 Process notes
+
+* A mechanism verified link by link from source was still the wrong mechanism:
+  the table had ten presses where the capture had 28, and nobody asked which
+  press was the **first** to fail. "After some point" names a point; find it
+  before reading code.
+* The first retail scan reported 267 presses and 0 answers — a broken scanner
+  (the decoded values carry the opcode in slot 0), caught only because §37.3's
+  267 was there as a positive control for the press count and the 0 was
+  impossible against §37.3's 0.029–0.045 s cell.
+* The tap join's point column is sample-and-hold again (`movetap`'s trap, one
+  instrument over): the async copy's x, y sat at (9879, 8012) for 2.2 s with
+  vx, vy = 216 u/s. The "parked from 26.8 s" reading rests on the speed-0 samples
+  and the Hatcher's standing distance, never on the point column.
+
 ## Provenance
 
 All figures are measurements over the owner's own live captures via extractors in this
@@ -4116,3 +4306,10 @@ its positive control named. No client launch on the RE side; the instrument runs
 the owner's own next session.
 
 sec.40.11's `agenttap.py` is the same class as `movetap.py`: a read-only cross-process `ReadProcessMemory` of the pinned loopback build (carve-out 1 territory, pure `ctypes` via `keytap`, no launch of ours), reading struct displacements `codescan` located and `movetap --selftest` re-checks, plus the one `+0x98` read sec.38.2 pinned. Its output is per-viewer client state, not ArenaNet's expression; it goes to `vault/research/animref/`.
+
+§41's retail table is a corpus scan (`retail_press_scan-20260903.py`, session scratch
+kept under `vault/research/animref/`) over the 21 live tapes via `tape.py`/`codec.py` —
+the c2s side rebuilt from `wire.jsonl` with `load_tape`'s own byte accounting — with
+every n restated in full above; its ours-side census reads the gamesrv captures the
+same way, and the tap join reads `agenttap.py`'s existing output. No client launch, no
+new extraction, no upstream derivation — no §6.1 register row required.

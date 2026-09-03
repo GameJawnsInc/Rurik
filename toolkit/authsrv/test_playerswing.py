@@ -41,7 +41,10 @@ import checks  # noqa: E402
 # FLOOR 96 from the green run of 2026-09-02 that added section 10 (ANIMREF-RE
 # 39: the press supersedes the walk, a move ends the chain; 14 fixture-free
 # checks). 82 with section 9 alone.
-LEDGER = checks.Ledger("player swing windup", floor=96)
+# FLOOR 116 from the green run of 2026-09-03 that added section 11 (ANIMREF-RE
+# 41: the press supersedes the keyboard belief, and every press leaves a
+# press_verdict row; 20 fixture-free checks). 96 with section 10 alone.
+LEDGER = checks.Ledger("player swing windup", floor=116)
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -451,12 +454,14 @@ def section_click_latch_bound():
           "nothing at all",
           f"click {W + 1.0:.1f}s old")
     check(authsrv._player_body_moving({"kbd_moving_at": now - 600.0}) is True,
-          "the KEYBOARD latch is deliberately NOT bounded here -- it is "
-          "cleared by the 0x0047 stop report, which the client does send "
-          "(36 of 36 in the corpus), so it has a real terminator and needs "
-          "no age guess. Bounding only the latch that lacks one is the whole "
-          "point",
-          "old kbd latch still reads moving")
+          "the KEYBOARD latch is still not AGE-bounded here: with no press "
+          "since the report, a 600 s old latch reads moving. (This used to "
+          "say the 0x0047 terminator arrives 36 of 36 -- REFUTED 2026-09-03: "
+          "the 08:46 session had 5 keyboard reports and 0 stops, the body "
+          "parked 14 s with the latch armed. The terminator that ends it for "
+          "THIS reader is now a newer attack press, section 11; rule 1 and "
+          "the cast-stop keep the raw latch)",
+          "old kbd latch, no press since: still reads moving")
 
     # THE END-TO-END SHAPE: an attack ordered after a completed click-walk must
     # actually swing. This is the operator's report as a test.
@@ -1457,11 +1462,334 @@ def section_press_supersedes_and_move_ends():
     # 10j. source pin: the press arm calls the supersede BEFORE begin_attack
     src = open(authsrv.__file__, encoding="utf-8").read()
     i = src.find("_press_supersedes(send, state, conn_id, values[1])")
-    j = src.find("begin_attack(send, state, values[1], conn_id)")
+    j = src.find("begin_attack(send, state, values[1], conn_id, rec=rec)")
     check(i > 0 and j > i and j - i < 200,
           "the 0x0026 arm supersedes the leg, then takes the order -- in that "
-          "order, adjacent",
+          "order, adjacent (and since ANIMREF-RE 41 hands the recorder over, "
+          "so the order's press_verdict row can be written)",
           f"offsets {i}, {j}")
+
+
+class _Rec:
+    """The Recorder's event() shape, kept in memory: what a capture would
+    hold, readable by the checks."""
+
+    def __init__(self):
+        self.events = []
+
+    def event(self, kind, **kw):
+        kw["kind"] = kind
+        self.events.append(kw)
+
+
+def section_press_ends_kbd_latch():
+    """ANIMREF-RE 41: the press supersedes the KEYBOARD belief, and every
+    press leaves a row.
+
+    THE SYMPTOM (RUN-FEEL, 2026-09-03 08:46): "couldn't resume attacking
+    after some point". The point was the session's first 0x003D at 23.56 s:
+    five keyboard reports, then NO 0x0047 for the remaining 16.6 s -- our own
+    0x0029 grant had turned the walk into a click-order leg, and click
+    arrival is silent (37.2) -- so `kbd_moving_at` stayed armed while the
+    tap showed the body parked from 26.8 s and the Hatcher swinging at it.
+    22 presses after that point: 2 got a follow, 0 got a swing. Before it:
+    4 of 5 fresh presses swung, the fifth lost its order to a click 1 ms
+    behind it (retail-faithful, MOVE_ENDS_CHAIN). The handed-down diagnosis
+    blamed the CLICK latch armed by refused clicks; the capture refutes it --
+    the click latch is ended by every press (_press_supersedes) and the
+    starved presses had no click within 215 ms.
+
+    RETAIL (live corpus, 267 presses): of the 48 whose last movement input
+    was a 0x003D no older than 0.5 s, 9 opened a swing and 15 a follow within
+    0.2 s -- it does not wait for a stop. And under MOVE_ENDS_CHAIN the
+    keyboard latch has no job at the swing gate: a 0x003D forgets the target,
+    so `attacking` is set again only by a press. So the gate reads the latch
+    as ended by a newer press (`attack_press_at`), and a report newer than
+    the press re-arms it -- the client steering wins, as on retail (11/15).
+
+    THE INSTRUMENT: a `press_verdict` row per press -- the branch that
+    answered it (swing / follow, with latency) or the FIRST branch that
+    refused it (moving + which latch and its age, interval, reach, cast,
+    move-ended-order, target-gone, dead-player), plus repeat / no-target /
+    dead-target from begin_attack itself. The first refusal PRINTS, the R11
+    rule applied to the swing.
+    """
+    import authsrv
+    import time as _t
+
+    print("\n11. ANIMREF-RE 41: the press supersedes the keyboard belief; every "
+          "press leaves a row")
+
+    STARTED = authsrv.agents.GV_ATTACK_STARTED
+    UD = authsrv.GAME_SMSG_AGENT_UPDATE_DESTINATION
+
+    def starts(sent):
+        return [v for op, v, _l in sent
+                if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
+                and v[0] == STARTED]
+
+    def rows(rec, reason=None):
+        return [e for e in rec.events if e["kind"] == "press_verdict"
+                and (reason is None or e["reason"] == reason)]
+
+    sent = []
+    send = lambda op, vals, label="", quiet=False: sent.append(
+        (op, vals, label))
+
+    check(authsrv.PRESS_ENDS_KBD_LATCH is True,
+          "the press-ends-the-keyboard-belief rule is the SHIPPED default; "
+          "--press-waits-for-stop is the revert arm",
+          f"PRESS_ENDS_KBD_LATCH = {authsrv.PRESS_ENDS_KBD_LATCH}")
+
+    # 11a. the reader: a keyboard latch OLDER than the press does not move
+    # the body; one NEWER (or equal) does.
+    now = _t.time()
+    check(authsrv._player_body_moving(
+              {"kbd_moving_at": now - 0.29, "attack_press_at": now}) is False,
+          "a keyboard report 0.29 s BEFORE the press (the 08:46 24.44 s "
+          "press, latch age 0.29 s, no stop ever) no longer reads as moving",
+          "press newer than the latch")
+    check(authsrv._player_body_moving(
+              {"kbd_moving_at": now, "attack_press_at": now - 0.1}) is True,
+          "a keyboard report AFTER the press re-arms the belief -- the "
+          "client steering wins (retail 11/15), and MOVE_ENDS_CHAIN ends the "
+          "chain on that same report",
+          "report newer than the press")
+    check(authsrv._player_body_moving(
+              {"kbd_moving_at": now, "attack_press_at": now}) is True,
+          "equal stamps: the report speaks last (>=), failing toward the "
+          "pause",
+          "equal stamps")
+    check(authsrv._player_body_moving({"kbd_moving_at": now - 600.0}) is True,
+          "and with no press at all the raw latch holds, so rule 1 (the "
+          "grant gate) and cast_stop_reckon -- which read the latch itself, "
+          "never the stamp -- see exactly what they saw before",
+          "no press: unchanged")
+
+    # 11b. END TO END, the 08:46 shape: a 0x003D 0.29 s ago, no 0x0047 ever,
+    # the Hatcher 86 u away -> the press opens the swing on the FIRST tick,
+    # and the row says so.
+    rec = _Rec()
+    state = _state()
+    state["agents"][10]["pos"] = (86.0, 0.0)
+    state["kbd_moving_at"] = _t.time() - 0.29
+    authsrv.begin_attack(send, state, 10, 0, rec=rec)
+    sent.clear()
+    authsrv.attack_tick(send, state, 0, rec)
+    r = rows(rec, "swing")
+    check(len(starts(sent)) == 1 and len(r) == 1 and r[0]["fired"] is True
+          and r[0]["refused_by"] is None and r[0]["target"] == 10
+          and r[0]["age"] < 1.0,
+          "END TO END: the 24.44 s press -- keyboard latch 0.29 s old, no "
+          "stop, target 86 u -- OPENS A SWING on the first tick, and its "
+          "press_verdict row is `swing`, refused by nothing; on the capture "
+          "this press and the 21 after it got nothing",
+          f"starts {len(starts(sent))}, rows {r}")
+
+    # 11c. KNOWN-BAD ARM: --press-waits-for-stop reproduces the starve, and
+    # the instrument names it -- ONE row on the first refused tick, not one
+    # per tick; then the stop arrives and the answer row closes the press.
+    saved = authsrv.PRESS_ENDS_KBD_LATCH
+    authsrv.PRESS_ENDS_KBD_LATCH = False
+    try:
+        rec2 = _Rec()
+        state2 = _state()
+        state2["agents"][10]["pos"] = (86.0, 0.0)
+        state2["kbd_moving_at"] = _t.time() - 0.29
+        authsrv.begin_attack(send, state2, 10, 0, rec=rec2)
+        sent.clear()
+        for _ in range(3):
+            authsrv.attack_tick(send, state2, 0, rec2)
+        r = rows(rec2, "moving")
+        check(starts(sent) == [] and len(r) == 1 and r[0]["fired"] is False
+              and r[0]["latch"] == "kbd" and 0.2 <= r[0]["latch_age"] <= 1.0
+              and len(rows(rec2)) == 1,
+              "KNOWN-BAD ARM (--press-waits-for-stop): the same press WAITS, "
+              "and the one press_verdict row names the branch and the latch "
+              "-- `moving`, latch `kbd`, ~0.29 s old -- written on the first "
+              "refused tick only (three ticks, one row)",
+              f"starts {starts(sent)}, rows {rows(rec2)}")
+        state2["kbd_moving_at"] = None          # the 0x0047 arm's clear
+        sent.clear()
+        authsrv.attack_tick(send, state2, 0, rec2)
+        r = rows(rec2, "swing")
+        check(len(starts(sent)) == 1 and len(r) == 1 and r[0]["fired"] is True
+              and r[0]["refused_by"] == "moving" and r[0]["ticks"] == 3,
+              "and when the stop finally clears the latch the swing opens "
+              "and the ANSWER row carries the starve: refused_by `moving`, "
+              "3 ticks -- the capture shows the wait AND its release",
+              f"rows {r}")
+    finally:
+        authsrv.PRESS_ENDS_KBD_LATCH = saved
+
+    # 11d. a report AFTER the press: the 0x003D arm forgets the order
+    # (cancel_on_move, MOVE_ENDS_CHAIN) and re-arms the latch; the tick
+    # finds a pending press with no target -> `move-ended-order`, terminal.
+    # The 08:46 21.859 s press, whose click landed 1 ms behind it.
+    rec3 = _Rec()
+    state3 = _state()
+    state3["agents"][10]["pos"] = (86.0, 0.0)
+    state3["kbd_moving_at"] = _t.time() - 0.29
+    authsrv.begin_attack(send, state3, 10, 0, rec=rec3)
+    authsrv.cancel_on_move(send, state3, 0)     # what the 0x003D/0x003E arm does
+    state3["kbd_moving_at"] = _t.time()
+    sent.clear()
+    authsrv.attack_tick(send, state3, 0, rec3)
+    authsrv.attack_tick(send, state3, 0, rec3)
+    r = rows(rec3, "move-ended-order")
+    check(starts(sent) == [] and state3.get("attacking") is None
+          and len(r) == 1 and r[0]["fired"] is False
+          and state3.get("press_pending") is None,
+          "a move command BETWEEN the press and the tick forgets the order "
+          "(retail: any move ends the chain, 28/28 re-pressed) -- no swing, "
+          "and the press closes as `move-ended-order`, once",
+          f"attacking {state3.get('attacking')}, rows {rows(rec3)}")
+
+    # 11e. THE REFUSED CLICK DOES NOT STARVE A PRESS INSIDE REACH. The 0x003E
+    # arm stamps the latch and the leg BEFORE its freshness verdict, so a
+    # click the server refuses `geo-stale` still arms them -- CORRECTLY: the
+    # client paths a refused click itself (5 of 5, cos 0.994-1.000; the
+    # 08:46 tap shows the body at 288 u/s on every refused-click leg). The
+    # press then ENDS that leg (_press_supersedes) and swings the same tick.
+    # On the capture: 16.42, 19.42, 21.06 and 22.51 s, each behind a run of
+    # refused clicks, each answered within 14-32 ms.
+    rec4 = _Rec()
+    state4 = _state()
+    state4["agents"][10]["pos"] = (100.0, 0.0)   # 42 u past the re-pin
+    state4["pos"] = (0.0, 0.0)
+    state4["client_pos"] = (0.0, 0.0)
+    state4["plane"] = 0
+    t0 = _t.time() - 0.2
+    state4["click_moving_at"] = t0                       # the arm's stamp
+    authsrv._click_leg_arm(state4, (1000.0, 0.0), t0, silent=False)
+    # ... and the verdict then refused the click: nothing else is written.
+    sent.clear()
+    authsrv._press_supersedes(send, state4, 0, 10)
+    authsrv.begin_attack(send, state4, 10, 0, rec=rec4)
+    sent.clear()
+    authsrv.attack_tick(send, state4, 0, rec4)
+    check(len(starts(sent)) == 1 and rows(rec4, "swing")
+          and state4.get("click_moving_at") is None,
+          "a click the server REFUSED (latch and leg armed, no answer) does "
+          "not starve the next press: the press ends the leg and the swing "
+          "opens on the first tick -- the click latch was never the starver",
+          f"starts {len(starts(sent))}, latch {state4.get('click_moving_at')}")
+    src = open(authsrv.__file__, encoding="utf-8").read()
+    i_stamp = src.find('state["click_moving_at"] = time.time()')
+    i_verdict = src.find('fresh = (time.time() - state.get("pos_seen", 0.0)) <= 1.0')
+    check(0 < i_stamp < i_verdict,
+          "and the arm's order is pinned as INTENDED: the latch stamp "
+          "precedes the freshness verdict, because a refused click is still "
+          "a click the client walks (moving the stamp below the verdict was "
+          "the handed-down fix, and it would have unarmed a moving body)",
+          f"stamp at {i_stamp}, verdict at {i_verdict}")
+
+    # 11f. the other rows begin_attack writes itself.
+    rec5 = _Rec()
+    state5 = _state()
+    state5["agents"][10]["pos"] = (50.0, 0.0)
+    authsrv.begin_attack(send, state5, 10, 0, rec=rec5)
+    authsrv.attack_tick(send, state5, 0, rec5)            # the swing opens
+    authsrv.begin_attack(send, state5, 10, 0, rec=rec5)   # a REPEAT press
+    r = rows(rec5, "repeat")
+    check(len(r) == 1 and r[0]["fired"] is False
+          and r[0]["swing_in_flight"] is True and r[0]["pending_refused"] is None,
+          "a REPEAT press on the running chain leaves a `repeat` row naming "
+          "the swing in flight -- retail does not re-arm the clock (128 "
+          "held presses, cadence p50 1.335 s), and neither do we, but the "
+          "press is no longer invisible",
+          f"rows {r}")
+    authsrv.begin_attack(send, state5, 99, 0, rec=rec5)
+    state5["agents"][10]["dead"] = True
+    authsrv.begin_attack(send, state5, 10, 0, rec=rec5)
+    check(len(rows(rec5, "no-target")) == 1
+          and len(rows(rec5, "dead-target")) == 1
+          and state5.get("attacking") is None,
+          "a press on no such agent and a press on a corpse each leave their "
+          "own row (`no-target`, `dead-target`) and drop the order",
+          f"{[e['reason'] for e in rows(rec5)]}")
+
+    # 11g. OUT OF REACH: the follow IS the answer, and the row says `follow`.
+    rec6 = _Rec()
+    state6 = _state()
+    state6["agents"][10]["pos"] = (900.0, 0.0)
+    state6["pos"] = (0.0, 0.0)
+    state6["client_pos"] = (0.0, 0.0)
+    state6["plane"] = 0
+    state6["kbd_moving_at"] = _t.time() - 0.3
+    authsrv.begin_attack(send, state6, 10, 0, rec=rec6)
+    sent.clear()
+    authsrv.attack_tick(send, state6, 0, rec6)
+    follows = [v for op, v, _l in sent if op == UD]
+    r = rows(rec6, "follow")
+    check(len(follows) == 1 and len(r) == 1 and r[0]["fired"] is True
+          and r[0]["refused_by"] is None and state6.get("press_pending") is None,
+          "OUT OF REACH with the keyboard latch set: the follow goes out on "
+          "the first tick (retail: 15 of the 48 fresh KBD-last presses were "
+          "answered by a 0x002A) and the row is `follow`, fired",
+          f"follows {len(follows)}, rows {r}")
+    sent.clear()
+    for _ in range(3):
+        authsrv.attack_tick(send, state6, 0, rec6)
+    check(len(rows(rec6)) == 1,
+          "and the follow's later ticks write nothing more: one press, one row",
+          f"{len(rows(rec6))} rows")
+
+    # 11h. the interval branch names itself too (a retarget mid-chain re-
+    # arms the clock, so this needs the revert of begin_attack's reset: a
+    # pending press with a fresh player_last_swing).
+    rec7 = _Rec()
+    state7 = _state()
+    state7["agents"][10]["pos"] = (50.0, 0.0)
+    authsrv.begin_attack(send, state7, 10, 0, rec=rec7)
+    state7["player_last_swing"] = _t.time()               # clock just ran
+    sent.clear()
+    authsrv.attack_tick(send, state7, 0, rec7)
+    r = rows(rec7, "interval")
+    check(starts(sent) == [] and len(r) == 1 and 0.0 < r[0]["remaining"] <= 5.0,
+          "the interval gate names itself: `interval` with the seconds "
+          "remaining -- a press cannot pass it in practice (begin_attack "
+          "zeroes the clock) but a chain resuming can, and it was silent",
+          f"rows {r}")
+
+    # 11i. the tick without a recorder is the tests' own call and stays legal
+    state8 = _state()
+    state8["agents"][10]["pos"] = (50.0, 0.0)
+    authsrv.begin_attack(send, state8, 10, 0)
+    sent.clear()
+    authsrv.attack_tick(send, state8, 0)
+    check(len(starts(sent)) == 1 and state8.get("press_pending") is None,
+          "with no recorder (rec=None, every earlier section) the press is "
+          "still resolved and the swing still opens -- telemetry is never "
+          "load-bearing",
+          f"starts {len(starts(sent))}")
+
+    # 11j. the call sites hand the recorder over: source pins.
+    check(src.count("attack_tick(send, state, conn_id, rec)") == 1
+          and src.count("begin_attack(send, state, foe, conn_id, rec=rec)") == 1
+          and src.count("begin_attack(send, state, values[1], conn_id, rec=rec)") == 1,
+          "the world tick, the harness control slot and the 0x0026 arm all "
+          "pass the recorder, so no press path can be silent by omission",
+          "source pin")
+    check(src.count('state["attack_press_at"] = now') == 1
+          and src.count('state.get("attack_press_at")') == 1,
+          "the press stamp has ONE writer (begin_attack) and ONE reader "
+          "(_player_body_moving) -- rule 1 and the cast-stop never see it",
+          "source pin")
+    import ast as _ast
+    n_kbd_writes = sum(
+        1 for node in _ast.walk(_ast.parse(src))
+        if isinstance(node, _ast.Assign)
+        for tgt in node.targets
+        if isinstance(tgt, _ast.Subscript)
+        and isinstance(tgt.value, _ast.Name) and tgt.value.id == "state"
+        and isinstance(getattr(tgt, "slice", None), _ast.Constant)
+        and tgt.slice.value == "kbd_moving_at")
+    check(n_kbd_writes == 2,
+          "and `kbd_moving_at` itself still has exactly its two writers (the "
+          "0x003D arm and the 0x0047 arm): 41 adds a reader's rule, not a "
+          "third policy on the latch (test_position_trust's AST lock)",
+          f"{n_kbd_writes} writes")
 
 
 def main():
@@ -1478,6 +1806,7 @@ def main():
     section_click_leg_eta()
     section_reach_and_approach()
     section_press_supersedes_and_move_ends()
+    section_press_ends_kbd_latch()
     return LEDGER.verdict()
 
 
