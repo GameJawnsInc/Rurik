@@ -9788,3 +9788,102 @@ two `0x002C` senders (`AGTRACK RE-PIN`, `PRESS ENDS THE WALK`) as fence-shutters
 command) — and the lead's length is still to be argued on maturation margin (§1z-u.4).
 The lead stays opt-in until then. No client launch, no static reads, no upstream
 derivation.
+
+---
+
+## 1z-aa. THE FENCE-SHUTTER AUDIT — every server 0x002C shuts the fence, the fence re-arms only at a keyboard walk-start, and a lead must never be sent into the window: §1z-u.5 item (d), measured and built
+
+**Asked:** "do the fence-shutter audit next" — the last of §1z-u.5's four gates before the
+keyboard lead may return. Zero client runs: the audit is a join over captures already in
+the vault, and its derived action is one gate with one flag and fifteen checks. Ident
+`MOVECODE-1z-aa`.
+
+### 1z-aa.1 The instrument, and what the corpus holds
+
+`movetap`'s `fence_state` is AgTrack's own per-agent `clientControlled` dword, read at
+the record (`S_CONTROLLED`, the operand of `cmp dword [rec], 0` at 0x00606002). The
+`agenttap` rows' `controlled` field is the controlled agent's *id*, not the flag, so the
+09-03 taps cannot see the fence; the 60 movetap tapes (08-19 → 08-26) can. Server
+`0x002C`s in the 213 gamesrv captures, by sender: `AGTRACK RE-PIN` 32 (9 sessions,
+08-30 onward), `PRESS ENDS THE WALK` 14 (2 sessions, 09-02 onward), `RESYNC` 24,
+`CAST-STOP PIN` 7, `APPROACH RE-PIN` 1. **No movetap tape overlaps the two senders the
+item named** — they shipped after the last tape — so their fence effect is read off the
+handler they share with the two senders that WERE taped: three tapes, twelve specimens
+(`CAST-STOP PIN` ×6 on 08-25 13:09 and 14:05, `RESYNC` ×6 on 08-25 17:42).
+
+### 1z-aa.2 The measurement (OBSERVED)
+
+| | |
+|---|---|
+| fence shut at the next sample after a server `0x002C` | **12 of 12** (one specimen shows one open sample of delivery latency first) |
+| re-armed at the `0x002C` itself | 0 of 12 |
+| re-armed at a `0x0047` stop inside the window | **0 of 4** |
+| re-armed at a moving `0x003D` after a park (a keyboard walk-start) | **7 of 8** |
+| shut span, where a re-arm was seen | 1.9 – 5.8 s (the operator's next key press) |
+| shut span, no command in the window | > 6 s, two cast-stop pins |
+| body travel inside the shut window | 0.0 u in 11 of 12 (parked bodies) |
+| zero-lead grants inside the shut window | 1–2 per window, at the re-arming report, no visible effect on a parked body |
+
+The one specimen that moved the body — a cast-stop pin at 14:05 landing 523 u from it
+at 6,458 u/s — is the pin's own placement onto a stale reckon (CANCELWALK-F34/F35's
+class), not the fence's doing; noted, not this audit's.
+
+So the transcription's Clear is right (`agtrack_mirror.on_update_position` →
+`clear()` → `client_controlled = False`) and its **re-arm rule is corrected by the
+tape**: the fence re-opens at the keyboard walk-start applier — REALFIX §0.11's *"the
+only fence re-armer"* — and not at a stop. `agtrack_guard.on_report` re-arms both
+mirrors on a `0x0047` too (*"Both kinds re-arm the record"*), which the tape refutes 0/4;
+`on_click`'s re-arm is unmeasured (no click fell in a window). **CONTESTED, recorded, not
+changed**: the replay validation (§1z-r) rests on the mirror as transcribed, and the
+error's direction is the conservative one — after a stop the mirror predicts a test that
+the client does not run.
+
+**What the tape cannot say.** Every taped `0x002C` landed on a parked body. Whether a
+held key keeps driving the body while the fence is shut has zero exposure here; the
+behavioural evidence is RUN-1zT's enslaved legs (§1z-x: a held Q/E/S moved the body the
+granted leg and parked; two held W legs moved it 2.9 u and 0 u), read with §0.11 stage 2.
+
+### 1z-aa.3 What follows for the six senders, and the gate built
+
+While the fence is shut every `0x0029` is an order. A zero-lead grant is an order to the
+body's own reported point — the tape shows them landing on parked bodies without effect,
+and under a held key the cost is bounded by the report chord. A **lead** into the window
+is §0.11 stage 2 verbatim: the body walks it as a click-order, releases go unreported,
+the walk-start applier never runs, the fence never re-opens — the 08:46 lock. So all six
+senders compose with a lead into the lock by construction, and `AGTRACK RE-PIN` worst of
+all: it fires from the report arm *above* the lead site, so the lead of the very report
+that carried it lands in the window it just opened. §1z-s's *"re-pin-then-grant is safe
+by construction because the fence closes"* is true of snapping and false of enslavement;
+the two are different hazards.
+
+**Built:** `KBD_LEAD_FENCE_GATE` (`--no-kbd-lead-fence-gate` reverts; `--legacy-kbd-sync`
+clears it). The server tracks the fence it shut — `fence_shut_at`, stamped in the send
+choke at every player `0x002C` whatever sender labelled it, cleared in one place: the
+`0x003D` arm, on a moving report that arrived with the keyboard latch clear (the tape's
+walk-start), with a `fence` row naming how long it was shut. Not cleared by a stop (0/4)
+and not by a click (unmeasured, so conservative). A keyboard or D1 lead computed while it
+is set degrades to the zero-lead point, `lead_src=fallback`, `lead_clip_why=fence-shut`;
+the held re-aim (§1z-y) inherits the degraded point; no leg record is armed. Under the
+shipped default (lead off) the gate is inert; it exists so the lead cannot return without
+it. The 1z-y kill was already a grant rather than a `0x002C` for this exact reason.
+
+### 1z-aa.4 Tests, and where the keyboard lead now stands
+
+`test_kbdsync.py` 69 → 84 (floor 84): the tracker stamped by a player `0x002C` and by
+nothing else; a mid-walk lead degrades with the row saying `fence-shut` and arms no
+record; a walk-start report re-arms with its row and the lead of that report fires; the
+hold stores the degraded point; the D1 lead degrades the same way; the known-bad arm
+sends the 520 u lead into the shut fence; and four source locks (stamped in the choke
+once, cleared in one place, the stop arm does not touch it, both branches pass the gate).
+`test_d1lead` 94, `test_position_trust` 235, `test_router` 114, `test_playerswing` 116,
+`test_cancelwalk` 124, `test_familyrate` 26, `test_clickecho` 25, `test_planerepair` 41,
+`test_grantsim` 86, `test_agtrack_mirror` 64, `test_agtrack_guard` 49 — green.
+
+**All four of §1z-u.5's gates are built** — (a) the held re-aim and the kill (§1z-y),
+(b) the matched word (§1z-z), (c) the enslavement detector (§1z-x), (d) this gate. What
+remains before `--kbd-lead` becomes the default is not a gate but an argument and a run:
+the lead's length on maturation margin (§1z-u.4: 766 leaves ~250 u over the ~515 u report
+chord where 520 leaves 5), and one scripted keyboard run under `--kbd-lead` scored by
+`w0score.py` with the detector — which now cannot read an enslaved body as a
+confirmation. No client launch, no static reads, no upstream derivation; all figures over
+the owner's own captures via extractors in this repo.

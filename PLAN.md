@@ -1505,8 +1505,9 @@ the operator's 40 refused clicks retrodict to 40 answered. §1z-w (same night)
 added the routing origin's own plane word and the cast abandon; §1z-x the
 enslavement detector, which withdraws RUN-1zT's confirmation; §1z-y the held
 re-aim and the lead kill, item (a) of the list before the lead returns; §1z-z
-the matched plane word on the lead grant, item (b). Only (d), the fence-shutter
-audit, remains.** The bundle
+the matched plane word on the lead grant, item (b); §1z-aa the fence-shutter
+audit, item (d), measured 12/12 and built as a gate. All four gates stand; the
+lead's return now waits on the length argument and one scored run.** The bundle
 question Q13 poses (adopt `D1_LEAD`?) is unchanged by it. The session's felt symptoms were
 1z-t's keyboard lead, now opt-in.
 Raised 2026-08-27 by
@@ -1610,6 +1611,36 @@ floors and aborts in `RUN-R8.md`; both are operator-driven client runs.
 ---
 
 ## 8. Immediate next actions
+
+### ★★★ MOVEMENT 2026-09-03 night — THE FENCE-SHUTTER AUDIT (MOVECODE-1z-aa): every server 0x002C shuts the fence, the fence re-arms only at a keyboard walk-start, and a lead is never sent into the window — §1z-u.5's four gates are all built
+
+**[studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1z-aa.** Zero client
+runs; a join over the movetap corpus (`fence_state` is AgTrack's own `clientControlled`
+dword) and one derived gate.
+
+* **Measured, 12 of 12:** a server `0x002C` shuts the fence at the next sample (two
+  senders taped, `CAST-STOP PIN` and `RESYNC`, one handler); it re-arms at a moving
+  `0x003D` after a park — the keyboard walk-start — 7 of 8, **never at a `0x0047`
+  (0 of 4)** and never at the `0x002C` itself; shut spans 1.9–5.8 s. The two senders
+  the item named (`AGTRACK RE-PIN` ×32, `PRESS ENDS THE WALK` ×14 in the corpus)
+  postdate the last tape and are read off the shared handler. Every taped `0x002C`
+  landed on a parked body, so the held-key-under-shut-fence question has zero tape
+  exposure; RUN-1zT's enslaved legs are its behavioural evidence.
+* **A transcription correction, CONTESTED and recorded:** `agtrack_guard.on_report`
+  re-arms the mirrors on a stop; the tape refutes it 0/4. Not changed — the replay
+  validation rests on the mirror, and the error runs the conservative way.
+* **Built:** `KBD_LEAD_FENCE_GATE` (`--no-kbd-lead-fence-gate`): `fence_shut_at` is
+  stamped in the send choke at every player `0x002C` and cleared only at a walk-start
+  report (with a `fence` row); a keyboard or D1 lead computed while it is set degrades
+  to the zero-lead point, `lead_clip_why=fence-shut`. `AGTRACK RE-PIN` fires above the
+  lead site, so without this the lead of the same report landed in the window it
+  opened — §0.11 stage 2 by construction. Inert with the lead off.
+* **Tests:** `test_kbdsync` 69 → 84 (floor 84), both lead branches, the known-bad arm,
+  four source locks; twelve files green.
+* **The keyboard lead's gates are all built.** What remains before `--kbd-lead`
+  becomes the default: the length argued on maturation margin (§1z-u.4) and one
+  scripted keyboard run under `--kbd-lead` scored by `w0score.py` with the enslavement
+  detector. Then `0x005FCAA0`.
 
 ### ★★ MOVEMENT 2026-09-03 night — the MATCHED PLANE WORD on the keyboard lead grant (MOVECODE-1z-z): §1z-u.5 item (b) built; the stop echo was already matched by construction
 

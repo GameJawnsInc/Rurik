@@ -265,7 +265,10 @@ mesh-derived plane words — the sync copy's and the origin's)**. Each has a
 1z-y gates ship ON regardless — a rate-refused re-aim is HELD and re-baked at the
 floor, `--no-kbd-hold`, and an in-flight lead is killed on a press or a click by a
 zero-lead grant at the body, `--no-kbd-lead-kill`; the lead grant's field 4 is
-matched to field 3, `--no-kbd-matched-plane`, 1z-z).
+matched to field 3, `--no-kbd-matched-plane`, 1z-z; and no lead is ever sent into a
+fence the server shut with a 0x002C, `--no-kbd-lead-fence-gate`, 1z-aa — every
+server 0x002C shuts AgTrack's fence until the next keyboard walk-start, measured
+12/12 on the movetap corpus).
 **`--grant-suppress` and the heading arm share ONE rate-limit clock**, so between them
 they cannot exceed one grant per 0.50 s — say which flags were on when you report a run.
 

@@ -3708,8 +3708,17 @@ Floor 75 against a green 75 with 5 declared skips (the archive-conditional
   refused crossing re-aim is HELD with the matched word; the zero-lead default's
   F1 lag is pinned UNCHANGED (scoped out, stated); the stop echo's two words are
   the report's plane by construction; and the match sits inside the KBD lead
-  branch before the lead point. Floor 33 → 60 → 69 from the green runs. No
-  vault, no client. ~1 s),
+  branch before the lead point. **Section 13 (MOVECODE-1z-aa, same night) added
+  fifteen — the fence-shutter audit's gate:** the tracker is stamped by a player
+  `0x002C` and by neither a grant nor an NPC placement; a lead computed mid-walk
+  under a fence we shut degrades to the zero-lead point with `lead_clip_why`
+  `fence-shut` and arms no record; a walk-start report (moving, latch clear)
+  re-arms it with a `fence` row and the lead of that report fires; the held re-aim
+  stores the degraded point; the D1 lead degrades the same way; the known-bad arm
+  `--no-kbd-lead-fence-gate` sends the 520 u lead into the shut fence; and four
+  source locks (stamped once in the send choke, cleared in one place, the stop arm
+  untouched, both branches through the gate). Floor 33 → 60 → 69 → 84 from the
+  green runs. No vault, no client. ~2 s),
   `toolkit/authsrv/test_livewire.py` (the committed retail-decode recipe,
   RETHINK instrument #2 — the campaign's referee moved out of a deletable
   scratchpad. Guards `toolkit/authsrv/livewire.py`: the no-vault doors
