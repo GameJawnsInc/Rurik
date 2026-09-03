@@ -13,7 +13,48 @@ field 4 MATCHED to field 3), §1z-aa (no lead into a fence the server shut with 
 default of `main` at `bdb010f` or later: the router, the plane repair, the AgTrack
 guard and its re-pin, the stop echo, the family rate.
 
-**Status: SET UP 2026-09-04, NOT RUN.** Nothing was launched to write this sheet.
+**Status: RAN 2026-09-03 18:39 — INCONCLUSIVE.** See the result block below.
+
+---
+
+## ★ RESULT — RAN 2026-09-03 18:39, **INCONCLUSIVE** (agent-driven, hands off)
+
+`agenttap-20260903T183943` / `authsrv-20260903T183941-c1` / harness `20260903T183905`.
+Full record: `studies/movecode/FINDINGS.md` §1z-ac.
+
+| §2 required | measured |
+|---|---|
+| p50 < 150 u | **1.0 u** ✅ |
+| per-leg travel scales with hold | W 1,062 / 1,155 / 1,045 u (5 s), S 543 / 677 (4 s), Q 620, E 589 (3 s) ✅ |
+| the detector reads FREE | **MIXED** ❌ |
+
+**⇒ INCONCLUSIVE by this sheet's own bounds, and the bar is not moved after the fact.**
+Not REFUTED: nothing read ENSLAVED, no held-key leg parked, no new warp class. Exposure
+well over floor (5,869 u over 278 moving samples; 22 `KBD LEAD`; 13 lead legs ≥ 300 u).
+
+**The MIXED was 88 % instrument.** As shipped the detector flagged 50 of 278 samples;
+44 of them are a FREE body whose own co-directional target sits 0.53 u from our grant —
+inside `GRANT_EPS` — because the 520 u length was derived from the client's own report
+chord. The decode separates them (a grant with the fence open writes world-0 ONLY), so
+enslavement is the drawn copy's target being **bit-identical** to world-0's, and that
+discriminator shipped as §1z-ac: RUN-1zT stays ENSLAVED 113/114, this run re-reads
+**6 of 278 (2.2 %)**, seven of eight legs FREE.
+
+**The residual six are real: the lead maturing.** On the Q leg the drawn body reached our
+520 u endpoint and parked for one sample before the next grant re-aimed it — 520 / speed
+is within 0.01 s of the report gap in all three families, so maturation and the re-aim are
+a photo finish. Cost ~26 u and one sample of stall. **No lock**: every release was reported,
+the body stopped where the player let go (385 u and 34 u short of our grant), no `0x002C`,
+no re-pin fire, max separation 155.6 u.
+
+**Gate exposure, reported not assumed:** HOLD fired 12 (`deferred-heading` re-bakes); KILL
+and FENCE GATE had **zero exposure by the script's construction**; `agtrack_repin blocked
+arrival-risk` ×6 as §1z-ab.5b predicted. Enemy control p50 0.6 / max 63.6 u.
+
+**`--kbd-lead` stays opt-in.** The registered confirmation did not land, and the only
+failing clause was an instrument defect now closed — a rerun on the fixed detector is the
+owner's call, not a session's.
+
 
 ---
 
@@ -64,7 +105,7 @@ census is zero exposure for that gate, not a pass for it.
 ## 4. The run
 
 **Announce it first — the machine is shared and `Gw.exe` fights for input focus.**
-Pre-flight on 2026-09-04: nothing bound on 6112/6601, no `Gw.exe` running, the
+Pre-flight on 2026-09-03: nothing bound on 6112/6601, no `Gw.exe` running, the
 build is `ours` (`dhbuild.py`), the scorer's positive control passes.
 
 > ### ⚠ HANDS OFF THE KEYBOARD ONCE THE CLIENT IS UP

@@ -29,7 +29,7 @@ import w0score                                                 # noqa: E402
 
 # Floor from the bare-machine green run (sections 1-4); section 5 is
 # vault-gated and skips, which lowers nothing.
-LEDGER = checks.Ledger("w0score enslavement detector", floor=35)
+LEDGER = checks.Ledger("w0score enslavement detector", floor=44)
 check = checks.adopt_named(LEDGER)
 
 T0 = 1_000_000_000.0          # a wall epoch no real capture overlaps
@@ -263,6 +263,64 @@ def main():
               re_["live"][0] < 1.0)
     elif cf:
         LEDGER.skip("5. the real controls", f"missing {cf} or {ce}")
+
+    print("== 6: MOVECODE-1z-ac, the bit-identity discriminator (the "
+          "co-directional-lead confound) ==")
+    # A LEAD run's grant sits ~0.5 u from the client's OWN co-directional
+    # target, because the lead length was derived from the client's own report
+    # chord. Only the DRAWN copy carrying the grant is enslavement.
+    G = [report_row(0.5, 0.0, 0.0), grant_row(0.6, 520.0, 0.0, label="KBD LEAD")]
+    gp = os.path.join(tmp, "authsrv-1zac-c1.jsonl")
+    write_jsonl(gp, G)
+    grants6 = w0score.grants(w0score.load_gamesrv(gp))
+    check("the fixture's lead is classified server-chosen",
+          len(grants6) == 1 and grants6[0]["kind"] == "server-chosen")
+
+    def cap(name, sync_tgt):
+        """One moving body walking toward (520,0); `sync_tgt` is world-0's."""
+        rows = [{"kind": "head", "pid": 1, "agents": [1], "t0": T0, "hz": 10.0}]
+        for k in range(6):
+            t = 1.0 + 0.1 * k
+            a = {"async": copy(10.0 * k, 0.0, 519.5, 0.0, 288.0, 0.0),
+                 "sync": copy(10.0 * k, 0.0, sync_tgt, 0.0, 288.0, 0.0)}
+            rows.append({"kind": "sample", "t": t, "clock0": 0, "clock1": 0,
+                         "agents": {"1": a}})
+        p = os.path.join(tmp, name)
+        write_jsonl(p, rows)
+        h, r = w0score.load(p)
+        return w0score.enslavement(h, r, grants6)
+
+    # (a) the CONFOUND: the body's own target is 0.5 u from our grant -- inside
+    #     GRANT_EPS -- but world-0 carries the grant and the body does not.
+    _per, free = cap("agenttap-confound.jsonl", 520.0)
+    check("CO-DIRECTIONAL CONFOUND: the body's own target within 1 u of a "
+          "server-chosen grant is NOT enslavement while the drawn copy keeps "
+          "its own target",
+          free["enslaved"] == 0 and free["verdict"] == "FREE"
+          and free["moving"] == 6, f"{free}")
+    check("and the loose join still counts it, so the report can name what "
+          "the discriminator removed",
+          free["loose"] == 6 and free["confound"] == 6, f"{free}")
+    # (b) REAL enslavement: the grant was written into the drawn copy too, so
+    #     both world targets are bit-identical.
+    _per, ens = cap("agenttap-enslaved.jsonl", 519.5)
+    check("REAL ENSLAVEMENT: both world copies bit-identical on the grant "
+          "reads ENSLAVED, with an onset",
+          ens["enslaved"] == 6 and ens["verdict"] == "ENSLAVED"
+          and ens["confound"] == 0 and ens["first_t"] is not None, f"{ens}")
+    # (c) the threshold sits between float identity and the measured confound
+    check("the threshold is below the confound's measured 0.53 u floor and "
+          "above float identity",
+          0.0 < w0score.TGT_SAME < 0.5, f"TGT_SAME={w0score.TGT_SAME}")
+    _per, edge = cap("agenttap-edge.jsonl", 519.5 + w0score.TGT_SAME * 2)
+    check("KNOWN-BAD ARM: a drawn copy whose target is merely NEAR world-0's "
+          "(twice the threshold) is not enslaved -- the test is identity, not "
+          "proximity", edge["enslaved"] == 0, f"{edge}")
+    # (d) a parked world-0 (infinite target) cannot enslave anything
+    _per, inf = cap("agenttap-inf.jsonl", float("inf"))
+    check("a world-0 with no leg armed (infinite target) enslaves nothing",
+          inf["enslaved"] == 0, f"{inf}")
+
     return LEDGER.verdict()
 
 
