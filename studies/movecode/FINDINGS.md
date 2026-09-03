@@ -8742,3 +8742,300 @@ flag to ask about.  The active arm is therefore built and DEFAULT ON:
   by re-pins at a rate well under `--resync`'s old 5.6/min, and the
   residual warp classes are 1z-s.3's blocked/unseen (report-starved
   moments, gate 3, the non-AgTrack mechanism).
+
+---
+
+## 1z-t. THE PLAYER'S WORLD-0 SYNC — the defect measured in the client, the cause read in the binary, and the three-term fix shipped default ON
+
+**This section closes ANIMREF-RE §40.12 item 1**, which handed the MOVECODE arc a
+number to hit (retail ~74 u, ours 806 u) and an instrument that measures it live.
+It is desk work over artifacts already on disk: **zero client runs**, one new
+default, one revert flag per term.
+
+### 1z-t.1 The defect, measured — and one of §40.11's two headline numbers is an instrument artifact
+
+`agenttap.py` records BOTH client copies of an agent. On the 2026-09-02 kite
+(`vault/research/animref/agenttap-20260902T213401.jsonl`, 507 player samples,
+~11 Hz over 55 s) the player's own world-0 (sync) copy sits far from the world-1
+copy that is DRAWN. §40.11 published "median 237 u, max 806 u". **The median is
+robust and the maximum is not:**
+
+| reading | p50 | p90 | max |
+|---|---|---|---|
+| raw `m_point` (+0x78), as §40.11 quotes | 237.0 | 511.8 | **805.8** |
+| `AgAgent::position_at` semantics (clamp first) | 237.0 | 431.3 | **516.1** |
+
+`m_point` is sample-and-hold and `+0x58` is its settle stamp; the stamp's age at
+sample time runs p50 **2.8 s** on the sync copy (max 13.4) and p50 1.3 s on the
+async one, which is older than 0.2 s in **91%** of samples. Dead-reckoning must
+therefore go through the client's own rule (`movetap.py:851-876`): **clamp first**
+— if `m_timeStopMovement != 0` and `when >= it`, the agent sits on its segment
+point and is NOT integrated, because dead-reckoning past the arrival tick invents
+a separation the client never computes. **Quote 237 u p50 / ~430-510 u p90 and
+retire the 806.** This is the movetap point-column trap in a new tool, the third
+time this arc has paid for it, and it changes no conclusion: 237 u against
+retail's ~74 u is still the defect.
+
+**A second correction to the same capture, and it matters for every future run.**
+Joined to the harness's own `report.json` legs, **every A and D leg travelled 0 u**:
+
+| leg | drawn body | world-0 | separation |
+|---|---|---|---|
+| wait   |    0 u (vmax 0)   |   0 u |   0 .. 0 |
+| S (4s) |  751 u (vmax 190) |   0 u |   0 .. 751 |
+| D (4s) |    0 u (vmax 0)   |   0 u | 237 .. 237 |
+| A (5s) |    0 u (vmax 0)   |   0 u | 237 .. 237 |
+| W (4s) | 1138 u (vmax 288) | 749 u |   0 .. 627 |
+| S (3s) |  357 u (vmax 190) | 425 u |   0 .. 315 |
+| D (3s) |    0 u (vmax 0)   |   0 u | 198 .. 198 |
+| W (3s) |  514 u (vmax 288) | 149 u |  48 .. 465 |
+| A (3s) |    0 u (vmax 0)   |   0 u | 341 .. 341 |
+
+In Guild Wars **A and D turn in place**; Q/E strafe. So four of the nine legs
+translate nothing, the client correctly emits no `0x003D` across them, and the
+15.4 s "report gap" that looks alarming in the wire is the client behaving
+correctly. §40.11's numbers rest on **four** real translation legs. **A future
+verification run must drive W/S (and Q/E for strafe), or it scores turn-in-place
+legs as movement.** The per-leg table is also the sharpest statement of the
+defect: world-0 travels 0 u where the body travels 751, 149 where it travels 514,
+and **425 where the body travels 357** — the last one an overshoot, visible
+directly, and the subject of term 2 below.
+
+### 1z-t.2 The cause, read in the binary — a fixed-magnitude chase of the body's past
+
+Reconciling §40.11's "nothing updates the client's world-0 self-copy" with
+`studies/movement/FINDINGS.md`'s "0x0025 is facing-only, 0x0029 is sync-only":
+**both are half-right, and the exact statement is one sentence.** The client never
+carries world-0 forward from local input, `0x0025`'s setter `0x00602660` writes
+the facing triple `+0xB8/+0xBC/+0xC0` and nothing else (12 stores, exhaustive),
+and `0x0029` is SYNC-ONLY (handler `0x005FD890`, sync arm `0x005FD8CE`, no async
+arm) — so **under our zero-lead default a fresh `0x0029` is the sole thing that
+moves the player's world-0 position.**
+
+The bake `0x005FE950` does not write a position. It settles `+0x78`, then arms a
+velocity of **fixed magnitude `|v| = maxSpeed x moveSpeed` (`+0x5C x +0x60`),
+distance-independent**, plus an arrival tick `+0x48`; the `<= 1.0 u`
+short-circuit at `0x005FEA85` parks the copy on arrival. So world-0 does not sit
+still so much as **chase the body's past at exactly the body's own speed**, glide
+for about one report interval, and park — with a lag fixed at grant time that can
+never decay. A lead can stop world-0 falling behind; **because `|v|` does not
+scale with distance it can never make it catch up.**
+
+Write-set table, build 38797, recv table `0x00A52D70`:
+
+| SMSG | handler | arrays | fields |
+|---|---|---|---|
+| `0x0025` | `0x005FD540` | sync always; async GATED (`0x005FD5CD` pending record, `0x005FD5D3` id == `[mgr+0x1E0]`) | `+0xB8/+0xBC/+0xC0` ONLY |
+| `0x0027` | `0x005FD700` | both, ungated | settle, `+0x5C`, then re-bake of the outstanding destination |
+| `0x0028` | `0x005FD7D0` | both, ungated | settle + teleport to the agent's OWN point; PARKS both |
+| `0x0029` | `0x005FD890` | **SYNC ONLY** | `+0x80`, `+0x88..+0x94`, `+0x98 = 0`, `+0x9C..+0xA8`, then the bake |
+| `0x002A` | `0x005FD930` | **SYNC ONLY** | as `0x0029` plus `+0x98` = the extra wire word |
+| `0x002B` | `0x005FD9D0` | **SYNC ONLY** | `+0xC4` = movementType, `+0x60` = moveSpeed; read only by the NEXT bake |
+| `0x002C` | `0x005FDA50` | both, ungated, after `AgTrack::Clear` | hard set; tail-calls reconcile |
+
+### 1z-t.3 ★ THE LAW, and it has no free parameter
+
+**separation = report_gap x body_speed.**
+
+Our in-leg `0x003D` gaps are modally **1.80 s**: 1.80 x 288 = **518.4 u**
+predicted against **516.1 u** measured, −0.4%. Retail's 0.257 s x 288 = **74.0 u**
+(§38.3). **Cadence ratio 7.00x, separation ratio 6.97x.** Report LATENCY is not
+the defect — at the instant each `0x003D` is sent the reported point is a median
+**12.3 u** from the body (max 33.7). The client tells the truth promptly; it tells
+it rarely, and we answer with a point that was already old.
+
+### 1z-t.4 ★ THE SHIPPED AgTrack GUARD IS STRUCTURALLY BLIND TO THIS — measured, from the run itself
+
+The active re-pin arm has been default ON since `2f00ea5` (§1z-s.5), and the
+obvious question is whether it already handles this. **It does not, and the kite
+proves it from both ends.** In `vault/captures/gamesrv/authsrv-20260902T213400-c1.jsonl`
+the guard evaluated **10 grants and returned `code=pass, why=match` on 10 of 10**,
+while the actual world-0-vs-drawn separation at those same instants was
+0.0, 513.8, 237.0, 511.8, 511.8, 114.9, 277.2, 192.6, 197.6, 465.1 u.
+`agtrack_repin_fire` = **0**.
+
+The reason is structural, not a bug: the guard's MATCH is the **reprieve test** —
+the sync copy against the client's own recorded history chain, oldest-match-wins
+over the whole chain — and it is satisfied *precisely because* the sync copy sits
+on ground the player already walked. **"On the trail" and "near the body" are
+different predicates**, and zero-lead's verbatim echo makes the first one true by
+construction, which is exactly what makes zero-lead warp-safe. The guard prevents
+snaps; it was never built to see world-0 lagging the rendered body, and it cannot.
+**The two are orthogonal and both are wanted.**
+
+(Instrument note: a text search for "agtrack" in a run's console log reads zero in
+three unrelated situations — the per-grant rows go only to the JSONL recorder, a
+fired re-pin's console line is capitalised `AGTRACK RE-PIN`, and the two capture
+directories use DIFFERENT STAMPS for one run: gamesrv telemetry `213400`, authsrv
+wire `213356`, tap `213401`. Score the JSONL, never the console.)
+
+### 1z-t.5 Retail, derived — the lead is the sync mechanism, and the clip is not only wall-safety
+
+On the adjudicated 9 live captures, retail's keyboard grant is
+`0x0025` → (`0x002B` on family change) → `0x0029` at `reported + vec2 + 0.5*u`,
+`|vec2|` pinned 765.018/768.000, inter-grant p50 **0.492 s**, 43.3% of dests
+clipped short. Under that lead the baked leg is **2.18 s** long against a
+**0.491 s** re-grant interval — **the copy is re-baked 4.45x before it could ever
+arrive**; only 282 of 3,071 legs (9.2%) reach `+0x48`, and the copy is parked at
+**1.8%** of moving samples against ZERO_LEAD's **14.8%**. So it never stops
+walking, and since `S ≈ v_body` it walks WITH the body at a fixed offset rather
+than chasing it.
+
+**The one-variable counterfactual** (same grant times, same
+`0x002B`/`0x0027`/`0x0028`/`0x002C` streams, ONLY the destination changed):
+retail's dests hold the sync copy **p50 62.2 u** from the rendered body where our
+ZERO_LEAD holds **p50 387.5 u** — 6.2x.
+
+**An identity check that could have failed, and did not.** The simulated client
+world-0 lands **2.8 u** from ArenaNet's *server's* own copy of the player —
+measured independently as the destination of NPC `0x002A` follows naming the
+player, which is not an input to the simulation — against positive controls of
+80.0 u (last reported position), 74.2 u (interpolated body) and 15,677 u (a frozen
+copy), over 45 follows with the player walking at p50 287.4 u/s.
+
+**Where the ~74 u comes from: the question's two readings are two different
+objects and both are true.** The SERVER's copy is a sample-and-hold on the last
+report (NPC follow dests best-fit the player's own reported polyline at
+tau = **0.257 s**). The CLIENT's world-0 is a constant-offset shadow: its distance
+to the body is FLAT in grant age (58-67 u from an anchor 0.1 s old to one 2.0 s
+old) while its distance to the anchoring report grows at exactly body speed
+(455.4 u measured against 288 x age = 455.8). Under ZERO_LEAD the two errors ADD.
+
+**The clip is NOT only wall-safety, and this CONTESTS the framing this section
+started with.** On identical grant times, retail's clipped mixture gives p50 62.2
+/ p90 239.1 against a flat 766 u lead's 157.9 / **650.6** — the 43.3% of dests
+retail shortens is the only difference between those arms and it owns the tail.
+
+**One theorem died in the deriving and should not be resurrected:** that the lead
+sets the loop time constant, tau = Lambda/S. Retail's stream fits it beautifully
+(2.633 s measured against 765.5/288 = 2.658 s) and **it is a coincidence** — a 19x
+sweep of flat leads from 86 to 1600 u returns beta 0.924-0.934 throughout, tau
+6.3-7.4 s regardless of Lambda. What mean-reverts retail's error is the clipped
+mixture, not the lead magnitude.
+
+### 1z-t.6 ★ THE CROSS-CHECK — scored against the client's OWN world-0 track, which no earlier candidate in this arc had
+
+Every previous simulation in this arc (`grantsim`, `agtrack_replay`) validated
+against snaps and wire. The tap holds world-0 itself, in a **different regime**
+from retail's corpus: our client, 1.8 s cadence, short start-stop legs.
+
+**Step 1, the check that can fail.** Drive the model with the grants ACTUALLY
+sent and score against the OBSERVED world-0: **p50 0.0, p75 13.2, p90 16.0,
+max 69.1 u.** (Before the `position_at` clamp went in, the same model read p90
+136 / max 504 — the clamp is 90% of the model's accuracy and it is the client's
+own rule, not a smoothing choice.)
+
+**Step 2, the counterfactual**, same reports, same cadence, only the policy
+changed, scored against the OBSERVED DRAWN BODY:
+
+| arm | p50 | p75 | p90 | max |
+|---|---|---|---|---|
+| SHIPPED (observed, ZERO_LEAD)      | 237.0 | 340.7 | 431.3 | 516.1 |
+| lead 520, no stop echo             | 179.3 | 283.0 | 335.1 | 414.6 |
+| lead 766, no stop echo             | **425.3** | 529.0 | 581.1 | 660.6 |
+| lead 520 + stop echo               |   0.0 |   9.5 |  69.7 | 335.1 |
+| lead 460 + echo + `0x002B` rate    |   0.0 |   8.6 |  63.1 |  85.7 |
+| **lead 520 + echo + `0x002B` rate**| **0.0** | **4.4** | **13.3** | **85.9** |
+| lead 766 + echo + `0x002B` rate    |   0.0 |   4.2 |  13.3 |  86.5 |
+
+**THE THREE TERMS ARE NOT SEPARABLE, and the ablation is why this ships as one
+behaviour.** The lead ALONE at 766 u is **worse than shipping nothing** (p50 425
+against 237) because it overshoots every stop; the stop echo is what collects it.
+Any reading of "the lead is the fix" or "the stop echo is the fix" alone is
+refuted by its own row here.
+
+**AND THIS ANSWERS THE RETAIL DERIVATION'S OWN OPEN QUESTION.** Scored on
+ArenaNet's forward-running captures the family rate reads as noise (62.2 → 51.9 u)
+and the derivation asked outright whether that corpus simply never leaves cruise.
+**It does not leave cruise.** Our kite has real backpedal legs — the drawn body
+runs at `{190.1, 288.0}` u/s while world-0 has only ever run at 288.0, because we
+send the player no `0x002B` at all (0 of 7 `AGENT_UPDATE_SPEED` rows in the
+capture name the player; all seven name the Hatcher) — and on that substrate the
+term is worth **p90 69.7 → 13.3 and max 335.1 → 85.9**. `0x002B` is not inert; it
+is invisible to a corpus that never backpedals.
+
+**Why 520 and not D1's 766.** The lead must cover the most ground the body can
+travel between two re-aims or `+0x48` fires and the copy parks. The client's
+`0x003D` is DISTANCE-triggered: held-heading chords run p95 **513.8**, p99
+**515.1 u** (corroborating REALFIX-W2's ~515 u from a different corpus). 520 is
+read off the client's own trigger, not fitted. 460/520/766 sit within noise of
+each other once the echo is on (p75 8.6 / 4.4 / 4.2); 766 is 1.49x the trigger
+distance with a signed p95 overshoot of +513 u against +342 at 520.
+
+### 1z-t.7 What ships — `KBD_SYNC`, default ON, four flags
+
+`authsrv.py`, on the `0x003D` and `0x0047` arms only. **The click arm is not
+touched.**
+
+1. **LEAD** the heading grant `520 u` along the client's own reported heading,
+   then clip it to the navmesh with `a2_clip_lead` (§0.17's D2 term, reused). The
+   LENGTH is ours, the DIRECTION is the client's, and the ray is anchored on the
+   REPORT in hand — never `state["pos"]`, which is `--heading-grant`'s epitaph.
+2. **SPEED TRUTH**: the edge-triggered `0x002B` family rate, same slot and same
+   edge as A2's, labelled `KBD SPEED-TRUTH`.
+3. **STOP ECHO** at every `0x0047`: `0x002B [1.0, 9]` then a zero-distance
+   `0x0029` at the reported stop, both plane words the client's own.
+
+Revert: `--legacy-kbd-sync` (all three, byte-identical to the pre-1z-t wire),
+`--no-kbd-lead`, `--no-kbd-speed-truth`, `--no-kbd-stop-echo` (one term each, so
+one run can convict one term). `D1_LEAD` owns the slot when both are set, so a
+`--d1-lead` run still measures REALFIX-A2 and not a mixture. Plane words on the
+heading arm are DELIBERATELY untouched — the only thing 1z-t changes there is the
+POINT, so one run can convict it.
+
+**This is not `--stop-echo` and not `--heading-grant`, and both epitaphs were read
+first.** `--stop-echo`'s own 2026-08-25 correction block is the licence: *"the
+harm is the WALK, whose length is |D − the sync copy's settled +0x78| —
+reconstructed at ~1,286 u for the 2026-08-19 echo, against a ~60 u p50 for
+retail's own stop-ack, which is MECHANICALLY THE SAME MESSAGE... The refutation is
+of BAKING A LONG LEG FROM A FAR COPY."* Term 1 supplies exactly the precondition
+that refutation names. The same block also retracts the operator's "it adds a
+SECOND destination": every `0x0029` overwrites unconditionally.
+
+Tests: `test_kbdsync.py` (32 checks, floor 32) and `test_position_trust`'s
+re-aimed stop-arm section. `test_d1lead`'s two count-locks moved with the code
+(the clip's call sites 1 → 2, the family re-arm 6 → 7) — and the clip lock now
+SUBTRACTS the definition, because `def a2_clip_lead(state, reported, dest)`
+matches the anchored-call pattern and a bare count reads 3 for two calls: this
+arc's substring trap, for the fifth time.
+
+### 1z-t.8 What this does NOT settle
+
+- **The verdict is an operator run and nothing here substitutes for it.** The
+  registered prediction: `agenttap.py --agents 1` during a keyboard walk reads
+  world-0 vs world-1 **p50 under 150 u** (baseline p50 237 / p90 431 / max 516 on
+  `agenttap-20260902T213401`, which is the before-picture and needs no new run).
+  The offline counterfactual says p50 0 / p90 13 / max 86 and the model's own
+  validation error is p90 16 u. **REFUTED IF** the p50 stays above 200 u, or if
+  the operator reports a NEW visible warp class the shipped default did not have.
+  **Drive W/S, not A/D.**
+- **The guard's behaviour under a lead is UNVERIFIED.** With a lead the grants are
+  no longer past-trail nodes, so the reprieve test will MATCH less often and the
+  re-pin may fire where it never has. The arm is additive by construction (it can
+  never suppress, hold or alter a grant — §1z-s.5), so the worst case is extra
+  `0x002C` re-pins bounded ≤100 u at the client's own reported position. It should
+  be scored from the first capture's `agtrack_guard` rows.
+- **The n is thin**: four real translation legs, one map, one operator, one
+  capture with world-0 ground truth. The retail side is 9 captures and 2,442
+  moving reports, but it has no world-0 ground truth at all. The two together are
+  the argument; neither alone is.
+- **The click path is untouched** and its own failures (F-A/F-B/P-17, the
+  report-starvation that silences every report-driven guard) are unaffected.
+- **A re-grant timer is REFUTED before being built**: a 0.5 s timer re-using the
+  last REPORTED anchor is roughly free (p90 583.8 → 536.2) while the same timer
+  extrapolating the anchor forward blows the tail to p90 **2,416** / max 18,067 u,
+  because the body may have stopped or turned inside the silence. Do not build it.
+- `0x0027` matters to the glide and `0x002B` does not, **on retail's substrate**
+  (62.2 → 51.9 without `0x002B`; 82.0 / p90 646.4 without both) — and §1z-t.6 shows
+  that conclusion is regime-bound. We send neither today; only `0x002B` is added
+  here.
+
+### 1z-t.9 Provenance
+
+All figures are measurements over the owner's own captures via extractors in this
+repo (`agenttap.py`, `movetap.py`'s `position_at`, `tape.py`/`codec.py`,
+`animgrammar.py`) plus read-only static reads of the pinned pristine 38797 client
+via `codescan.py` (carve-out 1, no launch). The counterfactual simulator is
+session scratch over the same artifacts; its validation against the observed
+world-0 is stated above and is the only reason its numbers are quoted. No asset
+bytes, no upstream derivation, no §6.1 register row required.

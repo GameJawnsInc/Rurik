@@ -424,10 +424,27 @@ def main():
           "the census key for P-1..P-5's scoring; null on a refusal like "
           "every field-4 fact")
     # -- sec.0.17: the D2 clip's locks -----------------------------------
-    check(src.count("a2_clip_lead(") == 2
-          and src.count("def a2_clip_lead(state, reported, dest)") == 1,
-          "the D2 clip has its def and ONE call site, and the call is "
-          "anchored on the REPORT in hand, verbatim",
+    # 2026-09-03: MOVECODE-1z-t added a SECOND caller (the KBD_SYNC lead's
+    # own branch, same arm, same slot), so the count moved 2 -> 3: one def
+    # and two calls. What the lock is FOR is unchanged and is now checked
+    # directly rather than through the count -- EVERY call must be anchored
+    # on `reported`, never on state['pos'], because a ray from the model's
+    # belief is --heading-grant's graveyard (R2-1). Counting call sites was
+    # only ever a proxy for that; a third caller anchored correctly is fine
+    # and a second one anchored on the model would not be.
+    # SUBTRACT THE DEFINITION. `def a2_clip_lead(state, reported, dest)`
+    # matches the call pattern too, so a bare count of the anchored spelling
+    # reads 3 for two calls -- this arc's substring trap, for the fifth time.
+    _clip_calls = (src.count("a2_clip_lead(")
+                   - src.count("def a2_clip_lead("))
+    _clip_anchored = (src.count("a2_clip_lead(state, reported,")
+                      - src.count("def a2_clip_lead(state, reported,"))
+    check(_clip_calls == 2
+          and src.count("def a2_clip_lead(state, reported, dest)") == 1
+          and _clip_anchored == _clip_calls
+          and "a2_clip_lead(state, state[" not in src,
+          "the D2 clip has its def and TWO call sites (D1's and 1z-t's), "
+          "and EVERY call is anchored on the REPORT in hand, verbatim",
           "state['pos']-anchored is --heading-grant's graveyard (R2-1): "
           "a ray from the model's belief aims the lead from somewhere "
           "the client is not -- a warp with a plausible destination")
@@ -507,15 +524,18 @@ def main():
           "one send path carrying the stale word the lock needs. The "
           "router's four were added deliberately (ROUTER.md sec.4 item 4: "
           "matched pairs everywhere, sec.0.11's own protection)")
-    check(src.count('state["a2_family_sent"] = None') == 6,
-          "the family edge re-arms at all SIX [1.0]-overwriting sends: "
-          "the stop arm, the watchdog, both click-answer sites, and "
+    check(src.count('state["a2_family_sent"] = None') == 7,
+          "the family edge re-arms at all SEVEN [1.0]-overwriting sends: "
+          "A2's stop arm, the watchdog, both click-answer sites, "
           "ROUTER-B2's two speed-sending answers (clip-fallback and the "
           "routed/verbatim block -- chains send speed ONCE, at the first "
-          "leg only, retail's own grammar)",
+          "leg only, retail's own grammar), and since 2026-09-03 "
+          "MOVECODE-1z-t's own stop echo",
           "each of those sends puts 1.0 in sync +0x60; a site without "
           "the reset leaves the next same-family leg reckoning at 288 "
-          "flat -- the exact --client-endpoint failure term")
+          "flat -- the exact --client-endpoint failure term. 1z-t's stop "
+          "echo is the seventh because it sends the same [1.0, 9] A2's "
+          "does, from the same arm, for the same reason")
     check(src.count('may_grant, why_g = True, "d1-click"') == 0
           and src.count('why_g = "click-held"') == 0
           and src.count('grant, why = True, "d1-click"') == 0,

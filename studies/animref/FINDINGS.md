@@ -4048,6 +4048,43 @@ The enemy arc's own desk work is done: the chase is retail's shape, the reach is
 the disc, the speed is 1.0, the halt is on the clock. What remains is not enemy
 work.
 
+### 40.13 ITEM 1 IS ANSWERED, in the MOVECODE arc — `studies/movecode/FINDINGS.md` §1z-t
+
+§40.12 item 1 handed the movement arc a number to hit and an instrument that
+measures it. **It was taken up the same night and the fix ships default ON**;
+the full record is `studies/movecode/FINDINGS.md` §1z-t and is not restated
+here. What an ANIMREF reader needs:
+
+- **The cause is one sentence of binary.** `0x0029` is SYNC-ONLY and `0x0025`'s
+  setter writes only the facing triple, so a fresh `0x0029` is the ONLY thing
+  that moves the player's world-0; and the bake `0x005FE950` arms a FIXED
+  `|v| = maxSpeed x moveSpeed` toward it. Granting the point the body has
+  already left therefore leaves world-0 parked behind by
+  **report_gap x body_speed**: 1.80 s x 288 = 518.4 u predicted, 516.1 u
+  measured, against retail's 0.257 s x 288 = 74.0 u. Cadence ratio 7.00x,
+  separation ratio 6.97x.
+- **TWO CORRECTIONS TO §40.11's OWN NUMBERS, neither changing its conclusion.**
+  (a) The **max 806 u is an instrument artifact** — `m_point` is sample-and-hold
+  and read through `AgAgent::position_at`'s clamp-first rule the max is
+  **516.1 u**. The median 237 u is robust both ways. Quote 237 p50 / ~430-510
+  p90 and retire the 806. (b) **Every A and D leg of that kite travelled 0 u** —
+  in Guild Wars A/D turn in place and Q/E strafe, so §40.11 rests on four real
+  translation legs, and any future run must drive **W/S**, or it scores
+  turn-in-place legs as movement.
+- **What shipped** (`KBD_SYNC`, revert `--legacy-kbd-sync`): the heading grant is
+  LED 520 u along the client's own reported heading and navmesh-clipped, the
+  `0x002B` family rate rides the burst edge-triggered, and every `0x0047` draws
+  retail's stop reply. Against the client's own world-0 track the three together
+  take the separation from **p50 237 / max 516** to **p50 0 / p90 13 / max 86**;
+  the lead ALONE is worse than shipping nothing (p50 425), so they are one
+  behaviour with three named parts.
+- **For this arc specifically:** the enemy's collision disc references world-0,
+  so if the operator's next run confirms the prediction, §40.7's three swing
+  symptoms should go with it **without any enemy-side change** — which is what
+  §40.11 predicted. If the swings still land far while world-0 tracks, the
+  enemy arc has a second cause and §40.12 item 2 (agent-vs-agent collision,
+  the `0x006011F0` dig) moves up.
+
 ## Provenance
 
 All figures are measurements over the owner's own live captures via extractors in this

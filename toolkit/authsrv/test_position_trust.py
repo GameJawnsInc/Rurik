@@ -1970,14 +1970,27 @@ def main():
         """
         st = {"pos": (1000.0, 2000.0), "plane": plane, "pos_seen": 0.0}
         w, r = Sent(st), FakeRec()
+        # KBD_SYNC PINNED OFF HERE AND AT EVERY OTHER HARNESS IN THIS FILE,
+        # and the reason is what this file is FOR. Its subject is the
+        # `--zero-lead` arm: the point it grants, the gate it drops, the plane
+        # words it carries. MOVECODE-1z-t (KBD_SYNC, default ON) rides on top
+        # of that same send site and LEADS the point 520 u, so a harness that
+        # leaves it armed stops measuring zero-lead and starts measuring the
+        # composition of two policies -- which is a real thing to test and is
+        # tested, in test_kbdsync.py, against its own registered evidence.
+        # Pinning it off is not hiding the new default; it is keeping ONE
+        # variable per test, which is why these checks could catch anything.
         was = authsrv.ZERO_LEAD
+        was_ks = authsrv.KBD_SYNC
         authsrv.ZERO_LEAD = flag
+        authsrv.KBD_SYNC = False
         try:
             for v in reports:
                 w.now = time.time() - stamp_age
                 arm(v, st, r, w, 0)
         finally:
             authsrv.ZERO_LEAD = was
+            authsrv.KBD_SYNC = was_ks
         return st, w, r
 
     st, w, r = drive([HEAD], True, stamp_age=10.0)
@@ -2055,12 +2068,14 @@ def main():
         st_j = {"pos": (1000.0, 2000.0), "plane": 7, "pos_seen": pos_seen}
         w_j, r_j = Sent(st_j), FakeRec()
         w_j.now = time.time() - 10.0
-        was_j = authsrv.ZERO_LEAD
+        was_j, was_ks = authsrv.ZERO_LEAD, authsrv.KBD_SYNC
         authsrv.ZERO_LEAD = True
+        authsrv.KBD_SYNC = False        # one variable -- see the note above
         try:
             arm(JUMP, st_j, r_j, w_j, 0)
         finally:
             authsrv.ZERO_LEAD = was_j
+            authsrv.KBD_SYNC = was_ks
         return st_j, w_j, r_j
 
     # `pos_seen = now` leaves the budget at the flat 900 u, so a 40,000 u claim
@@ -2202,26 +2217,91 @@ def main():
           f"no direction at all, which is the cadence the legacy gate would "
           f"have had")
 
-    # NO GRANT ON A STOP. A stop-arm 0x0029 is --stop-echo and it is REFUTED.
+    # THE STOP ARM, BOTH REGIMES -- and this check changed shape on
+    # 2026-09-03 rather than being deleted, because the thing it guards is
+    # still dangerous and is now guarded from a different side.
+    #
+    # It used to read "with --zero-lead ON a 0x0047 grants NOTHING", on the
+    # ground that a stop-arm 0x0029 IS --stop-echo and --stop-echo is REFUTED
+    # (authsrv.py:1071-1152). MOVECODE-1z-t sends one by default, so that
+    # sentence is no longer the rule -- and the epitaph's OWN 2026-08-25
+    # correction block is why it never was the whole rule: "the harm is the
+    # WALK, whose length is |D - the sync copy's settled +0x78| --
+    # reconstructed at ~1,286 u for the 2026-08-19 echo, against a ~60 u p50
+    # for retail's own stop-ack, which is MECHANICALLY THE SAME MESSAGE."
+    # The refutation is of BAKING A LONG LEG FROM A FAR COPY, not of the
+    # message. What made 2026-08-19 fatal was a copy 1,286 u away; what keeps
+    # 1z-t safe is term 1 holding the copy at one report of lag, which is the
+    # precondition the correction names.
+    #
+    # So the tripwire is re-aimed, not removed, and it now has THREE jobs:
+    # the legacy wire still grants nothing; the default sends retail's stop
+    # reply in retail's order; and NEITHER regime ever sends 0x0028 on a stop
+    # (FINDINGS sec.3.2 states that one as an instruction to a server author,
+    # and retail sends it on 7 of 114 stops).
     stop_arm = receive_arm("GAME_CMSG_LAST_POS_BEFORE_MOVE_CANCELED",
                            ("values", "state", "rec", "send", "conn_id"))
-    st_s = {"pos": (1000.0, 2000.0), "plane": 7, "pos_seen": 0.0,
-            "kbd_moving_at": 1000.0}
-    w_s, r_s = Sent(st_s), FakeRec()
-    was = authsrv.ZERO_LEAD
-    authsrv.ZERO_LEAD = True
-    try:
-        stop_arm([1, [1400.5, 2000.25], 7], st_s, r_s, w_s, 1)
-    finally:
-        authsrv.ZERO_LEAD = was
+
+    def drive_stop(kbd_sync):
+        st = {"pos": (1000.0, 2000.0), "plane": 7, "pos_seen": 0.0,
+              "kbd_moving_at": 1000.0, "a2_family_sent": 1}
+        w, r = Sent(st), FakeRec()
+        was_zl, was_ks = authsrv.ZERO_LEAD, authsrv.KBD_SYNC
+        authsrv.ZERO_LEAD, authsrv.KBD_SYNC = True, kbd_sync
+        try:
+            stop_arm([1, [1400.5, 2000.25], 7], st, r, w, 1)
+        finally:
+            authsrv.ZERO_LEAD, authsrv.KBD_SYNC = was_zl, was_ks
+        return st, w
+
+    st_s, w_s = drive_stop(False)
     check(w_s.of(authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT) == []
           and st_s.get("kbd_moving_at") is None,
-          "STOP ARM: with --zero-lead ON a 0x0047 grants NOTHING, and still "
-          "clears the latch",
-          f"{[row[2] for row in w_s.rows]} -- a stop-arm 0x0029 IS --stop-echo "
-          f"and it is REFUTED (:1004-1023): the operator watched the character "
-          f"teleport anyway 9.9 s after an echo, then walk BACK toward the "
-          f"echoed point. The flag must not smuggle it back in")
+          "STOP ARM, --legacy-kbd-sync: a 0x0047 grants NOTHING, and still "
+          "clears the latch -- the pre-1z-t wire, unchanged",
+          f"{[row[2] for row in w_s.rows]} -- this is the revert arm and it "
+          f"must be byte-identical to the server that shipped before "
+          f"MOVECODE-1z-t, or --legacy-kbd-sync is not a revert")
+
+    st_k, w_k = drive_stop(True)
+    grants_k = w_k.of(authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT)
+    speeds_k = w_k.of(authsrv.GAME_SMSG_AGENT_UPDATE_SPEED)
+    check(len(grants_k) == 1
+          and list(grants_k[0][1][1]) == [1400.5, 2000.25]
+          and grants_k[0][1][2] == 7 and grants_k[0][1][3] == 7,
+          "STOP ARM, the 1z-t default: ONE zero-distance 0x0029 at the "
+          "REPORTED stop, verbatim, with BOTH plane words the client's own",
+          f"{grants_k} -- retail's own dominant stop reply: 70 of 114 live "
+          f"stops land < 1 u from the reported stop, |dest - stop| p50 "
+          f"0.000 u. A point of OUR choosing here would be a lead backwards "
+          f"at the one instant the client has told us exactly where it is")
+    _i_speed = next(i for i, r in enumerate(w_k.rows)
+                    if r[0] == authsrv.GAME_SMSG_AGENT_UPDATE_SPEED)
+    _i_grant = next(i for i, r in enumerate(w_k.rows)
+                    if r[0] == authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT)
+    check(len(speeds_k) == 1 and speeds_k[0][1][1] == 1.0
+          and speeds_k[0][1][2] == 9 and _i_speed < _i_grant,
+          "and 0x002B [1.0, 9] goes out BEFORE it -- retail's order, and the "
+          "client bakes the re-pin from a +0x60 the [1.0, 9] has already set",
+          f"{[row[2] for row in w_k.rows]} -- swapped, the wire shows a stop "
+          f"burst retail has zero witnesses for, and the re-pin's leg is "
+          f"baked at whatever family the last walk left in +0x60")
+    check(st_k.get("a2_family_sent") is None
+          and st_k.get("kbd_moving_at") is None,
+          "and the stop resets the family edge AND still clears the latch",
+          f"family_sent={st_k.get('a2_family_sent')} "
+          f"kbd={st_k.get('kbd_moving_at')} -- the [1.0, 9] just overwrote "
+          f"sync +0x60, so the next leg must re-send its family even "
+          f"unchanged; without the reset the copy walks a whole leg at 288 "
+          f"while the body backpedals at 190.1")
+    check(w_s.of(authsrv.GAME_SMSG_AGENT_STOP_MOVING) == []
+          and w_k.of(authsrv.GAME_SMSG_AGENT_STOP_MOVING) == [],
+          "NEITHER regime sends 0x0028 on a stop -- the one thing FINDINGS "
+          "sec.3.2 tells a server author not to do",
+          f"legacy={[r[2] for r in w_s.rows]} default={[r[2] for r in w_k.rows]}"
+          f" -- retail sends 0x0028 on 7 of 114 stops (6.1%); 0x0028 halts "
+          f"BOTH copies where they stand, so on a stop it freezes the drift "
+          f"in instead of collecting it")
     def zl_names(node):
         return [n for n in ast.walk(node)
                 if isinstance(n, ast.Name) and n.id == "ZERO_LEAD"]
@@ -2663,7 +2743,9 @@ def main():
         w, r = (Sent(st) if wire is None else wire(st)), FakeRec()
         w.raised = []
         was_zl, was_pc = authsrv.ZERO_LEAD, authsrv.PLANE_CARRY
+        was_ks = authsrv.KBD_SYNC
         authsrv.ZERO_LEAD, authsrv.PLANE_CARRY = zero_lead, carry
+        authsrv.KBD_SYNC = False        # one variable -- see the note above
         try:
             for values, may in steps:
                 now = time.time()
@@ -2675,6 +2757,7 @@ def main():
                     w.raised.append(exc)
         finally:
             authsrv.ZERO_LEAD, authsrv.PLANE_CARRY = was_zl, was_pc
+            authsrv.KBD_SYNC = was_ks
         return st, w, r
 
     class PcDeadWire(Sent):
@@ -3398,8 +3481,10 @@ def main():
         w_, r_ = Sent(st_), FakeRec()
         was_zl, was_pc = authsrv.ZERO_LEAD, authsrv.PLANE_CARRY
         was_ac, was_time = authsrv.ARRIVAL_CARRY, authsrv.time
+        was_ks = authsrv.KBD_SYNC
         authsrv.ZERO_LEAD, authsrv.PLANE_CARRY = zero_lead, False
         authsrv.ARRIVAL_CARRY = carry
+        authsrv.KBD_SYNC = False        # one variable -- see the note above
         authsrv.time = clock
         try:
             for values, may in steps:
@@ -3410,6 +3495,7 @@ def main():
         finally:
             authsrv.ZERO_LEAD, authsrv.PLANE_CARRY = was_zl, was_pc
             authsrv.ARRIVAL_CARRY = was_ac
+            authsrv.KBD_SYNC = was_ks
             authsrv.time = was_time
         return st_, w_, r_
 
@@ -3513,8 +3599,10 @@ def main():
                      "sync_at": 0.0, "ac_queue": [], "ac_arrived": None}
     dead = PcDeadWire(ac_dead_state, die_on=1)
     was = (authsrv.ZERO_LEAD, authsrv.PLANE_CARRY, authsrv.ARRIVAL_CARRY)
+    was_ks = authsrv.KBD_SYNC
     authsrv.ZERO_LEAD, authsrv.PLANE_CARRY = True, False
     authsrv.ARRIVAL_CARRY = True
+    authsrv.KBD_SYNC = False            # one variable -- see the note above
     try:
         now = time.time()
         ac_dead_state["grant_at"] = now - 10.0
@@ -3525,6 +3613,7 @@ def main():
             pass
     finally:
         authsrv.ZERO_LEAD, authsrv.PLANE_CARRY, authsrv.ARRIVAL_CARRY = was
+        authsrv.KBD_SYNC = was_ks
     check(ac_dead_state["ac_queue"] == [] and ac_dead_state["ac_arrived"] is None,
           "and a send that RAISES leaves the queue exactly as the last grant "
           "that really went out left it",
