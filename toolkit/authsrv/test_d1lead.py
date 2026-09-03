@@ -512,13 +512,14 @@ def main():
           "coordinates on our mesh to <=3u only at a fine step -- at "
           "16u the landing quantizes ~9u short of the edge retail names "
           "exactly (p05 went 14.6u -> 2.0u when the step dropped)")
-    check(src.count("a2_matched_field4(") == 10,
-          "the matched-words helper has exactly its def and NINE call "
-          "sites -- the heading arm, the stop-repin, the ETA watchdog's "
-          "repin, the two click-answer sites (immediate + deferred), and "
-          "ROUTER-B2's four (chain tick, clip-fallback, one-leg verbatim, "
-          "first leg of a chain): every 0x0029 the bundle OR the router "
-          "sends is matched",
+    check(src.count("a2_matched_field4(") == 11,
+          "the matched-words helper has exactly its def and TEN call "
+          "sites -- the heading arm's D1 branch, the stop-repin, the ETA "
+          "watchdog's repin, the two click-answer sites (immediate + "
+          "deferred), ROUTER-B2's four (chain tick, clip-fallback, one-leg "
+          "verbatim, first leg of a chain), and since 2026-09-03 night "
+          "MOVECODE-1z-z's KBD lead branch: every 0x0029 the bundle, the "
+          "router OR the keyboard lead sends is matched",
           "an extra caller would rewrite another arm's field 4 under a "
           "flag whose charter does not cover it; a missing caller leaves "
           "one send path carrying the stale word the lock needs. The "
