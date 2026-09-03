@@ -4217,6 +4217,40 @@ def _forget_client_position(state, why):
     would have paired a modelled point with the plane of a report taken
     somewhere else. That is the split `_take_client_position`'s own comment
     was written to close, re-opened from the other end.
+
+    THE ASYMMETRY, and it is the rule rather than the list. THE POINT'S
+    SOURCE decides, not the opcode and not the call site: a 0x002C at a
+    point OUR MODEL computed CONTRADICTS the last report, so forget it; a
+    0x002C at THE REPORT ITSELF agrees with it, so keep it -- the report
+    still describes where the body is, and dropping it would fail every
+    consumer closed over a fact we still hold. Six sites in this file send a
+    0x002C for the player, and five of them sort by that one test:
+      forget -- `_press_supersedes` (the click leg lerped to the press) and
+        `_approach_send`'s snap re-pin WHEN `_click_leg_source` says "leg".
+        The cast-stop pin is the third modelled placement and reaches the
+        same end by its own older route: `cast_stop_pin` out-ranks any
+        report older than the pin, which is the pattern named above.
+      keep -- `_maybe_resync` and `_agtrack_maybe_repin` (both send
+        `client_pos` verbatim, one from the guard's copy of it) and
+        `_approach_send` when its point came from "report".
+    `_approach_send` is the only site that can be either, which is why it
+    asks `_click_leg_source` instead of assuming.
+
+    ONE SITE DOES NOT SORT CLEANLY and it is left alone on purpose: the
+    plane-repair fire sends the report's own POSITION with a CORRECTED
+    plane, so the position half agrees with the record and the plane half
+    contradicts it. It runs after `_take_client_position` has already
+    written `client_plane` = the plane being repaired (both on the 0x003D
+    arm, `_maybe_plane_repair` immediately below the take), so the record
+    is left naming a plane the client no longer holds -- half a fact, which
+    is the state this whole helper exists to refuse. Forgetting the triple
+    is the wrong answer there (the position is still good and the repair's
+    whole point is that it knows the right plane) and re-writing
+    `client_plane` would be a second writer of the record, which is the
+    other thing refused. The consumers that would read it are RESYNC and
+    CAST_STOP == "pin", both OFF, so it is latent like the rest -- recorded
+    here rather than fixed, because a third behaviour change in one arc
+    leaves none of them attributable.
     """
     state.pop("client_pos", None)
     state.pop("client_plane", None)
@@ -10236,6 +10270,27 @@ def handle_perf_report(values, send, state, conn_id):
          f"LATENCY_REPORT({elapsed_ms} ms)", quiet=True)
 
 
+def _click_leg_source(state, silent):
+    """WHICH of `_click_leg_start`'s three sources answers -- by name.
+
+    "leg" is OUR MODEL (a lerp along the click leg), "report" is the
+    client's own last accepted position, "pos" is the blend, and None means
+    nothing can place the body at all. `_click_leg_start` reads its branch
+    from HERE rather than restating it, because a caller that puts the point
+    on the WIRE has to know which one it got: a 0x002C at a "leg" point
+    contradicts the last report and a 0x002C at the "report" point agrees
+    with it, and the two answers are opposite (`_forget_client_position`,
+    THE ASYMMETRY). A second copy of this condition would be a second place
+    to disagree with it -- the same defect shape this file's source lock on
+    state["client_pos"] exists to catch, one field over.
+    """
+    if silent and state.get("click_leg") is not None:
+        return "leg"
+    if state.get("client_pos") is not None:
+        return "report"
+    return "pos" if state.get("pos") is not None else None
+
+
 def _click_leg_start(state, now, silent):
     """Where the body is when a click arrives, on the server's own model.
 
@@ -10247,9 +10302,12 @@ def _click_leg_start(state, now, silent):
     after a finished leg means the body is parked at its end); else the last
     accepted report; else the placement. Every position here is a model
     except the report itself, and the error is stated at _click_leg_arm.
+    `_click_leg_source` names which of the three answered, for the callers
+    that have to treat a model and a report differently.
     """
-    leg = state.get("click_leg")
-    if silent and leg is not None:
+    src = _click_leg_source(state, silent)
+    if src == "leg":
+        leg = state["click_leg"]
         x0, y0 = leg["p0"]
         dx, dy = leg["dest"][0] - x0, leg["dest"][1] - y0
         span = leg["eta"] - leg["t0"]
@@ -10257,8 +10315,10 @@ def _click_leg_start(state, now, silent):
             return leg["dest"]
         f = max(now - leg["t0"], 0.0) / span
         return (x0 + dx * f, y0 + dy * f)
-    pos = state.get("client_pos") or state.get("pos")
-    return None if pos is None else (float(pos[0]), float(pos[1]))
+    if src is None:
+        return None
+    pos = state["client_pos"] if src == "report" else state["pos"]
+    return (float(pos[0]), float(pos[1]))
 
 
 def _click_leg_arm(state, dest, now, silent):
@@ -10458,6 +10518,10 @@ def _approach_send(send, state, conn_id, target_id, agent, now, repath=False):
             reprieve = 100.0
         silent = state.get("click_moving_at") is not None
         model = _click_leg_start(state, now, silent)
+        # WHOSE POINT this is, read BEFORE either write below moves the
+        # answer -- the forget would make it "pos" and `state["pos"] =` would
+        # make that "pos" the re-pin. It decides the forget, not the send.
+        src = _click_leg_source(state, silent)
         sync = _sync_position(state, now) or state.get("pos")
         if model is not None and sync is not None:
             sep = math.hypot(model[0] - sync[0], model[1] - sync[1])
@@ -10470,6 +10534,37 @@ def _approach_send(send, state, conn_id, target_id, agent, now, repath=False):
                      f"{sep:.0f} u from the modelled click-leg end, past the "
                      f"client's {reprieve:.0f} u reprieve [ANIMREF-RE 38]")
                 state["pos"] = (float(model[0]), float(model[1]))
+                # AND THE REPORT IS NOW KNOWN-WRONG -- when the point was
+                # OURS. `_forget_client_position`'s asymmetry applied to the
+                # one 0x002C site whose payload can come from either side:
+                # `src == "leg"` is `_click_leg_start`'s dead-reckoned lerp,
+                # so the placement CONTRADICTS the last report, while "report"
+                # is that report and the placement agrees with it (the
+                # `_agtrack_maybe_repin` / `_maybe_resync` case -- they never
+                # forget, and neither may this arm when it sends their point).
+                #
+                # THE CONSEQUENCE IS CONCRETE and it is why the leg arm cannot
+                # be left alone. The send re-seeds the sync model onto its own
+                # point (`_note_wire_move`: sync_from = point, sync_to = None),
+                # so `_keepalive_ok` next computes
+                # sep = hypot(client_pos - sync) with client_pos still at the
+                # click leg's START -- which is the separation that just fired
+                # this re-pin, by construction over KEEPALIVE_SEPARATION -- and
+                # grants AGENT_MOVE_TO_POINT at the leg start, walking the body
+                # back down the leg it just walked. `_resync_verdict` has the
+                # same shape and hard-SETS both copies there instead. Both ship
+                # OFF (KEEPALIVE_GRANT, RESYNC), so this is latent, one flag
+                # away -- which is exactly the state ANIMREF-RE 39's write was
+                # in for two weeks.
+                #
+                # AFTER `state["pos"]`, deliberately: once the triple is gone,
+                # `_click_leg_start`'s fallback is what carries the answer, and
+                # `state["pos"]` IS that fallback. The reader below takes the
+                # re-pinned point out of it one line later.
+                if src == "leg":
+                    _forget_client_position(
+                        state, "the approach re-pinned at the modelled "
+                        "click-leg end")
     px, py = state.get("pos", (0.0, 0.0))
     px, py = float(px), float(py)
     dist = math.hypot(tx - px, ty - py)

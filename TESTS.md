@@ -3963,14 +3963,59 @@ Floor 75 against a green 75 with 5 declared skips (the archive-conditional
   count and the forget, dropping `state["pos"] = model` reddens the snap
   guard, forgetting ahead of the flag guard reddens the control.
 
-  **Still open, and deliberately not fixed in the same commit:**
-  `_approach_send`'s own snap re-pin sends a 0x002C at a modelled point and
-  does NOT forget the report, so it leaves the same stale value the
-  supersede arm used to launder. It is not a `client_pos` writer, so the lock
-  cannot see it, and both consumers that would be hurt (`--resync`,
-  `--keepalive-grant`) ship OFF — but the day either is turned on, a
-  keep-alive re-grant after an approach re-pin would grant to the leg's
-  start. It also
+  **Closed 2026-09-03, and the closure carried the rule the first fix only
+  implied.** `_approach_send`'s own snap re-pin was the other 0x002C at a
+  modelled point, and it did not forget: not a `client_pos` writer, so the
+  lock could not see it, and both consumers that would be hurt ship OFF —
+  but the day either is turned on, the send re-seeds the sync model onto its
+  own point (`_note_wire_move`: `sync_from = point`, `sync_to = None`) and
+  `_keepalive_ok` then computes `sep = hypot(client_pos − sync)` with
+  `client_pos` still at the click leg's START. That separation is the one
+  which just fired the re-pin, so it is over `KEEPALIVE_SEPARATION` **by
+  construction**, and the grant goes out at the leg start — walking the body
+  back down the leg it just walked. `_resync_verdict` has the same shape and
+  hard-SETS both copies there instead.
+
+  **The rule is the ASYMMETRY, and it is about the POINT'S SOURCE — not the
+  opcode, not the call site.** A 0x002C at a point our model computed
+  CONTRADICTS the last report, so forget it; a 0x002C at the report itself
+  AGREES with it, so keep it, because dropping it would fail every consumer
+  closed over a fact we still hold. All five 0x002C senders sort by that one
+  test: `_press_supersedes` and `_approach_send`-on-a-modelled-point forget;
+  `_maybe_resync` and `_agtrack_maybe_repin` send `client_pos` verbatim and
+  keep. `_approach_send` is the ONLY site that can be either — its point is
+  `_click_leg_start`'s, which is the leg lerp when the client has been silent
+  and the client's own report otherwise — so the branch condition was split
+  out as `_click_leg_source` (returning `"leg"` / `"report"` / `"pos"`) and
+  `_click_leg_start` now reads its branch from there. One condition, one
+  place: a second copy of it is a second place to disagree, which is the
+  defect shape the source lock one field over exists to catch.
+
+  Section 11 gained four checks for it, all fixture-free: the forget; the
+  positive control that the re-pin still reaches the follow leg the same call
+  arms (the payload is read BEFORE `state["pos"] = model` and the follow's
+  start AFTER it, so the check brackets the write the forget depends on); and
+  **both** controls the asymmetry needs — a re-pin firing at the client's own
+  report forgets nothing, and the `repath=True` arm, which runs no guard at
+  all, forgets nothing either. Each went red on its own mutation with clean
+  attribution: deleting the forget reddens only the forget (that is the
+  pre-fix behaviour), dropping `state["pos"] = model` reddens only the
+  positive control, dropping the `src == "leg"` test reddens only the report
+  control, and hoisting the forget to the top of the function reddens both
+  controls and neither of the first two. Floors 223/231 → 227/235, read off
+  real green runs of each configuration.
+
+  **One 0x002C site does not sort cleanly and is recorded rather than
+  fixed:** the plane repair sends the report's own POSITION with a CORRECTED
+  plane, so the position half agrees with the record and the plane half
+  contradicts it. It runs immediately after `_take_client_position` has
+  written `client_plane` = the plane being repaired, so the record is left
+  naming a plane the client no longer holds — half a fact, the state
+  `_forget_client_position` exists to refuse. Forgetting is the wrong answer
+  (the position is still good, and the repair's whole point is that it knows
+  the right plane) and rewriting `client_plane` would be a second writer of
+  the record, which is the other thing refused. Its readers are `--resync`
+  and `--cast-stop=pin`, both OFF, so it is latent like the rest. It also
   asserts the flag ships OFF and that with it off a state that *would* fire
   sends nothing **and records nothing**; that the three constants carry
   derivations rather than choices (the trigger is the client's own 100.0 u
