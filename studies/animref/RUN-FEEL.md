@@ -94,8 +94,89 @@ arc twice; the questions are a floor, not a ceiling.
 
 ---
 
-## RESULT
+## RESULT — RAN 2026-09-03 08:46. **REFUTED on the primary question, and the
+## capture says the fix never applied to how the operator actually plays.**
 
-*(to be filled in from the operator's own words plus the paired agenttap
-capture — the subjective answer is the verdict, the capture is the corroboration
-and never the other way round)*
+**The operator, verbatim:** *"still seeing desync, enemy at long range, and
+couldn't resume attacking after some point. bad run."*
+
+That is symptom 1 present. §2 predicted it GONE. **Registered outcome: REFUTED.**
+
+### Why — the operator plays with the MOUSE, and 1z-t is a keyboard fix
+
+Capture `authsrv-20260903T084616-c1.jsonl`, 24.3 s of live play:
+
+| | count |
+|---|---|
+| `click_verdict` rows | **40** |
+| of those, **fired** | **0** |
+| refusal reason | **`geo-stale`, 40 of 40** |
+| client position reports (`0x003D`, keyboard) | 5 |
+| `KBD LEAD` sends | **2** |
+| `KBD STOP-ECHO` sends | **0** (no `0x0047` arrived at all) |
+
+`geo-stale` is the 1.0 s freshness gate (`authsrv.py:16373`). During click-to-move
+the client goes quiet, so **every** click fails it: the server grants nothing, the
+client paths itself, and world-0 stands where it was until the client's own
+desync test drags the body back. **None of 1z-t's three terms engage on the click
+path** — the lead and the family rate ride the `0x003D` arm, and the stop echo
+needs an `0x0047` that never came.
+
+The tap shows the same split as a number (220 samples, `agenttap-20260903T084632`):
+
+| | RUN-1zT (scripted keyboard) | this session (clicking) |
+|---|---|---|
+| player world-0 vs drawn body p50 | 0.0 | 0.0 |
+| **p90** | **17.7** | **223.1** |
+| max | 198.9 | 494.9 |
+| rendered enemy vs rendered player p50 / p90 | — | 78.3 / **336.8** |
+| enemy's own two copies p50 | 5.2 | 4.6 |
+
+**The fix holds at the median and collapses in the tail**, and the tail is where
+the symptom lives. The enemy remains faithful (4.6 u between its own copies), so
+§40.11's reading survives: this is still the player's world-0 desync, just on a
+path 1z-t does not cover.
+
+### What this settles
+
+- **MOVECODE-1z-t is correct, confirmed, and scoped to a regime the operator does
+  not use.** Nothing about RUN-1zT is retracted; its claim was always about the
+  keyboard arm and it holds there.
+- **§40.13's question is NOT answered.** The symptoms were never given a chance to
+  respond, because the mechanism under test never ran. This is a **zero-exposure
+  result for the treatment**, not evidence against the mechanism — the same trap
+  §2 named for the enemy and missed for the fix itself.
+- **The next step is already in the tree, measured and costed.** `PLAN.md` §7 Q13,
+  2026-08-27, decomposing the same refusals: *"Widen or bypass the freshness
+  window (13 of 17). ... This is the cheapest thing on the list and the largest
+  single contributor."* It also records that this can be asked **on its own,
+  without the D1_LEAD bundle.** This run reproduces it at **40 of 40**.
+
+### The scope error, named so it is not repeated
+
+The instrument run (RUN-1zT) used scripted keyboard input because that is what
+`--walk` can drive. The fix was then aimed at the keyboard arm and assumed to
+transfer. **Nobody checked which movement path the operator actually uses before
+choosing which path to fix** — and 24 s of ordinary play answered it decisively
+(40 clicks against 5 keyboard reports). A regime census is cheap, and it belongs
+BEFORE the fix, not after it.
+
+### This run's own limits, stated rather than smoothed
+
+- **~24 s of play.** The client exited cleanly (code 0, no error dialog) 31 s into
+  a 720 s hold; the tap recorded 220 samples and stopped there. Thin — but the
+  40/40 refusal signal is unambiguous and does not need length.
+- Two process failures cost operator time and are recorded in the session log: a
+  **relative `--exe`** made `Popen` resolve the client against the working
+  directory it sets, so the first launch never spawned one; and the tap then timed
+  out on its 120 s wait and had to be restarted, losing the session's first ~40 s.
+- **Symptoms 2, 3 and 4 are UNREAD**, not negative. With the treatment inert and
+  the run 24 s long, the predicted split (3 staying while 1 and 2 go) never got a
+  fair test.
+
+### Carried forward, unresolved
+
+- **"couldn't resume attacking after some point"** — a symptom §6's four questions
+  did not ask about. The capture holds 10 × `PRESS ENDS THE WALK`, 28
+  `attack_started`, 26 `melee_attack_finished`. Not diagnosed here; it is an
+  attack-chain question, not a movement one.
