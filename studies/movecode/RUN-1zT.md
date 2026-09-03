@@ -23,6 +23,19 @@ Behaviour under test: `MOVECODE-1z-t` / `KBD_SYNC`, shipped default ON
 Registered bound was p50 < 150 to confirm. **p50 is 0.0.** Exposure well over
 floor: 3,572 u of body translation over 193 moving samples.
 
+> **⚠ CAVEAT ADDED THE SAME EVENING (MOVECODE §1z-u, a skeptic lane).** This
+> p50 0.0 is **contaminated by an enslaved body.** From 18.65 s — an arrival
+> snap of the 15.747 s lead whose 16.211 s re-report was `heading-rate` refused
+> and dropped — the drawn body's walk target equals OUR granted dest **to the
+> unit on every later leg** ((9481,8430), (10014,8430), (9511,8950), (9511,8430),
+> (8991,8430)), and per-leg body travel is ~520 u for both 3 s and 4 s holds
+> (the Q 509 / E 513 / S 504 rows below). **World-0 vs body cannot distinguish
+> "world-0 follows the body" from "the body follows world-0."** One release in
+> seven produced a `0x0047`, and it followed the leg whose leads were all
+> zero-length clip fallbacks. The measurement stands; the *confirmation* does
+> not until a lead run is scored with an enslavement detector (async target ==
+> granted dest; per-leg travel vs hold). The lead term is OPT-IN as of §1z-u.
+
 **Term 2 is visible as a number rather than an inference.** World-0's own speed
 set went from a bare `[288]` on the baseline — against a body running
 `{190, 288}` — to **`[190, 216, 288]`**. The `0x002B` family rate is reaching the

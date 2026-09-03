@@ -9101,3 +9101,203 @@ via `codescan.py` (carve-out 1, no launch). The counterfactual simulator is
 session scratch over the same artifacts; its validation against the observed
 world-0 is stated above and is the only reason its numbers are quoted. No asset
 bytes, no upstream derivation, no §6.1 register row required.
+
+---
+
+## 1z-u. THE FRESHNESS GATE, DERIVED — the fix as asked is refuted, the operator's "bad run" was 1z-t's own lead, and the lead is now OPT-IN
+
+**Asked:** "do the freshness gate fix" — `PLAN.md` §7 Q13's cheapest item — after the
+operator's first ordinary session (RUN-FEEL, 2026-09-03 08:46) showed **40 of 40 clicks
+refused `geo-stale`**. **Answered by derivation, and the answer is not the fix that was
+asked for.** Zero client runs. Four derivation lanes + three skeptics on the gate (one
+lane lost to an API outage; its script survived and was run by hand), then a
+correction to 1z-t built and **refuted by two more skeptics before it reached main**,
+then the conservative change that did ship. Every number below was re-derived by at
+least one lane told to refute it.
+
+### 1z-u.1 Widening the window is dead by arithmetic, and the gate protects nothing
+
+- **The 1.0 s constant cannot be "widened to a principled value."** On the operator's
+  own 40 clicks the report age was **15.0–21.3 s** for clicks 1–31 (only the spawn
+  stamp existed) and **3.8–11.5 s** for 32–40. Any window ≤ 15 s answers ≤ 9 of 40;
+  only ≥ 23 s answers all — past retail's own observed maximum of **20.99 s**.
+  Widening converges on bypass. NOT-FOUND with a positive control: "widen" was never
+  built or run.
+- **The gate does not protect the plane word.** Both plane words are computed ABOVE
+  it and identically with or without it — field 3 = the click's own plane
+  (`values[2]`, `:18925`), field 4 = `state["plane"]` from the last accepted report
+  (`:18974`, paired at `:19009`). `fresh` decides only whether geometry RUNS and
+  whether the answer is SENT. The gate comment's thesis ("answering stale corrupts
+  the plane") is really an argument for not answering — and the shipped cost of not
+  answering is the measured 5,970 u spawn warp (K1 arm A).
+- **Retail has no freshness precondition.** Adjudicated 9: **26 of 26** clicks
+  answered in 30–65 ms, **21 of 26** with a report older than 1.0 s or none ever (max
+  20.99 s), and nothing bad follows — 0 repositions, next input answered 17/18.
+- **D1's model-aware bypass (`a2_click_leg`) is structurally inert in click play** —
+  armed only by a fired `--d1-lead` keyboard grant, popped by the next report.
+
+### 1z-u.2 `--click-echo` is LIVE for the answer decision and REFUTED as a default — three lenses
+
+`--click-echo` (K2) is the only bypass that survives the graveyard: geo-stale only,
+the client's own x,y, 8/8 answered, 446 u largest displacement, 0 spawn landings, and
+`--echo-any-refusal`'s refutation provably does not transfer (zero staleness echoes
+reached its wire; all 46 grants were geometry echoes). It stays opt-in. Three
+skeptics, each told to refute shipping it as the default, each did, for different
+reasons:
+
+1. **It would not have fixed this session.** Phase-split of the tap: during the 6.2 s
+   of drag-clicking (31 of 40 refusals, a click every 0.13–0.20 s) world-0 vs drawn
+   body was **p50 23 / p90 138 / max 166 u** and every Hatcher swing in that window
+   landed **70–94 u** from the rendered body — inside reach. The two long-range
+   swings (486, 420 u) and the 495 u tail are the **keyboard arm's** (§1z-u.3). A K2
+   counterfactual on the drag makes the median WORSE (23 → 57 u) for a 23 u tail
+   gain; the recovered SIM script agrees in shape (click burst 1: shipped p50 23 /
+   p90 138 vs K2-as-coded p50 36 / p90 98). "K2 answers 40/40" overstates the wire:
+   under the shipped rate tower a 5–7 Hz drag coalesces to **21 of 40** echoes.
+2. **Its plane word is a lock hazard on seam-rich maps.** K2's field 4 is
+   `state["plane"]`, frozen across a click walk the echoes themselves drive across
+   seams. OBSERVED in K2's own client bin: 16 of 18 SYNC stamps were 0 while 5 of 8
+   echoed legs crossed non-zero planes; at 89.89 s a gated reseed rewrote the LOCAL
+   body's plane 32 → 0 — legal by 752 u of timing. Corpus counterfactual: **709**
+   incoherent stamps in 36 of 116 click sessions — **0 on map 146**, the operator's
+   map. The matched-word variant is worse (1,607). The derived word, if this path is
+   ever built: field 4 := `pm.plane_at()` of the modelled sync copy.
+3. **It reopens the no-clip on long clicks.** 7 of 8 of K2's own echoed lines were
+   mesh-blocked (shortfalls to 4,322 u); client-side depth inside blocked ground 347 u
+   (r4a) against a 2 u control. `--router` kills it (0 samples > 1 u deep in two
+   runs) — but every router run predates `PRESS_SUPERSEDES_LEG`, which places both
+   copies on the RAW click chord, and had zero attack presses.
+
+**In the operator's 08:46 session either arm would have been clean**: all 40 dests
+on-mesh, 29–270 u from the body, 0/40 blocked lines, `route()` one leg for 40/40.
+The no-clip is a property of LONG clicks across geometry, not of this regime.
+
+**What the click path should eventually get** (not built here): `--router` as the
+default, with (a) the click-leg record re-armed to the routed first leg so the press
+re-pin stops placing the body on the raw chord, and (b) the derived plane word. That
+is its own arc with its own run. **Q13 is updated, not closed.**
+
+### 1z-u.3 ★ THE SESSION'S SYMPTOMS WERE 1z-t's OWN LEAD — a keyboard lead maturing unanswered
+
+The tap's tail (p90 223 / max 495 u), both long-range swings and the starved attack
+trace to **one grant**. The `KBD LEAD` at 24.09 s sent world-0 519.5 u west at
+speed-truth 0.66. The client's next heading report **66 ms later** was refused
+`heading-rate` and **dropped by design** — `_heading_grant_ok`: *"a refused heading
+grant is DROPPED, NOT HELD — the next report carries a fresher position"* — a premise
+that failed: no `0x003D` for 2.7 s / 567 u. **The drawn body kept walking its OWN
+north-west heading** (tap target (9554,8705), v = (−92, 195), from 24.08 to 26.75 s —
+NOT the lead's endpoint). At the lead's arrival (26.85 s, ETA 24.09 + 518/190) the
+client's arrival reconcile **snapped the drawn body 498 u** onto the sync copy's
+parked point (9412,8041) — and that snap **shut the AgTrack fence**, after which every
+grant is walked as an order and key releases go unreported: five keyboard reports,
+**no `0x0047` ever**, the stop echo never fired, the keyboard latch stayed armed
+(ANIMREF-RE §41, `f6fe4e5`; attribution to this lead corrected by that session in
+`faa5b94`). Zero clicks occurred between 22.06 and 27.99 s. Skeptic 3's correction:
+the click gate still produced ~36% of the p90 tail (a 1.7 s excursion of refused
+post-snap clicks) — not blameless, not the cause.
+
+**The same thing is inside RUN-1zT's CONFIRMATION, and the p50 0.0 is contaminated.**
+From 18.65 s — an arrival snap (25 u) of the 15.747 s lead whose 16.211 s re-report
+was rate-refused — the drawn body's walk target equals OUR granted dest **to the
+unit on every later leg** ((9481,8430), (10014,8430), (9511,8950), (9511,8430),
+(8991,8430)), and per-leg body travel is ~520 u for both 3 s and 4 s holds (Q 509, E
+513, S 504 in §1z-t.9). **World-0 vs body cannot distinguish "world-0 follows the
+body" from "the body follows world-0."** One release in seven produced a `0x0047`,
+and that one followed the leg whose leads were all zero-length clip fallbacks.
+§1z-t.9's headline stands as a measurement and falls as a confirmation: it needs an
+enslavement detector (async target == granted dest; per-leg travel vs hold duration)
+before it is quoted again.
+
+### 1z-u.4 The correction I built, and why it was refuted before merging
+
+I read the missing `0x0047` as the client executing a grant it did NOT propose as a
+click-order, and built the fix: make the lead the client's OWN proposed endpoint
+(retail's D1 formula, `d1_lead_dest`). Desk evidence: per keyboard burst "closed by
+a `0x0047` within 3 s", 520 u lead 1 of 9 vs D1's own-endpoint ~70%. **Committed on
+the worktree as `8641930`, refuted by two skeptic lanes, reverted as `723641e`.**
+What they established, each re-derived from captures:
+
+- **The mechanism is NOT FOUND in any decode and contradicted by the record.** The
+  `0x0029` handler writes `+0x80/+0x88..+0xA8` and bakes; nothing reads a pending
+  proposal. REALFIX §0.10 layer 1, §0.11, §0.17 and RETHINK §2 all say every fired
+  `0x0029` is an order-walk once the fence is shut — D1's own-endpoint leads
+  included (§0.17: 24 of 36 D1 leads walked through walls).
+- **Retail's own wire refutes it directly.** ArenaNet sends a dest that is NOT the
+  client's proposal on **1,223 of 3,072** grants (40% — the D2 clip), 988 on-ray but
+  SHORT — our 520 u geometry. Next input after on-ray grants 400–766 u short
+  (n = 447): KBD 397 / STOP 21 / none 7, the same shape as bit-exact grants, all 21
+  stops landing SHORT of the dest. By the diff's own metric, bit-exact D1 bursts
+  close at **13.7%** and CLIPPED ones at **38.8%** — the opposite direction.
+- **My 11% vs 70% was an instrument artifact.** A 1 s burst gap splits a held walk
+  (report cadence modally 1.8 s) into several "bursts" most never followed by a
+  release, while A2's 2.4 s protocol legs make one burst per release. Per held-key
+  LEG the zero-lead arm closes 3 of 4 (9 of 9 at a 6 s window). And the D1 arm hides
+  contiguous silent full walks with the own-proposal point — 063459 t = 154–176 s
+  (8 bursts, zero `0x0047`, §0.10's incident #29), 073609 t = 25.8–35.3 s (the §0.11
+  golden lock repro), five silent walks to the D1 endpoint after 3.7–8.2 s of
+  silence.
+- **Under the diff the 08:46 session plays out identically with a ~766 u snap
+  instead of 498.** The point's identity never enters the fence logic.
+- **The §0.11 input-lock armer is live on the KBD path.** `pc_matched` is False on
+  all 14 fired `KBD_SYNC` rows; 073121's 12.358 s grant has plane cur = 0, dest = 29.
+  I skipped `a2_matched_field4` on this arm "to change one variable" — the skip
+  reintroduced a decoded lock cause.
+- A number in the reverted comments, "1,650 of 3,037 bit-exact", has no extractor
+  in `studies/`; REALFIX §3.2's **1,642 of 2,599 on-ray rows at +0.500** is canonical.
+
+**Retail's D1 formula is retail-verbatim and sync-neutral-to-mildly-better; it is
+not a stop-report mechanism.** If the length is ever changed it is argued on
+**maturation margin** — 766 u leaves ~250 u over the ~515 u report chord where 520
+leaves 5 — with the longer forced walk stated as its cost.
+
+### 1z-u.5 What shipped: the lead is OPT-IN, the two additive terms stay
+
+One run convicted one term, so that term is out (§29's rule, applied). `KBD_SYNC_LEAD_ON`
+defaults **False**; `--kbd-lead` opts in; `--no-kbd-lead` still parses and wins so
+pre-1z-u runsheets keep their meaning; the banner prints the split and warns when
+the lead is on. The family rate and the stop echo stay ON — nothing has convicted
+them, and under zero-lead the copy parks near the report, the drift is §1z-t.3's
+report-chord lag, and the stop echo closes it at every stop (the scripted
+counterfactual's "stop-ack only" arm: p50 237 → 0, p90 431 → 272, with no
+forced-walk exposure). The formula is unchanged behind the flag.
+
+**Before the lead returns, in order, each with its own test:** (a) a rate-refused
+heading is HELD and re-baked at the floor, never dropped, and an in-flight keyboard
+lead is killed by the zero-distance re-pin on any press or click (what `PRESS ENDS
+THE WALK` already does for click legs) — never let a keyboard lead outlive its
+answer; (b) `a2_matched_field4` on the KBD grant and stop-echo path; (c) the
+enslavement detector on any lead run; (d) the two new `0x002C` senders
+(`AGTRACK RE-PIN`, `PRESS ENDS THE WALK`) audited as fence-shutters — 08:46 had five
+before the keyboard burst.
+
+`test_kbdsync` pins the split and the flag semantics; the affected suite is green.
+
+### 1z-u.6 Corrections to the record, collected
+
+- **The operator's map is 146 (Lakeside County), not 148.** The `version` row's
+  `map_id` is the LOGIN map and reads 148 for every session in the corpus; the
+  instance is `MAP_UPDATE_CURRENT 0x0099` (`9900 9200` = 146; K2 and R7 `9900 1801`
+  = 280). Found independently by two skeptics.
+- **RUN-FEEL's "the press re-pin lands 0.2–24 u from the drawn body, so the teleport
+  hypothesis is refuted" measured the body AFTER the hard set.** Joined to the last
+  sample BEFORE the raw world-0 jump, the ten `0x002C`s moved the drawn body
+  13.8 / 19.5 / 83.8 / 30.2 / 96.9 / 57.4 / 0.3 / 86.5 / 0.2 / 39.2 u. Symptom 3 has
+  five specimens in that session and the click gate is not their cause.
+- **RUN-FEEL's `click_moving_at` diagnosis of the stuck attack was WRONG** (§41 found
+  `kbd_moving_at`, unbounded). A task chip carrying the wrong mechanism was spawned
+  from this session and correctly overridden by the session that took it.
+- **"The body walked to the lead's endpoint at 216 u/s"** (§1z-t's correction text
+  and §41.2) is wrong on the tap: it walked its own heading and was SNAPPED. Told to
+  the §41 session.
+- `heading-rate`'s "dropped, not held" premise is false whenever the client is
+  silent on a matured lead — the next derivation target, (a) above.
+- `agtrack_guard` telemetry lives in the gamesrv JSONL, not the console; a fired
+  re-pin's console line is capitalised `AGTRACK RE-PIN`.
+
+### 1z-u.7 Provenance
+
+All figures are measurements over the owner's own captures via extractors in this
+repo (`w0score.py`, `agenttap.py`, `tape.py`/`codec.py`, `livewire.py`,
+`readhook.py` on the K2 movehook bin) plus read-only static reads of the pinned
+38797 client via `codescan.py`. No asset bytes, no client launch, no upstream
+derivation.
