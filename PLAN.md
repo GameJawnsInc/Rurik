@@ -1488,7 +1488,18 @@ before the first native commit, which is where that doc says to pose them.
   be chosen to keep that number at one.
 
 **Q13. Do we turn `D1_LEAD` on, now that the cost of leaving it off is measured?**
-⏳ **OPEN, raised 2026-08-27 by
+⏳ **OPEN — and its "cheapest item" was DERIVED 2026-09-03 and is not a fix
+([studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1z-u).** The
+operator's ordinary session reproduced the refusals at 40 of 40 (`geo-stale`).
+Widening the 1.0 s window is dead by arithmetic (click ages 15–21 s; only ≥ 23 s
+answers all, past retail's 20.99 s max); the gate protects no plane word; retail
+has no freshness precondition. `--click-echo` — the only surviving bypass — was
+refuted as a default on three lenses (does not fix the session, plane-lock
+hazard off map 146, no-clip on long clicks). **The click path's derived answer
+is `--router` as default**, with the click-leg record re-armed to the routed
+first leg and a plane word from the modelled copy's mesh plane; that is its own
+arc. The session's felt symptoms were 1z-t's keyboard lead, now opt-in.
+Raised 2026-08-27 by
 [studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1i.**
 
 The measurement, not the proposal, is what is new. When our geometry cannot place
@@ -1590,7 +1601,60 @@ floors and aborts in `RUN-R8.md`; both are operator-driven client runs.
 
 ## 8. Immediate next actions
 
-### ★★★★★ MOVEMENT 2026-09-03 — THE PLAYER'S WORLD-0 SYNC IS DERIVED AND SHIPPED: the drift is `report_gap × speed`, and it is 7× retail's because we grant the point the body already left
+### ★★★★ MOVEMENT 2026-09-03 evening — THE FRESHNESS GATE DERIVED (refuted as asked), 1z-t's LEAD CONVICTED BY THE OPERATOR'S RUN AND MADE OPT-IN, and a correction to it refuted before merging
+
+**[studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1z-u.** Zero client
+runs: four derivation lanes + three skeptics on the gate, then two skeptics on a
+correction. The entry below this one is superseded on two points and stands on
+the rest.
+
+* **"Do the freshness gate fix" — answered by derivation, and the answer is not
+  the fix.** Widening the 1.0 s window is dead by arithmetic (the operator's
+  click ages were 15–21 s and 3.8–11.5 s; only ≥ 23 s answers all 40, past
+  retail's own 20.99 s max). The gate **does not protect the plane word** — both
+  words are fixed above it; its only effect is withholding the answer. Retail
+  has no freshness precondition (26/26 answered, 21/26 with a report > 1 s old
+  or none). `--click-echo` is the live bypass and was **refuted as a default on
+  three independent lenses**: it would not have fixed this session (the drag
+  phase was p50 23 u with every swing inside reach; a K2 counterfactual makes
+  the median worse), its inherited plane word is a **lock hazard** on seam-rich
+  maps (709 incoherent stamps in 36/116 corpus sessions — 0 on map 146), and it
+  reopens the no-clip on long clicks. **The click path's eventual answer is
+  `--router` as default** with two named conditions. **Q13 updated, not closed.**
+* **★ The session's symptoms were 1z-t's OWN LEAD.** One `KBD LEAD` at 24.09 s;
+  the next heading report 66 ms later was `heading-rate` refused and **dropped by
+  design**; the 520 u leg **matured unanswered**; the client's arrival reconcile
+  **snapped the drawn body 498 u** onto the sync copy and **shut the AgTrack
+  fence** — both long-range swings, the 495 u tail, and (via the never-cleared
+  keyboard latch, ANIMREF §41) the starved attack. The drawn body had been
+  walking its **own** heading, not the lead's.
+* **★ RUN-1zT's "p50 0.0" confirmation is contaminated by an enslaved body** from
+  18.65 s (async target == granted dest to the unit on every later leg; per-leg
+  travel ~520 u regardless of hold). World-0-vs-body cannot tell who follows
+  whom. Caveat added to the runsheet; an enslavement detector is required before
+  any lead run is quoted.
+* **A correction was built, committed on the worktree, and REFUTED by two
+  skeptics before it reached main** (`8641930` → reverted `723641e`): "a grant to
+  the client's own endpoint keeps it in keyboard mode and restores the
+  `0x0047`" is NOT FOUND in any decode, contradicted by REALFIX §0.10/0.11/0.17
+  and RETHINK §2, and by retail's own wire (40% non-proposal grants with releases
+  processed at the normal rate; bit-exact D1 bursts close at 13.7% vs clipped
+  38.8% — the opposite direction). My 11%-vs-70% split was a burst-definition
+  artifact. Recorded in full so it is not re-tried.
+* **SHIPPED: the lead term is OPT-IN** (`--kbd-lead`; `KBD_SYNC_LEAD_ON = False`;
+  `--no-kbd-lead` still parses and wins). The family rate and the stop echo stay
+  on — additive, unconvicted, and the stop echo alone was the counterfactual's
+  largest single win. **Before the lead returns**: (a) HOLD a rate-refused
+  heading and re-bake at the floor, never drop it, and kill an in-flight keyboard
+  lead on any press or click; (b) `a2_matched_field4` on the KBD path (the §0.11
+  lock armer is live there — `pc_matched` False on all 14 fired rows); (c) the
+  enslavement detector; (d) audit the two new `0x002C` senders as fence-shutters.
+* Corrections collected in §1z-u.6: the operator's map is **146**, not 148 (the
+  `version` row is the login map); RUN-FEEL's re-pin measurement was post-set;
+  its `click_moving_at` diagnosis was wrong (§41); "walked to the endpoint" is
+  wrong on the tap in both §1z-t's text and §41.2.
+
+### ★★★★ MOVEMENT 2026-09-03 — THE PLAYER'S WORLD-0 SYNC IS DERIVED AND SHIPPED: the drift is `report_gap × speed`, and it is 7× retail's because we grant the point the body already left — **superseded in part by §1z-u above: the LEAD term is now opt-in and RUN-1zT's confirmation carries an enslavement caveat**
 
 **[studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1z-t** is the
 record; ANIMREF-RE §40.13 is the pointer from the arc that handed this over.

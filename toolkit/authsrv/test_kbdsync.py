@@ -48,7 +48,7 @@ from test_position_trust import receive_arm, Sent, FakeRec   # noqa: E402
 
 # Floor read off the first green run of this file, per CLAUDE.md -- never
 # guessed from a head-count, which this arc has got wrong three times.
-LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=32)
+LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=33)
 check = checks.adopt(LEDGER)
 
 SRC = open(authsrv.__file__, encoding="utf-8").read()
@@ -88,13 +88,27 @@ def main():
     import math
 
     print("1. the constants, and where each number came from")
-    check(authsrv.KBD_SYNC is True and authsrv.KBD_SYNC_LEAD_ON is True
+    # 1z-u (2026-09-03 evening): this check used to pin all four ON. The
+    # operator's first ordinary session convicted term 1 -- a lead that
+    # matures unanswered (a rate-refused re-aim is DROPPED) makes the client's
+    # arrival reconcile snap the body 498 u and shut the AgTrack fence -- and
+    # two skeptic lanes then refuted the correction built for it. So the lead
+    # is OPT-IN (--kbd-lead) and the pin is the SPLIT: the two additive terms
+    # ship, the lead does not, until 1z-u's (a)/(b) land with their own tests.
+    check(authsrv.KBD_SYNC is True and authsrv.KBD_SYNC_LEAD_ON is False
           and authsrv.KBD_SYNC_SPEED_ON is True
           and authsrv.KBD_SYNC_STOP_ON is True,
-          "all four default ON -- the behaviour ships, the flags revert it",
-          "derived + flagged + tested means ship it (derive-dont-iterate); "
-          "an arm that defaults OFF after its derivation passed is a "
-          "question nobody asked the owner")
+          "KBD_SYNC ships with the family rate and the stop echo ON and the "
+          "LEAD OFF -- one run convicted one term, so that term is out",
+          "a lead defaulting ON after the 08:46 session would be shipping a "
+          "refuted arm; a stop echo or family rate defaulting OFF would be "
+          "withholding two additive terms nothing has convicted")
+    check("--kbd-lead" in SRC and "--no-kbd-lead" in SRC
+          and "bool(a.kbd_lead) and not a.no_kbd_lead" in SRC,
+          "the lead is opt-in through --kbd-lead, and --no-kbd-lead still "
+          "parses and wins, so pre-1z-u runsheets keep their meaning",
+          "a runsheet that said --no-kbd-lead must not silently start "
+          "meaning something else")
     check(authsrv.KBD_SYNC_LEAD == 520.0,
           "the lead is 520 u -- the client's OWN 0x003D distance trigger, "
           "held-heading chord p95 513.8 / p99 515.1 u",

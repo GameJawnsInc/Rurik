@@ -5538,12 +5538,54 @@ def d1_lead_dest(reported, vec2):
 # as three defaults nobody can tell apart afterwards.
 # D1_LEAD wins if both are set: it is the explicit experiment arm and it
 # carries its own registered predictions.
+#
+# TERM 1 (THE LEAD) IS OFF BY DEFAULT SINCE 2026-09-03 EVENING -- MOVECODE-1z-u,
+# studies/movecode/FINDINGS.md. It was ON for one day and the operator's first
+# ordinary session convicted it; two skeptic lanes then refuted the correction
+# I built for it before that reached main. What the captures show, on the
+# arm's own terms:
+#   * A keyboard lead that MATURES UNANSWERED is the defect. The heading-rate
+#     floor DROPS a refused re-aim ("the next report carries a fresher
+#     position" -- _heading_grant_ok), and that premise fails the moment the
+#     client goes quiet: 24.155 s in the 08:46 session (since_last 0.066) and
+#     16.211 s in RUN-1zT are the exact refusals that let a 520 u leg mature.
+#     When it matures the client's arrival reconcile SNAPS the drawn body onto
+#     the sync copy's parked point (498 u at 26.85 s, both long-range enemy
+#     swings, the tap's whole 495 u tail) and SHUTS the AgTrack fence -- after
+#     which every grant is walked as an order and key releases go unreported,
+#     which is what starved the attack (ANIMREF-RE 41's latch).
+#   * RUN-1zT's "p50 0.0" CONFIRMATION is contaminated by the same thing: from
+#     18.65 s (an arrival snap of the 15.747 s lead whose 16.211 s re-report
+#     was rate-refused) the drawn body's target equals OUR granted dest to the
+#     unit on every later leg and per-leg travel is ~520 u regardless of hold
+#     length. World-0 vs body cannot tell "world-0 follows the body" from "the
+#     body follows world-0". Score any future lead run with an enslavement
+#     detector (async target == granted dest; per-leg travel vs hold) first.
+#   * The 0.11 input-lock ARMER is live on this path: pc_matched is False on
+#     all 14 fired KBD rows (073121's 12.358 s grant has plane cur=0 dest=29).
+#     The a2_matched_field4 override was D1_LEAD-only and I skipped it here
+#     "to change one variable"; that skip reintroduced a decoded lock cause.
+# Under zero-lead none of this happens: the copy parks near the report, the
+# drift is the report-chord lag (1z-t.3's law), and the stop echo (term 3)
+# closes it at every stop. So the lead is OPT-IN (`--kbd-lead`) until, in
+# this order and each with its own test: (a) a rate-refused heading is HELD
+# and re-baked at the floor, never dropped, and an in-flight keyboard lead is
+# killed by the zero-distance re-pin on any press or click (what PRESS ENDS
+# THE WALK already does for click legs); (b) a2_matched_field4 runs on the
+# KBD grant and stop-echo path; (c) the lead length is argued on MATURATION
+# MARGIN -- 766 u leaves ~250 u over the ~515 u report chord where 520 leaves
+# 5 -- with the longer forced walk stated as its cost, not on any claim about
+# the client recognising its own proposal (refuted: retail's own wire has 40%
+# non-proposal grants with releases processed at the normal rate).
+# The formula below is unchanged and is what `--kbd-lead` sends.
 KBD_SYNC = True
-KBD_SYNC_LEAD_ON = True
+KBD_SYNC_LEAD_ON = False
 KBD_SYNC_SPEED_ON = True
 KBD_SYNC_STOP_ON = True
 # The client's own 0x003D distance trigger, held-heading chord p99 = 515.1 u.
-# A lead shorter than this lets the arrival tick fire between re-aims.
+# A lead shorter than this lets the arrival tick fire between re-aims -- and
+# 1z-u shows a lead only 5 u longer than it matures on the first dropped
+# re-aim. Opt-in only; see the block above.
 KBD_SYNC_LEAD = 520.0
 
 
@@ -22172,10 +22214,20 @@ def main():
                          "(0x002B [1.0,9] + a zero-distance 0x0029). Measured "
                          "against the client's own world-0 track: separation "
                          "from the drawn body p50 237 -> 0 u, max 516 -> 86 u.")
+    ap.add_argument("--kbd-lead", action="store_true",
+                    help="MOVECODE-1z-t term 1 ON (OPT-IN since 1z-u, "
+                         "2026-09-03): lead the heading grant 520 u along the "
+                         "client's heading. OFF by default because a lead "
+                         "that matures unanswered -- a rate-refused re-aim is "
+                         "DROPPED -- makes the client's arrival reconcile "
+                         "snap the body onto the sync copy and shut the "
+                         "AgTrack fence (498 u snap + the starved attack of "
+                         "the 08:46 session). Do not turn on for ordinary "
+                         "play until 1z-u's (a)/(b) land.")
     ap.add_argument("--no-kbd-lead", action="store_true",
-                    help="MOVECODE-1z-t term 1 OFF: the heading grant goes "
-                         "back to the reported point verbatim. Terms 2 and 3 "
-                         "stay on. One term per run -- sec.29's lesson.")
+                    help="MOVECODE-1z-t term 1 OFF. Since 1z-u this is the "
+                         "DEFAULT and the flag is kept only so existing "
+                         "runsheets still parse; it overrides --kbd-lead.")
     ap.add_argument("--no-kbd-speed-truth", action="store_true",
                     help="MOVECODE-1z-t term 2 OFF: send the player no 0x002B "
                          "family rate, so world-0 walks every family at "
@@ -23756,10 +23808,12 @@ def main():
               "client's world-0 copy of the player will sit a median 237 u "
               "behind the body it draws (agenttap, 2026-09-02).")
     else:
-        KBD_SYNC_LEAD_ON = not a.no_kbd_lead
+        # 1z-u: the lead is OPT-IN. --no-kbd-lead wins if both are passed,
+        # so a runsheet written before 1z-u still means what it said.
+        KBD_SYNC_LEAD_ON = bool(a.kbd_lead) and not a.no_kbd_lead
         KBD_SYNC_SPEED_ON = not a.no_kbd_speed_truth
         KBD_SYNC_STOP_ON = not a.no_kbd_stop_echo
-        _terms = [n for n, on in (("lead 520 u + navmesh clip",
+        _terms = [n for n, on in (("lead 520 u + navmesh clip (OPT-IN)",
                                    KBD_SYNC_LEAD_ON),
                                   ("0x002B family rate", KBD_SYNC_SPEED_ON),
                                   ("0x0047 stop echo", KBD_SYNC_STOP_ON))
@@ -23768,9 +23822,15 @@ def main():
               "client's WORLD-0 copy of the player near the body it draws. "
               "--legacy-kbd-sync reverts the whole behaviour.")
         print(f"      TERMS LIVE  {', '.join(_terms) if _terms else 'NONE'}")
-        if len(_terms) < 3:
-            print("      ONE TERM IS OFF -- this is a diagnostic arm, not the "
-                  "shipped default. Say so when you report the run.")
+        if KBD_SYNC_LEAD_ON:
+            print("      THE LEAD IS ON (--kbd-lead) -- an OPT-IN arm since "
+                  "1z-u, not the shipped default: a lead that matures "
+                  "unanswered snaps the body and shuts the AgTrack fence. "
+                  "Say so when you report the run, and score it with an "
+                  "enslavement detector before quoting a separation.")
+        elif not (KBD_SYNC_SPEED_ON and KBD_SYNC_STOP_ON):
+            print("      A DEFAULT TERM IS OFF -- this is a diagnostic arm, "
+                  "not the shipped default. Say so when you report the run.")
         print("      DERIVED    world-0 is moved by our 0x0029 alone (SYNC-"
               "ONLY, handler 0x005FD890) and the bake 0x005FE950 arms a "
               "FIXED |v| = maxSpeed x moveSpeed toward it, so a grant at the "
