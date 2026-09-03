@@ -1590,6 +1590,72 @@ floors and aborts in `RUN-R8.md`; both are operator-driven client runs.
 
 ## 8. Immediate next actions
 
+### ★★★★★ MOVEMENT 2026-09-03 — THE PLAYER'S WORLD-0 SYNC IS DERIVED AND SHIPPED: the drift is `report_gap × speed`, and it is 7× retail's because we grant the point the body already left
+
+**[studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1z-t** is the
+record; ANIMREF-RE §40.13 is the pointer from the arc that handed this over.
+Desk work over artifacts already on disk — **zero client runs**, one new default,
+one revert flag per term. **The verdict is the operator's next keyboard walk and
+nothing here substitutes for it.**
+
+* **The defect, measured in the client rather than inferred.** `agenttap.py`
+  reads both world copies; on the 2026-09-02 kite the player's world-0 (sync)
+  copy sits **p50 237 u** from the world-1 copy that is DRAWN, and it never
+  closes on its own — the capture ends with 10.01 s of a motionless player whose
+  two copies are 340.7 u apart. Retail holds the same quantity at ~74 u.
+* **The cause, read in the binary.** `0x0029` is SYNC-ONLY and `0x0025`'s setter
+  writes only the facing triple, so a fresh `0x0029` is the ONLY thing that moves
+  world-0; the bake `0x005FE950` arms a **fixed, distance-independent**
+  `|v| = maxSpeed × moveSpeed`. So world-0 chases the body's *past* at the body's
+  own speed and the lag, set at grant time, can never decay. **The law:
+  separation = report_gap × body_speed** — 1.80 s × 288 = 518.4 u predicted
+  against 516.1 u measured (−0.4%); retail's 0.257 s × 288 = 74.0 u. Cadence
+  ratio **7.00×**, separation ratio **6.97×**.
+* **★ The shipped AgTrack re-pin is structurally blind to it, and the run proves
+  it from both ends.** The guard evaluated 10 grants in that kite and answered
+  `pass/match` on **10 of 10** while the real separation at those instants ran to
+  513.8 u; `agtrack_repin_fire` = 0. Its MATCH is the *reprieve* test — the sync
+  copy against the client's own history trail — which zero-lead satisfies **by
+  construction**, and that is exactly what makes zero-lead warp-safe. *"On the
+  trail"* and *"near the body"* are different predicates. The two mechanisms are
+  orthogonal and both are wanted.
+* **Retail, derived on the 9 live captures.** Its lead makes the leg (p50 2.18 s)
+  outlive the re-grant interval (p50 0.49 s) **4.45×**, so the copy never reaches
+  `+0x48` and never parks (1.8% of moving samples against our 14.8%). One-variable
+  counterfactual, only the destination changed: retail's dests hold **p50 62.2 u**
+  where ZERO_LEAD holds **387.5 u**. An identity check that could have failed did
+  not — the simulated world-0 lands **2.8 u** from ArenaNet's own server copy
+  (measured independently as NPC follow destinations), against controls of 74–80 u
+  and 15,677 u.
+* **★ Cross-checked against the client's OWN world-0 track — which no earlier
+  candidate in this arc had.** Model validated against the observed copy at
+  **p50 0.0 / p90 16.0 u**, then the counterfactual: shipped **p50 237 / max 516**
+  → all three terms **p50 0 / p90 13.3 / max 85.9**. **The terms are not
+  separable**: the lead ALONE at 766 u is *worse than shipping nothing*
+  (p50 425), because it overshoots every stop and the stop echo is what collects
+  it. Any "the lead is the fix" or "the echo is the fix" reading is refuted by its
+  own row.
+* **SHIPPED, default ON, `--legacy-kbd-sync` reverting all three and
+  `--no-kbd-lead` / `--no-kbd-speed-truth` / `--no-kbd-stop-echo` one each** (so
+  one run convicts one term): the heading grant is **led 520 u** along the
+  client's own reported heading and navmesh-clipped (520 is the client's own
+  `0x003D` distance trigger, held-heading chord p99 515.1 u — read off the client,
+  not fitted); the **`0x002B` family rate** rides the burst edge-triggered; every
+  **`0x0047` draws retail's stop reply**. The click arm is untouched. `test_kbdsync.py`
+  (32 checks) + `test_position_trust`'s re-aimed stop-arm section.
+* **Two corrections to §40.11's own numbers, neither changing its conclusion**:
+  its **max 806 u is a sample-and-hold artifact** (`position_at`'s clamp-first
+  rule gives **516.1**; the 237 median is robust), and **every A/D leg of that
+  kite travelled 0 u** because A/D turn in place in Guild Wars — so a future run
+  must drive **W/S**, and Q/E to strafe.
+* **Registered prediction, before the run:** `agenttap.py --agents 1` reads world-0
+  vs world-1 **p50 under 150 u**. **REFUTED IF** it stays above 200 u, or the
+  operator reports a new visible warp class. **Open and named**: the guard's
+  behaviour under a lead is UNVERIFIED (additive by construction, so the worst
+  case is extra ≤100 u re-pins — score it from the first capture's
+  `agtrack_guard` rows); n is four translation legs on one map; a re-grant timer
+  that dead-reckons its anchor is REFUTED before being built (p90 → 2,416 u).
+
 ### ★★★★ ANIMREF 2026-08-30 — attack/cast animations resume on the movement lesson: the retail referent FIRST, and it immediately re-derived three constants
 
 **[studies/animref/PLAN.md](studies/animref/PLAN.md)** (the arc + divergence census

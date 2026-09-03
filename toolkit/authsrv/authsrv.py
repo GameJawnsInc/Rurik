@@ -5363,6 +5363,145 @@ def d1_lead_dest(reported, vec2):
              float(reported[1]) + vy + 0.5 * vy / mag], "d1")
 
 
+# --- KBD_SYNC (MOVECODE-1z-t): keep the client's WORLD-0 copy of the player
+# --- near the body it is supposed to represent, during keyboard movement.
+#
+# THE DEFECT, measured in the client's own memory rather than inferred.
+# `agenttap.py` records BOTH client copies of an agent; on the 2026-09-02 kite
+# (vault/research/animref/agenttap-20260902T213401.jsonl, 507 player samples)
+# the player's own world-0 (sync) copy sits a median 237 u from the world-1
+# copy that is DRAWN, and the gap never closes on its own -- across four
+# zero-motion legs the separation is flat at 237/237/198/341 u and the capture
+# ends with 10.01 s of the player standing perfectly still with the two copies
+# 340.7 u apart. Retail holds the same quantity at ~74 u (studies/animref
+# FINDINGS sec.38.3). ANIMREF-RE sec.40.11 traced all three of the operator's
+# enemy symptoms to this one number: the collision disc parks the enemy
+# relative to world-0, so a stale world-0 lands the rendered enemy 2-587 u from
+# the rendered player. THE ENEMY WAS NEVER THE BUG.
+#
+# WHY IT HAPPENS, from the binary (MOVECODE-1z-t.2). 0x0029 is SYNC-ONLY
+# (handler 0x005FD890, sync arm 0x005FD8CE and no async arm) and 0x0025's
+# setter 0x00602660 writes the FACING triple +0xB8/+0xBC/+0xC0 and nothing
+# else -- 12 stores, exhaustive. So a fresh 0x0029 is the ONLY thing that moves
+# the player's world-0 position, and the client never carries world-0 forward
+# from local input. The bake 0x005FE950 does not write a position: it arms a
+# velocity of FIXED magnitude |v| = maxSpeed x moveSpeed (+0x5C x +0x60),
+# DISTANCE-INDEPENDENT, plus an arrival tick +0x48, and the <= 1.0 u
+# short-circuit at 0x005FEA85 parks the copy on arrival. Under ZERO_LEAD the
+# destination is the point the client reported -- the point the body has
+# ALREADY LEFT -- so the leg is exactly the ground covered since the last
+# report, it expires about when the next grant lands, and the copy spends its
+# time parked behind the body. A lead can stop world-0 falling behind; because
+# |v| does not scale with distance it can never make it CATCH UP.
+#
+# THE LAW, and it has no free parameter. separation = report_gap x body_speed.
+# Our in-leg 0x003D gaps are modally 1.80 s: 1.80 x 288 = 518.4 u predicted
+# against 516.1 u measured (-0.4%). Retail's 0.257 s x 288 = 74.0 u. The
+# cadence ratio is 7.00x and the separation ratio 6.97x. Report LATENCY is not
+# the defect -- at the instant each 0x003D is sent the reported point is a
+# median 12.3 u from the body. The client tells the truth promptly; it tells it
+# rarely, and we answer with a point that was already old.
+#
+# THE THREE TERMS, each derived, none tuned. They are ONE behaviour because the
+# counterfactual says they are not separable -- the lead ALONE is worse than
+# shipping nothing (p50 425 u against 237) because it overshoots every stop.
+#   1. LEAD the heading grant by KBD_SYNC_LEAD along the client's own reported
+#      heading, then clip it to the navmesh (a2_clip_lead, sec.0.17's D2 term).
+#   2. SPEED TRUTH: the edge-triggered 0x002B family rate, so world-0 walks at
+#      the family the client is actually using.
+#   3. STOP ECHO: at every 0x0047, 0x002B [1.0, 9] then a zero-distance 0x0029
+#      at the reported stop -- retail's own dominant stop reply (70 of 114 land
+#      < 1 u from the reported stop, |dest-stop| p50 0.000 u). This is the term
+#      that collects the lead's overshoot AND closes the permanent strand.
+#
+# SCORED AGAINST GROUND TRUTH, which no earlier candidate in this arc had.
+# Every previous simulation validated against snaps and wire; the tap holds
+# world-0 itself. Driven by the grants actually sent, the model reproduces the
+# observed world-0 to p50 0.0 / p90 16.0 / max 69.1 u (AgAgent::position_at
+# semantics, clamp first -- movetap.py:851-876). Then, same reports, same
+# cadence, only the policy changed:
+#     SHIPPED (observed)            p50 237.0  p75 340.7  p90 431.3  max 516.1
+#     lead 520 alone                p50 179.3  p75 283.0  p90 335.1  max 414.6
+#     lead 766 alone                p50 425.3  p75 529.0  p90 581.1  max 660.6
+#     lead 520 + stop echo          p50   0.0  p75   9.5  p90  69.7  max 335.1
+#     all three (this default)      p50   0.0  p75   4.4  p90  13.3  max  85.9
+# Independently, on ArenaNet's own nine live captures with only the destination
+# changed, retail's dests hold p50 62.2 u where ZERO_LEAD holds p50 387.5 u.
+#
+# WHY 520 AND NOT D1_LEAD's 766. The lead must cover the most ground the body
+# can travel between two re-aims, or +0x48 fires and the copy parks. The
+# client's 0x003D is DISTANCE-triggered: held-heading chords run p95 513.8 u,
+# p99 515.1 u (corroborating REALFIX-W2's ~515 u from a different corpus). So
+# 520 is read off the client's own trigger, not fitted. Above it the curve is
+# flat and then degrades on overshoot; 460/520/766 sit within noise of each
+# other once the stop echo is on (p75 8.6 / 4.4 / 4.2) and 766 is 1.49x the
+# trigger distance with a signed p95 overshoot of +513 u against +342 at 520.
+#
+# 0x002B IS NOT INERT, and the corpus that said so never left cruise. Scored on
+# retail's forward-running captures the family rate is worth 62.2 -> 51.9 u and
+# reads as noise. Our kite has real backpedal legs -- the drawn body runs at
+# {190.1, 288.0} u/s while world-0 has only ever run at 288.0, because we send
+# the player no 0x002B at all (0 of 7 AGENT_UPDATE_SPEED rows in the capture
+# name the player; all seven name the Hatcher). On a substrate with backpedal
+# the term is worth p90 69.7 -> 13.3 and max 335.1 -> 85.9.
+#
+# THIS IS NOT --stop-echo AND NOT --heading-grant, and both epitaphs were read
+# first. `--heading-grant` (:1154) computed its point from `state["pos"]`, a
+# MODEL belief, and clipped it against our mesh; this is anchored on the report
+# in hand, which is the --heading-grant graveyard's own R2-1 lesson.
+# `--stop-echo` (:1071) is REFUTED, and its own 2026-08-25 correction block
+# says why that does not transfer: "the harm is the WALK, whose length is
+# |D - the sync copy's settled +0x78| -- reconstructed at ~1,286 u for the
+# 2026-08-19 echo, against a ~60 u p50 for retail's own stop-ack, which is
+# MECHANICALLY THE SAME MESSAGE." Under this default the copy tracks at one
+# report of lag, so the echo's leg is short by construction -- which is
+# precisely the precondition the correction names and the 2026-08-19 run
+# violated. The same block also retracts the operator's "it adds a SECOND
+# destination": every 0x0029 overwrites unconditionally (0x00602A40 above the
+# bake's <= 1.0 u branch).
+#
+# REVERT: `--legacy-kbd-sync` restores the pre-1z-t wire exactly. Each term
+# also has its own off switch (`--no-kbd-lead`, `--no-kbd-speed-truth`,
+# `--no-kbd-stop-echo`) so ONE run can convict ONE term -- the sec.29 lesson,
+# and the reason this ships as one behaviour with three named parts rather than
+# as three defaults nobody can tell apart afterwards.
+# D1_LEAD wins if both are set: it is the explicit experiment arm and it
+# carries its own registered predictions.
+KBD_SYNC = True
+KBD_SYNC_LEAD_ON = True
+KBD_SYNC_SPEED_ON = True
+KBD_SYNC_STOP_ON = True
+# The client's own 0x003D distance trigger, held-heading chord p99 = 515.1 u.
+# A lead shorter than this lets the arrival tick fire between re-aims.
+KBD_SYNC_LEAD = 520.0
+
+
+def kbd_lead_dest(reported, vec2):
+    """MOVECODE-1z-t's heading lead: (dest, src) for one report. Pure.
+
+    dest = reported + KBD_SYNC_LEAD * unit(vec2). The LENGTH is ours (the
+    client's report-trigger chord); the DIRECTION is the client's own, never
+    a model belief -- `--heading-grant`'s epitaph is a state["pos"]-anchored
+    ray and this is the same lesson D1's `reported`-anchoring already carries.
+
+    `src` is "kbd" when |vec2| sits in the verified proposal band, else
+    "fallback": the grant carries the zero-lead point and the verdict row
+    records which. REFUSE, DO NOT CLAMP -- a clamped wrong vector is still a
+    wrong destination, and the band check is d1_lead_dest's, reused rather
+    than restated so the two cannot drift apart.
+    """
+    try:
+        vx, vy = float(vec2[0]), float(vec2[1])
+    except (TypeError, ValueError, IndexError):
+        return [float(reported[0]), float(reported[1])], "fallback"
+    mag = math.hypot(vx, vy)
+    if (not math.isfinite(mag) or mag < D1_VEC2_FLOOR
+            or mag > D1_VEC2_CEILING):
+        return [float(reported[0]), float(reported[1])], "fallback"
+    return ([float(reported[0]) + KBD_SYNC_LEAD * vx / mag,
+             float(reported[1]) + KBD_SYNC_LEAD * vy / mag], "kbd")
+
+
 # The D2 clip's sampling interval, and it is deliberately FINER than
 # COLLISION_STEP's 16 u: the Q7 desk check (sec.0.17) reproduced retail's
 # clipped destinations on our own mesh to <=3 u only at a fine step -- at
@@ -5430,8 +5569,14 @@ def a2_clip_lead(state, reported, dest):
             "clipped" if clipped else "clear")
 
 
-def _a2_family_rate(send, state, mt):
+def _a2_family_rate(send, state, mt, tag="A2 FAMILY-RATE"):
     """Edge-triggered speed truth: one 0x002B per family CHANGE, plus re-arm.
+
+    `tag` names the ARM in the wire label. Two policies send this exact
+    message on the same edge -- REALFIX-A2's bundle and MOVECODE-1z-t's
+    KBD_SYNC term 2 -- and a capture whose rows cannot say which produced
+    them costs a later session a reconstruction (REALFIX-Q8). The bytes are
+    identical by design; only the label differs.
 
     Retail's 0x002B is a change signal (97.6% of family-change bursts vs
     11.5% same-family), and A1 proved the store PERSISTS -- so same-family
@@ -5444,7 +5589,7 @@ def _a2_family_rate(send, state, mt):
     """
     if state.get("a2_family_sent") == mt:
         return
-    if _send_family_rate(send, state, mt, tag="A2 FAMILY-RATE"):
+    if _send_family_rate(send, state, mt, tag=tag):
         state["a2_family_sent"] = mt
 
 
@@ -17937,6 +18082,18 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             # invariant, not the flag.
                             if D1_LEAD and zero_ok:
                                 _a2_family_rate(send, state, moving)
+                            elif KBD_SYNC and KBD_SYNC_SPEED_ON and zero_ok:
+                                # MOVECODE-1z-t term 2, SAME slot and same
+                                # edge as A2's -- world-0 walks at
+                                # maxSpeed x moveSpeed and moveSpeed is only
+                                # ever written by this message, so without it
+                                # the copy runs 288 u/s against a body
+                                # backpedalling at 190.1 (0.66 x 288). The
+                                # elif is the composition: D1_LEAD is the
+                                # explicit experiment arm and owns the slot
+                                # when both are set.
+                                _a2_family_rate(send, state, moving,
+                                                tag="KBD SPEED-TRUTH")
                             if HEADING_GRANT:
                                 # REFRESH THE CLIENT'S ARMED DESTINATION. It is
                                 # the only thing that stops a stale one maturing
@@ -18231,6 +18388,33 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                                          a2_dest))
                                     elif a2_src == "fallback":
                                         a2_clip_why = "fallback"
+                                elif KBD_SYNC and KBD_SYNC_LEAD_ON:
+                                    # MOVECODE-1z-t term 1. Same shape as the
+                                    # D1 branch above and the SAME clip, with
+                                    # one difference: the lead LENGTH is the
+                                    # client's own report-trigger chord
+                                    # (520 u) rather than its proposed
+                                    # endpoint (766 u), because the copy only
+                                    # has to outlast the next re-aim and 766
+                                    # overshoots by +513 u signed p95 against
+                                    # +342 at 520.
+                                    #
+                                    # PLANE WORDS DELIBERATELY UNTOUCHED. The
+                                    # D1 branch runs a2_matched_field4 first;
+                                    # this one does not, so the only thing
+                                    # 1z-t changes on this arm is the POINT.
+                                    # One variable, so one run can convict it
+                                    # -- and sec.0.11's armer-kill is a
+                                    # separate claim with its own evidence.
+                                    a2_dest, a2_src = kbd_lead_dest(
+                                        reported, heading)
+                                    if a2_src == "kbd":
+                                        (a2_dest, a2_lead_clipped,
+                                         a2_clip_why) = (
+                                            a2_clip_lead(state, reported,
+                                                         a2_dest))
+                                    else:
+                                        a2_clip_why = "fallback"
                                 if rec is not None:
                                     # EVERY evaluation, fired or refused, on the
                                     # SAME channel the click arm uses -- a log
@@ -18414,6 +18598,16 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                             f"({reported[0]:.0f},"
                                             f"{reported[1]:.0f})"
                                             if a2_src == "d1" else
+                                            # MOVECODE-1z-t: same "LED (x,y)
+                                            # from (rx,ry)" shape as D1's, so
+                                            # a reader (and every tool that
+                                            # already tolerates D1 LEAD) sees
+                                            # the wire point AND its anchor.
+                                            f"KBD LEAD ({zl_point[0]:.0f},"
+                                            f"{zl_point[1]:.0f}) from "
+                                            f"({reported[0]:.0f},"
+                                            f"{reported[1]:.0f})"
+                                            if a2_src == "kbd" else
                                             f"ZERO LEAD ({reported[0]:.0f},"
                                             f"{reported[1]:.0f})"
                                             + (" [d1-fallback]"
@@ -19407,6 +19601,52 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                  f"A2 STOP-REPIN ({reported[0]:.0f},"
                                  f"{reported[1]:.0f}) plane {plane}"
                                  + (" matched" if a2_stop_matched else ""))
+                            state["zl_last_grant_plane"] = plane
+                            state["a2_family_sent"] = None
+                        elif KBD_SYNC and KBD_SYNC_STOP_ON:
+                            # MOVECODE-1z-t term 3, THE STOP ECHO, and it is
+                            # the term that carries the result: without it the
+                            # lead overshoots every stop (p50 425 u, worse
+                            # than shipping nothing) and the gap a leg opened
+                            # never closes -- the 2026-09-02 capture ends with
+                            # 10.01 s of a motionless player whose two copies
+                            # are 340.7 u apart, because under the shipped
+                            # default a 0x0047 draws NOTHING (0 of 4 stop
+                            # reports produced a grant; positive control 10/10
+                            # for 0x003D).
+                            #
+                            # Retail's own dominant stop reply, and we are the
+                            # only one not sending it: 0x002B [1.0, 9] (the
+                            # server-only sentinel family, 131/131 live
+                            # echoes) then a zero-distance 0x0029 at the
+                            # reported stop -- 70 of 114 live stops land < 1 u
+                            # from it, |dest - stop| p50 0.000 u. Retail sends
+                            # 0x0028 on 7 of 114 (6.1%) and FINDINGS sec.3.2
+                            # states the rule outright: a server author must
+                            # not send 0x0028 on a stop.
+                            #
+                            # BOTH PLANE WORDS ARE THE CLIENT'S OWN REPORTED
+                            # PLANE, not the carry. At a zero-distance echo
+                            # field 3 (destination plane) and field 4 (current
+                            # plane) are the same plane by construction, which
+                            # is also retail's shape (its nonzero pairs are
+                            # bit-identical 222/222). Reusing the carry here
+                            # would import a one-grant lag into a site that
+                            # cannot need it.
+                            #
+                            # The family edge RESETS: [1.0, 9] has just
+                            # overwritten sync +0x60, so the next leg must
+                            # re-send its family even if unchanged.
+                            send(GAME_SMSG_AGENT_UPDATE_SPEED,
+                                 agents.agent_update_speed(
+                                     PLAYER_AGENT_ID, 1.0, 9),
+                                 "AGENT_UPDATE_SPEED(player, 1.0, type 9) "
+                                 "[kbd-stop]")
+                            send(GAME_SMSG_AGENT_MOVE_TO_POINT,
+                                 [PLAYER_AGENT_ID, list(reported),
+                                  plane, plane],
+                                 f"KBD STOP-ECHO ({reported[0]:.0f},"
+                                 f"{reported[1]:.0f}) plane {plane}")
                             state["zl_last_grant_plane"] = plane
                             state["a2_family_sent"] = None
                         # CANCELWALK R6 (--stop-answer=ack), and it is NOT
@@ -21577,6 +21817,33 @@ def main():
                          "zero-distance 0x0029). Requires --zero-lead and "
                          "--plane-carry; refused with the probe/diagnostic "
                          "arms. Protocol: click-free, cast-free.")
+    ap.add_argument("--legacy-kbd-sync", action="store_true",
+                    help="MOVECODE-1z-t REVERT: restore the pre-1z-t keyboard "
+                         "wire exactly (heading grant at the reported point "
+                         "verbatim, no player 0x002B, nothing at all on a "
+                         "0x0047). The default keeps the client's WORLD-0 "
+                         "copy of the player near the body it draws: the "
+                         "heading grant is LED 520 u along the client's own "
+                         "reported heading and clipped to the navmesh, the "
+                         "0x002B family rate rides the burst edge-triggered, "
+                         "and every 0x0047 draws retail's stop reply "
+                         "(0x002B [1.0,9] + a zero-distance 0x0029). Measured "
+                         "against the client's own world-0 track: separation "
+                         "from the drawn body p50 237 -> 0 u, max 516 -> 86 u.")
+    ap.add_argument("--no-kbd-lead", action="store_true",
+                    help="MOVECODE-1z-t term 1 OFF: the heading grant goes "
+                         "back to the reported point verbatim. Terms 2 and 3 "
+                         "stay on. One term per run -- sec.29's lesson.")
+    ap.add_argument("--no-kbd-speed-truth", action="store_true",
+                    help="MOVECODE-1z-t term 2 OFF: send the player no 0x002B "
+                         "family rate, so world-0 walks every family at "
+                         "288 u/s. Terms 1 and 3 stay on.")
+    ap.add_argument("--no-kbd-stop-echo", action="store_true",
+                    help="MOVECODE-1z-t term 3 OFF: a 0x0047 draws nothing "
+                         "again. Terms 1 and 2 stay on -- and this is the "
+                         "arm the counterfactual says is WORSE than the "
+                         "shipped default (p50 425 u against 237), because "
+                         "the lead's overshoot has nothing to collect it.")
     ap.add_argument("--router", action="store_true",
                     help="ROUTER-B2 (studies/movement/ROUTER.md; the "
                          "owner's 2026-08-26 ruling on RETHINK-H3): answer "
@@ -23126,6 +23393,51 @@ def main():
               "LABEL -- a [1.0, 1] send without the FAMILY-RATE PROBE "
               "prefix is a click; the definitive check is the c2s census "
               "(zero 0x003E rows).")
+    # MOVECODE-1z-t. Default ON; each term has its own off switch so one run
+    # can convict one term. The banner prints the terms that are LIVE, and
+    # prints the revert loudly when the whole behaviour is off, because a
+    # capture whose header cannot say which policy produced it costs a later
+    # session a reconstruction (REALFIX-Q8).
+    global KBD_SYNC, KBD_SYNC_LEAD_ON, KBD_SYNC_SPEED_ON, KBD_SYNC_STOP_ON
+    if a.legacy_kbd_sync:
+        KBD_SYNC = False
+        print("[map] --legacy-kbd-sync: MOVECODE-1z-t OFF. The keyboard wire "
+              "is the pre-1z-t one exactly -- heading grants at the reported "
+              "point verbatim, no player 0x002B, nothing on a 0x0047. The "
+              "client's world-0 copy of the player will sit a median 237 u "
+              "behind the body it draws (agenttap, 2026-09-02).")
+    else:
+        KBD_SYNC_LEAD_ON = not a.no_kbd_lead
+        KBD_SYNC_SPEED_ON = not a.no_kbd_speed_truth
+        KBD_SYNC_STOP_ON = not a.no_kbd_stop_echo
+        _terms = [n for n, on in (("lead 520 u + navmesh clip",
+                                   KBD_SYNC_LEAD_ON),
+                                  ("0x002B family rate", KBD_SYNC_SPEED_ON),
+                                  ("0x0047 stop echo", KBD_SYNC_STOP_ON))
+                  if on]
+        print("[map] MOVECODE-1z-t KBD_SYNC ON by default -- keeps the "
+              "client's WORLD-0 copy of the player near the body it draws. "
+              "--legacy-kbd-sync reverts the whole behaviour.")
+        print(f"      TERMS LIVE  {', '.join(_terms) if _terms else 'NONE'}")
+        if len(_terms) < 3:
+            print("      ONE TERM IS OFF -- this is a diagnostic arm, not the "
+                  "shipped default. Say so when you report the run.")
+        print("      DERIVED    world-0 is moved by our 0x0029 alone (SYNC-"
+              "ONLY, handler 0x005FD890) and the bake 0x005FE950 arms a "
+              "FIXED |v| = maxSpeed x moveSpeed toward it, so a grant at the "
+              "point the body already left leaves the copy parked behind by "
+              "report_gap x speed: 1.80 s x 288 = 518.4 u predicted, 516.1 u "
+              "measured. Retail's 0.257 s x 288 = 74.0 u.")
+        print("      READOUT    gamesrv verdict rows' lead_src ('kbd' / "
+              "'fallback') and lead_clip_why beside the KBD LEAD / KBD "
+              "STOP-ECHO / KBD SPEED-TRUTH wire labels. The verdict that "
+              "matters is agenttap.py --agents 1: world-0 vs world-1 during "
+              "a keyboard walk.")
+        print("      PREDICTS   that separation drops from p50 237 u / max "
+              "516 u to under 150 u p50. The offline counterfactual against "
+              "the client's own world-0 track says p50 0 / p90 13 / max 86; "
+              "the model's own error is p90 16 u, so anything under 150 "
+              "confirms and anything over 200 refutes.")
     if a.d1_lead:
         global D1_LEAD
         D1_LEAD = True

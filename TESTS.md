@@ -3627,6 +3627,65 @@ Floor 75 against a green 75 with 5 declared skips (the archive-conditional
   the moment the A2 edit landed (the lock working) and now admits exactly
   the audited IfExp whose else-branch is still `list(reported)`. No vault,
   no client. ~1 s),
+  `toolkit/authsrv/test_kbdsync.py` (**MOVECODE-1z-t, the keyboard world-0
+  sync — the behaviour that ships by default from 2026-09-03.** The defect it
+  answers was measured in the client's own memory, not inferred:
+  `agenttap.py` records BOTH world copies, and on the 2026-09-02 kite the
+  player's world-0 copy sits a median **237 u** from the world-1 copy that is
+  DRAWN, against retail's ~74 u — which is the whole of ANIMREF-RE §40.11's
+  enemy-swing symptom, since the collision disc parks the enemy relative to
+  world-0. The cause is one sentence of binary: `0x0029` is SYNC-ONLY and
+  `0x0025`'s setter writes only the facing triple, so a fresh `0x0029` is the
+  ONLY thing that moves world-0, and the bake `0x005FE950` arms a FIXED
+  `|v| = maxSpeed × moveSpeed` toward it — so granting the point the body has
+  already left leaves the copy parked behind by `report_gap × speed`
+  (1.80 s × 288 = 518.4 u predicted, **516.1 u measured**; retail's
+  0.257 s × 288 = 74.0 u, cadence ratio 7.00× against separation ratio
+  6.97×). Three terms, default ON, `--legacy-kbd-sync` reverting all three
+  and `--no-kbd-lead` / `--no-kbd-speed-truth` / `--no-kbd-stop-echo`
+  reverting one each — because shipping three defaults into one run convicts
+  the trio and clears none. **The verdict is an operator run this file cannot
+  perform** (`agenttap.py --agents 1`; the registered prediction and its
+  REFUTED-IF are §9 here and the startup banner). What it CAN refuse to let
+  rot: §1 the constants and their derivations — 520 u is the client's own
+  `0x003D` distance trigger (held-heading chord p95 513.8 / p99 515.1 u),
+  read off the client rather than fitted, and the fact that it must exceed
+  one grant-interval of travel; §2 that the lead's LENGTH is ours and its
+  DIRECTION is the client's — pinned on an axis AND on a diagonal AND at both
+  ends of the band, which is the whole difference from `d1_lead_dest`, whose
+  lead is the client's own 766 u endpoint (a lead that silently inherited the
+  vec2's magnitude would be D1 with extra steps and only the diagonal catches
+  it); §3 refuse-don't-clamp over six malformed vec2 shapes, with the band
+  REUSED from `d1_lead_dest` rather than restated so the two cannot drift;
+  §4 the composition — with `--d1-lead` also set the wire carries D1's
+  endpoint and NOT 1z-t's, so a `--d1-lead` run still measures REALFIX-A2 and
+  not a mixture; §5 the wire term by term plus the burst ORDER
+  (`0x0025` → `0x002B` → `0x0029`, the grant last — retail's grammar, 3,023
+  of 3,071 live bursts with zero counter-examples; out of order the client
+  bakes the leg before the family rate reaches `+0x60`); §6 each term
+  reverting alone, including that `--legacy-kbd-sync` is byte-identical to
+  the pre-1z-t server (if it is not, the run that convicts 1z-t has no
+  control); §8 source locks — ONE dest-computation site, the branch ordered
+  above the verdict row so the row records the point that goes out, the clip
+  gated on a REAL lead, the flags rebound through ONE declared `global`, and
+  the three `[1.0, 9]` senders distinguished by their bracket tags rather
+  than by a string count (a bare count reads 3, not 2, because the ETA
+  watchdog is the third sender — the lock would have failed for a reason
+  unrelated to what it guards). The stop echo's own wire shape is pinned in
+  `test_position_trust` instead, in "THE STOP ARM, BOTH REGIMES", because
+  that is where the arm it replaces was pinned: that check used to read
+  "with `--zero-lead` ON a `0x0047` grants NOTHING" on the ground that a
+  stop-arm `0x0029` IS `--stop-echo` and `--stop-echo` is REFUTED, and it is
+  now re-aimed rather than removed — the epitaph's own 2026-08-25 correction
+  says the refutation is of **baking a long leg from a far copy** (~1,286 u
+  in 2026-08-19, against ~60 u p50 for retail's own stop-ack, "MECHANICALLY
+  THE SAME MESSAGE"), which is a precondition term 1 supplies. It now checks
+  three things instead of one: the legacy wire still grants nothing, the
+  default sends retail's stop reply in retail's order, and NEITHER regime
+  ever sends `0x0028` on a stop. Imports `receive_arm`/`Sent`/`FakeRec` from
+  `test_position_trust` rather than copying them, because two copies of a
+  subtle source-extractor drifting apart is a failure this repo has already
+  recorded. No vault, no client. ~1 s),
   `toolkit/authsrv/test_livewire.py` (the committed retail-decode recipe,
   RETHINK instrument #2 — the campaign's referee moved out of a deletable
   scratchpad. Guards `toolkit/authsrv/livewire.py`: the no-vault doors
