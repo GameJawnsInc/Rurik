@@ -9447,3 +9447,77 @@ call-site censuses unchanged: `a2_matched_field4` 10, family-edge 7,
 `test_srclint.py` 26 — all green. The retrodiction is a measurement over the owner's
 own capture via a harness in this repo; the mesh is read from the owner's own archive
 at run time; no new static reads, no client launch, no upstream derivation.
+
+---
+
+## 1z-w. The routing origin's plane word, and a cast ends the route — §1z-v.3's two filed items, built
+
+**Asked:** "do the first two, origin plane word and cast abandon." Zero client runs; the
+affected suite green; the 08:46 retrodiction re-run with a new census column. Ident
+`MOVECODE-1z-w`.
+
+### 1z-w.1 The origin's plane word (`ROUTER_ORIGIN_PLANE`; reverted WITH (b) by `--router-report-plane`)
+
+- **What it is.** After the origin snap, the router's carry becomes the mesh's plane
+  under the **body model** — `_router_plane(pm, origin, report_plane)`: the report's
+  plane where the mesh offers it there, the mesh's single plane where it does not, the
+  report's plane where the mesh cannot say. It feeds `route()`'s start preference, the
+  clip-fallback's stop-plane carry, the matched flag, and every `router_route` row
+  (`plane_origin` beside `plane_report`). §1z-v condition (b) is the same construction
+  over the sync copy; this is it over the body — one construction in two places, so
+  **one revert**: a run that convicts the construction convicts both.
+- **Its exact exposure, derived before it was built.** `route()` is **provably
+  unchanged** by it: `start_plane` is a preference that falls back to every candidate
+  when unmatched, and the derived word differs from the report's only when the mesh
+  offers a single plane the report is not on — the case in which `route()` already
+  took that single trapezoid. The **one wire effect** is the clip-fallback's field 3/4
+  when its stop lands on **stacked** ground reached from single-plane ground: the stop
+  now carries the origin's deck instead of the frozen report's. `test_router` §6
+  drives that cell both ways (5 matched under the default; 3 under the known-bad arm,
+  which also tells `route()` 3).
+- **The census it enables is the real yield.** Every router row now measures the
+  frozen-report staleness at the routing origin. The plane census (§1z-n) bounds it
+  from below — 2.34% of on-mesh reports disagree with the mesh at REPORT time (0.54%
+  for a declared 0, 12.91% for a declared non-zero) — but the origin during a click
+  walk is a report frozen for the walk's whole length while the walk crosses seams,
+  and that term has never been measured. The operator's next default session on a
+  seam-rich map measures it for free.
+
+### 1z-w.2 A cast that begins ends the route
+
+- **What it is.** `handle_skill_press`, at the begin instant (`not queued`), attack and
+  non-attack alike: `router_abandon(state, rec, "cast", now)`; the skill-press arm now
+  hands the recorder over so the row is written. Reasoning as for the press and the
+  follow (§1z-v.1): the body stops to cast — or an attack skill's chase re-orders it —
+  and a chain still granting its remaining `0x0029` legs at cadence behind that is two
+  movement orders for one body. ROUTER-Q8 is now decided for three opcodes (press,
+  follow, cast); the interact arm stays refused outright (`--interact-walk`).
+- **What it deliberately does not do, and the derived next step.** The cast-stop pin
+  keeps its click-walk suppression (B1 of the 2026-08-25 CANCELWALK review). That
+  clause's stated justification — *"no belief can place the body"* — is **false under
+  a chain since §1z-v (a)**: `_click_leg_start(silent=True)` places the body on the
+  re-armed routed leg, the same model PRESS ENDS THE WALK already pins at. So the
+  derived behaviour for a cast during a click walk is the press's own: a `0x002C` at
+  the modelled body, then the halt. That changes a ruled arm (CANCELWALK §8.3g "pin
+  it", with B1 as a reviewed blocker), so it is filed with this reasoning rather than
+  built under a scope named "abandon". With abandon alone a cast mid-chain leaves the
+  sync copy parking at the current waypoint while the body stands casting — a
+  separation of at most one leg, evaluated at the next grant or report — which is
+  strictly less than before, when the chain kept walking the copy.
+
+### 1z-w.3 Retrodiction, tests, provenance
+
+`studies/movecode/review/clickretro.py` gained the (b′) column. The 08:46 capture:
+40 clicks → 40 `verbatim`; **origin plane ≠ report plane on 0 of 40** (map 146,
+plane 0 everywhere), and the capture holds no skill press at all and no chain ever formed, so no cast met one — **zero exposure
+for both items here**, said as such. Their exposure is map 280's seams and multi-leg
+clicks with a cast in flight.
+
+`test_router.py` 114 checks (floor 103 → 114; §6 is new), `test_cancelwalk.py` 124,
+`test_castcancel.py` 31, `test_castcycle.py` 35, `test_guards.py` 41,
+`test_pools.py` 127, `test_playerswing.py` 116, `test_d1lead.py` 94,
+`test_cmsgnames.py` 16, `test_planerepair.py` 41, `test_position_trust.py` 235,
+`test_kbdsync.py` 33, `test_familyrate.py` 26, `test_clickecho.py` 25,
+`test_grantsim.py` 86, `test_policyreplay.py` 14, `test_srclint.py` 26 — all green.
+Measurements over the owner's own capture via the harness in this repo; the mesh from
+the owner's own archive at run time; no new static reads, no client launch.

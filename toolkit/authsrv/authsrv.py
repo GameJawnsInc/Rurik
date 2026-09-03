@@ -6000,6 +6000,20 @@ ROUTER_LEG_REARM = True       # False (--router-raw-leg): the raw-chord record.
 # routed / chain / fallback sites keep their matched pairs -- read
 # a2_matched_field4's RULE block and FINDINGS 1z-o.6 before touching those.
 ROUTER_SYNC_PLANE = True      # False (--router-report-plane): field 4 = report.
+# (b') ROUTER_ORIGIN_PLANE (MOVECODE-1z-w, filed by 1z-v.3) -- the SAME word
+# for the ROUTING ORIGIN: the plane the body model stands on, read from the
+# mesh under `state["pos"]` after the origin snap, preferring the report's
+# plane where the mesh offers it there and carrying it where the mesh cannot
+# say. It feeds route()'s start-plane preference (provably a no-op THERE: an
+# unmatched preference already falls back to every candidate, and a single
+# candidate is exactly what the derived word names), the clip-fallback's
+# stop-plane carry (the one wire effect: a STACKED stop reached from
+# single-plane ground takes the origin's deck, not the frozen report's), and
+# every router_route row (`plane_origin` beside `plane_report` -- the census
+# of how often the report's plane is stale at the origin, the plane
+# channel's own question, 1z-n). Reverted by the SAME flag as (b): the two
+# are one construction -- the mesh under a modelled point -- in two places.
+ROUTER_ORIGIN_PLANE = True    # False (--router-report-plane): start plane = report.
 
 # THE TOUR CAP (ROUTER-B4, verification run 2, 20260826T194505): a route is
 # refused as a route when its length exceeds CAP x the direct distance plus
@@ -6203,6 +6217,14 @@ def router_answer_click(send, state, conn_id, rec, dest, dest_plane,
         if _near is not None:
             origin = (float(_near[0]), float(_near[1]))
             snapped_d = round(_near[2], 2)
+    # (b') ROUTER_ORIGIN_PLANE: the body model's own plane at the routing
+    # origin. The report's plane is frozen for the whole click walk and the
+    # walk crosses seams; `cur_plane` is the carry every site below reads
+    # (route()'s preference, the fallback's stop plane, the matched flag),
+    # `report_plane` keeps the wire's own word for the rows.
+    report_plane = cur_plane
+    if ROUTER_ORIGIN_PLANE:
+        cur_plane = _router_plane(pm, origin, report_plane)
     t0 = time.perf_counter()
     # Plane-aware (ROUTER-B4): the click names the clicked surface's plane
     # and the server tracks the player's -- both are passed so stacked
@@ -6287,7 +6309,8 @@ def router_answer_click(send, state, conn_id, rec, dest, dest_plane,
                 rec.event("router_route", verdict="clip-fallback",
                           reason=reason, dest=[dx, dy],
                           stop=[float(stop[0]), float(stop[1])],
-                          snapped=snapped_d, ms=round(ms, 2))
+                          snapped=snapped_d, ms=round(ms, 2),
+                          plane_origin=cur_plane, plane_report=report_plane)
             return True
         state["dest"], state["clipped"] = None, True
         # Run 3's lesson in one counter: a refusal STREAK is the arming of
@@ -6299,7 +6322,8 @@ def router_answer_click(send, state, conn_id, rec, dest, dest_plane,
         if rec is not None:
             rec.event("router_route", verdict="refused", reason=reason,
                       dest=[dx, dy], origin=[origin[0], origin[1]],
-                      snapped=snapped_d, streak=streak, ms=round(ms, 2))
+                      snapped=snapped_d, streak=streak, ms=round(ms, 2),
+                      plane_origin=cur_plane, plane_report=report_plane)
         print(f"[c{conn_id}] ROUTER click to ({dx:.0f}, {dy:.0f}): "
               f"REFUSED ({reason}) -- no legal leg exists from "
               f"({origin[0]:.0f}, {origin[1]:.0f}); nothing sent",
@@ -6346,7 +6370,8 @@ def router_answer_click(send, state, conn_id, rec, dest, dest_plane,
         if rec is not None:
             rec.event("router_route", verdict="verbatim", n_wp=1,
                       dest=[dx, dy], snapped=snapped_d, ms=round(ms, 2),
-                      plane4=ps, plane4_report=plane_second)
+                      plane4=ps, plane4_report=plane_second,
+                      plane_origin=cur_plane, plane_report=report_plane)
         return True
     first_wp = legs[0]
     # Corridor-true plane (ROUTER-B4): the route's own trapezoid chain
@@ -6374,7 +6399,8 @@ def router_answer_click(send, state, conn_id, rec, dest, dest_plane,
     if rec is not None:
         rec.event("router_route", verdict="routed", n_wp=len(legs),
                   dest=[dx, dy], origin=[origin[0], origin[1]],
-                  snapped=snapped_d, ms=round(ms, 2))
+                  snapped=snapped_d, ms=round(ms, 2),
+                  plane_origin=cur_plane, plane_report=report_plane)
         rec.event("router_leg", act="grant", i=1, n=len(legs),
                   dest=[first_wp[0], first_wp[1]], plane=pf,
                   terminal=False)
@@ -12557,7 +12583,7 @@ def cast_anim_msg(prop, caster, target, skill_id):
     return (GAME_SMSG_AGENT_PROPERTY_UPDATE_INT, [prop, caster, skill_id])
 
 
-def handle_skill_press(values, send, state, conn_id, opcode):
+def handle_skill_press(values, send, state, conn_id, opcode, rec=None):
     """One skill press, either half (0x0046 USE_SKILL or 0x0027 ATTACK_SKILL).
 
     Extracted from the dispatch chain 2026-08-14 so the connection-thread
@@ -12857,6 +12883,16 @@ def handle_skill_press(values, send, state, conn_id, opcode):
     # always until 2026-08-22 -- early, for a queued cast, by the rest of
     # the previous cast's aftercast.)
     if not queued:
+        # MOVECODE-1z-w: a cast that BEGINS ends the ROUTE. The body stops
+        # to cast (an attack skill's chase re-orders it instead); a live
+        # router chain would keep granting its remaining 0x0029 legs at
+        # cadence behind that -- the sync copy walking on while the body
+        # stands -- two movement orders for one body: the press's and the
+        # follow's composition (1z-v) closed for the third opcode
+        # ROUTER-Q8 named. Abandon ONLY: the cast-stop below keeps its
+        # click-walk suppression; the pin-from-model (the press's own
+        # 0x002C at the modelled body) is filed, FINDINGS sec.1z-w.
+        router_abandon(state, rec, "cast", time.time())
         # CANCELWALK R8 (--cast-stop): halt a body still in flight before
         # the cast opens. The hold below suppresses the walk-START (gate B,
         # F22) and does nothing to a leg already executing, so a cast begun
@@ -17875,7 +17911,8 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # socket. The dead-player guard stays HERE: it gates
                         # whether the press means anything at all, and the arm
                         # condition above is pinned by test_cmsgnames section 6.
-                        handle_skill_press(values, send, state, conn_id, opcode)
+                        handle_skill_press(values, send, state, conn_id, opcode,
+                                           rec=rec)
                     elif opcode in (GAME_CMSG_ATTACK_AGENT,
                                     GAME_CMSG_INTERACT_PLAYER):
                         # The player clicked something. Clicking a hostile
@@ -22373,11 +22410,16 @@ def main():
                          "WALK then re-pins the body onto the unclipped "
                          "chord on a mid-chain press. Diagnostic arm only.")
     ap.add_argument("--router-report-plane", action="store_true",
-                    help="MOVECODE-1z-v condition (b) OFF: the one-leg "
-                         "verbatim answer's field 4 is the last accepted "
-                         "report's plane again (frozen across the click "
-                         "walk) instead of the mesh's plane under the "
-                         "modelled sync copy. Diagnostic arm only.")
+                    help="MOVECODE-1z-v condition (b) OFF, and 1z-w's (b') "
+                         "with it: the one-leg verbatim answer's field 4 is "
+                         "the last accepted report's plane again (frozen "
+                         "across the click walk) instead of the mesh's "
+                         "plane under the modelled sync copy, and the "
+                         "routing origin's plane (route()'s start "
+                         "preference, the clip-fallback's stop-plane carry) "
+                         "is the report's plane instead of the mesh's under "
+                         "the body model. One construction, two places, one "
+                         "revert. Diagnostic arm only.")
     ap.add_argument("--router", action="store_true",
                     help="NO-OP since 2026-09-03 (MOVECODE-1z-v): the "
                          "router is the default click policy and needs no "
@@ -24049,10 +24091,11 @@ def main():
               "change or stop. A same-family stretch after a click reads "
               "as a P-3 failure when it is a protocol violation; the c2s "
               "census (zero 0x003E) is the definitive guard.")
-    global ROUTER, ROUTER_LEG_REARM, ROUTER_SYNC_PLANE
+    global ROUTER, ROUTER_LEG_REARM, ROUTER_SYNC_PLANE, ROUTER_ORIGIN_PLANE
     ROUTER = not a.no_router
     ROUTER_LEG_REARM = ROUTER and not a.router_raw_leg
     ROUTER_SYNC_PLANE = ROUTER and not a.router_report_plane
+    ROUTER_ORIGIN_PLANE = ROUTER and not a.router_report_plane
     if not ROUTER:
         print("[map] --no-router: the LEGACY click path (pre-1z-v). Clicks "
               "are gated on a report under 1.0 s old -- unsatisfiable "
@@ -24076,17 +24119,22 @@ def main():
                                 "routed leg", ROUTER_LEG_REARM),
                                ("(b) verbatim field 4 from the mesh under "
                                 "the modelled sync copy",
-                                ROUTER_SYNC_PLANE)) if on]
+                                ROUTER_SYNC_PLANE),
+                               ("(b') the origin's plane from the mesh "
+                                "under the body model",
+                                ROUTER_ORIGIN_PLANE)) if on]
         print(f"      CONDITIONS {', '.join(_rc) if _rc else 'NONE'}")
-        if not (ROUTER_LEG_REARM and ROUTER_SYNC_PLANE):
+        if not (ROUTER_LEG_REARM and ROUTER_SYNC_PLANE
+                and ROUTER_ORIGIN_PLANE):
             print("      A 1z-v CONDITION IS OFF -- this is a diagnostic arm, "
                   "not the shipped default. Say so when you report the run.")
         print("      READOUT    router_route rows (one per click: "
               "verbatim/routed/clip-fallback/refused/kbd-drop, the refusal "
-              "reason, route ms; verbatim rows carry plane4 beside "
-              "plane4_report) and router_leg rows (grant/abandon per leg, "
-              "the cause named: new-click / 0x003D / 0x0047 / press / "
-              "approach). There are NO click_verdict rows for routed "
+              "reason, route ms; every row carries plane_origin beside "
+              "plane_report, verbatim rows plane4 beside plane4_report) "
+              "and router_leg rows (grant/abandon per leg, the cause "
+              "named: new-click / 0x003D / 0x0047 / press / approach / "
+              "cast). There are NO click_verdict rows for routed "
               "clicks -- a scorer that counts them reads zero.")
         if a.tape:
             print("      INERT UNDER --tape: the tape dispatch never "

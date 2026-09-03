@@ -10764,8 +10764,22 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   unseeded model; the copy is modelled MID-LEG; the known-bad arm sends the
   frozen report plane; plus four source locks (the three re-arm sites, the
   two abandons, the helper before the gated match, the leg model's own
-  start).** Floor 103 from the green run (51 at the B2 landing, 57 after
-  the review round, 64 after B4, 68 after B5, 73 after 2026-08-30). ~1 s).
+  start).** **Section 6 (MOVECODE-1z-w, same day) added eleven: the routing
+  ORIGIN's plane word — the mesh under the body model, the report's plane
+  where the mesh offers it or cannot say — reaches route() as its start
+  preference (a body on plane-5 ground with a frozen report of 3 routes from
+  5), rides every `router_route` row as `plane_origin` beside
+  `plane_report`, and decides the clip-fallback's stop plane on STACKED
+  ground (the one wire effect: reached from plane-5 ground, a {3, 5} stop
+  carries 5 matched, and the known-bad arm `--router-report-plane` carries
+  3 and tells route() 3); ordinary ground and an unknowable mesh leave the
+  word at the report's; and a cast that begins abandons a live chain
+  (`cause=cast`, driven through `handle_skill_press` with the recorder the
+  press arm now hands it), pinned once at the begin instant before the
+  cast-stop block, with the origin word derived once, after the snap and
+  before route().** Floor 114 from the green run (51 at the B2 landing, 57
+  after the review round, 64 after B4, 68 after B5, 73 after 2026-08-30, 103
+  after 1z-v). ~1 s).
 
 `toolkit/authsrv/test_agtrack_mirror.py` (**the AgTrack mirror's transcription,
   rule by rule -- MOVECODE-1z-q step 1's guard.** `agtrack_mirror.py` is a

@@ -626,6 +626,9 @@ client instead of inferring from the wire. Handoff:
 > it, each with a revert: the click-leg record is re-armed to the routed leg and again
 > at every chain grant (`--router-raw-leg`), and the one-leg verbatim answer's field 4
 > is the mesh's plane under the modelled sync copy (`--router-report-plane`). ROUTER-Q8
-> is decided for two opcodes — a press and a follow abandon a live chain — and open for
-> casts. The nine composition refusals stand and now print a `--no-router` hint.
-> `test_router.py` floor 73 → 103.
+> is decided for three opcodes — a press, a follow and a cast abandon a live chain
+> (§1z-w) — and the interact arm stays refused. §1z-w also gave the routing ORIGIN
+> its own plane word (the mesh under the body model; same revert as (b)), whose one
+> wire effect is the clip-fallback's stop plane on stacked ground and whose yield is
+> the `plane_origin` / `plane_report` census on every row. The nine composition
+> refusals stand and now print a `--no-router` hint. `test_router.py` floor 73 → 114.

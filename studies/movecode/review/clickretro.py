@@ -139,6 +139,8 @@ def main():
     n_wp_hist = {}
     plane4_diff = 0
     plane4_rows = 0
+    origin_diff = 0
+    origin_rows = 0
     press_in_chain = 0
     press_total = 0
     chain_live = False
@@ -187,6 +189,10 @@ def main():
         verdicts[v] = verdicts.get(v, 0) + 1
         if row and row.get("n_wp"):
             n_wp_hist[row["n_wp"]] = n_wp_hist.get(row["n_wp"], 0) + 1
+        if row and "plane_origin" in row:
+            origin_rows += 1
+            if row.get("plane_origin") != row.get("plane_report"):
+                origin_diff += 1
         if v == "verbatim":
             plane4_rows += 1
             if row.get("plane4") != row.get("plane4_report"):
@@ -210,6 +216,8 @@ def main():
           f"presses inside a live chain = {press_in_chain} of {press_total}")
     print(f"(b) exposure: verbatim rows {plane4_rows}, field 4 differs from "
           f"the report plane on {plane4_diff}")
+    print(f"(b') exposure: rows with an origin word {origin_rows}, origin plane "
+          f"differs from the report plane on {origin_diff}")
     print()
     print("t        verdict        n_wp  dist_from_origin  reason")
     for t, v, n, d, why in per_click:
