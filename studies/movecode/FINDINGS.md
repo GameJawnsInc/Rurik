@@ -10266,3 +10266,122 @@ at all, are the two candidates; neither is derived yet and neither ships here.
 `test_w0score` 45, `test_leadmargin` 25, `test_kbdsync` 84 — unchanged and green; no
 code changed in this section. The next object is the one named in §1z-ad.4, and choosing
 between its two candidates is the owner's call.
+
+
+---
+
+## 1z-ae. REFRESH BEFORE MATURATION — the lead's arrival is a §0.11 stage-1 armer, and the server now pre-empts it; the first draft aimed from the model and a test lock caught it
+
+**Asked:** "do the refresh-before-maturation fix" — the object §1z-ad named after the
+rerun locked five of eight legs. Ident `MOVECODE-1z-ae`. **No client run yet**; the
+registered prediction for one is §1z-ae.6. Inert under the shipped default, because the
+lead it guards is still opt-in.
+
+### 1z-ae.1 Why the arrival is an armer, and why §0.11 did not name it
+
+REALFIX §0.11 decodes the lock as two stages and says *"neither alone suffices"*:
+stage 1 is a **snap whose dispatcher clears `clientControlled`** (fence shut), stage 2 is
+the lead's click-walk regime, under which *"every press acquires a fresh click-order,
+releases are ignored, no `0x0047` is emitted, and the keyboard walk-start applier — the
+only fence re-armer — never runs."* §0.11 named exactly one stage-1 route, plane-carry's
+stale word across a seam, and §1z-z's matched field 4 kills that one.
+
+**The lead's own arrival is a second route to the same stage, and it was already measured
+in this repo** — in the `HEADING_GRANT` block, from the client's own memory
+(`movetap.py`, 2,332 samples): *"agent+0x48 is set ONCE at the grant and never re-armed,
+and at that exact millisecond the client SNAPS to the granted point"* — seven arrivals,
+98 u to 5,238 u, every one within one 20 ms sample of schedule. A maturing lead **is** a
+snap. Compose it with stage 2, which the lead itself supplies, and the lock is complete
+without any plane mismatch. That is what §1z-ad measured: no `0x002C`, no dropped re-aim,
+the plane constant at 29, matched words on every grant — and five dead legs.
+
+**Why it is a race and not a constant.** The `0x003D` is distance-triggered at ~512 u
+(REALFIX-W2) and the lead is 520 u, so on a held key the next report is due at 512/S and
+the arrival at 520/S — **8 u apart, 0.028 s at 288 u/s and 0.042 s at 190**. Normally the
+report wins and its own re-aim re-arms `+0x48`. When it loses, the arrival fires. Same
+script, same build: run 1 clean, run 2 locked.
+
+### 1z-ae.2 The fix, and what it deliberately is not
+
+At **ETA − 2 ticks**, push the leg's own destination `KBD_SYNC_LEAD` further along the ray
+it is already on, clipped, with matched plane words. The grant re-bakes and re-arms
+`+0x48` a full leg further out, so the snap never fires.
+
+- **Not a re-pin at the modelled body**, which is what §1z-y's kill sends. At the ETA the
+  model puts the body *at* the lead's endpoint (`a2_leg_position` clamps there), so a
+  re-pin would be a zero-distance grant — the `distSq ≤ 1.0` short-circuit — which arms
+  `+0x48 = now+1` and moves the same arrival one tick later. **Only an extension
+  postpones it.** The kill stays what it is: the answer to a press or a click, where the
+  player has told us the leg is over.
+- **Not a longer lead** (§1z-u.4's maturation margin, which would also have avoided
+  §1z-ad's lock at 766 u). §1z-t.6 measured 766 alone as *worse than shipping nothing* on
+  the separation the lead exists to fix (p50 425 u against 237), and a longer lead still
+  matures inside any hold longer than `length/speed`. It moves the photo finish rather
+  than removing it. **`KBD_SYNC_LEAD` is untouched**; §1z-ab.4's refusal of the length
+  sweep stands.
+
+### 1z-ae.3 ★ The first draft aimed from the model, and `test_d1lead` caught it
+
+The draft computed a fresh lead from `a2_leg_position` — where the model puts the player
+now — and clipped it from there. `test_d1lead`'s clip census went red: *"EVERY call is
+anchored on the REPORT in hand… `state['pos']`-anchored is `--heading-grant`'s graveyard
+(R2-1): a ray from the model's belief aims the lead from somewhere the client is not."*
+
+**The lock was right and the draft was wrong.** The corrected shape extends the
+**existing** leg instead of starting a new one: the record's origin and `t0` are
+untouched and only `dest` moves, so
+
+- the ray keeps the anchor the client itself reported;
+- `a2_leg_position` is **continuous across the refresh** — the same instant reads the same
+  point before and after, pinned by its own check;
+- the clip runs from that report, spelled `a2_clip_lead(state, reported, dest)` like the
+  other two callers, because the census reads the spelling.
+
+The census moved 2 → 3 with the third site named, not bumped: its own comment already
+allowed *"a third caller anchored correctly"* and forbade *"a second one anchored on the
+model"*, which is exactly the distinction that had to be made. **This is the check that
+could fail doing its job on a change written the same evening.**
+
+### 1z-ae.4 The bounds, because an extension that never stops is a runaway
+
+1. **Once per report.** The counter lives in the leg record and every `0x003D` arms a
+   fresh record, so a silent client gets one extension and no more. A second consecutive
+   silence is not a race — it is a client that has stopped reporting.
+2. **Only while the keyboard latch says moving** — a reported stop clears it.
+3. **Never while our own `0x002C` has the fence shut** (§1z-aa's tracker, the same read
+   the lead itself takes).
+4. **Clipped**, so a blocked body — where the model drifts fastest — shortens it. If the
+   mesh refuses the extension outright the tick sends **nothing** and says
+   `refresh-blocked`: re-baking the same point would only re-arm the same arrival.
+5. **Past the ETA it sends nothing and says `refresh-late`**, once per leg. The arrival
+   has already fired; a silent miss would hide §1z-ad's own event.
+
+**Known side effect, stated rather than discovered later.** The margin is two ticks and
+the race is ~0.03 s — narrower than one tick, which is why the margin cannot be tuned to
+sit inside it — so the refresh will usually fire ~0.06 s **before** the report that would
+have pre-empted it. Its send stamps the shared grant clock, so that report's own lead can
+be refused `heading-rate`, and §1z-y's HOLD then re-bakes it at the floor. That path is
+already shipped and tested; the copy runs on the refreshed lead, computed from a model
+validated to p50 0.0 / p90 16 u (§1z-t.6), for at most one floor interval.
+
+### 1z-ae.5 Tests
+
+`test_kbdsync` 84 → **106** (floor 106), section 14: the flag and its global; the margin
+as two ticks and the budget as one; not due mid-leg; **due** → one grant extending the
+ray with matched words and a wire label, the arrival moved a full leg out, the record
+keeping its origin and `t0`, the position model continuous across it; the second
+extension refused and the budget resetting with the leg; refused on a reported stop and
+on a shut fence; `refresh-late` past the ETA, once not per tick; `refresh-blocked` when
+the clip refuses; the known-bad arm (`--no-kbd-lead-refresh`) leaving the lead to mature;
+inert with the lead off; and four source locks. `test_d1lead` 94 (census re-aimed),
+`test_position_trust` 235, `test_router` 114, `test_playerswing` 116, `test_cancelwalk`
+124, `test_srclint` 26 — green.
+
+### 1z-ae.6 The registered prediction, before any run
+
+| | |
+|---|---|
+| **CONFIRMS** | `kbd_leg act=refresh` rows fire, **zero `refresh-late`**, and the capture reads FREE with every key leg's release reported and travel scaling with hold |
+| **REFUTES** | any `refresh-late` row (the backstop lost its own race), or a lock at all (ENSLAVED / a parked held-key leg) |
+| **Expected** | ~1 refresh per cruise leg, since the margin usually beats the report; `refresh-blocked` only where the route meets geometry |
+| **Says nothing** | one clean run does not settle a race — §1z-ad is the reason. Two runs, and the mechanism rows (`refresh` firing, `refresh-late` absent) are the verbatim check, not the verdict word |

@@ -3717,7 +3717,18 @@ Floor 75 against a green 75 with 5 declared skips (the archive-conditional
   stores the degraded point; the D1 lead degrades the same way; the known-bad arm
   `--no-kbd-lead-fence-gate` sends the 520 u lead into the shut fence; and four
   source locks (stamped once in the send choke, cleared in one place, the stop arm
-  untouched, both branches through the gate). Floor 33 → 60 → 69 → 84 from the
+  untouched, both branches through the gate). §14 is MOVECODE-1z-ae, REFRESH
+  BEFORE MATURATION: the lead's own arrival is a sec.0.11 stage-1 armer (the client
+  snaps to the granted point when `+0x48` fires), so at ETA minus two ticks the leg's
+  destination is pushed a lead further along the ray it is already on. It drives the
+  due/not-due edges, the extension's geometry and matched words, the arrival moving a
+  full leg out, **the record keeping its origin and t0** so the ray stays anchored on
+  the client's own report and `a2_leg_position` is continuous across the refresh (the
+  first draft aimed from the model and `test_d1lead`'s clip census caught it), the
+  one-per-report budget and its reset, the refusals on a reported stop and a shut
+  fence, `refresh-late` once when the arrival wins anyway, `refresh-blocked` when the
+  clip refuses the extension, the known-bad arm, inertness with the lead off, and
+  four source locks. Floor 33 → 60 → 69 → 84 → 106 from the
   green runs. No vault, no client. ~2 s),
   `toolkit/authsrv/test_livewire.py` (the committed retail-decode recipe,
   RETHINK instrument #2 — the campaign's referee moved out of a deletable

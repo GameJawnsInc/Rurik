@@ -37,6 +37,7 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "schema"))
 
+import math                 # noqa: E402
 import authsrv              # noqa: E402
 import checks               # noqa: E402
 # The arm extractor is test_position_trust's and is IMPORTED rather than
@@ -50,8 +51,9 @@ from test_position_trust import receive_arm, Sent, FakeRec   # noqa: E402
 # guessed from a head-count, which this arc has got wrong three times.
 # 33 at 1z-t; +27 at 1z-y (sections 10-11: the held heading, the lead kill);
 # +9 at 1z-z (section 12: the matched plane word on the lead grant); +15 at
-# 1z-aa (section 13: the fence-shutter gate).
-LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=84)
+# 1z-aa (section 13: the fence-shutter gate); +22 at 1z-ae (section 14:
+# refresh before maturation).
+LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=106)
 check = checks.adopt(LEDGER)
 
 SRC = open(authsrv.__file__, encoding="utf-8").read()
@@ -718,6 +720,169 @@ def main():
     check(SRC.count("_fence_gate_lead(state, reported,") == 3,
           "both lead branches pass through the gate, after their clip chains "
           "(the def and two call sites)")
+
+    print("\n14. MOVECODE-1z-ae: REFRESH BEFORE MATURATION -- the arrival that "
+          "armed 1z-ad's lock never fires")
+    # One leg, so every arithmetic below is exact: 520 u at 190 u/s (backpedal,
+    # 1z-ad's own family) from t0 = 100.0, so the arrival is at t0 + 2.7368 s
+    # and the refresh is due one margin before it.
+    SPEED, LEAD = 190.0, authsrv.KBD_SYNC_LEAD
+    def leg(t0=100.0, refreshed=0, dest=(520.0, 0.0), x0=0.0):
+        return {"x0": x0, "y0": 0.0, "dest": dest, "plane": 7, "t0": t0,
+                "speed": SPEED, "wd_fired": False, "refreshed": refreshed}
+    ETA = 100.0 + 520.0 / SPEED
+    DUE = ETA - authsrv.KBD_LEAD_REFRESH_MARGIN
+    saved = (authsrv.KBD_SYNC_LEAD_ON, authsrv.KBD_LEAD_REFRESH)
+    authsrv.KBD_SYNC_LEAD_ON = True
+
+    check(authsrv.KBD_LEAD_REFRESH is True
+          and "--no-kbd-lead-refresh" in SRC
+          and "KBD_LEAD_REFRESH = not a.no_kbd_lead_refresh" in SRC
+          and SRC.count("global KBD_LEAD_REFRESH") == 1,
+          "the refresh ships ON with its revert flag, rebound through a "
+          "declared global",
+          "1z-ad: a 520 u lead matured 0.26 s before the player released and "
+          "locked five of eight legs")
+    check(abs(authsrv.KBD_LEAD_REFRESH_MARGIN - 2.0 * authsrv.TICK_SECONDS) < 1e-9
+          and authsrv.KBD_LEAD_REFRESH_MAX == 1,
+          "the margin is two server ticks and the budget is one extension per "
+          "report", "a margin under one tick could not be met by the poll at all")
+
+    # not due yet -> nothing on the wire
+    st = {"pos": (0.0, 0.0), "plane": 7, "kbd_moving_at": 99.0,
+          "kbd_leg": leg()}
+    w, r = Sent(st), FakeRec()
+    sent = authsrv.kbd_lead_refresh_tick(w, st, 1, r, now=ETA - 1.0)
+    check(sent is False and not w.of(MOVE),
+          "mid-leg, with the arrival a second out, the tick sends nothing")
+
+    # DUE: the re-aim the next report would have sent, from the model
+    st = {"pos": (0.0, 0.0), "plane": 7, "kbd_moving_at": 99.0,
+          "kbd_leg": leg()}
+    w, r = Sent(st), FakeRec()
+    sent = authsrv.kbd_lead_refresh_tick(w, st, 1, r, now=DUE)
+    mv = w.of(MOVE)
+    # the model has walked 520 - 190*0.1 = 501.0 u of the leg
+    check(sent is True and len(mv) == 1
+          and abs(mv[0][1][1][0] - (520.0 + LEAD)) < 1e-6
+          and abs(mv[0][1][1][1]) < 1e-6,
+          "DUE: one grant, pushing the leg's OWN destination a full lead "
+          "further along the ray it is already on",
+          f"sent {mv[0][1] if mv else None}")
+    check(mv[0][1][2] == 7 and mv[0][1][3] == 7,
+          "and its plane words are MATCHED (field 4 = field 3), so the refresh "
+          "cannot recreate sec.0.11's stage-1 route either (1z-z)")
+    check("KBD LEAD REFRESH" in mv[0][2],
+          "the wire label names the sender, so a capture can be split by it")
+    new = st["kbd_leg"]
+    new_eta = new["t0"] + math.dist((new["x0"], new["y0"]), new["dest"]) / new["speed"]
+    check(new["refreshed"] == 1 and new_eta > ETA + 2.0,
+          "THE POINT: the arrival moves a full leg out instead of firing",
+          f"old eta {ETA:.3f}, new eta {new_eta:.3f}")
+    check(new["x0"] == 0.0 and new["y0"] == 0.0 and new["t0"] == 100.0,
+          "and the record keeps its ORIGIN and t0 -- the ray stays anchored "
+          "on the report the client sent, never on the model "
+          "(--heading-grant's epitaph, and test_d1lead's clip lock)",
+          f"{new['x0']},{new['y0']} t0 {new['t0']}")
+    check(abs(authsrv.a2_leg_position(new, DUE)[0] - 501.0) < 1e-6,
+          "so the position model is CONTINUOUS across the refresh: the same "
+          "instant reads the same point before and after")
+    rows = [e for e in r.events if e.get("kind") == "kbd_leg"]
+    check(rows and rows[-1]["act"] == "refresh" and rows[-1]["n"] == 1,
+          "and it says so in a row", f"{rows}")
+
+    # once per report
+    w2, r2 = Sent(st), FakeRec()
+    check(authsrv.kbd_lead_refresh_tick(w2, st, 1, r2, now=new_eta - 0.1) is False
+          and not w2.of(MOVE),
+          "ONCE PER REPORT: the second extension is refused -- a client that "
+          "has gone on being silent is not a race any more",
+          f"due says {authsrv.kbd_lead_refresh_due(st, st['kbd_leg'], new_eta - 0.1)}")
+    check(authsrv.kbd_lead_refresh_due(st, leg(refreshed=0), DUE)[0] is True,
+          "and the budget resets with the leg record, which every 0x003D "
+          "re-arms")
+
+    # the refusals that keep it bounded
+    for label, state_bits, why in (
+            ("a reported STOP cleared the keyboard latch",
+             {"kbd_moving_at": None}, "stopped"),
+            ("our own 0x002C has the fence shut (1z-aa composes)",
+             {"kbd_moving_at": 99.0, "fence_shut_at": 99.0}, "fence-shut")):
+        stx = dict(state_bits)
+        wx, rx = Sent(stx), FakeRec()
+        stx["kbd_leg"] = leg()
+        check(authsrv.kbd_lead_refresh_tick(wx, stx, 1, rx, now=DUE) is False
+              and not wx.of(MOVE)
+              and authsrv.kbd_lead_refresh_due(stx, stx["kbd_leg"], DUE)[1] == why,
+              f"REFUSED, {why}: {label}")
+
+    # past the ETA: nothing, and never silently
+    st = {"pos": (0.0, 0.0), "plane": 7, "kbd_moving_at": 99.0,
+          "kbd_leg": leg()}
+    w, r = Sent(st), FakeRec()
+    late = authsrv.kbd_lead_refresh_tick(w, st, 1, r, now=ETA + 0.5)
+    rows = [e for e in r.events if e.get("kind") == "kbd_leg"]
+    check(late is False and not w.of(MOVE)
+          and rows and rows[-1]["act"] == "refresh-late",
+          "PAST THE ARRIVAL it sends nothing -- a grant at the dest re-bakes "
+          "nothing -- and records `refresh-late`, which is 1z-ad's own event",
+          f"{rows}")
+    w2, r2 = Sent(st), FakeRec()
+    authsrv.kbd_lead_refresh_tick(w2, st, 1, r2, now=ETA + 0.6)
+    check(not [e for e in r2.events if e.get("kind") == "kbd_leg"],
+          "and it says it ONCE per leg, not once per tick")
+
+    # KNOWN-BAD ARM
+    authsrv.KBD_LEAD_REFRESH = False
+    st = {"pos": (0.0, 0.0), "plane": 7, "kbd_moving_at": 99.0,
+          "kbd_leg": leg()}
+    w, r = Sent(st), FakeRec()
+    check(authsrv.kbd_lead_refresh_tick(w, st, 1, r, now=DUE) is False
+          and not w.of(MOVE) and st["kbd_leg"]["refreshed"] == 0,
+          "KNOWN-BAD ARM (--no-kbd-lead-refresh): the lead is left to reach "
+          "its arrival -- RUN-1zAB's rerun, five locked legs")
+    authsrv.KBD_LEAD_REFRESH = True
+
+    # inert without the lead
+    authsrv.KBD_SYNC_LEAD_ON = False
+    st = {"pos": (0.0, 0.0), "plane": 7, "kbd_moving_at": 99.0,
+          "kbd_leg": leg()}
+    w, r = Sent(st), FakeRec()
+    check(authsrv.kbd_lead_refresh_tick(w, st, 1, r, now=DUE) is False
+          and not w.of(MOVE),
+          "INERT under the shipped default (the lead is opt-in), so this "
+          "changes no wire anybody is running")
+    (authsrv.KBD_SYNC_LEAD_ON, authsrv.KBD_LEAD_REFRESH) = saved
+
+    # source locks
+    check(SRC.count("kbd_lead_refresh_tick(send, state, conn_id, rec)") == 3,
+          "polled at all three tick sites, beside the held heading",
+          "the arrival it pre-empts runs on the client's clock, so a poll that "
+          "only ran on a report would miss exactly the silent leg")
+    check(SRC.index("kbd_lead_refresh_tick(send, state, conn_id, rec)")
+          > SRC.index("heading_hold_tick(send, state, conn_id, rec)"),
+          "and after it, so a held re-aim wins the tick it shares")
+    check("a2_clip_lead(state, reported, dest)" in SRC,
+          "the extension is clipped along the ray FROM THE REPORT, so every "
+          "a2_clip_lead call in the file is still report-anchored",
+          "test_d1lead pins that census and it caught this one")
+    st = {"pos": (0.0, 0.0), "plane": 7, "kbd_moving_at": 99.0,
+          "kbd_leg": leg()}
+    w, r = Sent(st), FakeRec()
+    authsrv.KBD_SYNC_LEAD_ON = True
+    _real = authsrv.a2_clip_lead
+    authsrv.a2_clip_lead = lambda s, o, d: ([o[0] + 520.0, o[1]], True, "clipped")
+    try:
+        blocked = authsrv.kbd_lead_refresh_tick(w, st, 1, r, now=DUE)
+    finally:
+        authsrv.a2_clip_lead = _real
+        authsrv.KBD_SYNC_LEAD_ON = saved[0]
+    rows = [e for e in r.events if e.get("kind") == "kbd_leg"]
+    check(blocked is False and not w.of(MOVE)
+          and rows and rows[-1]["act"] == "refresh-blocked",
+          "A WALL AHEAD: when the clip refuses the extension the tick sends "
+          "NOTHING and says refresh-blocked -- re-baking the same point would "
+          "only re-arm the same arrival", f"{rows}")
     return LEDGER.verdict()
 
 
