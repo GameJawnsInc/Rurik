@@ -1501,8 +1501,9 @@ first leg and a plane word from the modelled copy's mesh plane; that is its own
 arc. **BUILT 2026-09-03 evening, §1z-v: the router IS the default, both conditions
 shipped with a revert each (`--no-router`, `--router-raw-leg`,
 `--router-report-plane`), and the press and the follow abandon a live chain;
-the operator's 40 refused clicks retrodict to 40 answered.** The bundle question
-Q13 poses (adopt `D1_LEAD`?) is unchanged by it. The session's felt symptoms were
+the operator's 40 refused clicks retrodict to 40 answered. §1z-w (same night)
+added the routing origin's own plane word and the cast abandon.** The bundle
+question Q13 poses (adopt `D1_LEAD`?) is unchanged by it. The session's felt symptoms were
 1z-t's keyboard lead, now opt-in.
 Raised 2026-08-27 by
 [studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1i.**
@@ -1605,6 +1606,34 @@ floors and aborts in `RUN-R8.md`; both are operator-driven client runs.
 ---
 
 ## 8. Immediate next actions
+
+### ★★★ MOVEMENT 2026-09-03 night — the routing ORIGIN's plane word and the CAST abandon (MOVECODE-1z-w): §1z-v.3's two filed items built, zero exposure on the operator's map, said as such
+
+**[studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1z-w.** Zero client
+runs; the affected suite green (17 files).
+
+* **The origin's plane word** (`ROUTER_ORIGIN_PLANE`, reverted WITH condition (b) by
+  `--router-report-plane` — one construction, the mesh under a modelled point, in two
+  places): the router's carry is the mesh's plane under the body model after the
+  origin snap, the report's plane where the mesh offers it or cannot say. **Its exposure
+  was derived before it was built:** `route()` is provably unchanged (an unmatched
+  preference already falls back), and the one wire effect is the clip-fallback's stop
+  plane on STACKED ground reached from single-plane ground (`test_router` §6 drives it
+  both ways). The yield is the census: every `router_route` row now carries
+  `plane_origin` beside `plane_report`, measuring the frozen-report staleness at the
+  origin — bounded below by §1z-n's 2.34%, unmeasured during click walks, free on the
+  next default session.
+* **A cast that begins abandons a live chain** (`cause=cast`; the skill-press arm hands
+  the recorder to `handle_skill_press`). ROUTER-Q8 is decided for press, follow and cast;
+  the interact arm stays refused. **Filed, with its reasoning:** the cast-stop pin's
+  click-walk suppression rests on *"no belief can place the body"*, which is false
+  under a chain since §1z-v (a) — the derived behaviour is the press's own `0x002C` at
+  the modelled body, and it changes a ruled arm (CANCELWALK §8.3g), so it was not built
+  under a scope named "abandon".
+* **Retrodiction re-run:** 40/40 verbatim; origin plane ≠ report plane on 0 of 40; no
+  chain, so no cast met one — zero exposure on map 146 for both items.
+* **Next, unchanged:** the enslavement detector for `w0score.py` (§1z-u.5 c), then
+  hold-not-drop + kill-on-press for the keyboard lead (§1z-u.5 a), then `0x005FCAA0`.
 
 ### ★★★★ MOVEMENT 2026-09-03 late — THE ROUTER IS THE DEFAULT CLICK POLICY (MOVECODE-1z-v): §1z-u's derived answer built with its two conditions, the press/follow composition it never had, and the operator's 40 refused clicks retrodicting to 40 answered
 

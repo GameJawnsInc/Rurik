@@ -17,6 +17,12 @@ re-pins the body on the leg it walks and not on the raw click chord; (b)
 the one-leg verbatim answer's field 4 is the mesh's plane under the
 modelled sync copy. Both known-bad arms are driven, and a press or a
 follow now abandons a live chain.
+
+Section 6 (MOVECODE-1z-w, 2026-09-03): the routing ORIGIN's own plane word
+(the mesh under the body model, the report's plane where offered or
+unknowable) feeds route()'s start preference, the clip-fallback's stop
+carry and every router_route row; and a cast that begins abandons a live
+chain, the third opcode of ROUTER-Q8.
 """
 
 import math
@@ -41,7 +47,10 @@ import authsrv                                                 # noqa: E402
 # analysis read the three unconditional call sites as a leak and proposed
 # gating them -- which was measured to turn this file's corridor-plane
 # checks red).
-LEDGER = checks.Ledger("router wiring", floor=73)
+# +30 2026-09-03 MOVECODE-1z-v (section 5: the default, both conditions,
+# the press/follow abandons); +11 MOVECODE-1z-w (section 6: the origin's
+# plane word, the cast abandon). 114 on the green run.
+LEDGER = checks.Ledger("router wiring", floor=114)
 check = checks.adopt_named(LEDGER)
 
 SPEED_OP = authsrv.GAME_SMSG_AGENT_UPDATE_SPEED
@@ -61,7 +70,7 @@ class FakeSend:
     def __init__(self):
         self.sent = []
 
-    def __call__(self, opcode, payload, label=""):
+    def __call__(self, opcode, payload, label="", quiet=False):
         self.sent.append((opcode, payload, label))
 
 
@@ -679,6 +688,91 @@ def main():
           < src.index("if D1_LEAD:\n            ps, _m = a2_matched_field4("))
     check("the leg model lerps from the leg's own start",
           'leg.get("start", leg["t0"])' in src)
+
+    print("== 6: MOVECODE-1z-w -- the origin's plane word, and a cast ends the route ==")
+    check("the origin word ships, reverted by (b)'s own flag",
+          authsrv.ROUTER_ORIGIN_PLANE is True
+          and "ROUTER_ORIGIN_PLANE = ROUTER and not a.router_report_plane"
+          in src)
+
+    def stacked_fn(x, y, prefer):
+        offered = {5} if x < 0.0 else ({3, 5} if x < 50.0 else {3})
+        if prefer in offered:
+            return prefer
+        return next(iter(offered)) if len(offered) == 1 else None
+    # The body stands on single-plane ground (5) while the frozen report
+    # still says 3: route() must be told the ground's own plane.
+    pm = StubPM(plane_fn=stacked_fn)
+    st = base_state(pm, pos=(-50.0, 0.0))
+    handled, sent, rows = answer(st, (-20.0, 40.0), dest_plane=3, cur_plane=3)
+    check("route() receives the ORIGIN's mesh plane as its start preference",
+          pm.last_planes == (5, 3), f"last_planes {pm.last_planes}")
+    row = next(r for r in rows if r["kind"] == "router_route")
+    check("every row carries plane_origin beside plane_report",
+          row.get("plane_origin") == 5 and row.get("plane_report") == 3)
+    # THE ONE WIRE EFFECT: a clip-fallback whose stop lands on STACKED
+    # ground {3, 5}, reached from plane-5 ground, takes the origin's deck.
+    st = base_state(StubPM(route_result=None, plane_fn=stacked_fn),
+                    pos=(-50.0, 0.0))
+    handled, sent, rows = answer(st, (40.0, 0.0), dest_plane=3, cur_plane=3)
+    check("a clip-fallback onto stacked ground carries the origin's deck, "
+          "matched",
+          sent[-1][0] == MOVE_OP and sent[-1][1][2] == 5
+          and sent[-1][1][3] == 5, f"sent {sent[-1]}")
+    # Where the mesh offers the report's plane at the origin, the word IS
+    # the report's -- the wire is unchanged on ordinary ground.
+    st = base_state(pm, pos=(10.0, 0.0))
+    handled, sent, rows = answer(st, (30.0, 40.0), dest_plane=3, cur_plane=3)
+    check("where the mesh offers the report's plane at the origin the word "
+          "is the report's", pm.last_planes == (3, 3))
+    pm_none = StubPM(plane_fn=lambda x, y, prefer: None)
+    st = base_state(pm_none, pos=(0.0, 0.0))
+    handled, sent, rows = answer(st, (50.0, 50.0), dest_plane=3, cur_plane=3)
+    check("where the mesh cannot say, the report's plane is carried",
+          pm_none.last_planes == (3, 3))
+    authsrv.ROUTER_ORIGIN_PLANE = False
+    try:
+        pm_bad = StubPM(route_result=None, plane_fn=stacked_fn)
+        st = base_state(pm_bad, pos=(-50.0, 0.0))
+        handled, sent, rows = answer(st, (40.0, 0.0), dest_plane=3,
+                                     cur_plane=3)
+        check("KNOWN-BAD ARM (--router-report-plane): the fallback carries "
+              "the frozen report plane and route() is told it too",
+              sent[-1][1][2] == 3 and pm_bad.last_planes == (3, 3))
+    finally:
+        authsrv.ROUTER_ORIGIN_PLANE = True
+
+    # ---- a cast that begins ends the route ----------------------------------
+    import contextlib
+    import io
+    st = base_state()
+    st["client_pos"] = (0.0, 0.0)
+    st["click_moving_at"] = time.time()
+    authsrv._click_leg_arm(st, (300.0, 0.0), st["click_moving_at"],
+                           silent=False)
+    answer(st, (300.0, 0.0))                       # a live chain
+    st["agents"] = {}
+    send6, rec6 = FakeSend(), FakeRec()
+    with contextlib.redirect_stdout(io.StringIO()):
+        authsrv.handle_skill_press([0, 42, 7, 0], send6, st, 1,
+                                   authsrv.GAME_CMSG_USE_SKILL, rec=rec6)
+    check("a cast that begins abandons the chain, cause named",
+          st.get("router_chain") is None
+          and any(r["kind"] == "router_leg" and r["act"] == "abandon"
+                  and r["cause"] == "cast" for r in rec6.rows),
+          f"chain {st.get('router_chain')}; rows {rec6.rows[:2]}")
+    check("the cast abandons once, at the begin instant, BEFORE the "
+          "cast-stop block",
+          src.count('router_abandon(state, rec, "cast", time.time())') == 1
+          and src.index('router_abandon(state, rec, "cast", time.time())')
+          < src.index("if CAST_STOP and not is_attack:"))
+    check("the skill-press arm hands the recorder to handle_skill_press",
+          "handle_skill_press(values, send, state, conn_id, opcode,\n"
+          + " " * 43 + "rec=rec)" in src)
+    check("the origin word is derived once, after the snap, before route()",
+          src.count("cur_plane = _router_plane(pm, origin, report_plane)") == 1
+          and src.index("cur_plane = _router_plane(pm, origin, report_plane)")
+          < src.index("_routed = pm.route(origin[0], origin[1], dx, dy,"))
     return LEDGER.verdict()
 
 
