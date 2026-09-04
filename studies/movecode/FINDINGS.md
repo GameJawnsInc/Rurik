@@ -11518,7 +11518,8 @@ The remaining question is stage 2's own gate: **what makes the client stop emitt
 still arrive in `191320`, `mt` 7/8/4 — so this is a selective suppression of the *stop*
 report, not a mute client. Two things would answer it and neither is another scripted run:
 
-- **The fence dword itself.** `clientControlled` is what §0.11's account turns on, and
+- **The fence dword itself — BUILT in §1z-an (2026-09-04), unverified against a live
+  client until one run writes a tape.** `clientControlled` is what §0.11's account turns on, and
   `movetap`'s `fence_state` reads it — but **no `movetap` tape overlaps any of these runs**
   (the lead arm shipped after that campaign, the same gap §1z-aa hit), and `movetap` cannot
   certify under the harness anyway (§1z-ag.6, 10–12 Hz against a 50 Hz floor). Adding the
@@ -11532,3 +11533,94 @@ report, not a mute client. Two things would answer it and neither is another scr
 
 **No code changed. `--kbd-lead` stays OFF; the waiver stays ON.** Instrument:
 `studies/movecode/review/stopcensus.py`.
+
+---
+
+## 1z-an. THE FENCE DWORD IS ON `agenttap` — movetap's reader CALLED not copied, a free negative control, and verified offline because `agtrack_fence` takes a closure
+
+**Asked:** "now add the fence dword to agenttap" — the cheap half of §1z-am.6's two ways to
+settle stage 2. Tooling, not a finding. Ident `MOVECODE-1z-an`. **`--no-fence` reverts.**
+
+### 1z-an.1 Why here and not `movetap`
+
+`clientControlled` — the dword at the agent's AgTrack record that the dispatcher's
+`0x00606002` tests *before* the three-gate snap test runs at all — is the field REALFIX
+§0.11's two-stage account turns on, and `movetap` has read it since §1z-aa. It cannot answer
+the current question for two reasons already on file: **no `movetap` tape overlaps any lead
+run** (the arm shipped after that campaign — §1z-aa hit the same gap), and `movetap` cannot
+certify a capture taken under the harness at all (§1z-ag.6, 10–12 Hz against its own 50 Hz
+floor). **`agenttap` already runs beside every one of these captures.** Putting the column
+there costs a tooling change instead of a campaign.
+
+### 1z-an.2 What was added, and what was deliberately *not* re-derived
+
+**`movetap.agtrack_fence` is CALLED, not reimplemented** — same record walk, same bounds
+checks (`state-array-null`, `state-count-implausible`, `id-out-of-bounds`,
+`agent-id-mismatch`), same string sentinels. A drift in `OFF_AGTRACK` / `STATE_STRIDE` /
+`S_CONTROLLED` therefore breaks **one** place, and `movetap --selftest` (250 checks, still
+green) keeps owning them. Two things are this file's own:
+
+- **`memo_reader`, a per-sample read memo.** `agtrack_fence` fetches the AgTrack header and
+  the armed id on every call, and this tape calls it once per tapped agent — but those are
+  per-*AgTrack*, not per-agent, so the second agent's copies are pure cost. That matters
+  here in a way it does not in `movetap`: **this reader already delivers ~9 Hz of the 30 it
+  asks for** (§1z-ak.7, gap p50 109 ms), so a wasted round trip is bought out of the sample
+  rate the fence exists to explain. The memo is scoped to one sample and thrown away —
+  a memo that outlived the sample would stamp a **stale fence with a fresh timestamp**,
+  which is worse than not reading it, and the test drives that both ways.
+- **The SYNC block is the one handed over.** The record is keyed by agent id, so the copy
+  cannot change `clientControlled` — but it *does* change `gate_reach`, whose world term
+  separates `test-runs` (world ≠ 1) from `world1:append`. **World 0 is the branch on which
+  the test at `0x006055E0` is actually reached**, which is the question being asked.
+
+### 1z-an.3 ★ The negative control is free, and it is the point
+
+`0x00605F10` writes `clientControlled` from **exactly two callers, both in the ChCliBase
+local-command block** — it is set for the LOCAL PLAYER's agent and nobody else. The tape
+already polls the Hatcher, so **its record must read `shut` for the whole run**, and the
+summary asserts that and says so loudly when it does not: an `open` there means this reader
+is indexing the wrong record and the player's column is worth nothing. A negative control
+that costs one agent we were already tapping is the cheapest kind there is, and this arc has
+just spent two sections (§1z-al, §1z-am) on readings that only survived because a control
+was run.
+
+An `unread:` value is a **third thing** and must not trip that control — a fence that could
+not be read is not a shut one. That is `movetap`'s own rule and the reason the state is a
+string rather than a boolean; the test pins it.
+
+### 1z-an.4 Verified offline, and exactly how far that goes
+
+`toolkit/clientscan/test_agenttap.py`, **15 checks, floor 15, bare machine** — fake memory,
+no client, no vault. That is possible only because `agtrack_fence` takes a `read(addr, n)`
+closure, which is a design decision of `movetap`'s paying off two arcs later. The four
+`gate_reach` branches through agenttap's own call shape; `clientControlled == 0` reading
+`shut` and never a failure value; an unreadable AgTrack reading `unread:`; an id mismatch
+refused; `read_copy`'s new `(fields, raw block)` return still refusing a short block and an
+id mismatch; the Hatcher control **driven both ways, including the RED**; and an old
+fence-less tape still summarising, which all 17 tapes in the vault are.
+
+**Two things the test caught that a live run would have hidden.** The `(fields, block)`
+change left the **success path still returning a bare dict** — every good sample would have
+raised inside the poll loop, and a tape is only written at the end. And the floor was
+**guessed at 17**; a green run produces 15, and `checks.Ledger` refused the guess rather
+than passing 15 silently. Both are the failure shapes CLAUDE.md's own rules name.
+
+**WHAT IT DOES NOT COVER, stated rather than left to be discovered: the column is UNVERIFIED
+against a live client.** No tape has been written with it. The offsets are `movetap`'s and
+its selftest re-encodes each instruction from the constants, so the *addressing* is as good
+as `movetap`'s; what is untested is that this process, on this build, reads a plausible
+fence at run time — and **the sample-rate cost is unmeasured**. The memo bounds it to one
+extra header read plus one record read per agent per sample, but "bounded" is not
+"measured", and a reader already at 9 Hz is the wrong place to assume. **`--no-fence` exists
+for exactly that**: if the column costs more rate than it is worth, the revert is one flag
+and the tape goes back to what §1z-ak.7 measured.
+
+### 1z-an.5 What it will answer
+
+§1z-am left the question sharp: the client keeps emitting `0x003D` while suppressing only
+`0x0047`, so this is a **selective suppression of the stop report, not a mute client**. With
+this column a lead run's tape says, per sample, whether the player's fence was open or shut
+and whether the snap test was reachable — which turns §0.11's stage 1 from an inference into
+a reading, and puts the fence transition on the same clock as the missing stop. **One
+ordinary scored `--kbd-lead` run writes it.** The other half of §1z-am.6 — the client's
+send-only `0x0047` sender — is untouched and remains its own dig.
