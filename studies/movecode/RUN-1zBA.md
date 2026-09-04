@@ -174,3 +174,64 @@ python toolkit/clientscan/agenttap.py --agents 1,10 --seconds 80
 ```powershell
 python toolkit/harness/session.py --exe vault/run/2026-07-29_221c13772c7a/Gw.exe --walk "wait:3 yaw:812 W:9.6 yaw:297 W:1.3 yaw:891 wait:2 shot:1 click:0.5,0.60 wait:6 click:0.5,0.40 wait:6 click:0.5,0.70 wait:6 click:0.5,0.30 wait:6 yaw:-875 click:0.5,0.46 wait:6" --hold 5 --game-args "--map 146 --explorable --no-enemy-skills --skills 0,0,0,0,0,0,0,0"
 ```
+
+---
+
+## RESULT, run 2 — RAN 2026-09-04 15:55. **P2: PARKED+SNAP on the one blind leg. P3 controls WALKED. The harm is real, on a router grant.**
+
+Capture `20260904T155523`, tape `agenttap-20260904T155554` (868 samples). The
+walk-in landed on the deck at **(10989, 5236)**, 39 u from the plan.
+
+| click | fy | landed | router | leg | seam | body |
+|---|---|---|---|---|---|---|
+| 1 | 0.60 | (10871, 5193) deck, 126 u | verbatim | on the deck | none | WALKED |
+| **2** | **0.40** | (8500, 4330) **off-mesh**, 2,522 u — over the railing | **clip-fallback** to (8961, 4498) | **2,032 u** | **BLIND 18→0 at (10861, 5189), f = 0.01** | **PARKED+SNAP** |
+| 3, 4 | 0.70, 0.30 | off-mesh | refused | — | — | — |
+| 5 | 0.46 | (8959, 3968) ground | clip-fallback, 331 u | ground | none | WALKED |
+
+**The specimen, from the tape:** at the grant the drawn body stood at
+(10870.8, 5192.8); within 0.17 s it was at **(10860.0, 5188.9) — x = 10860.0,
+the deck's west edge — velocity 0**, and it stayed there for **7.08 s while the
+sync copy walked 2,002 u away at 288 u/s**. At **+7.17 s** (the leg's ETA is
+7.06 s) the body was **teleported 2,021 u** to the granted point and **the fence
+shut** in the same sample. The server saw none of it — a click-walk sends no
+position reports — except its own AgTrack guard blocking a re-pin at +6.42
+(`gate1-red`). §1z-ao.2's signature, reproduced on a router grant.
+
+**Two things the specimen is NOT.** It is the router's **clip fallback**, not
+its string pull: the click landed off-mesh (the railing put the far hills under
+the cursor), the router fell back to the plane-blind `clip()` of the straight
+line, and that clip walked off the deck at 10 u and on for two kilometres. The
+pull's version — a `verbatim` leg onto a walkable bank — needs the click to
+LAND on the bank, which is run 3's job. And the lock was **not permanent**: the
+fence re-armed **2.5 s later on the next click** (click 3, itself refused), so
+under click movement the client's own local-command path re-arms what the snap
+shut — unlike RUN-1zAO's keyboard case.
+
+**And a measurement the bracket was designed to make:** three on-mesh landings
+from one camera — fy 0.60 → 126 u, fy 0.70 → 17 u, fy 0.46 → 523 u — say
+**lower on the screen is nearer**, and `clickaim.basis`'s screen-up vector
+pointed the other way (the world is z-DOWN; `cross(r, f)` points at the
+ground). Fixed in `clickaim.py`; §1z-ay's open P2 was this sign plus terrain.
+
+## Run 3 — the EAST exit, aimed to LAND on the bank
+
+Same walk-in and stand. Bearing **330°** (blind 100% from the stand). With the
+corrected sign and run 2's on-deck camera (337 u behind, 76.8 u above the
+target), fy **0.70 / 0.65 / 0.75** land **231–567 u** out for any bank height
+between 60 and 155 u below the deck — on the bank (plane 0, which extends
+≥ 350 u east of the edge at this y), never on the deck. The first landing moves
+the body off the deck; the later clicks fire from the bank as controls. Then
+bearing 270°, fy 0.46 — a seam-free control.
+
+**What run 3 adds:** the pull's specimen (a `verbatim` blind leg onto walkable
+ground), the mirror edge (the one that blocked run 1's keyboard body), and the
+second blind leg P1's floor asks for.
+
+```powershell
+python toolkit/clientscan/agenttap.py --agents 1,10 --seconds 80
+```
+
+```powershell
+python toolkit/harness/session.py --exe vault/run/2026-07-29_221c13772c7a/Gw.exe --walk "wait:3 yaw:812 W:9.6 yaw:297 W:1.3 yaw:-734 wait:2 shot:1 click:0.5,0.70 wait:6 click:0.5,0.65 wait:6 click:0.5,0.75 wait:6 yaw:750 click:0.5,0.46 wait:6" --hold 5 --game-args "--map 146 --explorable --no-enemy-skills --skills 0,0,0,0,0,0,0,0"
+```

@@ -208,14 +208,25 @@ def _norm(a):
 
 
 def basis(pos, target, up=UP_AXIS):
-    """(forward, right, up) for the camera, or None if it is degenerate."""
+    """(forward, right, screen-up) for the camera, or None if it is degenerate.
+
+    THE WORLD IS z-DOWN, and the screen-up vector is MEASURED (RUN-1zBA run
+    2): three on-mesh landings from one camera on the bridge deck -- fy 0.60
+    -> 126 u, fy 0.70 -> 17 u, fy 0.46 -> 523 u -- so LOWER on the screen is
+    NEARER. `_cross(r, f)` with `up = +z` points at the ground (it is +z, and
+    +z is down), and the first version of this file returned it as screen-up;
+    every fy-to-range prediction was inverted while every bearing was right,
+    which is exactly the split RUN-1zAY reported (P1 pass, P2 fail). `r` is
+    kept as it was because RUN-1zAY measured it: `cross(f, +z)` is screen-
+    right in this world (facing +x, right is -y).
+    """
     f = _norm(_sub(target, pos))
     if f is None:
         return None
     r = _norm(_cross(f, up))
     if r is None:                 # looking straight along `up`
         return None
-    return f, r, _cross(r, f)
+    return f, r, _cross(f, r)
 
 
 def project(world, pos, target, fov, aspect=DEFAULT_ASPECT, up=UP_AXIS):
@@ -350,12 +361,12 @@ def pairs_from_run(rundir, tape=None):
 # checks to travel with it, and this follows it rather than bending the lint.
 import checks                                                    # noqa: E402
 
-LEDGER = checks.Ledger("clickaim read-camera projection", floor=12)
+LEDGER = checks.Ledger("clickaim read-camera projection", floor=13)
 check = checks.adopt_named(LEDGER)
 
 BODY = (1000.0, 2000.0, 0.0)
-POS = (400.0, 2000.0, 400.0)        # 600 u behind, 400 up
-TGT = (1000.0, 2000.0, 80.0)
+POS = (400.0, 2000.0, -400.0)       # 600 u behind, 400 up -- z is DOWN here
+TGT = (1000.0, 2000.0, -80.0)       # (the world's convention, RUN-1zBA run 2)
 FOV = math.radians(75.0)            # sec.fovaxis: 75.000 deg HORIZONTAL
 
 
@@ -379,7 +390,7 @@ def selftest():
           project((POS[0] - 500.0, POS[1], 0.0), POS, TGT, FOV) is None,
           "a projection that wrapped would aim a click at the opposite horizon")
 
-    level = ((400.0, 2000.0, 120.0), (1000.0, 2000.0, 110.0))
+    level = ((400.0, 2000.0, -120.0), (1000.0, 2000.0, -110.0))
     check("a ray ABOVE the horizon returns None, never a distant invention",
           to_ground(0.5, 0.02, level[0], level[1], FOV, 0.0) is None,
           "sec.1z-aw's own rule: no ground there is an answer, not a number")
@@ -435,6 +446,13 @@ def selftest():
           FOV_IS_FULL_ANGLE is True,
           "fovread.describe prints both readings BECAUSE it was unsettled; "
           "fovaxis settled the axis at 75.000 deg horizontal")
+    f, r, u = basis(POS, TGT)
+    check("screen-up points to NEGATIVE z -- the world is z-down (RUN-1zBA run 2)",
+          u[2] < 0.0 and to_ground(0.5, 0.70, POS, TGT, FOV, 0.0)[0]
+          < to_ground(0.5, 0.60, POS, TGT, FOV, 0.0)[0],
+          "fy 0.60 -> 126 u, 0.70 -> 17 u, 0.46 -> 523 u from one on-deck camera: "
+          "lower on the screen is nearer. The first version returned cross(r, f), "
+          "which is +z, which is DOWN")
     return LEDGER.verdict()
 
 
