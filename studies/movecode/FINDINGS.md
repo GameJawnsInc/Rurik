@@ -11902,7 +11902,10 @@ first** so the shipped cell is known to measure the plane term and not the wall.
   routing behaves exactly as before. The same seam is presumably there, but the router
   has arms in §1z-o and §1z-v and changing it in the same commit would mean a run
   convicts two terms (§29's rule). **Its own section.**
-- **The fix is UNRUN.** Every number above is a desk re-score of captured leads; no
+- **The fix is UNRUN — RUN IN §1z-aq the same day: the mechanism CONFIRMED live
+  (0 of 65 arm-A leads cross a seam at gate 1 against 4 of 62 in the known-bad arm),
+  the outcome still open (no lock in EITHER arm).** Every number below is a desk
+  re-score of captured leads; no
   client has been driven with `A2_LEAD_PLANE_CLIP` on. The retrodiction is strong —
   6 of 6, on the exact leads that armed the observed locks — but retrodiction is not a
   run, and §1z-af is the standing reminder that a derived backstop can be convicted by
@@ -11911,3 +11914,69 @@ first** so the shipped cell is known to measure the plane term and not the wall.
 - **RECONSTRUCTION stands where §1z-ao.5 put it.** That the client refused *because* of
   the plane is still inferred: the seam is consistent with the refusal and the clip is
   provably plane-blind, but no run has shown the client's own reason.
+
+---
+
+## 1z-aq. RUN-1zAQ — the plane clip FIRES LIVE and the door is shut: 0 of 65 against 4 of 62, and the known-bad arm reproduced the defect
+
+**Asked:** "run it." §1z-ap was a desk fix and §1z-af is the standing reminder that a
+derived backstop can be convicted by its own verification runs. Four runs, alternating
+**B, A, B, A**, `--no-lead-plane-clip` the only variable, `--no-repin-stationary-waiver`
+held ON in both arms. Registered in `RUN-1zAQ.md` before launching. Ident
+`MOVECODE-1z-aq`. **All three powered predictions PASS.**
+
+### 1z-aq.1 The result
+
+| run | arm | leads | `plane-seam` | **cross-seam ≥ gate 1** | lock |
+|---|---|---|---|---|---|
+| `115542` | **B (off)** | 32 | 0 | **3** | no |
+| `115725` | **A (on)** | 31 | **1** | **0** | no |
+| `115909` | **B (off)** | 30 | 0 | **1** | no |
+| `120055` | **A (on)** | 34 | **2** | **0** | no |
+| | **A total** | **65** | **3** | **0** | 0/2 |
+| | **B total** | **62** | 0 | **4** | 0/2 |
+
+- **P1 EXPOSURE — PASS.** Both arm-A runs met the seam; the route exercises the fix.
+- **P2 THE FIX — PASS.** **Zero** of 65 arm-A leads reach gate 1 across a plane change.
+- **P3 THE CONTROL — PASS, and this is what makes P2 mean anything.** The known-bad arm
+  produced **4** such leads, every one at the full **520 u reading `why="clear"`** — the
+  §1z-ap defect, reproduced live on demand. Two ran **plane 29 → 0** and two **plane
+  0 → 29**, so the seam is crossed in both directions and the term catches both.
+- All four tapes valid: **Hatcher control `shut` on 100%** (645–660 samples each), zero
+  `unread:`. No abort.
+
+### 1z-aq.2 ★ And it does not perturb the healthy grants — confirmed live, not just at the desk
+
+Arm A's `maxreach` is still **520 u**: full-length leads go on being granted where the ray
+stays on one plane. Of 65 leads only **3** were clipped by the term. That is §1z-ap.4's
+7.8% desk figure holding up in front of a client — the fix bites on cross-seam rays and
+nowhere else, which is the property that matters more than the fix working at all. A clip
+that shortened healthy grants would have rewritten every one of them and broken the
+222/222 word doctrine on floats the client never sent.
+
+### 1z-aq.3 What this run does NOT show, as pre-registered
+
+**No lock occurred in either arm — including the known-bad one — so this run set carries
+NO evidence about the outcome.** That was registered as P4's explicit weakness before
+launching: the lock is per-RUN and probabilistic at a measured **1 in 4** (§1z-ao), so two
+runs per arm expect **0.5** locks in arm B and 0 of 2 is entirely ordinary. **A reader
+must not take "arm A did not lock" as the fix working** — arm B did not lock either.
+
+**The run was powered for the MECHANISM and the mechanism is what it settled**: the fix
+fires, the door is shut on this seam, and the arm without it re-opens the door on demand.
+Whether closing that door prevents the lock is the outcome question, and it needs either
+many more runs at a 1-in-4 rate or — better, and in this arc's own idiom — a route chosen
+to make the arming event frequent rather than incidental.
+
+### 1z-aq.4 What stands
+
+- **§1z-ap ships confirmed at the mechanism level.** `A2_LEAD_PLANE_CLIP` stays ON;
+  `--no-lead-plane-clip` reverts and now has a measured cost — 4 full-length cross-seam
+  grants in 62 leads.
+- **`--kbd-lead` stays OFF.** This removed an armer; it did not re-argue the lead.
+- **The ROUTER's clip is still plane-blind and was not under test** (§1z-ap.6). Arm B's
+  0 → 29 crossings say the seam is not a one-way curiosity, which makes the router's own
+  section worth writing.
+- **One map, one route, one build**, and the seam met is the plane-29 structure this route
+  happens to cross. P2 says the door is shut on THIS seam, not that no plane-blind grant
+  survives anywhere.
