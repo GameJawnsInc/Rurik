@@ -12199,6 +12199,10 @@ prop-shaped and a **big** one terrain:
 |---|---|---|---|
 | **Lakeside County (146)** | 178–353 | **17.0–19.7%** | **87–89%** |
 
+> **§1z-av CORRECTS THE WHOLE RANKING: `0x1B97D` is the entire Pre-Searing region and map
+> 146's spawn is ASCALON CITY's** (`content/maps.toml`, which said so all along) — so this
+> table scored a CITY, and against single-region maps it was never like-for-like.
+>
 > **§1z-au CORRECTS the "terrain-shaped" column: it is an UPPER BOUND on terrain, not a
 > measurement of it.** A screenshot from the spot this table chose shows Ascalon City's
 > WALL — the size proxy called a large building terrain, exactly the failure its own
@@ -12332,3 +12336,92 @@ target that forces a route and is not behind a building — and the compass says
 look for it.
 
 **Nothing is asked of the operator that the desk has not first tried.**
+
+---
+
+## 1z-av. THE WATER HUNT — it does not converge, and the reason is structural: §1z-at's ranking measured a CITY, and open country has almost no route-forcing geometry
+
+**Asked:** "go for the water". Four runs, no water reached. **This section is the negative
+result and the two corrections it forced**, and it ends the blind-fan approach rather than
+extending it. Ident `MOVECODE-1z-av`. No code change.
+
+### 1z-av.1 ★ CORRECTION: §1z-at's map ranking measured Ascalon City
+
+`content/maps.toml` says it plainly, and it was in the repo before any of this started:
+
+> *"Three map ids share one file because row 7982 covers the whole Pre-Searing region…
+> **WE DO NOT KNOW WHERE LAKESIDE'S SPAWN IS**… Ascalon City's coordinate is reused…
+> Pre-Searing is one continuous terrain, so **if this lands inside the city walls the fix is
+> to walk out** rather than to guess again."*
+
+**Map 146, map 148 and map 164 are one mesh** — `0x1B97D`, extent x −18432…21504 — and map
+146's spawn is **Ascalon City's**. So §1z-at's headline, *"map 146 ranks FIRST, 17–20%
+route-forcing, 87–89% terrain-shaped"*, was computed over a region that is largely a
+**city**, and its "terrain-shaped" holes are its walls and buildings. §1z-au caught one of
+them by photograph; this is the general case.
+
+**The ranking is not a terrain comparison and must not be read as one.** Against Lornar's
+Pass or Sparkfly Swamp it was never like-for-like: those are single regions, this is a city
+plus its countryside scored as one map. That the repo had already written down where the
+spawn is, and that the fix is to walk out, is the part worth remembering — **the answer was
+on disk before the first run.**
+
+### 1z-av.2 The country is 8–10 km away, and photographs confirm the walk out
+
+Grid clearance over the whole mesh (96 u cells, distance transform from every unwalkable
+cell) puts the most open ground at **(5560, 816), 2,400 u of clearance, 9,240 u from the
+spawn** — a 32 s walk. Two runs photographed the way there: `(9165, 10189)` is against the
+city wall (§1z-au), and `(8632, 6768)` — the lowest hole-density candidate at 0.179 — is at
+the **city gate**, with a dirt road, a mossy **rock slope** (terrain at last) and open
+country with trees and sky visible beyond the arch.
+
+So the geography is now known and the navigation works. What does not work is what waits
+out there.
+
+### 1z-av.3 ★★ THE STRUCTURAL RESULT: open country has almost no route-forcing geometry
+
+Ground in the open country with an obstacle at click range (250–650 u clearance), scored for
+how many of 18 bearings produce a **blocked-but-routable** chord:
+
+| position | clearance | walk from spawn | route-forcing bearings |
+|---|---|---|---|
+| (4600, 1680) | 576 u | 8,261 u | **2 of 18** |
+| (6520, 1680) | 576 u | 9,549 u | **0 of 18** |
+| (6616, −48) | 576 u | 10,562 u | **0 of 18** |
+| (3736, 816) | 576 u | 9,476 u | **0 of 18** |
+| (7480, 816) | 480 u | 10,737 u | **0 of 18** |
+
+**An isolated obstacle forces a route only if you click almost exactly through it.** In open
+country the obstacles are lone rocks with clear ground either side, so the angular window
+that bends a path is narrow — 0 to 2 bearings in 18. Dense geometry gives plenty of
+route-forcing chords, but dense geometry is the city, and the city's obstacles are the props
+that eat the click (§1z-as, §1z-au).
+
+**That is the bind in its general form, and it is the third instance of this shape in the
+arc** (§1z-aj.3's exposure tension, §1z-al's mutually exclusive `+0x98`): *the geometry that
+forces a route is the geometry that defeats a blind click, in both directions.* "Find a map
+whose obstacles are terrain" does not escape it — terrain obstacles are sparse, and sparse
+obstacles are the ones a blind fan misses.
+
+### 1z-av.4 The blind fan is the wrong instrument, and the right one is derivable
+
+Seven runs across §1z-as, §1z-at and here have produced **one** ground click that the router
+answered, and it answered `no-path-or-gate`. That is enough evidence about the method:
+**a fan of screen fractions cannot reliably hit a target this narrow**, and running more of
+them is the treadmill the 2026-08-30 direction refuses.
+
+The derived alternative is already identified in §1z-au.2 and is **arithmetic, not a run**:
+a world→screen projection from the measured **75.000° horizontal FOV**, the calibrated
+camera bearing (**12.5 px/degree**, §1z-as), and the body position the tape reports. With
+it, a click goes at a **chosen world point** — the route-forcing chord `mapscout.py` already
+computes — instead of at a guessed fraction. **The pieces all exist and none of them needs a
+client.**
+
+Its one known hazard is on file: §1z-as.3's range instability (the same `fy` returning
+511 u and 1,767 u as the ground falls away) says a **flat-ground** projection will not be
+enough, and the honest form validates against the 14 click→world pairs already captured
+before it is trusted.
+
+**What is NOT recommended is another blind fan, and what is not needed is the operator** —
+§1z-au's point stands: the desk can see the scene now, and what it is missing is a
+projection it can build.
