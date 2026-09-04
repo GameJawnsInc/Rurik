@@ -12173,6 +12173,96 @@ The two ways out, and the first is cheaper than it looks:
   a world-anchored click needs the scene — and it is one click, not a session: click past
   the bridge onto ground that needs routing, with the tape running. Everything after that
   is scoreable from the wire.
-- **Or move the probe off this obstacle**: find a map whose routing obstacles are terrain
+- **Or move the probe off this obstacle — DONE in §1z-at, and it answered differently:
+  the map was never wrong.** Map 146 is 17-20% route-forcing with ~89% of those obstacles
+  terrain-shaped; the SPAWN just sits beside a bridge, and the nearest terrain obstacle is
+  2,827 u away. Find a map whose routing obstacles are terrain
   rather than props, where the click can land on open ground beyond a bend. That is a desk
   search over the archive's meshes and needs no run to start.
+
+---
+
+## 1z-at. THE MAP SEARCH — it is THIS map, a different PLACE; the walk script now navigates to 16 u, and blind click targeting across an obstacle is what is left
+
+**Asked:** "find a map whose obstacles are terrain, not props" — §1z-as.6's second way out.
+Ident `MOVECODE-1z-at`. **The search answers differently than it was posed, and the answer
+is cheaper.**
+
+### 1z-at.1 ★ §1z-as's bind was the SPAWN's neighbourhood, not the map
+
+`mapscout.py` scores each explorable map for the thing a click probe needs — the share of
+(origin, bearing, range) triples at click range where the straight chord is **blocked but
+routable** — and classifies the blocking hole by flood-filled size, a **compact** hole being
+prop-shaped and a **big** one terrain:
+
+| map | chords | route-forcing | terrain-shaped |
+|---|---|---|---|
+| **Lakeside County (146)** | 178–353 | **17.0–19.7%** | **87–89%** |
+| Isle of the Nameless (280) | 383 | 12.3% | 83% |
+| Domain of Anguish (474) | 344 | 9.0% | 89% |
+| Lornar's Pass (90) | 344 | 6.7% | 78% |
+| Sparkfly Swamp (558) | 465 | 4.9% | 96% |
+
+**Map 146 ranks FIRST** — which contradicts §1z-as, and the contradiction is the finding.
+§1z-as scanned bearings **from the spawn only** (4 of 288, all the bridge) and concluded the
+map was wrong. It is not: 146 is 17–20% route-forcing and ~89% of those obstacles are
+terrain-shaped. **The spawn just happens to sit beside a bridge.** A one-origin scan
+generalised to a map, and a five-map scan caught it.
+
+**The nearest terrain-shaped route-forcing spot is 2,827 u from the spawn on foot — about
+10 s at run speed**: stand at `(9165, 10189)`, click toward `(9158, 10789)`, bearing 91°,
+3 waypoints, blocking hole big enough to hit the flood cap. No new map, no content work.
+
+### 1z-at.2 ★★ The walk script is now DERIVED from the mesh, and it navigates to 16 u
+
+`mapscout.py --script` emits a `--walk` plan that reaches a computed spot: the mesh's own
+route from the spawn, one `yaw`+`W` pair per leg, using §1z-as's calibration
+(**12.5 px/degree**, 288 u/s) and closing with a click fan at the target bearing.
+
+Driven, it put the body at **(9159, 10203)** against a computed target of
+**(9165, 10189)** — **16 u**. That validates three things at once that had only been
+assumed separately: the yaw calibration composes over a multi-leg plan, **`W` does follow
+the camera's forward** (the run's tape checks what §1z-as could only assume), and a mesh
+route converts to a keyboard plan that lands where it says. **The harness can now be sent
+to a computed coordinate**, which it could not before, and that is worth more than the
+probe it was built for.
+
+### 1z-at.3 What still does not work: blind click targeting ACROSS an obstacle
+
+Four clicks from the spot, all `fx=0.5, fy=0.46`, ranges **511 → 1031 → 1429 → 1767 u**
+(the same `fy` walking outward as the camera meets falling ground — §1z-as.3's instability
+again):
+
+| range | landed | router |
+|---|---|---|
+| 511 u | prop/void | `clip-fallback / dest-off-mesh` |
+| 1031 u | prop/void | `refused / dest-off-mesh` |
+| **1429 u** | **GROUND** | `refused / no-path-or-gate` |
+| 1767 u | prop/void | `refused / dest-off-mesh` |
+
+**The 511 u click landed 75 u SHORT of the intended `(9158, 10789)` — inside the obstacle's
+own hole.** That is the geometry, not bad luck: aiming *past* a barrier at a shallow camera
+angle puts the ray into the barrier's near face. Click further to clear it and the
+destination lands in mesh the router says it has **no path** to. **One ground hit in four,
+and it was unroutable.**
+
+So the obstacle is no longer prop occlusion (§1z-as) — that was solved by moving away from
+the bridge. It is that **clearing a barrier blind requires knowing how far past it to aim,
+and the screen fraction does not carry that.** Still **zero routed multi-waypoint paths
+under any tape**; §1z-ar's question is unchanged.
+
+### 1z-at.4 What ships, and what the remaining step is
+
+- **`mapscout.py`** — the map ranking, the terrain/prop size proxy (labelled as a proxy: it
+  cannot see a prop, it infers one from a footprint), the nearest-reachable-spot search, and
+  the script emitter.
+- **The correction to §1z-as**: the map was never wrong.
+- **Not shipped: a router probe.** Three runs of blind click targeting have now produced one
+  ground hit that the router refused.
+
+**The remaining step is one aimed click, and it is worth being plain about why.** Everything
+around it is solved — the harness navigates to a computed spot, the tape reads both copies
+and the fence, and the wire scores where every click landed. What is missing is the single
+judgement a screen fraction cannot encode: *how far past that ridge is open ground.* That is
+the aiming boundary this repo has always drawn, and the cheapest form of it is one click
+from the operator standing at `(9165, 10189)` with the tape running.
