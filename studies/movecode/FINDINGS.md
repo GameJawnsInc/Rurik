@@ -10471,3 +10471,160 @@ keyboard path once §1z-z has killed the plane route. `agenttap` cannot see the 
 `controlled` field is the controlled agent's id, §1z-aa.1), and `movetap` — which reads
 `clientControlled` directly — has not been run against a lead arm. That is the
 instrument gap to close before the next fix is designed, and it needs no new theory.
+
+
+---
+
+## 1z-ag. THE ARMER, IDENTIFIED — the lead's own arrival teleports the drawn body onto world-0 across a gate-1 separation and clears the fence, with no message of ours within a second of it
+
+**Asked:** "close the instrument gap: run movetap against the lead arm." `movetap.py` reads
+AgTrack's `clientControlled` at the record; `agenttap` cannot see the fence at all
+(§1z-aa.1), which is why §1z-af had to leave the armer unidentified. Prediction registered
+before launching (RUN-1zAB's armer block, `a2a1560`). Ident `MOVECODE-1z-ag`.
+
+### 1z-ag.1 The answer, in the client's own memory
+
+`movetap-20260903T202134` × `authsrv-20260903T202121-c1`, `--kbd-lead`, refresh OFF (its
+default since §1z-af). The run **locked** — 1 reported stop for 7 key legs — so the
+exposure floor this run registered was met.
+
+| client clock | fence | `+0x48` | sync copy | drawn body | body velocity | separation |
+|---|---|---|---|---|---|---|
+| 16826 | open | 17740 | 10022.6 | 10369.4 | **0.00** | 347.1 |
+| … | open | 17740 | walking | 10369.4 | **0.00** | growing |
+| 17730 | open | 17740 | 9851.4 | 10369.4 | **0.00** | **518.0** |
+| **17831** | **shut** | re-armed | 9839.7 | **9849.4** | −190.08 | **6.84** |
+
+Two consecutive samples. The sync copy walks the granted lead while **the drawn body is
+parked**; separation grows 347 → 518 u, past gate 1's **299.33 u**; the arrival due at
+17740 fires; and the drawn body's point is written **520 u exactly onto our granted
+destination** while `clientControlled` clears. The fence never re-arms for the remaining
+46 s.
+
+**It is not the `+0x78` sample-and-hold artifact**, which is the trap `movetap`'s own
+docstring exists to warn about (*"across a perfectly normal glide the `+0x78` trace is
+flat for the whole leg, then one step onto the destination — exactly what a teleport looks
+like"*). Checked directly: through the whole approach `async_vel_raw` is **(0.00, 0.00)**
+and the integrated position equals the raw point, which is what a parked agent looks like
+and what a gliding one cannot. Velocity becomes −190.08 only *after* the jump.
+
+So this is REALFIX §0.11 stage 1 on the keyboard path, and it is the `HEADING_GRANT`
+block's own measurement — *"`agent+0x48` is set ONCE at the grant and never re-armed, and
+at that exact millisecond the client SNAPS to the granted point"* — caught in the act,
+with the gate it fails visible in the same rows.
+
+### 1z-ag.2 Every registered discriminator, answered
+
+| registered | measured |
+|---|---|
+| the fence flips open→shut once and stays shut | **yes** — one shut, no re-arm in 46 s |
+| §0.11's `async_reqtoken` fingerprint reproduces | **no, and it does not discriminate here**: the token reads 0 both before and after, so on this path it does not mark the edge |
+| a position snap rides the same sample | **yes — 520 u**, far larger than §0.11's ~15 u, because this is a gate-1 failure rather than a plane reconcile |
+| the plane words are already equal before the shut | **yes in run A, 29 = 29 at every transition** — the plane route is not this armer. **But run B shows the disagreement still occurs** (§1z-ag.7), so this is “not the armer here”, not “eliminated” |
+| no server message rides the shut edge | **confirmed, and wider than registered**: no player `0x0029` or `0x002C` within **±1.5 s**. Nearest send is an enemy speed message 1.39 s before; our next player grant is 1.13 s *after* |
+| would re-open the arrival reading | **it does** — §1z-ag.3 |
+
+### 1z-ag.3 §1z-af.3 is CORRECTED: the arrival is the armer
+
+§1z-af.3 wrote that preventing the arrival did not prevent the lock and therefore the
+armer was "UNIDENTIFIED". **The observation stands; the conclusion was wrong.** This
+capture shows the arrival arming the lock directly. What §1z-af measured was that the
+refresh's **coverage** was incomplete — it fires at most once per report, was
+`refresh-blocked` by the clip 1–3 times per run, and lost one race outright — and one
+uncovered arrival is enough.
+
+**The refresh was also the wrong shape**, which the same rows show: the body was already
+parked while the copy walked, so extending the lead pushes the copy *further* from a
+stationary body and the eventual arrival fails gate 1 by more. **The quantity that kills
+is the separation at the arrival, not the arrival's timing.** That is why a backstop built
+to postpone it could not work, and it is the part §1z-ae got wrong at the design level
+rather than in coverage.
+
+### 1z-ag.4 The guard has the predicate and did not fire in time
+
+`agtrack_guard.arrival_risk` asks exactly the right question — is an arrival maturing
+within the horizon whose evaluation predicts a snap. On this capture it **did not fire
+before the snap**. The wire shows the fatal lead evaluated `agtrack_guard pass match` at
+−1.918 s, and the first `arrival-risk` row lands at **+0.392 s, after the fact**.
+
+Two candidate reasons, and the rows cannot separate them, so both are recorded rather than
+chosen:
+
+1. **The guard was blind through the window.** Its last state transition before the snap
+   was `none / not-tested` — the code the mirror returns when it believes the fence is
+   shut — and our own `AGTRACK RE-PIN` had shut it 5.7 s earlier.
+2. **The `pass/match` may be an old-trail match**, which is the failure §1z-r.4 named
+   outright (*"keep q within 100 u of the CURRENT leg — old history is deleted by
+   invisible resets and is never protection"*). The body had walked forward through
+   ≈9849 earlier in the run, and `AgTrack::Clear` zeroes the head **but the seed
+   survives**, so the first node recorded after a Clear forms a segment with a stale seed
+   that can span the whole earlier leg. **UNVERIFIED** — it needs the mirror's chain
+   dumped at that instant, not inferred from a verdict word.
+
+Either way the practical statement is the same and it is measured: **the guard cleared the
+lead that armed the lock, and reported the risk only after the body had already moved.**
+
+### 1z-ag.5 The derived fix, named not built
+
+An arrival is harmless when separation is small — that is §1z-r's reprieve and the whole
+basis of zero-lead's warp-safety. So the action before a maturing lead is **not to extend
+it but to retract the copy to the body's own reported point**, which is exactly the
+zero-lead grant §1z-y's kill already sends on a press or a click. It needs one more
+trigger: *an arrival is due and the modelled separation exceeds gate 1*. A grant and not a
+`0x002C`, for the reason §1z-y already gives — a `0x002C`'s own Clear shuts the fence.
+
+That is a change with its own registered run, and §1z-ag.4 says the predicate it should
+use needs auditing first: a fix hung on `arrival_risk` inherits whatever kept
+`arrival_risk` quiet here.
+
+### 1z-ag.6 The instrument, honestly
+
+**The capture failed `movetap`'s own sample-rate floor** — 613 samples over 60 s = 10.2 Hz
+against a 50 Hz target, floor 1500 — and it said so and refused to certify itself:
+*"It stalled; do not read a null out of it."* Nothing above is a null. The snap is a
+positive event captured in two consecutive samples; the arrival instant is the client's
+own `+0x48`; the parked-body check is a velocity field, not a rate; and the ±1.5 s wire
+window comes from the gamesrv capture, whose timing the tap's rate cannot affect. What the
+undersampling costs is **resolution and completeness**: the shut is located inside
+`[17730, 17831]` rather than at an instant, and **other fence transitions could have been
+missed between samples**. The client's own world clock advanced 51.5 s over 60 s of wall
+time — it was running ~14 % slow — which is worth knowing before anyone reads a timing
+figure off this capture, and is the likely cause of the tap's own shortfall.
+
+**And the shortfall is reproducible, which makes it an instrument limitation rather than a
+fluke.** A second capture, started at the map rung so it covered the whole walk, read
+**575 samples over 48 s = 12.0 Hz** and failed the same floor. Two attempts, 10.2 and
+12.0 Hz, against a reader that measured itself at ~14 kHz capability beforehand: on this
+machine `movetap` cannot hold 50 Hz while the harness is driving the client. Closing that
+is the next instrument job, and until it is closed **no `movetap` capture taken under the
+harness can be certified** — which is why everything above is stated as a positive
+observation and nothing as a null.
+
+### 1z-ag.7 The second capture is a WITHIN-ARM CONTROL, and it separates the two routes
+
+`movetap-20260903T202916` × `authsrv-20260903T202912-c1`, identical script and flags.
+**That run did not lock: 7 reported stops for 7 key legs** (run A: 1), 31 heading reports
+(run A: 12). Its only open→shut transition is a different animal:
+
+| | run A — LOCKED | run B — CLEAN |
+|---|---|---|
+| what shut the fence | the lead's **arrival** (`+0x48` due inside the sample gap) | **no arrival armed at all** (`+0x48` = 0 both sides) |
+| separation at the shut | **518 u**, over gate 1 | **96.8 u**, under it |
+| the body at the shut | parked, then moved **520 u** onto our dest | moving, then stopped; moved **3.5 u** |
+| plane words | equal (29 = 29) | **disagree — sync 0, drawn 29** |
+| re-armed afterwards | **never**, 46 s | **yes, 3.8 s later** |
+| reported stops | 1 of 7 | 7 of 7 |
+
+Both of §0.11's ingredients are visible in this arm and they do not carry the same weight:
+**the plane-mismatch shut self-heals** — it re-armed at the next walk-start, exactly as
+§1z-aa measured — while **the arrival-across-gate-1 shut never re-arms and takes the
+session with it.** That is the route to fix, and it is also why the same script locks in
+some runs and not others.
+
+**One thing this obliges me to withdraw.** I registered that the plane words would already
+be equal because §1z-z matches field 4 to field 3, and in run B **the client's two copies
+disagreed anyway** (sync 0, drawn 29). Matching the words *in our grant* does not make the
+client's two copies agree — the drawn body can cross a seam while the sync copy has not
+been re-granted. §1z-z is not thereby broken (its own test pins what it does), but
+“§1z-z removes the cross-plane state” is not a claim these runs support, and §1z-af
+leaned on it when it ruled the plane route out.

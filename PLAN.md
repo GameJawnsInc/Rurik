@@ -1614,6 +1614,18 @@ floors and aborts in `RUN-R8.md`; both are operator-driven client runs.
 
 ## 8. Immediate next actions
 
+### ★★★ MOVEMENT 2026-09-03 — THE ARMER IDENTIFIED (MOVECODE-1z-ag): the lead's own arrival teleports the drawn body onto world-0 across a gate-1 separation and clears the fence
+
+**[studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1z-ag.** The instrument gap §1z-af named, closed: `movetap` reads `clientControlled` directly, which `agenttap` cannot. Prediction registered before launching (`a2a1560`).
+
+* **The armer, in the client's own memory.** Two consecutive samples: the sync copy walks the granted lead while the drawn body is **parked** (`async_vel_raw` = 0, so this is not the `+0x78` sample-and-hold trap), separation grows **347 → 518 u** past gate 1's 299.33, the arrival fires, and the body's point is written **520 u exactly onto our granted destination** while the fence clears and never re-arms. **No player `0x0029` or `0x002C` within ±1.5 s** — the armer is not one of our messages.
+* **A within-arm control in the second capture.** Same script; that run **did not lock** (7 stops of 7 key legs against 1). Its only shut had **no arrival armed**, 96.8 u of separation, and **re-armed 3.8 s later**. The plane-mismatch shut self-heals; the arrival-across-gate-1 shut is the one that takes the session.
+* **§1z-af.3 CORRECTED:** the arrival IS the armer. §1z-af measured the refresh's *coverage* being incomplete, and the refresh was the wrong SHAPE besides — the body was already parked, so extending the lead grows the very separation that fails the gate. **The quantity that kills is the separation at the arrival, not its timing.**
+* **The guard has the predicate and did not fire in time:** it passed the fatal lead `pass/match` at −1.918 s and reported `arrival-risk` only at **+0.392 s, after the snap**. Two candidate reasons recorded, neither chosen (its mirror believed the fence shut; or an old-trail match off a seed that survives `Clear`, §1z-r.4 — UNVERIFIED).
+* **The derived fix, named not built:** before a maturing lead whose modelled separation exceeds gate 1, **retract** the copy to the body's reported point — §1z-y's kill with a third trigger, a grant and not a `0x002C`. Its predicate needs auditing first.
+* **Withdrawn:** “§1z-z removes the cross-plane state”. Run B's client copies disagreed (sync 0, drawn 29) despite matched words in every grant.
+* **Instrument debt:** both captures FAILED `movetap`'s own rate floor (10.2 and 12.0 Hz against 50), reproducibly, so **no `movetap` capture taken under the harness can be certified** until that is fixed. Every figure above is a positive observation, never a null.
+
 ### ★★★ MOVEMENT 2026-09-03 — THE REFRESH IS **REFUTED** BY ITS OWN TWO VERIFICATION RUNS (MOVECODE-1z-af): preventing the arrival does not prevent the lock, and the keyboard armer is now UNIDENTIFIED
 
 **[studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1z-af.** Two runs of RUN-1zAB's script with `--kbd-lead` and the refresh live, scored against §1z-ae.6's bounds, registered before either.
