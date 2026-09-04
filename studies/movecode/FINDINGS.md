@@ -10992,6 +10992,12 @@ unmeasured**, and after two sheets the reason is structural rather than procedur
 harness route cannot reliably manufacture "a full-length lead over a parked body", because
 on a clear ray the body does not park.
 
+> **REFUTED by §1z-al (2026-09-04).** The enemy's collision cannot park a keyboard body at
+> all: the resolver's park arm is gated on the blocker being `+0x98`, a walking player's
+> `+0x98` is 0 (0 of 3,032 moving samples), the drawn body passes within **4.8 u** of the
+> Hatcher at full speed, and the lead's own `0x0029` clears `+0x98` anyway. The paragraph
+> below is kept as written because it is what the next step WAS.
+
 **What a next attempt needs is not another route.** It needs the parking to be caused
 rather than waited for — the `--enemy` Hatcher's collision blocking the body mid-leg is the
 one mechanism in this harness that stops a walking body without our mesh knowing, and it is
@@ -11298,3 +11304,99 @@ without one it falls back to the leg-age bound, prints the origin caveat, and **
 non-zero on an uncertified pin** — so a capture like this one reports "1 pin not cleared"
 rather than the flattering "unmeasured" it used to. Run on 140659 it exits 1 and names
 35.681.
+
+---
+
+## 1z-al. THE ENEMY CANNOT CAUSE THE PARKING — the resolver's park arm is gated on `+0x98`, the lead's own `0x0029` clears it, and the drawn body walks through the Hatcher at 4.8 u
+
+**Asked:** "now cause the parking with the enemy collision" — §1z-aj.5's derived next step,
+in its own words: *"the parking must be CAUSED, not waited for — the `--enemy` Hatcher's
+collision blocking the body mid-leg is the one mechanism in this harness that stops a
+walking body without our mesh knowing."* **That plan is REFUTED, at the desk, with no
+client run.** Ident `MOVECODE-1z-al`.
+
+### 1z-al.1 The gate is `+0x98`, and it was in the decode all along
+
+The collision resolver `0x006011F0` runs its neighbour test for every agent in a ±60°
+forward cone, but the arm that actually stops the body — the kind-5 arrival and the
+teleport-in-place (`0x006020B0`: velocity 0, `m_targetPoint` ← +INF, `+0x48` ← 0) — fires
+**only when the blocking neighbour IS the agent named in `+0x98`**:
+`0x006017CB cmp ebx,[esi+0x98]` (ANIMREF-RE §38.2). `+0x98` is the *destination agent* — who
+this body is FOLLOWING. **A keyboard or click walk carries `+0x98 = 0`.** There is no
+followed agent, so the arm cannot fire no matter who is standing in the way. The resolver is
+a **follow-arrival** mechanism, not a physical barrier.
+
+### 1z-al.2 ★ And the lead's own opcode clears the field the park needs
+
+This is the part that makes it structural rather than merely unlikely. `0x002A`'s handler
+passes the wire's fifth field into the shared setter's `+0x98` slot; **`0x0029`'s handler
+`0x005FD890` passes 0 into that same slot** — so a `0x0029` CLEARS the follow (§38.2,
+answering §35.5's open decode). **The keyboard lead IS a `0x0029`.** Every lead grant
+destroys the precondition the park requires, so "a maturing lead" and "a body parked by the
+enemy" are **mutually exclusive by construction**, not two things that merely failed to
+co-occur. No route, no script and no enemy placement can hold both at once.
+
+### 1z-al.3 The corpus agrees, and it is not close
+
+`studies/movecode/review/collisionpark.py` over all **17 agenttap tapes, 9,852 paired
+samples** (both copies of the player and the Hatcher, read through the client's own
+`position_at`):
+
+| | |
+|---|---|
+| player moving samples | **3,032** |
+| … with the drawn copy's `+0x98` set | **0** (sync copy: 4) |
+| moving samples **inside** the 80 u disc | **636 of 3,032 (21.0%)** |
+| closest approach at speed | **4.8 u**, player at 190.1 u/s, `+0x98 = 0` |
+
+Twelve passes come inside 17 u at full run speed with no deflection, no velocity change and
+no stop. **If the disc blocked a keyboard body, none of those 636 samples could exist.**
+OBSERVED.
+
+### 1z-al.4 ★ THE POSITIVE CONTROL — the resolver does fire, for the agent that carries `+0x98`
+
+A negative this large is worthless without showing the same reader finding the thing it
+should find (the standing rule; §1z-ak.6's own harness earned its numbers the same way). The
+**Hatcher** chases the player, so *its* `+0x98` names agent 1, and the resolver must be
+visible stopping it at `r + r + 56` = 80 u:
+
+| | |
+|---|---|
+| Hatcher samples with `+0x98` set | **2,538 of 9,852 (25.8%)** |
+| Hatcher halts (was > 100 u/s, now < 20) | **432** |
+| distance to the player at the halt | p10 68.3, **p50 84.5**, p90 194.0 |
+| inside the 60–100 u band (the disc) | **267 of 432 (62%)** |
+
+**The mechanism works and the reader sees it.** It fires for the agent that names a target
+and never for the one that does not. That is the gate, measured from both sides.
+
+> **A false start recorded, because it is the trap this section nearly published.** The
+> corpus does hold 29 player stalls in the 65–90 u band, clustered near 75 u, which reads
+> exactly like an 80 u collision stop. It is not one: `+0x98` is **0 on both copies for the
+> five samples BEFORE each stall**, so nothing was being followed. Those are the **Hatcher's
+> own** 80 u chase-halt (ANIMREF-RE §40) seen from the player's frame — the enemy settles at
+> its disc whenever the player stops, so the *separation* clusters at 80 u without the
+> player ever being stopped by anything. A distance histogram alone would have "confirmed"
+> the collision park; only the `+0x98` column refutes it.
+
+### 1z-al.5 What this retires, and what is actually left
+
+- **§1z-aj.5's next step is dead as written.** Its premise — *"the one mechanism in this
+  harness that stops a walking body without our mesh knowing"* — is wrong on its own terms:
+  the enemy does not stop the walking body **at all**. Nothing about the route, the script
+  or the enemy's placement can be adjusted to fix that; the field the mechanism needs is
+  zeroed by the very grant under test.
+- **The retract's outcome question is therefore still open, and this closes a door rather
+  than opening one.** §1z-aj left it INCONCLUSIVE because the control never produced the
+  lock, and the proposed way to force it does not exist.
+- **What remains, from the arc's own record, and this section does not choose between
+  them.** (a) §1z-aj.3's other candidate — *"our mesh and the client's collision
+  disagreeing"*, i.e. terrain or a prop the client stops on where our mesh says clear; the
+  lead needs `clip()` to pass, so only a **disagreement** can serve, and whether one exists
+  is a question about our own decode's gaps. (b) §1z-ad's specimen, where the armer was not
+  a parked body at all but a **swallowed `0x0047`** — the lead matured 0.26 s before the
+  player released and the release went unreported. These are different mechanisms and the
+  arc has been treating them as one. Picking between them is the next decision; **it is not
+  a run, and after this section it is not an enemy.**
+
+**No code changed. `--kbd-lead` stays OFF; the waiver stays ON.**
