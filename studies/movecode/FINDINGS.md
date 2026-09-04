@@ -12053,7 +12053,10 @@ whether any routed leg leaves the drawn body parked while the server thinks it i
 That is an observation of the client's own behaviour and does not need the portal question
 answered at all — which is exactly why it is the right instrument.
 
-Two things to fix first, both cheap: **the harness drives keys, not clicks**, so a router
+**§1z-as took up the first of these and calibrated the click verb; it also found the
+BIND — the geometry that forces a route is the bridge whose PROP eats the click, so the
+probe still needs one owner-aimed click or a different map.** Two things to fix first,
+both cheap: **the harness drives keys, not clicks**, so a router
 run needs a click script (`--walk` cannot produce one), and the plane-29 structure needs a
 route that actually crosses it.
 
@@ -12070,3 +12073,106 @@ with full-length grants otherwise unaffected. Recorded because "clips at plane c
 "clips at illegitimate plane changes" are different claims, and §1z-ap's text should not be
 read as the second. RUN-1zAO's own 29 → 0 seam **is** portal-linked somewhere on the map;
 the portal simply was not on that ray, which is why clipping it was right.
+
+---
+
+## 1z-as. THE CLICK SCRIPT — calibrated, and it hits the bind: the geometry that forces a route is the geometry whose PROP eats the click
+
+**Asked:** "write the click script" — §1z-ar's prerequisite, since the ROUTER only runs on
+a click and the whole recent campaign is `--walk` keyboard-only. Three calibration runs.
+Ident `MOVECODE-1z-as`. **The script exists and is calibrated; the router probe it was for
+is still not deliverable, and §1z-as.5 says why.**
+
+### 1z-as.1 The verb reaches the world — which was not known
+
+`session.py` has carried a `click:<fx>,<fy>` walk verb since the panel probes, but its own
+executor calls it *"a UI click at a FIXED window fraction — **a panel button, not a world
+target**"* and `parse_walk` retires the aiming caveat *"for everything except a
+world-anchored CLICK"*. Four runs in the whole corpus had used it, all at
+(0.39–0.41, 0.56–0.61), all UI. **Pointed at the ground it works: 13 of 14 click legs
+across three runs produced a `MOVE_TO_COORD`.** No new primitive was needed.
+
+### 1z-as.2 ★ The camera calibration, confirmed predictively
+
+`yaw:N` right-drags N pixels. Measured over a four-step sweep, the click's world bearing
+moved **−24.0° per `yaw:300`** — 0.0 → 336.0 → 312.0 → 288.0 → 264.0, exactly linear:
+
+> **12.5 pixels per degree.**
+
+**Then it was used as a prediction rather than a fit:** the next run opened with `yaw:1500`
+(= 120°) and the first click came back at **240.0°** — the calibration's own answer, to the
+tenth. That is the part worth having; a fit that is never asked to predict is a curve.
+
+### 1z-as.3 The range calibration, and its limit
+
+At `fx = 0.5`, measured body-relative from the tape: **`fy` 0.46 ≈ 420–620 u**, **0.62 ≈
+80 u**, **0.70 ≈ at the feet**. Useful, and **not stable**: the same `fy = 0.46` returned
+**2,697 u** where the ground falls away, because a screen ray meets sloping terrain further
+out. So `fy` sets a *rough* range on level ground and nothing more — **the wire, not the
+fraction, is what says where a click went.**
+
+### 1z-as.4 ★★ PROPS SWALLOW CLICKS — the owner's observation, and it explains everything
+
+Watching the run:
+
+> *"your click landed on the bridge prop, which was obscuring what is the ground point you
+> were trying to click. when you click a prop like that you'll walk in a straight line at
+> it"*
+
+That is the harness's aiming limit stated exactly, and **no screen fraction chosen at the
+desk can know a prop is there.** It accounts for every anomaly above at once: the
+`verbatim` router verdicts (a straight walk **at** the prop, never a route), the range
+jumping to 2,697 u at an unchanged `fy`, and the `dest-off-mesh` refusals — **we carry no
+prop geometry** (§0.17's named remainder), so a prop surface point is never on our navmesh.
+
+**And that makes the mesh the SENSOR.** A click whose destination is off our navmesh is a
+prop hit or the void; on it, the click reached the ground. Scored that way the last run
+reads **2 GROUND, 5 prop/void — and the split is exactly the router's own: both GROUND
+hits are the two `verbatim` answers and all five prop hits are the five `dest-off-mesh`
+refusals, 7 of 7.** A blind script cannot aim, but a run can be **scored on the subset that
+landed**, which is what makes a click probe possible at all without the owner at the
+keyboard. `clickcal.py` prints that column.
+
+**This also makes §1z-ap/§1z-ao's plane-29 structure concrete: it is that bridge.** The
+"bridge over the ground beneath it" in `clip`'s docstring was written as the generic case
+for a file with no height in it; the owner's sentence says it is literally the thing the
+fatal lead crossed.
+
+### 1z-as.5 THE BIND, and it is why the router probe is not deliverable yet
+
+A router probe needs a click the router must **bend** — the string pull only runs on more
+than two waypoints. Scanning map 146 from the spawn for bearings where a straight line is
+blocked but a route exists gives four, at **355°/700 u, 350°/700 u, 95°/700 u and
+90°/550 u** (3–4 waypoints each).
+
+**Those are the bridge.** The obstacle that forces the route is the obstacle whose prop
+occludes the ground in front of it — so a blind click aimed there lands on the prop and the
+client walks straight at it, which is the one outcome that produces no routing at all.
+**The geometry that makes a route necessary is the geometry that eats the click**, the same
+shape as §1z-aj.3's tension and §1z-al's mutual exclusion.
+
+Every ground hit so far has come back `verbatim` — a straight-line pass-through — so
+**zero genuinely routed multi-waypoint paths exist under any tape**, and §1z-ar's question
+is exactly where it was.
+
+### 1z-as.6 What ships, and the two ways out
+
+**Shipped:** `studies/movecode/review/clickcal.py` — the calibration, the prop sensor, and
+the exposure count. The script itself is one line and is now writable against measured
+constants rather than guesses:
+
+```
+--walk "wait:3 yaw:1500 click:0.5,0.46 wait:3 click:0.5,0.46 wait:3 yaw:-250 click:0.5,0.46 wait:3 ..."
+```
+
+**Not shipped: a router probe**, because it would measure nothing.
+
+The two ways out, and the first is cheaper than it looks:
+
+- **The owner aims one click.** This is precisely the boundary that has always been theirs —
+  a world-anchored click needs the scene — and it is one click, not a session: click past
+  the bridge onto ground that needs routing, with the tape running. Everything after that
+  is scoreable from the wire.
+- **Or move the probe off this obstacle**: find a map whose routing obstacles are terrain
+  rather than props, where the click can land on open ground beyond a bend. That is a desk
+  search over the archive's meshes and needs no run to start.

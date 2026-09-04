@@ -23,6 +23,27 @@ chose. So a click script can be blind about aim and still be scoreable, because
 every destination it produced is recorded. That is enough for a router probe,
 which needs routed grants rather than a particular destination.
 
+★ AND PROPS SWALLOW CLICKS -- the owner's observation, watching the calibration
+run, and it is the reason this file classifies destinations at all:
+
+    "your click landed on the bridge prop, which was obscuring what is the
+     ground point you were trying to click. when you click a prop like that
+     you'll walk in a straight line at it"
+
+That is the harness's aiming limit stated exactly: **a prop occludes the ground
+and takes the click**, and no screen fraction chosen at the desk can know it is
+there. It explains the whole first calibration -- `verbatim` router verdicts (a
+straight walk AT the prop, never a route), ranges jumping from ~550 u to 2,697 u
+at the same `fy`, and `dest-off-mesh` refusals, because **we carry no prop
+geometry** (sec.0.17's named remainder) so a prop surface point is never on our
+navmesh.
+
+So the mesh is the SENSOR: a click whose destination is off our navmesh is a prop
+hit or out of bounds, and a click whose destination is on it reached the ground.
+A blind script cannot aim, but a run can be SCORED on the subset that landed --
+which is what makes a click probe possible at all without the owner at the
+keyboard.
+
 WHAT IT PRINTS, per click leg: the screen fraction, the body's position when the
 click fired, the `MOVE_TO_COORD` the client sent, and the displacement in world
 units -- range and bearing relative to the body's own facing where a heading is
@@ -42,6 +63,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "..", "..", "toolkit"))
 
 HARNESS = "captures/harness"
+MAP_146 = 0x1B97D    # the harness route's map
 
 
 def newest_run(root):
@@ -88,7 +110,18 @@ def main():
     reports = [(r["wall_unix"], tuple(r["reported"])) for r in R
                if r.get("kind") == "position_report" and r.get("accepted")
                and r.get("reported")]
-    verdicts = [(r["wall_unix"], r) for r in R if r.get("kind") == "grant_verdict"]
+    routes = [(r["wall_unix"], r) for r in R if r.get("kind") == "router_route"]
+
+    # The mesh is the prop sensor (see the header). Absent, every landing
+    # reads "?" rather than a guess -- this file never invents a verdict it
+    # cannot support.
+    pm = None
+    try:
+        sys.path.insert(0, os.path.join(HERE, "..", "..", "..", "toolkit", "mapdata"))
+        from pathmap import PathingMap
+        pm = PathingMap.load(MAP_146)
+    except Exception as e:
+        print("  (no mesh: %r -- the GROUND/prop column cannot be filled)" % (e,))
 
     def body_at(w):
         prev = None
@@ -99,30 +132,41 @@ def main():
                 break
         return prev
 
-    print("\n%-16s %-9s %-19s %-19s %8s  %s"
-          % ("click fx,fy", "fired", "body at click", "MOVE_TO_COORD", "range", "router"))
-    hit = 0
+    print("\n%-16s %-9s %-19s %-19s %8s  %-9s %s"
+          % ("click fx,fy", "fired", "body at click", "MOVE_TO_COORD",
+             "range", "landed", "router"))
+    hit = ground = 0
     for w in clicks:
         s, e = w["started_unix"], w["ended_unix"]
         m = [(t, d) for t, d in moves if s - 0.3 <= t <= e + 2.0]
         b = body_at(s)
         if not m:
-            print("%-16s %-9s %-19s %-19s %8s  %s"
-                  % (w["key"], "NO MOVE_TO_COORD", "-", "-", "-",
+            print("%-16s %-9s %-19s %-19s %8s  %-9s %s"
+                  % (w["key"], "NO MOVE", "-", "-", "-", "-",
                      "the click produced no movement command"))
             continue
         hit += 1
         t, d = m[0]
         rng = math.hypot(d[0] - b[0], d[1] - b[1]) if b else float("nan")
-        rt = [v for vt, v in verdicts if t <= vt <= t + 1.5]
-        chain = sum(1 for v in rt if v.get("arm") and "rout" in str(v.get("arm")).lower())
-        print("%-16s %-9s (%7.0f,%7.0f) (%7.0f,%7.0f) %8.1f  %s"
+        rr = [v for vt, v in routes if t - 0.3 <= vt <= t + 1.5]
+        land = "?" if pm is None else ("GROUND" if pm.walkable(d[0], d[1])
+                                       else "prop/void")
+        if land == "GROUND":
+            ground += 1
+        print("%-16s %-9s (%7.0f,%7.0f) (%7.0f,%7.0f) %8.1f  %-9s %s"
               % (w["key"], "yes",
-                 (b[0] if b else 0), (b[1] if b else 0), d[0], d[1], rng,
-                 ("%d routed grant(s)" % chain) if chain else
-                 ("%d grant row(s)" % len(rt) if rt else "no grant row")))
+                 (b[0] if b else 0), (b[1] if b else 0), d[0], d[1], rng, land,
+                 (rr[0].get("verdict", "?") + "/" + str(rr[0].get("reason")))
+                 if rr else "no router row"))
 
     print("\n  %d of %d click legs produced a MOVE_TO_COORD" % (hit, len(clicks)))
+    if pm is not None:
+        print("  %d of those landed on GROUND our mesh knows; the rest hit a prop "
+              "or the void" % ground)
+        print("  -- the owner's rule: a prop occludes the ground and takes the "
+              "click, and the\n     client then walks a STRAIGHT LINE AT IT rather "
+              "than routing. We carry no prop\n     geometry, so off-mesh IS the "
+              "prop signature and this column is the sensor.")
     if hit == 0:
         print("  -> the click verb does not reach the WORLD in this configuration; "
               "a router\n     probe cannot be built on it until that is understood.")
