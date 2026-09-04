@@ -13132,6 +13132,8 @@ not a ray's.
 
 ## 1z-bd. THE RETURN TAP ON A LEAD RUN — the keyboard mover never calls `MapFindPath`; the park is a client-side stall at the wedge tip that PRECEDES our re-pin, and the portal is crossable
 
+**CORRECTED by §1z-be (2026-09-04, later the same day) — read the title's middle clause as refuted.** The park at the wedge tip is NOT a client-side stall that precedes our re-pin: it IS our re-pin, a `0x002C` install landing on a drawn body walking at 205 u/s (§1z-be.4), after which GmWalk does not re-dispatch the held key. And the S-press refusal is not "the waypoint feeder": the client raised notify 4 from its agent-avoidance pass because the follower stood inside the 60° cone (§1z-be.2–.3). §1z-bd.1, .3 and .4 stand.
+
 **Asked:** "now arm the MapFindPath tap on a lead run" — §1z-bc.3's open question, put to
 the instrument built for it. Ident `MOVECODE-1z-bd`. Two runs under `RUN-1zBD.md`, arm
 `--kbd-lead --lead-seam-clip --no-repin-stationary-waiver` (the seam clip grants the fatal
@@ -13168,6 +13170,7 @@ report at **−3.87 / −3.85 s** already has the body stationary there. Our `ga
 AGTRACK RE-PIN follows at **−3.72 / −3.71 s** — 0.75 s after the stall began. **Our re-pin
 is downstream of a client-side stall, not its cause**, and §1z-ba.3's reading of run 1 there
 ("the body was blocked at the deck edge") was right about the body and wrong about the agent.
+**→ WRONG, see §1z-be.4.** The 35 re-targets are GmWalk's silent per-frame re-entries while the body WALKS to the vertex; it arrives at −3.89, advances, and walks NE until our `0x002C` (hook: `setposition` ret `0x005FDB4E` at −3.72) halts it. "Stationary at −3.87" was the server's reading of the report, not the drawn body.
 
 **At the lead — one command sequence, two endings.** S at −0.03 → the walk-start report →
 the 520 u lead → the fence re-arms. Both clients run `movecmd → movedispatch → chcli_dir →
@@ -13188,6 +13191,7 @@ at this acute corner. Nothing in the two gate words distinguishes the runs; what
 it is a client-side decode, not a run: `chcli_advance` "solves up to 9 waypoints and feeds
 them out one at a time" (movecode.toml) through a solver that is **not** the tapped
 `MapFindPath`.
+**→ DECODED in §1z-be.** What did not arrive was notify 5; the client raised notify 4 (ChCliBase case 4, ClearPath) from the setter's agent-avoidance pass, because the follower's disc covered both the body and the 15.9 u target. Not the feeder.
 
 **Why run 2 did not warp** where RUN-1zAO did: the sync copy walked only 105 u — north-west,
 off the lead's ray — and stopped at `(10277, 8327)` at +1.09 s, so the lead never matured
@@ -13223,6 +13227,7 @@ returned **1**, which R7's exceptionless rule does not predict; one query, recor
 - **Not the portal.** Crossed at speed, twice, once at the fatal spot.
 - **The client's mover stalls at the wedge tip**, before our re-pin, and sometimes does not
   feed the second waypoint across the seam line its first step lands on. Intermittent.
+  **→ REFUTED in §1z-be.4 / .3:** our `0x002C` install halts the walking body; the intermittent part is the follower's position relative to the 60° cone.
 - **Our part is the warp**, when a full-length lead matures during the stall. §1z-ap's clip
   keeps that door shut; §1z-bc's refusal of the seam clip for the lead is confirmed from the
   client's side.
@@ -13230,3 +13235,168 @@ returned **1**, which R7's exceptionless rule does not predict; one query, recor
   plane word across a portal (§1z-bd.4); why run 2's sync copy left the lead's ray.
 - Instruments: `leadtap.py`, `tapdrive.py`; the two hook captures under
   `vault/research/movecode/1zbd-run1/` and `1zbd-run2/`.
+
+---
+
+## 1z-be. `chcli_advance`'S GUARD, DECODED — the advance has no guard of its own; run 2's quarterstep died in the client's AGENT-AVOIDANCE pass (notify 4 → ChCliBase ClearPath) because the follower stood inside the 60° cone; and the W-hold "stall" at the tip was OUR `0x002C` halting a walking body — §1z-bd.2 CORRECTED
+
+**Asked:** "now decode chcli_advance's guard" — §1z-bd.5's filed item. Ident `MOVECODE-1z-be`. A
+client-side decode on the pinned 38797 image plus a re-read of RUN-1zBD's two hook captures; no
+run. New tools: `review/hookwin.py` (the record stream around one client destination, return
+addresses rebased to the image) and `review/solverhalts.py` (the avoidance solver's halts per
+agent, joined to the tape and to the server's re-pin rows). OBSERVED unless marked.
+
+### 1z-be.1 The advance has two guards and neither is the answer
+
+`chcli_advance` `0x0081B580` tests exactly two things: the notify's sequence word against its
+own (`0x0081B58D cmp eax,[esi+0x68]`) and `m_path[0]` against `AGENT_INVALID_POSITION`
+(`0x0081B592`–`0x0081B5B3`); both failures go to ClearPath + `resume_arm` (`0x0081B5B5`). The
+hook sits at its **entry**, and in run 2 the entry was never reached — so the refusal is
+upstream: **the client never raised notify 5 for that quarterstep.** Its ChCliBase dispatcher
+`0x0081B220` has six cases (`cmp eax,5; ja`, table `0x0081B568`): 0 → `0x0081B295` (bind the
+player char: `+0x64 |= 2`, `ctx+0x680 = this`), 3 → `0x0081B27A`, 4 → **`0x0081B52E` =
+ClearPath `0x0081A6F0` + `resume_arm` `0x0081C090`, returning to `0x0081B53C`**, 5 →
+`0x0081B543` = the advance. Notify 4 is "stopped short"; notify 5 is "arrived". Who raises them:
+
+| code | raiser | when |
+|---|---|---|
+| 5 | the async tick `0x00600140` at `0x00600342` | `[this+0xC] == m_timeStopMovement` (`0x006001EB`), **isWaypoint clear** (`0x0060029F test [esi+0x20],0x40000` — set goes to `0x005FE950` and skips the notify), world 1; the halt-at-target `0x006020B0` is called first (`0x0060032E`) |
+| 5 | the avoidance solver at `0x006017E3` | the overlapping blocker IS our target agent (`0x006017CB cmp ebx,[esi+0x98]`) |
+| 4 | the avoidance solver at `0x00601868` | blocked and no sidestep — see .3; halt at `0x00601899`, **return address `0x0060189E`** |
+| 4 | the terrain-avoidance sibling `0x00600840` at `0x00600A64` | its own INVALID sidestep; halt at `0x00600A91` (ret `0x00600A96`) — **fired 0 times in either capture** |
+| 4 | the halt-in-place `0x00602540` at `0x00602570` | a stop landing on a moving agent (ret `0x006025AB`) — our stops |
+
+The run-2 hook has **`resume_arm` returning to `0x0081B53C` at +16 ms** with the player's
+ChCliBase in `ecx` (the same object `chcli_dir` ran on). The client took **case 4**.
+
+### 1z-be.2 ★★ The raiser: AgAgent's agent-avoidance pass, run inside every bake
+
+The shared destination setter `0x00602A40` — the one both `agapi_setdest` and our `0x0029`
+reach — does, in order: bake `0x005FE950` (`0x00602AD3`), `0x005FFCB0`, terrain avoidance
+`0x00600840` (`0x00602AEB`), **agent avoidance `0x006011F0` (`0x00602AF8`, args
+`(time, &m_point, 1, 0)`)**, `0x00600B70`, `0x00601F70`. So every destination, ours or the
+keyboard's, is judged against the neighbouring agents **synchronously, in the same call** — the
+hook shows the solver's halt in the same millisecond as the bake. Six callers in all
+(`--xrefs`): the setter, the tick (`0x006004BF`, per frame while a collision deadline `+0x44`
+is pending), the bake's propagation loop to linked agents (`0x005FECAC`), and the position
+installer's linked-copy loop (`0x00602231`, `0x00602BE5`, `0x00602C7F`, with arg4 = 1).
+
+The pass iterates the world's spatial set of agents (`0x00603770` on
+`ctx + 0x10C + world*0x64`, bitset iterator `0x004736B0`) and, per candidate `other`
+(dead-reckoned to `time` from its own `+0x78`/`+0xB0`/`+0x58`, clamped to the map bounds):
+
+1. **closing.** `rel = p_other − point`, `relv = v_other − v_this`; `rel·relv > 0` (separating)
+   is skipped when arg4 = 0 (`0x0060164E`–`0x00601660`). Static neighbours of a moving body
+   are closing.
+2. **the forward cone.** `unit(rel)·unit(v_this) > 0.5` (`0x00601791 fcomp [0x9458BC]` = cos
+   60°) or skip — the same constant `stepclear` uses.
+3. **overlap.** `combinedRadius² ≥ d²` (`0x006017BC`) or else compute time-to-contact
+   (`0x005FEEC0`) and shorten the deadline `+0x44`. `combinedRadius²` comes from `0x005FED20`:
+   same layer (`+0x1C`) → `(R_this + R_other + pad[layer])²` with `R = [agent+0xD0]` and
+   `pad` at `ctx+0x20 + layer*12`; same non-zero group `+0xE8` **and neither targets the other**
+   → `(2·max(this+0xEC, other+0xEC))²` (`0x004F1BA0` is `fmax`).
+4. **on overlap:** the blocker is our target agent → **notify 5** + halt (ret `0x0060181C`);
+   else we are already at `m_targetPoint` (`0x0060182D`), or the retry counter `+0x64` has
+   reached 6 (`0x006018B8`), or the sidestep computer `0x00600500` returns
+   `AGENT_INVALID_POSITION` → **notify 4 + halt (ret `0x0060189E`)**; else bake the sidestep
+   with **isWaypoint = 1** (`0x00601936`, ret `0x0060193B`) — the isWaypoint-1 bakes the arc
+   has counted since §1c. Every hard bake resets the retry counter (`0x005FEA42`).
+
+**The sidestep computer refuses before it looks.** `0x00600500`'s first test after its asserts
+is `d²(m_targetPoint − obstacleCenter)` against `combinedRadiusSq` (`0x006005CE`–`0x006005D8`):
+if the obstacle's disc **covers the target point**, it falls straight into the INVALID exit
+`0x006005DA` — **no navmesh query, no `stepclear`**. That is a **fourth** predecessor of the
+exit that `studies/movement/FINDINGS.md`'s decode counted three of (pointer placed there). It
+is also exactly what the hook shows: the run-2 quarterstep's halt has **no `stepclear`** in its
+millisecond, while the sync copy's 520 u lead in the next millisecond — same blocker, target far
+away — runs `stepclear` (ret `0x006007AE`) and re-bakes isWaypoint = 1 (ret `0x0060193B`).
+
+### 1z-be.3 ★★ Run 2's S press, record by record, and the blocker's name
+
+`hookwin.py --anchor 10358,8287` on `1zbd-run2` (ms from the client's own `agapi_setdest`):
+
+| ms | run 1 | run 2 |
+|---|---|---|
+| +0 | `chcli_dir` → setdest `(10362.67, 8282.34)` (6.8 u W) → setter w1 → bake isWaypoint 0 → agtrack | `chcli_dir` → setdest `(10358.17, 8286.86)` (15.9 u W) → setter w1 → bake isWaypoint 0 → agtrack → **halt, ret `0x0060189E`** (no `stepclear`) → agtrack |
+| +16 | our lead `(9849.42, 8282.33)` on w0: setter/bake/agtrack/snaptest | **`resume_arm` ret `0x0081B53C` = case 4, ClearPath**; our lead on w0 → `stepclear` `0x006007AE` → bake isWaypoint 1 (the sync copy's sidestep) |
+| +47 | **tick arrival** (ret `0x00600333`) → **`chcli_advance`** → setdest `(9602.27, 8283.10)`, the 767 u leg | — |
+| the S hold | body walks W at 190 u/s | `movecmd` 0, `chcli_advance` 0 (the five in the window belong to the follower's ChCliBase), body stands 4 s |
+
+**Who blocked.** The hook saw two agents in either world across both captures, ids 1 and 10 —
+the player and the follower. `solverhalts.py` joins each player-body halt to the follower's live
+async position on the tape (spread 160–180 ms; the follower had `v = 0` at both instants):
+
+| | body | v | quarterstep | follower | d(body) | d(target) | cos | verdict |
+|---|---|---|---|---|---|---|---|---|
+| run 2, S press | `(10374.0, 8286.8)` | `(−190, 0)` | 15.9 u W | `(10322.0, 8245.7)` | **66.3 u** | **54.8 u** | **0.78** | in the cone, target covered → no sidestep → notify 4 |
+| run 1, S press | `(10369.4, 8282.3)` | `(−190, 0)` | 6.8 u W | `(10340.6, 8213.1)` | 74.9 u | 72.6 u | **0.38** | outside the cone → skipped → arrival → advance |
+| run 1, +27.76 s | `(10098.5, 8599.1)` | `(288, 0)` | 596 u E | `(10120.6, 8617.7)` | 28.9 u | 574 u | 0.77 | the run's other player halt |
+
+MEASURED. The player's drawn body was halted by the solver **once per run**; the follower's
+own async copy took the other **119 / 16** halts (its world-1 copy is set through
+`0x00604A43` with target agent 0, so the player it walks into is a blocker, not a target — its
+world-0 copy, set by our `0x0029` with target agent 1, arrives instead: ret `0x0060181C`
+21 / 23 times). The lower bound this puts on the combined radius is **≥ 66.3 u**, which is not
+two body radii — either the same-group `2·max(+0xEC)` branch applies or `pad[layer]` is large.
+The number needs four offsets read live (`+0xD0`, `+0x1C`, `+0xE8`, `+0xEC` on both agents:
+agenttap columns), not a run design. **Why run 2's sync copy left the ray (§1z-bd.2's open
+item): the same pass, same blocker, on the 520 u lead — sidestep 49 u north, then west.**
+
+### 1z-be.4 ★★ §1z-bd.2 CORRECTED — the park at the wedge tip is OUR install, not a client stall
+
+Re-read with the body's own position and velocity in every record (the `hookwin` columns §1z-bd
+never printed), the "35 re-targets with no advance" and "the client's report already has the
+body stationary" are both wrong, in both runs (ms before the S press; identical to ±15 ms):
+
+| ms | what the hook shows |
+|---|---|
+| −4.6 → −3.9 | 42 / 43 `movecmd`, **40 / 41 of them GmWalk's silent per-frame re-entries** (ret `0x00535EA4`, arg6 = 0 — CANCELWALK:1369–1379), each re-issuing waypoint 0 `(10366, 8279)` **while the body walks to it at 205 u/s** (`+0x78` advancing every record). This is the "re-targeting". |
+| −3.89 | arrival at the vertex (tick, ret `0x00600333`) → **`chcli_advance`** → waypoint `(10671.37, 8577.00)` → the body turns the corner and walks NE at `(149, 146)`; 12 more re-entries follow |
+| −3.86 | the client's report `(10369.42, 8282.33)` plane 29 → our guard: `agtrack_guard veto gate2-offmesh, repin due` |
+| −3.71 | `agtrack_repin_fire gate2-offmesh` → our **`0x002C`** |
+| −3.72 (hook) | `setposition` on world 0 (ret `0x005FDAEA`) then **world 1 (ret `0x005FDB4E`)**: the drawn body, at `(10391.80, 8304.18)` with `m_timeStopMovement ≠ 0`, is **halted at `(10369.42, 8282.33)`** by the installer's moving branch (`0x00602B74` → `0x006020B0`: velocity 0, `+0x3C/+0x40/+0x48` zeroed, segment = target = point, propagated to linked copies; **no notify**) |
+| −3.72 → −0.03 | **0 `movecmd` in 221 frames**, W still held. Our stop at −1.73 (halt-in-place, ret `0x006025AB` → notify 4 → case 4) clears the queued NE waypoint from `m_path`. |
+| −0.03 | S: the key edge dispatches (ret `0x00535DF3`) — the quarterstep of .3 |
+
+So the order of causes is: **(1) our re-pin halts a walking drawn body; (2) GmWalk does not
+re-dispatch a held key after a halt** (§27's rule, observed here as 60 Hz re-entries → 0 in
+the same hold); **(3) the S press's restart dies in the avoidance pass (run 2) or walks (run 1).**
+The client's mover never stalled at the tip. "The body stationary at −3.87" was our reading of
+the report point, not the drawn body. §1z-bd.1 (no `MapFindPath`), .3 (the portal is
+crossable) and .4 (the NE-end plane-word warp) stand. **The stationary waiver did not admit this
+re-pin**: the report was 0.14 s old, the freshness gate (`agtrack_guard._repin_block`,
+`REPIN_MAX_REPORT_AGE`) passed on its own, so the default configuration fires it too.
+
+### 1z-be.5 Why the guard vetoed, and what it costs
+
+The report `(10369.42, 8282.33)` is 4.8 u past the wedge's tip vertex `(10366, 8279)`: on
+plane-0 ground **by our mesh**, declared **plane 29** by the client (its own trace put the
+body there along plane 29's edge). `agtrack_guard._judge` predicts the client's snap test on
+that grant — gate 1 passes (separation ~102 u), the modelled `MapFindPath` from a declared plane
+our mesh does not offer there answers `pathCount 0` → SNAP → `"gate2-offmesh"` → VETO, re-pin
+due → a `0x002C` to the reported point itself. R7's rule was applied to our own mesh's plane
+assignment; the client's assignment differed by one seam. **So a plane-word disagreement at a
+seam — §1z-bd.4's class, this time on the client's own REPORT — costs a full halt of a walking
+keyboard body, and the hold cannot recover it.** The re-pin's harm metric (displacement,
+§1z-aj: "all 0.0 u") never counted a halt.
+
+### 1z-be.6 What stands, what is filed
+
+- **`chcli_advance` has no guard worth the name; the advance waits for notify 5, and the client
+  sent notify 4.** Source: the agent-avoidance pass inside the setter — closing, 60° cone,
+  combined-radius overlap, sidestep refused because the disc covered the 15.9 u target.
+- **The blocker is the follower (agent 10)**, the only other agent; run 1 skipped it at cos
+  0.38, run 2 blocked on it at cos 0.78. The intermittency of §1z-bd.2 is where the follower
+  stands.
+- **§1z-bd.2 and §1z-bd.5 corrected**: the tip park is our `0x002C` install halting a body
+  walking at 205 u/s, then GmWalk's held-key rule. RUN-1zBD's RESULT line carries the pointer.
+- **Filed, derived, not shipped here:** the guard must not re-pin onto a walking keyboard body
+  it cannot restart — (i) a report whose declared plane is off by one seam (`portal_at` /
+  `SEAM_TOL` at the reported point) should not be modelled as off-mesh; (ii) an install onto a
+  moving drawn body is the halt, so a gate-2 veto during a keyboard hold needs a different
+  answer than `0x002C`. Both belong with §1z-bd.4's plane-channel fix and need the corpus
+  retrodiction before a default moves.
+- **Filed, measurement:** the combined radius (four offsets, agenttap columns); GmWalk's exact
+  re-entry predicate (`0x005355C0`–`0x00535EAA`: the observation is 60 Hz on a traced path,
+  0 after a halt, 0 during a straight S walk).
+- Tools: `review/hookwin.py`, `review/solverhalts.py`.
