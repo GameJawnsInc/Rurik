@@ -11974,9 +11974,99 @@ to make the arming event frequent rather than incidental.
   `--no-lead-plane-clip` reverts and now has a measured cost — 4 full-length cross-seam
   grants in 62 leads.
 - **`--kbd-lead` stays OFF.** This removed an armer; it did not re-argue the lead.
-- **The ROUTER's clip is still plane-blind and was not under test** (§1z-ap.6). Arm B's
+- **The ROUTER's clip is still plane-blind and was not under test** (§1z-ap.6) — **TAKEN
+  UP in §1z-ar: plane-blind for CERTAIN, harmful UNMEASURED, NOTHING SHIPPED, and the
+  last of three desk instruments was refuted by its own positive control.** Arm B's
   0 → 29 crossings say the seam is not a one-way curiosity, which makes the router's own
   section worth writing.
 - **One map, one route, one build**, and the seam met is the plane-29 structure this route
   happens to cross. P2 says the door is shut on THIS seam, not that no plane-blind grant
   survives anywhere.
+
+---
+
+## 1z-ar. THE ROUTER'S CLIP — plane-blind for certain, harmful UNMEASURED, and NOTHING SHIPPED: three desk instruments, the last refuted by its own control
+
+**Asked:** "now do the router's clip" — the residual §1z-ap.6 named. **No code change
+beyond a comment.** Ident `MOVECODE-1z-ar`. This section is mostly a record of
+measurements that did not hold up, which is why it exists.
+
+### 1z-ar.1 What is CERTAIN, from the code
+
+The router's A* walks `adjacent()`, which **does** respect planes and portals. The
+**string pull** then drops any waypoint the previous one can "see", and its visibility
+test is `_visible` → `_sightline`, whose own docstring says it *"answers exactly
+`clip(x0, y0, x1, y1) == (x1, y1)`"* — **plane-blind**. `route()`'s final gate calls
+plane-blind `clip` as well. So **the pull can in principle undo the A*'s plane
+discipline, and neither the pull nor the gate would notice.** That is a code fact and
+needs no measurement.
+
+The lead had exactly this shape and it cost a 520 u warp (§1z-ap). The question is
+whether the router's version ever fires.
+
+### 1z-ar.2 What is NOT established — three attempts, and why none of them counts
+
+| attempt | result | why it does not count |
+|---|---|---|
+| **(a)** count pulled segments whose two planes are **never portal-linked anywhere on the map** | 6 of 144 (4.2%) | a **lower bound only**: a pair linked *somewhere* can still be shortcut *here*, so the 138 "linked" crossings may hide more |
+| **(b)** compare the plane sequence before and after the pull | "the pull removed a transition on **14%** of routes" | the sequence was **my reconstruction** (`plane_at(prefer=…)` chained), not the router's own labels — it oscillates on stacked geometry, so this measures my reconstruction's instability |
+| **(c)** for each plane-changing segment, does **any point on it carry both planes**? | **78.4%** are "discontinuities" | **REFUTED BY ITS OWN POSITIVE CONTROL** — see below |
+
+**★ The control is the finding.** (c) looked authoritative: it used `route(with_planes=True)`'s
+own plane labels and asked a purely geometric question. So it was pointed at 300 cross-plane
+links the router itself asserts in `_cross`, and asked to find both planes at their meeting
+point. **It found 92 of 300 — 31%.** A test that misses **69% of the portals it is told
+about** cannot be believed when it reports finding nothing, and 78.4% is therefore a
+statement about the test.
+
+**And the miss explains itself:** at a plane-39 trapezoid's centre, only plane 39 is
+present — plane 0 is not, though `_cross` links them. **Portal-linked trapezoids do NOT
+reliably overlap in 2D.** `_shared_edge`'s *"the same physical place on two planes"* reads
+as 2D coincidence and is not one, so "is this plane change legitimate?" **cannot be answered
+by sampling the segment at all.** Every approach above was built on that assumption.
+
+### 1z-ar.3 And there is no observed harm to anchor on
+
+The lead had a specimen: a captured run where the drawn body demonstrably did not move on a
+granted ray (§1z-ao). **The router has none.** It shipped default-ON at §1z-v, and the
+campaign since is `--walk` keyboard-only — no clicks, so **no router grants at all** in the
+runs that carry tapes. The corpus cannot answer this either.
+
+### 1z-ar.4 Decision: NOTHING SHIPS
+
+A router plane term now would be **a fix justified by a confounded measurement**, which is
+the failure this repo has already paid for once. The `clip(plane=)` machinery exists and is
+tested (§1z-ap); wiring it into `_visible` is a two-line change **and it stays unwritten
+until something says it is needed.** The direction of error matters too: over-clipping the
+ROUTER shortens click paths for every player on every map, where over-clipping a keyboard
+lead only shortens a lead the client is authoritative over anyway.
+
+**What was written instead:** the plane-blindness is now **named at `_visible`**, with the
+control's 31% and the "portal links are not 2D overlaps" fact, so the next reader does not
+re-derive this from scratch or, worse, ship the two-line change on a desk number.
+
+### 1z-ar.5 What would settle it, and it is not another desk pass
+
+**The same move that settled the lead: a client run with a tape over it.** A click route
+with `ROUTER` on, crossing the plane-29 structure this map has, and `agenttap` reading
+whether any routed leg leaves the drawn body parked while the server thinks it is walking.
+That is an observation of the client's own behaviour and does not need the portal question
+answered at all — which is exactly why it is the right instrument.
+
+Two things to fix first, both cheap: **the harness drives keys, not clicks**, so a router
+run needs a click script (`--walk` cannot produce one), and the plane-29 structure needs a
+route that actually crosses it.
+
+### 1z-ar.6 An honest property of the SHIPPED lead fix, found on the way
+
+Since portal-linked trapezoids do not reliably overlap in 2D, `plane_at(prefer=)` flips at
+the plane boundary whether or not a portal is there — so **§1z-ap's lead clip stops at ANY
+plane change, including a legitimate portal crossing.** It is more conservative than
+strictly necessary: a lead whose ray genuinely passes through a portal is now clipped short.
+
+**That is the safe direction and the fix stands** — the failure mode is a shorter grant,
+which the client is authoritative over, and RUN-1zAQ measured the cost at **3 of 65 leads**
+with full-length grants otherwise unaffected. Recorded because "clips at plane changes" and
+"clips at illegitimate plane changes" are different claims, and §1z-ap's text should not be
+read as the second. RUN-1zAO's own 29 → 0 seam **is** portal-linked somewhere on the map;
+the portal simply was not on that ray, which is why clipping it was right.
