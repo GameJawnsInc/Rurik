@@ -10998,3 +10998,131 @@ one mechanism in this harness that stops a walking body without our mesh knowing
 already in every run. Scoring which legs ran into it, and whether the body's stall is what
 run A's fatal leg had, is the derived next step. `--kbd-lead` stays OFF; the waiver stays
 ON.
+
+---
+
+## 1z-ak. PRESS ENDS THE WALK NEEDS NO HARM BOUND — its payload is a MODEL of the body, not the stale report `repincheck` scores it against, and the drawn body's own tape puts every pin within 6.9 u
+
+**Asked:** RUN-1zAH's sweep incidentally lit up a second `0x002C` sender — *"does
+`PRESS ENDS THE WALK` have a harm bound at all, and does it need one?"* Answer: **it does
+not need one**, and the reason is structural rather than lucky. No client run; the corpus
+already held both instruments. Ident `MOVECODE-1z-ak`.
+
+### 1z-ak.1 What the sweep actually surfaced, counted honestly
+
+`repincheck.py --all` over the corpus (now **1,270** captures): **108 × `0x002C`, 0
+violations** — §1z-ah's waiver still clean. `PRESS ENDS THE WALK` appears **14 times in
+exactly 2 captures** (`authsrv-20260902T140659-c1` ×4, `authsrv-20260903T084616-c1` ×10);
+it is a young arm, shipped 09-02.
+
+Re-scoring the press arm by the re-pin's own licensing rule today reads **5** would-be
+violations, **all inside the 08:46 capture** — last accepted report 5.57/7.61/9.01/12.11/
+**13.48 s** stale, with the previous two accepted reports **12.7 u** apart (a body that was
+moving when it last spoke). `146218d`'s registration noted **7** on that day's
+1,262-capture corpus; today's re-sweep of the same rule finds 5, in the same single
+capture, with the same ages and the same 12.7 u report pair. The count is not reproducible
+across the two sweeps and **nothing here rests on it** — the harm is what was measured, not
+the tally. The other capture's 4 pins all fire *before its first accepted report*, so they
+have no age and no `prev_d` at all.
+
+### 1z-ak.2 ★ `age` and `prev_d` are the wrong instrument for this arm — it never sends the report
+
+The re-pin's two gates are harm predictors **because `AGTRACK RE-PIN`'s payload is
+`client_pos` verbatim**: it puts the client's own last accepted report back on the wire, so
+"how stale is that report" and "was the body moving when it last spoke" bound exactly how
+far the body may have walked away from the point being sent.
+
+**`PRESS ENDS THE WALK` sends a different thing.** `_press_supersedes` (`authsrv.py:11400`)
+puts `_click_leg_start(state, now, silent=True)` on the wire — the click leg **lerped to the
+instant of the press**, i.e. the server's model of where the body is *now* — and then calls
+`_forget_client_position(state, "press superseded the click leg")` in the same breath. The
+stale report is not the payload; it is the thing this sender **drops**. That asymmetry is
+already written down as the rule at `_forget_client_position`'s docstring (*"THE POINT'S
+SOURCE decides… a `0x002C` at a point OUR MODEL computed CONTRADICTS the last report, so
+forget it; a `0x002C` at THE REPORT ITSELF agrees with it, so keep it"*), and it sorts these
+two senders onto opposite sides.
+
+The 08:46 numbers make it concrete: the last accepted report is at t=24.156 s, `(9913,
+7961)`. The five "stale" pins fire at 29.7–37.6 s at `(9633,8309)`, `(9568,8311)`,
+`(9543,8392)`, `(9518,8250)`, `(9536,8313)` — **446 to 568 u away from that report.** The
+pin is nowhere near the report whose age is being scored. Judging it by `age`/`prev_d` is
+the same category error as scoring a `RESYNC` by a click's licensing rule. **The quantity
+that matters is `|pin − the DRAWN body|`**, because `0x002C`'s handler `0x005FDA50`
+SetPositions the async twin too (`AgMsg.cpp` 584) — that is the whole reason §1z-ah.3 would
+not open the freshness gate on age.
+
+### 1z-ak.3 ★ THE MEASUREMENT — the drawn body, read out of the client, at every press pin
+
+The wire cannot see the rendered body, so this is a join to the `agenttap` tape: the async
+(world-1) copy of agent 1 through the client's own `AgAgent::position_at` accessor, clamp
+included (`w0score.live`). **`authsrv-20260903T084616-c1` is the only capture in the corpus
+carrying both press pins and a tape spanning them** — `agenttap-20260903T084632`, 220
+samples, tape `t0` = capture wall + 16.295 s (the same offset ANIMREF-RE §41 derived
+independently, 16.296). Two instruments that share nothing: the server's leg model, and
+`ReadProcessMemory` on the client's own agent block.
+
+| capture t | pin | drawn body at the press | **residual** | next drawn sample |
+|---|---|---|---|---|
+| 16.421 | (9951,7975) | (9951,7975) | **0.0** | 0.0 u from pin |
+| 19.421 | (9894,8148) | (9894,8148) | **0.0** | 0.0 |
+| 21.055 | (9884,8089) | (9884,8089) | **0.0** | 23.6 (walked on) |
+| **21.860** | (9941,8193) | (9935,8197), **v = 289 u/s** | **6.9** | **0.0 — reached the pin 30 ms later** |
+| 22.508 | (9992,8016) | (9992,8016) | **0.0** | 0.0 |
+| 29.730 | (9633,8309) | (9633,8309) | **0.0** | 15.4 (walked on) |
+| 31.767 | (9568,8311) | (9568,8311) | **0.0** | 0.0 |
+| 33.166 | (9543,8392) | (9543,8392) | **0.0** | 0.0 |
+| 36.269 | (9518,8250) | (9518,8250) | **0.0** | 12.7 (walked on) |
+| 37.638 | (9536,8313) | (9536,8313) | **0.0** | 0.0 |
+
+**10 of 10 scored. Worst residual 6.9 u. Nine of ten are 0.0 u.** OBSERVED. The five
+"stale" rows — the ones the re-pin rule would have convicted, at ages to 13.5 s — are
+**0.0 u every one**. The client's own reprieve radius is `R_MATCH` = 100 u; the worst pin
+here is **1/14th of it**.
+
+**The one moving case is the informative one.** At 21.860 the drawn body was mid-walk
+(v = (213, −194), 289 u/s) and the pin sat 6.9 u away — **ahead of it along its own path**:
+the next tape sample, 30 ms later, has the body *at* the pin. That is a forward nudge of
+one frame's travel, not a backward yank. **No pin in the set moved the body backward.**
+
+**Why this is not luck.** The leg model is built to track the body: ANIMREF-RE §37.5
+measured **10 of 10 post-click reports within 3.5 u of the modelled end** on open ground and
+stated its three error terms with their directions. This tape is that claim checked from the
+other side — against the rendered body rather than the next report — and it holds.
+
+### 1z-ak.4 The verdict, and what a bound would have cost
+
+**`PRESS ENDS THE WALK` already carries the strongest bound available to it**: it pins to a
+model of the body's current position and discards the stale report, where the re-pin pins to
+the report and therefore needs `RUN_SPEED × age` to bound it. Adding a freshness gate to
+this arm would gate it on the staleness of a fact it does not use — and would **refuse the
+five pins that measured 0.0 u of harm**, i.e. it would break the press response (ANIMREF-RE
+§39's whole point: a press must end the walk *now*, 12–32 ms) to protect against a warp the
+tape says is not there. **No bound. No flag. No code change.** §1z-ah.3's warp (*"630, 189
+and 765 units"*) came from a sender that put **our integrator's** position on the wire while
+the client had not moved; this one puts a model of the body on the wire *at the instant the
+client's own click leg is being cancelled*, and the body is measured to be there.
+
+**Residual, stated rather than discovered later.** The 08:46 specimen is an open-ground
+click kite, which is §37.5's *good* case. A **bent path** is the untested geometry: the model
+is a straight-line lerp, so a bowed client path puts the pin off the arc by the bow, and a
+press mid-bend truncates to the segment waypoint (§37.5 names both, with directions). That
+error is bounded by the leg's own length and self-corrects at the next report, and **n = 0**
+here — it is not evidence of harm, it is the cell this capture could not fill. The other
+press capture (`140659`, CASE 6) has **no tape partner**, so its 4 pins are unmeasured by
+this instrument; §39.6 already scored them on the operator's own screen (*"all three worked
+as intended"*, no jump).
+
+### 1z-ak.5 What was built
+
+- **`studies/movecode/review/pressharm.py`** — the join above, re-runnable. Prints the
+  per-pin residual against the drawn body, flags anything over `R_MATCH`, and **exits 1 on
+  zero exposure** (a capture with press pins but no tape scores nothing, and that is not a
+  pass — §1z-ai's lesson). Currently: 10 of 10 scored, worst 6.9 u, exit 0.
+- **`repincheck.py`'s SCOPE comment now records that the exemption was CHECKED**, in both
+  the docstring and at the branch that skips the sender — with the reason (the payload is a
+  model, not the report) and the number (0.0–6.9 u). It was previously left as *"their own
+  question"*, which is how an unexamined exemption becomes a permanent one.
+- **`repincheck.py` is deliberately NOT extended to score this sender.** Its rule is the
+  waiver's licensing rule and does not apply here; the right check for this arm needs the
+  drawn body, which is a different instrument on a different input. Two rules in one scorer
+  is how the first draft read 7 violations that were never violations.

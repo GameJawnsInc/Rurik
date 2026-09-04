@@ -37,6 +37,18 @@ rule is not theirs; they are printed for context and never counted. Scoring them
 by it made the corpus read 7 violations that predate 1z-ah entirely -- a metric
 red before the change ran cannot score the change.
 
+THE PRESS ENDS THE WALK EXEMPTION WAS CHECKED, NOT ASSUMED (MOVECODE-1z-ak,
+FINDINGS sec.1z-ak). `age` and `prev_d` are the wrong instrument for that arm
+because its payload is NOT the report -- it is `_click_leg_start`'s model of the
+body, and it FORGETS the report in the same breath (`_forget_client_position`).
+So a stale report and a 12.7 u prev_d describe a report the pin never touches.
+The quantity that matters -- `|pin - the DRAWN body|` -- was measured on the one
+capture that carries both press pins and an agenttap tape over them
+(`authsrv-20260903T084616-c1`): all 10 pins land on the rendered body within
+0.0-6.9 u, well under the client's own 100 u R_MATCH, and in the one moving case
+the body was walking TOWARD the pin. `studies/movecode/review/pressharm.py`
+reruns that join; no harm bound is needed for this arm.
+
 Read-only; the vault is found through vaultpath.
 """
 import argparse
@@ -158,8 +170,11 @@ def check(path, verbose=True):
             # judging them by this rule would paint pre-existing behaviour as a
             # regression of 1z-ah's -- and a safety metric that is already red
             # before the change ran is measuring the wrong quantity. Reported
-            # for context, never counted. (The corpus sweep does show PRESS
-            # ENDS THE WALK sending stale 0x002Cs -- their own question.)
+            # for context, never counted. (PRESS ENDS THE WALK's stale 0x002Cs
+            # are its OWN question, answered 1z-ak: its payload is a model of
+            # the body, not the report -- age/prev_d judge a report it never
+            # sends. pressharm.py measures the real harm, |pin - drawn body|,
+            # at 0.0-6.9 u across all 10 pins. No bound needed.)
             verdict = "-- other sender, not the waiver's rule"
         elif not stale:
             verdict = "ok (fresh report, the original gate)"
