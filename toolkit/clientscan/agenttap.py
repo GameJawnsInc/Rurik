@@ -24,6 +24,32 @@ Every displacement is movetap.py's, read from the pinned build with codescan and
 re-checked by movetap --selftest; this file adds only the +0x98 read, which
 ANIMREF-RE 38.2 located (0x00602AA8, the shared setter's third argument).
 
+AND THE AGTRACK FENCE (MOVECODE-1z-an, `--no-fence` reverts). `clientControlled`
+-- the dword at the agent's AgTrack record that the dispatcher's 0x00606002
+tests before it will run the three-gate snap test at all -- is the field REALFIX
+sec.0.11's two-stage lock account turns on, and sec.1z-am named reading it here
+as the cheap next step: `movetap` has read it since sec.1z-aa, but NO movetap
+tape overlaps any lead run (the arm shipped after that campaign) and movetap
+cannot certify under the harness anyway (sec.1z-ag.6, 10-12 Hz against a 50 Hz
+floor). This tape already runs beside those captures.
+
+It is `movetap.agtrack_fence` CALLED, not reimplemented -- same record walk, same
+bounds checks, same string sentinels, so a drift in the offsets breaks one place
+and `movetap --selftest` still owns them. Two things are this file's own: the
+reads are memoised per sample (`memo_reader`), because the AgTrack header is
+per-AgTrack and would otherwise be re-fetched for every tapped agent on a reader
+already delivering ~9 Hz of the 30 it asks for; and the SYNC block is the one
+handed over, because the record is keyed by agent id and only `gate_reach`'s
+world term depends on the copy -- world 0 being the branch where the test is
+actually reached.
+
+THE NEGATIVE CONTROL IS FREE AND IS THE POINT. 0x00605F10 writes
+`clientControlled` from exactly two callers, both in the ChCliBase local-command
+block, so it is set for the LOCAL PLAYER and nobody else: the Hatcher's record
+must read `shut` for the whole run. The summary asserts that, and says so loudly
+when it fails -- an `open` there means this reader is on the wrong record and the
+player's column is worth nothing.
+
 WHAT IT ANSWERS, stated before the run: with the player standing still and the
 Hatcher walking in, (1) does the SYNC copy's +0x48 clear (park) at ~80 u from the
 player on its own, before our 0x0028 lands, or does it walk to the player's point;
@@ -55,28 +81,59 @@ from movetap import (u32, i32, f32, resolve, TapFail, OFF_SYNC_ARRAY,   # noqa: 
                      OFF_SYNC_COUNT, OFF_ASYNC_ARRAY, OFF_ASYNC_COUNT,
                      OFF_WORLD_STRIDE, OFF_WORLD_CLOCK, AGENT_SPAN,
                      A_FLAGS, A_STOP, A_UPDATED, A_MAXSPEED, A_MOVESPEED,
-                     A_POINT, A_SEGMENT, A_TARGET, A_VEL, A_ID, A_WORLD)
+                     A_POINT, A_SEGMENT, A_TARGET, A_VEL, A_ID, A_WORLD,
+                     agtrack_fence, _fence_blank)
 
 A_FOLLOW = 0x98      # the destination AGENT (ANIMREF-RE 38.2: 0x00602AA8 writes it)
 
 
+def memo_reader(handle):
+    """A `read(addr, n)` closure that answers each address ONCE per sample.
+
+    `agtrack_fence` fetches the AgTrack header (`+0x20..+0x2C`) and the armed
+    id on every call, and this file calls it once per tapped agent -- but those
+    two reads are per-AGTRACK, not per-agent, so the second agent's copies are
+    pure cost. That matters here in a way it does not in movetap: this tape
+    already delivers ~9 Hz against the 30 it asks for (MOVECODE-1z-ak.7, gap
+    p50 109 ms), so every avoidable cross-process round trip is bought out of
+    the sample rate the fence is being added to explain.
+
+    Scoped to ONE sample and thrown away, because the whole point of the tape is
+    that these words change: a memo that outlived the sample would report a
+    stale fence with a fresh timestamp, which is worse than not reading it.
+    """
+    cache = {}
+
+    def read(addr, n):
+        key = (addr, n)
+        if key not in cache:
+            cache[key] = keytap.read_handle(handle, addr, n)
+        return cache[key]
+    return read
+
+
 def read_copy(handle, agbase, array_off, count_off, aid):
-    """One agent's block from one world array, or None if absent."""
+    """One agent's block from one world array: (fields, raw block).
+
+    Returns the RAW block beside the decoded fields because `agtrack_fence`
+    needs it -- it re-checks the agent's own id field against the id we indexed
+    with, and reads the world word for the `gate_reach` term. Handing it the
+    decoded dict instead would mean trusting our own decode twice."""
     cnt = keytap.read_handle(handle, agbase + count_off, 4)
     arr = keytap.read_handle(handle, agbase + array_off, 4)
     if not cnt or not arr:
-        return None
+        return None, None
     count, array = u32(cnt), u32(arr)
     if not array or aid >= count:
-        return None
+        return None, None
     p = keytap.read_handle(handle, array + aid * 4, 4)
     if not p or not u32(p):
-        return None
+        return None, None
     blk = keytap.read_handle(handle, u32(p), AGENT_SPAN)
     if not blk or len(blk) < AGENT_SPAN:
-        return None
+        return None, None
     if u32(blk, A_ID) != aid:
-        return {"bad_id": u32(blk, A_ID)}
+        return {"bad_id": u32(blk, A_ID)}, blk
     return {
         "ptr": u32(p),
         "flags": u32(blk, A_FLAGS),
@@ -90,7 +147,7 @@ def read_copy(handle, agbase, array_off, count_off, aid):
         "tx": f32(blk, A_TARGET), "ty": f32(blk, A_TARGET + 4),
         "vx": f32(blk, A_VEL), "vy": f32(blk, A_VEL + 4),
         "follow": u32(blk, A_FOLLOW),
-    }
+    }, blk
 
 
 def world_clock(handle, agbase, world):
@@ -117,6 +174,10 @@ def main():
                     help="seconds to keep retrying until a client is in a map")
     ap.add_argument("--out", default=None, help="JSONL path (default: vault/research/animref/agenttap-<stamp>.jsonl)")
     ap.add_argument("--any-build", action="store_true")
+    ap.add_argument("--no-fence", dest="fence", action="store_false",
+                    help="skip the AgTrack fence read (MOVECODE-1z-an). ON by "
+                         "default; this is the revert if the extra reads cost "
+                         "more sample rate than the fence is worth")
     a = ap.parse_args()
     ids = [int(x) for x in a.agents.split(",") if x.strip()]
 
@@ -165,11 +226,25 @@ def main():
             row = {"kind": "sample", "t": round(t, 4), "controlled": ctrl,
                    "clock0": world_clock(handle, agbase, 0),
                    "clock1": world_clock(handle, agbase, 1), "agents": {}}
+            rd = memo_reader(handle) if a.fence else None
             for aid in ids:
-                row["agents"][str(aid)] = {
-                    "sync": read_copy(handle, agbase, OFF_SYNC_ARRAY, OFF_SYNC_COUNT, aid),
-                    "async": read_copy(handle, agbase, OFF_ASYNC_ARRAY, OFF_ASYNC_COUNT, aid),
-                }
+                sync, sync_blk = read_copy(handle, agbase, OFF_SYNC_ARRAY,
+                                           OFF_SYNC_COUNT, aid)
+                asy, _asy_blk = read_copy(handle, agbase, OFF_ASYNC_ARRAY,
+                                          OFF_ASYNC_COUNT, aid)
+                one = {"sync": sync, "async": asy}
+                if a.fence:
+                    # THE SYNC BLOCK, deliberately. The AgTrack record is keyed
+                    # by agent id, so which copy we hand over cannot change
+                    # `clientControlled` -- but it DOES change `gate_reach`,
+                    # whose world term separates "test-runs" (world != 1) from
+                    # "world1:append". World 0 is the branch on which the snap
+                    # test at 0x006055E0 is actually reached, and that is the
+                    # question the fence is being read to answer.
+                    one["fence"] = (agtrack_fence(rd, agbase, aid, sync_blk)
+                                    if sync_blk is not None
+                                    else _fence_blank("no-sync-block"))
+                row["agents"][str(aid)] = one
             fh.write(json.dumps(row) + "\n")
             n += 1
             # a terse live line whenever the Hatcher's state changes
@@ -180,16 +255,70 @@ def main():
                     "h_stop_s": (h["sync"] or {}).get("stop"), "h_stop_a": (h["async"] or {}).get("stop"),
                     "h_follow": (h["sync"] or {}).get("follow"),
                 }
-                key = (line["h_stop_s"] != 0, line["h_stop_a"] != 0, line["h_follow"])
+                pf = (p.get("fence") or {}).get("fence_state")
+                key = (line["h_stop_s"] != 0, line["h_stop_a"] != 0,
+                       line["h_follow"], pf)
                 if key != last_line.get("key"):
                     print(f"  t={t:6.2f}  Hatcher sync {line['d_sync'] and round(line['d_sync'])} u / "
                           f"async {line['d_async'] and round(line['d_async'])} u from the player; "
-                          f"+0x48 sync={line['h_stop_s']} async={line['h_stop_a']}  +0x98={line['h_follow']}",
+                          f"+0x48 sync={line['h_stop_s']} async={line['h_stop_a']}  +0x98={line['h_follow']}"
+                          + (f"  player fence={pf}" if pf else ""),
                           flush=True)
                     last_line["key"] = key
             time.sleep(period)
     print(f"{n} samples written to {a.out}")
     summarise(a.out, ids)
+
+
+def summarise_fence(samples, P, H):
+    """The AgTrack fence over the run, with its own built-in negative control.
+
+    THE CONTROL IS FREE AND IT IS THE POINT. `clientControlled` is written by
+    0x00605F10, whose only two callers sit in the ChCliBase local-command block
+    -- i.e. it is set for the LOCAL PLAYER's agent and nobody else. So the
+    Hatcher's record must read `shut` for the whole run. If it ever reads
+    `open`, this reader is indexing the wrong record and the player's column is
+    not evidence of anything. That check costs one extra agent we were already
+    tapping.
+
+    Every `unread:` value is printed rather than dropped: a fence that could not
+    be read is a third thing, not a shut one (movetap's own rule, and the reason
+    the state is a string).
+    """
+    have = [r for r in samples if (r["agents"].get(P) or {}).get("fence")]
+    if not have:
+        print("  fence: not read (--no-fence, or an older tape)")
+        return
+    def states(who):
+        out = {}
+        for r in have:
+            f = (r["agents"].get(who) or {}).get("fence") or {}
+            s = f.get("fence_state")
+            out[s] = out.get(s, 0) + 1
+        return out
+    ps, hs = states(P), states(H)
+    print(f"  FENCE player agent {P}: {ps}")
+    print(f"  FENCE Hatcher {H} (NEGATIVE CONTROL, must be shut throughout): {hs}")
+    bad = [s for s in hs if s not in ("shut",) and not str(s).startswith("unread:")]
+    if bad:
+        print(f"    !! CONTROL FAILED: the Hatcher's fence read {bad}. Only the "
+              f"local player's agent is client-controlled (0x00605F10 has two "
+              f"callers, both local-command), so this reader is on the wrong "
+              f"record and the player's column above proves nothing.")
+    # transitions on the player, which is what the lock question is about
+    prev = None
+    for r in have:
+        f = (r["agents"].get(P) or {}).get("fence") or {}
+        s = f.get("fence_state")
+        if prev is not None and s != prev:
+            print(f"    t={r['t']:.2f}: player fence {prev} -> {s} "
+                  f"(gate_reach {f.get('gate_reach')}, raw {f.get('fence_raw')})")
+        prev = s
+    reach = {}
+    for r in have:
+        g = ((r["agents"].get(P) or {}).get("fence") or {}).get("gate_reach")
+        reach[g] = reach.get(g, 0) + 1
+    print(f"  player gate_reach over the run: {reach}")
 
 
 def summarise(path, ids):
@@ -211,6 +340,7 @@ def summarise(path, ids):
     print(f"  m_flags seen -- Hatcher sync: {[hex(f) for f in flags_h]}   player sync: {[hex(f) for f in flags_p]}")
     fol = {(r["agents"][H]["sync"] or {}).get("follow") for r in samples} - {None}
     print(f"  Hatcher sync +0x98 (followed agent) values seen: {sorted(fol)}")
+    summarise_fence(samples, P, H)
     # when did the sync copy park (stop -> 0) and how far apart were the copies then
     prev = None
     for r in samples:

@@ -7440,6 +7440,42 @@ the same-tick ALIAS**: the
   `authsrv.py` stay tree-relative, so a worktree session scores the real corpus
   against its OWN tree's prose and trigger mirror.
 
+  `toolkit/clientscan/test_agenttap.py` (**the AGTRACK FENCE column agenttap
+  gained for MOVECODE-1z-an / FINDINGS §1z-an.** `clientControlled` is the dword the
+  dispatcher's `0x00606002` tests before the three-gate snap test runs at all — the
+  field REALFIX §0.11's two-stage lock account turns on — and §1z-am named reading it
+  from this tape as the cheap next step, because `movetap` has read it since §1z-aa
+  but NO movetap tape overlaps any lead run and movetap cannot certify under the
+  harness anyway. The offsets and the record walk are `movetap.agtrack_fence` CALLED,
+  not reimplemented, so `movetap --selftest` still owns them; what this file checks is
+  everything agenttap adds on top, each of which is a place a live run would have
+  failed silently. `memo_reader` serves one fetch per address per sample AND does not
+  outlive the sample (a memo that persisted would stamp a stale fence with a fresh
+  timestamp — worse than not reading it), which matters because the AgTrack header is
+  per-AgTrack rather than per-agent on a reader already delivering ~9 Hz of the 30 it
+  asks for (§1z-ak.7). All four `gate_reach` branches come back through agenttap's own
+  call shape with the SYNC block handed over — world 0 being the branch the test at
+  `0x006055E0` is actually reached on, and the only thing the choice of copy changes,
+  since the record is keyed by agent id. `clientControlled == 0` reads `shut` and never
+  a failure value, an unreadable AgTrack reads `unread:` rather than a plausible shut,
+  and a block whose own id is not the one we indexed with is refused. `read_copy` now
+  returns `(fields, raw block)` — the raw block, because handing `agtrack_fence` our
+  decoded dict would mean trusting our own decode twice — and still refuses an id
+  mismatch and a short block rather than yielding a partial agent; **that return change
+  is what this test caught first, the success path having still returned a bare dict.**
+  And §4 is THE NEGATIVE CONTROL DRIVEN BOTH WAYS: `0x00605F10` writes
+  `clientControlled` from exactly two callers, both in the ChCliBase local-command
+  block, so only the LOCAL PLAYER's agent is client-controlled and the Hatcher's record
+  must read `shut` for a whole run — the summary must print both columns quietly when
+  it does, and **must go RED when the Hatcher reads `open`**, because that means the
+  reader is on the wrong record and the player's column proves nothing. An all-`unread:`
+  run must NOT trip that control (unread is a third thing, not a shut fence), and a tape
+  written before the column existed — all 17 in the vault — must still summarise rather
+  than raise. Bare machine throughout: fake memory, no client, no vault, which is
+  possible only because `agtrack_fence` takes a `read(addr, n)` closure. 15 checks,
+  floor 15, set from the green run — the floor guard caught a guessed 17 first.
+  **The column itself is UNVERIFIED against a live client until one run writes a tape**;
+  `--no-fence` reverts it),
   `toolkit/clientscan/test_w0score.py` (**the MOVECODE-1z-t scorer's ENSLAVEMENT
   DETECTOR, MOVECODE-1z-u.5 item c / FINDINGS §1z-x.** `w0score.py`'s number —
   world-0 vs the drawn body — cannot tell "world-0 follows the body" from "the body
