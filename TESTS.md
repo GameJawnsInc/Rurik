@@ -3516,7 +3516,22 @@ when map 280 is absent, and §14(g) when Pre-Searing is absent skip-declare);
   ships ON, `--no-lead-plane-clip` the one revert, bound from argv, and the ray's plane
   taken from `plane_at(prefer=` the REPORT's own plane word rather than `state["pos"]`
   or a literal (`--heading-grant`'s graveyard). 94 → **104 checks, floor 104**, set from
-  the green run.
+  the green run. **§2f (2026-09-04, MOVECODE-1z-bc) is the SEAM VARIANT of that clip,
+  OPT-IN AND REFUTED AS A DEFAULT.** `pathmap.seam_clip` — the router's primitive since
+  1z-bb, a plane may end only at a portal — was built to replace §2e's any-plane-change
+  stop and let a lead through a bridge's end ramp; `studies/movecode/review/leadretro.py`
+  replayed the lead campaign's 622 leads through both and found every one of the six
+  fatal leads of the six measured locks going out at the full 520 u under it (0 of 6
+  kept under gate 1), because at both ends of the spawn-side bridge the seam the body
+  would not walk is portal-linked in the file. So the section pins the DEFAULT — a ray
+  through a file-linked portal is still cut at the plane change — as the shipped cell,
+  the opt-in arm (`--lead-seam-clip`) granting that same ray at full length, the blind
+  side-exit still stopping under either arm with its reach under gate 1, a mesh without
+  `seam_clip` falling back to the plane clip unchanged, and the source: ships OFF, the
+  flag is opt-in and bound from argv, the lead reaches `seam_clip` at exactly one site,
+  and the file records WHY the default is off (the 0-of-6 number is a substring lock,
+  so a later reader flipping the default has to delete the reason first). 104 → **110
+  checks, floor 110**.
   `toolkit/authsrv/test_d1lead.py` (REALFIX-A2's `--d1-lead` bundle, and since
   2026-09-01 also **§R11: the grant-during-hold A/B lever.** SHIPPED suppressing and
   REFUTED by the very next run -- the default is back to granting and the suppression

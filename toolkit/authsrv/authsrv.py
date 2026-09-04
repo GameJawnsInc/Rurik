@@ -6126,6 +6126,30 @@ A2_LEAD_CLIP_STEP = 2.0
 # guessing on ambiguous stacked geometry, and this file's own doctrine at the
 # no-mesh door is to disable the term rather than freeze the lead.
 A2_LEAD_PLANE_CLIP = True     # False (--no-lead-plane-clip): the plane-blind ray.
+# MOVECODE-1z-bc: THE SEAM TEST IS REFUTED FOR THE LEAD, BY ITS OWN
+# RETRODICTION. It was built to replace 1z-ap's any-plane-change clip -- whose
+# cost sec.1z-ar.6 measured as 3 of RUN-1zAQ's 65 arm-A leads and 7.8% of the
+# 464-lead corpus cut short at plane changes, some presumably portals -- with
+# `pathmap.seam_clip`, the primitive the router's rays ride since 1z-bb: a
+# plane may end only at a portal. Then the lead campaign's 622 recoverable
+# leads were replayed through both (studies/movecode/review/leadretro.py):
+#
+#   * the SIX fatal leads that armed the six measured locks -- RUN-1zAO's
+#     (10373,8286) among them, which 1z-ap stops at 14 u -- ALL go out at the
+#     full 520 u under seam_clip: 0 of 6 kept under gate 1. Every one crosses
+#     a seam the FILE links as a portal (plane 29's two bridge ends), and the
+#     client's body did not walk any of them.
+#   * 33 of 622 leads would be re-granted past gate 1 that 1z-ap's clip stops,
+#     at the lock rate 1z-ao measured at 1 in 4 per crossing.
+#
+# So "portal-linked in the file" is NOT "the body will cross it here", at least
+# on that bridge, and the lead keeps the stricter clip. What the body refuses
+# and why -- the declared plane at a wedge tip (the R7 pathCount == 0 class), a
+# prop the mesh does not carry, or a portal narrower than the linked edge -- is
+# the client-side question filed at FINDINGS sec.1z-bc. The seam variant ships
+# OPT-IN (`--lead-seam-clip`) so a run can drive it deliberately; it is the
+# known-bad arm of that question, not a fix.
+A2_LEAD_SEAM_CLIP = False     # True (--lead-seam-clip): seam_clip on the lead's ray.
 
 
 def a2_clip_lead(state, reported, dest):
@@ -6193,6 +6217,12 @@ def a2_clip_lead(state, reported, dest):
         stopped = pm.clip(float(reported[0]), float(reported[1]),
                           float(dest[0]), float(dest[1]),
                           step=A2_LEAD_CLIP_STEP)
+    elif A2_LEAD_SEAM_CLIP and hasattr(pm, "seam_clip"):
+        # 1z-bc, OPT-IN and refuted as a default (see the flag): the plane may
+        # end only at a file-linked portal. The six fatal leads pass it.
+        stopped = pm.seam_clip(float(reported[0]), float(reported[1]),
+                               float(dest[0]), float(dest[1]), plane,
+                               step=A2_LEAD_CLIP_STEP)
     else:
         stopped = pm.clip(float(reported[0]), float(reported[1]),
                           float(dest[0]), float(dest[1]),
@@ -6215,6 +6245,9 @@ def a2_clip_lead(state, reported, dest):
                 bx = float(reported[0]) + nx * f
                 by = float(reported[1]) + ny * f
                 if pm.walkable(bx, by):
+                    # Under the seam clip (1z-bc) this is a plane change with
+                    # NO portal -- the word is kept so gatecensus and the run
+                    # sheets keep reading, and it now means the sharper thing.
                     why = "plane-seam"
     return ([float(stopped[0]), float(stopped[1])], clipped, why)
 
@@ -23149,6 +23182,15 @@ def main():
                          "to plane 0 lead passed at 520 u, the drawn body "
                          "parked 3.0 s under a held key, and the arrival "
                          "warped it 520 u and shut AgTrack's fence for good.")
+    ap.add_argument("--lead-seam-clip", action="store_true",
+                    help="MOVECODE-1z-bc OPT-IN: clip the D1/keyboard lead's "
+                         "ray with pathmap.seam_clip (a plane may end only at "
+                         "a portal) instead of 1z-ap's any-plane-change stop. "
+                         "REFUTED as a default by retrodiction: all six fatal "
+                         "leads of the six measured locks cross a FILE-LINKED "
+                         "portal and go out at the full 520 u under it, so "
+                         "this arm re-opens the lead's lock door on the "
+                         "spawn-side bridge. Diagnostic arm only.")
     ap.add_argument("--no-kbd-lead-fence-gate", action="store_true",
                     help="MOVECODE-1z-aa OFF: a keyboard or D1 lead may "
                          "be sent into a fence the server itself shut with "
@@ -24789,7 +24831,7 @@ def main():
     # session a reconstruction (REALFIX-Q8).
     global KBD_SYNC, KBD_SYNC_LEAD_ON, KBD_SYNC_SPEED_ON, KBD_SYNC_STOP_ON
     global KBD_SYNC_HOLD, KBD_LEAD_KILL, KBD_SYNC_MATCHED, KBD_LEAD_FENCE_GATE
-    global KBD_LEAD_REFRESH, A2_LEAD_PLANE_CLIP
+    global KBD_LEAD_REFRESH, A2_LEAD_PLANE_CLIP, A2_LEAD_SEAM_CLIP
     if a.legacy_kbd_sync:
         KBD_SYNC = False
         KBD_SYNC_HOLD = False
@@ -24813,6 +24855,13 @@ def main():
         KBD_SYNC_MATCHED = not a.no_kbd_matched_plane
         KBD_LEAD_FENCE_GATE = not a.no_kbd_lead_fence_gate
         A2_LEAD_PLANE_CLIP = not a.no_lead_plane_clip
+        A2_LEAD_SEAM_CLIP = bool(a.lead_seam_clip)
+        if A2_LEAD_SEAM_CLIP:
+            print("[map] --lead-seam-clip: the lead's ray stops only where its "
+                  "plane ends WITHOUT a portal. Retrodiction says the six "
+                  "measured locks' fatal leads all pass this test at 520 u "
+                  "(FINDINGS 1z-bc) -- expect the 1z-ao lock class back.",
+                  flush=True)
         KBD_LEAD_REFRESH = bool(a.kbd_lead_refresh) and not a.no_kbd_lead_refresh
         if a.no_repin_stationary_waiver:
             import agtrack_guard as _ag_flag

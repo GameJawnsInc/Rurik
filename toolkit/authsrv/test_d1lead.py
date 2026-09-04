@@ -58,7 +58,7 @@ import checks      # noqa: E402
 # the 2d cells, five row locks: lead_clip_why, the flush-hold row,
 # kbd_age, the a2_leg lifecycle, the watchdog-due transition) -> 86.
 # Each floor re-read off its own green run.)
-LEDGER = checks.Ledger("the REALFIX-A2 d1-lead bundle", floor=104)
+LEDGER = checks.Ledger("the REALFIX-A2 d1-lead bundle", floor=110)
 check = checks.adopt(LEDGER)
 
 
@@ -452,6 +452,90 @@ def main():
           "flag is bound from argv rather than left at its default",
           "sec.29's rule: one behaviour change, one flag, so a run convicts "
           "one term")
+    print("\n2f. the seam variant of the lead clip, OPT-IN and refuted as a "
+          "default (MOVECODE-1z-bc)")
+    # The seam test (pathmap.seam_clip, the router's primitive since 1z-bb)
+    # was built to replace 1z-ap's any-plane-change clip on the lead and was
+    # REFUTED by retrodiction before it could ship: all six fatal leads of the
+    # six measured locks cross a FILE-LINKED portal and go out at 520 u under
+    # it (leadretro.py, FINDINGS 1z-bc). So the default stays 1z-ap's clip and
+    # the seam variant is a diagnostic arm. These cells pin BOTH behaviours
+    # and the default's direction.
+
+    class SeamPM(PlanePM):
+        """PlanePM's seam at x = 300 is a PORTAL here (a bridge's end ramp) and
+        there is a second, BLIND seam at x = 600 (the deck's side). The seam-
+        aware ray -- pathmap.seam_clip's contract -- passes the first and stops
+        at the second; 1z-ap's any-plane-change clip stops at the first."""
+
+        def plane_at(self, x, y, prefer=None):
+            if 100.0 < x < 200.0:
+                return None
+            if x >= 600.0:
+                return 7
+            return 0 if x >= 300.0 else 29
+
+        def seam_clip(self, x0, y0, x1, y1, plane, step=2.0):
+            p = self.clip(x0, y0, x1, y1, step=step)        # plane-blind walk
+            if x0 < 600.0 < p[0] and x1 != x0:
+                f = (600.0 - x0) / (x1 - x0)
+                return (600.0 - step, y0 + f * (y1 - y0))
+            return p
+
+    spm = SeamPM()
+    seam_st2 = {"pathmap": spm, "plane": 29}
+    _was_seam_clip = authsrv.A2_LEAD_SEAM_CLIP
+    try:
+        # THE DEFAULT: 1z-ap's clip stops at the portal too. This is the cell
+        # that protects the six locks, and it is the SHIPPED one.
+        authsrv.A2_LEAD_SEAM_CLIP = False
+        authsrv.A2_LEAD_PLANE_CLIP = True
+        d_p, was_p, why_p = clipf(seam_st2, [250.0, 0.0], [550.0, 0.0])
+        check(was_p is True and 250.0 <= d_p[0] < 300.0 and why_p == "plane-seam",
+              "SHIPPED DEFAULT: a ray through a file-linked PORTAL is still cut "
+              "at the plane change -- the clip that kept all six fatal leads "
+              "under gate 1",
+              "the seam variant would grant it at full length, and the "
+              "retrodiction says the body did not walk exactly this on the "
+              "spawn-side bridge, six times")
+        authsrv.A2_LEAD_SEAM_CLIP = True
+        d_s, was_s, why_s = clipf(seam_st2, [250.0, 0.0], [550.0, 0.0])
+        check(was_s is False and d_s == [550.0, 0.0] and why_s == "clear",
+              "OPT-IN ARM (--lead-seam-clip): the same ray goes out at FULL "
+              "LENGTH through the portal -- the re-opened door, on demand",
+              "a run that wants to ask WHY the body refuses a linked portal "
+              "drives this arm deliberately")
+        d_b, was_b, why_b = clipf(seam_st2, [450.0, 0.0], [970.0, 0.0])
+        check(was_b is True and 550.0 <= d_b[0] < 600.0 and why_b == "plane-seam",
+              "and a ray off the deck's SIDE -- a plane ending with no portal -- "
+              "still stops at the edge and names the door",
+              "RUN-1zBA's harm class: the client's body will not follow a lead "
+              "across it, and the arrival snap is what happens next")
+        check(d_b[0] - 450.0 < 299.332591,
+              "the surviving reach across the blind seam is under gate 1")
+        # A mesh with plane_at but no seam_clip (1z-ap's contract) keeps the
+        # any-plane-change clip: the capability is probed, not assumed.
+        d_o, was_o, why_o = clipf(seam_st, [250.0, 0.0], [770.0, 0.0])
+        check(was_o is True and 250.0 <= d_o[0] < 300.0 and why_o == "plane-seam",
+              "a mesh WITHOUT seam_clip falls back to the plane clip unchanged",
+              "an old mesh object must not raise inside the recv loop, and its "
+              "answer must be the 1z-ap one, not the plane-blind one")
+    finally:
+        authsrv.A2_LEAD_SEAM_CLIP = _was_seam_clip
+        authsrv.A2_LEAD_PLANE_CLIP = _was_plane_clip
+    check(authsrv.A2_LEAD_SEAM_CLIP is False
+          and '"--lead-seam-clip"' in _psrc
+          and "A2_LEAD_SEAM_CLIP = bool(a.lead_seam_clip)" in _psrc
+          and _psrc.count("pm.seam_clip(") == 2
+          and "return pm.seam_clip(x0, y0, x1, y1, plane, step=step)" in _psrc
+          and "0 of 6 kept under gate 1" in _psrc,
+          "it ships OFF, --lead-seam-clip is opt-in and bound from argv, "
+          "seam_clip is reached at exactly two sites (the router's "
+          "_router_clip and the lead), and the file records WHY the default "
+          "is off (the 0-of-6 retrodiction)",
+          "a default flipped by a later reader who does not see this number "
+          "re-arms the six locks' door")
+
     check("plane=plane" in _psrc and 'prefer=state.get("plane")' in _psrc,
           "the ray's plane comes from plane_at(prefer=the REPORT's own plane), "
           "not from state[\"pos\"] or a literal",
