@@ -12562,5 +12562,84 @@ route-forcing point `mapscout.py` computes, and click the fraction that comes ou
 validation is built in and needs no new instrument: **the click's own `MOVE_TO_COORD` says
 where it landed**, so predicted-versus-actual is a residual in world units, per click.
 
-**That run is not taken.** The harness is the operator's, and this is the point at which the
+**TAKEN in §1z-ay:** the bearing is predicted to **1.02°**, both declared terms are now
+MEASURED, and the vertical half does not separate from terrain relief. **That run is not taken.** The harness is the operator's, and this is the point at which the
 projection stops being arithmetic and starts costing a client launch.
+
+---
+
+## 1z-ay. RUN-1zAY — the projection PREDICTS the bearing to 1.0°, and the run settles both of §1z-ax's unproven terms; the vertical half does not separate from terrain
+
+**Asked:** "harness is free." One run, registered first, **no aiming attempted** — the
+design asks whether the projection *predicts* where arbitrary clicks landed, with the
+client's own `MOVE_TO_COORD` as the answer key. Ident `MOVECODE-1z-ay`. Capture
+`20260904T142759`, tape `agenttap-20260904T142831`.
+
+### 1z-ay.1 P3 — the camera reads, and it confirms `fovaxis` LIVE
+
+**1,056 of 1,056 samples carry a readable camera.** And the value:
+
+> `fov = 1.30900 rad = **75.000 degrees**`, `pos = (9426.3, 8077.0, −731.8)`,
+> `tgt = (9826.0, 8077.0, −716.6)`
+
+**75.000° exactly, read live off `0x00C078C4`** — §fovaxis's measurement confirmed from a
+running client by an instrument built for a different purpose, and the first time the
+number has been seen on the same clock as a click.
+
+### 1z-ay.2 ★★ P1 PASS — and it settles both declared terms
+
+The bearing test is **independent of any ground height**: the landing must lie along the
+ray's own horizontal direction from the camera.
+
+| | mean | max |
+|---|---|---|
+| bearing residual, 6 GROUND clicks | **1.02°** | **1.81°** |
+
+Registered threshold was < 2°. **PASS.** And re-scoring the same capture under §1z-ax's
+two *declared but unestablished* terms is what the sheet said would settle them:
+
+| variant | bearing mean | |
+|---|---|---|
+| **`UP = +z`, fov FULL** | **1.02°** | ← the declared reading |
+| `UP = +z`, fov HALF | 20.93° | |
+| `UP = +y`, fov FULL | 9.35° | |
+| `UP = +y`, fov HALF | 17.06° | |
+| `UP = −z`, fov FULL | 15.84° | |
+
+**The declared reading wins by a factor of nine over the next best.** `UP_AXIS = +z` and
+`fov` as the **full** angle are now MEASURED, not presumed — and the off-centre columns
+(0.35–0.65) are what made it a real test: every earlier calibration sat at `fx = 0.5`,
+where a wrong horizontal FOV is invisible.
+
+### 1z-ay.3 P2 FAIL — and this run cannot say whose fault it is
+
+Each click's implied ground `z` spanned **−519 to −111, a 407.8 u spread**, against a
+registered < 150 u. **FAIL**, and the honest reading is that **the run's design cannot
+separate the two explanations**: our vertical term being wrong, and the ground out there
+not being level. §1z-as.3 already measured range varying with slope at a fixed `fy`, so
+relief of this order is entirely plausible on open country that was chosen for *clearance*,
+not flatness.
+
+Something the numbers do say: `pos.z = −731.8` sits **below** `tgt.z = −716.6`, so on a
+naive reading the camera looks *upward* at the character, which a third-person view does
+not. That is consistent with the world's third axis being **down-positive** — but P1 passing
+under `UP = +z` shows the horizontal handedness is right as written, and untangling the
+vertical sign from terrain relief is exactly what this capture cannot do.
+
+**Not fixable by fitting** — that is the §1z-aw mistake. What separates them is a run
+designed for it: the same world point clicked from two camera heights, or a spot whose
+flatness is established first.
+
+### 1z-ay.4 What is aimable now, and what is not
+
+- **`fx` is aimable.** The bearing is predicted to ~1°, which at 500 u is ~9 u of lateral
+  error — well inside anything the router cares about.
+- **`fy` is not, yet.** It needs a local ground `z`, and the operational answer is cheap and
+  needs no new theory: **one throwaway click measures it** (§1z-ay.3's own arithmetic run
+  backwards), and every click after that at the same spot can be aimed. The projection turns
+  a blind fan into one calibration click plus aimed ones.
+- **§1z-ax's `--selftest` is unchanged and still green** — the algebra was never in doubt;
+  what this run added is which constants go into it.
+
+**Nothing shipped to the server.** `clickaim.py`'s two terms move from *declared* to
+*measured*, with the variant table as the evidence.

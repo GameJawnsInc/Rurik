@@ -178,8 +178,14 @@ def fit(samples, aspect=DEFAULT_ASPECT):
 # `viewport_in_window()` measures it instead of the four-parameter fit sec.1z-aw
 # used. Nothing about the window's chrome should ever have been a fitted term.
 
-UP_AXIS = (0.0, 0.0, 1.0)      # UNVERIFIED -- see above
-FOV_IS_FULL_ANGLE = True       # sec.fovaxis: 75.000 deg HORIZONTAL
+# MEASURED by RUN-1zAY (sec.1z-ay.2), not presumed: re-scoring one capture under
+# five (up, fov) variants put the declared reading at a 1.02 deg mean bearing
+# residual against 9.35 deg for the next best -- a factor of nine. The
+# off-centre click columns are what made that a real test; at fx=0.5 a wrong
+# horizontal FOV is invisible. `fov` reads 1.30900 rad = 75.000 deg EXACTLY on
+# a live client, which is sec.fovaxis confirmed from the running process.
+UP_AXIS = (0.0, 0.0, 1.0)      # MEASURED (RUN-1zAY)
+FOV_IS_FULL_ANGLE = True       # MEASURED (RUN-1zAY); sec.fovaxis's axis
 
 
 def _sub(a, b):
@@ -419,11 +425,12 @@ def selftest():
           "min at fy=%.2f, body at fy=%.2f" % (rows[lo], fyb))
 
     print("\n3. the terms that are NOT established, pinned so a change is deliberate")
-    check("UP_AXIS is declared and marked unverified",
+    check("UP_AXIS is +z, and the file records it as MEASURED",
           UP_AXIS == (0.0, 0.0, 1.0)
-          and "UNVERIFIED" in open(os.path.abspath(__file__), encoding="utf-8").read(),
-          "the movement wire is (x, y) and the pathing file has NO HEIGHT, so the "
-          "third float is PRESUMED height; a run settles it, not a comment")
+          and "MEASURED (RUN-1zAY)" in open(os.path.abspath(__file__),
+                                            encoding="utf-8").read(),
+          "RUN-1zAY re-scored one capture under five (up, fov) variants: 1.02 deg "
+          "against 9.35 for the next best")
     check("fov is read as the FULL angle, per sec.fovaxis",
           FOV_IS_FULL_ANGLE is True,
           "fovread.describe prints both readings BECAUSE it was unsettled; "

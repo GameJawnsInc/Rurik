@@ -83,3 +83,35 @@ the bearing residual against the actual `MOVE_TO_COORD`, and the implied ground
 `z`. Then the same re-scored under the `UP_AXIS` and full/half-angle variants —
 **which is how §1z-ax's two declared-but-unestablished terms get settled from one
 capture.**
+
+---
+
+## RESULT — RAN 2026-09-04. **P3 and P1 PASS; P2 FAILS and cannot be attributed.**
+
+Capture `20260904T142759`, tape `agenttap-20260904T142831`.
+
+**P3 PASS** — 1,056 of 1,056 samples carry a readable camera, reading
+`fov = 1.30900 rad = 75.000 deg EXACTLY`, `pos = (9426.3, 8077.0, -731.8)`,
+`tgt = (9826.0, 8077.0, -716.6)`. sec.fovaxis confirmed live.
+
+**P1 PASS** — bearing residual over 6 GROUND clicks: **mean 1.02 deg, max 1.81**
+against a registered < 2. And the variant re-score settles sec.1z-ax's two
+declared terms:
+
+| variant | bearing mean |
+|---|---|
+| **UP=+z, fov FULL** | **1.02 deg** |
+| UP=+z, fov HALF | 20.93 |
+| UP=+y, fov FULL | 9.35 |
+| UP=+y, fov HALF | 17.06 |
+| UP=-z, fov FULL | 15.84 |
+
+A factor of nine over the next best. The off-centre columns (0.35-0.65) are what
+made it a real test.
+
+**P2 FAIL** — implied ground z spread **407.8 u** (-519 to -111) against < 150.
+**This run cannot say whose fault it is**: our vertical term, or ground that is
+not level. It was chosen for clearance, not flatness, and sec.1z-as.3 already
+measured range varying with slope. Separating them needs a run designed for it --
+the same world point from two camera heights, or a spot whose flatness is
+established first. Full write-up: FINDINGS sec.1z-ay.
