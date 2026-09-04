@@ -94,3 +94,33 @@ point, and `lead_clip_why`. Then `stopcensus.py` for the lock column and
 the plane-29 structure this route happens to cross. A green P2 says the door is
 shut on THIS seam, not that no plane-blind grant survives anywhere — the ROUTER's
 own clip is still plane-blind by design (§1z-ap.6) and is not under test.
+
+---
+
+## RESULT — RAN 2026-09-04. **All three powered predictions PASS.**
+
+| run | arm | leads | `plane-seam` | cross-seam >= gate 1 | lock |
+|---|---|---|---|---|---|
+| `20260904T115542` | B (off) | 32 | 0 | **3** | no |
+| `20260904T115725` | A (on) | 31 | **1** | **0** | no |
+| `20260904T115909` | B (off) | 30 | 0 | **1** | no |
+| `20260904T120055` | A (on) | 34 | **2** | **0** | no |
+| | **A** | **65** | **3** | **0** | 0/2 |
+| | **B** | **62** | 0 | **4** | 0/2 |
+
+**P1 EXPOSURE PASS** (both arm-A runs met the seam). **P2 THE FIX PASS** — zero of
+65 arm-A leads reach gate 1 across a plane change. **P3 CONTROL PASS** — the
+known-bad arm produced 4, every one at the full 520 u reading `why="clear"`, two
+running plane 29 -> 0 and two plane 0 -> 29, so the term catches both directions.
+All four tapes valid: Hatcher control `shut` on 100%, zero `unread:`; no abort.
+
+**Healthy grants unperturbed, live:** arm A's max reach is still 520 u and only 3
+of 65 leads were clipped -- sec.1z-ap.4's 7.8% desk figure holding in front of a
+client.
+
+**P4: no lock in EITHER arm (0/2, 0/2), so this run set carries NO evidence about
+the outcome** -- registered as weak before launching, since at the measured 1-in-4
+rate two runs expect 0.5 locks in arm B. "Arm A did not lock" must not be read as
+the fix working; arm B did not lock either.
+
+Full write-up: FINDINGS sec.1z-aq.
