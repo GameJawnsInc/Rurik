@@ -96,6 +96,8 @@ the tap's own readers and stay authoritative for anything this joins.
 
 ## RESULT — RAN 2026-09-04 17:37 (run 1) and 17:40 (run 2). **P1 met (4 portal-crossing leads). P2: outcome (c), four of four — the keyboard mover never calls `MapFindPath`. The park is the client's, at the wedge tip, before our re-pin.**
 
+**CORRECTED by FINDINGS §1z-be (same day): the park is OUR `0x002C` install halting a body walking at 205 u/s, then GmWalk's held-key rule; the S-press refusal in run 2 is the client's agent-avoidance pass (notify 4) with the follower inside the 60° cone. Outcome (c) and the portal-crossing count stand.**
+
 | | run 1 `20260904T173704` | run 2 `20260904T174050` |
 |---|---|---|
 | hook | v9, 8,234 records, both controls FIRED, attached 4.4 s after the map line | 8,363 records, both FIRED, 2.7 s |
