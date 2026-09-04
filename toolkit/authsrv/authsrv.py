@@ -5797,7 +5797,20 @@ def _fence_gate_lead(state, reported, dest, src, clip_why):
 # computed from the model, for at most one floor interval.
 #
 # Inert without --kbd-lead, like every other gate in this block.
-KBD_LEAD_REFRESH = True       # False (--no-kbd-lead-refresh): let it mature.
+# CONVICTED BY ITS OWN VERIFICATION RUNS, 2026-09-03 (FINDINGS sec.1z-af) --
+# OPT-IN, DEFAULT OFF. Two runs of RUN-1zAB's script with this ON both LOCKED:
+# 19:58 read MIXED 24.3% with two parked held-key legs, 20:05 read ENSLAVED
+# 31.4% with three, and both sent three reported stops for seven key legs.
+# 20:05 also carried a `refresh-late` row -- an arrival won its race in spite
+# of the backstop. So preventing the arrival does NOT prevent the lock, and
+# sec.1z-ae.1's reading that the arrival is THE stage-1 armer is refuted as a
+# sufficient account: something else arms it too. It also roughly DOUBLES the
+# effective lead (520 -> up to 1,040 u), and 1z-t.6 measured longer leads as
+# worse on the separation the lead exists to fix. sec.29's rule applies as it
+# did to the lead itself in 1z-u: one run convicts one term, and this had two.
+# The code and its tests stay because the mechanism rows (`refresh`,
+# `refresh-late`, `refresh-blocked`) are how the next session reads the race.
+KBD_LEAD_REFRESH = False      # True (--kbd-lead-refresh): the refuted backstop.
 # Two server ticks. The poll granularity is TICK_SECONDS, so a margin below it
 # cannot be met at all, and the race this covers is ~0.03 s -- narrower than one
 # tick, which is exactly why the margin cannot be tuned to sit inside it.
@@ -22949,6 +22962,13 @@ def main():
                          "arm the counterfactual says is WORSE than the "
                          "shipped default (p50 425 u against 237), because "
                          "the lead's overshoot has nothing to collect it.")
+    ap.add_argument("--kbd-lead-refresh", action="store_true",
+                    help="MOVECODE-1z-ae ON (OPT-IN since 1z-af, which "
+                         "convicted it): re-aim an in-flight keyboard lead "
+                         "before its arrival can snap. Two verification runs "
+                         "with it on both locked, one of them past a "
+                         "`refresh-late`, so this is a diagnostic arm and not "
+                         "a fix. Inert without --kbd-lead.")
     ap.add_argument("--no-kbd-lead-refresh", action="store_true",
                     help="MOVECODE-1z-ae OFF: let an in-flight keyboard "
                          "lead reach its arrival. The arrival is a SNAP "
@@ -24614,7 +24634,7 @@ def main():
         KBD_LEAD_KILL = not a.no_kbd_lead_kill
         KBD_SYNC_MATCHED = not a.no_kbd_matched_plane
         KBD_LEAD_FENCE_GATE = not a.no_kbd_lead_fence_gate
-        KBD_LEAD_REFRESH = not a.no_kbd_lead_refresh
+        KBD_LEAD_REFRESH = bool(a.kbd_lead_refresh) and not a.no_kbd_lead_refresh
         _terms = [n for n, on in (("lead 520 u + navmesh clip (OPT-IN)",
                                    KBD_SYNC_LEAD_ON),
                                   ("0x002B family rate", KBD_SYNC_SPEED_ON),
@@ -24636,7 +24656,8 @@ def main():
                                    "0x002C (the fence-shutter audit)",
                                    KBD_LEAD_FENCE_GATE),
                                   ("an in-flight lead REFRESHED before its "
-                                   "arrival can snap (1z-ad's lock)",
+                                   "arrival can snap -- REFUTED 1z-af, "
+                                   "opt-in diagnostic",
                                    KBD_LEAD_REFRESH)) if on]
         print(f"      1z-y GATES  {', '.join(_gates) if _gates else 'NONE'}")
         if KBD_SYNC_LEAD_ON:

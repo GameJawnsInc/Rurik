@@ -3728,7 +3728,10 @@ Floor 75 against a green 75 with 5 declared skips (the archive-conditional
   one-per-report budget and its reset, the refusals on a reported stop and a shut
   fence, `refresh-late` once when the arrival wins anyway, `refresh-blocked` when the
   clip refuses the extension, the known-bad arm, inertness with the lead off, and
-  four source locks. Floor 33 → 60 → 69 → 84 → 106 from the
+  four source locks -- and the flag it drives is OPT-IN and OFF since 1z-af, which
+  convicted the backstop on two runs that both locked (one past a `refresh-late`),
+  so the section's first check pins the default OFF rather than ON. Floor 33 → 60 →
+  69 → 84 → 106 from the
   green runs. No vault, no client. ~2 s),
   `toolkit/authsrv/test_livewire.py` (the committed retail-decode recipe,
   RETHINK instrument #2 — the campaign's referee moved out of a deletable

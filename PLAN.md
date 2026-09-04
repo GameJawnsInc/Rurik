@@ -1614,6 +1614,16 @@ floors and aborts in `RUN-R8.md`; both are operator-driven client runs.
 
 ## 8. Immediate next actions
 
+### ★★★ MOVEMENT 2026-09-03 — THE REFRESH IS **REFUTED** BY ITS OWN TWO VERIFICATION RUNS (MOVECODE-1z-af): preventing the arrival does not prevent the lock, and the keyboard armer is now UNIDENTIFIED
+
+**[studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1z-af.** Two runs of RUN-1zAB's script with `--kbd-lead` and the refresh live, scored against §1z-ae.6's bounds, registered before either.
+
+* **Both locked.** Run A MIXED 24.3 % with two parked held-key legs; run B **ENSLAVED 31.4 %** with three. Three reported stops for seven key legs in both (a clean run sends seven). Run B also carried a **`refresh-late`** — an arrival won its race in spite of the backstop — which §1z-ae.6 registered as refuting on its own.
+* **An instrument defect of mine, caught by run A and fixed before run B:** the `refresh-blocked` path set the same latch the late path checks, so on exactly the legs where the clip had refused the extension a `refresh-late` could not be emitted. Run A's "zero refresh-late" was therefore unreadable. Split and pinned (`42a47e3`).
+* **§1z-ae.1's armer account is refuted as SUFFICIENT.** The arrival snap is still measured, but two runs prevented most arrivals and locked anyway, and run B's early `S` leg parked before any refresh had fired. With §0.11's plane route already killed by §1z-z, **the armer on the keyboard path is UNIDENTIFIED** — the honest state.
+* **Disposition, by §29's rule:** `KBD_LEAD_REFRESH` defaults **False**, `--kbd-lead-refresh` opts in. It also roughly doubles the effective lead (520 → 1,040 u) and §1z-t.6 measured longer leads as worse. The code and its 22 checks stay as the instrument. **Nothing shipped changes** — the lead is opt-in, so this was always inert by default.
+* **Four scored `--kbd-lead` runs now exist, three locked, and n = 2 either side does not separate the arms.** The next object is the ARMER, not another backstop: `movetap` reads `clientControlled` directly and has never been run against a lead arm, while `agenttap` cannot see the fence at all (§1z-aa.1). That instrument gap comes first.
+
 ### ★★★ MOVEMENT 2026-09-03 — REFRESH BEFORE MATURATION (MOVECODE-1z-ae): the lead's own arrival is a §0.11 stage-1 armer, and the server now pre-empts it
 
 **[studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1z-ae.** The fix §1z-ad named, built. **Not yet run**; the registered prediction is §1z-ae.6. Inert under the shipped default — the lead it guards is still opt-in.

@@ -735,14 +735,15 @@ def main():
     saved = (authsrv.KBD_SYNC_LEAD_ON, authsrv.KBD_LEAD_REFRESH)
     authsrv.KBD_SYNC_LEAD_ON = True
 
-    check(authsrv.KBD_LEAD_REFRESH is True
-          and "--no-kbd-lead-refresh" in SRC
-          and "KBD_LEAD_REFRESH = not a.no_kbd_lead_refresh" in SRC
+    check(authsrv.KBD_LEAD_REFRESH is False
+          and "--kbd-lead-refresh" in SRC and "--no-kbd-lead-refresh" in SRC
+          and "KBD_LEAD_REFRESH = bool(a.kbd_lead_refresh)" in SRC
           and SRC.count("global KBD_LEAD_REFRESH") == 1,
-          "the refresh ships ON with its revert flag, rebound through a "
-          "declared global",
-          "1z-ad: a 520 u lead matured 0.26 s before the player released and "
-          "locked five of eight legs")
+          "the refresh ships OFF and OPT-IN -- 1z-af convicted it on two runs "
+          "that both locked, one past a refresh-late",
+          "it was ON for one evening; keeping a refuted backstop on by default "
+          "is how sec.29's rule gets broken")
+    authsrv.KBD_LEAD_REFRESH = True
     check(abs(authsrv.KBD_LEAD_REFRESH_MARGIN - 2.0 * authsrv.TICK_SECONDS) < 1e-9
           and authsrv.KBD_LEAD_REFRESH_MAX == 1,
           "the margin is two server ticks and the budget is one extension per "
@@ -870,17 +871,16 @@ def main():
           "kbd_leg": leg()}
     w, r = Sent(st), FakeRec()
     authsrv.KBD_SYNC_LEAD_ON = True
+    authsrv.KBD_LEAD_REFRESH = True
     _real = authsrv.a2_clip_lead
     authsrv.a2_clip_lead = lambda s, o, d: ([o[0] + 520.0, o[1]], True, "clipped")
     try:
         blocked = authsrv.kbd_lead_refresh_tick(w, st, 1, r, now=DUE)
     finally:
         authsrv.a2_clip_lead = _real
-        authsrv.KBD_SYNC_LEAD_ON = saved[0]
     rows = [e for e in r.events if e.get("kind") == "kbd_leg"]
-    authsrv.KBD_SYNC_LEAD_ON = True
     late_after = authsrv.kbd_lead_refresh_tick(Sent(st), st, 1, r, now=ETA + 0.5)
-    authsrv.KBD_SYNC_LEAD_ON = saved[0]
+    (authsrv.KBD_SYNC_LEAD_ON, authsrv.KBD_LEAD_REFRESH) = saved
     rows = [e for e in r.events if e.get("kind") == "kbd_leg"]
     check(blocked is False and not w.of(MOVE)
           and [x["act"] for x in rows] == ["refresh-blocked", "refresh-late"]
