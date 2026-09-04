@@ -294,7 +294,16 @@ runs LOCKED — MIXED 24.3 % with two parked legs, then ENSLAVED 31.4 % with thr
 reported stops of seven key legs in each, and the second carried a `refresh-late`. So
 preventing the arrival does NOT prevent the lock; with §1z-z having killed §0.11's plane
 route, the keyboard armer is UNIDENTIFIED. `KBD_LEAD_REFRESH` is now OPT-IN and OFF
-(`--kbd-lead-refresh`). **§1z-ah BUILT THE RETRACT, and it is the `0x002C`, not the grant §1z-ag.5 named.**
+(`--kbd-lead-refresh`). **§1z-ai RAN IT (RUN-1zAH, four runs). The retract FIRES and is SAFE — four fired,
+every one at 0.0 u of harm with the next report landing on the pinned point, zero
+violations. The OUTCOME clause REFUTED: arm T's second run had a held-key parked leg,
+though that leg had a ZERO-LENGTH lead and no arrival-risk at all, so it is a different
+defect. The persistent lock (1 stop of 7, no re-arm) reproduced in arm C only. AND THE
+EXPOSURE WAS A QUARTER OF WHAT THE FLOOR CLAIMED: only 2-4 leads per run survive the
+clip at full 520 u; the rest are origin-unwalkable or clipped. --kbd-lead stays OFF,
+the waiver stays ON.**
+
+**§1z-ah BUILT THE RETRACT, and it is the `0x002C`, not the grant §1z-ag.5 named.**
 The mirror refutes the grant (it snaps at its own bake-tail once separation is RED),
 and the capture refutes §1z-ag.4: the guard saw the snap coming 0.425 s EARLY and was
 blocked by the report-freshness gate alone (report 2.311 s old, ceiling 0.347 s). The

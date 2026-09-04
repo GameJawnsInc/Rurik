@@ -16981,8 +16981,18 @@ def capture_flags():
                 isinstance(v, str) and len(v) <= 32):
             out[name] = v
     for modname in ("agtrack_guard",):
-        mod = sys.modules.get(modname)
-        if mod is None:
+        # IMPORTED, not looked up. `sys.modules.get` was the first draft and
+        # RUN-1zAH caught it in the act: the guard is imported LAZILY at
+        # character placement, which is AFTER this header row is written, so
+        # the module was absent and the switch went unrecorded -- except in the
+        # arm that passed --no-repin-stationary-waiver, whose own resolution
+        # imports it early. The header then named the flag ONLY in the arm that
+        # reverted it, which is the worst possible half of an A/B to be able to
+        # identify. Both modules are stdlib-only, so importing here costs
+        # nothing on the bare-machine path.
+        try:
+            mod = __import__(modname)
+        except Exception:
             continue
         for name in sorted(vars(mod)):
             if not name.isupper() or name.startswith("_"):

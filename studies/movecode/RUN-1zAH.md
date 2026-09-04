@@ -11,7 +11,7 @@ the client's own `ZERO_DIST_SQ`, because a body measured still has a re-pin harm
 1.0 u rather than `RUN_SPEED × age`. Everything else is the shipped default of `main` at
 `3b3285b` or later, and the lead is still opt-in (`--kbd-lead`), exactly as RUN-1zAB ran it.
 
-**Status: REGISTERED, NOT YET RUN.**
+**Status: RAN 2026-09-03 21:42-21:51, four runs. MECHANISM CONFIRMED (four retracts, every one at 0.0 u of harm, zero violations); OUTCOME **REFUTED** by this sheet's own clause -- arm T's second run had a held-key parked leg. The result block is below; `--kbd-lead` stays OFF and the waiver stays ON.**
 
 ---
 
@@ -256,3 +256,97 @@ The repo's boundary is aiming, not seeing. The session that set this up can driv
 four runs on a go-ahead — ≈ 6 minutes of client time in total, announced first, with
 nothing left parked. If the operator would rather watch, §4's block says the one thing
 worth watching for.
+
+---
+
+## ★ RESULT — RAN 2026-09-03 21:42–21:51, four runs, **MECHANISM CONFIRMED / OUTCOME REFUTED BY THIS SHEET'S OWN CLAUSE**
+
+Agent-driven, hands off. Captures: T1 `authsrv-20260903T214318-c1` × `agenttap-20260903T214319`,
+C1 `…214558-c1` × `…214600`, T2 `…214815-c1` × `…214816`, C2 `…215027-c1` × `…215028`.
+Full record: `studies/movecode/FINDINGS.md` §1z-ai.
+
+| run | arm | reported stops / 7 key legs | legs armed | parked legs | retracts | travel |
+|---|---|---|---|---|---|---|
+| T1 | waiver **ON** | 7 / 7 | 32 | **0** | 3 | 5,894 u |
+| C1 | waiver OFF | 7 / 7 | 25 | 2 | 0 | 3,514 u |
+| T2 | waiver **ON** | 7 / 7 | 33 | **1** | 1 | 4,727 u |
+| C2 | waiver OFF | **1 / 7** | **7** | **5** | 0 | **773 u** |
+
+### §2a THE MECHANISM — CONFIRMED, every registered row
+
+**Four retracts fired, all in arm T.** Every one of §2a's five rows appeared:
+`agtrack_repin code=due why=arrival-risk` (T1 at 18.10 / 30.31 / 40.49, T2 at 30.27) exactly
+where arm C logged `code=blocked blocked_by=stale-report` (C1 ×2, C2 ×2); the
+`AGTRACK RE-PIN 0x002C` went out; `kbd_leg act=clear by=0x002C` sat beside it.
+
+**THE HARM BOUND HELD ABSOLUTELY.** Every fired retract read `prev_d = 0.0 u` — the body
+had not moved a unit across the two reports that licensed it — and **`next_d = 0.0 u`**:
+the next accepted report landed exactly on the point we pinned to, which is the closest
+the wire can come to saying "the body really was standing there and we did not move it."
+**Zero violations across all four runs**, on a checker that reads 0 over the
+1,262-capture corpus and goes red with exit 1 on a synthetic stale re-pin. No backward
+yank was seen or recorded.
+
+**The waiver refused what it should refuse**, live: T1's first arrival-risk row at 10.46 s
+was still `blocked / stale-report` with the waiver ON, because the body had moved.
+
+### §2b THE OUTCOME — the registered REFUTES clause FIRED, and the bar does not move
+
+§2b registered: *"REFUTES — arm T locks (ENSLAVED, or a held-key leg moving ≤ 50 u, or
+stops ≪ legs) on a run where a retract fired."* **T2 had a retract fire and a held-key leg
+that moved 0 u in 4.0 s. By this sheet's own words that is REFUTED, and it is recorded as
+refuted.**
+
+**What the same rows also show, offered as analysis and NOT as a rescue.** T2's parked leg
+cannot be the mechanism under test:
+
+- its lead was **ZERO-LENGTH** — armed at 15.71 s with `dest = (10368.68, 8281.62)` against
+  a report of `(10368.7, 8281.6)`, i.e. the grant was to the point the body already
+  occupied. There was no 520 u arrival to pre-empt, and nothing for a retract to do;
+- the guard logged **no `arrival-risk` row at all** in that window, correctly — with zero
+  separation nothing was predicted to snap;
+- it follows the `gate2-offmesh` AGTRACK RE-PIN that fires at **≈11.9 s in all four runs**,
+  arm T and arm C alike, and whose fence shut is pre-existing behaviour this change did
+  not introduce.
+
+So the clause caught a **different** defect from the one it was written for. That is a flaw
+in my pre-registration, not a finding about the waiver — and the correction belongs in a
+new registration, not in a re-reading of this one.
+
+### The persistent lock, which is what §1z-ag identified
+
+Run A's signature is not "a parked leg", it is a fence that never re-arms: **1 reported
+stop for 7 key legs, ~7 legs armed instead of ~30, and every subsequent leg parked.**
+**C2 reproduces it exactly** (1/7 stops, 7 legs, 5 parked, 773 u, plus 5 leads degraded
+`fence-shut` by §1z-aa's gate). **Neither arm-T run produced it** — both ran 7/7 stops and
+32–33 legs, and T2's single parked leg recovered on the next leg (1,014 u). n = 2 per arm.
+
+### ★ THE EXPOSURE WAS MUCH THINNER THAN §3 BELIEVED, and §3's floor was the wrong quantity
+
+§3 required "≥ 8 `KBD LEAD` grants" and every run cleared it (25–33). But the census of
+`lead_clip_why` shows what those grants actually were:
+
+| run | `clear` (full 520 u) | `clipped` | `origin-unwalkable` (zero-length) | `fence-shut` |
+|---|---|---|---|---|
+| T1 | **4** | 18 | 10 | 0 |
+| C1 | **4** | 11 | 10 | 0 |
+| T2 | **2** | 16 | 15 | 0 |
+| C2 | **2** | 4 | 1 | 5 |
+
+**Only 2–4 leads per run are long enough to mature at 520 u**; 26 of T1's 32 legs and 27 of
+T2's 33 carried a lead of ≤ 1 u once clipped, because on this route the client's reported
+position is repeatedly off our navmesh (ROUTER-B3's origin-unwalkable door, working as
+designed). **A floor that counts lead grants does not measure the arm under test** — it
+should count leads that survive the clip. This is the same defect class as the floor
+itself exists to prevent.
+
+### Verdict
+
+**The mechanism is confirmed and safe; the outcome is not confirmed, and this sheet's
+REFUTES clause fired.** The waiver does what §1z-ah derived — it converts exactly the
+blocked re-pins it was meant to, lands them on a stationary body for 0.0 u, and never
+fires at a moved one. What has NOT been shown is that it prevents the lock: arm T avoided
+the persistent lock in both runs while arm C hit it once, but with 2–4 maturing leads per
+run and n = 2, that is a direction, not a result. **`--kbd-lead` stays OFF; the waiver
+stays ON** (it is additive, bounded at 1 u, and refutation would be a violation row, of
+which there are none).

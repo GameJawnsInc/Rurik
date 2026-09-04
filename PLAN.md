@@ -1614,6 +1614,17 @@ floors and aborts in `RUN-R8.md`; both are operator-driven client runs.
 
 ## 8. Immediate next actions
 
+### ★★★ MOVEMENT 2026-09-03 — RUN-1zAH RAN (MOVECODE-1z-ai): the retract fires and lands on the body for 0.0 u; the OUTCOME clause REFUTED, and the exposure census says why the run could not have settled it
+
+**[studies/movecode/RUN-1zAH.md](studies/movecode/RUN-1zAH.md), [FINDINGS](studies/movecode/FINDINGS.md) §1z-ai.** Four runs, arms alternating T C T C, RUN-1zAB's script and build verbatim, one variable changed. Agent-driven.
+
+* **MECHANISM CONFIRMED.** Four retracts fired, all in arm T, exactly where arm C logged `blocked / stale-report`. **Every one read `prev_d = 0.0 u` AND `next_d = 0.0 u`** — the body had not moved across the two reports that licensed it, and the next report landed on the point we pinned to. **Zero violations in four runs**, on a checker that reads 0 across the 1,262-capture corpus and goes red on a synthetic. It also refused correctly live (T1's 10.46 s row stayed blocked, body had moved).
+* **OUTCOME REFUTED by the sheet's own clause.** T2 fired a retract AND had a held-key leg move 0 u. Recorded as refuted; the bar is not moved. The rows do show that leg had a **zero-length** lead, no `arrival-risk` at all, and follows the `gate2-offmesh` re-pin that fires at ≈11.9 s in **all four runs, both arms** — so the clause caught a different defect than it was written for, which is a flaw in the pre-registration.
+* **The persistent lock is a separate object from a parked leg.** Run A's signature (1 stop of 7, ~7 legs armed, no re-arm) **reproduced exactly in C2** and in neither arm-T run; T2's parked leg recovered on the next leg. n = 2 per arm.
+* **★ THE FLOOR COUNTED THE WRONG THING.** §3 wanted ≥ 8 `KBD LEAD` grants and got 25–33 — but `lead_clip_why` says only **2–4 per run** survive the clip at full 520 u (10–15 are `origin-unwalkable`, 11–18 clipped). The arm under test is a 520 u lead MATURING, so the run had a quarter of the exposure its floor claimed.
+* Instrument defect caught by the run: `capture_flags` used `sys.modules.get` and the guard imports lazily at placement, so the header named the waiver **only in the arm that reverted it**. Now a real import; fixed after the campaign so all four runs share one binary.
+* **`--kbd-lead` stays OFF; the waiver stays ON** (additive, bounded at 1 u by measurement, no violation row anywhere). A next run needs a floor counted in **unclipped** leads, a route that produces them, and a REFUTES clause naming the **persistent** lock.
+
 ### ★★★ MOVEMENT 2026-09-03 — THE RETRACT, BUILT (MOVECODE-1z-ah): the guard predicted the snap 0.43 s early and ONE gate refused it; a body measured stationary lifts that gate
 
 **[studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1z-ah.** §1z-ag.5's retract, audited first as it asked, then built. The audit changed both halves of its sentence.

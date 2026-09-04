@@ -10799,3 +10799,105 @@ re-argue §1z-t.6's separation counterfactual. And the run itself is the verdict
 the standing reminder that a derived backstop can be convicted by its own two verification
 runs. `movetap` still cannot certify a capture taken under the harness (§1z-ag.6), so the
 score for this one comes from the gamesrv rows and the operator, not from the tap.
+
+
+---
+
+## 1z-ai. RUN-1zAH RAN — the retract fires, lands on the body for 0.0 u and never at a moved one; the OUTCOME clause refuted, and the run's own exposure census says why it could not have settled it
+
+**Asked:** "set up the --kbd-lead run", then "go ahead and drive it." Four runs, arms
+alternating T C T C, RUN-1zAB's script and build verbatim with one variable changed.
+Agent-driven, hands off, ~90 s each. Ident `MOVECODE-1z-ai`.
+
+### 1z-ai.1 The mechanism: CONFIRMED, and the harm bound held absolutely
+
+| run | arm | stops / 7 key legs | legs armed | parked | retracts | travel |
+|---|---|---|---|---|---|---|
+| T1 | waiver **ON** | 7/7 | 32 | **0** | 3 | 5,894 u |
+| C1 | OFF | 7/7 | 25 | 2 | 0 | 3,514 u |
+| T2 | waiver **ON** | 7/7 | 33 | **1** | 1 | 4,727 u |
+| C2 | OFF | **1/7** | **7** | **5** | 0 | **773 u** |
+
+Every row §1z-ah.7 registered appeared. Four retracts fired, all in arm T
+(`code=due why=arrival-risk` at T1 18.10 / 30.31 / 40.49 and T2 30.27) exactly where arm C
+logged `code=blocked blocked_by=stale-report` — **the `blocked_by` field added for this run
+naming its own gate, live.**
+
+**THE HARM BOUND, which is the whole safety argument: every fired retract read
+`prev_d = 0.0 u` and `next_d = 0.0 u`.** The body had not moved a unit across the two
+reports that licensed the retract, and the next accepted report landed exactly on the point
+we pinned to. Zero violations across four runs, on a checker that reads 0 over the
+1,262-capture corpus and goes red with exit 1 on a synthetic. **And it refused correctly
+live**: T1's 10.46 s arrival-risk stayed `blocked / stale-report` with the waiver ON,
+because the body had moved.
+
+### 1z-ai.2 ★ The OUTCOME clause fired, and the bar does not move
+
+RUN-1zAH §2b registered: *"REFUTES — arm T locks (ENSLAVED, or a held-key leg moving ≤ 50 u,
+or stops ≪ legs) on a run where a retract fired."* **T2 fired a retract and had a held-key
+leg that moved 0 u in 4.0 s. That is REFUTED by the sheet's own words and is recorded as
+refuted.**
+
+**What the rows also show, as analysis and explicitly not as a rescue.** T2's parked leg
+cannot be the mechanism under test: its lead was **zero-length** (armed 15.71 s,
+`dest = (10368.68, 8281.62)` against a report of `(10368.7, 8281.6)` — a grant to the point
+the body already occupied), the guard logged **no `arrival-risk` row at all** in that window
+(correctly — with no separation nothing is predicted to snap), and it follows the
+`gate2-offmesh` AGTRACK RE-PIN that fires at **≈11.9 s in all four runs, both arms**. So the
+clause caught a different defect from the one it was written for. **That is a flaw in the
+pre-registration**, and the fix belongs in a new registration rather than a re-reading of
+this one.
+
+**The persistent lock is a different object from "a parked leg"** and the run separates
+them cleanly. Run A's signature is a fence that never re-arms: 1 stop of 7, ~7 legs armed
+instead of ~30, every later leg parked. **C2 reproduces it exactly** (1/7, 7 legs, 5 parked,
+773 u, plus 5 leads degraded `fence-shut` by §1z-aa's gate). **Neither arm-T run produced
+it**, and T2's single parked leg recovered on the next leg (1,014 u). n = 2 per arm.
+
+### 1z-ai.3 ★ THE EXPOSURE CENSUS — the floor counted the wrong thing
+
+RUN-1zAH §3 required "≥ 8 `KBD LEAD` grants" and every run cleared it (25–33 fired). The
+`lead_clip_why` census says what those grants were:
+
+| run | `clear` (full 520 u) | `clipped` | `origin-unwalkable` (zero-length) | `fence-shut` |
+|---|---|---|---|---|
+| T1 | **4** | 18 | 10 | 0 |
+| C1 | **4** | 11 | 10 | 0 |
+| T2 | **2** | 16 | 15 | 0 |
+| C2 | **2** | 4 | 1 | 5 |
+
+**Only 2–4 leads per run survive the clip at full length** — 26 of T1's 32 legs and 27 of
+T2's 33 carried ≤ 1 u after clipping, because on this route the client's reported position
+sits off our navmesh repeatedly (ROUTER-B3's origin-unwalkable door, working as designed).
+The arm under test is *a 520 u lead maturing*, so **the run had a quarter of the exposure
+its floor claimed**. A floor that counts lead grants does not measure it; it must count
+leads that survive `a2_clip_lead`. This is the defect class the floor exists to prevent,
+committed by the floor itself.
+
+### 1z-ai.4 One instrument defect, caught by the run
+
+`capture_flags` swept companion policy modules with `sys.modules.get`, and the guard is
+imported **lazily at character placement — after the header row is written**. So the header
+recorded the waiver only in the arm that passed `--no-repin-stationary-waiver`, whose own
+resolution imports the module early: **the A/B could name its flag in the reverted arm
+only**, the worst half to be able to identify. Now a real `__import__` (both modules are
+stdlib-only, so the bare-machine path is untouched). Fixed after the campaign rather than
+during it, so all four runs share one binary.
+
+### 1z-ai.5 Where this leaves it
+
+**The mechanism is confirmed and safe; the outcome is not confirmed.** The waiver converts
+exactly the blocked re-pins it was derived to convert, lands them on a stationary body for
+0.0 u, and never fires at a moved one. It has **not** been shown to prevent the lock: arm T
+avoided the persistent lock twice and arm C hit it once, but at 2–4 maturing leads per run
+with n = 2 that is a direction, not a result.
+
+**`--kbd-lead` stays OFF. The waiver stays ON** — additive, bounded at 1 u by measurement,
+and its refutation would be a violation row, of which there are none in four runs or in the
+corpus.
+
+**What a next run needs, registered here so it is not re-derived:** an exposure floor
+counted in **unclipped** leads (`lead_clip_why == "clear"`), a route that produces them —
+the current one spends most of its leads on off-mesh origins — and a REFUTES clause that
+names the **persistent** lock (stops ≪ legs, no re-arm) rather than any parked leg, since
+those turn out to be two different objects with two different causes.
