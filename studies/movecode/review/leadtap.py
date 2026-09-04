@@ -123,10 +123,17 @@ def align(cap, names, grants):
             offs.append(best[1] - r["tick"] / 1000.0)
     if not offs:
         return None, 0, None
+    # TWO PASSES. The same POINT is granted many times over a run (a zero-lead
+    # echo re-sends the body's own report while it stands), so a setdest can
+    # match several grant rows by coordinate alone and the first-pass offsets
+    # scatter by whole seconds (492 ms spread on 22 anchors, run 1 of
+    # RUN-1zBD). The median of the first pass is still the true offset; the
+    # second pass keeps only anchors within 0.25 s of it and reports THAT
+    # spread, which is the alignment error a reader should carry.
     med = statistics.median(offs)
-    # anchors more than 2 s from the median are a different grant with the
-    # same point (a re-pin onto the body); drop them and report the rest
-    kept = [o for o in offs if abs(o - med) < 2.0]
+    kept = [o for o in offs if abs(o - med) < 0.25]
+    if not kept:
+        kept = offs
     med = statistics.median(kept)
     spread = (max(kept) - min(kept)) * 1000.0 if len(kept) > 1 else 0.0
     return med, len(kept), spread
@@ -213,6 +220,11 @@ def main():
               % (g - leads[0][0], o[0], o[1], plane, dest[0], dest[1],
                  math.hypot(dest[0] - o[0], dest[1] - o[1]), rp, why))
         sc = SC.score_leg(tape, g, o, dest)
+        pre = [s for s in tape.window(g - 0.4, g)]
+        if pre:
+            a0 = pre[-1]["agents"]["1"]
+            print("    at the grant: body v %.0f u/s, fence %s, async stop=%s"
+                  % (SC.speed(a0["async"]), SC.Tape.fence(pre[-1]), a0["async"].get("stop")))
         if sc:
             print("    body: %s -- moving %.0f%%, travelled %.0f u, sync %.0f u, max separation %.0f u, "
                   "largest live jump %.0f u%s%s"
