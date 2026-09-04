@@ -10385,3 +10385,89 @@ inert with the lead off; and four source locks. `test_d1lead` 94 (census re-aime
 | **REFUTES** | any `refresh-late` row (the backstop lost its own race), or a lock at all (ENSLAVED / a parked held-key leg) |
 | **Expected** | ~1 refresh per cruise leg, since the margin usually beats the report; `refresh-blocked` only where the route meets geometry |
 | **Says nothing** | one clean run does not settle a race — §1z-ad is the reason. Two runs, and the mechanism rows (`refresh` firing, `refresh-late` absent) are the verbatim check, not the verdict word |
+
+
+---
+
+## 1z-af. THE REFRESH IS REFUTED BY ITS OWN VERIFICATION RUNS — preventing the arrival does not prevent the lock, so §1z-ae.1's armer account is not sufficient; the backstop is now OPT-IN
+
+**Two runs, both locked**, on RUN-1zAB's script with `--kbd-lead` and the refresh live.
+Registered bounds are §1z-ae.6's, written before either run. Ident `MOVECODE-1z-af`.
+
+### 1z-af.1 The verdict
+
+| | §1z-ae.6 registered | run A `agenttap-20260903T195932` | run B `agenttap-20260903T200621` |
+|---|---|---|---|
+| verdict | FREE confirms | **MIXED 24.3 %** | **ENSLAVED 31.4 %** |
+| parked held-key legs | any refutes | **2** (S, W) | **3** (S, S, W) |
+| reported stops / 7 key legs | all seven | **3** | **3** |
+| `refresh` rows | expected | 3 | 2 |
+| `refresh-blocked` | expected on geometry | 3 | 1 |
+| **`refresh-late`** | **any refutes** | 0, and unreadable — see §1z-af.2 | **1** |
+
+**⇒ REFUTED, on both registered clauses.** Run B carries a `refresh-late`: an arrival won
+its race in spite of the backstop. And every run locked regardless — including run A,
+where the backstop lost no race it could see.
+
+### 1z-af.2 An instrument defect of mine, found by the first run and fixed before the second
+
+Run A reported **zero `refresh-late` and three `refresh-blocked`**, and the first number
+was worthless: the blocked path set the same `refresh_late` latch the late path checks, so
+on exactly the legs where the clip had refused the extension — the legs where the arrival
+was therefore still coming — a `refresh-late` could not be emitted. Split into two latches
+and pinned by a test that drives blocked-then-late on one leg (`42a47e3`), which is how
+run B could report the late arrival at all. **A backstop that cannot say it lost is not a
+backstop**, and this one could not for a whole run.
+
+### 1z-af.3 What it means for §1z-ae.1's mechanism
+
+§1z-ae.1 argued the lead's arrival is a §0.11 stage-1 armer, from the client's own memory
+(`+0x48` fires once and the client snaps to the granted point). That reading is not
+overturned — the snap is measured — but **it is refuted as a SUFFICIENT account of the
+lock**: two runs prevented most arrivals and locked anyway, and run B's early `S` leg
+parked at 0 u before any refresh had fired at all. Something else arms it, or the arrival
+is not the arming route on this path. §0.11's own stage-1 route (plane-carry's stale word)
+is killed by §1z-z here, so the armer on the keyboard path is now **UNIDENTIFIED**, and
+that is the honest state.
+
+One repeatable detail for whoever picks this up: in **both** refresh runs the `E` strafe
+leg read ENSLAVED 100 % and every leg after it parked, with onsets 29.58 s and 29.80 s —
+the same place in the same script. §1z-ad's lock, without the refresh, armed on a
+backpedal at 15.40 s instead, so this is not a fixed trigger; but a repeated onset inside
+one arm is a lead worth pulling.
+
+### 1z-af.4 Disposition, by §29's rule
+
+`KBD_LEAD_REFRESH` now defaults **False**; `--kbd-lead-refresh` opts in and
+`--no-kbd-lead-refresh` still parses and wins. One run convicts one term (§29, applied to
+the lead itself in §1z-u); this had two. It also roughly **doubles the effective lead**
+(520 → up to 1,040 u), and §1z-t.6 measured longer leads as worse on the very separation
+the lead exists to fix — so leaving a refuted backstop on inside `--kbd-lead` would be
+shipping a measured-harmful quantity on a hypothesis two runs contradict.
+
+The code and its 22 checks stay: the mechanism rows (`refresh`, `refresh-late`,
+`refresh-blocked`) are the instrument the next session reads the race with, and they cost
+nothing while the flag is off. **Nothing shipped changes** — the lead is opt-in, so the
+refresh was inert for anyone not passing `--kbd-lead`.
+
+### 1z-af.5 Where the keyboard lead now stands
+
+Four scored `--kbd-lead` runs exist, all on one script and one map:
+
+| run | refresh | verdict | parked legs | stops / 7 |
+|---|---|---|---|---|
+| 18:39 (§1z-ac) | off | MIXED 2.2 % (strict) | 0 | 7 |
+| 19:12 (§1z-ad) | off | ENSLAVED 48.3 % | 5 | 1 |
+| 19:58 (run A) | on | MIXED 24.3 % | 2 | 3 |
+| 20:05 (run B) | on | ENSLAVED 31.4 % | 3 | 3 |
+
+**Three locks in four runs, and the samples do not separate the arms** — n = 2 either
+side, one metric, one route. Nothing here says the refresh helps or harms; it says it does
+not fix. The lead stays OPT-IN and OFF, which is where §1z-u put it and where every run
+since has kept it.
+
+**The next object is not another backstop.** It is the armer: what shuts the fence on the
+keyboard path once §1z-z has killed the plane route. `agenttap` cannot see the fence (its
+`controlled` field is the controlled agent's id, §1z-aa.1), and `movetap` — which reads
+`clientControlled` directly — has not been run against a lead arm. That is the
+instrument gap to close before the next fix is designed, and it needs no new theory.

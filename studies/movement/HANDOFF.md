@@ -289,8 +289,13 @@ to mature, and the length is NOT the fix.** **BUILT the same day as §1z-ae (`--
 destination a lead further along the ray it is already on, so `+0x48` re-arms a full
 leg out and the arrival snap never fires. Bounded to one extension per report, only
 while the keyboard latch says moving, never into a fence we shut, clipped — and it
-says `refresh-late` if the arrival wins anyway. NOT RUN yet; §1z-ae.6 registers the
-prediction.**
+says `refresh-late` if the arrival wins anyway.** **RUN TWICE AND REFUTED (§1z-af): both
+runs LOCKED — MIXED 24.3 % with two parked legs, then ENSLAVED 31.4 % with three, three
+reported stops of seven key legs in each, and the second carried a `refresh-late`. So
+preventing the arrival does NOT prevent the lock; with §1z-z having killed §0.11's plane
+route, the keyboard armer is UNIDENTIFIED. `KBD_LEAD_REFRESH` is now OPT-IN and OFF
+(`--kbd-lead-refresh`). Next: `movetap` reads `clientControlled` directly and has never
+been run against a lead arm — close that instrument gap before designing another fix.**
 **`--grant-suppress` and the heading arm share ONE rate-limit clock**, so between them
 they cannot exceed one grant per 0.50 s — say which flags were on when you report a run.
 
