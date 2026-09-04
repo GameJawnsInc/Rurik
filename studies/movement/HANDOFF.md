@@ -294,8 +294,16 @@ runs LOCKED — MIXED 24.3 % with two parked legs, then ENSLAVED 31.4 % with thr
 reported stops of seven key legs in each, and the second carried a `refresh-late`. So
 preventing the arrival does NOT prevent the lock; with §1z-z having killed §0.11's plane
 route, the keyboard armer is UNIDENTIFIED. `KBD_LEAD_REFRESH` is now OPT-IN and OFF
-(`--kbd-lead-refresh`). Next: `movetap` reads `clientControlled` directly and has never
-been run against a lead arm — close that instrument gap before designing another fix.**
+(`--kbd-lead-refresh`). **§1z-ag CLOSED that gap: the ARMER is the lead's own ARRIVAL.** The sync copy walks
+the lead while the drawn body is parked, separation passes gate 1 (347 → 518 u), the
+arrival fires, and the body is teleported 520 u onto our granted point while the fence
+clears and never re-arms — with no message of ours within ±1.5 s. A second capture is
+a within-arm control: it did NOT lock, its only shut had no arrival, 96.8 u of
+separation, and it re-armed 3.8 s later. So the plane shut self-heals and the arrival
+shut does not. The derived fix is to RETRACT the copy to the body's reported point
+before such an arrival (§1z-y's kill, third trigger), NOT to extend it. Instrument
+debt: both movetap captures failed its own 50 Hz floor (10.2 / 12.0 Hz) under the
+harness, reproducibly.**
 **`--grant-suppress` and the heading arm share ONE rate-limit clock**, so between them
 they cannot exceed one grant per 0.50 s — say which flags were on when you report a run.
 
