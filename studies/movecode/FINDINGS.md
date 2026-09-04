@@ -12643,3 +12643,90 @@ flatness is established first.
 
 **Nothing shipped to the server.** `clickaim.py`'s two terms move from *declared* to
 *measured*, with the variant table as the evidence.
+
+---
+
+## 1z-az. THE AIMED CLICK WORKS — the first `routed` grant under a tape, and §1z-av's "open country has none" was an artifact of where I searched
+
+**Asked:** "go at it." Two runs. **The instrument chain is now complete and proven end to
+end**: computed target → mesh-derived walk → read camera → aimed click → **`routed`** grant
+under a tape. Ident `MOVECODE-1z-az`. Runs `20260904T144203` (A) and `20260904T144614` (B).
+
+### 1z-az.1 ★ CORRECTION: §1z-av searched the wrong place, twice over
+
+§1z-av concluded *"open country has almost no route-forcing geometry — 0 to 2 of 18
+bearings"* and made it a structural claim. **It is an artifact of the search.** That scan
+was restricted to ground within 4,000 u of the map's **clearance peak** — which is by
+construction the point furthest from any obstacle. Searching all low-density ground instead:
+
+| spot | hole density | route-forcing chords |
+|---|---|---|
+| **(2296, 8400)** | **0.061** | **50** |
+| (2296, 8112) | 0.061 | 47 |
+| (1144, 9552) | 0.061 | 47 |
+| (−296, 8688) | 0.026 | 45 |
+
+Against the city's ~0.27 and the clearance peak's near-nothing. **Genuinely open country has
+plenty of route-forcing geometry**; I had looked only where obstacles are furthest away and
+then generalised. That is the second time in this arc a one-place scan became a claim about
+a whole class (§1z-av itself corrected §1z-at for the same shape of error).
+
+### 1z-az.2 The chain, run end to end
+
+**Run A** — walk 10,477 u to (2296, 8400), arriving at **(2408, 8324), 118 u off**, then two
+calibration clicks. The first landed on GROUND with a **0.00° bearing residual** and measured
+the local ground height: **z = −947.1**. And the vertical ordering finally reads sensibly —
+camera −1103.3, target −1042.2, ground −947.1 — the camera above the character's centre above
+the ground.
+
+**Run B** — the same walk, then a click at **fx = 0.237, fy = 0.428**, computed offline from
+run A's camera and ground height to land on a 5-waypoint route-forcing chord at (2676, 8549):
+
+> landed **(2855, 8665)**, GROUND, **`ROUTER: routed`**
+
+**That is the first genuinely routed multi-waypoint grant under a tape in this whole arc**,
+and the thing §1z-as, §1z-at and §1z-av each failed to produce with a blind fan.
+
+### 1z-az.3 What the aim actually achieved, honestly
+
+**Residual 213 u** on a 561 u click. Split by axis, and the split is the point:
+
+- **Bearing: right.** The click went where it was pointed — that is the axis RUN-1zAY
+  validated at 1.02°, and it is what carried the click into route-forcing geometry.
+- **Range: long.** 561 u actual against ~350 u predicted. §1z-ay's P2 already failed and said
+  the vertical term was unresolved; this is that failure, in the field, at the size it
+  predicted. **The aim was good enough because the bearing did the work.**
+
+So the honest claim is narrow and worth stating narrowly: **aiming by bearing works and is
+sufficient to hit route-forcing geometry; aiming by range does not yet.**
+
+### 1z-az.4 ★ And the specimen does NOT answer §1z-ar
+
+The routed path, re-derived on our mesh with `route(with_planes=True)`:
+
+```
+wp0 (2408, 8326) plane 23    wp1 (2533, 8230) plane 23
+wp2 (2549, 8230) plane 23    wp3 (2855, 8665) plane 23
+```
+
+**Four waypoints, one plane.** No plane change, so the string pull had no plane discipline to
+undo, and **§1z-ar's question — does the plane-blind pull ever shortcut a seam — is untouched
+by this run.** The prerequisite is met and the question is not answered; saying otherwise
+because a `routed` finally appeared would be the easiest mistake available here.
+
+**What it needs is one more targeting pass, and it is a desk search**: `mapscout` already
+computes route-forcing chords — the added filter is that the chord's own **route crosses a
+plane**, which `route(with_planes=True)` reports directly. §1z-ar measured plane-changing
+pulled segments in 97 of 300 sampled routes, so such chords are common; this one simply was
+not chosen for it, because until this run there was no way to hit a chosen chord at all.
+
+### 1z-az.5 What is built and no longer in doubt
+
+- **Navigation to a computed coordinate** (§1z-at, 16 u; here 118 u over 10.5 km).
+- **The camera on the tape** (§1z-ay, 1,056/1,056 readable, `fov` 75.000° exact).
+- **Aim by bearing**, validated at 1.02° and now used in anger.
+- **The prop/ground sensor** on every click, and the wire scoring every landing.
+
+**Unresolved and named:** the vertical term (§1z-ay P2 — our model, or terrain relief, and
+the run that separates them is the same world point from two camera heights), and §1z-ar
+itself.
