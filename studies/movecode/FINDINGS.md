@@ -10186,6 +10186,12 @@ held-key legs, and six of seven releases never reaching the wire.
 
 ### 1z-ad.2 The door that opened, to the second (OBSERVED)
 
+> **The OBSERVATION below stands; the CAUSAL framing does not. §1z-am (2026-09-04)
+> scored 'a clear lead matured before the release' over all 17 lead runs: **six healthy
+> runs carry it and one locked run carries none**, so it is neither necessary nor
+> sufficient. REALFIX §0.11's two-stage account ("neither alone suffices") is untouched —
+> what is refuted is reading this maturation as *the door*.**
+
 Not a `0x002C`, not a dropped re-aim, not a gate failing. **A lead matured while the
 key was still held.**
 
@@ -11394,9 +11400,135 @@ and never for the one that does not. That is the gate, measured from both sides.
   disagreeing"*, i.e. terrain or a prop the client stops on where our mesh says clear; the
   lead needs `clip()` to pass, so only a **disagreement** can serve, and whether one exists
   is a question about our own decode's gaps. (b) §1z-ad's specimen, where the armer was not
-  a parked body at all but a **swallowed `0x0047`** — the lead matured 0.26 s before the
+  a parked body at all but a **swallowed `0x0047`** — **taken up in §1z-am, which confirms the
+  swallow at frame level and REFUTES the maturation as its cause** — the lead matured 0.26 s before the
   player released and the release went unreported. These are different mechanisms and the
   arc has been treating them as one. Picking between them is the next decision; **it is not
   a run, and after this section it is not an enemy.**
 
 **No code changed. `--kbd-lead` stays OFF; the waiver stays ON.**
+
+---
+
+## 1z-am. THE SWALLOWED `0x0047` — the client really never sends it, the lock is visible from the wire alone, and §1z-ad's "the lead matured" is REFUTED as the cause
+
+**Asked:** "now do the swallowed `0x0047`" — the second of §1z-al.5's two remaining
+candidates. Answered from the corpus; no client run, no code change. Ident
+`MOVECODE-1z-am`.
+
+### 1z-am.1 The fact, established at the frame level rather than the decoded one
+
+§1z-ad said the release "is swallowed". That was read off the decoded rows, which cannot
+distinguish *"the client did not send it"* from *"we did not parse it"* or *"we refused
+it"*. Checked directly on `authsrv-20260903T191320-c1`: the c2s **frame** opcodes, taken
+from each frame's own plaintext before any handler runs, are
+`0x8009` ×13, `0x803d` ×12, `0x80c1` ×6, **`0x8047` ×1**, and one each of `0x800a /
+0x800d / 0x8090 / 0x808a / 0x8008`. The four `unhandled` rows are all login-time
+(`SEND_MACHINE_SPEC` and friends); there is no `Undecodable`, and no refused
+`position_report`. **One `0x0047` frame exists in the whole 62 s session, against seven
+key legs.** The client genuinely never sent the other six. OBSERVED, and now at the layer
+that can tell the three cases apart.
+
+### 1z-am.2 The denominator was wrong, and the first pass got a meaningless number
+
+A corpus sweep comparing `0x0047` counts against `0x003D` counts reads a baseline ratio of
+**0.15** and a lead-run ratio of **0.22** — and it means nothing, because `0x003D` fires on
+every heading change, not once per leg. **The honest unit is the key leg**, and the harness
+walk spec carries every press and release instant, so scripted runs can be scored exactly.
+Two further controls the first pass lacked: a leg whose capture **ended** before a stop
+could arrive is excluded rather than counted as a miss, and the rate is broken out per key:
+
+| key | n | closed | | key | n | closed |
+|---|---|---|---|---|---|---|
+| W | 218 | **85%** | | Q | 21 | 67% |
+| S | 143 | **92%** | | E | 21 | 67% |
+| A | 4 | 0% | | D | 8 | 12% |
+
+**A and D turn in place** — they translate nothing, so no stop is reported, and pooling them
+with W/S would have manufactured a deficit out of the key layout. On **W/S legs only**:
+lead-ON **74 of 97 (76%)**, lead-absent **244 of 264 (92%)**.
+
+### 1z-am.3 ★ The signature is TERMINAL, not a rate — and it is readable from the wire alone
+
+The 76%/92% gap is not the finding; the **shape** is. Healthy runs miss a leg here and there
+and recover (`YYYYYYYY.YYYY`). A locked run reports a **prefix and then never again**:
+`Y......`, `YYY....`. Scoring *trailing silence* — legs after the last closed one:
+
+| | runs with ≥ 2 trailing silent legs |
+|---|---|
+| `KBD_SYNC_LEAD_ON` | **6 of 17** |
+| lead flag absent | **0 of 32** |
+
+Baseline runs never reach 2; their worst is exactly 1, which is the capture ending. **This
+is a lock detector that needs no tape, no `movetap`, and no enslavement scorer** — three
+instruments the arc has been leaning on, one of which cannot certify under the harness at
+all (§1z-ag.6). It is a wire-only signature.
+
+**Confound stated: the comparison is not clean.** Every lead-ON run uses the `WSWQESW` or
+`WSWSQEWSDWSQE` script and every lead-absent run uses something else; **no lead-OFF run in
+the corpus uses `WSWQESW`**, so script and flag are not separable here. What *is* clean is
+the within-script variation — of the 11 lead runs on the identical `WSWQESW` script, build
+and flags, **6 lock and 5 do not**, which is the coin flip §1z-ad described and does not
+depend on the cross-script comparison.
+
+### 1z-am.4 ★ THE REGISTERED TEST, AND IT REFUTED §1z-ad's CAUSE
+
+§1z-ad named the mechanism: *"a lead matured while the key was still held"*, measured on one
+run as maturing **0.26 s** before the release. Registered before computing anything:
+
+> **PREDICTION.** The runs that go terminally silent are exactly those in which at least one
+> clear-clipped lead's maturation instant — `t_arm + 520/speed`, both taken from the
+> server's own `kbd_leg` row, **no free parameter** — falls before that leg's release.
+> **REFUTED IF** a locking run has none, or a healthy run has one.
+
+| | locked | healthy |
+|---|---|---|
+| an early maturation | **5** | **6** ← refutes |
+| none | **1** ← refutes | 5 |
+
+**Both refutation conditions fired.** Six healthy runs carry exactly the event §1z-ad
+identified as the cause — `20260903T202542` has a lead maturing **1.24 s** before its S
+release and reports all seven stops — and one locked run (`20260903T073055`) carries none at
+all. **Maturation-before-release is neither necessary nor sufficient** for the swallowed
+stop.
+
+**What this does and does not overturn.** REALFIX §0.11 decodes the lock as **two** stages
+and says in its own words *"neither alone suffices"* — a snap that clears `clientControlled`
+(stage 1), composed with the click-walk regime in which *"releases are ignored, no `0x0047`
+is emitted, and the keyboard walk-start applier — the only fence re-armer — never runs"*
+(stage 2). **§0.11 is untouched by this and in fact predicted it.** What is refuted is
+§1z-ad's framing of the maturation as *"the door"* — a single sufficient trigger — which is
+how the arc has been quoting it since, including in §1z-al.5's own list of candidates. The
+maturation supplies stage 1 and the corpus shows stage 1 alone doing nothing eleven times.
+
+### 1z-am.5 A discriminator that looks perfect and is CIRCULAR
+
+`lead_clip_why == "fence-shut"` separates the two groups almost exactly — locked runs read
+0/4/2/2/5/5, healthy runs read 0 in ten of eleven. **It cannot be evidence, and it is
+printed by the instrument with this warning so it is not re-discovered and believed.**
+`fence_shut_at` is *our* flag, set by our own `0x002C` and cleared by a client walk-start
+report; when the client stops reporting, the flag stops clearing. It is the same silence
+read from the server's side — one theorem, two instruments (§1z-u's standing trap), not an
+independent cause.
+
+### 1z-am.6 What would settle it, and why it is not a run
+
+The remaining question is stage 2's own gate: **what makes the client stop emitting
+`0x0047` while it keeps emitting `0x003D`?** The locked runs are not silent — 12 `0x003D`
+still arrive in `191320`, `mt` 7/8/4 — so this is a selective suppression of the *stop*
+report, not a mute client. Two things would answer it and neither is another scripted run:
+
+- **The fence dword itself.** `clientControlled` is what §0.11's account turns on, and
+  `movetap`'s `fence_state` reads it — but **no `movetap` tape overlaps any of these runs**
+  (the lead arm shipped after that campaign, the same gap §1z-aa hit), and `movetap` cannot
+  certify under the harness anyway (§1z-ag.6, 10–12 Hz against a 50 Hz floor). Adding the
+  dword to `agenttap`, which *does* run alongside these captures at 9 Hz, is the cheap
+  version and is a tooling change rather than an experiment.
+- **The client's `0x0047` sender.** `studies/movement/FINDINGS.md`:1160 already establishes
+  it is **send-only — no receive handler in the agent table at all** — so it has never been
+  located from the receive side, and `codescan`'s field/xref anchors do not reach a
+  send-side opcode immediate. Finding it is its own dig, and it is the one thing that would
+  read the gate directly rather than inferring it.
+
+**No code changed. `--kbd-lead` stays OFF; the waiver stays ON.** Instrument:
+`studies/movecode/review/stopcensus.py`.
