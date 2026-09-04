@@ -111,3 +111,38 @@ rows — the same cross-check RUN-1zAN passed to one sample.
 **What this cannot settle even on success.** n = 1 locked specimen on one route
 and one build. It can *refute* §0.11 stage 2 outright; confirming it would be one
 observation consistent with the account, not a proof of the mechanism.
+
+---
+
+## RESULT — RAN 2026-09-04. Runs 1-3 healthy; **RUN 4 LOCKED with a valid tape.**
+
+| run | harness | pattern | lock | fence |
+|---|---|---|---|---|
+| 1 | `20260904T105157` | `YYYYYYY` | no | shut 10.79 -> **re-armed** 14.58 |
+| 2 | `20260904T105456` | `YYYYYYY` | no | open from 8.14, never shut |
+| 3 | `20260904T105722` | `YYYYYYY` | no | open from 7.94, never shut |
+| **4** | **`20260904T105954`** | **`Y......`** | **YES (6)** | **shut 17.67, NEVER re-armed (43.5 s)** |
+
+All four tapes valid: Hatcher control `shut` on 100%, zero `unread:`.
+
+**ALL THREE CLAUSES CONFIRMED on the specimen** — P1 the fence shut at 17.67
+against a lock onset of 18.68; P2 zero transitions for 43.5 s; P3 the prefix shows
+a shut (10.91) and a re-arm (14.74).
+
+**The mechanism, observed whole:** the drawn body sat at v = 0.0 for 3.0 s under a
+held key while the sync copy walked the 520 u lead; separation crossed gate 1 at
+16.53 and reached 502 u; at 17.67 the arrival teleported the body 520 u onto the
+granted point and the fence shut in the same sample, with **no `0x002C`
+involved**. The server's own arithmetic put the maturation at 17.44.
+
+**The discriminator, both kinds in one run:** a fence shut by a server `0x002C`
+(10.91) re-armed at the next walk-start (14.74); a fence shut by the client's own
+snap (17.67) never re-armed, through **six** subsequent `0x003D` walk-starts.
+
+**Why the body was parked:** the lead's ray runs plane 29 -> plane 0 and
+`pm.clip` is plane-blind, so the server scored it CLEAR at full length and the
+client would not walk it -- sec.1z-al.5's candidate (a) with a mechanism.
+RECONSTRUCTION.
+
+Lock rate today **1 of 4** against the corpus's 6 of 10; recorded, not explained.
+Full write-up: FINDINGS sec.1z-ao.
