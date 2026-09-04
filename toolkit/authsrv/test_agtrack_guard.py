@@ -28,8 +28,8 @@ import authsrv                   # noqa: E402
 AS_SRC = open(authsrv.__file__, encoding="utf-8").read()
 
 # Floor from the 2026-08-30 green run: 49 checks, all unconditional;
-# +22 at MOVECODE-1z-ah (section 9: the stationary waiver -- the retract).
-LEDGER = checks.Ledger("agtrack guard: the derived pre-emit rule", floor=71)
+# +25 at MOVECODE-1z-ah (section 9: the stationary waiver -- the retract).
+LEDGER = checks.Ledger("agtrack guard: the derived pre-emit rule", floor=74)
 check = checks.adopt_named(LEDGER)
 
 
@@ -435,6 +435,26 @@ def main():
               "to replay a capture to find out which gate refused",
               "blocked_by=_agtrack_guard_call(" in AS_SRC
               and '"repin_block_reason", now' in AS_SRC)
+
+        # -- the capture header must be able to say WHICH ARM produced it
+        flags = authsrv.capture_flags()
+        check("the capture header names the waiver -- authsrv's own discovery "
+              "is scoped to its module globals, so a switch living in a policy "
+              "module beside it would have gone unrecorded, and this run is an "
+              "A/B on exactly that flag",
+              flags.get("agtrack_guard.STATIONARY_WAIVER") is True)
+        ag.STATIONARY_WAIVER = False
+        try:
+            check("and it tracks the flag, not a literal",
+                  authsrv.capture_flags()
+                  .get("agtrack_guard.STATIONARY_WAIVER") is False)
+        finally:
+            ag.STATIONARY_WAIVER = True
+        check("bools only from the companion module: its derived constants and "
+              "verdict names are not switches",
+              "agtrack_guard.PASS" not in flags
+              and "agtrack_guard.REPIN_MAX_REPORT_AGE" not in flags
+              and "agtrack_guard.GATE1_RED" not in flags)
 
         # -- a 0x002C kills the keyboard leg (the stale-arrival third door)
         st = {"pos": (0.0, 0.0), "plane": 7,

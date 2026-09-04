@@ -16960,6 +16960,16 @@ def capture_flags():
     The three-value flags (`WINDUP_MODEL`, `CAST_STOP`) are strings or None
     and are carried too, because "which arm" is the question this answers.
     Nothing here reads content or the vault: it is our own configuration.
+
+    THE COMPANION POLICY MODULES ARE SWEPT TOO (MOVECODE-1z-ah), because the
+    discovery above is scoped to THIS module's globals and a switch that lives
+    beside it is invisible to it -- the same silent staleness the paragraph
+    above warns about, arriving from the side. `agtrack_guard.STATIONARY_WAIVER`
+    was the specimen: it ships ON, it changes the wire, and the run that scores
+    it is an A/B on exactly that flag, so a capture that could not say which arm
+    produced it would have cost that run its meaning (REALFIX-Q8). BOOLS ONLY
+    there -- the guard's other globals are derived constants and verdict names,
+    which are not switches -- and namespaced, so no name can collide.
     """
     g = globals()
     out = {}
@@ -16970,6 +16980,16 @@ def capture_flags():
         if isinstance(v, bool) or v is None or (
                 isinstance(v, str) and len(v) <= 32):
             out[name] = v
+    for modname in ("agtrack_guard",):
+        mod = sys.modules.get(modname)
+        if mod is None:
+            continue
+        for name in sorted(vars(mod)):
+            if not name.isupper() or name.startswith("_"):
+                continue
+            v = getattr(mod, name)
+            if isinstance(v, bool):
+                out[modname + "." + name] = v
     return out
 
 
