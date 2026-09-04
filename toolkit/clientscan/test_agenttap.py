@@ -39,7 +39,7 @@ from movetap import (OFF_AGTRACK, T_STATE_ARRAY, T_ARMED_ID,   # noqa: E402
                      STATE_STRIDE, AGENT_SPAN, A_ID, A_WORLD,
                      REACH_TEST_RUNS, REACH_FENCED)
 
-LEDGER = checks.Ledger("agenttap fence wiring", floor=15)
+LEDGER = checks.Ledger("agenttap fence wiring", floor=18)
 check = checks.adopt_named(LEDGER)
 
 AG, ARRAY = 0x10000000, 0x0A000000
@@ -227,5 +227,48 @@ check("no `fence` key says so rather than raising",
       "not read" in buf.getvalue(),
       "the 17 tapes already in the vault have no fence column and must still "
       "be readable")
+
+# ---- 6. the camera column (MOVECODE-1z-ay) --------------------------------
+print("\n6. the camera read: the client's own view transform, or a sentinel")
+
+from fovread import VA_FOV, VA_POSITION, VA_TARGET, IMAGE_BASE as FIB  # noqa: E402
+
+BASE = 0x00400000
+WANT = {FIB + (VA_FOV - FIB): struct.pack("<f", 1.309),
+        FIB + (VA_POSITION - FIB): struct.pack("<3f", 10.0, 20.0, 30.0),
+        FIB + (VA_TARGET - FIB): struct.pack("<3f", 40.0, 50.0, 60.0)}
+
+
+def _cam_read(h, a, n):
+    for va, blob in WANT.items():
+        if a == BASE + (va - FIB):
+            return blob[:n]
+    return None
+
+
+_real = agenttap.keytap.read_handle
+try:
+    agenttap.keytap.read_handle = _cam_read
+    cam = agenttap.read_camera(_H(), BASE)
+    check("the camera comes back as fov + position + target",
+          cam.get("fov") is not None and cam.get("pos") == [10.0, 20.0, 30.0]
+          and cam.get("tgt") == [40.0, 50.0, 60.0],
+          "%s -- these three ARE the view transform, so sec.1z-ax's projection "
+          "needs nothing else" % cam)
+    agenttap.keytap.read_handle = lambda h, a, n: None
+    cam = agenttap.read_camera(_H(), BASE)
+    check("an unreadable camera returns a SENTINEL, never zeros",
+          str(cam.get("cam", "")).startswith("unread:"),
+          "a (0,0,0) position would project every click to the same fraction "
+          "and look exactly like data")
+finally:
+    agenttap.keytap.read_handle = _real
+
+check("the addresses are IMPORTED from fovread, not restated here",
+      "from fovread import" in open(
+          os.path.join(os.path.dirname(agenttap.__file__), "agenttap.py"),
+          encoding="utf-8").read(),
+      "they are the frustum builder's own failure-path arguments; a drift must "
+      "break ONE place")
 
 raise SystemExit(LEDGER.verdict())

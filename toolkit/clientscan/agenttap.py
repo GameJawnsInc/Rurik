@@ -64,6 +64,7 @@ JSON line per sample; prints a summary at the end.
 """
 import argparse
 import json
+import struct
 import math
 import os
 import sys
@@ -85,6 +86,35 @@ from movetap import (u32, i32, f32, resolve, TapFail, OFF_SYNC_ARRAY,   # noqa: 
                      agtrack_fence, _fence_blank)
 
 A_FOLLOW = 0x98      # the destination AGENT (ANIMREF-RE 38.2: 0x00602AA8 writes it)
+
+# THE CAMERA (MOVECODE-1z-ay, `--no-camera` reverts). Imported from fovread
+# rather than restated: those three addresses are the frustum builder's own
+# failure-path arguments, and a drift must break ONE place. sec.1z-ax's
+# projection is exact GIVEN the camera, and this is what puts the camera on the
+# same clock as the click -- sec.1z-aw's whole failure was fitting a camera that
+# moves between samples instead of reading it.
+from fovread import (VA_FOV, VA_POSITION, VA_TARGET,            # noqa: E402
+                     IMAGE_BASE as FOV_IMAGE_BASE)
+
+
+def read_camera(handle, base):
+    """{fov, pos, tgt} from the client, or a reason it could not be read.
+
+    Same sentinel doctrine as the fence: a camera that could not be read is a
+    THIRD thing, not a zero one -- a (0,0,0) position would project every click
+    to the same fraction and look like data.
+    """
+    def f32(va, n):
+        raw = keytap.read_handle(handle, base + (va - FOV_IMAGE_BASE), 4 * n)
+        if raw is None or len(raw) < 4 * n:
+            return None
+        return list(struct.unpack("<%df" % n, raw))
+    fov = f32(VA_FOV, 1)
+    pos = f32(VA_POSITION, 3)
+    tgt = f32(VA_TARGET, 3)
+    if fov is None or pos is None or tgt is None:
+        return {"cam": "unread:camera-unreadable"}
+    return {"fov": fov[0], "pos": pos, "tgt": tgt}
 
 
 def memo_reader(handle):
@@ -174,6 +204,10 @@ def main():
                     help="seconds to keep retrying until a client is in a map")
     ap.add_argument("--out", default=None, help="JSONL path (default: vault/research/animref/agenttap-<stamp>.jsonl)")
     ap.add_argument("--any-build", action="store_true")
+    ap.add_argument("--no-camera", dest="camera", action="store_false",
+                    help="skip the camera read (MOVECODE-1z-ay). ON by "
+                         "default; sec.1z-ax's projection needs it on the "
+                         "same clock as the click")
     ap.add_argument("--no-fence", dest="fence", action="store_false",
                     help="skip the AgTrack fence read (MOVECODE-1z-an). ON by "
                          "default; this is the revert if the extra reads cost "
@@ -227,6 +261,8 @@ def main():
                    "clock0": world_clock(handle, agbase, 0),
                    "clock1": world_clock(handle, agbase, 1), "agents": {}}
             rd = memo_reader(handle) if a.fence else None
+            if a.camera:
+                row["camera"] = read_camera(handle, base)
             for aid in ids:
                 sync, sync_blk = read_copy(handle, agbase, OFF_SYNC_ARRAY,
                                            OFF_SYNC_COUNT, aid)
