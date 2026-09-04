@@ -6103,6 +6103,30 @@ def kbd_lead_dest(reported, vec2):
 # the recv loop's own work.
 A2_LEAD_CLIP_STEP = 2.0
 
+# MOVECODE-1z-ap: THE CLIP MUST STAY ON THE REPORT'S OWN PLANE.
+#
+# `pm.walkable()` is documented as "inside any trapezoid, ON ANY PLANE", and
+# `pm.clip()` was built on it -- so a ray from a bridge to the ground beneath
+# it scored CLEAR at full length. There is NO HEIGHT in the pathing file, so a
+# plane-29 trapezoid and a plane-0 trapezoid can occupy the same (x, y) and be
+# different physical places with no straight walk between them.
+#
+# RUN-1zAO (FINDINGS sec.1z-ao) caught what that costs, in the client's own
+# memory: the lead (10373,8286) -> (9853,8286) runs plane 29 -> plane 0, this
+# clip passed it at full 520 u, the drawn body DID NOT MOVE for 3.0 s under a
+# held key while the sync copy walked the granted ray, separation crossed
+# gate 1 at 312 u and reached 502 u, and the arrival then teleported the body
+# 520 u onto the granted point -- shutting AgTrack's fence in the same sample,
+# and that shut never re-armed (43.5 s, six walk-starts). One plane-blind clip,
+# one warp, one permanent lock.
+#
+# The term only ever clips EARLIER, so it cannot lengthen a lead; a short grant
+# is the direction the client is authoritative over. It is applied only when
+# the mesh can NAME the origin's plane -- `plane_at` returns None rather than
+# guessing on ambiguous stacked geometry, and this file's own doctrine at the
+# no-mesh door is to disable the term rather than freeze the lead.
+A2_LEAD_PLANE_CLIP = True     # False (--no-lead-plane-clip): the plane-blind ray.
+
 
 def a2_clip_lead(state, reported, dest):
     """Clip a D1 lead's endpoint to the navmesh along the REPORT's own ray.
@@ -6153,12 +6177,46 @@ def a2_clip_lead(state, reported, dest):
     if not pm.walkable(reported[0], reported[1]):
         return ([float(reported[0]), float(reported[1])], True,
                 "origin-unwalkable")
-    stopped = pm.clip(float(reported[0]), float(reported[1]),
-                      float(dest[0]), float(dest[1]),
-                      step=A2_LEAD_CLIP_STEP)
+    # THE PLANE THE RAY MUST STAY ON (MOVECODE-1z-ap), or None to keep the
+    # historical plane-blind walk. `prefer` is the report's own plane word, so
+    # the stacked-geometry case resolves the way plane_at's contract says: the
+    # client's plane if the mesh offers it here, else the mesh's own answer,
+    # else None -- and None disables the term rather than guessing a surface.
+    plane = None
+    if A2_LEAD_PLANE_CLIP and hasattr(pm, "plane_at"):
+        plane = pm.plane_at(float(reported[0]), float(reported[1]),
+                            prefer=state.get("plane"))
+    # The plane kwarg is passed ONLY when the term is in force, so a mesh
+    # object that predates it (or a stub) takes the historical call unchanged
+    # rather than raising inside the recv loop on a keyword it never had.
+    if plane is None:
+        stopped = pm.clip(float(reported[0]), float(reported[1]),
+                          float(dest[0]), float(dest[1]),
+                          step=A2_LEAD_CLIP_STEP)
+    else:
+        stopped = pm.clip(float(reported[0]), float(reported[1]),
+                          float(dest[0]), float(dest[1]),
+                          step=A2_LEAD_CLIP_STEP, plane=plane)
     clipped = (stopped[0] != dest[0]) or (stopped[1] != dest[1])
-    return ([float(stopped[0]), float(stopped[1])], clipped,
-            "clipped" if clipped else "clear")
+    why = "clipped" if clipped else "clear"
+    if clipped and plane is not None:
+        # NAME WHICH DOOR, because this file already paid for not naming one
+        # (the P-17 wall press: `lead_clipped=false` on a row whose ray a later
+        # session had to re-score by hand). The sample one step PAST the stop
+        # is the one that refused: if the mesh still holds it, the ray left the
+        # PLANE rather than the mesh, and that is a different defect with a
+        # different fix.
+        nx, ny = float(dest[0]) - float(reported[0]), float(dest[1]) - float(reported[1])
+        d = math.hypot(nx, ny)
+        if d > 0.0:
+            f = (math.hypot(stopped[0] - reported[0], stopped[1] - reported[1])
+                 + A2_LEAD_CLIP_STEP) / d
+            if f <= 1.0:
+                bx = float(reported[0]) + nx * f
+                by = float(reported[1]) + ny * f
+                if pm.walkable(bx, by):
+                    why = "plane-seam"
+    return ([float(stopped[0]), float(stopped[1])], clipped, why)
 
 
 def _a2_family_rate(send, state, mt, tag="A2 FAMILY-RATE"):
@@ -23050,6 +23108,16 @@ def main():
                          "the gate has nothing to protect. With this flag the "
                          "maturing lead of RUN-1zAB run A goes un-retracted "
                          "and the arrival arms REALFIX 0.11 stage 1 again.")
+    ap.add_argument("--no-lead-plane-clip", action="store_true",
+                    help="MOVECODE-1z-ap OFF: the D1/keyboard lead clip goes "
+                         "back to the PLANE-BLIND ray. pm.walkable() means "
+                         "'inside any trapezoid, on ANY plane', so a ray from "
+                         "a bridge to the ground beneath it scores CLEAR at "
+                         "full length -- there is no height in the pathing "
+                         "file. RUN-1zAO measured what that costs: a plane 29 "
+                         "to plane 0 lead passed at 520 u, the drawn body "
+                         "parked 3.0 s under a held key, and the arrival "
+                         "warped it 520 u and shut AgTrack's fence for good.")
     ap.add_argument("--no-kbd-lead-fence-gate", action="store_true",
                     help="MOVECODE-1z-aa OFF: a keyboard or D1 lead may "
                          "be sent into a fence the server itself shut with "
@@ -24683,7 +24751,7 @@ def main():
     # session a reconstruction (REALFIX-Q8).
     global KBD_SYNC, KBD_SYNC_LEAD_ON, KBD_SYNC_SPEED_ON, KBD_SYNC_STOP_ON
     global KBD_SYNC_HOLD, KBD_LEAD_KILL, KBD_SYNC_MATCHED, KBD_LEAD_FENCE_GATE
-    global KBD_LEAD_REFRESH
+    global KBD_LEAD_REFRESH, A2_LEAD_PLANE_CLIP
     if a.legacy_kbd_sync:
         KBD_SYNC = False
         KBD_SYNC_HOLD = False
@@ -24706,6 +24774,7 @@ def main():
         KBD_LEAD_KILL = not a.no_kbd_lead_kill
         KBD_SYNC_MATCHED = not a.no_kbd_matched_plane
         KBD_LEAD_FENCE_GATE = not a.no_kbd_lead_fence_gate
+        A2_LEAD_PLANE_CLIP = not a.no_lead_plane_clip
         KBD_LEAD_REFRESH = bool(a.kbd_lead_refresh) and not a.no_kbd_lead_refresh
         if a.no_repin_stationary_waiver:
             import agtrack_guard as _ag_flag

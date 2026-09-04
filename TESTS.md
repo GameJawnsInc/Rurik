@@ -3462,6 +3462,32 @@ Floor 75 against a green 75 with 5 declared skips (the archive-conditional
   real green run -- the first draft declared 21 from a head-count and the
   run said 23; the history is in the floor comment. No vault, no client.
   ~1 s),
+  **§2e is MOVECODE-1z-ap, THE PLANE-BLIND CLIP** (FINDINGS §1z-ap): `pm.walkable()`
+  means *"inside any trapezoid, on ANY plane"*, so `a2_clip_lead`'s ray from a bridge
+  to the ground beneath it scored CLEAR at full length — there is NO HEIGHT in the
+  pathing file, and a plane-29 and a plane-0 trapezoid can occupy the same (x, y) with
+  no straight walk between them. RUN-1zAO measured the cost in the client's own memory:
+  the lead `(10373,8286) → (9853,8286)` passed at 520 u, the drawn body did not move for
+  3.0 s under a held key, separation crossed gate 1 and reached 502 u, and the arrival
+  warped the body 520 u and shut AgTrack's fence permanently. The section drives **the
+  KNOWN-BAD ARM FIRST** — with `--no-lead-plane-clip` the seam ray goes out at full
+  length reading `clear`, so the shipped cell is known to be measuring the plane term
+  and not the wall — then the shipped arm stopping AT the seam with the row **naming
+  the door** (`why="plane-seam"`, not `"clipped"`, because the two have different fixes
+  and this file already paid once for a clip whose row did not say which had opened),
+  and the surviving reach being under gate 1's 299.33 u so the granted point cannot be
+  the far side of a snap. Then the three ways it must NOT fire: a same-plane clear ray
+  is **bit-identical on both arms** (a clip that perturbs healthy grants by epsilon
+  rewrites every one of them); a ray into the wall still reads `clipped`; and a mesh
+  that cannot NAME the origin's plane — `plane_at` returning None, "say nothing, never
+  a guess" — **disables the term rather than guessing a surface**, as this file's own
+  no-mesh door already does. A pathmap with no `plane_at` at all keeps the historical
+  answer exactly, and the `plane=` kwarg is passed only when the term is in force, so a
+  stub or an older mesh object cannot raise inside the recv loop. Plus the flag cells:
+  ships ON, `--no-lead-plane-clip` the one revert, bound from argv, and the ray's plane
+  taken from `plane_at(prefer=` the REPORT's own plane word rather than `state["pos"]`
+  or a literal (`--heading-grant`'s graveyard). 94 → **104 checks, floor 104**, set from
+  the green run.
   `toolkit/authsrv/test_d1lead.py` (REALFIX-A2's `--d1-lead` bundle, and since
   2026-09-01 also **§R11: the grant-during-hold A/B lever.** SHIPPED suppressing and
   REFUTED by the very next run -- the default is back to granting and the suppression

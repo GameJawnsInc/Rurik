@@ -58,7 +58,7 @@ import checks      # noqa: E402
 # the 2d cells, five row locks: lead_clip_why, the flush-hold row,
 # kbd_age, the a2_leg lifecycle, the watchdog-due transition) -> 86.
 # Each floor re-read off its own green run.)
-LEDGER = checks.Ledger("the REALFIX-A2 d1-lead bundle", floor=94)
+LEDGER = checks.Ledger("the REALFIX-A2 d1-lead bundle", floor=104)
 check = checks.adopt(LEDGER)
 
 
@@ -332,6 +332,131 @@ def main():
           "answer orders no walk and leaves the client authoritative "
           "where our mesh has nothing to say -- the router's own "
           "origin-off-mesh doctrine, applied to the keyboard channel")
+
+
+    # ---------------------------------------------------------------- 3b
+    print("\n2e. the clip stays on the report's PLANE (MOVECODE-1z-ap)")
+
+    class PlanePM(StubPM):
+        """The same wall, plus a SEAM: everything at x >= 300 is plane 0 and
+        everything below it is plane 29 -- a bridge running out over ground,
+        which is the shape RUN-1zAO's fatal lead crossed. `walkable` is
+        deliberately still plane-BLIND (that is pathmap's own contract: "inside
+        any trapezoid, on ANY plane"), so only the plane term can see the seam."""
+
+        def plane_at(self, x, y, prefer=None):
+            if 100.0 < x < 200.0:       # the wall: no trapezoid, so no plane
+                return None
+            return 0 if x >= 300.0 else 29
+
+        def clip(self, x0, y0, x1, y1, step=16.0, plane=None):
+            dx, dy = x1 - x0, y1 - y0
+            dist = (dx * dx + dy * dy) ** 0.5
+            if dist <= 0.0:
+                return (x0, y0)
+            n = max(1, int(dist / step))
+            last = (x0, y0)
+            for i in range(1, n + 1):
+                f = i / n
+                px, py = x0 + dx * f, y0 + dy * f
+                if not self.walkable(px, py):
+                    return last
+                if plane is not None and self.plane_at(px, py, prefer=plane) != plane:
+                    return last
+                last = (px, py)
+            return (x1, y1)
+
+    ppm = PlanePM()
+    seam_st = {"pathmap": ppm, "plane": 29}
+
+    _was_plane_clip = authsrv.A2_LEAD_PLANE_CLIP
+    try:
+        # THE KNOWN-BAD ARM FIRST, so the cell below is known to be measuring
+        # the plane term and not the wall.
+        authsrv.A2_LEAD_PLANE_CLIP = False
+        d_off, was_off, why_off = clipf(seam_st, [250.0, 0.0], [770.0, 0.0])
+        check(was_off is False and d_off == [770.0, 0.0] and why_off == "clear",
+              "KNOWN-BAD ARM (--no-lead-plane-clip): a 520 u ray across a "
+              "plane 29 -> plane 0 seam goes out at FULL LENGTH, why='clear'",
+              "this is the defect RUN-1zAO caught in the client's own memory: "
+              "the body would not walk the seam, sat parked 3.0 s under a held "
+              "key while the sync copy walked the granted ray, and the arrival "
+              "then warped it 520 u and shut AgTrack's fence for good. If this "
+              "cell ever goes green with the flag ON, the fix is not the thing "
+              "being measured")
+
+        authsrv.A2_LEAD_PLANE_CLIP = True
+        d_on, was_on, why_on = clipf(seam_st, [250.0, 0.0], [770.0, 0.0])
+        check(was_on is True and 250.0 <= d_on[0] < 300.0
+              and why_on == "plane-seam",
+              "SHIPPED: the same ray stops AT the seam and the row NAMES the "
+              "door -- why='plane-seam', not 'clipped'",
+              "the wall door and the seam door have different fixes, and this "
+              "file already paid once for a clip whose row did not say which "
+              "had opened (the P-17 press, lead_clipped=false)")
+        check(d_on[0] < 299.332591 + 250.0,
+              "and the surviving reach is under gate 1's 299.33 u, so the "
+              "granted point cannot be the far side of a snap",
+              "the whole harm is separation at the arrival exceeding gate 1 "
+              "(sec.1z-ag); a lead that cannot reach it cannot arm the lock")
+
+        # The term must not touch a ray that never leaves its plane.
+        for flag in (False, True):
+            authsrv.A2_LEAD_PLANE_CLIP = flag
+            d_s, was_s, why_s = clipf(seam_st, [0.0, 0.0], [90.0, 0.0])
+            check(was_s is False and d_s == [90.0, 0.0] and why_s == "clear",
+                  "a same-plane clear ray is bit-identical with the plane "
+                  "clip %s -- healthy grants are not perturbed"
+                  % ("ON" if flag else "OFF"),
+                  "a clip that moves unblocked leads by epsilon rewrites every "
+                  "healthy grant and the 222/222 word doctrine starts matching "
+                  "floats the client never sent")
+
+        # An ordinary mesh block must still read 'clipped', never 'plane-seam'.
+        authsrv.A2_LEAD_PLANE_CLIP = True
+        d_w, was_w, why_w = clipf(seam_st, [0.0, 0.0], [90.0 + 680.0, 0.0])
+        check(was_w is True and why_w == "clipped",
+              "a ray into the WALL still reads why='clipped' -- the seam name "
+              "is not applied to a mesh block",
+              "the door names are the whole point of the row; a plane term "
+              "that relabels the wall door would hide the defect it replaced")
+
+        # plane_at refusing to answer disables the term rather than guessing.
+        class MutePM(PlanePM):
+            def plane_at(self, x, y, prefer=None):
+                return None
+        d_m, was_m, why_m = clipf({"pathmap": MutePM(), "plane": 29},
+                                  [250.0, 0.0], [770.0, 0.0])
+        check(was_m is False and why_m == "clear",
+              "a mesh that CANNOT NAME the origin's plane disables the term "
+              "rather than guessing a surface",
+              "plane_at returns None for 'say nothing, never a guess' on "
+              "stacked geometry with no height in the file; this file's own "
+              "no-mesh door already fails toward the historical behaviour")
+
+        # A pathmap with no plane_at at all (the pre-1z-ap stub) still works.
+        d_o, was_o, why_o = clipf({"pathmap": StubPM(), "plane": 29},
+                                  [0.0, 0.0], [766.5, 0.0])
+        check(was_o is True and why_o == "clipped",
+              "a pathmap with NO plane_at keeps the historical answer exactly",
+              "the capability is probed, not assumed: an old mesh object must "
+              "not raise inside the recv loop")
+    finally:
+        authsrv.A2_LEAD_PLANE_CLIP = _was_plane_clip
+
+    _psrc = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
+    check(authsrv.A2_LEAD_PLANE_CLIP is True
+          and '"--no-lead-plane-clip"' in _psrc
+          and "A2_LEAD_PLANE_CLIP = not a.no_lead_plane_clip" in _psrc,
+          "it ships ON with --no-lead-plane-clip as the one revert, and the "
+          "flag is bound from argv rather than left at its default",
+          "sec.29's rule: one behaviour change, one flag, so a run convicts "
+          "one term")
+    check("plane=plane" in _psrc and 'prefer=state.get("plane")' in _psrc,
+          "the ray's plane comes from plane_at(prefer=the REPORT's own plane), "
+          "not from state[\"pos\"] or a literal",
+          "--heading-grant's graveyard (R2-1): the lead must aim from, and be "
+          "judged on, the point the client actually named")
 
     print("\n3. composition cells: the lattice around the bundle")
     comp = authsrv.zero_lead_composition
