@@ -180,7 +180,7 @@ class as_before:
         pm = self.pm
         self.saved = pm._component
         pm.walkable = lambda x, y: old_walkable(pm, x, y)
-        pm._string_pull = lambda pts, budget=None: old_string_pull(pm, pts)
+        pm._string_pull = lambda pts, budget=None, planes=None: old_string_pull(pm, pts)
         pm._component = [0] * len(pm.trapezoids)
         return pm
 
@@ -334,7 +334,10 @@ def all_valid(pm, paths):
 # ArenaNet stopped registering bit-31 file ids after 38797 (25 -> 0), so the
 # three checks about raw/masked pairing have nothing to be about. They are
 # declared skips there, not silent absences.
-LEDGER = checks.Ledger("pathing map", floor=80)
+# Section 14 (2026-09-04, MOVECODE-1z-bb, the seam-aware pull) adds nine
+# unconditional checks on a synthetic bridge and four behind the Pre-Searing
+# load: floor 80 -> 89, green run 93 on 38833 (5 declared skips).
+LEDGER = checks.Ledger("pathing map", floor=89)
 check = checks.adopt(LEDGER)
 
 
@@ -349,6 +352,7 @@ def main():
     args = ap.parse_args()
 
     t0 = time.perf_counter()
+    pre = None            # bound by section 9's load; section 14 reads it after the archive closes
     with Archive(args.dat) as ar:
         table = file_id_table(ar)
 
@@ -720,6 +724,14 @@ def main():
         pairs = chase_pairs(pre, args.routes)
         print(f"    {len(pairs)} pairs, {CHASE_LO:.0f}..{CHASE_HI:.0f} units "
               f"apart, on a {TICK_MS:.0f} ms tick")
+        # This section is the 2026-08-13 PERFORMANCE fix's own control --
+        # "nothing changed an answer" -- so it runs with the seam term OFF:
+        # MOVECODE-1z-bb's seam-aware pull changes answers BY DESIGN (a route
+        # that used to cut through a bridge deck now goes round), and section
+        # 14 owns that census. With it on here, 12 of 1,500 paths differed and
+        # the None count fell 48 -> 38, which is the seam term, not the fix.
+        saved10 = pathmap.SEAM_AWARE_ROUTE
+        pathmap.SEAM_AWARE_ROUTE = False
         with as_before(pre):
             before_ms, before_paths = sweep(pre, pairs)
         after_ms, after_paths = sweep(pre, pairs)
@@ -805,14 +817,14 @@ def main():
         #     whole check, this would read as a further win. It is caught by
         #     length and by nothing else in the timing half.
         real_pull = pre._string_pull
-        pre._string_pull = lambda pts, budget=None: list(pts)
+        pre._string_pull = lambda pts, budget=None, planes=None: list(pts)
         raw_ms, raw_paths = sweep(pre, pairs)
         del pre._string_pull
         latency_table("RAW-SAB", raw_ms)
         raw_ratios = length_ratios(after_paths, raw_paths)
         raw_mean, raw_worst = (sum(raw_ratios) / len(raw_ratios),
                                max(raw_ratios))
-        pre._string_pull = lambda pts, budget=None: list(pts)
+        pre._string_pull = lambda pts, budget=None, planes=None: list(pts)
         raw_confirmed = confirmed_over_tick(pre, pairs, raw_ms)
         del pre._string_pull
         check(not raw_confirmed,
@@ -837,9 +849,9 @@ def main():
             counter[0] += used
             return ok, used
 
-        def watched_pull(pts, budget=None):
+        def watched_pull(pts, budget=None, planes=None):
             counter[0] = 0
-            out = real_pull(pts, budget)
+            out = real_pull(pts, budget, planes)
             spend.append(counter[0])
             return out
 
@@ -869,6 +881,7 @@ def main():
         check(pathmap.PULL_SAMPLE_BUDGET == saved_budget,
               "the budget was put back", f"{pathmap.PULL_SAMPLE_BUDGET}")
 
+    pathmap.SEAM_AWARE_ROUTE = saved10          # section 10's control is over
     print("\n11. route() plane preference and corridor planes (ROUTER-B4)")
     # The 2026-08-26 run-2 defect: endpoint selection took containing()[0]
     # blind, and on stacked geometry that routed a click to the wrong
@@ -1166,6 +1179,225 @@ def main():
         check(longer == 0,
               "the pull never makes a path longer",
               f"{longer} of {pairs} longer")
+
+    print("\n14. the seam-aware pull and gate (MOVECODE-1z-bb)")
+    # THE DEFECT: route()'s string pull and final gate asked clip(), which asks
+    # "inside any trapezoid, on ANY plane", so the pull could drop the
+    # waypoints the A* only reached through a portal and grant a straight leg
+    # across a plane change the file has no portal for. RUN-1zBA measured it
+    # on a router grant, twice: the drawn body parked at a bridge deck's edge
+    # for 7 s while the server's copy walked 2 km, then a 2,021 u teleport.
+    #
+    # The synthetic bridge below is the shape of that map's plane 18 reduced
+    # to five trapezoids: a DECK (plane 1) over ground at its south end, a
+    # zero-height portal LINE pair at its south edge -- the file's own shape,
+    # the deck's body links to nothing -- ground continuing south of the
+    # line, and an east bank the deck's side abuts with no portal. Every
+    # check runs BOTH WAYS where it can: with SEAM_AWARE_ROUTE on, and off,
+    # which restores the plane-blind pull exactly -- a fix whose control
+    # cannot reproduce the bug is asserted, not tested.
+    Tz = pathmap.Trapezoid
+    NO = pathmap.NO_NEIGHBOUR
+    #            plane idx  y_top  y_bot  xtl    xtr    xbl    xbr   neighbours (tl, tr, bl, br)
+    T1 = Tz(0, 0,    0.0, -100.0, 100.0, 200.0, 100.0, 200.0, (NO, NO, 1, 1))   # ground under the deck
+    T2 = Tz(0, 1, -100.0, -100.0, 100.0, 200.0, 100.0, 200.0, (0, 0, 2, 2))     # portal LINE, ground side
+    T4 = Tz(0, 2, -100.0, -200.0, 100.0, 200.0, 100.0, 200.0, (1, 1, NO, NO))   # ground south of the line
+    T3 = Tz(0, 3,  300.0,    0.0, 200.0, 300.0, 200.0, 300.0, (NO, NO, NO, NO)) # east bank, beside the deck
+    D0 = Tz(1, 0,  300.0, -100.0, 100.0, 200.0, 100.0, 200.0, (NO, NO, 1, 1))   # the deck
+    D1 = Tz(1, 1, -100.0, -100.0, 100.0, 200.0, 100.0, 200.0, (0, 0, NO, NO))   # portal LINE, deck side
+    toy = pathmap.PathingMap([T1, T2, T4, T3, D0, D1], [{}, {}])
+    LINK = {1: [5], 5: [1]}                     # T2 <-> D1, and nothing else
+    toy._cross = dict(LINK)
+
+    # (a) planes_at is the grid's answer; containing() is the band walk.
+    # Two implementations of one point test, put against each other.
+    dis = 0
+    for gx in range(90, 311, 5):
+        for gy in range(-210, 311, 5):
+            if toy.planes_at(gx, gy) != {t.plane for t in toy.containing(gx, gy)}:
+                dis += 1
+    check(dis == 0, "planes_at agrees with containing() over the whole toy",
+          f"{dis} disagreements on a 5 u lattice")
+
+    # (b) the deck's SIDE: a body on the deck walking east onto the bank.
+    side = toy.seam_clip(150.0, 150.0, 250.0, 150.0, 1)
+    blind_side = toy.clip(150.0, 150.0, 250.0, 150.0, step=2.0)
+    check(198.0 <= side[0] <= 200.0 and blind_side == (250.0, 150.0),
+          "a body on the deck stops at its side; the plane-blind clip walks "
+          "straight onto the bank",
+          f"seam_clip {side}, clip {blind_side} -- RUN-1zBA's specimen in miniature")
+    # (c) DIRECTIONAL: the ground under the deck ends at y = 0 for a body on
+    # plane 0 (only the deck is beyond), but the deck continues for a body
+    # on plane 1 over that same ground.
+    under = toy.seam_clip(150.0, -50.0, 150.0, 150.0, 0)
+    over = toy.seam_clip(150.0, -50.0, 150.0, 150.0, 1)
+    check(-2.0 <= under[1] <= 0.0 and over == (150.0, 150.0),
+          "a seam is directional: plane 0 ends under the deck's edge, plane 1 "
+          "continues over the ground",
+          f"on plane 0 -> {under}, on plane 1 -> {over}")
+    # (d) THROUGH the line portal, and the primitive's known-bad arm.
+    thru = toy.seam_clip(150.0, -50.0, 150.0, -150.0, 1)
+    toy._cross = {}
+    cut = toy.seam_clip(150.0, -50.0, 150.0, -150.0, 1)
+    toy._cross = dict(LINK)
+    check(thru == (150.0, -150.0) and -100.0 <= cut[1] <= -98.0,
+          "the deck's south end is a portal (zero-height lines): linked, the "
+          "walk continues; unlinked, it stops at the line",
+          f"linked -> {thru}, link removed -> {cut}")
+    check(toy.seam_clip(150.0, -50.0, 150.0, -150.0, 0) == (150.0, -150.0),
+          "in-plane across the line trapezoid is not a seam at all")
+
+    # (e) route(): ground under the deck -> up onto the deck. The straight line
+    # is plane 0 ending at y = 0 with the deck above -- blind. The legal way is
+    # the U-turn through the south-end portal.
+    toy._component = None
+    saved_flag = pathmap.SEAM_AWARE_ROUTE
+    try:
+        pathmap.SEAM_AWARE_ROUTE = True
+        on = toy.route(150.0, -50.0, 150.0, 150.0, start_plane=0, goal_plane=1,
+                       with_planes=True)
+        pathmap.SEAM_AWARE_ROUTE = False
+        off = toy.route(150.0, -50.0, 150.0, 150.0, start_plane=0, goal_plane=1,
+                        with_planes=True)
+        pathmap.SEAM_AWARE_ROUTE = True
+        none_on = toy.route(150.0, -50.0, 250.0, 150.0)
+        pathmap.SEAM_AWARE_ROUTE = False
+        none_off = toy.route(150.0, -50.0, 250.0, 150.0)
+    finally:
+        pathmap.SEAM_AWARE_ROUTE = saved_flag
+    check(on is not None and len(on[0]) == 3
+          and abs(on[0][1][1] + 100.0) <= 1.0 and on[1][1] == 1 and on[1][-1] == 1,
+          "seam-aware: the route U-turns through the portal (3 waypoints, the "
+          "middle one on the line, then on the deck)",
+          f"{on}")
+    check(off is not None and len(off[0]) == 2,
+          "KNOWN-BAD: with SEAM_AWARE_ROUTE off the same route is the straight "
+          "line through the deck's underside -- the defect reproduces on demand",
+          f"{off}")
+    check(none_on is None and none_off is None,
+          "a goal in another component is None in both arms (the seam term "
+          "never invents a route)")
+    # (f) the pull without planes is the pull as it was.
+    corridor = [(150.0, -50.0), (150.0, -100.0), (150.0, -100.0), (150.0, 150.0)]
+    check(toy._string_pull(corridor) == toy._string_pull(corridor, planes=[None] * 4)
+          and toy._string_pull(corridor) == [(150.0, -50.0), (150.0, 150.0)],
+          "planes=None (and all-None planes) is the plane-blind pull unchanged")
+
+    # (g) the real map, where the specimen lives.
+    if pre is None:
+        LEDGER.skip("the seam term on Pre-Searing",
+                    "the Pre-Searing mesh did not load from this archive")
+    else:
+        # RUN-1zBA run 4's grant: from the deck of the bridge into Ascalon
+        # City toward the off-mesh click on the hills. The plane-blind clip
+        # granted 2,158 u; the body parked at x = 10860.0 (the deck's west
+        # edge) for 7.5 s and was teleported. The seam-aware ray must stop
+        # at that edge.
+        o = (10989.0, 5236.0)
+        stop = pre.seam_clip(o[0], o[1], 8500.0, 4330.0, 18)
+        blind = pre.clip(o[0], o[1], 8500.0, 4330.0, step=2.0)
+        check(abs(stop[0] - 10860.0) <= 12.0
+              and math.dist(blind, o) > 1500.0,
+              "RUN-1zBA's specimen: seam_clip on plane 18 stops at the deck's "
+              "west edge; the plane-blind clip runs past it by kilometres",
+              f"seam_clip {tuple(round(v) for v in stop)}, clip "
+              f"{tuple(round(v) for v in blind)} ({math.dist(blind, o):.0f} u)")
+
+        def blind_by_containing(pm_, path, planes):
+            """The reference walker over containing() (the band walk), not
+            planes_at (the grid): a plane change with no portal on any leg."""
+            for (a, b), pl in zip(zip(path, path[1:]), planes):
+                dx, dy = b[0] - a[0], b[1] - a[1]
+                dist = math.hypot(dx, dy)
+                n = max(1, int(dist / 2.0))
+
+                def at(f):
+                    return {t.plane for t in pm_.containing(a[0] + dx * f, a[1] + dy * f)}
+
+                carried, pf = None, 0.0
+                for k in range(n + 1):
+                    f = k / n
+                    cp = at(f)
+                    if not cp:
+                        continue
+                    if carried is None:
+                        carried = {pl} if pl in cp else cp
+                    elif carried & cp:
+                        carried &= cp
+                    else:
+                        # bisect to the seam from both sides, as the walk under
+                        # test does; a midpoint of two 2 u samples can sit a
+                        # unit off a portal LINE and miss it by tolerance
+                        lo, hi = pf, f
+                        for _ in range(12):
+                            mid = (lo + hi) * 0.5
+                            if at(mid) & carried:
+                                lo = mid
+                            else:
+                                hi = mid
+                        f_old = lo
+                        lo, hi = pf, f
+                        for _ in range(12):
+                            mid = (lo + hi) * 0.5
+                            if at(mid) & cp:
+                                hi = mid
+                            else:
+                                lo = mid
+                        sf = (f_old + hi) * 0.5
+                        if not pm_.portal_at(a[0] + dx * sf, a[1] + dy * sf,
+                                             carried, cp):
+                            return True
+                        carried = cp
+                    pf = f
+            return False
+
+        rng14 = random.Random(8)
+        pairs14 = []
+        while len(pairs14) < 300:
+            ax, ay = rng14.choice(pre.trapezoids).centre
+            if not pre.walkable(ax, ay):
+                continue
+            ang = rng14.uniform(0.0, 2.0 * math.pi)
+            d = rng14.uniform(300.0, 1500.0)
+            bx, by = ax + math.cos(ang) * d, ay + math.sin(ang) * d
+            if pre.walkable(bx, by):
+                pairs14.append((ax, ay, bx, by))
+        got = {}
+        try:
+            for flag in (False, True):
+                pathmap.SEAM_AWARE_ROUTE = flag
+                ms14, paths14 = [], []
+                for (ax, ay, bx, by) in pairs14:
+                    t14 = time.perf_counter()
+                    paths14.append(pre.route(ax, ay, bx, by, with_planes=True))
+                    ms14.append((time.perf_counter() - t14) * 1000.0)
+                got[flag] = (paths14, ms14)
+        finally:
+            pathmap.SEAM_AWARE_ROUTE = saved_flag
+        off_p, on_p = got[False][0], got[True][0]
+        changed = [i for i in range(len(pairs14))
+                   if (off_p[i] is None) != (on_p[i] is None)
+                   or (off_p[i] and on_p[i] and off_p[i][0] != on_p[i][0])]
+        explained = sum(1 for i in changed
+                        if off_p[i] and blind_by_containing(pre, *off_p[i]))
+        on_blind = sum(1 for r in on_p if r and blind_by_containing(pre, *r))
+        check(on_blind == 0,
+              "no seam-aware route crosses a blind seam, by the containing() "
+              "walker (a second point test, not the grid the pull used)",
+              f"{on_blind} of {sum(1 for r in on_p if r)} routed")
+        check(sum(1 for r in off_p if r is None) == sum(1 for r in on_p if r is None)
+              and len(changed) - explained <= max(3, len(pairs14) // 50),
+              "the seam term changes only what it should: None counts equal, "
+              "and every changed path but a handful had a blind crossing before",
+              f"{len(changed)} of {len(pairs14)} changed, {explained} explained "
+              f"by a blind crossing in the old path; None "
+              f"{sum(1 for r in off_p if r is None)} vs "
+              f"{sum(1 for r in on_p if r is None)}")
+        check(max(got[True][1]) < 50.0,
+              "the seam-aware route() stays under the 50 ms tick in the chase band",
+              f"max {max(got[True][1]):.1f} ms (plane-blind max "
+              f"{max(got[False][1]):.1f}); p50 {sorted(got[True][1])[150]:.2f} vs "
+              f"{sorted(got[False][1])[150]:.2f} ms")
 
     dt = time.perf_counter() - t0
     print(f"\nwalked the archive in {dt:.1f}s")

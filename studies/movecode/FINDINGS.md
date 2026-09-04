@@ -12898,3 +12898,122 @@ as the reference implementation, `test_pathmap`'s controls that no returned path
 no seam is involved, and a regression pinned on this specimen: from (10989, 5236) on plane 18
 toward (8500, 4330), the router must not grant a leg that leaves the deck anywhere but at its
 ends.
+
+---
+
+## 1z-bb. THE SEAM-AWARE RAYS, SHIPPED — a body's plane may end only at a portal, at both of the router's plane-blind sites; RUN-1zBB's A/B closes RUN-1zBA's door and reopens it on demand
+
+**Asked:** "ship it." Ident `MOVECODE-1z-bb`. Server-path change in `pathmap.py` and
+`authsrv.py`, default ON, `--router-blind-clip` reverts. Verified on the desk against the
+specimen and the chase band, and live in two runs under `RUN-1zBB.md`: the fix arm and the
+known-bad arm on the same click.
+
+### 1z-bb.1 What shipped, and why it is a seam test and not the lead's plane test
+
+Three primitives in `PathingMap`, all stdlib and all on the grid `walkable()` already uses
+(the record grew a tenth field, the plane):
+
+- **`planes_at(x, y)`** — the set of planes under a point, at `walkable()`'s cost.
+- **`portal_at(x, y, planes_from, planes_to)`** — is there a portal here: any trapezoid within
+  `SEAM_TOL` (1 u) of the point on the from side `_cross`-linked to any on the to side. The
+  tolerance is what sees the zero-height portal LINES (§1z-ba.1).
+- **`seam_clip(x0, y0, x1, y1, plane)`** — `clip()` carrying the body's planes: a sample that
+  keeps any carried plane is a step; when every carried plane has ended the seam is bisected
+  from both sides and `portal_at` asked; a portal continues the walk on the new planes,
+  anything else returns the last sample. `SEAM_AWARE_ROUTE` is the module switch.
+
+Wired into **both** of the router's plane-blind sites (§1z-ar.1 named both; §1z-ba.5 showed
+they share one primitive): `route()`'s string pull now takes the corridor plane per waypoint
+and accepts a shortcut only if `_seam_walk` on the kept point's plane reaches it, and its
+final gate walks each segment on its plane (`_gate_clip`); in `authsrv`, `_router_clip`
+carries the pre-send leg gate (each leg on its corridor plane) and the clip fallback (on the
+body's plane), under `ROUTER_SEAM_CLIP`, which also sets `pathmap.SEAM_AWARE_ROUTE` — one
+flag, both rays, so the pull and the fallback cannot disagree.
+
+**Why not `clip(plane=)`:** §1z-ap's lead clip stops at ANY plane change, portals included,
+and §1z-ar.6 measured that as 3 of 65 leads clipped short at legitimate portals — fine for a
+520 u lead the client is authoritative over. A router doing it would refuse every route
+across every bridge. The seam test lets portals through and refuses the deck's side; that is
+the distinction §1z-ba.1's three facts about the file exist to make.
+
+### 1z-bb.2 The pull's walk is coarse and off-mesh-tolerant, and the numbers say why
+
+The first version ran the seam walk inside the pull at the gate's 2 u, strict. Over 300
+chase-band pairs on Pre-Searing: **38 paths changed, only 3 of which had crossed a blind
+seam**, and max latency **76.7 ms** — over the tick. The 35 were not seams: a 2 u strict walk
+inside the pull also refused sub-16 u mesh cracks the 16 u sightline had never seen, i.e. it
+was a second walkability test at a different resolution. Now the pull's seam walk runs at the
+sightline's own 16 u step and skips off-mesh samples — it judges plane changes and nothing
+else — and the strict 2 u walk is the gate's, after the pull, where it always was. Result:
+**4 of 300 changed, 3 explained by a blind crossing in the old path**, None counts equal
+(11/11), **0 seam-aware routes cross a blind seam** by a `containing()`-based reference
+walker, and latency p50 0.51 → 0.85 ms, max 20.8 → 27.6 ms, **0 of 1,500 over the tick** in
+`test_pathmap` §10.
+
+The fourth change is recorded, not explained: pair 101's old path crossed one linked seam
+(0 → 43) and the new path is 6 waypoints instead of 4 — and **180 u shorter**. Somewhere the
+pull refused one shortcut through a legitimate portal; the candidate contest then found a
+shorter legal survivor. One in 300, in the benign direction, and the route is seam-clean.
+
+### 1z-bb.3 ★ A latent bug the gate exposed: coincident waypoints and `with_planes`
+
+`test_pathmap` §14's synthetic bridge returned **None** for the route from under the deck onto
+it. The corridor was fine — start, then THREE coincident waypoints at (150, −100): the edge
+onto the portal line (plane 0), the portal crossing (plane 1), the edge off it (plane 1), then
+the goal. The pull kept the farthest of them, on plane 1, and accepted the leg to the goal on
+plane 1. `route()` then recovered the pulled path's planes by **value-matching**, found the
+FIRST duplicate, handed the gate plane 0, and the gate refused the leg on the wrong plane.
+**`with_planes` had been reporting the first duplicate's plane at every coincident portal
+crossing since ROUTER-B4** — the plane word the grants carry. The pull now records the indices
+it kept (`_pull_idx`); a replacement pull that does not (the tests' pre-fix reconstruction)
+falls back to value-matching that takes the LAST of a coincident run, which is provably what
+the pull chose (it tries farther indices first and coincident points pass or fail identically).
+
+### 1z-bb.4 Tests
+
+- **`test_pathmap.py` §14** (floor 80 → 89, green 93): a five-trapezoid bridge — deck over
+  ground at its south end, the file's own zero-height portal line pair, ground south of the
+  line, an east bank the deck's side abuts with no portal. `planes_at` vs `containing()` over a
+  lattice; `seam_clip` stops at the deck's side where `clip()` walks onto the bank (the
+  specimen in miniature), reads the seam directionally, passes the line portal and stops at
+  it when the link is removed, treats the in-plane step across the line as no seam; `route()`
+  U-turns through the portal (3 waypoints, planes [0, 1, 1]) and with the term off is the
+  straight line through the underside — **the defect on demand**; a foreign-component goal is
+  None in both arms; `planes=None` is the old pull. On Pre-Searing: RUN-1zBA run 4's grant
+  stops at x = 10860 ± 12 where `clip()` runs 2,159 u; the 300-pair census above; the tick.
+  **§10's "nothing changed an answer" control now runs with the seam term off** — it is the
+  2026-08-13 performance fix's control, and with the term on it read 12 changed / Nones
+  48 → 38, which was the seam term working.
+- **`test_router.py` §6** (floor 114 → 121): the stub mesh grows a fake blind seam; the
+  fallback stops at it and, under the known-bad arm, walks through it to the wall; a stub
+  route whose leg crosses it is demoted to the fallback, and granted verbatim under the arm;
+  source locks on the flag's default, the two call sites through `_router_clip` and no bare
+  `pm.clip(` in `router_answer_click`, and the one-flag-both-rays assignment.
+- `test_d1lead` 104, `test_routerbench` 48, `test_srclint` 26, both study self-tests green.
+
+### 1z-bb.5 ★★ RUN-1zBB — the A/B on the specimen
+
+Run 4's script verbatim, twice, minutes apart; the only variable is the ray.
+
+| | arm A — fix | arm B — `--router-blind-clip` |
+|---|---|---|
+| click 1 | (8532, 4342) off-mesh | (8532, 4343) off-mesh |
+| fallback stop | **(10862, 5190), 136 u — the edge** | (8961, 4499), 2,158 u — through the seam at f = 0.06 |
+| drawn body | **WALKED** — 100% moving, arrived +0.31 s, separation 11 u | **PARKED+SNAP** — 7% moving, separation 2,007 u, **2,021 u teleport at +7.59 s** |
+| fence | untouched | shut at the snap |
+| control leg | 1,629 u out the south portal, WALKED | 333 u, WALKED |
+
+**Arm A is what the fix is for: the body walks 136 u to the railing and stops there, which is
+where the click could honestly take it. Arm B is RUN-1zBA run 4 again, to the sample.** The
+control makes A a measurement rather than a clean run: the defect was live on the same
+geometry the same afternoon, and one flag switched it.
+
+### 1z-bb.6 Filed
+
+- **The lead's clip.** `a2_clip_lead` still uses `clip(plane=)`, the any-plane-change stop.
+  `seam_clip` would let its 3-of-65 legitimate portal leads through (§1z-ar.6). Safe direction
+  today; a one-line change with its own run when a lead campaign next needs it.
+- **One in 300.** §1z-bb.2's fourth change: a legitimate portal shortcut the pull refused
+  somewhere. Benign, recorded, unexplained.
+- **What the operator sees now** on a click over the railing: the body walks to the edge and
+  stops. The click was never going anywhere honest; a short leg is the truth about it.

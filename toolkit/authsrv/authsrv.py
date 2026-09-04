@@ -6565,6 +6565,21 @@ ROUTER_SYNC_PLANE = True      # False (--router-report-plane): field 4 = report.
 # channel's own question, 1z-n). Reverted by the SAME flag as (b): the two
 # are one construction -- the mesh under a modelled point -- in two places.
 ROUTER_ORIGIN_PLANE = True    # False (--router-report-plane): start plane = report.
+# (c) ROUTER_SEAM_CLIP (MOVECODE-1z-bb, 2026-09-04) -- the router's two rays
+# are SEAM-AWARE: route()'s pull and gate (pathmap.SEAM_AWARE_ROUTE, set from
+# this flag) and the clip fallback below (`_router_clip`). A body on plane P
+# stops where P ends without a portal. RUN-1zBA measured the plane-blind
+# version on a router grant, twice: a click over the bridge railing landed
+# off-mesh, the fallback clipped the straight line off the deck at its tenth
+# unit and on for 2 km, and the drawn body PARKED at the deck's edge
+# (x = 10860.0, velocity 0) for 7.1 s / 7.5 s while the sync copy walked the
+# leg, then a 2,021 u teleport at the ETA and the client's AgTrack fence shut
+# (studies/movecode/FINDINGS.md sec.1z-ba). The lead's `clip(plane=)` does
+# NOT transplant here: it stops at ANY plane change and would refuse every
+# bridge; the seam test lets portals through (pathmap.SEAM_AWARE_ROUTE's
+# comment has the three facts about the file that make it the right shape).
+# `--router-blind-clip` is the revert arm and the known-bad arm of RUN-1zBB.
+ROUTER_SEAM_CLIP = True       # False (--router-blind-clip): plane-blind rays.
 
 # THE TOUR CAP (ROUTER-B4, verification run 2, 20260826T194505): a route is
 # refused as a route when its length exceeds CAP x the direct distance plus
@@ -6623,6 +6638,18 @@ def _router_plane(pm, wp, carry):
     guess; the carry is then the only honest fallback)."""
     p = pm.plane_at(wp[0], wp[1], prefer=carry) if pm is not None else None
     return carry if p is None else p
+
+
+def _router_clip(pm, x0, y0, x1, y1, plane, step):
+    """The router's ray (MOVECODE-1z-bb): where a body ON `plane` gets to
+    along the segment. Seam-aware under ROUTER_SEAM_CLIP when the mesh has
+    `seam_clip` -- the walk stops where the plane ends without a portal --
+    else plane-blind clip(), the ray RUN-1zBA convicted. Both the pre-send
+    leg gate and the clip fallback come through here, so the two sites
+    cannot drift apart."""
+    if ROUTER_SEAM_CLIP and plane is not None and hasattr(pm, "seam_clip"):
+        return pm.seam_clip(x0, y0, x1, y1, plane, step=step)
+    return pm.clip(x0, y0, x1, y1, step=step)
 
 
 def _router_sync_plane(state, pm, carry, now):
@@ -6804,10 +6831,12 @@ def router_answer_click(send, state, conn_id, rec, dest, dest_plane,
     # sub-sample sliver and is treated as no route at all. Cost: one
     # walkable() per 2 u of route (~1.2us each), well under a millisecond
     # on any click this corpus has seen.
+    # And (1z-bb) each leg is walked on ITS corridor plane: a leg that leaves
+    # its plane anywhere but through a portal is no leg at all.
     if wps is not None and not all(
-            pm.clip(a[0], a[1], b[0], b[1],
-                    step=A2_LEAD_CLIP_STEP) == (b[0], b[1])
-            for a, b in zip(wps, wps[1:])):
+            _router_clip(pm, a[0], a[1], b[0], b[1], pa,
+                         step=A2_LEAD_CLIP_STEP) == (b[0], b[1])
+            for a, b, pa in zip(wps, wps[1:], wpls)):
         wps = None
     ms = (time.perf_counter() - t0) * 1000.0
     if wps is None:
@@ -6831,8 +6860,10 @@ def router_answer_click(send, state, conn_id, rec, dest, dest_plane,
         # it gets the sharpest ray this repo owns. The moved-threshold
         # stays COLLISION_STEP -- a leg under 16 u is a refusal, not a
         # grant.
-        stop = pm.clip(origin[0], origin[1], dx, dy,
-                       step=A2_LEAD_CLIP_STEP)
+        # ON the body's plane (1z-bb): RUN-1zBA's two specimens were THIS ray
+        # walking off a bridge deck's side and granting the 2 km beyond it.
+        stop = _router_clip(pm, origin[0], origin[1], dx, dy, cur_plane,
+                            step=A2_LEAD_CLIP_STEP)
         moved = math.hypot(stop[0] - origin[0],
                            stop[1] - origin[1]) > COLLISION_STEP
         if moved and reason != "origin-off-mesh":
@@ -23175,6 +23206,13 @@ def main():
                          "is the report's plane instead of the mesh's under "
                          "the body model. One construction, two places, one "
                          "revert. Diagnostic arm only.")
+    ap.add_argument("--router-blind-clip", action="store_true",
+                    help="MOVECODE-1z-bb condition (c) OFF: the router's two "
+                         "rays -- route()'s pull/gate and the clip fallback "
+                         "-- go back to the plane-blind clip() that RUN-1zBA "
+                         "convicted (a body parked 7 s at a bridge deck's "
+                         "edge, then a 2,021 u teleport). Diagnostic arm "
+                         "only; RUN-1zBB's known-bad arm.")
     ap.add_argument("--router", action="store_true",
                     help="NO-OP since 2026-09-03 (MOVECODE-1z-v): the "
                          "router is the default click policy and needs no "
@@ -24883,10 +24921,26 @@ def main():
               "as a P-3 failure when it is a protocol violation; the c2s "
               "census (zero 0x003E) is the definitive guard.")
     global ROUTER, ROUTER_LEG_REARM, ROUTER_SYNC_PLANE, ROUTER_ORIGIN_PLANE
+    global ROUTER_SEAM_CLIP
     ROUTER = not a.no_router
     ROUTER_LEG_REARM = ROUTER and not a.router_raw_leg
     ROUTER_SYNC_PLANE = ROUTER and not a.router_report_plane
     ROUTER_ORIGIN_PLANE = ROUTER and not a.router_report_plane
+    ROUTER_SEAM_CLIP = ROUTER and not a.router_blind_clip
+    # route()'s own pull and gate read the same switch (1z-bb): one flag,
+    # both rays. A missing mesh module means no router either, so the
+    # failure to set it is not this flag's to report.
+    try:
+        import pathmap as _pathmap_mod
+        _pathmap_mod.SEAM_AWARE_ROUTE = ROUTER_SEAM_CLIP
+    except Exception:                                         # noqa: BLE001
+        pass
+    if ROUTER and not ROUTER_SEAM_CLIP:
+        print("[map] --router-blind-clip: the router's rays are PLANE-BLIND "
+              "again (pre-1z-bb). A click whose straight line leaves the "
+              "body's plane without a portal grants the whole line; RUN-1zBA "
+              "measured that as a 7 s park at a bridge edge and a 2 km warp.",
+              flush=True)
     if not ROUTER:
         print("[map] --no-router: the LEGACY click path (pre-1z-v). Clicks "
               "are gated on a report under 1.0 s old -- unsatisfiable "

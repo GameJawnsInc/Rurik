@@ -50,7 +50,7 @@ import authsrv                                                 # noqa: E402
 # +30 2026-09-03 MOVECODE-1z-v (section 5: the default, both conditions,
 # the press/follow abandons); +11 MOVECODE-1z-w (section 6: the origin's
 # plane word, the cast abandon). 114 on the green run.
-LEDGER = checks.Ledger("router wiring", floor=114)
+LEDGER = checks.Ledger("router wiring", floor=121)   # +7: section 6, MOVECODE-1z-bb
 check = checks.adopt_named(LEDGER)
 
 SPEED_OP = authsrv.GAME_SMSG_AGENT_UPDATE_SPEED
@@ -80,11 +80,12 @@ class StubPM:
     line. plane 3 everywhere."""
 
     def __init__(self, route_result="auto", route_planes=None,
-                 plane_fn=None):
+                 plane_fn=None, seam_stop=None):
         self.route_result = route_result
         self.route_planes = route_planes
         self.last_planes = None
         self.plane_fn = plane_fn      # (x, y, prefer) -> plane or None
+        self.seam_stop = seam_stop    # x of a BLIND seam the seam-aware ray stops at
 
     def walkable(self, x, y):
         return not (100.0 < x < 200.0) or y > 400.0
@@ -108,6 +109,16 @@ class StubPM:
                 return best
             best = p
         return (x1, y1)
+
+    def seam_clip(self, x0, y0, x1, y1, plane, step=2.0):
+        """pathmap.seam_clip's contract on the stub: clip(), then stop short at
+        a fake blind seam at x = seam_stop if the ray crosses it (MOVECODE-1z-bb)."""
+        p = self.clip(x0, y0, x1, y1, step=step)
+        xs = self.seam_stop
+        if xs is not None and x1 != x0 and min(x0, p[0]) < xs < max(x0, p[0]):
+            f = (xs - x0) / (x1 - x0)
+            return (xs, y0 + f * (y1 - y0))
+        return p
 
     def nearest_walkable(self, x, y, radius):
         if self.walkable(x, y):
@@ -449,8 +460,8 @@ def main():
     check("the pre-send re-clip exists at the fine step, once",
           src.count("step=A2_LEAD_CLIP_STEP) == (b[0], b[1])") == 1)
     check("the clip-fallback samples at the fine step too",
-          src.count("stop = pm.clip(origin[0], origin[1], dx, dy,\n"
-                    "                       step=A2_LEAD_CLIP_STEP)") == 1)
+          src.count("stop = _router_clip(pm, origin[0], origin[1], dx, dy, cur_plane,\n"
+                    "                            step=A2_LEAD_CLIP_STEP)") == 1)
 
     # ---- the a2_matched_field4 gating pattern, and WHY it is asymmetric ----
     # TWO SEPARATE ANALYSES have read the three unconditional router call
@@ -773,6 +784,67 @@ def main():
           src.count("cur_plane = _router_plane(pm, origin, report_plane)") == 1
           and src.index("cur_plane = _router_plane(pm, origin, report_plane)")
           < src.index("_routed = pm.route(origin[0], origin[1], dx, dy,"))
+
+    print("== 6: the seam-aware rays (MOVECODE-1z-bb) ==")
+    # RUN-1zBA's specimen: a click over the bridge railing landed off-mesh,
+    # the fallback clipped the straight line PLANE-BLIND off the deck at its
+    # tenth unit and granted 2 km; the drawn body parked at the edge for 7 s
+    # and was teleported. Both of the router's rays -- the pre-send leg gate
+    # and the clip fallback -- now come through _router_clip, which walks the
+    # body's plane and stops where it ends without a portal. On the stub the
+    # seam is a vertical line at x = seam_stop, short of the wall at 100.
+    check("ROUTER_SEAM_CLIP is the default", authsrv.ROUTER_SEAM_CLIP is True)
+    body = src[src.index("def router_answer_click("):]
+    body = body[:body.index("\ndef ", 1)]
+    check("both rays come through _router_clip and nowhere else",
+          src.count("_router_clip(") == 3
+          and body.count("_router_clip(") == 2 and "pm.clip(" not in body,
+          f"{body.count('_router_clip(')} helper calls, "
+          f"{body.count('pm.clip(')} bare pm.clip in router_answer_click")
+    # the fallback: seam-aware stops at the seam, plane-blind at the wall
+    st = base_state(StubPM(route_result=None, seam_stop=50.0))
+    handled, sent, rows = answer(st, (300.0, 0.0))
+    stop = sent[-1][1][1]
+    check("the clip fallback stops at the BLIND SEAM, not the wall",
+          handled and [op for op, _p, _l in sent] == [SPEED_OP, MOVE_OP]
+          and abs(stop[0] - 50.0) < 1e-6
+          and any(r.get("verdict") == "clip-fallback" for r in rows),
+          f"stop {stop}")
+    authsrv.ROUTER_SEAM_CLIP = False
+    try:
+        st = base_state(StubPM(route_result=None, seam_stop=50.0))
+        handled, sent, rows = answer(st, (300.0, 0.0))
+        stop = sent[-1][1][1]
+        check("KNOWN-BAD ARM (--router-blind-clip): the fallback walks through "
+              "the seam to the wall -- RUN-1zBA's grant",
+              50.0 < stop[0] <= 100.0 + 1e-6, f"stop {stop}")
+    finally:
+        authsrv.ROUTER_SEAM_CLIP = True
+    # the leg gate: a route whose leg crosses the seam is no route
+    st = base_state(StubPM(route_result=[(0.0, 0.0), (80.0, 0.0)],
+                           route_planes=[3, 3], seam_stop=50.0))
+    handled, sent, rows = answer(st, (80.0, 0.0))
+    stop = sent[-1][1][1]
+    check("a routed leg that crosses a blind seam is demoted to the fallback, "
+          "which itself stops at the seam",
+          handled and abs(stop[0] - 50.0) < 1e-6
+          and any(r.get("verdict") == "clip-fallback" for r in rows),
+          f"stop {stop}, verdicts {[r.get('verdict') for r in rows]}")
+    authsrv.ROUTER_SEAM_CLIP = False
+    try:
+        st = base_state(StubPM(route_result=[(0.0, 0.0), (80.0, 0.0)],
+                               route_planes=[3, 3], seam_stop=50.0))
+        handled, sent, rows = answer(st, (80.0, 0.0))
+        check("KNOWN-BAD ARM: the same leg is granted verbatim across the seam",
+              handled and sent[-1][1][1] == [80.0, 0.0]
+              and any(r.get("verdict") == "verbatim" for r in rows))
+    finally:
+        authsrv.ROUTER_SEAM_CLIP = True
+    check("one flag, both rays: the revert arm exists and sets pathmap's own "
+          "switch, so route()'s pull and gate cannot disagree with the fallback",
+          '"--router-blind-clip"' in src
+          and "ROUTER_SEAM_CLIP = ROUTER and not a.router_blind_clip" in src
+          and "_pathmap_mod.SEAM_AWARE_ROUTE = ROUTER_SEAM_CLIP" in src)
     return LEDGER.verdict()
 
 
