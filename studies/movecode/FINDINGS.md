@@ -11605,7 +11605,9 @@ raised inside the poll loop, and a tape is only written at the end. And the floo
 **guessed at 17**; a green run produces 15, and `checks.Ledger` refused the guess rather
 than passing 15 silently. Both are the failure shapes CLAUDE.md's own rules name.
 
-**WHAT IT DOES NOT COVER, stated rather than left to be discovered: the column is UNVERIFIED
+**WHAT IT DOES NOT COVER — CLOSED the same day by §1z-an.6 (RUN-1zAN): the column READS, the
+control is exceptionless and the rate cost is nil. The paragraph below is what was
+outstanding before that run.** **The column is UNVERIFIED
 against a live client.** No tape has been written with it. The offsets are `movetap`'s and
 its selftest re-encodes each instruction from the constants, so the *addressing* is as good
 as `movetap`'s; what is untested is that this process, on this build, reads a plausible
@@ -11624,3 +11626,61 @@ and whether the snap test was reachable — which turns §0.11's stage 1 from an
 a reading, and puts the fence transition on the same clock as the missing stop. **One
 ordinary scored `--kbd-lead` run writes it.** The other half of §1z-am.6 — the client's
 send-only `0x0047` sender — is untouched and remains its own dig.
+
+### 1z-an.6 ★ RUN-1zAN RAN — every registered clause CONFIRMED, and the wire corroborates the column to one sample
+
+Driven 2026-09-04, agent-driven, hands off, one run arm T. Capture
+`authsrv-20260904T103712-c1`, tape `agenttap-20260904T103713`, harness
+`20260904T103636`, verdict PASS. `RUN-1zAN.md` registered the four predictions and
+the abort before launching.
+
+| registered | measured |
+|---|---|
+| **P1 — the Hatcher reads `shut` on 100%** | **680 of 680 `shut`.** Zero `open`, zero `unread:`. |
+| **P2 — the player reads, not `unread:`** | **680 of 680 read: 581 `open`, 99 `shut`. Zero `unread:`.** |
+| **P3 — at least one transition** | **three:** `shut→open` 6.79, `open→shut` 21.44, `shut→open` 23.91 |
+| **P4 — within ~2× of 9.1 Hz** | **10.73 Hz** (680 samples / 63.4 s, gap p50 92 ms) |
+
+Exposure floor met on all three clauses: 680 samples against a floor of 200, 680
+non-`unread:` player samples against a floor of 1, and the capture reached the map.
+
+**The negative control is the result that matters and it is exceptionless.** The
+Hatcher's record read `shut` on every one of 680 samples while the player's read
+`open` on 581 of them — from the *same* reader, the *same* AgTrack array, one
+index apart. `0x00605F10`'s two local-command callers say only the local player's
+agent is client-controlled, and that is now measured rather than inferred. A
+reader on the wrong record could not produce that split.
+
+**AND THE RATE COST IS NIL.** 10.73 Hz against the fence-less tapes' 9.1 Hz —
+this run was *faster*, which is machine-load variance and **not** a speedup from
+adding reads; what it establishes is that the fence read is nowhere near this
+reader's bottleneck. `--no-fence` stays as the revert and has no reason to be used.
+
+**★ THE CROSS-CHECK NOBODY REGISTERED, and it is the strongest thing in the run.**
+The column can be checked against an instrument that shares nothing with it — the
+wire. §1z-aa's rule is that a server `0x002C` shuts the fence and a keyboard
+walk-start re-arms it:
+
+| the wire | the client's own memory |
+|---|---|
+| the run's **only** `0x002C` (`AGTRACK RE-PIN`) at tape t **21.40** | fence `open → shut` at **21.44** — *one sample later* |
+| the only walk-start `0x003D` in the window, tape t **23.97** | fence `shut → open` at **23.91** — *one sample earlier* |
+| the server's own `fence` row: `rearm by=walk-start`, **`shut_for` 2.569 s** | the tape's shut window: **2.47 s** |
+
+Both edges land within one 92 ms sample of the wire event that the decode says
+causes them, and the two independent measurements of the shut window agree to
+0.1 s. **This is §1z-aa's fence-shutter rule confirmed from the client's memory
+for the `AGTRACK RE-PIN` sender — which §1z-aa itself could not test**, in its own
+words: *"No movetap tape overlaps the two senders the item named."* 1 of 1 for the
+shut and 1 of 1 for the walk-start re-arm; n = 1 each, and the point is the
+agreement, not the count.
+
+**What the run does NOT show, exactly as the sheet pre-registered.** It is
+**healthy** — `stopcensus` reads `YYYYYYYY.YYYY`, 12 stops for 13 legs, no
+terminal silence — so it carries **no evidence about the lock**, which §1z-am's
+census already said would be the likely outcome on this route (the four sibling
+`222xxx` runs read the same pattern). The instrument is verified; the question it
+was built for still needs a run that locks, and §1z-am puts that at roughly 6 in
+17 on the `WSWQESW` script rather than this one.
+
+**The column ships verified. `--no-fence` reverts and is not recommended.**

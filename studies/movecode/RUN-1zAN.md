@@ -122,3 +122,30 @@ INSTRUMENT. Whether the fence explains the swallowed `0x0047` needs the column
 joined to a locked run, and §1z-am's own census says only 6 of 17 lead runs lock
 — this one may well be healthy, which is a fine outcome for an instrument check
 and no evidence at all about the lock.
+
+---
+
+## RESULT — RAN 2026-09-04, agent-driven, hands off. **ALL FOUR CLAUSES CONFIRMED.**
+
+Capture `authsrv-20260904T103712-c1`, tape `agenttap-20260904T103713`, harness
+`20260904T103636`, verdict PASS.
+
+| | |
+|---|---|
+| **P1** Hatcher `shut` on 100% | **680 of 680**, zero `open`, zero `unread:` |
+| **P2** player reads | **680 of 680** -- 581 `open`, 99 `shut`, zero `unread:` |
+| **P3** a transition | **three** -- 6.79, 21.44, 23.91 |
+| **P4** rate | **10.73 Hz** vs the fence-less 9.1 (machine variance, not a speedup: the cost is nil) |
+
+Exposure floor met: 680 samples (floor 200), 680 non-`unread:` (floor 1), map reached.
+
+**The unregistered cross-check is the strongest part.** The run's only `0x002C`
+fired at tape t 21.40 and the fence shut at 21.44; the only walk-start `0x003D`
+fired at 23.97 and the fence re-opened at 23.91 -- both within one 92 ms sample --
+and the server's own `shut_for` 2.569 s matches the tape's 2.47 s window. That is
+sec.1z-aa's rule confirmed from the client's memory for the `AGTRACK RE-PIN`
+sender, which sec.1z-aa could not test for want of an overlapping tape.
+
+**The run is HEALTHY** (`YYYYYYYY.YYYY`, 12 stops for 13 legs) and therefore
+carries **no evidence about the lock** -- pre-registered in sec.5 as the likely and
+acceptable outcome for an instrument check. Full write-up: FINDINGS sec.1z-an.6.
