@@ -283,3 +283,34 @@ python toolkit/clientscan/agenttap.py --agents 1,10 --seconds 90
 ```powershell
 python toolkit/harness/session.py --exe vault/run/2026-07-29_221c13772c7a/Gw.exe --walk "wait:3 yaw:812 W:9.6 yaw:297 W:1.3 yaw:891 wait:2 shot:1 click:0.5,0.46 wait:9 click:0.5,0.44 wait:9 click:0.5,0.48 wait:9 yaw:-875 click:0.5,0.46 wait:9" --hold 5 --game-args "--map 146 --explorable --no-enemy-skills --skills 0,0,0,0,0,0,0,0"
 ```
+
+---
+
+## RESULT, run 4 — RAN 2026-09-04 16:08. **PARKED+SNAP again, 7.5 s. P1 met across runs 2 + 4. The pull's specimen not obtained.**
+
+Capture `20260904T160759`, tape `agenttap-20260904T160832` (971 samples). Click 1
+(fy 0.46) did not land on the modelled far ground: **(8532, 4342), off-mesh,
+2,540 u — the same hillside run 2's fy 0.40 hit**, so the router fell back
+again: `clip-fallback` to (8961, 4498), **2,158 u**, **BLIND 18→0 at (10860,
+5189), f = 0.06**. The drawn body stood at **(10860.0, 5189.2), velocity 0, for
+73 samples (7.5 s)** while the sync copy walked the leg (separation 2,007 u);
+at **+7.58 s** (ETA 7.49) it was **teleported 2,021 u** and the fence shut.
+Clicks 2–3 (refused, same hillside) re-armed nothing; click 4's granted control
+leg (332 u, ground) WALKED and re-armed the fence at +0.03 s.
+
+**The operator, watching:** *"that click from the bridge to the ground below did
+a straight line towards the edge of the bridge and stopped, then seconds later
+warped to the ground."*
+
+## VERDICT
+
+| clause | result |
+|---|---|
+| **P1 exposure** | **2 blind legs** (runs 2 and 4), both via the router's **clip fallback**; the pull's own specimen was targeted three times and is out of reach from a railed deck (§1z-ba.5) |
+| **P2 the question** | **PARKED+SNAP on both**: 7.08 s and 7.5 s parked at x = 10860.0, then 2,021 u teleports at the ETA, fence shut — RUN-1zAO's signature on a router grant |
+| **P3 control** | **12 of 12** portal / seam-free legs WALKED across the four runs |
+
+The registered reading for this outcome stands: the router's plane-blind clip
+produces grants the client cannot walk; the harm is real and observed; and the
+fix must cover **both** plane-blind sites, with the SEAM-aware test rather than
+the lead's any-plane-change clip. Write-up: FINDINGS §1z-ba.

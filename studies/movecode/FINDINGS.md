@@ -12730,3 +12730,171 @@ not chosen for it, because until this run there was no way to hit a chosen chord
 **Unresolved and named:** the vertical term (§1z-ay P2 — our model, or terrain relief, and
 the run that separates them is the same world point from two camera heights), and §1z-ar
 itself.
+
+---
+
+## 1z-ba. THE BLIND SEAM, WALKED INTO — the router's plane-blind clip grants a leg the client's body cannot walk; the body parks at the bridge's edge for seven seconds and is teleported two kilometres. Reproduced twice.
+
+**Asked:** "do the plane-crossing filter" — §1z-az.4's targeting pass. It became four
+client runs under one registered sheet (`RUN-1zBA.md`), and it answers §1z-ar. Ident
+`MOVECODE-1z-ba`. Runs `20260904T153746` (1), `20260904T155523` (2), `20260904T160220` (3),
+`20260904T160759` (4). Two new study tools: `seamscout.py` (the census, the per-leg walker,
+the chord filter, and a seam-aware run planner) and `seamscore.py` (the run scorer).
+
+### 1z-ba.1 ★ What a portal IS in the pathing file — three things the filter had to learn from its own controls
+
+§1z-ar's instruments all assumed portal-linked trapezoids overlap in 2D, and its control
+found 31%. The filter's first three versions each failed a control of their own, and the
+failures are the finding:
+
+1. **`_cross` is a CLUSTER relation.** Every trapezoid sitting on portal P links to every
+   trapezoid sitting on P's partner, so two linked trapezoids are usually not adjacent — the
+   median corner-to-corner gap between linked pairs on map 146 is **139 u**, max 1,082. A
+   control asking "is every linked pair adjacent" scored 47% and was the wrong question.
+2. **A seam is DIRECTIONAL.** Most cross-plane pairs that meet in 2D are STACKED — a large
+   plane-20 or plane-37 trapezoid over a thin plane-0 band — and a body walking across the
+   band's edge never changes plane, because its own plane continues. What a body experiences
+   is: it is on plane P, P ENDS underfoot, and only some other plane is there. The ground
+   continuing under a deck's edge is a seam for the deck and no seam at all for the ground.
+   Before this, 0 of 65 "blind" pairs agreed with the walker.
+3. **The portal trapezoids are LINES.** Plane 18's two portals are `p18#1 y 5579..5579` and
+   `p18#2 y 4532..4532` — zero-height trapezoids lying along the strip's end edges, linked to
+   zero-height plane-0 twins on the same lines; the strip's body trapezoids link to nothing.
+   A point test half a unit either side of a seam never lands on such a line, and a leg
+   walking straight through a portal was being scored blind.
+
+With those: **map 146 has 2,372 plane changes a body can make off a trapezoid edge; 52 are
+corners, 2,125 are linked throughout, and 195 carry a BLIND stretch ≥ 12 u** — a plane change
+the file carries no portal for, which plane-blind `clip()` walks straight across and the A*
+never would. Controls: **168 of 168** cross-plane portal pairs that link anything are found
+(21 more have an empty plane-0 side and link nothing — portals to nowhere); the per-leg walker
+agrees with the census on **295 of 298** seam-local walks, **22 of 25** on the blind arm, the
+three residuals one recorded class (a portal sliver's end, a one-unit ambiguity in the
+direction of calling *fewer* legs blind).
+
+### 1z-ba.2 The target: the stone bridge into Ascalon City
+
+Plane 18 is a strip **263 × 1,047 u** (x 10860..11123, y 4532..5579), water on both sides in
+the middle, walkable plane-0 ground beneath its middle third and alongside it at the banks,
+portals only at its two ends. The run's screenshots show what the mesh cannot: **the stone
+bridge into Ascalon City, with an iron railing down both sides.** Run 1's on-deck camera puts
+the deck **~155 u above the north shore**.
+
+For the chord (11174, 5175) → (10906, 5712) the plane-respecting A* corridor is **41 waypoints
+and 6,180 u** — west around the water, up the strip from its south end — and the string pull
+collapses it to **one straight 600 u leg through the strip's east side**. §1z-ar.1's mechanism,
+on the desk. Basin 0.96 over the run's measured error budget.
+
+### 1z-ba.3 Run 1 — P1 failed FOR THE MECHANISM UNDER STUDY
+
+Every leg WALKED and none crossed a blind seam, because click 1 fired from **(11123, 5213) on
+plane 18 — the deck's east edge** — not from the bank. **The walk-in had been planned by
+`mapscout.emit_script` over `pm.route()`, whose string pull is the plane-blind one this
+section is about.** Spawn → bank came out as one straight 3,200 u leg through the bridge (the
+corridor that respects planes is 8,831 u). The body entered the deck through its north portal
+and then, **under the held key, stopped at x = 11123.0 — the edge, to the unit — and slid 77 u
+south along it** until the key released, while the server's straight-line model put it 37 u
+past the edge on the bank (`position_report` drift 37.35 at the stop). The census's blind seam
+was a physical barrier to the body before any router grant was tried.
+
+### 1z-ba.4 ★★ Runs 2 and 4 — the specimens
+
+Origin on the deck at (10989, 5236) (run 2) and (10989, 5236) (run 4), reached by a
+**seam-aware walk-in** (`seamscout.seam_route`, §1z-ba.7), facing the west bank at 200°.
+
+| | run 2, click 2 (fy 0.40) | run 4, click 1 (fy 0.46) |
+|---|---|---|
+| `MOVE_TO_COORD` | (8500, 4330), **off-mesh**, 2,522 u — the far hillside over the railing | (8532, 4342), **off-mesh**, 2,540 u — the same hillside |
+| router | **`clip-fallback`** → (8961, 4498), **2,032 u** | **`clip-fallback`** → (8961, 4498), **2,158 u** |
+| the leg's first seam | **BLIND 18→0 at (10861, 5189), f = 0.01** | **BLIND 18→0 at (10860, 5189), f = 0.06** |
+| drawn body | at **(10860.0, 5188.9)**, velocity **0**, for **7.08 s** | at **(10860.0, 5189.2)**, velocity **0**, **73 samples, 7.5 s** |
+| sync copy | walked the leg at 288 u/s; separation reached **2,002 u** | walked the leg; separation **2,007 u** |
+| the arrival | **+7.17 s** (ETA 7.06): body teleported **2,021 u** to the granted point; **fence shut** in the same sample | **+7.58 s** (ETA 7.49): teleported **2,021 u**; **fence shut** |
+| server side | `agtrack_repin blocked gate1-red` at +6.42; no position reports (click-walks send none) | same shape |
+
+**The operator, watching run 4 live, unprompted:** *"that click from the bridge to the ground
+below did a straight line towards the edge of the bridge and stopped, then seconds later
+warped to the ground."* That is the tape's row, read off the screen.
+
+**Across the four runs: 14 granted legs scored. The 2 that crossed a blind seam both PARKED
+and SNAPPED. The 12 that crossed a portal or no seam all WALKED** — run 3's 1,703 u control
+down the deck and out the south-end portal among them. The control arm cannot be the
+instrument's artefact and the treatment arm cannot be chance.
+
+**This is §1z-ao.2's mechanism** — REALFIX §0.11 stage 1, the client's own arrival snap
+clearing `clientControlled` — **caused by the router**: the server granted a straight leg its
+own mesh says is walkable (plane-blind), the client's body reached the plane's edge and could
+not continue, and the sync copy walked on until the grant matured. §1z-ar asked "does the
+router's plane-blindness ever fire". It fires, and the cost is a 2 km warp.
+
+### 1z-ba.5 What the specimen is NOT, and what that costs the fix
+
+**Both specimens are the router's clip FALLBACK, not its string pull.** The click landed
+off-mesh (the railing put the far hills under the cursor), the router fell back to the
+plane-blind `clip()` of the straight line, and that clip walked off the deck at the tenth
+unit and on for two kilometres. The pull's own version — a `verbatim` leg onto WALKABLE ground
+across the edge — was targeted three times and not obtained, for a reason the geometry makes
+general: from a railed deck, a ray steep enough to land within the ~700 u bank drops below the
+railing at the edge (run 2's fy 0.60 stopped at the railing's foot, 126 u; run 3's fy
+0.65–0.75 hit the deck itself at 16–63 u), and a ray that clears the railing overshoots the
+bank onto ground the hills occlude. `chord_verdict` says the pull WOULD grant such a leg for
+any walkable destination across the edge (a `verbatim` one-leg answer, planes [18, 0]), and
+the pull's sightline **is** `clip() == end` (§1z-ar.1), the same primitive the fallback used.
+Two sites, one primitive; the specimen convicts the primitive.
+
+**And the LEAD's fix does not transplant.** §1z-ap's `clip(plane=)` stops at ANY plane change,
+portals included (§1z-ar.6 measured 3 of 65 leads clipped short for it, acceptable for a lead
+the client is authoritative over). A router that refused every portal crossing would refuse
+every route over every bridge. **The router needs the SEAM-aware test — at each plane change,
+is there a portal between the two sides (`linked_at`, lines included) — which `seam_route`
+already implements** and which planned runs 2–4's walk-ins without incident: linked crossings
+pass, blind ones stop.
+
+### 1z-ba.6 Run 3 — a miss, recorded because the table was right and I was not
+
+fy 0.70 / 0.65 / 0.75 toward the east bank landed **16 / 63 / 23 u ahead on the deck**. The
+aim table's own "deck level" column read 84 / 138 / 40 u — every one short of the 123 u edge —
+and I read the bank columns. The control WALKED. The run's value is §1z-ba.5's geometry.
+
+### 1z-ba.7 The planner is the fix, prototyped where it can do no harm
+
+`seamscout.seam_route(a, b)` takes `route()`'s raw A* corridor and pulls it with a plane-aware
+visibility test: a shortcut is taken only if it clips clear at the gate step, crosses no
+blind seam when walked on the kept point's corridor plane, **and ends on the corridor's plane
+for that waypoint** — the last clause added after the first version accepted "west bank → deck
+in one 447 u leg" that would have walked UNDER the deck. Runs 2–4 walked its plans through the
+north portal onto the deck, landing within 39 u of the planned stand each time. Cost:
+`near_trapezoids` is consulted only at plane changes, which are rare along a leg.
+
+### 1z-ba.8 ★ The projection's vertical sign is MEASURED, and §1z-ay's P2 is explained
+
+Three on-mesh landings from one on-deck camera in run 2 — **fy 0.60 → 126 u, fy 0.70 → 17 u,
+fy 0.46 → 523 u** — say lower on the screen is nearer. `clickaim.basis` returned `cross(r, f)`
+as screen-up, which is +z, **and this world is z-DOWN**: every bearing was right (RUN-1zAY's
+P1) and every fy-to-range prediction inverted (its P2). Fixed; the self-test's toy world is
+now z-down like the real one and a 13th check pins the sign. Re-scoring RUN-1zAY under the
+corrected basis takes its implied-ground-z spread from 408 to 276 u — the rest is the terrain
+the body walked between those clicks, as §1z-ay suspected.
+
+### 1z-ba.9 Two things seen and not explained
+
+- **The fence under click movement is not permanently locked.** RUN-1zAO's keyboard lock held
+  43 s; here the snap shut the fence and it **re-armed at the next granted click** (run 2:
+  +40.7 s, click 5; run 4: +40.05 s, click 4). But run 2 also shows a re-arm at **+19.36 s,
+  coinciding with click 3 — which was REFUSED** (`dest-off-mesh`, no grant) — while run 4's
+  clicks 2 and 3, equally refused, re-armed nothing. Recorded; not understood.
+- **Every long-range click from the deck lands on the same hillside** (8500–8615, 4330–4372)
+  whatever the `fy` between 0.40 and 0.48: the far ground is hidden behind that slope from the
+  deck. It is why the pull's specimen is out of reach from this origin, and it is a scene fact
+  no mesh instrument can see.
+
+### 1z-ba.10 Decision
+
+**Nothing shipped in this section; the fix is derived and now NEEDED.** §1z-ar.4 held the
+two-line change back "until something says it is needed". Two runs say so, with the operator's
+eyes on the second. What ships next (§1z-bb) is the seam-aware test at the router's **two**
+plane-blind sites — the pull's sightline and gate, and the clip fallback — with `seam_route`
+as the reference implementation, `test_pathmap`'s controls that no returned path changes where
+no seam is involved, and a regression pinned on this specimen: from (10989, 5236) on plane 18
+toward (8500, 4330), the router must not grant a leg that leaves the deck anywhere but at its
+ends.
