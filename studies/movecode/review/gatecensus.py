@@ -77,11 +77,45 @@ def census(path):
     return span, C
 
 
+# The exposure floor, counted on the quantity the ARM actually needs
+# (MOVECODE-1z-ai.3). RUN-1zAH asked for ">= 8 KBD LEAD grants", got 25-33, and
+# had 2-4: the rest were `origin-unwalkable` (a lead whose origin is off OUR
+# mesh degrades to a ZERO-DISTANCE grant) or clipped short. The arm under test
+# is a 520 u lead MATURING, and a lead that never reached full length cannot
+# mature into anything -- so the floor belongs on the leads that SURVIVE
+# a2_clip_lead, never on the grants that carry them.
+CLEAR_FLOOR = 8
+
+
+def exposure(C):
+    """The clear-lead count, named against its floor, before anything else."""
+    ctr = C["heading arm (arm, fired, reason, lead_src, lead_clip_why)"]
+    by_why = collections.Counter()
+    fired = 0
+    for (_arm, ok, _reason, _src, why), n in ctr.items():
+        if ok:
+            fired += n
+            by_why[why] += n
+    clear = by_why.get("clear", 0)
+    print("  EXPOSURE -- leads that survived the clip (1z-ai.3)")
+    print("      %4d  fired lead grants  <- NOT the floor: this is what "
+          "RUN-1zAH counted" % fired)
+    for why, n in by_why.most_common():
+        mark = "   <== THE ARM" if why == "clear" else ""
+        print("      %4d  %s%s" % (n, why, mark))
+    verdict = "MET" if clear >= CLEAR_FLOOR else "UNDER FLOOR"
+    print("      floor %d full-length leads: %s (%d)%s"
+          % (CLEAR_FLOOR, verdict, clear,
+             "" if clear >= CLEAR_FLOOR else
+             "  -- a run under this measured a fraction of the arm"))
+
+
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
     path = argv[0] if argv else newest()
     span, C = census(path)
     print(f"{os.path.basename(path)}  span {span[1] - span[0]:.0f} s")
+    exposure(C)
     for name, ctr in C.items():
         print(f"  {name}")
         if not ctr:
