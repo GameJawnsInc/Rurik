@@ -5872,8 +5872,12 @@ def kbd_lead_refresh_tick(send, state, conn_id, rec=None, now=None):
         # cannot be postponed by moving the dest. Say so and leave it: a
         # grant that re-bakes the same point would only re-arm the same
         # tick, and the clip is the one term that knows about the wall.
-        if rec is not None and not leg.get("refresh_late"):
-            leg["refresh_late"] = True
+        if rec is not None and not leg.get("refresh_blocked"):
+            # A SEPARATE latch from refresh_late, and the first run is why:
+            # sharing one made "zero refresh-late" unreadable on exactly the
+            # legs where the clip had refused the extension and the arrival
+            # was therefore still coming.
+            leg["refresh_blocked"] = True
             rec.event("kbd_leg", act="refresh-blocked", why=clip_why,
                       grew=round(grew, 1))
         return False

@@ -878,11 +878,16 @@ def main():
         authsrv.a2_clip_lead = _real
         authsrv.KBD_SYNC_LEAD_ON = saved[0]
     rows = [e for e in r.events if e.get("kind") == "kbd_leg"]
+    authsrv.KBD_SYNC_LEAD_ON = True
+    late_after = authsrv.kbd_lead_refresh_tick(Sent(st), st, 1, r, now=ETA + 0.5)
+    authsrv.KBD_SYNC_LEAD_ON = saved[0]
+    rows = [e for e in r.events if e.get("kind") == "kbd_leg"]
     check(blocked is False and not w.of(MOVE)
-          and rows and rows[-1]["act"] == "refresh-blocked",
-          "A WALL AHEAD: when the clip refuses the extension the tick sends "
-          "NOTHING and says refresh-blocked -- re-baking the same point would "
-          "only re-arm the same arrival", f"{rows}")
+          and [x["act"] for x in rows] == ["refresh-blocked", "refresh-late"]
+          and late_after is False,
+          "A WALL AHEAD: refresh-blocked, nothing sent -- and the arrival that "
+          "follows STILL says refresh-late, on its own latch. Sharing one latch "
+          "made a whole run's `zero refresh-late` unreadable", f"{rows}")
     return LEDGER.verdict()
 
 
