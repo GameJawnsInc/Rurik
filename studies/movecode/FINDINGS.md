@@ -11081,7 +11081,10 @@ here is **1/14th of it**.
 
 **The one moving case is the informative one.** At 21.860 the drawn body was mid-walk
 (v = (213, −194), 289 u/s) and the pin sat 6.9 u away — **ahead of it along its own path**:
-the next tape sample, 30 ms later, has the body *at* the pin. That is a forward nudge of
+the next tape sample, 30 ms later, has the body *at* the pin. (§1z-ak.7 bounds this one:
+the tape runs at 9.1 Hz effective, ~31 u of travel per sample, so for a MOVING body read
+“within a sample of the body's path” rather than 6.9 u to the unit. The nine parked
+readings carry no such error.) That is a forward nudge of
 one frame's travel, not a backward yank. **No pin in the set moved the body backward.**
 
 **Why this is not luck.** The leg model is built to track the body: ANIMREF-RE §37.5
@@ -11110,7 +11113,9 @@ error is bounded by the leg's own length and self-corrects at the next report, a
 here — it is not evidence of harm, it is the cell this capture could not fill. **FILLED by §1z-ak.6 (2026-09-04): the bow error is real and exceeds `R_MATCH`, and it belongs to the `--no-router` / `--router-raw-leg` revert flags rather than to the shipped default.** The other
 press capture (`140659`, CASE 6) has **no tape partner**, so its 4 pins are unmeasured by
 this instrument; §39.6 already scored them on the operator's own screen (*"all three worked
-as intended"*, no jump).
+as intended"*, no jump). **TAKEN UP in §1z-ak.7 (2026-09-04): three of the four are cleared
+without a tape by the LEG-AGE bound — which turns out to be `REPIN_MAX_REPORT_AGE` on the
+leg clock — and the fourth is uncertified, not harmed.**
 
 ### 1z-ak.5 What was built
 
@@ -11202,3 +11207,94 @@ even that band.
   over it. The table is derived; what would settle it is one run on `--no-router` with a
   route that has something to walk around and an `agenttap` tape — and there is no reason
   to spend an operator run on a regime we do not ship.
+
+### 1z-ak.7 ★ THE 140659 PINS — a `0x002C` cannot audit itself, but two of the four are provable anyway, and the bound turns out to be `REPIN_MAX_REPORT_AGE` on the LEG clock
+
+§1z-ak.4 left the CASE 6 capture's four pins *"unmeasured by this instrument"* because it
+has **no tape partner**. Taken up here. Three of the four are cleared without one, the
+fourth is not, and the argument that clears them names a bound this arm was already
+carrying and nobody had written down.
+
+**First, why the wire can never do it, and this is the general statement.** A `0x002C`
+**is self-fulfilling**: its handler SetPositions *both* copies onto the payload, so from
+the instant it lands the body **is** where we pinned it, and every later report describes
+the **post-pin** body. `next_d` — the distance from the pin to the next accepted report —
+therefore measures where the body went *after* we put it there, never how far we moved it.
+That is why `repincheck` prints `next_d` as context and never as a verdict, why §1z-ak
+needed an out-of-band reader of the client's memory, and why **no amount of wire data can
+audit a pin**. On this capture the first accepted report arrives at **t = 39.987**, after
+all four pins (14.727 / 19.299 / 31.162 / 35.681); the client is silent for the first 40 s.
+
+**Second, two origins ARE provable, and the arithmetic checks against the wire.** The
+payload is `p0 + 288·dt` along the click chord. Where `p0` can be established from the
+capture alone, the pin is reproducible:
+
+| pin | its leg's origin `p0` | why that origin is certain | model | the wire's pin |
+|---|---|---|---|---|
+| 14.727 | **the spawn**, `(9826.0, 8077.0)` | `INSTANCE_LOAD_SPAWN_POINT`, and **no movement command of any kind precedes it** — the click at 14.412 is the session's first, so the body had never left the spawn | (9877.06, 8002.02) | **(9877, 8002)** |
+| 19.299 | **pin 1's own point** | pin 1 set *both* copies there and cleared movement; **no movement command falls between** 14.727 and the click at 19.000, so the body was parked on it | (9959.37, 7976.70) | **(9959, 7977)** |
+
+Both reproduce the emitted payload exactly. The self-fulfilling property that makes a pin
+un-auditable is the same property that makes the *next* one provable: **a pin establishes
+the position its successor's leg starts from.**
+
+**Third, the bound — and it is a constant this arm already had.** On a **clear** chord from
+an **exact** origin the body walks that same line, and its own travel lies in
+`[0, 288·dt]`, so `|model − body| ≤ 288·dt`, attained only if the body never started at
+all. And `288·dt` reaches `R_MATCH` at
+
+> `dt = 100 / 288 = 0.347 s` — **`REPIN_MAX_REPORT_AGE`**, the very constant that gates the
+> `AGTRACK RE-PIN`, read on the **leg** clock instead of the **report** clock.
+
+Not a coincidence: both are `R_MATCH / RUN_SPEED`, and both answer the one question — *how
+far can the body have moved since the last thing we know for certain.* The re-pin's
+certainty is a client report; the press pin's is its leg origin. **`PRESS ENDS THE WALK`
+was never unbounded; its bound is the age of the leg it lerps, and this is where that gets
+written down.**
+
+**All seven click chords in this capture are CLEAR** on map 146's mesh (checked with the
+server's own `walkable` + `clip`), so §1z-ak.6's bow term does not apply here either.
+
+| pin | leg age | bound | origin | verdict |
+|---|---|---|---|---|
+| 14.727 | 0.315 s | **≤ 90.8 u** | **provable** (spawn) | **CLEARED** — under `R_MATCH` whatever the body did |
+| 19.299 | 0.299 s | **≤ 86.1 u** | **provable** (pin 1) | **CLEARED** |
+| 31.162 | 0.235 s | **≤ 67.5 u** | chained (4 click legs, no report) | cleared *by age*; its origin carries its own error |
+| 35.681 | **1.084 s** | **≤ 312.2 u** | approach-armed leg | **UNCERTIFIED — over `R_MATCH`** |
+
+**The fourth pin is the one this capture cannot rule out, and "uncertified" is not
+"harmed".** Its leg is 1.084 s old — three times the 0.347 s limit — and its origin comes
+from the approach's own follow leg, dead-reckoned through 40 s of client silence. The bound
+only says the wire cannot exclude a correction past `R_MATCH`; the body walking its chord
+normally puts the real residual near zero. The only evidence that bears on it is the one
+§39.6 already recorded, and it is the right instrument for a visible warp: this is Q6b #2 of
+the operator's own CASE 6 run, and the operator's verdict was **"all three worked as
+intended"**, no jump.
+
+**What would actually produce the bad case is already named.** `288·dt` is attained only if
+the body **stopped mid-leg without our knowing**, and the one mechanism in this harness that
+does that is the `--enemy` Hatcher's collision — which was chasing and nibbling throughout
+this very capture, and which §1z-aj.5 independently nominated as the next thing to cause
+rather than wait for. That is a hypothesis this section does not test, recorded because the
+two arcs meet here.
+
+**An instrument debt, stated because it bounds §1z-ak.3 too.** The 08:46 tape asks for 30 Hz
+in its header and delivers **9.1 Hz effective** (220 samples over 24.3 s; gap p50 109 ms,
+max 220 ms) — **~31 u of body travel per sample at run speed**. An attempt to measure the
+click **start transient** off it (does the body really cover `288·dt` in the first 0.3 s?)
+produced two artifact populations and no signal: apparent travel of 23 u in 10 ms, which is
+the client starting **before the server sees the click** (one network hop), and a body
+reading 0.0 u for 250 ms then the whole chord at once, which is `position_at`'s **arrival
+clamp** returning `m_segmentPoint`. **No transient number is published from it.**
+Consequently §1z-ak.3's single **moving** specimen (6.9 u) carries roughly one sample
+interval of uncertainty — it is honestly *"within a sample of the body's path"* rather than
+6.9 u to the unit. **The nine 0.0 u readings are unaffected**: those bodies were parked
+(`v = 0`, `stop = 0`) and stable across neighbouring samples, where there is no sampling
+error, and the headline — nothing near `R_MATCH`, no pin moving the body backward — stands
+on them.
+
+**`pressharm.py` now carries both arms.** With a tape it measures against the drawn body;
+without one it falls back to the leg-age bound, prints the origin caveat, and **exits
+non-zero on an uncertified pin** — so a capture like this one reports "1 pin not cleared"
+rather than the flattering "unmeasured" it used to. Run on 140659 it exits 1 and names
+35.681.

@@ -55,6 +55,27 @@ SPECIMEN = "authsrv-20260903T084616-c1.jsonl"
 # R_MATCH, the client's own "close enough" reprieve radius (agtrack_mirror.py:51,
 # f32 @0x00946560): a correction under this is one the client itself forgives.
 R_MATCH = 100.0
+RUN_SPEED = 288.0
+# THE LEG-AGE BOUND (MOVECODE-1z-ak.7), for a capture with NO tape.
+#
+# A 0x002C is SELF-FULFILLING: after it lands both copies sit on its point, so
+# every later report describes the POST-pin body and the wire can never audit
+# its own pin. That is why the drawn-body tape is the primary arm and why
+# repincheck's `next_d` is context. But a bound survives without one.
+#
+# The payload is p0 + RUN_SPEED*dt along the click chord (`_click_leg_start`'s
+# lerp). If the chord is CLEAR the body walks that same line, and its own travel
+# is in [0, RUN_SPEED*dt], so |model - body| <= RUN_SPEED*dt -- attained only if
+# the body never started. The bound therefore needs two things checked, not
+# assumed: the chord clear (else the body leaves the line -- 1z-ak.6) and the
+# leg ORIGIN exact (else the origin's own error adds).
+#
+# RUN_SPEED*dt reaches R_MATCH at dt = 100/288 = 0.347 s, which is
+# REPIN_MAX_REPORT_AGE -- literally the same decoded constant that gates the
+# AGTRACK RE-PIN, read on the LEG clock instead of the report clock. Both ask
+# the one question: how far can the body have moved since the last thing we
+# know for certain.
+LEG_AGE_LIMIT = R_MATCH / RUN_SPEED      # 0.347222 s
 
 
 def newest_with_press():
@@ -124,6 +145,46 @@ def hyp(a, b):
     return ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5
 
 
+def leg_age_bound(rows, pins, verbose=True):
+    """The tape-free arm: bound each pin by the age of the leg it lerped.
+
+    Returns (pins, scored, uncertified) -- `uncertified` counts pins whose bound
+    exceeds R_MATCH, which is NOT a measurement of harm and must never be
+    reported as one. It means the wire cannot rule the pin out."""
+    t0 = rows[0]["t"]
+    moves = [r["t"] for r in rows
+             if r.get("kind") == "decoded" and r.get("name") == "MOVE_TO_COORD"]
+    if verbose:
+        print("%-8s %8s %10s  %s" % ("t", "leg age", "bound", "reading"))
+    scored = uncertified = 0
+    for r in pins:
+        prior = [m for m in moves if m <= r["t"]]
+        if not prior:
+            if verbose:
+                print("%-8.3f %8s %10s  no click precedes it -- the leg is not a "
+                      "click leg, unbounded here" % (r["t"] - t0, "--", "--"))
+            uncertified += 1
+            continue
+        age = r["t"] - prior[-1]
+        bound = RUN_SPEED * age
+        scored += 1
+        if bound <= R_MATCH:
+            reading = ("<= %.1f u, UNDER R_MATCH -- the client forgives it whatever "
+                       "the body did" % bound)
+        else:
+            reading = ("<= %.1f u, OVER R_MATCH -- NOT a measured harm, an "
+                       "uncertified pin" % bound)
+            uncertified += 1
+        if verbose:
+            print("%-8.3f %7.3fs %9.1fu  %s" % (r["t"] - t0, age, bound, reading))
+    if verbose:
+        print("\n  The bound holds only where the chord is CLEAR and the leg ORIGIN "
+              "exact.\n  Check both (bentbound.py; and read 1z-ak.7 for the origin "
+              "chain) before\n  quoting it -- a chained or approach-armed leg carries "
+              "its own origin error.\n")
+    return len(pins), scored, uncertified
+
+
 def check(cap_path, verbose=True):
     rows = [json.loads(l) for l in open(cap_path, encoding="utf-8") if l.strip()]
     pins = [r for r in rows if r.get("kind") == "sent" and r.get("opcode") == 0x2C
@@ -139,10 +200,10 @@ def check(cap_path, verbose=True):
     tap = find_tap(cap_path, rows)
     if tap is None:
         if verbose:
-            print("  NO agenttap tape spans this capture: the drawn body cannot "
-                  "be read, so the harm is UNMEASURED here -- not zero.\n")
-        # Exposure, not a pass: report the pins we could not score.
-        return len(pins), 0, 0
+            print("  NO agenttap tape spans this capture: the drawn body cannot be "
+                  "read, so the\n  harm is UNMEASURED -- a 0x002C is self-fulfilling "
+                  "and the wire cannot audit it.\n  Falling back to the LEG-AGE BOUND.\n")
+        return leg_age_bound(rows, pins, verbose)
     tap_path, head = tap
     _h, samples = load_tap(tap_path)
     if verbose:
@@ -213,16 +274,19 @@ def main():
             path = newest_with_press()
 
     pins, scored, over = check(path)
+    if pins and scored == 0:
+        print("Nothing scored at all: neither a drawn-body tape nor a click leg to "
+              "bound against. Zero exposure, NOT a clean result.")
+        return 1
     if over:
-        print("A press pin jumped the DRAWN body more than R_MATCH. PRESS ENDS "
-              "THE WALK needs a harm bound after all -- see FINDINGS sec.1z-ak.")
+        print("%d pin(s) not cleared. Against a TAPE that means measured harm past "
+              "R_MATCH;\nwithout one it means the leg was old enough that the wire "
+              "cannot rule the pin\nout -- an uncertified pin, not a proven warp. "
+              "FINDINGS sec.1z-ak.7." % over)
         return 1
-    if scored == 0:
-        print("Nothing measured: no drawn-body tape over the press pins. This is "
-              "zero exposure, NOT a clean result.")
-        return 1
-    print("Every press pin landed on the rendered body within the client's own "
-          "R_MATCH reprieve radius: no harm bound is needed (FINDINGS sec.1z-ak).")
+    print("Every press pin cleared the client's own R_MATCH reprieve radius -- "
+          "measured\nagainst the drawn body where a tape exists, bounded by the leg "
+          "age where not.\nNo harm bound is needed (FINDINGS sec.1z-ak).")
     return 0
 
 
