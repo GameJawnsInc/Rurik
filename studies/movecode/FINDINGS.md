@@ -12410,7 +12410,10 @@ answered, and it answered `no-path-or-gate`. That is enough evidence about the m
 **a fan of screen fractions cannot reliably hit a target this narrow**, and running more of
 them is the treadmill the 2026-08-30 direction refuses.
 
-The derived alternative is already identified in §1z-au.2 and is **arithmetic, not a run**:
+**BUILT AND REFUTED in §1z-aw** — the flat-ground model failed its own hold-out (205 u
+mean, 569 u worst) because the camera's PITCH VARIES, and the fix is to READ the camera
+(`fovread.py` already does) rather than fit it. The derived alternative is already
+identified in §1z-au.2 and is **arithmetic, not a run**:
 a world→screen projection from the measured **75.000° horizontal FOV**, the calibrated
 camera bearing (**12.5 px/degree**, §1z-as), and the body position the tape reports. With
 it, a click goes at a **chosen world point** — the route-forcing chord `mapscout.py` already
@@ -12425,3 +12428,65 @@ before it is trusted.
 **What is NOT recommended is another blind fan, and what is not needed is the operator** —
 §1z-au's point stands: the desk can see the scene now, and what it is missing is a
 projection it can build.
+
+---
+
+## 1z-aw. THE PROJECTION — built, REFUTED by its own hold-out, and the failure names the fix: read the camera, do not fit it
+
+**Asked:** "build the projection" — §1z-av.4's derived alternative to the blind fan.
+Built, and **it does not work.** Ident `MOVECODE-1z-aw`. `studies/movecode/review/clickaim.py`
+ships with its verdict in its header and `--aim` refusing to emit a table.
+
+### 1z-aw.1 What was built
+
+A ground-plane intersection from a third-person camera: a screen row `fy` is a ray depressed
+`θ + α(fy)` below horizontal, meeting flat ground at `H / tan(θ + α)` from the camera. `FOV_v`
+comes from the repo's measured **75.000° horizontal** and the window aspect; `α` accounts for
+the **viewport not being the window** (`dc.click` takes fractions from `GetWindowRect`, which
+includes the title bar), with the viewport's top and height fitted rather than guessed.
+
+**And a hold-out gate, written before any data existed**: fit on some points, score on
+points the fit never saw, and refuse to print an aim table if the held-out error is worse
+than the flat-ground assumption can excuse. §1z-as's yaw calibration earned its keep by
+predicting `yaw:1500 → 240.0°` *before* the run; this file was held to the same test.
+
+### 1z-aw.2 ★★ It failed that test, and the data says why in one line
+
+An eight-point sweep on the map's most open ground — **all 8 clicks landing on GROUND**, every
+body position read from the tape:
+
+| `fy` | 0.36 | 0.42 | 0.48 | 0.54 | 0.60 | 0.66 | 0.70 | 0.44 |
+|---|---|---|---|---|---|---|---|---|
+| range (u) | 686 | **255** | **1057** | 923 | 141 | 62 | 83 | 464 |
+
+**That is not monotone in `fy`.** A click lower on the screen must land nearer; 0.42 → 255 u
+against 0.48 → 1057 u cannot happen under *any* fixed camera. Fitted on five points and
+scored on three, the hold-out came to **205 u mean, 569 u worst** — against an aiming need of
+roughly ±100 u.
+
+**The gate did its job.** Fitted and reported on the same points, the model would have shown a
+310 u rms and looked like a tuning problem; the hold-out shows it is a *modelling* failure, and
+the non-monotonicity shows it is not fixable by adding parameters.
+
+### 1z-aw.3 The diagnosis, and it is not the slope
+
+§1z-as.3's slope hazard was the anticipated risk and it is **not** what happened — slopes
+would bias ranges long or short, not reverse their order. **The camera's pitch is not
+constant.** `fy` alone therefore does not determine the ray, and no fit *over `fy`* can
+recover a parameter that moves between samples.
+
+### 1z-aw.4 ★ The fix is a READ, and the instrument already exists
+
+`toolkit/clientscan/fovread.py` — built two arcs ago for the FOV question — **already reads
+the client's live camera**: `Position` at `0x00C07860`, `Target` at `0x00C0786C`, `fov` at
+`0x00C078C4`, the three the frustum builder's own failure path prints under
+`Invalid frustum:`. Position, target and FOV **are** the view transform.
+
+So the projection should be **evaluated per click from the client's own camera**, not fitted
+across clicks — at which point a varying pitch stops being an error term because it is being
+measured. That is this repo's standing method (*"the wins all came from capturing the client
+and reading it, never from reasoning about it"*) applied to a place where I reasoned first.
+
+**What remains** is small and needs no new derivation: read those three vectors beside the
+click, build the view matrix, project the route-forcing point `mapscout.py` already computes,
+and click the fraction that comes out. The failure above is what says to do it that way.
