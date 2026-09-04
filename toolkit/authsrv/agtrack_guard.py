@@ -90,6 +90,49 @@ CLOCK_SKEW_U = 10.0
 REPIN_MAX_REPORT_AGE = am.R_MATCH / RUN_SPEED          # 0.347222 s
 REPIN_MIN_INTERVAL = 0.5                                # < 299.33/576 s
 
+# THE STATIONARY WAIVER (MOVECODE-1z-ah).  DERIVED, and it is the whole of
+# the "retract fix" 1z-ag.5 asked for.
+#
+# WHAT IT ANSWERS.  1z-ag identified the armer: a keyboard lead matures, the
+# client SNAPS the drawn body onto the granted point across a gate-1
+# separation, and the AgTrack fence clears and never re-arms.  This guard
+# already predicts that exact event -- on RUN-1zAB run A it reported
+# `arrival-risk` at t=18.074, a full 0.425 s BEFORE the 18.499 arrival -- and
+# then did not act, because `_repin_code` refused it.  The capture names the
+# sole refusal: the last accepted report was 2.311 s old against this 0.347 s
+# ceiling, with zero refused reports and the previous re-pin 6.1 s back.  The
+# predicate was right and one gate stood in front of it.
+#
+# WHY THE GATE CANNOT SIMPLY BE OPENED.  A 0x002C is not sync-only: its
+# handler 0x005FDA50 Clears the record first, then SetPositions the sync twin
+# (AgMsg.cpp 579) AND the async twin (AgMsg.cpp 584) -- BOTH copies land on
+# the same point (studies/movement/FINDINGS.md:3246).  So re-pinning a
+# SILENTLY WALKING body back to a stale report drags the drawn body with it.
+# That is not hypothetical here: an earlier build of this server sent five,
+# "three were arrivals, carrying the client 630, 189 and 765 units", and they
+# were removed as THE WARP THE PLAYER DESCRIBED.  RUN_SPEED * age is exactly
+# the bound that prevents it, and on age alone it must stand.
+#
+# THE DISCRIMINATOR, and it is wire-visible.  When the last TWO accepted
+# reports carry the same point to within the client's own zero-distance
+# radius, the body did not move across that interval AT ALL -- it is not a
+# guess about a silent client, it is two measurements of a still one.  A
+# stationary body's next movement produces a walk-start 0x003D (1z-aa: 7 of
+# 8), so while nothing new has arrived it is still standing there, and the
+# harm bound for re-pinning onto it is am.ZERO_DIST_SQ rather than
+# RUN_SPEED * age.  The gate then has nothing left to protect.  A WALKING
+# body can never satisfy this: consecutive reports sit ~512 u apart, the
+# client's own 0x003D distance trigger.  RUN-1zAB run A is the specimen --
+# the parked body reported (10369.4169921875, 8282.3349609375) BIT-IDENTICAL
+# three times while the lead walked 520 u away from it.
+#
+# REFUSED WHILE A CLICK IS GLIDING THE COPY (`async_dest`): the report is
+# then not where the body is, and the whole argument above is about a report
+# that still describes the body.
+#
+# --no-repin-stationary-waiver reverts to the pre-1z-ah gate.
+STATIONARY_WAIVER = True
+
 # Verdicts
 PASS = "pass"                # predicted MATCH -- nothing can snap
 PASS_GATES = "pass-gates"    # predicted miss, gates pass with margin
@@ -142,6 +185,14 @@ class AgTrackGuard(object):
         self.epoch = None            # server-time origin for the ms clock
         self.seeded = False          # HOLE D: placement must seed us
         self.client_pos = None       # last ACCEPTED report (x, y)
+        self.prev_pos = None         # the one before it -- the waiver's
+                                     # second measurement (STATIONARY_WAIVER)
+        self._last_report_pos = None  # reports only: a PLACEMENT is where we
+                                      # put the agent, not a measurement that
+                                      # the body sat still, and seeding
+                                      # prev_pos from it made a single report
+                                      # look like two (caught by section 9's
+                                      # existing stale-report check)
         self.client_plane = None
         self.client_pos_at = None    # server time of that accept
         self.pos_rejects = 0         # refusals since the last accept
@@ -179,6 +230,10 @@ class AgTrackGuard(object):
         ms = self._ms(now)
         self.mirror.sync.set_position(x, y, plane, ms)
         self.twin.sync.set_position(x, y, plane, ms)
+        # The waiver wants TWO accepted reports, and a placement is one
+        # event, not a measurement that the body sat still.
+        self.prev_pos = None
+        self._last_report_pos = None
         self.client_pos = (float(x), float(y))
         self.client_plane = plane
         self.client_pos_at = now
@@ -192,6 +247,8 @@ class AgTrackGuard(object):
         described).  Both kinds re-arm the record (player input)."""
         ms = self._ms(now)
         if accepted:
+            self.prev_pos = self._last_report_pos
+            self._last_report_pos = (float(x), float(y))
             self.client_pos = (float(x), float(y))
             self.client_plane = plane
             self.client_pos_at = now
@@ -353,18 +410,51 @@ class AgTrackGuard(object):
                 return True, v
         return False, None
 
-    def _repin_code(self, now):
-        """The re-pin's preconditions, re-derived (see the constants):
-        a fresh ACCEPTED report, nothing refused since, and the rate."""
-        if (self.client_pos is None or self.client_pos_at is None
-                or self.pos_rejects > 0):
-            return REPIN_BLOCKED
-        if now - self.client_pos_at > REPIN_MAX_REPORT_AGE:
-            return REPIN_BLOCKED
+    def stationary(self):
+        """Did the body sit still across its last two accepted reports?
+
+        The stationary waiver's entire predicate -- pure, and see the
+        STATIONARY_WAIVER block for why two identical reports are a
+        measurement rather than an assumption."""
+        if not STATIONARY_WAIVER or self.async_dest is not None:
+            return False
+        if self.client_pos is None or self.prev_pos is None:
+            return False
+        dx = self.client_pos[0] - self.prev_pos[0]
+        dy = self.client_pos[1] - self.prev_pos[1]
+        return dx * dx + dy * dy <= am.ZERO_DIST_SQ
+
+    def _repin_block(self, now):
+        """WHICH precondition refuses a re-pin right now, or None.
+
+        Named rather than boolean because 1z-ag had to replay a capture to
+        find out: the row said `blocked` and nothing else, and two wrong
+        explanations reached a merged document before the capture was asked
+        directly (1z-ah).  A guard nobody can see not-firing is a wish."""
+        if self.client_pos is None or self.client_pos_at is None:
+            return "no-report"
+        if self.pos_rejects > 0:
+            return "rejects"
+        if (now - self.client_pos_at > REPIN_MAX_REPORT_AGE
+                and not self.stationary()):
+            return "stale-report"
         if (self.last_repin_at is not None
                 and now - self.last_repin_at < REPIN_MIN_INTERVAL):
-            return REPIN_BLOCKED
-        return REPIN_DUE
+            return "rate"
+        return None
+
+    def repin_block_reason(self, now):
+        """The block reason for the telemetry row: a name, or None when
+        nothing is blocking.  Public -- authsrv writes it beside the code."""
+        if not self.seeded:
+            return "unseeded"
+        return self._repin_block(now)
+
+    def _repin_code(self, now):
+        """The re-pin's preconditions, re-derived (see the constants):
+        a fresh ACCEPTED report -- or a body MEASURED stationary across two
+        of them (STATIONARY_WAIVER) -- nothing refused since, and the rate."""
+        return REPIN_BLOCKED if self._repin_block(now) else REPIN_DUE
 
     def repin_state(self, now):
         """Standing answer to "should the server re-pin right now?" --

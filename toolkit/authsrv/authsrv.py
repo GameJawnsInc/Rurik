@@ -4694,6 +4694,17 @@ def _note_wire_move(state, opcode, values, now, rec=None):
         # becomes the reached plane. --resync is ALLOWED beside --arrival-carry
         # (with a note), which is why this is wired rather than assumed.
         state["ac_queue"] = []
+        # AND THE KEYBOARD LEAD'S LEG DIES WITH IT, by the same decoded
+        # argument the ac_queue clear above rests on: 0x00602B20's ARMED arm
+        # reaches the teleport primitive 0x006020B0, which CLEARS THE ARRIVAL
+        # TICK at 0x006021E6. The client will never mature that lead, so a
+        # leg record left armed would let the kill, the refresh or the
+        # watchdog act on a leg that no longer exists -- the stale-arrival
+        # defect, arriving by a third door (MOVECODE-1z-ah).
+        _dead_kleg = state.pop("kbd_leg", None)
+        if _dead_kleg is not None and rec is not None:
+            rec.event("kbd_leg", act="clear", by="0x002C",
+                      age=round(now - _dead_kleg["t0"], 3))
         if len(values) > 2 and isinstance(values[2], int):
             state["ac_arrived"] = values[2]
 
@@ -5036,7 +5047,13 @@ def _agtrack_shadow_tick(state, rec, send=None):
     if code != prev:
         state["agtrack_guard_repin"] = code
         if rec is not None:
-            rec.event("agtrack_repin", code=code, why=str(why))
+            # WHICH precondition refused, by name (1z-ah). Without it a
+            # `blocked` row costs the next session a capture replay, which is
+            # exactly what 1z-ag paid and got wrong twice before asking the
+            # capture directly.
+            rec.event("agtrack_repin", code=code, why=str(why),
+                      blocked_by=_agtrack_guard_call(
+                          state, "repin_block_reason", now))
     if send is not None and AGTRACK_REPIN:
         import agtrack_guard as _ag
         if code == _ag.REPIN_DUE:
@@ -22978,6 +22995,17 @@ def main():
                          "then keeps shut -- RUN-1zAB's rerun locked five "
                          "of eight legs that way. Inert without --kbd-lead. "
                          "Diagnostic arm.")
+    ap.add_argument("--no-repin-stationary-waiver", action="store_true",
+                    help="MOVECODE-1z-ah OFF: the AgTrack re-pin's freshness "
+                         "gate refuses again even when the client has "
+                         "REPORTED THE SAME POINT TWICE. That gate bounds a "
+                         "re-pin's harm at RUN_SPEED x age because a 0x002C "
+                         "moves BOTH copies -- but a body measured stationary "
+                         "across two accepted reports has moved 0 u, so the "
+                         "bound is the client's own zero-distance radius and "
+                         "the gate has nothing to protect. With this flag the "
+                         "maturing lead of RUN-1zAB run A goes un-retracted "
+                         "and the arrival arms REALFIX 0.11 stage 1 again.")
     ap.add_argument("--no-kbd-lead-fence-gate", action="store_true",
                     help="MOVECODE-1z-aa OFF: a keyboard or D1 lead may "
                          "be sent into a fence the server itself shut with "
@@ -24635,6 +24663,13 @@ def main():
         KBD_SYNC_MATCHED = not a.no_kbd_matched_plane
         KBD_LEAD_FENCE_GATE = not a.no_kbd_lead_fence_gate
         KBD_LEAD_REFRESH = bool(a.kbd_lead_refresh) and not a.no_kbd_lead_refresh
+        if a.no_repin_stationary_waiver:
+            import agtrack_guard as _ag_flag
+            _ag_flag.STATIONARY_WAIVER = False
+            print("[map] --no-repin-stationary-waiver: MOVECODE-1z-ah OFF. A "
+                  "maturing lead over a body that has reported the same point "
+                  "twice will NOT be retracted; its arrival snaps the drawn "
+                  "body onto the granted point and shuts the fence.")
         _terms = [n for n, on in (("lead 520 u + navmesh clip (OPT-IN)",
                                    KBD_SYNC_LEAD_ON),
                                   ("0x002B family rate", KBD_SYNC_SPEED_ON),

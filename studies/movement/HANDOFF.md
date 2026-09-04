@@ -294,7 +294,18 @@ runs LOCKED — MIXED 24.3 % with two parked legs, then ENSLAVED 31.4 % with thr
 reported stops of seven key legs in each, and the second carried a `refresh-late`. So
 preventing the arrival does NOT prevent the lock; with §1z-z having killed §0.11's plane
 route, the keyboard armer is UNIDENTIFIED. `KBD_LEAD_REFRESH` is now OPT-IN and OFF
-(`--kbd-lead-refresh`). **§1z-ag CLOSED that gap: the ARMER is the lead's own ARRIVAL.** The sync copy walks
+(`--kbd-lead-refresh`). **§1z-ah BUILT THE RETRACT, and it is the `0x002C`, not the grant §1z-ag.5 named.**
+The mirror refutes the grant (it snaps at its own bake-tail once separation is RED),
+and the capture refutes §1z-ag.4: the guard saw the snap coming 0.425 s EARLY and was
+blocked by the report-freshness gate alone (report 2.311 s old, ceiling 0.347 s). The
+fix is a derived waiver on that gate — two accepted reports agreeing to within the
+client's own zero-distance radius are a MEASUREMENT that the body is still, so the
+re-pin's harm is 1.0 u and not RUN_SPEED x age; a walking body (reports ~512 u apart)
+can never satisfy it. On run A's leg the re-pin becomes due, lands on the body for
+0.000 u of harm, and the 520 u arrival never matures. ON, --no-repin-stationary-waiver
+reverts; the registered prediction is §1z-ah.7 and the verdict is the next run.
+
+**§1z-ag CLOSED that gap: the ARMER is the lead's own ARRIVAL.** The sync copy walks
 the lead while the drawn body is parked, separation passes gate 1 (347 → 518 u), the
 arrival fires, and the body is teleported 520 u onto our granted point while the fence
 clears and never re-arms — with no message of ours within ±1.5 s. A second capture is

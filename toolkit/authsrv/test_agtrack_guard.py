@@ -12,6 +12,7 @@ it predicts about).
 Synthetic throughout -- no vault, no client, bare machine.
 """
 
+import math
 import os
 import sys
 
@@ -24,8 +25,11 @@ import agtrack_mirror as am      # noqa: E402
 import agtrack_guard as ag       # noqa: E402
 import authsrv                   # noqa: E402
 
-# Floor from the 2026-08-30 green run: 49 checks, all unconditional.
-LEDGER = checks.Ledger("agtrack guard: the derived pre-emit rule", floor=49)
+AS_SRC = open(authsrv.__file__, encoding="utf-8").read()
+
+# Floor from the 2026-08-30 green run: 49 checks, all unconditional;
+# +22 at MOVECODE-1z-ah (section 9: the stationary waiver -- the retract).
+LEDGER = checks.Ledger("agtrack guard: the derived pre-emit rule", floor=71)
 check = checks.adopt_named(LEDGER)
 
 
@@ -270,6 +274,182 @@ def main():
                                          now=5000.1)
     check("active: an unusable plane word refuses the fire",
           not fired and len(sent) == 1)
+
+
+    # ---- 9. MOVECODE-1z-ah: THE STATIONARY WAIVER (the retract) ---------
+    # RUN-1zAB run A's fatal leg, verbatim from the capture: the body parked
+    # and reported (10369.4169921875, 8282.3349609375) BIT-IDENTICAL three
+    # times (t=11.892 / 14.028 / 15.763) while a 520 u backpedal lead at
+    # 190.08 u/s walked the sync copy away from it. The guard reported
+    # `arrival-risk` at t=18.074 -- 0.426 s BEFORE the 18.500 arrival -- and
+    # was refused. This section pins WHICH gate refused, that the waiver
+    # lifts exactly that one, and that a walking body can never reach it.
+    RA_REPORT = (10369.4169921875, 8282.3349609375)
+    RA_DEST = (9849.4169921875, 8282.3349609375)
+    RA_PLANE, RA_T0 = 29, 15.764
+    RA_ETA = RA_T0 + 520.0 / 190.08
+    RA_RISK = 18.074
+
+    def run_a(waiver=True, walking=False):
+        """The fatal leg replayed. Returns the guard at the risk tick."""
+        ag.STATIONARY_WAIVER = waiver
+        g = ag.AgTrackGuard(mesh=None)
+        g.on_placement(RA_REPORT[0], RA_REPORT[1], RA_PLANE, 11.0)
+        pts = [RA_REPORT] * 3
+        if walking:
+            # a body actually walking the lead reports its own 0x003D
+            # distance trigger instead -- ~512 u apart.
+            pts = [RA_REPORT, (RA_REPORT[0] - 512.0, RA_REPORT[1]),
+                   (RA_REPORT[0] - 1024.0, RA_REPORT[1])]
+        for t, p in zip((11.892, 14.028, 15.763), pts):
+            g.on_report(p[0], p[1], RA_PLANE, ("rep", t), t, accepted=True)
+        g.on_emit(0x29, RA_DEST[0], RA_DEST[1], RA_PLANE, RA_PLANE, RA_T0)
+        return g
+
+    try:
+        check("the waiver ships ON, with its revert flag",
+              ag.STATIONARY_WAIVER is True
+              and "--no-repin-stationary-waiver" in AS_SRC
+              and "_ag_flag.STATIONARY_WAIVER = False" in AS_SRC)
+
+        # -- the predicate itself, pure
+        g = ag.AgTrackGuard(mesh=None)
+        g.on_placement(0.0, 0.0, 0, 1000.0)
+        check("a placement alone is NOT a stationary measurement (one event, "
+              "not two reports)", g.stationary() is False)
+        check("nor does a placement stand in as the FIRST of the two -- it is "
+              "where we put the agent, not the client telling us twice",
+              g._last_report_pos is None)
+        g.on_report(0.0, 0.0, 0, ("a",), 1001.0, accepted=True)
+        check("one accepted report is still not two", g.stationary() is False)
+        g.on_report(0.0, 0.0, 0, ("b",), 1002.0, accepted=True)
+        check("TWO identical accepted reports: the body is MEASURED still",
+              g.stationary() is True)
+        g.on_report(0.9, 0.0, 0, ("c",), 1003.0, accepted=True)
+        check("and 0.9 u apart still counts -- the bound is the client's own "
+              "zero-distance radius, not equality",
+              g.stationary() is True and 0.9 ** 2 <= am.ZERO_DIST_SQ)
+        g.on_report(2.0, 0.0, 0, ("d",), 1004.0, accepted=True)
+        check("1.1 u apart does NOT: over the radius, the body moved. The "
+              "boundary is the client's own `distSq <= 1.0`, so 1.0 u exactly "
+              "still counts as zero distance",
+              g.stationary() is False and 1.1 ** 2 > am.ZERO_DIST_SQ)
+        # a refused report must not become the second measurement
+        g2 = ag.AgTrackGuard(mesh=None)
+        g2.on_placement(0.0, 0.0, 0, 1000.0)
+        g2.on_report(0.0, 0.0, 0, ("a",), 1001.0, accepted=True)
+        g2.on_report(0.0, 0.0, 0, ("b",), 1002.0, accepted=True)
+        g2.on_report(900.0, 0.0, 0, ("bad",), 1003.0, accepted=False)
+        check("a REFUSED report advances neither measurement (it is "
+              "disbelieved, and pos_rejects blocks anyway)",
+              g2.stationary() is True
+              and g2._repin_block(1003.1) == "rejects")
+        # a click in flight is gliding the copy: the report is not the body
+        g3 = run_a()
+        g3.on_click(RA_REPORT[0] - 300.0, RA_REPORT[1], RA_PLANE, RA_RISK)
+        check("REFUSED while a click glides the copy -- the report is then "
+              "not where the body is", g3.stationary() is False)
+
+        # -- run A, both arms
+        off = run_a(waiver=False)
+        risky_off, v_off = off.arrival_risk(RA_RISK)
+        code_off, why_off = off.repin_state(RA_RISK)
+        check("RUN A, waiver OFF: the guard PREDICTS THE SNAP 0.426 s early "
+              "-- the predicate was never the problem",
+              risky_off is True and v_off.code == am.SNAP
+              and why_off == "arrival-risk" and RA_RISK < RA_ETA)
+        check("RUN A, waiver OFF: and is BLOCKED, by the freshness gate and "
+              "nothing else -- the capture's `blocked` row, named",
+              code_off == ag.REPIN_BLOCKED
+              and off.repin_block_reason(RA_RISK) == "stale-report"
+              and off.pos_rejects == 0 and off.last_repin_at is None,
+              "report age %.3f s against the %.3f s ceiling"
+              % (RA_RISK - off.client_pos_at, ag.REPIN_MAX_REPORT_AGE))
+
+        on = run_a(waiver=True)
+        code_on, why_on = on.repin_state(RA_RISK)
+        harm = math.hypot(on.client_pos[0] - RA_REPORT[0],
+                          on.client_pos[1] - RA_REPORT[1])
+        check("RUN A, waiver ON: the re-pin is DUE",
+              code_on == ag.REPIN_DUE and why_on == "arrival-risk"
+              and on.repin_block_reason(RA_RISK) is None)
+        check("and the 0x002C it would send lands ON the parked body -- the "
+              "harm the freshness gate exists to bound is ZERO here",
+              harm ** 2 <= am.ZERO_DIST_SQ and harm < 1e-9,
+              "harm %.6f u" % harm)
+
+        # THE POINT: the arrival that armed the lock never fires.
+        on.on_emit(0x2C, on.client_pos[0], on.client_pos[1], RA_PLANE, None,
+                   RA_RISK)
+        check("THE RETRACT: the 0x002C clears the arrival tick and the "
+              "destination, so the 520 u arrival that armed 0.11 stage 1 "
+              "NEVER MATURES (0x00602B20's armed arm -> 0x006020B0, which "
+              "clears +0x48 at 0x006021E6)",
+              on.mirror.sync.t_arrive == 0 and on.mirror.sync.dest is None)
+        fired, t = None, RA_RISK + 0.05
+        while t <= RA_ETA + 0.5:
+            r = on.tick(t)
+            if r is not None:
+                fired = r
+                break
+            t += 0.05
+        sep_after = math.hypot(on.mirror.sync.x78 - RA_REPORT[0],
+                               on.mirror.sync.y78 - RA_REPORT[1])
+        check("and no arrival fires through the window that snapped in the "
+              "capture; the sync copy sits ON the body",
+              fired is None and sep_after < 1e-9,
+              "fired %s, sep %.6f u" % (fired, sep_after))
+
+        # -- THE KNOWN-BAD ARM: the warp the gate exists to prevent
+        walk = run_a(waiver=True, walking=True)
+        risky_w, _v = walk.arrival_risk(RA_RISK)
+        code_w, why_w = walk.repin_state(RA_RISK)
+        check("KNOWN-BAD ARM -- a body WALKING the lead: two reports 512 u "
+              "apart never satisfy the waiver, so the stale re-pin that "
+              "would drag BOTH copies backward is still refused",
+              walk.stationary() is False
+              and walk.repin_block_reason(RA_RISK) == "stale-report")
+        check("and it does not even get proposed: a walking body's sync copy "
+              "tracks it, so no snap is predicted at all",
+              risky_w is False and code_w == ag.REPIN_NONE)
+
+        # -- the other preconditions still bite under the waiver
+        rate = run_a(waiver=True)
+        rate.last_repin_at = RA_RISK - 0.1
+        check("the RATE still blocks a stationary body (the waiver lifts one "
+              "gate, not all of them)",
+              rate._repin_code(RA_RISK) == ag.REPIN_BLOCKED
+              and rate.repin_block_reason(RA_RISK) == "rate")
+        rej = run_a(waiver=True)
+        rej.on_report(RA_REPORT[0], RA_REPORT[1], RA_PLANE, ("x",),
+                      RA_RISK - 0.05, accepted=False)
+        check("a REFUSED report since the last accept still blocks",
+              rej._repin_code(RA_RISK) == ag.REPIN_BLOCKED
+              and rej.repin_block_reason(RA_RISK) == "rejects")
+        check("and an unseeded guard names itself",
+              ag.AgTrackGuard(mesh=None).repin_block_reason(1.0) == "unseeded")
+
+        # -- the row carries the reason (1z-ag replayed a capture for want
+        #    of it, and published two wrong explanations first)
+        check("the telemetry row names the blocker, so no later session has "
+              "to replay a capture to find out which gate refused",
+              "blocked_by=_agtrack_guard_call(" in AS_SRC
+              and '"repin_block_reason", now' in AS_SRC)
+
+        # -- a 0x002C kills the keyboard leg (the stale-arrival third door)
+        st = {"pos": (0.0, 0.0), "plane": 7,
+              "kbd_leg": {"x0": 0.0, "y0": 0.0, "dest": (520.0, 0.0),
+                          "plane": 7, "t0": 100.0, "speed": 288.0,
+                          "wd_fired": False}}
+        authsrv._note_wire_move(st, authsrv.GAME_SMSG_AGENT_UPDATE_POSITION,
+                                [authsrv.PLAYER_AGENT_ID, [10.0, 0.0], 7],
+                                101.0, rec=None)
+        check("a 0x002C CLEARS the keyboard lead's leg record: the client's "
+              "teleport primitive already cleared +0x48, so a leg left armed "
+              "would let the kill or the refresh act on a dead leg",
+              st.get("kbd_leg") is None)
+    finally:
+        ag.STATIONARY_WAIVER = True
 
     return LEDGER.verdict()
 

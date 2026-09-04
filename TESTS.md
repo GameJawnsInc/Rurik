@@ -10917,7 +10917,7 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   plays (the corpus-counts-redden rule). Floor 64 from the 2026-08-30 green
   run. <1 s),
 
-`toolkit/authsrv/test_agtrack_guard.py` (**the derived pre-emit grant rule,
+`toolkit/authsrv/test_agtrack_guard.py` (**§9 is MOVECODE-1z-ah's STATIONARY WAIVER — the retract.** RUN-1zAB run A's fatal leg replayed verbatim: the guard predicted the snap 0.425 s before the arrival and was refused by the report-freshness gate ALONE, which the section pins BY NAME (`blocked_by`) because §1z-ag had to replay a capture to learn it and published two wrong explanations first. The waiver lifts that one gate when the last two accepted reports agree to within the client's own `ZERO_DIST_SQ` — a body MEASURED still, whose re-pin harm is then 1.0 u rather than `RUN_SPEED × age`. Pinned: the 1.0 u boundary COUNTS (the client's own `distSq <= 1.0`) and 1.1 u does not; a placement is not the first of the two measurements (the section's own pre-existing stale-report check caught the looser draft); a click in flight refuses; the harm on run A's leg is **0.000 u** and the 520 u arrival then never matures; and the KNOWN-BAD ARM — a walking body, reports ~512 u apart — never satisfies the waiver and never even gets a re-pin proposed, which is the warp `AgMsg.cpp` 584 makes possible and this repo shipped once. Also §9: a `0x002C` clears the keyboard leg record. The rest is **the derived pre-emit grant rule,
   clause by clause -- MOVECODE-1z-s.** `agtrack_guard.py` is the policy layer
   over the AgTrack mirror: the three-zone structure the decoded machinery
   forces (green = in the 100 u tube, MATCH, nothing can snap; yellow = gates

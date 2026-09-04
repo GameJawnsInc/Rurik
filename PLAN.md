@@ -1614,6 +1614,18 @@ floors and aborts in `RUN-R8.md`; both are operator-driven client runs.
 
 ## 8. Immediate next actions
 
+### ★★★ MOVEMENT 2026-09-03 — THE RETRACT, BUILT (MOVECODE-1z-ah): the guard predicted the snap 0.43 s early and ONE gate refused it; a body measured stationary lifts that gate
+
+**[studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1z-ah.** §1z-ag.5's retract, audited first as it asked, then built. The audit changed both halves of its sentence.
+
+* **The primitive is the `0x002C`, not the grant.** Replayed through the mirror, a `0x0029` retract to the reported point SNAPS at its own bake-tail whenever separation is already RED (520 u and 378.7 u both snap; 227.2 u is safe) — §1z-s.1 clause 3 on this exact leg. The safe grant window closes at t0+1.05 s while the arrival is at t0+2.735 s, and neither a separation trigger (fires on every cruise chord) nor a timing one (§1z-ae.1's 8 u / 0.03 s photo finish, narrower than a tick) can be aimed at it.
+* **§1z-ag.4 CORRECTED: the guard was neither blind nor late.** It logged `arrival-risk` at t=18.074, **0.425 s before** the 18.499 arrival, and was blocked by the report-freshness gate ALONE — report 2.311 s old against the 0.347 s ceiling, zero refusals, previous re-pin 6.1 s back. Neither of §1z-ag.4's two candidates. Three documents had already written this down; none acted, because the row said `blocked` and not by what.
+* **The gate may not be opened on age** — a `0x002C` SetPositions BOTH copies (`AgMsg.cpp` 579 and 584), and this repo already shipped that warp once (630, 189 and 765 u, *"the warp the player described"*).
+* **THE DISCRIMINATOR: two identical reports are a measurement.** When the last two accepted reports agree to within the client's own `ZERO_DIST_SQ`, the body moved 0 u across that interval, and a stationary body's next move produces a walk-start report. The harm bound becomes 1.0 u instead of `RUN_SPEED × age`. A walking body (reports ~512 u apart) can never satisfy it. Run A's parked body reported the same point BIT-IDENTICAL three times.
+* **On the leg that armed the lock:** the re-pin becomes DUE, lands on the body for a measured harm of **0.000 u**, and clears `+0x48` and `dest` — **the 520 u arrival never matures.** Known-bad arm: a walking body never even gets a re-pin proposed.
+* Also: a `0x002C` now clears the keyboard leg record (the stale-arrival defect by a third door), and the row NAMES its blocker. `STATIONARY_WAIVER` ON, `--no-repin-stationary-waiver` reverts. `test_agtrack_guard` 49 → **71**.
+* **The residual, stated:** the retract shuts the fence — a bounded window (already the shipped RE-PIN's own behaviour, and §1z-aa's gate covers it) traded against a permanent lock. **The registered prediction and its REFUTED-IF are §1z-ah.7**; the verdict is the operator's next `--kbd-lead` run.
+
 ### ★★★ MOVEMENT 2026-09-03 — THE ARMER IDENTIFIED (MOVECODE-1z-ag): the lead's own arrival teleports the drawn body onto world-0 across a gate-1 separation and clears the fence
 
 **[studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1z-ag.** The instrument gap §1z-af named, closed: `movetap` reads `clientControlled` directly, which `agenttap` cannot. Prediction registered before launching (`a2a1560`).

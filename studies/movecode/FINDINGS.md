@@ -10542,6 +10542,14 @@ rather than in coverage.
 
 ### 1z-ag.4 The guard has the predicate and did not fire in time
 
+> **CORRECTED by §1z-ah.2 (2026-09-03).** Both candidate reasons below are wrong,
+> and the capture settles it without the live chain dump this section asks for: the
+> guard reported `arrival-risk` at t=18.074, **0.425 s BEFORE** the 18.499 arrival --
+> it was neither blind nor late -- and was refused by the report-freshness gate alone
+> (last accepted report 2.311 s old against a 0.347 s ceiling, zero refusals since,
+> previous re-pin 6.1 s back). This section's own draft said so before the merged text
+> replaced it. §1z-ah builds the fix on that gate.
+
 `agtrack_guard.arrival_risk` asks exactly the right question — is an arrival maturing
 within the horizon whose evaluation predicts a snap. On this capture it **did not fire
 before the snap**. The wire shows the fatal lead evaluated `agtrack_guard pass match` at
@@ -10628,3 +10636,166 @@ client's two copies agree — the drawn body can cross a seam while the sync cop
 been re-granted. §1z-z is not thereby broken (its own test pins what it does), but
 “§1z-z removes the cross-plane state” is not a claim these runs support, and §1z-af
 leaned on it when it ruled the plane route out.
+
+
+---
+
+## 1z-ah. THE RETRACT, BUILT — the guard predicted the snap 0.43 s early and one gate refused it; a body MEASURED stationary lifts that gate, and the arrival never matures
+
+**Asked:** "do the retract fix." §1z-ag.5 named it — *"before a maturing lead whose modelled
+separation exceeds gate 1, **retract** the copy to the body's reported point — §1z-y's kill
+with a third trigger, **a grant and not a `0x002C`**… Its predicate needs auditing first."*
+The audit was done first, as that sentence asked, and it changed **both** halves of it: the
+primitive is the `0x002C` and not the grant, and the predicate was never the problem.
+Ident `MOVECODE-1z-ah`.
+
+### 1z-ah.1 The primitive, adjudicated against the mirror
+
+Run A's fatal leg replayed through `agtrack_mirror` — the instrument §1z-r validated against
+every warp in the corpus. Each candidate retract aims at the same place, the body's own
+reported point:
+
+| candidate | separation when it fires | its own delivery verdict |
+|---|---|---|
+| `0x0029` at maturation | 520.0 u (RED) | **SNAP** |
+| `0x0029` in RED | 378.7 u (RED) | **SNAP** |
+| `0x0029` early | 227.2 u (yellow) | nomatch-pass — safe |
+| `0x002C` at maturation | 520.0 u (RED) | not-tested — safe, fence shuts |
+
+**§1z-ag.5's grant is refuted by §1z-s.1 clause 3, on this leg.** *"RED — separation ≥
+299.332591 u: ANY evaluation snaps — **including the evaluation triggered by the grant that
+tries to fix it**… No `0x0029` recovers from red."* A retract grant does not move `q`: the
+bake settles `+0x78` where the copy already is and re-aims only the destination, so its own
+bake-tail dispatch tests the 520 u separation and snaps. The grant is safe only *early*, and
+the modelled separation crosses gate 1 at **t0+1.05 s** while the arrival is at t0+2.735 s —
+so "before a maturing lead" and "while a `0x0029` still works" are 1.7 s apart, not the same
+moment.
+
+**And an early grant cannot be triggered on separation either.** The sync copy and a walking
+body advance together, so a separation-threshold retract fires on every held-key cruise chord
+over the threshold — reintroducing exactly the lag the lead exists to remove. The timing
+trigger fares no better: §1z-ae.1's photo finish (report at 512 u, arrival at 520 u, **8 u =
+0.03 s apart, narrower than one tick**) means no tick-polled margin can sit between them.
+That is the same wall the refresh hit, and it is why this section does not ship another
+pre-emption of the arrival.
+
+### 1z-ah.2 ★ §1z-ag.4 is CORRECTED — the guard was neither blind nor late
+
+§1z-ag.4 recorded that `arrival_risk` *"did not fire before the snap"*, offered two candidate
+reasons (a mirror that believed the fence shut; an old-trail match off a surviving seed) and
+chose neither, marking it UNVERIFIED. **Both candidates are wrong, and the capture says so
+without a replay.** From `authsrv-20260903T202121-c1`:
+
+| | |
+|---|---|
+| fatal leg armed | t=15.764, 520 u backpedal at 190.08 u/s → arrival **t=18.499** |
+| the guard's row | t=**18.074** — `agtrack_repin code=blocked why=arrival-risk` |
+| so the risk was seen | **0.425 s BEFORE the arrival**, not after it |
+| last accepted report | t=15.763, age at that tick **2.311 s** |
+| the ceiling | `REPIN_MAX_REPORT_AGE` = `R_MATCH`/`RUN_SPEED` = 100/288 = **0.347 s** |
+| refused reports since | **0** — so not `rejects` |
+| previous re-pin | t=11.966, **6.1 s** back — so not the rate |
+
+**The predicate was right and one gate stood in front of it: the report-freshness gate, and
+nothing else.** §1z-ag.4's own draft had this (*"its preconditions refused it… the gap
+§1z-ab.5b filed as latent"*) and the merged text replaced it with the two-candidate account.
+The `KBD_SYNC` block had already written the same thing down: *"the guard's clause 2 models a
+keyboard body as parked, so it predicts a snap at every maturing lead **and is blocked only by
+`REPIN_MAX_REPORT_AGE`**."* Three documents knew; none of them acted, because the row said
+`blocked` and did not say by what. It does now (§1z-ah.6).
+
+### 1z-ah.3 Why that gate may NOT simply be opened
+
+A `0x002C` is not sync-only. Its handler `0x005FDA50` Clears the record first, then
+SetPositions the **sync** twin (`AgMsg.cpp` 579) **and the async** twin (`AgMsg.cpp` 584) —
+*"both copies land on the same point"* (`studies/movement/FINDINGS.md`:3246). So re-pinning a
+**silently walking** body back to a stale report drags the drawn body with it, and that is not
+hypothetical in this repo: an earlier build sent five, *"three were arrivals, carrying the
+client 630, 189 and 765 units"*, removed as **the warp the player described**. `RUN_SPEED ×
+age` is precisely the bound that prevents that recurrence, and **on age alone the gate must
+stand.**
+
+### 1z-ah.4 ★ THE DISCRIMINATOR — two identical reports are a MEASUREMENT, not an assumption
+
+The gate bounds *how far the body may have walked since it last spoke*. That bound is a
+worst case over a silent client. But when the **last two accepted reports carry the same
+point** to within the client's own zero-distance radius (`ZERO_DIST_SQ` = 1.0, the bake's own
+short-circuit), the body did not move across that interval **at all** — that is not a guess
+about a silent client, it is two measurements of a still one. A stationary body's next
+movement produces a walk-start `0x003D` (§1z-aa: 7 of 8), so while nothing new has arrived it
+is still standing there, and the harm bound for re-pinning **onto** it is `ZERO_DIST_SQ`
+rather than `RUN_SPEED × age`. The gate then has nothing left to protect.
+
+**A walking body can never satisfy it**: its consecutive reports sit ~512 u apart, the
+client's own `0x003D` distance trigger. Run A is the specimen — the parked body reported
+`(10369.4169921875, 8282.3349609375)` **bit-identical three times** (t=11.892 / 14.028 /
+15.763) while the lead walked the sync copy 520 u away from it.
+
+Refused outright while a click is gliding the copy (`async_dest`), because then the report is
+not where the body is. Refused on a placement, which is where *we* put the agent rather than
+the client telling us twice — section 9's own existing stale-report check caught the looser
+first draft and is the reason this is two **reports** and not two positions.
+
+### 1z-ah.5 What it does to the leg that armed the lock
+
+`STATIONARY_WAIVER`, ON, `--no-repin-stationary-waiver` reverts. Measured on run A's leg:
+
+| arm | `arrival_risk` | re-pin | `blocked_by` |
+|---|---|---|---|
+| waiver OFF (what ran in run A) | **True, SNAP** | blocked | **stale-report** |
+| waiver ON (the new default) | True, SNAP | **due** | — |
+| waiver ON, body WALKING (known-bad) | **False** | none | — |
+
+The re-pin lands at `(10369.42, 8282.33)` — where the body is standing — for a measured harm
+of **0.000 u**. After it, `t_arrive = 0` and `dest = None`: **the 520 u arrival that armed
+REALFIX §0.11 stage 1 never matures**, and the sync copy sits 0.000 u from the body, well
+inside gate 1's 299.33. The known-bad arm is stronger than required: a walking body's sync
+copy tracks it, so no snap is predicted and the re-pin is never even proposed — the warp of
+§1z-ah.3 cannot be reached by this path at all.
+
+### 1z-ah.6 What else changed, and the residual
+
+- **A `0x002C` now clears the keyboard leg record.** By the same decoded argument the
+  `ac_queue` clear beside it already rests on: `0x00602B20`'s armed arm reaches the teleport
+  primitive `0x006020B0`, which clears the arrival tick at `0x006021E6`. The client will never
+  mature that lead, so a leg left armed would let the kill, the refresh or the watchdog act on
+  a leg that no longer exists — the stale-arrival defect by a third door.
+- **The row names the blocker** (`blocked_by`: `no-report` / `rejects` / `stale-report` /
+  `rate` / `unseeded`). §1z-ag had to replay a capture to learn which gate refused, and
+  published two wrong explanations before asking it directly. A guard nobody can see
+  not-firing is a wish.
+- **THE RESIDUAL, stated rather than discovered later: the retract shuts the fence.**
+  §1z-ag.5's reason for preferring a grant is true — a `0x002C`'s Clear closes AgTrack until
+  the next walk-start. The trade is deliberate: a **bounded** shut window against a
+  **permanent** lock, and the window is already the shipped AGTRACK RE-PIN's own behaviour
+  rather than a new hazard. Three things bound it: §1z-aa's gate degrades any lead computed
+  while `fence_shut_at` is set; the heading arm is report-driven, so no grant is sent between
+  the re-pin and the next report; and the fence re-arms at that report if it is a walk-start
+  (§1z-aa, 7 of 8). What this does **not** do is re-open §1z-aa's CONTESTED re-arm rule.
+
+### 1z-ah.7 Tests, and the registered prediction
+
+`test_agtrack_guard.py` 49 → **71 checks (floor 71)**: the waiver ships ON with its revert
+flag; the predicate over one report, two identical reports, the 1.0 u boundary (which
+*counts* — the client's own `distSq <= 1.0`), 1.1 u (which does not), a refused report, a
+placement, and a click in flight; run A replayed on both arms with the blocker named and the
+harm measured at 0.000 u; the arrival proven not to fire through the window that snapped in
+the capture; the known-bad walking arm; the rate and the rejects still biting under the
+waiver; and the `0x002C` leg clear. `test_kbdsync` 106, `test_d1lead` 94,
+`test_position_trust` 235, `test_router` 114, `test_cancelwalk` 124, `test_playerswing` 116,
+`test_guards` 41, `test_grantsim` 86, `test_srclint` 26, `test_bareimport` 8 — green.
+
+**REGISTERED BEFORE ANY RUN.** The next `--kbd-lead` run should show, in the gamesrv rows:
+`agtrack_repin code=due why=arrival-risk` where run A logged `blocked` / `blocked_by`
+`stale-report`; an `AGTRACK RE-PIN 0x002C` at a point within 1 u of the preceding report;
+`kbd_leg act=clear by=0x002C` beside it; and the reported-stop count for keyboard legs back
+near 1:1 rather than run A's 1 of 7. **REFUTED IF** the lock still arms with the re-pin
+firing, or if a re-pin fires at a point more than 1 u from the body's last report (the harm
+bound is the whole safety argument), or if the operator sees any backward yank — which would
+mean a walking body reached the waiver and §1z-ah.4's discriminator is wrong.
+
+**Not settled.** The lead stays OPT-IN: this removes the armer §1z-ag identified, it does not
+re-argue §1z-t.6's separation counterfactual. And the run itself is the verdict — §1z-af is
+the standing reminder that a derived backstop can be convicted by its own two verification
+runs. `movetap` still cannot certify a capture taken under the harness (§1z-ag.6), so the
+score for this one comes from the gamesrv rows and the operator, not from the tap.
