@@ -11397,7 +11397,9 @@ and never for the one that does not. That is the gate, measured from both sides.
   lock, and the proposed way to force it does not exist.
 - **What remains, from the arc's own record, and this section does not choose between
   them.** (a) §1z-aj.3's other candidate — *"our mesh and the client's collision
-  disagreeing"*, i.e. terrain or a prop the client stops on where our mesh says clear; the
+  disagreeing"* — **ANSWERED in §1z-ao.5: the lead's ray crosses a plane-29 → plane-0 seam
+  and `pm.clip` is plane-blind, so the server scored it CLEAR and the client would not walk
+  it** —, i.e. terrain or a prop the client stops on where our mesh says clear; the
   lead needs `clip()` to pass, so only a **disagreement** can serve, and whether one exists
   is a question about our own decode's gaps. (b) §1z-ad's specimen, where the armer was not
   a parked body at all but a **swallowed `0x0047`** — **taken up in §1z-am, which confirms the
@@ -11684,3 +11686,127 @@ was built for still needs a run that locks, and §1z-am puts that at roughly 6 i
 17 on the `WSWQESW` script rather than this one.
 
 **The column ships verified. `--no-fence` reverts and is not recommended.**
+
+---
+
+## 1z-ao. RUN-1zAO CAUGHT THE LOCK WITH THE FENCE READING — all three clauses confirmed, and the discriminator is WHAT SHUT THE FENCE, not that it shut
+
+**Asked:** "go after the lock." Four runs, arm C (`--no-repin-stationary-waiver`, the
+known-bad revert, chosen to provoke), RUN-1zAH's `WSWQESW` script. Runs 1–3 healthy;
+**run 4 LOCKED with a valid tape.** Registered in `RUN-1zAO.md` before launching. Ident
+`MOVECODE-1z-ao`. **Specimen: capture `authsrv-20260904T110025-c1`, tape
+`agenttap-20260904T110026`, harness `20260904T105954`.**
+
+### 1z-ao.1 The three registered clauses, all CONFIRMED
+
+`stopcensus` reads **`Y......`**, trailing silence 6 — leg 1 closed at 12.97, legs 2–7
+never reported a stop. Tape valid: **637 samples, zero `unread:`, Hatcher control `shut`
+637 of 637.**
+
+| registered | measured |
+|---|---|
+| **P1** the fence SHUTS at or before the lock onset | shut at **17.67**; the onset is leg 2, whose release is **18.68** ✓ |
+| **P2** it STAYS shut for the whole silent tail | **43.5 s, zero transitions**, final state `shut` ✓ |
+| **P3** the healthy prefix shows a shut→open re-arm | shut **10.91** → re-armed **14.74** ✓ |
+
+No refutation condition fired.
+
+### 1z-ao.2 ★ The mechanism, observed whole in the client's own memory
+
+Leg 2 is `S` (backpedal), pressed 14.68, released 18.68. From the tape, both copies of
+the player:
+
+| t | sync (world 0) | drawn body | separation | body v |
+|---|---|---|---|---|
+| 14.74 | starts walking the lead | **(10373, 8286)** | 19 u | **0.0** |
+| 16.53 | walking | **unmoved** | **312 u — past gate 1 (299.33)** | **0.0** |
+| 17.58 | walking | **unmoved** | **502 u** | **0.0** |
+| **17.67** | **(9853, 8286)** | **(9853, 8286)** | **0.0** | 0.0 |
+| 17.77 | walking | walking | 0.6 u | 190.1 |
+
+**The drawn body did not move for 3.0 seconds while the key was held**, the sync copy
+walked the granted 520 u lead away from it at 190.1 u/s, separation crossed gate 1 at
+16.53 and reached 502 u — and at **17.67 the arrival fired and teleported the drawn body
+520 u onto the granted point**, collapsing separation to 0.0 in one sample. **The fence
+shut in that same sample**, and there is **no server `0x002C` anywhere near it** (the
+run's `0x002C`s are at 10.91, 20.43 and 36.60).
+
+The server's own arithmetic predicted the instant: the lead was armed at 14.71 at
+speed 190.08, so it matures at `14.71 + 520/190.08 = ` **17.44** — **0.23 s before the
+observed shut**, and **1.01 s before the key was released**. That is REALFIX §0.11
+**stage 1 — "a snap whose dispatcher clears `clientControlled`" — observed directly, in
+the client's memory, for the first time.**
+
+### 1z-ao.3 ★★ THE DISCRIMINATOR: it is WHAT SHUT THE FENCE, not that it shut
+
+Both kinds of shut occur **in this one run**, which is what makes the comparison clean:
+
+| shut | cause | re-armed? |
+|---|---|---|
+| **10.91** | a server **`0x002C`** (`AGTRACK RE-PIN`, `gate2-offmesh`) — the tape's transition lands in the same sample as the send | **YES, at 14.74**, on the next walk-start. Bounded window: 3.8 s. |
+| **17.67** | the client's **own arrival-snap**, no `0x002C` involved | **NO. Never, for 43.5 s.** |
+
+**And the client kept reporting walk-starts the whole time.** After 17.67 it sent
+`0x003D` at **17.71, 20.43, 27.15, 31.88, 36.60, 42.32** — one per remaining leg press —
+and the fence stayed shut through all six. So §0.11 stage 2's *"the keyboard walk-start
+applier — the only fence re-armer — never runs"* is **sharpened by measurement**: the
+client goes on *reporting* walk-starts on the wire, and the fence still does not re-arm.
+Whatever suppresses the re-arm does not suppress the `0x003D`, and it does suppress the
+`0x0047`.
+
+**This is the trade §1z-ah.6 stated as its residual, now measured on both sides** — *"a
+bounded shut window against a permanent lock"*. The bounded one is ours; the permanent
+one is the snap's.
+
+### 1z-ao.4 Why §1z-am's maturation test failed, resolved
+
+§1z-am refuted "a lead matured before the release" as the cause, on six healthy runs that
+had exactly that event. This specimen shows why, and it is not a contradiction:
+**maturation is necessary but not sufficient — it must produce a SNAP**, and a snap needs
+the separation at the arrival past gate 1, which needs the drawn body to be **parked while
+the sync copy walks**. In the healthy runs the body walks with the lead, separation stays
+small, the arrival is a no-op. **§1z-ag said exactly this** — *"the quantity that kills is
+the separation at the arrival, not its timing"* — and this is the direct observation of it.
+§1z-am's refutation stands and §1z-ag's account absorbs it.
+
+### 1z-ao.5 ★ WHY the body was parked — §1z-al.5's candidate (a), with a mechanism
+
+The remaining question is why the drawn body refused to move for 3 s under a held key.
+The lead's own geometry answers it, and the answer is in **our** mesh:
+
+| | |
+|---|---|
+| the fatal lead | `(10373, 8286)` → `(9853, 8286)`, 520 u due west |
+| our mesh, origin | walkable, and the planes it offers there are **[29]** |
+| our mesh, destination | the planes it offers there are **[0]** |
+| our mesh, the ray | `clip` shortfall **0.0 u — scored CLEAR at full 520 u** |
+| the client | **did not walk it at all** |
+
+**`pm.clip(x0, y0, x1, y1, step)` takes no plane argument — it is plane-blind by
+construction**, and `a2_clip_lead` scores a lead with it. So the server granted a
+full-length lead across a **plane-29 → plane-0 seam** that our mesh cannot see and the
+client's body would not cross. That is **§1z-al.5's candidate (a) — *"our mesh and the
+client's collision disagreeing"* — with a specific mechanism**, and it is the parking
+that §1z-aj.5 wanted caused and §1z-al proved the enemy could not cause.
+
+Corroboration, and its limit: once the snap put the body at `(9853, 8286)` — plane 0 —
+it walked west immediately at 190.1 u/s. **RECONSTRUCTION**, not OBSERVED: the seam is
+consistent with the refusal and our clip is provably plane-blind, but this run does not
+show the client refusing *because* of the plane, and one specimen cannot exclude geometry
+our mesh simply lacks.
+
+### 1z-ao.6 What this run does and does not settle
+
+- **The instrument did what it was built for.** The fence column turned §0.11 stage 1
+  from an inference into a reading, and the discriminator in §1z-ao.3 was not visible from
+  the wire at all — §1z-am's only fence signal was our own flag, and circular.
+- **n = 1 locked specimen**, one route, one build, arm C. It can and did refute nothing;
+  what it gives is a mechanism observed end to end and a named, testable cause for the
+  parking.
+- **The lock rate did not reproduce.** Today: **1 of 4** arm-C runs, against the corpus's
+  6 of 10. Recorded rather than explained; four runs is a thin base either way and this
+  campaign was sized to catch one specimen, not to estimate a rate.
+- **Nothing shipped.** `--kbd-lead` stays OFF, the waiver stays ON, and the plane-blind
+  clip is a **derived candidate defect, not a fix** — it needs its own section, and the
+  obvious repair (a plane-aware clip) touches the routing path that §1z-o and §1z-v both
+  have arms in.
