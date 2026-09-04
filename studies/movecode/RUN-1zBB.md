@@ -72,3 +72,20 @@ Per granted leg: the walker's seam verdict on the granted origin→dest, the
 fallback's stop distance from the origin, and the drawn body's class from the
 live track (WALKED / PARKED+SNAP), with the fence transitions. Arm A's
 fallback leg must be short and WALKED; arm B's long and PARKED+SNAP.
+
+---
+
+## RESULT — RAN 2026-09-04 16:50 (A) and 16:53 (B). **Both predictions held. The door is closed, and the control reopens it on demand.**
+
+| | arm A — fix (`20260904T165029`) | arm B — `--router-blind-clip` (`20260904T165324`) |
+|---|---|---|
+| click 1's `MOVE_TO_COORD` | (8532, 4342), off-mesh — the hillside | (8532, 4343), off-mesh — the same |
+| router | `clip-fallback` | `clip-fallback` |
+| the fallback's stop | **(10862, 5190), 136 u** — the deck's west edge | (8961, 4499), **2,158 u** — the seam at (10860, 5191), f = 0.06 |
+| the drawn body | **WALKED**: moving 100%, arrived +0.31 s, max separation 11 u, largest jump 38 u | **PARKED+SNAP**: moving 7%, separation 2,007 u, **teleported 2,021 u at +7.59 s** (ETA 7.49) |
+| the fence | no transition | **shut** at the snap, re-armed by click 4 |
+| control leg (click 4) | 1,629 u down the deck and out the south portal, WALKED | 333 u on the far ground, WALKED |
+
+Same script, same spot, same click, same afternoon; the server's banner named
+the arm. One ray differs, and with it the whole outcome: **136 u walked to the
+railing** against **7.5 s parked and a 2 km warp**. Write-up: FINDINGS §1z-bb.

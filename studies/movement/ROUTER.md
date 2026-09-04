@@ -632,3 +632,17 @@ client instead of inferring from the wire. Handoff:
 > wire effect is the clip-fallback's stop plane on stacked ground and whose yield is
 > the `plane_origin` / `plane_report` census on every row. The nine composition
 > refusals stand and now print a `--no-router` hint. `test_router.py` floor 73 → 114.
+>
+> **2026-09-04 (MOVECODE-1z-bb): the router's rays are SEAM-AWARE.** The string
+> pull's sightline and route()'s gate asked plane-blind `clip()`, and so did the clip
+> fallback; RUN-1zBA measured the cost on a router grant — a click over the bridge
+> railing, the fallback walking off the deck's side and granting 2 km, the drawn body
+> parked 7 s at the edge and then teleported 2,021 u. `pathmap.seam_clip` now carries
+> the body's plane and lets it end only at a portal (`portal_at`, 1 u tolerance for the
+> zero-height portal lines); `authsrv._router_clip` puts both rays through it under
+> `ROUTER_SEAM_CLIP` (`--router-blind-clip` reverts, and sets `pathmap.SEAM_AWARE_ROUTE`
+> with it). The A/B on the same click (RUN-1zBB): 136 u walked to the railing against
+> 7.5 s parked and a 2 km warp. Not the lead's `clip(plane=)`, which stops at portals
+> too. `with_planes` had reported the wrong plane at coincident portal waypoints since
+> B4; fixed alongside. FINDINGS §1z-ba/§1z-bb; `test_router.py` floor 114 → 121,
+> `test_pathmap.py` §14.
