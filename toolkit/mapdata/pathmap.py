@@ -1159,7 +1159,23 @@ class PathingMap:
         return True, spent
 
     def _visible(self, x0, y0, x1, y1):
-        """`clip(x0, y0, x1, y1) == (x1, y1)`, without building the point."""
+        """`clip(x0, y0, x1, y1) == (x1, y1)`, without building the point.
+
+        PLANE-BLIND, AND KNOWINGLY SO (MOVECODE-1z-ar). `clip`'s `plane=` term
+        exists (MOVECODE-1z-ap) and this does not pass it, so the smoother can
+        drop a waypoint the A* only reached by crossing a portal: `adjacent()`
+        respects planes, and the pull can undo that. `route()`'s own final gate
+        calls plane-blind `clip` too, so it would not catch the shortcut either.
+
+        WHETHER THAT EVER HAPPENS IS UNMEASURED, and §1z-ar is the record of
+        three desk attempts that failed to settle it -- the last refuted by its
+        own positive control, which found only 31% of the portals `_cross`
+        asserts. The blocker is that portal-linked trapezoids do NOT reliably
+        overlap in 2D, so "is this plane change legitimate?" cannot be answered
+        by sampling the segment. Do not add a plane term here on the strength of
+        a desk number; the thing that settled the same question for the lead was
+        a client run with a tape over it.
+        """
         return self._sightline(x0, y0, x1, y1)[0]
 
     def _string_pull(self, pts, budget=None):
