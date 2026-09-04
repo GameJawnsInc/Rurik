@@ -144,6 +144,151 @@ def fit(samples, aspect=DEFAULT_ASPECT):
     return best[1], best[0]
 
 
+
+
+# --- the camera the CLIENT reports, and the exact projection over it ---------
+#
+# MOVECODE-1z-ax. sec.1z-aw fitted a camera and was refuted by its own hold-out:
+# the ranges came back NON-MONOTONE in `fy`, which no fixed camera can produce,
+# because the pitch moves between samples. So the camera is READ instead --
+# `fovread.py` already locates all three terms of the view transform, from the
+# frustum builder's own failure path:
+#
+#     Position  0x00C07860   Target  0x00C0786C   fov  0x00C078C4
+#
+# With position, target and fov there is nothing left to fit: the transform is
+# evaluated PER CLICK from the client's own state, and a pitch that varies stops
+# being an error term because it is being measured.
+#
+# TWO THINGS HERE ARE NOT YET ESTABLISHED, and both are marked at the call site
+# rather than buried:
+#   * WHICH AXIS IS UP in Position/Target. The movement wire is (x, y) with the
+#     pathing file carrying NO HEIGHT, so the third float is presumably height --
+#     but "presumably" is not a measurement, and `UP_AXIS` exists so a run can
+#     settle it rather than a comment asserting it.
+#   * WHETHER `fov` as read is the FULL angle or the HALF one. `fovread.describe`
+#     prints both readings precisely because it is unsettled; sec.fovaxis settled
+#     the AXIS as horizontal at 75.000 deg, which is the full-angle reading, and
+#     that is what `FOV_IS_FULL_ANGLE` selects.
+#
+# THE VIEWPORT OFFSET IS NOT FITTED EITHER, and that is the other half of the
+# sec.1z-aw correction. `dc.click` takes its fractions from GetWindowRect, which
+# includes the title bar and borders; the client renders into the CLIENT rect.
+# The difference is readable exactly (GetClientRect + ClientToScreen), so
+# `viewport_in_window()` measures it instead of the four-parameter fit sec.1z-aw
+# used. Nothing about the window's chrome should ever have been a fitted term.
+
+UP_AXIS = (0.0, 0.0, 1.0)      # UNVERIFIED -- see above
+FOV_IS_FULL_ANGLE = True       # sec.fovaxis: 75.000 deg HORIZONTAL
+
+
+def _sub(a, b):
+    return (a[0] - b[0], a[1] - b[1], a[2] - b[2])
+
+
+def _dot(a, b):
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+
+
+def _cross(a, b):
+    return (a[1] * b[2] - a[2] * b[1],
+            a[2] * b[0] - a[0] * b[2],
+            a[0] * b[1] - a[1] * b[0])
+
+
+def _norm(a):
+    L = math.sqrt(_dot(a, a))
+    return (a[0] / L, a[1] / L, a[2] / L) if L > 1e-9 else None
+
+
+def basis(pos, target, up=UP_AXIS):
+    """(forward, right, up) for the camera, or None if it is degenerate."""
+    f = _norm(_sub(target, pos))
+    if f is None:
+        return None
+    r = _norm(_cross(f, up))
+    if r is None:                 # looking straight along `up`
+        return None
+    return f, r, _cross(r, f)
+
+
+def project(world, pos, target, fov, aspect=DEFAULT_ASPECT, up=UP_AXIS):
+    """A world point -> (fx, fy) in VIEWPORT fractions, or None if behind.
+
+    Viewport, not window: `viewport_in_window()` converts, and it MEASURES the
+    chrome rather than fitting it.
+    """
+    b = basis(pos, target, up)
+    if b is None:
+        return None
+    f, r, u = b
+    v = _sub(world, pos)
+    depth = _dot(v, f)
+    if depth <= 1e-6:
+        return None
+    fh = fov if FOV_IS_FULL_ANGLE else fov * 2.0
+    th = math.tan(fh / 2.0)
+    tv = th / aspect
+    return (0.5 + (_dot(v, r) / (depth * th)) / 2.0,
+            0.5 - (_dot(v, u) / (depth * tv)) / 2.0)
+
+
+def ray(fx, fy, pos, target, fov, aspect=DEFAULT_ASPECT, up=UP_AXIS):
+    """The world-space direction a VIEWPORT fraction looks along."""
+    b = basis(pos, target, up)
+    if b is None:
+        return None
+    f, r, u = b
+    fh = fov if FOV_IS_FULL_ANGLE else fov * 2.0
+    th = math.tan(fh / 2.0)
+    tv = th / aspect
+    sx = (fx - 0.5) * 2.0 * th
+    sy = (0.5 - fy) * 2.0 * tv
+    return _norm((f[0] + r[0] * sx + u[0] * sy,
+                  f[1] + r[1] * sx + u[1] * sy,
+                  f[2] + r[2] * sx + u[2] * sy))
+
+
+def to_ground(fx, fy, pos, target, fov, ground_z,
+              aspect=DEFAULT_ASPECT, up=UP_AXIS):
+    """Where a viewport fraction meets the plane z = ground_z, or None.
+
+    None when the ray does not descend to the plane -- a click at or above the
+    horizon has no ground point, and inventing a distant one would be a lie with
+    a unit on it (the same rule sec.1z-aw's `ground_range` follows).
+    """
+    d = ray(fx, fy, pos, target, fov, aspect, up)
+    if d is None or abs(d[2]) < 1e-9:
+        return None
+    t = (ground_z - pos[2]) / d[2]
+    if t <= 0:
+        return None
+    return (pos[0] + d[0] * t, pos[1] + d[1] * t, ground_z)
+
+
+def viewport_in_window(hwnd):
+    """(top, span) of the client area as fractions of the WINDOW rect.
+
+    MEASURED, not fitted. sec.1z-aw carried these as two of its four fitted
+    parameters, which is how a window border ended up inside a camera model.
+    """
+    import ctypes
+    from ctypes import wintypes
+    u = ctypes.windll.user32
+    w = wintypes.RECT()
+    c = wintypes.RECT()
+    if not u.GetWindowRect(hwnd, ctypes.byref(w)):
+        return None
+    if not u.GetClientRect(hwnd, ctypes.byref(c)):
+        return None
+    p = wintypes.POINT(0, 0)
+    u.ClientToScreen(hwnd, ctypes.byref(p))
+    wh = w.bottom - w.top
+    if wh <= 0:
+        return None
+    return ((p.y - w.top) / wh, (c.bottom - c.top) / wh)
+
+
 def pairs_from_run(rundir, tape=None):
     """(fy, body-relative range) for every click leg, body from the TAPE.
 
@@ -191,10 +336,108 @@ def pairs_from_run(rundir, tape=None):
     return out
 
 
+# --- the self-check, movetap's precedent -------------------------------------
+# NOT a `test_*.py`: `run_suite.py` walks `toolkit/` only, and `test_srclint`
+# section 7 requires every name in TESTS.md to EXIST there -- so a test file
+# under `studies/` is both undiscovered by the suite and a stale entry in the
+# list. `movetap.py --selftest` is the pattern for a study tool that wants its
+# checks to travel with it, and this follows it rather than bending the lint.
+import checks                                                    # noqa: E402
+
+LEDGER = checks.Ledger("clickaim read-camera projection", floor=12)
+check = checks.adopt_named(LEDGER)
+
+BODY = (1000.0, 2000.0, 0.0)
+POS = (400.0, 2000.0, 400.0)        # 600 u behind, 400 up
+TGT = (1000.0, 2000.0, 80.0)
+FOV = math.radians(75.0)            # sec.fovaxis: 75.000 deg HORIZONTAL
+
+
+def selftest():
+    print("\n1. the projection's algebra")
+    for dx in (200.0, 600.0, 1500.0):
+        W = (BODY[0] + dx, BODY[1], 0.0)
+        s = project(W, POS, TGT, FOV)
+        back = to_ground(s[0], s[1], POS, TGT, FOV, 0.0) if s else None
+        err = math.hypot(back[0] - W[0], back[1] - W[1]) if back else 9e9
+        check("a ground point at %4.0f u projects and unprojects to itself" % dx,
+              err < 0.5,
+              "err %.3f u -- if this drifts, every aimed click drifts with it" % err)
+
+    s = project(BODY, POS, TGT, FOV)
+    check("the body projects onto the CENTRE column",
+          s is not None and abs(s[0] - 0.5) < 1e-6,
+          "fx=%.4f (the camera is directly behind it)" % (s[0] if s else -1))
+
+    check("a point BEHIND the camera returns None, never a coordinate",
+          project((POS[0] - 500.0, POS[1], 0.0), POS, TGT, FOV) is None,
+          "a projection that wrapped would aim a click at the opposite horizon")
+
+    level = ((400.0, 2000.0, 120.0), (1000.0, 2000.0, 110.0))
+    check("a ray ABOVE the horizon returns None, never a distant invention",
+          to_ground(0.5, 0.02, level[0], level[1], FOV, 0.0) is None,
+          "sec.1z-aw's own rule: no ground there is an answer, not a number")
+
+    # sec.1z-as measured 12.5 px/degree on the client. Here the same 24 deg step
+    # is asked of the GEOMETRY, from the measured FOV alone.
+    W = (BODY[0] + 1000.0, BODY[1], 0.0)
+    s0 = project(W, POS, TGT, FOV)
+    a = math.radians(24.0)
+    t2 = (POS[0] + math.cos(a) * (TGT[0] - POS[0]) - math.sin(a) * (TGT[1] - POS[1]),
+          POS[1] + math.sin(a) * (TGT[0] - POS[0]) + math.cos(a) * (TGT[1] - POS[1]),
+          TGT[2])
+    s1 = project(W, POS, t2, FOV)
+    want = (math.tan(math.radians(24.0)) / math.tan(math.radians(37.5))) / 2.0
+    got = abs(s1[0] - s0[0]) if s1 else None
+    check("a 24 deg yaw shifts a fixed point by the FOV's own fraction",
+          got is not None and abs(got - want) < 0.02,
+          "%.3f vs %.3f -- sec.1z-as's yaw:300 step falling OUT of the geometry "
+          "rather than being assumed by it" % (got or -1, want))
+
+    print("\n2. the V, and the correction sec.1z-aw owes")
+    f, r, u = basis(POS, TGT)
+    rows = [x / 100.0 for x in range(30, 77, 6)]
+    signed, dist = [], []
+    for fy in rows:
+        g = to_ground(0.5, fy, POS, TGT, FOV, 0.0)
+        if g is None:
+            continue
+        signed.append((g[0] - BODY[0]) * f[0] + (g[1] - BODY[1]) * f[1])
+        dist.append(math.hypot(g[0] - BODY[0], g[1] - BODY[1]))
+    check("SIGNED range along the view direction decreases monotonically with fy",
+          all(a > b for a, b in zip(signed, signed[1:])),
+          "this is the quantity a camera model is monotone in")
+    check("UNSIGNED |ground - body| is NOT monotone -- it is V-shaped",
+          not all(a > b for a, b in zip(dist, dist[1:])),
+          "clicks BELOW the body's row land between camera and body, so the "
+          "distance rises again. sec.1z-aw measured THIS and read the V as proof "
+          "that no fixed camera could fit -- half its evidence was geometry")
+    fyb = project(BODY, POS, TGT, FOV)[1]
+    lo = min(range(len(dist)), key=lambda i: dist[i])
+    check("the V's minimum sits at the BODY's own screen row",
+          abs(rows[lo] - fyb) < 0.06,
+          "min at fy=%.2f, body at fy=%.2f" % (rows[lo], fyb))
+
+    print("\n3. the terms that are NOT established, pinned so a change is deliberate")
+    check("UP_AXIS is declared and marked unverified",
+          UP_AXIS == (0.0, 0.0, 1.0)
+          and "UNVERIFIED" in open(os.path.abspath(__file__), encoding="utf-8").read(),
+          "the movement wire is (x, y) and the pathing file has NO HEIGHT, so the "
+          "third float is PRESUMED height; a run settles it, not a comment")
+    check("fov is read as the FULL angle, per sec.fovaxis",
+          FOV_IS_FULL_ANGLE is True,
+          "fovread.describe prints both readings BECAUSE it was unsettled; "
+          "fovaxis settled the axis at 75.000 deg horizontal")
+    return LEDGER.verdict()
+
+
+
 def main():
     ap = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--selftest", action="store_true",
+                    help="the bare-machine checks (no client, no vault)")
     ap.add_argument("--fit", action="store_true")
     ap.add_argument("--aim", type=float, help="body-relative range in units")
     ap.add_argument("--runs", nargs="*", help="harness run stamps to fit on")
@@ -202,6 +445,8 @@ def main():
     print("FOV_h %.3f deg (measured) -> FOV_v %.2f deg at aspect %.3f"
           % (FOV_H, fov_v(), DEFAULT_ASPECT))
     print("This file is a MODEL over flat ground; sec.1z-as.3's slope hazard applies.")
+    if a.selftest:
+        return selftest()
     if a.aim is not None:
         print("\n--aim needs a fit first (--fit), and the fit needs a level-ground "
               "click sweep\nwith a tape over it. See the module header.")

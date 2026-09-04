@@ -12410,7 +12410,8 @@ answered, and it answered `no-path-or-gate`. That is enough evidence about the m
 **a fan of screen fractions cannot reliably hit a target this narrow**, and running more of
 them is the treadmill the 2026-08-30 direction refuses.
 
-**BUILT AND REFUTED in §1z-aw** — the flat-ground model failed its own hold-out (205 u
+**BUILT AND REFUTED in §1z-aw, then REPLACED BY A READ in §1z-ax (which also corrects
+half of §1z-aw's evidence: the V near the body is geometry, not a varying pitch)** — the flat-ground model failed its own hold-out (205 u
 mean, 569 u worst) because the camera's PITCH VARIES, and the fix is to READ the camera
 (`fovread.py` already does) rather than fit it. The derived alternative is already
 identified in §1z-au.2 and is **arithmetic, not a run**:
@@ -12490,3 +12491,76 @@ and reading it, never from reasoning about it"*) applied to a place where I reas
 **What remains** is small and needs no new derivation: read those three vectors beside the
 click, build the view matrix, project the route-forcing point `mapscout.py` already computes,
 and click the fraction that comes out. The failure above is what says to do it that way.
+
+---
+
+## 1z-ax. THE CAMERA IS READ, NOT FITTED — the projection is exact, and half of §1z-aw's evidence was geometry I mis-measured
+
+**Asked:** "read the camera." Built on `fovread.py`'s existing read; **12 bare-machine
+checks green, no client used** (the harness is the operator's). Ident `MOVECODE-1z-ax`.
+**Nothing has been aimed at a live client yet, and §1z-ax.4 says what that needs.**
+
+### 1z-ax.1 What replaces the fit
+
+`fovread.py` already reads all three terms of the view transform, from the frustum builder's
+own failure path: **`Position` `0x00C07860`, `Target` `0x00C0786C`, `fov` `0x00C078C4`**. With
+those there is nothing to fit — `clickaim.py` now carries `project()`, `ray()` and
+`to_ground()`, evaluated **per click from the client's own camera**. A pitch that moves stops
+being an error term because it is being measured.
+
+**And the window chrome stopped being a fitted parameter.** §1z-aw carried the viewport's top
+and height as two of its four fitted terms — which is how a title bar ended up inside a camera
+model. `viewport_in_window()` reads it exactly (`GetClientRect` + `ClientToScreen` against
+`GetWindowRect`, which is what `dc.click` uses).
+
+### 1z-ax.2 ★ The correction §1z-ax owes §1z-aw
+
+§1z-aw called its sweep *"not monotone in `fy`, which no fixed camera can produce"* and blamed
+a varying pitch **for all of it**. That was too strong. **Half of it is ordinary geometry:**
+
+Clicks **below the body's own screen row** land *between* the camera and the body, so
+`|ground − body|` is **V-shaped, with its minimum at the body**. §1z-aw measured exactly that
+unsigned distance — and its tail, `0.60 → 141, 0.66 → 62, 0.70 → 83`, is the V, not a
+contradiction. The projection reproduces it, minimum at the body's row.
+
+**What survives is the inversion higher up** — `0.42 → 255` against `0.48 → 1057`, both well
+above the body's row, where the geometry says monotone. *That* still needs the read camera,
+and it is the half of §1z-aw's evidence that was real.
+
+The lesson is the small one: **I chose the wrong quantity.** The signed range along the view
+direction is what a camera model is monotone in; the unsigned distance to the body is not, and
+reading a V as a refutation cost a section. The self-check pins both directions so it cannot
+happen twice.
+
+### 1z-ax.3 What is checked, and what is only declared
+
+`clickaim.py --selftest`, **12 checks, floor 12, bare machine** — a ground point projects and
+unprojects to itself at 200/600/1500 u; the body lands on the centre column; a point behind
+the camera and a ray above the horizon each return **None rather than a fabricated
+coordinate**; and **a 24° yaw shifts a fixed point by the fraction of screen width the
+measured 75.000° FOV requires** — §1z-as's `yaw:300` calibration *falling out of* the geometry
+rather than being assumed by it, which is the closest thing to an independent check available
+without a client.
+
+> **Not a `test_*.py`, deliberately.** `run_suite.py` walks `toolkit/` only, and
+> `test_srclint` §7 requires every name in `TESTS.md` to **exist** there — so a test file under
+> `studies/` is both undiscovered by the suite and a stale entry in the list. I wrote one,
+> srclint refused it, and it was right. `movetap.py --selftest` is the precedent for a study
+> tool whose checks travel with it, and this follows it.
+
+**Two terms are declared, not established, and are pinned so changing them is deliberate:**
+`UP_AXIS` — the movement wire is `(x, y)` and the pathing file has **no height**, so the third
+float is *presumed* height; and `fov` read as the **full** angle, per §fovaxis's 75.000°
+horizontal, where `fovread.describe` prints both readings precisely because it was unsettled.
+
+### 1z-ax.4 What it still needs, and it is one run
+
+The arithmetic is exact and self-consistent; **what it has never done is aim at a live
+client.** The step is small: read `Position`/`Target`/`fov` beside the click — the natural home
+is a column on `agenttap`, exactly as the fence was added in §1z-an — project the
+route-forcing point `mapscout.py` computes, and click the fraction that comes out. The
+validation is built in and needs no new instrument: **the click's own `MOVE_TO_COORD` says
+where it landed**, so predicted-versus-actual is a residual in world units, per click.
+
+**That run is not taken.** The harness is the operator's, and this is the point at which the
+projection stops being arithmetic and starts costing a client launch.
