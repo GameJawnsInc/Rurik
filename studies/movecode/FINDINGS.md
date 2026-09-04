@@ -11790,7 +11790,9 @@ client's collision disagreeing"* — with a specific mechanism**, and it is the 
 that §1z-aj.5 wanted caused and §1z-al proved the enemy could not cause.
 
 Corroboration, and its limit: once the snap put the body at `(9853, 8286)` — plane 0 —
-it walked west immediately at 190.1 u/s. **RECONSTRUCTION**, not OBSERVED: the seam is
+it walked west immediately at 190.1 u/s. **FIXED in §1z-ap** (`A2_LEAD_PLANE_CLIP`, `--no-lead-plane-clip` reverts; the
+same lead now clips to 14 u reading `plane-seam`, and the term retrodicts 6 of 6 locked
+runs below gate 1). **RECONSTRUCTION**, not OBSERVED: the seam is
 consistent with the refusal and our clip is provably plane-blind, but this run does not
 show the client refusing *because* of the plane, and one specimen cannot exclude geometry
 our mesh simply lacks.
@@ -11810,3 +11812,102 @@ our mesh simply lacks.
   clip is a **derived candidate defect, not a fix** — it needs its own section, and the
   obvious repair (a plane-aware clip) touches the routing path that §1z-o and §1z-v both
   have arms in.
+
+---
+
+## 1z-ap. THE PLANE-BLIND CLIP, FIXED — the lead's ray must stay on the report's own plane, and it retrodicts 6 of 6 locked runs
+
+**Asked:** "fix the plane-blind clip." §1z-ao.5 named it from the specimen; this builds it,
+behind one flag, with the known-bad arm in the test. Ident `MOVECODE-1z-ap`.
+**`A2_LEAD_PLANE_CLIP` ON, `--no-lead-plane-clip` reverts.**
+
+### 1z-ap.1 The defect, in one sentence of the mesh's own documentation
+
+`PathingMap.walkable()` says what it does: *"Is this point inside any trapezoid, **on any
+plane**?"* — and `clip()` was built on it. There is **no height in the pathing file**, so a
+plane-29 trapezoid and a plane-0 trapezoid can occupy the same `(x, y)` and be different
+physical places with no straight walk between them. A ray from a bridge to the ground
+beneath it therefore scored **CLEAR at full length**. That is not a bug in `walkable` —
+its contract is right for its own callers — it is a term `a2_clip_lead` never applied.
+
+### 1z-ap.2 What it cost, measured rather than argued
+
+RUN-1zAO's specimen (§1z-ao), scored through the shipped code on both arms:
+
+| | `--no-lead-plane-clip` | shipped |
+|---|---|---|
+| the fatal lead `(10373,8286) → (9853,8286)` | **520.0 u, `why="clear"`** | **14.0 u, `why="plane-seam"`** |
+
+At 520 u the sync copy walked away from a body that would not follow, separation crossed
+gate 1 and reached 502 u, and the arrival warped the drawn body 520 u and shut AgTrack's
+fence for good. At 14 u the ray cannot reach gate 1 at all, so **the arming event is
+unreachable rather than merely less likely**.
+
+### 1z-ap.3 ★ THE RETRODICTION — 6 of 6
+
+Every locked run in the corpus, re-scored on map 146's mesh at the lead armed on its
+**first silent leg** (the arming event), plane-blind against plane-aware:
+
+| run | reach before | after | |
+|---|---|---|---|
+| `20260903T191246` | 520 u | **6 u** | prevented |
+| `20260903T195857` | 520 u | **36 u** | prevented |
+| `20260903T200549` | 520 u | **146 u** | prevented |
+| `20260903T202051` | 520 u | **6 u** | prevented |
+| `20260903T214957` | 520 u | **2 u** | prevented |
+| `20260904T105954` (RUN-1zAO) | 520 u | **14 u** | prevented |
+
+**6 of 6 fall below gate 1's 299.33 u**, every one on a plane-29 origin. The seventh
+locked run, `20260903T073055`, had **no lead armed on its silent leg at all** — and it is
+the same run §1z-am found had no early maturation either, the odd one out in both tests.
+Consistent, and it says this fix does not explain that one.
+
+### 1z-ap.4 What it does NOT do, which is most of the corpus
+
+Re-scoring **464** keyboard leads: the plane term changes **36 (7.8%)**, and **all 36 are
+`plane-seam`**. The other 92.2% come back bit-identical. That is the shape a fix should
+have — it bites on the cross-seam rays and nowhere else — and the test pins it directly: a
+same-plane clear ray is **bit-identical on both arms**, because a clip that perturbs
+healthy grants by epsilon rewrites every one of them and the 222/222 word doctrine starts
+matching floats the client never sent.
+
+### 1z-ap.5 The build
+
+- **`pathmap.clip(..., plane=None)`.** Default is the historical behaviour to the bit.
+  Given a plane, a sample must also satisfy `plane_at(prefer=plane) == plane`. The term
+  can only ever stop the walk **earlier**, never later, so it cannot lengthen a lead —
+  the failure direction is a short grant, which the client is authoritative over anyway.
+  Crossing surfaces is a **portal's** job (`adjacent()` walks them, `route()` searches
+  them); a straight-line clip is not the place to model one.
+- **`a2_clip_lead`** takes the plane from `plane_at(reported, prefer=state["plane"])` —
+  the REPORT's own plane word, never `state["pos"]` (`--heading-grant`'s graveyard). When
+  `plane_at` returns None it **refuses to guess** and the term is disabled, which is this
+  site's existing no-mesh doctrine.
+- **The row names the door.** A new `why` value, **`plane-seam`**, decided by whether the
+  sample one step past the stop is still on the mesh: on the mesh means the ray left the
+  *plane*, off it means the ordinary wall clip. This file already paid once for a clip
+  whose row did not say which door opened (the P-17 press, `lead_clipped=false`).
+- **The `plane=` kwarg is passed only when the term is in force**, so a stub or an older
+  mesh object takes the historical call unchanged rather than raising inside the recv
+  loop — caught by the test, not by a session.
+
+**Tests.** `test_d1lead` **94 → 104, floor 104**, §2e, and it **drives the known-bad arm
+first** so the shipped cell is known to measure the plane term and not the wall.
+`test_kbdsync` 106, `test_router` 114, `test_pathmap` 80, `test_position_trust` 235,
+`test_srclint` 26 — green.
+
+### 1z-ap.6 What is NOT fixed, and it is deliberate
+
+- **The ROUTER's clip is untouched.** It calls `pm.clip` without a plane, so click
+  routing behaves exactly as before. The same seam is presumably there, but the router
+  has arms in §1z-o and §1z-v and changing it in the same commit would mean a run
+  convicts two terms (§29's rule). **Its own section.**
+- **The fix is UNRUN.** Every number above is a desk re-score of captured leads; no
+  client has been driven with `A2_LEAD_PLANE_CLIP` on. The retrodiction is strong —
+  6 of 6, on the exact leads that armed the observed locks — but retrodiction is not a
+  run, and §1z-af is the standing reminder that a derived backstop can be convicted by
+  its own verification runs.
+- **`--kbd-lead` stays OFF.** This removes an armer; it does not re-argue the lead.
+- **RECONSTRUCTION stands where §1z-ao.5 put it.** That the client refused *because* of
+  the plane is still inferred: the seam is consistent with the refusal and the clip is
+  provably plane-blind, but no run has shown the client's own reason.

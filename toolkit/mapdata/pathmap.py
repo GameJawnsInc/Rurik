@@ -644,13 +644,35 @@ class PathingMap:
             return next(iter(planes))
         return None
 
-    def clip(self, x0, y0, x1, y1, step=16.0):
+    def clip(self, x0, y0, x1, y1, step=16.0, plane=None):
         """How far along (x0,y0)->(x1,y1) a character can actually get.
 
         Returns the last sampled point that is walkable, or the start if the
         very first step is not. Sampling, not solving: a gap narrower than
         `step` can be stepped over. 16 units is about a twentieth of a second at
         run speed, and the client does its own collision besides.
+
+        `plane` -- STAY ON ONE SURFACE (MOVECODE-1z-ap). Default None is the
+        historical behaviour to the bit: `walkable()` asks "inside any
+        trapezoid, ON ANY PLANE", so a ray from a bridge to the ground beneath
+        it clips CLEAR even though the two are different physical places with
+        no straight walk between them. RUN-1zAO caught that costing a 520 u
+        warp: the lead `(10373,8286) -> (9853,8286)` runs plane 29 -> plane 0,
+        this method scored it clear at full length, the client would not walk
+        it, and the drawn body was still parked when the grant's arrival
+        teleported it onto the far end (FINDINGS sec.1z-ao.5).
+
+        Given a plane, a sample must ALSO be on it -- `plane_at(prefer=plane)`,
+        so the ambiguous stacked case resolves to `plane` when the mesh offers
+        it there and to None ("say nothing") when it cannot tell, which clips.
+        The plane term can only ever stop the walk EARLIER, never later, so it
+        cannot lengthen a lead: the failure direction is a short grant, which
+        the client is authoritative over anyway.
+
+        Crossing to another surface is a PORTAL's job (`adjacent()` walks them
+        and `route()` searches them); a straight-line clip is not the place to
+        model one, and refusing to walk off the start plane is the conservative
+        reading of a mesh with NO HEIGHT in it.
         """
         dx, dy = x1 - x0, y1 - y0
         dist = (dx * dx + dy * dy) ** 0.5
@@ -662,6 +684,8 @@ class PathingMap:
             f = i / n
             px, py = x0 + dx * f, y0 + dy * f
             if not self.walkable(px, py):
+                return last
+            if plane is not None and self.plane_at(px, py, prefer=plane) != plane:
                 return last
             last = (px, py)
         return (x1, y1)
