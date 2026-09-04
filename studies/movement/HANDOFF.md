@@ -294,7 +294,16 @@ runs LOCKED — MIXED 24.3 % with two parked legs, then ENSLAVED 31.4 % with thr
 reported stops of seven key legs in each, and the second carried a `refresh-late`. So
 preventing the arrival does NOT prevent the lock; with §1z-z having killed §0.11's plane
 route, the keyboard armer is UNIDENTIFIED. `KBD_LEAD_REFRESH` is now OPT-IN and OFF
-(`--kbd-lead-refresh`). **§1z-ai RAN IT (RUN-1zAH, four runs). The retract FIRES and is SAFE — four fired,
+(`--kbd-lead-refresh`). **§1z-aj RERAN IT on a fixed floor and route (RUN-1zAJ, four runs): the EXPOSURE
+DEFECT IS FIXED -- clear leads 2-4 -> 9-14, floor met 4/4, exactly the 8-12 the mesh
+predicted at the desk (leadroute.py). 7 more retracts, all 0.0 u, zero violations,
+11 total. But INCONCLUSIVE: the control never locked. And the reason is structural,
+derived before the run -- a CLEAR lead means nothing stops the body for 520 u, so it
+walks to its 512 u trigger and re-aims; the geometry that makes a lead full-length is
+the geometry that stops it maturing. Next: CAUSE the parking (the enemy's collision),
+do not wait for it.**
+
+**§1z-ai RAN IT (RUN-1zAH, four runs). The retract FIRES and is SAFE — four fired,
 every one at 0.0 u of harm with the next report landing on the pinned point, zero
 violations. The OUTCOME clause REFUTED: arm T's second run had a held-key parked leg,
 though that leg had a ZERO-LENGTH lead and no arrival-risk at all, so it is a different

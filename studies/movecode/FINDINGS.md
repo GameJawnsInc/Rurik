@@ -10901,3 +10901,100 @@ counted in **unclipped** leads (`lead_clip_why == "clear"`), a route that produc
 the current one spends most of its leads on off-mesh origins — and a REFUTES clause that
 names the **persistent** lock (stops ≪ legs, no re-arm) rather than any parked leg, since
 those turn out to be two different objects with two different causes.
+
+
+---
+
+## 1z-aj. RUN-1zAJ RAN — the exposure defect is FIXED (floor met 4/4, clear leads 2–4 → 9–14), seven more retracts all at 0.0 u, and the run is **INCONCLUSIVE** because the control never produced the defect
+
+**Asked:** "fix the exposure floor and rerun on a route with unclipped leads." Both done,
+then four runs T C T C. Captures `authsrv-20260903T222122 / 222324 / 222522 / 222719-c1`
+with their taps. Ident `MOVECODE-1z-aj`.
+
+### 1z-aj.1 The two repairs, and they worked
+
+**The floor now counts leads that survive `a2_clip_lead`** (`gatecensus.py`, floor 8).
+Pointed at RUN-1zAH's own captures it reads `UNDER FLOOR (4)` — the defect §1z-ai found,
+now caught automatically.
+
+**The route was the problem, not the map.** `leadroute.py` (new) scores a mesh with the
+server's own test — `walkable(origin)`, then `clip(origin → origin + 520·u)` at the same
+2.0 u step. Around map 146's spawn: **0–300 u is 0 % off-mesh at a mean 13.6/16 clear
+headings**; 400–500 u is 8 % off; 700–900 u is 25 %. RUN-1zAH's script ranged to 2,091 u
+and its own reports read 26 % and 48 % origin-off-mesh. The new script oscillates — every
+forward leg answered by a backpedal — and stays inside ~300 u.
+
+| | RUN-1zAH | RUN-1zAJ |
+|---|---|---|
+| clear (full 520 u) leads per run | **2, 4, 4, 2** | **9, 14, 11, 13** |
+| `origin-unwalkable` per run | 10, 10, 15, 1 | **1, 2, 0, 3** |
+| floor verdict | UNDER FLOOR ×4 | **MET ×4** |
+
+Predicted 8–12 before the run; measured 9–14. The desk model of the mesh was right.
+
+### 1z-aj.2 The mechanism, again and more of it
+
+| run | arm | reports | stop-echoes | legs armed | retracts |
+|---|---|---|---|---|---|
+| J-T1 | waiver ON | 32 | 12 | 19 | **4** |
+| J-C1 | OFF | 37 | 12 | 25 | 0 |
+| J-T2 | waiver ON | 30 | 12 | 18 | **3** |
+| J-C2 | OFF | 36 | 12 | 24 | 0 |
+
+**Seven more retracts, every one `prev_d = 0.0 u`, zero violations.** The arms mirror each
+other exactly: arm C logged `blocked / stale-report` at 9.4 / 39.4 / 46.5 s and 9.4 / 39.4 s,
+and arm T converted the same events at 39.4 / 46.5 and 29.2 / 39.3. **And the waiver
+refused correctly in arm T too** — the 9.4 s row stayed `blocked / stale-report` in *both*
+arm-T runs, because the body had moved there. Running total across both sheets:
+**11 retracts, 0 violations**, on a checker that reads 0 across 1,262 captures and exits 1
+on a synthetic.
+
+### 1z-aj.3 ★ INCONCLUSIVE — the control never produced the defect
+
+**All four runs are healthy: 12 stop-echoes for 13 movement legs, in every one.** No
+persistent lock anywhere — not in arm C, which is what the run needed. RUN-1zAJ §2
+registered this outcome in advance: *"INCONCLUSIVE — … arm C never locks (the regime did
+not produce the defect)."* So it is inconclusive, and the clean arm T is **not** evidence
+the fix works.
+
+**Why, and it was derived before the run rather than after.** §1zAJ §2 registered: *"more
+clear leads buy more TRIALS, not better odds per lead… a `clear` lead means our mesh says
+nothing stops the body for 520 u, so a freely walking body covers its 512 u report trigger
+and re-aims before the arrival."* That is exactly what happened. The oscillating script
+made leads full-length **and** made every leg end in a reported stop, which kills the lead
+by design (§1z-y). **The two requirements are in tension: the geometry that lets a lead
+reach 520 u is the same geometry that lets the body keep walking and re-aim it.** Run A's
+lock needed a body parked *while its key was held* on a ray our mesh called clear — our
+mesh and the client's collision disagreeing — and that is not something a route can
+schedule.
+
+### 1z-aj.4 Two observations, recorded not scored
+
+- **The `D:1` turn-in-place leg is flagged `HELD KEY, BODY PARKED` in all four runs.** A
+  and D turn without translating — the scorer's own table header says so — so 0 u is
+  correct there and the flag is a false positive on turn keys. It would have tripped
+  RUN-1zAH's old REFUTES clause in every run of both arms, which is a second, independent
+  reason §1z-aj's narrowing to the *persistent* lock was necessary.
+- **J-T2 has one leg reading `ENSLAVED 100.0 %` while travelling 360.6 u of a 380 u free
+  walk.** Normal travel, neighbours FREE, no lock. That is §1z-ac's bit-identity test
+  firing on a co-directional leg: our granted lead pointed where the body was already
+  going. Not a refutation under the registered clause, and recorded here because a
+  100 % leg that is not a lock is exactly the reading a later session would misquote.
+- **Arm T arms fewer legs than arm C** (18–19 against 24–25) and takes fewer reports. That
+  is the retract's own `0x002C` clearing `kbd_leg` (§1z-ah.6) and shutting the fence
+  briefly — expected, and the cost side of the trade that section stated.
+
+### 1z-aj.5 Where this leaves it
+
+**The exposure instrument is fixed and proven** — floor met 4/4, and it retro-flags
+RUN-1zAH. **The mechanism has 11 firings and no violation.** **The outcome is still
+unmeasured**, and after two sheets the reason is structural rather than procedural: this
+harness route cannot reliably manufacture "a full-length lead over a parked body", because
+on a clear ray the body does not park.
+
+**What a next attempt needs is not another route.** It needs the parking to be caused
+rather than waited for — the `--enemy` Hatcher's collision blocking the body mid-leg is the
+one mechanism in this harness that stops a walking body without our mesh knowing, and it is
+already in every run. Scoring which legs ran into it, and whether the body's stall is what
+run A's fatal leg had, is the derived next step. `--kbd-lead` stays OFF; the waiver stays
+ON.

@@ -1614,6 +1614,17 @@ floors and aborts in `RUN-R8.md`; both are operator-driven client runs.
 
 ## 8. Immediate next actions
 
+### ★★★ MOVEMENT 2026-09-03 — RUN-1zAJ RAN (MOVECODE-1z-aj): the exposure defect FIXED (floor met 4/4, clear leads 2-4 → 9-14), 7 more retracts at 0.0 u, and INCONCLUSIVE because the control never locked
+
+**[studies/movecode/RUN-1zAJ.md](studies/movecode/RUN-1zAJ.md), [FINDINGS](studies/movecode/FINDINGS.md) §1z-aj.**
+
+* **THE FLOOR NOW COUNTS THE ARM.** `gatecensus.py` reports leads that survive `a2_clip_lead` and names MET / UNDER FLOOR against 8. Pointed at RUN-1zAH's own captures it reads **UNDER FLOOR (4)** — §1z-ai's defect, now caught automatically.
+* **THE ROUTE WAS THE PROBLEM, NOT THE MAP.** `leadroute.py` (new) scores a mesh with the server's own test. Around map 146's spawn **0–300 u is 0 % off-mesh at 13.6/16 clear headings**; RUN-1zAH's script ranged to **2,091 u** and read 26 % / 48 % origin-off-mesh. An oscillating script staying inside ~300 u took clear leads from **2,4,4,2 to 9,14,11,13** — predicted 8–12 from the mesh at the desk.
+* **MECHANISM, again:** 7 more retracts (11 total across both sheets), **every one `prev_d` 0.0 u, zero violations**. The arms mirror: arm C logged `blocked/stale-report` at the same instants arm T converted. The waiver also **refused correctly in arm T** where the body had moved.
+* **★ INCONCLUSIVE, as this sheet registered in advance:** all four runs healthy (12 stop-echoes for 13 legs), **the control never locked**, so the clean arm T is not evidence the fix works. The reason was derived BEFORE the run: a `clear` lead means nothing stops the body for 520 u, so it walks to its 512 u trigger and re-aims. **The geometry that makes a lead full-length is the geometry that stops it maturing.**
+* Recorded not scored: the `D:1` turn-in-place leg reads `BODY PARKED` in all four runs (A/D turn without translating) — it would have tripped RUN-1zAH's old clause in every run of both arms, a second reason the narrowing was necessary; and one J-T2 leg reads `ENSLAVED 100 %` while walking 360 u of a 380 u free walk (§1z-ac's bit-identity test on a co-directional lead).
+* **Next is not another route.** The parking must be CAUSED, not waited for — the `--enemy` Hatcher's collision is the one thing in this harness that stops a walking body without our mesh knowing. `--kbd-lead` stays OFF; the waiver stays ON.
+
 ### ★★★ MOVEMENT 2026-09-03 — RUN-1zAH RAN (MOVECODE-1z-ai): the retract fires and lands on the body for 0.0 u; the OUTCOME clause REFUTED, and the exposure census says why the run could not have settled it
 
 **[studies/movecode/RUN-1zAH.md](studies/movecode/RUN-1zAH.md), [FINDINGS](studies/movecode/FINDINGS.md) §1z-ai.** Four runs, arms alternating T C T C, RUN-1zAB's script and build verbatim, one variable changed. Agent-driven.

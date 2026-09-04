@@ -7,7 +7,7 @@ counted the wrong quantity, and the route spent most of its leads off our navmes
 Everything not named here is RUN-1zAH's, verbatim — same build, same flags, same arms,
 same scoring, same harm bound.
 
-**Status: REGISTERED, NOT YET RUN.**
+**Status: RAN 2026-09-03 22:20-22:27, four runs. THE EXPOSURE DEFECT IS FIXED (floor MET 4/4, clear leads 2-4 -> 9-14, exactly the 8-12 predicted); seven more retracts, all at 0.0 u, zero violations. **INCONCLUSIVE** on the outcome -- the control never produced the defect, which this sheet registered as an outcome in advance. Full record: FINDINGS 1z-aj.**
 
 ---
 
