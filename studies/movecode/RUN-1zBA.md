@@ -235,3 +235,51 @@ python toolkit/clientscan/agenttap.py --agents 1,10 --seconds 80
 ```powershell
 python toolkit/harness/session.py --exe vault/run/2026-07-29_221c13772c7a/Gw.exe --walk "wait:3 yaw:812 W:9.6 yaw:297 W:1.3 yaw:-734 wait:2 shot:1 click:0.5,0.70 wait:6 click:0.5,0.65 wait:6 click:0.5,0.75 wait:6 yaw:750 click:0.5,0.46 wait:6" --hold 5 --game-args "--map 146 --explorable --no-enemy-skills --skills 0,0,0,0,0,0,0,0"
 ```
+
+---
+
+## RESULT, run 3 — RAN 2026-09-04 16:02. **Missed: every bracket click hit the deck.** Control WALKED.
+
+Capture `20260904T160220`, tape `agenttap-20260904T160250`. fy 0.70 / 0.65 /
+0.75 landed **16 / 63 / 23 u ahead, on the deck** — the aim table's own
+"deck level" column read 84 / 138 / 40 u, all short of the 123 u edge, and I
+read the bank columns instead. The control (bearing 270°, fy 0.46) ran
+**1,703 u down the deck and out the south portal**: PORTAL, WALKED.
+
+**And the geometry rules the adjacent bank out altogether.** From mid-deck the
+camera sits ~172 u above the deck and 337 u behind the body; a ray steep enough
+to land within the ~700 u bank drops below the ~65 u railing at the edge (run
+2's fy 0.60 stopped at the railing's foot, 126 u), and a ray that clears the
+railing overshoots the bank. **What clears the railing AND lands on-mesh is the
+far ground beyond the bank**, and that is a legitimate specimen: a `verbatim`
+leg from the deck to walkable ground 1.5–2 km west, crossing the blind edge at
+its tenth unit.
+
+## Run 4 — the PULL's specimen: west, over the railing, onto far ground
+
+Calibrated from run 2's own click 2 (fy 0.40 → 2,522 u, off-mesh): the far
+ground west lies **236 u below the deck**. On that plane, from run 2's camera:
+
+| fy | lands | range | plane | ray above deck at the edge | `chord_verdict` |
+|---|---|---|---|---|---|
+| 0.44 | (9013, 4517) | 1,977 u | 0 | 110 u | **BLIND**, verbatim |
+| **0.46** | (9205, 4586) | 1,773 u | 0 | 104 u | **BLIND**, verbatim |
+| 0.48 | (9366, 4645) | 1,601 u | 0 | 98 u | **BLIND**, verbatim |
+| 0.50 | (9504, 4695) | 1,454 u | 0 | 92 u | **BLIND**, verbatim |
+
+Clicks fy **0.46, 0.44, 0.48**, waits of 9 s (a 1.8 km leg is a 6.2 s ETA).
+The first that lands takes the body 1.7 km west (walked or teleported); the
+rest fire from there as controls. Then bearing 270°, fy 0.46, a seam-free
+control. **Prediction, if run 2 generalises:** the drawn body parks at
+x = 10860.0 for ~6 s while the sync copy walks ~1,800 u, then a ~1,750 u
+teleport at the ETA and the fence shuts. **P1's second blind leg comes from
+this run, by the router's other plane-blind path** — the string pull, where
+run 2's was the clip fallback.
+
+```powershell
+python toolkit/clientscan/agenttap.py --agents 1,10 --seconds 90
+```
+
+```powershell
+python toolkit/harness/session.py --exe vault/run/2026-07-29_221c13772c7a/Gw.exe --walk "wait:3 yaw:812 W:9.6 yaw:297 W:1.3 yaw:891 wait:2 shot:1 click:0.5,0.46 wait:9 click:0.5,0.44 wait:9 click:0.5,0.48 wait:9 yaw:-875 click:0.5,0.46 wait:9" --hold 5 --game-args "--map 146 --explorable --no-enemy-skills --skills 0,0,0,0,0,0,0,0"
+```
