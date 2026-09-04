@@ -13072,6 +13072,12 @@ the door back on its hinges.
 
 ### 1z-bc.3 ★ Why: on this bridge the portal is the body trapezoid, and the body still refuses it
 
+> **CORRECTED BY §1z-bd (the tap on a lead run):** the body CAN cross this portal — run 1 walked
+> RUN-1zAO's exact fatal lead at 190 u/s. The six parks were the client's keyboard mover
+> stalling at the wedge tip, 0.75 s BEFORE our re-pin, and none of the three candidates below
+> is it: `MapFindPath` is never called by keyboard movement. The decision (seam clip OFF for
+> the lead) stands, because the warp behind a stall is what a full-length lead adds.
+
 Plane 29 — the spawn-side bridge — has five trapezoids. Its two portals are carried by the
 **end body trapezoids**: `p29#0` (y 8279..8577, a wedge whose west edge slants from
 (10366, 8279) to (10069, 8577)) links to the three plane-0 trapezoids abutting that whole
@@ -13121,3 +13127,106 @@ not a ray's.
 - §1z-ba.1 (3): portal trapezoids are lines **on plane 18**; on plane 29 they are body
   trapezoids linked along an edge.
 - §1z-bb.6: "`a2_clip_lead` could take `seam_clip`" — refuted, 0 of 6.
+
+---
+
+## 1z-bd. THE RETURN TAP ON A LEAD RUN — the keyboard mover never calls `MapFindPath`; the park is a client-side stall at the wedge tip that PRECEDES our re-pin, and the portal is crossable
+
+**Asked:** "now arm the MapFindPath tap on a lead run" — §1z-bc.3's open question, put to
+the instrument built for it. Ident `MOVECODE-1z-bd`. Two runs under `RUN-1zBD.md`, arm
+`--kbd-lead --lead-seam-clip --no-repin-stationary-waiver` (the seam clip grants the fatal
+leads at full length on purpose), RUN-1zAQ's script with an 8 s opening wait so the hook
+attaches after the map loads. Three captures on one clock each time: the gamesrv tape, the
+agenttap tape, and `movehook.bin` (19 sites). New tools: `leadtap.py` (the three-way join)
+and `tapdrive.py` (attach on the harness's "body is in the map" line).
+
+### 1z-bd.1 The instrument worked, and the first answer is a zero
+
+Both runs: hook v9, 8,234 / 8,363 records, both DLL controls FIRED, attached 4.4 / 2.7 s
+after the map line and before the first key; tapes valid with the Hatcher control shut on
+every sample; ticks aligned to the wall on `agapi_setdest` points to a 160–180 ms spread.
+
+**`MapFindPath` fired 0 times in run 1's 60 s and 2 times in run 2** — and both of those came
+from return address `0x00605807`, snaptest's gate 2, not from the mover. Across ~880
+`agapi_setdest` step commands the keyboard mover consulted the tapped pathfinder **never**.
+So R7's mechanism — `pathCount == 0` when the declared from-plane is impossible — cannot be
+what parks a keyboard-driven body. Registered outcome **(c)**, four of four portal-crossing
+leads.
+
+### 1z-bd.2 ★★ The park, read from inside the client
+
+Four leads were granted at or past gate 1 where §1z-ap's clip would have stopped them short
+(P1 met). Two are the fatal shape — the wedge tip `(10369, 8282)` / `(10374, 8287)` on plane
+29, 520 u due west — one per run, **and they diverged**: run 1's body WALKED it (528 u at 190
+u/s, separation 9 u); run 2's PARKED for the whole 4 s S hold. Same spot, same server
+sequence, same script timing to 0.05 s. What the hook shows:
+
+**Before the lead — the stall is the client's, and it comes first.** Under the W hold the
+body reaches the wedge tip. From **−4.46 / −4.49 s** the mover re-targets the tip vertex
+`(10366, 8279)` **35 times at 16 ms intervals** with no `chcli_advance`. The client's own
+report at **−3.87 / −3.85 s** already has the body stationary there. Our `gate2-offmesh`
+AGTRACK RE-PIN follows at **−3.72 / −3.71 s** — 0.75 s after the stall began. **Our re-pin
+is downstream of a client-side stall, not its cause**, and §1z-ba.3's reading of run 1 there
+("the body was blocked at the deck edge") was right about the body and wrong about the agent.
+
+**At the lead — one command sequence, two endings.** S at −0.03 → the walk-start report →
+the 520 u lead → the fence re-arms. Both clients run `movecmd → movedispatch → chcli_dir →
+agapi_setdest`, and the first quarterstep's target is **on the wedge's west edge**:
+`(10363.0, 8282.0)` in run 1, `(10358.0, 8287.0)` in run 2 — 0.010 and 0.027 u outside plane
+29 by our decode, on the seam line where the file's portal is. Then:
+
+| | run 1 (walked) | run 2 (parked) |
+|---|---|---|
+| +0.09/+0.11 s | quarterstep to the edge; async body baked, then `teleport` w1 with v = (−190, 0) | quarterstep to the edge; async body baked; `teleport` w1 with v = (−190, 0) |
+| +0.15 s | **`chcli_advance` → `agapi_setdest (9602, 8283)`** — the 767 u segment across the portal | **no advance.** `snaptest`, `stepclear`; sync copy baked west |
+| +0.29/+0.31 s | `resume_fire`, gate flags 2 / status 0 | `resume_fire`, gate flags 2 / status 0 — identical |
+| the body | walks west at 190 u/s | stands on the seam, fence OPEN, through the 4 s hold |
+
+**The refusal is in the mover's waypoint feeder at the seam line**, and it is intermittent
+at this acute corner. Nothing in the two gate words distinguishes the runs; whatever
+`chcli_advance` waits for did not arrive in run 2. That guard is the next decode target, and
+it is a client-side decode, not a run: `chcli_advance` "solves up to 9 waypoints and feeds
+them out one at a time" (movecode.toml) through a solver that is **not** the tapped
+`MapFindPath`.
+
+**Why run 2 did not warp** where RUN-1zAO did: the sync copy walked only 105 u — north-west,
+off the lead's ray — and stopped at `(10277, 8327)` at +1.09 s, so the lead never matured
+and there was no arrival to snap on. RUN-1zAO's sync copy walked the whole 520 u and the
+arrival fired at +2.96. Why the sync copy left the ray is unexplained; the guard's
+`arrival-risk` blocked at +2.39 for want of a fresh report, and the S release's stop-report
+at +3.98 drew a `gate1-red` re-pin.
+
+### 1z-bd.3 The portal is crossable — §1z-bc corrected
+
+Run 1's body crossed the wedge portal at full speed on exactly RUN-1zAO's fatal lead; run
+2's body crossed the NE-end portal (`(11112, 9008)` → 520 u N) and the bank-to-deck one.
+**§1z-bc's "the body walked none of them" was six parks read as a rule.** The six were the
+stall above with a full-length lead maturing during it; the seam is not a wall. §1z-bc's
+decision still stands for the right reason: the seam clip would re-arm the warp behind
+every stall, and the stall is the client's.
+
+### 1z-bd.4 ★ R7's class showed up once — as a warp a lead's plane word causes
+
+At the NE end the walked lead carried **plane 29 across the portal onto plane-0 ground** (the
+grant's matched words were 29/29; the client kept declaring 29). Snaptest's gate 2 then asked
+`MapFindPath` from the granted point declaring 29 where the mesh offers 0 → **`pathCount 0` →
+`reseed`** in the next records, +2.48 s — the fence shut at +2.38 on the tape. The copies were
+together (7 u) so the warp was small; on a longer leg it would not be. **A lead through a
+portal must carry the destination's plane, not the origin's** — the same word discipline
+`route(with_planes)` gives the router's grants — filed as the plane-channel fix this run
+points at. The other gate-2 query (from the sync copy's stop, declaring 29 on plane-0 ground)
+returned **1**, which R7's exceptionless rule does not predict; one query, recorded.
+
+### 1z-bd.5 What stands
+
+- **Not the pathfinder.** Keyboard movement never calls `MapFindPath`; R7 does not transfer.
+- **Not the portal.** Crossed at speed, twice, once at the fatal spot.
+- **The client's mover stalls at the wedge tip**, before our re-pin, and sometimes does not
+  feed the second waypoint across the seam line its first step lands on. Intermittent.
+- **Our part is the warp**, when a full-length lead matures during the stall. §1z-ap's clip
+  keeps that door shut; §1z-bc's refusal of the seam clip for the lead is confirmed from the
+  client's side.
+- **Filed:** decode `chcli_advance`'s guard (why no second waypoint at the seam); the lead's
+  plane word across a portal (§1z-bd.4); why run 2's sync copy left the lead's ray.
+- Instruments: `leadtap.py`, `tapdrive.py`; the two hook captures under
+  `vault/research/movecode/1zbd-run1/` and `1zbd-run2/`.
