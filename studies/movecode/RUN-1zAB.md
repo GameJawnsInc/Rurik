@@ -121,6 +121,32 @@ same event, and run 1 merely won every coin flip. **`--kbd-lead` stays OFF.**
 
 ---
 
+## ★★ THE ARMER RUN — registered 2026-09-03 before launching (MOVECODE-1z-ag)
+
+`movetap.py` reads AgTrack's `clientControlled` dword directly; `agenttap` cannot see
+the fence at all (§1z-aa.1). Four scored `--kbd-lead` runs have locked three times and
+§1z-af left the armer **UNIDENTIFIED**, so this run points the one instrument that can
+see the fence at the one arm that locks. Same script, same flags, `--kbd-lead`, refresh
+OFF (its shipped default since §1z-af).
+
+**The question:** what shuts the fence on the keyboard lead path, now that §1z-z has
+killed §0.11's plane route?
+
+| registered before the run | |
+|---|---|
+| **Exposure floor** | the run must LOCK (a parked held-key leg, or stops < 7 of 7). Three of four prior runs did. **No lock = this measured nothing about the armer**, and I say exactly that rather than reading a null |
+| **The fence flips open→shut ONCE and stays shut** | §0.11 measured 351/325 subsequent samples with no re-arm |
+| **§0.11's fingerprint REPRODUCES on this arm** | at the shut sample `async_reqtoken` — the keyboard walk-start applier's own token — resets to 0 and stays 0, while `mode`/`speed`/`stop` keep re-arming normally |
+| **A position snap rides the same sample** | §0.11 saw ~15 u |
+| **The plane words are ALREADY equal before the shut** | §1z-z matches field 4 to field 3 on this path, so §0.11's L1 trigger ("the drawn body's plane word catches up to the sync copy's") should not be available. **If the plane words DO converge at the shut edge, §1z-z's armer-kill is not reaching this path** — that is a finding about the fix, not about the client |
+| **No server message rides the shut edge** | neither a `0x0029` nor a `0x002C` within one sample either side. Our own `0x002C` is already modelled by §1z-aa's tracker, so if the armer were ours the tracker would have caught it |
+| **Would re-open the arrival reading** | if the shut edge sits at the in-flight lead's own `+0x48` instant, the arrival IS a route after all and §1z-af.3's "not sufficient" needs qualifying to "not the only one" |
+
+**Not a fix run.** Nothing is being tested; this is an instrument pointed at a named
+unknown, and its output is a mechanism, not a verdict.
+
+---
+
 ## 1. The question
 
 > With the four gates on, does the keyboard lead keep the client's WORLD-0 copy
