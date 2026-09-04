@@ -6463,6 +6463,20 @@ ROUTER = True
 # presses, so the composition was never exercised). The router re-aims the
 # record at the leg it grants, and each chain leg re-aims it again at its
 # own grant instant, keeping the click's stamp as the record's identity.
+#
+# AND THE SIZE OF THAT IS NOW MEASURED (MOVECODE-1z-ak.6,
+# studies/movecode/review/bentbound.py). On the raw chord the model lerps
+# the STRAIGHT line at 288 u/s while the body walks the ROUTE at 288 u/s,
+# so it runs AHEAD on the shorter path and the error is along-track as well
+# as lateral. Over map 146, even in the mildest bow band (route/chord <
+# 1.25 -- a rock, not a mountain) the worst press-pin residual reaches
+# 164.9 u and 19 of 135 exceed the client's own 100 u R_MATCH; a real
+# detour (bow 1.25-2.0) reads p50 174.6 u. Under this flag's default the
+# record follows a SEGMENT OF THE ROUTE and the bow term is gone by
+# construction, which is why 1z-ak measured 0.0-6.9 u against the drawn
+# body. `--router-raw-leg` and `--no-router` buy that error back, on bent
+# geometry only -- a composition cost to read before reaching for either,
+# not a defect in anything shipped.
 ROUTER_LEG_REARM = True       # False (--router-raw-leg): the raw-chord record.
 # (b) The one-leg verbatim answer's field 4 is the SYNC copy's plane word
 # (agent+0x80; 0x0029 is sync-only, sec.1z-t). It was `state["plane"]`, the

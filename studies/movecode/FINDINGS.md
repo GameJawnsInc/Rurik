@@ -11107,7 +11107,7 @@ click kite, which is §37.5's *good* case. A **bent path** is the untested geome
 is a straight-line lerp, so a bowed client path puts the pin off the arc by the bow, and a
 press mid-bend truncates to the segment waypoint (§37.5 names both, with directions). That
 error is bounded by the leg's own length and self-corrects at the next report, and **n = 0**
-here — it is not evidence of harm, it is the cell this capture could not fill. The other
+here — it is not evidence of harm, it is the cell this capture could not fill. **FILLED by §1z-ak.6 (2026-09-04): the bow error is real and exceeds `R_MATCH`, and it belongs to the `--no-router` / `--router-raw-leg` revert flags rather than to the shipped default.** The other
 press capture (`140659`, CASE 6) has **no tape partner**, so its 4 pins are unmeasured by
 this instrument; §39.6 already scored them on the operator's own screen (*"all three worked
 as intended"*, no jump).
@@ -11126,3 +11126,79 @@ as intended"*, no jump).
   waiver's licensing rule and does not apply here; the right check for this arm needs the
   drawn body, which is a different instrument on a different input. Two rules in one scorer
   is how the first draft read 7 violations that were never violations.
+
+### 1z-ak.6 ★ THE BENT-PATH CELL, FILLED — the bow error is real and over `R_MATCH`, and it belongs to the REVERT FLAGS, not to the shipped default
+
+§1z-ak.4 left one cell empty and named it: the specimen was an open-ground click kite, so
+a **bent** path — one the client must walk around — was `n = 0`. Filled here by derivation
+(`studies/movecode/review/bentbound.py`), because the corpus cannot fill it by observation
+and the geometry can answer it at the desk. No client run.
+
+**First, why the corpus cannot fill it, checked rather than assumed.** Every one of the
+08:46 session's clicks was scored against map 146's mesh with the server's own test
+(`walkable(origin)` then `clip(origin → dest)` at the lead clip's 2.0 u step):
+**0 of 37 chords are bent — every one clips clean.** That is not luck, it is where the
+operator stands: at the session's own click lengths (53–276 u) **0 of 496**
+(origin, heading) pairs over the 31 drawn-body positions of that session are bent, rising
+to only **15 of 452 (3.3%)** at 300–500 u. §1z-ak's measurement was taken in a regime with
+**zero bent exposure**, which is exactly why it could not speak to this.
+
+> **A confound this section walked into first, recorded so the next reader does not.** A
+> bend detector built on the body's own path — traversed length against the chord — flags
+> two legs in that tape at bow 1.54 and 1.65. **Both are false.** The window opens at the
+> click, and the body is still turning off its *previous* heading for the first ~150 ms, so
+> a click-induced **corner** reads as a bow. The mesh is the instrument that separates
+> them, and it says neither leg had anything to walk around.
+
+**Second, the size of the error, and it is not the bow.** `_click_leg_arm` records a
+straight leg and `_click_leg_start` lerps it at 288 u/s; the body walks the **route** at
+288 u/s. Both advance on the same clock, so at time *t* the model sits at arclength 288*t*
+along the **chord** while the body sits at 288*t* along the **longer route** — the error is
+lateral **and along-track, because the model runs ahead on the shorter path**, and it is
+larger than the bow alone. `max_t |chord(288t) − route(288t)|` is the worst residual a
+press pin could carry on that leg. **Positive control: a clear chord's route IS the chord,
+and the harness returns 0.000 u on 60 of them** — it invents no error on a straight walk.
+
+| bow (route/chord) | n | p50 | p90 | max | over `R_MATCH` |
+|---|---|---|---|---|---|
+| 1.00–1.25 — a rock / a corner | 135 | 40.6 u | 107.8 u | 164.9 u | **19 of 135** |
+| 1.25–2.00 — a real detour | 78 | 174.6 u | 298.4 u | 401.9 u | 71 of 78 |
+| 2.00–5.00 — around a building | 90 | 464.3 u | 906.5 u | 1118.8 u | 89 of 90 |
+| 5.00+ — around the mountain | 97 | 1112.3 u | 3090.8 u | 11825.4 u | 97 of 97 |
+
+**The headline is the MILDEST band and the tail is deliberately not quoted.** Even at
+bow < 1.25 — a rock, not a mountain — **19 of 135 exceed the client's own 100 u reprieve
+radius**. Pooling the four bands would produce a p50 of 212 u, and that number is about the
+sampler rather than about the game; the 73× bow at the top is a random walkable point on
+the far side of terrain, which is a click a player can make but not one this repo should
+build a headline on. RECONSTRUCTION: our mesh, our `route()` (A* + string-pull), **not the
+client's pathfinder**. Mild bows are geometry and travel well; the extreme tail may be our
+connectivity decode as much as the world.
+
+**Third, and this is the finding: the bow error is not the shipped default's.** The 08:46
+capture ran **`ROUTER: False`** — its flags row says so — so the click-leg record was the
+**raw chord**, which is the regime the table above describes. Under the current default
+`ROUTER_LEG_REARM` re-aims that record at the **routed** leg (`_router_rearm_leg`, at the
+first waypoint and again at each chain leg), so `_click_leg_start` lerps **a segment of the
+route the body is actually walking** and the bow term is gone by construction. §1z-v built
+that flag for exactly this reader, and its comment names it: *"Every reader of the record —
+`PRESS ENDS THE WALK`'s `0x002C` at the modelled body… would place the body on a straight
+line the client is not walking."* **This section is the size of the thing that comment was
+protecting against**, measured: up to 164.9 u at bow < 1.25, and past `R_MATCH` in 14% of
+even that band.
+
+**What this does and does not change.**
+
+- **§1z-ak's verdict STANDS for the shipped default.** No bound, no flag, no code change.
+  The 0.0–6.9 u measurement is valid where it was taken, and under `ROUTER` the bow term it
+  never exercised cannot arise.
+- **It becomes a stated cost of two revert flags.** `--no-router` and `--router-raw-leg`
+  restore the raw-chord record, and on bent geometry a press pin under them can place the
+  drawn body **past the client's own forgiveness radius**. Those flags exist for
+  diagnostics (§1z-v: *"the diagnostic arms the composition matrix refuses beside the
+  router need it"*), so this is a composition hazard to read before reaching for one, not a
+  defect in anything shipped.
+- **It is still `n = 0` OBSERVED.** No bent press pin has ever been captured with a tape
+  over it. The table is derived; what would settle it is one run on `--no-router` with a
+  route that has something to walk around and an `agenttap` tape — and there is no reason
+  to spend an operator run on a regime we do not ship.
