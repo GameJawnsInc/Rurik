@@ -578,7 +578,7 @@ def describe(v):
 def corridor(pm, a, b, start_plane=None, goal_plane=None):
     """route()'s raw A* corridor with NO pull: the plane-respecting path."""
     sp, pc = pm._string_pull, pm._pull_corners
-    pm._string_pull = lambda pts, budget=None: list(pts)
+    pm._string_pull = lambda pts, budget=None, planes=None: list(pts)
     pm._pull_corners = lambda pts, spans, rounds=None: pts
     try:
         return pm.route(a[0], a[1], b[0], b[1], start_plane=start_plane,

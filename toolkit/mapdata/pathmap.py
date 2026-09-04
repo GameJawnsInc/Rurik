@@ -250,6 +250,40 @@ CORNER_PULL_EPS = 0.5
 # future divergence findable.
 CORNER_PULL_GATE_STEP = 2.0
 
+# THE SEAM-AWARE ROUTE (MOVECODE-1z-bb, 2026-09-04). route()'s string pull and
+# its final gate used to ask clip(), which asks "inside any trapezoid, on ANY
+# plane" -- so the pull could drop the waypoints the A* only reached through a
+# portal and grant a straight leg across a plane change the file carries no
+# portal for. RUN-1zBA measured what that costs on a router grant: the drawn
+# body parked at the bridge deck's edge (x = 10860.0, velocity 0) for 7.1 s and
+# 7.5 s while the server's copy walked 2 km, then a 2,021 u teleport at the
+# leg's ETA and the client's AgTrack fence shut (studies/movecode/FINDINGS.md
+# sec.1z-ba). Both specimens came through the router's clip FALLBACK; the pull's
+# sightline is the same primitive.
+#
+# The test that replaces it is a SEAM test, not the lead's plane test.
+# `clip(plane=)` (MOVECODE-1z-ap) stops at ANY plane change, portals included --
+# right for a 520 u keyboard lead the client is authoritative over, wrong for a
+# router that must cut through every bridge. Here a plane change is legal iff a
+# portal joins the two sides AT THAT POINT: `portal_at` gathers every trapezoid
+# within SEAM_TOL of the seam on each side and asks `_cross` about the pairs.
+# Three facts about the file make that the right shape (sec.1z-ba.1): portal
+# links are a CLUSTER relation (every trapezoid on portal P links every one on
+# its partner -- linked trapezoids are usually not adjacent), a seam is
+# DIRECTIONAL (the plane the body is ON must end; the ground continuing under a
+# deck is no seam for the ground), and the portal trapezoids are ZERO-HEIGHT
+# LINES lying on the seam edges, which is why the tolerance exists at all -- a
+# point test half a unit either side of a seam never lands on one.
+#
+# SEAM_AWARE_ROUTE is the revert (authsrv's --router-blind-clip clears it) and
+# the known-bad arm test_pathmap.py section 14 drives: with it False the
+# synthetic bridge routes as the straight line through its side, exactly the
+# defect. SEAM_STEP is the server's own gate step; a sliver narrower than it
+# would be stepped over, and no plane on either measured map is that narrow.
+SEAM_AWARE_ROUTE = True
+SEAM_TOL = 1.0
+SEAM_STEP = 2.0
+
 
 NO_NEIGHBOUR = 0xFFFFFFFF
 NO_PORTAL = 0xFFFF
@@ -490,11 +524,14 @@ class PathingMap:
             yb, yt = t.y_bottom, t.y_top
             xmn = min(t.x_bottom_left, t.x_top_left) - CELL_SLACK
             xmx = max(t.x_bottom_right, t.x_top_right) + CELL_SLACK
+            # The plane rides along as a tenth field so planes_at() can be
+            # answered from this same bucket at walkable()'s cost; walkable()
+            # ignores it.
             rec = (yb, yt, yt - yb,
                    t.x_bottom_left, t.x_bottom_right,
                    t.x_top_left - t.x_bottom_left,
                    t.x_top_right - t.x_bottom_right,
-                   xmn, xmx)
+                   xmn, xmx, t.plane)
             # An inverted y span files into no cell at all, which agrees with
             # `contains` -- it can never satisfy y_bottom <= y <= y_top either.
             for cy in range(int(yb // CELL), int(yt // CELL) + 1):
@@ -520,13 +557,147 @@ class PathingMap:
         grid = self._grid
         if grid is None:
             grid = self._grid = self._build_grid()
-        for (yb, yt, span, xbl, xbr, dxl, dxr, xmn, xmx) in \
+        for (yb, yt, span, xbl, xbr, dxl, dxr, xmn, xmx, _pl) in \
                 grid.get((int(y // CELL), int(x // CELL)), ()):
             if xmn <= x <= xmx and yb <= y <= yt:
                 f = 0.0 if span <= 0.0 else (y - yb) / span
                 if xbl + f * dxl <= x <= xbr + f * dxr:
                     return True
         return False
+
+    def planes_at(self, x, y):
+        """The set of planes with a trapezoid under this point, at walkable()'s
+        cost. Empty off the mesh. The same arithmetic as walkable(), so the two
+        cannot disagree about whether a point is on the mesh at all."""
+        grid = self._grid
+        if grid is None:
+            grid = self._grid = self._build_grid()
+        out = set()
+        for (yb, yt, span, xbl, xbr, dxl, dxr, xmn, xmx, pl) in \
+                grid.get((int(y // CELL), int(x // CELL)), ()):
+            if xmn <= x <= xmx and yb <= y <= yt:
+                f = 0.0 if span <= 0.0 else (y - yb) / span
+                if xbl + f * dxl <= x <= xbr + f * dxr:
+                    out.add(pl)
+        return out
+
+    def _near(self, x, y, tol=SEAM_TOL):
+        """Every trapezoid within `tol` of (x, y) -- zero-height portal lines
+        included, which containing() can only hit by landing on them exactly."""
+        out = []
+        for b in range(int((y - tol) // BAND), int((y + tol) // BAND) + 1):
+            for t in self._bands.get(b, ()):
+                if not (t.y_bottom - tol <= y <= t.y_top + tol):
+                    continue
+                if not (min(t.x_bottom_left, t.x_top_left) - tol <= x
+                        <= max(t.x_bottom_right, t.x_top_right) + tol):
+                    continue
+                if _nearest_on_trapezoid(t, x, y)[2] <= tol:
+                    out.append(t)
+        return out
+
+    def portal_at(self, x, y, planes_from, planes_to, tol=SEAM_TOL):
+        """Is there a portal at (x, y) from any of `planes_from` to any of
+        `planes_to`? True iff some trapezoid within `tol` on the from side is
+        `_cross`-linked to some trapezoid within `tol` on the to side."""
+        near = self._near(x, y, tol)
+        A = [self._flat_index(t) for t in near if t.plane in planes_from]
+        B = [self._flat_index(t) for t in near if t.plane in planes_to]
+        cross = self._cross
+        for a in A:
+            links = cross.get(a, ())
+            for b in B:
+                if b in links or a in cross.get(b, ()):
+                    return True
+        return False
+
+    def seam_clip(self, x0, y0, x1, y1, plane, step=SEAM_STEP):
+        """How far a body ON `plane` gets along (x0,y0)->(x1,y1) before it
+        leaves the mesh or its plane ends without a portal.
+
+        clip() with a seam term (MOVECODE-1z-bb). Samples like clip(); carries
+        the set of planes the body is on -- {plane} if the start offers it,
+        else every plane the start offers -- and a sample that keeps any of
+        them is a step, not a change (a sample landing exactly on a shared
+        edge lies in both trapezoids and must not read as a crossing; a deck
+        over continuing ground is a seam for the deck and not for the ground).
+        When every carried plane has ended, the seam is bisected from both
+        sides and `portal_at` asked; a portal lets the walk continue on the
+        new planes, anything else returns the last sample before the change.
+        A sample in no trapezoid returns the last one, as clip() does.
+
+        Returns the point, like clip(). `_seam_walk` is the same walk
+        returning its sample count too, for the pull's budget.
+        """
+        return self._seam_walk(x0, y0, x1, y1, plane, step)[0]
+
+    def _seam_walk(self, x0, y0, x1, y1, plane, step=SEAM_STEP, strict=True):
+        """seam_clip's body -> (point, samples spent).
+
+        `strict` decides what an off-mesh sample means. True (the gate,
+        seam_clip itself): stop there, as clip() does. False (the pull's
+        acceptance test): skip it -- walkability is `_sightline`'s job at
+        its own 16 u resolution, and a 2 u seam walk that also refused
+        sub-sample cracks changed 35 of 300 chase-band paths that crossed no
+        seam at all (MEASURED before this flag existed). The seam walk judges
+        plane changes and nothing else.
+        """
+        dx, dy = x1 - x0, y1 - y0
+        dist = (dx * dx + dy * dy) ** 0.5
+        if dist <= 0.0:
+            return (x0, y0), 0
+        n = max(1, int(dist / step))
+        planes_at = self.planes_at
+        carried = None
+        last = (x0, y0)
+        prev_f = 0.0
+        spent = 0
+        for i in range(0, n + 1):
+            f = i / n
+            px, py = x0 + dx * f, y0 + dy * f
+            cp = planes_at(px, py)
+            spent += 1
+            if not cp:
+                if i == 0 or not strict:
+                    continue                  # off-mesh: not this walk's call
+                return last, spent
+            if carried is None:
+                carried = {plane} if (plane is not None and plane in cp) else cp
+            elif carried & cp:
+                carried = carried & cp
+            else:
+                # the carried planes ended between prev_f and f: find where
+                lo, hi = prev_f, f
+                for _ in range(12):
+                    mid = (lo + hi) * 0.5
+                    if planes_at(x0 + dx * mid, y0 + dy * mid) & carried:
+                        lo = mid
+                    else:
+                        hi = mid
+                f_old = lo
+                lo, hi = prev_f, f
+                for _ in range(12):
+                    mid = (lo + hi) * 0.5
+                    if planes_at(x0 + dx * mid, y0 + dy * mid) & cp:
+                        hi = mid
+                    else:
+                        lo = mid
+                f_new = hi
+                sf = (f_old + f_new) * 0.5
+                spent += 24
+                if not self.portal_at(x0 + dx * sf, y0 + dy * sf, carried, cp):
+                    return last, spent
+                carried = cp
+            last = (px, py)
+            prev_f = f
+        return (x1, y1), spent
+
+    def _gate_clip(self, a, b, plane, step):
+        """route()'s per-segment gate: the seam-aware walk when the corridor
+        plane is known and SEAM_AWARE_ROUTE is on, else clip() as before."""
+        if SEAM_AWARE_ROUTE and plane is not None:
+            return self.seam_clip(a[0], a[1], b[0], b[1], plane, step=step)
+        return self.clip(a[0], a[1], b[0], b[1], step=step)
 
     def nearest_walkable(self, x, y, radius):
         """(px, py, dist) -- the nearest on-mesh point within radius, or None.
@@ -953,29 +1124,47 @@ class PathingMap:
         for cand in ((pulled, pts) if pulled is not pts else (pts,)):
             step = (CORNER_PULL_GATE_STEP if cand is pulled and pulled is not pts
                     else 16.0)
-            cpath = self._string_pull(cand)
-            if any(self.clip(*a, *b, step=step) != b
-                   for a, b in zip(cpath, cpath[1:])):
+            # THE SEAM TERM (MOVECODE-1z-bb): the pull and the gate both carry
+            # the corridor's plane per waypoint, so a shortcut is refused when
+            # a body on the kept point's plane would reach a plane change no
+            # portal covers. The A* corridor itself only ever steps across
+            # links, so `pts` needs the term only against the shared-edge
+            # fallback waypoint (a far centre when two linked trapezoids do
+            # not overlap in 2D); the pulled candidate is where it bites.
+            self._pull_idx = None
+            cpath = self._string_pull(cand, planes=pls)
+            # Each survivor's plane, by the INDEX the pull kept it at. The
+            # pull records that (`_pull_idx`); a replacement pull that does
+            # not (test_pathmap's pre-fix reconstruction) falls back to
+            # value-matching, taking the LAST of a run of coincident points --
+            # the pull tries farther indices first, and coincident points pass
+            # or fail its tests identically, so that is the one it would keep.
+            kept = self._pull_idx
+            if (isinstance(kept, list) and len(kept) == len(cpath)
+                    and all(cand[k] == p for k, p in zip(kept, cpath))):
+                cpl = [pls[k] for k in kept]
+            else:
+                cpl, j = [], 0
+                for k, p in enumerate(cpath):
+                    while cand[j] != p:
+                        j += 1
+                    while (j + 1 < len(cand) and cand[j + 1] == p
+                           and not (k + 1 < len(cpath) and cpath[k + 1] == p)):
+                        j += 1
+                    cpl.append(pls[j])
+                    j += 1
+            if any(self._gate_clip(a, b, pa, step) != b
+                   for a, b, pa in zip(cpath, cpath[1:], cpl)):
                 continue
             clen = sum(((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2) ** 0.5
                        for a, b in zip(cpath, cpath[1:]))
             if best is None or clen < best[0]:
-                best = (clen, cpath, cand)
+                best = (clen, cpath, cpl)
         if best is None:
             return None
-        path, pts = best[1], best[2]
         if with_planes:
-            # The pull returns an ordered subset of pts; walk a pointer to
-            # recover each survivor's plane. Value-matching is exact: every
-            # element of `path` IS an element of `pts`, in order.
-            planes, j = [], 0
-            for p in path:
-                while pts[j] != p:
-                    j += 1
-                planes.append(pls[j])
-                j += 1
-            return path, planes
-        return path
+            return best[1], best[2]
+        return best[1]
 
     def _shared_edge(self, a, b, span=False):
         """A point on the edge `a` and `b` share, inside both.
@@ -1161,28 +1350,29 @@ class PathingMap:
     def _visible(self, x0, y0, x1, y1):
         """`clip(x0, y0, x1, y1) == (x1, y1)`, without building the point.
 
-        PLANE-BLIND, AND KNOWINGLY SO (MOVECODE-1z-ar). `clip`'s `plane=` term
-        exists (MOVECODE-1z-ap) and this does not pass it, so the smoother can
-        drop a waypoint the A* only reached by crossing a portal: `adjacent()`
-        respects planes, and the pull can undo that. `route()`'s own final gate
-        calls plane-blind `clip` too, so it would not catch the shortcut either.
-
-        WHETHER THAT EVER HAPPENS IS UNMEASURED, and §1z-ar is the record of
-        three desk attempts that failed to settle it -- the last refuted by its
-        own positive control, which found only 31% of the portals `_cross`
-        asserts. The blocker is that portal-linked trapezoids do NOT reliably
-        overlap in 2D, so "is this plane change legitimate?" cannot be answered
-        by sampling the segment. Do not add a plane term here on the strength of
-        a desk number; the thing that settled the same question for the lead was
-        a client run with a tape over it.
+        PLANE-BLIND, and no longer what the smoother uses to accept a
+        shortcut: `_string_pull` asks this first (cheap, coarsest-first
+        refutation) and then `_seam_walk` on the kept point's corridor plane
+        (MOVECODE-1z-bb). §1z-ar recorded three desk attempts to measure the
+        plane-blind pull's harm, the last refuted by its own control -- portal-
+        linked trapezoids do NOT overlap in 2D -- and said not to add a plane
+        term on a desk number. RUN-1zBA then measured it on a router grant: a
+        body parked 7 s at a bridge's edge and a 2,021 u teleport (§1z-ba). The
+        term that was added is a SEAM term, not the lead's any-plane-change
+        clip; see SEAM_AWARE_ROUTE.
         """
         return self._sightline(x0, y0, x1, y1)[0]
 
-    def _string_pull(self, pts, budget=None):
+    def _string_pull(self, pts, budget=None, planes=None):
         """Drop waypoints that the previous kept point can already reach.
 
         Uses the same sampling clip() does, so a segment survives only if every
-        sample along it is walkable.
+        sample along it is walkable -- AND, given `planes` (the corridor plane
+        per waypoint, MOVECODE-1z-bb), only if a body on the kept point's plane
+        walks it without meeting a plane change no portal covers. The seam walk
+        runs after the sightline and only on segments the sightline passed, so
+        the refutation path costs what it cost before; its samples count
+        against the same budget.
 
         THIS IS WHERE THE TIME WENT -- 94.2% of route(), against 3.5% for the
         A*. It is quadratic in waypoints and each of those tests is a line up to
@@ -1200,7 +1390,9 @@ class PathingMap:
         """
         if budget is None:
             budget = PULL_SAMPLE_BUDGET
+        seam = SEAM_AWARE_ROUTE and planes is not None
         out = [pts[0]]
+        idx = [0]
         i = 0
         n = len(pts)
         spent = 0
@@ -1212,11 +1404,30 @@ class PathingMap:
                     break
                 ok, used = self._sightline(*out[-1], *pts[j])
                 spent += used
+                if ok and seam and planes[i] is not None:
+                    # At the sightline's own step, off-mesh-tolerant: this
+                    # asks only whether the shortcut crosses a blind seam.
+                    # The 2 u strict walk is route()'s gate, after the pull.
+                    stop, used = self._seam_walk(out[-1][0], out[-1][1],
+                                                 pts[j][0], pts[j][1],
+                                                 planes[i], 16.0, strict=False)
+                    spent += used
+                    ok = stop == pts[j]
                 if ok:
                     break
                 j -= 1
             out.append(pts[j])
+            idx.append(j)
             i = j
+        # WHICH waypoints survived, by index, for route()'s plane bookkeeping.
+        # Value-matching cannot recover it: a portal crossing puts two or three
+        # COINCIDENT waypoints in the corridor (the edge onto the portal line,
+        # the crossing, the edge off it) on DIFFERENT planes, the pull keeps
+        # the farthest of them, and the first-match walk handed route()'s gate
+        # the plane of the first -- which refused a leg the pull had accepted
+        # on the right plane (test_pathmap.py section 14's U-turn came back
+        # None). `with_planes` had been reporting that wrong plane too.
+        self._pull_idx = idx
         return out
 
     # -- loading ---------------------------------------------------------

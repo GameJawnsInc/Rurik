@@ -2056,9 +2056,38 @@ first — the first minimiser was wrong for same-side neighbours and made
 19 of 300 corpus paths longer, and pulled points can cut a corner the
 midpoints rounded off, which lost 4 of 300 until route() started scoring
 the midpoint answer as a fallback CANDIDATE rather than replacing it.
-Floor 75 against a green 75 with 5 declared skips (the archive-conditional
-§6 checks, and §13 skip-declares when map 280 is absent);
-~105 s, `--routes` shrinks section 10),
+**Section 14 (2026-09-04, MOVECODE-1z-bb) is the SEAM-AWARE PULL AND GATE**,
+and it exists because RUN-1zBA measured the plane-blind one on a router
+grant: the drawn body parked at a bridge deck's edge for 7 s while the
+server's copy walked 2 km, then a 2,021 u teleport. `planes_at` (the grid's
+plane set) is put against `containing()` over a lattice; `seam_clip` on a
+five-trapezoid synthetic bridge — a deck over ground at its south end, the
+file's own zero-height portal LINE pair at the deck's south edge, ground
+south of the line, an east bank the deck's side abuts with no portal — stops
+at the deck's side where plain `clip()` walks onto the bank (the specimen in
+miniature), reads the seam DIRECTIONALLY (plane 0 ends under the deck's edge;
+plane 1 continues over the same ground), passes through the line portal and
+stops at it when the link is removed (the primitive's known-bad arm), and
+treats an in-plane step across the line trapezoid as no seam. `route()` from
+under the deck onto it U-turns through the portal (3 waypoints) with the term
+on and is the straight line through the deck's underside with
+`SEAM_AWARE_ROUTE = False` — the defect reproduced on demand; a goal in
+another component is None in both arms; `planes=None` is the old pull
+unchanged. On Pre-Searing (skip-declared if absent): RUN-1zBA run 4's grant —
+`seam_clip` on plane 18 from (10989, 5236) toward the off-mesh click stops at
+the deck's west edge (x = 10860 ± 12) where `clip()` runs 2,159 u; over 300
+chase-band pairs the None counts are equal, every changed path but a handful
+had a blind crossing before (measured 4 changed, 3 explained), no seam-aware
+route crosses a blind seam by a `containing()`-based walker (a second point
+test, not the grid the pull used), and route() stays under the 50 ms tick
+(max 34.8 vs 25.1 ms plane-blind; p50 0.95 vs 0.56). **Section 10's
+"nothing changed an answer" control now runs with the seam term OFF**: it
+is the 2026-08-13 performance fix's control, and with the term on it read
+12 of 1,500 paths changed and Nones 48 → 38, which was the seam term working,
+not the fix regressing — section 14 owns that census.
+Floor 89 against a green 93 on 38833 (the archive-conditional §6 checks, §13
+when map 280 is absent, and §14(g) when Pre-Searing is absent skip-declare);
+~110 s, `--routes` shrinks section 10),
   `toolkit/mapdata/test_spawncheck.py` (the map-row spawn census, `spawncheck.py`,
   which answers a clause `PLAN.md` §3.2 had carried unmeasured since it was written:
   *"how many of the nine pass the trapezoid test has not been re-run, so the map figure
@@ -10952,9 +10981,25 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   (`cause=cast`, driven through `handle_skill_press` with the recorder the
   press arm now hands it), pinned once at the begin instant before the
   cast-stop block, with the origin word derived once, after the snap and
-  before route().** Floor 114 from the green run (51 at the B2 landing, 57
-  after the review round, 64 after B4, 68 after B5, 73 after 2026-08-30, 103
-  after 1z-v). ~1 s).
+  before route().** **Section 6 (2026-09-04, MOVECODE-1z-bb) is the SEAM-AWARE
+  RAYS**: RUN-1zBA's specimen was the clip fallback walking plane-blind off a
+  bridge deck's side and granting the 2 km beyond it, so both of the router's
+  rays — the pre-send leg gate and the fallback — now come through
+  `_router_clip`, which calls the mesh's `seam_clip` on the body's plane under
+  `ROUTER_SEAM_CLIP` (default on) and plain `clip()` under
+  `--router-blind-clip`. The stub mesh grows a fake blind seam (`seam_stop`, a
+  vertical line short of its wall): the fallback stops AT the seam, and under
+  the known-bad arm walks through it to the wall (RUN-1zBA's grant); a stub
+  route whose leg crosses the seam is demoted to the fallback, which itself
+  stops at the seam, and the known-bad arm grants that leg verbatim; source
+  locks pin the flag's default, that `router_answer_click` reaches the mesh's
+  ray only through `_router_clip` (three occurrences file-wide, two in the
+  function, no bare `pm.clip(` in it), and that the one flag sets
+  `pathmap.SEAM_AWARE_ROUTE` too, so route()'s own pull and gate cannot
+  disagree with the fallback. The fine-step source lock for the fallback
+  follows the call through the helper. Floor 121 from the green run (51 at
+  the B2 landing, 57 after the review round, 64 after B4, 68 after B5, 73
+  after 2026-08-30, 103 after 1z-v, 114 after 1z-w). ~1 s).
 
 `toolkit/authsrv/test_agtrack_mirror.py` (**the AgTrack mirror's transcription,
   rule by rule -- MOVECODE-1z-q step 1's guard.** `agtrack_mirror.py` is a
