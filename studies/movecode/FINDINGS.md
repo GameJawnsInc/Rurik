@@ -12198,6 +12198,11 @@ prop-shaped and a **big** one terrain:
 | map | chords | route-forcing | terrain-shaped |
 |---|---|---|---|
 | **Lakeside County (146)** | 178–353 | **17.0–19.7%** | **87–89%** |
+
+> **§1z-au CORRECTS the "terrain-shaped" column: it is an UPPER BOUND on terrain, not a
+> measurement of it.** A screenshot from the spot this table chose shows Ascalon City's
+> WALL — the size proxy called a large building terrain, exactly the failure its own
+> docstring names.
 | Isle of the Nameless (280) | 383 | 12.3% | 83% |
 | Domain of Anguish (474) | 344 | 9.0% | 89% |
 | Lornar's Pass (90) | 344 | 6.7% | 78% |
@@ -12266,3 +12271,64 @@ and the fence, and the wire scores where every click landed. What is missing is 
 judgement a screen fraction cannot encode: *how far past that ridge is open ground.* That is
 the aiming boundary this repo has always drawn, and the cheapest form of it is one click
 from the operator standing at `(9165, 10189)` with the tape running.
+
+---
+
+## 1z-au. THE SCENE IS READABLE — the "terrain" obstacle is the CITY WALL, the size proxy was fooled exactly as advertised, and aiming is no longer the operator's alone
+
+**Asked:** the operator, fairly — *"idk what you're asking me"*. The ask was a single
+world-anchored click, and before handing that over it was worth checking whether the desk
+could do it after all. **It can, and this section is what looking cost and bought.** Ident
+`MOVECODE-1z-au`. No code change.
+
+### 1z-au.1 ★ The correction: my "terrain-shaped" obstacle is a BUILDING
+
+§1z-at picked `(9165, 10189)` as the nearest **terrain-shaped** route-forcing spot — the
+blocking hole flood-filled past the cap, so the size proxy called it terrain. A screenshot
+from that exact spot shows what is actually there: **the character is standing against
+Ascalon City's wall**, a masonry structure filling the right half of the frame, with the
+gate and its red doors up-left and open grass to the left.
+
+**That is the proxy failing in precisely the way it was documented to fail.** `mapscout.py`
+says of it: *"it cannot see a prop; it infers one from a footprint, and a large building or
+a small island would each fool it."* A city wall is a large building. So §1z-at's
+"87–89% terrain-shaped" is **an upper bound on terrain, not a measurement of it** — big
+holes are terrain *or* big structures, and this map's biggest holes are its city.
+
+It also explains §1z-at.3's clicks without any new mechanism: the 511 u click landing 75 u
+short "inside the obstacle's own hole" was landing **on the wall**, which is §1z-as's prop
+rule again at a different address.
+
+### 1z-au.2 ★★ And the scene is READABLE at the desk, which changes the boundary
+
+The harness's `shot:` verb writes a PNG; that PNG can be opened and looked at, and its
+**compass rosette cropped and enlarged is a top-down local map** — it shows the city to the
+west, open field east, long diagonal walls south, and **water** to the south-east.
+
+So the standing rule that *"world-anchored clicks stay with the owner"* was drawn when the
+harness could not aim **and could not look**. It can now do both: walk to a computed
+coordinate (§1z-at, 16 u), photograph it, and read the result. **The remaining gap is not
+seeing, it is the world↔screen mapping** — knowing which fraction hits a point one has
+identified — and that is arithmetic with a measured FOV (75.000° horizontal,
+`studies/.../fovread`), a known camera bearing and a known body position, not a judgement
+call.
+
+**This does not retire the boundary, it narrows it**, and the narrowing should be checked
+rather than assumed: the projection has not been built or validated, and §1z-as's own
+range instability (the same `fy` returning 511 u and 1,767 u as the ground falls away) is
+the warning that a flat-ground projection will not be enough.
+
+### 1z-au.3 Where the probe actually stands
+
+**Water, south-east on the compass, is the obstacle worth aiming at** — it blocks routing,
+it is genuinely terrain rather than a structure, and unlike a wall or a bridge **it does not
+occlude the ground beyond it**, which was the whole failure of §1z-as and §1z-au.1. Nothing
+has tested it yet.
+
+What is built and working, none of which needs revisiting: navigation to a computed
+coordinate (§1z-at), the fence column and both drawn copies on the tape (§1z-an), the
+prop/ground sensor on every click (§1z-as), and the screenshot. What is missing is one
+target that forces a route and is not behind a building — and the compass says where to
+look for it.
+
+**Nothing is asked of the operator that the desk has not first tried.**
