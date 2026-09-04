@@ -449,17 +449,21 @@ def walker_control(pm, found, sample=300, rnd=None):
 
 # --- the chord filter --------------------------------------------------------
 
-def chord_verdict(pm, o, d):
+def chord_verdict(pm, o, d, start_plane=None):
     """One chord -> None (unroutable / no blind leg) or a record.
 
     Routed as the server routes it -- the body's plane at the origin and the
     clicked surface's plane at the destination as preferences (ROUTER-B4),
-    corridor planes returned -- then every leg walked.
+    corridor planes returned -- then every leg walked. `start_plane` is the
+    body's REPORTED plane where the mesh is ambiguous (ground under a deck
+    offers both; the server prefers the report, `_router_plane`).
     """
     if not (pm.walkable(*o) and pm.walkable(*d)):
         return None
+    if start_plane is None:
+        start_plane = pm.plane_at(*o)
     r = pm.route(o[0], o[1], d[0], d[1],
-                 start_plane=pm.plane_at(*o), goal_plane=pm.plane_at(*d),
+                 start_plane=start_plane, goal_plane=pm.plane_at(*d),
                  with_planes=True)
     if not r:
         return None
@@ -556,6 +560,164 @@ def describe(v):
     pl, pair, span, s = v["seam"]
     print("      aimed at seam plane %d -> %d (traps %s, blind stretch %d u) at %s;"
           "  %.0f u walk from spawn" % (pl[0], pl[1], pair, span, s, v["walk_u"]))
+
+
+# --- planning a run that RESPECTS the seams -----------------------------------
+#
+# RUN-1zBA run 1 (20260904T153746) failed its exposure floor for a reason this
+# file should have foreseen: the harness's walk-in was planned by
+# mapscout.emit_script over pm.route(), whose string pull is the plane-blind one
+# under study. Spawn -> stand came out as ONE straight 3,200 u leg through the
+# bridge (the plane-respecting corridor is 8,831 u, around the west); the body
+# crossed onto the deck through its north portal and then, under the held key,
+# stopped at x = 11123.0 -- the deck's east edge -- and slid south along it
+# while the server's straight-line model put it 37 u past the edge on the bank.
+# So the planner below pulls the corridor with a PLANE-AWARE visibility test.
+# It is sec.1z-ar's two-line fix, prototyped where it can do no harm.
+
+def corridor(pm, a, b, start_plane=None, goal_plane=None):
+    """route()'s raw A* corridor with NO pull: the plane-respecting path."""
+    sp, pc = pm._string_pull, pm._pull_corners
+    pm._string_pull = lambda pts, budget=None: list(pts)
+    pm._pull_corners = lambda pts, spans, rounds=None: pts
+    try:
+        return pm.route(a[0], a[1], b[0], b[1], start_plane=start_plane,
+                        goal_plane=goal_plane, with_planes=True)
+    finally:
+        pm._string_pull, pm._pull_corners = sp, pc
+
+
+def seam_route(pm, a, b, start_plane=None, goal_plane=None):
+    """A plane-aware string pull over the corridor.
+
+    A waypoint is dropped only if the straight line from the last kept point
+    to the one after it clips clear at the gate step AND, walked on the kept
+    point's corridor plane, crosses no blind seam AND ends on the corridor's
+    plane for that waypoint. Portals may be cut through (that is what they
+    are for); blind seams may not; and a leg may not "reach" a deck point by
+    walking under the deck -- the first version accepted exactly that (west
+    bank -> deck as one 447 u leg, planes [0, 18], the body ending on plane 0
+    beneath the point the corridor put on plane 18).  -> (path, planes)
+    """
+    r = corridor(pm, a, b, start_plane, goal_plane)
+    if not r:
+        return None
+    pts, pls = r
+    out, opl = [pts[0]], [pls[0]]
+    i, n = 0, len(pts)
+    while i < n - 1:
+        j = n - 1
+        while j > i + 1:
+            if pm.clip(out[-1][0], out[-1][1], pts[j][0], pts[j][1], step=WALK_STEP) == pts[j]:
+                xs = seam_crossings(pm, out[-1], pts[j], plane=opl[-1])
+                ends_on = set(xs[-1]["to"]) if xs else {opl[-1]}
+                if all(c["linked"] for c in xs) and pls[j] in ends_on:
+                    break
+            j -= 1
+        out.append(pts[j])
+        opl.append(pls[j])
+        i = j
+    return out, opl
+
+
+PLAN_RANGES = (250.0, 330.0, 450.0, 600.0, 750.0)   # what fy=0.46 has produced
+PLAN_OFFSETS = ((0.0, 0.0), (80.0, 0.0), (-80.0, 0.0), (0.0, 80.0), (0.0, -80.0))
+CLICK_WAIT = 6
+
+
+def click_outcomes(pm, o, bearing_deg, plane=None):
+    """Over the range and origin spread: (blind share, portal-only share,
+    refused share, median landing of the blind chords). `plane` is the body's
+    plane at the origin (the reported one where the mesh offers two)."""
+    th = math.radians(bearing_deg)
+    blind = portal = refused = 0
+    lands = []
+    tot = 0
+    for ox, oy in PLAN_OFFSETS:
+        oo = (o[0] + ox, o[1] + oy)
+        if not pm.walkable(*oo):
+            continue
+        for L in PLAN_RANGES:
+            d = (oo[0] + L * math.cos(th), oo[1] + L * math.sin(th))
+            tot += 1
+            if not pm.walkable(*d):
+                refused += 1
+                continue
+            v = chord_verdict(pm, oo, d, start_plane=plane)
+            if v is not None:
+                blind += 1
+                lands.append(d)
+            else:
+                r = pm.route(oo[0], oo[1], d[0], d[1], start_plane=plane,
+                             goal_plane=pm.plane_at(*d), with_planes=True)
+                if r and any(c["linked"] for _i, c in route_seams(pm, r[0], r[1])):
+                    portal += 1
+    if not tot:
+        return 0.0, 0.0, 1.0, None
+    med = None
+    if lands:
+        lands.sort()
+        med = lands[len(lands) // 2]
+    return blind / tot, portal / tot, refused / tot, med
+
+
+def plan_clicks(pm, start, steps=3, step_deg=10, start_plane=None):
+    """Greedy: at each step the bearing with the largest blind share; the body
+    is assumed to end at the granted point (true whether it WALKED or was
+    teleported there at the ETA), on that point's plane -- which the granted
+    destination makes unambiguous (a click lands on ONE surface).
+    -> [(bearing, blind, portal, refused, next)]"""
+    plan = []
+    o, pl = start, start_plane
+    for _ in range(steps):
+        best = None
+        for b in range(0, 360, step_deg):
+            bl, po, rf, med = click_outcomes(pm, o, float(b), plane=pl)
+            if best is None or (bl, -rf) > (best[1], -best[3]):
+                best = (float(b), bl, po, rf, med)
+        plan.append(best)
+        if best[4] is None:
+            break
+        o = best[4]
+        pl = pm.plane_at(*o)
+    return plan
+
+
+def emit_walk(pm, mid, stand, clicks, fy=0.46, stand_plane=None):
+    """A walk string: the plane-aware route to `stand` (on `stand_plane` where
+    the mesh offers two), then one click per entry of `clicks` -- a bearing,
+    or a (bearing, fy) pair. Same verbs and yaw calibration as
+    mapscout.emit_script."""
+    import mapscout
+    sp = mapscout.SPAWNS.get(mid)
+    if sp is None:
+        return None, None
+    r = seam_route(pm, sp, stand, goal_plane=stand_plane)
+    if not r:
+        return None, None
+    path, planes = r
+    steps = ["wait:3"]
+    facing = 0.0
+    for a, b in zip(path, path[1:]):
+        L = math.hypot(b[0] - a[0], b[1] - a[1])
+        if L < 40.0:
+            continue
+        brg = math.degrees(math.atan2(b[1] - a[1], b[0] - a[0])) % 360.0
+        px, facing = mapscout.yaw_to(brg, facing)
+        if px:
+            steps.append("yaw:%d" % px)
+        steps.append("W:%.1f" % (L / mapscout.RUN_SPEED))
+    first = True
+    for c in clicks:
+        brg, f = (c if isinstance(c, (tuple, list)) else (c, fy))
+        px, facing = mapscout.yaw_to(brg, facing)
+        if px:
+            steps.append("yaw:%d" % px)
+        if first:
+            steps += ["wait:2", "shot:1"]
+            first = False
+        steps += ["click:0.5,%.2f" % f, "wait:%d" % CLICK_WAIT]
+    return " ".join(steps), (path, planes)
 
 
 # --- self-test on a synthetic map ---------------------------------------------
@@ -673,6 +835,16 @@ def main():
     ap.add_argument("--no-basin", action="store_true")
     ap.add_argument("--script", action="store_true",
                     help="emit a walk string to the best candidate")
+    ap.add_argument("--plan", metavar="X,Y",
+                    help="plan a click sequence from this stand point (greedy, "
+                         "seam-aware) and emit the walk string to it")
+    ap.add_argument("--steps", type=int, default=3)
+    ap.add_argument("--stand-plane", type=int, default=None,
+                    help="the body's plane at the stand point where the mesh "
+                         "offers two (ground under a deck)")
+    ap.add_argument("--clicks", default=None,
+                    help="override the planned clicks: 'BRG:FY,BRG:FY,...' "
+                         "(e.g. 200:0.60,200:0.40,270:0.46)")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
     if a.selftest:
@@ -683,6 +855,38 @@ def main():
     fid = dict((m, f) for m, f, _ in mapscout.MAPS)[a.map]
     pm = PathingMap.load(fid)
     rnd = random.Random(20260904)
+
+    if a.plan:
+        stand = tuple(float(v) for v in a.plan.split(","))
+        spl = a.stand_plane if a.stand_plane is not None else pm.plane_at(*stand)
+        print("PLAN from (%.0f, %.0f), plane %s (mesh offers %s)"
+              % (stand[0], stand[1], spl, sorted({t.plane for t in pm.containing(*stand)})))
+        if a.clicks:
+            clicks = [(float(b), float(f)) for b, f in
+                      (c.split(":") for c in a.clicks.split(","))]
+            for k, (brg, f) in enumerate(clicks):
+                bl, po, rf, med = click_outcomes(pm, stand, brg, plane=spl)
+                print("  click %d: bearing %3.0f fy %.2f   from the stand: blind %3.0f%%  "
+                      "portal-only %3.0f%%  refused %3.0f%%" % (k + 1, brg, f, 100 * bl, 100 * po, 100 * rf))
+        else:
+            plan = plan_clicks(pm, stand, steps=a.steps, start_plane=spl)
+            for k, (brg, bl, po, rf, med) in enumerate(plan):
+                print("  click %d: bearing %3.0f   blind %3.0f%%  portal-only %3.0f%%  refused %3.0f%%   "
+                      "median landing %s" % (k + 1, brg, 100 * bl, 100 * po, 100 * rf,
+                                             None if med is None else (round(med[0]), round(med[1]))))
+            clicks = [p[0] for p in plan]
+        walk, route = emit_walk(pm, a.map, stand, clicks, stand_plane=spl)
+        if walk is None:
+            print("  no plane-aware route from the spawn")
+            return 1
+        path, planes = route
+        L = sum(math.hypot(b[0] - a_[0], b[1] - a_[1]) for a_, b in zip(path, path[1:]))
+        print("\n  walk-in: %d legs, %.0f u (%.0f s); planes %s" % (len(path) - 1, L, L / mapscout.RUN_SPEED, planes))
+        print("  waypoints: %s" % [(round(x), round(y)) for x, y in path])
+        xs = route_seams(pm, path, planes)
+        print("  walk-in seam crossings: %s" % [(i, c["from"], c["to"], "portal" if c["linked"] else "BLIND") for i, c in xs])
+        print("\n  --walk %r" % walk)
+        return 0
 
     found = census(pm)
     seams = blind_seams(found)

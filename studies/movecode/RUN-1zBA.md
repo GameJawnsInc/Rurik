@@ -113,3 +113,64 @@ sync travel, max separation, largest single-sample jump, arrival, fence
 transitions — classified WALKED / PARKED+SNAP / PARKED / OTHER. Then the three
 clauses. Smoke-tested on §1z-az's run B before this sheet was written: its
 three plane-23 legs score `none` / WALKED.
+
+---
+
+## RESULT, run 1 — RAN 2026-09-04 15:37. **P1 FAILS (0 blind legs): a targeting failure, and the failure is the mechanism under study.**
+
+Capture `20260904T153746`, tape `agenttap-20260904T153817` (918 samples). All
+five clicks landed on GROUND and were granted; all five legs WALKED; **none
+crossed a blind seam**, because click 1 fired from **(11123, 5213) on plane 18**
+— the deck's east edge — not from the bank.
+
+**Why:** the walk-in was planned by `mapscout.emit_script` over `pm.route()`,
+whose string pull is the plane-blind one this whole sheet is about. Spawn →
+bank came out as ONE straight 3,200 u leg through the bridge (the corridor that
+respects planes is 8,831 u, around the west). The body crossed onto the deck
+through the north portal — and then, **under the held key, stopped at
+x = 11123.0, the deck's east edge, and slid south along it for the last 77 u
+while the server's straight-line model put it 37 u past the edge on the bank**
+(`position_report` drift 37.35 at the stop). The screenshot is the stone bridge
+into Ascalon City, parapet and all; the on-deck camera puts the deck **~155 u
+above the north shore**.
+
+So the census's blind seam is a physical barrier to the client's body — seen
+under the keyboard, not yet under a router grant, which is what P2 asks. The
+operator touched the mouse ~15 s from the end; that can only have affected
+clicks 4–5 (control legs, both WALKED) and is not the failure.
+
+## Run 2 — the deck as origin, the WEST exit as the treatment
+
+Two corrections. **The walk-in is now planned with a plane-aware pull**
+(`seamscout.seam_route`: a shortcut must clip clear, cross no blind seam on the
+kept point's plane, and end on the corridor's plane) — the §1z-ar fix
+prototyped in the harness planner where it can do no harm. And **the origin is
+the deck**, because a click from beside a raised deck hits its side wall
+(§1z-as's prop trap), while from the deck the camera is high and a low click
+lands on the bank beyond the edge.
+
+- **Stand:** (11000, 5200), plane 18, via the north portal — 3,136 u, 11 s, one
+  portal crossing and no blind one.
+- **Treatment, bearing 200° (west bank):** blind 100% over ranges 250–750 u
+  and a ±80 u origin spread; every range 300–900 u lands on plane 0.
+- **`fy` is BRACKETED** — 0.60, 0.40, 0.70, 0.30 — because the projection's
+  vertical sign is unresolved (§1z-ay P2; re-scoring that run with the vertical
+  basis negated took the spread from 408 to 276 u, no collapse). Under the
+  code's sign fy 0.30/0.40 reach ~450/690 u; under the flipped one fy 0.70/0.60
+  do. The first click that lands moves the body off the deck; later ones fire
+  from the bank, further west, as seam-free controls.
+- **Control, bearing 270°** (`fy` 0.46): south along the bank, no seam.
+- One exit per run, deliberately: a mid-run keyboard return to the deck would
+  be planned from a landing the run cannot confirm. The **east exit** — the edge
+  that blocked run 1's body — is run 3, same script mirrored.
+
+**P1's floor of 2 is therefore across runs 2 + 3**; each run's own floor is
+**≥ 1 blind leg with a tape window**. P2 and P3 as registered above.
+
+```powershell
+python toolkit/clientscan/agenttap.py --agents 1,10 --seconds 80
+```
+
+```powershell
+python toolkit/harness/session.py --exe vault/run/2026-07-29_221c13772c7a/Gw.exe --walk "wait:3 yaw:812 W:9.6 yaw:297 W:1.3 yaw:891 wait:2 shot:1 click:0.5,0.60 wait:6 click:0.5,0.40 wait:6 click:0.5,0.70 wait:6 click:0.5,0.30 wait:6 yaw:-875 click:0.5,0.46 wait:6" --hold 5 --game-args "--map 146 --explorable --no-enemy-skills --skills 0,0,0,0,0,0,0,0"
+```
