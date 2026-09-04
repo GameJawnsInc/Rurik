@@ -12072,7 +12072,10 @@ which the client is authoritative over, and RUN-1zAQ measured the cost at **3 of
 with full-length grants otherwise unaffected. Recorded because "clips at plane changes" and
 "clips at illegitimate plane changes" are different claims, and §1z-ap's text should not be
 read as the second. RUN-1zAO's own 29 → 0 seam **is** portal-linked somewhere on the map;
-the portal simply was not on that ray, which is why clipping it was right.
+the portal simply was not on that ray, which is why clipping it was right. **[CORRECTED
+§1z-bc.3: the portal WAS on that ray in the file's terms — `p29#0` is linked to `p0#2509`
+along the whole slant the lead crossed — and the body still did not walk it. Clipping it
+was right for a reason the file cannot state.]**
 
 ---
 
@@ -12757,7 +12760,7 @@ failures are the finding:
    is: it is on plane P, P ENDS underfoot, and only some other plane is there. The ground
    continuing under a deck's edge is a seam for the deck and no seam at all for the ground.
    Before this, 0 of 65 "blind" pairs agreed with the walker.
-3. **The portal trapezoids are LINES.** Plane 18's two portals are `p18#1 y 5579..5579` and
+3. **The portal trapezoids are LINES** *(on plane 18 — §1z-bc.3 corrects the generalisation: plane 29's portals are BODY trapezoids linked along a whole edge)*. Plane 18's two portals are `p18#1 y 5579..5579` and
    `p18#2 y 4532..4532` — zero-height trapezoids lying along the strip's end edges, linked to
    zero-height plane-0 twins on the same lines; the strip's body trapezoids link to nothing.
    A point test half a unit either side of a seam never lands on such a line, and a leg
@@ -13012,8 +13015,109 @@ geometry the same afternoon, and one flag switched it.
 
 - **The lead's clip.** `a2_clip_lead` still uses `clip(plane=)`, the any-plane-change stop.
   `seam_clip` would let its 3-of-65 legitimate portal leads through (§1z-ar.6). Safe direction
-  today; a one-line change with its own run when a lead campaign next needs it.
+  today; a one-line change with its own run when a lead campaign next needs it. **[REFUTED
+  §1z-bc: built and retrodicted — the seam clip lets ALL SIX fatal leads through at 520 u, 0 of
+  6 kept under gate 1. The lead keeps the plane clip; the seam variant ships opt-in.]**
 - **One in 300.** §1z-bb.2's fourth change: a legitimate portal shortcut the pull refused
   somewhere. Benign, recorded, unexplained.
 - **What the operator sees now** on a click over the railing: the body walks to the edge and
   stops. The click was never going anywhere honest; a short leg is the truth about it.
+
+---
+
+## 1z-bc. THE LEAD'S CLIP STAYS — the seam test is REFUTED for the lead by its own retrodiction: all six fatal leads pass through file-linked portals, and the body walked none of them
+
+**Asked:** "now do the lead's clip" — §1z-bb.6's filed item: put `a2_clip_lead` on
+`seam_clip`, the router's primitive, and stop cutting leads short at legitimate portals.
+Ident `MOVECODE-1z-bc`. **Built, audited, and NOT shipped as a default.** The audit is
+`studies/movecode/review/leadretro.py`, and this section is mostly what it found.
+
+### 1z-bc.1 The swap, and the audit it had to pass
+
+§1z-ap's clip stops the lead's ray at ANY plane change; §1z-ar.6 measured that as an
+over-clip — 3 of RUN-1zAQ's 65 arm-A leads and 7.8% of a 464-lead corpus cut short at plane
+changes, presumably some of them portals a body walks every day. `seam_clip` (§1z-bb) lets a
+plane end at a portal and stops it anywhere else, and the router's two rays already ride it.
+The change is four lines in `a2_clip_lead`.
+
+The bar it had to clear was set by §1z-ap.3: **the six locked runs' fatal leads must still
+come out under gate 1.** So before flipping anything, every fired keyboard lead in the lead
+campaign (harness runs 2026-09-03 07:00 → 2026-09-04 13:00, map 146) was rebuilt from its
+capture — origin = the report it was armed at, plane = that report's word, direction toward
+the granted point (or the body's last motion where the grant had been clipped to zero) — and
+walked three ways at the server's 2 u step: plane-blind `clip()`, 1z-ap's `clip(plane=)`,
+and `seam_clip` on the report's plane.
+
+### 1z-bc.2 ★★ The result: 0 of 6
+
+**622 leads, 27 captures.** The two plane-aware rays agree on 568. Where they differ the seam
+ray is **always the longer** (54 times, never shorter — as it must be, it refuses a subset of
+what the plane clip refuses), and **33 times it lets a lead past gate 1** that the plane clip
+had stopped.
+
+| locked run | fatal lead's origin | plane clip | seam clip |
+|---|---|---|---|
+| `20260903T191246` | (10370, 8283), plane 29 | 6 u | **520 u** |
+| `20260903T195857` | (11164, 9060), plane 29 | 36 u | **520 u** |
+| `20260903T200549` | (11109, 9005), plane 29 | 146 u | **520 u** |
+| `20260903T202051` | (10369, 8282), plane 29 | 6 u | **520 u** |
+| `20260903T214957` | (10367, 8280), plane 29 | 2 u | **520 u** |
+| `20260904T105954` (RUN-1zAO) | (10373, 8286), plane 29 | 14 u | **520 u** |
+
+**The plane clip kept 6 of 6 fatal leads under gate 1; the seam clip keeps 0 of 6.** Every one
+of the six is a lead the client's body demonstrably did not walk (§1z-ao watched one in the
+client's own memory for 3.0 s), and every one crosses a seam **the file links as a portal**.
+The lock rate at such crossings was measured at 1 in 4 (§1z-ao); 33 re-opened crossings is
+the door back on its hinges.
+
+### 1z-bc.3 ★ Why: on this bridge the portal is the body trapezoid, and the body still refuses it
+
+Plane 29 — the spawn-side bridge — has five trapezoids. Its two portals are carried by the
+**end body trapezoids**: `p29#0` (y 8279..8577, a wedge whose west edge slants from
+(10366, 8279) to (10069, 8577)) links to the three plane-0 trapezoids abutting that whole
+slant, and `p29#3` at the other end likewise. **Not zero-height lines** — §1z-ba.1's third
+lesson was plane 18's shape, not the file's rule, and it is corrected here: a portal may be
+carried by a line OR by a body trapezoid along an entire edge.
+
+RUN-1zAO's fatal lead left (10373, 8286) westward — 7 u inside the wedge's tip — and crossed
+that slant at x ≈ 10360, where `portal_at` finds `p29#0` and `p0#2509` within a unit of each
+other and both sides of the file's link. The file says portal. The body stood there for
+three seconds and was then warped 520 u. **§1z-ar.6's "the portal simply was not on that
+ray" is corrected: it was, in the file's terms.** What the body refused is not a fact the
+mesh carries. Three candidates, none settled here: the declared plane at a wedge tip (the R7
+class — the client's own pathfinder returns `pathCount == 0` exactly when its declared
+from-plane is impossible, §1z-i); a prop the mesh does not carry (the bridge's railing or
+abutment); a physical ramp narrower than the linked edge. The movehook `MapFindPath` return
+tap (§1z-h) is the instrument for the first, and it has never been armed on a lead run.
+
+### 1z-bc.4 What ships
+
+- **`A2_LEAD_SEAM_CLIP = False`.** The lead keeps §1z-ap's any-plane-change clip, and
+  §1z-ar.6's measured cost — 3 of 65 leads cut short at crossings that may have been
+  legitimate — stands as the price of the six it keeps under the gate.
+- **`--lead-seam-clip`** is the opt-in arm: the seam ray on the lead, for a run that wants to
+  ask §1z-bc.3's question deliberately. Its banner says what to expect.
+- `test_d1lead` **§2f** (104 → 110, floor 110): the default cuts a ray through a file-linked
+  portal at the plane change; the opt-in arm grants it at full length; a blind side-exit stops
+  under either with its reach under gate 1; a mesh without `seam_clip` falls back to the
+  plane clip; and the source lock includes the string `0 of 6 kept under gate 1` beside the
+  flag, so a later reader who flips the default has to delete the reason first.
+- `leadretro.py` is committed with its window, its six captures and its verdict line.
+
+### 1z-bc.5 What this says about §1z-bb, honestly
+
+The router's rays ride the seam test and the router's **corridor** has always crossed portals
+through `_cross` — so a click leg through `p29#0`'s slant is granted today, as it was before
+§1z-bb, and the body may refuse it exactly as it refused the leads. **§1z-bb fixed the blind
+side-exit and did not change this.** No lock has been observed under click movement in the
+corpus; the click campaign was short and the lead campaign's ~1-in-4 rate was under a held
+key. Filed, kept in view, and the fix — if the R7 reading holds — is the plane channel's,
+not a ray's.
+
+### 1z-bc.6 Corrections carried into earlier sections
+
+- §1z-ar.6: the portal WAS on RUN-1zAO's ray (file-linked `p29#0` ↔ `p0#2509`); the clip
+  was right for a reason the file cannot state.
+- §1z-ba.1 (3): portal trapezoids are lines **on plane 18**; on plane 29 they are body
+  trapezoids linked along an edge.
+- §1z-bb.6: "`a2_clip_lead` could take `seam_clip`" — refuted, 0 of 6.
