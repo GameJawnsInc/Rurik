@@ -13987,3 +13987,113 @@ mattered had the key been alive is not observable here.
 - The registration's P3 first clause ("moving at ≥ 150 u/s at the press") cannot be met by
   this script on any run — the harness parks the body between legs — and should have read
   "walks the hold". Recorded rather than re-aimed.
+
+## 1z-bk. RUN-1zBK — the `--no-enemy` arm CONFIRMS §1z-bj's follower reconstruction (no dead hold without the follower; the short seam lead walks), and surfaces a DIFFERENT failure on the same route: after leg 3 crosses the 29→0 seam the client's reported position FREEZES at the far point for the last four legs (~21 s), the drawn body pinned there through four held keys, our AGTRACK re-pins reseeding it back — a stall the lock census and `w0score` both score clean
+
+**Asked:** the check §1z-bj.5 registered — RUN-1zBI's command with the follower removed
+(`--no-enemy`), to separate the short seam-clipped lead from the follower's avoidance disc.
+Ident `MOVECODE-1z-bk`. Harness `20260905T111345`, capture `authsrv-20260905T111417-c1`,
+tape `agenttap-20260905T111418` (679 player samples, 61 s). Agent-driven, owner away, one
+launch, ended on its own. OBSERVED unless marked.
+
+### 1z-bk.1 The prediction, MET
+
+§1z-bj.5: *"the same script with `--no-enemy` — prediction: the 106 u seam lead is walked
+(body ≥ 150 u/s within 0.3 s of the W press); refuted if the hold is dead with no follower,
+which would put the cause in the short lead alone."* **Legs 1–3 walked, no dead hold.** Leg 1W
+909 u, leg 2S carried a `plane-seam`-clipped **494 u** lead and the body backpedalled it at
+190 u/s the whole leg, leg 3W 941 u. The dead 5.0 s W hold of §1z-bj (RUN-1zBI leg 3W, a
+106 u `plane-seam` lead onto a body with the Hatcher parked 68 u from its target) **did not
+recur without the follower.** So §1z-bj.4's reconstruction stands: the client's
+agent-avoidance pass, with the follower's disc over the lead's short target, was necessary
+for that hold; the short seam lead alone is walked.
+
+### 1z-bk.2 ★ The new failure — a report-freeze stall at the far side of the 29→0 seam
+
+The route's last four legs (4Q, 5E, 6S, 7W; t = 28.2–47.4 s) did not progress. The wire
+tells it plainest — every reported point from the end of leg 3 onward:
+
+```
+26.0  0x003D (11318,9151) plane 0     <- leg 3W, still advancing
+26.5  0x0047 (11456,9151) plane 0     <- leg 3W stop; the LAST point that ever changes
+28.2  0x003D (11456,9151)   ... 47.4  0x0047 (11456,9151)   <- 8 more reports, all identical
+```
+
+Leg 3 crossed the plane 29→0 seam (reports read plane 29 through t = 25.0, plane 0 from
+25.5) and ended at `(11456, 9151)` on plane 0. **From that stop the client's reported
+position never changed again** — four held-key legs, each opening a `0x003D` walk-start and
+closing a `0x0047` stop, both from the one frozen point. The drawn body (tape) was pinned
+there too: legs 4Q/6S/7W show its `m_point` at `(11456,9151)` for the whole leg with
+velocity set to 216/190/288 (the bake armed a segment; the position never settled away). On
+**leg 5E** the drawn body's `m_point` settled once at `(11462, 8843)` — a real 308 u strafe,
+sync copy alongside at `(11456, 8855)`, separation 14 u — and **0.45 s later a `budget-red`
+`0x002C` reseed returned both copies to `(11456,9151)`, velocity 0, fence shut** (the reseed
+logged at 34.83; the tape shows the snap-back at 34.81, within the clock skew). That is one
+OBSERVED ~300 u out-and-back of the drawn body; the other three legs never settled away from
+the pin on the ~11 Hz tape, so whether the body briefly escaped on them is unresolved (the
+`m_point` sample-and-hold, §1z-t.7).
+
+**The onset is client-side and upstream of our re-pin.** The report froze at t = 26.49; the
+first AGTRACK re-pin after leg 3 fired at t = 30.25 — 3.8 s later. Four re-pins fired in the
+stall (3 `arrival-risk`, 1 `budget-red`), each because our sync model, granted the lead,
+walked ahead of the frozen report until the guard's arrival/budget arithmetic went red;
+each reseeded both copies back to the frozen report. **Our re-pin did not cause the freeze —
+it keeps the body pinned to it.** What froze the client's report at the seam's far point is
+not on this capture; the two candidates are a client-side path refusal at the seam (our mesh
+calls `(11456,9151)` and every neighbour walkable, plane 0, but the client would not advance
+from it under W/S/Q — MOVECODE-Q2's disagreement, decodable by the `MapFindPath` return tap)
+and a plane-word carry across the 29→0 seam of the kind §1z-c's locks share. It is neither
+§1z-ao's arrival-snap lock (near side of the seam, lead maturity) nor §1z-bj's avoidance
+dead-hold (the follower); it is a third thing, on the plane-0 side, on the shipped guard.
+
+### 1z-bk.3 ★ Both instruments score it clean
+
+- **`stopcensus`: no lock** — `YYYYYYY`, every leg closed a `0x0047`. The terminal-silence
+  signature (§1z-am) never trips because the frozen client keeps answering each held key with
+  a stop at the frozen point.
+- **`w0score`: CONFIRMED, body FREE** — all-sample p50 0.0, moving-only p50 9.9, p90 112,
+  **max 148 u**, 0 of 218 moving samples enslaved. The bar reads the run as the arc's cleanest
+  because it measures world-0 against the drawn body, and the two copies sit on the pin
+  **together** and are reseeded together; the stall is a divergence between the body and
+  **where the player walked**, which neither copy represents. The raw `m_point` column's max
+  reads 422.7 u (the leg-5 out-and-back and the settle lag) and is the §40.11 artifact the
+  headline is told to ignore.
+
+This is the review's **M-F2** (the warp instruments are blind to a reseed that moves both
+copies / lands in report silence) and **M-F4** (the AGTRACK re-pin reseeding a body that had
+walked — one 308 u snap-back OBSERVED) together, on the shipped default guard, lead ON, no
+enemy. The player would have held Q, E, S and W for 3–4 s each and seen the character sit at
+one point for the last ~21 s of the walk, twitching once. **`stopcensus` and `w0score` both
+call that run green** — which is exactly why the review said no instrument in the harness
+regime can certify the shipped default (M-F13) and the re-pin harm is uncounted (M-F4).
+
+### 1z-bk.4 What this settles, and what it opens
+
+- **Settled:** §1z-bj's follower reconstruction — the dead hold needs the enemy; the short
+  seam lead walks without it. And a warp instrument that reads a stalled run green: the arc
+  cannot score movement fidelity on `stopcensus` + `w0score` alone (review M-F2/M-F13
+  confirmed on a live run).
+- **Open, and it is the priority now:** why the client's report freezes at the plane-0 far
+  side of the 29→0 seam and will not advance from ground our mesh calls walkable. The
+  registered decode is the `MapFindPath` return tap (§1z-bj.5, movehook) armed on the same
+  route: if the client's own pathfinder returns `pathCount == 0` from `(11456,9151)` the
+  freeze is a client path refusal (MOVECODE-Q2, our mesh disagreeing at the seam's far side),
+  and §1z-i's law predicts it would do so only if the from-plane were impossible there — which
+  our decode says it is not, so a non-zero `pathCount` would put the cause elsewhere. Either
+  way it is a one-launch check.
+- **Open, and it is the owner's regime question:** this ran with the lead ON. The re-pins
+  that reseed the pinned body are `arrival-risk`/`budget-red`, which need a grant that walks
+  the model ahead of the report — the lead. The report FREEZE, though, is lead-independent in
+  origin (it precedes the first re-pin and is a client report). **Does the freeze happen on the
+  shipped lead-OFF default?** One `--no-enemy` run without `--kbd-lead` answers it, and it is
+  the operator's own configuration. Registered as the next check.
+
+### 1z-bk.5 Not done
+
+No fix built; no default moved. The two derived fix candidates from §1z-bj.5 (no lead
+shorter than a follower's reach; do not park the follow in the walk direction) address the
+enemy dead-hold, not this stall — this one's fix, if it is ours at all, is upstream of the
+re-pin and unknown until the seam freeze is decoded. `w0score` and `stopcensus` should each
+gain a "the body's reported point did not advance for N s while keys were held" stall check;
+filed, not built, because the derived object is the client-side cause, not another server
+bound (review M-A2's warp-bar item is where it belongs).
