@@ -4397,6 +4397,19 @@ GRANT_DURING_HOLD = True
 
 AGTRACK_SHADOW = True
 AGTRACK_REPIN = True
+# GATE 2 ON-MESH TOLERANCE (MOVECODE-1z-bf, 2026-09-04). The guard's gate 2
+# asks pathmap.on_mesh(a, 1 u) -- inside a trapezoid OR within SEAM_TOL of one
+# -- instead of exact walkable(a). Every gate2-offmesh re-pin this server ever
+# sent (17 fired, 19 predicted, 1,123 harness runs) was raised with the
+# modelled sync copy standing on the client's own previous REPORT, a point
+# exact containment rejects by <= 0.5 u at the wedge tip of map 146; the
+# client's own snap test ran on the vetoed grant and did not reseed (2 of 2
+# hooked runs), and the 0x002C the false veto licensed halted a drawn body
+# walking at 205 u/s for the rest of the key hold (FINDINGS sec.1z-be.4,
+# sec.1z-bf). The constant lives in agtrack_mirror (GATE2_SEAM_TOL); this bool
+# is the recorded switch. --agtrack-gate2-exact reverts to exact containment,
+# the known-bad arm.
+AGTRACK_GATE2_SEAM = True
 # HOW FAR APART THE TWO COPIES MUST BE BEFORE WE ACT.  100.0 u is the CLIENT'S
 # OWN constant, not ours: 0x00946560, the radius inside which 0x00605AF0 calls
 # the authoritative position a match against the client's history and returns
@@ -23255,6 +23268,14 @@ def main():
                          "convicted (a body parked 7 s at a bridge deck's "
                          "edge, then a 2,021 u teleport). Diagnostic arm "
                          "only; RUN-1zBB's known-bad arm.")
+    ap.add_argument("--agtrack-gate2-exact", action="store_true",
+                    help="MOVECODE-1z-bf OFF: the AgTrack guard's gate 2 goes "
+                         "back to EXACT trapezoid containment of the modelled "
+                         "sync copy (pathmap.walkable) instead of on_mesh with "
+                         "the 1 u edge tolerance. Known-bad arm: 17 of 17 "
+                         "gate2-offmesh re-pins in the corpus were false "
+                         "vetoes on sub-unit edge slivers, and one of them "
+                         "halted a walking keyboard body for 3.7 s (RUN-1zBD).")
     ap.add_argument("--router", action="store_true",
                     help="NO-OP since 2026-09-03 (MOVECODE-1z-v): the "
                          "router is the default click policy and needs no "
@@ -24990,6 +25011,21 @@ def main():
               "body's plane without a portal grants the whole line; RUN-1zBA "
               "measured that as a 7 s park at a bridge edge and a 2 km warp.",
               flush=True)
+    global AGTRACK_GATE2_SEAM
+    AGTRACK_GATE2_SEAM = not a.agtrack_gate2_exact
+    if not AGTRACK_GATE2_SEAM:
+        # The tolerance is the mirror's constant; the revert zeroes it there
+        # so MeshAdapter.start_walkable falls back to exact walkable().
+        try:
+            import agtrack_mirror as _am_flag
+            _am_flag.GATE2_SEAM_TOL = 0.0
+        except Exception:                                     # noqa: BLE001
+            pass
+        print("[map] --agtrack-gate2-exact: the AgTrack guard's gate 2 is "
+              "EXACT containment again (pre-1z-bf). A sync copy standing on "
+              "the client's own report at a trapezoid edge reads off-mesh, "
+              "the guard vetoes, and the 0x002C halts a walking body -- "
+              "RUN-1zBD's 3.7 s park at the wedge tip.", flush=True)
     if not ROUTER:
         print("[map] --no-router: the LEGACY click path (pre-1z-v). Clicks "
               "are gated on a report under 1.0 s old -- unsatisfiable "

@@ -337,7 +337,7 @@ def all_valid(pm, paths):
 # Section 14 (2026-09-04, MOVECODE-1z-bb, the seam-aware pull) adds nine
 # unconditional checks on a synthetic bridge and four behind the Pre-Searing
 # load: floor 80 -> 89, green run 93 on 38833 (5 declared skips).
-LEDGER = checks.Ledger("pathing map", floor=89)
+LEDGER = checks.Ledger("pathing map", floor=97)
 check = checks.adopt(LEDGER)
 
 
@@ -1398,6 +1398,49 @@ def main():
               f"max {max(got[True][1]):.1f} ms (plane-blind max "
               f"{max(got[False][1]):.1f}); p50 {sorted(got[True][1])[150]:.2f} vs "
               f"{sorted(got[False][1])[150]:.2f} ms")
+
+    print("\n15. on_mesh(): the mesh as the client resolves it at its edges (MOVECODE-1z-bf)")
+    # THE DEFECT: the AgTrack guard's gate 2 asked walkable() -- exact
+    # containment -- of the modelled sync copy, and every gate2-offmesh re-pin
+    # in the corpus (17 fired, 19 predicted, 1,123 runs) was raised with that
+    # copy standing on the client's own previous REPORT, a point exact
+    # containment rejects by <= 0.5 u at the wedge tip of map 146. The client's
+    # keyboard mover lays waypoints along trapezoid edges, its body reports from
+    # them, and its own snap test passed the very grants we vetoed (RUN-1zBD,
+    # two hooked runs). on_mesh() is containment OR within SEAM_TOL of a
+    # trapezoid -- the same 1 u portal_at() uses -- and it must say YES on a
+    # sub-unit sliver, NO further out, and NO where the mesh really ends.
+    SQ = pathmap.Trapezoid(0, 0, 100.0, 0.0, 0.0, 100.0, 0.0, 100.0,
+                           (pathmap.NO_NEIGHBOUR,) * 4)
+    sq = pathmap.PathingMap([SQ], [{}])
+    sq._cross = {}
+    check(sq.walkable(50.0, 50.0) and sq.on_mesh(50.0, 50.0),
+          "15a. inside a trapezoid: walkable() and on_mesh() agree", "")
+    check(not sq.walkable(100.5, 50.0) and sq.on_mesh(100.5, 50.0),
+          "15b. 0.5 u outside an edge: walkable() says off, on_mesh() says on",
+          "the corpus's 17 false vetoes stood on exactly this")
+    check(not sq.on_mesh(101.5, 50.0),
+          "15c. 1.5 u outside: off under the default SEAM_TOL", "")
+    check(sq.on_mesh(101.5, 50.0, tol=2.0) and not sq.on_mesh(103.0, 50.0, tol=2.0),
+          "15d. the tolerance is the caller's, and it is a radius", "")
+    check(not sq.on_mesh(150.0, 150.0),
+          "15e. far off the mesh stays off", "")
+    check(pathmap.SEAM_TOL == 1.0,
+          "15f. SEAM_TOL is the 1 u the portal test already uses -- on_mesh adds no new constant",
+          f"SEAM_TOL {pathmap.SEAM_TOL}")
+    if pre is None:
+        LEDGER.skip("15g/15h. RUN-1zBD's report points on Pre-Searing",
+                    "no archive")
+    else:
+        spec = [(10302.02, 8214.08), (10374.04, 8286.84), (10369.42, 8282.33)]
+        got = [(pre.walkable(x, y), pre.on_mesh(x, y)) for x, y in spec]
+        check(all(w is False and m is True for w, m in got),
+              "15g. RUN-1zBD's three report points at the wedge tip: outside "
+              "every trapezoid by exact containment, ON the mesh within 1 u",
+              f"(walkable, on_mesh) = {got}")
+        check(not pre.on_mesh(10441.47, 8209.68) and not pre.walkable(10441.47, 8209.68),
+              "15h. and the server's legacy belief 144 u east of the report, "
+              "genuinely off the mesh, stays off under the tolerance", "")
 
     dt = time.perf_counter() - t0
     print(f"\nwalked the archive in {dt:.1f}s")

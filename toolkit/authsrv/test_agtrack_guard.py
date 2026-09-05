@@ -29,7 +29,7 @@ AS_SRC = open(authsrv.__file__, encoding="utf-8").read()
 
 # Floor from the 2026-08-30 green run: 49 checks, all unconditional;
 # +25 at MOVECODE-1z-ah (section 9: the stationary waiver -- the retract).
-LEDGER = checks.Ledger("agtrack guard: the derived pre-emit rule", floor=74)
+LEDGER = checks.Ledger("agtrack guard: the derived pre-emit rule", floor=77)
 check = checks.adopt_named(LEDGER)
 
 
@@ -470,6 +470,27 @@ def main():
               st.get("kbd_leg") is None)
     finally:
         ag.STATIONARY_WAIVER = True
+
+    # ---- 13. MOVECODE-1z-bf: gate 2's edge tolerance is a recorded switch --
+    # The guard's gate 2 reads the mesh through agtrack_mirror.MeshAdapter,
+    # whose tolerance lives in agtrack_mirror.GATE2_SEAM_TOL; authsrv records
+    # the switch as a bool (capture_flags sweeps SCREAMING_CASE bools) and
+    # --agtrack-gate2-exact zeroes the tolerance -- the known-bad arm the
+    # corpus convicted (17 of 17 gate2-offmesh re-pins were false vetoes on
+    # sub-unit edge slivers; one halted a walking body for 3.7 s).
+    check("authsrv records AGTRACK_GATE2_SEAM, ON by default",
+          authsrv.AGTRACK_GATE2_SEAM is True
+          and authsrv.capture_flags().get("AGTRACK_GATE2_SEAM") is True)
+    check("--agtrack-gate2-exact exists and zeroes the mirror's tolerance "
+          "(source lock)",
+          "--agtrack-gate2-exact" in AS_SRC
+          and "_am_flag.GATE2_SEAM_TOL = 0.0" in AS_SRC)
+    _msrc = open(am.__file__, encoding="utf-8").read()
+    check("the mirror's gate 2 reads on_mesh under the tolerance and "
+          "walkable() without it (source lock)",
+          "return self.pm.on_mesh(x, y, GATE2_SEAM_TOL)" in _msrc
+          and "return self.pm.walkable(x, y)" in _msrc
+          and am.GATE2_SEAM_TOL == 1.0)
 
     return LEDGER.verdict()
 

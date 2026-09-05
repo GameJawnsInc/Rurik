@@ -22,7 +22,7 @@ import checks                    # noqa: E402
 import agtrack_mirror as am      # noqa: E402
 
 # Floor from the 2026-08-30 green run: 64 checks, all unconditional.
-LEDGER = checks.Ledger("agtrack mirror transcription", floor=64)
+LEDGER = checks.Ledger("agtrack mirror transcription", floor=68)
 check = checks.adopt_named(LEDGER)
 
 
@@ -239,6 +239,46 @@ def main():
           v.code == am.SNAP and v.gate2 is False)
     check("NoMesh never runs gate 2 (labelled degradation)",
           gate1_only(100.0).gate2 is None)
+
+    # ---- 10b. gate 2 tolerates the mesh's edge rounding (MOVECODE-1z-bf) --
+    # Every gate2-offmesh re-pin in the corpus (17 fired, 19 predicted) was a
+    # false veto on a point <= 0.5 u outside our trapezoid edges where the
+    # client's own body stood and its own snap test passed. MeshAdapter now
+    # asks on_mesh(a, GATE2_SEAM_TOL); 0.0 is the revert arm.
+    class SliverMesh(object):
+        """walkable() says off, on_mesh() says on within the tolerance."""
+
+        def walkable(self, x, y):
+            return False
+
+        def on_mesh(self, x, y, tol=1.0):
+            return tol > 0.0
+
+    class ExactOnlyMesh(object):
+        """An older stub with no on_mesh(): the adapter must fall back."""
+
+        def walkable(self, x, y):
+            return True
+
+    saved_tol = am.GATE2_SEAM_TOL
+    try:
+        am.GATE2_SEAM_TOL = 1.0
+        check("gate 2 under the tolerance: a sub-unit sliver PASSES",
+              am.MeshAdapter(SliverMesh()).start_walkable(0.0, 0.0) is True)
+        am.GATE2_SEAM_TOL = 0.0
+        check("gate 2 exact (the revert arm, --agtrack-gate2-exact): the same "
+              "sliver FAILS -- the known-bad arm still reproduces the false veto",
+              am.MeshAdapter(SliverMesh()).start_walkable(0.0, 0.0) is False)
+        am.GATE2_SEAM_TOL = 1.0
+        check("a mesh without on_mesh() falls back to walkable()",
+              am.MeshAdapter(ExactOnlyMesh()).start_walkable(0.0, 0.0) is True)
+    finally:
+        am.GATE2_SEAM_TOL = saved_tol
+    sys.path.insert(0, os.path.join(os.path.dirname(HERE), "mapdata"))
+    import pathmap as _pathmap
+    check("GATE2_SEAM_TOL is pathmap.SEAM_TOL, ON by default -- one edge "
+          "constant, not a new guess",
+          am.GATE2_SEAM_TOL == _pathmap.SEAM_TOL and am.GATE2_SEAM_TOL > 0.0)
 
     # ---- 11. fences and resets ----------------------------------------
     m = am.AgTrackMirror()

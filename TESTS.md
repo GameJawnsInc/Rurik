@@ -2542,7 +2542,7 @@ when map 280 is absent, and §14(g) when Pre-Searing is absent skip-declare);
   and turned it into a declared SKIP, which the floor did NOT catch because the
   floor had risen enough to hide four missing checks behind eleven new ones.
   (The line this replaces said "score 10 against a floor of 14", stale by two
-  floor changes)),
+  floor changes) **§15 (MOVECODE-1z-bf, 2026-09-04): `on_mesh()`** — containment OR within `SEAM_TOL` of a trapezoid, the mesh as the client resolves it at its edges. A synthetic square pins the shape (inside agrees with `walkable`; 0.5 u outside an edge is ON, 1.5 u is OFF, the tolerance is a radius the caller owns, far stays off, and `SEAM_TOL` is still the portal test's 1 u, no new constant); on Pre-Searing the THREE report points RUN-1zBD's body stood on at the wedge tip — outside every trapezoid by exact containment, on the mesh within 1 u — and the server's legacy belief 144 u east of them, genuinely off, stays off. Floor 89 → 97 from the green run (101 checks, 5 skips)),
 
 === AMENDMENT 3 of 3 — test_contentids, section 6 and the floor (builder's, unchanged) ===
   `toolkit/mapdata/test_mapscale.py` (the authored-map SCALE ladder, `mapscale.py`,
@@ -11037,7 +11037,7 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   -- a tool, not a suite test, because its ground truth is the growing
   gamesrv corpus and a pinned count there goes stale the next time the owner
   plays (the corpus-counts-redden rule). Floor 64 from the 2026-08-30 green
-  run. <1 s),
+  run. <1 s **§10b (MOVECODE-1z-bf, 2026-09-04): gate 2 tolerates the mesh's edge rounding.** Every gate2-offmesh re-pin in the corpus (17 fired, 19 predicted, 1,123 runs) was a false veto on a point ≤ 0.5 u outside our trapezoid edges where the client's own body stood and its own snap test passed (RUN-1zBD, two hooked runs). `MeshAdapter.start_walkable` now asks `on_mesh(a, GATE2_SEAM_TOL)`; the section runs a sliver stub under BOTH arms — tolerance 1.0 passes it, 0.0 (the `--agtrack-gate2-exact` revert) still fails it, so the known-bad arm still reproduces the false veto — plus the fallback for a mesh with no `on_mesh()` and the cross-pin `GATE2_SEAM_TOL == pathmap.SEAM_TOL`. Floor 64 → 68),
 
 `toolkit/authsrv/test_agtrack_guard.py` (**§9 is MOVECODE-1z-ah's STATIONARY WAIVER — the retract.** RUN-1zAB run A's fatal leg replayed verbatim: the guard predicted the snap 0.425 s before the arrival and was refused by the report-freshness gate ALONE, which the section pins BY NAME (`blocked_by`) because §1z-ag had to replay a capture to learn it and published two wrong explanations first. The waiver lifts that one gate when the last two accepted reports agree to within the client's own `ZERO_DIST_SQ` — a body MEASURED still, whose re-pin harm is then 1.0 u rather than `RUN_SPEED × age`. Pinned: the 1.0 u boundary COUNTS (the client's own `distSq <= 1.0`) and 1.1 u does not; a placement is not the first of the two measurements (the section's own pre-existing stale-report check caught the looser draft); a click in flight refuses; the harm on run A's leg is **0.000 u** and the 520 u arrival then never matures; and the KNOWN-BAD ARM — a walking body, reports ~512 u apart — never satisfies the waiver and never even gets a re-pin proposed, which is the warp `AgMsg.cpp` 584 makes possible and this repo shipped once. Also §9: a `0x002C` clears the keyboard leg record. The rest is **the derived pre-emit grant rule,
   clause by clause -- MOVECODE-1z-s.** `agtrack_guard.py` is the policy layer
@@ -11065,4 +11065,4 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   choke, no second fire, staleness/flag-off/bad-plane refusals. Synthetic,
   bare machine. The corpus retrodiction lives in `agtrack_replay.py
   --policy` (217/251 corpus warps pre-empted, 10/10 in the current regime
-  -- FINDINGS 1z-s). Floor 49 from the 2026-08-30 green run. ~2 s),
+  -- FINDINGS 1z-s). Floor 49 from the 2026-08-30 green run. ~2 s **§13 (MOVECODE-1z-bf, 2026-09-04): the gate-2 tolerance is a recorded, revertable switch** — `AGTRACK_GATE2_SEAM` ON by default and swept by `capture_flags()`, `--agtrack-gate2-exact` present and zeroing the mirror's constant (source lock), and the mirror's gate 2 reading `on_mesh` under the tolerance and `walkable()` without it (source lock). Floor 74 → 77),

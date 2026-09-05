@@ -109,6 +109,36 @@ class Verdict(object):
 # The mesh adapter -- the walkable conjunct and gate 2, injectable.
 # ---------------------------------------------------------------------------
 
+# GATE 2 ON-MESH TOLERANCE (MOVECODE-1z-bf, 2026-09-04).  DERIVED from the
+# corpus and from two hooked runs, and it is the whole of the "guard fix"
+# sec.1z-be.6 filed.
+#
+# WHAT WAS WRONG.  Gate 2 was modelled as pathmap.walkable(a) -- EXACT
+# containment of the modelled sync copy in a trapezoid, on any plane.  Every
+# gate2-offmesh re-pin the server ever sent (17 fired, 19 predicted, 1,123
+# harness runs) was raised with that copy standing on a point walkable()
+# rejects by <= 0.5 u: the previous accepted REPORT, i.e. where the client's
+# own body stood and said so.  The client lays keyboard waypoints along
+# trapezoid edges (sec.1z-bd.2: 0.01-0.03 u outside the plane by our decode),
+# so its positions live on our edges' rounding.  On both runs with the
+# movehook attached (RUN-1zBD) the client's snap test ran on the very grant we
+# vetoed -- and did not reseed.  The prediction was false, the 0x002C it
+# licensed landed on a drawn body walking at 205 u/s and halted it, and the
+# held key never re-dispatched (sec.1z-be.4).
+#
+# THE FIX.  Gate 2 asks pathmap.on_mesh(a, GATE2_SEAM_TOL): inside a
+# trapezoid OR within 1 u of one -- the mesh as the client resolves it at its
+# edges.  The tolerance is pathmap.SEAM_TOL, the constant portal_at() already
+# uses to see zero-height portal lines; it is not a new number.  It is the
+# SMALLEST tolerance the evidence needs (all 17 at <= 0.5 u); the client's own
+# gate 2 is looser still (a query 32 u off its declared plane returned a path
+# in RUN-1zBD run 2), and that looseness is deliberately NOT modelled here --
+# widening the mesh by tens of units would be a guess from n = 1, and the
+# failure direction of a too-narrow gate 2 is a false veto, which this repo
+# has now measured the cost of once.  0.0 reverts to exact containment
+# (authsrv --agtrack-gate2-exact).
+GATE2_SEAM_TOL = 1.0
+
 class MeshAdapter(object):
     """Wraps a toolkit/mapdata/pathmap.PathingMap for the two navmesh queries.
 
@@ -123,7 +153,9 @@ class MeshAdapter(object):
         polyline length.
     Gate 2's `pathCount == 0` means THE START POINT (the sync position we
     granted) is off the navmesh -- narrower than "no path" (studies/movement/
-    FINDINGS.md:3176).  We reproduce it as walkable(A).
+    FINDINGS.md:3176).  We reproduce it as on_mesh(A, GATE2_SEAM_TOL): exact
+    containment was measured false at the client's own positions along
+    trapezoid edges (the block above the class).
 
     MODEL-CHOICE: our PathingMap is our own reconstruction of the same
     trapezoid data the client queries -- pinned per capture by the in-band
@@ -135,6 +167,8 @@ class MeshAdapter(object):
         self.pm = pathing_map
 
     def start_walkable(self, x, y):
+        if GATE2_SEAM_TOL > 0.0 and hasattr(self.pm, "on_mesh"):
+            return self.pm.on_mesh(x, y, GATE2_SEAM_TOL)
         return self.pm.walkable(x, y)
 
     def path_len_ok(self, qx, qy, qplane, cx, cy, cplane, limit):
