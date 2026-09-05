@@ -14097,3 +14097,180 @@ re-pin and unknown until the seam freeze is decoded. `w0score` and `stopcensus` 
 gain a "the body's reported point did not advance for N s while keys were held" stall check;
 filed, not built, because the derived object is the client-side cause, not another server
 bound (review M-A2's warp-bar item is where it belongs).
+
+## 1z-bl. RUN-1zBL — THE STALL IS OURS. The client's own pathfinder is never consulted (`MapFindPath` 0 hits of 5 sites); the body walks the held key exactly as commanded and our AGTRACK re-pin throws it **294–433 u BACKWARD** to the leg's start, after which GmWalk never re-dispatches the key. The trigger is REPORT SILENCE — 9 of 9 legs with no mid-leg `0x003D` were re-pinned against 1 of 12 that reported — and §1z-bk's "the onset is client-side and upstream of our re-pin" is **REFUTED by this capture, my own section, on the sample-and-hold trap**
+
+**Asked:** the check §1z-bk.4 made the priority — arm the hook on the seam stall. Ident
+`MOVECODE-1z-bl`, sheet [RUN-1zBL.md](RUN-1zBL.md), registered before launching. One run,
+agent-driven, hands off, owner away. Harness `20260905T113306`, capture
+`authsrv-20260905T113339-c1`, tape `agenttap-20260905T113340` (969 samples), hook
+`vault/research/movecode/1zbl/movehook.bin`. OBSERVED unless marked.
+
+### 1z-bl.1 The capture is valid, and that is what makes its zeros quotable
+
+7,962 records, capture v9, ring **7,962 of 32,768 — not full**, ended "timer elapsed",
+**both controls FIRED** (A: the DLL's own `int3`; B: real client code at `0x01230AB4`).
+P4 MET. Alignment via `leadtap.align`: offset from 2 anchors, spread **12 ms** — thin on
+anchors, tight on spread, and every timing claim below is at leg scale (seconds), so the
+alignment is not load-bearing for any of them.
+
+### 1z-bl.2 ★ P3 ANSWERED, and it removes MOVECODE-Q2 from this stall
+
+**`mapfindpath` 0 hits. `mapfindpath_ret1..4` 0 hits.** Also zero: `reseed`, `resync`,
+`stepclear`, `movecache`, `heldbit`, `chcli_point`. The registered expectation from
+§1z-bd.1 — the keyboard mover never calls the client's pathfinder — is **confirmed out of
+sample**, and the consequence is the one §1z-bk.4 registered: the stall is **not** a client
+path refusal, our mesh disagreeing with the client's at the seam's far side is **not** the
+explanation, and `pathCount == 0` never happened because the question was never asked. Zero
+`reseed` also means no whole-roster reseed occurred all run, and zero `stepclear` means the
+snap test's gate 3 was never evaluated. These nulls are quotable because §1z-bl.1's controls
+fired.
+
+### 1z-bl.3 ★★ What actually happens on a "frozen" leg — the body walks, and we throw it back
+
+The route is `wait:8 W:5 S:4 W:5 Q:3 E:3 S:4 W:4`. Three legs (2S, 4Q, 7W) reported the
+identical point at their walk-start and their stop — §1z-bk's "frozen" signature. The hook
+and the client's own position accessor say they were not frozen at all.
+
+Per leg, the drawn body through **`w0score.live` — `AgAgent::position_at` (`0x005FF820`)
+replicated, clamp first**, which is the rule the client itself uses:
+
+| leg | the body walked | at our `0x002C` | after | held key remaining |
+|---|---|---|---|---|
+| 2S | out to **443 u** at 190 u/s, monotone | **back to 9.5 u from the start** | never moves again | 1.5 s |
+| 4Q | out to **426 u** at 216 u/s | back to 17.9 u | never moves again | 0.8 s |
+| 7W | out to **308 u** at 288 u/s | back to 9.8 u | never moves again | 2.8 s |
+
+The wire and the hook agree on the cause, to the sample:
+
+```
+20.71  press: resume_arm, movecmd, movedispatch, chcli_dir, agapi_setdest -> (10124.30, 8521.51)
+       setter+bake on 0x254FF060 (DRAWN), setter+bake on 0x254FFBE8 (SYNC), agtrack, snaptest
+20.71 -> 23.05   both copies velocity 190, arrival stamp 22276; the body glides 443 u west
+23.12  WIRE: our "AGTRACK RE-PIN 0x002C at (10614,8521) plane 29 -- the client's own report"
+23.15  HOOK: setposition on 0x254FFBE8, teleport; setposition on 0x254FF060, teleport
+23.14  TAPE: both copies velocity 190 -> 0, arrival stamp 22276 -> 0, body at (10614, 8521)
+23.15 -> 24.68   movecmd fires ZERO times while S is still held; inputeval samples 240 times
+24.68  the leg's stop reports (10614,8521) -- the point the leg STARTED from
+```
+
+`movecmd` fires **once** on each frozen leg (at the press) and **163 / 227 / 108 times** on
+the three legs that walked. `inputeval` runs 179–240 times on the frozen legs regardless —
+the client is still sampling the held key every frame; it is the dispatch that never comes
+again. That is §1z-be.4's rule reproduced exactly: **GmWalk does not re-dispatch a held key
+after a halt.** So P2 resolves to a fourth outcome the registration did not list, and it is
+the union of (b) and (c): the body *did* move (c's clause) and the input path *did* stop
+re-dispatching (b's clause), and our `0x002C` is the hinge between them.
+
+**The `0x002C` lands on BOTH copies** — two `setposition` records per send, `0x254FFBE8`
+(sync) and `0x254FF060` (drawn) — which is why the drawn body, the thing the player sees,
+goes backward. 8 `setposition` records, 4 sends, 4 legs. No other leg has one.
+
+### 1z-bl.4 ★★★ The trigger is REPORT SILENCE, and it holds across all three runs
+
+Every leg of RUN-1zBI, RUN-1zBK and RUN-1zBL (21 legs, same script, three arms), classified
+by whether the client sent any `0x003D` **between** the leg's walk-start and its stop:
+
+| | legs | got an AGTRACK re-pin |
+|---|---|---|
+| **zero mid-leg reports** | 9 | **9** |
+| at least one mid-leg report | 12 | **1** |
+
+The single exception is RUN-1zBL's leg 5E, whose one report and the re-pin land in the same
+0.1 s — the send was already in flight — and it is also the only re-pinned leg that was *not*
+thrown back, because the re-pin's target was a point the body had just confirmed. **Eight
+bodies were thrown backward 294–433 u**: 1zBK legs 2S/4Q/5E/6S/7W (−381/−418/−376/−294/−420 u)
+and 1zBL legs 2S/4Q/7W (−433/−408/−298 u).
+
+**Why a leg goes silent is the client's report cadence, not the seam.** The client's `0x003D`
+is distance-triggered at ~512 u (§1z-ab.1; re-derived for retail's own client in the review's
+fact 1). A held-key leg that covers less than that emits nothing between its start and its
+stop. Peak travel against the trigger, this run: legs over it (1W 882 u, 3W 1033 u, 6S 546 u)
+reported 6–9 times mid-leg and were never re-pinned; legs under it (2S 443, 4Q 426, 5E 306,
+7W 308) reported 0–1 times and were re-pinned every time. The seam has nothing to do with it:
+leg 2S was thrown back on plane 29 **before** the crossing, and legs after the crossing walked
+whenever they were long enough.
+
+**The chain, entirely ours:** a short leg sends no report → our sync model walks the granted
+lead onward → the guard's `arrival-risk` / `budget-red` arithmetic compares the model against
+a report that is now stale by the whole leg → it fires a re-pin **at that stale point** → the
+`0x002C` reseeds both copies backward onto it and zeroes the arrival → the held key is never
+re-dispatched → the leg's stop reports the stale point → the next leg begins from it and the
+loop repeats. **Retail cannot do this to a player: it sends the player zero corrective
+`0x002C` in the whole 61-connection live corpus** (§1p; 13 total, 5 to the player, 0
+corrections). Retail lives with the same 512 u silence and tolerates it.
+
+### 1z-bl.5 ★ §1z-bk is REFUTED on its central claim, by me, and the trap is the one this arc keeps paying for
+
+§1z-bk concluded: *"the onset is client-side and upstream of our re-pin — our re-pin keeps
+the body pinned to it, it did not cause the freeze."* **That is wrong.** The re-pin causes it.
+Two errors produced it, both mine:
+
+1. **I read a frozen `m_point` as a body that had not moved.** `m_point` (+0x78) is
+   sample-and-hold; measured here on a leg that demonstrably walked (leg 1W), it stayed at
+   `(9826.0, 8077.0)` for **1.6 s and six consecutive samples** at 288 u/s before settling.
+   A body that walks 443 u in 2.3 s and is reset before its next settle leaves **no trace at
+   all** in the raw column. Only the client's own accessor (clamp first, then dead-reckon)
+   shows the travel. This is the third time the arc has published on the raw column and the
+   first time the control was run in the same section — `w0score --legs` and every future
+   scorer should read `live`, and §1z-bk's numbers should be re-derived through it.
+2. **I inferred causality from the freeze "preceding" the first re-pin.** The reported
+   position stopped changing at the end of leg 3 because that is where leg 3 ended; each
+   later leg then walked and was thrown back to that same point, so the *reported* point
+   never changed while the body moved 300–420 u every leg. The 3.8 s gap I cited is the gap
+   between one leg's stop and the next leg's re-pin, not evidence of anything.
+
+**What survives of §1z-bk:** its prediction result (no dead hold without the follower) is
+untouched, and §1z-bj's follower/avoidance dead hold is a **genuinely different class** —
+RUN-1zBI's leg 3W has peak travel **0 u** with the live accessor (the body never armed;
+§1z-bj measured `+0x48` never set), whereas every leg here armed, walked and was reset. Two
+classes: *never started* (avoidance refusal, follower in the disc) and *walked and thrown
+back* (our re-pin on a silent leg).
+
+### 1z-bl.6 Why every instrument called these runs clean
+
+`stopcensus`: no lock — the client answers every held key with a stop, at the point we put it
+back to. `w0score`: CONFIRMED, body FREE, moving-only p50 9.9 u, max 148 u — it compares
+world-0 with world-1 and the `0x002C` reseeds **both**, so the divergence it is built to see
+never opens. `movesync`'s wire bar: the whole event lands inside a >1 s report silence, which
+its `FREE_SILENCE` construction cannot fire on. The review's **M-F2** (the warp instruments
+are blind to a reseed that moves both copies inside report silence) and **M-F4** (the re-pin
+harming a walking body, uncounted) are both confirmed live, with magnitude, and this is the
+warp class the owner's Q10 bar is about.
+
+### 1z-bl.7 The derived fix, and what is still open
+
+**Derived, not built** (no default moved in this section): the guard must not treat *report
+silence* as divergence. A re-pin's whole justification is that the client's copy has drifted
+from a point we know it occupies; during a silent leg we know no such thing, and the point we
+re-pin to is the one place the body provably is **not**. Three candidate shapes, each cheap
+and each needing its own section: (i) refuse any re-pin while a keyboard leg is open and no
+fresh report has arrived since the walk-start — the condition is already on the wire
+(`kbd_moving_at`, the leg's own `0x003D`); (ii) require the re-pin's target to be a point
+reported *after* the current leg began; (iii) re-pin to the model's own position rather than
+the stale report, which is what the client would have reached. **(i) is the smallest, and it is
+already retrodicted.** Over every AGTRACK re-pin in the harness corpus — 62 fires in 28
+captures — the condition "an open keyboard leg with no fresh `0x003D` since its walk-start"
+removes **24** and keeps **38**, and it is surgical by trigger:
+
+| trigger | removed | kept |
+|---|---|---|
+| `budget-red` | **7** | 0 |
+| `arrival-risk` | **15** | 5 |
+| `gate1-red` | 2 | 16 |
+| `gate2-offmesh` | 0 | 17 |
+
+Every `budget-red` and three quarters of `arrival-risk` — the two triggers that threw all
+eight bodies backward — go; `gate2-offmesh` (the class §1z-bf's tolerance already governs)
+and the bulk of `gate1-red` are untouched. That is the shape a fix should have. It is still
+**not built**: it needs its own section, a revert flag, and `guardretro`'s replay to confirm
+the removed fires are exactly the harmful ones rather than merely the ones this condition
+happens to name.
+
+**Open.** Why leg 5E's single mid-leg report arrived at all when its 306 u is under the
+trigger (a heading nudge — the review's sub-0.6 s class — is the candidate). Whether the
+`arrival-risk` and `budget-red` triggers need separate treatment. And the lead's own part:
+the model only walks ahead of the report *because* the lead grants it a destination, so a
+lead-OFF run should show the same silence with no divergence and no re-pin — that is the
+one-launch check that separates the guard's fault from the lead's, and it is the shipped
+default's own configuration.
