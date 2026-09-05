@@ -24,7 +24,10 @@ import glob
 import os
 import sys
 
-ROOT = "C:/gd/Rurik"
+# Resolve the tree from THIS FILE, never from a hardcoded absolute path: a git worktree
+# has its own copy of toolkit/, and a hardcoded "C:/gd/Rurik" would silently read main's
+# while the shell sits in the worktree -- the stale-tree trap CLAUDE.md opens with.
+ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".."))
 for sub in (("studies", "movecode", "review"), ("toolkit",),
             ("toolkit", "mapdata"), ("toolkit", "authsrv")):
     sys.path.insert(0, os.path.join(ROOT, *sub))
@@ -39,7 +42,12 @@ def pct(xs, q):
     return xs[min(len(xs) - 1, int(len(xs) * q))] if xs else float("nan")
 
 
-caps = sorted(glob.glob(os.path.join(ROOT, "vault", "captures", "gamesrv", "*.jsonl")))
+# The vault via vaultpath.require_dir(), which RAISES -- never ROOT/"vault", which in a
+# worktree resolves to nothing, makes this glob return empty, and would have this file
+# report "0 fires" as a finding.  A fixture that silently resolves to nothing turns every
+# assertion behind it into a no-op, and here it would have CONFIRMED its own conclusion.
+from vaultpath import require_dir  # noqa: E402
+caps = sorted(glob.glob(os.path.join(require_dir(), "captures", "gamesrv", "*.jsonl")))
 print("scanning %d gamesrv captures for COINCIDENT consecutive report pairs ...\n" % len(caps))
 
 gaps = {}        # pair -> [gap seconds]
