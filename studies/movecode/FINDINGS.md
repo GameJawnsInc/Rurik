@@ -13861,3 +13861,129 @@ or the body halts inside a W hold with no `0x002C` within 0.5 s (a client-side h
 **What this section does NOT decide:** whether the lead returns as the default. That is the
 owner's ruling (review §2.1); this section removes the reason it was convicted and names the
 run that checks the removal.
+
+## 1z-bj. RUN-1zBI RAN — the lead under the shipped guard: the gate-2 halt is GONE (0 of 38 evaluations, the sliver report passed as `match`), the copy tracked the walking body at p50 26 u (retail ~74 u), the body stayed FREE and no leg locked; and one W hold was dead for 5.0 s from a class the guard cannot cause — a 106 u seam-clipped lead whose target sat inside the parked follower's disc, the client's own avoidance refusal (RECONSTRUCTION)
+
+**Asked:** the run §1z-bi.6 registered — one `--kbd-lead` launch under HEAD, RUN-1zAO's fourth
+command without its known-bad revert, `WSWQESW`, hands off, agenttap attached. Sheet
+[RUN-1zBI.md](RUN-1zBI.md). Ident `MOVECODE-1z-bj`. Harness `20260905T104856`, capture
+`authsrv-20260905T104935-c1`, tape `agenttap-20260905T104936` (668 player samples over
+61.5 s, Hatcher control valid). The owner was away from the keyboard by their own word; the
+run ended on its own. OBSERVED unless marked. Scored with `review/leadreplay.py` (given one
+fix: a run can carry two gamesrv captures, and the one with the movement rows is the game),
+`w0score.py` (with §1z-bh's moving-only line) and `stopcensus.py`.
+
+### 1z-bj.1 The configuration, from the capture's own flags row
+
+`KBD_SYNC_LEAD_ON` True (the opt-in lead), `AGTRACK_GATE2_SEAM` True, `AGTRACK_REPIN` True,
+`STATIONARY_WAIVER` True, `A2_LEAD_PLANE_CLIP` True, `A2_LEAD_ORIGIN_SEAM` True, `ROUTER` True:
+the shipped default plus the lead, the follower present as in every locked run.
+
+### 1z-bj.2 The verdict against the registration
+
+| | registered | measured |
+|---|---|---|
+| **P1** | zero `gate2-offmesh` verdicts and zero re-pins of any kind in the W holds | **0 gate-2 verdicts in 38 guard evaluations** (36 `match`, 2 `gates-pass`); the wedge-tip sliver report at 21.45 — `(10013.8, 8525.8)`, plane 0, `walkable()` False, `planes_at` empty, the exact class of §1z-bf's 19 false vetoes — **passed as `match`**. One re-pin fired: `budget-red` at 22.09, onto a body already stationary for 0.64 s, 0.0 u displacement. The gate-2 clause is MET; the "of any kind" clause is not, and §1z-bj.4 says what the fire was. |
+| **P2** | the drawn body never below 150 u/s inside a W hold | legs 1W and 7W: 288 u/s from the first sample of each press, body 1,091 u / 987 u per leg. **Leg 3W: 0 u/s for the whole 5.0 s hold — 0 u travelled — with the fence OPEN and no server `0x002C` in the first 0.64 s.** The registered REFUTED-IF clause for a client-side halt of its own FIRES. §1z-bj.4. |
+| **P3** | the S-press lead lands on a moving body; body within 100 u of the copy at the ETA | the S press's lead was 520 u `clear`; the body backpedalled it at 190 u/s; separation 0.4–84 u over the leg. MET. (The clause's "moving at the press" was ill-posed: the script's gaps park the body before every press; what matters is that the hold walks.) |
+| lock | reported, not scored | **NO LOCK** — `stopcensus` `YYYYYYY`, trailing 0; every leg's `0x0047` arrived. |
+
+**The number the review asked for, on the lead-ON arm under HEAD** (`w0score`, position_at
+clamp-first, body FREE 0 of 252 moving samples): all-sample p50 0.0; **moving-only p50 26.3 u,
+p75 61.3, p90 91.9, max 116.8** over 252 samples. The lead-OFF default reads ~515 u on the
+same statistic (§1z-bh.5). Retail's copy trails by ~74 u (§38.3). The raw `m_point` column
+reads max 496.7 u on this tape and is the §40.11 sample-and-hold artifact; the first pass of
+this section's scoring read five "teleports" off it and every one dissolved under the
+client's own settle rule — quote nothing from that column.
+
+### 1z-bj.3 What the run settles
+
+1. **The chain's first link is gone.** The 14-for-14 retrodiction of §1z-bi is now one
+   observation on the live guard: the same sliver report that drew a `gate2-offmesh` veto in
+   every locked run drew `match`. No halt, no park, no lock, on the route that locked 6 of 10.
+2. **With the lead on, the copy tracks the body at retail's magnitude**, moving-only p50 26 u,
+   which no lead-OFF configuration has reached (§1z-t.6's own counterfactual predicted this;
+   the review's fact 1 said why). One run; the base rate for a lock given the OLD chain was
+   ~4/7, and this run has no chain, so its clean signature is consistent, not probative.
+
+### 1z-bj.4 ★ The dead hold — a new class, reconstructed from §1z-be.2 and not yet hooked
+
+Leg 3W, capture 21.43–26.43 s. The wire and the tape, in order:
+
+| t | what |
+|---|---|
+| 19.72 | the S release's `0x0047` at `(10014, 8526)` plane 0; the stop echo (`0x002B [1.0, 9]` + zero-distance `0x0029`) |
+| 20.21 | our NPC follow parks the Hatcher **at 80 u from the player**, `(10079, 8572)` — north-east of the body, i.e. **in the direction the next W press will walk** |
+| 21.43 | W pressed (harness) |
+| 21.45 | the client's walk-start `0x003D` from `(10013.8, 8525.8)` plane 0 — the wedge-tip sliver; guard `match`; our answer: `0x002B [1.0, 1]` speed-truth and a **`0x0029` lead to `(10119.8, 8525.8)` — 106 u, `lead_clip_why = plane-seam`**: the 520 u ray east from a plane-0 origin leaves plane 0 at 97.5 u (`clip(plane=0)` → `(10111.5, 8526)`; plane-blind it runs 520 u to `(10534, 8526)`), so §1z-ap's clip cut it |
+| 21.45–22.09 | **neither copy moves.** The drawn body: v = 0, `+0x78` unchanged, every sample. The SYNC copy: `+0x48` (`m_timeStopMovement`) stays **0** — a 106 u grant at 288 u/s would have armed it for 0.37 s; **the client did not bake our lead at all** |
+| 22.09 | the guard's `budget-red` re-pin: a `0x002C` at the client's own report point, 0.0 u from the body. The fence reads `shut` from the next sample (the fence-shutter rule, §1z-aa) |
+| 22.09–26.43 | the body never moves; the key is held; 0 u travelled |
+| 26.46 | the release's `0x0047` from the same point; leg 4Q then walks normally (467 u) |
+
+**The reconstruction.** The shared setter runs the agent-avoidance pass on **every** bake
+(§1z-be.2, `0x006011F0` at `0x00602AF8`): per neighbour, closing, inside the 60° cone
+(cos > 0.5), and `combinedRadius² ≥ d²`; a blocker whose disc covers `m_targetPoint` refuses
+the sidestep before any query (the fourth INVALID predecessor), raising **notify 4 → halt** —
+the sync bake refused, and `ChCliBase::ClearPath` on the drawn copy, so the held key's path is
+gone. At 21.45 the Hatcher's drawn copy stood at **76.3 u from the body, cos +0.77 into the walk
+direction (inside the cone), stationary, 68.0 u from our lead's target.** §1z-be.3 measured the
+combined radius only as a lower bound, ≥ 66.3 u (run 2's halt at 66.3 u / cos 0.78 / target
+54.8 u). Both of this run's distances lie in the band that bound leaves open, so the predicate
+is **consistent with every fact on the tape and proven by none of them**: RECONSTRUCTION. What
+the alternatives cannot explain: our `0x002C` came 0.64 s *after* the body had already failed
+to start (so §1z-be.4's halt is not it); the fence was open until that `0x002C`; no other
+server message reached the player between the 21.45 answers and 22.09; and the sync copy's
+`+0x48` never armed, which only a refused bake produces.
+
+**Why the healthy holds walked.** Leg 1W's first lead reached 422 u and leg 7W's 520 u; a
+target 400+ u out is far beyond any follower's disc, and the body was at 288 u/s from the
+first sample of both presses. The discriminator is the lead's LENGTH, and the short lead here
+is §1z-ap's plane clip doing its job at a seam 97 u east of the spawn-side wedge tip — the
+same tip the whole lock campaign lived on.
+
+**What it means, stated narrowly.** With the lead ON, a seam-clipped lead whose target lands
+inside a parked ally's avoidance disc is refused by the client, and the drawn body's held key
+dies with it for the rest of the hold. The class is ours in two of its three terms: the short
+order is our clip's, and the ally parked in the walk direction at 80 u is our follow's halt
+distance (ANIMREF §40.4/§40.9). The shipped lead-OFF default never issues an order (a zero-lead
+grant takes the ≤ 1.0 u short-circuit and dispatches no test), which is why the 17 default
+captures show nothing of this. **This is the first operator-visible cost of the lead that is
+not the lock**, and it is what the owner would feel as "my key did nothing for five seconds."
+
+**The `budget-red` re-pin** is downstream: with the copy parked on the report and the body
+parked with it, the guard's budget arithmetic went red 0.64 s later and re-pinned the client
+to the point it was already on. Harmless in displacement (0.0 u, §1z-aj's class), not harmless
+in effect: it shut the fence for the rest of the hold. Whether a shut fence would have
+mattered had the key been alive is not observable here.
+
+### 1z-bj.5 What this does NOT settle, and the next verbatim checks
+
+- **The avoidance reconstruction has no hook record.** `movehook`'s sites include the setter,
+  the bake and the notify/`resume_arm` cases (`sites.h`); a tape of the same press with the hook
+  armed shows the pass's exit (notify 4 at the setter's avoidance return, `0x0060189E`) or
+  refutes it. That is one launch with `attach.py` beside the harness. Cheaper and decisive
+  in the other direction: the same script with `--no-enemy` — prediction: the 106 u seam
+  lead is walked (body ≥ 150 u/s within 0.3 s of the W press); refuted if the hold is dead
+  with no follower, which would put the cause in the short lead alone.
+- **The combined radius is still a lower bound.** Reading `+0xD0 / +0x1C / +0xE8 / +0xEC`
+  live (§1z-be.3's filed measurement) turns the band into a number and this class into a
+  predicate the server can evaluate before it grants a short order.
+- **The derived fix is not built and not shipped.** Two candidates, named, not chosen: refuse
+  to issue a lead shorter than the follower's disc reach (grant the zero-lead instead — the
+  short-circuit dispatches no test); or stop parking the follow in the player's walk
+  direction. Both change a ruled arm and each needs its own section.
+- **One run.** The lock's absence is one observation on a route with no remaining chain;
+  the moving-only 26 u is one tape. The lead's return as the default is the owner's ruling
+  (review §2.1), and this run adds to that ruling: retail-class tracking and no lock, against
+  a five-second dead key from a class that needs one more decode before it can be guarded.
+
+### 1z-bj.6 Record corrections from this run
+
+- `review/leadreplay.py` chose the first gamesrv capture a harness run lists; a run can carry
+  two (a character-select connection and the game) and the first has no movement rows. Fixed:
+  the capture with the most `position_report` rows is the game. The §1z-bi table is unaffected
+  (single-capture runs).
+- The registration's P3 first clause ("moving at ≥ 150 u/s at the press") cannot be met by
+  this script on any run — the harness parks the body between legs — and should have read
+  "walks the hold". Recorded rather than re-aimed.
