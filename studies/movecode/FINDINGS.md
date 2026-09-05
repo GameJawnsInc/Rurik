@@ -15000,3 +15000,115 @@ the waiver has ever carried sit on the pair the clause refuses.
 arm shows the instruments can redden, not that the fix is correct in cases neither run reached.
 The clause's KEEP branch is still unwitnessed in a decision that mattered, exactly as §1z-bo.4
 said, and no run on this route can witness it.
+
+## 1z-bq. ★★★ **The stationary waiver's founding specimen was misread, and it is an instance of the defect §1z-bn fixed.** RUN-1zAB run A's three reports are `0x003D` / **`0x0047`** / `0x003D`, not three walk-starts, so its pair at the decision instant is `{0x0047 → 0x003D}` — the pair the clause refuses — and the client reports **520.0 u away** 3.05 s later, putting the body **~394 u downrange** rather than parked. The "harm 0.000 u" that justified the waiver measured the distance to the REPORT, not to the body. Q15's answer changes
+
+**Not a run.** Desk work from the archive, following §1z-bo.9 and PLAN Q15. Capture
+`authsrv-20260903T202121-c1`, which is RUN-1zAB and was in the vault the whole time.
+OBSERVED; the 394 u is a labelled ESTIMATE.
+
+### 1z-bq.1 A hypothesis of mine, refuted first
+
+I expected the waiver to be **structurally** dead: if a parked body always re-reports inside the
+0.347222 s freshness gate, `stationary()` could never be the thing that lets a re-pin through on
+a pair the clause keeps, and Q15 would answer itself with no run. Measured over all 2,142
+coincident consecutive report pairs in the corpus:
+
+| pair | n | p50 gap | p90 gap | max gap | **leaving a stale window** |
+|---|---|---|---|---|---|
+| `0x0047` → `0x003D` | 1492 | 1.368 s | 5.506 s | 57.9 s | 1205 — *the refused pair* |
+| `0x003D` → `0x003D` | 446 | 0.251 s | 1.818 s | 138.2 s | **180** |
+| `0x003D` → `0x0047` | 204 | 0.817 s | 4.004 s | 41.8 s | **175** |
+
+**Refuted: 355 stale coincident pairs sit on kept orderings.** The waiver's remaining branch is
+live as a *condition*; it has simply never co-occurred with a re-pin proposal. So Q15 could not
+be closed that way, and the question became what the waiver's own founding case actually was.
+
+### 1z-bq.2 ★★★ The specimen, read off the capture instead of off the comment
+
+`agtrack_guard.py`'s `STATIONARY_WAIVER` block has said this since §1z-ah:
+
+> RUN-1zAB run A is the specimen — the parked body reported (10369.4169921875,
+> 8282.3349609375) BIT-IDENTICAL three times while the lead walked 520 u away from it.
+
+The three reports are real and the point is bit-identical to the last decimal. **Their kinds are
+not what that sentence assumes:**
+
+| | | |
+|---|---|---|
+| +11.892 s | `0x003D` | (10369.4170, 8282.3350) |
+| +14.028 s | **`0x0047`** | (10369.4170, 8282.3350) |
+| +15.763 s | `0x003D` | (10369.4170, 8282.3350) |
+| +18.816 s | `0x003D` | **(9849.4170, 8282.3350)** — 520.0 u away |
+
+At the `arrival-risk` at **+18.074 s** the guard's last two accepted reports are the `0x0047`
+stop and the `0x003D` walk-start: **`{0x0047 → 0x003D}`, coincident at d² = 0.000, report age
+2.311 s.** The waiver was load-bearing, and **§1z-bn's clause refuses exactly this.** Replayed
+both ways against the guard itself: clause off → `stationary()` True, `_repin_block` None (the
+re-pin goes); clause on → `stationary()` False, `_repin_block` `stale-report`.
+
+**And refusing it is right.** The third report is a walk-start — the client announcing it is
+leaving — and the next report is 520.0 u away 3.053 s later. At the decision instant the body
+was **75.7% along that chord, ~394 u from the point the waiver would have re-pinned it to**
+(constant-speed estimate, the same one `waiverretro` uses; §1z-bl measured **311–468 u** off the
+tape for this class, and 394 sits inside it).
+
+**So "the harm on run A's leg is 0.000 u" — §1z-ai's justifying figure, and the one the waiver's
+comment block still rested on — is the sample-and-hold error of §1z-bh.2 in its original form:**
+it measures the distance from the re-pin point to the last *report*, which is zero by
+construction because we re-pin *to* that report. The distance to the *body* is 394 u.
+
+### 1z-bq.3 What that means, stated carefully
+
+**The waiver's founding case is an instance of the defect its own clause now fixes.** That is a
+strong statement and it needs its limits said with it:
+
+- It does **not** make the waiver's *argument* wrong. Two coincident reports genuinely do
+  measure a still body across the interval between them. What the specimen shows is that the
+  interval ends at the walk-start, which is §1z-bn's whole point, arrived at from the archive
+  instead of from the corpus.
+- It does **not** mean §1z-ah was careless. The kinds were not instrumented into the guard's
+  state until §1z-bn added `last_is_walkstart`/`prev_is_walkstart`; before that a reader had to
+  go to the capture, and the capture says `0x0047` in the middle.
+- It **does** remove the waiver's last piece of supporting evidence. §1z-bo.9 already found all
+  22 re-pins it has ever carried on the refused pair; §1z-aj registered itself INCONCLUSIVE;
+  and now the founding specimen joins the refused class too.
+
+### 1z-bq.4 What was corrected
+
+- **`agtrack_guard.py`** — the `STATIONARY_WAIVER` block no longer cites the specimen as
+  support. It states what the capture carries, what the body was doing, and that the block now
+  rests on the principle rather than on that run.
+- **`test_agtrack_guard.py` §9** — `run_a` **invented its report kinds**: it built all three as
+  walk-starts via a 2-tuple sig, which is why §14 could assert the specimen "still waives". The
+  fixture is now explicitly parameterised and documented as SYNTHETIC, and it stays synthetic on
+  purpose, because `{0x003D → 0x003D}` is the suite's only kept-pair case. What changed is that
+  it is no longer *described* as the specimen.
+- **§14** — two new checks against the capture's real kinds: the clause refuses the founding
+  specimen (`stale-report`), and reverting restores the waive. Floor 97 → **99**.
+- **`TESTS.md`** — carried the same wrong claim and now carries the correction.
+
+Nine affected tests green: `test_agtrack_guard` (99), `test_agtrack_mirror` (68), `test_d1lead`
+(118), `test_position_trust` (235), `test_kbdsync` (106), `test_router` (126), `test_replay`
+(16), `test_srclint` (26), `test_citelint` (50).
+
+### 1z-bq.5 Q15 now has a recommendation rather than a hedge
+
+§1z-bo.9 recommended keeping `STATIONARY_WAIVER` and ruling deliberately, on the grounds that
+absence of a witnessed benefit is not proof a mechanism is useless. **That recommendation is
+withdrawn and replaced**, because the evidence moved twice since:
+
+1. its founding specimen is on the refused pair and would have cost 394 u (this section);
+2. every re-pin it has ever carried, all 22, is on that same pair (§1z-bo.9);
+3. its only other claimed benefit registered itself INCONCLUSIVE (§1z-aj).
+
+**There is now no case, anywhere in the archive, in which the stationary waiver has done
+anything but permit a rewind.** The condition for it to help is live (§1z-bq.1: 355 stale
+coincident kept pairs) and has never once coincided with a re-pin proposal.
+
+*Revised recommendation for Q15: delete `STATIONARY_WAIVER`, or equivalently make the clause
+unconditional.* It is still the owner's call and this section does not move it — the argument
+for keeping it is now purely a priori, and the argument against is three independent readings of
+the archive. What would change the recommendation back is a single capture in which the guard
+wants to re-pin onto a genuinely parked body on a kept pair; §1z-bq.1 names 355 places to look
+for the *condition*, and none of them has a re-pin.

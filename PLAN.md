@@ -1635,20 +1635,33 @@ waiver's only ever claimed benefit, §1z-aj's 11 retracts at 0.0 u harm, is
 inside that 22, and §1z-aj registered itself INCONCLUSIVE because its control
 never produced the defect.
 
-*So the shipped clause is doing all of the work and the waiver does none of it.*
-*Recommendation: leave it in place and rule deliberately rather than deleting it
-on a corpus null.* Absence of a witnessed benefit across 1,309 captures is not
-proof the mechanism is useless — it is a statement about the routes we have
-walked, all of them keyboard legs on map 146 — and deleting it would widen the
-re-pin's refusal on a class we have simply never seen occur. The cost of keeping
-it is now known to be zero, since the clause already refuses the only pair it has
-ever fired on.
+**AND ITS FOUNDING SPECIMEN TURNS OUT TO BE ON THE REFUSED PAIR TOO
+(§1z-bq, 2026-09-05).** The waiver's own comment block cited RUN-1zAB run A —
+*"the parked body reported (10369.4169921875, 8282.3349609375) BIT-IDENTICAL
+three times"* — and the capture (`authsrv-20260903T202121-c1`) carries
+`0x003D` / **`0x0047`** / `0x003D`. The middle report is a STOP, so the pair at
+the +18.074 s arrival-risk is `{0x0047 → 0x003D}`, coincident at d² = 0.000 and
+2.311 s stale: **the pair the clause refuses.** And refusing it is right — the
+next report is **520.0 u away** 3.053 s later, so at the decision instant the
+body was **~394 u downrange**, inside §1z-bl's tape-measured 311–468 u for this
+class. §1z-ai's justifying *"harm 0.000 u"* measured the distance to the
+**report**, which is zero by construction because we re-pin to it.
 
-*What would settle it:* a capture in which a body is genuinely parked and the
-guard wants to re-pin onto it on a `{0x003D → 0x003D}` or `{0x003D → 0x0047}`
-pair — the waiver's own specimen, RUN-1zAB run A, is exactly that shape and
-predates the instrumentation. If no route can be constructed that produces one,
-that is itself the answer.
+*Revised recommendation (§1z-bq.5, replacing "keep it and rule deliberately"):
+**delete `STATIONARY_WAIVER`, or equivalently make the clause unconditional.***
+Three independent readings of the archive now say the same thing — the founding
+specimen is on the refused pair and would have cost 394 u; all 22 re-pins it has
+ever carried are on that pair; and its only other claimed benefit registered
+itself INCONCLUSIVE. **There is no case anywhere in the archive in which the
+waiver has done anything but permit a rewind.** The argument for keeping it is
+now purely a priori.
+
+*What would change the recommendation back:* one capture in which the guard
+wants to re-pin onto a genuinely parked body on a `{0x003D → 0x003D}` or
+`{0x003D → 0x0047}` pair. The **condition** is live and common — §1z-bq.1 counts
+**355** stale coincident pairs on those two orderings across the corpus — but
+not one of them has ever coincided with a re-pin proposal. That is the shape of
+the remaining doubt, and it is small.
 
 ---
 

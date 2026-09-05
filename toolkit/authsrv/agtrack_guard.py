@@ -131,9 +131,29 @@ REPIN_MIN_INTERVAL = 0.5                                # < 299.33/576 s
 # harm bound for re-pinning onto it is am.ZERO_DIST_SQ rather than
 # RUN_SPEED * age.  The gate then has nothing left to protect.  A WALKING
 # body can never satisfy this: consecutive reports sit ~512 u apart, the
-# client's own 0x003D distance trigger.  RUN-1zAB run A is the specimen --
-# the parked body reported (10369.4169921875, 8282.3349609375) BIT-IDENTICAL
-# three times while the lead walked 520 u away from it.
+# client's own 0x003D distance trigger.
+#
+# THE SPECIMEN THIS PARAGRAPH USED TO CITE WAS MISREAD, AND IT WAS THE WHOLE
+# EVIDENCE FOR THE WAIVER (corrected MOVECODE-1z-bq).  It said: "RUN-1zAB run A
+# is the specimen -- the parked body reported (10369.4169921875,
+# 8282.3349609375) BIT-IDENTICAL three times while the lead walked 520 u away
+# from it."  The three reports are real and the point is bit-identical.  Their
+# KINDS are not what that sentence assumes: the capture
+# (authsrv-20260903T202121-c1) carries 0x003D at +11.892, **0x0047 at +14.028**
+# and 0x003D at +15.763.  The third is a WALK-START -- the client announcing it
+# is leaving -- so at the +18.074 arrival-risk the pair was {0x0047 -> 0x003D},
+# which is exactly the pair the WALK-START CLAUSE below refuses.  And the body
+# was not parked through it: the next report, +18.816, is **520.0 u away**, so
+# at the decision instant the body was ~394 u downrange (constant-speed
+# estimate along the chord; 1z-bl measured 311-468 u off the tape for this
+# class).  The "harm 0.000 u" that justified the waiver measured the distance
+# from the re-pin point to the REPORT, not to the body -- the sample-and-hold
+# error of 1z-bh.2.
+#
+# So the waiver's founding case is itself an instance of the defect the clause
+# below fixes, and this block's argument now rests on the PRINCIPLE (two
+# coincident reports measure a still body) rather than on that specimen.
+# Whether the waiver should survive at all is PLAN.md sec.7 Q15.
 #
 # REFUSED WHILE A CLICK IS GLIDING THE COPY (`async_dest`): the report is
 # then not where the body is, and the whole argument above is about a report

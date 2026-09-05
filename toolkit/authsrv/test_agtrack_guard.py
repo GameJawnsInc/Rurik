@@ -29,9 +29,10 @@ AS_SRC = open(authsrv.__file__, encoding="utf-8").read()
 
 # Floor from the 2026-08-30 green run: 49 checks, all unconditional;
 # +25 at MOVECODE-1z-ah (section 9: the stationary waiver -- the retract);
-# +20 at MOVECODE-1z-bn (section 14: the waiver's walk-start clause), from
-# a real green run of 97, never from a guess.
-LEDGER = checks.Ledger("agtrack guard: the derived pre-emit rule", floor=97)
+# +20 at MOVECODE-1z-bn (section 14: the waiver's walk-start clause);
+# +2 at MOVECODE-1z-bq (the waiver's founding specimen, with the kinds the
+# capture actually carries).  Each from a real green run, never from a guess.
+LEDGER = checks.Ledger("agtrack guard: the derived pre-emit rule", floor=99)
 check = checks.adopt_named(LEDGER)
 
 
@@ -292,8 +293,19 @@ def main():
     RA_ETA = RA_T0 + 520.0 / 190.08
     RA_RISK = 18.074
 
-    def run_a(waiver=True, walking=False):
-        """The fatal leg replayed. Returns the guard at the risk tick."""
+    # THE KINDS BELOW ARE SYNTHETIC AND THE REAL CAPTURE'S ARE NOT (1z-bq).
+    # This fixture's three reports are all WALK-STARTS, which makes the pair at
+    # the risk tick {0x003D -> 0x003D} -- a legitimate coincident pair, and the
+    # one this section needs in order to exercise the waiver's mechanism at all.
+    # RUN-1zAB run A itself carries 0x003D / **0x0047** / 0x003D, so its real
+    # pair is {0x0047 -> 0x003D}, the one 1z-bn refuses; that is checked
+    # separately in section 14 against the capture's own kinds. Keeping this
+    # fixture synthetic is deliberate -- renaming it to the truth would delete
+    # the only kept-pair case the suite has -- but it must not be described as
+    # the specimen, which is what the docstring used to do.
+    def run_a(waiver=True, walking=False, kinds=(False, False, False)):
+        """A coincident-report leg, SYNTHETIC kinds. Returns the guard at the
+        risk tick. `kinds` is per report: True = 0x0047 stop."""
         ag.STATIONARY_WAIVER = waiver
         g = ag.AgTrackGuard(mesh=None)
         g.on_placement(RA_REPORT[0], RA_REPORT[1], RA_PLANE, 11.0)
@@ -303,8 +315,9 @@ def main():
             # distance trigger instead -- ~512 u apart.
             pts = [RA_REPORT, (RA_REPORT[0] - 512.0, RA_REPORT[1]),
                    (RA_REPORT[0] - 1024.0, RA_REPORT[1])]
-        for t, p in zip((11.892, 14.028, 15.763), pts):
-            g.on_report(p[0], p[1], RA_PLANE, ("rep", t), t, accepted=True)
+        for t, p, stop in zip((11.892, 14.028, 15.763), pts, kinds):
+            g.on_report(p[0], p[1], RA_PLANE, ("rep", "syn", stop), t,
+                        accepted=True)
         g.on_emit(0x29, RA_DEST[0], RA_DEST[1], RA_PLANE, RA_PLANE, RA_T0)
         return g
 
@@ -655,10 +668,38 @@ def main():
               and pair(WALK, WALK, dx=512.0).stationary() is False)
         # -- and section 9's specimen (a genuinely parked body reporting the
         #    same point three times) must still be waived
-        check("RUN-1zAB run A, the specimen the waiver was built for, still "
-              "waives: three walk-starts on one point is not this pair",
+        check("a synthetic three-walk-start leg on one point still waives -- "
+              "{0x003D -> 0x003D} is a kept pair and the clause is inside the "
+              "waiver, not over it",
               run_a(waiver=True).stationary() is True
               and run_a(waiver=True).repin_state(RA_RISK)[0] == ag.REPIN_DUE)
+
+        # -- AND THE HISTORICAL SPECIMEN, with the kinds the capture actually
+        #    carries. 1z-bq: RUN-1zAB run A is 0x003D / 0x0047 / 0x003D, not
+        #    three walk-starts, so its pair at the risk tick is the one this
+        #    clause REFUSES -- the waiver's founding case is an instance of the
+        #    defect the clause fixes. This check exists because the section
+        #    above asserted the opposite for a day, on a fixture that invented
+        #    the kinds.
+        #    The flag is a module global read at CALL time, so each arm is
+        #    interrogated under its own setting rather than built and queried
+        #    later -- the trap this section already walked into once.
+        real = run_a(waiver=True, kinds=(False, True, False))
+        shipped = (real.stationary(), real.repin_block_reason(RA_RISK))
+        ag.WAIVER_WALKSTART_ENDS_STILL = False
+        try:
+            reverted = (real.stationary(), real.repin_block_reason(RA_RISK))
+        finally:
+            ag.WAIVER_WALKSTART_ENDS_STILL = True
+        check("RUN-1zAB run A's REAL kinds (0x003D / 0x0047 / 0x003D, capture "
+              "authsrv-20260903T202121-c1) make its pair {0x0047 -> 0x003D}, "
+              "so the clause REFUSES the waiver's own founding specimen -- and "
+              "correctly: the client reported 520.0 u away 3.05 s later, so at "
+              "the risk tick the body was ~394 u downrange, not parked",
+              shipped == (False, "stale-report"))
+        check("...and with the clause reverted it waives again, which is what "
+              "the pre-1z-bn build did and why that 394 u rewind shipped",
+              reverted == (True, None))
     finally:
         ag.WAIVER_WALKSTART_ENDS_STILL = True
         ag.STATIONARY_WAIVER = True
