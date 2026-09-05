@@ -27,6 +27,9 @@ counts sec.1z-bq.1 quotes (180 / 175 / 1205) are the proxy's; the corrected ones
 below.  Pairs with no next accepted report are counted separately ("open") rather than
 faked from the capture's last row.  No conclusion of the arc moves.
 
+NOTE (MOVECODE-1z-bt): the waiver was DELETED on 2026-09-05 (PLAN sec.7 Q15).  This measures
+the corpus as it was.
+
 Read-only.  Stdlib only.  Whole corpus.
 """
 import glob

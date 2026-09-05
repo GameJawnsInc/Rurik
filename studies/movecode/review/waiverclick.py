@@ -41,6 +41,10 @@ windows and the corpus's two >500 u kept-branch cases).  A displacement here is 
 the next REPORT -- an upper bound on where the body was at any decision instant inside the
 window, not a `w0score` live-column reading.
 
+NOTE (MOVECODE-1z-bt): the owner deleted the waiver on 2026-09-05 (PLAN sec.7 Q15) on this
+evidence; the predicate quoted above no longer exists in agtrack_guard.  This measures the
+corpus as it was.
+
 Read-only.  Stdlib only.  Whole corpus.  --list prints the kept windows carrying a want;
 --movers prints the double-walk-start specimens the keyboard produced.
 """

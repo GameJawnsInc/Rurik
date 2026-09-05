@@ -13,6 +13,9 @@ have refused), how many sit on the pair sec.1z-bn's clause refuses and how many 
 keeps?  A fire on a KEPT pair is a witnessed benefit the clause preserves.  If there are none,
 the waiver has no measured benefit anywhere.
 
+NOTE (MOVECODE-1z-bt): the waiver was DELETED on 2026-09-05 (PLAN sec.7 Q15).  This measures
+the corpus as it was; on captures made after 1z-bt a waiver-carried fire cannot occur.
+
 Read-only.  Stdlib only.
 """
 import glob

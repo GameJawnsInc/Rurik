@@ -310,7 +310,8 @@ though that leg had a ZERO-LENGTH lead and no arrival-risk at all, so it is a di
 defect. The persistent lock (1 stop of 7, no re-arm) reproduced in arm C only. AND THE
 EXPOSURE WAS A QUARTER OF WHAT THE FLOOR CLAIMED: only 2-4 leads per run survive the
 clip at full 520 u; the rest are origin-unwalkable or clipped. --kbd-lead stays OFF,
-the waiver stays ON.**
+the waiver stays ON.** *(Superseded 2026-09-05: the waiver was narrowed at 1z-bn/1z-bs
+and DELETED at MOVECODE-1z-bt on the owner's ruling — studies/movecode/HANDOFF-WAIVER.md.)*
 
 **§1z-ah BUILT THE RETRACT, and it is the `0x002C`, not the grant §1z-ag.5 named.**
 The mirror refutes the grant (it snaps at its own bake-tail once separation is RED),
@@ -322,6 +323,8 @@ re-pin's harm is 1.0 u and not RUN_SPEED x age; a walking body (reports ~512 u a
 can never satisfy it. On run A's leg the re-pin becomes due, lands on the body for
 0.000 u of harm, and the 520 u arrival never matures. ON, --no-repin-stationary-waiver
 reverts; the registered prediction is §1z-ah.7 and the verdict is the next run.
+*(Superseded: that specimen was misread (§1z-bq — the pair was {stop → walk-start}, the body
+~394 u downrange), and the waiver is DELETED as of MOVECODE-1z-bt; no revert flag remains.)*
 
 **§1z-ag CLOSED that gap: the ARMER is the lead's own ARRIVAL.** The sync copy walks
 the lead while the drawn body is parked, separation passes gate 1 (347 → 518 u), the

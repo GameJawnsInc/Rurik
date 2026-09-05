@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Retrodict the stationary waiver's WALK-START CLAUSE over the corpus (MOVECODE-1z-bn).
+"""RETIRED at MOVECODE-1z-bt: STATIONARY_WAIVER was deleted (PLAN sec.7 Q15, owner's ruling
+2026-09-05), so the arms this tool replayed no longer exist in agtrack_guard and main() refuses.
+Its published figures stand in FINDINGS sec.1z-bn.3, sec.1z-bo.5 and sec.1z-bs.5; the deleted
+build's behaviour on this corpus is its former THIRD arm, identical to the last shipped clause in
+every control-OK run.  Kept for the method.
+
+Retrodict the stationary waiver's WALK-START CLAUSE over the corpus (MOVECODE-1z-bn).
 
     python studies/movecode/review/waiverretro.py --all
     python studies/movecode/review/waiverretro.py 20260905T124559
@@ -203,6 +209,12 @@ def pct(xs, q):
 
 
 def main():
+    import agtrack_guard as _ag
+    if not hasattr(_ag, "STATIONARY_WAIVER"):
+        print("waiverretro.py is RETIRED (MOVECODE-1z-bt): STATIONARY_WAIVER was deleted, so the\n"
+              "arms this tool replays no longer exist in agtrack_guard.  Its figures stand in\n"
+              "FINDINGS sec.1z-bn.3, 1z-bo.5 and 1z-bs.5; the deleted build IS its former third arm.")
+        return 2
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("runs", nargs="*")

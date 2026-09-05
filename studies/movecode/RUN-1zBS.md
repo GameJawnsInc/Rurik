@@ -1,5 +1,11 @@
 # RUN-1zBS — the double walk-start under the lead: can the waiver's refused half be witnessed?
 
+> **WITHDRAWN 2026-09-05 (MOVECODE-1z-bt).** The owner deleted `STATIONARY_WAIVER` (PLAN §7
+> Q15). This sheet existed to witness the waiver's refused half, and there is nothing left to
+> witness. Kept for the harness findings it carries: A and D are turn keys, the diagonals are
+> W+Q / W+E, coincidence at a leg opening is a ~10 % lottery, and a two-key leg needs a verb the
+> harness does not have.
+
 **Registered 2026-09-05, `MOVECODE-1z-bs`, as OPTIONAL and NOT RUNNABLE TODAY.** It is
 registered so that the next session does not re-derive the design, and it is optional because
 PLAN §7 Q15 does not wait on it: the desk finding it would confirm (§1z-bs) already shipped

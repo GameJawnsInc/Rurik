@@ -26,7 +26,7 @@ TREE = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 EXE = "C:/gd/Rurik/vault/run/2026-07-29_221c13772c7a/Gw.exe"      # build 38797, movehook's addresses
 WALK = "wait:8 W:5 S:4 W:5 Q:3 E:3 S:4 W:4"
 GAME = ("--map 146 --explorable --no-enemy-skills --enemy-hit 0.02 --skills 0,0,0,0,0,0,0,0 "
-        "--kbd-lead --lead-seam-clip --no-repin-stationary-waiver")
+        "--kbd-lead --lead-seam-clip")   # --no-repin-stationary-waiver retired at 1z-bt: the waiver is gone
 
 
 def main():

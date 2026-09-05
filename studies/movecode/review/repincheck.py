@@ -127,13 +127,20 @@ def check(path, verbose=True):
             and r.get("reported")]
     pins = [r for r in rows
             if r.get("kind") == "sent" and r.get("opcode") == 0x2C]
+    # WHICH ERA. The waiver ran from 1z-ah (2026-09-03) to 1z-bt (2026-09-05).
+    # Its flags-row key was recorded from the header sweep's landing, later on
+    # 2026-09-03, so a 2026-09-03 capture with no key may have run it
+    # unrecorded; every later capture without the key ran WITHOUT it (the key
+    # is gone with the switch), and so did every pre-1z-ah capture.
+    waiver_era = (waiver is True) or (
+        waiver is None and os.path.basename(path).startswith("authsrv-20260903T"))
 
     if verbose:
         print("capture  %s" % os.path.basename(path))
         print("         %d accepted reports, %d x 0x002C, span %.1f s, "
               "STATIONARY_WAIVER=%s"
               % (len(reps), len(pins), rows[-1]["t"] - t0,
-                 "(not recorded -- pre-1z-ah capture)" if waiver is None
+                 "(not recorded -- pre-1z-ah, or post-1z-bt: waiver deleted)" if waiver is None
                  else waiver))
     if not pins:
         if verbose:
@@ -181,8 +188,18 @@ def check(path, verbose=True):
         elif prev_d is None:
             verdict = "?? stale with fewer than two reports -- unlicensed"
             violations += 1
+        elif prev_d <= ZERO_DIST and waiver_era:
+            verdict = "ok (STATIONARY WAIVER: body measured still -- waiver-era capture)"
         elif prev_d <= ZERO_DIST:
-            verdict = "ok (STATIONARY WAIVER: body measured still)"
+            # The waiver was DELETED at MOVECODE-1z-bt (and did not exist before
+            # 1z-ah), so a stale AGTRACK re-pin on a coincident pair is
+            # unlicensed on any capture that did not run the waiver: it is a
+            # re-introduced waiver or a broken _repin_block, not a measurement.
+            # The first 1z-bt draft left this branch unconditional, which is a
+            # check that passes on the broken arm; the verification lane caught it.
+            verdict = ("VIOLATION -- stale re-pin on a coincident pair, and this "
+                       "capture ran WITHOUT the waiver (deleted at 1z-bt)")
+            violations += 1
         else:
             verdict = ("VIOLATION -- stale re-pin, body had MOVED %.1f u"
                        % prev_d)
@@ -233,12 +250,12 @@ def main():
           % (pins, len(paths), viol))
     if viol:
         print("A stale re-pin fired at a body that had MOVED. That is the warp "
-              "AgMsg.cpp 584 makes possible, and it refutes FINDINGS "
-              "sec.1z-ah.4 on safety -- revert with "
-              "--no-repin-stationary-waiver.")
+              "AgMsg.cpp 584 makes possible. Under the waiver (1z-ah..1z-bs) it "
+              "refuted FINDINGS sec.1z-ah.4 on safety; the waiver was DELETED at "
+              "MOVECODE-1z-bt, so on a later capture it is a new sender's defect.")
         return 1
-    print("Every 0x002C was licensed: a fresh report, or a body MEASURED "
-          "still across two of them.")
+    print("Every 0x002C was licensed: a fresh report -- or, on a waiver-era "
+          "capture, a body MEASURED still across two of them.")
     return 0
 
 
