@@ -104,25 +104,31 @@ def main():
     import math
 
     print("1. the constants, and where each number came from")
-    # 1z-u (2026-09-03 evening): this check used to pin all four ON. The
-    # operator's first ordinary session convicted term 1 -- a lead that
-    # matures unanswered (a rate-refused re-aim is DROPPED) makes the client's
-    # arrival reconcile snap the body 498 u and shut the AgTrack fence -- and
-    # two skeptic lanes then refuted the correction built for it. So the lead
-    # is OPT-IN (--kbd-lead) and the pin is the SPLIT: the two additive terms
-    # ship, the lead does not, until 1z-u's (a)/(b) land with their own tests.
-    check(authsrv.KBD_SYNC is True and authsrv.KBD_SYNC_LEAD_ON is False
+    # 1z-u (2026-09-03 evening) split this pin: the operator's first ordinary
+    # session convicted term 1 -- a lead that matured unanswered snapped the
+    # body 498 u and shut the AgTrack fence -- so the lead went OPT-IN while
+    # its four gates were built (1z-y, 1z-z, 1z-ab, 1z-aa).  1z-bl then
+    # localised the rewind to the AgTrack guard's stationary waiver, not to
+    # the lead; RUN-1zBM measured the lead-off cost (world-0 p50 252 u behind
+    # a walking body), RUN-1zBO ran the lead under the guard fix (zero 0x002C,
+    # 0 of 7 legs thrown back, 13.0 u), RUN-1zBP its revert arm, and 1z-bt
+    # deleted the waiver.  1z-bu (2026-09-05, PLAN sec.7 Q13, the owner's
+    # ruling) puts all three terms back ON, and this pin is the whole trio.
+    check(authsrv.KBD_SYNC is True and authsrv.KBD_SYNC_LEAD_ON is True
           and authsrv.KBD_SYNC_SPEED_ON is True
           and authsrv.KBD_SYNC_STOP_ON is True,
-          "KBD_SYNC ships with the family rate and the stop echo ON and the "
-          "LEAD OFF -- one run convicted one term, so that term is out",
-          "a lead defaulting ON after the 08:46 session would be shipping a "
-          "refuted arm; a stop echo or family rate defaulting OFF would be "
-          "withholding two additive terms nothing has convicted")
+          "KBD_SYNC ships with all THREE terms ON -- the lead is back by the "
+          "owner's ruling (1z-bu) after RUN-1zBO/1zBP under the guard fix",
+          "the lead OFF would be shipping RUN-1zBM's measured 252 u lag "
+          "after the rewind it was convicted for was localised elsewhere and "
+          "removed; a stop echo or family rate OFF would be withholding two "
+          "additive terms nothing has convicted")
     check("--kbd-lead" in SRC and "--no-kbd-lead" in SRC
-          and "bool(a.kbd_lead) and not a.no_kbd_lead" in SRC,
-          "the lead is opt-in through --kbd-lead, and --no-kbd-lead still "
-          "parses and wins, so pre-1z-u runsheets keep their meaning",
+          and "KBD_SYNC_LEAD_ON = not a.no_kbd_lead" in SRC
+          and "bool(a.kbd_lead)" not in SRC,
+          "the lead is the default; --kbd-lead still parses as a no-op and "
+          "--no-kbd-lead reverts and wins, so runsheets of both eras keep "
+          "their meaning",
           "a runsheet that said --no-kbd-lead must not silently start "
           "meaning something else")
     check(authsrv.KBD_SYNC_LEAD == 520.0,
@@ -851,8 +857,8 @@ def main():
     w, r = Sent(st), FakeRec()
     check(authsrv.kbd_lead_refresh_tick(w, st, 1, r, now=DUE) is False
           and not w.of(MOVE),
-          "INERT under the shipped default (the lead is opt-in), so this "
-          "changes no wire anybody is running")
+          "INERT with the lead off (--no-kbd-lead): the refresh has nothing "
+          "to refresh, so that arm's wire is untouched by it")
     (authsrv.KBD_SYNC_LEAD_ON, authsrv.KBD_LEAD_REFRESH) = saved
 
     # source locks

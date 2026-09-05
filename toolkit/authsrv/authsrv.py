@@ -5670,8 +5670,27 @@ def d1_lead_dest(reported, vec2):
 # guard's clause 2 models a keyboard body as parked, so it predicts a
 # snap at every maturing lead and is blocked only by REPIN_MAX_REPORT_AGE.
 # The formula below is unchanged and is what `--kbd-lead` sends.
+#
+# TERM 1 (THE LEAD) IS ON BY DEFAULT AGAIN SINCE 2026-09-05 -- MOVECODE-1z-bu,
+# the owner's ruling on PLAN.md sec.7 Q13.  What changed between 1z-u's
+# conviction and this: the four gates above ((a) hold + kill, (b) matched
+# plane, (c) the length argued, (d) the fence-shutter audit) were built with
+# their own tests; the rewind that 1z-u's session felt was localised to the
+# AgTrack guard's stationary waiver, not to the lead (RUN-1zBL, 1z-bl.8);
+# RUN-1zBM measured the lead-off default's cost (world-0 p50 252 u / p90
+# 509 u behind a walking body, 7 of 7 legs); RUN-1zBO ran this exact
+# configuration under the guard fix -- zero 0x002C, 0 of 7 legs thrown
+# back, separation 13.0 u -- and RUN-1zBP its revert arm (3 fires, 3 of 7
+# rewound, -432 u), same binary, same day; and the waiver itself was then
+# DELETED (1z-bt), which is identical to the fix on every capture held.  So
+# the shipped default is RUN-1zBO's arm, and that run is its witness.  Score
+# any lead run with the enslavement detector (1z-x) before quoting a
+# separation, and quote 1zBO's 13.0 u with its p90 170.2 u beside it: the
+# number is a property of the route.  REVERT: --no-kbd-lead restores the
+# 1z-u..1z-bt default (--kbd-lead still parses, as a no-op, so every
+# runsheet of the opt-in era keeps its meaning).
 KBD_SYNC = True
-KBD_SYNC_LEAD_ON = False
+KBD_SYNC_LEAD_ON = True
 KBD_SYNC_SPEED_ON = True
 KBD_SYNC_STOP_ON = True
 # The client's own 0x003D distance trigger: 512 u, measured spread [505,
@@ -5734,7 +5753,7 @@ KBD_LEAD_KILL = True          # False (--no-kbd-lead-kill): the lead outlives.
 # show the one-grant lag (79.7% of 306 crossings), so ROUTER-Q7's recorded
 # deviation applies here as it does under D1, and 1z-o.6's counterexample
 # (matching to a dest plane the copy's point cannot resolve) stays the
-# helper's own open question. Inert without --kbd-lead.
+# helper's own open question. Inert without a lead arm (--no-kbd-lead).
 KBD_SYNC_MATCHED = True       # False (--no-kbd-matched-plane): 1z-t's raw carry.
 # MOVECODE-1z-aa (sec.1z-u.5 item d, THE FENCE-SHUTTER AUDIT, FINDINGS
 # sec.1z-aa). MEASURED on the movetap corpus (fence_state is AgTrack's own
@@ -5859,7 +5878,7 @@ def _fence_gate_lead(state, reported, dest, src, clip_why):
 # That path is already shipped and tested; the copy runs on the refreshed lead,
 # computed from the model, for at most one floor interval.
 #
-# Inert without --kbd-lead, like every other gate in this block.
+# Inert without a lead arm (--no-kbd-lead), like every other gate in this block.
 # CONVICTED BY ITS OWN VERIFICATION RUNS, 2026-09-03 (FINDINGS sec.1z-af) --
 # OPT-IN, DEFAULT OFF. Two runs of RUN-1zAB's script with this ON both LOCKED:
 # 19:58 read MIXED 24.3% with two parked held-key legs, 20:05 read ENSLAVED
@@ -23295,19 +23314,20 @@ def main():
                          "against the client's own world-0 track: separation "
                          "from the drawn body p50 237 -> 0 u, max 516 -> 86 u.")
     ap.add_argument("--kbd-lead", action="store_true",
-                    help="MOVECODE-1z-t term 1 ON (OPT-IN since 1z-u, "
-                         "2026-09-03): lead the heading grant 520 u along the "
-                         "client's heading. OFF by default because a lead "
-                         "that matures unanswered -- a rate-refused re-aim is "
-                         "DROPPED -- makes the client's arrival reconcile "
-                         "snap the body onto the sync copy and shut the "
-                         "AgTrack fence (498 u snap + the starved attack of "
-                         "the 08:46 session). Do not turn on for ordinary "
-                         "play until 1z-u's (a)/(b) land.")
+                    help="MOVECODE-1z-t term 1: lead the heading grant 520 u "
+                         "along the client's own reported heading, clipped "
+                         "to the navmesh. THE DEFAULT since MOVECODE-1z-bu "
+                         "(2026-09-05, PLAN sec.7 Q13) -- opt-in between "
+                         "1z-u and 1z-bt while its four gates were built and "
+                         "the AgTrack guard's rewind was localised and "
+                         "removed. This flag now parses as a no-op so the "
+                         "opt-in era's runsheets keep their meaning.")
     ap.add_argument("--no-kbd-lead", action="store_true",
-                    help="MOVECODE-1z-t term 1 OFF. Since 1z-u this is the "
-                         "DEFAULT and the flag is kept only so existing "
-                         "runsheets still parse; it overrides --kbd-lead.")
+                    help="MOVECODE-1z-bu REVERT: term 1 OFF, the 1z-u..1z-bt "
+                         "default -- the heading grant lands at the reported "
+                         "point and world-0 parks a report behind the walking "
+                         "body (p50 252 u / p90 509 u, RUN-1zBM). Wins over "
+                         "--kbd-lead.")
     ap.add_argument("--no-kbd-speed-truth", action="store_true",
                     help="MOVECODE-1z-t term 2 OFF: send the player no 0x002B "
                          "family rate, so world-0 walks every family at "
@@ -23324,7 +23344,7 @@ def main():
                          "before its arrival can snap. Two verification runs "
                          "with it on both locked, one of them past a "
                          "`refresh-late`, so this is a diagnostic arm and not "
-                         "a fix. Inert without --kbd-lead.")
+                         "a fix. Inert without a lead arm (--no-kbd-lead).")
     ap.add_argument("--no-kbd-lead-refresh", action="store_true",
                     help="MOVECODE-1z-ae OFF: let an in-flight keyboard "
                          "lead reach its arrival. The arrival is a SNAP "
@@ -23332,7 +23352,7 @@ def main():
                          "the granted point) and it arms REALFIX 0.11 "
                          "stage 1, which the lead's own click-walk regime "
                          "then keeps shut -- RUN-1zAB's rerun locked five "
-                         "of eight legs that way. Inert without --kbd-lead. "
+                         "of eight legs that way. Inert without a lead arm. "
                          "Diagnostic arm.")
     ap.add_argument("--no-lead-plane-clip", action="store_true",
                     help="MOVECODE-1z-ap OFF: the D1/keyboard lead clip goes "
@@ -23375,8 +23395,8 @@ def main():
                          "carries the plane-carry word raw again (dest 29 "
                          "/ cur 0 at a crossing, 1z-u.4's shape) instead "
                          "of field 4 matched to field 3 (REALFIX 0.11's "
-                         "armer-kill, retail's 222/222). Inert without "
-                         "--kbd-lead. Diagnostic arm.")
+                         "armer-kill, retail's 222/222). Inert without a "
+                         "lead arm (--no-kbd-lead). Diagnostic arm.")
     ap.add_argument("--no-kbd-hold", action="store_true",
                     help="MOVECODE-1z-y (a1) OFF: a rate-refused heading "
                          "report is DROPPED again instead of held and "
@@ -23388,7 +23408,7 @@ def main():
                          "lead (--kbd-lead only) is left to mature on a "
                          "press or a click instead of being ended by a "
                          "zero-lead grant at the modelled body. Inert "
-                         "without --kbd-lead. Diagnostic arm.")
+                         "without a lead arm (--no-kbd-lead). Diagnostic arm.")
     ap.add_argument("--no-router", action="store_true",
                     help="MOVECODE-1z-v: turn the router OFF (it is the "
                          "default click policy since 2026-09-03). Restores "
@@ -25023,9 +25043,11 @@ def main():
               "client's world-0 copy of the player will sit a median 237 u "
               "behind the body it draws (agenttap, 2026-09-02).")
     else:
-        # 1z-u: the lead is OPT-IN. --no-kbd-lead wins if both are passed,
-        # so a runsheet written before 1z-u still means what it said.
-        KBD_SYNC_LEAD_ON = bool(a.kbd_lead) and not a.no_kbd_lead
+        # 1z-bu: the lead is the DEFAULT again (PLAN sec.7 Q13, 2026-09-05).
+        # --no-kbd-lead reverts; --kbd-lead still parses as a no-op, so the
+        # runsheets of the opt-in era (1z-u..1z-bt) keep their meaning and
+        # the ones from before 1z-u do too.
+        KBD_SYNC_LEAD_ON = not a.no_kbd_lead
         KBD_SYNC_SPEED_ON = not a.no_kbd_speed_truth
         KBD_SYNC_STOP_ON = not a.no_kbd_stop_echo
         KBD_SYNC_HOLD = not a.no_kbd_hold
@@ -25048,7 +25070,7 @@ def main():
                   "(FINDINGS 1z-bc) -- expect the 1z-ao lock class back.",
                   flush=True)
         KBD_LEAD_REFRESH = bool(a.kbd_lead_refresh) and not a.no_kbd_lead_refresh
-        _terms = [n for n, on in (("lead 520 u + navmesh clip (OPT-IN)",
+        _terms = [n for n, on in (("lead 520 u + navmesh clip (DEFAULT since 1z-bu)",
                                    KBD_SYNC_LEAD_ON),
                                   ("0x002B family rate", KBD_SYNC_SPEED_ON),
                                   ("0x0047 stop echo", KBD_SYNC_STOP_ON))
@@ -25074,12 +25096,17 @@ def main():
                                    KBD_LEAD_REFRESH)) if on]
         print(f"      1z-y GATES  {', '.join(_gates) if _gates else 'NONE'}")
         if KBD_SYNC_LEAD_ON:
-            print("      THE LEAD IS ON (--kbd-lead) -- an OPT-IN arm since "
-                  "1z-u, not the shipped default: a lead that matures "
-                  "unanswered snaps the body and shuts the AgTrack fence. "
-                  "Say so when you report the run, and score it with an "
-                  "enslavement detector before quoting a separation.")
-        elif not (KBD_SYNC_SPEED_ON and KBD_SYNC_STOP_ON):
+            print("      THE LEAD IS ON -- the shipped default since 1z-bu "
+                  "(2026-09-05, PLAN sec.7 Q13; RUN-1zBO is its witness, "
+                  "RUN-1zBP its revert arm); --no-kbd-lead restores the "
+                  "1z-u..1z-bt default. Score a lead run with the "
+                  "enslavement detector (1z-x) before quoting a separation.")
+        else:
+            print("      THE LEAD IS OFF (--no-kbd-lead) -- the 1z-u..1z-bt "
+                  "default, a diagnostic arm since 1z-bu: world-0 parks a "
+                  "report behind the walking body (p50 252 u, RUN-1zBM). "
+                  "Say so when you report the run.")
+        if not (KBD_SYNC_SPEED_ON and KBD_SYNC_STOP_ON):
             print("      A DEFAULT TERM IS OFF -- this is a diagnostic arm, "
                   "not the shipped default. Say so when you report the run.")
         if not (KBD_SYNC_LEAD_ON or a.d1_lead):

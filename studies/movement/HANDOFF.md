@@ -239,9 +239,9 @@ point samples.** The client's walker consults its pathing query every ~16 ms and
 **ignores the answer**: the result gates only the `+0x68` copy, while movement
 dead-reckons from `+0x78`. **Wall integrity on retail was always the server's grants.**
 
-**The shipped policy arms.** Six movement arms are ON by default, each by an owner
-ruling or a derivation — **`--router` among them since 2026-09-03 (MOVECODE-1z-v)**;
-`--click-echo` is NOT (§C). The candidate graveyard is real and
+**The shipped policy arms.** Seven movement arms are ON by default, each by an owner
+ruling or a derivation — **`--router` among them since 2026-09-03 (MOVECODE-1z-v), and
+the keyboard lead since 2026-09-05 (MOVECODE-1z-bu)**; `--click-echo` is NOT (§C). The candidate graveyard is real and
 the tree currently states its size four different ways — do not quote a count, read the
 flags.
 
@@ -260,9 +260,11 @@ That is a statement that cannot go stale, because it names an artifact that rege
 ON by default: `--zero-lead`, `--plane-carry`, `--grant-suppress`, `--cast-stop=pin`,
 plane repair, **and the router (MOVECODE-1z-v/1z-w, 2026-09-03; `--no-router` reverts;
 `--router-raw-leg` reverts the click-leg re-arm, `--router-report-plane` reverts both
-mesh-derived plane words — the sync copy's and the origin's)**. Each has a
-`--no-` revert. OFF: `--click-echo`, the keyboard lead (`--kbd-lead` opts in; its two
-1z-y gates ship ON regardless — a rate-refused re-aim is HELD and re-baked at the
+mesh-derived plane words — the sync copy's and the origin's)**, **and the keyboard
+lead (MOVECODE-1z-bu, 2026-09-05, the owner's ruling on PLAN Q13; `--no-kbd-lead`
+reverts; RUN-1zBO is its witness)**. Each has a `--no-` revert. OFF: `--click-echo`.
+The keyboard lead was opt-in from 1z-u to 1z-bt (`--kbd-lead`, now a no-op); its two
+1z-y gates shipped ON throughout — a rate-refused re-aim is HELD and re-baked at the
 floor, `--no-kbd-hold`, and an in-flight lead is killed on a press or a click by a
 zero-lead grant at the body, `--no-kbd-lead-kill`; the lead grant's field 4 is
 matched to field 3, `--no-kbd-matched-plane`, 1z-z; and no lead is ever sent into a
@@ -311,7 +313,8 @@ defect. The persistent lock (1 stop of 7, no re-arm) reproduced in arm C only. A
 EXPOSURE WAS A QUARTER OF WHAT THE FLOOR CLAIMED: only 2-4 leads per run survive the
 clip at full 520 u; the rest are origin-unwalkable or clipped. --kbd-lead stays OFF,
 the waiver stays ON.** *(Superseded 2026-09-05: the waiver was narrowed at 1z-bn/1z-bs
-and DELETED at MOVECODE-1z-bt on the owner's ruling — studies/movecode/HANDOFF-WAIVER.md.)*
+and DELETED at MOVECODE-1z-bt on the owner's ruling, and the keyboard lead is ON by default
+again since MOVECODE-1z-bu — studies/movecode/HANDOFF-WAIVER.md, FINDINGS §1z-bu.)*
 
 **§1z-ah BUILT THE RETRACT, and it is the `0x002C`, not the grant §1z-ag.5 named.**
 The mirror refutes the grant (it snaps at its own bake-tail once separation is RED),

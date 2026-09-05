@@ -165,8 +165,10 @@ for every flag you delete, and for the command strings that pass it (`tapdrive.p
 
 ## 6. Standing debt this session did not clear
 
-1. **PLAN Q13** (`D1_LEAD` on by default) — its precondition is met (§1z-bo); the ruling is the
-   owner's.
+1. ~~**PLAN Q13** (`D1_LEAD` on by default)~~ — **RULED 2026-09-05, landed as MOVECODE-1z-bu:**
+   the keyboard lead (`KBD_SYNC_LEAD_ON`) ships ON, `--no-kbd-lead` reverts; the shipped default
+   is RUN-1zBO's arm. Applied to the lead the runs measured, not to the `D1_LEAD` bundle — the
+   assumption is stated in Q13 (§1z-bu.1).
 2. **`gate2-offmesh` exposure** — no route walked so far produces one.
 3. **The movement-type census** corpus-wide (all 446 coincident double walk-starts, not the 87
    live windows) — a curiosity, not a debt, now that nothing reads the pair.
