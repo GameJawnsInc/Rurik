@@ -1666,16 +1666,52 @@ through the ordering the clause already refuses. Both of that run's
 waiver-load-bearing decisions were on the refused pair, both `blocked`, and the
 shipped build sent zero `0x002C`.
 
-*What would still change the recommendation:* the **click** path, which is the
-one place the kept branch actually lives — of the 180 stale coincident
-`{0x003D → 0x003D}` pairs in the corpus, **124 have a click in flight** and only
-19 are keyboard-only. A click leg with a re-pin risk on a kept pair has never
-been tested. That is one run, it would make the case complete rather than merely
-strong, and it is the only remaining route to a different answer.
+*~~What would still change the recommendation: the click path~~* — **CLOSED AT
+DESK 2026-09-05 (§1z-bs), and the three numbers that sentence rested on are
+retracted** (180 was `waiverlive.py` scoring staleness with the pair's own gap;
+124 reproduces only as "a click within ~10 s"; 19 reproduces from nothing).
+Joined on the guard's OWN state — its click contract kills the waiver while a
+0x003E is pending and clears on the next report — the kept branch splits by
+ORDERING, not by mover: where the newest report is a **stop**
+(`{0x003D → 0x0047}`, 151 live windows) the next report finds the body still in
+**151 of 151**; where it is a **walk-start** (`{0x003D → 0x003D}`, 87 live
+windows) the body has walked on in **14**, every one at a client movement speed
+— the 1z-bl defect's shape on a pair 1z-bn kept. That half is now REFUSED:
+**`WAIVER_NEWEST_MUST_BE_STOP` shipped 2026-09-05** (MOVECODE-1z-bs; revert
+`--waiver-walkstart-pair-stands`; RUN-1zBP's arm now needs both revert flags),
+altering zero of the 85 historical fires, and on every capture held it is
+indistinguishable from deleting the waiver. No kept window in the corpus has
+ever carried a re-pin want (317 windows; the four sample-and-hold candidates all
+explained from raw rows), and `{0x0047 → 0x0047}` never coincides, so **the
+waiver's surviving branch is `{walk-start → stop}` alone.**
+
+*The question now, narrower than above:* is that one branch worth a code path
+for an a-priori benefit — correcting a drawn body that has diverged from its
+reported point by less than the ≥ 299 u the client's own test would snap — that
+no report chord can measure and no capture has produced? **Keeping it also
+means closing a latent hole found on the way (§1z-bs.6): `_approach_send` arms
+authsrv's click latch without reaching the guard's `on_click`, so over an attack
+approach leg the waiver's click refusal does not fire (zero corpus exposure,
+9 grants in 3 captures). Deleting the waiver closes that for free.**
+Recommendation unchanged: delete, or equivalently leave the shipped clause.
+RUN-1zBS is registered as *optional* confirmation (a keyboard run; it needs a
+harness chord verb that does not exist and an exposure floor of ~32 leg
+openings) — the ruling does not wait on it.
 
 ---
 
 ## 8. Immediate next actions
+
+### ★★★ MOVEMENT 2026-09-05 — THE CLICK PATH, AT DESK (MOVECODE-1z-bs): **the waiver's kept branch splits by ORDERING, not by mover** — newest = stop, still in 151 of 151; newest = walk-start, walking in 14 of 87 at the client's own speeds — **and the half that walks is now refused** (`WAIVER_NEWEST_MUST_BE_STOP`), altering zero of 85 historical fires
+
+**[FINDINGS](studies/movecode/FINDINGS.md) §1z-bs; instrument [`waiverclick.py`](studies/movecode/review/waiverclick.py); sheet [RUN-1zBS.md](studies/movecode/RUN-1zBS.md) (registered, optional, not runnable yet). Desk only — no launch. Ten-lane adversarial fan-out; three blind recounts agree once two census knobs are stated.**
+
+* **HANDOFF-WAIVER §2.1's click-path numbers are retracted** (180 / 124 / 19): `waiverlive.py` scored staleness with the pair's own gap — trap (3) inside the instrument that recommended it — corrected to 154 closed windows; 124 reproduces only as "a click within ~10 s"; 19 reproduces from nothing. Under the guard's own click contract that population is 50 click-pending at the window's start, 17 going pending inside, **87 waiver-live throughout** — the click path is not where the waiver lives, and its big displacements (max 7,310.7 u) sit where the waiver is already dead.
+* **★ The ordering split** (`waiverclick.py` §D): 1z-bn's argument applied to the newer member alone. The `{walk-start → stop}` branch has never met a re-pin want in 151 windows / ~520 live seconds; `{stop → stop}` never coincides in 1,311 captures. **The waiver's surviving branch is one ordering.**
+* **The double walk-start** is the specimen the click framing hid: 446 coincident `{0x003D → 0x003D}` pairs in owner play, the moving ones at 0.2–1.6 s gaps (not chord-shaped: 20 of 22 sub-45 ms pairs are a parked body flicking keys). Replayed under a 520 u lead the 1z-bn build answers **`due`** on a 1.46 s-old report (420 u of counterfactual rewind); the shipped build, a deleted waiver, and a single-walk-start opening all answer `blocked/stale-report`. **Exposure under the lead: zero** — reachable in principle, unwitnessed in fact.
+* **Shipped:** the clause, its revert flag, `test_agtrack_guard.py` §15 (floor 99 → 116; §9 and §14 pinned with the clause off so they keep measuring the builds 1zAB/1zBO/1zBP ran); `waiverretro.py`'s 1z-bn arms pinned likewise (unchanged: 87 dropped / 0 raised / third arm identical in zero runs). **`--waiver-walkstart-stands` alone no longer reproduces RUN-1zBP**; the `[map]` line says so.
+* **Two latent holes, zero exposure:** `async_dest` is not "the same contract as authsrv's click latch" — `_approach_send` arms the latch without `on_click` (docstring corrected; Q15 asymmetry: deletion closes it free). And 1z-br.1's second "park" on the `D:8` leg is most likely a turn-in-place — **D is a turn key** (zero wire messages, heading rotated ~119°); RUN-1zBR's P1 refutation stands on the report ordering.
+* **Q15 narrows and is still the owner's:** delete, or equivalently keep the shipped clause; the residual case for the waiver is a-priori and unmeasurable from reports. **Not run, not built:** RUN-1zBS (a harness verb for two overlapping keys; W+Q/W+E, never W+A; ~32 openings; the informative arm is the revert).
 
 ### ★★★★ MOVEMENT 2026-09-05 — RUN-1zBP, THE REVERT ARM (MOVECODE-1z-bp): **the known-bad control this arc never ran.** Same binary, same route, one flag: re-pin fires **3** against 0, `setposition` **6** against 0, **3 of 7** legs thrown back against 0, body **−432 u** backward against 0.0, and three decision points matched to **0.01–0.02 s** flip `blocked/stale-report` → `due`
 

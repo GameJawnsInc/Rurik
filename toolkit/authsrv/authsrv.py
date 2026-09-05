@@ -23345,7 +23345,27 @@ def main():
                          "477.9 u (18 of 19 over 100 u) against 0.0 u on the "
                          "two pairs the clause keeps, and RUN-1zBL watched "
                          "three of them rewind a walking body 298-433 u. With "
-                         "this flag that class of re-pin fires again.")
+                         "this flag that class of re-pin fires again. NOTE: "
+                         "while MOVECODE-1z-bs's clause is on this flag alone "
+                         "changes nothing -- the pair it re-admits has a "
+                         "walk-start as its newest report; RUN-1zBP's arm "
+                         "needs --waiver-walkstart-pair-stands as well.")
+    ap.add_argument("--waiver-walkstart-pair-stands", action="store_true",
+                    help="MOVECODE-1z-bs OFF: the stationary waiver accepts a "
+                         "coincident {0x003D walk-start -> 0x003D walk-start} "
+                         "pair again as a measurement that the body is still "
+                         "-- the 1z-bn build. The shipped clause requires the "
+                         "NEWEST accepted report to be a 0x0047 stop, because "
+                         "a walk-start asserts the body is leaving whatever "
+                         "the older report said. Corpus: where the newest is a "
+                         "stop the next report finds the body still in 151 of "
+                         "151 windows; where it is a walk-start, 14 of 87 are "
+                         "over 100 u away at the client's own walking speeds. "
+                         "With this flag a leg that opens on a double "
+                         "walk-start (a chord, or a heading change before the "
+                         "body leaves) can be re-pinned 1-2.4 s into its "
+                         "silent glide -- the 1z-bl rewind through the pair "
+                         "1z-bn kept.")
     ap.add_argument("--no-repin-stationary-waiver", action="store_true",
                     help="MOVECODE-1z-ah OFF: the AgTrack re-pin's freshness "
                          "gate refuses again even when the client has "
@@ -25080,6 +25100,20 @@ def main():
                   "own silent opening glide -- the class measured at p50 "
                   "366.6 u of harm, which rewinds the drawn body to where "
                   "the leg began and leaves the held key dead.")
+        if a.waiver_walkstart_pair_stands:
+            import agtrack_guard as _ag_flag
+            _ag_flag.WAIVER_NEWEST_MUST_BE_STOP = False
+            print("[map] --waiver-walkstart-pair-stands: MOVECODE-1z-bs OFF. A "
+                  "coincident {walk-start -> walk-start} pair counts as a "
+                  "stationary measurement again -- the 1z-bn build. A leg "
+                  "that opens on a double walk-start (a chord, or a heading "
+                  "change before the body leaves) can then be re-pinned "
+                  "1-2.4 s into its silent glide.")
+        elif a.waiver_walkstart_stands:
+            print("[map] NOTE: --waiver-walkstart-stands alone changes nothing "
+                  "while MOVECODE-1z-bs's clause is on -- the pair it re-admits "
+                  "has a walk-start as its newest report. RUN-1zBP's arm "
+                  "needs --waiver-walkstart-pair-stands as well.")
         if a.no_repin_stationary_waiver:
             import agtrack_guard as _ag_flag
             _ag_flag.STATIONARY_WAIVER = False

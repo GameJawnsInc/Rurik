@@ -18,6 +18,15 @@ is the GAP, split by the pair's kind?
 
 Either answer is useful, which is why it is worth measuring before proposing a run.
 
+CORRECTED MOVECODE-1z-bs: the first version scored "stale" with the pair's OWN gap
+(t_b - t_a), which is the gap BEFORE the newer report.  The waiver is load-bearing when the
+NEWEST report is stale at the decision instant, so the window in which it can be is
+(t_b + gate, the NEXT accepted report), and the gap that decides it is t_next - t_b -- the
+trap HANDOFF-WAIVER.md sec.4 lists as (3), inside the instrument that recommended it.  The
+counts sec.1z-bq.1 quotes (180 / 175 / 1205) are the proxy's; the corrected ones print
+below.  Pairs with no next accepted report are counted separately ("open") rather than
+faked from the capture's last row.  No conclusion of the arc moves.
+
 Read-only.  Stdlib only.  Whole corpus.
 """
 import glob
@@ -50,9 +59,10 @@ from vaultpath import require_dir  # noqa: E402
 caps = sorted(glob.glob(os.path.join(require_dir(), "captures", "gamesrv", "*.jsonl")))
 print("scanning %d gamesrv captures for COINCIDENT consecutive report pairs ...\n" % len(caps))
 
-gaps = {}        # pair -> [gap seconds]
-stale_rows = {}  # pair -> [(capture, t, gap)]
+gaps = {}        # pair -> [gap seconds, the pair's own]
+stale_rows = {}  # pair -> [(capture, t_b, gap AFTER the newer report)]
 n_pairs = 0
+n_open = 0       # coincident pairs that are their file's last accepted pair (no next report)
 for c in caps:
     try:
         R, _ = SC.load_rows(c)
@@ -63,7 +73,8 @@ for c in caps:
             and r.get("wall_unix") and r.get("accepted")]
     if len(reps) < 2:
         continue
-    for (ta, sa, pa), (tb, sb, pb) in zip(reps, reps[1:]):
+    for i in range(1, len(reps)):
+        (ta, sa, pa), (tb, sb, pb) = reps[i - 1], reps[i]
         if not pa or not pb:
             continue
         d2 = (pb[0] - pa[0]) ** 2 + (pb[1] - pa[1]) ** 2
@@ -71,19 +82,24 @@ for c in caps:
             continue                      # not a coincident pair: the waiver never applies
         n_pairs += 1
         key = "%s->%s" % (sa or "?", sb or "?")
-        gap = tb - ta
-        gaps.setdefault(key, []).append(gap)
+        gaps.setdefault(key, []).append(tb - ta)
         # "stale" for the waiver's purpose means the NEWEST report has aged past the gate by
-        # the time a re-pin would act.  The soonest that can happen is immediately after the
-        # next report would have been due, so the pair's own gap is the natural proxy: a pair
-        # whose successor arrives within the gate leaves no stale window at all.
-        if gap > GATE:
-            stale_rows.setdefault(key, []).append((os.path.basename(c), round(tb, 2), round(gap, 3)))
+        # the time a re-pin acts, so the window is (t_b + gate, the NEXT accepted report) and
+        # the gap that decides it is the one AFTER the newer report (1z-bs correction; the
+        # first version used the pair's own gap, which is the one before it).
+        if i + 1 < len(reps):
+            after = reps[i + 1][0] - tb
+            if after > GATE:
+                stale_rows.setdefault(key, []).append((os.path.basename(c), round(tb, 2), round(after, 3)))
+        else:
+            n_open += 1                   # the file's last accepted pair: no next report to measure
 
 print("=" * 84)
 print("COINCIDENT CONSECUTIVE REPORT PAIRS (within %.1f u^2) -- %d found" % (ZERO, n_pairs))
 print("  the waiver applies to ALL of these; it is LOAD-BEARING only on the stale ones")
-print("  (gate = %.6f s)\n" % GATE)
+print("  (gate = %.6f s; STALE = the next accepted report arrives more than the gate after the\n"
+      "   newer report -- 1z-bs correction; %d pairs with no next report are not scored)\n"
+      % (GATE, n_open))
 print("  %-18s %6s   %8s %8s %8s   %s" % ("pair", "n", "p50 gap", "p90 gap", "max gap",
                                           "pairs leaving a STALE window"))
 for k in sorted(gaps, key=lambda k: -len(gaps[k])):
@@ -109,13 +125,16 @@ if kept_stale == 0:
     print("  need a route: the waiver's remaining branch cannot fire, by the client's own")
     print("  reporting cadence rather than by our policy.")
 else:
-    print("  THE WAIVER HAS A LIVE CASE the clause preserves: %d stale coincident pairs on kept" % kept_stale)
-    print("  orderings.  Q15 needs the run, and here is where the condition occurs:")
+    print("  THE WAIVER'S CONDITION IS LIVE on the kept orderings: %d stale coincident pairs." % kept_stale)
+    print("  What sits under them is the question, and waiverclick.py answers it by ORDERING and by")
+    print("  the guard's own click state: a pair whose newest report is a STOP is followed by a still")
+    print("  body, a pair whose newest is a WALK-START by a walking one in a quarter of its windows, and")
+    print("  no kept window has ever met a re-pin want (1z-bs).  Where the condition occurs:")
     for k, v in stale_rows.items():
         if k == "0x0047->0x003D":
             continue
         print("    %s  x%d" % (k, len(v)))
         for name, t, gap in v[:10]:
-            print("        %s  t=%.2f  gap %.3f s" % (name[:38], t, gap))
+            print("        %s  t_b=%.2f  window %.3f s" % (name[:38], t, gap))
         if len(v) > 10:
             print("        ... %d more" % (len(v) - 10))

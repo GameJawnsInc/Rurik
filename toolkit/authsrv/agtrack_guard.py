@@ -157,7 +157,8 @@ REPIN_MIN_INTERVAL = 0.5                                # < 299.33/576 s
 #
 # REFUSED WHILE A CLICK IS GLIDING THE COPY (`async_dest`): the report is
 # then not where the body is, and the whole argument above is about a report
-# that still describes the body.
+# that still describes the body.  Only the client's OWN clicks set it -- see
+# async_dest's note in __init__ for the approach-leg hole (1z-bs).
 #
 # --no-repin-stationary-waiver reverts to the pre-1z-ah gate.
 STATIONARY_WAIVER = True
@@ -203,6 +204,47 @@ STATIONARY_WAIVER = True
 # against a harm measured at 366 u median.  The retract still fires on the two
 # pairs that genuinely measure a body which was told to move and did not.
 WAIVER_WALKSTART_ENDS_STILL = True
+
+# THE NEWEST-IS-A-STOP CLAUSE (MOVECODE-1z-bs).  1z-bn's argument applied to
+# the only member of the pair whose kind says anything about what is true
+# AFTER the newer report: a STOP asserts the body is at rest as of that
+# instant; a WALK-START asserts the opposite, so the waiver may not survive
+# one -- whatever the older report was.  1z-bn refused only the {stop ->
+# walk-start} spelling because that is where its harm census had n=19; the
+# argument never depended on the older member.
+#
+# MEASURED (studies/movecode/review/waiverclick.py; whole corpus; the stale
+# window taken from the NEXT accepted report, not the pair's own gap; the
+# waiver's own click state applied).  Where the waiver is live and the newest
+# report is a STOP ({0x003D -> 0x0047}, 151 windows) the next report finds
+# the body at the same point in 151 of 151.  Where the newest is a WALK-START
+# ({0x003D -> 0x003D}, 87 windows) the next report is over 100 u away in 14,
+# every one at a speed within 5% of the client's own movement families --
+# real walking legs, the 1z-bl defect's shape, on a pair 1z-bn KEEPS.  (The
+# fuller variant that also reads pre-telemetry captures by `t` adds two
+# cases over 500 u; FINDINGS sec.1z-bs states both knobs.)  A guard replay of that pair under a 520 u lead answers
+# due/arrival-risk on a 1.46 s-old report with this clause off and
+# blocked/stale-report with it on (test_agtrack_guard.py section 15).
+# {0x0047 -> 0x0047} never coincides anywhere in 1,311 captures, so the
+# waiver's surviving branch is exactly {walk-start -> stop}: 151 windows,
+# ~520 live seconds, zero re-pin wants.  On every capture held this clause is
+# therefore indistinguishable from deleting STATIONARY_WAIVER -- PLAN.md sec.7
+# Q15, the owner's call, deliberately NOT made here: what this keeps is the
+# one branch whose a-priori argument survives.
+#
+# WHAT IT COSTS: the class 1z-bn already accepted -- a body that reported a
+# walk-start and then genuinely stood still gets the unwaived gate and the
+# client's own arrival test decides.  Corpus exposure of that cost: zero (no
+# re-pin want inside any of the 87 windows).  What it closes has zero exposure
+# too: no lead run has yet opened a leg on a coincident double walk-start
+# (446 such pairs in owner play, none under the lead), so the rewind this
+# refuses is unwitnessed, not absent.
+#
+# --waiver-walkstart-pair-stands reverts to the 1z-bn build.  FOR THE REVERT
+# ARMS: with this clause on, --waiver-walkstart-stands alone changes nothing
+# (the pair it re-admits has a walk-start as its newest report and is refused
+# here); reproducing RUN-1zBP's arm needs BOTH flags.
+WAIVER_NEWEST_MUST_BE_STOP = True
 
 # Verdicts
 PASS = "pass"                # predicted MATCH -- nothing can snap
@@ -279,8 +321,20 @@ class AgTrackGuard(object):
         # granted speed -- the client's own glide model applied to the
         # async copy, straight-line (the client paths around obstacles;
         # this is an estimate and says so).  Cleared by any report (the
-        # client speaking again ends the silent leg -- the same contract
-        # as authsrv's click-in-flight latch).
+        # client speaking again ends the silent leg).
+        #
+        # NOT the same contract as authsrv's click-in-flight latch, though
+        # this note used to say so (corrected MOVECODE-1z-bs).  Only the
+        # client's OWN 0x003E reaches on_click; state["click_moving_at"] has
+        # a second armer, _approach_send (ATTACK_APPROACH ships on), which
+        # walks the body on a silent leg toward its target and never calls
+        # on_click.  Over an approach leg this field says nothing is in
+        # flight while the body walks, and the stationary waiver's
+        # `async_dest is not None` refusal does not fire.  Corpus exposure
+        # is zero -- 9 approach grants in 3 of 1,311 captures, none over a
+        # coincident stale pair -- so it is a latent hole, named in PLAN.md
+        # sec.8 (1z-bs); deleting STATIONARY_WAIVER (sec.7 Q15) closes it
+        # for free, keeping it needs a second on_click call site.
         self.async_dest = None
         # shadow counters
         self.n_pass = 0
@@ -510,6 +564,12 @@ class AgTrackGuard(object):
         # decides, which is the bound this pair's harm actually obeys.
         if (WAIVER_WALKSTART_ENDS_STILL
                 and self.last_is_walkstart and self.prev_is_walkstart is False):
+            return False
+        # THE NEWEST-IS-A-STOP CLAUSE (1z-bs, see its block above).  Only the
+        # newer member's kind bears on what is true after its instant, and a
+        # walk-start says the body is leaving.  Subsumes the clause above when
+        # on; both stay, so each revert arm is a real A/B.
+        if WAIVER_NEWEST_MUST_BE_STOP and self.last_is_walkstart:
             return False
         dx = self.client_pos[0] - self.prev_pos[0]
         dy = self.client_pos[1] - self.prev_pos[1]

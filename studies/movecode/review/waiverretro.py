@@ -55,6 +55,14 @@ NARROWER than deleting the stationary waiver, in behaviour?  Every capture is al
 with `STATIONARY_WAIVER` off entirely.  It is not a rhetorical arm -- it can and does report a
 difference if one exists, and today it reports none.
 
+MOVECODE-1z-bs added a second clause on top of 1z-bn's (`WAIVER_NEWEST_MUST_BE_STOP`: the waiver
+requires the newest accepted report to be a stop).  This file's stock and fix arms are the
+1z-bn A/B and are replayed with that clause OFF, so they keep measuring what their names say.
+The shipped (1z-bs) build's retrodiction is the THIRD arm: its differential set over 1z-bn is
+the coincident {0x003D -> 0x003D} pair, which carries zero re-pin wants anywhere in the corpus
+(waiverclick.py measures that directly), so on every capture held the shipped build and the
+waiver-deleted arm are one object.
+
 Read-only.  Needs the vault.  Stdlib only.  Map 146 only, as guardretro is.
 """
 import argparse
@@ -84,9 +92,15 @@ def replay(evs, pm, tol, clause, waiver=True):
     import agtrack_guard as ag
     import agtrack_mirror as am
     s_tol, s_cl, s_w = am.GATE2_SEAM_TOL, ag.WAIVER_WALKSTART_ENDS_STILL, ag.STATIONARY_WAIVER
+    s_ns = ag.WAIVER_NEWEST_MUST_BE_STOP
     am.GATE2_SEAM_TOL = tol
     ag.WAIVER_WALKSTART_ENDS_STILL = clause
     ag.STATIONARY_WAIVER = waiver
+    # The 1z-bs clause is pinned OFF in every arm here: this file is the 1z-bn A/B and the
+    # clause subsumes 1z-bn's, so leaving it at its shipped default would make the "stock"
+    # arm refuse the very pair it exists to re-admit and fail its own control.  See the
+    # module docstring for why the third arm already covers the shipped build.
+    ag.WAIVER_NEWEST_MUST_BE_STOP = False
     try:
         g = ag.AgTrackGuard(mesh=am.MeshAdapter(pm))
         verdicts, dues = [], []
@@ -127,6 +141,7 @@ def replay(evs, pm, tol, clause, waiver=True):
         return verdicts, dues
     finally:
         am.GATE2_SEAM_TOL, ag.WAIVER_WALKSTART_ENDS_STILL, ag.STATIONARY_WAIVER = s_tol, s_cl, s_w
+        ag.WAIVER_NEWEST_MUST_BE_STOP = s_ns
 
 
 def near(t, dues):
