@@ -14274,3 +14274,92 @@ the model only walks ahead of the report *because* the lead grants it a destinat
 lead-OFF run should show the same silence with no divergence and no re-pin — that is the
 one-launch check that separates the guard's fault from the lead's, and it is the shipped
 default's own configuration.
+
+### 1z-bl.8 THE ADVERSARIAL PANEL — what it strengthened, and the six things it corrects in the section above
+
+§1z-bl.1–.7 were written from my own read of the capture and committed at `9193da4`. A
+four-lane panel plus two adversarial refuters then worked the same capture independently
+(the lanes were told the wire's leg verdicts and nothing else; the refuters were told to
+break the lanes). **All four lanes and both refuters independently reach §1z-bl's headline
+and independently refute §1z-bk.** They also correct this section in six places, and the
+corrections are the valuable part.
+
+**Strengthened, beyond what §1z-bl claimed.**
+
+- **The excursion is no longer only our accessor.** The tape's **camera target** — the
+  client's own camera code, an instrument that does not share `position_at` — tracks the
+  glide sample for sample (leg 2S: camera 433.9 u against `live()` 449.7 u, a constant ~16 u
+  one-frame lag; p50 15–18 u on every leg, walkers included). And `live()` is validated on
+  the walking legs, where raw travel 999/1091/584 u matches live travel 986/1074/590 u. The
+  308–443 u is **OBSERVED**, not a reconstruction.
+- **The "it is only a reporting defect" loophole is closed.** The `0x0047` stop-report equals
+  the stop-echo teleport's `point` field on 7 of 7 legs, and on walking legs that field
+  *catches up* 6.9–143.7 u at key-up. The client materialises `m_point` at key-up, so a body
+  genuinely 440 u downrange **would have reported it**. The body was physically back at the
+  start.
+- **The defect is localised in our own source.** `agtrack_guard.stationary()` waives the
+  0.347 s stale-report gate whenever the last two accepted reports coincide — and **every
+  leg's opening `0x003D` duplicates the previous leg's `0x0047` stop to 0.000 u**. The
+  waiver's own comment asserts this cannot happen: *"A WALKING body can never satisfy this:
+  consecutive reports sit ~512 u apart."* The counterexample is the first report pair of
+  every single leg. **That is the fix's real surface**, and it is a better target than
+  §1z-bl.7's three candidate shapes.
+
+**Corrected in the section above.**
+
+1. **`movecmd` does not count key edges.** §1z-bl.3 says it "fires once on each frozen leg
+   (at the press)". `movecmd @ 0x00535380` with ret `0x00535DF3` is **one dispatch per server
+   `0x0029` grant**, not per key edge. The operand was wrong (`verify the operand, not just
+   the predicate`), and the "1 vs 163/227/108" contrast is a grant count, not an input count.
+2. **The one-shot regime is not a frozen-leg property.** §1z-bl.3 reads "GmWalk never
+   re-dispatches the held key" as something our `0x002C` caused. The 60 Hz steering re-entry
+   (`0x00535EA4`, arg6=0) **is not started by the key press — it starts at the first
+   ARRIVAL**. Every leg opens with one committed ballistic segment during which the client
+   emits neither its steering re-entry nor its c2s report; walking leg 1W sits in that same
+   state for its first 1.55 s. Legs 3W and 6S leave it in 0.1–0.4 s because their first
+   segments are short (80 u, 12 u); the frozen legs' first segments are 460–767 u and last
+   1.2–2.4 s. **"No re-dispatch" and "no report" are ONE fact, not two.**
+3. **So the discriminator is not the 512 u odometer.** §1z-bl.4's mechanism paragraph fits
+   the data but the better-supported statement is: **the length of the leg's FIRST COMMITTED
+   SEGMENT** decides how long the client is silent, and a re-pin landing inside that window
+   rewinds the body. The first segment's length is **the client's own reach, geometry-clipped
+   (up to 767 u) — not our lead**, so shortening the lead would not shorten it. The 512 u
+   distance trigger remains the reason a *short* leg never reports at all; it is not the
+   mechanism's hinge.
+4. **The re-pin is sufficient, not shown to be necessary.** §1z-bl's "the re-pin is the cause"
+   overstates. It is the proximate writer of the body's return (decoded `0x002C` payload
+   bit-equal to the `SetPosition` `pt_a`, 4 of 4) and is sufficient to guarantee net-zero
+   travel — but "re-pin present" and "long first segment" are **the same partition
+   {2,4,5,7}**, and the corpus contains **no leg with a long opening segment where the re-pin
+   was suppressed**. That control does not exist yet and it is what would make the claim
+   necessary-and-sufficient.
+5. **Leg 1W is not a clean control — it is the run's real counterfactual.** An identical
+   mid-glide `arrival-risk` re-pin was evaluated on leg 1 at 14.981 s and **refused**, with
+   `blocked_by = stale-report`, on a report *younger* than leg 2's, which fired with
+   `blocked_by = None` on a report 2.42 s older. Leg 1 then walked 904 u. So "0 of 3 walking
+   legs were re-pinned" should read "0 of 3 were re-pinned, one of them because a startup
+   accident refused it" — on a run that did not start there it might have been 4 of 4. **The
+   rule that distinguishes those two evaluations is the fix's surface**, together with the
+   waiver above.
+6. **Numbers.** The rewind's supported range is **311–468 u**, not §1z-bl's 294–433 u (leg 2's
+   own last live sample is a measurement at 452.6 u). **P4 is MET with one clause VACUOUS**:
+   nothing pairs on `(tid, esp)` because the only ret sites in the build are the four
+   `mapfindpath_ret`s and all four have zero hits. And **not every zero in §1z-bl.2 is
+   licensed**: `mapfindpath`'s is (that site is proven live in 18 other captures of the same
+   DLL) and `chcli_point`'s is, but **`heldbit`, `movecache` and `mapfindpath_ret1/2/3` have
+   never fired in ANY capture**, so their zeros carry no information about this run and
+   §1z-bl.2 should not have listed them as findings.
+
+**Two things the panel could not settle, and they bound the next step.** Why the client does
+not re-arm the held key after a `SetPosition` — `inputeval` runs at 59.7–60.0 Hz throughout
+and `resume_arm`/`resume_fire` fire 1/1 on every leg including the frozen ones, so the input
+path is alive and the two sites that would name the refusal (`heldbit`, `chcli_point`) never
+fire. And whether any of this reproduces with `--kbd-lead` OFF, which is the shipped default
+and the operator's own regime.
+
+**A process failure of mine, recorded because it nearly cost the panel.** I removed the
+`movecode-1z-bl` worktree after merging **while the six agents were still running in it**.
+Both refuters found the pinned tree empty and deregistered mid-analysis, said so out loud per
+the cross-tree rule, verified that `main` at `54b1949` is a superset, and continued against
+absolute vault paths — so nothing was lost. It should not have depended on their discipline:
+**do not remove a worktree while agents are pinned to it.**
