@@ -11,6 +11,18 @@ the one it follows), the three verdicts and their bars, and the per-leg table.
 Section 5 runs the two real controls when the vault is present: the zero-lead
 baseline must read FREE and RUN-1zT's registered arm ENSLAVED from 18.65 s --
 a detector that cannot find the known contamination cannot clear a new run.
+
+Section 7 (MOVECODE-1z-bh, 2026-09-05; studies/review/MOVEMENT-2026-09-04.md
+sec.1.1) is the MOVING-ONLY line. THE NUMBER is an all-sample p50, and on the
+shipped lead-OFF default the stop echo parks world-0 on the body at every stop,
+so the parked majority drags the median to ~0 while the copy runs a full report
+chord behind whenever the body walks -- the registered sec.1z-t.8 verdict
+printed CONFIRMED over exactly such a tape. The section builds that tape (20
+walking samples 500 u behind, 30 parked samples on the body) and asserts the
+all-sample p50 under the CONFIRM bar, the moving-only p50 over 400 u, and the
+line actually printed beside THE NUMBER. Its control is a walk-only tape where
+the two statistics must AGREE, so a green cell above is the parked majority and
+not two differently-computed numbers.
 """
 
 import json
@@ -27,9 +39,20 @@ sys.path.insert(0, os.path.dirname(HERE))                      # toolkit/
 import checks                                                  # noqa: E402
 import w0score                                                 # noqa: E402
 
-# Floor from the bare-machine green run (sections 1-4); section 5 is
-# vault-gated and skips, which lowers nothing.
-LEDGER = checks.Ledger("w0score enslavement detector", floor=44)
+# Floor from the BARE-MACHINE green run, because a skip does not lower a floor
+# (checks.py: `self.ran < self.floor` counts executed checks and nothing else),
+# so the floor has to be the count the WEAKEST healthy configuration produces.
+# Measured 2026-09-05 in this worktree: 50 checks with the vault present, 47
+# with `RURIK_VAULT` pointed at an empty directory -- section 5's three real
+# controls are the difference and declare a skip. Floor 47.
+#
+# The old floor of 44 was one the bare-machine run could not reach: 42 before
+# section 7, because section 6's seven checks landed and the floor never moved.
+# This file would have gone red on any machine without a vault -- the standing
+# bare-machine defect class -- and the number was moving anyway, so it is
+# corrected here. +5 2026-09-05 MOVECODE-1z-bh (section 7, the moving-only
+# line and its no-parked-samples control).
+LEDGER = checks.Ledger("w0score enslavement detector", floor=47)
 check = checks.adopt_named(LEDGER)
 
 T0 = 1_000_000_000.0          # a wall epoch no real capture overlaps
@@ -320,6 +343,64 @@ def main():
     _per, inf = cap("agenttap-inf.jsonl", float("inf"))
     check("a world-0 with no leg armed (infinite target) enslaves nothing",
           inf["enslaved"] == 0, f"{inf}")
+
+    print("== 7: MOVECODE-1z-bh, the MOVING-ONLY line (review sec.1.1) ==")
+    # The shipped lead-OFF default in miniature: the body walks at 288 with
+    # world-0 a full report chord (500 u) behind, then stops and the stop echo
+    # parks the copy ON it. The parked samples outnumber the walking ones --
+    # they do on every real tape too -- so the ALL-SAMPLE median reads ~0 while
+    # the copy was 500 u behind for the whole walk. That is exactly the tape
+    # the sec.1z-t.8 verdict printed CONFIRMED over.
+    rows7 = [{"kind": "head", "pid": 1, "agents": [1], "t0": T0, "hz": 10.0}]
+    for k in range(20):                       # WALKING: copy 500 u behind
+        bx = 1000.0 + 100.0 * k
+        rows7.append({"kind": "sample", "t": 1.0 + 0.1 * k,
+                      "clock0": 0, "clock1": 0,
+                      "agents": {"1": {
+                          "async": copy(bx, 0.0, bx + 520.0, 0.0, 288.0, 0.0),
+                          "sync": copy(bx - 500.0, 0.0, bx, 0.0, 288.0, 0.0)}}})
+    endx = 1000.0 + 100.0 * 19
+    for k in range(30):                       # PARKED: the stop echo, sep 0
+        rows7.append({"kind": "sample", "t": 3.1 + 0.1 * k,
+                      "clock0": 0, "clock1": 0,
+                      "agents": {"1": {
+                          "async": copy(endx, 0.0, endx, 0.0, 0.0, 0.0),
+                          "sync": copy(endx, 0.0, endx, 0.0, 0.0, 0.0)}}})
+    tap7 = os.path.join(tmp, "agenttap-1zbh.jsonl")
+    write_jsonl(tap7, rows7)
+    gs7 = os.path.join(tmp, "authsrv-1zbh-c1.jsonl")
+    write_jsonl(gs7, [report_row(1.0, 1000.0, 0.0),
+                      grant_row(1.05, 1000.0, 0.0, label="zero-lead")])
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        r7 = w0score.score(tap7, grants_path=gs7)
+    out7 = buf.getvalue()
+    check("THE NUMBER, all-sample, reads under the CONFIRM bar on a tape "
+          "whose every walking sample was 500 u behind",
+          r7["live"][0] < w0score.CONFIRM_P50, f"p50 {r7['live'][0]:.1f}")
+    check("the MOVING-ONLY p50 reads the separation law instead",
+          r7["live_moving"][0] > 400.0 and r7["moving_n"] == 20,
+          f"p50 {r7['live_moving'][0]:.1f} over {r7['moving_n']} samples")
+    check("and the headline PRINTS it, beside THE NUMBER and not instead",
+          f"moving only (v > {w0score.MOVING_V:.0f} u/s)" in out7
+          and "<-- THE NUMBER" in out7)
+    check("the cut is the body's speed, not world-0's: 20 walking samples of "
+          "50, and the parked majority is what drags the all-sample median",
+          r7["moving_n"] == 20 and r7["live"][3] > 400.0,
+          f"max {r7['live'][3]:.1f}")
+    # KNOWN-BAD ARM: a tape with NO parked samples cannot show the divergence,
+    # so a green section 7 must be the parked majority doing the work rather
+    # than the two statistics being computed differently.
+    tap7b = os.path.join(tmp, "agenttap-1zbh-walkonly.jsonl")
+    write_jsonl(tap7b, [rows7[0]] + rows7[1:21])
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        r7b = w0score.score(tap7b, grants_path=gs7)
+    check("CONTROL: with no parked samples the two statistics agree, so the "
+          "gap in the cell above is the stop echo and not the arithmetic",
+          abs(r7b["live"][0] - r7b["live_moving"][0]) < 1e-6
+          and r7b["live_moving"][0] > 400.0,
+          f"all {r7b['live'][0]:.1f} vs moving {r7b['live_moving'][0]:.1f}")
 
     return LEDGER.verdict()
 

@@ -13604,3 +13604,107 @@ is named rather than folded into "unwalkable".
   pre-1z-ap doctrine: None → plane-blind clip); the sliver path is stricter than the inside path
   there, which is the conservative asymmetry, not the fix's business. The other re-pin triggers
   and the client's gate-2 tolerance stay as §1z-bf.5 left them.
+
+## 1z-bh. THE REVIEW'S CORRECTIONS, APPLIED — the retail-cadence sentence, the "SHIPPED as the default" headings on an inert path, the keyboard drop's false attribution and its missing revert arm, two docstrings that said the opposite of the code, and a moving-only line beside `w0score`'s headline; no default moves
+
+**Asked:** step 1 of the plan the review ([studies/review/MOVEMENT-2026-09-04.md](../review/MOVEMENT-2026-09-04.md))
+put first: correct the sentences the next session would otherwise build on, and give the one
+shipped behaviour with no revert arm its arm. Ident `MOVECODE-1z-bh`. No run. No default
+changed. The mechanical half was done by a subagent from the review's §1.1, §1.2, §1.5, §1.7
+and §4; this section is the record of what moved and what it rests on.
+
+### 1z-bh.1 The retail-cadence sentence
+
+§1z-t.3's law is right and its retail clause was a category error (review verdict fact 1;
+`studies/review/movement-2026-09-04/retail_2c_and_cruise.py`). Corrected IN PLACE in the server's
+own statement of the law (`authsrv.py`, the `KBD_SYNC` comment block) and in the startup
+banner's `DERIVED` line: retail's client fires the same ~512 u `0x003D` trigger during cruise
+(61 live connections, 454 cruise pairs, gap p50 1.20 s / p90 1.785 s, chord p90 513.8 u, 208 of
+454 in the 1.5–2.0 s bin, 137 under 0.6 s); the 0.257 s is the NPC-follow-fitted lag of retail's
+*server* copy (RECONSTRUCTION, §38.3), not a report cadence; retail's copy stays ~74 u behind a
+moving body because it walks the 766 u lead, so with the lead OFF the copy is granted the point
+the body already left and the law is the default's own state. The FINDINGS sentence itself
+(§1z-t.3, *"Retail's 0.257 s × 288 = 74.0 u. Cadence ratio 7.00×"*) stands as written with this
+section as its correction; the numbers regenerate from the review's script.
+
+### 1z-bh.2 "SHIPPED as the default", on a path the default never reaches
+
+`A2_LEAD_PLANE_CLIP` (§1z-ap), `A2_LEAD_ORIGIN_SEAM` (§1z-bg) and the opt-in `A2_LEAD_SEAM_CLIP`
+are read only inside `a2_clip_lead`, whose three call sites each sit under `D1_LEAD = False` or
+`KBD_SYNC_LEAD_ON = False`. Both headings said "SHIPPED as the default" and neither said the lead
+is OFF, unlike every earlier lead section. PLAN §8's two entries carry an in-place correction
+now, and the startup banner prints one line when neither lead is armed: the three arms are
+*lead-path only, INERT under this configuration, armed with `--kbd-lead` or `--d1-lead`*.
+`capture_flags()` is untouched (it dumps every uppercase bool and tests read it).
+
+### 1z-bh.3 The keyboard drop: ours, and now with an arm
+
+Three places said the router's mid-keyboard click drop was *"retail's own contract (§0.15)"* —
+the `ROUTER` doc block, the drop's own comment in `router_answer_click`, and the console line an
+operator reads during a run. §0.15 states an older-of-a-rapid-PAIR rule; §0.14's V-RETAIL-2
+measured seven SINGLE mid-keyboard clicks and retail answered all seven within one RTT; §1p.9
+published that correction on 2026-08-28 and it was never applied. All three now say the drop is
+OURS, kept on MOVECODE-R1-B1's displacement outcome (§1q) measured on the legacy path under the
+pre-`KBD_SYNC` copy placement. `ROUTER.md` §4 carries the same correction, and its "opt-in,
+shipped default byte-identical" (stale since §1z-v) is struck.
+
+**The arm.** `--answer-kbd-click` set `ANSWER_KBD_CLICK`, read only by `_grant_verdict` — the
+legacy path the router bypasses — so under the shipped `ROUTER = True` the flag was inert and
+the drop had no arm that could convict it (the arc's own two-defaults rule, §29). The router's
+drop now honours the flag: OFF is the `kbd-drop` row unchanged; ON falls through and routes the
+click like any other, logging a `router_route` row with `verdict = "kbd-answered"`,
+`arm = "answer-kbd-click"`, `pass_through = True` before the click's real verdict row, so a
+click census must filter the pass-through (`keepalivelog.py`, the one existing consumer, now
+counts it on its own line). The flag's help and startup print say it reaches the router and is
+a DIAGNOSTIC/REVERT arm, not a default — R1-B1 is REFUTED as a default on the legacy path and
+this section does not re-open that. `zero_lead_composition` has no `answer_kbd_click` term, so
+no refusal was deleted. **Exposure at HEAD is zero**: the corpus holds 0 of 69 router clicks
+inside `GRANT_LOCAL_WINDOW` of a report, so no existing capture scores the arm; a script that
+clicks within 3.0 s of a `0x003D` is the first step if it is ever priced (review §3.12's
+prior-art item, re-aimed by its refuter).
+
+### 1z-bh.4 Two docstrings that said the opposite of the code
+
+`_heading_grant_ok`'s docstring — *"A REFUSED HEADING GRANT IS DROPPED, NOT HELD … There is no
+pending machinery here and there must not be one"* — and the `0x003D` tail comment repeating
+it have been false since §1z-y: `KBD_SYNC_HOLD` ships True, the refused report is stored as
+`state["heading_hold"]` and `heading_hold_tick` re-bakes it when the floor opens. Both now state
+the shipped behaviour and why the old premise failed (a 0.28–0.30 s report cadence is the
+click-heavy runs'; held-key cruise is 1.80 s). The predicate is unchanged — `grantsim.py`
+imports it, and it stays pure rule 2. `agtrack_guard.py`'s header said the active re-pin
+*"ships OFF by default"*; `AGTRACK_SHADOW` and `AGTRACK_REPIN` are both True since §1z-s.5, with
+72 live fires in 30 captures, and the sentence now says so.
+
+### 1z-bh.5 `w0score`'s moving-only line
+
+The headline p50 is ALL-SAMPLE, and on the shipped lead-OFF default the stop echo parks
+world-0 on the body at every stop, so the parked majority drags the median to ~0 while the copy
+runs a full report chord behind whenever the body walks — the registered §1z-t.8 verdict printed
+CONFIRMED over exactly such a tape (review §1.1: moving-only p50 510–515 u on 8 of 13 default
+tapes). `w0score` now prints a second line under THE NUMBER over samples with the body above
+50 u/s (`MOVING_V`), returns it as `live_moving` / `moving_n`, and the verdict block carries a
+MOVING ONLY line with the law's interpretation (`LAW_PREDICTED` 518.4 u), labelled *"NOT the
+registered statistic"*. **The registered verdict's semantics are unchanged** — a prediction
+re-aimed after its run is not a prediction; the second line is what the next registration
+should be written on.
+
+### 1z-bh.6 Tests, and one floor that was already unreachable
+
+`test_router` §1 +5 (the drop driven both ways on one click, the global restored and
+re-asserted), floor 121 → 126. `test_w0score` §7 +5 (a tape with 20 walking samples 500 u behind
+and 30 parked on the body: all-sample p50 under the CONFIRM bar, moving-only p50 over 400 u,
+the line printed beside the headline, and a walk-only control where the two statistics must
+agree), floor 44 → **47** — from the BARE-MACHINE run, because the old 44 was unreachable
+without a vault since §1z-ac's section 6 (a `LEDGER.skip` lowers nothing; 50 with the vault).
+`test_kbdsync` 106, `test_position_trust` 235, `test_d1lead` 118, `test_agtrack_guard` 77,
+`test_grantsim` 86, `test_movehook` 302, `test_srclint` 26, `test_citelint` 50 — green.
+`TESTS.md` carries both new sections and the kbd-drop line's own correction.
+
+### 1z-bh.7 Not done here, deliberately
+
+The review's other §4 corrections outside this brief are untouched and still owed:
+`movesync.py`'s header (the ~80 % silence the bar cannot see), `pathmap.py:54-56` (the DAG the
+client's start resolution is), `movetap.py`'s `calibrate()` floor, `authsrv.py`'s `TICK_SECONDS`
+rationale and the NPC "stands against the wall" sentence, `HANDOFF.md` §A's currency row,
+`RETHINK.md:6`'s never-lifted rule, `HANDOFF-WARP.md`'s `--router` rows and its PLAN.md citation,
+`content/movecode.toml:528`. Each is one sentence; none changes behaviour.

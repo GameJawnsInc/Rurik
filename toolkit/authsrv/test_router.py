@@ -23,6 +23,15 @@ Section 6 (MOVECODE-1z-w, 2026-09-03): the routing ORIGIN's own plane word
 unknowable) feeds route()'s start preference, the clip-fallback's stop
 carry and every router_route row; and a cast that begins abandons a live
 chain, the third opcode of ROUTER-Q8.
+
+The kbd-drop pair in section 1 grew a REVERT ARM on 2026-09-05
+(MOVECODE-1z-bh, studies/review/MOVEMENT-2026-09-04.md sec.1.7). The drop is
+OURS, not retail's, and until 1z-bh `--answer-kbd-click` was read only by
+`_grant_verdict` -- the legacy path `router_answer_click` bypasses -- so under
+the shipped ROUTER = True a shipped behaviour had no arm that could convict
+it. Both arms are now driven off the same click: flag OFF is the kbd-drop row,
+flag ON routes it and logs a `kbd-answered` PASS-THROUGH row (marked `arm` and
+`pass_through`) ahead of the real verdict row, and the global is restored.
 """
 
 import math
@@ -50,7 +59,10 @@ import authsrv                                                 # noqa: E402
 # +30 2026-09-03 MOVECODE-1z-v (section 5: the default, both conditions,
 # the press/follow abandons); +11 MOVECODE-1z-w (section 6: the origin's
 # plane word, the cast abandon). 114 on the green run.
-LEDGER = checks.Ledger("router wiring", floor=121)   # +7: section 6, MOVECODE-1z-bb
+# +7 section 6, MOVECODE-1z-bb; +5 MOVECODE-1z-bh (the kbd-drop's revert arm:
+# `--answer-kbd-click` now reaches router_answer_click, and the drop it reverts
+# is OURS rather than retail's -- review sec.1.7). 126 on the green run.
+LEDGER = checks.Ledger("router wiring", floor=126)
 check = checks.adopt_named(LEDGER)
 
 SPEED_OP = authsrv.GAME_SMSG_AGENT_UPDATE_SPEED
@@ -312,6 +324,38 @@ def main():
     check("kbd-drop row emitted",
           any(r["kind"] == "router_route" and r["verdict"] == "kbd-drop"
               for r in rows))
+
+    # ...and the drop's REVERT ARM (MOVECODE-1z-bh, review sec.1.7). The drop
+    # is OURS -- REALFIX sec.0.15 is a rapid-PAIR rule and sec.0.14's
+    # V-RETAIL-2 measured retail answering 7 of 7 single mid-keyboard clicks
+    # -- and until 1z-bh `--answer-kbd-click` was read only by
+    # `_grant_verdict`, which this handler bypasses, so under the shipped
+    # ROUTER = True the flag was inert and a shipped behaviour had no arm that
+    # could convict it. Same click, flag on: routed like any other.
+    check("the drop is the shipped path -- ANSWER_KBD_CLICK defaults False",
+          authsrv.ANSWER_KBD_CLICK is False)
+    _saved_akc = authsrv.ANSWER_KBD_CLICK
+    try:
+        authsrv.ANSWER_KBD_CLICK = True
+        st = base_state()
+        st["kbd_moving_at"] = authsrv.time.time()
+        handled, sent, rows = answer(st, (50.0, 50.0))
+        check("with the flag the same click is ANSWERED, and a grant is sent",
+              handled and [op for op, _p, _l in sent] == [SPEED_OP, MOVE_OP]
+              and sent[1][1][1] == [50.0, 50.0])
+        verdicts = [r["verdict"] for r in rows if r["kind"] == "router_route"]
+        check("no kbd-drop row survives the flag; the real verdict follows",
+              "kbd-drop" not in verdicts and "verbatim" in verdicts)
+        check("the pass-through row names its arm, so a click census can "
+              "filter it out of the verdict rows",
+              any(r["kind"] == "router_route"
+                  and r["verdict"] == "kbd-answered"
+                  and r.get("arm") == "answer-kbd-click"
+                  and r.get("pass_through") is True for r in rows))
+    finally:
+        authsrv.ANSWER_KBD_CLICK = _saved_akc
+    check("the module global is restored for every later section",
+          authsrv.ANSWER_KBD_CLICK is False)
 
     # refused: origin off-mesh (the P-17 wall-press door, CLOSED).
     st = base_state(pos=(150.0, 0.0))

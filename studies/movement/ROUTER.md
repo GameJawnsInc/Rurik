@@ -110,7 +110,16 @@ in content, 1 connection unattributable):
 - **Chained specimens run the same corridors**: 63805 — our 4 corners vs
   retail's 9 grants, every retail waypoint ≤120.3u from our polyline,
   length ratio 1.18; the Pre-Searing chain — ≤12.0u, ratio 1.26. Retail
-  emits more, shorter legs (ROUTER-Q4); ours string-pulls to corners only.
+  emits more, shorter legs (ROUTER-Q4); ~~ours string-pulls to corners
+  only.~~ **CORRECTED 2026-09-05 (MOVECODE-1z-bh,
+  [MOVEMENT-2026-09-04.md](../review/MOVEMENT-2026-09-04.md) §3.4): false at
+  HEAD.** On r7 / map 0x287B3, `route()`'s 82 interior waypoints are **0
+  bit-exact corners**, p50 236 u from the nearest corner, because
+  `_pull_corners` slides each crossing along the shared-edge interval. The
+  CLIENT's own solver emits corners on 103 of its 168 intermediate waypoints
+  (65 mid-edge, 0 interior). The vocabulary is shared static geometry; the
+  emission rule is what differs, and that is the residual §3.4 of the review
+  is aimed at.
 - **The origin must be dead-reckoned** (registered prediction, held): the
   client is report-silent during click-walks, so a mid-chain click's last
   REPORT is seconds stale. Modeling the origin by walking granted legs at
@@ -139,9 +148,16 @@ in content, 1 connection unattributable):
 - **ROUTER-Q4** — retail grants shorter legs than corner-to-corner (grants
   at ~300–1000u spacing on straight stretches; a part-way first waypoint
   can sit ON the straight line, e.g. 1233.471's, 1.3u off ours). Mechanism
-  unmeasured (leg cap? LOS budget?). Our router grants corner waypoints
-  only; the client walks long straight legs happily (our own 766u leads),
-  so this is cadence cosmetics, not legality. Not implemented; registered.
+  unmeasured (leg cap? LOS budget?). ~~Our router grants corner waypoints
+  only;~~ **CORRECTED 2026-09-05 (MOVECODE-1z-bh, review §3.4): it does not —
+  0 of 82 r7 interior waypoints are bit-exact corners, p50 236 u away, because
+  `_pull_corners` slides crossings along the shared edge. The client's own
+  solver is the one emitting corners (103 of 168).** The client walks long
+  straight legs happily (our own 766u leads), so the CADENCE half of this row
+  is still cadence cosmetics rather than legality — but the shape half is a
+  real residual (34 of 131 comparable r7 rows over 16 u, 28 over 100 u) and
+  review §3.4 prices transcribing the client's emission rule. Not
+  implemented; registered.
 - **ROUTER-Q5** — no specimen clicks an unwalkable/off-mesh destination
   (all 29 dests are on-mesh; the GW client raycasts clicks onto ground).
   Retail's rule for such clicks is unmeasured.
@@ -197,12 +213,25 @@ Findings absorbed:
 
 ## 4. ROUTER-B2 — the wiring (authsrv `--router`) — BUILT 2026-08-26, tests green
 
-Opt-in flag, shipped default byte-identical. Under `--router`, the click
+~~Opt-in flag, shipped default byte-identical.~~ **CORRECTED 2026-09-05
+(MOVECODE-1z-bh, [MOVEMENT-2026-09-04.md](../review/MOVEMENT-2026-09-04.md)
+§4): stale since 2026-09-03 — `ROUTER = True` is the SHIPPED DEFAULT
+(MOVECODE-1z-v) and `--no-router` is the revert.** Under the router, the click
 branch (0x003E) becomes:
 
 1. Origin = `state["pos"]` (the 20 Hz integrator; B1's origin result).
-   Clicks under active keyboard authority stay DROPPED (retail's own
-   contract, §0.15 — rule 1 unchanged).
+   Clicks under active keyboard authority stay DROPPED ~~(retail's own
+   contract, §0.15 — rule 1 unchanged)~~. **CORRECTED 2026-09-05
+   (MOVECODE-1z-bh, review §1.7): the drop is OURS.** §0.15 states an
+   older-of-a-rapid-PAIR rule; §0.14's V-RETAIL-2 measured seven SINGLE
+   mid-keyboard clicks and retail answered all seven within one RTT
+   (`studies/movecode/FINDINGS.md` §1p.9–§1p.10, published 2026-08-28 and
+   never applied here). What keeps the drop is MOVECODE-R1-B1's displacement
+   outcome (§1q), measured on the LEGACY grant path. **And under the router
+   that drop lived in `router_answer_click` with NO revert flag until 1z-bh** —
+   `--answer-kbd-click` was read only by `_grant_verdict`, the path the router
+   bypasses, so a shipped behaviour had no arm that could convict it. Since
+   1z-bh the flag reaches the router's drop too, as a diagnostic/revert arm.
 2. `route(origin → click)` on `state["pathmap"]`, then **every leg
    re-clipped at `A2_LEAD_CLIP_STEP` (2.0 u) before anything is sent**
    (the review's sampling gate — a route that survives route()'s own 16 u
