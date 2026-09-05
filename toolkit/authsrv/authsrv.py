@@ -6163,13 +6163,31 @@ A2_LEAD_PLANE_CLIP = True     # False (--no-lead-plane-clip): the plane-blind ra
 # OPT-IN (`--lead-seam-clip`) so a run can drive it deliberately; it is the
 # known-bad arm of that question, not a fix.
 A2_LEAD_SEAM_CLIP = False     # True (--lead-seam-clip): seam_clip on the lead's ray.
+# MOVECODE-1z-bg: THE SLIVER ORIGIN. The origin test above the plane term was
+# `pm.walkable(report)` -- exact containment -- and at the wedge tip of map 146
+# the client's reports sit <= 0.5 u OUTSIDE our trapezoid edges (its keyboard
+# mover lays waypoints along them, sec.1z-bd.2; its own snap test passes them,
+# sec.1z-bf.1). So 179 keyboard leads in 26 runs were refused as
+# "origin-unwalkable" and became zero-leads: the sync copy sat at the report
+# while the body walked on, which is the separation the lock is made of
+# (sec.1z-t's LAW), and the corpus shows the aftermath (sec.1z-bg.3). Under this
+# switch a report ON the mesh within pathmap.SEAM_TOL (1 u, the portal test's
+# own constant) is an origin -- PROVIDED the mesh can name its plane there
+# (`plane_near`: the report's word if offered, a sole candidate, else refuse).
+# The ray then takes 1z-ap's plane clip exactly as an inside origin does, so
+# ROUTER-B3's door stays shut: a sliver origin never receives the unclipped ray,
+# and a ray from a wall press into the wall clips at its first step. Ambiguous
+# slivers refuse with their own word ("origin-ambiguous"); the plane-blind arm
+# (--no-lead-plane-clip) never opens this door at all. --lead-origin-exact
+# reverts to the exact test, the known-bad arm.
+A2_LEAD_ORIGIN_SEAM = True    # False (--lead-origin-exact): walkable() alone decides the origin.
 
 
 def a2_clip_lead(state, reported, dest):
     """Clip a D1 lead's endpoint to the navmesh along the REPORT's own ray.
 
     (dest, clipped, why) -- why is one of "no-mesh" / "origin-unwalkable" /
-    "clear" / "clipped", and it exists because of the P-17 run
+    "origin-ambiguous" / "clear" / "clipped" / "plane-seam", and it exists because of the P-17 run
     (sec.0.18): the wall press pushed the client's reported position
     ~0.25 u past the mesh edge, the off-mesh door opened, and the ONLY
     trace was `lead_clipped=false` on a row whose ray a later session had
@@ -6211,18 +6229,31 @@ def a2_clip_lead(state, reported, dest):
     pm = state.get("pathmap")
     if pm is None:
         return dest, False, "no-mesh"
-    if not pm.walkable(reported[0], reported[1]):
-        return ([float(reported[0]), float(reported[1])], True,
-                "origin-unwalkable")
+    rx, ry = float(reported[0]), float(reported[1])
+    plane = None
+    sliver = False
+    if not pm.walkable(rx, ry):
+        # THE SLIVER DOOR IS A DIFFERENT DOOR (MOVECODE-1z-bg). ROUTER-B3's
+        # door returned the UNCLIPPED ray from an off-mesh origin; this one
+        # admits an origin our edges miss by less than SEAM_TOL -- the
+        # client's own report, where its body stands -- into the SAME plane
+        # clip an inside origin gets, and only when the mesh can name the
+        # plane there. Nothing here can lengthen a ray past the clip.
+        if not (A2_LEAD_ORIGIN_SEAM and A2_LEAD_PLANE_CLIP
+                and hasattr(pm, "on_mesh") and hasattr(pm, "plane_near")
+                and pm.on_mesh(rx, ry)):
+            return ([rx, ry], True, "origin-unwalkable")
+        plane = pm.plane_near(rx, ry, prefer=state.get("plane"))
+        if plane is None:
+            return ([rx, ry], True, "origin-ambiguous")
+        sliver = True
     # THE PLANE THE RAY MUST STAY ON (MOVECODE-1z-ap), or None to keep the
     # historical plane-blind walk. `prefer` is the report's own plane word, so
     # the stacked-geometry case resolves the way plane_at's contract says: the
     # client's plane if the mesh offers it here, else the mesh's own answer,
     # else None -- and None disables the term rather than guessing a surface.
-    plane = None
-    if A2_LEAD_PLANE_CLIP and hasattr(pm, "plane_at"):
-        plane = pm.plane_at(float(reported[0]), float(reported[1]),
-                            prefer=state.get("plane"))
+    if not sliver and A2_LEAD_PLANE_CLIP and hasattr(pm, "plane_at"):
+        plane = pm.plane_at(rx, ry, prefer=state.get("plane"))
     # The plane kwarg is passed ONLY when the term is in force, so a mesh
     # object that predates it (or a stub) takes the historical call unchanged
     # rather than raising inside the recv loop on a keyword it never had.
@@ -23204,6 +23235,14 @@ def main():
                          "portal and go out at the full 520 u under it, so "
                          "this arm re-opens the lead's lock door on the "
                          "spawn-side bridge. Diagnostic arm only.")
+    ap.add_argument("--lead-origin-exact", action="store_true",
+                    help="MOVECODE-1z-bg OFF: a keyboard lead's origin must be "
+                         "INSIDE a trapezoid (pathmap.walkable) again; a report "
+                         "the mesh holds within 1 u of an edge -- where the "
+                         "client's body stands and reports from at the wedge "
+                         "tip -- is refused as origin-unwalkable and the lead "
+                         "becomes a zero-lead (179 of them in 26 runs). "
+                         "Known-bad arm.")
     ap.add_argument("--no-kbd-lead-fence-gate", action="store_true",
                     help="MOVECODE-1z-aa OFF: a keyboard or D1 lead may "
                          "be sent into a fence the server itself shut with "
@@ -24852,7 +24891,7 @@ def main():
     # session a reconstruction (REALFIX-Q8).
     global KBD_SYNC, KBD_SYNC_LEAD_ON, KBD_SYNC_SPEED_ON, KBD_SYNC_STOP_ON
     global KBD_SYNC_HOLD, KBD_LEAD_KILL, KBD_SYNC_MATCHED, KBD_LEAD_FENCE_GATE
-    global KBD_LEAD_REFRESH, A2_LEAD_PLANE_CLIP, A2_LEAD_SEAM_CLIP
+    global KBD_LEAD_REFRESH, A2_LEAD_PLANE_CLIP, A2_LEAD_SEAM_CLIP, A2_LEAD_ORIGIN_SEAM
     if a.legacy_kbd_sync:
         KBD_SYNC = False
         KBD_SYNC_HOLD = False
@@ -24877,6 +24916,13 @@ def main():
         KBD_LEAD_FENCE_GATE = not a.no_kbd_lead_fence_gate
         A2_LEAD_PLANE_CLIP = not a.no_lead_plane_clip
         A2_LEAD_SEAM_CLIP = bool(a.lead_seam_clip)
+        A2_LEAD_ORIGIN_SEAM = not a.lead_origin_exact
+        if not A2_LEAD_ORIGIN_SEAM:
+            print("[map] --lead-origin-exact: a keyboard lead's origin must be "
+                  "INSIDE a trapezoid again (pre-1z-bg). Reports the client "
+                  "makes from a trapezoid edge -- the wedge tip -- refuse the "
+                  "lead and the sync copy sits while the body walks.",
+                  flush=True)
         if A2_LEAD_SEAM_CLIP:
             print("[map] --lead-seam-clip: the lead's ray stops only where its "
                   "plane ends WITHOUT a portal. Retrodiction says the six "

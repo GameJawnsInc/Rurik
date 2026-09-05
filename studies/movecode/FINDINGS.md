@@ -13499,6 +13499,9 @@ re-pin in the corpus dragged a body, the harm was the halt.
   half-unit points — and granted zero-leads instead (run 2's −4.34 s row). Not changed here: the
   leads are the arc's subject and the six fatal runs' leads must be retrodicted (`leadretro.py`)
   before an origin test loosens. Filed.
+  **→ SHIPPED in §1z-bg** after the retrodiction: 148 of 148 refusals since 2026-09-01 become
+  leads, 113 of them the fatal westward ray clipped at 14 u, 15 full-length along the body's
+  own motion, none across the seam; the six fatal leads are untouched.
 - The client's true gate-2 tolerance (≥ 32 u on the declared plane, n = 1) is an open number;
   `mfpseam`-style census on `r7`/`r8` needs their own maps loaded (`0x287B3`, map 280).
 
@@ -13510,3 +13513,94 @@ re-pin in the corpus dragged a body, the harm was the halt.
   the walking body would not be licensed.
 - Tools: `review/guardretro.py`. Filed: the other re-pin triggers on a walking body (counts
   above), the lead origin sliver (179), the client's gate-2 tolerance.
+
+---
+
+## 1z-bg. THE LEAD'S ORIGIN TEST — the same exact-containment error as gate 2, on the lead's origin; a report the mesh holds within `SEAM_TOL` is an origin when its plane can be named; retrodicted over 148 refusals, none crosses the seam, the six fatal leads untouched; SHIPPED as the default, `--lead-origin-exact` reverts
+
+**Asked:** "now do the lead's origin test" — §1z-bf.5's filed item. Ident `MOVECODE-1z-bg`.
+Derived from §1z-bf's finding, retrodicted over every keyboard lead the corpus refused,
+shipped as a default with a revert flag. No run. New tool: `review/leadorigin.py`.
+OBSERVED / MEASURED unless marked.
+
+### 1z-bg.1 The door and the doctrine it was built under
+
+`a2_clip_lead` began `if not pm.walkable(report): return zero-lead, "origin-unwalkable"`. That
+test is ROUTER-B3's, and its doctrine was right: an origin the mesh cannot place never receives
+a walk order, because before it the branch returned the **unclipped** ray and 11 of 12 off-mesh
+episodes on map 280 started on exactly those grants. What §1z-bf showed is that `walkable()` is
+not "the mesh cannot place it" — it is exact trapezoid containment, and the client's reports
+at the wedge tip of map 146 sit ≤ 0.5 u outside our edges while its body stands on them and
+its own snap test passes them. So the doctrine refused the wrong set: **179 keyboard leads in
+26 runs** (148 in 24 captures since 2026-09-01) became zero-leads at points the client was
+standing on. The zero-lead leaves the sync copy at the report while the body walks — the
+separation §1z-t's LAW is made of.
+
+### 1z-bg.2 The fix, and why it is a different door from ROUTER-B3's
+
+- `pathmap.plane_near(x, y, prefer, tol=SEAM_TOL)`: `plane_at()` wherever containment has an
+  answer (ambiguity included); where it has none, the plane of the trapezoids within `tol` —
+  the report's own word if offered, a sole candidate, else **None**.
+- `a2_clip_lead`: a report `walkable()` rejects is admitted **only if** `on_mesh()` holds it
+  within 1 u **and** `plane_near()` names its plane **and** the plane clip is in force. It then
+  takes §1z-ap's plane clip exactly as an inside origin does. Nothing can lengthen a ray past the
+  clip, so the unclipped-ray door stays shut: a wall-press origin whose ray points into the wall
+  clips at its first step and returns the start. An unnamed plane refuses with its own word,
+  `origin-ambiguous`; `--no-lead-plane-clip` never opens this door at all.
+- `A2_LEAD_ORIGIN_SEAM = True`, `--lead-origin-exact` reverts. `leadroute.py`'s twin of the
+  server's order moves with it.
+- Tests: `test_d1lead` §2g (a sliver origin gets a plane-clipped lead; the ray into the mesh's
+  edge returns the start; 1.5 u is still refused; ambiguous refuses and names the door; a mesh
+  without `on_mesh` keeps the exact test; the plane-blind arm never opens the door; the revert
+  arm reproduces the zero-lead; source locks; floor 110 → 118), `test_pathmap` §15i–k
+  (`plane_near` on the synthetic square, a two-plane sliver where only the word decides, and
+  the three wedge-tip reports named 0/29/29 as the client reported; floor 97 → 100).
+
+### 1z-bg.3 ★★ The retrodiction (`leadorigin.py`, harness runs since 2026-09-01, map 146)
+
+| | count |
+|---|---|
+| keyboard leads refused as `origin-unwalkable` | 148 in 24 captures |
+| become leads under the fix (on the mesh within 1 u, plane named) | **148** — the report's plane word honoured in 148 of 148 |
+| stay refused as `origin-ambiguous` / as > 1 u off the mesh | 0 / 0 |
+
+Reach under §1z-ap's plane clip, new leads against the corpus's 533 granted ones walked the same way:
+
+| reach | new (148) | granted (533) |
+|---|---|---|
+| 0–14 u | **113** | 64 |
+| 14–100 u | 16 | 68 |
+| 100–299 u | 4 | 46 |
+| ≥ 299.33 u (gate 1) | 15 | 355 |
+
+**The 113 are the fatal ray, clipped.** They are the wedge-tip reports whose last motion pointed
+west, where plane 29 ends 14 u on — RUN-1zAO's 520 u lead is stopped there by the same clip, and
+a sliver origin inherits it. **The 15 full-length leads all run along the body's own motion on
+a continuous plane**: headings +40…+45° (the plane-29 strip north-east, and plane-0 ground at
+the strip's far end) and one −124° back down the strip — never west across the seam. That is
+the ordinary lead class (355 of the 533 granted leads are full-length), not §1z-ao's.
+
+**The six locked captures.** The fatal leads were granted, not refused, so the fix cannot touch
+them (the plane clip still keeps 6 of 6 under gate 1). New leads it adds there: 92–102 u at
++58…+61° in the first two seconds of five runs (the walk from spawn), zeros, and one 520 u at
++45° at 3 s in `20260903T200621` — 16 s before that run's fatal-shape lead at 19 s, along the
+strip, away from the seam.
+
+**What the refusal cost, measured.** The next accepted report after a zero-lead sat **100.6 u**
+(p50) from the server's copy against **76.1 u** after a granted lead (p90 108.5 vs 149.2; report
+gap 0.49 s either way); and 28 of the 148 refusals (19%) were followed within 1.5 s by a
+`gate2-offmesh` re-pin — the sliver veto §1z-bf removed, raised because the zero-lead had just
+settled the sync copy on the sliver. So the refusal's harm in this corpus was modest and mostly
+the same defect wearing the guard's hat; the fix's value is that the two mesh tests now agree
+about where the client stands, the lead the body is walking is granted, and the ambiguous case
+is named rather than folded into "unwalkable".
+
+### 1z-bg.4 What stands, what is filed
+
+- **A sliver origin is an origin** when the mesh can name its plane; it takes the plane clip;
+  the unclipped ray is never returned. Default ON; `--lead-origin-exact` reverts; the tests keep
+  the known-bad arm and ROUTER-B3's door alive.
+- **Filed, unchanged:** `plane_at()`'s inside-ambiguity still disables the plane term (the
+  pre-1z-ap doctrine: None → plane-blind clip); the sliver path is stricter than the inside path
+  there, which is the conservative asymmetry, not the fix's business. The other re-pin triggers
+  and the client's gate-2 tolerance stay as §1z-bf.5 left them.

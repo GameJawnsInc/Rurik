@@ -58,7 +58,7 @@ import checks      # noqa: E402
 # the 2d cells, five row locks: lead_clip_why, the flush-hold row,
 # kbd_age, the a2_leg lifecycle, the watchdog-due transition) -> 86.
 # Each floor re-read off its own green run.)
-LEDGER = checks.Ledger("the REALFIX-A2 d1-lead bundle", floor=110)
+LEDGER = checks.Ledger("the REALFIX-A2 d1-lead bundle", floor=118)
 check = checks.adopt(LEDGER)
 
 
@@ -541,6 +541,97 @@ def main():
           "not from state[\"pos\"] or a literal",
           "--heading-grant's graveyard (R2-1): the lead must aim from, and be "
           "judged on, the point the client actually named")
+
+    # ---- 2g. MOVECODE-1z-bg: THE SLIVER ORIGIN -------------------------
+    # The origin test was walkable(report) -- exact containment -- and the
+    # client's reports at the wedge tip sit <= 0.5 u outside our edges, so 179
+    # keyboard leads in 26 runs became zero-leads. A report the mesh holds
+    # within SEAM_TOL is now an origin IF the mesh can name its plane there;
+    # its ray takes 1z-ap's plane clip like any inside origin. What must stay
+    # shut: ROUTER-B3's door (the unclipped ray from an off-mesh origin), the
+    # plane-blind arm, an ambiguous sliver, and anything further than 1 u off.
+    class SliverPM(PlanePM):
+        """PlanePM whose mesh begins at x = 0: x < 0 is off it, and the band
+        -1 <= x < 0 is a sliver -- off by exact containment, on within 1 u."""
+
+        def walkable(self, x, y):
+            return x >= 0.0 and not (100.0 < x < 200.0)
+
+        def on_mesh(self, x, y, tol=1.0):
+            return self.walkable(x, y) or (-tol <= x < 0.0)
+
+        def plane_near(self, x, y, prefer=None, tol=1.0):
+            if self.walkable(x, y):
+                return self.plane_at(x, y, prefer=prefer)
+            return 29 if -tol <= x < 0.0 else None
+
+    class AmbiguousSliverPM(SliverPM):
+        """The same sliver, but two planes meet there and the report names neither."""
+
+        def plane_near(self, x, y, prefer=None, tol=1.0):
+            return None if not self.walkable(x, y) else SliverPM.plane_near(self, x, y, prefer, tol)
+
+    class OldSliverPM(PlanePM):
+        """A mesh object that predates on_mesh()/plane_near(): the door must not open."""
+
+        def walkable(self, x, y):
+            return x >= 0.0 and not (100.0 < x < 200.0)
+
+    spm = SliverPM()
+    sl_st = {"pathmap": spm, "plane": 29}
+    _was_origin = authsrv.A2_LEAD_ORIGIN_SEAM
+    _was_plane = authsrv.A2_LEAD_PLANE_CLIP
+    try:
+        authsrv.A2_LEAD_ORIGIN_SEAM = True
+        authsrv.A2_LEAD_PLANE_CLIP = True
+        d, was, why = clipf(sl_st, [-0.5, 0.0], [519.5, 0.0])
+        check(was is True and 50.0 < d[0] < 100.0 and d[1] == 0.0 and why == "clipped",
+              "2g. a SLIVER origin (0.5 u outside the mesh) gets a real lead, "
+              "walked on the plane clip and stopped at the wall like any inside origin",
+              f"got {d} {why}")
+        d, was, why = clipf(sl_st, [-0.5, 0.0], [-520.5, 0.0])
+        check(was is True and d == [-0.5, 0.0] and why == "clipped",
+              "2g. ROUTER-B3's door STAYS SHUT: a sliver origin whose ray leaves the "
+              "mesh at the first step gets the start back, never the unclipped ray",
+              f"got {d} {why}")
+        d, was, why = clipf(sl_st, [-1.5, 0.0], [518.5, 0.0])
+        check(was is True and d == [-1.5, 0.0] and why == "origin-unwalkable",
+              "2g. 1.5 u off the mesh is still origin-unwalkable (the tolerance is 1 u)",
+              f"got {d} {why}")
+        d, was, why = clipf({"pathmap": AmbiguousSliverPM(), "plane": 7}, [-0.5, 0.0], [519.5, 0.0])
+        check(was is True and d == [-0.5, 0.0] and why == "origin-ambiguous",
+              "2g. a sliver where two planes meet and the report names neither refuses, "
+              "and NAMES the door (origin-ambiguous, not origin-unwalkable)",
+              f"got {d} {why}")
+        d, was, why = clipf({"pathmap": OldSliverPM(), "plane": 29}, [-0.5, 0.0], [519.5, 0.0])
+        check(was is True and d == [-0.5, 0.0] and why == "origin-unwalkable",
+              "2g. a mesh without on_mesh()/plane_near() keeps the exact test (no raise, "
+              "no door)", f"got {d} {why}")
+        authsrv.A2_LEAD_PLANE_CLIP = False
+        d, was, why = clipf(sl_st, [-0.5, 0.0], [519.5, 0.0])
+        check(was is True and d == [-0.5, 0.0] and why == "origin-unwalkable",
+              "2g. the PLANE-BLIND arm (--no-lead-plane-clip) never opens the sliver door: "
+              "a sliver origin is only ever walked on a named plane",
+              f"got {d} {why}")
+        authsrv.A2_LEAD_PLANE_CLIP = True
+        authsrv.A2_LEAD_ORIGIN_SEAM = False
+        d, was, why = clipf(sl_st, [-0.5, 0.0], [519.5, 0.0])
+        check(was is True and d == [-0.5, 0.0] and why == "origin-unwalkable",
+              "2g. KNOWN-BAD ARM (--lead-origin-exact): the same sliver origin is refused "
+              "and the lead is a zero-lead -- the 179-refusal behaviour reproduces",
+              f"got {d} {why}")
+    finally:
+        authsrv.A2_LEAD_ORIGIN_SEAM = _was_origin
+        authsrv.A2_LEAD_PLANE_CLIP = _was_plane
+    check(authsrv.A2_LEAD_ORIGIN_SEAM is True
+          and '"--lead-origin-exact"' in _psrc
+          and "A2_LEAD_ORIGIN_SEAM = not a.lead_origin_exact" in _psrc
+          and '"origin-ambiguous"' in _psrc
+          and "pm.plane_near(rx, ry, prefer=state.get(\"plane\"))" in _psrc,
+          "2g. it ships ON, --lead-origin-exact reverts and is bound from argv, the "
+          "ambiguous door has its own word, and the sliver's plane comes from "
+          "plane_near(prefer=the REPORT's plane)",
+          "a sliver origin walked on a guessed plane is the 1z-ao door by another name")
 
     print("\n3. composition cells: the lattice around the bundle")
     comp = authsrv.zero_lead_composition

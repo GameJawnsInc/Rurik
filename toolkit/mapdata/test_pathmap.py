@@ -337,7 +337,7 @@ def all_valid(pm, paths):
 # Section 14 (2026-09-04, MOVECODE-1z-bb, the seam-aware pull) adds nine
 # unconditional checks on a synthetic bridge and four behind the Pre-Searing
 # load: floor 80 -> 89, green run 93 on 38833 (5 declared skips).
-LEDGER = checks.Ledger("pathing map", floor=97)
+LEDGER = checks.Ledger("pathing map", floor=100)
 check = checks.adopt(LEDGER)
 
 
@@ -1428,8 +1428,26 @@ def main():
     check(pathmap.SEAM_TOL == 1.0,
           "15f. SEAM_TOL is the 1 u the portal test already uses -- on_mesh adds no new constant",
           f"SEAM_TOL {pathmap.SEAM_TOL}")
+    # plane_near (MOVECODE-1z-bg): the plane of a sliver point, named the way
+    # plane_at names an inside one -- prefer if offered, a sole candidate, else
+    # None -- and plane_at itself wherever containment has an answer.
+    check(sq.plane_near(50.0, 50.0) == 0 and sq.plane_near(100.5, 50.0) == 0
+          and sq.plane_near(101.5, 50.0) is None,
+          "15i. plane_near: inside is plane_at; a 0.5 u sliver names the sole plane; "
+          "1.5 u out names nothing", "")
+    SQ1 = pathmap.Trapezoid(1, 0, 100.0, 0.0, 0.0, 100.0, 0.0, 100.0,
+                            (pathmap.NO_NEIGHBOUR,) * 4)
+    sq2 = pathmap.PathingMap([SQ, SQ1], [{}, {}])
+    sq2._cross = {}
+    check(sq2.plane_near(100.5, 50.0) is None
+          and sq2.plane_near(100.5, 50.0, prefer=1) == 1
+          and sq2.plane_near(100.5, 50.0, prefer=0) == 0
+          and sq2.plane_near(50.0, 50.0) is None
+          and sq2.plane_near(50.0, 50.0, prefer=1) == 1,
+          "15j. two planes on one sliver: the report's word decides, and with no word "
+          "it says nothing -- inside, the stacked case is plane_at's own", "")
     if pre is None:
-        LEDGER.skip("15g/15h. RUN-1zBD's report points on Pre-Searing",
+        LEDGER.skip("15g/15h/15k. RUN-1zBD's report points on Pre-Searing",
                     "no archive")
     else:
         spec = [(10302.02, 8214.08), (10374.04, 8286.84), (10369.42, 8282.33)]
@@ -1441,6 +1459,14 @@ def main():
         check(not pre.on_mesh(10441.47, 8209.68) and not pre.walkable(10441.47, 8209.68),
               "15h. and the server's legacy belief 144 u east of the report, "
               "genuinely off the mesh, stays off under the tolerance", "")
+        named = [pre.plane_near(x, y, prefer=pl) for (x, y), pl in
+                 zip(spec, (0, 29, 29))]
+        check(named == [0, 29, 29] and pre.plane_near(10374.04, 8286.84) == 29
+              and pre.plane_near(10358.17, 8286.86) == pre.plane_at(10358.17, 8286.86) == 29,
+              "15k. plane_near names the three report points' planes as the client "
+              "reported them (0, 29, 29), the wedge-tip sliver is unambiguous even "
+              "without the word, and an inside point is plane_at",
+              f"named {named}")
 
     dt = time.perf_counter() - t0
     print(f"\nwalked the archive in {dt:.1f}s")
