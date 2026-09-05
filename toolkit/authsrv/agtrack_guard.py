@@ -142,6 +142,48 @@ REPIN_MIN_INTERVAL = 0.5                                # < 299.33/576 s
 # --no-repin-stationary-waiver reverts to the pre-1z-ah gate.
 STATIONARY_WAIVER = True
 
+# THE WALK-START CLAUSE (MOVECODE-1z-bn).  The waiver above is RIGHT about
+# what two coincident reports measure and WRONG about one pair of them, and
+# the wrong pair is the one it fires on almost every time.
+#
+# READ THE SENTENCE THE BLOCK ABOVE ENDS ON: "A stationary body's next
+# movement produces a walk-start 0x003D (1z-aa: 7 of 8), so while nothing new
+# has arrived it is still standing there."  The walk-start IS the something
+# new.  A keyboard leg opens by reporting a 0x003D at the point the previous
+# leg's 0x0047 stop left the body -- the same point, to 0.000 u, because the
+# body has not moved YET -- and the waiver reads that pair as two measurements
+# of a still body.  It is one measurement of a still body plus the client
+# announcing that it is now walking away from it.  The measurement's window
+# ends exactly where the re-pin's window begins, so they do not overlap and
+# the pair carries no information at all about the 1-2.4 s the re-pin acts in.
+#
+# MEASURED, and the split is total (MOVECODE-1z-bl, 1z-bm; corpus census over
+# every AGTRACK re-pin that fired, harm = the distance from the point we
+# re-pinned to, to where the body actually was by the client's own
+# AgAgent::position_at):
+#
+#   older -> newer      n    p50 harm    max harm   over 100 u
+#   0x0047 -> 0x003D   19     366.6 u     477.9 u     18 of 19    <- refused here
+#   0x003D -> 0x0047    3       0.0 u       0.0 u      0 of 3
+#   0x003D -> 0x003D    1       0.0 u       0.0 u      0 of 1
+#
+# So this clause does not overrule the waiver -- it RESTORES the waiver's own
+# stated bound.  The block above justifies itself by "the harm bound for
+# re-pinning onto it is am.ZERO_DIST_SQ rather than RUN_SPEED * age"; the two
+# pairs kept below measure 0.0 u and honour that bound, and the pair refused
+# measures 366 u median, which is RUN_SPEED * age exactly as the unwaived
+# gate would have predicted.  RUN-1zBL watched three of them rewind a walking
+# body 298-433 u; RUN-1zBM ran the same route with no re-pin at all and every
+# leg walked.
+#
+# WHAT IT COSTS, said plainly: 1z-ai/1z-aj's 11 retracts at 0.0 u harm are
+# mostly this pair, so the retract stops firing on a leg-opening report.  That
+# benefit was never demonstrated (1z-aj is INCONCLUSIVE by its own
+# registration -- the control never produced the defect), and it is traded
+# against a harm measured at 366 u median.  The retract still fires on the two
+# pairs that genuinely measure a body which was told to move and did not.
+WAIVER_WALKSTART_ENDS_STILL = True
+
 # Verdicts
 PASS = "pass"                # predicted MATCH -- nothing can snap
 PASS_GATES = "pass-gates"    # predicted miss, gates pass with margin
@@ -196,6 +238,10 @@ class AgTrackGuard(object):
         self.client_pos = None       # last ACCEPTED report (x, y)
         self.prev_pos = None         # the one before it -- the waiver's
                                      # second measurement (STATIONARY_WAIVER)
+        self.last_is_walkstart = None   # was the newest accepted report a
+        self.prev_is_walkstart = None   # 0x003D?  the walk-start clause
+                                        # (WAIVER_WALKSTART_ENDS_STILL) needs
+                                        # the pair's KINDS, not only its points
         self._last_report_pos = None  # reports only: a PLACEMENT is where we
                                       # put the agent, not a measurement that
                                       # the body sat still, and seeding
@@ -256,6 +302,13 @@ class AgTrackGuard(object):
         described).  Both kinds re-arm the record (player input)."""
         ms = self._ms(now)
         if accepted:
+            # The pair's KINDS travel with its points: `sig` is
+            # ("rep", source, is_stop) at the authsrv call site, so a report
+            # is a walk-start when it is not a stop.  Defensive about the
+            # shape because guardretro and the tests build sig by hand.
+            is_stop = bool(sig[2]) if isinstance(sig, (tuple, list)) and len(sig) >= 3 else False
+            self.prev_is_walkstart = self.last_is_walkstart
+            self.last_is_walkstart = not is_stop
             self.prev_pos = self._last_report_pos
             self._last_report_pos = (float(x), float(y))
             self.client_pos = (float(x), float(y))
@@ -428,6 +481,15 @@ class AgTrackGuard(object):
         if not STATIONARY_WAIVER or self.async_dest is not None:
             return False
         if self.client_pos is None or self.prev_pos is None:
+            return False
+        # THE WALK-START CLAUSE (1z-bn, see its block above).  A pair whose
+        # OLDER member is a stop and whose NEWER member is a walk-start
+        # measures the body's stillness up to the instant it was told to
+        # move, and the re-pin acts 1-2.4 s after that instant: the windows
+        # do not overlap.  Refused -- the unwaived RUN_SPEED * age gate then
+        # decides, which is the bound this pair's harm actually obeys.
+        if (WAIVER_WALKSTART_ENDS_STILL
+                and self.last_is_walkstart and self.prev_is_walkstart is False):
             return False
         dx = self.client_pos[0] - self.prev_pos[0]
         dy = self.client_pos[1] - self.prev_pos[1]

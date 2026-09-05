@@ -23333,6 +23333,19 @@ def main():
                          "then keeps shut -- RUN-1zAB's rerun locked five "
                          "of eight legs that way. Inert without --kbd-lead. "
                          "Diagnostic arm.")
+    ap.add_argument("--waiver-walkstart-stands", action="store_true",
+                    help="MOVECODE-1z-bn OFF: the stationary waiver accepts a "
+                         "{0x0047 stop -> 0x003D walk-start} pair again as a "
+                         "measurement that the body is still. It is not one: "
+                         "a leg opens by reporting a walk-start at the point "
+                         "the previous leg's stop left the body, so the pair "
+                         "measures stillness UP TO the instant the client was "
+                         "told to move and the re-pin acts 1-2.4 s after it. "
+                         "Measured harm on that pair is p50 366.6 u / max "
+                         "477.9 u (18 of 19 over 100 u) against 0.0 u on the "
+                         "two pairs the clause keeps, and RUN-1zBL watched "
+                         "three of them rewind a walking body 298-433 u. With "
+                         "this flag that class of re-pin fires again.")
     ap.add_argument("--no-repin-stationary-waiver", action="store_true",
                     help="MOVECODE-1z-ah OFF: the AgTrack re-pin's freshness "
                          "gate refuses again even when the client has "
@@ -25058,6 +25071,15 @@ def main():
                   "(FINDINGS 1z-bc) -- expect the 1z-ao lock class back.",
                   flush=True)
         KBD_LEAD_REFRESH = bool(a.kbd_lead_refresh) and not a.no_kbd_lead_refresh
+        if a.waiver_walkstart_stands:
+            import agtrack_guard as _ag_flag
+            _ag_flag.WAIVER_WALKSTART_ENDS_STILL = False
+            print("[map] --waiver-walkstart-stands: MOVECODE-1z-bn OFF. A "
+                  "{stop -> walk-start} report pair counts as a stationary "
+                  "measurement again, so the re-pin fires into the client's "
+                  "own silent opening glide -- the class measured at p50 "
+                  "366.6 u of harm, which rewinds the drawn body to where "
+                  "the leg began and leaves the held key dead.")
         if a.no_repin_stationary_waiver:
             import agtrack_guard as _ag_flag
             _ag_flag.STATIONARY_WAIVER = False

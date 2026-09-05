@@ -28,8 +28,10 @@ import authsrv                   # noqa: E402
 AS_SRC = open(authsrv.__file__, encoding="utf-8").read()
 
 # Floor from the 2026-08-30 green run: 49 checks, all unconditional;
-# +25 at MOVECODE-1z-ah (section 9: the stationary waiver -- the retract).
-LEDGER = checks.Ledger("agtrack guard: the derived pre-emit rule", floor=77)
+# +25 at MOVECODE-1z-ah (section 9: the stationary waiver -- the retract);
+# +20 at MOVECODE-1z-bn (section 14: the waiver's walk-start clause), from
+# a real green run of 97, never from a guess.
+LEDGER = checks.Ledger("agtrack guard: the derived pre-emit rule", floor=97)
 check = checks.adopt_named(LEDGER)
 
 
@@ -491,6 +493,175 @@ def main():
           "return self.pm.on_mesh(x, y, GATE2_SEAM_TOL)" in _msrc
           and "return self.pm.walkable(x, y)" in _msrc
           and am.GATE2_SEAM_TOL == 1.0)
+
+    # ---- 14. MOVECODE-1z-bn: the waiver's WALK-START CLAUSE ---------------
+    # Section 9 pinned the stationary waiver and its known-bad arm: "a body
+    # WALKING the lead: two reports 512 u apart never satisfy the waiver".
+    # That arm is real and still passes below -- and it is not the arm the
+    # waiver actually fires on.  A keyboard leg OPENS with a 0x003D walk-start
+    # sitting on the previous leg's 0x0047 stop, 0.000 u apart, because the
+    # body has not moved yet; the waiver reads that as a measured-still body
+    # and lifts the freshness gate 1-2.4 s into the client's own committed
+    # glide.  Corpus census (1z-bl): 19 such pairs, p50 harm 366.6 u, 18 of 19
+    # over 100 u, against 0.0 u for the other two orderings.  RUN-1zBL watched
+    # three rewind a walking body 298-433 u; RUN-1zBM ran the route with the
+    # lead off, no re-pin fired and every leg walked (7 of 7).
+    #
+    # The clause refuses exactly {stop -> walk-start} and keeps the rest.
+    # Retrodicted over the corpus by studies/movecode/review/waiverretro.py.
+    def pair(older_stop, newer_stop, dx=0.0, t0=1000.0, clause=True):
+        """A guard whose last two accepted reports are that pair of KINDS,
+        dx apart.  Returns it at t0 + 2.0, a report age 5.8x the gate."""
+        ag.WAIVER_WALKSTART_ENDS_STILL = clause
+        g = ag.AgTrackGuard(mesh=None)
+        g.on_placement(0.0, 0.0, 0, t0 - 1.0)
+        g.on_report(0.0, 0.0, 0, ("rep", "s", older_stop), t0, accepted=True)
+        g.on_report(dx, 0.0, 0, ("rep", "s", newer_stop), t0 + 0.1, accepted=True)
+        return g
+
+    STOP, WALK = True, False       # the sig's third element: is_stop
+    try:
+        check("the clause ships ON, with its own revert flag",
+              ag.WAIVER_WALKSTART_ENDS_STILL is True
+              and "--waiver-walkstart-stands" in AS_SRC
+              and "_ag_flag.WAIVER_WALKSTART_ENDS_STILL = False" in AS_SRC)
+        check("and the capture header records it, so a run's arm is readable "
+              "off its own capture rather than off the session that made it",
+              authsrv.capture_flags()
+              .get("agtrack_guard.WAIVER_WALKSTART_ENDS_STILL") is True)
+
+        # -- the predicate, all four orderings, points IDENTICAL throughout
+        check("{stop -> walk-start} is REFUSED: the older report measures a "
+              "still body, the newer one announces it is leaving, and the "
+              "re-pin acts after that instant",
+              pair(STOP, WALK).stationary() is False)
+        check("{walk-start -> walk-start} still waives -- a body that said it "
+              "was walking and reported the same point twice did not move",
+              pair(WALK, WALK).stationary() is True)
+        check("{walk-start -> stop} still waives: it is the body arriving, "
+              "and the stop is a measurement of where it stopped",
+              pair(WALK, STOP).stationary() is True)
+        check("{stop -> stop} still waives",
+              pair(STOP, STOP).stationary() is True)
+
+        # -- the revert flag restores the pre-1z-bn behaviour on that pair
+        check("--waiver-walkstart-stands restores it: the SAME pair waives "
+              "again, so the arm is a real A/B and not a rewrite",
+              pair(STOP, WALK, clause=False).stationary() is True
+              and pair(STOP, WALK, clause=True).stationary() is False)
+
+        # -- the clause is scoped to the waiver, not to the gate
+        fresh = pair(STOP, WALK)
+        check("a FRESH report is unaffected -- the clause lifts nothing and "
+              "blocks nothing when the waiver was not carrying the decision",
+              fresh._repin_block(1000.2) is None
+              and pair(STOP, WALK, clause=False)._repin_block(1000.2) is None)
+        stale = pair(STOP, WALK)
+        check("a STALE one is blocked by the freshness gate, named, and the "
+              "reverted arm is not -- this is the whole behavioural delta",
+              stale._repin_block(1002.1) == "stale-report"
+              and pair(STOP, WALK, clause=False)._repin_block(1002.1) is None,
+              "report age %.3f s against the %.3f s ceiling"
+              % (1002.1 - stale.client_pos_at, ag.REPIN_MAX_REPORT_AGE))
+        check("non-coincident reports are untouched either way: the waiver "
+              "never applied to them and the clause is inside it",
+              pair(STOP, WALK, dx=600.0).stationary() is False
+              and pair(WALK, WALK, dx=600.0).stationary() is False)
+
+        # -- the KINDS have to travel with the points, and from authsrv
+        g1 = ag.AgTrackGuard(mesh=None)
+        g1.on_placement(0.0, 0.0, 0, 1000.0)
+        g1.on_report(0.0, 0.0, 0, ("rep", "s", True), 1001.0, accepted=True)
+        check("one report after a placement cannot trip the clause: the "
+              "PREVIOUS kind is unknown, not False, and unknown must not "
+              "read as a stop",
+              g1.prev_is_walkstart is None and g1.stationary() is False)
+        g2 = ag.AgTrackGuard(mesh=None)
+        g2.on_placement(0.0, 0.0, 0, 1000.0)
+        g2.on_report(0.0, 0.0, 0, ("rep", "s", True), 1001.0, accepted=True)
+        g2.on_report(0.0, 0.0, 0, ("rep", "s", False), 1002.0, accepted=True)
+        g2.on_report(900.0, 0.0, 0, ("rep", "s", True), 1003.0, accepted=False)
+        check("a REFUSED report advances neither kind (it is disbelieved, so "
+              "it cannot turn a refused pair into a waived one)",
+              g2.last_is_walkstart is True and g2.prev_is_walkstart is False
+              and g2.stationary() is False)
+        g3 = ag.AgTrackGuard(mesh=None)
+        g3.on_placement(0.0, 0.0, 0, 1000.0)
+        g3.on_report(0.0, 0.0, 0, ("rep", 1.0), 1001.0, accepted=True)
+        g3.on_report(0.0, 0.0, 0, ("rep", 1.0), 1002.0, accepted=True)
+        check("a 2-tuple sig -- the shape section 9 and guardretro build by "
+              "hand -- reads as a walk-start rather than raising, so the "
+              "clause never fires on a caller that predates it",
+              g3.last_is_walkstart is True and g3.prev_is_walkstart is True
+              and g3.stationary() is True)
+        check("authsrv's call site passes the stop bit as the sig's third "
+              "element, which is where the kinds come from (source lock)",
+              '("rep", source, bool(stop))' in AS_SRC)
+        _gsrc = open(ag.__file__, encoding="utf-8").read()
+        check("the clause reads the pair's KINDS and only fires on "
+              "{stop -> walk-start} (source lock)",
+              "and self.last_is_walkstart and self.prev_is_walkstart is False"
+              in _gsrc)
+
+        # -- THE KNOWN-BAD ARM, and it is the run this fix was derived from:
+        #    RUN-1zBL leg 4Q.  The leg opened with a walk-start on the
+        #    previous leg's stop; 1.9 s later the guard called arrival-risk
+        #    on a report that old and the waiver let it through; the 0x002C
+        #    SetPositioned both copies back to the leg's start.
+        BL_T0, BL_RISK = 100.0, 101.93       # the corpus median report age
+        def bl(clause):
+            """The leg, ANSWERED under `clause`. The flag is a module global
+            read at call time, so an arm must be interrogated before the next
+            one is built -- returning two guards and querying them afterwards
+            gives both the LAST arm's answer, which is how this check first
+            went green against itself."""
+            ag.WAIVER_WALKSTART_ENDS_STILL = clause
+            g = ag.AgTrackGuard(mesh=None)
+            g.on_placement(0.0, 0.0, 0, BL_T0 - 1.0)
+            g.on_report(0.0, 0.0, 0, ("rep", "0x0047", True), BL_T0 - 0.2,
+                        accepted=True)
+            g.on_report(0.0, 0.0, 0, ("rep", "0x003D", False), BL_T0,
+                        accepted=True)
+            g.on_speed(288.0, BL_T0)
+            g.on_emit(0x29, 520.0, 0.0, 0, 0, BL_T0)
+            return {"code": g.repin_state(BL_RISK)[0],
+                    "why": g.repin_state(BL_RISK)[1],
+                    "block": g.repin_block_reason(BL_RISK),
+                    "risk": g.arrival_risk(BL_RISK)[0],
+                    "age": BL_RISK - g.client_pos_at}
+        old, new = bl(False), bl(True)
+        check("KNOWN-BAD ARM -- RUN-1zBL's leg shape, clause OFF: the re-pin "
+              "is DUE on a report 1.93 s old, which is the defect",
+              old["code"] == ag.REPIN_DUE and old["block"] is None
+              and old["why"] == "arrival-risk")
+        check("and clause ON it is BLOCKED, by the freshness gate the waiver "
+              "was lifting -- 1z-ah's gate, doing 1z-ah's job. The risk is "
+              "still PREDICTED in both arms: the clause moves the "
+              "precondition, not the prediction",
+              new["code"] == ag.REPIN_BLOCKED and new["block"] == "stale-report"
+              and new["risk"] is True and old["risk"] is True)
+        harm = ag.RUN_SPEED * old["age"]
+        check("the harm the gate bounds is NOT the waiver's claimed zero: at "
+              "this age the unwaived bound is a rewind of hundreds of units, "
+              "and the corpus measured p50 366.6 u on this exact pair",
+              harm > 100.0 and 300.0 < harm < 600.0,
+              "RUN_SPEED * age = %.1f u" % harm)
+
+        # -- section 9's own known-bad arm must STILL pass: a walking body's
+        #    512 u reports never reach the waiver, clause or no clause
+        check("section 9's walking arm is untouched -- the clause narrows the "
+              "waiver, it does not widen anything",
+              run_a(waiver=True, walking=True).stationary() is False
+              and pair(WALK, WALK, dx=512.0).stationary() is False)
+        # -- and section 9's specimen (a genuinely parked body reporting the
+        #    same point three times) must still be waived
+        check("RUN-1zAB run A, the specimen the waiver was built for, still "
+              "waives: three walk-starts on one point is not this pair",
+              run_a(waiver=True).stationary() is True
+              and run_a(waiver=True).repin_state(RA_RISK)[0] == ag.REPIN_DUE)
+    finally:
+        ag.WAIVER_WALKSTART_ENDS_STILL = True
+        ag.STATIONARY_WAIVER = True
 
     return LEDGER.verdict()
 
