@@ -1488,6 +1488,12 @@ before the first native commit, which is where that doc says to pose them.
   be chosen to keep that number at one.
 
 **Q13. Do we turn `D1_LEAD` on, now that the cost of leaving it off is measured?**
+**Its blocking precondition is now MET (2026-09-05, §1z-bo).** §1z-bm reduced this
+from a trade-off to a precondition — the lead earns retail-class tracking and the
+warp came from the guard's re-pin, not from the lead — and RUN-1zBO ran the lead ON
+under §1z-bn's fix: **zero `0x002C`, zero legs thrown back, tracking held at 13.0 u**.
+The remaining caveats are in §1z-bo.4 (one state-matched trial, not four) and the
+revert arm has never been run.
 ⏳ **OPEN — and its "cheapest item" was DERIVED 2026-09-03 and is not a fix
 ([studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1z-u).** The
 operator's ordinary session reproduced the refusals at 40 of 40 (`geo-stale`).
@@ -1609,6 +1615,40 @@ specificity and the router confound, provokes nothing) then **R8b** (authorship
 by removal, and the first live trial of the heal — the `0x002C` restamp has
 never met a locked client). Both are pre-registered with predictions, exposure
 floors and aborts in `RUN-R8.md`; both are operator-driven client runs.
+
+**Q15. Should `agtrack_guard.STATIONARY_WAIVER` exist at all?**
+⏳ **OPEN, and newly answerable — asked 2026-09-05 because the evidence changed
+under it ([studies/movecode/FINDINGS.md](studies/movecode/FINDINGS.md) §1z-bo.9,
+§1z-bo.5b).** The waiver (§1z-ah) lifts the re-pin's 0.347222 s report-freshness
+gate whenever the last two accepted reports coincide, arguing that two identical
+reports *measure* a still body so the harm bound is 1.0 u rather than
+`RUN_SPEED × age`. **The argument is sound and its benefit is unwitnessed.** Two
+instruments, from opposite directions: `waiverbenefit.py` censuses all 1,309
+gamesrv captures and finds **82 real re-pin fires, of which the waiver carried
+22 — every one of them on `{0x0047 stop → 0x003D walk-start}`, the single pair
+§1z-bn's clause already refuses, and ZERO on a pair the clause keeps**;
+`waiverretro.py`'s third arm replays the corpus with the waiver deleted entirely
+and finds it **identical to the shipped build in zero of 71 control-OK runs**.
+(They are corroborating rather than independent — both read `_repin_block`'s
+`age > gate and not stationary()` conjunction — and §1z-bo.9 says so.) The
+waiver's only ever claimed benefit, §1z-aj's 11 retracts at 0.0 u harm, is
+inside that 22, and §1z-aj registered itself INCONCLUSIVE because its control
+never produced the defect.
+
+*So the shipped clause is doing all of the work and the waiver does none of it.*
+*Recommendation: leave it in place and rule deliberately rather than deleting it
+on a corpus null.* Absence of a witnessed benefit across 1,309 captures is not
+proof the mechanism is useless — it is a statement about the routes we have
+walked, all of them keyboard legs on map 146 — and deleting it would widen the
+re-pin's refusal on a class we have simply never seen occur. The cost of keeping
+it is now known to be zero, since the clause already refuses the only pair it has
+ever fired on.
+
+*What would settle it:* a capture in which a body is genuinely parked and the
+guard wants to re-pin onto it on a `{0x003D → 0x003D}` or `{0x003D → 0x0047}`
+pair — the waiver's own specimen, RUN-1zAB run A, is exactly that shape and
+predates the instrumentation. If no route can be constructed that produces one,
+that is itself the answer.
 
 ---
 

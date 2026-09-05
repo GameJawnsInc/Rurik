@@ -14835,16 +14835,60 @@ is **98.2–100.5%**.
 shipped clause from deleting the stationary waiver.** Two desk items first, both read-only and
 both possibly decisive:
 
-1. Replay §1z-ai/§1z-aj's **11 retracts** through `waiverretro` and split them by report pair.
-   §1z-bn.5 says they are "mostly" `{0x0047 → 0x003D}`. **If it is ALL of them, the waiver has no
-   measured benefit anywhere**, and the question for the owner stops being "is the clause narrow
-   enough" and becomes "should `STATIONARY_WAIVER` exist at all".
-2. Re-check the `gate2-offmesh` cell now that the population filter is fixed.
+1. ~~Replay §1z-ai/§1z-aj's 11 retracts and split them by report pair.~~ **DONE — §1z-bo.9,
+   and it came back "all of them".**
+2. Re-check the `gate2-offmesh` cell now that the population filter is fixed. Corrected table
+   in §1z-bn.3: the cell reads **0 removed of 9 kept**, unchanged by the fix.
 
-Then, and only if (1) leaves the waiver alive: **one run of §1z-ai's arm-T configuration** — the
-one that produced the waiver's only witnessed benefit, 4 retracts at 0.0 u harm — under HEAD with
-the clause ON, pre-registering that the retracts on a KEPT pair still fire and still land at
-0.0 u.
+~~Then, and only if (1) leaves the waiver alive: one run of §1z-ai's arm-T configuration.~~
+**(1) did not leave it alive — see §1z-bo.9. That run is withdrawn before it was registered:
+it would have been an attempt to witness a benefit the corpus says has never occurred.**
+
+### 1z-bo.9 ★★★ **The stationary waiver has NO measured benefit anywhere in the corpus** — every re-pin it has ever carried, all 22 of them, sits on the one pair §1z-bn refuses
+
+[`waiverbenefit.py`](review/waiverbenefit.py), over all 1,309 gamesrv captures.
+
+**First, a null I nearly published as a measurement.** "Retract" is not a capture row — there
+are **zero** rows matching it in any of the 1,309 captures, so my first pass at this scored
+"0 retracts found" as though it meant the retract never fires. It means the retract was never
+instrumented. §1z-bo's critic had already said so and I ran the search anyway. The tool now
+refuses that reading in its own output.
+
+A retract *is* a re-pin fire the waiver let through: the `0x002C` clears the arrival tick so the
+arrival never matures. So the measurable form of the question is — of the re-pins that **really
+fired**, how many did the waiver actually **carry**? It carried one iff the last two accepted
+reports coincided within `ZERO_DIST_SQ` **and** the newest was older than
+`REPIN_MAX_REPORT_AGE`, because that is exactly the conjunction `_repin_block` tests.
+
+**82 real re-pin fires across the corpus:**
+
+| pair | was the waiver load-bearing? | n | |
+|---|---|---|---|
+| `0x003D` → `0x003D` | no — fresh report | 44 | the gate never refused these |
+| **`0x0047` → `0x003D`** | **YES, the waiver carried it** | **22** | **the pair §1z-bn refuses** |
+| `0x003D` → `0x0047` | no | 9 | |
+| `0x0047` → `0x003D` | no — fresh report | 6 | |
+| fewer than two reports | no | 1 | |
+
+**22 carried, and every single one is on the refused pair. Zero on a pair the clause keeps.**
+§1z-aj's own captures (`authsrv-20260903T222122` and its siblings) are in that 22, so the
+retracts §1z-bn.5 called "mostly" this pair are **all** of it.
+
+**This corroborates §1z-bo.5(b) from the opposite direction** — that arm replays the guard and
+finds clause-ON identical to waiver-OFF; this one censuses what actually fired and finds the
+waiver never carrying anything the clause keeps. **They are not fully independent**: both read
+the same source truth, `_repin_block`'s `age > gate and not stationary()` conjunction. Two views
+of one theorem, and worth saying so rather than counting it twice.
+
+**What follows, and what does not.** It does **not** follow that the waiver is wrong: its
+argument — two coincident reports *measure* a still body — is sound, and §1z-bn's clause is
+built on accepting it. What follows is that the waiver's benefit is **unwitnessed across every
+capture we hold**, its only claimed evidence (§1z-aj) was registered INCONCLUSIVE by its own
+author, and the shipped clause is therefore doing all of the work while the waiver does none of
+it. **Whether `STATIONARY_WAIVER` should exist at all is now an owner question**, recorded at
+`PLAN.md` §7. It is not a change to make on a corpus null: absence of a witnessed benefit in
+1,309 captures is not proof the mechanism is useless, and deleting it would widen the re-pin's
+refusal on a class we have never seen occur.
 
 **The revert arm has still never been run.** `--waiver-walkstart-stands` exists and RUN-1zBL is
 standing in for it, but 1zBL is a different code revision and, by `waiverretro`'s own control,
