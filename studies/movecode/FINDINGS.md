@@ -15112,3 +15112,93 @@ for keeping it is now purely a priori, and the argument against is three indepen
 the archive. What would change the recommendation back is a single capture in which the guard
 wants to re-pin onto a genuinely parked body on a kept pair; §1z-bq.1 names 355 places to look
 for the *condition*, and none of them has a re-pin.
+
+## 1z-br. RUN-1zBR, the wall press — **P1 REFUTED, and the refutation is the answer.** Parking the body against geometry twice, deliberately, with the lead on, produced **zero** kept-pair windows: a parked body emits `0x0047` and restarts with `0x003D` at the same point, which **is** `{0x0047 → 0x003D}` by construction. The waiver's surviving branch is a **click** phenomenon (124 of its 180 corpus instances), and the keyboard path cannot reach it
+
+**Registered** in [RUN-1zBR.md](RUN-1zBR.md) before launching, including the clause that a P1
+null is a real answer and must not be written as inconclusive. Ident `MOVECODE-1z-br`. Harness
+`20260905T161301`, capture `authsrv-20260905T161332-c1`, tape `agenttap-20260905T161333`, hook
+`vault/research/movecode/1zbr`. OBSERVED.
+
+### 1z-br.1 My targeting was wrong and the run worked anyway
+
+The sheet predicted the wall from a raycast: *"`S` meets non-walkable ground at 376 u"*. **The
+client's keyboard headings are camera-relative and my raycast assumed world axes** — pressing
+`S` moved the body in **−x**, not +y. So the 376 u figure was meaningless and P4 as written was
+untestable.
+
+The body parked anyway, twice, and the capture proves it without reference to my prediction:
+
+| | | |
+|---|---|---|
+| +21.287 → +22.072 s | 321.6 → 66.5 → 38.9 u | decelerating into geometry, then `0x0047` |
+| +22.072 → +23.805 s | **0.0 u** across 1.73 s | parked at (8405.9, 8161.1) |
+| +27.809 → **+39.255 s** | **0.0 u across 11.45 s** | the `D:8` leg pressed into geometry and **never moved at all** |
+
+An 11.45 s window with zero displacement while a key is held is as parked as a body gets. **P4
+is met on the capture's own evidence rather than on my raycast**, and that distinction is worth
+keeping: the run is sound, the prediction that justified the route was not.
+
+### 1z-br.2 ★★★ P1 REFUTED — and the reason is structural, not bad luck
+
+The run produced **two** coincident stale report pairs. **Both are `{0x0047 → 0x003D}`** — the
+pair §1z-bn refuses. **Zero kept-pair windows**, from a route built specifically to manufacture
+one.
+
+The mechanism is visible in the report stream and it is not an accident of this route:
+
+> **A body that parks emits a `0x0047` stop. The next thing it emits when told to move again is
+> a `0x003D` walk-start at that same point. That sequence *is* the refused pair.**
+
+So the intuition behind the waiver — "park the body, keep the lead running, and the waiver
+protects a re-pin that lands harmlessly on it" — describes a state the keyboard path reaches
+**only through the refused ordering.** The kept orderings need two consecutive walk-starts, or
+a walk-start followed by a stop, at one point with no intervening stop; a held key into a wall
+does not produce that.
+
+The guard agreed at both instants, and the shipped build did the right thing: the two
+waiver-load-bearing decisions (+25.186 s, +41.964 s, both `{0x0047 → 0x003D}`, d² = 0.000, ages
+1.38 s and 2.71 s) were `blocked / stale-report`, and **`0x002C` sent = 0** for the whole run.
+
+### 1z-br.3 ★★ Where the kept branch actually lives: the click path
+
+§1z-bq.1 counted 180 stale coincident `{0x003D → 0x003D}` pairs across the corpus. Split by
+what was moving the body:
+
+| | n |
+|---|---|
+| a **click** in flight, no keyboard | **124** |
+| neither | 37 |
+| keyboard only | 19 |
+
+**The waiver's surviving branch is predominantly a click phenomenon**, and clicks and the
+keyboard lead are different movers. That reframes §1z-bq.1's "355 places to look": most of them
+are not places the keyboard lead's re-pin risk can occur, which is why none of the 355 ever
+coincided with one.
+
+### 1z-br.4 What this does to Q15, and the gap it leaves
+
+**Strengthened toward deletion.** §1z-bq.5 recommended deleting `STATIONARY_WAIVER` on three
+archive readings. This run adds a fourth from the other direction: the state the waiver exists
+to protect **could not be manufactured on purpose** on the keyboard path, because that path
+reaches a parked body only through the ordering the clause already refuses.
+
+**And the gap, named rather than glossed.** This run tested the **keyboard** path only, and 124
+of the 180 kept-pair conditions are **click**-driven. A click leg with a re-pin risk on a kept
+pair remains untested, and it is the last place the waiver could still earn its keep. §1z-bl
+already showed clicks produce long report silences, so the ingredients are there.
+
+*Recommendation for Q15 is unchanged from §1z-bq.5 — delete it — with the honest note that the
+click path has not been tried and is the one route that could still overturn it.* Whether that
+is worth a run before ruling is the owner's call; it is one run, and it would make the case
+complete rather than merely strong.
+
+### 1z-br.5 One methodological correction, and it is mine
+
+While hunting for the kept-pair case I wrote a scan that joined report pairs to guard rows **by
+a 3-second time window**, and it reported one kept-pair re-pin risk in the corpus. It is an
+artifact: at that decision instant the guard was reading `{0x0047 → 0x003D}`, because a new
+report had arrived in between. **A report pair and a guard decision are different events and
+must be joined by the guard's own state, never by proximity in time.** `waiverbenefit.py`
+(§1z-bo.9) does it correctly and its "zero on a kept pair" stands unamended; the loose scan was
+scratch and is not promoted.

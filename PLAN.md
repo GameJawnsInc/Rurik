@@ -1656,12 +1656,22 @@ itself INCONCLUSIVE. **There is no case anywhere in the archive in which the
 waiver has done anything but permit a rewind.** The argument for keeping it is
 now purely a priori.
 
-*What would change the recommendation back:* one capture in which the guard
-wants to re-pin onto a genuinely parked body on a `{0x003D → 0x003D}` or
-`{0x003D → 0x0047}` pair. The **condition** is live and common — §1z-bq.1 counts
-**355** stale coincident pairs on those two orderings across the corpus — but
-not one of them has ever coincided with a re-pin proposal. That is the shape of
-the remaining doubt, and it is small.
+**RUN-1zBR TRIED TO MANUFACTURE THE CASE THAT WOULD OVERTURN THIS, AND COULD
+NOT (§1z-br).** Parking the body against geometry twice with the lead on — one
+window of 0.0 u across **11.45 s** — produced **zero** kept-pair windows. The
+reason is structural: **a parked body emits a `0x0047` stop, and the next thing
+it emits when told to move again is a `0x003D` walk-start at that same point,
+which IS the refused pair.** The keyboard path reaches a parked body only
+through the ordering the clause already refuses. Both of that run's
+waiver-load-bearing decisions were on the refused pair, both `blocked`, and the
+shipped build sent zero `0x002C`.
+
+*What would still change the recommendation:* the **click** path, which is the
+one place the kept branch actually lives — of the 180 stale coincident
+`{0x003D → 0x003D}` pairs in the corpus, **124 have a click in flight** and only
+19 are keyboard-only. A click leg with a re-pin risk on a kept pair has never
+been tested. That is one run, it would make the case complete rather than merely
+strong, and it is the only remaining route to a different answer.
 
 ---
 
