@@ -14363,3 +14363,103 @@ Both refuters found the pinned tree empty and deregistered mid-analysis, said so
 the cross-tree rule, verified that `main` at `54b1949` is a superset, and continued against
 absolute vault paths — so nothing was lost. It should not have depended on their discipline:
 **do not remove a worktree while agents are pinned to it.**
+
+## 1z-bm. RUN-1zBM — the lead-OFF control: **the re-pin is NECESSARY as well as sufficient.** Seven of seven legs opened with the same 410–514 u silent glide that the lead-ON runs were rewound inside, **zero re-pins fired, and nothing was thrown back.** §1z-bl.8's correction 4 is closed, correction 3 is confirmed at the byte, and the warp is a cost of the OPT-IN LEAD, not of the shipped default
+
+**Asked:** the control §1z-bl.8 correction 4 said the corpus does not contain — a leg with a
+long opening segment where the re-pin is suppressed. Registered in [RUN-1zBM.md](RUN-1zBM.md)
+before launching. Ident `MOVECODE-1z-bm`. One run, agent-driven, hands off, owner away.
+Harness `20260905T124559`, capture `authsrv-20260905T124631-c1`, tape
+`agenttap-20260905T124632`, hook `vault/research/movecode/1zbm/movehook.bin` (5,863 records,
+ring 18% full, **both controls FIRED**). Flags confirm the shipped default: `KBD_SYNC` true,
+**`KBD_SYNC_LEAD_ON` false**, `AGTRACK_REPIN` true, `ROUTER` true. OBSERVED unless marked.
+
+### 1z-bm.1 ★★★ The result, in one table
+
+| | RUN-1zBL, lead ON | RUN-1zBM, lead OFF |
+|---|---|---|
+| legs with a long silent opening segment | 4 of 7 | **7 of 7** (410–514 u travelled, 1.57–2.77 s silent) |
+| AGTRACK re-pins fired | 4 | **0** |
+| `0x002C` sent to the player | 4 | **0** |
+| bodies thrown back | 3 (−298 to −433 u) | **0** |
+| per-leg net travel | 0 u on the frozen legs | **589–888 u, every leg** |
+
+**Every leg of this run met the condition the lead-ON runs were rewound inside** — a
+committed opening glide of 410–514 u during which the client sends nothing, 1.57–2.77 s long,
+which is precisely the window in which 1zBL's four re-pins fired (1.2–2.4 s after the press).
+The re-pin did not fire once, and not one body moved backward.
+
+**So the re-pin is necessary as well as sufficient**, within these three runs: long silent
+segment **with** a re-pin → rewind (7 of 8 such legs across 1zBK/1zBL); long silent segment
+**without** one → the leg walks (7 of 7 here). §1z-bl.8's correction 4 — "re-pin present and
+long-first-segment are the same partition, and the corpus has no leg with a long segment and
+the re-pin suppressed" — is closed by construction: this run is 7 such legs.
+
+### 1z-bm.2 ★ Correction 3 confirmed at the byte: the glide is the client's, not our lead's
+
+The client's own opening waypoint (`agapi_setdest`'s `pt_a`, the keyboard mover's target) at
+the first three presses, lead-OFF against lead-ON:
+
+| press | lead OFF | lead ON | delta |
+|---|---|---|---|
+| 1 | `(10248.7, 8077.4)` | `(10248.7, 8077.4)` | **0.0 u** |
+| 2 | `(10272.0, 8184.0)` | `(10272.0, 8184.0)` | **0.0 u** |
+| 3 | `(10122.3, 8523.6)` | `(10124.3, 8521.5)` | 2.9 u |
+
+Identical. (Presses 4 onward are not comparable: by then the lead-ON run's body had been
+thrown backward, so the two runs' bodies are in different places and their targets diverge by
+construction, not by mechanism.) **The opening glide's length is the client's own
+geometry-clipped reach and does not depend on our lead** — §1z-bl.8's correction 3, confirmed,
+and with it the corollary that *shortening or removing the lead cannot shorten the silent
+window*. What removing the lead does is stop our model walking away from the report, which is
+what the guard was reacting to.
+
+### 1z-bm.3 The other two predictions, and one honest loose end
+
+- **P4 MET, and it is the review's fact 1 measured on the shipped default.** Moving-only
+  world-0 separation reads **p50 251.6 u, p90 509.2, max 523.9** over 307 moving samples,
+  against RUN-1zBL's **26.3 u** with the lead on. The lead-off default leaves the copy up to
+  a full report chord behind the walking body — the defect §1z-bh.5 named and the reason the
+  lead exists at all. Body FREE; the all-sample headline still prints 0.0, which is §1z-bh.5's
+  point about that statistic.
+- **P5 MET.** Both controls fired; ring 5,863 of 32,768.
+- **The loose end:** leg 7W peaks at 683 u and nets 589 u — the only leg where the two differ.
+  There is no `0x002C` anywhere in the run, so it is not the rewind class; the likely reading
+  is the glide's tail against the leg's end, and it is left labelled UNVERIFIED rather than
+  explained.
+- **An instrument note:** `leadtap.align` returns **no anchors at all** on a lead-off capture.
+  It matches `agapi_setdest` points to grant destinations within 1 u, and a zero-lead grant
+  sits on the client's reported point while the client's own setdest sits 400–500 u ahead, so
+  nothing pairs. Every timing statement above is therefore wire- and tape-only; the hook is
+  used for coordinates and counts, never for wall-clock ordering. A lead-off capture needs a
+  different anchor before anyone quotes hook timing from one.
+
+### 1z-bm.4 ★★ What this settles for the owner's ruling on the lead
+
+The trade is now measured on both sides, in the same script, three runs apart:
+
+| | lead OFF (shipped) | lead ON (opt-in) |
+|---|---|---|
+| copy tracks the walking body | **p50 252 u / p90 509 u behind** | **p50 26 u** (retail's own is ~74 u) |
+| our `0x002C` rewinds the body | **never** (0 in 7 long silent legs) | **3 of 4 re-pinned legs, −298 to −433 u** |
+
+**The warp is a cost of the lead, and it is not intrinsic to it.** The lead earns
+retail-class tracking; what turns that into a warp is the guard's re-pin firing during the
+client's own silent glide, on the defect §1z-bl.8 localised in source —
+`agtrack_guard.stationary()` waiving the freshness gate whenever the last two accepted
+reports coincide, which **every leg's opening report pair does**, and whose own comment
+asserts a walking body can never satisfy it. Fix that predicate and the lead can return
+with tracking at 26 u and no rewind; leave it and the lead cannot return at all.
+
+**So the ruling the review put to the owner (§2.1) now has a precondition rather than a
+trade-off**: the lead's return is blocked on the re-pin's predicate, not on the lead's own
+merits. That is a smaller and much better-defined decision than the one §1z-bl left open.
+
+### 1z-bm.5 What is still not done
+
+The fix is **derived, retrodicted and still not built** (§1z-bl.7's corpus retrodiction:
+removing re-pins during an open keyboard leg with no fresh report takes out 24 of the
+corpus's 62 fires, all 7 `budget-red` and 15 of 20 `arrival-risk`, leaving `gate2-offmesh` and
+most `gate1-red` untouched). It needs its own section, a revert flag, `guardretro`'s replay,
+and then **one lead-ON run to confirm the rewind is gone while the 26 u tracking stays** —
+which is the run that would actually answer Q13. Nothing in this section moved a default.
