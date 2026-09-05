@@ -48,10 +48,19 @@ Three clauses follow, each forced by the zones:
      a belief.
 
 WHAT THIS MODULE DOES NOT DO.  It sends nothing and mutates no server
-state -- it returns verdicts.  The active wiring (actually vetoing sends,
-actually firing the re-pin) is a behaviour change that ships OFF by
-default; the shadow feed is telemetry-only, the same class as the
-plane-echo tripwire.  The re-pin's own preconditions (report freshness,
+state -- it returns verdicts.  The active wiring lives in `authsrv.py`.
+
+CORRECTED 2026-09-05 (MOVECODE-1z-bh, studies/review/MOVEMENT-2026-09-04.md
+sec.4).  This paragraph used to continue "The active wiring (actually
+vetoing sends, actually firing the re-pin) is a behaviour change that ships
+OFF by default; the shadow feed is telemetry-only".  That has been false
+since MOVECODE-1z-s.5: `AGTRACK_SHADOW` and `AGTRACK_REPIN` are BOTH True
+in `authsrv.py`, so the veto and the re-pin are the shipped default and
+this module's verdicts really do move the wire (72 live fires across 30
+captures; `--no-agtrack-shadow` / `--no-agtrack-repin` are the reverts).
+Read the sentence as scoping THIS FILE -- it is pure and returns verdicts
+-- and not as a statement about what ships.  The re-pin's own
+preconditions (report freshness,
 the refused-report hole, rate) inherit _resync_verdict's derivations and
 are re-derived here from decoded constants; the test pins this module's
 values against authsrv's so they cannot drift apart.

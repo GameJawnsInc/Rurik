@@ -47,6 +47,20 @@ printed beside THE NUMBER, a contaminated capture gets no CONFIRMED verdict,
 and --baseline runs the detector's two controls too: the 2026-09-02 baseline
 must read FREE and RUN-1zT's 073122 must read ENSLAVED from 18.65 s.
 
+THE MOVING-ONLY LINE (MOVECODE-1z-bh, 2026-09-05;
+studies/review/MOVEMENT-2026-09-04.md sec.1.1). THE NUMBER is an ALL-SAMPLE
+p50, and the review found the registered sec.1z-t.8 verdict printing CONFIRMED
+over a tape whose keyboard legs ran 500 u behind: on the shipped lead-OFF
+default the stop echo parks world-0 ON the body at every stop, and the parked
+samples are the majority. So the headline and the verdict block each carry a
+second line over samples with the body actually walking (`MOVING_V`), and
+`score()` returns them as `live_moving` / `moving_n`. The registered verdict's
+semantics are UNCHANGED -- it is still the all-sample p50 against the same two
+bounds -- because a registered prediction that gets re-aimed after the run is
+not a prediction. Read the two together: on the 13 default tapes of 2026-09-04
+the moving-only p50 is 510-515 u on eight, which is `report_gap x body_speed`
+intact.
+
 Read-only over JSONLs already on disk: no client, no vault write, stdlib only.
 """
 import argparse
@@ -77,6 +91,31 @@ BASELINE_RAW = (237.0, 805.8)       # p50, max -- raw m_point, the artifact
 # report_gap x speed.
 MIN_TRAVEL = 500.0
 MIN_MOVING_SAMPLES = 20
+
+# THE MOVING-ONLY SEPARATION (MOVECODE-1z-bh, 2026-09-05;
+# studies/review/MOVEMENT-2026-09-04.md sec.1.1). Printed BESIDE the headline
+# and beside the verdict, never instead of either -- the sec.1z-t.8 verdict's
+# semantics are registered and stay exactly as they are.
+#
+# WHY IT IS NEEDED. THE NUMBER is an ALL-SAMPLE p50, and on the shipped
+# lead-OFF default the stop echo parks world-0 ON the body at every stop, so
+# the parked samples -- the majority of most tapes -- drive the median to ~0
+# while the copy runs a full report chord behind whenever the body walks. The
+# review re-scored the 13 default-configuration tapes of 2026-09-04 with the
+# body speed over this threshold: p50 510-515 u on eight of them, 299-323 u on
+# three, 11.5 and 19.3 u on two short parked runs. That is the separation law
+# (report_gap x body_speed) intact, and the registered verdict printed
+# CONFIRMED on a tape whose keyboard legs ran 500 u behind.
+#
+# 50 u/s is LEAD_MIN's threshold, reused deliberately: it is the same cut
+# between "where the body is" and "where we sent it", and it is low enough
+# that a body sliding along a wall at max(288 cos i, 94 u/s) still counts as
+# moving.
+MOVING_V = 50.0
+# What the law predicts for a lead-OFF default: the modal in-leg 0x003D gap
+# times the run speed, 1.80 s x 288 u/s (authsrv.py's KBD_SYNC block). Not a
+# bar and not a bound -- it is the number the moving-only p50 is read against.
+LAW_PREDICTED = 518.4
 
 # ENSLAVEMENT. "To the unit": the tap reads the client's f32 target and the
 # gamesrv capture carries the f32 we sent, so a followed grant matches to
@@ -448,6 +487,11 @@ def score(path, legs=None, quiet=False, grants_path=None):
     body_travel = travel([r["body"] for r in p])
     w0_travel = travel([r["w0"] for r in p])
     moving = [r for r in p if r["vbody"] > 1.0]
+    # MOVECODE-1z-bh: the same separation over WALKING samples only. See the
+    # MOVING_V block -- the all-sample median is dominated by parked samples
+    # the stop echo zeroes.
+    mv_sep = [math.dist(r["w0"], r["body"])
+              for r in p if r["vbody"] > MOVING_V]
 
     if not quiet:
         print(f"capture   {os.path.basename(path)}")
@@ -458,6 +502,14 @@ def score(path, legs=None, quiet=False, grants_path=None):
         m, p75, p90, mx = q(live_sep)
         print(f"  position_at (clamp first)   p50 {m:7.1f}  p75 {p75:7.1f}"
               f"  p90 {p90:7.1f}  max {mx:8.1f}   <-- THE NUMBER")
+        # ...and the same quantity over WALKING samples only (1z-bh, review
+        # sec.1.1). THE NUMBER above is all-sample and the stop echo parks the
+        # copy on the body, so on a lead-OFF default this line is where the
+        # separation law shows up.
+        mm, mp75, mp90, mmx = q(mv_sep)
+        _mlab = f"moving only (v > {MOVING_V:.0f} u/s)"
+        print(f"  {_mlab:<26s}p50 {mm:7.1f}  p75 {mp75:7.1f}"
+              f"  p90 {mp90:7.1f}  max {mmx:8.1f}   n={len(mv_sep)}")
         rm, _, rp90, rmx = q(raw_sep)
         print(f"  raw m_point (sample&hold)   p50 {rm:7.1f}"
               f"              p90 {rp90:7.1f}  max {rmx:8.1f}"
@@ -546,6 +598,9 @@ def score(path, legs=None, quiet=False, grants_path=None):
               f"              p90 {ep90:7.1f}  max {emx:8.1f}")
 
     return {"live": q(live_sep), "raw": q(raw_sep),
+            # MOVECODE-1z-bh: the moving-only quantiles and their n, so a
+            # caller can read the law's own regime without re-deriving it.
+            "live_moving": q(mv_sep), "moving_n": len(mv_sep),
             "travel": body_travel, "moving": len(moving),
             "enslavement": ens, "grants_path": gpath}
 
@@ -628,6 +683,26 @@ def main():
     print(f"  registered: p50 < {CONFIRM_P50:.0f} u confirms, "
           f"> {REFUTE_P50:.0f} u refutes. Baseline was p50 "
           f"{BASELINE_LIVE[0]:.0f} / max {BASELINE_LIVE[1]:.0f}.")
+    # MOVECODE-1z-bh. NOT the registered statistic and it does not change it:
+    # the verdict below is still the all-sample p50 against the same two
+    # bounds. This line exists because the review found the registered verdict
+    # printing CONFIRMED over a tape whose keyboard legs ran 500 u behind.
+    mmv, _mv75, _mv90, _mvmx = r.get("live_moving", (0.0, 0.0, 0.0, 0.0))
+    mvn = r.get("moving_n", 0)
+    if mvn:
+        print(f"  MOVING ONLY (review 2026-09-04 sec.1.1, NOT the registered "
+              f"statistic): p50 {mmv:.1f} u over {mvn} samples with the body "
+              f"walking (v > {MOVING_V:.0f} u/s).")
+        print(f"    The law predicts report_gap x speed = "
+              f"{LAW_PREDICTED:.0f} u for a lead-OFF default, so a moving-only "
+              f"p50 near it means world-0 is NOT tracking the body while it "
+              f"walks -- whatever the registered all-sample verdict below "
+              f"says. The all-sample median is pulled toward 0 by the stop "
+              f"echo parking the copy on the body at every stop.")
+    else:
+        print(f"  MOVING ONLY (review 2026-09-04 sec.1.1): NO SAMPLES with "
+              f"the body over {MOVING_V:.0f} u/s -- the all-sample verdict "
+              f"below is measuring a parked body.")
     if r["travel"] < MIN_TRAVEL or r["moving"] < MIN_MOVING_SAMPLES:
         print(f"  ** NO VERDICT -- ZERO EXPOSURE. The drawn body translated "
               f"{r['travel']:.0f} u over {r['moving']} moving samples, under "

@@ -13604,3 +13604,260 @@ is named rather than folded into "unwalkable".
   pre-1z-ap doctrine: None → plane-blind clip); the sliver path is stricter than the inside path
   there, which is the conservative asymmetry, not the fix's business. The other re-pin triggers
   and the client's gate-2 tolerance stay as §1z-bf.5 left them.
+
+## 1z-bh. THE REVIEW'S CORRECTIONS, APPLIED — the retail-cadence sentence, the "SHIPPED as the default" headings on an inert path, the keyboard drop's false attribution and its missing revert arm, two docstrings that said the opposite of the code, and a moving-only line beside `w0score`'s headline; no default moves
+
+**Asked:** step 1 of the plan the review ([studies/review/MOVEMENT-2026-09-04.md](../review/MOVEMENT-2026-09-04.md))
+put first: correct the sentences the next session would otherwise build on, and give the one
+shipped behaviour with no revert arm its arm. Ident `MOVECODE-1z-bh`. No run. No default
+changed. The mechanical half was done by a subagent from the review's §1.1, §1.2, §1.5, §1.7
+and §4; this section is the record of what moved and what it rests on.
+
+### 1z-bh.1 The retail-cadence sentence
+
+§1z-t.3's law is right and its retail clause was a category error (review verdict fact 1;
+`studies/review/movement-2026-09-04/retail_2c_and_cruise.py`). Corrected IN PLACE in the server's
+own statement of the law (`authsrv.py`, the `KBD_SYNC` comment block) and in the startup
+banner's `DERIVED` line: retail's client fires the same ~512 u `0x003D` trigger during cruise
+(61 live connections, 454 cruise pairs, gap p50 1.20 s / p90 1.785 s, chord p90 513.8 u, 208 of
+454 in the 1.5–2.0 s bin, 137 under 0.6 s); the 0.257 s is the NPC-follow-fitted lag of retail's
+*server* copy (RECONSTRUCTION, §38.3), not a report cadence; retail's copy stays ~74 u behind a
+moving body because it walks the 766 u lead, so with the lead OFF the copy is granted the point
+the body already left and the law is the default's own state. The FINDINGS sentence itself
+(§1z-t.3, *"Retail's 0.257 s × 288 = 74.0 u. Cadence ratio 7.00×"*) stands as written with this
+section as its correction; the numbers regenerate from the review's script.
+
+### 1z-bh.2 "SHIPPED as the default", on a path the default never reaches
+
+`A2_LEAD_PLANE_CLIP` (§1z-ap), `A2_LEAD_ORIGIN_SEAM` (§1z-bg) and the opt-in `A2_LEAD_SEAM_CLIP`
+are read only inside `a2_clip_lead`, whose three call sites each sit under `D1_LEAD = False` or
+`KBD_SYNC_LEAD_ON = False`. Both headings said "SHIPPED as the default" and neither said the lead
+is OFF, unlike every earlier lead section. PLAN §8's two entries carry an in-place correction
+now, and the startup banner prints one line when neither lead is armed: the three arms are
+*lead-path only, INERT under this configuration, armed with `--kbd-lead` or `--d1-lead`*.
+`capture_flags()` is untouched (it dumps every uppercase bool and tests read it).
+
+### 1z-bh.3 The keyboard drop: ours, and now with an arm
+
+Three places said the router's mid-keyboard click drop was *"retail's own contract (§0.15)"* —
+the `ROUTER` doc block, the drop's own comment in `router_answer_click`, and the console line an
+operator reads during a run. §0.15 states an older-of-a-rapid-PAIR rule; §0.14's V-RETAIL-2
+measured seven SINGLE mid-keyboard clicks and retail answered all seven within one RTT; §1p.9
+published that correction on 2026-08-28 and it was never applied. All three now say the drop is
+OURS, kept on MOVECODE-R1-B1's displacement outcome (§1q) measured on the legacy path under the
+pre-`KBD_SYNC` copy placement. `ROUTER.md` §4 carries the same correction, and its "opt-in,
+shipped default byte-identical" (stale since §1z-v) is struck.
+
+**The arm.** `--answer-kbd-click` set `ANSWER_KBD_CLICK`, read only by `_grant_verdict` — the
+legacy path the router bypasses — so under the shipped `ROUTER = True` the flag was inert and
+the drop had no arm that could convict it (the arc's own two-defaults rule, §29). The router's
+drop now honours the flag: OFF is the `kbd-drop` row unchanged; ON falls through and routes the
+click like any other, logging a `router_route` row with `verdict = "kbd-answered"`,
+`arm = "answer-kbd-click"`, `pass_through = True` before the click's real verdict row, so a
+click census must filter the pass-through (`keepalivelog.py`, the one existing consumer, now
+counts it on its own line). The flag's help and startup print say it reaches the router and is
+a DIAGNOSTIC/REVERT arm, not a default — R1-B1 is REFUTED as a default on the legacy path and
+this section does not re-open that. `zero_lead_composition` has no `answer_kbd_click` term, so
+no refusal was deleted. **Exposure at HEAD is zero**: the corpus holds 0 of 69 router clicks
+inside `GRANT_LOCAL_WINDOW` of a report, so no existing capture scores the arm; a script that
+clicks within 3.0 s of a `0x003D` is the first step if it is ever priced (review §3.12's
+prior-art item, re-aimed by its refuter).
+
+### 1z-bh.4 Two docstrings that said the opposite of the code
+
+`_heading_grant_ok`'s docstring — *"A REFUSED HEADING GRANT IS DROPPED, NOT HELD … There is no
+pending machinery here and there must not be one"* — and the `0x003D` tail comment repeating
+it have been false since §1z-y: `KBD_SYNC_HOLD` ships True, the refused report is stored as
+`state["heading_hold"]` and `heading_hold_tick` re-bakes it when the floor opens. Both now state
+the shipped behaviour and why the old premise failed (a 0.28–0.30 s report cadence is the
+click-heavy runs'; held-key cruise is 1.80 s). The predicate is unchanged — `grantsim.py`
+imports it, and it stays pure rule 2. `agtrack_guard.py`'s header said the active re-pin
+*"ships OFF by default"*; `AGTRACK_SHADOW` and `AGTRACK_REPIN` are both True since §1z-s.5, with
+72 live fires in 30 captures, and the sentence now says so.
+
+### 1z-bh.5 `w0score`'s moving-only line
+
+The headline p50 is ALL-SAMPLE, and on the shipped lead-OFF default the stop echo parks
+world-0 on the body at every stop, so the parked majority drags the median to ~0 while the copy
+runs a full report chord behind whenever the body walks — the registered §1z-t.8 verdict printed
+CONFIRMED over exactly such a tape (review §1.1: moving-only p50 510–515 u on 8 of 13 default
+tapes). `w0score` now prints a second line under THE NUMBER over samples with the body above
+50 u/s (`MOVING_V`), returns it as `live_moving` / `moving_n`, and the verdict block carries a
+MOVING ONLY line with the law's interpretation (`LAW_PREDICTED` 518.4 u), labelled *"NOT the
+registered statistic"*. **The registered verdict's semantics are unchanged** — a prediction
+re-aimed after its run is not a prediction; the second line is what the next registration
+should be written on.
+
+### 1z-bh.6 Tests, and one floor that was already unreachable
+
+`test_router` §1 +5 (the drop driven both ways on one click, the global restored and
+re-asserted), floor 121 → 126. `test_w0score` §7 +5 (a tape with 20 walking samples 500 u behind
+and 30 parked on the body: all-sample p50 under the CONFIRM bar, moving-only p50 over 400 u,
+the line printed beside the headline, and a walk-only control where the two statistics must
+agree), floor 44 → **47** — from the BARE-MACHINE run, because the old 44 was unreachable
+without a vault since §1z-ac's section 6 (a `LEDGER.skip` lowers nothing; 50 with the vault).
+`test_kbdsync` 106, `test_position_trust` 235, `test_d1lead` 118, `test_agtrack_guard` 77,
+`test_grantsim` 86, `test_movehook` 302, `test_srclint` 26, `test_citelint` 50 — green.
+`TESTS.md` carries both new sections and the kbd-drop line's own correction.
+
+### 1z-bh.7 Not done here, deliberately
+
+The review's other §4 corrections outside this brief are untouched and still owed:
+`movesync.py`'s header (the ~80 % silence the bar cannot see), `pathmap.py:54-56` (the DAG the
+client's start resolution is), `movetap.py`'s `calibrate()` floor, `authsrv.py`'s `TICK_SECONDS`
+rationale and the NPC "stands against the wall" sentence, `HANDOFF.md` §A's currency row,
+`RETHINK.md:6`'s never-lifted rule, `HANDOFF-WARP.md`'s `--router` rows and its PLAN.md citation,
+`content/movecode.toml:528`. Each is one sentence; none changes behaviour.
+
+## 1z-bi. THE LEAD'S CONVICTION, REPLAYED THROUGH THE FIXED GUARD — five of the seven locks begin with OUR gate-2 `0x002C` halting the body under a held W, and the shipped guard removes that halt in every one; the chain is exposure, not a verdict (4 of 7 chain-complete runs locked, 3 did not); the two Q-leg locks are a different class; one `--kbd-lead` run under HEAD is the next verbatim check
+
+**Asked:** step 2 of the plan the review ([studies/review/MOVEMENT-2026-09-04.md](../review/MOVEMENT-2026-09-04.md)
+§3.1) put first: *"replay the six fatal leads through the fixed guard."* Ident `MOVECODE-1z-bi`.
+Desk only, no run, no code change. New tool: `review/leadreplay.py`. OBSERVED / MEASURED
+unless marked.
+
+### 1z-bi.1 Why this section exists
+
+The keyboard lead ships OFF (`KBD_SYNC_LEAD_ON = False`, §1z-u.5) because §1z-ad found it armed
+the lock on five of eight legs. Three later sections each hold one link of the cause and none
+joined them: §1z-be.4 — the park at the wedge tip is OUR `gate2-offmesh` `0x002C` halting a
+drawn body walking under a held W, after which GmWalk never re-dispatches the held key;
+§1z-ao.2 — the lock is the S press's 520 u lead maturing on a body that did not move for
+3.0 s (arrival snap, fence shut for good); §1z-bf — that gate-2 veto was a model false
+positive on a half-unit sliver and the shipped guard no longer licenses it (19 → 0, control
+exact). The review's first fact makes the join load-bearing: retail's copy stays ~74 u behind
+a moving body because it walks the lead, so the lead is the only lever that reaches retail's
+separation, and it was convicted for a lock whose first link the arc has since removed.
+
+### 1z-bi.2 The registration, written before the script ran
+
+Verbatim from the pre-registration file (2026-09-05, before `leadreplay.py` existed):
+
+> **Population:** the six fatal-lead runs of §1z-ap.3 (harness `191246`, `195857`, `200549`,
+> `202051`, `214957`, `105954`), all WSWQESW, all `--kbd-lead` ON. Control: every other lead-ON
+> harness run on 09-03/04 with an S leg and a tape.
+>
+> **P1** In ≥ 4 of the 6 locked runs a `gate2-offmesh` `0x002C` fires during the first W hold,
+> before the first S press, and the HEAD guard (fix arm, `GATE2_SEAM_TOL`) does not license it
+> while the stock arm reproduces it. [REFUTED IF ≤ 2 of 6; or any fire the fix arm keeps]
+> **P2** In each such run the drawn body's tape velocity is > 150 u/s in the sample before the
+> `0x002C` and < 1 u/s within 0.3 s after it, and stays < 1 u/s until the S press.
+> [REFUTED IF any of those runs has the body moving (> 50 u/s) in the 0.2 s before the press]
+> **P3** The fatal lead is granted while the body stands within 5 u of the halt point.
+> [REFUTED IF the body is > 50 u from the halt point in ≥ 2 runs]
+> **P4** The lead's arrival lands ≥ 299.33 u from the drawn body and the tape shows a
+> drawn-body jump ≥ 300 u within [ETA − 0.3, ETA + 0.6] s with the fence shut. [REFUTED IF no
+> jump in ≥ 2 runs]
+> **C1** Among healthy lead-ON runs with a gate-2 fire before S1 the body moves (> 50 u/s)
+> within 1.5 s of the S press; among the locked runs it does not. [REFUTED IF locked and healthy
+> runs are indistinguishable on post-S motion AND on follower distance]
+
+**Two things the registration got wrong, found by the first run of the script and corrected
+before any number was read as a result.** (a) *"the first S press"* is the wrong anchor: the
+lock leg is each run's **first silent leg** (§1z-am's signature), and for `195857` and
+`200549` that is leg 4 (Q), not leg 2 (S) — the review's refuter had already said so
+(§5 of the review). The script now anchors on the first silent leg and reports which. (b) The
+seventh lock (`073055`, which §1z-ap.3 sets aside as *"no lead armed on its silent leg"*) was
+added to the population; §1z-bi.5 shows that sentence is wrong.
+
+### 1z-bi.3 ★ The table (`review/leadreplay.py`, HEAD guard tol 1.0 u; times relative to the lock leg's press P)
+
+| run | lock leg | gate-2 `0x002C` before P | stock guard | HEAD guard | body v before → after | parked to P | lead at P | body from halt pt | ≥ 300 u drawn-body jump after the grant | fence |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `191246` | 2S | −3.8 s | reproduces | **REMOVED** | 205 → 0 | 100 % | 520 u clear | **0.0 u** | 520 u at +3.82 | (no column) |
+| `202051` | 2S | −3.8 s | reproduces | **REMOVED** | (no tape) | — | 520 u clear | — | — | — |
+| `214957` | 2S | −3.8 s | reproduces | **REMOVED** | 205 → 0 | 100 % | 520 u clear | **0.0 u** | none within the leg + 1.5 s (body 412 u from the dest at the ETA) | (no column) |
+| `105954` (RUN-1zAO) | 2S | −3.8 s | reproduces | **REMOVED** | 208 → 0 | 100 % | 520 u clear | **0.0 u** | 520 u at +3.00 | **SHUT at +3.00** |
+| `073055` | 2S | −2.7 s | reproduces | **REMOVED** | 208 → 0 | 96 % | 520 u clear | 15.6 u | none (199 u from the dest at the ETA) | (no column) |
+| `195857` | **4Q** | **none** | — | — | — | — | 520 u clear | — | 476 u at +2.34 | (no column) |
+| `200549` | **4Q** | **none** | — | — | — | — | 520 u clear | — | 374 u at +2.32 | (no column) |
+
+The 09-03 tapes predate the fence column (§1z-an); only `105954` can show it.
+
+**Control** — the other 19 lead-ON runs of 09-03/04 with an S leg and a tape, anchored on the
+first S press:
+
+| | runs | body moved within 1.5 s of P | locked |
+|---|---|---|---|
+| with a gate-2 `0x002C` before P (stock reproduces 9/9, HEAD removes 9/9) | 9 | 5 | 0 |
+| without one | 10 | 10 | 0 |
+
+Of the nine with a fire, the lead at the press was **refused or clipped short in five**
+(`0 u origin-unwalkable` ×4 — the sliver refusal §1z-bg removed — and `10 u plane-seam` ×1),
+so no full-length lead ever landed on the halted body; in the remaining four a 520 u lead
+landed on or beside the halted body (0.0 / 0.0 / 6.7 u; the fourth with the body already
+backpedalling at 190 u/s) and **none of the four locked**, although two of them show a
+≥ 500 u drawn-body jump after the grant (`115909` +2.73, `173704` +2.79) and one shows the
+fence shut at +4.05 (`174050`).
+
+Follower (agent 10) at P + 0.1 s: locked p50 77 u, healthy-with-fire p50 75 u,
+healthy-no-fire p50 82 u; cosine into the backpedal 0.99 / 0.98 / 0.91.
+
+### 1z-bi.4 The verdict against the registration
+
+- **P1 MET, and stronger than registered.** 4 of the registered six (5 of 7 with the seventh)
+  begin with a `gate2-offmesh` `0x002C` in the W hold, at −3.8 s (−2.7 s in `073055`) before
+  the press. The stock guard reproduces the veto in every one; the shipped guard licenses
+  **none** of them — nor any of the nine in the control. The two exceptions are the two Q-leg
+  locks, which have no fire at all.
+- **P2 MET.** 4 of 4 with a tape: 205–208 u/s → 0 within 0.3 s of the `0x002C`, parked for
+  96–100 % of the remaining hold, 0 u/s at the press. That is §1z-be.4's halt, corpus-wide.
+- **P3 MET.** 3 of 4 with a tape at **0.0 u** from the halt point; the fourth (`073055`) at 15.6 u.
+  The lead was granted onto a body our own `0x002C` had parked.
+- **P4 REFUTED as registered.** A ≥ 300 u drawn-body jump after the grant is on the tape in 2 of
+  the 4 taped 2S locks (`191246`, `105954`), not in `214957` (body 412 u from the dest at the
+  ETA, no step ≥ 300 u inside the leg + 1.5 s) nor `073055` (199 u, under gate 1). The
+  arrival-snap picture of §1z-ao.2 is one lock's, not every lock's; the terminal signature
+  (no stop report on any later leg) is common to all seven and the jump is not. The window
+  is the leg plus 1.5 s; a later snap would be outside it.
+- **C1 REFUTED.** Post-press motion does not separate locked from healthy runs (4 of 6 locked
+  bodies moved within 1.5 s; 5 of 9 healthy-with-fire did), and the follower's distance and
+  cone are the same in all three populations. The §1z-be.2 avoidance branch is not what
+  decides the lock either way on this evidence.
+
+### 1z-bi.5 What it derives
+
+1. **The lead's conviction rests, in five of seven locks, on a park our own guard caused, and
+   the shipped guard no longer causes it.** Every one of the 14 `gate2-offmesh` `0x002C`s in
+   the hold before a press (5 locked + 9 healthy) is removed by `GATE2_SEAM_TOL`; the stock
+   arm reproduces all 14, so the replay has authority over the counterfactual. Under HEAD the
+   chain's first link cannot occur where it occurred.
+2. **The chain is exposure, not a verdict.** Given the complete chain — our halt, a full-length
+   lead granted onto the halted body — 4 of 7 runs locked and 3 did not, and nothing measured
+   here (post-press motion, follower distance, cone, a drawn-body jump, even a shut fence)
+   separates them. That matches the record's own rate (§1z-ad: 5 of 8 legs; §1z-aq: ~1 in 4 per
+   crossing). A run that removes the exposure is therefore checkable on its first link in
+   one launch; its lock outcome is not.
+3. **Two locks are a different class.** `195857` and `200549` lock on the Q leg at the NE end
+   with no `0x002C` anywhere in the hold; §1z-ap.3 retrodicted exactly those two to 36 u and
+   146 u under the plane clip. The plane clip stays load-bearing for that class; it was never
+   the explanation for the other five.
+4. **§1z-ap.3's "no lead armed on its silent leg" for `073055` is wrong.** Its capture carries
+   `KBD LEAD (10001,8430) from (10521,8430)` — a fired `0x0029`, 520 u, `clear` — 0.033 s after
+   the S press (no `kbd_leg arm` row accompanies it, which is probably what the sentence read).
+   It is the fifth run of the halt chain, not the odd one out.
+5. **§1z-bg's origin test would have turned four protective refusals into leads — in the old
+   regime.** The four `origin-unwalkable` refusals at the press in the control are exactly the
+   sliver class §1z-bg admits, and each stood on a body our halt had parked. Under HEAD the
+   halt is gone, so a sliver origin is once again a body standing on it; but the retrodiction
+   in §1z-bg.3 did not ask whether the refused bodies were parked by us, and should have.
+
+### 1z-bi.6 The next verbatim check, registered here
+
+One `--kbd-lead` run under HEAD (`AGTRACK_GATE2_SEAM` on, the plane clip on, the origin test on),
+the same WSWQESW script, one launch, hands off, agenttap attached. The derived object is the
+chain's first link, and that is what the run checks:
+
+- **P1** zero `gate2-offmesh` verdicts and zero re-pins of any kind during the W holds;
+- **P2** the drawn body's velocity never drops below 150 u/s inside a W hold (no halt);
+- **P3** the S-press lead lands on a body moving at ≥ 150 u/s at the press, and the body is within
+  100 u of the copy at the lead's ETA;
+- the lock outcome is REPORTED, not scored: a clean run is consistent with (2) above and does
+  not prove the lead safe; a lock with P1–P3 met names a class this section did not see.
+
+REFUTED IF a `gate2-offmesh` re-pin fires (the guard fix has an exposure this corpus lacks),
+or the body halts inside a W hold with no `0x002C` within 0.5 s (a client-side halt of its own).
+
+**What this section does NOT decide:** whether the lead returns as the default. That is the
+owner's ruling (review §2.1); this section removes the reason it was convicted and names the
+run that checks the removal.

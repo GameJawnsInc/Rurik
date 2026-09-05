@@ -7581,8 +7581,23 @@ the same-tick ALIAS**: the
   sits between float identity and the measured 0.53 u confound floor, a known-bad
   arm at twice the threshold is refused because the test is identity and not
   proximity, and a world-0 with no leg armed enslaves nothing.
-  Floor 44 from the bare-machine run; section 5 skips without the vault and lowers
-  nothing. ~5 s with the vault),
+  **Section 7 (MOVECODE-1z-bh, 2026-09-05; review §1.1) is the MOVING-ONLY
+  LINE.** `w0score`'s headline p50 is ALL-SAMPLE, and on the shipped lead-OFF
+  default the stop echo parks world-0 on the body at every stop, so the parked
+  majority drags the median to ~0 while the copy runs a full report chord behind
+  whenever the body walks — the registered §1z-t.8 verdict printed CONFIRMED over
+  exactly such a tape. The section builds that tape (20 walking samples 500 u
+  behind, 30 parked samples on the body) and asserts the all-sample p50 under the
+  CONFIRM bar, the moving-only p50 over 400 u with n = 20, and the line PRINTED
+  beside `<-- THE NUMBER` rather than instead of it; its control is a walk-only
+  tape where the two statistics must AGREE, so a green cell is the parked
+  majority doing the work and not two differently-computed numbers. The verdict's
+  registered semantics are unchanged — the moving-only reading is printed beside
+  it, labelled "NOT the registered statistic".
+  Floor 47, from the BARE-MACHINE green run (50 with the vault; section 5's three
+  real controls are the difference and declare a skip). **A skip does not lower a
+  floor**, so the old 44 was unreachable without a vault after §1z-ac's section 6
+  landed — corrected here in the same change. ~5 s with the vault),
 
   `toolkit/clientscan/test_leadmargin.py` (**the keyboard lead's LENGTH argument,
   MOVECODE-1z-ab / FINDINGS §1z-ab.** `leadmargin.py` holds the three extractors the
@@ -10914,8 +10929,12 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   one wall through all five verdicts: verbatim (speed-then-move, exact
   point, no chain, held click superseded, integrator armed), routed (speed
   ONCE then the first leg, chain armed with the remaining legs, matched
-  plane pair), kbd-drop (nothing sent — retail's own contract, read off
-  Rule 1's latch directly so it survives --no-grant-suppress), refused
+  plane pair), kbd-drop (nothing sent, read off Rule 1's latch directly so it
+  survives --no-grant-suppress — ~~retail's own contract~~ **CORRECTED
+  2026-09-05 (MOVECODE-1z-bh, review §1.7): the drop is OURS**, kept on
+  MOVECODE-R1-B1's displacement outcome; retail answered 7 of 7 single
+  mid-keyboard clicks, and `--answer-kbd-click` is the revert arm this section
+  now also drives), refused
   (origin-off-mesh — the P-17 wall-press door CLOSED: nothing sent, dest
   dropped, reason named in the row) and clip-fallback (the stop lands short
   of the wall, never past it; the route-refusal reason rides the row), plus
@@ -11012,9 +11031,21 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   function, no bare `pm.clip(` in it), and that the one flag sets
   `pathmap.SEAM_AWARE_ROUTE` too, so route()'s own pull and gate cannot
   disagree with the fallback. The fine-step source lock for the fallback
-  follows the call through the helper. Floor 121 from the green run (51 at
-  the B2 landing, 57 after the review round, 64 after B4, 68 after B5, 73
-  after 2026-08-30, 103 after 1z-v, 114 after 1z-w). ~1 s).
+  follows the call through the helper. **2026-09-05 (MOVECODE-1z-bh, review
+  §1.7) added five to section 1: THE KEYBOARD DROP'S REVERT ARM.** The drop
+  was documented in three places as retail's contract and it is ours —
+  REALFIX §0.15 is a rapid-PAIR rule, §0.14's V-RETAIL-2 measured retail
+  answering 7 of 7 SINGLE mid-keyboard clicks — and `--answer-kbd-click` was
+  read only by `_grant_verdict`, the legacy path `router_answer_click`
+  bypasses, so under the shipped `ROUTER = True` the flag was inert and the
+  drop had no arm that could convict it. The flag now reaches the router, and
+  the same click is driven both ways: OFF is the kbd-drop row (existing), ON
+  is a grant on the wire with the real `verbatim` verdict row and a
+  `kbd-answered` PASS-THROUGH row marked `arm`/`pass_through` so a click
+  census can filter it, with the module global restored and re-asserted after.
+  Floor 126 from the green run (51 at the B2 landing, 57 after the review
+  round, 64 after B4, 68 after B5, 73 after 2026-08-30, 103 after 1z-v, 114
+  after 1z-w, 121 after 1z-bb). ~1 s).
 
 `toolkit/authsrv/test_agtrack_mirror.py` (**the AgTrack mirror's transcription,
   rule by rule -- MOVECODE-1z-q step 1's guard.** `agtrack_mirror.py` is a

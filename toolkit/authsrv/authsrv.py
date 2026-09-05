@@ -1436,6 +1436,14 @@ ECHO_ANY_REFUSAL = False
 # (the rate floor) exactly as any other click does, so a click inside the floor
 # is still HELD with the newest destination winning.
 #
+# EXTENDED 2026-09-05 (MOVECODE-1z-bh, review sec.1.7): the flag also switches
+# off `router_answer_click`'s OWN keyboard-age drop. That handler bypasses
+# `_grant_verdict` entirely, so from the router's default flip (2026-09-03)
+# until 1z-bh this flag was INERT on the shipped path and the router's drop was
+# a shipped behaviour with no arm that could convict it. The router has no
+# rule 2 to fall through to -- it answers every processed click within one RTT
+# by design -- so there the flag simply routes the click.
+#
 # WHAT IT DELIBERATELY DOES NOT CHANGE, and this is the guard §1p.10 says must
 # stay. Retail's real contract for a rapid PAIR is that the older click is
 # dropped, and that is RULE 2's hold-and-coalesce, not RULE 1. Removing rule 2
@@ -5500,11 +5508,36 @@ def d1_lead_dest(reported, vec2):
 #
 # THE LAW, and it has no free parameter. separation = report_gap x body_speed.
 # Our in-leg 0x003D gaps are modally 1.80 s: 1.80 x 288 = 518.4 u predicted
-# against 516.1 u measured (-0.4%). Retail's 0.257 s x 288 = 74.0 u. The
-# cadence ratio is 7.00x and the separation ratio 6.97x. Report LATENCY is not
-# the defect -- at the instant each 0x003D is sent the reported point is a
-# median 12.3 u from the body. The client tells the truth promptly; it tells it
-# rarely, and we answer with a point that was already old.
+# against 516.1 u measured (-0.4%). Report LATENCY is not the defect -- at the
+# instant each 0x003D is sent the reported point is a median 12.3 u from the
+# body. The client tells the truth promptly; it tells it rarely, and we answer
+# with a point that was already old.
+#
+# CORRECTED 2026-09-05 (MOVECODE-1z-bh, studies/review/MOVEMENT-2026-09-04.md
+# sec.1.2). The two sentences that used to close that paragraph -- "Retail's
+# 0.257 s x 288 = 74.0 u. The cadence ratio is 7.00x and the separation ratio
+# 6.97x" -- are a CATEGORY ERROR, and they are the sentence the whole
+# no-lead default was argued from. Three facts, re-derived for the review by
+# studies/review/movement-2026-09-04/retail_2c_and_cruise.py:
+#   * RETAIL REPORTS AS WE DO. Retail's own client fires the same ~512 u
+#     0x003D distance trigger during cruise: over the 61 live connections,
+#     454 cruise pairs, inter-report gap p50 1.20 s / p90 1.785 s, chord
+#     p90 513.8 u, 208 of 454 in the 1.5-2.0 s bin and 137 of 454 under 0.6 s
+#     (heading nudges). There is no 7x cadence advantage to close, and no
+#     echo, rate or cadence term can reach retail's magnitude.
+#   * 0.257 s IS NOT A REPORT CADENCE. It is the NPC-follow-fitted lag of
+#     retail's SERVER copy -- a RECONSTRUCTION, studies/animref/FINDINGS.md
+#     sec.38.3 -- and comparing it against our report gap compares two
+#     different quantities.
+#   * WHY RETAIL'S COPY STAYS ~74 u BEHIND A MOVING BODY: retail grants the
+#     766 u D1 lead and the copy WALKS it. The lead is the mechanism. With
+#     KBD_SYNC_LEAD_ON = False the copy is granted the point the body has
+#     already left and parks there, so the law above is not a defect the
+#     three terms remove -- it is the SHIPPED DEFAULT'S OWN MEASURED STATE:
+#     moving-body separation p50 510-515 u on 8 of the 13 default tapes of
+#     2026-09-04 (review sec.1.1; w0score's moving-only line). The all-sample
+#     p50 reads ~0 on those tapes only because the stop echo zeroes the
+#     parked majority.
 #
 # THE THREE TERMS, each derived, none tuned. They are ONE behaviour because the
 # counterfactual says they are not separable -- the lead ALONE is worse than
@@ -6552,8 +6585,22 @@ def _a2_watchdog(send, state, rec, now=None):
 # straight lines. The hold/void/freshness tower polices exactly that
 # hazard, so ROUTER clicks bypass it: no grant_pending, no rate floor
 # (retail answers every processed click within one RTT), Rule 1's
-# keyboard drop KEPT (a click under active keyboard authority is dropped
-# outright -- retail's own contract, sec.0.15).
+# keyboard drop KEPT -- and that drop is OURS.
+#
+# CORRECTED 2026-09-05 (MOVECODE-1z-bh, studies/review/MOVEMENT-2026-09-04.md
+# sec.1.7). This sentence used to end "a click under active keyboard authority
+# is dropped outright -- retail's own contract, sec.0.15". REALFIX sec.0.15
+# states an older-of-a-rapid-PAIR rule and says nothing about a single click;
+# sec.0.14's V-RETAIL-2 measured seven SINGLE mid-keyboard clicks and retail
+# answered all seven within one RTT. studies/movecode/FINDINGS.md sec.1p.9 /
+# sec.1p.10 published that correction on 2026-08-28 and it never reached this
+# block. What the drop is really kept on is MOVECODE-R1-B1's displacement
+# outcome (FINDINGS sec.1q, 2026-08-28) -- measured on the LEGACY grant path
+# under the pre-KBD_SYNC copy placement -- so it is a refuted-as-a-default arm,
+# not a decoded retail rule. `--answer-kbd-click` is its revert arm and reaches
+# this handler since 1z-bh; before that the flag was read only by
+# `_grant_verdict`, which the router bypasses, so the shipped drop had no arm
+# that could convict it.
 #
 # Where route() cannot answer, nothing is invented: a clip-fallback single
 # leg when the straight line moves the client (ROUTER-Q1's cross-component
@@ -6845,25 +6892,69 @@ def router_answer_click(send, state, conn_id, rec, dest, dest_plane,
     kbd_at = state.get("kbd_moving_at")
     kage = None if kbd_at is None else now - kbd_at
     if kage is not None and kage <= GRANT_LOCAL_WINDOW:
-        # Retail's contract (sec.0.15): a click under an ACTIVE KEYBOARD
-        # authority is DROPPED OUTRIGHT. Read straight off Rule 1's latch
-        # (same arithmetic, negative age counts as armed) rather than
-        # through _grant_verdict, because the drop is retail's measured
-        # behaviour and must not evaporate under --no-grant-suppress. The
-        # rate floor is deliberately NOT consulted -- retail answers every
-        # processed click within one RTT (29/29, ROUTER.md sec.1), and the
-        # floor's hazard (a grant onto a silent mid-walk client) is gone
-        # when every grant is a legal leg.
-        state["grant_pending"] = None
+        # THE MID-KEYBOARD DROP, AND IT IS OURS. CORRECTED 2026-09-05
+        # (MOVECODE-1z-bh, review sec.1.7): this comment used to open
+        # "Retail's contract (sec.0.15): a click under an ACTIVE KEYBOARD
+        # authority is DROPPED OUTRIGHT" and justify itself with "the drop is
+        # retail's measured behaviour". Both clauses are false. REALFIX
+        # sec.0.15 is an older-of-a-rapid-PAIR rule; sec.0.14's V-RETAIL-2
+        # measured seven SINGLE mid-keyboard clicks and retail answered 7 of 7
+        # within one RTT (studies/movecode/FINDINGS.md sec.1p.9-1p.10, and the
+        # sibling comment on `_grant_verdict`'s rule 1 has said so since
+        # 2026-08-28).
+        #
+        # WHAT ACTUALLY KEEPS IT: MOVECODE-R1-B1's displacement outcome
+        # (FINDINGS sec.1q) -- deleting this refusal scored a largest
+        # displacement of 537 u against the K2 baseline's 446 u on a walk half
+        # as long, with the operator reporting the warps. That run was scored
+        # on the LEGACY grant path under the pre-KBD_SYNC copy placement, so
+        # it convicts the deletion under conditions this build no longer has.
+        # A shipped behaviour on evidence that stale needs an arm, which is
+        # the branch below.
+        #
+        # Read straight off Rule 1's latch (same arithmetic, a negative age
+        # counts as armed) rather than through `_grant_verdict`, so the drop
+        # does not evaporate under --no-grant-suppress. The rate floor is
+        # deliberately NOT consulted -- retail answers every processed click
+        # within one RTT (29/29, ROUTER.md sec.1), and the floor's hazard (a
+        # grant onto a silent mid-walk client) is gone when every grant is a
+        # legal leg.
+        if not ANSWER_KBD_CLICK:
+            state["grant_pending"] = None
+            if rec is not None:
+                rec.event("router_route", verdict="kbd-drop",
+                          dest=[dx, dy],
+                          keyboard_age=round(kage, 3))
+            print(f"[c{conn_id}] ROUTER click to ({dx:.0f}, {dy:.0f}): the "
+                  f"player is driving with the keyboard -- dropped. OURS, "
+                  f"not retail's (review sec.1.7: retail answered 7 of 7 "
+                  f"single mid-keyboard clicks); kept on R1-B1's "
+                  f"displacement outcome. Revert: --answer-kbd-click",
+                  flush=True)
+            return True
+        # --answer-kbd-click, wired to the router 2026-09-05 (MOVECODE-1z-bh,
+        # review sec.1.7). The flag has existed since 2026-08-28 but was read
+        # ONLY by `_grant_verdict`, the legacy path this handler bypasses, so
+        # under the shipped ROUTER = True it was inert and the drop above had
+        # no revert arm that could convict it -- exactly what sec.29's
+        # one-run-one-term rule forbids. With the flag on, the click is routed
+        # like any other: the chain abandon has already run above and nothing
+        # further down this function reads the keyboard latch.
+        #
+        # THIS ROW IS A PASS-THROUGH MARKER, not the click's verdict: the
+        # routing below emits the real `router_route` row (verbatim /
+        # clip-fallback / refused). A scorer counting clicks by router_route
+        # rows must drop verdict == "kbd-answered", which is why the row also
+        # carries arm= and pass_through=.
         if rec is not None:
-            rec.event("router_route", verdict="kbd-drop",
-                      dest=[dx, dy],
-                      keyboard_age=(None if kage is None
-                                    else round(kage, 3)))
-        print(f"[c{conn_id}] ROUTER click to ({dx:.0f}, {dy:.0f}): the "
-              f"player is driving with the keyboard -- dropped, retail's "
-              f"own contract", flush=True)
-        return True
+            rec.event("router_route", verdict="kbd-answered",
+                      arm="answer-kbd-click", pass_through=True,
+                      dest=[dx, dy], keyboard_age=round(kage, 3))
+        print(f"[c{conn_id}] ROUTER click to ({dx:.0f}, {dy:.0f}) arrived "
+              f"{kage:.2f}s into a keyboard walk: ANSWERED, not dropped "
+              f"(--answer-kbd-click). DIAGNOSTIC/REVERT ARM -- R1-B1 is "
+              f"REFUTED as a default on the legacy path; say so when you "
+              f"report the run.", flush=True)
     origin = (float(pos[0]), float(pos[1]))
     snapped_d = None
     if not pm.walkable(origin[0], origin[1]):
@@ -7342,15 +7433,34 @@ def _heading_grant_ok(state, now):
     nothing else, so the offline scorer runs it directly and the caller's `if
     ZERO_LEAD:` is the only place the flag is read.
 
-    A REFUSED HEADING GRANT IS DROPPED, NOT HELD, and that is the second
-    difference from the click arm. A held click is the PLAYER'S CHOICE and
-    losing it loses a feature (grant_flush_tick exists for exactly that), but a
-    heading grant is superseded by construction: the client emits 0x003D while
-    moving at a median 0.28-0.30 s (`ours`, click-heavy runs -- the same cadence
-    --client-endpoint's refutation measured as its 0.28 s median grant age), so
-    the next report carries a fresher position than the one we just refused and
-    granting the stale one late would be the reproduction with a delay bolted
-    on. There is no pending machinery here and there must not be one.
+    A REFUSED HEADING GRANT IS HELD AND RE-BAKED, and this predicate does not
+    know it. CORRECTED 2026-09-05 (MOVECODE-1z-bh, review sec.4). This
+    paragraph read "A REFUSED HEADING GRANT IS DROPPED, NOT HELD ... There is
+    no pending machinery here and there must not be one" until today, and it
+    has been false since MOVECODE-1z-y (2026-09-03): `KBD_SYNC_HOLD` ships
+    True, the 0x003D arm stores the refused report as `state["heading_hold"]`
+    (the grant the arm would have sent, computed at refusal from the report in
+    hand), and `heading_hold_tick` -- polled beside `grant_flush_tick` --
+    re-bakes it the instant the floor opens, unless a newer report, a stop, a
+    click or `HEADING_HOLD_MAX_AGE` superseded it. The `KBD_SYNC_HOLD` comment
+    block already said so; this docstring did not, and the review found it
+    still generating proposals to "delete the heading-rate floor" because the
+    mechanism that answers them looked absent.
+
+    THE PREDICATE ITSELF IS UNCHANGED and is still pure rule 2 -- it returns
+    (False, "heading-rate") and the CALLER decides whether to hold. That
+    separation is deliberate: `grantsim.py` imports this symbol to score the
+    floor offline, and a predicate that also owned the hold would not be
+    drivable from a capture. What was wrong was only the claim about what
+    happens afterwards.
+
+    WHY THE OLD PREMISE FAILED, for the record. It rested on the client
+    emitting 0x003D while moving at a median 0.28-0.30 s -- true of the
+    click-heavy runs it was measured on, and 1.80 s on held-key cruise (review
+    sec.4). A refusal in a 1.80 s gap is a whole silent interval with no
+    anchor, and 1z-u.3's 08:46 session is the specimen: a re-aim refused 66 ms
+    after a lead, no 0x003D for 2.7 s / 567 u, the lead matured unanswered and
+    the arrival snapped the body 498 u.
 
     THE CLOCK IS THE SHARED ONE. `grant_at` is stamped inside send() by
     _note_wire_move for EVERY player 0x0029 whatever arm sent it (:2724-2731),
@@ -20048,11 +20158,22 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                             arrival_carry_advance(
                                                 state, now_z, ac_arrival, plane,
                                                 reported)
-                                # AND NO `else` HOLDING IT. A refused heading
+                                # NO `else` HERE, but the refusal IS held --
+                                # thirty lines up, not on this branch.
+                                # CORRECTED 2026-09-05 (MOVECODE-1z-bh, review
+                                # sec.4): this comment read "A refused heading
                                 # grant is DROPPED; the next 0x003D supersedes
-                                # it in ~0.29 s by construction. See
-                                # _heading_grant_ok for why the click arm's hold
-                                # would be wrong here.
+                                # it in ~0.29 s by construction", and that has
+                                # been false since MOVECODE-1z-y. Under
+                                # KBD_SYNC_HOLD (True) the `not zero_ok and
+                                # zero_why == "heading-rate"` arm above writes
+                                # state["heading_hold"], and heading_hold_tick
+                                # re-bakes it when the floor opens. The
+                                # ~0.29 s premise was measured on click-heavy
+                                # runs; held-key cruise reports at 1.80 s, so
+                                # a dropped refusal costs a whole silent
+                                # interval. See _heading_grant_ok's docstring
+                                # and the KBD_SYNC_HOLD block.
                     elif opcode == GAME_CMSG_MOVE_TO_COORD:
                         # A click to move is movement: it cancels the cast in
                         # flight and the auto-attack chain BEFORE the move is
@@ -22544,10 +22665,17 @@ def main():
                          "click grant refuses whenever the locally-driving "
                          "latch is younger than 3.0 s; retail answered 7 of 7 "
                          "such clicks within one RTT, so the refusal is ours "
-                         "(sec.1p.10 item 1). The click falls through to the "
-                         "RATE FLOOR, which still holds-and-coalesces -- that "
-                         "is the pair contract REALFIX sec.0.15 actually "
-                         "states, and it deliberately stays. Off by default.")
+                         "(sec.1p.10 item 1). On the LEGACY path the click "
+                         "falls through to the RATE FLOOR, which still "
+                         "holds-and-coalesces -- that is the pair contract "
+                         "REALFIX sec.0.15 actually states, and it "
+                         "deliberately stays. SINCE 2026-09-05 (1z-bh, review "
+                         "sec.1.7) it also reaches the ROUTER's own drop in "
+                         "router_answer_click, which the legacy path bypasses "
+                         "-- under the shipped --router this flag was inert "
+                         "and that drop had no arm. Off by default, and it is "
+                         "a REVERT/DIAGNOSTIC arm, not a candidate default: "
+                         "R1-B1 is REFUTED on the legacy path (sec.1q).")
     ap.add_argument("--keepalive-grant", action="store_true",
                     help="MOVECODE-K1. Re-grant the player's own last REPORTED "
                          "position, unclipped, whenever our model says the "
@@ -24971,12 +25099,38 @@ def main():
         elif not (KBD_SYNC_SPEED_ON and KBD_SYNC_STOP_ON):
             print("      A DEFAULT TERM IS OFF -- this is a diagnostic arm, "
                   "not the shipped default. Say so when you report the run.")
+        if not (KBD_SYNC_LEAD_ON or a.d1_lead):
+            # MOVECODE-1z-bh, review sec.1.3: three flags ship True and
+            # nothing at run time said they were unreachable. a2_clip_lead
+            # has exactly three call sites (kbd_lead_refresh_tick, and the
+            # D1 / KBD_SYNC lead branches of the 0x003D arm), each under
+            # D1_LEAD or KBD_SYNC_LEAD_ON. `a.d1_lead` and not D1_LEAD:
+            # the global is resolved further down, after this banner.
+            print("      LEAD-PATH ONLY: INERT UNDER THIS CONFIGURATION -- "
+                  "A2_LEAD_PLANE_CLIP (1z-ap, ON), A2_LEAD_ORIGIN_SEAM "
+                  "(1z-bg, ON) and A2_LEAD_SEAM_CLIP (1z-bc, opt-in) reach "
+                  "the wire only through a2_clip_lead, whose three call sites "
+                  "all sit under D1_LEAD or KBD_SYNC_LEAD_ON. Both leads are "
+                  "off, so the two shipped defaults change nothing in this "
+                  "run and the known-bad arm cannot be driven. Armed with "
+                  "--kbd-lead or --d1-lead.")
         print("      DERIVED    world-0 is moved by our 0x0029 alone (SYNC-"
               "ONLY, handler 0x005FD890) and the bake 0x005FE950 arms a "
               "FIXED |v| = maxSpeed x moveSpeed toward it, so a grant at the "
               "point the body already left leaves the copy parked behind by "
               "report_gap x speed: 1.80 s x 288 = 518.4 u predicted, 516.1 u "
-              "measured. Retail's 0.257 s x 288 = 74.0 u.")
+              "measured.")
+        print("      NOT A CADENCE GAP (corrected 2026-09-05, review sec.1.2). "
+              "Retail's client fires the SAME ~512 u 0x003D trigger during "
+              "cruise -- 454 cruise pairs over 61 live connections, gap p50 "
+              "1.20 s / p90 1.785 s, chord p90 513.8 u. The 0.257 s x 288 = "
+              "74.0 u this banner used to quote is the NPC-follow-fitted lag "
+              "of retail's SERVER copy, not a report cadence. Retail's copy "
+              "stays near the body because retail grants the 766 u lead and "
+              "the copy WALKS it -- so with the lead OFF the law above is "
+              "this default's own measured state (moving-body separation p50 "
+              "510-515 u on 8 of 13 tapes), not a defect the other two terms "
+              "remove.")
         print("      READOUT    gamesrv verdict rows' lead_src ('kbd' / "
               "'fallback') and lead_clip_why beside the KBD LEAD / KBD "
               "STOP-ECHO / KBD SPEED-TRUTH wire labels. The verdict that "
@@ -25243,6 +25397,17 @@ def main():
         print("[map] --answer-kbd-click ON (MOVECODE-R1-B1). A click no longer "
               "dies because the player is ALSO on the keyboard; it falls "
               "through to the rate floor like any other click.")
+        print("      REACHES THE ROUTER TOO since 2026-09-05 (1z-bh, review "
+              "sec.1.7). router_answer_click has its own keyboard-age drop "
+              "and the legacy _grant_verdict this flag used to be read by is "
+              "bypassed under --router, so with ROUTER on the flag was INERT "
+              "and that drop had no arm that could convict it. With the flag "
+              "the router routes the click like any other and logs a "
+              "'kbd-answered' pass-through row before the real verdict row.")
+        print("      THIS IS A REVERT/DIAGNOSTIC ARM, NOT A CANDIDATE "
+              "DEFAULT. R1-B1 is REFUTED on the legacy path (FINDINGS "
+              "sec.1q: largest displacement 537 u against K2's 446 u on a "
+              "walk half as long). Say so when you report the run.")
         print("      WHY: rule 1 read REALFIX sec.0.15 as 'a click under an "
               "active keyboard authority is dropped outright'. sec.0.15 does "
               "not say that -- it is about the older click of a rapid PAIR "

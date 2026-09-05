@@ -243,12 +243,24 @@ def main(argv=None):
     rr = [r for r in rs if str(r.get("kind", "")).startswith("router")]
     if rr:
         print()
-        routes = [r for r in rr if r.get("kind") == "router_route"]
+        # MOVECODE-1z-bh: `--answer-kbd-click` logs a PASS-THROUGH row
+        # (verdict "kbd-answered", pass_through=True) before the click's real
+        # verdict row, so counting every router_route row would report one
+        # extra "route" per answered mid-keyboard click. Counted on its own
+        # line instead -- the arm is worth seeing, just not as a route.
+        passthru = [r for r in rr if r.get("kind") == "router_route"
+                    and r.get("pass_through")]
+        routes = [r for r in rr if r.get("kind") == "router_route"
+                  and not r.get("pass_through")]
         print(f"ROUTER: {len(routes)} route(s) -- the click census above is BLIND "
               f"to these")
         for v, n in collections.Counter(
                 r.get("verdict") for r in routes).most_common():
             print(f"  {str(v):<16} x{n}")
+        if passthru:
+            print(f"  {'(kbd-answered)':<16} x{len(passthru)}   "
+                  f"--answer-kbd-click let these through the keyboard drop; "
+                  f"each one's real verdict is counted above")
         wp = [r.get("n_wp") for r in routes
               if isinstance(r.get("n_wp"), int)]
         if wp:
