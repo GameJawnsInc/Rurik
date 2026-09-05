@@ -28,7 +28,7 @@ Three questions, all answerable from the corpus, all joined on the guard's own s
 
 The third question found what the click framing hid.  The two kept orderings are opposites:
 where the newest report is a STOP the next report finds the body at the same point every time;
-where the newest is a WALK-START the body is walking on in a quarter of the windows, at the
+where the newest is a WALK-START the body is walking on in one window of six, at the
 client's own movement speeds.  That is 1z-bn's argument applied to the newer member alone, and
 it is what the NEWEST-IS-A-STOP clause (agtrack_guard.WAIVER_NEWEST_MUST_BE_STOP) ships.
 

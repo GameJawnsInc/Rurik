@@ -128,7 +128,7 @@ else:
     print("  THE WAIVER'S CONDITION IS LIVE on the kept orderings: %d stale coincident pairs." % kept_stale)
     print("  What sits under them is the question, and waiverclick.py answers it by ORDERING and by")
     print("  the guard's own click state: a pair whose newest report is a STOP is followed by a still")
-    print("  body, a pair whose newest is a WALK-START by a walking one in a quarter of its windows, and")
+    print("  body, a pair whose newest is a WALK-START by a walking one in one window of six, and")
     print("  no kept window has ever met a re-pin want (1z-bs).  Where the condition occurs:")
     for k, v in stale_rows.items():
         if k == "0x0047->0x003D":
