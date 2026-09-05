@@ -13396,7 +13396,117 @@ keyboard body, and the hold cannot recover it.** The re-pin's harm metric (displ
   moving drawn body is the halt, so a gate-2 veto during a keyboard hold needs a different
   answer than `0x002C`. Both belong with §1z-bd.4's plane-channel fix and need the corpus
   retrodiction before a default moves.
+  **→ (i) SHIPPED in §1z-bf, and the cause was narrower than a plane word:** gate 2 was EXACT
+  containment of the modelled sync copy, and all 19 vetoes stood on sub-unit slivers outside
+  our trapezoid edges. `on_mesh(a, SEAM_TOL)` retrodicts them to 0 with the control exact.
+  (ii) has no surviving specimen and is not built (§1z-bf.5).
 - **Filed, measurement:** the combined radius (four offsets, agenttap columns); GmWalk's exact
   re-entry predicate (`0x005355C0`–`0x00535EAA`: the observation is 60 Hz on a traced path,
   0 after a halt, 0 during a straight S walk).
 - Tools: `review/hookwin.py`, `review/solverhalts.py`.
+
+---
+
+## 1z-bf. THE GUARD FIX — gate 2 was EXACT containment of the modelled sync copy, and the client's copies live on our edges' rounding; `on_mesh(a, SEAM_TOL)` retrodicts 19 → 0 false vetoes with the control exact; SHIPPED as the default, `--agtrack-gate2-exact` reverts
+
+**Asked:** "now do the guard fix" — §1z-be.6's filed item. Ident `MOVECODE-1z-bf`. Derived from
+the corpus and the two hooked runs, retrodicted over every capture that carries the guard's own
+log, shipped as a default with a revert flag. No run. New tool: `review/guardretro.py` (replays
+a capture's guard feed through the guard, stock and fixed, with the logged verdicts as the
+positive control). OBSERVED / MEASURED unless marked.
+
+### 1z-bf.1 What gate 2 actually tested, and what stood on it
+
+`agtrack_mirror.MeshAdapter.start_walkable(x, y)` was `pathmap.walkable(x, y)` — is the point
+**inside** a trapezoid, on any plane — applied to `a = sync.position(now)`, the modelled sync
+copy at evaluation (the docstring's "the start point"). The census of the whole harness corpus
+(1,123 parseable captures): the guard predicted `gate2-offmesh` **19 times in 19 runs** and
+fired **17** re-pins on it (the other two fell between the 2 Hz samples). **All 19 at one spot**
+— the wedge tip of map 146, x 10367–10447, y 8280–8358 — and in every one the modelled `a` was
+the client's **previous accepted report**: a zero-lead grant had just settled the sync copy on
+it. Those points are what our decode calls off-mesh **by ≤ 0.5 u**: `planes_at` empty,
+`walkable` False, `_near(·, 0.5)` finding plane 29 (or plane 0 at `(10302.02, 8214.08)`). The
+client's keyboard mover lays its waypoints along trapezoid edges (§1z-bd.2: the first quarterstep
+sits 0.01–0.03 u outside the plane by our decode), its body reports from them, and on both hooked
+runs its own snap test **ran on the very grant we vetoed and did not reseed** (`snaptest` at
+−3.828 / −3.844 s, no `reseed` before our `0x002C`). So the veto was a model false positive on a
+half-unit sliver, and its `0x002C` is what halted the walking body in §1z-be.4.
+
+### 1z-bf.2 The tolerance is derived, and it is the smallest the evidence needs
+
+`SEAM_TOL = 1.0` u — the constant `portal_at()` already uses to see zero-height portal lines —
+is the tolerance. It covers all 19 (≤ 0.5 u) and it is not a new number. The client's own gate 2
+is looser than that: run 2's gate-2 query from `(10276.6, 8326.7)` declaring plane 29, **32 u**
+from the nearest plane-29 trapezoid, returned `pathCount 1`, while §1z-bd.4's query at the
+NE end, > 256 u off its declared plane, returned 0 (the map-146 return-tap corpus is four
+queries; the 282 in `r7`/`r8` are on other maps and their meshes are not loaded here). That
+looseness is deliberately **not** modelled: widening the mesh by tens of units on n = 1 would be
+a guess, and a too-narrow gate 2 fails toward a false veto — the cost this repo has now measured
+once (a 3.7 s park). `--agtrack-gate2-exact` zeroes the tolerance; the tests run both arms.
+
+### 1z-bf.3 The change
+
+- `pathmap.on_mesh(x, y, tol=SEAM_TOL)`: `walkable()` or `_near(x, y, tol)` non-empty. It does
+  not name a plane — the slivers are at portal ends where two planes meet, and `planes_at` /
+  `plane_at` are unchanged.
+- `agtrack_mirror.GATE2_SEAM_TOL = 1.0`; `MeshAdapter.start_walkable` asks `on_mesh` under it and
+  falls back to `walkable()` for a mesh without `on_mesh` (the test stubs).
+- `authsrv.AGTRACK_GATE2_SEAM = True` (swept by `capture_flags()`), `--agtrack-gate2-exact`
+  reverts by zeroing the mirror's constant, banner printed.
+- Tests: `test_pathmap` §15 (synthetic square: inside agrees, 0.5 u outside is ON, 1.5 u OFF,
+  radius semantics, far off, `SEAM_TOL == 1.0`; Pre-Searing: RUN-1zBD's three report points
+  outside every trapezoid and on the mesh within 1 u, the legacy belief 144 u east stays off;
+  floor 89 → 97 from 101 green), `test_agtrack_mirror` §10b (a sliver stub under both arms —
+  1.0 passes, 0.0 still fails, so the known-bad arm still reproduces the false veto; the
+  no-`on_mesh` fallback; `GATE2_SEAM_TOL == pathmap.SEAM_TOL`; floor 64 → 68),
+  `test_agtrack_guard` §13 (the switch recorded and ON, the flag and its zeroing, the mirror's
+  two branches; floor 74 → 77). `test_srclint` 26.
+
+### 1z-bf.4 ★★ The retrodiction
+
+`guardretro.py --all` rebuilds each capture's guard feed exactly as `authsrv` feeds the guard
+(placement from the first report's server position; `position_report` → `on_report` with the
+server's own `("rep", source, stop)` signature; decoded `0x003E` → `on_click`; the player's sent
+`0x0029`/`0x002A` → `pre_emit` + `on_emit`; sent `0x002C` → `on_emit`; `0x002B` → `on_speed`;
+every `WORLD_SIMULATION_TICK` → `tick`) and runs it twice, exact and tolerant. Map 146 only.
+
+| population | runs | vetoes logged / stock / fix | gate2-offmesh logged / stock / fix |
+|---|---|---|---|
+| **control OK** — the capture carries the guard's own rows and the stock replay reproduces every logged verdict, code and reason | **66** | 27 / **27** / **8** | 19 / **19** / **0** |
+| MISMATCH — an older guard's rows (2026-08-30) | 4 | 4 / 14 / 14 | 0 / 11 / 11 |
+| pre-guard — no verdict rows at all (2026-08-21..29) | 51 | 0 / 684 / 678 | 0 / 30 / 24 |
+
+**The control is exact on all 66 runs that can be controlled** (0 mismatches, the 19 gate-2
+vetoes among them), and under the fix those 19 become **0**; the 8 vetoes that remain are
+`gate1-red` / `budget-red` / `arrival-risk`, untouched. The pre-guard population is not evidence
+about the fix (today's guard over traffic an older server produced) but it does show the gate is
+not blinded: 30 → 24, not 0 — a sync copy genuinely off the mesh still fails it. Outcome
+evidence for the removed re-pins: the two hooked runs (no client reseed on the vetoed grant, .1),
+and the next report after each real re-pin — 104 u along the body's heading in 6 of 17 (the body
+kept walking), 0 in the rest (it stood) — no report jumped back to the pinned point, so no
+re-pin in the corpus dragged a body, the harm was the halt.
+
+### 1z-bf.5 What this does not do, with numbers
+
+- **The re-pin's other triggers still land on a walking body.** `gate1-red` fired 32 times in
+  the corpus, `arrival-risk` 13, `budget-red` 4. Each has its own derivation (§1z-ah's waiver,
+  §1z-ag's retract) and none is a false positive by construction; §1z-be.6's fix (ii) — "no
+  install onto a moving drawn body during a hold" — has **no specimen** in the corpus once (i)
+  is applied (0 gate-2 vetoes survive on the controllable population), so it is not built.
+  Filed with those counts, not as a defect.
+- **The lead's `origin-unwalkable` refusal shares the sliver defect.** `a2_clip_lead` refused
+  **179** leads in 26 runs because the reported origin was `walkable()`-false — the same
+  half-unit points — and granted zero-leads instead (run 2's −4.34 s row). Not changed here: the
+  leads are the arc's subject and the six fatal runs' leads must be retrodicted (`leadretro.py`)
+  before an origin test loosens. Filed.
+- The client's true gate-2 tolerance (≥ 32 u on the declared plane, n = 1) is an open number;
+  `mfpseam`-style census on `r7`/`r8` needs their own maps loaded (`0x287B3`, map 280).
+
+### 1z-bf.6 What stands
+
+- **Gate 2 reads the mesh the way the client stands on it.** 19 → 0 false vetoes, control exact,
+  default ON, `--agtrack-gate2-exact` reverts and the tests keep the known-bad arm alive.
+- **The wedge-tip park of §1z-bd/§1z-be cannot recur from this cause**: the re-pin that halted
+  the walking body would not be licensed.
+- Tools: `review/guardretro.py`. Filed: the other re-pin triggers on a walking body (counts
+  above), the lead origin sliver (179), the client's gate-2 tolerance.

@@ -581,6 +581,33 @@ class PathingMap:
                     out.add(pl)
         return out
 
+    def on_mesh(self, x, y, tol=SEAM_TOL):
+        """Is (x, y) on the mesh AS THE CLIENT RESOLVES IT: inside a trapezoid,
+        or within `tol` of one. `walkable()` is exact containment, and the
+        client's own copies stand where exact containment says nothing is.
+
+        MEASURED (MOVECODE-1z-bf, 2026-09-04). Every gate2-offmesh re-pin in the
+        harness corpus -- 17 of 17 fired, 19 of 19 predicted, over 1,123 runs --
+        was raised with the modelled sync copy standing on a point walkable()
+        rejects by <= 0.5 u, at the wedge tip of map 146 where the client's
+        own navmesh trace lays its waypoints ALONG trapezoid edges (the first
+        quarterstep of a keyboard walk lands 0.01-0.03 u outside the plane by
+        our decode, sec.1z-bd.2). The client reported its body standing on
+        those points, and on the two hooked runs its own snap test ran on the
+        very grant we vetoed and did not reseed (sec.1z-bf). So a sub-unit
+        sliver outside our edge is not off the client's mesh; it is our edge
+        rounding. `tol` defaults to SEAM_TOL, the same 1 u that lets
+        portal_at() see zero-height portal lines -- one constant for "the
+        mesh as the client sees it at its edges", not a new guess. A caller
+        that needs "which plane" still uses planes_at()/plane_at(), which this
+        deliberately does not widen: the slivers here are at portal ENDS,
+        where two planes meet, and naming one would be the guess this method
+        exists to avoid making.
+        """
+        if self.walkable(x, y):
+            return True
+        return bool(self._near(x, y, tol))
+
     def _near(self, x, y, tol=SEAM_TOL):
         """Every trapezoid within `tol` of (x, y) -- zero-height portal lines
         included, which containing() can only hit by landing on them exactly."""
