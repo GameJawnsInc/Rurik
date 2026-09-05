@@ -14463,3 +14463,168 @@ corpus's 62 fires, all 7 `budget-red` and 15 of 20 `arrival-risk`, leaving `gate
 most `gate1-red` untouched). It needs its own section, a revert flag, `guardretro`'s replay,
 and then **one lead-ON run to confirm the rewind is gone while the 26 u tracking stays** —
 which is the run that would actually answer Q13. Nothing in this section moved a default.
+
+## 1z-bn. THE FIX, built: the stationary waiver's **walk-start clause**. The waiver fires almost every time on `{0x0047 stop → 0x003D walk-start}` — a pair that is 0.000 u apart only because the body has not moved *yet* — and on the corpus that pair carries a p50 366.6 u rewind against 0.0 u for every other ordering. `WAIVER_WALKSTART_ENDS_STILL` refuses that one pair. Retrodicted over 68 control-OK runs: it removes **every** reproduced `arrival-risk` (10 of 10) and **every** `budget-red` (4 of 4) real re-pin, **zero** `gate2-offmesh`, and drops nothing the waiver was not carrying (68 of 68 on the named pair, 68 of 68 stale). SHIPPED ON; `--waiver-walkstart-stands` reverts
+
+**Closes** §1z-bl.7's and §1z-bm.5's standing debt — "the fix is derived, retrodicted and
+still **not built**: it needs its own section, a revert flag, and `guardretro`'s replay". Ident
+`MOVECODE-1z-bn`. No client run. OBSERVED unless marked; the rewind figures in §1z-bn.4 are a
+labelled ESTIMATE and say so.
+
+### 1z-bn.1 ★★★ The defect, in the waiver's own words
+
+`agtrack_guard.py`'s `STATIONARY_WAIVER` block argues, correctly, that two accepted reports
+carrying the same point within `am.ZERO_DIST_SQ` are a *measurement* of a still body rather
+than a guess about a silent one, so the harm bound for re-pinning onto it is 1.0 u instead of
+`RUN_SPEED × age`, and the freshness gate has nothing left to protect. It then names the
+condition it believes makes that safe:
+
+> A stationary body's next movement produces a walk-start `0x003D` (§1z-aa: 7 of 8), so while
+> nothing new has arrived it is still standing there.
+
+**The walk-start IS the something new.** A keyboard leg opens by reporting a `0x003D` at the
+point the previous leg's `0x0047` stop left the body — the same point to 0.000 u, because the
+body has not moved yet — and the waiver reads that pair as two measurements of stillness. It
+is *one* measurement of a still body, plus the client announcing that it is now walking away
+from it. The measurement's window **ends** exactly where the re-pin's window **begins**, so
+the pair carries no information at all about the 1–2.4 s in which the re-pin acts.
+
+The same block's known-bad arm is real and is not this: "A WALKING body can never satisfy
+this: consecutive reports sit ~512 u apart." True — and a walking body's *first* report of the
+leg is not 512 u from anything. §9 of `test_agtrack_guard.py` tested the arm the waiver does
+not fire on and never tested the arm it fires on almost every time.
+
+### 1z-bn.2 ★★★ The corpus splits **totally** by the pair's order
+
+§1z-bl's census over every AGTRACK re-pin that fired, harm measured as the distance from the
+point we re-pinned *to*, to where the body actually was by the client's own
+`AgAgent::position_at` (`0x005FF820`, clamp-first — §1z-bh.2's rule, and the reason the four
+earlier readings of this were wrong):
+
+| older → newer | n | p50 harm | max harm | over 100 u |
+|---|---|---|---|---|
+| `0x0047` → `0x003D` | 19 | **366.6 u** | 477.9 u | **18 of 19** |
+| `0x003D` → `0x0047` | 3 | 0.0 u | 0.0 u | 0 of 3 |
+| `0x003D` → `0x003D` | 1 | 0.0 u | 0.0 u | 0 of 1 |
+
+**The clause does not overrule the waiver — it restores the waiver's own stated bound.** The
+block justifies itself by "the harm bound for re-pinning onto it is `am.ZERO_DIST_SQ`"; the two
+orderings kept measure 0.0 u and honour that bound, and the ordering refused measures 366 u
+median, which is `RUN_SPEED × age` exactly as the unwaived gate predicted.
+
+### 1z-bn.3 ★★ The retrodiction, and why it needed a new instrument
+
+[`studies/movecode/review/waiverretro.py`](review/waiverretro.py). `guardretro.py` could not
+answer this: **its two arms vary `agtrack_mirror.GATE2_SEAM_TOL`** (the §1z-bf fix) and the
+walk-start clause is ON in both, so it is blind to the change. Running it and reading its
+`removed by the fix: 21` as this fix's effect would have been a straight category error, and
+was nearly published as one.
+
+**The control had to move too.** `guardretro` scores its arms against each capture's logged
+`agtrack_guard` **verdict** rows. Against *this* clause that control cannot fail —
+`stationary()` is read only by `_repin_block`, so no verdict can move when the clause moves.
+`waiverretro` keeps the verdict control for what it is good for, **selecting the population**
+(a run whose logged verdicts the stock arm cannot reproduce was written by a guard that no
+longer exists), and then scores the clause against the captures' logged
+`agtrack_repin_fire` rows — the real `0x002C` re-pins the server actually sent.
+
+**125 runs replayed on map 146; 68 are control-OK and carry 56 real `0x002C` fires.**
+
+| the server's own reason | control missed | **clause REMOVES** | clause keeps | control reproduces |
+|---|---|---|---|---|
+| `arrival-risk` | 6 | **10** | 0 | 10 of 16 (62%) |
+| `budget-red` | 1 | **4** | 0 | 4 of 5 (80%) |
+| `gate1-red` | 14 | 1 | 3 | 4 of 18 (22%) |
+| `gate2-offmesh` | 8 | **0** | 9 | 9 of 17 (53%) |
+
+This is §1z-bl.7's hand retrodiction reproduced mechanically and independently: *all*
+`budget-red`, *nearly all* `arrival-risk`, `gate2-offmesh` untouched, most `gate1-red`
+untouched.
+
+**State the control's limit rather than the pooled figure.** The stock arm reproduces only 27
+of the 56 real fires. It is strongest in the two classes the clause acts on (62% and 80%) and
+weakest in `gate1-red` (22%), which the clause barely touches — so the replay's fidelity gap
+and the fix's effect do not sit in the same place. UNVERIFIED: why `gate1-red` replays badly.
+It is not this arc's question and it is not load-bearing here, but it is debt and it is named.
+
+### 1z-bn.4 ★★ The clause removes nothing the waiver was not carrying
+
+Over the same 68 runs, counting **every** re-pin due-transition rather than only the ones that
+reached the wire: **68 dropped, 0 newly raised.** Every one of the 68 is on `{0x0047 →
+0x003D}`, and every one was on a **stale** report — the clause never touches a decision the
+waiver was not already carrying. What it keeps, it keeps for the right reason: the 21 kept
+transitions are all on a **fresh** report, where the waiver was not load-bearing at all.
+
+The rewind each dropped re-pin would have caused, ESTIMATED as `chord × (t_repin − t_before) /
+(t_after − t_before)` — how far along the client's own cruise chord the body had already
+travelled, since a `0x002C` SetPositions **both** copies back to the older report:
+
+| n | p50 | p90 | max | over 100 u |
+|---|---|---|---|---|
+| 68 | **375 u** | 429 u | 513 u | 46 of 68 |
+
+The estimate is wire-only and assumes constant speed across one chord. **§1z-bl measured three
+real rewinds off the `agenttap` tape at 311–468 u**, so a second instrument with no shared
+sampler lands inside the first one's range. Report age at each dropped re-pin: p50 1.93 s, max
+2.78 s, against the 0.347222 s gate the waiver waives — 5× to 8× too old.
+
+**Not measuring the chord itself.** The distance between the reports either side of a re-pin is
+~512 u *by construction* (the client's own `0x003D` distance trigger, the review's fact 1), and
+would read the same for a body that had not moved. The first draft of this instrument printed
+that number, and it is the wrong one.
+
+### 1z-bn.5 ★ What it costs, said plainly
+
+§1z-ai/§1z-aj's 11 retracts at 0.0 u harm are mostly this pair, so **the retract stops firing
+on a leg-opening report**. That benefit was never demonstrated — §1z-aj is INCONCLUSIVE by its
+own registration, its control never produced the defect — and it is traded against a harm
+measured at 366 u median. The retract still fires on the two orderings that genuinely measure a
+body which was told to move and did not.
+
+The clause is also strictly narrower than the waiver: it can only ever *refuse*, and only
+inside the waiver, so no re-pin that the pre-§1z-ah gate would have blocked can now get
+through. The 0-newly-raised count above is that property measured rather than asserted.
+
+### 1z-bn.6 What shipped
+
+- `agtrack_guard.WAIVER_WALKSTART_ENDS_STILL = True`, read inside `stationary()`; the report
+  KINDS ride the sig's third element, which `authsrv`'s call site already carried as
+  `("rep", source, bool(stop))`.
+- `--waiver-walkstart-stands` reverts it, and `capture_flags()` records it, so a run's arm is
+  readable off its own capture rather than off the session that made it.
+- `test_agtrack_guard.py` §14, floor 77 → **97** from a real green run. All four orderings with
+  the points identical throughout; the revert arm; the fresh-report and non-coincident cases
+  untouched in both arms; an unknown previous kind is `None` and not `False`; a refused report
+  advances neither kind; a 2-tuple sig reads as a walk-start rather than raising; two source
+  locks. The KNOWN-BAD ARM is RUN-1zBL's leg shape at the corpus-median 1.93 s age — clause OFF
+  the re-pin is DUE, clause ON it is `stale-report`, and the arrival risk is PREDICTED in
+  **both** arms, so the clause moves the precondition and not the prediction. §9's own
+  known-bad arm and §9's specimen both still pass.
+- One trap worth carrying forward, pinned in the section's comments because this check went
+  green **against itself** first: the flag is a module global read at call time, so
+  `old, new = bl(False), bl(True)` builds both guards before either is queried and gives both
+  arms the *last* arm's answer.
+
+Ten affected tests green: `test_agtrack_guard` (97), `test_agtrack_mirror` (68), `test_d1lead`
+(118), `test_position_trust` (235), `test_kbdsync` (106), `test_router` (126), `test_srclint`
+(26), `test_citelint` (50), `test_identlint` (28), `test_provlint` (19).
+
+### 1z-bn.7 ★★ What this does **not** establish, and the one run that would
+
+Everything above is a retrodiction and a unit test. **Two of our own components agreeing is not
+a measurement of the client**, and the standing rule here is that an operator symptom closes on
+a run and not on a test.
+
+The registered next step is unchanged from §1z-bm.5 and is now unblocked: **one lead-ON run on
+the same route under the fix.** It answers Q13 with two numbers that must hold together —
+
+- the rewind is **gone** (zero `0x002C` on the player during a keyboard leg's opening glide,
+  against 4 re-pins and 3 rewinds of −298 to −433 u in RUN-1zBL), and
+- the tracking **stays** (moving-only world-0 separation near RUN-1zBL's **26.3 u**, not
+  RUN-1zBM's lead-off p50 251.6 u).
+
+Either alone is uninformative: the lead-off arm already gets the first for free by not leading
+at all, and that is what RUN-1zBM measured. Pre-register both, with the exposure floor —
+a leg with a long silent opening glide, which RUN-1zBM produced 7 times out of 7 — before
+launching, and remember that shipping two defaults at once means one run convicts the pair.
+**This is the only default this section moved.**
