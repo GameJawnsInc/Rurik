@@ -14230,7 +14230,10 @@ back* (our re-pin on a silent leg).
 ### 1z-bl.6 Why every instrument called these runs clean
 
 `stopcensus`: no lock — the client answers every held key with a stop, at the point we put it
-back to. `w0score`: CONFIRMED, body FREE, moving-only p50 9.9 u, max 148 u — it compares
+back to. `w0score` (**RUN-1zBK's tape** `agenttap-20260905T111418`, n=218 — this section
+quotes "these runs" plural and the figure is 1zBK's, not 1zBL's; **RUN-1zBL's own tape**
+`agenttap-20260905T113340` reads moving-only **p50 31.2 u / n=253 / max 146.6**, corrected
+at §1z-bo.6): CONFIRMED, body FREE, moving-only p50 9.9 u, max 148 u — it compares
 world-0 with world-1 and the `0x002C` reseeds **both**, so the divergence it is built to see
 never opens. `movesync`'s wire bar: the whole event lands inside a >1 s report silence, which
 its `FREE_SILENCE` construction cannot fire on. The review's **M-F2** (the warp instruments
@@ -14418,7 +14421,8 @@ what the guard was reacting to.
 
 - **P4 MET, and it is the review's fact 1 measured on the shipped default.** Moving-only
   world-0 separation reads **p50 251.6 u, p90 509.2, max 523.9** over 307 moving samples,
-  against RUN-1zBL's **26.3 u** with the lead on. The lead-off default leaves the copy up to
+  against **RUN-1zBI's 26.3 u** with the lead on (§1z-bo.6: this figure is 1zBI's tape,
+  `agenttap-20260905T104936`; RUN-1zBL's own is **31.2 u**). The lead-off default leaves the copy up to
   a full report chord behind the walking body — the defect §1z-bh.5 named and the reason the
   lead exists at all. Body FREE; the all-sample headline still prints 0.0, which is §1z-bh.5's
   point about that statistic.
@@ -14440,7 +14444,7 @@ The trade is now measured on both sides, in the same script, three runs apart:
 
 | | lead OFF (shipped) | lead ON (opt-in) |
 |---|---|---|
-| copy tracks the walking body | **p50 252 u / p90 509 u behind** | **p50 26 u** (retail's own is ~74 u) |
+| copy tracks the walking body | **p50 252 u / p90 509 u behind** (1zBM) | **p50 26 u** — *RUN-1zBI's tape*, not 1zBL's; 1zBL's own is **31.2 u** (§1z-bo.6). Retail's own is ~74 u |
 | our `0x002C` rewinds the body | **never** (0 in 7 long silent legs) | **3 of 4 re-pinned legs, −298 to −433 u** |
 
 **The warp is a cost of the lead, and it is not intrinsic to it.** The lead earns
@@ -14449,7 +14453,8 @@ client's own silent glide, on the defect §1z-bl.8 localised in source —
 `agtrack_guard.stationary()` waiving the freshness gate whenever the last two accepted
 reports coincide, which **every leg's opening report pair does**, and whose own comment
 asserts a walking body can never satisfy it. Fix that predicate and the lead can return
-with tracking at 26 u and no rewind; leave it and the lead cannot return at all.
+with tracking at 26 u (1zBI's figure; 1zBL's own is 31.2 u) and no rewind; leave it and the
+lead cannot return at all. **RUN-1zBO did exactly this and it held — §1z-bo.**
 
 **So the ruling the review put to the owner (§2.1) now has a precondition rather than a
 trade-off**: the lead's return is blocked on the re-pin's predicate, not on the lead's own
@@ -14461,7 +14466,7 @@ The fix is **derived, retrodicted and still not built** (§1z-bl.7's corpus retr
 removing re-pins during an open keyboard leg with no fresh report takes out 24 of the
 corpus's 62 fires, all 7 `budget-red` and 15 of 20 `arrival-risk`, leaving `gate2-offmesh` and
 most `gate1-red` untouched). It needs its own section, a revert flag, `guardretro`'s replay,
-and then **one lead-ON run to confirm the rewind is gone while the 26 u tracking stays** —
+and then **one lead-ON run to confirm the rewind is gone while the tracking stays** —
 which is the run that would actually answer Q13. Nothing in this section moved a default.
 
 ## 1z-bn. THE FIX, built: the stationary waiver's **walk-start clause**. The waiver fires almost every time on `{0x0047 stop → 0x003D walk-start}` — a pair that is 0.000 u apart only because the body has not moved *yet* — and on the corpus that pair carries a p50 366.6 u rewind against 0.0 u for every other ordering. `WAIVER_WALKSTART_ENDS_STILL` refuses that one pair. Retrodicted over 68 control-OK runs: it removes **every** reproduced `arrival-risk` (10 of 10) and **every** `budget-red` (4 of 4) real re-pin, **zero** `gate2-offmesh`, and drops nothing the waiver was not carrying (68 of 68 on the named pair, 68 of 68 stale). SHIPPED ON; `--waiver-walkstart-stands` reverts
@@ -14528,21 +14533,35 @@ was nearly published as one.
 longer exists), and then scores the clause against the captures' logged
 `agtrack_repin_fire` rows — the real `0x002C` re-pins the server actually sent.
 
-**125 runs replayed on map 146; 68 are control-OK and carry 56 real `0x002C` fires.**
+**CORRECTED 2026-09-05 at §1z-bo.5 — the figures first published here were produced by a
+tool with its control aimed at the wrong build, and they were wrong in the direction that
+flatters.** `waiverretro` replayed every capture at `GATE2_SEAM_TOL = 0.0`, so a run recorded
+*with* the §1z-bf seam tolerance failed a control checking it against a guard it never ran and
+was dropped from the evidence population. **RUN-1zBL — the run this clause was derived from and
+is A/B'd against — was excluded that way.** The corrected figures, at each capture's own
+tolerance:
+
+**≥126 runs replayed on map 146; ≥71 control-OK, carrying ≥61 real `0x002C` fires.** (A floor
+and a signature set, not an exact count: the corpus grows with every run, and RUN-1zBO added
+itself to these numbers. The signature is the shape of the table below, not its totals.)
 
 | the server's own reason | control missed | **clause REMOVES** | clause keeps | control reproduces |
 |---|---|---|---|---|
-| `arrival-risk` | 6 | **10** | 0 | 10 of 16 (62%) |
-| `budget-red` | 1 | **4** | 0 | 4 of 5 (80%) |
+| `arrival-risk` | 6 | **13** | 0 | 13 of 19 (68%) |
+| `budget-red` | 2 | **5** | 0 | 5 of 7 (71%) |
 | `gate1-red` | 14 | 1 | 3 | 4 of 18 (22%) |
 | `gate2-offmesh` | 8 | **0** | 9 | 9 of 17 (53%) |
+
+On the two runs that matter most — RUN-1zBL and RUN-1zBO, the same configuration with and
+without the clause — the corrected control predicts **4 of 4** real fires and the clause removes
+**4 of 4**.
 
 This is §1z-bl.7's hand retrodiction reproduced mechanically and independently: *all*
 `budget-red`, *nearly all* `arrival-risk`, `gate2-offmesh` untouched, most `gate1-red`
 untouched.
 
-**State the control's limit rather than the pooled figure.** The stock arm reproduces only 27
-of the 56 real fires. It is strongest in the two classes the clause acts on (62% and 80%) and
+**State the control's limit rather than the pooled figure.** The stock arm reproduces 31 of the
+61 real fires. It is strongest in the two classes the clause acts on (62% and 80%) and
 weakest in `gate1-red` (22%), which the clause barely touches — so the replay's fidelity gap
 and the fix's effect do not sit in the same place. UNVERIFIED: why `gate1-red` replays badly.
 It is not this arc's question and it is not load-bearing here, but it is debt and it is named.
@@ -14550,10 +14569,18 @@ It is not this arc's question and it is not load-bearing here, but it is debt an
 ### 1z-bn.4 ★★ The clause removes nothing the waiver was not carrying
 
 Over the same 68 runs, counting **every** re-pin due-transition rather than only the ones that
-reached the wire: **68 dropped, 0 newly raised.** Every one of the 68 is on `{0x0047 →
-0x003D}`, and every one was on a **stale** report — the clause never touches a decision the
-waiver was not already carrying. What it keeps, it keeps for the right reason: the 21 kept
-transitions are all on a **fresh** report, where the waiver was not load-bearing at all.
+reached the wire: **81 dropped, 0 newly raised** (68 before the §1z-bo correction). Every one
+is on `{0x0047 → 0x003D}`, and every one was on a **stale** report — the clause never touches a
+decision the waiver was not already carrying. What it keeps, it keeps on a **fresh** report,
+where the waiver was not load-bearing at all.
+
+**And that last sentence is the whole problem with this section, found at §1z-bo.5.** If every
+kept re-pin sits on a fresh report, the waiver is never load-bearing on anything the clause
+keeps — so the clause is **behaviourally indistinguishable from deleting the stationary waiver
+outright**. `waiverretro`'s third arm now measures exactly that and the two arms differ in
+**zero** of the corpus's control-OK runs. §1z-bn.5 below calls the clause "strictly narrower
+than the waiver": that is true as *code* and **UNWITNESSED as behaviour**, and no run we hold
+can separate the two.
 
 The rewind each dropped re-pin would have caused, ESTIMATED as `chord × (t_repin − t_before) /
 (t_after − t_before)` — how far along the client's own cruise chord the body had already
@@ -14561,7 +14588,7 @@ travelled, since a `0x002C` SetPositions **both** copies back to the older repor
 
 | n | p50 | p90 | max | over 100 u |
 |---|---|---|---|---|
-| 68 | **375 u** | 429 u | 513 u | 46 of 68 |
+| 81 | **374 u** | 429 u | 513 u | 56 of 81 |
 
 The estimate is wire-only and assumes constant speed across one chord. **§1z-bl measured three
 real rewinds off the `agenttap` tape at 311–468 u**, so a second instrument with no shared
@@ -14581,9 +14608,13 @@ own registration, its control never produced the defect — and it is traded aga
 measured at 366 u median. The retract still fires on the two orderings that genuinely measure a
 body which was told to move and did not.
 
-The clause is also strictly narrower than the waiver: it can only ever *refuse*, and only
-inside the waiver, so no re-pin that the pre-§1z-ah gate would have blocked can now get
-through. The 0-newly-raised count above is that property measured rather than asserted.
+The clause is strictly narrower than the waiver **as code**: it can only ever *refuse*, and
+only inside the waiver, so no re-pin the pre-§1z-ah gate would have blocked can now get through,
+and the 0-newly-raised count measures that rather than asserting it. **As BEHAVIOUR it is
+unwitnessed — see §1z-bo.5.** Every re-pin the clause keeps, across the whole corpus, sits on a
+fresh report where the waiver was never deciding anything, so a build with `STATIONARY_WAIVER`
+deleted entirely produces the identical re-pin sequence on every run we hold. Whether the waiver
+should exist at all is now a live question and it is §1z-bo.8's registered next step.
 
 ### 1z-bn.6 What shipped
 
@@ -14620,7 +14651,8 @@ the same route under the fix.** It answers Q13 with two numbers that must hold t
 
 - the rewind is **gone** (zero `0x002C` on the player during a keyboard leg's opening glide,
   against 4 re-pins and 3 rewinds of −298 to −433 u in RUN-1zBL), and
-- the tracking **stays** (moving-only world-0 separation near RUN-1zBL's **26.3 u**, not
+- the tracking **stays** (moving-only world-0 separation near **RUN-1zBL's 31.2 u** — the
+  26.3 u this line used to name is RUN-1zBI's tape, corrected at §1z-bo.6 — not
   RUN-1zBM's lead-off p50 251.6 u).
 
 Either alone is uninformative: the lead-off arm already gets the first for free by not leading
@@ -14628,3 +14660,193 @@ at all, and that is what RUN-1zBM measured. Pre-register both, with the exposure
 a leg with a long silent opening glide, which RUN-1zBM produced 7 times out of 7 — before
 launching, and remember that shipping two defaults at once means one run convicts the pair.
 **This is the only default this section moved.**
+
+## 1z-bo. RUN-1zBO — lead ON under the walk-start clause: **the rewind is gone and the tracking held.** Zero `0x002C`, zero `setposition` at the client, zero legs thrown back, moving-only separation **13.0 u**; all five pre-registered predictions MET and three adversaries failed to refute. **And the honest limit, which is larger than the result:** the run tests only the clause's REMOVE branch, and the corpus cannot separate the shipped clause from deleting the stationary waiver outright — they differ in **zero** of 71 control-OK runs. §1z-bn's corpus table was also **wrong** and is corrected here
+
+**Registered** in [RUN-1zBO.md](RUN-1zBO.md) before launching. Ident `MOVECODE-1z-bo`. One run,
+agent-driven, hands off, owner away. Harness `20260905T134305`, capture
+`authsrv-20260905T134337-c1`, tape `agenttap-20260905T134338`, hook
+`vault/research/movecode/1zbo/movehook.bin` (7,506 records, ring 23%, **both controls FIRED**).
+Scored by a five-lane panel with one adversary per lane and a completeness critic; the critic
+found more than the panel did, and §1z-bo.5 through §1z-bo.7 are its work. OBSERVED unless
+marked.
+
+### 1z-bo.1 ★★★ The five predictions
+
+| | registered bar | measured | RUN-1zBL, same arm without the clause |
+|---|---|---|---|
+| **P1** exposure | ≥3 long silent opening legs | **MET — 5 of 7** strict, 7 of 7 loose | 4 of 7 — the pre-registered figure, reproduced |
+| **P2** re-pins | zero in an opening glide | **MET — 0** of 7 legs, 0 in the whole 87.3 s | **4** |
+| **P3** tracking | p50 ≤ 60 u, refuted > 150 | **MET — 13.0 u** (n=316), p90 170.2 | 31.2 u (n=253); lead-off 1zBM 251.6 u |
+| **P4** outcome | zero legs thrown back | **MET — 0 of 7**; largest backward step **0.0 u** | 3 of 7 at exactly 0.0 u; −449.7 u backward |
+| **P5** validity | controls fired, arm correct | **MET** — both FIRED, ring 23%, origin `ours` | — |
+
+P4's two signatures are the cleanest, because they need no tape, no hook and no clock join —
+just the wire. **Does any leg report the same point at its walk-start and its stop?** RUN-1zBL:
+**3 of 7**, at exactly 0.0 u. RUN-1zBO: **0 of 7**, displacements 637–1122 u. And by the
+client's own `AgAgent::position_at`, grouped on object address: RUN-1zBL's largest backward step
+along its own heading is **−449.7 u** (sync) and **−452.6 u** (async) at t=22.00 — *both copies
+together*, which is the `0x002C` SetPositions-both signature — against RUN-1zBO's **0.0 u on
+both copies over 964 samples**.
+
+### 1z-bo.2 ★★★ Why the zero is not the situation failing to arise
+
+RUN-1zBM already produced zero re-pins **without** the fix, by having the lead off, so a bare
+zero here would prove nothing. The guard's own telemetry separates the two, and this is the
+run's central evidence:
+
+| | RUN-1zBL, no clause | RUN-1zBM, lead off | **RUN-1zBO, clause on** |
+|---|---|---|---|
+| re-pin risk transitions | 6 | **1**, `not-tested` | **7** |
+| `due` → fired | **4** | 0 | **0** |
+| `blocked` | 2 | 0 | **7, every one `stale-report`** |
+
+The guard was **more** exposed here than in the unfixed arm and was refused every time, with
+exactly the reason the clause predicts. 1zBM's single `not-tested` row is what "the situation
+never arose" actually looks like, and this is not that.
+
+**Six of the seven blocks are the clause's doing, not seven.** The +15.46 s block is leg 1W,
+the first leg after the 8 s wait, where fewer than two accepted reports exist and `prev_pos is
+None` makes `stationary()` return False regardless — RUN-1zBL's leg 1W blocked for the same
+reason.
+
+### 1z-bo.3 ★★ The A/B is one change in the source, and the lead was genuinely leading
+
+The two captures' whole `flags` dictionaries differ in **exactly one key**,
+`agtrack_guard.WAIVER_WALKSTART_ENDS_STILL`, and `git log` over the 2 h 10 m between the runs
+shows exactly one commit touching `authsrv`/`agtrack_guard`/`agtrack_mirror` — `c72c585`,
+§1z-bn itself.
+
+The confound that mattered more was a lead that had silently degraded to nothing, which would
+reproduce every result here for the wrong reason. Measured at the byte, from each capture's own
+grant rows, each grant's destination against the client's last accepted report:
+
+| | grants | with a non-zero lead | lead p90 | max | `KBD LEAD` sends |
+|---|---|---|---|---|---|
+| RUN-1zBO | 48 | **13** | **422 u** | 520 u | 20 |
+| RUN-1zBL | 48 | 8 | 294 u | 520 u | 11 |
+| RUN-1zBM | 33 | **0** (every grant on the reported point) | 0.0 u | 0.0 u | 0 |
+
+**1zBO's lead was strictly stronger than the unfixed arm's.** It also did its job of walking our
+model ahead: drift between our model and the client's report at accepted reports reads p50
+66.9 / p90 107.7 / **max 179.4 u, nothing over 300**, against 1zBL's p50 100.6 / max 766.8
+(three over 300, its own rewind artifacts). That is the **cost side** of the fix measured — with
+the re-pin refused the model runs uncorrected through the glide, and it stays inside the tube.
+
+### 1z-bo.4 ★★★ What the run does NOT establish, and this is bigger than what it does
+
+**Only ONE of the four removed re-pins is a state-matched trial.** Legs 1 and 2 start 0.0 u and
+2.7 u apart in the two runs; legs 3–7 start **503–714 u** apart and on different planes, because
+1zBL's leg 2 was rewound and the runs diverge from there. So the paired table is one matched row
+(leg 2S: 1zBL `due` at t=23.122 against 1zBO `blocked` at t=23.074) plus three that pair on wall
+clock only. The class labels are not stable across the arms either — the leg-4 decision is
+`arrival-risk` in 1zBL and `gate1-red` in 1zBO. **Say "4 fewer fires than the unfixed arm, of
+which one is a state-matched pair", never "4 removed".**
+
+For the same reason **"exposure grew, 7 against 5" is endogenous** and is not independent
+evidence: 1zBL's short legs are short *because* it was rewound. P1's 5-of-7 against 4-of-7
+inherits this for five of its seven legs; the two genuinely comparable legs agree (422.7 u both
+arms; 493.5 against 489.7).
+
+Three further things this run is being read as confirming and does not touch:
+
+- **`gate2-offmesh` untouched: ZERO EXPOSURE.** No gate-2 verdict and no gate-2 re-pin in either
+  arm on this route. Untested, not confirmed.
+- **"0 newly raised" and "the clause removes nothing the waiver was not carrying"** are
+  structurally unfalsifiable in a run with zero fires.
+- **§1z-bn.5's registered cost was never presented.** All seven refusals landed on legs where
+  the body was demonstrably walking, so every one was correct; the cost class did not occur.
+
+### 1z-bo.5 ★★★ Two defects found in §1z-bn itself — one in the tool, one in the claim
+
+**(a) `waiverretro`'s control was aimed at the wrong build, and §1z-bn's published table was
+wrong.** The tool replayed **every** capture at `GATE2_SEAM_TOL = 0.0` — pre-§1z-bf exact
+containment — and computed the shipped-tolerance arm without ever reading it. A capture recorded
+*with* the seam tolerance then fails a control checking it against a guard it never ran and is
+dropped from the evidence population. **RUN-1zBL, the run this clause was derived from, was
+excluded that way**, and the runs such a filter drops are biased toward sliver geometry, which
+is precisely where `gate2-offmesh` lives — the one class the clause claims to leave alone. Fixed:
+each capture is now replayed at its own recorded `AGTRACK_GATE2_SEAM`. §1z-bn.3 and §1z-bn.4 are
+corrected in place. **A control aimed at the wrong build is not a weak control, it is a filter.**
+
+**(b) The clause is behaviourally indistinguishable from deleting the stationary waiver.**
+§1z-bn.5 said the clause is "strictly narrower than the waiver". That is true as *code*. As
+behaviour it is **unwitnessed**: `waiverretro` now carries a third arm that replays with
+`STATIONARY_WAIVER` off entirely, and across the corpus the shipped arm and the waiver-deleted
+arm produce **the identical due-transitions in ZERO differing runs** (20 against 20 on the
+control-OK population, 895 against 895 over every replayed run). The reason is §1z-bn.4's own
+sentence read the other way round: every re-pin the clause *keeps* sits on a **fresh** report,
+where the waiver was never load-bearing. **So on all evidence held today the stationary waiver
+has no measured benefit anywhere**, and RUN-1zBO's capture is bit-for-bit what a build with
+`stationary()` hard-wired to `False` would have produced. Only §14 of `test_agtrack_guard.py`
+says otherwise, and that is two of our own components agreeing — the exact thing a run exists to
+escape.
+
+### 1z-bo.6 ★★ The tracking figure was mis-attributed in five places
+
+Re-scored today, one `w0score` invocation shape per tape:
+
+| tape | run | moving-only p50 | n | max |
+|---|---|---|---|---|
+| `agenttap-20260905T104936` | RUN-1zBI | **26.3 u** | 252 | 116.1 |
+| `agenttap-20260905T111418` | RUN-1zBK | 9.9 u | 218 | 148.3 |
+| `agenttap-20260905T113340` | **RUN-1zBL** | **31.2 u** | 253 | 146.6 |
+| `agenttap-20260905T124632` | RUN-1zBM | 251.6 u | 307 | 523.9 |
+| `agenttap-20260905T134338` | **RUN-1zBO** | **13.0 u** | 316 | 325.1 |
+
+**The 26.3 u that §1z-bm.3/.4/.5, §1z-bn.7, RUN-1zBM.md and RUN-1zBO.md all attribute to
+RUN-1zBL is RUN-1zBI's**, and §1z-bl.6's 9.9 u is RUN-1zBK's, quoted inside 1zBL's own section
+under a plural heading. **RUN-1zBL's own figure, 31.2 u, had never been published anywhere.**
+All corrected; §1z-bj's uses of 26.3 are its own tape and are right. The prediction is unharmed
+— P3's bars are absolute, not deltas.
+
+**And "the fix improved tracking, 13.0 against 31.2" is NOT a supported reading.** 1zBL's number
+is biased low *by its own defect*: the `0x002C` reseeds both copies together, so on the rewound
+legs the divergence `w0score` exists to see never opens. The defensible claim is that the
+tracking **survived**.
+
+### 1z-bo.7 ★ The one degraded leg is the lead's plane-seam clip, not the clause
+
+Leg 5E ran moving-only p50 133.3 u with world 0 travelling 287.4 u against the body's 608.4 u
+(47%, where every other leg is 88–91%), and it alone lifts the run's p90 to 170.2 — above the
+150 that appears in P3's REFUTED-IF, though the registered clause is on the p50 and the p50 is
+13.0. Traced sample by sample: world 0 walks with the body for 0.97 s to y = 9305.0, exactly the
+opening grant's destination, then sits there **1.42 s** while the body keeps walking at
+216 u/s — 1.42 × 216 = 307 u against the leg's 321 u deficit, so the whole gap is that park. The
+grant row names the cause itself: `lead_clip_why = "plane-seam"`, and both strafes cross the
+plane 29/0 boundary at y ≈ 9305. Leg 4Q has the identical shape at the identical point but its
+next grant lands 0.2 s sooner, so its gap reaches only 68.7 u.
+
+**So p50 13.0 u is a property of this route, not of the fix**: the lead's tracking degrades with
+the time world 0 spends parked at a clipped destination, and that park is set by
+distance-to-next-seam. Quote the **p90 of 170.2 beside the 13.0 every time.** Do not re-aim the
+registered statistic, and this needs no run of its own — it is §1z-bc's known seam class on new
+ground.
+
+**One clause was dropped rather than scored, and here is why:** P4's "net travel within 15% of
+its commanded distance" is unscorable as written — "commanded distance" was never
+operationalised, and the free-walk estimator reads 84.5% on leg 7W only because that leg turns
+onto a diagonal and runs at 288/√2 = 208 u/s. Against the body's own integrated speed every leg
+is **98.2–100.5%**.
+
+### 1z-bo.8 What is registered next, and it is not a rerun
+
+**The largest hole is that nothing — not this run, not the 126-run corpus — separates the
+shipped clause from deleting the stationary waiver.** Two desk items first, both read-only and
+both possibly decisive:
+
+1. Replay §1z-ai/§1z-aj's **11 retracts** through `waiverretro` and split them by report pair.
+   §1z-bn.5 says they are "mostly" `{0x0047 → 0x003D}`. **If it is ALL of them, the waiver has no
+   measured benefit anywhere**, and the question for the owner stops being "is the clause narrow
+   enough" and becomes "should `STATIONARY_WAIVER` exist at all".
+2. Re-check the `gate2-offmesh` cell now that the population filter is fixed.
+
+Then, and only if (1) leaves the waiver alive: **one run of §1z-ai's arm-T configuration** — the
+one that produced the waiver's only witnessed benefit, 4 retracts at 0.0 u harm — under HEAD with
+the clause ON, pre-registering that the retracts on a KEPT pair still fire and still land at
+0.0 u.
+
+**The revert arm has still never been run.** `--waiver-walkstart-stands` exists and RUN-1zBL is
+standing in for it, but 1zBL is a different code revision and, by `waiverretro`'s own control,
+was a different guard. A shipped default whose revert arm has never been exercised against the
+client is an assertion — this section does not pretend otherwise.

@@ -38,10 +38,22 @@ back to the older report.  This file estimates it as chord * (t_repin - t_before
 sec.1z-bl measured three real rewinds off the agenttap tape at 311-468 u, so the estimate has
 an independent number to answer to.
 
-Two baselines are printed because the corpus predates sec.1z-bf: the ERA baseline
-(GATE2_SEAM_TOL 0.0, what the captures were recorded under, the only one whose control means
-anything) and the HEAD baseline (the shipped tolerance, the configuration the fix ships into).
-If the clause's delta differs between them the two fixes interact and that has to be said.
+EACH CAPTURE IS REPLAYED AT ITS OWN GATE-2 TOLERANCE, read from its own recorded
+`AGTRACK_GATE2_SEAM` flag, and getting this wrong is not a small error.  The first draft
+replayed EVERY capture at `GATE2_SEAM_TOL = 0.0` -- pre-sec.1z-bf exact containment -- and
+computed the shipped-tolerance arm without ever reading it.  A capture recorded WITH the seam
+tolerance then fails a control that is checking it against a guard it never ran, and gets
+dropped from the evidence population.  RUN-1zBL, the single run this whole clause was derived
+from and A/B'd against, was excluded that way, and the runs such a filter excludes are biased
+toward sliver geometry -- which is exactly where `gate2-offmesh` lives, the one class this
+clause claims to leave untouched.  A control aimed at the wrong build is not a weak control,
+it is a filter.  Found by sec.1z-bo's completeness critic, after the corpus figures it produced
+had already been published in sec.1z-bn.
+
+THE THIRD ARM (sec.1z-bo) answers a question sec.1z-bn asserted from the source: is the clause
+NARROWER than deleting the stationary waiver, in behaviour?  Every capture is also replayed
+with `STATIONARY_WAIVER` off entirely.  It is not a rhetorical arm -- it can and does report a
+difference if one exists, and today it reports none.
 
 Read-only.  Needs the vault.  Stdlib only.  Map 146 only, as guardretro is.
 """
@@ -62,7 +74,7 @@ import guardretro  # noqa: E402  (events(), decode_plain(), MAP146 -- the feed i
 MATCH_S = 0.6      # guardretro's pairing window between a predicted DUE and a real fire
 
 
-def replay(evs, pm, tol, clause):
+def replay(evs, pm, tol, clause, waiver=True):
     """Drive the guard over one capture's feed.  Returns (verdicts, due-transitions).
 
     Each due-transition carries the guard's own state at that instant -- the pair of report
@@ -71,9 +83,10 @@ def replay(evs, pm, tol, clause):
     """
     import agtrack_guard as ag
     import agtrack_mirror as am
-    s_tol, s_cl = am.GATE2_SEAM_TOL, ag.WAIVER_WALKSTART_ENDS_STILL
+    s_tol, s_cl, s_w = am.GATE2_SEAM_TOL, ag.WAIVER_WALKSTART_ENDS_STILL, ag.STATIONARY_WAIVER
     am.GATE2_SEAM_TOL = tol
     ag.WAIVER_WALKSTART_ENDS_STILL = clause
+    ag.STATIONARY_WAIVER = waiver
     try:
         g = ag.AgTrackGuard(mesh=am.MeshAdapter(pm))
         verdicts, dues = [], []
@@ -113,7 +126,7 @@ def replay(evs, pm, tol, clause):
                         dues.append((t, why, pair, age))
         return verdicts, dues
     finally:
-        am.GATE2_SEAM_TOL, ag.WAIVER_WALKSTART_ENDS_STILL = s_tol, s_cl
+        am.GATE2_SEAM_TOL, ag.WAIVER_WALKSTART_ENDS_STILL, ag.STATIONARY_WAIVER = s_tol, s_cl, s_w
 
 
 def near(t, dues):
@@ -144,7 +157,14 @@ def load(vault, rid, pm, SC):
     reports = [(t, d) for t, k, d in evs if k == "report"]
     if not reports or not pm.on_mesh(reports[0][1][0], reports[0][1][1], 1.0):
         return None
-    return evs, reports
+    # The capture records the server's own switches.  AGTRACK_GATE2_SEAM decides which
+    # gate-2 tolerance THIS capture was recorded under, and so which arm can reproduce it.
+    flags = {}
+    for r in R:
+        if r.get("kind") == "flags" or "flags" in r:
+            flags = r.get("flags") or {k: v for k, v in r.items() if k != "kind"}
+            break
+    return evs, reports, flags
 
 
 def rewind_estimate(t, reports):
@@ -191,6 +211,8 @@ def main():
         return 1
 
     n_skip = 0
+    eras = {}                      # how many captures replayed at each tolerance
+    nowaiver_differs, nowaiver_all, nowaiver_ok = [], 0, 0   # third arm: the waiver deleted
     # per population: runs, real fires, fires predicted by stock / by fix, dues stock / fix
     P = {k: [0, 0, 0, 0, 0, 0] for k in ("ok", "bad", "preguard")}
     dropped, added, kept = [], [], []
@@ -202,14 +224,30 @@ def main():
         if got is None:
             n_skip += 1
             continue
-        evs, reports = got
+        evs, reports, flags = got
         logged = [(t, c, w) for t, k, (c, w) in ((t, k, d) for t, k, d in evs if k == "logged_verdict")]
         fired = [(t, d) for t, k, d in evs if k == "logged_fire"]     # (time, the server's own why)
         real = [t for t, _d in fired]
-        arms = {}
-        for name, tol in (("era", 0.0), ("head", head_tol)):
-            arms[name] = (replay(evs, pm, tol, False), replay(evs, pm, tol, True))
-        (sv, sdue), (_fv, fdue) = arms["era"]
+        # THE ARM IS THE CAPTURE'S OWN, and getting this wrong cost RUN-1zBL its place in the
+        # evidence population (MOVECODE-1z-bo's critic).  The first draft replayed EVERY capture
+        # at GATE2_SEAM_TOL 0.0 -- pre-1z-bf exact containment -- and computed the shipped-
+        # tolerance arm without ever reading it.  A capture recorded WITH the seam tolerance then
+        # fails a control that is checking it against a guard it never ran, and the runs it
+        # excludes are biased toward sliver geometry, which is exactly where gate2-offmesh lives:
+        # the one class this clause claims to leave untouched.  A control aimed at the wrong
+        # build is not a weak control, it is a filter.
+        tol = head_tol if flags.get("AGTRACK_GATE2_SEAM") else 0.0
+        (sv, sdue), (_fv, fdue) = (replay(evs, pm, tol, False), replay(evs, pm, tol, True))
+        # THE THIRD ARM (MOVECODE-1z-bo).  sec.1z-bn.5 claims the clause is "strictly narrower
+        # than the waiver".  That is true as code and it is a claim about BEHAVIOUR, so measure
+        # it: replay with the whole stationary waiver deleted and see whether the shipped clause
+        # differs from it anywhere.  If it never does, "narrower" is unwitnessed and the section
+        # must say so rather than resting on the source.
+        _nv, ndue = replay(evs, pm, tol, True, waiver=False)
+        if len(ndue) != len(fdue) or any(abs(a[0] - b[0]) > 1e-9 for a, b in zip(ndue, fdue)):
+            nowaiver_differs.append((rid, len(fdue), len(ndue)))
+        nowaiver_all += len(ndue)
+        eras[bool(flags.get("AGTRACK_GATE2_SEAM"))] = eras.get(bool(flags.get("AGTRACK_GATE2_SEAM")), 0) + 1
         # POPULATION: the verdict control says whether this replay reproduces the past at all
         ok = (len(sv) == len(logged)
               and all(c1 == c2 and w1 == w2 for (_t, c1, w1), (_t2, c2, w2) in zip(sv, logged)))
@@ -223,6 +261,7 @@ def main():
         row[5] += len(fdue)
         if key != "ok":
             continue
+        nowaiver_ok += len(ndue)
         for t, why in fired:
             w = W.setdefault(why, [0, 0, 0])
             if not near(t, sdue):
@@ -242,6 +281,9 @@ def main():
 
     print("CORPUS  %d runs replayed on map 146, %d skipped (other map / no capture / unreadable)"
           % (sum(P[k][0] for k in P), n_skip))
+    print("  each capture replayed at ITS OWN gate-2 tolerance, from its own AGTRACK_GATE2_SEAM")
+    print("  flag: %d with the seam tolerance on, %d without."
+          % (eras.get(True, 0), eras.get(False, 0)))
     print("\nPOPULATION -- the verdict control selects it.  Only 'control OK' runs are evidence:")
     print("  a run whose logged verdicts the stock arm cannot reproduce was written by a guard")
     print("  that no longer exists, and its counterfactual is not ours to read.")
@@ -257,6 +299,25 @@ def main():
     if rf:
         print("  -> the clause removes %d of the %d re-pins that REALLY FIRED (%.0f%%)."
               % (ps - pf, rf, 100.0 * (ps - pf) / rf))
+    print("\nIS THE CLAUSE NARROWER THAN DELETING THE WAIVER -- IN BEHAVIOUR, NOT IN SOURCE?")
+    print("  A third arm replays every capture with STATIONARY_WAIVER off entirely.")
+    print("  on the SAME population (control-OK), shipped due-transitions %d | waiver DELETED %d"
+          % (P["ok"][5], nowaiver_ok))
+    print("  over every replayed run regardless of population:      %d | %d"
+          % (sum(P[k][5] for k in P), nowaiver_all))
+    if not nowaiver_differs:
+        print("  THEY DIFFER IN ZERO RUNS.  On every capture we hold, the shipped clause is")
+        print("  OBSERVATIONALLY IDENTICAL to deleting the stationary waiver: every re-pin the")
+        print("  clause keeps sits on a FRESH report, where the waiver was never load-bearing.")
+        print("  sec.1z-bn.5's \"strictly narrower than the waiver\" is true as CODE and")
+        print("  UNWITNESSED as BEHAVIOUR, and no run on this corpus can separate the two.")
+        print("  Say that, rather than resting the claim on the source.")
+    else:
+        print("  they differ in %d run(s) -- the waiver still carries a decision the clause keeps:"
+              % len(nowaiver_differs))
+        for rid, f, n in nowaiver_differs[:10]:
+            print("     %s  shipped %d dues / waiver-deleted %d" % (rid, f, n))
+
     print("\nEVERY REAL 0x002C FIRE, by the server's OWN reason and what the two arms did:")
     print("  %-16s %8s %8s %8s   %s" % ("why", "missed", "REMOVED", "kept", "control reproduces"))
     for why, (m, rem, k) in sorted(W.items(), key=lambda kv: -(kv[1][1] + kv[1][2])):

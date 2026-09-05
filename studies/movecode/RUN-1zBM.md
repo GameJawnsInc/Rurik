@@ -52,7 +52,8 @@ its stop.
 something else rewinds the body, and §1z-bl's attribution needs a third explanation.
 
 **P4 — THE LEAD-OFF LAW, as a cross-check on the review.** Moving-only world-0 separation
-(`w0score`'s §1z-bh line) **≥ 300 u**, against RUN-1zBL's 26 u with the lead on — the review's
+(`w0score`'s §1z-bh line) **≥ 300 u**, against 26 u with the lead on (**RUN-1zBI's** tape,
+not 1zBL's — corrected at FINDINGS §1z-bo.6; 1zBL's own is 31.2 u) — the review's
 fact 1 and §1z-bh.5 predict ~515 u. This costs nothing and ties the two runs together.
 
 **P5 — CONTROLS.** Both DLL controls FIRED, ring not full. Nulls are not quotable otherwise.
@@ -98,7 +99,7 @@ shipped default (`KBD_SYNC_LEAD_ON` false, `AGTRACK_REPIN` true).
 | **P1** | **MET 7 of 7** — every leg opened with a 410–514 u committed glide and 1.57–2.77 s of silence, the same window 1zBL's re-pins fired inside (1.2–2.4 s) |
 | **P2** | **MET decisively — ZERO re-pins, ZERO `0x002C` sent, whole run** |
 | **P3** | **MET** — nothing thrown back; per-leg net travel 589–888 u (leg 7W peaks 683 / nets 589, no `0x002C` in the run, left UNVERIFIED) |
-| **P4** | **MET** — moving-only separation p50 **251.6 u** / p90 509.2 / max 523.9, against 26.3 u with the lead on |
+| **P4** | **MET** — moving-only separation p50 **251.6 u** / p90 509.2 / max 523.9, against 26.3 u with the lead on (**RUN-1zBI's** tape; RUN-1zBL's own is **31.2 u** — FINDINGS §1z-bo.6) |
 | **P5** | MET — controls fired, ring not full |
 
 **The control is supplied and the re-pin is NECESSARY as well as sufficient.** Long silent
