@@ -14890,7 +14890,113 @@ it. **Whether `STATIONARY_WAIVER` should exist at all is now an owner question**
 1,309 captures is not proof the mechanism is useless, and deleting it would widen the re-pin's
 refusal on a class we have never seen occur.
 
-**The revert arm has still never been run.** `--waiver-walkstart-stands` exists and RUN-1zBL is
-standing in for it, but 1zBL is a different code revision and, by `waiverretro`'s own control,
-was a different guard. A shipped default whose revert arm has never been exercised against the
-client is an assertion — this section does not pretend otherwise.
+~~**The revert arm has still never been run.**~~ **DISCHARGED the same day by RUN-1zBP —
+§1z-bp.** `--waiver-walkstart-stands` was run on the same binary, same route, one flag: the
+re-pin fires 3 times against 0, `setposition` takes 6 hits against 0, 3 of 7 legs are thrown
+back against 0, the body goes −432 u backward on both copies against 0.0, and three decision
+points matched to 0.01–0.02 s flip `blocked/stale-report` → `due`. **§1z-bo.4's "only one
+state-matched trial" is repaired: there are now three, in one build.**
+
+## 1z-bp. RUN-1zBP — **the revert arm, and it is the control this arc never had.** Same binary, same day, same route, `--waiver-walkstart-stands` the only difference: the re-pin fires **3** times against 0, the client's `setposition` takes **6** hits against 0, **3 of 7** legs are thrown back against 0, and the body goes **−432 u** backward on both copies against 0.0. Three decision points are matched to **0.01–0.02 s** and flip `blocked/stale-report` → `due`. §1z-bo's "only one state-matched trial" is repaired
+
+**Registered** in [RUN-1zBP.md](RUN-1zBP.md) before launching. Ident `MOVECODE-1z-bp`. One run,
+agent-driven, hands off, owner away. Harness `20260905T153758`, capture
+`authsrv-20260905T153830-c1`, tape `agenttap-20260905T153831`, hook
+`vault/research/movecode/1zbp/movehook.bin` (8,736 records, **both controls FIRED**). OBSERVED
+throughout.
+
+### 1z-bp.1 ★★★ Why this run and not another comparison with RUN-1zBL
+
+§1z-bo reached the right answer for a weaker reason than it looked, and its own §1z-bo.4 said
+so: RUN-1zBL is a **different code revision** — by `waiverretro`'s verdict control a different
+guard — and only **one** of the four removed re-pins was a state-matched trial, because 1zBL's
+leg 2 was rewound and the two runs' geometry diverges by 503–714 u from leg 3 onward.
+
+This run removes both objections at once. **Same binary, same day, same route, same
+instruments, one flag.** The two captures' whole `flags` dictionaries differ in exactly
+`agtrack_guard.WAIVER_WALKSTART_ENDS_STILL` (True → False) and nothing else but timestamps.
+
+It is also **the known-bad arm this arc had never run**. Every number §1z-bo published had been
+scored against a capture from a different build and never against a same-build negative, and a
+scoring instrument that reads the same in both arms is measuring the wrong quantity rather than
+the wrong threshold.
+
+### 1z-bp.2 ★★★ Every instrument reddens, and by the predicted amount
+
+| | prediction | RUN-1zBO, clause ON | **RUN-1zBP, clause OFF** |
+|---|---|---|---|
+| **P1** long silent windows | ≥ 3 | 7 | **5** — MET |
+| **P2** in-glide `0x002C` | **≥ 1** | 0 | **3** (all `arrival-risk`) — MET |
+| client `setposition` hits | ≥ 2 | 0 | **6** — exactly 3 sends × 2 world copies — MET |
+| **P3** legs same point at walk-start/stop | ≥ 1 | 0 of 7 | **3 of 7** (0.0 u) — MET |
+| **P3** largest backward step, both copies | ≥ 100 u | 0.0 u | **−432.2 / −432.4 u** @ t=34.47 — MET |
+| **P4** guard on the `{stop → walk-start}` pair | ≥ 1 `due` | 7 × `blocked/stale-report` | **3 × `due`**, 1 × blocked — MET |
+| **P5** controls | both FIRED | FIRED | FIRED, 8,736 records — MET |
+
+Per-leg walk-start-to-stop displacement, wire only — no tape, no hook, no clock join:
+
+- **1zBO:** 907.1, 715.6, 1121.6, 640.5, 636.9, 679.3, 918.3 u
+- **1zBP:** 908.1, **0.0**, 1047.0, **0.0**, 572.0, **0.0**, 842.3 u
+
+The three zeros are legs 2S, 4Q and 6S: the body reported a walk-start, was re-pinned back to
+it, and reported its stop at the identical point.
+
+### 1z-bp.3 ★★★ The matched decision points — the clause's behavioural delta, in the guard's own words
+
+The guard reached the same decision points in both runs, to **0.01–0.02 s**:
+
+| | RUN-1zBO, clause ON | RUN-1zBP, clause OFF | |
+|---|---|---|---|
+| +15.4 s | `blocked` arrival-risk `stale-report` | `blocked` arrival-risk `stale-report` | **both blocked** |
+| +23.1 s | `blocked` arrival-risk `stale-report` | **`due` arrival-risk**, `blocked_by` null | ← the clause |
+| +35.3 s | `blocked` gate1-red `stale-report` | **`due` arrival-risk**, `blocked_by` null | ← the clause |
+| +44.9 s | `blocked` arrival-risk `stale-report` | **`due` arrival-risk**, `blocked_by` null | ← the clause |
+
+**Three state-matched trials in one build**, against §1z-bo's one across two builds. That
+section's largest methodological weakness is repaired.
+
+**And the first row is a prediction verified rather than argued.** §1z-bo.2 corrected my own
+claim that all seven of 1zBO's blocks were the clause's doing: the +15.4 s block is leg 1W,
+where fewer than two accepted reports exist and `prev_pos is None` makes `stationary()` return
+False **regardless of the clause**. That correction was derived from the source. Here it is
+measured — the revert arm blocks at the same instant, for the same reason, with the clause off.
+
+1zBO logged three further blocks (+27.65, +39.33, +49.99) with no counterpart here, and that is
+expected rather than awkward: by +27 s the reverted run's body had already been thrown back, so
+from leg 3 onward *this* run is the one whose geometry diverges. **The matched window is legs
+1–4 and the arc should say so** rather than pairing all seven.
+
+### 1z-bp.4 The separation, reported and deliberately not scored
+
+`w0score` moving-only: **51.6 u** (n=261) against 1zBO's 13.0 u. §1z-bp's sheet registered this
+as reported-not-predicted, and the reason stands — §1z-bl.6 showed the `0x002C` reseeds **both**
+copies together, so on a rewound leg the divergence `w0score` exists to see never opens and the
+statistic is uninterpretable as a quality measure in this arm. It is recorded because a number
+that is not quoted is a number nobody can check, not because it scores anything.
+
+The same caution applies in the other direction, and it is worth stating plainly: 51.6 > 13.0
+is **not** evidence that the fix improves tracking, for exactly the reason §1z-bo.6 refused the
+same inference against RUN-1zBL.
+
+### 1z-bp.5 ★ What is now closed, and what is not
+
+**Closed.** §1z-bo.8's standing debt — *"a shipped default whose revert arm has never been
+exercised against the client is an assertion"* — is discharged. `--waiver-walkstart-stands`
+works, it restores the old behaviour on the same binary, and the fix's attribution now rests on
+three same-build matched trials rather than on a cross-build comparison.
+
+**Also closed:** the instruments are proven to discriminate on a same-build negative. The
+in-glide `0x002C` census, the walk-start/stop identity test, the backward-excursion scorer and
+the `setposition` hit count all read zero with the clause on and non-zero with it off, in the
+same build on the same route.
+
+**Not closed, and unchanged by this run.** `gate2-offmesh` still has **zero exposure** on this
+route — neither arm produced one, so it remains untested rather than confirmed. And **PLAN §7
+Q15 is untouched**: this run says nothing about whether `STATIONARY_WAIVER` should exist, only
+that the clause inside it does what §1z-bn claimed. §1z-bo.9's finding stands — all 22 re-pins
+the waiver has ever carried sit on the pair the clause refuses.
+
+**One honest asymmetry.** This run reproduces the *defect*, which is the easier half: a known-bad
+arm shows the instruments can redden, not that the fix is correct in cases neither run reached.
+The clause's KEEP branch is still unwitnessed in a decision that mattered, exactly as §1z-bo.4
+said, and no run on this route can witness it.
