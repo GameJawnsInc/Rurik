@@ -608,6 +608,34 @@ class PathingMap:
             return True
         return bool(self._near(x, y, tol))
 
+    def plane_near(self, x, y, prefer=None, tol=SEAM_TOL):
+        """plane_at(), and where exact containment finds nothing, the plane of the
+        trapezoids within `tol`: `prefer` if one of them offers it, the sole plane
+        if exactly one does, None otherwise -- never a guess between two.
+
+        The companion of on_mesh() (MOVECODE-1z-bg): a keyboard lead's origin is
+        the client's REPORT, and at the wedge tip of map 146 those reports sit
+        <= 0.5 u outside our trapezoids, so plane_at() has no plane to give and
+        a2_clip_lead used to refuse the lead outright (179 zero-leads in 26 runs).
+        The lead's ray must stay on ONE plane (sec.1z-ap), so a sliver origin
+        needs its plane named the same way plane_at() names an inside one: the
+        report's own plane word when the mesh offers it within the tolerance, a
+        single candidate when there is one, and None -- "say nothing" -- when two
+        planes meet there and the report names neither. Inside a trapezoid this
+        IS plane_at(), ambiguity included; the tolerance only speaks where
+        containment is silent.
+        """
+        if self.containing(x, y):
+            return self.plane_at(x, y, prefer=prefer)
+        planes = {t.plane for t in self._near(x, y, tol)}
+        if not planes:
+            return None
+        if prefer in planes:
+            return prefer
+        if len(planes) == 1:
+            return next(iter(planes))
+        return None
+
     def _near(self, x, y, tol=SEAM_TOL):
         """Every trapezoid within `tol` of (x, y) -- zero-height portal lines
         included, which containing() can only hit by landing on them exactly."""

@@ -52,15 +52,26 @@ CANDIDATES = [
 def clear_at(pm, x, y, heading, lead=LEAD):
     """Exactly what a2_clip_lead would do with this origin and heading.
 
-    -> "origin-unwalkable" / "clipped" / "clear".  The server's own order:
-    walkable(origin) first (an off-mesh origin gets a zero-distance lead and
-    never reaches the clip), then the ray.
+    -> "origin-unwalkable" / "clipped" / "clear".  The server's own order
+    (MOVECODE-1z-bg): walkable(origin) first; an origin the mesh holds within
+    SEAM_TOL of an edge is admitted when plane_near can name its plane (here
+    with no report word, so only a sole candidate counts) and its ray then
+    takes the plane clip; an origin further off, or on an ambiguous sliver,
+    gets a zero-distance lead and never reaches the clip. This twin exists to
+    score meshes, so it mirrors the server's order rather than re-deriving it
+    -- when a2_clip_lead moves, this moves with it.
     """
+    plane = None
     if not pm.walkable(x, y):
-        return "origin-unwalkable"
+        if not (hasattr(pm, "on_mesh") and hasattr(pm, "plane_near") and pm.on_mesh(x, y)):
+            return "origin-unwalkable"
+        plane = pm.plane_near(x, y)
+        if plane is None:
+            return "origin-unwalkable"
     dx, dy = math.cos(heading), math.sin(heading)
     tx, ty = x + lead * dx, y + lead * dy
-    sx, sy = pm.clip(x, y, tx, ty, step=CLIP_STEP)
+    sx, sy = (pm.clip(x, y, tx, ty, step=CLIP_STEP, plane=plane) if plane is not None
+              else pm.clip(x, y, tx, ty, step=CLIP_STEP))
     if abs(sx - tx) < 1e-6 and abs(sy - ty) < 1e-6:
         return "clear"
     return "clipped"
