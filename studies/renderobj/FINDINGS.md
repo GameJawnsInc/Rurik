@@ -182,6 +182,31 @@ fact is what the sign is being used to explain** — `min` only means "highest w
 
 ---
 
+
+## GROUNDZ-F8 — the reader is CONFIRMED live, and the sink is our own stale plane word
+
+**GROUNDZ-R1, 2026-09-06** ([RUN-R1.md](RUN-R1.md)). The arc's static decode is now measured:
+799 of 799 samples read `ok` for both agents with **zero refusals**, the round trip held, and
+`+0x8C == +0x30` on every single sample — the self-check with no free parameter. The height
+varies 171.30 u across the stairs against 21.60 u on the flat, so it is not a constant a wrong
+offset happened to land on. **GROUNDZ-F7's `up is -Z` is upgraded from RECONSTRUCTION to
+OBSERVED**: heights are negative and grow more negative with altitude.
+
+**And the sink has a measured mechanism.** With both bodies on plane-29 ground by our own mesh,
+the Hatcher's client plane read **0** and its height sat **32.5 u below** the player's. The
+cause is a link nobody had reason to look at: our follow resolves field 4 **at send time**, the
+hostile then walks onto the higher plane and **arrives**, and the halt `0x0028` carries no plane
+— so the stale word stands, and `MapQueryAltitude` skips the prop branch (GROUNDZ-F4) and
+answers from the terrain under the staircase.
+
+**MOVECODE §1z-bz is not wrong; it is incomplete.** It made every order carry the mover's
+current plane, which is what let the Hatcher climb at all. What it cannot do is correct the
+plane *after* the last order, and a parked body is precisely when no further order comes.
+
+**`GROUNDZ-Q5`, registered:** re-path when the mover's own plane changes, not only when the
+player has moved. One condition, the existing message, no deviation from retail's shape,
+`--no-plane-repath` as the revert, and this run's **32.5 u** as the number it must move.
+
 ## Open
 
 - **`GROUNDZ-Q1` — which of F6's three candidates causes the sink.** Separable by a live read of

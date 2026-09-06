@@ -89,4 +89,57 @@ samples (§1z-bw.7). If P3 is thin, that is why.
 
 ---
 
-## RESULT — not yet run.
+## RESULT — RAN 2026-09-06 01:32, 76 s. **ALL FIVE PREDICTIONS MET, the reader is real, and P5 found the sink's mechanism end to end.**
+
+| | |
+|---|---|
+| exposure | **799 of 799 samples `ok` for BOTH agents, zero refusals**; player plane-29 samples 451 (floor 20) |
+| **P1** the round trip | **MET** — zero `id-roundtrip` refusals. `array[id]->+0x2C == id` holds live, so GROUNDZ-F1's walk is right |
+| **P2** the memo self-check | **MET, exactly** — `+0x8C == +0x30` on **799 of 799** for both agents. No free parameter, no tolerance |
+| **P3** moves with the geometry | **MET** — 243 distinct values; on plane 29 the range is **171.30 u** (stdev 50.05), on plane 0 **21.60 u** (stdev 7.15). An 8× wider spread on the stairs |
+| **P4** a height, not a coordinate | **MET** — −641 to −837 against x/y in the ten-thousands |
+
+**A bonus the run settled for free: GROUNDZ-F7's `up is -Z` is no longer a reconstruction.**
+Heights are negative and grow MORE negative up the stairs (−837 at the top of the plane-29
+range against −641 on the flat). The static case rested on two independent witnesses; this is
+a live measurement agreeing with them.
+
+### P5 — THE SINK, MEASURED, and it is OUR stale plane word
+
+During the 22 s hold the two bodies are 74 u apart and:
+
+| | client plane | `groundz` | query plane |
+|---|---|---|---|
+| player | **29** | −695.904 | 29 |
+| Hatcher | **0** | −663.403 | 0 |
+
+**32.5 u apart in height** — the Hatcher below — while our own navmesh says **both** stand on
+plane-29 ground: it stopped at (10375, 8293), and `planes_at` there is `(29,)`.
+
+**The chain, every link measured:**
+
+1. our last follow order to it was `(29, 0)` at t=51.75 — field 4 = **0**, because
+   `_npc_plane` resolved the mover's plane **at send time**, while it was still on the flat;
+2. it then walked onto plane-29 ground and **arrived**, so no further order went out;
+3. **the halt `0x0028` carries no plane** — retail's shape, and §42.5 explicitly said it
+   "needs nothing", which was written before anyone could measure this;
+4. so the client's agent keeps plane **0** while standing on the stairs;
+5. and `MapQueryAltitude` (GROUNDZ-F4) **skips the prop branch entirely when plane == 0**,
+   returning the raw terrain height underneath the staircase.
+
+That is the ankle-deep sink, from wire to render, with no inference left in it.
+
+**It is bounded, which is why it took a parked body to see.** While the player keeps moving the
+follow re-paths and every new order carries a fresh plane. The stale word only survives when the
+hostile arrives on a different plane and everything then stands still — exactly the operator's
+scenario, and exactly what a scripted route ending in a hold reproduces.
+
+**The fix is one condition, inside the existing message vocabulary:** re-path when the MOVER'S
+OWN PLANE CHANGES, not only when the player has moved. That sends one more `0x002A` carrying the
+corrected `(dest, cur)` and needs no new message and no deviation from retail's shape. It is a
+fourth default in two days, so it is registered here rather than shipped in the same breath as
+the run that found it.
+
+**Registered next:** `GROUNDZ-Q5` — ship the plane-change re-path, with `--no-plane-repath` as
+its revert and this run's 32.5 u as the number it has to move.
+
