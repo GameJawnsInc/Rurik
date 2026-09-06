@@ -337,7 +337,7 @@ def all_valid(pm, paths):
 # Section 14 (2026-09-04, MOVECODE-1z-bb, the seam-aware pull) adds nine
 # unconditional checks on a synthetic bridge and four behind the Pre-Searing
 # load: floor 80 -> 89, green run 93 on 38833 (5 declared skips).
-LEDGER = checks.Ledger("pathing map", floor=100)
+LEDGER = checks.Ledger("pathing map", floor=116)
 check = checks.adopt(LEDGER)
 
 
@@ -1467,6 +1467,96 @@ def main():
               "reported them (0, 29, 29), the wedge-tip sliver is unambiguous even "
               "without the word, and an inside point is plane_at",
               f"named {named}")
+
+    print("\n16. wall_slide(): retail's next-vertex slide along a wall (MOVECODE-1z-ce)")
+    # THE RULE, and where it comes from. A keyboard report whose heading ray is
+    # blocked at the body is a body pressed against a wall and sliding along
+    # it. ArenaNet's server grants the NEXT VERTEX of that wall in the
+    # heading's slide direction -- measured on the live corpus against our own
+    # decode of the same files: 62 blocked-ray report pairs, the rule within
+    # 3 u of retail's grant on 49, the zero-length lead we used to send on 19
+    # (studies/movecode/review/wallslide.py --check). RUN-R3's stair climb is
+    # the specimen on OUR map: 15 reports along the stairs' right side, the
+    # client's heading due east on every one, 15 zero leads, and the sync copy
+    # 100-139 u behind the body for the climb.
+    SQ16 = pathmap.Trapezoid(0, 0, 100.0, 0.0, 0.0, 100.0, 0.0, 100.0,
+                             (pathmap.NO_NEIGHBOUR,) * 4)
+    sq16 = pathmap.PathingMap([SQ16], [{}])
+    sq16._cross = {}
+    check(sq16._walls == {},
+          "16a. the wall index is lazy: nothing built until the first slide, so the "
+          "corpus sweep pays nothing", "")
+    got, why = sq16.wall_slide(100.0, 50.0, 1.0, 1.0, 0)
+    check(got == (100.0, 100.0) and why == "vertex",
+          "16b. a body on the right side of a lone square, heading north-east, slides "
+          "to the side's next vertex (100, 100)", f"{got} {why}")
+    got, why = sq16.wall_slide(100.0, 50.0, 1.0, -1.0, 0)
+    check(got == (100.0, 0.0) and why == "vertex",
+          "16c. heading south-east it slides the other way, to (100, 0)", f"{got} {why}")
+    got, why = sq16.wall_slide(100.0, 50.0, 1.0, 0.0, 0)
+    check(got is None,
+          "16d. a HEAD-ON press (due east into the side) slides nowhere: the wall "
+          "press of RUN-1zBR keeps its zero lead", f"{got} {why}")
+    got, why = sq16.wall_slide(100.0, 50.0, -1.0, 1.0, 0)
+    check(got is None and why == "no-pressed-wall",
+          "16e. a heading AWAY from the wall presses into nothing and answers None "
+          "-- the caller keeps its clip", f"{got} {why}")
+    got, why = sq16.wall_slide(50.0, 50.0, 1.0, 1.0, 0)
+    check(got is None and why == "no-wall",
+          "16f. a body with no wall within WALL_SLIDE_TOL answers None", f"{got} {why}")
+    got, why = sq16.wall_slide(50.0, 100.0, 1.0, 1.0, 0)
+    check(got == (100.0, 100.0) and why == "vertex",
+          "16g. a HORIZONTAL wall -- the square's unshared top edge -- slides too: from "
+          "(50, 100) heading north-east to (100, 100)", f"{got} {why}")
+    got, why = sq16.wall_slide(100.0, 100.0, 1.0, 1.0, 0)
+    check(got is None,
+          "16h. standing ON the corner with the heading pressing into both walls, "
+          "neither continuing wall is slid forward: None", f"{got} {why}")
+    got, why = sq16.wall_slide(100.0, 100.0, -1.0, 1.0, 0)
+    check(got == (0.0, 100.0) and why in ("vertex", "vertex-after-corner"),
+          "16i. standing ON the corner heading north-west, the slide runs along "
+          "the top edge to its far vertex (0, 100) -- whichever of the two walls "
+          "meeting there is found first", f"{got} {why}")
+    got, why = sq16.wall_slide(100.0, 50.0, 1.0, 1.0, 0, chord=20.0)
+    check(got == (100.0, 70.0) and why == "chord",
+          "16j. the chord caps the slide along the wall: 20 u of a 50 u wall", f"{got} {why}")
+    check(pathmap.WALL_SLIDE_TOL == 3.0,
+          "16k. WALL_SLIDE_TOL is 3 u: RUN-R3's reports sit -0.004..+0.398 u off the "
+          "stairs' side and no wall in the live corpus is thinner", "")
+    if pre is None:
+        LEDGER.skip("16l-16p. the stairs of Pre-Searing", "no archive")
+    else:
+        # RUN-R3's report at 12.394 s: (10444.908, 8356.0) plane 29, the client's
+        # vec2 (766.8, 0) due east, 0.003 u outside the stairs' right side. The
+        # side is p29#0's, from its bottom apex (10366, 8279) to (10671.37, 8577).
+        t0_ = [t for t in pre.trapezoids if t.plane == 29 and t.index == 0][0]
+        got, why = pre.wall_slide(10444.908203125, 8356.0, 766.8, 0.0, 29)
+        check(got == (t0_.x_top_right, t0_.y_top) and why == "vertex"
+              and abs(got[0] - 10671.374) < 0.01 and got[1] == 8577.0,
+              "16l. THE STAIRS: the report's due-east heading is a press into the "
+              "stairs' right side, and the slide is that side's next vertex "
+              "(10671.37, 8577) -- 316 u up the stairs, where the shipped lead was 0",
+              f"{got} {why}")
+        d16 = math.hypot(got[0] - 10444.908203125, got[1] - 8356.0)
+        ang = math.degrees(math.atan2(got[1] - 8356.0, got[0] - 10444.908203125))
+        check(abs(d16 - 316.4) < 0.5 and abs(ang - 44.3) < 0.2,
+              "16m. 316 u at 44.3 deg -- the direction the body actually moved on the "
+              "tape (reports 44.3 deg apart), not the 0 deg it reported",
+              f"{d16:.1f} u at {ang:.1f} deg")
+        got, why = pre.wall_slide(10444.908203125, 8356.0, -766.8, 0.0, 29)
+        check(got is None,
+              "16n. the same body heading WEST presses into no wall (the stairs are "
+              "open to the west): None, the clip's answer stands", f"{got} {why}")
+        got, why = pre.wall_slide(10668.328125, 8574.0283203125, 766.8, 0.0, 29)
+        check(got == (t0_.x_top_right, t0_.y_top),
+              "16o. 4 u short of that vertex the answer is still the vertex, not the "
+              "wall beyond it -- the rule stops at the FIRST vertex, the "
+              "decomposition's split points included, because retail does", f"{got} {why}")
+        got, why = pre.wall_slide(10742.6318359375, 8646.5361328125, 766.8, 0.0, 29)
+        check(got is not None and abs(got[0] - 11070.0) < 0.01 and abs(got[1] - 8966.0) < 0.01,
+              "16p. past it, on p29#2's side, the next vertex is (11070, 8966): the "
+              "climb is granted in vertex-long legs, 457 u here",
+              f"{got} {why}")
 
     dt = time.perf_counter() - t0
     print(f"\nwalked the archive in {dt:.1f}s")

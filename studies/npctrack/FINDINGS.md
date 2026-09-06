@@ -703,6 +703,9 @@ both are world-0's own sidestep after the park, the mechanism of F14 seen from t
   never left the drawn body by more than **27.9 u** over 575 samples (p99 12.5). What the owner
   saw instead was the Hatcher drawn 52 u INTO the terrace: not this arc's copies but the plane
   word on ground our mesh does not cover, [GROUNDZ-F11](../renderobj/FINDINGS.md).
+  **Corrected 2026-09-06 (GROUNDZ-F12):** the sync copy and the drawn body agreed because BOTH
+  went THROUGH the hole — the client walks a hostile's 0x002A dead straight and our wire carries
+  no corridor; the route around the wall was the player's. See Q9.
 - ~~**`NPCTRACK-Q4` — the resolver's velocity extrapolation of the target**~~ **CLOSED 2026-09-06
   (F15)**: it is the agent-avoidance pass's deadline on `rel + relv·t` with the other agent
   dead-reckoned to the tick (F14 step 4); small here because the frame stands or walks slowly
@@ -748,6 +751,24 @@ both are world-0's own sidestep after the park, the mechanism of F14 seen from t
   moving on these runs (p90 284 / 91 / 247). Q1 makes the server agree with the client about
   where the hostile stands; it does not move the hostile closer to where the operator is looking.
   That is MOVECODE's two-world problem, unchanged.
+- **`NPCTRACK-Q9` — the follow's wire carries no corridor, and the client walks a hostile's
+  0x002A dead straight.** OBSERVED ([GROUNDZ-F12.5](../renderobj/FINDINGS.md)): on the feel tape
+  the Hatcher's sync copy and drawn body are identical on every sample as it cuts through the
+  hole above the stairs — 45 u from any trapezoid at the deepest — and parks 8.4 u inside the
+  wall, 76 u from the player; the hostile's sync copy is > 2 u off our mesh while moving on 4 of
+  9 tapes (r1-control 94 u, feel 45, renderobj-r1 45, r1 29). The router (1z-by) only ever moved
+  the SERVER's copy ("wire unchanged") and Q1 then replaced that copy with the client's own
+  straight line, so nothing has routed the client's hostile around anything since this arc
+  opened. Two readings, one run apart: **H1**, the client never paths an NPC on 0x002A (retail's
+  7 corpus chases were in the open, so retail's server would carry the corridor — 0x0029 legs —
+  when a wall intervenes; NOT FOUND in the corpus either way); **H3**, the client's follower does
+  call `MapFindPath` but from the hostile's declared plane (29 on plane-0 ground here) and gets
+  `pathCount == 0` (1z-i.2's exceptionless rule), falling back to the straight line — in which
+  case F11's word, right BEFORE the approach, might route it. The discriminating run is the feel
+  route scripted (R3's route, then Q:2 W:3 down p0#2496's left edge so the hostile must cross the
+  hole) under `movehook`'s `MapFindPath` tap: calls from the follower, their from-plane and
+  `pathCount`. If H1, the fix is on the wire — the corridor's legs as 0x0029 to the hostile — and
+  it is the first time this arc changes what the client is told to walk.
 
 ## Runs
 

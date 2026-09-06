@@ -84,3 +84,16 @@ it). The hostile's disc runs in world-0's frame, so its parks and the model's fe
 body was half a second ago; Q1's median stands (11.7 u) and its tail does not. The stairs of
 map 146 are walked by the client and half-absent from our trapezoids: **Q7 is not "the terrace"
 but the staircase and the terrace both.**
+
+### CORRECTION 2026-09-06 (GROUNDZ-F12) — the red sub-bar's cause was misread
+
+"Our mesh has no trapezoid under the player at 7 of the 17 grant points … the keyboard lead had
+no origin to clip from" is wrong on both counts. The seven points are 0.000–0.398 u outside the
+stairs' right side — exact containment refusing the client's edge-riding report, four of them
+inside at the unit — and the lead HAD an origin (the sliver door admitted every one). What it
+had was a heading INTO the wall: every one of the 15 climb reports carries vec2 (766.8, 0.0),
+due east, while the body slides 44.3° up the stairs' right side, so the ray was blocked at its
+first 2 u sample and clipped to zero (`lead_clip_why: clipped`, 15 of 15). That is why world-0
+trailed the body 100–139 u. Retail's answer to the same situation is the next vertex of the
+wall along the slide ([MOVECODE-1z-ce](../movecode/FINDINGS.md), shipped); replayed, the climb's
+leads become 27–457 u. The stairs are in our mesh; Q7 is closed at [FINDINGS F12](FINDINGS.md).

@@ -284,6 +284,14 @@ SEAM_AWARE_ROUTE = True
 SEAM_TOL = 1.0
 SEAM_STEP = 2.0
 
+# THE WALL SLIDE (MOVECODE-1z-ce, 2026-09-06): how far from a wall a body counts
+# as pressed against it, for wall_slide(). The client's keyboard mover lays its
+# waypoints ALONG trapezoid edges (sec.1z-bd.2) and reports from 0.0-0.4 u either
+# side of them (RUN-R3's 15 stair reports: -0.004..+0.398 u from the stairs'
+# right side), so SEAM_TOL's 1 u would already do; 3 u is the same test with
+# room for a report the client rounds, and no wall in the live corpus is thinner.
+WALL_SLIDE_TOL = 3.0
+
 
 NO_NEIGHBOUR = 0xFFFFFFFF
 NO_PORTAL = 0xFFFF
@@ -432,6 +440,134 @@ class Trapezoid:
                 f"y {self.y_bottom:.0f}..{self.y_top:.0f}>")
 
 
+class _Walls:
+    """Every WALL of one plane, indexed by endpoint, for PathingMap.wall_slide().
+
+    A wall is a piece of the plane's boundary: the two slanted SIDES of each
+    trapezoid -- the file's neighbour slots only ever cross a top or bottom edge,
+    so a side is never shared and is always polygon boundary -- plus the parts of
+    a top or bottom edge that no neighbour's edge covers. Each carries the
+    outward normal (out of the walkable interior), which is what lets a heading
+    be tested for PRESSING INTO it. Built once per plane, lazily, and never in
+    from_chunk(): the corpus sweep constructs 349 maps and asks none of them.
+    """
+
+    KEYQ = 0.25          # endpoints match to a quarter unit
+    BAND = 256.0
+
+    def __init__(self, pm, plane):
+        self.segs = []                       # (ax, ay, bx, by, nx, ny)
+        self.by_end = {}
+        self._bands = {}
+        base = pm._base.get(plane)
+        if base is None:
+            return
+        for t in pm.trapezoids:
+            if t.plane != plane:
+                continue
+            self._side(t.x_bottom_left, t.y_bottom, t.x_top_left, t.y_top, True)
+            self._side(t.x_bottom_right, t.y_bottom, t.x_top_right, t.y_top, False)
+            for edge_y, lo, hi, slots, top in (
+                    (t.y_top, t.x_top_left, t.x_top_right, t.neighbours[0:2], True),
+                    (t.y_bottom, t.x_bottom_left, t.x_bottom_right,
+                     t.neighbours[2:4], False)):
+                free = [(lo, hi)]
+                for ni in slots:
+                    if ni == NO_NEIGHBOUR:
+                        continue
+                    n = pm.trapezoids[base + ni]
+                    a, b = ((n.x_bottom_left, n.x_bottom_right) if top
+                            else (n.x_top_left, n.x_top_right))
+                    nf = []
+                    for c, d in free:
+                        if b <= c or a >= d:
+                            nf.append((c, d))
+                        else:
+                            if a > c:
+                                nf.append((c, a))
+                            if b < d:
+                                nf.append((b, d))
+                    free = nf
+                for c, d in free:
+                    if d - c > 0.5:
+                        self._push(c, edge_y, d, edge_y, 0.0, 1.0 if top else -1.0)
+
+    def _side(self, ax, ay, bx, by, left):
+        ux, uy = bx - ax, by - ay
+        m = (ux * ux + uy * uy) ** 0.5
+        if m < 1e-9:
+            return
+        ux, uy = ux / m, uy / m
+        # The right-hand perpendicular of the upward direction points out of a
+        # RIGHT side (the interior lies at smaller x); a left side's is the other.
+        nx, ny = uy, -ux
+        if left:
+            nx, ny = -nx, -ny
+        self._push(ax, ay, bx, by, nx, ny)
+
+    def _push(self, ax, ay, bx, by, nx, ny):
+        i = len(self.segs)
+        self.segs.append((ax, ay, bx, by, nx, ny))
+        q = self.KEYQ
+        self.by_end.setdefault((round(ax / q), round(ay / q)), []).append(i)
+        self.by_end.setdefault((round(bx / q), round(by / q)), []).append(i)
+        lo, hi = int(min(ay, by) // self.BAND), int(max(ay, by) // self.BAND)
+        for b in range(lo, hi + 1):
+            self._bands.setdefault(b, []).append(i)
+
+    def near(self, x, y, tol):
+        """[(dist, index)] of every wall within tol of (x, y), nearest first."""
+        out = []
+        b0 = int(y // self.BAND)
+        seen = set()
+        for b in (b0 - 1, b0, b0 + 1):
+            for i in self._bands.get(b, ()):
+                if i in seen:
+                    continue
+                seen.add(i)
+                ax, ay, bx, by, _nx, _ny = self.segs[i]
+                if (min(ay, by) - tol > y or max(ay, by) + tol < y
+                        or min(ax, bx) - tol > x or max(ax, bx) + tol < x):
+                    continue
+                dx, dy = bx - ax, by - ay
+                L = dx * dx + dy * dy
+                f = (0.0 if L == 0
+                     else max(0.0, min(1.0, ((x - ax) * dx + (y - ay) * dy) / L)))
+                d = ((ax + f * dx - x) ** 2 + (ay + f * dy - y) ** 2) ** 0.5
+                if d <= tol:
+                    out.append((d, i))
+        out.sort()
+        return out
+
+    def through(self, i, px, py, hx, hy, ux, uy):
+        """The wall continuing THROUGH vertex (px, py) from wall i that the
+        heading still presses into and still slides forward along -- the
+        straightest if several. (index, far endpoint, unit direction) or None."""
+        q = self.KEYQ
+        best = None
+        for j in self.by_end.get((round(px / q), round(py / q)), ()):
+            if j == i:
+                continue
+            ax, ay, bx, by, nx, ny = self.segs[j]
+            if abs(ax - px) <= 1.0 and abs(ay - py) <= 1.0:
+                far = (bx, by)
+            elif abs(bx - px) <= 1.0 and abs(by - py) <= 1.0:
+                far = (ax, ay)
+            else:
+                continue
+            vx, vy = far[0] - px, far[1] - py
+            mv = (vx * vx + vy * vy) ** 0.5
+            if mv < 1e-9 or hx * nx + hy * ny <= 0.0:
+                continue
+            vx, vy = vx / mv, vy / mv
+            if hx * vx + hy * vy <= 0.0:
+                continue
+            turn = ux * vx + uy * vy
+            if best is None or turn > best[0]:
+                best = (turn, j, far, vx, vy)
+        return None if best is None else (best[1], best[2], best[3], best[4])
+
+
 class PathingMap:
     """Every trapezoid in one map, with a point test over them."""
 
@@ -457,6 +593,7 @@ class PathingMap:
         # a millisecond to a caller that only wants to know the layout walked.
         self._grid = None            # walkable()'s bucket; _build_grid
         self._component = None       # route()'s reachability; _build_components
+        self._walls = {}             # wall_slide()'s per-plane wall index; _Walls
 
     def _build_cross_links(self):
         """Trapezoid-to-trapezoid links through paired portals.
@@ -840,6 +977,77 @@ class PathingMap:
         if best is None:
             return None
         return best[1], best[2], best[0]
+
+    def wall_slide(self, x, y, hx, hy, plane, chord=None, tol=WALL_SLIDE_TOL):
+        """Where ArenaNet's server sends a body whose heading ray is blocked
+        AT THE BODY: the NEXT VERTEX of the wall it presses against, in the
+        heading's slide direction. (point, why), or (None, why).
+
+        MEASURED on the live corpus, 2026-09-06 (MOVECODE-1z-ce,
+        studies/movecode/review/wallslide.py). Of 2,156 consecutive moving
+        report pairs with a retail 0x0029 to the player, 62 have the client's
+        own heading ray (0x003D's vec2) blocked within 4 u of the report on OUR
+        decode of the same file -- a body against a wall. Retail's grant on
+        those is this rule's point to 0.0 u on most of them: 27 of the 33 where
+        the grant leaves the heading by more than 10 deg land within 3 u, and
+        22 of the 29 where it does not; today's zero-length lead matches 6 and
+        13. The two rules it beat, both scored on the same pairs: routing to
+        the heading ray's endpoint (1 of 33) and continuing along the wall past
+        every vertex the heading still presses into (14 of 33). The 124 slides
+        retail granted ALONG the heading are never eligible -- their ray is
+        clear -- so this changes nothing where the clip already agrees with
+        retail. The vertex retail names is a vertex of our trapezoids, bit for
+        bit: the decomposition's split points included, which is why the rule
+        stops at the FIRST vertex rather than the wall's geometric corner.
+
+        `plane` names the wall index (a wall belongs to one plane); `chord`
+        caps the slide's length along the wall -- the caller's lead length,
+        and retail never exceeded ours (the longest measured 684 u). A body
+        standing ON a vertex (within 1 u) slides along the next wall through
+        it that the heading still presses into; a heading that presses into no
+        wall within `tol` -- a clear ray, or a report off every wall -- answers
+        None, and the caller keeps its clip.
+        """
+        hm = (hx * hx + hy * hy) ** 0.5
+        if hm < 1e-9:
+            return None, "no-heading"
+        hx, hy = hx / hm, hy / hm
+        walls = self._walls.get(plane)
+        if walls is None:
+            walls = self._walls[plane] = _Walls(self, plane)
+        cands = walls.near(x, y, tol)
+        if not cands:
+            return None, "no-wall"
+        for _d, i in cands:
+            ax, ay, bx, by, nx, ny = walls.segs[i]
+            if hx * nx + hy * ny <= 0.0:
+                continue                         # not pressing into this wall
+            ux, uy = bx - ax, by - ay
+            m = (ux * ux + uy * uy) ** 0.5
+            ux, uy = ux / m, uy / m
+            along = hx * ux + hy * uy
+            if abs(along) < 1e-6:
+                continue
+            if along < 0.0:
+                ux, uy = -ux, -uy
+                target = (ax, ay)
+            else:
+                target = (bx, by)
+            seg = ((target[0] - x) ** 2 + (target[1] - y) ** 2) ** 0.5
+            why = "vertex"
+            if seg < 1.0:
+                nxt = walls.through(i, target[0], target[1], hx, hy, ux, uy)
+                if nxt is None:
+                    continue
+                _j, target, ux, uy = nxt
+                seg = ((target[0] - x) ** 2 + (target[1] - y) ** 2) ** 0.5
+                why = "vertex-after-corner"
+            if chord is not None and seg > chord:
+                f = chord / seg
+                return ((x + (target[0] - x) * f, y + (target[1] - y) * f),
+                        "chord")
+            return (float(target[0]), float(target[1])), why
+        return None, "no-pressed-wall"
 
     def plane_at(self, x, y, prefer=None):
         """Which plane a point is on, or None if the geometry cannot say.

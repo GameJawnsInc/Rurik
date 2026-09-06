@@ -62,7 +62,7 @@ from test_position_trust import receive_arm, Sent, FakeRec   # noqa: E402
 # the word-against-point check and the known-bad arm that reddens all three --
 # the cross-plane guard NPCTRACK proposed is refuted at 0 of 488 and ships as
 # nothing).
-LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=144)
+LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=153)
 check = checks.adopt(LEDGER)
 
 SRC = open(authsrv.__file__, encoding="utf-8").read()
@@ -1399,6 +1399,98 @@ def main():
           "same detector must still find where it is not, and it reads the arm "
           "from each capture's own flags row instead of inferring it",
           f"leadplane.py {'found' if _lps else 'MISSING'}")
+
+    print("\n18. MOVECODE-1z-ce: THE WALL SLIDE -- a lead blocked at the body "
+          "becomes retail's next-vertex slide along the wall")
+    # THE DEFECT, on the tape: RUN-GROUNDZ-R3's stair climb. The client's own
+    # vec2 read due east (766.8, 0) on all 15 reports while its collision slid
+    # the body 44 deg up the stairs' right side; every lead's ray was blocked at
+    # its first 2 u sample, every grant was the report back (why="clipped",
+    # arm zero-lead), and the sync copy trailed the drawn body 100-139 u for
+    # the climb -- the frame the hostile's disc parks in (R3's six over-40
+    # halts). Not the mesh: the body never left our trapezoids by 0.5 u.
+    # THE RULE is retail's, measured on the live corpus (wallslide.py --check):
+    # of 62 report pairs whose ray our clip blocks at the body, ArenaNet's
+    # grant is the NEXT VERTEX of the wall the body presses against, in the
+    # heading's slide direction, on 49 -- to 0.0 u on our own decode. The
+    # fixture is a lone 100 x 100 square; the report stands on its right side.
+    sys.path.insert(0, os.path.join(os.path.dirname(HERE), "mapdata"))
+    import pathmap as _pmod
+    _SQ = _pmod.Trapezoid(0, 0, 100.0, 0.0, 0.0, 100.0, 0.0, 100.0,
+                          (_pmod.NO_NEIGHBOUR,) * 4)
+    _sq = _pmod.PathingMap([_SQ], [{}])
+    _sq._cross = {}
+    _H = 766.0 / math.sqrt(2.0)                    # north-east, in the vec2 band
+    st18 = {"pos": (100.0, 50.0), "plane": 0, "pathmap": _sq}
+    lead18 = authsrv.kbd_lead_dest([100.0, 50.0], [_H, _H])[0]
+    got, clipped, why = authsrv.a2_clip_lead(st18, [100.0, 50.0], lead18)
+    check(clipped and why == "wall-slide" and got == [100.0, 100.0],
+          "18a. THE SLIDE: a report on the square's right side heading north-east "
+          "-- the ray blocked at its first sample -- is granted the side's next "
+          "vertex (100, 100), 50 u up the wall, why=wall-slide",
+          f"granted {got} why={why}")
+    _saved_ws = authsrv.A2_LEAD_WALL_SLIDE
+    try:
+        authsrv.A2_LEAD_WALL_SLIDE = False
+        g0, c0, w0 = authsrv.a2_clip_lead(st18, [100.0, 50.0], lead18)
+    finally:
+        authsrv.A2_LEAD_WALL_SLIDE = _saved_ws
+    check(c0 and w0 == "clipped" and g0 == [100.0, 50.0],
+          "18b. KNOWN-BAD ARM (--no-lead-wall-slide): the same report gets the "
+          "shipped-until-now answer, the report itself -- the zero lead R3 sent "
+          "15 times",
+          f"granted {g0} why={w0}")
+    check(authsrv.A2_LEAD_WALL_SLIDE is _saved_ws is True,
+          "and the module global is restored after the revert arm")
+    lead_e = authsrv.kbd_lead_dest([100.0, 50.0], [766.0, 0.0])[0]
+    ge, ce, we = authsrv.a2_clip_lead(st18, [100.0, 50.0], lead_e)
+    check(ce and we == "clipped" and ge == [100.0, 50.0],
+          "18c. A HEAD-ON PRESS (due east into the side) stays a zero lead: the "
+          "heading slides along no wall, and RUN-1zBR's wall press is unchanged",
+          f"granted {ge} why={we}")
+    lead_w = authsrv.kbd_lead_dest([100.0, 50.0], [-766.0, 0.0])[0]
+    gw, cw, ww = authsrv.a2_clip_lead(st18, [100.0, 50.0], lead_w)
+    check(cw and ww == "clipped" and gw == [0.0, 50.0],
+          "18d. NOT ELIGIBLE: aimed away from the wall the ray runs 100 u to the "
+          "far side and is clipped there as before -- the slide is consulted "
+          "only when the clip stops within A2_LEAD_WALL_SLIDE_FLOOR of the body",
+          f"granted {gw} why={ww} floor {authsrv.A2_LEAD_WALL_SLIDE_FLOOR}")
+    lead_s = authsrv.kbd_lead_dest([100.0, 50.0], [_H, -_H])[0]
+    gs, cs, ws = authsrv.a2_clip_lead(st18, [100.0, 50.0], lead_s)
+    check(cs and ws == "wall-slide" and gs == [100.0, 0.0],
+          "18e. heading south-east it slides the other way, to (100, 0): the "
+          "direction is the heading's component along the wall",
+          f"granted {gs} why={ws}")
+    lead_c = authsrv.kbd_lead_dest([100.0, 50.0], [_H, _H])[0]
+    _saved_len = authsrv.KBD_SYNC_LEAD
+    try:
+        authsrv.KBD_SYNC_LEAD = 20.0
+        gc, cc, wc = authsrv.a2_clip_lead(st18, [100.0, 50.0], lead_c)
+    finally:
+        authsrv.KBD_SYNC_LEAD = _saved_len
+    check(cc and wc == "wall-slide" and gc == [100.0, 70.0],
+          "18f. the slide is capped at the lead's own length along the wall "
+          "(KBD_SYNC_LEAD): 20 u of a 50 u wall lands at (100, 70)",
+          f"granted {gc} why={wc}")
+
+    # ---- THROUGH THE REAL RECEIVE ARM ----------------------------------
+    st18w = {"pos": (100.0, 50.0), "plane": 0, "pos_seen": 0.0, "pathmap": _sq}
+    st18w, w18 = drive_heading([1, [100.0, 50.0], 0, [_H, _H], 1],
+                               lead=True, state=st18w)
+    mv18 = w18.of(MOVE)
+    row18 = st18w["_rec"].of("grant_verdict")[-1]
+    check(len(mv18) == 1 and mv18[0][1][1] == [100.0, 100.0]
+          and mv18[0][1][2] == 0 and mv18[0][1][3] == 0
+          and row18["lead_clip_why"] == "wall-slide" and row18["lead_clipped"]
+          and row18["lead_src"] == "kbd",
+          "18g. ON THE WIRE: the 0x0029 the client receives names the vertex "
+          "(100, 100) on plane 0, and the verdict row says wall-slide on a "
+          "kbd-sourced lead",
+          f"sent {mv18[0][1] if mv18 else None} row {row18.get('lead_clip_why')} "
+          f"arm {row18.get('arm')}")
+    check(authsrv.capture_flags().get("A2_LEAD_WALL_SLIDE") is True,
+          "18h. the switch is in the capture header, so a tape says which arm "
+          "produced it", "")
 
     return LEDGER.verdict()
 

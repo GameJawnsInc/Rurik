@@ -316,25 +316,97 @@ owner's session read 52 u for 15 s.
 **What it does not cover:** a mover more than 80 u from the player on uncovered ground keeps
 its carried word (nothing to name it from); a plane-0 ground whose true height is a prop rather
 than terrain (F4's "plane 0 skips the prop query") would still sink — no specimen; and the
-missing trapezoids themselves, which are the pathmap's (the terrace is walkable in the client
-and absent in our decode of the same data — worth a look at what `from_chunk` drops there).
+missing trapezoids themselves, which are the pathmap's ~~(the terrace is walkable in the client
+and absent in our decode of the same data — worth a look at what `from_chunk` drops there)~~
+**— struck by F12: the client's BODY never entered it either. Nothing is missing.**
+
+## GROUNDZ-F12 — Q7 CLOSED: nothing is missing from the mesh. The stairs are plane 29, the hole above them is a hole in the client's mesh too, and the two symptoms behind the question were a keyboard lead aimed INTO a wall (fixed, MOVECODE-1z-ce) and a hostile ordered straight THROUGH one (NPCTRACK-Q9)
+
+**Asked:** *"dig into Q7, why the stairs are missing from the mesh."* Ident `GROUNDZ-F12`. Desk
+only: the two tapes, 397 captures, the pathing and props chunks, and the live corpus; no run.
+New tools `review/meshcensus.py --check` and `../movecode/review/wallslide.py --check`.
+OBSERVED unless marked.
+
+**F12.1 The chunk walks and the stairs are in it.** File id 0x1B97D: the tag walk closes to the
+byte, 58 planes, 6,120 trapezoids, zero inverted. Plane 29 is the 5-trapezoid staircase prefab
+(x 10069–11183, y 8279–9385; 1z-bx.1 named it the same way from the other side). RUN-R3's seven
+"NONE" grant points sit −0.004..+0.398 u from the stairs' RIGHT SIDE — the 1z-bf edge class,
+exact containment refusing a point the client reports from an edge — and four of the seven are
+inside once rounded to the unit. The R3 sheet's "no trapezoid under the player at 7 of the 17
+grant points" was our decoder's rounding, read as geometry.
+
+**F12.2 The client's body never leaves our trapezoids.** Per sample, the client's plane word
+against ours and the drawn body's distance off our mesh (`meshcensus.py`): R3's tape 670 player
+samples, the feel tape 575 — none more than 0.5 u off, and the client's plane word IN our
+`planes_at` on 1,072 of 1,072 on-mesh samples. Nine tapes, 6,591 drawn-body samples, worst
+0.36 u. The corpus: 397 captures on map 146, **10,529 accepted reports — 9,786 inside a
+trapezoid, 552 distinct points within 0.5 u of an edge, 2 within 2 u, 18 beyond**; of the 18,
+10 were walking a server grant whose destination sits off our mesh or lie on its leg (the
+2026-08-19 endpoint echoes), 7 came within 3 s of a > 200 u jump between consecutive reports
+(the body MOVED by the server, then walking back on — among them a 62.8 u park beside the
+bridge's north-west end on 2026-08-22, plane 18, held 11 s, the one point in 10,529 worth a
+second look), and 1 is the client's own: a 10.7 u stop-report at the foot of the stairs on
+2026-09-03. `from_chunk` drops nothing the client walks on.
+
+**F12.3 The hole is real, and it is the client's too.** At y ≈ 9104 our mesh covers x ≤ 11216
+(p0#2495) and x ≥ 11308 (p0#2496); at y ≈ 8910 the gap is 410 u wide. No prop stands in it: the
+map's props chunk holds 864 placements, the nearest 629 u away, and none of the 34 outlines
+covers it. The player's body on the feel tape RAN THE HOLE'S BOUNDARY: (11238, 9120) on
+p0#2495's right edge at 44.1 s, the vertex (11280, 9151) at 44.8 s, then down p0#2496's left
+edge with the body 0.1–0.2 u from the edge for 80 u (45.65–45.95 s) — a body pressed against
+ground it cannot enter, on the client's own mesh, along the line our decode draws. The client's
+height reader along that boundary climbs from −1051 (the landing) to −1102 over 350 u while the
+hole's interior at (11238, 9104) reads −1050.8, the landing's level (R3): a lower pocket beside
+a raised ramp — terrain, not a prop, and exactly *"he didn't walk up the slope like my
+character did"*. F11 read the hole as *"walkable in the client and absent in our decode"*: the
+second half is true and the first is not — the client's BODY never entered it. What entered it
+was the hostile (F12.5).
+
+**F12.4 Symptom A — world-0 100–139 u behind the body on the climb — is a lead aimed into a
+wall. FIXED, [MOVECODE-1z-ce](../movecode/FINDINGS.md).** Decoded from the capture's own 0x003D
+bytes: all 15 climb reports carry the heading vector **(766.8, 0.0) — due east** — while the
+body moves at 44.3° along the stairs' right side, a single 44.3° line from (10366, 8279) to
+(11183, 9079) that the client's collision slides the body along. `a2_clip_lead` aims the lead
+along the heading, the ray enters the wall at its first 2 u sample, and the grant is the report
+back: `lead_clip_why: clipped`, arm zero-lead, `HELD HEADING (X,Y) from (X,Y)`, 15 of 15. Not
+"no origin" — an origin, a heading, and a wall. ArenaNet's server does something else, measured
+on the live corpus and shipped as `A2_LEAD_WALL_SLIDE` / `pathmap.wall_slide`: the next vertex
+of the wall the body presses against, in the heading's slide direction. Replayed through the
+shipped function the climb's 15 zero leads become 27 / 94 / 419 / 316 / 210 / 107 / 4 / 457 /
+355 / 251 / 148 / 44 / 102 / 120 / 5 u along the stairs. RECONSTRUCTION on our map until a run
+walks it; the rule itself is retail's on 62 live specimens.
+
+**F12.5 Symptom B — the Hatcher IN the hole — is our wire, not the client's mesh. Open as
+[NPCTRACK-Q9](../npctrack/FINDINGS.md).** The follow's order is a bare 0x002A "go to the
+player", and the client walks a hostile's 0x002A dead straight: on the feel tape its sync copy
+and drawn body are IDENTICAL on every sample as it cuts from (11219, 9099) through (11296, 9035)
+— 45 u from any trapezoid — to park at (11412.8, 8909.7), 8.4 u inside the wall, 76 u from the
+player, plane word 29, height cached. The router (1z-by) only ever moved the SERVER's copy
+("wire unchanged"), and NPCTRACK-Q1 then replaced that copy with the client's straight-line
+one, so nothing has ever routed the client's hostile around anything. On the tapes the
+hostile's sync copy is more than 2 u off our mesh while moving on 4 of 9 (r1-control 94 u, feel
+45, renderobj-r1 45, r1 29). The owner's *"he pathed around the wall well"* was the player's own
+route; the Hatcher went through. F11's correction still does what it says — the plane word is
+right wherever the hostile parks — it cannot put the hostile on the ramp.
+
+**Corrections carried:** RUN-R3 (a note under its RESULT), F11's parenthesis above (struck),
+npctrack's Q3 closure and RUN-FEEL (the wall).
 
 ## Open
 
 - ~~`GROUNDZ-Q5` — ship the plane-change re-path~~ **SHIPPED, GROUNDZ-F9; CONFIRMED by R2 (F10,
   the client applies it in 90 ms).** Its blind spot — ground our mesh does not cover at all — is
   F11's, shipped 2026-09-06 and unverified against a client.
-- **`GROUNDZ-Q7` — why does our mesh have no trapezoid on the terrace above the stairs — OR ON
-  THE STAIRS?** The client walks both (both bodies did) and its height reader resolves plane 0 on
-  the terrace and 29 on the stairs. R3 widened it: our decode says NONE under the player at 7 of
-  17 grant points up the staircase, so the keyboard lead has no origin there, every grant is the
-  report itself, and world-0 trails the body by 100–139 u for the whole climb — which is where
-  R3's six over-40 halts and MOVECODE-1z-bc's `pathCount == 0` class both live. Either the
-  pathing chunk carries these trapezoids and `from_chunk` drops them, or the stairs and terrace
-  are prop-borne ground the trapezoid data never held. A decode question for the pathmap, with
-  R3's points as the specimen: the stairs `(10266, 8156) … (11184, 9080)`, the terrace
-  `(11185–11459, 8849–9120)`. The first thing to try is the chunk's own trapezoid count against
-  ours for this file id.
+- ~~**`GROUNDZ-Q7` — why does our mesh have no trapezoid on the terrace above the stairs — OR ON
+  THE STAIRS?**~~ **CLOSED 2026-09-06, [F12](#groundz-f12): nothing is missing.** The stairs are
+  plane 29 and R3's seven "NONE" points were 0.0–0.4 u outside an edge; the client's body never
+  leaves our trapezoids (10,529 accepted reports on map 146, 6,591 drawn-body tape samples,
+  worst 0.36 u); the hole above the stairs is a hole in the client's mesh too (the owner's body
+  slid along its edge to 0.2 u for 80 u). The two symptoms were a keyboard lead aimed INTO the
+  wall the body slides along — MOVECODE-1z-ce, shipped — and a hostile the client walks dead
+  straight through the hole because our wire carries no corridor — NPCTRACK-Q9. One point in
+  10,529 is worth a second look: a 62.8 u park beside the bridge's north-west end on
+  2026-08-22, plane 18, held 11 s, three seconds after a jump.
 - **`GROUNDZ-Q1` — which of F6's three candidates causes the sink.** Separable by a live read of
   `+0x8C`, `+0x30` and `+0x40` at a known stair position.
 - **`GROUNDZ-Q2` — is the position updater per-frame?** NOT FOUND. `0x007EB7F0` is also a vtable

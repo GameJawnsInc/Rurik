@@ -2085,8 +2085,18 @@ test, not the grid the pull used), and route() stays under the 50 ms tick
 is the 2026-08-13 performance fix's control, and with the term on it read
 12 of 1,500 paths changed and Nones 48 → 38, which was the seam term working,
 not the fix regressing — section 14 owns that census.
-Floor 89 against a green 93 on 38833 (the archive-conditional §6 checks, §13
-when map 280 is absent, and §14(g) when Pre-Searing is absent skip-declare);
+**Section 16 (MOVECODE-1z-ce, 2026-09-06) is `wall_slide()`**, the rule ArenaNet's
+server follows when a keyboard report's heading ray is blocked at the body: the NEXT
+VERTEX of the wall the body presses against, in the heading's slide direction. Pinned
+on a lone square (the slide both ways, a head-on press that slides nowhere, a heading
+away from the wall, a horizontal wall, the corner, the chord cap, the lazy index) and
+on Pre-Searing's stairs -- RUN-GROUNDZ-R3's report (10444.9, 8356.0) plane 29 heading
+due east lands on the stairs' side vertex (10671.37, 8577), 316 u at 44.3 deg, where
+the shipped lead was 0 u; 4 u short of that vertex the answer is still that vertex
+(the decomposition's split points count, because retail's do); the next side's vertex
+after it. The live-corpus derivation is `studies/movecode/review/wallslide.py --check`.
+Floor 116 against a green 120 on 38833 (the archive-conditional §6 checks, §13
+when map 280 is absent, and §14(g)/§16(l-p) when Pre-Searing is absent skip-declare);
 ~110 s, `--routes` shrinks section 10),
   `toolkit/mapdata/test_spawncheck.py` (the map-row spawn census, `spawncheck.py`,
   which answers a clause `PLAN.md` §3.2 had carried unmeasured since it was written:
@@ -3848,7 +3858,17 @@ when map 280 is absent, and §14(g) when Pre-Searing is absent skip-declare);
   term shipped -- without that positive control the zero would be
   indistinguishable from a broken census. Floor 33 → 60 → 69 → 84 → 106 → 114 →
   135 → 144 from the
-  green runs. No vault, no client. ~2 s),
+  green runs. **Section 18 (MOVECODE-1z-ce, 2026-09-06): the WALL SLIDE**, through
+  `a2_clip_lead` and the real receive arm on a real `PathingMap` square: a report on
+  the square's right side heading north-east -- the ray blocked at its first 2 u
+  sample, RUN-GROUNDZ-R3's stair climb in miniature -- is granted the side's next
+  vertex with `why="wall-slide"`; the known-bad arm (`--no-lead-wall-slide`) gives
+  the report back, the zero lead R3 sent 15 times; a HEAD-ON press stays a zero lead
+  (RUN-1zBR unchanged); a ray aimed away from the wall is clipped 100 u out as before
+  and never consults the slide; the other slide direction; the cap at `KBD_SYNC_LEAD`;
+  the wire (`0x0029` names the vertex on plane 0, the verdict row says wall-slide on a
+  kbd lead); and the switch in the capture header. Floor 144 → 153 from the green
+  run. No vault, no client. ~2 s),
   `toolkit/authsrv/test_livewire.py` (the committed retail-decode recipe,
   RETHINK instrument #2 — the campaign's referee moved out of a deletable
   scratchpad. Guards `toolkit/authsrv/livewire.py`: the no-vault doors

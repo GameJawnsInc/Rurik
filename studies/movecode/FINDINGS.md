@@ -16628,3 +16628,90 @@ nearby. An early draft of this section's own census re-derived the reach with
 `plane=None` and reported 520 u where the server had granted 104, which would have
 "confirmed" the brief; the error was mine and it was caught by scoring against the
 recorded grant instead ([[validate-the-simulator-against-the-thing-itself]]).
+
+---
+
+## 1z-ce. THE WALL SLIDE — a keyboard lead whose heading ray is blocked AT THE BODY was a zero lead every time (RUN-GROUNDZ-R3's stair climb: 15 of 15, world-0 100–139 u behind the body); ArenaNet's server grants the NEXT VERTEX of the wall the body presses against, in the heading's slide direction, and does so to 0.0 u on our own decode of its maps — SHIPPED as `A2_LEAD_WALL_SLIDE` / `pathmap.wall_slide`, `--no-lead-wall-slide` reverts
+
+**Asked:** GROUNDZ-Q7 — *"why the stairs are missing from the mesh"* — which they are not
+([renderobj F12](../renderobj/FINDINGS.md)); this is the half of the answer that belongs to the
+lead. Ident `MOVECODE-1z-ce`. Desk only: R3's capture and tape, the live corpus, our meshes. New
+tool `review/wallslide.py --check`. OBSERVED unless marked.
+
+### 1z-ce.1 The defect, from the capture's own bytes
+
+RUN-R3, 9.5–17.9 s, the body sliding up the stairs' right side under a held W. Every 0x003D of
+the climb decodes to vec2 **(766.8, 0.0)** — due east — while consecutive reports lie **44.3°**
+apart, ON the stairs' right side (−0.004..+0.398 u from it: p0#2508's and p29#0/#2's sides are
+one 44.3° line from (10366, 8279) to (11183, 9079)). The client's collision slides the body
+along the wall; its report names the key's direction, not the motion's. `kbd_lead_dest` aims
+520 u east, `a2_clip_lead`'s plane clip refuses the first 2 u sample, the grant is the report
+back — `lead_clip_why: clipped`, arm zero-lead, `HELD HEADING (X,Y) from (X,Y)`, **15 of 15** —
+and the sync copy sits at each report until the next, 100–139 u behind the drawn body for the
+whole climb. R3's six over-40 halts are the hostile's disc parking in that frame. The sliver
+door (1z-bg) admitted every origin; a tolerant-sample clip (tried first, refuted: 0.0 u on all
+15) changes nothing, because the ray really does enter the wall.
+
+### 1z-ce.2 ★★★ What retail does, measured
+
+Live corpus, 20 stamps, six maps (0x1B97D, 0x26529, 0x2659F, 0x287B3, 0x28F32, 0x28F33). Every
+pair of consecutive player 0x003Ds 0.2–1.5 s apart with ≥ 40 u of motion and a retail 0x0029 to
+the player on the first (within 0.4 s): **2,156 pairs.** Split by whether the reported heading
+and the actual motion agree within 20°:
+
+| | pairs | ray blocked at the body (our clip < 4 u) | retail's grant |
+|---|---|---|---|
+| straight (heading ≈ motion) | 1,984 | 29 | the 766 u chord along vec2: our clip within 10 u of it on 1,789 (p50 1.5 u) — the positive control |
+| slide, grant along vec2 (≤ 10°) | 124 | **0** | the clipped chord, p50 375 u |
+| slide, grant OFF vec2 (> 10°) | 48 | **33** | see below |
+
+The blocked ray is the discriminator: it fires on 33 of the 48 grants that leave the heading and
+on **none** of the 124 that follow it. On the 33, retail's grant is a **vertex of our
+trapezoids** — (4688, 366) four reports running on one wall, (−4934, 1122), (−8993, 1995),
+(10368, 7872), (−7708, 3658), (−9931, 10003) … — the far end, in the heading's slide direction,
+of the side the body stands on. Rules scored against retail's point on the same pairs:
+
+| rule | off-heading slides within 3 u of retail (of 33) | straight, blocked (of 29) |
+|---|---|---|
+| TODAY, the zero lead (within 30 u) | 6 | 13 |
+| route to the heading ray's endpoint and grant the first corner / to the farthest walkable sample | 1 / 1 | — |
+| continue along the wall past every vertex the heading still presses into | 14 | 10 |
+| merge collinear split vertices, stop at a bend | 23 | 17 |
+| **the NEXT VERTEX, split points included** | **27** (28 within 10 u) | **22** |
+
+Retail stops at the decomposition's own split vertices — the vertex 4 u ahead is the answer,
+not the wall's geometric corner 700 u on — which is itself a fact about its pathing data: the
+same trapezoids. The misses: two where retail went past a vertex 50 u ahead (unexplained), one
+heading flip between reports, one where retail went the other way along the wall at a
+near-stationary body, one 64 u short.
+
+### 1z-ce.3 What ships
+
+`PathingMap.wall_slide(x, y, hx, hy, plane, chord)` — a per-plane wall index built lazily
+(slanted sides, always boundary; the unshared parts of top and bottom edges; each with its
+outward normal), the nearest wall within 3 u the heading presses into, its far vertex in the
+slide direction, a body ON a vertex continuing along the next pressed wall, the length capped at
+the caller's chord (ours 520 u; retail's longest 684). `a2_clip_lead`: when the clip stops
+within `A2_LEAD_WALL_SLIDE_FLOOR` (4 u) of the report and the slide answers, the grant is the
+slide with `why="wall-slide"`; a head-on press (no component along the wall) stays the zero lead
+RUN-1zBR measured. `A2_LEAD_WALL_SLIDE = True`, `--no-lead-wall-slide` reverts, the switch is in
+the capture header. On R3's climb, replayed through the shipped function: 27 / 94 / 419 / 316 /
+210 / 107 / 4 / 457 / 355 / 251 / 148 / 44 / 102 / 120 / 5 u along the stairs, against 15 zeros.
+
+Tests: `test_pathmap` §16 (+16, floor 100 → 116, green 120 — the square, the stairs, the head-on
+press, the corner, the cap, the lazy index), `test_kbdsync` §18 (+9, floor 144 → 153: through
+`a2_clip_lead` and the wire, the known-bad arm, head-on unchanged, not eligible when the ray is
+clear, the cap, the header). Corpus: `review/wallslide.py --check` — floors on the eligible
+counts and hit rates, a ≤ 3 % ceiling on eligibility where retail granted along the heading, the
+rule ≥ 2× the zero lead, and six signature vertices that must keep reproducing exactly
+([[corpus-counts-redden]]).
+
+### 1z-ce.4 What this is not
+
+Not the mesh (F12.2: 10,529 reports, the body never off it by the client's own doing beyond one
+10.7 u stop). Not a run: the derivation is retail's, on 62 specimens; the first ordinary session
+on the stairs is its confirmation, and the prediction is plain — world-0 within ~30 u of the
+drawn body on the climb instead of 100–139, and the hostile's halts on the stairs no longer 6 of
+16 over 40 u. And not the whole of R3's red bar: the hostile still parks in whatever frame
+world-0 provides, and NPCTRACK-Q9 (the client walks a hostile's 0x002A dead straight) is the
+other half of what the owner saw.

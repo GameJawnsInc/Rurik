@@ -6280,6 +6280,30 @@ A2_LEAD_SEAM_CLIP = False     # True (--lead-seam-clip): seam_clip on the lead's
 # (--no-lead-plane-clip) never opens this door at all. --lead-origin-exact
 # reverts to the exact test, the known-bad arm.
 A2_LEAD_ORIGIN_SEAM = True    # False (--lead-origin-exact): walkable() alone decides the origin.
+# MOVECODE-1z-ce: THE WALL SLIDE. A report whose heading ray is blocked AT THE
+# BODY -- the plane clip returns under A2_LEAD_WALL_SLIDE_FLOOR -- is a body
+# pressed against a wall and sliding along it. RUN-R3's whole stair climb is
+# that: the client reports "east, 767 u" on all 15 reports while its collision
+# slides the body 44 deg up the stairs' right side, so every lead clipped to
+# ZERO, the sync copy was granted each report as it arrived and trailed the
+# drawn body by 100-139 u for the climb (the hostile's disc parks in that
+# frame: R3's six over-40 halts). Nothing about the mesh: the stairs are in it
+# and the body never left our trapezoids by more than 0.5 u (GROUNDZ-Q7).
+#
+# ArenaNet's server grants the NEXT VERTEX of the wall the body presses
+# against, in the heading's slide direction -- MEASURED on the live corpus
+# (studies/movecode/review/wallslide.py): 62 of 2,156 moving report pairs have
+# the ray blocked at the body on our decode of the same file, and
+# `pathmap.wall_slide` reproduces retail's grant to 0.0 u on most (27 of 33
+# where the grant leaves the heading, 22 of 29 where it does not) against 6
+# and 13 for the zero lead. The 124 slides retail granted along the heading
+# are never eligible, so a clear ray is untouched; the chord cap is our own
+# lead length and retail never exceeded it. The point is a vertex of our own
+# trapezoids, so it is on the mesh by construction and the guard's gate 2
+# (on_mesh, 1z-bf) sees it as such. --no-lead-wall-slide reverts to the zero
+# lead, the known-bad arm test_kbdsync section 18 drives.
+A2_LEAD_WALL_SLIDE = True     # False (--no-lead-wall-slide): a blocked ray stays a zero lead.
+A2_LEAD_WALL_SLIDE_FLOOR = 4.0
 
 
 def a2_clip_lead(state, reported, dest):
@@ -6372,6 +6396,19 @@ def a2_clip_lead(state, reported, dest):
                           step=A2_LEAD_CLIP_STEP, plane=plane)
     clipped = (stopped[0] != dest[0]) or (stopped[1] != dest[1])
     why = "clipped" if clipped else "clear"
+    if (A2_LEAD_WALL_SLIDE and clipped and plane is not None
+            and hasattr(pm, "wall_slide")
+            and math.hypot(stopped[0] - rx, stopped[1] - ry)
+            < A2_LEAD_WALL_SLIDE_FLOOR):
+        # 1z-ce: blocked at the body -> retail's next-vertex slide along the
+        # wall, on the origin's own plane. None (a heading that presses into
+        # no wall here) keeps the clip's answer and its word.
+        pt, _sw = pm.wall_slide(rx, ry, float(dest[0]) - rx,
+                                float(dest[1]) - ry, plane,
+                                chord=KBD_SYNC_LEAD)
+        if (pt is not None and math.hypot(pt[0] - rx, pt[1] - ry)
+                >= A2_LEAD_WALL_SLIDE_FLOOR):
+            return ([float(pt[0]), float(pt[1])], True, "wall-slide")
     if clipped and plane is not None:
         # NAME WHICH DOOR, because this file already paid for not naming one
         # (the P-17 wall press: `lead_clipped=false` on a row whose ray a later
@@ -24361,6 +24398,14 @@ def main():
                          "tip -- is refused as origin-unwalkable and the lead "
                          "becomes a zero-lead (179 of them in 26 runs). "
                          "Known-bad arm.")
+    ap.add_argument("--no-lead-wall-slide", action="store_true",
+                    help="MOVECODE-1z-ce REVERT: a keyboard lead whose heading "
+                         "ray is blocked at the body stays a ZERO lead instead "
+                         "of retail's next-vertex slide along the wall "
+                         "(pathmap.wall_slide, 49 of 62 live cases to 0.0 u). "
+                         "On RUN-R3's stair climb that is 15 zero leads in 8 s "
+                         "and the sync copy trailing the body by 100-139 u. "
+                         "Known-bad arm.")
     ap.add_argument("--no-fence-latch-timeout", action="store_true",
                     help="MOVECODE-1z-bw REVERT: restore the UNBOUNDED "
                          "fence-gate latch, cleared only by a keyboard "
@@ -26080,6 +26125,7 @@ def main():
     global KBD_SYNC_HOLD, KBD_LEAD_KILL, KBD_SYNC_MATCHED, KBD_LEAD_FENCE_GATE
     global FENCE_LATCH_MAX_AGE
     global KBD_LEAD_REFRESH, A2_LEAD_PLANE_CLIP, A2_LEAD_SEAM_CLIP, A2_LEAD_ORIGIN_SEAM
+    global A2_LEAD_WALL_SLIDE
     if a.legacy_kbd_sync:
         KBD_SYNC = False
         KBD_SYNC_HOLD = False
@@ -26109,6 +26155,13 @@ def main():
         A2_LEAD_PLANE_CLIP = not a.no_lead_plane_clip
         A2_LEAD_SEAM_CLIP = bool(a.lead_seam_clip)
         A2_LEAD_ORIGIN_SEAM = not a.lead_origin_exact
+        A2_LEAD_WALL_SLIDE = not a.no_lead_wall_slide
+        if not A2_LEAD_WALL_SLIDE:
+            print("[map] --no-lead-wall-slide: a keyboard lead whose heading "
+                  "ray is blocked at the body is a ZERO lead again (pre-1z-ce). "
+                  "A body sliding along a wall -- the stair climb -- gets its "
+                  "report back every half second and the sync copy trails it.",
+                  flush=True)
         if not A2_LEAD_ORIGIN_SEAM:
             print("[map] --lead-origin-exact: a keyboard lead's origin must be "
                   "INSIDE a trapezoid again (pre-1z-bg). Reports the client "

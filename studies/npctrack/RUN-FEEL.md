@@ -49,3 +49,15 @@ the client's own word, never a guess between our trapezoids. `--no-npc-plane-rea
 **RECONSTRUCTION until the next session shows the body on the surface**: the prediction is that
 on the same terrace the Hatcher's client plane reads 0 within one half-second of parking and its
 ground z tracks the player's within 15 u.
+
+## CORRECTION 2026-09-06 (GROUNDZ-F12) — the wall
+
+The Q3 row above reads the sync copy's agreement with the drawn body as "the drawn body pathed
+around the wall". Both copies went THROUGH it: from 45.4 s the Hatcher cut from (11219, 9099)
+straight across the pocket above the stairs — 45 u from any trapezoid at (11296, 9035) — and
+parked at (11412.8, 8909.7), 8.4 u inside ground the mesh does not cover, 76 u from the player,
+while the player's own body ran the pocket's boundary (down p0#2496's left edge, 0.1–0.2 u from
+it for 80 u). The route around the wall was yours; the client walks a hostile's 0x002A dead
+straight and our wire carried no corridor ([NPCTRACK-Q9](FINDINGS.md)). "In the ground" was two
+things at once: the held plane word (F11, fixed) and a body standing in a lower pocket beside the
+ramp you climbed, which no plane word can lift onto the ramp.
