@@ -779,3 +779,22 @@ both are world-0's own sidestep after the park, the mechanism of F14 seen from t
 - **The review tool's positive control is the pinned-tape pair** — F4's model must land ≤ 20 u
   from the client's copy AND the pre-Q1 integrator ≥ 40 u from it. A scorer that fails either
   cannot be trusted on R1.
+- **A tape join must be symmetric around the capture's stamp** (F13, withdrawn). The capture
+  stamps a send −67..+38 ms around the tape showing it applied; a backward-only window turned
+  our own 0.5 s re-path into "the client re-targets itself" for two hours. Before any "no
+  order explains this": symmetric window, check the cadence against our own timers, then the
+  hook names the caller.
+- **Name the caller with the hook before reading a function's trigger** (F11 → F14). The
+  sidestep computer has two callers; the study read the terrain one, whose predictor never
+  fires, and called the trigger unread for a day. RUN-R3's hook had the return address
+  (`0x0060193B`) the whole time.
+- **A sentinel with no segment is not a pathfinder refusal** (F14 vs 1z-cd). The avoidance
+  halt invalidates both target blocks in the setter's own millisecond, so "the destination
+  was never installed" and "the client refused to path" are indistinguishable on a 30 Hz tape.
+  Before reading a mesh disagreement off that shape, ask whether the lead's endpoint sat
+  within 80 u of any agent's copy.
+- **A residual with a sign and a bound is a derivation, not a fudge** (F15). The client parks
+  its copy at its next tick, so its park can only be inside the disc by at most one tick of
+  walking; the census confirmed the sign and the bound (0–18 u, 36 of 37). That turns Q1's
+  "7–16 u" from an unexplained residual into a floor. What would have been a fudge is parking
+  the model half a tick inside to zero the mean — not built.
