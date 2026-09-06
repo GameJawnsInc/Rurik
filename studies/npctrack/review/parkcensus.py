@@ -10,7 +10,7 @@ capture), an ARRIVAL (the copy sits on its previous target: the tick's 0x0060033
 PARK (stopped short of the target), and for the disc parks the distance to the player's world-0
 live position at that sample.  `-v` lists them.
 
-    python studies/npctrack/review/parkcensus.py [-v]
+    python studies/npctrack/review/parkcensus.py [-v] [--tape T --cap C]
 
 Pinned 2026-09-06 (FINDINGS F15): 103 disc parks; at a STANDING player (n = 37) d p10 63.8 /
 p50 71.1 / p90 79.6, min 61.8, 36 of 37 inside (one at 84.9) -- the park lands 0-18 u inside the
@@ -62,7 +62,7 @@ def stops(rows, head, t0, halts):
 def main(argv):
     verbose = "-v" in argv
     pooled, stand, move = [], [], []
-    for name, tape, cap in avoidcensus.RUNS:
+    for name, tape, cap in avoidcensus.runs_from(argv):
         if not (os.path.exists(tape) and os.path.exists(cap)):
             print("%-10s SKIPPED: tape or capture missing" % name)
             continue

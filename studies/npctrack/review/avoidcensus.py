@@ -11,6 +11,7 @@ tape) on the arc's seven tapes, and scored two ways:
 
     python studies/npctrack/review/avoidcensus.py              # the shipped arm
     python studies/npctrack/review/avoidcensus.py --no-avoid   # the revert arm (MIRROR_AVOID off)
+    python studies/npctrack/review/avoidcensus.py --tape T --cap C   # one fresh run, out of sample
 
 Pinned 2026-09-06 (FINDINGS F14): avoid ON -- 232 grants, 24 both / 1 model-only / 1 tape-only,
 14 halts, waypoint error p50 0.2 u; mirror vs world-0 moving p50 10.1 / p90 19.9 / max 105
@@ -263,12 +264,22 @@ def q(v, f):
     return v[min(int(f * len(v)), len(v) - 1)] if v else float("nan")
 
 
+def runs_from(argv):
+    """The seven pinned runs, or ONE run named on the command line
+    (`--tape T --cap C`, e.g. a fresh capture to score out of sample)."""
+    if "--tape" in argv and "--cap" in argv:
+        t = argv[argv.index("--tape") + 1]
+        c = argv[argv.index("--cap") + 1]
+        return [(os.path.basename(t).split("-")[0], t, c)]
+    return RUNS
+
+
 def main(argv):
     if "--no-avoid" in argv:
         am.MIRROR_AVOID = False
     P = dict(grants=0, both=0, model_only=0, tape_only=0, halts=0)
     wp, at_halt, moving = [], [], []
-    for name, tape, cap in RUNS:
+    for name, tape, cap in runs_from(argv):
         if not (os.path.exists(tape) and os.path.exists(cap)):
             print("%-10s SKIPPED: tape or capture missing" % name)
             continue
