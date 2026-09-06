@@ -85,6 +85,8 @@ from movetap import (u32, i32, f32, resolve, TapFail, OFF_SYNC_ARRAY,   # noqa: 
                      A_POINT, A_SEGMENT, A_TARGET, A_VEL, A_ID, A_WORLD,
                      agtrack_fence, _fence_blank)
 
+import groundz as _groundz   # noqa: E402  (GROUNDZ-F1: the AgentView height read)
+
 A_FOLLOW = 0x98      # the destination AGENT (ANIMREF-RE 38.2: 0x00602AA8 writes it)
 
 # THE CAMERA (MOVECODE-1z-ay, `--no-camera` reverts). Imported from fovread
@@ -230,6 +232,15 @@ def main():
                     help="skip the camera read (MOVECODE-1z-ay). ON by "
                          "default; sec.1z-ax's projection needs it on the "
                          "same clock as the click")
+    ap.add_argument("--no-groundz", dest="groundz", action="store_false",
+                    help="skip the AgentView height read (GROUNDZ-F3). ON by "
+                         "default. It is the ONLY way to see a drawn height: "
+                         "the agent's own movement record has no z at all and "
+                         "its fourth point word is a literal zero (MOVECODE "
+                         "sec.1z-cb). Every offset it uses is STATIC "
+                         "disassembly that has never been read from a running "
+                         "client, so this is the revert if it misbehaves -- and "
+                         "a refusal in the `groundz.why` column is the tell.")
     ap.add_argument("--no-fence", dest="fence", action="store_false",
                     help="skip the AgTrack fence read (MOVECODE-1z-an). ON by "
                          "default; this is the revert if the extra reads cost "
@@ -291,6 +302,15 @@ def main():
                 asy, _asy_blk = read_copy(handle, agbase, OFF_ASYNC_ARRAY,
                                           OFF_ASYNC_COUNT, aid)
                 one = {"sync": sync, "async": asy}
+                if a.groundz:
+                    # GROUNDZ-F3: the height is NOT on the agent -- it is on the
+                    # client's AgentView object, and this walks there from the
+                    # agent id. Every failure mode returns a NAMED refusal
+                    # rather than a float, so a wrong module base cannot show up
+                    # as a body at ground level (groundz.py, test_groundz.py).
+                    one["groundz"] = _groundz.read_groundz(
+                        lambda addr, n: keytap.read_handle(handle, addr, n),
+                        base, aid)
                 if a.fence:
                     # THE SYNC BLOCK, deliberately. The AgTrack record is keyed
                     # by agent id, so which copy we hand over cannot change
