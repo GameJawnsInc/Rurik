@@ -15883,6 +15883,60 @@ def _follow_advance(agent, px, py, budget, stop, pm, now, rec=None, agent_id=Non
     return math.hypot(px - ax, py - ay)
 
 
+# ---- GROUNDZ-Q5: the plane word a STATIONARY hostile is left holding --------
+#
+# WHAT 1z-bz LEFT BEHIND, and GROUNDZ-R1 measured end to end. The follow resolves
+# field 4 -- the mover's plane -- AT SEND TIME. On the operator's stairs route the
+# hostile crossed onto plane-29 ground in the 0.6 s AFTER its last order (our own
+# mesh answers 29 cleanly at the point it stopped on; it is not a stale-mesh
+# problem), then ARRIVED, and the halt 0x0028 carries no plane. Nothing re-sends
+# to a parked hostile in reach, so the client kept plane 0 for the whole 22 s
+# hold -- and MapQueryAltitude SKIPS the prop branch entirely when the plane is 0
+# (GROUNDZ-F4), answering from the raw terrain heightmap under the staircase.
+# Measured gap: the Hatcher's drawn ground z sat 32.5 u BELOW the player's while
+# our navmesh put both of them on the same plane-29 ground.
+#
+# THE MESSAGE IS RETAIL'S OWN, not an invention. Field 4 of a 0x0029/0x002A is
+# what writes the client agent's plane (agtrack_mirror.bake_grant: "agent plane
+# +0x80 <- plane_second"), and ArenaNet's own servers send NPC-addressed 0x0029
+# in bulk -- 8,160 of them across the live corpus, 1,164 carrying field 3 != field
+# 4 (ANIMREF sec.42.4). A zero-distance grant to the hostile's own point is the
+# smallest thing that carries the word.
+#
+# WHY IT IS SAFE TO SEND TO A PARKED BODY: the destination IS where the client
+# already has it, so there is nowhere to walk. This is the same zero-lead shape
+# the server already uses for the player.
+#
+# TWO FACES, ONE FLAG. `--no-plane-repath` reverts both: the stationary
+# correction here, and the extra re-path clause in the follow (a plane change
+# mid-walk re-paths, instead of waiting for the player to move far enough).
+NPC_PLANE_REPATH = True   # False (--no-plane-repath): leave the stale word.
+
+
+def _npc_plane_correct(send, conn_id, agent_id, agent, plane, now):
+    """One zero-distance 0x0029 when a stationary hostile's own plane has moved
+    away from the last word we told the client. Returns True if it sent.
+
+    Rate-limited on FOLLOW_REPATH_INTERVAL like every other NPC send, so a body
+    oscillating on a seam cannot turn this into a storm."""
+    if not (NPC_PLANE_REPATH and NPC_PLANE_TRACK):
+        return False
+    told = agent.get("plane_told")
+    if told is None or told == plane:
+        return False
+    if now - agent.get("plane_told_at", -1e9) < FOLLOW_REPATH_INTERVAL:
+        return False
+    ax, ay = agent["pos"]
+    agent["plane_told"] = plane
+    agent["plane_told_at"] = now
+    send(GAME_SMSG_AGENT_MOVE_TO_POINT,
+         [agent_id, [float(ax), float(ay)], plane, plane],
+         f"PLANE CORRECT: agent {agent_id} stands at ({ax:.0f},{ay:.0f}) and its "
+         f"plane moved {told} -> {plane} after its last order; a stale word "
+         f"draws it on the wrong surface [GROUNDZ-Q5]")
+    return True
+
+
 def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, pm,
                      rec=None):
     """One hostile's chase, in retail's shape (ANIMREF-RE 40; NPC_FOLLOW).
@@ -15963,7 +16017,12 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
     stop = follow_stop_radius(agent)
     if fol is None:
         if dist <= enemy_reach():
-            # In reach and standing: the attack tick's business, not a walk.
+            # In reach and standing: the attack tick's business, not a walk --
+            # but GROUNDZ-Q5's correction still goes out, because THIS is the
+            # branch RUN-1zCA's sunken Hatcher sat in for 22 s. A parked hostile
+            # gets no other send, so a plane word that went stale as it arrived
+            # would stand for the rest of the session.
+            _npc_plane_correct(send, conn_id, agent_id, agent, plane, now)
             agent["moved_at"] = now
             return
         if not agent.get("moving"):
@@ -15977,6 +16036,8 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
                   f"the player, {dist:.0f} u out, halts at {stop:.0f} u",
                   flush=True)
         agent["follow"] = {"told": (px, py), "sent_at": now, "t0": now}
+        agent["plane_told"] = plane          # GROUNDZ-Q5
+        agent["plane_told_at"] = now
         # The first step is measured from here, not from before the walk
         # was announced -- an agent cannot have travelled before it set off.
         agent["moved_at"] = now
@@ -16003,9 +16064,19 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
     # it stands (retail: 0 of 31 spontaneous re-paths on a standing target,
     # sec.38.3).
     moved = math.hypot(px - fol["told"][0], py - fol["told"][1])
-    if moved > FOLLOW_REPATH_MOVED and now - fol["sent_at"] >= FOLLOW_REPATH_INTERVAL:
+    # GROUNDZ-Q5: OUR OWN plane changing is a reason to re-path too, not only the
+    # player moving. Without this the correction has to wait for the player to
+    # travel FOLLOW_REPATH_MOVED, and on a staircase that is exactly when it
+    # matters most. Same rate floor, so this adds no sends on flat ground.
+    _plane_moved = (NPC_PLANE_REPATH and NPC_PLANE_TRACK
+                    and agent.get("plane_told") is not None
+                    and agent.get("plane_told") != plane)
+    if ((moved > FOLLOW_REPATH_MOVED or _plane_moved)
+            and now - fol["sent_at"] >= FOLLOW_REPATH_INTERVAL):
         fol["told"] = (px, py)
         fol["sent_at"] = now
+        agent["plane_told"] = plane          # GROUNDZ-Q5
+        agent["plane_told_at"] = now
         send(GAME_SMSG_AGENT_UPDATE_DESTINATION,
              [agent_id, (float(px), float(py)), dest_plane, plane,
               PLAYER_AGENT_ID],
@@ -23400,6 +23471,19 @@ def main():
                          "body trails its sync copy and an instant halt froze "
                          "it short of the disc -- CASE 8 v2's 'long range "
                          "attacks' with the server's copy at exactly 80 u.")
+    ap.add_argument("--no-plane-repath", action="store_true",
+                    help="GROUNDZ-Q5 REVERT: do not correct a hostile's plane "
+                         "word after it stops. GROUNDZ-R1 measured what that "
+                         "costs: the follow resolves the mover's plane AT SEND "
+                         "TIME, the hostile crossed onto plane-29 ground 0.6 s "
+                         "AFTER its last order, halted, and nothing re-sends to "
+                         "a parked body -- so the client held plane 0 for the "
+                         "whole 22 s hold, MapQueryAltitude skipped the prop "
+                         "branch (which it does whenever the plane is 0) and "
+                         "drew the body 32.5 u down in the terrain under the "
+                         "staircase. Reverts BOTH faces: the stationary "
+                         "correction and the plane-change re-path. Known-bad "
+                         "arm.")
     ap.add_argument("--no-npc-plane-track", action="store_true",
                     help="ANIMREF-RE 42.5 / MOVECODE-1z-bz REVERT: a hostile's "
                          "follow carries the plane it SPAWNED on in both wire "
@@ -25120,6 +25204,13 @@ def main():
         print("[map] --halt-on-arrival: a hostile's 0x0028 goes out the instant "
               "the server's copy reaches the disc (ANIMREF-RE 40.9's revert; "
               "the client's rendered body halts short).", flush=True)
+    if a.no_plane_repath:
+        global NPC_PLANE_REPATH
+        NPC_PLANE_REPATH = False
+        print("[map] --no-plane-repath: a hostile keeps whatever plane word its "
+              "last movement order carried, even after it stops on different "
+              "ground (GROUNDZ-Q5's revert). RUN-GROUNDZ-R1: 32.5 u of sink.",
+              flush=True)
     if a.no_npc_plane_track:
         global NPC_PLANE_TRACK
         NPC_PLANE_TRACK = False

@@ -207,8 +207,44 @@ plane *after* the last order, and a parked body is precisely when no further ord
 player has moved. One condition, the existing message, no deviation from retail's shape,
 `--no-plane-repath` as the revert, and this run's **32.5 u** as the number it must move.
 
+
+## GROUNDZ-F9 — Q5 SHIPPED: a stationary hostile's plane word is corrected
+
+`NPC_PLANE_REPATH = True`; `--no-plane-repath` reverts. **Two faces of one defect, one flag.**
+
+**The branch that previously sent nothing at all.** A hostile parked in reach with no follow
+gets no message of any kind — the tick returns early, and that is the branch GROUNDZ-R1's
+sunken Hatcher sat in for 22 s. It now emits **one zero-distance `0x0029`** to the point the
+client already has it on, carrying the corrected plane in both words. Nowhere to walk, because
+the destination is where it stands.
+
+**The message is retail's own, not an invention.** Field 4 of a `0x0029`/`0x002A` is what writes
+the client agent's plane (`agtrack_mirror.bake_grant`: *"agent plane +0x80 <- plane_second"*),
+and ArenaNet's servers send NPC-addressed `0x0029` in bulk — **8,160** across the live corpus,
+**1,164** of them with field 3 ≠ field 4 (§42.4). A zero-distance grant is the smallest thing
+that carries the word.
+
+**The second face:** our own plane changing now re-paths an in-flight follow, instead of waiting
+for the player to travel `FOLLOW_REPATH_MOVED`. On a staircase that is exactly when it matters,
+and it adds no sends on flat ground because the rate floor is unchanged.
+
+**Rate-limited on `FOLLOW_REPATH_INTERVAL`**, the same floor every other NPC send uses, so a body
+oscillating on a seam cannot turn the correction into a storm.
+
+**Tests:** `test_agentlife` `section_plane_repath`, floor 286 → **294** (green run 310). It pins
+the correction, that it goes to the body's own point, that the told word is remembered, that no
+change sends nothing, the rate floor, the mid-walk re-path, and **the known-bad arm** — with the
+flag off the identical stale word produces no correction, which is GROUNDZ-R1's 22 s of plane 0
+reproduced.
+
+**Unverified against a client.** GROUNDZ-R1's **32.5 u** is the number this has to move, and the
+run that scores it is the stairs route again. Until then this is derived-and-tested, not
+confirmed.
+
 ## Open
 
+- ~~`GROUNDZ-Q5` — ship the plane-change re-path~~ **SHIPPED, GROUNDZ-F9.** Unverified against a
+  client; GROUNDZ-R1's 32.5 u is the number it must move.
 - **`GROUNDZ-Q1` — which of F6's three candidates causes the sink.** Separable by a live read of
   `+0x8C`, `+0x30` and `+0x40` at a known stair position.
 - **`GROUNDZ-Q2` — is the position updater per-frame?** NOT FOUND. `0x007EB7F0` is also a vtable

@@ -66,7 +66,9 @@ from codec import Codec  # noqa: E402
 # control). Floor from a real green run, never a head-count.
 # +8 at MOVECODE-1z-bz (section_npc_plane: ANIMREF-RE 42.5's tracked
 # plane words, with the frozen spawn word as the known-bad control).
-LEDGER = checks.Ledger("agent lifetime", floor=286)
+# +8 at GROUNDZ-Q5 (section_plane_repath: the stationary plane correction,
+# with the stale word left standing as the known-bad control).
+LEDGER = checks.Ledger("agent lifetime", floor=294)
 
 
 def section_weapon_damage():
@@ -521,6 +523,7 @@ def main():
     section_chase()
     section_follow_router()
     section_npc_plane()
+    section_plane_repath()
     section_facing()
     section_enemy_skill()
     section_constants()
@@ -1047,6 +1050,125 @@ class _Stairs:
         if y > 900.0:
             return None
         return 29 if x >= 500.0 else 0
+
+
+def _parked(agent_plane, told, player=(560.0, 0.0), pos=(520.0, 0.0)):
+    """A hostile PARKED IN REACH with no follow -- the exact branch RUN-GROUNDZ-R1's
+    sunken Hatcher sat in for 22 s. `told` is the plane word its last order carried."""
+    import authsrv
+    st = _follow_world(pos, player)
+    st["plane"] = 29
+    ag = st["agents"][10]
+    ag["follow"] = None
+    ag["moving"] = False
+    ag["plane"] = agent_plane
+    ag["plane_told"] = told
+    ag["plane_told_at"] = 0.0
+    return st
+
+
+def _tick_parked(state, pm, now=10.0):
+    """One _npc_follow_tick, returning every send it made."""
+    import authsrv
+    import math as _m
+    ag = state["agents"][10]
+    px, py = state["pos"]
+    sent = []
+    ax, ay = ag["pos"]
+    authsrv._npc_follow_tick(
+        lambda op, vals, label="", quiet=False: sent.append((op, vals, label)),
+        state, 1, 10, ag, (px, py), _m.hypot(px - ax, py - ay), now, pm)
+    return sent
+
+
+def section_plane_repath():
+    """GROUNDZ-Q5: a stationary hostile's plane word is corrected when it goes stale.
+
+    RUN-GROUNDZ-R1 measured the whole chain live. The follow resolves field 4 AT
+    SEND TIME; the hostile crossed onto plane-29 ground 0.6 s AFTER its last
+    order (our own mesh answers 29 cleanly at the point it stopped on, so this
+    is not a stale-mesh problem); it arrived; the halt carries no plane; and
+    nothing re-sends to a parked body in reach. The client held plane 0 for the
+    whole 22 s hold, MapQueryAltitude skipped the prop branch -- which it does
+    whenever the plane is 0 -- and drew the body 32.5 u down in the terrain.
+    """
+    import authsrv
+    MOVE = authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT
+    print("\nGROUNDZ-Q5: the plane word a STATIONARY hostile is left holding")
+    LEDGER.ok(authsrv.NPC_PLANE_REPATH is True
+              and "--no-plane-repath" in open(
+                  authsrv.__file__, encoding="utf-8").read()
+              and authsrv.capture_flags().get("NPC_PLANE_REPATH") is True,
+              "it ships ON with its revert flag, recorded in the capture header",
+              "the revert covers BOTH faces -- the stationary correction and the "
+              "plane-change re-path")
+
+    pm = _Stairs()
+    saved = authsrv.NPC_PLANE_REPATH
+    try:
+        # THE MEASURED CASE: parked, in reach, plane went 0 -> 29 after the last
+        # order. Nothing else in the tick sends to this agent.
+        st = _parked(agent_plane=29, told=0)
+        sent = _tick_parked(st, pm)
+        mv = [s for s in sent if s[0] == MOVE]
+        LEDGER.ok(len(mv) == 1 and mv[0][1][0] == 10
+                  and mv[0][1][2] == 29 and mv[0][1][3] == 29,
+                  "a parked hostile whose plane moved since its last order gets "
+                  "ONE zero-distance 0x0029 carrying the corrected plane in both "
+                  "words -- the branch that previously sent nothing at all",
+                  f"{mv}")
+        LEDGER.ok(mv and list(mv[0][1][1]) == [520.0, 0.0],
+                  "and it is addressed to the point the client already has it "
+                  "on, so there is nowhere for the body to walk",
+                  f"{mv[0][1][1] if mv else None}")
+        LEDGER.ok(st["agents"][10]["plane_told"] == 29,
+                  "the word we told it is remembered, so the correction does not "
+                  "repeat")
+
+        # NO CHANGE -> NO SEND. Without this the fix would be a per-tick storm.
+        st = _parked(agent_plane=29, told=29)
+        LEDGER.ok(not [s for s in _tick_parked(st, pm) if s[0] == MOVE],
+                  "a parked hostile whose plane has NOT moved sends nothing",
+                  "this is the check that keeps the fix from being a storm")
+
+        # THE RATE FLOOR, on the same clock the rest of the NPC path uses.
+        st = _parked(agent_plane=29, told=0)
+        st["agents"][10]["plane_told_at"] = 9.9        # 0.1 s ago
+        LEDGER.ok(not [s for s in _tick_parked(st, pm, now=10.0) if s[0] == MOVE],
+                  "and one inside FOLLOW_REPATH_INTERVAL is refused -- a body "
+                  "oscillating on a seam cannot turn this into a storm",
+                  f"floor {authsrv.FOLLOW_REPATH_INTERVAL} s")
+
+        # THE OTHER FACE: a plane change mid-walk re-paths, without waiting for
+        # the player to travel FOLLOW_REPATH_MOVED.
+        st = _fresh_follow((0.0, 0.0), (900.0, 0.0), player_plane=29)
+        _follow_run(st, pm, seconds=0.05)              # opens the follow
+        ag = st["agents"][10]
+        ag["pos"] = (600.0, 0.0)                       # now on plane 29
+        ag["follow"]["sent_at"] = 0.0                  # clear the rate floor
+        ag["follow"]["told"] = (900.0, 0.0)            # the player has NOT moved
+        sent = _tick_parked(st, pm, now=5.0)
+        dest = [s for s in sent
+                if s[0] == authsrv.GAME_SMSG_AGENT_UPDATE_DESTINATION]
+        LEDGER.ok(len(dest) == 1 and dest[0][1][3] == 29,
+                  "MID-WALK: our own plane changing re-paths the follow even "
+                  "though the player has not moved at all -- on a staircase "
+                  "that is exactly when it matters",
+                  f"{dest}")
+
+        # THE KNOWN-BAD ARM: with the flag off, the same stale word stands.
+        authsrv.NPC_PLANE_REPATH = False
+        st = _parked(agent_plane=29, told=0)
+        LEDGER.ok(not [s for s in _tick_parked(st, pm) if s[0] == MOVE],
+                  "REVERT ARM (--no-plane-repath): the identical stale word "
+                  "produces NO correction -- RUN-GROUNDZ-R1's 22 s of plane 0 "
+                  "reproduced, so this section's positive is the fix and not "
+                  "the fixture",
+                  "32.5 u of sink is what that arm measured")
+    finally:
+        authsrv.NPC_PLANE_REPATH = saved
+    LEDGER.ok(authsrv.NPC_PLANE_REPATH is True,
+              "and the module global is restored after the revert arm")
 
 
 def section_npc_plane():

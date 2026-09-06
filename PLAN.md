@@ -1750,6 +1750,16 @@ openings) — the ruling does not wait on it.
 * What would settle it is the render/model object, not `AgAgent` — a different arc, worth opening only if a cosmetic sink on a parked body matters. `movetap.py`'s `A_POINT` now carries the finding at the offset so nobody re-derives it.
 * **Method:** the request was for an instrument and the answer was a disassembly. Ask the binary what a field IS before recording it.
 
+### ★★★ MOVEMENT 2026-09-06 — GROUNDZ: the render-object arc opened, the height reader CONFIRMED LIVE, and the ankle-deep sink traced to OUR OWN STALE PLANE WORD and fixed (GROUNDZ-F1..F9, RUN-R1)
+
+**[studies/renderobj/FINDINGS.md](studies/renderobj/FINDINGS.md). Ident word GROUNDZ. Opened after MOVECODE §1z-cb proved an agent has no z at all.**
+
+* **The height is on a different object:** `view = [[0x00BF96CC] + id*4]`, guarded by the `0xDB` tag and the round trip `[view+0x2C] == id` — **ArenaNet's own invariant**, since its registrar writes each object into the slot its `+0x2C` names. Ground z at `view+0x8C`, written only by `AvAgent::GetGroundHeight`, = `MapQueryAltitude() - 1.0`. **It ends in a READER, not a hook.**
+* **RUN-GROUNDZ-R1 confirmed it live on all five predictions:** 799/799 samples ok with ZERO refusals, `+0x8C == +0x30` on every sample (no free parameter), 171 u of movement on the stairs against 21 u on the flat. `up is -Z` upgraded from RECONSTRUCTION to OBSERVED.
+* **THE SINK, MEASURED:** with our mesh putting both bodies on plane-29 ground, the Hatcher's client plane read 0 and it sat **32.5 u below** the player. Our follow resolves field 4 AT SEND TIME; the hostile crossed 0.6 s AFTER its last order, arrived, and the halt carries no plane — so the stale word stood, and `MapQueryAltitude` skips the prop branch whenever the plane is 0. **§1z-bz was incomplete, not wrong.**
+* **FIXED (GROUNDZ-F9):** a parked hostile whose plane went stale now gets one zero-distance `0x0029` at its own point carrying the corrected word — retail's own message (8,160 NPC-addressed `0x0029` in the live corpus, 1,164 with field 3 ≠ field 4). Our own plane changing also re-paths an in-flight follow. `--no-plane-repath` reverts both. `test_agentlife` floor 286 → 294.
+* **Unverified against a client:** 32.5 u is the number the next stairs run has to move.
+
 ### ★★★ MOVEMENT 2026-09-05 — RUN-1zCA: **ANIMREF-RE §42.5 PASSES ON ALL FOUR CLAUSES** (MOVECODE-1z-ca), a month after it was written and could not be run. The follow climbs `(29, 0)`, sits `(29, 29)` and descends `(0, 29)` — retail's own three-phase sequence, three times over — and the Hatcher is on the stairs for **486 of the 511 samples the player is**, against RUN-1zAB's 48-of-48 `(0, 0)`
 
 **[FINDINGS](studies/movecode/FINDINGS.md) §1z-ca. Sheet [RUN-1zCA.md](studies/movecode/RUN-1zCA.md). First tape ever to carry the plane column.**
