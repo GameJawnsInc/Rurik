@@ -158,8 +158,13 @@ for every flag you delete, and for the command strings that pass it (`tapdrive.p
 - **Do not re-run RUN-1zBP's arm.** Its flags no longer exist; its capture is the record.
 - **The click path is closed** (§1z-bs.1–.2). **The four "kept-pair wants" are explained**
   (§1z-bs.4). **RUN-1zAB run A is not a parked-body specimen** (§1z-bq).
-- **`gate2-offmesh` is UNTESTED, not confirmed.** Zero exposure on map 146's keyboard route,
-  and every guard replay used `mesh=None`.
+- ~~**`gate2-offmesh` is UNTESTED, not confirmed.**~~ **CLOSED 2026-09-05, MOVECODE-1z-bv.**
+  The deletion could not have removed a gate-2 re-pin: all 17 gate-2 fires in 1,311 captures
+  were on a FRESH report with its predecessor ~100 u away, and all 25 waiver-carried fires are
+  `arrival-risk` or `budget-red` (`review/gate2census.py`). **And the "every guard replay used
+  `mesh=None`" clause was FALSE** — `guardretro.py` and `waiverretro.py` both build
+  `MeshAdapter(pm)`. The real gap was that every fixture in `test_agtrack_guard.py` did, and
+  §14 now closes it (floor 81), with the known-bad arm run against the old module.
 
 ---
 
@@ -169,6 +174,6 @@ for every flag you delete, and for the command strings that pass it (`tapdrive.p
    the keyboard lead (`KBD_SYNC_LEAD_ON`) ships ON, `--no-kbd-lead` reverts; the shipped default
    is RUN-1zBO's arm. Applied to the lead the runs measured, not to the `D1_LEAD` bundle — the
    assumption is stated in Q13 (§1z-bu.1).
-2. **`gate2-offmesh` exposure** — no route walked so far produces one.
+2. ~~**`gate2-offmesh` exposure**~~ — **CLOSED at a desk, §1z-bv.** Nothing derived is left in this arc; what remains is [RUN-1zBW](RUN-1zBW.md), the operator's own session under the shipped default.
 3. **The movement-type census** corpus-wide (all 446 coincident double walk-starts, not the 87
    live windows) — a curiosity, not a debt, now that nothing reads the pair.

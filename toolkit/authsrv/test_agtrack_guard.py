@@ -31,10 +31,38 @@ AS_SRC = open(authsrv.__file__, encoding="utf-8").read()
 # +25 at MOVECODE-1z-ah, +20 at 1z-bn, +2 at 1z-bq, +17 at 1z-bs -- the
 # stationary waiver's sections, 116 on their last green run; then the waiver
 # was DELETED at MOVECODE-1z-bt (PLAN sec.7 Q15) and sections 9/14/15 became
-# one section pinning the gate on age alone: 74 on the green run.
+# one section pinning the gate on age alone: 74 on the green run.  +7 at
+# MOVECODE-1z-bv, a NEW section 14: the gate-2 branch driven through the
+# guard with a mesh stub (every other fixture here is mesh=None, so that
+# branch had never executed in a test) and the three re-pin arms over it,
+# the third of which is the deleted waiver's own licence shape and goes RED
+# on the pre-1z-bt build: 81 on the green run.
 # Each from a real green run, never from a guess.
-LEDGER = checks.Ledger("agtrack guard: the derived pre-emit rule", floor=74)
+LEDGER = checks.Ledger("agtrack guard: the derived pre-emit rule", floor=81)
 check = checks.adopt_named(LEDGER)
+
+
+class _OffMeshStub(object):
+    """Gate 2's failure: the modelled sync copy is off the navmesh.  Same
+    shape as test_agtrack_mirror's OffMeshStart -- the guard needs its own
+    because every other fixture in this file passes mesh=None (MOVECODE-1z-bv).
+    """
+
+    def start_walkable(self, x, y):
+        return False
+
+    def path_len_ok(self, *a, **k):
+        return True
+
+
+class _OnMeshStub(object):
+    """The vacuity control for the pair above: identical geometry, walkable."""
+
+    def start_walkable(self, x, y):
+        return True
+
+    def path_len_ok(self, *a, **k):
+        return True
 
 
 def seeded_guard(px=0.0, py=0.0, t0=1000.0):
@@ -547,6 +575,85 @@ def main():
           "return self.pm.on_mesh(x, y, GATE2_SEAM_TOL)" in _msrc
           and "return self.pm.walkable(x, y)" in _msrc
           and am.GATE2_SEAM_TOL == 1.0)
+
+    # ---- 14. MOVECODE-1z-bv: the gate-2 branch, driven THROUGH the guard --
+    # Every fixture above this line builds AgTrackGuard(mesh=None), so gate 2
+    # -- `mesh.start_walkable(a)` -- is None in all of them and the guard's
+    # own `gate2-offmesh` branch has never been executed by a test.  It is
+    # covered one layer down (test_agtrack_mirror sec.10b, both tolerance
+    # arms), which is why sec.1z-bo.4's open item read "gate2-offmesh
+    # exposure -- untested".
+    #
+    # WHAT THAT ITEM WAS REALLY ASKING, and why it belongs here.  The waiver
+    # deleted at 1z-bt licensed exactly one thing: a re-pin whose newest
+    # accepted report was PAST the freshness gate AND whose last two reports
+    # COINCIDED.  So the deletion can only have removed a fire that was both.
+    # `review/gate2census.py` asked the corpus and got zero: all 17 gate-2
+    # fires ever sent were FRESH (age 0.000-0.149 s, gate 0.347) with their
+    # reports ~100 u apart, and all 25 waiver-carried fires are arrival-risk
+    # or budget-red.  That is a census, and a census cannot go red when
+    # somebody re-introduces the licence.  These checks can.
+    _g2 = _OffMeshStub()
+    g = ag.AgTrackGuard(mesh=_g2)
+    g.on_placement(0.0, 0.0, 0, 1000.0)
+    g.on_report(100.0, 0.0, 0, ("head", 1.0, 0.0, 1), now=1000.1)
+    v = g.pre_emit(100.0, 0.0, 0, 0, now=1000.2)
+    check("gate 2 is REACHABLE through the guard: an off-mesh sync copy "
+          "vetoes as gate2-offmesh, not gate1-red",
+          v.code == ag.VETO and v.why == "gate2-offmesh")
+    _mv = g.mirror.predict(g._ms(1000.2), g._async_est(1000.2))
+    check("and it is genuinely gate 2 that failed -- gate 1 PASSED at "
+          "100 u, well under the 299.33 u snap line (localises the branch: "
+          "a green conjunct here would let a gate-1 fixture masquerade)",
+          _mv.code == am.SNAP and _mv.gate1 is True and _mv.gate2 is False
+          and abs(_mv.gate1_sep - 100.0) < 1e-9)
+    # VACUITY GUARD: the same geometry on a walkable mesh must NOT produce it,
+    # or the verdict is coming from the shape and the stub is decorative.
+    g_ok = ag.AgTrackGuard(mesh=_OnMeshStub())
+    g_ok.on_placement(0.0, 0.0, 0, 1000.0)
+    g_ok.on_report(100.0, 0.0, 0, ("head", 1.0, 0.0, 1), now=1000.1)
+    check("vacuity: the IDENTICAL shape on a walkable mesh is not a gate-2 "
+          "veto -- the mesh is what drives it",
+          g_ok.pre_emit(100.0, 0.0, 0, 0, now=1000.2).why != "gate2-offmesh")
+
+    # The three re-pin arms over a gate-2 want.  Arm 3 is the regression
+    # guard: it is the exact shape the deleted waiver licensed, and it went
+    # DUE on the 1z-bs build.
+    check("a gate-2 want on a FRESH report MATURES -- this is the corpus's "
+          "17 fires, every one of them fresh",
+          g.repin_state(1000.2) == (ag.REPIN_DUE, "gate2-offmesh")
+          and g.repin_block_reason(1000.2) is None)
+    _late = 1000.1 + ag.REPIN_MAX_REPORT_AGE + 0.05
+    check("a gate-2 want on a STALE report is BLOCKED, and the blocker is "
+          "named: the freshness gate governs gate 2 like every other class",
+          g.repin_state(_late) == (ag.REPIN_BLOCKED, "gate2-offmesh")
+          and g.repin_block_reason(_late) == "stale-report")
+    # THE PAIR'S KINDS ARE LOAD-BEARING AND THE FIRST DRAFT MISSED IT.
+    # `sig` is ("rep", source, is_stop) at the authsrv call site.  This
+    # fixture first used two walk-starts -- and the 1z-bs build REFUSES that
+    # pair on its own (WAIVER_NEWEST_MUST_BE_STOP: the newest member being a
+    # walk-start ends the waiver), so the check passed on the broken build
+    # and was measuring nothing.  Running the old module found it.  The shape
+    # the waiver actually licensed is {walk-start -> STOP}, 1z-bs's KEPT
+    # branch, and it is the one the deletion removed.
+    #
+    # VERIFIED against agtrack_guard.py as of 30159d9 (1z-bs, the last commit
+    # carrying the waiver): this exact shape gives ("due", "gate2-offmesh")
+    # with stationary() True there, against ("blocked", ...) here.
+    g2c = ag.AgTrackGuard(mesh=_g2)
+    g2c.on_placement(0.0, 0.0, 0, 1000.0)
+    g2c.on_report(100.0, 0.0, 0, ("rep", "kbd", False), now=1000.05)  # walk-start
+    g2c.on_report(100.0, 0.0, 0, ("rep", "kbd", True), now=1000.1)    # STOP
+    check("THE WAIVER'S OLD LICENCE, on a gate-2 want: stale AND the last "
+          "two reports coincident (0.0 u) AND the newest a STOP -- the "
+          "branch 1z-bs KEPT -- is STILL blocked. This is ('due', "
+          "'gate2-offmesh') on the pre-1z-bt build, checked, not assumed",
+          g2c.repin_state(_late) == (ag.REPIN_BLOCKED, "gate2-offmesh")
+          and g2c.repin_block_reason(_late) == "stale-report")
+    check("and the same coincident pair FRESH still matures -- so the block "
+          "above is the AGE, not the pair (the clause 1z-bn refused is gone "
+          "too, and neither is doing the work here)",
+          g2c.repin_state(1000.2) == (ag.REPIN_DUE, "gate2-offmesh"))
 
     return LEDGER.verdict()
 

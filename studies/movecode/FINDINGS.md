@@ -14846,6 +14846,8 @@ it would have been an attempt to witness a benefit the corpus says has never occ
 
 ### 1z-bo.9 ★★★ **The stationary waiver has NO measured benefit anywhere in the corpus** — every re-pin it has ever carried, all 22 of them, sits on the one pair §1z-bn refuses
 
+*(The 22 is correct as of this section. It reads **25** from 2026-09-05 15:39 onward: the three new ones are RUN-1zBP's, the known-bad revert arm run on purpose. Attributed in §1z-bv.2, and `review/gate2census.py` now prints every carried fire with its capture so a moved count is answered rather than guessed.)*
+
 [`waiverbenefit.py`](review/waiverbenefit.py), over all 1,309 gamesrv captures.
 
 **First, a null I nearly published as a measurement.** "Retract" is not a capture row — there
@@ -15346,3 +15348,107 @@ PLAN Q13 is titled with `D1_LEAD` because it was raised in 2026-08 (§1i) about 
 ### 1z-bu.3 Tests and docs
 
 `test_kbdsync.py` §1 pins the trio ON and the argv contract (`--no-kbd-lead` reverts and wins; `bool(a.kbd_lead)` is gone). Its refresh section's "inert" arm now says what it tests — the lead off — rather than "the shipped default". Green, with `test_d1lead.py`, `test_position_trust.py` and `test_agtrack_guard.py`. PLAN Q13 marked ruled with the assumption; PLAN §3 and §8; HANDOFF-WAIVER §6; `studies/movement/HANDOFF.md`'s "the lead stays OFF" superseded in place.
+## 1z-bv. THE LAST OPEN ITEM, CLOSED AT A DESK — the stationary waiver's deletion **could not have removed a `gate2-offmesh` re-pin**, and the clause the item rested on ("every guard replay used `mesh=None`") is **false**. All 17 gate-2 fires the server has ever sent were on a FRESH report with its predecessor ~100 u away; all 25 waiver-carried fires are `arrival-risk` or `budget-red`. The cell is not untested, it is **unreachable by that change**. New `review/gate2census.py`; new `test_agtrack_guard` §14 executes the guard's gate-2 branch for the first time, and the known-bad arm **refuted the first draft of its regression guard**
+
+**Asked:** "continue." Zero client runs. Ident `MOVECODE-1z-bv`. OBSERVED unless marked.
+
+### 1z-bv.1 The open item, and the two things wrong with it
+
+§1z-bo.4 registered it and §1z-bt.5 and PLAN §8 repeated it verbatim:
+
+> `gate2-offmesh` exposure — untested; every guard replay so far used `mesh=None`.
+
+**The second clause is wrong.** `guardretro.py:115` and the retired `waiverretro.py:111` both
+build `AgTrackGuard(mesh=am.MeshAdapter(pm))` off the real map-146 pathmap — §1z-bf.4's
+19-to-0 retrodiction could not have existed otherwise, and its own table has a populated
+`gate2-offmesh` column. What *is* true is narrower and was never said: **every fixture in
+`test_agtrack_guard.py` passes `mesh=None`**, so the guard's `gate2-offmesh` branch had never
+been executed by a test. Gate 2 was covered one layer down, in `test_agtrack_mirror` §10b,
+on both tolerance arms — a real gap, but a smaller one than "untested".
+
+**The first clause was never operationalised**, which is why it survived three sections. "Is
+the cell tested" has no answer until somebody says what the cell would have to show. The
+question the arc actually needs is narrow and the wire can answer it:
+
+> The waiver licensed exactly one thing — a re-pin whose newest accepted report was **past**
+> the freshness gate **and** whose last two accepted reports **coincided**. So its deletion
+> can only have removed a fire that was **both**. Was any `gate2-offmesh` fire both?
+
+### 1z-bv.2 ★★★ The census — no, and not narrowly
+
+`studies/movecode/review/gate2census.py`, over 1,311 gamesrv captures. The verdict class is
+read off each capture's own `agtrack_repin_fire` row — **the reason the server recorded when
+it sent the `0x002C`**, not a replay's re-derivation — so this answer survives the `mesh=None`
+objection entirely, because no mesh is involved in it.
+
+| | fires | classes |
+|---|---|---|
+| real AGTRACK `0x002C` fires | 84 scorable (85 with one that has fewer than two prior reports) | — |
+| **the waiver was load-bearing for** | **25** | `arrival-risk` ×18, `budget-red` ×7 — **`gate2-offmesh` ×0** |
+| the freshness gate allowed on its own | 59 | includes all 17 gate-2 fires |
+
+And from the other side, every `gate2-offmesh` fire in the corpus:
+
+| | n | report age at the fire | distance between the last two reports |
+|---|---|---|---|
+| all 17 | 17 | **0.000–0.149 s**, gate is 0.347 s | **d² 10,045–10,810**, i.e. **≥ 100 u** |
+
+The coincidence radius the waiver needed is `ZERO_DIST_SQ = 1.0`. Every gate-2 fire is four
+orders of magnitude outside it and every one was fresh anyway. **The waiver was load-bearing
+for none of them, so deleting it removed none.** §1z-bo.4's item is closed.
+
+**The count moved and the movement is attributed.** §1z-bo.9 read 22 carried fires; this reads
+25. The three new ones are `authsrv-20260905T153830-c1`'s — **RUN-1zBP, the known-bad revert
+arm this arc ran on purpose**. A corpus count that grows is a question, and the tool now prints
+every carried fire with its capture stamp so the next session answers it instead of guessing.
+
+### 1z-bv.3 ★★ The test, and the draft its own known-bad arm refuted
+
+A census cannot go red when somebody re-introduces the licence. `test_agtrack_guard` §14
+(floor 74 → **81**) drives the guard with a mesh stub for the first time:
+
+1. gate 2 is reachable through the guard — an off-mesh sync copy vetoes `gate2-offmesh`;
+2. and it is genuinely gate **2** — `gate1 True` at 100 u separation, `gate2 False`, `SNAP`
+   (without this a gate-1 fixture could masquerade as coverage);
+3. **vacuity guard** — the identical geometry on a walkable mesh is not a gate-2 veto, so the
+   verdict comes from the mesh and not from the shape;
+4. a gate-2 want on a **fresh** report matures (the corpus's 17);
+5. on a **stale** report it is blocked, and `repin_block_reason` names `stale-report`;
+6. **the regression guard** — stale AND coincident AND the newest report a **stop** is still
+   blocked;
+7. the same coincident pair **fresh** still matures, so (6) is the age and not the pair.
+
+**(6) was wrong on its first draft and the known-bad arm caught it.** Written with two
+walk-starts, it passed against `agtrack_guard.py` as of `30159d9` — the last commit carrying
+the waiver — because the 1z-bs build **refuses that pair on its own** (`WAIVER_NEWEST_MUST_BE_STOP`:
+a walk-start as the newest member ends the waiver). A check that passes on the broken arm is
+measuring the wrong quantity, not the wrong threshold. Re-aimed at `{walk-start → STOP}`,
+1z-bs's **kept** branch, it reads `("due", "gate2-offmesh")` with `stationary()` True on the old
+module and `("blocked", …)` on this one. That was run, not reasoned — the old file was checked
+out and imported.
+
+### 1z-bv.4 ★★ What this does NOT settle, and one of them matters
+
+- **It says nothing about whether gate 2 is CORRECT.** That is §1z-bf's tolerance, whose live
+  witness is RUN-1zBI (0 gate-2 verdicts in 38 evaluations, the wedge-tip sliver passing as
+  `match`). This section is only about what the *deletion* could have touched.
+- **The census's population is entirely PRE-tolerance-fix, and that is worth saying plainly.**
+  The tolerance shipped at `b3bf37d`, 2026-09-04 20:17; the newest gate-2 fire in the corpus is
+  `authsrv-20260904T174122-c1`, 17:41 the same day. **No gate-2 re-pin has fired since the fix**
+  — consistent with §1z-bf and RUN-1zBI, and it also means all 17 come from the regime the fix
+  replaced. A future gate-2 fire would be a genuinely off-mesh copy (> 1 u), a class this corpus
+  has no example of. The argument above does not depend on the regime — it is about the
+  freshness and coincidence of the reports, which are what they are — but the *population* does,
+  and a later session should not read "17 of 17" as covering the current one.
+- **It is not a claim about the future.** No capture in 1,311 has a stale-and-coincident gate-2
+  fire; whether one can arise is now pinned by check (6) rather than argued.
+
+### 1z-bv.5 What is left in the arc
+
+Nothing derived. The shipped stack is the waiver deleted (1z-bt) and the keyboard lead on by
+default (1z-bu), and the last registered open item is closed here. **What remains is the
+operator's**: the lead has been on by default for zero minutes of ordinary play, and the
+session that convicted it (RUN-FEEL, 2026-09-03 08:46) was mouse-driven, where none of 1z-t's
+terms engage. [RUN-1zBW.md](RUN-1zBW.md) registers that run, and registers the exposure floor
+first, because an ordinary clicking session gives the lead **zero trials** and RUN-FEEL is the
+precedent for reading that as a null.
