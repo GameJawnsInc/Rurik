@@ -210,7 +210,8 @@ class Run(object):
 
     def mirror_at(self, t):
         if self._mirror is None:
-            self._mirror = mirror_trace(self.rows, self.reps)
+            self._mirror = mirror_trace(self.rows, self.reps,
+                                        end_t=self.s1[-1]["w"] - self.t0)
         ws = [w for w, _ in self._mirror]
         i = bisect.bisect_right(ws, t)
         return self._mirror[i - 1][1] if i > 0 else self._mirror[0][1]
@@ -223,10 +224,13 @@ class Run(object):
         return self.mirror_at(t)
 
 
-def mirror_trace(rows, reps):
+def mirror_trace(rows, reps, end_t=None):
     """The AgTrack mirror replayed from the capture (agtrack_replay's own
     driver), seeded from the first accepted report the way the live guard is
-    seeded by placement. -> [(capture t, (x, y))]."""
+    seeded by placement, and TICKED TO end_t -- the live guard ticks every
+    world tick, so a leg armed by the last event still arrives; a replay that
+    stopped at the last event read 91 u of standing error on GROUNDZ-R2 that
+    the live mirror never had (NPCTRACK-Q2, 2026-09-06). -> [(t, (x, y))]."""
     import tempfile
     # agtrack_replay reads a PATH; hand it the rows it already parsed.
     tmp = tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False,
@@ -290,6 +294,14 @@ def mirror_trace(rows, reps):
         if p:
             trace.append((now / 1000.0, p))
         last_ms = max(last_ms, now)
+    if end_t is not None and last_ms is not None:
+        end_ms = ms(end_t)
+        while last_ms + AR.TICK_MS <= end_ms:
+            last_ms += AR.TICK_MS
+            mirror.tick(last_ms, atrack.at(last_ms / 1000.0))
+            p = mirror.sync.position(last_ms)
+            if p:
+                trace.append((last_ms / 1000.0, p))
     trace.sort()
     return trace
 

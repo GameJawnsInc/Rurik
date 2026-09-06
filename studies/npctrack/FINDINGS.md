@@ -124,7 +124,7 @@ things it could put there. The same model as F4, in each:
 |---|---|---|
 | the tape's world-0 (truth; not available live) | 11.6 / 17.7 / 22.8 / 57.3 | 1 |
 | **the last accepted report while STANDING, the AgTrack mirror while MOVING** | **17.5 / 38.0 / 78.3 / 488.0** | **9** |
-| the AgTrack mirror alone (seeded as the live guard is) | 24.3 / 80.4 / 110.0 / 488.0 | 17 |
+| the AgTrack mirror alone (seeded as the live guard is; replay ticked to the tape end, F10) | 20.9 / 59.7 / 110.0 / 488.0 | 14 |
 | `state["pos"]`, the report track | 41.8 / 106.3 / 173.8 / 510.5 | 20 |
 | the last accepted report, always | 50.7 / 184.4 / 324.2 / 465.5 | 22 |
 | *the pre-Q1 integrator, for scale (F1)* | *53.8 / 113.4 / 193.3 / 525.9* | *26* |
@@ -132,9 +132,10 @@ things it could put there. The same model as F4, in each:
 "Standing" is derived from ANIMREF-RE §40.11's measurement — the player's world-0 and drawn body
 sit 0 u apart when standing — and the server knows it from the last accepted report being a
 `0x0047`. The hybrid's error against the true world-0 is p50 0.0 u over all samples (p90 33 / 61 /
-53 per run); the mirror alone is p50 20–30 u even standing, because on `R2` it sat **91.0 u from
-world-0 for the last 25 s** of the run with the player parked, and while moving it is p50 19–22 u,
-p90 58–78. That residual is the mirror's, not this arc's — **NPCTRACK-Q2**.
+53 per run); the mirror alone is p50 19–26 u while moving, p90 58–95. (This paragraph first said
+the mirror "sat 91.0 u from world-0 for the last 25 s" of R2 — that was the offline replay
+stopping its ticks at the last event, corrected in F10; the live mirror never had it.) That
+residual is the mirror's, not this arc's — **NPCTRACK-Q2**, and F10 reads it off the tape.
 
 ## NPCTRACK-F6 — what does NOT explain it, including two instruments of my own that were wrong
 
@@ -264,15 +265,68 @@ one run each); what the operator sees behind a running player is the model arm's
 cadence (Q6) against the old arm's swing from an imaginary spot, and only their next session can
 rank those.
 
+
+## NPCTRACK-F10 — the mirror's residual, read off five tapes: one artifact of mine, three real sources, one refuted repair
+
+**First the artifact.** F5's "once 91 u standing for 25 s" and Q2's copy of it were my replay's,
+not the mirror's: the offline replay stopped ticking at the capture's last event, so the leg the
+stop-echo grant had armed never arrived and the trace held its pre-arrival point for the rest of
+the tape. The live guard ticks every world tick. The replay now ticks to the tape's end
+(`review/npcdrift.py`), and with that the mirror's error against the true world-0 is **p50 0.0 u**
+on all five tapes (1zCA, GROUNDZ-R1, GROUNDZ-R2, RUN-R1, its control), p90 30 / 63 / 44 / 74 /
+92, max 107–152. F5's mirror row becomes 20.9 / 59.7 / 110.0 at the halts (14 of 40 over 40 u);
+the hybrid row is unchanged, because it already used the stop report while standing.
+
+**Then the real sources, each located to the sample.** A jump census (the error growing by more
+than 20 u between two tape samples) over the five tapes puts every jump inside 0.35 s of one of
+three things, all under an OPEN fence during a keyboard walk:
+
+1. **The first press.** At t≈9.0 on every run the client's world-0 has our lead point as its
+   destination (`tx,ty` = (10248, 8077)) but a velocity of (0, 288) — it walks **+y**, the body's
+   old facing, for a 312 ms / 90 u leg, then at that leg's arrival tick re-bakes toward our
+   destination ((282, −60) toward (10248, 8077)). Our `0x0025` said (1, 0). The mirror bakes toward
+   the lead at once and leads world-0 by the turn's cost: 52 → 104 u over 0.3 s, decaying.
+2. **A body that cannot move.** At t≈25.5 on every stairs run the W press is into the staircase
+   side: one `0x003D`, our lead grant 108–132 u ahead, then no report for five seconds and a
+   `0x0047` at the SAME point. World-0 never moves (`v0 = 0` throughout, destination written).
+   The mirror walks the lead's full length in 0.46 s and waits there: 57–132 u for the whole
+   silent stretch. (The server's own report track meanwhile dead-reckoned 604 u through the wall —
+   a keyboard-arc defect, flagged separately.)
+3. **Held-heading grants** (the zero-lead at each report while walking): world-0 walks a short
+   leg to the report point and parks there with velocity 0 until the next one; the mirror does
+   the same from its own settled point. ≤ 30 u for under 0.2 s, on both sides of zero.
+
+**The rule the samples support, stated so it can be refuted:** for the controlled agent under
+an open fence, a `0x0029` writes the OUTSTANDING destination; the copy takes it up at its next
+arrival tick, the end of whatever leg it is on; a local move event (the press, each subsequent
+report) arms a short leg of the client's own toward the body's near position; and a copy with no
+leg in flight has no next arrival, so a body that cannot move leaves world-0 frozen with our
+destination written and unwalked. **OBSERVED on the tape at the sample level, CONTESTED against
+[studies/movecode/FINDINGS.md](../movecode/FINDINGS.md)'s write-set reading that "the client
+never carries world-0 forward from local input"** — the (0, 288) leg at 9.06 has epoch 8135,
+before our grant reached the client, and no message of ours carries +y. The handler-level cause
+(the pending-record gate at `0x005FD5CD`, or the arrival dispatch) is a disassembly question and is
+not claimed here.
+
+**One repair, refuted offline before it was built.** "Defer every grant's bake while a gesture is
+pending, take it up at the next report or arrival" — replayed on the five tapes it is three to
+six times WORSE (moving p50 86–140 u, p90 276–517 against the mirror's 21–26 / 64–95): during a
+normal walk world-0 does walk toward our leads, and a mirror that waits falls a report interval
+behind on every leg. The two real sources above are a turn the server cannot see and a wall the
+client does not report; neither is a bake-timing rule. **Q2 stays open with these numbers**, and
+what would close it is the client's own local-leg model (the facing, the turn rate, the first
+waypoint) — MOVECODE's dig, not a tuning knob here.
+
 ## Open
 
 - **`NPCTRACK-Q2` — the AgTrack mirror's POSITION fidelity, handed to MOVECODE.** The mirror was
-  built and validated for snap VERDICTS; as a position it is p50 19–22 u from the client's world-0
-  while the player moves, p90 58–78, and on `R2` it stood **91.0 u off for 25 s** after the last
-  walk (raw world-0 (11304, 9151) against the mirror's (11223, 9108)). It is the whole residual
-  between F5's hybrid (17.5 u) and the truth (11.6). `review/npcdrift.py` prints the comparison
-  per run; `scratch/mirrorcheck`-style per-second traces showed the error opening on the first
-  grant of each walk and closing to 0 at the next stop until that last one.
+  built and validated for snap VERDICTS; as a position it is p50 0.0 u from the client's world-0
+  over five tapes, p90 30–92, max 107–152, and **F10 locates every excursion**: the first press's
+  local leg along the old facing (up to ~100 u for 0.3 s), a body blocked by a wall while the
+  mirror walks the lead (57–132 u for the silent stretch), and ≤ 30 u held-heading transients.
+  (The "91 u for 25 s" this entry first carried was the replay's own artifact, F10.) It is the
+  whole residual between F5's hybrid (17.5 u) and the truth (11.6). The one repair tried offline
+  is refuted (F10); what would close it is the client's local-leg model — MOVECODE's.
 - **`NPCTRACK-Q3` — the sync copy against the drawn body ACROSS AN OBSTACLE.** F2 holds on the
   stairs route, whose walls are the staircase sides. On the operator's bridge session the two
   still agreed to 28.8 u at the halts, but en route around the wedge is unmeasured, and a sync
