@@ -304,9 +304,13 @@ leg in flight has no next arrival, so a body that cannot move leaves world-0 fro
 destination written and unwalked. **OBSERVED on the tape at the sample level, CONTESTED against
 [studies/movecode/FINDINGS.md](../movecode/FINDINGS.md)'s write-set reading that "the client
 never carries world-0 forward from local input"** — the (0, 288) leg at 9.06 has epoch 8135,
-before our grant reached the client, and no message of ours carries +y. The handler-level cause
-(the pending-record gate at `0x005FD5CD`, or the arrival dispatch) is a disassembly question and is
-not claimed here.
+before our grant reached the client, and no message of ours carries +y. **CORRECTED BY F11, the same
+day:** the +y leg is a wire-driven bake after all — the shared setter's own obstacle avoidance
+sidestepping the parked hostile, 66 ms after our grant, on the tape clock's 55 ms offset — so the
+"local leg" reading above is withdrawn and the movement arc's write-set stands. What survives of
+this paragraph is the observation, not the rule. **And item 2's "destination written" is wrong
+too** — the tape holds the invalid-position sentinel on both copies for the whole silence; the
+destination was never installed (movecode §1z-cd, and Q2's entry).
 
 **One repair, refuted offline before it was built.** "Defer every grant's bake while a gesture is
 pending, take it up at the next report or arrival" — replayed on the five tapes it is three to
@@ -317,6 +321,70 @@ client does not report; neither is a bake-timing rule. **Q2 stays open with thes
 what would close it is the client's own local-leg model (the facing, the turn rate, the first
 waypoint) — MOVECODE's dig, not a tuning knob here.
 
+
+## NPCTRACK-F11 — the first-press excursion is the client sidestepping the parked hostile
+
+F10's first real source, read to the field on the tape and matched to the movement arc's own
+decode. It is not a bake-timing rule, it is not a local leg, and this arc has the inputs.
+
+**The sidestep.** At every first press the sync copy first takes our lead as a straight hard leg
+(R1: `seg = tgt = (10248, 8077)`, `v = (288, 0)`, arrival 1465 ms), and **66 ms later a second
+bake replaces it with a 90 u perpendicular leg carrying the waypoint bit** (`flags 0x60005`,
+bit 18 set; `seg = (9845, 8167)`, `tgt` unchanged, `v = (0, 288)`, 312 ms). At that leg's end a
+hard bake resumes toward the target. This is
+[studies/movement/FINDINGS.md](../movement/FINDINGS.md)'s corroborated sidestep computer
+`0x00600500` (`AgAgent.cpp:1261`, `MathSqrt(combinedRadiusSq) + 1.0f >= distFromLine`), reached
+from the shared setter's obstacle avoidance `0x00600840` at `0x00602AEB` — *"setting a
+destination, from either world copy, runs avoidance immediately"* — and the obstacle is the
+**parked Hatcher, standing 80 u ahead exactly on the line to the lead**. Wire-driven, then: F10's
+"local leg" reading is withdrawn and the movement arc's write-set stands.
+
+The geometry the decode states, checked on all **18 waypoint legs across five tapes** (bit 18
+rising with a finite segment): the waypoint is the start point displaced perpendicular to the
+velocity, **away** from the obstacle, by `(combinedRadius + 10) − |distFromLine|`, with
+`combinedRadius = 12 + 12 + 56 = 80` — the follow's own disc. Every first press is 80 + 10 − 0 =
+89.9 u with the hostile 0.0 u off the line; the others fit to within 3 u (63.2 → 29.4 measured
+against 26.8; 47.0 → 45.2 against 43; 53.7 → 36.4 against 36.3; 7.3 → 82.5 against 82.7; 59.8 →
+30.4 against 30.2); a tie at 0.0 goes left; one leg of 18 (R2 at 38.79, obstacle behind) does not
+fit and is presumably a different obstacle. **16 of 18 legs have the hostile within 60 u of the
+copy's line, the other two at 61 and 63.**
+
+**What is NOT decoded is the trigger**, and two proxies for it were tried offline and are
+recorded so nobody re-fits them: (a) "obstacle within 81 u of the line anywhere along the leg"
+fires 5–11 times per run against the tape's 2–6 and worsens two runs' p90; (b) the same with an
+"ahead, within 130 u" bound fires 5–9 and halves the first-press excursion (max 107 / 99 / 101 /
+121 / 122 → 85 / 69 / 69 / 86 / 55 u) without closing it, because it also fires on grazing passes
+the client ignores (e.g. the second lead at 9.57 with the hostile 79 u beside the line) and on
+grants from a standing copy. The fired-versus-quiet census is the check any decode must pass:
+**12 grants fired** (hostile ahead by 44–116 u, within 62 u of the line, 60–122 u away) and
+**29 quiet grants** with the hostile ahead and within 81 u of the line — the quiet ones at small
+`along` with the hostile beside the copy (7–25 u ahead, 75–80 u aside), from a standing copy
+(24.1–24.5 s on three runs), or on the stairs where the sidestep point would fall off the
+client's mesh (the computer validates its waypoint through `0x0070A150` and returns
+`AGENT_INVALID_POSITION` otherwise). The caller's own test is a collision-time predictor —
+`AgAgent:1352` at `0x006009C8`, *`(timeToEvent == HUGE_VAL) || (m_point.position !=
+obstacleCenter)`*, with a constant at `0x00943898` and calls into `0x0070A0E0`, `0x0046E000`
+and `0x00487BC0` in the 170 instructions read — and reading it is the next step, in the movement
+arc where the function lives. **With it, the mirror can sidestep too, and the server has every
+input: the hostile's position is the client's own copy since Q1.**
+
+**The wall was handed over and came back corrected the same afternoon**
+([movecode §1z-cc, §1z-cd](../movecode/FINDINGS.md)). The 604 u the report track ran during the
+silence was one missing keyword in one of the server's two navmesh clippers (1z-cc, shipped with
+`test_kbdsync` §16). The reading this arc handed over with it — a plane-blind lead sent onto the
+stair tread — is **refuted at 0 of 240** moving grants with the plane clip in force (1z-cd): the
+granted point is on plane 0, the mover's own plane, one 2 u sample short of the seam, and F10's
+"frozen with our destination written" was wrong too — the tape holds the client's
+`AGENT_INVALID_POSITION` sentinel on both copies for the whole silence, **the destination was
+never installed**, which is the client's own pathfinder refusing to path into 104 u of plane-0
+ground our mesh carries as open. Prop geometry we do not carry, in the pathmap's court; Q2's
+entry below has the whole correction.
+
+**What this leaves for the NPC frame.** The mirror's remaining excursions are bounded and
+located: ~100 u for 0.3 s at a press toward a parked hostile (until the sidestep is modelled),
+the lead's length for a silent leg the client refuses to path (until the mesh carries the prop),
+and ≤ 30 u held-heading transients. Q2 stays open on the predictor only.
+
 ## Open
 
 - **`NPCTRACK-Q2` — the AgTrack mirror's POSITION fidelity, handed to MOVECODE.** The mirror was
@@ -326,7 +394,11 @@ waypoint) — MOVECODE's dig, not a tuning knob here.
   mirror walks the lead (57–132 u for the silent stretch), and ≤ 30 u held-heading transients.
   (The "91 u for 25 s" this entry first carried was the replay's own artifact, F10.) It is the
   whole residual between F5's hybrid (17.5 u) and the truth (11.6). The one repair tried offline
-  is refuted (F10); what would close it is the client's local-leg model — MOVECODE's.
+  is refuted (F10). **F11 decoded the first-press excursion**: the client's sidestep around the
+  parked hostile (geometry confirmed on 18 legs; the TRIGGER — the collision-time predictor in
+  `0x00600840`, `AgAgent:1352` — is the one thing left to read, with a 12-fired / 29-quiet census
+  as its acceptance test). With the predictor read, the mirror can sidestep, and the server has
+  the inputs.
 
   **The WALL CASE half of that residual went to MOVECODE and came back REFUTED, 2026-09-06
   ([movecode §1z-cd](../movecode/FINDINGS.md)).** The reading taken over was that our
