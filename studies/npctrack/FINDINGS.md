@@ -385,6 +385,53 @@ located: ~100 u for 0.3 s at a press toward a parked hostile (until the sidestep
 the lead's length for a silent leg the client refuses to path (until the mesh carries the prop),
 and ≤ 30 u held-heading transients. Q2 stays open on the predictor only.
 
+## NPCTRACK-F12 — RUN-R2: Q1 holds a second time, and 1z-cc reaches this arc's wire
+
+[RUN-R2.md](RUN-R2.md). On the tree after the keyboard arc's clip fix: **6.7 u** at the halt's own
+instant (R1 11.8, the old arm 54.8), 4 of 23 over 40 u, the wire shape identical to R1's. During
+the silent leg at the staircase side the server's player copy now stops 98 u from the body
+instead of 604, and the hostile **swings four times** at a player standing beside it instead of
+holding out of reach for five seconds. One registered prediction is refuted, P3 — 5 of 23 halts
+landed on a walking client copy — and all five are F13.
+
+## NPCTRACK-F13 — the client's follow re-targets ITSELF, on its own clock, and §38.2 says it does not
+
+Read off three tapes by the Hatcher's sync `m_targetPoint`, which agenttap records: a target
+change that no server order to agent 10 within the previous 0.35 s explains.
+
+| tape | target changes | unexplained by any order | follow field at those instants |
+|---|---|---|---|
+| RUN-R2 | 37 | **24** | `1` (the player), every one |
+| RUN-R1 | 36 | **19** | `1` |
+| GROUNDZ-R2 | 41 | **23** | `1` |
+
+On RUN-R2 the unexplained re-targets come a median **0.51 s after our last order** and **0.56 s
+apart** from each other, and the new target sits on the player's world-0 or ahead of it: 0.0 u at
+21.58 and 44.85 (the player standing), 2–8 u at 47.75–49.29, and while the player walks at 288
+u/s the new target is **144.0 u from our last ordered point** in eight cases (0.5 s of the player's
+speed), 158.4 u in four (0.55 s), 79–128 u where the player was at the stairs' 190/216 u/s. So
+the client keeps the follow's destination moving at the followed agent's velocity between our
+orders, re-baking about every half second. **OBSERVED on the tape**, three runs, 66 events.
+
+**This is CONTESTED against ANIMREF-RE §38.2's static read** — *"nothing reads `+0x98` to fetch
+the followed agent's current position … the client tracks a moving target only through the
+velocity extrapolation inside the reach test; the server's re-path is the contract"*. The tape
+says the target point itself advances, and the movement arc's own hook capture cannot arbitrate
+because the wall-press run had no hostile. [RUN-R3.md](RUN-R3.md) is that run with the hook on:
+its P1 is that the Hatcher's sync setter has a non-wire caller on the half-second cadence, and
+its refutation is every setter record returning to the wire handlers, which would mean the tape's
+join is wrong.
+
+**What it changes here.** (1) P3's five cuts on R2 are our `0x0028` landing on a walk the client
+started by itself after both copies had parked; the halt is not a no-op in that case, it is a
+cut, and F3's "one quarter of halts" census on the old arm was reading the same thing. (2) Q6's
+mid-chase cadence has a client half: the client's own re-target every ~0.5 s and our re-path
+every 0.5 s interleave, aimed at two player positions ~100 u apart while walking. (3) The model
+of F4 has no local re-target and still scored 6.7–11.8 u at the halts, because at a park the
+two coincide; between parks it is missing a term the server could supply — the mirror carries the
+player's world-0 **velocity**, which is what the client extrapolates with. That is **NPCTRACK-Q7**,
+gated on R3 naming the caller.
+
 ## Open
 
 - **`NPCTRACK-Q2` — the AgTrack mirror's POSITION fidelity, handed to MOVECODE.** The mirror was
@@ -465,6 +512,10 @@ and ≤ 30 u held-heading transients. Q2 stays open on the predictor only.
   to the client, noisier than retail, whose server player IS the frame and whose copy therefore
   never arrives behind a player running at its own speed. The lever is the frame (Q2), not the
   follow.
+- **`NPCTRACK-Q7` — the client's own follow re-target (F13).** What advances the hostile's sync
+  target between our orders, on what clock, and by which velocity — R3's hook names the caller;
+  the tape says ~0.5 s and the followed agent's world-0 velocity. Once known, the F4 model gains
+  a term the server already holds (the mirror's velocity), and P3's cuts have a rule.
 - **`NPCTRACK-Q5` — the operator's picture is still world-0's.** The drawn hostile parks 80 u from
   the player's WORLD-0 copy, and that copy is p50 34 / 23 / 40 u from the drawn player while
   moving on these runs (p90 284 / 91 / 247). Q1 makes the server agree with the client about
@@ -478,10 +529,11 @@ and ≤ 30 u held-heading transients. Q2 stays open on the predictor only.
   comparator at fault; 11.8 u at the halt's instant against 46–68; P3 met; P4b refuted and
   explained (Q6)**; the control at 10:06: **P1′–P3′ MET, 54.8 u against 11.8** — Q1 CONFIRMED with a
   control.
-- **[RUN-R2.md](RUN-R2.md)** — registered 2026-09-06 after MOVECODE-1z-cc/1z-cd landed: the same
-  route on the tree with the report track bounded at the wall; Q1's number a second time (P1–P3),
-  and P5, that no follow order during the silent leg names a point > 120 u from the body (R1 had
-  seven at 158–604 u).
+- **[RUN-R2.md](RUN-R2.md)** — ran 12:47 (F12): **6.7 u at the halt, Q1 twice**; P3 refuted (5 of
+  23, all F13's local re-target); 1z-cc reaches this arc's wire — the report track's drift at the
+  wall 604 → 98 u and the hostile swings four times at a standing player instead of holding.
+- **[RUN-R3.md](RUN-R3.md)** — registered, running: the same route under `movehook`, to name the
+  caller of F13's re-target (P1: a non-wire return address on the Hatcher's sync setter, ≥ 10).
 
 ## Method notes
 

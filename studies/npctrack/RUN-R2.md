@@ -74,3 +74,53 @@ python studies/npctrack/review/npcdrift.py vault/research/npctrack/r2-agenttap.j
 P1–P3 from the tool's instant-metric lines (P1′/P2′ there; the +0.5 s lines are printed and are
 not the verdict, F9). P4 and P5 off the capture: the send census and the follow orders' points
 inside the silence against the `0x003D`/`0x0047` report point that brackets it.
+
+---
+
+## RESULT — RAN 2026-09-06 12:47, 76 s, agent-driven, main after 1z-cd. **P1, P2, P4 MET; P3 REFUTED (5 of 23, and the mechanism is new, F13); P5 met vacuously on the registered quantity and decisively on the one that discriminates.**
+
+Tape `vault/research/npctrack/r2-agenttap.jsonl` (675 of 675), capture `authsrv-20260906T124708-c1`
+(`NPC_CLIENT_MODEL`, `MODEL_LEG_BOUND`, `MODEL_PLANE_CLIP` all true). 23 halts, 38 follow orders,
+21 model parks, 5 holds.
+
+| | RUN-R2 | RUN-R1 (09:43) | control (old arm) |
+|---|---|---|---|
+| copy vs client SYNC at the halt's own instant, p50 / p75 / p90 / max | **6.7 / 17.5 / 53.6 / 84.5** | 11.8 / 35.3 / 72.2 / 78.4 | 54.8 / 90.1 / 131.5 / 177.4 |
+| halts over 40 u | 4 of 23 (17 %) | 4 of 23 | 7 of 12 |
+| the model's own parks vs the client's copy, p50 / max | 7.5 / 60.2 (n = 21) | 9.3 / 77.8 | — |
+| halts on a walking client copy | **5 of 23 (22 %)** | 0 of 23 | 3 of 12 |
+| opens / re-paths / halts / out-of-reach halts / swings | 23 / 15 / 23 / 15 / 44 | 23 / 15 / 23 / 15 / 43 | 12 / 39 / 12 / 0 / 41 |
+
+**P1 MET, twice now** — 6.7 u against 11.8, on a run whose only server change from R1 is the
+keyboard arc's clip. Q1's number no longer stands on one sample. **P2 MET** (17 %). **P4 MET**:
+the wire shape is R1's to the message, nothing inside 0.4 s, four plane-word classes, 675 of
+675 `groundz.ok`.
+
+**P3 REFUTED — 5 of 23 halts landed on a walking client copy, and every one of the five is the
+same thing.** At the model's park instant the client's copy was parked too, within 0.6–6.4 u of
+the model's point and with velocity zero. Between that park and our halt 0.3–2.7 s later the
+client's copy **re-targeted itself and walked again** — a new `m_targetPoint` with no order from
+us (t = 13.37 → (10596, 8503) with our last order at 12.88 naming (10522, 8431)), 24–143 u of
+travel in the half second before the halt. Our `0x0028` then cut a walk the client had started on
+its own. That is F13, a fact about the client the arc had not measured, and it moves P3 from a
+model-fidelity metric to a question about what the client does between our orders.
+
+**P5 — met on the registered quantity, vacuously:** no follow order went out inside the silence
+on this run, and none did on R1 either (F8's hold suppressed them on both; the seven runaway
+orders the sheet quoted were the 09:23 capture's, before F8). **The quantities that discriminate
+are the report track's drift at the stop and what the hostile did while the player stood at the
+wall:**
+
+| capture | server player at the stop, drift | swings inside the silence | holds inside |
+|---|---|---|---|
+| 09:23 (pre-F8, pre-1z-cc) | 604.1 u | 0 (seven halts at one point instead) | 0 |
+| 09:43 R1 (F8, pre-1z-cc) | 603.9 u | 0 (held out of reach for 5 s) | 1 |
+| **12:47 R2 (F8 + 1z-cc)** | **98.0 u** | **4** | 0 |
+
+With the report track bounded at the wall, the hostile stood 80 u from a player standing still
+and swung four times — the correct behaviour — instead of holding for five seconds against a
+player copy 600 u away. 1z-cc reaches this arc's behaviour, and the frame mismatch during the
+silence is now the lead's length, not the leg's.
+
+**P6.** Five holds, none inside the silence (there was nothing to hold against); 21 parks at
+7.5 u median from the client's copy.
