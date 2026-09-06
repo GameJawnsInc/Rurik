@@ -1,0 +1,202 @@
+# The render object — where an agent's height comes from
+
+**Opened 2026-09-06** on the owner's instruction, after MOVECODE §1z-cb proved the height
+cannot be read from the agent: its movement record has no z, and the one candidate field is a
+literal zero the client writes on every read.
+
+**Identifiers.** `GROUNDZ-F<n>` = decoded facts about the height chain. `GROUNDZ-Q<n>` = open
+questions. Convention: [studies/idents/CONVENTION.md](../idents/CONVENTION.md).
+
+**Everything here is static disassembly of the pinned client**
+(`vault/client/2026-07-29_221c13772c7a/Gw.exe`, build 38797, pristine, ImageBase `0x00400000`).
+**Nothing has been read out of a running process.** Eight agents produced it, four decoding and
+four refuting; **13 claims were corrected**, and §6 lists the corrections that matter because
+two of them would have misled a live reader.
+
+---
+
+## GROUNDZ-F1 — the walk from an agent id to its view object
+
+`0x00802160` is a checked id→view lookup over one global array. Disassembled in full:
+
+```
+00802163  mov ecx, [ebp+8]              ; arg0 = the agent id
+00802166  cmp ecx, [0x00BF96D4]         ; count
+0080216C  jae  -> return 0
+0080216E  mov eax, [0x00BF96CC]         ; array base
+00802173  mov ecx, [eax + ecx*4]        ; obj = arr[id]
+00802178  test ecx, ecx / je -> 0
+0080217C  cmp dword [ecx + 0x9C], 0xDB  ; TYPE TAG
+00802186  setne al / dec eax / and eax, ecx
+```
+
+ArenaNet's own name for the base form is `ManagerFindAgent` — the client asserts
+`AvApi:1552 !ManagerFindAgent(agent)` at `0x007E0A62`, over the unchecked variant at
+`0x00802140`. `0x00802160` is that plus a `type == 0xDB` downcast. Three sibling lookups exist
+on the same array with tags `0x200` and `0x400`, so the array holds mixed AgentView types keyed
+by agent id.
+
+**The index IS the agent id**, not a separate view id: the `AvAgent` constructor hands the id it
+registers under to `AgApi 0x005FC550`, which indexes `[AGBASE+0x14C]` bounds-checked against
+`[AGBASE+0x154]` — the same async array and count `movetap.py` already documents.
+
+**The round-trip a live reader should use** is `[view+0x2C] == id`. The registrar at
+`0x008014B0` reads `[obj+0x2C]` *as* the array slot (`mov [eax + esi*4], edi` at `0x00801515`),
+so the client's own code guarantees it. Same idiom `movetap` already uses on the agent side.
+
+## GROUNDZ-F2 — the object, and the position triple on it
+
+`AvChar` derives from `AvAgent` at offset 0; its own fields begin at `+0xC4`; `sizeof` is
+`0x1C4`, witnessed at **three** construction sites (`0x007DF301`, `0x007DF361`, `0x007F627A`),
+each `mov ecx, 0x1C4` / `call` operator new / `push 0xDB`. Class identity comes from the strings
+trailing the vtables (`0x00A9223C`, `0x00A93930`), **not** from neighbouring asserts — that
+distinction is a correction, see §6.
+
+`+0x84`, `+0x88`, `+0x8C` are a position triple, and the proof is at the operand level rather
+than "three adjacent floats":
+
+- the accessor `0x007EBFD0` writes `[esi+0x84]`→`out[0]`, `[esi+0x88]`→`out[4]`,
+  `[esi+0x8C]`→`out[8]`;
+- `0x00802E10`, called with `eax = esi+0x84`, reads `[ecx]`, `[ecx+4]`, `[ecx+8]` and stores
+  them into three consecutive globals `0x0108765C/60/64`;
+- `0x007E14E0` subtracts three camera statics from all three components and takes a square
+  root — a distance from the eye.
+
+`+0x84` and `+0x88` are the agent's own x and y. The per-frame writer is
+`0x007EB90F  fstp dword ptr [edi]` with `edi` hoisted at `0x007EB81C` — a `mod=00` store that
+`codescan --writes` cannot see, which is a real hole in our tooling and is recorded as such.
+
+## GROUNDZ-F3 — the height field, and its one producer
+
+**`view+0x8C` is the ground z.** In the whole AgentView band there are four stores; one belongs
+to a different class, one is the constructor writing `0.0` (`fldz` at `0x007EB4D2`), and the
+other two are each the instruction *immediately after* a call to the same function:
+
+```
+007EB91B  call 0x007EBF00   ->  007EB920  fstp dword ptr [esi+0x8C]
+007ECA59  call 0x007EBF00   ->  007ECA5E  fstp dword ptr [ebx+0x8C]
+```
+
+`0x007EBF00` is `AvAgent::GetGroundHeight(const Point* pt, Vec3* outNormal)` — `__thiscall`,
+`ret 8`. Its second argument is a **normal** out-pointer, not a second point: `0x007EBFAC`
+copies `+0x64/+0x68/+0x6C` into it, and the constructor seeds that triple to `(0, 0, -1.0)`.
+
+It memoises: the key is the query point at `+0x74/+0x78/+0x7C`, the cached height is `+0x30`,
+and a sticky failure bit is bit 0 of `+0x58`. **The stored value is the queried altitude minus
+1.0** — `0x007EBF6F  fsub qword ptr [0x0093C1D0]`, and `0x0093C1D0` reads `1.0` out of `.rdata`.
+
+**The cache condition, corrected** (the first reading had the branch backwards): it *recomputes*
+when any of x, y, plane differs, **or** when the plane is non-zero **and** the failure bit is
+set. It takes the cache when all three match **and** either the plane is zero or the bit is
+clear. Semantically: **the retry-on-failure only arms for prop-bearing planes**, because nothing
+about a plane-0 answer can change.
+
+## GROUNDZ-F4 — the query, and how the plane reaches prop geometry
+
+The producer calls `0x0070A190`, and the client names it in its own log string at `0x00A6B6A0`:
+`MapQueryAltitude() invalid params point=(%f,%f,%u) mapRect=(...)`. An image-wide sweep finds
+`0x007EBF5E` is the **only** direct AgentView→`MapQueryAltitude` call in the binary.
+
+**The plane word is the only route from an agent to prop geometry**, and the mechanism is
+byte-verified by both the decoder and its refuter:
+
+```
+0070A40B  lea ecx, [ebx+8]              ; &point.plane
+0070A433  cmp dword ptr [ecx], 0
+0070A436  je  -> 0x0070A4D7             ; plane == 0: SKIP the whole prop block
+0070A475  push dword ptr [ecx]          ; the plane
+0070A47A  call 0x00721C40               ; PathApi: plane -> (propIndex, propLayer)
+0070A4AB  call 0x00738D30               ; PrApi:  prop altitude
+0070A4C1  call 0x004F1BA0               ; min(terrain, prop)
+```
+
+with the client's own asserts naming both callees — `PathApi:507 propIndex && propLayer`,
+`PrApi:573 props`, `PrApi:574 altitude`, the file string at `0x00A6FF1C` being
+`P:\Code\Engine\Map\Props\PrApi.cpp`.
+
+**The terrain half is a heightmap and cannot represent a stair tread.** `TrnQueryAlt`
+(`0x0074F720`) seeds the out-altitude to `+INF` (`0x00948654`), walks a rect of chunks, and each
+chunk multiplies its coordinate by 32 and tests each quad as **two triangles**, folding results
+with the same `min` helper.
+
+## GROUNDZ-F5 — the model side, and why this ends in a reader
+
+`0x007ECB90` hands `&view+0x84` to the model placement API, guarded by the `m_model` handle at
+`view+0x60` (`AvAgent:818` asserts it). That reaches `MdlSetPlacement` (`0x00782CB0`), which
+resolves the handle through the type-tagged table at `0x0046FE40` with FourCC `'mdl '`, and then
+`Model::SetPlacement` (`0x00784010`), which stores nine plain dwords:
+
+**`model+0x10` = pos.x, `model+0x14` = pos.y, `model+0x18` = pos.z.**
+
+`Model::ApplyWorldTransform` (`0x007841D0`) pushes GrTrans stream 2 and, in the no-rotation
+fast path, passes **`lea eax, [esi+0x10]`** — the translation *is* `model+0x10..+0x18`, with no
+inference at all.
+
+**The world matrix itself is NOT pollable.** It is a slot on a global 96-deep stack (base
+`0x00C120C0`, stride `0x1400`, matrices at `+0x7C` stride `0x34`), pushed and popped per model
+per frame and reused by every model. Reading it cross-process returns whatever the client was
+drawing at that instant, with no agent identity attached.
+
+**But the translation is copied verbatim from persistent per-agent fields, so this arc ends in a
+READER, not a hook.** CLAUDE.md carve-out (3) is not needed.
+
+```
+level 1:  view = [[0x00BF96CC] + id*4]
+          guard  id < [0x00BF96D4],  view != 0,  [view+0x9C] == 0xDB,  [view+0x2C] == id
+          ground z = float32 at view+0x8C
+level 2:  model = handle_resolve([view+0x60], 'mdl ')
+          drawn z = float32 at model+0x18
+```
+
+## GROUNDZ-F6 — what this says about the operator's sink, which is less than it looks
+
+RUN-1zCA's residual was a hostile standing ankle-deep in a stair tread. The obvious reading —
+*plane 0 skips the prop query, so the body gets raw terrain* — **is refuted by our own data**:
+RUN-1zCA measured plane **29** on both copies for all 269 samples of the sink.
+
+So the prop branch **was** taken. What follows from F3 instead: since every non-init write of
+`view+0x8C` is the ground z, **the body is drawn on whatever surface the query returned**, and an
+ankle-deep sink is a *wrong-surface answer*, not a skipped query. The candidates are now three,
+and they are separable:
+
+1. the prop altitude for plane 29 resolved below the tread;
+2. `min()` picked the terrain over the prop;
+3. the per-agent vertical term at **`view+0x40`** — omitted from the first field map and found by
+   a refuter — which is subtracted from `+0x8C` at three read sites (`0x007EC1DB`, `0x007F62FE`,
+   `0x007EB1DE`).
+
+**So the drawn height is not `+0x8C` alone**, and a live reader must capture `+0x40` and `+0x30`
+beside it or it will mis-attribute the sink.
+
+## GROUNDZ-F7 — `up is -Z`, and it is RECONSTRUCTION
+
+Load-bearing for reading `min()` as "the highest surface wins", so it is labelled honestly. It
+rests on **two** genuinely independent witnesses plus one weaker: the default ground normal is
+`(0, 0, -1)` (`0x0093CF24`, stored at `0x0070A1DC` and `0x0070A45F`); the clamp at `0x007FD1A8`
+pushes a point back when its z exceeds the ground; and a `fchs` at `0x00737332` negates a
+raycast distance against a `{x, y, 50000}` origin.
+
+The first draft offered four witnesses. **Two of them were the same fact stated twice, and that
+fact is what the sign is being used to explain** — `min` only means "highest wins" *if* up is
+−Z, so quoting it as evidence is circular. Corrected here.
+
+---
+
+## Open
+
+- **`GROUNDZ-Q1` — which of F6's three candidates causes the sink.** Separable by a live read of
+  `+0x8C`, `+0x30` and `+0x40` at a known stair position.
+- **`GROUNDZ-Q2` — is the position updater per-frame?** NOT FOUND. `0x007EB7F0` is also a vtable
+  entry (`0x00A92224`), so a direct-caller search cannot close. Note the memo makes call
+  frequency and query frequency different numbers regardless.
+- **`GROUNDZ-Q3` — the second, terrain-free height path.** `0x0070A190` returns early through
+  `0x007372B0` when `map->[+0x78]` is populated, ignoring the plane entirely and hardcoding a
+  flat normal. Its module could not be named — `0x00737xxx` falls in an assert gap.
+- **`GROUNDZ-Q4` — stream 2 is assumed to be the world transform.** The enum was never located;
+  the bound `GR_TRANSFORMS = 5` and the name `GR_TRANSFORM_VIEW` come from asserts, the
+  identification of 2 does not.
+
+**Nothing here has been observed in a running client.** Every float above is a static read. The
+three refutable predictions a live reader must satisfy are in `GROUNDZ-F3`/`F5`: `+0x8C` must
+bit-equal `+0x30` immediately after a store; `+0x8C` must equal `model+0x18` for the same agent;
+and `+0x8C` must vary on a slope and hold constant on flat ground.
