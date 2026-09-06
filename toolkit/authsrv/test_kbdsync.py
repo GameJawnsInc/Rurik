@@ -54,8 +54,11 @@ from test_position_trust import receive_arm, Sent, FakeRec   # noqa: E402
 # 1z-aa (section 13: the fence-shutter gate); +22 at 1z-ae (section 14:
 # refresh before maturation); +8 at 1z-bw (section 15: the fence latch is
 # BOUNDED by the client's own measured re-open time, with the unbounded
-# behaviour kept as the revert arm and exercised).
-LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=114)
+# behaviour kept as the revert arm and exercised); +21 at 1z-cc (section 16:
+# the SERVER'S OWN model leg -- the plane term at the primitive, the leg bound
+# as a pure function, the four arms through the real receive arm, and open
+# ground unchanged).
+LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=135)
 check = checks.adopt(LEDGER)
 
 SRC = open(authsrv.__file__, encoding="utf-8").read()
@@ -979,6 +982,240 @@ def main():
           "--no-kbd-lead-fence-gate still wins over the bound: gate off means "
           "no degradation at any latch age",
           f"sent {mv[0] if mv else None}")
+
+    print("\n16. MOVECODE-1z-cc: the SERVER'S OWN model leg is bounded too -- "
+          "one surface, and never past the order we gave")
+    # WHAT THIS IS ABOUT. `state["dest"]` never touches the wire, so nothing here
+    # is a grant policy -- but the world tick's integrator walks `state["pos"]`
+    # to it, and the NPC follow, the leash, the range gate and every re-path read
+    # `state["pos"]`. On RUN-NPCTRACK-R1 the client sent one 0x003D from
+    # (10012, 8524), walked into the staircase side, moved 0 u and said nothing
+    # for five seconds; the model walked 604 u up the stairs and four follow
+    # orders went out naming a player who was never there.
+    #
+    # THE FIXTURE IS THE SEAM, NOT A WALL, and that distinction is the whole
+    # point: everything below is walkable, so a plane-BLIND clip runs the ray to
+    # its end and only the plane term can stop it. A wall fixture would clip with
+    # the term OFF and this section would be measuring nothing (§13's lesson:
+    # prove which lever you are pulling).
+    import pathmap as _pm_mod                                  # noqa: E402
+
+    class _Stairs(object):
+        """map 148's staircase seam in miniature. Plane 0 to x = 1100, 29 past.
+
+        `clip` is `PathingMap.clip` ITSELF, bound to this geometry -- not a
+        re-implementation. A second copy of that walk drifting from the real one
+        is the failure this repo keeps recording, and the plane term under test
+        lives inside it.
+        """
+        SEAM = 1100.0
+
+        def walkable(self, x, y):
+            return True
+
+        def plane_at(self, x, y, prefer=None):
+            return 0 if x <= self.SEAM else 29
+
+        def containing(self, x, y):
+            # The plane-repair arm asks the mesh which planes cover a point,
+            # BEFORE this section's arm runs. One plane everywhere, so it always
+            # answers `plane-legal` and never fires -- the fixture must not
+            # smuggle a second policy into a section about the model leg.
+            return (self,)
+
+        @property
+        def plane(self):
+            return 0
+
+        clip = _pm_mod.PathingMap.clip
+
+    class _Blind(object):
+        """A mesh from before the plane term: no `plane_at`, and a `clip` that
+        would TypeError on the keyword. The hasattr door is what keeps it out."""
+
+        def walkable(self, x, y):
+            return True
+
+        def clip(self, x0, y0, x1, y1, step=16.0):
+            return (x1, y1)
+
+    check(authsrv.MODEL_PLANE_CLIP is True and authsrv.MODEL_LEG_BOUND is True
+          and "--no-model-plane-clip" in SRC and "--no-model-leg-bound" in SRC
+          and "global MODEL_PLANE_CLIP" in SRC
+          and "global MODEL_LEG_BOUND" in SRC,
+          "both terms ship ON, each with its OWN revert flag rebound through a "
+          "declared global -- one run can convict one term (sec.29)",
+          f"plane={authsrv.MODEL_PLANE_CLIP} bound={authsrv.MODEL_LEG_BOUND}")
+
+    # ---- (a) the plane term, at the primitive -----------------------------
+    st = {"pos": (1000.0, 2000.0), "plane": 0, "pathmap": _Stairs()}
+    aware, aware_blocked = authsrv.clip_to_walkable(st, (1900.0, 2000.0))
+    _saved_pc = authsrv.MODEL_PLANE_CLIP
+    try:
+        authsrv.MODEL_PLANE_CLIP = False
+        blind, blind_blocked = authsrv.clip_to_walkable(st, (1900.0, 2000.0))
+    finally:
+        authsrv.MODEL_PLANE_CLIP = _saved_pc
+    check(aware[0] <= _Stairs.SEAM and aware_blocked
+          and abs(aware[0] - 1100.0) <= authsrv.COLLISION_STEP,
+          "the model leg STOPS at the plane seam, within one COLLISION_STEP of "
+          "it, and reports blocked",
+          f"{aware} blocked={aware_blocked}")
+    check(blind == (1900.0, 2000.0) and not blind_blocked,
+          "KNOWN-BAD ARM (--no-model-plane-clip): the same ray over the same "
+          "geometry runs its FULL 900 u onto the far plane and calls it clear "
+          "-- so the check above is measuring the plane term and not the "
+          "fixture",
+          f"{blind} blocked={blind_blocked}")
+    check(math.hypot(aware[0] - 1000.0, aware[1] - 2000.0)
+          <= math.hypot(blind[0] - 1000.0, blind[1] - 2000.0),
+          "and the term can only ever SHORTEN the leg -- pm.clip's own "
+          "contract, which is why it cannot lengthen a lead into a wall")
+    st_blind = {"pos": (1000.0, 2000.0), "plane": 0, "pathmap": _Blind()}
+    check(authsrv.clip_to_walkable(st_blind, (1900.0, 2000.0))
+          == ((1900.0, 2000.0), False),
+          "THE hasattr DOOR: a mesh predating the plane term takes the "
+          "historical call and does not raise inside the recv loop",
+          "a2_clip_lead guards the same way for the same reason")
+
+    # ---- (b) the leg bound, as the pure function it is --------------------
+    LB = authsrv.model_leg_bound
+    O, R = (0.0, 0.0), (0.0, 0.0)
+    check(LB(O, (700.0, 0.0), R, (100.0, 0.0), True, "kbd")
+          == ((100.0, 0.0), "bounded"),
+          "BOUNDED: a 700 u model leg against a 100 u lead our mesh cut short "
+          "is trimmed to the lead's own REACH, on the model's own ray")
+    check(LB(O, (700.0, 0.0), R, (100.0, 0.0), False, "kbd")
+          == (None, "lead-clear"),
+          "LEAD-CLEAR is untouched, and this is the derived scope: 520 u of "
+          "lead against the client's 768 u vec2 is 248 u of DELIBERATE margin "
+          "over its own report trigger (p99 chord 515.1 u), so capping a clear "
+          "lead would park the model mid-cruise")
+    check(LB(O, (700.0, 0.0), R, (100.0, 0.0), True, "fallback")
+          == (None, "no-lead")
+          and LB(O, (700.0, 0.0), R, None, True, None) == (None, "no-lead"),
+          "NO-LEAD: a fallback grant IS the report and a fence-zeroed one is "
+          "too -- neither orders a walk, so neither bounds one")
+    check(LB(O, (50.0, 0.0), R, (100.0, 0.0), True, "kbd") == (None, "within"),
+          "WITHIN: a model leg already shorter than the grant is left alone")
+    check(LB(O, None, R, (100.0, 0.0), True, "kbd") == (None, "no-model"),
+          "NO-MODEL: no destination in hand, nothing to bound")
+    _saved_lb = authsrv.MODEL_LEG_BOUND
+    try:
+        authsrv.MODEL_LEG_BOUND = False
+        off = LB(O, (700.0, 0.0), R, (100.0, 0.0), True, "kbd")
+    finally:
+        authsrv.MODEL_LEG_BOUND = _saved_lb
+    check(off == (None, "off"),
+          "OFF (--no-model-leg-bound): the revert arm refuses first, so a run "
+          "can convict this term alone")
+    # THE ORIGINS DIFFER ON A REFUSED REPORT, which is why the bound compares
+    # REACHES. Same lead, same 700 u model leg, model origin 500 u behind the
+    # report: the answer must still be 100 u OF MODEL LEG, measured from the
+    # model's own start, not the lead's endpoint borrowed across frames.
+    d, why = LB((-500.0, 0.0), (200.0, 0.0), R, (100.0, 0.0), True, "kbd")
+    check(why == "bounded" and abs(d[0] - (-400.0)) < 1e-9,
+          "and it is REACH, not the point: with the model leg anchored 500 u "
+          "behind the report (a refused report -- the one moment the two are "
+          "not the same point) the trim is still 100 u of the model's own ray",
+          f"{d} {why}")
+
+    # ---- (c) the two ends joined, through the real arm ---------------------
+    # RUN-NPCTRACK-R1's own geometry, scaled onto the fixture: the report sits
+    # 100 u inside plane 0, the client's vec2 is its real 766 u, and the seam is
+    # at 1100. The lead is clipped at the seam; the model must not out-walk it.
+    STAIRS_REPORT = [1, [1000.5, 2000.25], 0, [766.0, 0.0], 1]
+
+    def _drive_stairs(plane_clip, leg_bound):
+        s = {"pos": (1000.5, 2000.25), "plane": 0, "pos_seen": 0.0,
+             "pathmap": _Stairs()}
+        sv = (authsrv.MODEL_PLANE_CLIP, authsrv.MODEL_LEG_BOUND)
+        authsrv.MODEL_PLANE_CLIP, authsrv.MODEL_LEG_BOUND = plane_clip, leg_bound
+        try:
+            s, ww = drive_heading(STAIRS_REPORT, lead=True, state=s)
+        finally:
+            (authsrv.MODEL_PLANE_CLIP, authsrv.MODEL_LEG_BOUND) = sv
+        row = s["_rec"].of("grant_verdict")[-1]
+        reach = math.hypot(s["dest"][0] - 1000.5, s["dest"][1] - 2000.25)
+        lead = math.hypot(row["dest"][0] - 1000.5, row["dest"][1] - 2000.25)
+        return s, ww, row, reach, lead
+
+    s_bad, _, row_bad, reach_bad, lead_bad = _drive_stairs(False, False)
+    s_pc, _, row_pc, reach_pc, _ = _drive_stairs(True, False)
+    s_lb, _, row_lb, reach_lb, _ = _drive_stairs(False, True)
+    s_on, w_on, row_on, reach_on, lead_on = _drive_stairs(True, True)
+    check(lead_bad == lead_on and lead_on < 120.0
+          and row_on["lead_clip_why"] == "plane-seam",
+          "THE GRANT IS IDENTICAL ON ALL FOUR ARMS and is clipped at the seam "
+          "-- a2_clip_lead has had the plane term since 1z-ap. Nothing in this "
+          "section changes a byte on the wire",
+          f"lead reach bad={lead_bad:.1f} on={lead_on:.1f} "
+          f"why={row_on['lead_clip_why']}")
+    check(reach_bad > 700.0 and row_bad["model_bound"] == "off",
+          "KNOWN-BAD ARM (both reverted): the model leg runs its full 766 u "
+          "THROUGH the seam while the grant stopped at it -- two of our own "
+          "components modelling one body 650 u apart. This is RUN-R1's 604 u",
+          f"model reach {reach_bad:.1f} u, grant {lead_bad:.1f} u")
+    check(reach_pc <= lead_bad,
+          "THE PLANE TERM ALONE closes it: the model stops at the seam, at or "
+          "inside the grant's own reach",
+          f"model {reach_pc:.1f} u vs grant {lead_bad:.1f} u")
+    check(reach_lb <= lead_bad + 1e-6 and row_lb["model_bound"] == "bounded",
+          "THE LEG BOUND ALONE closes it too, from the other side -- with the "
+          "plane term REVERTED the model is still trimmed to the granted "
+          "reach. Two independent conjuncts, so a run that reddens one "
+          "localises the change",
+          f"model {reach_lb:.1f} u vs grant {lead_bad:.1f} u "
+          f"({row_lb['model_bound']})")
+    check(reach_on <= lead_on and row_on["model_bound"] in ("within", "bounded"),
+          "SHIPPED, both on: the model ends at or inside the point our own "
+          "mesh just refused the client",
+          f"model {reach_on:.1f} u vs grant {lead_on:.1f} u "
+          f"({row_on['model_bound']})")
+    check(s_on.get("clipped") is True,
+          "and `state['clipped']` says the leg was cut short, so the 0x0047 "
+          "arm's `was_clipped` reads the bound as it reads the clip")
+    # THE ROW EXISTS ON EVERY EVALUATION, not only when it fires -- a bound
+    # nobody can see not-firing is a wish.
+    check(all("model_bound" in r for r in s_on["_rec"].of("grant_verdict"))
+          and row_bad["model_bound"] == "off",
+          "every grant_verdict row carries `model_bound`, including the arms "
+          "where the bound refused",
+          f"{[r.get('model_bound') for r in s_on['_rec'].of('grant_verdict')]}")
+
+    # ---- (d) OPEN GROUND IS UNTOUCHED -------------------------------------
+    # The regression this must not cause. With no seam in reach the lead is
+    # clear at its full 520 u and the model keeps its 766 u ray: the 248 u of
+    # margin over the client's own report trigger, which is what stops the model
+    # parking mid-cruise and turning the next 0x0025 into a per-report send.
+    st = {"pos": (1000.0, 2000.0), "plane": 7, "pos_seen": 0.0}
+    st, w = drive_heading(REPORT, lead=True, state=st)
+    row = st["_rec"].of("grant_verdict")[-1]
+    check(st["dest"] == (1766.5, 2000.25)
+          and row["lead_clip_why"] == "no-mesh"
+          and row["model_bound"] == "lead-clear"
+          and w.of(MOVE)[0][1][1] == [1520.5, 2000.25],
+          "NO MESH IN HAND: the model keeps the client's own 766 u ray and the "
+          "lead its derived 520, because a mesh that said nothing cannot have "
+          "refused anything -- `a2_clip_lead` answers `no-mesh` with "
+          "lead_clipped False and the bound refuses `lead-clear` on it. "
+          "Section 2's numbers unchanged to the bit",
+          f"dest={st['dest']} why={row['lead_clip_why']} "
+          f"bound={row['model_bound']}")
+    st = {"pos": (1000.0, 2000.0), "plane": 0, "pos_seen": 0.0,
+          "pathmap": _Stairs()}
+    # Same mesh, but aimed AWAY from the seam: nothing is clipped, nothing is
+    # bounded, and the 248 u margin survives the fix.
+    st, w = drive_heading([1, [1000.5, 2000.25], 0, [-766.0, 0.0], 1],
+                          lead=True, state=st)
+    row = st["_rec"].of("grant_verdict")[-1]
+    check(row["lead_clip_why"] == "clear" and row["model_bound"] == "lead-clear"
+          and abs(st["dest"][0] - 234.5) < 1e-6,
+          "AWAY FROM THE SEAM the lead reads clear, the bound refuses "
+          "`lead-clear`, and the model still walks the full 766 u -- the "
+          "bound reads a mesh REFUSAL and nothing else",
+          f"dest={st['dest']} why={row['lead_clip_why']} "
+          f"bound={row['model_bound']}")
 
     return LEDGER.verdict()
 

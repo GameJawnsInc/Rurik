@@ -8460,6 +8460,32 @@ def grant_flush_tick(send, state, conn_id, rec=None, now=None):
     return True
 
 
+# MOVECODE-1z-cc. THE MODEL'S OWN LEG IS CLIPPED ON ONE SURFACE, like the lead's.
+# `pm.clip`'s plane term has existed since 1z-ap and only ONE of the file's two
+# clippers ever passed it: `a2_clip_lead` (the wire lead) does, `clip_to_walkable`
+# (the server's private model leg) did not. Plane-blind, `walkable()` answers
+# "inside any trapezoid, ON ANY PLANE", so a ray that leaves the ground and
+# re-enters on a staircase stacked above it scores CLEAR the whole way -- which is
+# the same defect RUN-1zAO measured on the lead, arriving from the side.
+#
+# MEASURED on the real map-148 mesh, at RUN-NPCTRACK-R1's own specimen (capture
+# `authsrv-20260906T092316-c1` t=25.34, report (10011.9, 8524.0) plane 0, the
+# client's own 767.4 u vec2): plane-BLIND clip 604.1 u, plane-AWARE 98.0 u, and the
+# lead's own plane-aware clip stopped at 108.0 u naming `plane-seam`. The body never
+# left the report -- the 0x0047 five seconds later repeats it to the bit -- so the
+# 604 u was ours alone, and every follow order in that window carried it.
+# Corpus (783 report->lead pairs, 39 captures): the blind model leg ends past the
+# granted lead's own dest on 32 of the 497 clipped leads, max 765.0 u; with the
+# plane term, 2, max 1.4 u.
+#
+# It cannot lengthen a leg: `pm.clip`'s own contract is that the plane term stops
+# the walk earlier or not at all. `hasattr` because a mesh stub that predates the
+# term must take the historical call rather than raise inside the recv loop -- the
+# same guard `a2_clip_lead` uses, for the same reason.
+# --no-model-plane-clip reverts. Known-bad arm.
+MODEL_PLANE_CLIP = True
+
+
 def clip_to_walkable(state, dest):
     """Trim a destination to where the navmesh says a character can get.
 
@@ -8472,6 +8498,11 @@ def clip_to_walkable(state, dest):
     somewhere the mesh does not cover. Refusing every move from there would look
     like a hang, and a hang is a much worse failure than the wall-clipping this
     replaces.
+
+    THE PLANE the ray must stay on is resolved AT THE MODEL'S OWN STANDING POINT
+    (`plane_at(prefer=state["plane"])`, the reported plane where the trapezoids
+    allow it), never copied blind -- and None disables the term rather than
+    guessing a surface, exactly as `a2_clip_lead` does. See MODEL_PLANE_CLIP.
     """
     pm = state.get("pathmap")
     dest = (float(dest[0]), float(dest[1]))
@@ -8485,8 +8516,74 @@ def clip_to_walkable(state, dest):
                   f"does not cover -- collision suspended for this character")
         return dest, False
     state["off_mesh_warned"] = False
-    stopped = pm.clip(px, py, dest[0], dest[1], step=COLLISION_STEP)
+    plane = None
+    if MODEL_PLANE_CLIP and hasattr(pm, "plane_at"):
+        plane = pm.plane_at(px, py, prefer=state.get("plane"))
+    if plane is None:
+        stopped = pm.clip(px, py, dest[0], dest[1], step=COLLISION_STEP)
+    else:
+        stopped = pm.clip(px, py, dest[0], dest[1], step=COLLISION_STEP,
+                          plane=plane)
     return stopped, stopped != dest
+
+
+# MOVECODE-1z-cc, the second half: OUR OWN MODEL MAY NOT OUT-WALK THE ORDER WE
+# JUST GAVE. `--no-model-leg-bound` reverts.
+MODEL_LEG_BOUND = True
+
+
+def model_leg_bound(origin, model_dest, reported, lead_dest, lead_clipped, src):
+    """Pure: trim the model leg to the REACH the grant ordered. -> (dest, why)
+
+    `dest` is None unless `why` is "bounded", so the call site can never write a
+    destination this refused to compute.
+
+    WHY REACH AND NOT THE POINT. The two legs do not share an origin by
+    construction: the lead is anchored at `reported` (--heading-grant's
+    graveyard, R2-1) and the model leg at `state["pos"]`, and those are the same
+    point only on an ACCEPTED report. Comparing distances travelled compares the
+    two legs' own claims about the body without pretending they start together;
+    comparing endpoints would silently mix frames on exactly the refused report
+    where the model is least entitled to an opinion.
+
+    ONLY WHEN OUR OWN MESH CUT THE GRANT SHORT (`lead_clipped`), and this is the
+    whole scope. A CLEAR lead is 520 u by derivation (1z-ab.4) while the model's
+    ray is the client's own ~768 u vec2, and that 248 u is DELIBERATE: the model
+    must out-run the client's own report trigger (chord p95 513.8 / p99 515.1 u)
+    or it parks mid-cruise, sets `state["walking"] = False`, and turns the next
+    report's 0x0025 from a turn signal into a per-report one. Measured, the cost
+    of getting this wrong is the 286 clear leads in the corpus; the value of
+    getting it right is 2 events at <= 1.4 u. So the bound reads a mesh REFUSAL
+    and nothing else: where our navmesh has just told the client "you cannot get
+    past here", our own model does not get past there either.
+
+    It is deliberately NOT redundant with MODEL_PLANE_CLIP even though that term
+    closes 30 of the same 32 corpus events. The two clippers sample at different
+    steps (COLLISION_STEP 16.0 against A2_LEAD_CLIP_STEP 2.0, and a coarse walk
+    can step OVER a band a fine one catches) and `a2_clip_lead` carries doors this
+    one does not (the origin seam, the plane-ambiguity refusal, the opt-in seam
+    clip). This is the check that survives them drifting apart -- the guard
+    pointed the other way.
+    """
+    if not MODEL_LEG_BOUND:
+        return None, "off"
+    if model_dest is None:
+        return None, "no-model"
+    # A fallback grant IS the report and a fence-zeroed one is the report too:
+    # neither is an order to walk anywhere, so neither bounds anything.
+    if src not in ("kbd", "d1") or lead_dest is None:
+        return None, "no-lead"
+    if not lead_clipped:
+        return None, "lead-clear"
+    lead_reach = math.hypot(float(lead_dest[0]) - float(reported[0]),
+                            float(lead_dest[1]) - float(reported[1]))
+    mx = float(model_dest[0]) - float(origin[0])
+    my = float(model_dest[1]) - float(origin[1])
+    model_reach = math.hypot(mx, my)
+    if model_reach <= lead_reach or model_reach <= 0.0:
+        return None, "within"
+    f = lead_reach / model_reach
+    return (float(origin[0]) + mx * f, float(origin[1]) + my * f), "bounded"
 
 # The reply to CHAR_CREATION_REQUEST_ARMORS. The name is a red herring: nothing is
 # being created and no armour is sent. OpenTyria (GameSrv.c:1557) answers it with
@@ -20491,6 +20588,27 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                         _fence_gate_lead(state, reported,
                                                          a2_dest, a2_src,
                                                          a2_clip_why))
+                                # MOVECODE-1z-cc. THE SERVER'S OWN MODEL LEG MAY
+                                # NOT OUT-WALK THE ORDER IT JUST GAVE, when the
+                                # point it gave was one OUR OWN MESH cut short.
+                                # HERE and not beside the `state["dest"]` write
+                                # above, because the lead does not exist yet up
+                                # there -- the 0x003D arm pops `kbd_leg` on entry
+                                # and this block is where the replacement is
+                                # computed and clipped. `state["pos"]` is the
+                                # model leg's own origin and nothing between the
+                                # two sites writes it. Nothing goes on the wire
+                                # from here: `state["dest"]` feeds the world
+                                # tick's integrator and no send site.
+                                _mb_dest, a2_model_bound = model_leg_bound(
+                                    state.get("pos"), state.get("dest"),
+                                    reported, a2_dest, a2_lead_clipped, a2_src)
+                                if _mb_dest is not None:
+                                    state["dest"] = _mb_dest
+                                    # The leg WAS cut short, by the same mesh and
+                                    # for the same reason the grant was, so the
+                                    # 0x0047 arm's `was_clipped` must read it.
+                                    state["clipped"] = True
                                 if rec is not None:
                                     # EVERY evaluation, fired or refused, on the
                                     # SAME channel the click arm uses -- a log
@@ -20632,7 +20750,21 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                               # the wire.
                                               pc_spoofed=(pcs_fired
                                                           if zero_ok
-                                                          else None))
+                                                          else None),
+                                              # MOVECODE-1z-cc. Which door the
+                                              # model bound took, on EVERY
+                                              # evaluation -- "bounded" is the
+                                              # fire and the other five are the
+                                              # refusals, because a bound nobody
+                                              # can see not-firing is a wish
+                                              # (the same rule a2_watchdog_due
+                                              # and the fence gate are held to).
+                                              # It is recorded even when the
+                                              # grant is refused: the model leg
+                                              # is armed above the verdict and
+                                              # its bound does not wait on a
+                                              # send.
+                                              model_bound=a2_model_bound)
                                 # MOVECODE-1z-y (a1): a rate-refused report
                                 # is HELD with the exact grant it would have
                                 # sent -- the lead or the point, both
@@ -23829,6 +23961,30 @@ def main():
                          "This is also the arm to test with if the client "
                          "refuses (dest, cur): sec.42.5's stated fallback is "
                          "the mover's plane twice. Known-bad arm.")
+    ap.add_argument("--no-model-plane-clip", action="store_true",
+                    help="MOVECODE-1z-cc REVERT: the server's own model leg is "
+                         "clipped PLANE-BLIND again, as it was until 2026-09-06 "
+                         "-- pathmap.clip with no plane term, so a ray that "
+                         "leaves the ground and re-enters on a staircase "
+                         "stacked above it scores clear the whole way. This is "
+                         "the 604 u in RUN-NPCTRACK-R1's five-second silence: "
+                         "the client's body never left (10012, 8524), the "
+                         "grant's own plane-aware clip stopped 108 u out "
+                         "naming plane-seam, and state['pos'] walked to "
+                         "(10616, 8524) with every follow order in the window "
+                         "carrying it. Nothing on the wire changes either way "
+                         "-- state['dest'] feeds the world tick's integrator "
+                         "and no send site. Known-bad arm.")
+    ap.add_argument("--no-model-leg-bound", action="store_true",
+                    help="MOVECODE-1z-cc REVERT: the server's own model leg may "
+                         "again end further along its ray than the lead grant "
+                         "our own mesh just cut short. The bound reads a mesh "
+                         "REFUSAL only -- a CLEAR lead is untouched, because "
+                         "its 520 u against the model ray's 768 is derived "
+                         "(1z-ab.4) and capping it would park the model at the "
+                         "client's own report trigger. Corpus residual behind "
+                         "the plane term: 2 events of 783, <= 1.4 u. Known-bad "
+                         "arm.")
     ap.add_argument("--no-npc-follow-router", action="store_true",
                     help="MOVECODE-1z-by REVERT: a hostile's own server-side "
                          "copy walks a STRAIGHT LINE clipped by the pathmap "
@@ -25556,6 +25712,19 @@ def main():
               "SPAWN plane in both words (ANIMREF-RE 42.5's revert). RUN-1zBW: "
               "4 follow orders onto plane-18-only bridge deck, all stamped "
               "plane 0.", flush=True)
+    if a.no_model_plane_clip:
+        global MODEL_PLANE_CLIP
+        MODEL_PLANE_CLIP = False
+        print("[map] --no-model-plane-clip: the server's own model leg is "
+              "clipped plane-blind (MOVECODE-1z-cc's revert). RUN-NPCTRACK-R1: "
+              "604 u of model walk while the body stood still, against 98 u "
+              "with the plane term.", flush=True)
+    if a.no_model_leg_bound:
+        global MODEL_LEG_BOUND
+        MODEL_LEG_BOUND = False
+        print("[map] --no-model-leg-bound: the server's own model leg may "
+              "out-walk a lead our mesh cut short (MOVECODE-1z-cc's revert).",
+              flush=True)
     if a.no_npc_follow_router:
         global NPC_FOLLOW_ROUTER
         NPC_FOLLOW_ROUTER = False

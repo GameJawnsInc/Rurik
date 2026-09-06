@@ -3800,8 +3800,32 @@ when map 280 is absent, and §14(g) when Pre-Searing is absent skip-declare);
   clip refuses the extension, the known-bad arm, inertness with the lead off, and
   four source locks -- and the flag it drives is OPT-IN and OFF since 1z-af, which
   convicted the backstop on two runs that both locked (one past a `refresh-late`),
-  so the section's first check pins the default OFF rather than ON. Floor 33 → 60 →
-  69 → 84 → 106 from the
+  so the section's first check pins the default OFF rather than ON. **Section 15
+  (MOVECODE-1z-bw) added eight:** the fence latch is BOUNDED at 8.0 s, above the
+  client's own measured maximum shut (6.087 s), with `--no-fence-latch-timeout`
+  kept as the exercised known-bad arm. **Section 16 (MOVECODE-1z-cc) added
+  twenty-one, and it is about the one leg in this file that never touches the
+  wire:** `state["dest"]`, the server's own model of where the player is walking,
+  which the world tick integrates into `state["pos"]` and which the NPC follow,
+  the leash and every range check then read. Two terms, ON, each reverting alone
+  (`--no-model-plane-clip`, `--no-model-leg-bound`). The fixture is a SEAM and not
+  a wall -- everything in it is walkable, so a plane-blind clip runs the ray to its
+  end and only the plane term can stop it, which is what makes the known-bad arm
+  informative instead of decorative -- and its `clip` is `PathingMap.clip` itself
+  bound to that geometry rather than a second copy of the walk. It drives the plane
+  term at the primitive (stop at the seam / full 900 u through it on the revert /
+  the term can only shorten / the `hasattr` door for a mesh predating it), the leg
+  bound as the pure function it is over all six of its named doors including
+  `lead-clear` and the refused-report case where the two legs' origins genuinely
+  differ, then joins both ends through the REAL receive arm on RUN-NPCTRACK-R1's
+  own geometry: the grant is byte-identical on all four arms, the known-bad arm
+  walks the model 766 u through a seam its own grant stopped at, and EACH term
+  closes it ALONE -- two independent conjuncts, so a run that reddens one localises
+  the change. The last two checks are the regression it must not cause: on open
+  ground the model keeps the client's own 766 u ray against the lead's derived 520,
+  because that 248 u is the margin over the client's own report trigger and capping
+  it would park the model mid-cruise. Floor 33 → 60 → 69 → 84 → 106 → 114 →
+  135 from the
   green runs. No vault, no client. ~2 s),
   `toolkit/authsrv/test_livewire.py` (the committed retail-decode recipe,
   RETHINK instrument #2 — the campaign's referee moved out of a deletable

@@ -16177,3 +16177,209 @@ The request was for an instrument and the answer was a **disassembly**, not a ru
 instructions in the client's own reader closed a question that would otherwise have cost a
 client session to answer with a column of zeros — and would then have looked like a null result
 about height rather than a decode failure. Ask the binary what a field IS before recording it.
+
+---
+
+## 1z-cc. THE 604 u IN RUN-NPCTRACK-R1's FIVE-SECOND SILENCE WAS **ONE MISSING KEYWORD** — this file has two navmesh clippers, `a2_clip_lead` has passed `pm.clip` its plane term since §1z-ap and `clip_to_walkable` never did, so the server's own model of the player walked **up a staircase the body was standing against**. Both halves fixed and each reverts alone; measured on the corpus, and the residual is named rather than tuned away
+
+**Asked after NPCTRACK-F8/F10 recorded the symptom and could not explain the number.**
+RUN-R1's write-up says the report track "dead-reckoned to (10616, 8524), 604 u from the
+body" and stops there. §1z-cc is where that 604 comes from. Ident `MOVECODE-1z-cc`.
+Every figure below is reproducible with
+`python studies/movecode/review/modelleg.py --check` — no client, no replay, no
+simulator: the capture and our own navmesh.
+
+### 1z-cc.1 ★★★ The specimen, and it reproduces to the last decimal — OBSERVED
+
+Capture `authsrv-20260906T092316-c1`, map 148, t = 25.34 → 30.32. One `0x003D`:
+
+```
+25.336  0x003D  reported (10011.915, 8524.033) plane 0, vec2 (767.371, 0.000), mt 1 (W)
+25.337  0x0025  MOVE_DIRECTION (1.000, 0.000) type 1
+25.338  0x0029  KBD LEAD (10120, 8524) from (10012, 8524)     lead_clipped, why=plane-seam
+25.338  kbd_leg arm  dest [10119.915, 8524.033]
+        ... five seconds of silence ...
+30.324  0x0047  MOVE_CANCEL_REPORT_POSITION (10011.915, 8524.033)   drift 604.1
+```
+
+The `0x0047` repeats the `0x003D`'s point **to the bit**: the body walked into the
+staircase side and never moved at all. Our `state["pos"]` was at (10616.016, 8524.033).
+
+Both numbers come out of the mesh on demand. On the real map-148 navmesh, from that
+report, along that vec2:
+
+| | call | stop | reach |
+|---|---|---|---|
+| the model leg (`clip_to_walkable`) | `pm.clip(..., step=16.0)` | (10616.016, 8524.033) | **604.10 u** |
+| the same ray, plane term added | `pm.clip(..., step=16.0, plane=0)` | (10109.877, 8524.033) | **97.96 u** |
+| the lead (`a2_clip_lead`) | `pm.clip(..., step=2.0, plane=0)` | (10119.915, 8524.033) | **108.00 u** |
+
+604.10 is `state["pos"]`'s captured value to five decimal places. **The 604 u was not
+dead reckoning gone wrong and it was not a stale belief — it was our own navmesh
+answering a question nobody had asked it properly.**
+
+### 1z-cc.2 ★★★ Why — `walkable()` means "on ANY plane", and only one caller knew
+
+`pathmap.clip`'s `plane` keyword has existed since **§1z-ap**, and its own docstring
+says what it is for: without it `walkable()` answers *"inside any trapezoid, ON ANY
+PLANE"*, so a ray from a bridge to the ground beneath it scores CLEAR at full length.
+RUN-1zAO measured that costing a 520 u warp on a lead crossing plane 29 → plane 0.
+
+The term was then wired into **exactly one** of the file's two clippers:
+
+* `a2_clip_lead` — the wire lead — resolves `plane_at(reported, prefer=state["plane"])`
+  and passes it, with an origin-seam door, a plane-ambiguity refusal, and a `why`
+  vocabulary that names `plane-seam` when the ray left the plane rather than the mesh.
+* `clip_to_walkable` — the server's own model leg, `state["dest"]` — did not.
+
+So at 25.34 the two clippers were handed **the same ray, from the same origin, at the
+same instant**, and answered 108 u and 604 u. The staircase at (10120, 8524) is plane 0
+below and plane 29 above; the lead stopped at the seam and said so, and the model walked
+up the stairs.
+
+This is [[guards-pointed-one-way]] arriving from the side: the check EXISTED, it was
+derived, it was tested, and it read one of the two callers. It is also §1z-bz's shape
+one layer down — that fix taught the *follow* to track a mover's plane; this one is our
+own player model doing the thing §1z-ap forbade.
+
+**And the wire never carried any of it.** `state["dest"]` feeds the world tick's
+integrator (`state["pos"] += unit(dest − pos) × 288 × dt`, clamped on arrival) and no
+send site. What reads the result is everything else: the NPC follow's `(px, py)`, the
+leash, `enemy_reach`, the re-path trigger, `_approach_send`. The four follow orders in
+the silence — "player at (10170,8524)", "(10329,…)", "(10487,…)", "(10616,…)" — are that
+integrator's ticks, printed.
+
+### 1z-cc.3 ★★ The corpus: 39 captures, 783 report→lead pairs — OBSERVED
+
+`modelleg.py`, over every gamesrv capture carrying `kbd_leg` rows (all map 148).
+
+**(a) The two clippers on one ray**, model-leg end against the grant's own reach:
+
+| | pairs | plane-BLIND ends past the grant | plane-AWARE |
+|---|---|---|---|
+| the mesh clipped the lead | 497 | **32**, max **765.0 u** | **2**, max **1.4 u** |
+| the lead was clear | 286 | 285, max 248.0 u | 249, max 248.0 u |
+
+The clear-lead column is **not** a defect and §1z-cc.5 is about why. The two survivors on
+the clipped side are the sampling-step difference (`COLLISION_STEP` 16.0 against
+`A2_LEAD_CLIP_STEP` 2.0), 1.4 u and 1.2 u.
+
+**(b) The cost, observed on the wire rather than modelled.** At each `0x0047` the capture
+records the drift between the client's own point and `state["pos"]`. Where that drift
+**equals** the plane-blind model reach, the body stood still for the whole leg and the
+drift *is* the model's walk — no inference, no replay. That is **35 of 193 stop reports**:
+
+| | p50 | p90 | max |
+|---|---|---|---|
+| drift today | **457.2 u** | 766.6 | 767.8 |
+| what the plane term leaves | **130.5 u** | 587.8 | 766.5 |
+
+5,370 u removed across the 35. **13 of the 35 are untouched and still over 100 u** —
+§1z-cc.6.
+
+### 1z-cc.4 ★★★ SHIPPED, two terms, each reverting alone
+
+1. **`MODEL_PLANE_CLIP`** (`--no-model-plane-clip`). `clip_to_walkable` resolves the
+   plane at the model's own standing point and passes it, exactly as `a2_clip_lead` does
+   — `plane_at(prefer=state["plane"])`, `None` disabling the term rather than guessing a
+   surface, `hasattr` so a mesh object predating the keyword takes the historical call
+   instead of raising inside the recv loop. **It cannot lengthen a leg**: `pm.clip`'s own
+   contract is that the plane term stops the walk earlier or not at all.
+2. **`MODEL_LEG_BOUND`** (`--no-model-leg-bound`). After the lead is computed and
+   clipped, the model leg is trimmed so it cannot **out-walk the order we just gave**,
+   *when our own mesh cut that order short*. It compares **reaches**, not endpoints: the
+   lead is anchored at `reported` and the model leg at `state["pos"]`, and those are the
+   same point only on an ACCEPTED report — comparing endpoints would silently mix frames
+   on exactly the refused report where the model is least entitled to an opinion. Its
+   six doors (`off` / `no-model` / `no-lead` / `lead-clear` / `within` / `bounded`) are
+   recorded on **every** `grant_verdict` row as `model_bound`, fired or not, because a
+   bound nobody can see not-firing is a wish.
+
+They are separate flags on §29's rule — shipping two defaults into one run convicts the
+pair and clears neither — and on the specimen **each closes it alone**: 604.1 → 97.96 with
+the plane term only, → 108.00 with the bound only, → 97.96 with both (`model_bound` reads
+`within`, the plane term having already done the work). Two independent conjuncts, so a
+run that reddens one localises the change ([[green-conjuncts-localize-the-change]]).
+
+The bound is not redundant behind the plane term even though that term closes 30 of the
+same 32 corpus events: the two clippers sample at different steps and `a2_clip_lead`
+carries doors this one does not. It is the check that survives them drifting apart.
+
+### 1z-cc.5 ★★ REFUSED, with the number on both sides: an UNCONDITIONAL cap at the leg's dest
+
+The obvious stronger bound is "the model may never end past the lead's dest, clipped or
+not". **Refused, and this is the arithmetic.** A clear lead is 520 u by §1z-ab.4's
+derivation; the model's ray is the client's own vec2, ~768 u. That 248 u is deliberate:
+the model must out-run the client's own report trigger, whose held-heading chord is
+**p95 513.8 / p99 515.1 u**. Capping at 520 leaves **4.9 u** — 17 ms at 288 u/s — before
+the model arrives, clamps, sets `state["walking"] = False`, and turns the next report's
+`0x0025` from a turn signal into a per-report send. That is a wire change, in a place
+retail is measured not to change (GWLP-R sends ChangeDirection only on a turn).
+
+Priced both ways on the corpus: the cap would touch **286 clear leads**, and buy at most
+246 u on **3** of the 13 §1z-cc.6 events. So the bound reads a **mesh refusal** and
+nothing else — where our navmesh has just told the client "you cannot get past here", our
+own model does not get past there either. Not a threshold, not a tuned constant, and no
+knob was added ([[derive-dont-iterate]]).
+
+### 1z-cc.6 ★★ The residual, NAMED and not claimed — it is mesh AGREEMENT, again
+
+13 of the 35 still-body stop reports are untouched: our mesh reads those rays clear the
+whole way, at their full ~766 u, and the client's body did not move a unit. Neither term
+can help — the plane term finds no seam, and the bound refuses `lead-clear` because the
+lead was not clipped either. `a2_clip_lead`'s own docstring already names the class: the
+corridor's five prop-class points, *"we carry no prop geometry, so those clips stay
+retail-only"*.
+
+Two things follow and neither is closed here. **(i)** On those rays the *lead* also goes
+out at its full 520 u, into geometry the client refuses — a pre-existing exposure of the
+grant, not of the model. **(ii)** This is §1o's conclusion for the fourth time: every
+server-side lever that consults our navmesh is capped by how well it agrees with
+ArenaNet's. **UNVERIFIED** which of the 13 are props and which are our trapezoids being
+coarse; settling it needs the geometry, not another guard.
+
+### 1z-cc.7 What this does and does not do for NPCTRACK-Q2
+
+**It does not close Q2.** Q2 is the *frame* — the server has no copy of the client's
+world-0 and the mirror's own error while the player moves is p50 ~20 u (F5/F10). This is
+a different quantity: `state["pos"]`'s error when the client is **silent because it is
+blocked**, which F5's table lists at p50 41.8 / p90 173.8 and which the 35 still-body
+stops put at p50 457 in its own tail. Removing 5,370 u of it makes the follow track a
+real body during the exact stretch F8 found the halt/re-follow loop in; whether that
+loop's four re-opens survive is a **run's** question, not this one's
+([[operator-symptoms-close-on-runs]]).
+
+### 1z-cc.8 Tests, and the fixture is a SEAM not a wall
+
+`test_kbdsync` §16, **+21 (floor 114 → 135, green 135)**. The fixture is `_Stairs`:
+everything in it is walkable, plane 0 to x = 1100 and plane 29 beyond, and its `clip` is
+`PathingMap.clip` **itself** bound to that geometry rather than a second copy of the walk.
+That choice is the section: a *wall* fixture clips with the plane term OFF and the whole
+section would pass while measuring nothing — the known-bad arm has to be informative, and
+here it walks the full 900 u through the seam and calls it clear.
+
+It drives the term at the primitive (stop at the seam / the revert arm through it / the
+term can only shorten / the `hasattr` door), the bound as the pure function it is across
+all six doors including the refused-report origin split, then both ends joined through the
+**real** receive arm on §1z-cc.1's geometry: **the grant is byte-identical on all four
+arms**, the known-bad arm walks the model 766 u past a seam its own grant stopped at, and
+each term closes it alone. The last two checks are the regression §1z-cc.5 refuses to
+cause — on open ground the model still walks its full 766 u and `model_bound` reads
+`lead-clear`.
+
+Run and green: `test_kbdsync` 135, `test_position_trust` 235, `test_d1lead` 118,
+`test_agentlife` 333, `test_keepalive` 32, `test_leadmargin` 25, `test_srclint` 26.
+`test_cancelwalk` has **two pre-existing failures on this branch's parent** (its
+three-site `0x0028` census finds two; verified against `HEAD` in a throwaway worktree
+before any edit here) — not this section's, and not fixed here.
+
+### 1z-cc.9 The method note
+
+The write-up that produced this section already contained the answer and nobody had
+subtracted: RUN-R1's paragraph gives the grant's endpoint (10120) and the model's (10616)
+one sentence apart. **Two of our own components had published contradictory positions for
+one body in one log line, and the reading passed as a symptom rather than a
+contradiction.** The check that finds this class is cheap and general: when two functions
+in one file answer the same geometric question, feed them one input and diff the answers
+— which is exactly what §16's four-arm table is, and what `modelleg.py`'s column (a) is
+over 783 real reports.
