@@ -306,9 +306,12 @@ tape this names 0 from 46.6 s, the parked branch then sends F9's zero-distance `
 under the terrace, which is where the player's −1102 came from. `test_agentlife`
 §`section_plane_reach` pins the measured shape, out-of-reach, a seam, a mesh without
 `planes_at`, the parked branch's correction and the revert arm (floor 323 → green
-341). **RECONSTRUCTION until a session on that terrace shows the body rise**: the
-prediction is a client plane of 0 within 0.5 s of parking there and a ground z within 15 u of
-the player's.
+341). ~~**RECONSTRUCTION until a session on that terrace shows the body rise**~~ **CONFIRMED,
+[RUN-R3.md](RUN-R3.md), the same afternoon, agent-driven:** the Hatcher parked on the same
+uncovered ground 80 u from the player, the correction `29 -> 0` went out **50 ms after the
+halt**, the client's plane read 0 on the next sample (82 of 84 in the exposure) and its height
+reader was live again — 14 u below the player on the ramp, −0.1 u beside it on the level. The
+owner's session read 52 u for 15 s.
 
 **What it does not cover:** a mover more than 80 u from the player on uncovered ground keeps
 its carried word (nothing to name it from); a plane-0 ground whose true height is a prop rather
@@ -321,11 +324,17 @@ and absent in our decode of the same data — worth a look at what `from_chunk` 
 - ~~`GROUNDZ-Q5` — ship the plane-change re-path~~ **SHIPPED, GROUNDZ-F9; CONFIRMED by R2 (F10,
   the client applies it in 90 ms).** Its blind spot — ground our mesh does not cover at all — is
   F11's, shipped 2026-09-06 and unverified against a client.
-- **`GROUNDZ-Q7` — why does our mesh have no trapezoid on the terrace above the stairs?** The
-  client walks it (both bodies did) and its height reader resolves plane 0 there for the player.
-  Either the pathing chunk carries it and `from_chunk` drops it, or the terrace is prop-borne
-  ground the trapezoid data never held. A decode question for the pathmap, with the feel tape's
-  points (11185–11459, 8849–9120) as the specimen.
+- **`GROUNDZ-Q7` — why does our mesh have no trapezoid on the terrace above the stairs — OR ON
+  THE STAIRS?** The client walks both (both bodies did) and its height reader resolves plane 0 on
+  the terrace and 29 on the stairs. R3 widened it: our decode says NONE under the player at 7 of
+  17 grant points up the staircase, so the keyboard lead has no origin there, every grant is the
+  report itself, and world-0 trails the body by 100–139 u for the whole climb — which is where
+  R3's six over-40 halts and MOVECODE-1z-bc's `pathCount == 0` class both live. Either the
+  pathing chunk carries these trapezoids and `from_chunk` drops them, or the stairs and terrace
+  are prop-borne ground the trapezoid data never held. A decode question for the pathmap, with
+  R3's points as the specimen: the stairs `(10266, 8156) … (11184, 9080)`, the terrace
+  `(11185–11459, 8849–9120)`. The first thing to try is the chunk's own trapezoid count against
+  ours for this file id.
 - **`GROUNDZ-Q1` — which of F6's three candidates causes the sink.** Separable by a live read of
   `+0x8C`, `+0x30` and `+0x40` at a known stair position.
 - **`GROUNDZ-Q2` — is the position updater per-frame?** NOT FOUND. `0x007EB7F0` is also a vtable
