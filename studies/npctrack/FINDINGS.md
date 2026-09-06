@@ -697,6 +697,17 @@ both are world-0's own sidestep after the park, the mechanism of F14 seen from t
   to the client, noisier than retail, whose server player IS the frame and whose copy therefore
   never arrives behind a player running at its own speed. The lever is the frame (Q2), not the
   follow.
+  **The corpus half, 2026-09-06 (after F14 closed Q2):** retail's follow point is *"the
+  server's copy of the player: 12–32 u from my own last report when that report was under
+  0.35 s old, 75–85 u when it was 0.5 s old"* (animref §38.3's ~74 u lag; the copy walks the
+  reported polyline one report late), so retail aims its hostile at what our mirror now models
+  (world-0), while ours aims at the freshest accepted report, ~100 u further along while the
+  player runs. The disc does not care (the client parks on the target agent's world-0 either
+  way, F14/F15); what differs is the walk's aim point and the server's own arrival/halt
+  bookkeeping, and no operator-visible consequence is predicted from it — so the lever is
+  recorded, not pulled: if the owner's eye ever names the cadence, the change is one line
+  (`_npc_follow_tick`'s point ← `_npc_frame`), with a run whose prediction is retail's
+  spacing (consecutive points 144 u apart at 288 u/s, the first ~74 u behind the report).
 - ~~**`NPCTRACK-Q7`**~~ **withdrawn with F13**: the sync copy has no local re-target; its
   setter is wire-only (R3's hook, 26 of 26). The mirror's velocity term is not needed for a
   mechanism that does not exist.
