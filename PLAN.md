@@ -1741,6 +1741,15 @@ openings) — the ruling does not wait on it.
 
 ## 8. Immediate next actions
 
+### ★★★ MOVEMENT 2026-09-05 — THE Z COLUMN CANNOT BE ADDED (MOVECODE-1z-cb): **the fourth word of every agent point is a hardcoded zero**, there is no height in the agent's movement record at all, and `AgAgent`'s 70 assert sites name none — settled from the pinned binary in three instructions, with no run
+
+**[FINDINGS](studies/movecode/FINDINGS.md) §1z-cb. Asked after §1z-ca.5 registered the residual ankle-sink as needing an instrument.**
+
+* `m_point` is documented across five files as `x f, y f, plane i, w i`, and `w` was the only z candidate. The client's own position reader at `0x005FFB40` copies the plane from `+0x80` into the out-point and then does `mov dword [ecx+0xC], 0` — **literal zero, every read**. Recording it would have produced a column of zeros and cost a client session to discover.
+* **The implication changes what the residual IS:** if height is not stored on the agent it is computed from `(x, y, plane)` — so **the plane word is the only height lever the wire has, and §1z-bz already made it correct.** RUN-1zCA measured every one of those inputs right through the sink (plane 29 on both copies for all 269 hold samples). The sink is therefore most likely the client's own height resolution on stair geometry, with nothing on the wire to change. **RECONSTRUCTION, not asserted.**
+* What would settle it is the render/model object, not `AgAgent` — a different arc, worth opening only if a cosmetic sink on a parked body matters. `movetap.py`'s `A_POINT` now carries the finding at the offset so nobody re-derives it.
+* **Method:** the request was for an instrument and the answer was a disassembly. Ask the binary what a field IS before recording it.
+
 ### ★★★ MOVEMENT 2026-09-05 — RUN-1zCA: **ANIMREF-RE §42.5 PASSES ON ALL FOUR CLAUSES** (MOVECODE-1z-ca), a month after it was written and could not be run. The follow climbs `(29, 0)`, sits `(29, 29)` and descends `(0, 29)` — retail's own three-phase sequence, three times over — and the Hatcher is on the stairs for **486 of the 511 samples the player is**, against RUN-1zAB's 48-of-48 `(0, 0)`
 
 **[FINDINGS](studies/movecode/FINDINGS.md) §1z-ca. Sheet [RUN-1zCA.md](studies/movecode/RUN-1zCA.md). First tape ever to carry the plane column.**

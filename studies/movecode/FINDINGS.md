@@ -16108,3 +16108,65 @@ since the tolerance shipped. `fencelatency` unchanged at 26 measured shuts, max 
 - **Zero `0x002C` means the AgTrack path had no exposure at all** in this run.
 - **The residual sink is unfixed and unexplained**, and the next step for it is an instrument
   (agent z, or a render-side read), not a patch.
+## 1z-cb. THE Z COLUMN CANNOT BE ADDED, and the binary says why in three instructions: **the fourth word of every agent point is a hardcoded zero.** There is no height in the agent's movement record at all, and `AgAgent`'s 70 assert sites name none. **So the plane word is the only height lever the wire has — and §1z-bz already made it correct**, which makes the residual ankle-sink most likely the client's own height resolution rather than anything we send
+
+**Asked:** "add the z column to agenttap" — the owner, after §1z-ca.5 registered the residual
+sink as needing an instrument. **Zero client runs: this is settled from the pinned binary.**
+Ident `MOVECODE-1z-cb`. OBSERVED unless marked.
+
+### 1z-cb.1 What was expected, and what is actually there
+
+The plane column (§1z-bx.5) cost three lines because its offset was already decoded four times
+over. The natural assumption was that z would be the same: `m_point` is documented across five
+files in this tree as **`x f, y f, plane i, w i`** — four dwords — and the fourth, `w`, has never
+been decoded. It was the only candidate.
+
+**It is a constant.** The client's own position reader at `0x005FFB40`, the function whose four
+returned dwords `0x005FF8B9`..`0x005FF8CE` write into `+0x78..+0x84`:
+
+```
+0x005FFBD7  mov eax, dword ptr [esi + 0x80]    ; the agent's PLANE
+0x005FFBDD  mov dword ptr [ecx + 8],  eax      ; -> the out-point's plane slot
+0x005FFBE0  mov dword ptr [ecx + 0xc], 0       ; -> the out-point's w slot, LITERAL ZERO
+```
+
+`w` is padding the client zeroes on every read, immediately after copying the plane it *does*
+carry. Recording it would have produced a column of zeros and cost a run to discover.
+
+### 1z-cb.2 The negative, stated so nobody pays for it twice
+
+- **No z anywhere in the agent's movement record.** `AGENT_SPAN` is `0xD0` and every decoded
+  field lies inside it: id, flags, world, stop, updated, maxspeed, movespeed, the three points
+  (each `x, y, plane, 0`), velocity, followed-agent. None is a height.
+- **`AgAgent`'s 70 assert sites name no height, z, elevation or terrain field** (`asserts.py`,
+  filtered). ArenaNet's own error strings do not describe one for this object.
+- `movetap.py`'s `A_POINT` now carries this finding at the offset itself, with the three
+  instructions, so the next session reads it before re-deriving it.
+
+### 1z-cb.3 ★★ What it implies about the sink — and this is RECONSTRUCTION
+
+If an agent's rendered height is not stored on the agent, it is **computed** from what is:
+`(x, y, plane)`. That has a consequence worth stating plainly, because it changes what the
+residual is:
+
+**The plane word is the only height lever the wire has, and §1z-bz has already made it
+correct.** RUN-1zCA measured it right through the sink: for all 269 samples of the hold, the
+Hatcher's `m_point` plane reads 29, the sync copy reads 29, and the segment and target points
+are infinite. Every input the client could resolve a height from was correct while the body sat
+ankle-deep in the tread.
+
+So the sink is most likely **the client's own height resolution on stair geometry** — its
+collision or terrain surface sitting slightly below the visual tread — and there is nothing on
+the wire to change. **RECONSTRUCTION, and deliberately not asserted:** this run cannot see the
+rendered height, which is the whole point of this section.
+
+**What would settle it** is the render/model object, not `AgAgent` — a different structure and a
+different arc. It is worth opening only if the sink turns out to matter; it is cosmetic, it is
+confined to a parked body on stairs, and the operator called the run *"a nice improvement"*.
+
+### 1z-cb.4 The method note, because it is the reusable part
+
+The request was for an instrument and the answer was a **disassembly**, not a run. Three
+instructions in the client's own reader closed a question that would otherwise have cost a
+client session to answer with a column of zeros — and would then have looked like a null result
+about height rather than a decode failure. Ask the binary what a field IS before recording it.

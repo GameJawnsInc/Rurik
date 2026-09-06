@@ -460,7 +460,19 @@ A_STOP = 0x48              # m_timeStopMovement, absolute ms, 0 = not moving
 A_UPDATED = 0x58           # m_timeUpdated -- the epoch m_point is dated to
 A_MAXSPEED = 0x5C          # float, units/second
 A_MOVESPEED = 0x60         # float multiplier, AGENT_MAX_MOVE_SPEED = 1.0
-A_POINT = 0x78             # m_point   : x f, y f, plane i, w i
+# THE FOURTH WORD IS A HARDCODED ZERO, AND IT IS NOT A HEIGHT (MOVECODE-1z-cb).
+# Asked for as "the z column" after an operator saw a body sunk ankle-deep into a
+# stair tread, and settled from the binary rather than by a run: the client's own
+# position reader at 0x005FFB40 does
+#     0x005FFBD7  mov eax, [esi+0x80]      ; the agent's PLANE
+#     0x005FFBDD  mov [ecx+8], eax         ; -> the out-point's plane slot
+#     0x005FFBE0  mov dword [ecx+0xC], 0   ; -> the out-point's w slot, LITERAL 0
+# so `w` is padding the client zeroes on every read. There is NO z in the agent's
+# movement record at all, and AgAgent's 70 assert sites name no height, z,
+# elevation or terrain field. Do not add a "z column" here: the field does not
+# exist in this block, and the only candidate is that constant. If a rendered
+# height is ever needed it lives on the render/model object, not on AgAgent.
+A_POINT = 0x78             # m_point   : x f, y f, plane i, w i (w == 0, see above)
 A_SEGMENT = 0x88           # m_segmentPoint (assert AgAgent:1143)
 A_TARGET = 0x9C            # m_targetPoint  (assert AgAgent:1144) -- the landing point
 A_VEL = 0xB0               # vx f, vy f, units/second
