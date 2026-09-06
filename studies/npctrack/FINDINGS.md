@@ -478,6 +478,10 @@ and ≤ 30 u held-heading transients. Q2 stays open on the predictor only.
   comparator at fault; 11.8 u at the halt's instant against 46–68; P3 met; P4b refuted and
   explained (Q6)**; the control at 10:06: **P1′–P3′ MET, 54.8 u against 11.8** — Q1 CONFIRMED with a
   control.
+- **[RUN-R2.md](RUN-R2.md)** — registered 2026-09-06 after MOVECODE-1z-cc/1z-cd landed: the same
+  route on the tree with the report track bounded at the wall; Q1's number a second time (P1–P3),
+  and P5, that no follow order during the silent leg names a point > 120 u from the body (R1 had
+  seven at 158–604 u).
 
 ## Method notes
 
