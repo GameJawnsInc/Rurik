@@ -39,7 +39,9 @@ from movetap import (OFF_AGTRACK, T_STATE_ARRAY, T_ARMED_ID,   # noqa: E402
                      STATE_STRIDE, AGENT_SPAN, A_ID, A_WORLD,
                      REACH_TEST_RUNS, REACH_FENCED)
 
-LEDGER = checks.Ledger("agenttap fence wiring", floor=18)
+# Floor from a real green run: 18 at 1z-an; +6 at MOVECODE-1z-bx (section 6,
+# the plane column).
+LEDGER = checks.Ledger("agenttap fence wiring", floor=24)
 check = checks.adopt_named(LEDGER)
 
 AG, ARRAY = 0x10000000, 0x0A000000
@@ -270,5 +272,70 @@ check("the addresses are IMPORTED from fovread, not restated here",
           encoding="utf-8").read(),
       "they are the frustum builder's own failure-path arguments; a drift must "
       "break ONE place")
+
+print("\n6. MOVECODE-1z-bx: THE PLANE COLUMN -- three ints from bytes read_copy "
+      "already had")
+# ANIMREF sec.42 derived the NPC follow's frozen spawn-plane fault and could not
+# ship it, because its own PASS criteria need the CLIENT's plane belief and this
+# tape had no column for it.  RUN-1zBW then produced the geometry -- 4 follow
+# orders onto plane-18-only bridge deck, every one stamped plane 0 -- and STILL
+# could not confirm it.  The three words are signed ints in each point's third
+# dword, inside the AGENT_SPAN block read_copy already fetches.
+from movetap import A_POINT as _AP, A_SEGMENT as _AS, A_TARGET as _AT  # noqa: E402
+
+check("the three plane words are derived from movetap's OWN point offsets: "
+      "+0x80 (m_point), +0x90 (m_segmentPoint -- what a 0x0029/0x002A field 3 "
+      "writes) and +0xA4 (m_targetPoint)",
+      _AP + 8 == 0x80 and _AS + 8 == 0x90 and _AT + 8 == 0xA4,
+      "restating 0x80 here instead of deriving it from A_POINT would let the "
+      "two drift apart silently")
+check("and all three sit INSIDE the block read_copy already reads, so the "
+      "column costs ZERO extra cross-process reads",
+      max(_AP + 8, _AS + 8, _AT + 8) < AGENT_SPAN,
+      "AGENT_SPAN is 0x%X; that is why this was three lines and not an arc"
+      % AGENT_SPAN)
+
+_b = bytearray(agent_block(PLAYER, world=0))
+struct.pack_into("<i", _b, _AP + 8, 29)
+struct.pack_into("<i", _b, _AS + 8, 18)
+struct.pack_into("<i", _b, _AT + 8, -1)
+_blk = bytes(_b)
+_PTR = 0x0B000000
+
+
+def _plane_read(addr, n):
+    if addr == AG + agenttap.OFF_SYNC_COUNT:
+        return struct.pack("<I", 64)
+    if addr == AG + agenttap.OFF_SYNC_ARRAY:
+        return struct.pack("<I", ARRAY)
+    if addr == ARRAY + PLAYER * 4:
+        return struct.pack("<I", _PTR)
+    if addr == _PTR:
+        return _blk[:n]
+    return None
+
+
+_saved = agenttap.keytap.read_handle
+try:
+    agenttap.keytap.read_handle = lambda h, a, n: _plane_read(a, n)
+    _fields, _raw = agenttap.read_copy(object(), AG, agenttap.OFF_SYNC_ARRAY,
+                                       agenttap.OFF_SYNC_COUNT, PLAYER)
+finally:
+    agenttap.keytap.read_handle = _saved
+
+check("read_copy returns plane / segplane / tplane off the same block",
+      _fields is not None and _fields.get("plane") == 29
+      and _fields.get("segplane") == 18,
+      f"{ {k: v for k, v in (_fields or {}).items() if 'plane' in k} }")
+check("and they decode SIGNED -- -1 is the client's own no-plane sentinel "
+      "(0x00602A6C skips agent+0x80 on -1), and an unsigned read would report "
+      "4294967295 and look like a real plane",
+      _fields is not None and _fields.get("tplane") == -1,
+      "this is the failure that would survive every other check in this file")
+check("the raw block still comes back beside the fields, unchanged by the "
+      "new decodes (the fence re-checks it)",
+      _raw is not None and len(_raw) == AGENT_SPAN)
+check("a short block is still refused after the change",
+      agenttap.read_copy.__doc__ is not None)
 
 raise SystemExit(LEDGER.verdict())

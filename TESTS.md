@@ -7510,7 +7510,7 @@ the same-tick ALIAS**: the
   `authsrv.py` stay tree-relative, so a worktree session scores the real corpus
   against its OWN tree's prose and trigger mirror.
 
-  `toolkit/clientscan/test_agenttap.py` (**the AGTRACK FENCE column agenttap
+  `toolkit/clientscan/test_agenttap.py` (**§6 is MOVECODE-1z-bx (2026-09-05): THE PLANE COLUMN.** `agenttap` now records `plane`/`segplane`/`tplane` — `m_point`'s, `m_segmentPoint`'s (what a `0x0029`/`0x002A` field 3 writes) and `m_targetPoint`'s plane words, signed ints at +0x80/+0x90/+0xA4. The section DERIVES those offsets from `movetap`'s own `A_POINT`/`A_SEGMENT`/`A_TARGET` rather than restating them (so the two cannot drift), pins that all three sit inside the `AGENT_SPAN` block `read_copy` already reads — **zero extra cross-process reads, which is why the gap that blocked ANIMREF §42 for a month cost three lines** — and pins the **signed** decode, because `-1` is the client's own no-plane sentinel and an unsigned read would report 4294967295 and look like a real plane. Floor 18 → 24. The rest is **the AGTRACK FENCE column agenttap
   gained for MOVECODE-1z-an / FINDINGS §1z-an.** `clientControlled` is the dword the
   dispatcher's `0x00606002` tests before the three-gate snap test runs at all — the
   field REALFIX §0.11's two-stage lock account turns on — and §1z-am named reading it

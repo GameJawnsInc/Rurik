@@ -52,8 +52,10 @@ from test_position_trust import receive_arm, Sent, FakeRec   # noqa: E402
 # 33 at 1z-t; +27 at 1z-y (sections 10-11: the held heading, the lead kill);
 # +9 at 1z-z (section 12: the matched plane word on the lead grant); +15 at
 # 1z-aa (section 13: the fence-shutter gate); +22 at 1z-ae (section 14:
-# refresh before maturation).
-LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=106)
+# refresh before maturation); +8 at 1z-bw (section 15: the fence latch is
+# BOUNDED by the client's own measured re-open time, with the unbounded
+# behaviour kept as the revert arm and exercised).
+LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=114)
 check = checks.adopt(LEDGER)
 
 SRC = open(authsrv.__file__, encoding="utf-8").read()
@@ -894,6 +896,90 @@ def main():
           "A WALL AHEAD: refresh-blocked, nothing sent -- and the arrival that "
           "follows STILL says refresh-late, on its own latch. Sharing one latch "
           "made a whole run's `zero refresh-late` unreadable", f"{rows}")
+
+    print("\n15. MOVECODE-1z-bw: the fence latch is BOUNDED by the client's own "
+          "measured re-open time")
+    # section 13's gate degrades a lead while our latch is set, and the latch is
+    # cleared in ONE place -- a keyboard walk-start, which needs a 0x0047 first.
+    # A player who walks without stopping holds it set for as long as they walk:
+    # on RUN-1zBW, 45.25 s in one window, 72 of 163 fired grants zeroed, while
+    # the CLIENT's own fence dword read OPEN for 462 of the 498 tape samples
+    # inside it. The client re-opens by itself in <= 6.087 s (26 measured shuts,
+    # 14 tapes -- review/fencelatency.py), so past that the gate is degrading a
+    # grant for a window that is no longer there.
+    check(authsrv.FENCE_LATCH_MAX_AGE == 8.0
+          and "--no-fence-latch-timeout" in SRC
+          and "FENCE_LATCH_MAX_AGE = None if a.no_fence_latch_timeout else 8.0" in SRC,
+          "the bound ships at 8.0 s with its revert flag, rebound through a "
+          "declared global",
+          "unbounded is what held the lead off for 28.7% of RUN-1zBW")
+    check(authsrv.FENCE_LATCH_MAX_AGE > 6.087,
+          "and it sits ABOVE the client's measured maximum shut (6.087 s), so "
+          "it can never cut a genuinely-shut window short -- the bound caps the "
+          "pathological case, it does not tune the normal one",
+          "a bound under the measured max would trade this defect for the one "
+          "the gate exists to prevent")
+    # INSIDE the window: unchanged from section 13, so the bound did not
+    # quietly disable the gate.
+    st = {"pos": (1000.0, 2000.0), "plane": 7, "pos_seen": 0.0,
+          "fence_shut_at": _t.time() - 0.2, "kbd_moving_at": _t.time() - 0.3}
+    st, w = drive_heading(REPORT, lead=True, state=st)
+    mv = w.of(MOVE)
+    check(len(mv) == 1 and mv[0][1][1] == [1000.5, 2000.25]
+          and st["_rec"].of("grant_verdict")[-1]["lead_clip_why"] == "fence-shut",
+          "INSIDE the bound the gate still degrades exactly as before -- the "
+          "timeout did not silently switch the gate off",
+          f"sent {mv[0] if mv else None}")
+    # PAST the window: the lead fires. This is the whole change.
+    st = {"pos": (1000.0, 2000.0), "plane": 7, "pos_seen": 0.0,
+          "fence_shut_at": _t.time() - 20.0, "kbd_moving_at": _t.time() - 30.0}
+    st, w = drive_heading(REPORT, lead=True, state=st)
+    mv = w.of(MOVE)
+    check(len(mv) == 1 and mv[0][1][1] == [1520.5, 2000.25]
+          and "KBD LEAD" in mv[0][2],
+          "PAST the bound, mid-walk with no walk-start in sight, the lead "
+          "FIRES at its full 520 u -- the 45 s of zeroed grants is what this "
+          "removes",
+          f"sent {mv[0] if mv else None}")
+    check(st.get("fence_shut_at") is not None,
+          "and the latch itself is NOT cleared -- the bound is read at the "
+          "gate, so a later 0x002C still re-stamps it and the telemetry keeps "
+          "saying the fence was shut",
+          "clearing it would lose the fact that we shut the fence at all")
+    # THE KNOWN-BAD ARM: with the timeout reverted the old behaviour returns.
+    # A guard that passes on the broken arm is measuring the wrong quantity.
+    _saved = authsrv.FENCE_LATCH_MAX_AGE
+    try:
+        authsrv.FENCE_LATCH_MAX_AGE = None
+        st = {"pos": (1000.0, 2000.0), "plane": 7, "pos_seen": 0.0,
+              "fence_shut_at": _t.time() - 20.0, "kbd_moving_at": _t.time() - 30.0}
+        st, w = drive_heading(REPORT, lead=True, state=st)
+        mv = w.of(MOVE)
+        check(len(mv) == 1 and mv[0][1][1] == [1000.5, 2000.25]
+              and st["_rec"].of("grant_verdict")[-1]["lead_clip_why"] == "fence-shut",
+              "REVERT ARM (--no-fence-latch-timeout): the same 20 s latch "
+              "degrades the lead again, so this section's positive really is "
+              "the bound and not something else in the fixture",
+              f"sent {mv[0] if mv else None}")
+    finally:
+        authsrv.FENCE_LATCH_MAX_AGE = _saved
+    check(authsrv.FENCE_LATCH_MAX_AGE == 8.0,
+          "and the module global is restored after the revert arm")
+    # the gate OFF entirely still wins over the bound.  NOTE the lever: this
+    # check first set authsrv.KBD_LEAD_FENCE_GATE directly and went RED,
+    # because drive_heading takes its OWN `fence=` argument and rebinds the
+    # global inside the call -- a module-level assignment here is overwritten
+    # before the arm runs.  The failure was the fixture, not the code, and it
+    # is exactly the "prove which lever you are pulling" trap.
+    st = {"pos": (1000.0, 2000.0), "plane": 7, "pos_seen": 0.0,
+          "fence_shut_at": _t.time() - 0.2, "kbd_moving_at": _t.time() - 0.3}
+    st, w = drive_heading(REPORT, lead=True, state=st, fence=False)
+    mv = w.of(MOVE)
+    check(len(mv) == 1 and mv[0][1][1] == [1520.5, 2000.25],
+          "--no-kbd-lead-fence-gate still wins over the bound: gate off means "
+          "no degradation at any latch age",
+          f"sent {mv[0] if mv else None}")
+
     return LEDGER.verdict()
 
 

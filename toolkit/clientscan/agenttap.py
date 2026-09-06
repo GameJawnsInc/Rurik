@@ -177,6 +177,28 @@ def read_copy(handle, agbase, array_off, count_off, aid):
         "tx": f32(blk, A_TARGET), "ty": f32(blk, A_TARGET + 4),
         "vx": f32(blk, A_VEL), "vy": f32(blk, A_VEL + 4),
         "follow": u32(blk, A_FOLLOW),
+        # THE PLANE WORDS (MOVECODE-1z-bx, 2026-09-05).  Each of the three
+        # points is (x, y, plane) and the plane is a SIGNED int in the third
+        # dword -- +0x80 for m_point, +0x90 for m_segmentPoint, +0xA4 for
+        # m_targetPoint (the one a 0x0029/0x002A field 3 writes).  Four
+        # independent witnesses: movetap's own A_POINT/A_SEGMENT/A_TARGET
+        # arithmetic, agents.py's CHECKSUM_FIELDS naming +0x80 as the int,
+        # MOVECODE FINDINGS sec.433/677 (`out->plane = [esi+0x80]`), and
+        # agtrack_mirror.bake_grant's independent statement of the split.
+        # movetap already emits all three per sample (movetap.py:1361-1366).
+        #
+        # WHY IT WAS MISSING AND WHY IT COSTS NOTHING.  ANIMREF sec.42 derived
+        # the NPC follow's frozen spawn-plane fault and could not SHIP it,
+        # because its own PASS criteria need the client's plane belief and
+        # this tape had no column for it -- so RUN-1zBW produced the geometry
+        # (4 follow orders onto plane-18-only bridge deck, all stamped plane
+        # 0) and STILL could not confirm it.  The read is free: read_copy
+        # already pulls the whole AGENT_SPAN (0xD0) block in one call and
+        # 0x80 < 0x90 < 0xA4 < 0xD0, so these are three decodes of bytes
+        # already in hand and ZERO extra cross-process reads.
+        "plane": i32(blk, A_POINT + 8),
+        "segplane": i32(blk, A_SEGMENT + 8),
+        "tplane": i32(blk, A_TARGET + 8),
     }, blk
 
 

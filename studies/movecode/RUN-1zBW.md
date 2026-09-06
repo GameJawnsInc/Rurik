@@ -119,4 +119,72 @@ Score the wire **before** reading the operator's words, so the numbers are not f
 
 ---
 
-## RESULT — not yet run.
+## RESULT — RAN 2026-09-05 21:31, 190 s. **P1 MET ("felt good"), and the run found a defect nobody had registered.** Scored in [FINDINGS.md](FINDINGS.md) **§1z-bw** (movement, the fence-gate latch, the corrected comparator) and **§1z-bx** (the two plane faults, the aggro death, the plane column).
+
+### The operator, verbatim (asked after the session, answers unedited)
+
+1. *"there were maybe 2 or 3 short warps"*
+2. *"felt good"*
+3. *"didn't swing, but had inconsistent aggro behavior and didn't walk on the bridge but
+   rather terrain-walked on the ground below"*
+4. *"i was able to get a terrain walk myself near the stairs by the spawn by spam clicking
+   the top and bottom floors of the stairs over and over (hard to replicate, but did
+   happen)"*
+
+**Compare RUN-FEEL, 2026-09-03 08:46, the session that convicted the lead:** *"still seeing
+desync, enemy at long range, and couldn't resume attacking after some point. bad run."*
+Q3's "didn't swing" answers a question about swinging **from too far**, so the long-range
+swing symptom reads ABSENT here. That is the 08:46 primary symptom, gone.
+
+### The wire, scored BEFORE the answers were read
+
+| | |
+|---|---|
+| validity (P5) | **MET** — `KBD_SYNC_LEAD_ON` True, **no `agtrack_guard.*` key** (waiver deleted = right binary), `D1_LEAD` False, origin `ours` |
+| exposure (§2's floor) | **MET, both arms** — 229 × `0x003D`, 92 × `0x003E`, 13 × `0x0047`, 182 `kbd_leg`, 242 accepted reports over 190.4 s |
+| tape | 2,064 samples / 189.2 s, 64 lost polls (3%) |
+| re-pins | 5 × `0x002C`, **0 violations of the harm bound**, every one on a FRESH report (age 0.00–0.16 s). Classes: `gate1-red` ×3, `arrival-risk` ×1, plus one APPROACH re-pin (other sender) |
+| enslavement | **MIXED at 0.1%** (2 of 1,930 moving samples) — under the 25% bar, so the body was substantially FREE and the separation figure stands |
+| enemy's own two copies | p50 **0.0**, p90 9.8, max 39.7 — the Hatcher is faithful to itself; this is the player's desync, as §40.11 read it |
+| gate 2 | no `gate2-offmesh` fire — consistent with §1z-bv |
+
+**Separation, split by regime before quoting** (moving-only, `position_at` semantics; the
+pooled figure is two populations with different treatments and must not be compared to a
+scripted run):
+
+| regime | n | p50 | p75 | p90 | max | body moved |
+|---|---|---|---|---|---|---|
+| **keyboard** (the lead's arm) | 1404 | **110.5** | 225.9 | 421.2 | 680.0 | 34,016 u |
+| click (router's arm) | 525 | 91.5 | 387.5 | **849.6** | 872.9 | 14,066 u |
+| pooled (what `w0score` prints) | 1930 | 107.9 | 263.1 | 507.5 | 872.9 | — |
+
+Comparators, all moving-only p50 on **scripted** keyboard routes: RUN-1zBO **13.0**,
+RUN-1zBI 26.3, RUN-1zBL 31.2, RUN-1zBM (lead OFF) **251.6**; retail's own copy trails
+**~74**.
+
+### What is open, and it is the interesting part
+
+**The keyboard arm reads 110.5 u where RUN-1zBO read 13.0 u** — same binary, same map, same
+arm. The regime split does NOT explain it away, and the three `gate1-red` re-pins corroborate
+it from a second instrument (the server's own model independently found the copies > 299.33 u
+apart). It sits between the lead-off 251.6 and retail's 74. **And the operator called it
+"felt good", which is the recalibration that matters: 110 u of world-0 lag did not produce the
+symptom.** Free play turns; the scripted route did not. Being scored.
+
+**Two NEW plane faults, and they are probably one bug with two faces** — the NPC's follow
+crossing under a bridge, and the player's own body terrain-walking at a staircase under
+alternating clicks. A bridge and a staircase are separate planes. ANIMREF §42 derived exactly
+this for the Hatcher (the follow's plane words frozen at spawn, retail tracking the mover's
+plane) and did **not** ship it, for two stated reasons: **zero cross-plane hostile exposure in
+the corpus, and no plane column in `agenttap`.** This session carries the exposure — the player
+crossed planes **6 times** (0→19 at 53.8 s, back at 59.3; 0→29 at 81.9, back at 90.4; 0→29 at
+173.2, back at 176.2) with **7 `plane_repair_due`** rows, four of them clustered in the two
+seconds around the plane-19 crossing. The instrument gap is real and confirmed here: the tape's
+per-copy fields are `flags, follow, maxspeed, movespeed, ptr, segx, segy, stop, tx, ty,
+updated, vx, vy, world, x, y` — **no plane**. So every claim about what plane the CLIENT
+believed an agent was on is RECONSTRUCTION until that column exists.
+
+**One thing to reconcile with the operator:** the wire carries **5 × `attack_started: agent 10
+swings at the player`**. Read together with Q3 that most likely means the swings happened but
+not from an impossible range; if the operator saw *no* swing at all, that is a separate symptom
+and this row is the evidence for asking again.

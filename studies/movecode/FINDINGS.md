@@ -15452,3 +15452,330 @@ session that convicted it (RUN-FEEL, 2026-09-03 08:46) was mouse-driven, where n
 terms engage. [RUN-1zBW.md](RUN-1zBW.md) registers that run, and registers the exposure floor
 first, because an ordinary clicking session gives the lead **zero trials** and RUN-FEEL is the
 precedent for reading that as a null.
+## 1z-bw. RUN-1zBW — the operator's own session under the shipped default. **The primary question is MET** ("felt good"; the 08:46 long-range swing symptom absent) — and the run found a defect nobody had registered: **our own fence gate held the keyboard lead off for 28.7% of the session, on a belief the client's own fence dword contradicts 93% of the time.** Bounded here; `--no-fence-latch-timeout` reverts. Two corrections to the arc's own record: **RUN-1zBO's 13.0 u comparator is inflated by parked samples** (freshness-matched the gap is ~2.2×, not 8.3×), and **P4 clause 1 was unfalsifiable as written**
+
+**Ran 2026-09-05 21:31, 190 s, the operator driving.** Sheet [RUN-1zBW.md](RUN-1zBW.md) with
+the verbatim answers. Scored by two adversarial fan-outs (10 agents, 62 claims, 45
+challenged); everything below survived a refuter that recomputed it. OBSERVED unless marked.
+
+### 1z-bw.1 ★★★ The operator's words, and why they are the headline
+
+> 1. *"there were maybe 2 or 3 short warps"* · 2. *"felt good"*
+> 3. *"didn't swing, but had inconsistent aggro behavior and didn't walk on the bridge but
+>    rather terrain-walked on the ground below"*
+> 4. *"i was able to get a terrain walk myself near the stairs by the spawn by spam clicking
+>    the top and bottom floors of the stairs over and over"*
+
+Against RUN-FEEL (2026-09-03 08:46), the session that convicted the lead: *"still seeing
+desync, enemy at long range, and couldn't resume attacking after some point. bad run."*
+Q3's "didn't swing" answers a question about swinging **from too far**, so that symptom reads
+ABSENT. **P1 is MET.** The wire agrees the Hatcher was engaged — 5 `attack_started` — so this
+is not a zero-exposure pass.
+
+**And it recalibrates the arc's proxy.** World-0 trailed the drawn body by p50 110.5 u on the
+keyboard arm and the operator called it good. Separation has been this arc's stand-in for the
+symptom since §1z-t; two operator sessions now say the mapping is loose in the good direction.
+Do not read a separation figure as a felt outcome without one of these.
+
+### 1z-bw.2 The registered predictions, and one that could not fail
+
+| | registered | measured |
+|---|---|---|
+| **P5** validity | right binary | **MET** — `KBD_SYNC_LEAD_ON` True, **no `agtrack_guard.*` key**, `D1_LEAD` False, origin `ours`, logs clean, RTT 14 ms |
+| **exposure** | ≥8 held-key legs ≥2 s, ≥20 `0x003D` | **MET** — 229 `0x003D`, 92 `0x003E`, 13 `0x0047`, 182 `kbd_leg`, both arms |
+| **P1** primary | no warp/stick while walking | **MET** by the operator; one wire-corroborated warp (§1z-bw.5) |
+| **P4** clause 2 | no leg coincident at walk-start and stop | **MET** — 0 of 12, min displacement 5.18 u (RUN-1zBL: 3 of 7 at 0.0) |
+| **P4** clause 1 | no `0x002C` in an opening glide | **ZERO TRIALS — the clause cannot fail.** See below |
+| gate 2 | — | **no trials** — 0 of 4 fires and 0 of 256 guard rows name `gate2-offmesh`, consistent with §1z-bv |
+
+**P4 clause 1 was unfalsifiable as written, and that is a runsheet defect worth keeping.** All
+four AGTRACK pins are sent **synchronously from the `0x003D` handler** (`authsrv.py:19250`),
+0.331–0.353 ms after the report that triggered them, and the glide window is closed by the
+next report. So a pin can land strictly inside a glide only if it fires on the walk-start's
+*own* report. Under the arc's leg definition the count is 0 of 5; under a click-aware one it is
+1 of 5; fire 1 misses the window by **0.333 ms**. The number was never going to measure
+behaviour. A predicate whose value is fixed by the call site is not a prediction.
+
+### 1z-bw.3 ★★★ THE FINDING — our fence gate held the lead off for 28.7% of the session, and the client disagreed
+
+`KBD_LEAD_FENCE_GATE` (§1z-aa) degrades a keyboard or D1 lead to the zero-lead point while
+`state["fence_shut_at"]` is set. That latch is stamped at **every** player `0x002C`
+(`authsrv.py:4705`) and cleared in exactly **one** place (`:19202-19208`): a keyboard
+**walk-start**, which needs a preceding `0x0047` to have cleared `kbd_moving_at`.
+
+**So a player who walks without stopping holds it set for as long as they walk.**
+
+| | |
+|---|---|
+| fired grants degraded to zero-length | **72 of 163 (44.2%)**, every one `lead_src=fallback`, `lead_clip_why=fence-shut` |
+| time held | **54.72 s of 190.4 s (28.7%)**, three windows: 1.72 s, 7.76 s, **45.25 s** |
+| why the 45 s | the re-arm needs a walk-start; the operator walked **53.6 s** without a stop |
+| the telemetry lied | logged `shut_for` 1.716 / 2.801 / **8.087** s against true 1.72 / 7.76 / **45.25** — the field is re-stamped by every later `0x002C`, so it measures from the last pin, not from when degradation began |
+
+**The gate's own derivation names the assumption and marks it unmeasured:** *"the walk-start
+applier — the only re-armer — never runs, and the fence never re-opens"*, cleared at a
+walk-start *"and by nothing else: not a stop, not a click, **which the tape did not
+measure**"*. The tape has now measured it, and **the assumption is false**:
+
+| the client's own fence dword (`clientControlled`, recorded by `agenttap` since §1z-an) | |
+|---|---|
+| corpus | **14 tapes, 32 player `0x002C`, 26 measured shuts** |
+| client shut duration | min 0.809 · p50 3.025 · p90 3.823 · **max 6.087 s** |
+| client fence read OPEN | 8,278 of 11,615 samples corpus-wide (71.3%); **1,869 of 2,064 (90.6%) in RUN-1zBW** |
+| inside our longest window | the client read **OPEN for 462 of 498 samples (93%)** |
+| our latch outlived the client's fence by | 0.77 s, 0.77 s and **9.50 s** |
+
+**THE FIX, shipped here.** `FENCE_LATCH_MAX_AGE = 8.0` s, read at the gate. The bound is the
+client's measured maximum **plus margin**, not a tuned number: 8.0 sits above 6.087 so it can
+never cut a genuinely-shut window short, and it caps the pathological case instead of leaving
+it unbounded. It is deliberately loose — p90 is 3.823, so a later session with more shuts may
+tighten it **from the distribution**. The latch itself is not cleared, so a later `0x002C`
+still re-stamps it and the telemetry still records that we shut the fence.
+`--no-fence-latch-timeout` restores the unbounded latch. `studies/movecode/review/fencelatency.py`
+is the instrument and prints the per-pin rows.
+
+**Its own tooling defect, found and fixed:** the first draft globbed `agenttap-*.jsonl` and so
+**excluded RUN-1zBW's own tape** (`1zbw-agenttap.jsonl`) — the corpus constant was computed
+without the run that motivated it. Fixed before the number above was taken; with 1zBW included
+the pin count goes 27 → 32 and two pins that never shut the client's fence appear.
+
+**Tests:** `test_kbdsync.py` §15, floor 106 → **114**. Inside the bound the gate degrades
+exactly as before (so the timeout did not silently disable it); past it the lead fires at its
+full 520 u; the latch is not cleared; **the revert arm reproduces the old behaviour**, so the
+positive is the bound and not the fixture; `--no-kbd-lead-fence-gate` still wins. One check
+went red on its first draft because it set the module global while `drive_heading` rebinds it
+from its own `fence=` argument — the fixture was wrong, not the code, and the lever is now the
+harness's own.
+
+### 1z-bw.4 ★★★ THE COMPARATOR WAS NEVER LIKE-FOR-LIKE — §1z-bo's 13.0 u is inflated by parked samples
+
+The naive reading of this run is "110.5 u against RUN-1zBO's 13.0 u, eight times worse". A
+regime split refuses the pooled figure first (keyboard n=1404 **p50 110.5** / p90 421.2; click
+n=525 p50 91.5 / p90 849.6), and the keyboard arm really is where it sits — so this is not a
+pooling artifact. But the **comparator** does not survive:
+
+- **RUN-1zBO is 67% parked** (964 samples, 316 moving); RUN-1zBW is **94% moving** (2,064 /
+  1,930). A median over mostly-parked samples is a sample-and-hold reading of two caches
+  holding the same old value.
+- **Freshness-matched** — restricting both to samples where both copies were freshly updated —
+  1zBO lifts to **≈47–64 u raw / 50–69 live** and 1zBW to **≈131–148 raw / 120–140 live**. The
+  real difference is **~2.2–2.5×, not 8.3×.**
+- It is **not** an artifact of `live()`'s extrapolation: on the raw column the gap is *larger*
+  (99.7 vs 0.3 u). This was proposed as the explanation and refuted.
+- Retail's own copy trails ~74 u (§38.3), so the freshness-matched 1zBO figure is roughly
+  retail's and 1zBW's is about twice it.
+
+**Quote §1z-bo's 13.0 u with this beside it from now on.** It is a real measurement of a
+mostly-parked scripted route, not a target free play can be held to.
+
+The 110.5 u itself is **not** explained by the obvious candidates. Turning: on the wire's own
+heading the correlation is flat (rho −0.10), but that instrument is invalid because a turn
+*triggers* the report that refreshes the anchor; on the tape's own heading rho is **+0.207**.
+Turning contributes and is not the driver. Report staleness owns the **tail** (p90 climbs
+468 → 515 u) but not the median (within-interval rho +0.100 over 83 intervals). Speed
+composition was proposed and **refuted**: the speed–separation relation has the opposite shape
+inside 1zBO, and standardising on speed and lead band together moves 110.5 only to 100.5.
+**What does move it is the fence gate**: with the lead live the keyboard arm reads p50 83.1 u,
+with it gated off **200.7 u**, and across the 137.80 s re-arm the figure collapses from 159.1 u
+to **12.7 u** — RUN-1zBO's number, on this route, the moment the lead is allowed to work.
+
+### 1z-bw.5 ★★ The two sticks, and the one real warp
+
+**Two `0x002C` are each followed by the drawn body freezing** — 0.765 s and 1.635 s of zero
+live travel, ending in a `0x0047` at the pin's exact float32 point. Both pins carried the
+client's own last reported point to 0.00 u and fired 0.33 ms after it, so **staleness is not
+the mechanism** and the waiver deletion is not implicated: this is `0x002C` landing on a
+*walking* body, which §1z-be.4 decoded (SetPositions both copies, and GmWalk does not
+re-dispatch the held key).
+
+The lane's headline statistic was a **denominator swap** and is withdrawn: "0 of 87" compared
+one shape's numerator to all pinless gaps. Like for like, `{moving 0x003D → 0x0047}` gaps are
+**5 in the whole run — 2 with a pin, both frozen; 3 without, none frozen** (Fisher p = 0.10).
+Across all 91 qualifying gaps: 2 frozen of 4 pinned against 2 of 87 unpinned, and both unpinned
+freezes are the benign already-parked shape (p ≈ 0.009). **The association survives; the
+number quoted does not.**
+
+**Causation is nonetheless settled better than "unresolvable", by an instrument-independent
+discriminator:** across all 13 stops, the time from the last moving tape sample to the stop
+report is **0.053–0.138 s for the 11 with no `0x002C`**, and **0.835 s and 1.725 s for the
+two with one** — 6× and 12.5× the control maximum. A key release produces a prompt stop, 11
+for 11. A release is excluded. A second control agrees: 95 of 251 grants went to the client's
+own reported point and only 2 of 95 stalled the body.
+
+**Warps: one, not six.** Differencing consecutive `live()` values reports six events over
+50 u; two are pure extrapolation unwinding and two more are inflated by it. **Only the 318.2 u
+event is corroborated on the wire**, and only that one should be called a warp. That is
+consistent with the operator's "2 or 3 short warps" and with the two sticks above being
+what they felt.
+
+**One gate-1 verdict was a FALSE POSITIVE against the client's own memory:** at fire 1 the
+guard modelled ~432.5 u of separation while the client's two copies were **coincident at 0.0 u**
+for the whole silent walk (max 9.22 u over 3.70 s / 449 u of travel). Our mirror does not see
+the client's local writes, so after a silent keyboard interval it reports a separation the
+client does not have. **But that is not the harm's cause:** fire 3 was a *true* positive
+(670–680 u for the full second before) and produced the **longer** freeze. The harm is
+`0x002C` on a walking body, right or wrong.
+
+### 1z-bw.6 ★★ The click arm — `geo-stale` is GONE, and a class with zero scripted trials
+
+RUN-FEEL's defining number was **40 of 40 clicks refused `geo-stale`**. Here the router
+answered **71 of 92 clicks with 0 geometry refusals and ZERO `geo-stale` trials**. That is
+§1z-v's router doing what it shipped for, measured on the operator's own regime for the first
+time.
+
+The click arm's p90 849.6 u is **one 8.1 s episode**, not a distribution. Its cause is our own
+`router_route` verdict **`kbd-drop`, which fired 21 times and has zero trials in every scripted
+comparator** (RUN-1zBO logged no clicks at all) — a mid-keyboard click is dropped, and world-0
+parks while the client walks the click anyway. Its 338.2-vs-98.9 u signature is a **subcount of
+world-0 parking** rather than a mechanism of its own (parked world-0 reads p50 263.7 against
+94.7 walking; conditioned on world-0 walking the difference vanishes). **`kbd-drop` is
+genuinely unmeasured and is the next click-path question.**
+
+### 1z-bw.7 What this run does NOT establish
+
+- **The two runs differ in more than the treatment.** `SPAWN_ENEMY` True here against False in
+  RUN-1zBO is the only differing *flag*, but the routes differ in click count (92 vs 0), grant
+  cadence (251/190 s vs 41/38 s), report gap (0.267 vs 0.501 s) and plane exposure. This is not
+  an A/B and must not be quoted as one.
+- **The tape achieves 10.91 Hz against a 30 Hz nominal** (the loop sleeps 1/30 *after* a ~57 ms
+  cross-process read), with a ~57 ms stamp-to-read lag and a ~26 u resolution floor. RUN-1zBO
+  reads 11.20 Hz, so rate comparisons are fair — checked, not assumed.
+- **The plane is not the separation's driver:** split by reported plane the keyboard figure is
+  flat (plane 0 n=1737 p50 112.3; plane 19 n=60 p50 111.8; plane 29 n=99 p50 116.8). The
+  operator's two plane faults are a **different phenomenon** and are chased separately.
+- **`gate2-offmesh` again has no trials**, so §1z-bv is untouched in either direction.
+- **The fix shipped here has not run against the client.** Its witness is the corpus and the
+  test; the next ordinary session is its confirmation, and it is a **one-flag revert** away.
+## 1z-bx. THE OPERATOR'S TWO PLANE FAULTS, CHASED — and neither is what it looked like. The NPC half is **ANIMREF §42's frozen spawn-plane words with the live geometry the corpus never had** (49 of 49 follow orders stamped `(0,0)`, four onto bridge deck with no ground beneath) but it is **still not confirmed**, because §42's own PASS criteria need a plane column that did not exist. **It exists now — three lines, zero extra reads.** The "inconsistent aggro" is a different fault entirely: **our own mesh clip trapped the SERVER's Hatcher and the chase was dead for 155 s.** And the operator's own "terrain walk" was **not an off-mesh walk at all** — it was the client's own gate-1 snap, 343 u backward down a staircase, caused by us dropping 13 of their clicks
+
+**Asked:** the operator's answers 3 and 4 to RUN-1zBW. Eight agents, 52 claims, 27 challenged.
+Ident `MOVECODE-1z-bx`. OBSERVED unless marked.
+
+### 1z-bx.1 The geometry, first, because both reports name a structure
+
+| plane | what our mesh says |
+|---|---|
+| **18** | 4 trapezoids, x 10860–11123, y 4532–5579 (a 263 × 1047 u strip). **578 of 1122 cells (52%) are ALSO on plane 0** — a deck over ground. **This is the bridge.** |
+| 19 | 5 trapezoids, x 8245–9359, y 6372–7478. **0% overlap with plane 0** — a hole in plane 0, not a deck |
+| 29 | the **same 5-trapezoid prefab translated by (+1824, +1907)**, trapezoid for trapezoid. 0% overlap. **The stairs by the spawn** — 316 u from the spawn point, and ANIMREF §42 independently named plane 29 "the stairs" from RUN-1zAB |
+
+Our own router named plane 18 on the wire (a `0x0029` at t=12.510 putting the player's
+destination on the deck), so the identification is not only a footprint census. **CONTESTED,
+honestly:** our mesh carries no height and says nothing about what is *drawn* under a plane, so
+a 0%-overlap plane could still be a bridge over water. Plane 18 is the only deck-over-ground
+either body touched.
+
+### 1z-bx.2 ★★★ The NPC half — the exposure is real, the confirmation is not
+
+**Every movement message our server sent for the Hatcher carried plane words `(0, 0)` — 49 of
+49.** Zero `0x0029` and zero `0x002C` were ever addressed to it. Decoded from payload bytes by
+agent id, never by label (54 rows carry the label "agent 10" and five of those are the
+player's own attack approach).
+
+**Four follow orders sent it to points our mesh puts on plane 18 ONLY**, with no plane 0
+beneath — t=14.635, 15.143, 17.688, 18.197 — and four more onto stacked plane-0/18 cells.
+**That is the cross-plane hostile geometry ANIMREF §42 said the corpus did not have.** The
+Hatcher's drawn body did stand inside the bridge footprint for 40 samples (t 17.01–20.64).
+
+**The source is a frozen constant, re-verified on this tree:** `plane = agent.get("plane", 0)`
+(`authsrv.py:15683`) is one local read used for **both** words on the follow and on every
+re-path (`:15720`, `:15744`); nothing anywhere writes `agent["plane"]` after `spawn_enemy`'s
+dict literal (`:16865`), and the copy's own step is `pm.clip(ax, ay, nx, ny)` — no plane
+argument. §42.3's table, confirmed.
+
+**But §42 is NOT confirmed, and the refuter was right to force this down.** §42.5 wrote its own
+PASS criteria: *"agenttap given a plane column … the Hatcher's copies on plane-29 ground WITH
+plane 29 in the new column"*. This tape has no plane column, and the client sent **no position
+report at all for 15.05 s (t=8.837–23.887)** — covering the entire bridge crossing. So the run
+supplies the geometry and **zero client-side confirmation**. Label this **CONSISTENT WITH
+§42, RECONSTRUCTION** — not confirmed. §42's PASS conditions remain unmet.
+
+**And §42's own scenario still has zero trials.** The Hatcher's drawn body was never once on
+plane 19 or 29 in 2,064 samples, and during all three of the player's off-plane excursions it
+stood still 2,039–4,589 u away. The stairs case is unexposed, again.
+
+### 1z-bx.3 ★★★ "Inconsistent aggro" is a SEPARATE fault: our own mesh clip killed the chase
+
+The Hatcher's entire behavioural life is the **first 35.5 s of a 190 s session** — 6 follow
+opens, 43 re-paths, 6 halts, last agent-10 traffic at t=35.547, then **154.9 s of silence**.
+
+**The server's copy WEDGED at (10683.46, 4329.52).** That point is walkable — inside `p0#1682`
+— but sits ~7 u from the trapezoid's left edge, and a 24-direction probe finds the mesh ending
+within 4–16 u in every direction. **From that anchor all 15 follow orders after t=20.793 clip
+0.000 u**: the copy could not take a single step in any of them, and they fall 149–1003 u
+short of the player.
+
+**The immediate cause is that the follow walks by straight-line `pm.clip` with the A\* router
+not wired in.** `enemy_chase_tick`'s own docstring says so (`authsrv.py:15550`): *"THERE IS NO
+PATHFINDING. `pathmap.route` is an A* and it is NOT wired in here."* Meanwhile the **same build
+routed the player's clicks 92 times**, and `pm.route` from the wedge point returns a path —
+**49 of 49**, including 4 waypoints and 2,193 u out of the corner `clip` could not leave.
+
+**Nothing in our protocol can put the copies back together.** The client kept drawing the body
+**965.6 u** from where the server held it; `0x0028` carries no point, and an NPC never receives
+a `0x002C`. So after the leash the operator stood **285.8 u from the Hatcher they could see**
+while never coming closer than **1,241 u** to the copy the 1,200 u leash is tested on. That is
+the "inconsistent aggro", exactly.
+
+**The five swings were server-legitimate**, so answer 3's "didn't swing" is about range, not
+about the swings not happening. And this is **exposure, not regression**: the mechanism is
+equally live in earlier captures.
+
+### 1z-bx.4 ★★★ The operator's own "terrain walk" — the client snapped ITSELF, because we dropped their clicks
+
+**The episode is in the capture: t=60.089–76.690, 61 clicks, six rapid cross-plane pairs on
+staircase plane 19.** And the fault is not what it looked like: **the drawn body never left our
+navmesh — 0 of 2,064 tape samples off-mesh.** What it did was **snap 343.1 u BACKWARD down the
+staircase at t=64.44**, the first of exactly **three gate-1 snaps in the whole 190 s** — which
+is the operator's *"2 or 3 short warps"*.
+
+The cause chain is entirely on the wire:
+
+1. a zero-length keyboard grant parked our sync copy at (8491.2, 6320.6);
+2. **the next 13 clicks were DROPPED by the mid-keyboard rule** (`ANSWER_KBD_CLICK` False), so
+   **no grant went out for 3.615 s** while the body walked away;
+3. separation crossed **the client's own 299.3 u gate 1** at t=60.565 and stayed over it 3.79 s;
+4. our AgTrack guard called `gate1-red` five times and **every re-pin was blocked
+   `stale-report`** — `REPIN_MAX_REPORT_AGE` is 0.347 s and the client had been silent 16.9 s.
+
+**So the guard that exists to prevent this was refused by its own freshness gate at exactly the
+moment it was needed.** That is not the deleted waiver (which only ever licensed *coincident
+and* stale pairs, §1z-bv) — it is the gate standing on age alone, meeting a client that goes
+silent under click-walking. **Registered, unfixed.**
+
+**And 19 grants in that episode wrote plane 0 into a body our mesh puts on staircase plane 19**
+— 19 new instances of §1z-o.6's open n=1 counterexample, on a staircase.
+
+### 1z-bx.5 ★★★ The instrument gap is CLOSED — and it was three lines
+
+**The plane offset was never unknown.** `agent+0x80` is `m_point`'s plane, a **signed** int;
+`+0x90` is `m_segmentPoint`'s (what a `0x0029`/`0x002A` field 3 writes); `+0xA4` is
+`m_targetPoint`'s. Four independent witnesses: `movetap`'s own point offsets, `agents.py`'s
+`CHECKSUM_FIELDS` naming `+0x80` as the int, MOVECODE FINDINGS §433/§677
+(`out->plane = [esi+0x80]`), and `agtrack_mirror.bake_grant` stating the split independently.
+`movetap` has emitted all three per sample since §1z-aa (`movetap.py:1361-1366`).
+
+**`agenttap` now records them** (`plane`, `segplane`, `tplane`). `read_copy` already fetched the
+whole `AGENT_SPAN` (0xD0) block in one call and 0x80 < 0x90 < 0xA4 < 0xD0, so this is **three
+decodes of bytes already in hand and ZERO extra cross-process reads** — which is why a gap that
+blocked §42 for a month cost three lines. `test_agenttap.py` §6, floor 18 → **24**, derives the
+offsets from `movetap`'s own constants rather than restating them, and pins the **signed**
+decode: `-1` is the client's no-plane sentinel and an unsigned read would report 4294967295 and
+look like a real plane.
+
+**Why a cheaper substitute will not do**, checked rather than assumed: an x/y-only connectivity
+test was proposed as a free alternative and **is copy-dependent**. On the async (drawn) copy the
+player's and the Hatcher's plane-18 footprint sequences are near-identical 3.46 s apart and the
+test is inert; on the **world-0** copy they diverge 0.37 s apart and the exclusive-footprint
+discriminator **fires 8 times**. A signature that flips with which copy you score is not an
+instrument. The plane column is.
+
+### 1z-bx.6 What is registered next, and none of it ran
+
+1. **Wire the router into the NPC follow.** `route()` succeeds 49 of 49 where `clip()` clipped
+   15 of 49 to zero. This is the aggro death's direct fix and it is the largest item here.
+2. **Ship ANIMREF §42's plane fix** — now that the column exists, its PASS criteria are
+   reachable for the first time. It needs one run with a hostile that actually crosses.
+3. **The dropped-click / silent-client hole** (§1z-bx.4): our re-pin is refused `stale-report`
+   exactly when the client has gone silent and is about to snap itself.
+4. §1z-o.6's counterexample now has 19 instances, on a staircase, and is no longer n=1.

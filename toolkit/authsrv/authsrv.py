@@ -5785,14 +5785,54 @@ KBD_SYNC_MATCHED = True       # False (--no-kbd-matched-plane): 1z-t's raw carry
 # without a lead arm; ON so the lead cannot return without it.
 KBD_LEAD_FENCE_GATE = True    # False (--no-kbd-lead-fence-gate): leads into a shut fence.
 
+# ...AND THE LATCH IS BOUNDED, SINCE MOVECODE-1z-bw (2026-09-05).  Read the
+# block above first: its derivation rests on "the walk-start applier -- the
+# only re-armer -- never runs, and the fence never re-opens", and it says
+# out loud that the other cases are what "the tape did not measure".
+#
+# THE TAPE HAS NOW MEASURED THEM, and the assumption is false.  The client's
+# own fence dword (`clientControlled`, which agenttap has recorded since
+# 1z-an) re-opens BY ITSELF, without any walk-start:
+#
+#     14 tapes, 32 player 0x002C, 26 measured shuts
+#     client shut duration   min 0.809   p50 3.025   p90 3.823   MAX 6.087 s
+#     client fence read OPEN in 8,278 of 11,615 samples (71.3%)
+#
+# (`studies/movecode/review/fencelatency.py`, which prints the per-pin rows.)
+# Our latch has no upper bound at all, so on RUN-1zBW it outlived the client's
+# fence by 0.77 s, 0.77 s and 9.50 s, held for 54.72 s of a 190.4 s session
+# (28.7%) and degraded 72 of 163 fired grants to zero-length -- while the
+# client's fence read OPEN for 462 of the 498 tape samples inside the longest
+# window.  The 45.25 s window happened because the re-arm needs a walk-start,
+# a walk-start needs a preceding 0x0047, and the operator walked 53.6 s
+# without stopping.  That is a property of the re-arm rule, not of this
+# session.
+#
+# THE BOUND IS THE CLIENT'S OWN MAXIMUM PLUS MARGIN, not a tuned number: 8.0
+# is above the measured 6.087 so it never cuts a genuinely-shut window short,
+# and it caps the pathological case instead of leaving it unbounded.  It is
+# deliberately loose -- p90 is 3.823, so a tighter bound would recover more
+# lead, and a later session with more shuts may tighten it FROM THE
+# DISTRIBUTION rather than by taste.  The tape polls at 11-30 Hz, so every
+# duration above is quantised to a sample gap and the 6.087 is a LOWER bound
+# on that one shut; the margin absorbs that too.
+FENCE_LATCH_MAX_AGE = 8.0     # s; --no-fence-latch-timeout restores the unbounded latch.
+
 
 def _fence_gate_lead(state, reported, dest, src, clip_why):
     """(dest, src, clip_why) with a LEAD degraded to the zero-lead point
-    while the fence is shut by our own 0x002C (KBD_LEAD_FENCE_GATE). Pure
-    apart from the read; fallbacks pass through untouched."""
+    while the fence is shut by our own 0x002C (KBD_LEAD_FENCE_GATE), for at
+    most FENCE_LATCH_MAX_AGE (1z-bw). Pure apart from the read; fallbacks
+    pass through untouched."""
     if not KBD_LEAD_FENCE_GATE or src not in ("d1", "kbd"):
         return dest, src, clip_why
-    if state.get("fence_shut_at") is None:
+    shut_at = state.get("fence_shut_at")
+    if shut_at is None:
+        return dest, src, clip_why
+    if FENCE_LATCH_MAX_AGE is not None and (time.time() - shut_at) > FENCE_LATCH_MAX_AGE:
+        # The client re-opened its own fence long ago (26 of 26 measured
+        # shuts closed inside 6.087 s). Holding the lead off past that is
+        # degrading a grant for a window that is not there any more.
         return dest, src, clip_why
     return [float(reported[0]), float(reported[1])], "fallback", "fence-shut"
 
@@ -23381,6 +23421,17 @@ def main():
                          "tip -- is refused as origin-unwalkable and the lead "
                          "becomes a zero-lead (179 of them in 26 runs). "
                          "Known-bad arm.")
+    ap.add_argument("--no-fence-latch-timeout", action="store_true",
+                    help="MOVECODE-1z-bw REVERT: restore the UNBOUNDED "
+                         "fence-gate latch, cleared only by a keyboard "
+                         "walk-start. The bound exists because the client's "
+                         "own fence dword re-opens on its own within 6.087 s "
+                         "(26 measured shuts over 14 tapes, "
+                         "studies/movecode/review/fencelatency.py) while our "
+                         "latch had no upper bound and held 45.25 s on "
+                         "RUN-1zBW, zeroing 72 of 163 fired grants. Inert "
+                         "without a lead arm and without "
+                         "--no-kbd-lead-fence-gate's gate being ON.")
     ap.add_argument("--no-kbd-lead-fence-gate", action="store_true",
                     help="MOVECODE-1z-aa OFF: a keyboard or D1 lead may "
                          "be sent into a fence the server itself shut with "
@@ -25029,6 +25080,7 @@ def main():
     # session a reconstruction (REALFIX-Q8).
     global KBD_SYNC, KBD_SYNC_LEAD_ON, KBD_SYNC_SPEED_ON, KBD_SYNC_STOP_ON
     global KBD_SYNC_HOLD, KBD_LEAD_KILL, KBD_SYNC_MATCHED, KBD_LEAD_FENCE_GATE
+    global FENCE_LATCH_MAX_AGE
     global KBD_LEAD_REFRESH, A2_LEAD_PLANE_CLIP, A2_LEAD_SEAM_CLIP, A2_LEAD_ORIGIN_SEAM
     if a.legacy_kbd_sync:
         KBD_SYNC = False
@@ -25054,6 +25106,8 @@ def main():
         KBD_LEAD_KILL = not a.no_kbd_lead_kill
         KBD_SYNC_MATCHED = not a.no_kbd_matched_plane
         KBD_LEAD_FENCE_GATE = not a.no_kbd_lead_fence_gate
+        # 1z-bw: None restores the unbounded latch (the 1z-aa..1z-bv behaviour).
+        FENCE_LATCH_MAX_AGE = None if a.no_fence_latch_timeout else 8.0
         A2_LEAD_PLANE_CLIP = not a.no_lead_plane_clip
         A2_LEAD_SEAM_CLIP = bool(a.lead_seam_clip)
         A2_LEAD_ORIGIN_SEAM = not a.lead_origin_exact
