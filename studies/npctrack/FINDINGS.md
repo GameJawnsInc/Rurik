@@ -697,6 +697,12 @@ both are world-0's own sidestep after the park, the mechanism of F14 seen from t
   corridor the player just walked. Q3 stays open only for a route that puts a wall between the
   parked hostile and the player before the follow re-opens — the owner's mouse play showed
   28.8 u at the halts on the bridge, which is the nearest measurement there is.
+
+  **CLOSED on the owner's own route, 2026-09-06 15:48 ([RUN-FEEL.md](RUN-FEEL.md)):** up the
+  stairs and around the wall at the top — *"he pathed around the wall well"* — the sync copy
+  never left the drawn body by more than **27.9 u** over 575 samples (p99 12.5). What the owner
+  saw instead was the Hatcher drawn 52 u INTO the terrace: not this arc's copies but the plane
+  word on ground our mesh does not cover, [GROUNDZ-F11](../renderobj/FINDINGS.md).
 - ~~**`NPCTRACK-Q4` — the resolver's velocity extrapolation of the target**~~ **CLOSED 2026-09-06
   (F15)**: it is the agent-avoidance pass's deadline on `rel + relv·t` with the other agent
   dead-reckoned to the tick (F14 step 4); small here because the frame stands or walks slowly
@@ -732,6 +738,11 @@ both are world-0's own sidestep after the park, the mechanism of F14 seen from t
   names one, is MOVECODE's: clip the keyboard lead to end outside every agent's disc, which
   turns the halt into the sidestep the client would take. Not built: no symptom, and a lead
   the client refuses costs the frame nothing now.
+- ~~**`NPCTRACK-Q5`**~~ **and ~~`NPCTRACK-Q6`~~ CLOSED on the owner's word, 2026-09-06 15:48
+  ([RUN-FEEL.md](RUN-FEEL.md)):** *"looks like real melee range"* and *"the follow is good"*;
+  the tape agrees (the disc parks 62–79 u from world-0, Q1 6.2 u at the halts, 40 follows /
+  22 halts in 63 s, nothing inside 0.5 s). The retail-aim lever recorded under Q6 stays
+  recorded.
 - **`NPCTRACK-Q5` — the operator's picture is still world-0's.** The drawn hostile parks 80 u from
   the player's WORLD-0 copy, and that copy is p50 34 / 23 / 40 u from the drawn player while
   moving on these runs (p90 284 / 91 / 247). Q1 makes the server agree with the client about
@@ -748,6 +759,9 @@ both are world-0's own sidestep after the park, the mechanism of F14 seen from t
 - **[RUN-R2.md](RUN-R2.md)** — ran 12:47 (F12): **6.7 u at the halt, Q1 twice**; P3 refuted (5 of
   23, all F13's local re-target); 1z-cc reaches this arc's wire — the report track's drift at the
   wall 604 → 98 u and the hostile swings four times at a standing player instead of holding.
+- **[RUN-FEEL.md](RUN-FEEL.md)** — the owner's own session, 15:48: **Q5, Q6 and Q3 closed in
+  their words and on the tape**; the Hatcher drawn 52 u into the terrace above the stairs is a
+  missing trapezoid and a held plane word — GROUNDZ-F11, shipped.
 - **[RUN-R4.md](RUN-R4.md)** — ran 15:13, agent-driven, after F14/F15 shipped: **F14 holds
   out of sample** — 3 of 3 sidesteps to 0.3 u, the one predicted halt confirmed on the tape,
   mirror vs world-0 while moving p90 25.1 u, Q1 9.1 u, zero re-pins, the wire shape as R2/R3.

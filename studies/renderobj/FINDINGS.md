@@ -282,10 +282,50 @@ day: [studies/npctrack/FINDINGS.md](../npctrack/FINDINGS.md), ident word NPCTRAC
 measured the drift on 40 halts (median 53.8 u, not 24), F4 reproduced the client's copy with the
 client's own equations, and Q1 shipped that model as the server's copy.
 
+## GROUNDZ-F11 — the terrace sink: a missing trapezoid, a held word, and the fix is the client's own report
+
+**The owner's session, 2026-09-06 15:48** ([npctrack/RUN-FEEL.md](../npctrack/RUN-FEEL.md)):
+led up the stairs of map 146 and around the wall at the top, the Hatcher was drawn **52 u into
+the ground for 16 s** beside a player standing on the surface — *"he didn't walk up the slope
+like my character did"*. The tape: from 44.1 s the hostile stood only on points where **our mesh
+has no trapezoid** (nearest covered ground 5–45 u off, plane 0 from 46.6 s), its client plane
+stayed **29** (our follow orders said so, field 4 = the carried word, `_npc_plane` having nothing
+better), and its height reader answered **the cached −1050.1 for 230 u of walking** — `ok`, no
+refusal, no surface on plane 29 there — while the player 77 u away read plane 0 at **−1102**.
+F9's correction compares the word against `plane_at`, which was silent, so it never fired. This
+is R2's "zero trials" region (F10) seen with a body in it.
+
+**SHIPPED (`NPC_PLANE_REACH`, revert `--no-npc-plane-reach`, in the capture header):**
+`_npc_plane` now takes the session state, and where the mesh has **no trapezoid at all** under
+the mover (`planes_at` empty — a seam, where `plane_at` declines between two, is not silence)
+and the mover stands within its follow stop radius (80 u) of the player's last accepted report,
+**the player's reported plane names the ground**. The client's own word for ground within reach,
+never a guess between our own trapezoids; the carry everywhere else, as §42.5 wrote it. On the
+tape this names 0 from 46.6 s, the parked branch then sends F9's zero-distance `0x0029` with 0
+(the send the terrace never got), and the client re-resolves the height on plane 0 — the terrain
+under the terrace, which is where the player's −1102 came from. `test_agentlife`
+§`section_plane_reach` pins the measured shape, out-of-reach, a seam, a mesh without
+`planes_at`, the parked branch's correction and the revert arm (floor 323 → green
+341). **RECONSTRUCTION until a session on that terrace shows the body rise**: the
+prediction is a client plane of 0 within 0.5 s of parking there and a ground z within 15 u of
+the player's.
+
+**What it does not cover:** a mover more than 80 u from the player on uncovered ground keeps
+its carried word (nothing to name it from); a plane-0 ground whose true height is a prop rather
+than terrain (F4's "plane 0 skips the prop query") would still sink — no specimen; and the
+missing trapezoids themselves, which are the pathmap's (the terrace is walkable in the client
+and absent in our decode of the same data — worth a look at what `from_chunk` drops there).
+
 ## Open
 
-- ~~`GROUNDZ-Q5` — ship the plane-change re-path~~ **SHIPPED, GROUNDZ-F9.** Unverified against a
-  client; GROUNDZ-R1's 32.5 u is the number it must move.
+- ~~`GROUNDZ-Q5` — ship the plane-change re-path~~ **SHIPPED, GROUNDZ-F9; CONFIRMED by R2 (F10,
+  the client applies it in 90 ms).** Its blind spot — ground our mesh does not cover at all — is
+  F11's, shipped 2026-09-06 and unverified against a client.
+- **`GROUNDZ-Q7` — why does our mesh have no trapezoid on the terrace above the stairs?** The
+  client walks it (both bodies did) and its height reader resolves plane 0 there for the player.
+  Either the pathing chunk carries it and `from_chunk` drops it, or the terrace is prop-borne
+  ground the trapezoid data never held. A decode question for the pathmap, with the feel tape's
+  points (11185–11459, 8849–9120) as the specimen.
 - **`GROUNDZ-Q1` — which of F6's three candidates causes the sink.** Separable by a live read of
   `+0x8C`, `+0x30` and `+0x40` at a known stair position.
 - **`GROUNDZ-Q2` — is the position updater per-frame?** NOT FOUND. `0x007EB7F0` is also a vtable

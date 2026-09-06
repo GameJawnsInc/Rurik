@@ -15831,15 +15831,32 @@ def enemy_move_tick(send, state, conn_id, rec=None):
 NPC_PLANE_TRACK = True    # False (--no-npc-plane-track): the frozen spawn plane.
 
 
-def _npc_plane(pm, x, y, carry):
+def _npc_plane(pm, x, y, carry, state=None):
     """Field 4: the mover's plane at its own point, disambiguated toward the
     plane it already had. `_router_plane` is the ONE place that rule lives, so
     the NPC path and the router's waypoints cannot drift apart; this only adds
     the guards it does not need -- the flag, no mesh, and a mesh stub with no
-    plane_at() (every pre-1z-bz fixture is one)."""
+    plane_at() (every pre-1z-bz fixture is one).
+
+    GROUNDZ-F11: with `state`, where the mesh has NO trapezoid at all under
+    the mover (planes_at empty -- not a seam, where plane_at declines to
+    choose between two) and the mover stands within its follow stop radius
+    of the player's last accepted report, the player's REPORTED plane names
+    the ground. Measured: 16 s of a hostile drawn 52 u into a terrace our
+    mesh does not cover, 8-45 u from ground the client had just reported as
+    plane 0."""
     if not NPC_PLANE_TRACK or pm is None or not hasattr(pm, "plane_at"):
         return carry
-    return _router_plane(pm, (x, y), carry)
+    p = _router_plane(pm, (x, y), carry)
+    if (NPC_PLANE_REACH and state is not None and hasattr(pm, "planes_at")
+            and not pm.planes_at(x, y)):
+        rp = state.get("plane")
+        pos = state.get("pos")
+        if (isinstance(rp, int) and rp >= 0 and pos is not None
+                and math.hypot(float(pos[0]) - x, float(pos[1]) - y)
+                <= follow_stop_radius()):
+            return rp
+    return p
 
 
 def _npc_dest_plane(pm, state, px, py, mover_plane):
@@ -16015,6 +16032,20 @@ def _follow_advance(agent, px, py, budget, stop, pm, now, rec=None, agent_id=Non
 # correction here, and the extra re-path clause in the follow (a plane change
 # mid-walk re-paths, instead of waiting for the player to move far enough).
 NPC_PLANE_REPATH = True   # False (--no-plane-repath): leave the stale word.
+
+# GROUNDZ-F11 (2026-09-06, the operator's own session): where our mesh has NO
+# TRAPEZOID under the hostile, `_npc_plane` held whatever word it carried --
+# on the terrace above the stairs of map 146 that was plane 29 for 16 s while
+# the player stood 77 u away on plane 0, the client resolved the Hatcher's
+# height on a plane with no surface there (its reader answered the cached
+# -1050.1 for 230 u of walking) and drew it 52 u into the ground. The word the
+# client itself gave us for that ground -- the player's report, 8-45 u from
+# the same points -- was right the whole time. So: where the mesh is silent
+# under the mover and the mover stands within its follow stop radius of the
+# player's last report, the player's reported plane names the ground; else
+# the carry, as before. The client's word, never a guess between our own
+# trapezoids. --no-npc-plane-reach reverts to holding the stale word.
+NPC_PLANE_REACH = True    # False (--no-npc-plane-reach): hold the carried word.
 
 
 def _npc_plane_correct(send, conn_id, agent_id, agent, plane, now):
@@ -16394,7 +16425,8 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
     # the SPAWN plane, frozen for the session. It is now the mover's own,
     # re-resolved at the copy's point every tick and written back so the
     # preference carries; `dest_plane` is the destination's.
-    plane = agent["plane"] = _npc_plane(pm, ax, ay, agent.get("plane", 0))
+    plane = agent["plane"] = _npc_plane(pm, ax, ay, agent.get("plane", 0),
+                                        state=state)
     dest_plane = _npc_dest_plane(pm, state, px, py, plane)
 
     def _send(op, vals, label):
@@ -16540,7 +16572,7 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
         # point (1z-bz) and the halt still waits for the clock (40.9).
         parked = _npc_model_advance(state, agent, now, elapsed, rec, agent_id)
         ax, ay = agent["pos"]
-        agent["plane"] = _npc_plane(pm, ax, ay, plane)
+        agent["plane"] = _npc_plane(pm, ax, ay, plane, state=state)
         dist = math.hypot(px - ax, py - ay)
         if parked:
             if not HALT_ON_CLOCK:
@@ -16564,7 +16596,7 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
         if agent.get("froute") or agent["pos"] != before:
             dist, routed = newdist, True
             ax, ay = agent["pos"]
-            agent["plane"] = _npc_plane(pm, ax, ay, plane)   # 1z-bz
+            agent["plane"] = _npc_plane(pm, ax, ay, plane, state=state)   # 1z-bz
     if not routed:
         step = min(budget, dist - stop)
         if step > 0.0 and dist > 0.0:
@@ -16573,7 +16605,7 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
             if pm is not None:
                 nx, ny = pm.clip(ax, ay, nx, ny)
             agent["pos"] = (nx, ny)
-            agent["plane"] = _npc_plane(pm, nx, ny, plane)   # 1z-bz
+            agent["plane"] = _npc_plane(pm, nx, ny, plane, state=state)   # 1z-bz
             dist = math.hypot(px - nx, py - ny)
     if dist <= stop + 1e-6:
         if not HALT_ON_CLOCK:
@@ -23991,6 +24023,15 @@ def main():
                          "(p90 193, max 526) from the body the client drew, "
                          "while the client's own two copies agreed to 12 u. "
                          "Known-bad arm; RUN-NPCTRACK-R1's control.")
+    ap.add_argument("--no-npc-plane-reach", action="store_true",
+                    help="GROUNDZ-F11 REVERT: where our navmesh has no "
+                         "trapezoid under a hostile, keep the plane word it "
+                         "already carried instead of taking the player's own "
+                         "reported plane for ground within the follow's reach. "
+                         "Measured cost (the operator's 2026-09-06 session): "
+                         "the Hatcher drawn 52 u into the terrace above the "
+                         "stairs for 16 s, its client plane 29 on plane-0 "
+                         "ground the player had reported 8-45 u away.")
     ap.add_argument("--no-plane-repath", action="store_true",
                     help="GROUNDZ-Q5 REVERT: do not correct a hostile's plane "
                          "word after it stops. GROUNDZ-R1 measured what that "
@@ -25765,6 +25806,13 @@ def main():
               "server's own corridor toward the live player and parks at 80 u "
               "(NPCTRACK-Q1's revert). Measured: a median 53.8 u from the "
               "drawn body at the halt.", flush=True)
+    if a.no_npc_plane_reach:
+        global NPC_PLANE_REACH
+        NPC_PLANE_REACH = False
+        print("[map] --no-npc-plane-reach: a hostile on ground our mesh does not "
+              "cover keeps its carried plane word (GROUNDZ-F11's revert). "
+              "Measured: 52 u of sink for 16 s on the terrace above the stairs.",
+              flush=True)
     if a.no_plane_repath:
         global NPC_PLANE_REPATH
         NPC_PLANE_REPATH = False

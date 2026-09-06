@@ -73,7 +73,7 @@ from codec import Codec  # noqa: E402
 # known-bad control; and the chase section's wall pin split by arm, 1).
 # Floor from a real green run of 331. +1 at NPCTRACK-F8 (the hold rule
 # replaces the fresh-follow pin: three checks for two), green 333.
-LEDGER = checks.Ledger("agent lifetime", floor=315)
+LEDGER = checks.Ledger("agent lifetime", floor=323)
 
 
 def section_weapon_damage():
@@ -529,6 +529,7 @@ def main():
     section_follow_router()
     section_npc_plane()
     section_plane_repath()
+    section_plane_reach()
     section_client_model()
     section_facing()
     section_enemy_skill()
@@ -1064,6 +1065,112 @@ class _Stairs:
         if y > 900.0:
             return None
         return 29 if x >= 500.0 else 0
+
+
+class _Terrace(_Stairs):
+    """_Stairs that also answers planes_at: the strip y > 900 has NO trapezoid
+    (the terrace above map 146's stairs, GROUNDZ-F11), everything else one."""
+
+    def planes_at(self, x, y):
+        if y > 900.0:
+            return set()
+        return {29} if x >= 500.0 else {0}
+
+
+def section_plane_reach():
+    """GROUNDZ-F11: where the mesh has no trapezoid under the mover, the player's
+    reported plane names ground within reach.
+
+    The operator's own session (2026-09-06, capture 154850, feel-agenttap):
+    the Hatcher followed them onto the terrace above the stairs, where our mesh
+    has no trapezoid at any of its points for 16 s; `_npc_plane` held its
+    carried 29, the client resolved its height on a plane with no surface
+    there (its reader answered the cached -1050.1 across 230 u of walking) and
+    drew it 52 u into the ground beside a player standing on plane 0 at -1102.
+    The player's own report -- plane 0, 8-45 u from the same points -- was the
+    word that was right.
+    """
+    import authsrv
+    MOVE = authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT
+    print("\nGROUNDZ-F11: the player's reported plane names ground our mesh does "
+          "not cover, within the follow's reach")
+    LEDGER.ok(authsrv.NPC_PLANE_REACH is True
+              and "--no-npc-plane-reach" in open(
+                  authsrv.__file__, encoding="utf-8").read()
+              and authsrv.capture_flags().get("NPC_PLANE_REACH") is True,
+              "it ships ON with its revert flag, recorded in the capture header")
+    pm = _Terrace()
+    saved = authsrv.NPC_PLANE_REACH
+    try:
+        # THE MEASURED SHAPE: the mover in the strip, carrying 29 from the
+        # stairs; the player 60 u away reporting plane 0. Field 4 reads 0.
+        st = _fresh_follow((520.0, 950.0), (580.0, 950.0), player_plane=0,
+                           agent_plane=29)
+        _follow_run(st, pm, seconds=0.05)
+        fol = _last_follow(st)
+        LEDGER.ok(st["agents"][10]["plane"] == 0,
+                  "on ground our mesh does not cover, 60 u from a player who "
+                  "reported plane 0, the mover's word becomes 0 (was the "
+                  "carried 29 -- the terrace sink); in reach no follow goes "
+                  "out, the word is what the correction and the next order carry",
+                  f"agent plane {st['agents'][10]['plane']}")
+        # OUT OF REACH: the same strip, the player 200 u away -> the carry.
+        st = _fresh_follow((520.0, 950.0), (720.0, 950.0), player_plane=0,
+                           agent_plane=29)
+        _follow_run(st, pm, seconds=0.05)
+        fol = _last_follow(st)
+        LEDGER.ok(fol is not None and fol[3] == 29,
+                  "200 u from the player the report says nothing about the "
+                  "mover's ground: the carried word stands, as 42.5 wrote it",
+                  f"{fol[2:4] if fol else fol}")
+        # A SEAM IS NOT SILENCE: on named ground the mesh's own answer wins
+        # even with the player in reach on another plane.
+        st = _fresh_follow((520.0, 0.0), (580.0, 0.0), player_plane=0,
+                           agent_plane=0)
+        _follow_run(st, pm, seconds=0.05)
+        fol = _last_follow(st)
+        LEDGER.ok(st["agents"][10]["plane"] == 29,
+                  "where the mesh HAS a trapezoid under the mover its plane is "
+                  "the answer -- the report never overrules named ground",
+                  f"agent plane {st['agents'][10]['plane']}")
+        # A MESH WITHOUT planes_at: every pre-F11 stub -> the carry, no raise.
+        st = _fresh_follow((520.0, 950.0), (580.0, 950.0), player_plane=0,
+                           agent_plane=29)
+        _follow_run(st, _Stairs(), seconds=0.05)
+        fol = _last_follow(st)
+        LEDGER.ok(st["agents"][10]["plane"] == 29,
+                  "a pathmap with no planes_at() degrades to the carried word "
+                  "instead of raising", f"agent plane {st['agents'][10]['plane']}")
+        # THE PARKED BRANCH: this is where the operator's Hatcher sat for 16 s.
+        # With the word re-named, GROUNDZ-F9's correction goes out at once.
+        st = _parked(agent_plane=29, told=29, player=(580.0, 950.0),
+                     pos=(520.0, 950.0))
+        st["plane"] = 0
+        sent = _tick_parked(st, pm)
+        mv = [s for s in sent if s[0] == MOVE]
+        LEDGER.ok(len(mv) == 1 and mv[0][1][2] == 0 and mv[0][1][3] == 0
+                  and st["agents"][10]["plane"] == 0,
+                  "a hostile PARKED on uncovered ground beside a player on "
+                  "plane 0 gets F9's zero-distance 0x0029 carrying 0 -- the "
+                  "send the terrace never got",
+                  f"{mv}")
+        # THE KNOWN-BAD ARM: the flag off, the same park sends nothing and
+        # the word stays 29 -- the 16 s of sink, reproduced.
+        authsrv.NPC_PLANE_REACH = False
+        st = _parked(agent_plane=29, told=29, player=(580.0, 950.0),
+                     pos=(520.0, 950.0))
+        st["plane"] = 0
+        sent = _tick_parked(st, pm)
+        LEDGER.ok(not [s for s in sent if s[0] == MOVE]
+                  and st["agents"][10]["plane"] == 29,
+                  "REVERT ARM (--no-npc-plane-reach): the same park holds 29 "
+                  "and sends nothing -- the operator's screenshot",
+                  f"plane {st['agents'][10]['plane']}, sends "
+                  f"{[hex(s[0]) for s in sent]}")
+    finally:
+        authsrv.NPC_PLANE_REACH = saved
+    LEDGER.ok(authsrv.NPC_PLANE_REACH is True,
+              "and the module global is restored after the revert arm")
 
 
 def _parked(agent_plane, told, player=(560.0, 0.0), pos=(520.0, 0.0)):
