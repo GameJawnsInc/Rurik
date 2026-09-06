@@ -685,6 +685,18 @@ both are world-0's own sidestep after the park, the mechanism of F14 seen from t
   still agreed to 28.8 u at the halts, but en route around the wedge is unmeasured, and a sync
   copy that dead-reckons straight through a wall while the body paths around it is what the
   decode says should happen. Only a wedge run with the tape can say how far apart they get.
+
+  **MEASURED on the eight tapes, 2026-09-06 (`review/copysep.py`), and the route already
+  crosses the wedge tip and the staircase side:** 6,192 samples, separation p50 1.4 / p90 13.0
+  / p99 20.2 / max 57.9 u; while either copy moves p50 4.9 / p90 13.4. The widest instants are
+  the spawn chase's first second on six of eight tapes (the drawn body trailing the sync copy
+  by 21–37 u — the AgTrack handoff's lag, ANIMREF-RE §37.2) and two old-arm transients at a
+  park (52–58 u, one copy walking while the other stood). Nothing at the wedge or along the
+  staircase side. **What this route cannot show** is a wall INSIDE the chord: the hostile
+  follows 80 u behind the player along the walked polyline, so its straight leg is always the
+  corridor the player just walked. Q3 stays open only for a route that puts a wall between the
+  parked hostile and the player before the follow re-opens — the owner's mouse play showed
+  28.8 u at the halts on the bridge, which is the nearest measurement there is.
 - ~~**`NPCTRACK-Q4` — the resolver's velocity extrapolation of the target**~~ **CLOSED 2026-09-06
   (F15)**: it is the agent-avoidance pass's deadline on `rel + relv·t` with the other agent
   dead-reckoned to the tick (F14 step 4); small here because the frame stands or walks slowly
@@ -752,6 +764,8 @@ both are world-0's own sidestep after the park, the mechanism of F14 seen from t
   halts, and the frame with and without it.
 - `python studies/npctrack/review/parkcensus.py [-v]` — F15: where the client parks the
   hostile relative to the player's world-0, disc parks separated from arrivals and our halts.
+- `python studies/npctrack/review/copysep.py` — Q3: the hostile's sync copy against its drawn
+  body over every sample, with the widest instants located.
 
 ## Method notes
 
