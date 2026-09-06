@@ -137,10 +137,104 @@ capture (`npc_model` rows with the frame it used), so the next run explains a pa
 
 **P5 was not run** (no control session).
 
-## RE-RUN — the same sheet, the tape mandatory
+## RE-RUN — the same sheet, the tape mandatory (RAN 09:43 — see the second RESULT below)
 
 §4's two commands, unchanged; the server build now carries F8 and the tape tool creates its
 directory. Score with §5. The registered
 predictions stand as written, plus one from this run: **P4b — halts with the copy > 92 u from the
 server's player ≤ 5 of ~13**, against this run's 27 of 37 (the pinned runs' 0 of 40 is the old
 integrator's construction, not a bar).
+
+---
+
+## RESULT — RAN 2026-09-06 09:43, 77 s, default arm (Q1 + F8), **WITH THE TAPE.** P1 and P2 REFUTED as registered — **and the registered metric is the thing that failed**; at the halt's own instant the drift is **11.8 u** against the pinned runs' 46–68. P3 MET. P4b refuted, explained. P5 not run.
+
+Tape `vault/research/npctrack/r1-agenttap.jsonl` (812 of 812 samples ok for both agents), capture
+`authsrv-20260906T094349-c1`. Exposure: 23 halts, 38 follow orders, 21 model disc parks, 6 holds.
+
+### P1 / P2 as registered — REFUTED, by a comparator that measures the wrong thing on this arm
+
+| | copy vs client SYNC, **0.5 s after** the halt (registered) | over 40 u | client walking within 0.5 s of the halt |
+|---|---|---|---|
+| this run | **p50 76.6**, p90 146.2 | 16 of 23 | **17 of 23** |
+| the pinned runs | 63.3 / 47.9 / 56.0 | 26 of 40 | 4 / 4 / 4 |
+
+The registered metric reads the client's copy half a second after the halt. On the corridor
+integrator that was fair — the hostile then stood in reach and swung, and the client stood too
+(4 of 13 walking). Under the model the halt is followed by a fresh follow 0.05 s later whenever the
+player kept moving (F8's hold releases the moment the client's frame is out of reach), and the
+client's copy has walked 100 u or more by the time the registered metric looks. **The metric
+measured the re-follow, not the drift.** That is the parked-comparator trap this repo already has a
+note for, committed by the person who wrote the note, in a metric registered against the old arm's
+dynamics without asking whether the new arm keeps them.
+
+### The same quantity at the halt's OWN instant — the drift is closed
+
+| | copy vs client SYNC **at the halt** | p75 | p90 | max | over 40 u |
+|---|---|---|---|---|---|
+| `1zCA` | 59.3 | 112.5 | 482.6 | 612.3 | 8 of 13 |
+| `GROUNDZ-R1` | 45.7 | 75.5 | 178.3 | 193.3 | 9 of 14 |
+| `GROUNDZ-R2` | 68.0 | 158.0 | 259.7 | 432.3 | 9 of 13 |
+| **this run** | **11.8** | **35.3** | **72.2** | **78.4** | **4 of 23** |
+
+On the pinned runs the two metrics agree to within 10 u (the client stood after the halt), so the
+old arm's number is the same either way; on this run they differ by 65 u, and the instant one is
+the comparison the arc registered in words if not in code. **And the model's own disc rows say
+the same thing without any halt at all:** at each of the 21 parks the server recorded, the
+server's copy against the client's sync copy at that instant is **p50 9.3 u, max 77.8** — the copy
+parks where the client's copy parks. The two worst parks (77.5 and 77.8 u at 19.7 s and 20.6 s)
+are the two where the live frame sat 33–35 u behind the true world-0 (the mirror's error,
+NPCTRACK-Q2), exactly the residual F5 predicted.
+
+**Read as registered: P1 and P2 are REFUTED. Read at the instant the halt was sent: the drift
+went from 46–68 u to 11.8 u and the over-40 tail from two-thirds to one-sixth.** Both readings are
+printed by the review tool now, with the walking count as the confound's witness. The corrected
+metric is registered for the control run below as P1′ / P2′, with the pinned runs' same-instant
+numbers as its bar.
+
+### P3 — MET
+
+The client's sync copy was still walking at the last sample before a `0x0028` on **0 of 23** halts
+(pinned: 10 of 40). The halt lands on a parked body, every time.
+
+### P4 — the wire, and P4b REFUTED with its reason
+
+| | this run | pinned |
+|---|---|---|
+| follow opens / re-paths / halts | 23 / 15 / 23 | 13 / 33–39 / 13–14 |
+| halts with the copy > 92 u from the server's player (P4b) | **15 of 23** | 0 of 40 |
+| smallest gap between follow orders | 0.508 s | — |
+| swings | 43 | 42–45 |
+| plane-word classes | (0,0) 28, (29,0) 3, (29,29) 4, (0,29) 3 | the same four |
+| `groundz.ok` | 812 of 812 | — |
+
+No storm (nothing inside 0.4 s). More halts and opens than the old arm, fewer re-paths, about the
+same message total (84 against 76). **P4b's 15 is the frame mismatch made visible, not a loop:**
+while the player walks, the server's report track leads the client's world-0 copy by ~100 u (the
+disc rows print both: e.g. at 13.3 s the frame at x=10521 and the server's player at x=10622). The
+copy parks at the disc around world-0 — as the client's does — which is ~180 u short of the
+server's player, so "out of reach" is true in the server's frame and false in the client's. The
+old arm never printed this because its copy walked to 80 u from the server's player regardless.
+Retail's mid-chase halt (§40.2, chase 3) is the same shape at a lower rate, because retail's
+server player IS the frame.
+
+### P5 — not run
+
+No control session was driven. The three pinned runs are that arm on that route and stand in for
+it on both metrics (46–68 u same-instant); a same-day control under `--no-npc-client-model` would
+still be the cleaner reading and is registered below.
+
+### Verdict
+
+**Q1 holds at the instant the server acts** — 9 u at the park, 12 u at the halt, against 46–68 u
+before — **and the prediction as registered failed**, because I registered a comparator that
+assumed the old arm's dynamics. Both go on the record. The residual is the frame (Q2, the mirror's
+error), and the visible cost is the halt-and-re-follow cadence behind a running player (Q6).
+
+## RE-REGISTERED — the control run, and the corrected predictions
+
+`--no-npc-client-model` appended inside `--game-args`, tape to
+`vault/research/npctrack/r1-control-agenttap.jsonl`, scored by the same tool. **P1′:** the
+control's same-instant p50 ≥ 40 u (the pinned runs read 46–68). **P2′:** the control's same-instant
+over-40 fraction ≥ 50 %. **P3′:** the control's cut fraction ≥ 20 % (pinned 25 %). A control that
+comes out at 12 u convicts the tape, not the fix.

@@ -368,6 +368,17 @@ def score(run):
         p1 = nearest(s1, hw, after=0.5)
         R["copy_vs_drawn"].append(dist(cpos, a1["body"]))
         R["copy_vs_sync"].append(dist(cpos, a1["w0"]))
+        # THE SAME INSTANT (F9). The registered metric above reads the client
+        # 0.5 s after the halt, which was fair on the corridor integrator
+        # (the hostile then stood in reach and swung) and is NOT fair under
+        # the client model, whose halt is followed by a fresh follow 0.05 s
+        # later whenever the player kept moving: RUN-R1 read 76.6 u on the
+        # registered metric and 11.8 u at the same instant, with the client
+        # walking within 0.5 s of 17 of its 23 halts. Both are printed; the
+        # walking count is the confound's own witness.
+        R["copy_vs_sync_now"].append(dist(cpos, a0["w0"]))
+        R["client_walks_after"].append(bool(a1["v0"] > 5.0
+                                            or dist(a0["w0"], a1["w0"]) > 20.0))
         R["sync_vs_drawn"].append(dist(a1["w0"], a1["body"]))
         s2s = dist(a1["w0"], p1["w0"])
         lastf = [f for f in run.follows if f[0] <= h]
@@ -380,6 +391,17 @@ def score(run):
         i = bisect.bisect_left([s["w"] for s in s10], hw) - 1
         R["moving_at_halt"].append(bool(i >= 0 and s10[i]["v0"] > 5.0))
     cvs = R["copy_vs_sync"]
+    now = R["copy_vs_sync_now"]
+    print("  F9 the same at the halt's OWN instant:            vs SYNC p50 %5.1f p75 %5.1f p90 %6.1f max %6.1f | over %.0f u: %d/%d | client walking within 0.5 s of the halt: %d/%d"
+          % (statistics.median(now), q(now, .75), q(now, .9), max(now), OVER,
+             sum(1 for x in now if x > OVER), len(now), sum(R["client_walks_after"]), len(now)))
+    parks = [r for r in run.rows if r.get("kind") == "npc_model" and r.get("act") == "disc"]
+    if parks:
+        pd = [dist(p["at"], nearest(s10, run.t0 + p["t"])["w0"]) for p in parks]
+        holds = sum(1 for r in run.rows if r.get("kind") == "npc_model" and r.get("act") == "hold")
+        R["park_vs_sync"] = pd
+        print("  F9 the model's own disc parks (npc_model rows) vs the client's sync copy at that instant: n=%d p50 %5.1f p90 %5.1f max %5.1f; holds %d"
+              % (len(pd), statistics.median(pd), q(pd, .9), max(pd), holds))
     print("  F1 server copy vs client at the halt (settled):  vs DRAWN p50 %5.1f p90 %6.1f max %6.1f | vs SYNC p50 %5.1f p75 %5.1f p90 %6.1f max %6.1f | over %.0f u: %d/%d"
           % (statistics.median(R["copy_vs_drawn"]), q(R["copy_vs_drawn"], .9), max(R["copy_vs_drawn"]),
              statistics.median(cvs), q(cvs, .75), q(cvs, .9), max(cvs), OVER,
@@ -418,23 +440,23 @@ def pooled(results):
     P = collections.defaultdict(list)
     for R in results:
         for k, v in R.items():
-            if k in ("rule", "moving_at_halt"):
+            if k in ("rule", "moving_at_halt", "client_walks_after"):
                 P[k].extend(v)
             elif isinstance(v, list) and v and isinstance(v[0], float):
                 P[k].extend(v)
     n = len(P["copy_vs_sync"])
     print("\nPOOLED over %d halts" % n)
     print("  %-22s %6s %6s %6s %6s  %s" % ("server copy vs SYNC", "p50", "p75", "p90", "max", "over 40 u"))
-    for k in ("copy_vs_sync", "copy_vs_drawn", "model:truth(w0)", "model:hybrid",
+    for k in ("copy_vs_sync", "copy_vs_sync_now", "copy_vs_drawn", "model:truth(w0)", "model:hybrid",
               "model:mirror", "model:state[pos]", "model:DR-only"):
         v = P[k]
         if v:
             print("  %-22s %6.1f %6.1f %6.1f %6.1f  %d/%d" % (
                 k, statistics.median(v), q(v, .75), q(v, .9), max(v),
                 sum(1 for x in v if x > OVER), len(v)))
-    print("  stop rules %s; still walking at the halt %d/%d; sync-vs-drawn over 12 u %d/%d"
+    print("  stop rules %s; still walking at the halt %d/%d; sync-vs-drawn over 12 u %d/%d; client walking within 0.5 s of the halt %d/%d"
           % (dict(collections.Counter(P["rule"])), sum(P["moving_at_halt"]), n,
-             sum(1 for x in P["sync_vs_drawn"] if x > 12), n))
+             sum(1 for x in P["sync_vs_drawn"] if x > 12), n, sum(P["client_walks_after"]), n))
     return P
 
 
@@ -456,13 +478,23 @@ def main(argv):
         p50 = statistics.median(v)
         frac = sum(1 for x in v if x > OVER) / float(len(v))
         cut = sum(R["moving_at_halt"]) / float(len(v))
+        walks = sum(R["client_walks_after"])
         print("\nRUN-NPCTRACK-R1 verdicts (registered predictions, studies/npctrack/RUN-R1.md):")
-        print("  P1 copy-vs-client-sync at the halts p50 %.1f u  -> %s (bar <= 30; the three pinned runs measured 63.3 / 47.9 / 56.0)"
+        print("  P1 copy-vs-client-sync 0.5 s AFTER the halt p50 %.1f u  -> %s (bar <= 30; the three pinned runs measured 63.3 / 47.9 / 56.0)"
               % (p50, "MET" if p50 <= 30.0 else "REFUTED"))
-        print("  P2 halts over %.0f u: %.0f%%  -> %s (bar <= 30%%; pinned 65%%)"
+        print("  P2 halts over %.0f u on that metric: %.0f%%  -> %s (bar <= 30%%; pinned 65%%)"
               % (OVER, 100 * frac, "MET" if frac <= 0.30 else "REFUTED"))
+        if walks:
+            print("     CONFOUND: the client copy was walking within 0.5 s of %d of %d halts -- a halt followed by a fresh follow; that metric reads the walk, not the drift (F9)" % (walks, len(v)))
         print("  P3 client copy still walking when the halt landed: %.0f%%  -> %s (bar <= 15%%; pinned 25%%)"
               % (100 * cut, "MET" if cut <= 0.15 else "REFUTED"))
+        now = R["copy_vs_sync_now"]
+        p50n = statistics.median(now)
+        fracn = sum(1 for x in now if x > OVER) / float(len(now))
+        print("  P1' copy-vs-client-sync at the halt's OWN instant p50 %.1f u  -> %s (bar <= 30; the pinned runs on this metric 59.3 / 45.7 / 68.0)"
+              % (p50n, "MET" if p50n <= 30.0 else "REFUTED"))
+        print("  P2' halts over %.0f u at that instant: %.0f%%  -> %s (bar <= 30%%; pinned 26 of 40)"
+              % (OVER, 100 * fracn, "MET" if fracn <= 0.30 else "REFUTED"))
         return 0
 
     try:
@@ -489,7 +521,7 @@ def main(argv):
         return 2
     P = pooled(results)
     model = statistics.median(P["model:truth(w0)"])
-    today = statistics.median(P["copy_vs_sync"])
+    today = statistics.median(P["copy_vs_sync_now"])
     ok_model = model <= CONTROL_MODEL_P50
     ok_today = today >= CONTROL_TODAY_P50
     print("\nPOSITIVE CONTROL: the client's own model in the TRUE frame reproduces the client's copy to p50 %.1f u (bar <= %.0f) -> %s;"

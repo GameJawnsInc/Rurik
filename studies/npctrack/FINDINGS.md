@@ -183,9 +183,9 @@ p90 58–78. That residual is the mirror's, not this arc's — **NPCTRACK-Q2**.
   reach), plus the wall split. Floor 294 → 315 from a real green run of 331.
 
 **Desk prediction for the run:** copy-vs-client-sync at the halts p50 ≈ 17.5 u (F5's hybrid)
-against the measured 53.8, over-40 halts ≈ 9 / 40 against 26 / 40. `RUN-NPCTRACK-R1` is
-registered on those numbers; until it runs WITH ITS TAPE, Q1 is derived and desk-validated, not
-confirmed.
+against the measured 53.8, over-40 halts ≈ 9 / 40 against 26 / 40. **RUN-R1 measured 11.8 u and
+4 of 23 at the halt's own instant (F9)** — inside the desk prediction — and 76.6 on the metric as
+registered, which turned out to measure the re-follow.
 
 ## NPCTRACK-F8 — RUN-R1's wire: the open rule must run in the client's frame too
 
@@ -219,6 +219,39 @@ check caught it. The model now records every disc park (`npc_model act=disc`, wi
 used) and every hold (`act=hold`) into the capture, so a park can be explained without a tape.
 `test_agentlife` `section_client_model` pins the hold, the no-swing, and the release; green 333.
 
+
+## NPCTRACK-F9 — RUN-R1 with its tape: the copy stands where the client's does, and my comparator did not
+
+RUN-R1 ran a third time on 2026-09-06 at 09:43 with the tape ([RUN-R1.md](RUN-R1.md), second
+RESULT). Two readings of one run:
+
+| copy vs the client's sync copy | pinned runs (old arm) | RUN-R1 (Q1 + F8) |
+|---|---|---|
+| **at the instant the halt was sent** | 59.3 / 45.7 / 68.0 u p50; 26 of 40 over 40 u | **11.8 u p50; 4 of 23 over 40 u** |
+| at the model's own disc parks (`npc_model` rows) | — | **9.3 u p50, max 77.8, n = 21** |
+| 0.5 s after the halt — **the metric P1/P2 were registered on** | 63.3 / 47.9 / 56.0 | 76.6 |
+| the client walking within 0.5 s of the halt | 4 / 4 / 4 | 17 of 23 |
+
+**P1 and P2 as registered are REFUTED, and the registered metric is what failed.** It read the
+client half a second after the halt, which was fair on the corridor integrator (the hostile then
+stood and swung) and measures the re-follow under the model (F8's hold releases the moment the
+client's frame is out of reach, and a fresh follow goes out 0.05 s after the halt whenever the
+player kept moving). At the instant the server acted, the drift went from 46–68 u to 11.8, and at
+the parks the server recorded itself, 9.3. **Q1 is CONFIRMED on the instant the server acts, and
+the registered prediction is recorded as failed** — a parked-run comparator, written by the author
+of this repo's own note on parked-run comparators. The review tool prints both metrics and the
+walking count; P1′/P2′ are registered on the instant metric for the control run.
+
+**P3 MET:** 0 of 23 halts landed on a walking client copy (10 of 40 before). **P4b REFUTED with
+its reason:** 15 of 23 halts had the copy more than 92 u from the server's player — the frame
+mismatch made visible, not a loop. While the player walks, the server's report track leads the
+client's world-0 by ~100 u (the disc rows print both), the copy parks at world-0's disc as the
+client's does, and the server sees it 180 u short. The old arm hid this by walking to 80 u from its
+own player. The cadence it produces — halt, fresh follow 0.05 s later, park — is retail's mid-chase
+halt (§40.2 chase 3) at a higher rate, because retail's server player IS the frame:
+**NPCTRACK-Q6**. The two worst parks (77.5 / 77.8 u) are the two where the live frame sat 33–35 u
+behind the true world-0 — the mirror's error, Q2, as F5 predicted.
+
 ## Open
 
 - **`NPCTRACK-Q2` — the AgTrack mirror's POSITION fidelity, handed to MOVECODE.** The mirror was
@@ -237,6 +270,13 @@ used) and every hold (`act=hold`) into the capture, so a park can be explained w
   tracks a moving target only through the velocity extrapolation inside the reach test"*). F4's
   model has none and reproduces the tape to 10 u, so its horizon is short or its effect small;
   unmeasured.
+- **`NPCTRACK-Q6` — the mid-chase halt cadence.** Behind a running player the server's report
+  track leads the client's world-0 by ~100 u, so the copy parks at world-0's disc every re-path
+  interval, halts, and is re-followed 0.05 s later: 23 halts and 23 opens in 77 s against 13
+  on the old arm (about the same message total, 84 against 76; nothing inside 0.4 s). Faithful
+  to the client, noisier than retail, whose server player IS the frame and whose copy therefore
+  never arrives behind a player running at its own speed. The lever is the frame (Q2), not the
+  follow.
 - **`NPCTRACK-Q5` — the operator's picture is still world-0's.** The drawn hostile parks 80 u from
   the player's WORLD-0 copy, and that copy is p50 34 / 23 / 40 u from the drawn player while
   moving on these runs (p90 284 / 91 / 247). Q1 makes the server agree with the client about
@@ -245,9 +285,10 @@ used) and every hold (`act=hold`) into the capture, so a park can be explained w
 
 ## Runs
 
-- **[RUN-R1.md](RUN-R1.md)** — ran once WITHOUT its tape (P1–P3 zero trials; the wire found
-  F8). **Re-run pending, tape mandatory**: the stairs route, scoring Q1 against F1's 53.8 u with
-  `--no-npc-client-model` as the control, plus P4b (halts out of reach ≤ 5) from the first attempt.
+- **[RUN-R1.md](RUN-R1.md)** — three attempts: without its tape (the sheet's own path bug; the
+  wire found F8), a 5 s cut, and the full run at 09:43 (F9): **P1/P2 refuted as registered, the
+  comparator at fault; 11.8 u at the halt's instant against 46–68; P3 met; P4b refuted and
+  explained (Q6)**. The control session (P1′–P3′) is registered and unrun.
 
 ## Method notes
 
