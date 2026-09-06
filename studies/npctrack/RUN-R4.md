@@ -64,3 +64,36 @@ python studies/npctrack/review/npcdrift.py vault/research/npctrack/r4-agenttap.j
 
 P1/P2 from `avoidcensus`, P3 from `npcdrift`'s instant lines, P4/P5 from the capture's send
 census, P6 from `parkcensus`.
+
+---
+
+## RESULT — RAN 2026-09-06 15:13, 78 s, agent-driven, `main` at `cc4a1d3`. **P1–P5 MET, P6 as F15 predicts. F14 holds on a tape it never saw.**
+
+Capture `authsrv-20260906T151305-c1` (`MIRROR_AVOID`, `NPC_CLIENT_MODEL`, `MODEL_LEG_BOUND`,
+`MODEL_PLANE_CLIP` all true in the header), tape `r4-agenttap.jsonl` 609 of 609 paired
+samples over 180 s. 38 follow orders, 22 halts, 21 model parks, 4 holds, 29 leads.
+
+| | RUN-R4 | the seven fitted tapes |
+|---|---|---|
+| **P1** tape sidesteps matched / model-only / tape-only | **3 / 0 / 0**, waypoint error p50 0.1 max 0.3 u, stamps within 27–41 ms | 24 / 1 / 1, p50 0.2 |
+| **P1** halts predicted / confirmed by the tape | **1 / 1** — the wall lead `(10118, 8527)`, 102 u, ending 48.5 u from the parked hostile; the copy at `(10016, 8527)`, v = 0, both target blocks invalid, from the sample before the stamp | 14 / 14 |
+| **P2** mirror vs the client's world-0 while moving, p50 / p90 / max (n = 146) | **17.4 / 25.1 / 36.3** | 10.1 / 19.9 / 105 (76–105 p90 on the revert arm) |
+| **P3** Q1 same-instant at the halts, p50 / over 40 u | **9.1 u / 2 of 22** | 6.7 / 11.8 / 15.7 |
+| **P4** `0x002C` re-pins sent | **0** | 0 / 0 / 0 |
+| **P5** follows / halts / min follow gap / `groundz.ok` | 38 / 22 / 0.509 s / 609 of 609 | R2: 38 / 23 / — |
+| **P6** disc parks at a standing player: inside the disc by | **n = 8, mean 6.9 u, all inside (64.4–78.6)** | n = 37, mean 8.4, 36 of 37 |
+
+**The three sidesteps are the route's three** (9.08 s the first press, 17.81 s the S press after
+the shot, 47.67 s the last W leg), each fired at the setter with the hostile parked 64–75 u dead
+ahead, waypoint 90 u to the left, the model's fire 27–41 ms before the tape's leg (the stamp
+lag). No grant fired that the tape did not, none the tape shows was missed. The hybrid frame at
+the 22 halts under the shipped mirror: p50 14.6 / p90 22.9 u, against npcdrift's pre-F14 mirror
+on the same tape at p90 39.6. **P6, the moving-player parks that read up to 100 u** (21.76 s,
+37.47 s): both are world-0's own sidestep right after the park — the player reversed into the
+parked hostile, world-0 stepped 90 u aside at 288 u/s, and the sample caught it mid-step. Not a
+park outside the disc; another instance of the mechanism.
+
+**What this run does not say:** nothing about a hostile that moves while the copy sidesteps
+(this route parks it first), nothing about a second hostile, nothing about the mesh arm of the
+computer (no waypoint fell off the mesh here either). The seven-tape census plus this one make
+27 sidesteps and 15 halts reproduced against 2 disagreements, all on one map and one route.

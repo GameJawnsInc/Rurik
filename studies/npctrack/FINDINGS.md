@@ -554,6 +554,12 @@ is left of Q2 is the tick phase (≤ 29 u for ≤ 100 ms at 288 u/s), the mesh/`
 these tapes never exercised, and 1zCA's one 357 u halt that both arms share and that is not
 this mechanism.
 
+**OUT OF SAMPLE — [RUN-R4.md](RUN-R4.md), 2026-09-06 15:13, the same route on a tape the
+pass had never seen:** 3 of 3 sidesteps matched (waypoint error ≤ 0.3 u), the one predicted
+halt confirmed (the wall lead ending 48.5 u from the hostile), mirror vs world-0 while moving
+p90 **25.1 u**, Q1 at 9.1 u, zero `0x002C`, the wire shape unchanged. Twenty-seven sidesteps
+and fifteen halts reproduced against two disagreements over eight tapes.
+
 ## NPCTRACK-F15 — the client parks the hostile INSIDE the disc, by its next tick's worth of walking; Q1's residual is that, derived, and Q4 closes with it
 
 F14's pass is also the hostile's own disc stop — its target-agent exit (`0x0060181C`: the
@@ -594,6 +600,10 @@ and reproduces the tape to 10 u because a standing or slowly moving frame makes 
 (a head-on closing at 576 u/s would put the park up to 29 u deeper per 50 ms — one park at
 60.2 u is the only candidate in the corpus). The server's `_npc_disc_hit_ms` already solves the
 hit against the frame at each tick; nothing to change.
+
+*RUN-R4 (registered after F15, run 15:13): 8 disc parks at a standing player, all inside the
+disc, 64.4–78.6 u, mean depth 6.9 u; two moving-player parks read 98–100 u at the sample and
+both are world-0's own sidestep after the park, the mechanism of F14 seen from the other side.*
 
 ## Open
 
@@ -715,6 +725,9 @@ hit against the frame at each tick; nothing to change.
 - **[RUN-R2.md](RUN-R2.md)** — ran 12:47 (F12): **6.7 u at the halt, Q1 twice**; P3 refuted (5 of
   23, all F13's local re-target); 1z-cc reaches this arc's wire — the report track's drift at the
   wall 604 → 98 u and the hostile swings four times at a standing player instead of holding.
+- **[RUN-R4.md](RUN-R4.md)** — ran 15:13, agent-driven, after F14/F15 shipped: **F14 holds
+  out of sample** — 3 of 3 sidesteps to 0.3 u, the one predicted halt confirmed on the tape,
+  mirror vs world-0 while moving p90 25.1 u, Q1 9.1 u, zero re-pins, the wire shape as R2/R3.
 - **[RUN-R3.md](RUN-R3.md)** — ran 12:56 under `movehook`: **P1 REFUTED, F13 withdrawn** — the
   sync copy's setter is wire-only (26 of 26); our halts hit a parked copy 13 of 15 times; the tape's
   Q1 number a third time, 15.7 u at the halt (6.7, 11.8 before; old arm 46–68).
