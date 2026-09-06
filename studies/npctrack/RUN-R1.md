@@ -90,10 +90,16 @@ the plane words as RUN-1zCA's scoring did; P5 is the same tool on the control ta
 
 ## RESULT — RAN 2026-09-06 09:23, 77 s, default arm, **WITHOUT THE TAPE.** P1–P3 ZERO TRIALS; **P4 REFUTED on the wire, and the cause is fixed (NPCTRACK-F8)**; P5 not run.
 
-**The tape was never written.** `vault/research/npctrack/` does not exist, and `agenttap.py` creates
-that directory before it writes a byte — so the tape command did not run to the point of writing.
-Everything P1–P3 need (the client's sync copy at each halt) is on the tape and nowhere else. Per §2
-this is a targeting failure: **zero trials on Q1's central claim, in either direction.**
+**The tape was never written, and that was this sheet's fault.** The operator ran the tape command
+both times; `agenttap.py` found the client and then died at `open()` with `FileNotFoundError`,
+because it created a directory only for its DEFAULT path and this sheet named a new arc's
+directory that did not exist yet. (The first write-up here said the tool creates the directory
+before writing a byte — wrong, and corrected the same morning when the operator pasted the
+traceback.) The tool now makes the directory for an explicit `--out` too. Everything P1–P3 need
+(the client's sync copy at each halt) is on the tape and nowhere else, so per §2 this is a
+targeting failure: **zero trials on Q1's central claim, in either direction.** A second attempt at
+09:38 was cut at 5 s when the tape crashed again; its capture is on the F8 build and shows one
+follow, one halt, and the first `npc_model` row.
 
 **What the capture alone could say — P4, and it went RED.**
 
@@ -133,7 +139,8 @@ capture (`npc_model` rows with the frame it used), so the next run explains a pa
 
 ## RE-RUN — the same sheet, the tape mandatory
 
-§4's two commands, unchanged; the server build now carries F8. Score with §5. The registered
+§4's two commands, unchanged; the server build now carries F8 and the tape tool creates its
+directory. Score with §5. The registered
 predictions stand as written, plus one from this run: **P4b — halts with the copy > 92 u from the
 server's player ≤ 5 of ~13**, against this run's 27 of 37 (the pinned runs' 0 of 40 is the old
 integrator's construction, not a bar).

@@ -189,8 +189,10 @@ confirmed.
 
 ## NPCTRACK-F8 — RUN-R1's wire: the open rule must run in the client's frame too
 
-RUN-R1 ran on 2026-09-06 at 09:23 **without its tape** ([RUN-R1.md](RUN-R1.md) RESULT), so P1–P3
-have zero trials. The capture alone caught a regression: **37 halts and 37 fresh follows in 77 s
+RUN-R1 ran on 2026-09-06 at 09:23 **without its tape** ([RUN-R1.md](RUN-R1.md) RESULT) — the tape
+tool crashed at `open()` because the runsheet named a directory that did not exist and the tool
+only created its default one (fixed in `agenttap.py`; the sheet's first write-up blamed the
+command for not running, wrongly) — so P1–P3 have zero trials. The capture alone caught a regression: **37 halts and 37 fresh follows in 77 s
 against 13 on every pinned run, 27 of the 37 halts with the copy more than 92 u from the server's
 player against 0 of 40 before**, and seven halts at one point in 3.4 s.
 

@@ -275,6 +275,13 @@ def main():
         d = vaultpath.vault_path("research", "animref")
         os.makedirs(d, exist_ok=True)
         a.out = os.path.join(d, time.strftime("agenttap-%Y%m%dT%H%M%S.jsonl"))
+    elif os.path.dirname(a.out):
+        # An explicit --out into a directory that does not exist yet crashed
+        # here with FileNotFoundError AFTER the client was found -- twice, on
+        # RUN-NPCTRACK-R1 (2026-09-06), whose runsheet named a new arc's
+        # directory. The default path made its own directory; this one now
+        # does too. A tape that dies at open() costs a whole client run.
+        os.makedirs(os.path.dirname(a.out), exist_ok=True)
     print(f"pid {pid}, polling agents {ids} at {a.hz:.0f} Hz for {a.seconds:.0f} s -> {a.out}", flush=True)
     period = 1.0 / a.hz
     t0 = time.time()
