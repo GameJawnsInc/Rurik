@@ -126,14 +126,22 @@ wrong"*, never as a threshold to beat.
 | 22.21 | (10061.03, 8539.30) | 24.04 u |
 | **22.30** | **(10054.72, 8562.50)** | **0.00 u** |
 
-**The body teleported onto our point and stayed there.** The cause is in F9's own payload:
+**The body moved 24.04 u onto our point and stayed there.** The cause is in F9's own payload:
 `_npc_plane_correct` sends `agent["pos"]` — **the SERVER's copy** — and our copy had drifted
 24.04 u from where the client was drawing the body. "Zero-distance" is true of our model and
 false of the client's.
 
-**That is the exact harm class this project spent the movement arc removing** — a server
-message dragging a drawn body — and F9 shipped it back in on the NPC path, at 24 u, unnoticed
-because the prediction that caught it was written for a different reason.
+**CORRECTED 2026-09-06, and the correction matters: it WALKED, it did not teleport.** This
+section first said "teleported", read off raw `m_point` deltas — the sample-and-hold column
+this repo's own notes forbid quoting motion from. Re-measured through `w0score.live()`
+(`AgAgent::position_at`, clamp first): the step across the correction is **18.43 u at 189 u/s**,
+then 5.61 u at 63 u/s, then still — a decelerating walk over ~0.2 s into the point. Whole run,
+**1 of 814 steps implies > 400 u/s on `live()` against 36 on the raw column**, which is the
+artifact measured rather than argued.
+
+**So the cost is a 24 u WALK of a parked hostile, not a snap.** That is milder than the warp
+class this project removed for the player, and the original wording overstated it. It is still
+movement we caused and P3 still fails — but it fails as a twitch, not as a teleport.
 
 ### P4 / P5
 
@@ -148,9 +156,25 @@ was the open question and it is answered.
 
 **Costs:** a teleport equal to the server-client drift, every time it fires.
 
-**`GROUNDZ-Q6`, registered, NOT patched here:** the correction must carry a point the CLIENT
-already believes, not our own copy. The last point we ORDERED it to is knowable server-side and
-is what the client walked toward; our copy is not. **Do not patch this blind** — the drift
+**`GROUNDZ-Q6`, and its first answer is a REFUTATION** (2026-09-06). The obvious repair — carry
+the last point we ORDERED instead of our own copy — was measured before being written, and it
+is **worse**: at the correction the last ordered point sat **48.45 u** from the drawn body
+against our copy's 24.04, and across the run the ordered point is a median **195.4 u** away
+(p90 421, max 574). It cannot be otherwise: the follow order names the **player's** position and
+the client parks ~80 u short of it at its own disc.
+
+**The follow message is not a safer vehicle either.** Of 52 `0x002A` in this run, 31 landed on
+an already-parked body and the largest movement in the 0.35 s after was **83.23 u** (p50 0.00).
+A `0x002A` on a parked body moves it too.
+
+**So of the three candidates, F9's own payload is the CLOSEST**: our copy 24 u, the last order
+48 u, the follow's target 195 u median. There is no server-side point that reliably sits on the
+drawn body, because the server never learns where the client put an NPC — which is the same gap
+`agenttap` exists to cover.
+
+**Q6 therefore reduces to the DRIFT**, not to the payload: our copy sitting 24 u from the drawn
+body of a *parked* hostile is the defect underneath, and it belongs to the NPC-tracking arc.
+**Do not patch this blind** — the drift
 itself (our copy 24 u from the drawn body on a parked NPC) may be the more interesting defect,
 and it belongs to the NPC-tracking arc rather than to this one.
 

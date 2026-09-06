@@ -252,8 +252,13 @@ the same step. GROUNDZ-F9's mechanism is real.
 
 **REFUTED, and it is F9's own defect:** the grant is zero-distance in OUR model and **24.04 u
 from where the client draws the body**, because `_npc_plane_correct` sends `agent["pos"]`. The
-client teleported the body onto our point. **That is the harm class the movement arc exists to
-remove**, re-introduced on the NPC path at 24 u.
+client moved the body onto our point.
+
+**It WALKED, it did not teleport** — corrected the same day. The first reading came off raw
+`m_point` deltas, the sample-and-hold column this repo forbids quoting motion from. Through
+`w0score.live()` the step is **18.43 u at 189 u/s** then 5.61 u at 63, a decelerating walk into
+the point; whole run **1 of 814** steps exceeds 400 u/s on `live()` against **36 on the raw
+column**. So the cost is a 24 u twitch of a parked hostile, not the warp class.
 
 **ZERO TRIALS on the sink:** the Hatcher parked where our mesh has no trapezoid, so its plane
 could not be adjudicated on any of 213 samples (R1 disagreed on 213 of 213).
@@ -264,9 +269,15 @@ staircase's SLOPE, not the sink, whenever the bodies stand at different points �
 the plane our mesh assigns its own x/y**. R1's 32.5 u is "the run where the plane was
 demonstrably wrong", not a threshold.
 
-**`GROUNDZ-Q6`:** carry a point the client already believes — the last point we ORDERED — not
-our drifting copy. Not patched blind: the 24 u drift on a parked NPC may be the better defect,
-and it belongs to the NPC-tracking arc.
+**`GROUNDZ-Q6` — ASKED AND ANSWERED, in the negative.** "Carry the last point we ORDERED" was
+measured before it was written and is **worse**: 48.45 u from the drawn body at the correction
+against our copy's 24.04, and a median **195.4 u** across the run, because the follow names the
+PLAYER's position and the client parks ~80 u short. The follow message is no safer a vehicle
+either — 31 of its orders landed on an already-parked body and moved one by up to 83.23 u.
+
+**F9's payload is the closest of the three** (24 / 48 / 195 u). **There is no server-side point
+that reliably sits on the drawn body**, because the server never learns where the client put an
+NPC. So Q6 reduces to the DRIFT itself, which belongs to the NPC-tracking arc.
 
 ## Open
 
