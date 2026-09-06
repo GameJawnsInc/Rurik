@@ -1741,7 +1741,7 @@ openings) — the ruling does not wait on it.
 
 ## 8. Immediate next actions
 
-### ★★★ MOVEMENT 2026-09-05 — THE Z COLUMN CANNOT BE ADDED (MOVECODE-1z-cb): **the fourth word of every agent point is a hardcoded zero**, there is no height in the agent's movement record at all, and `AgAgent`'s 70 assert sites name none — settled from the pinned binary in three instructions, with no run
+### ★★★ MOVEMENT 2026-09-05 — THE Z COLUMN CANNOT BE ADDED (MOVECODE-1z-cb): **the fourth word of every agent point is a hardcoded zero**, there is no height in the agent's movement record at all, and no assert `asserts.py` reads in `AgAgent` names one — **a floor, not a census** (the tool is short by ~370 sites and says so) — settled from the pinned binary in three instructions, with no run
 
 **[FINDINGS](studies/movecode/FINDINGS.md) §1z-cb. Asked after §1z-ca.5 registered the residual ankle-sink as needing an instrument.**
 

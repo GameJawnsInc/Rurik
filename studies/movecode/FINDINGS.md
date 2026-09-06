@@ -16138,8 +16138,15 @@ carry. Recording it would have produced a column of zeros and cost a run to disc
 - **No z anywhere in the agent's movement record.** `AGENT_SPAN` is `0xD0` and every decoded
   field lies inside it: id, flags, world, stop, updated, maxspeed, movespeed, the three points
   (each `x, y, plane, 0`), velocity, followed-agent. None is a height.
-- **`AgAgent`'s 70 assert sites name no height, z, elevation or terrain field** (`asserts.py`,
-  filtered). ArenaNet's own error strings do not describe one for this object.
+- **No assert `asserts.py` READS in `AgAgent` names a height, z, elevation or terrain field**
+  — and that is a FLOOR, not a census, which this bullet got wrong on its first draft and
+  which the tool itself prints in its own banner: it reads **19,758** sites while an
+  independent sweep finds **20,131** `call rel32` landing on the assert routine, plus 3 named
+  unreadable. So it is short by ~370, every `--in <module>` bound inherits that, and
+  [[feedback-asserts-count-is-a-floor]] is a standing note in this repo that says exactly
+  this. **Corrected 2026-09-06 while opening the render-object arc (§1z-cc).** The claim that
+  survives is the disassembly above; this bullet is supporting evidence with a known hole,
+  not a proof of absence.
 - `movetap.py`'s `A_POINT` now carries this finding at the offset itself, with the three
   instructions, so the next session reads it before re-deriving it.
 
