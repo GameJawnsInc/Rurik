@@ -15683,6 +15683,70 @@ def enemy_move_tick(send, state, conn_id, rec=None):
             # the way, so a wall stops the agent instead of being walked through.
             nx, ny = pm.clip(ax, ay, nx, ny)
         agent["pos"] = (nx, ny)
+        # ANIMREF-RE 42.5 item 1 names this integrator too, not only the
+        # follow's: the legacy arm's own 0x0029 carries agent["plane"] twice.
+        agent["plane"] = _npc_plane(pm, nx, ny, agent.get("plane", 0))
+
+
+# ---- MOVECODE-1z-bz: ANIMREF-RE 42.5's plane words, shipped ----------------
+#
+# WHAT WAS WRONG. The follow stamped `agent.get("plane", 0)` -- the plane the
+# agent was SPAWNED on -- into both wire fields, on the opening order and on
+# every re-path, for the life of the session. ANIMREF-RE 42 derived that retail
+# does the opposite: its server TRACKS each NPC's current plane and the follow
+# carries it. Its census, 61 live connections: NPC-addressed 0x0029 carry
+# field 3 != field 4 **1,164 times**, and **128 of 377** NPCs change their
+# plane words over their grants. NPC 11's sequence is the rule written out --
+# (13, 0) climbing, (13, 13) once there, (0, 13) coming back.
+#
+# WHY IT SURVIVED. Ours equals retail's only while the mover stays on its spawn
+# plane, and Lakeside's flat ground made that true for every earlier run. The
+# symptom had ZERO EXPOSURE until an operator took the enemy near a bridge:
+# RUN-1zBW sent four follow orders onto plane-18-only deck, every one stamped
+# plane 0 (FINDINGS sec.1z-bx.2), and the operator reported the Hatcher
+# "didn't walk on the bridge but rather terrain-walked on the ground below".
+#
+# THE TWO WORDS, and both are sec.42.5's, not this session's:
+#   field 4 = the MOVER's current plane, resolved at the copy's own point with
+#             _router_plane's exact call, keeping the previous value when the
+#             mesh cannot say (plane_at returns None rather than guessing);
+#   field 3 = the DESTINATION's plane -- the player's reported plane where the
+#             mesh offers it there, else the mover's. The decode says field 3
+#             is what the arrival copies into the agent's plane (sec.42.2).
+#
+# (dest, cur) IS THE DERIVED SHAPE AND (cur, cur) IS THE FALLBACK. Retail's
+# follows are (cur, cur) 63 of 63 -- but not one of those 63 is a cross-plane
+# chase, because no retail hostile ever chased a player across a plane in the
+# 21 captures. So the crossing case is derived from the 1,164 crossing GRANTS,
+# not observed on a follow, and if the client refuses (dest, cur) the fallback
+# is to send the mover's plane twice. --no-npc-plane-track reverts to the
+# frozen spawn word and is how that would be tested.
+#
+# DO NOT REACH FOR -1: the word field's extension is undecidable
+# (studies/movement/FINDINGS.md, "65535 is UNDECIDABLE").
+NPC_PLANE_TRACK = True    # False (--no-npc-plane-track): the frozen spawn plane.
+
+
+def _npc_plane(pm, x, y, carry):
+    """Field 4: the mover's plane at its own point, disambiguated toward the
+    plane it already had. `_router_plane` is the ONE place that rule lives, so
+    the NPC path and the router's waypoints cannot drift apart; this only adds
+    the guards it does not need -- the flag, no mesh, and a mesh stub with no
+    plane_at() (every pre-1z-bz fixture is one)."""
+    if not NPC_PLANE_TRACK or pm is None or not hasattr(pm, "plane_at"):
+        return carry
+    return _router_plane(pm, (x, y), carry)
+
+
+def _npc_dest_plane(pm, state, px, py, mover_plane):
+    """Field 3: the destination's plane. The player's own reported plane is the
+    preference -- the client's fresh report is never overruled by the mesh
+    (movement/FINDINGS "Do not retry" #4) -- and the MOVER's plane is the
+    fallback where the mesh cannot say, which is sec.42.5's wording exactly."""
+    if not NPC_PLANE_TRACK or pm is None or not hasattr(pm, "plane_at"):
+        return mover_plane
+    p = pm.plane_at(px, py, prefer=state.get("plane"))
+    return mover_plane if p is None else p
 
 
 # ---- MOVECODE-1z-by: the NPC follow's own copy walks a ROUTED corridor ------
@@ -15855,7 +15919,12 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
     px, py = player
     ax, ay = agent["pos"]
     fol = agent.get("follow")
-    plane = agent.get("plane", 0)
+    # ANIMREF-RE 42.5 (MOVECODE-1z-bz). `plane` was agent.get("plane", 0) --
+    # the SPAWN plane, frozen for the session. It is now the mover's own,
+    # re-resolved at the copy's point every tick and written back so the
+    # preference carries; `dest_plane` is the destination's.
+    plane = agent["plane"] = _npc_plane(pm, ax, ay, agent.get("plane", 0))
+    dest_plane = _npc_dest_plane(pm, state, px, py, plane)
 
     def _halt(why):
         agent["follow"] = None
@@ -15912,9 +15981,11 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
         # was announced -- an agent cannot have travelled before it set off.
         agent["moved_at"] = now
         send(GAME_SMSG_AGENT_UPDATE_DESTINATION,
-             [agent_id, (float(px), float(py)), plane, plane, PLAYER_AGENT_ID],
-             f"FOLLOW: agent {agent_id} -> player at ({px:.0f},{py:.0f}), "
-             f"{dist:.0f} u out, halts at {stop:.0f} u [ANIMREF-RE 40]")
+             [agent_id, (float(px), float(py)), dest_plane, plane,
+              PLAYER_AGENT_ID],
+             f"FOLLOW: agent {agent_id} -> player at ({px:.0f},{py:.0f}) "
+             f"plane {plane}->{dest_plane}, {dist:.0f} u out, halts at "
+             f"{stop:.0f} u [ANIMREF-RE 40]")
         return
     # A follow in flight. ARRIVED and waiting for the clock: no re-path, no
     # step; the halt when the follow's half-second next fires -- unless the
@@ -15936,9 +16007,10 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
         fol["told"] = (px, py)
         fol["sent_at"] = now
         send(GAME_SMSG_AGENT_UPDATE_DESTINATION,
-             [agent_id, (float(px), float(py)), plane, plane, PLAYER_AGENT_ID],
-             f"FOLLOW re-path: agent {agent_id} -> player at ({px:.0f},{py:.0f}), "
-             f"{dist:.0f} u out [ANIMREF-RE 40]")
+             [agent_id, (float(px), float(py)), dest_plane, plane,
+              PLAYER_AGENT_ID],
+             f"FOLLOW re-path: agent {agent_id} -> player at ({px:.0f},{py:.0f}) "
+             f"plane {plane}->{dest_plane}, {dist:.0f} u out [ANIMREF-RE 40]")
     # Advance our own copy, capped so it parks at the disc rather than on top
     # of the player -- the same arithmetic the legacy arm ran at 150 u.
     elapsed = max(0.0, now - agent.get("moved_at", now))
@@ -15955,6 +16027,7 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
         if agent.get("froute") or agent["pos"] != before:
             dist, routed = newdist, True
             ax, ay = agent["pos"]
+            agent["plane"] = _npc_plane(pm, ax, ay, plane)   # 1z-bz
     if not routed:
         step = min(budget, dist - stop)
         if step > 0.0 and dist > 0.0:
@@ -15963,6 +16036,7 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
             if pm is not None:
                 nx, ny = pm.clip(ax, ay, nx, ny)
             agent["pos"] = (nx, ny)
+            agent["plane"] = _npc_plane(pm, nx, ny, plane)   # 1z-bz
             dist = math.hypot(px - nx, py - ny)
     if dist <= stop + 1e-6:
         if not HALT_ON_CLOCK:
@@ -23326,6 +23400,20 @@ def main():
                          "body trails its sync copy and an instant halt froze "
                          "it short of the disc -- CASE 8 v2's 'long range "
                          "attacks' with the server's copy at exactly 80 u.")
+    ap.add_argument("--no-npc-plane-track", action="store_true",
+                    help="ANIMREF-RE 42.5 / MOVECODE-1z-bz REVERT: a hostile's "
+                         "follow carries the plane it SPAWNED on in both wire "
+                         "words, frozen for the session, instead of the "
+                         "mover's tracked plane and the destination's. Retail "
+                         "tracks: 1,164 NPC grants carry field 3 != field 4 "
+                         "and 128 of 377 NPCs change their words over a "
+                         "session. Ours matched only on flat ground, which is "
+                         "why this had zero exposure until RUN-1zBW sent four "
+                         "follow orders onto bridge deck stamped plane 0 and "
+                         "the operator watched the Hatcher walk underneath. "
+                         "This is also the arm to test with if the client "
+                         "refuses (dest, cur): sec.42.5's stated fallback is "
+                         "the mover's plane twice. Known-bad arm.")
     ap.add_argument("--no-npc-follow-router", action="store_true",
                     help="MOVECODE-1z-by REVERT: a hostile's own server-side "
                          "copy walks a STRAIGHT LINE clipped by the pathmap "
@@ -25032,6 +25120,13 @@ def main():
         print("[map] --halt-on-arrival: a hostile's 0x0028 goes out the instant "
               "the server's copy reaches the disc (ANIMREF-RE 40.9's revert; "
               "the client's rendered body halts short).", flush=True)
+    if a.no_npc_plane_track:
+        global NPC_PLANE_TRACK
+        NPC_PLANE_TRACK = False
+        print("[map] --no-npc-plane-track: a hostile's follow carries its "
+              "SPAWN plane in both words (ANIMREF-RE 42.5's revert). RUN-1zBW: "
+              "4 follow orders onto plane-18-only bridge deck, all stamped "
+              "plane 0.", flush=True)
     if a.no_npc_follow_router:
         global NPC_FOLLOW_ROUTER
         NPC_FOLLOW_ROUTER = False

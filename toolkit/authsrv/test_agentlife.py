@@ -64,7 +64,9 @@ from codec import Codec  # noqa: E402
 # +10 at MOVECODE-1z-by (section_follow_router: the hostile's own copy
 # walks a routed corridor, with the straight-line arm as the known-bad
 # control). Floor from a real green run, never a head-count.
-LEDGER = checks.Ledger("agent lifetime", floor=278)
+# +8 at MOVECODE-1z-bz (section_npc_plane: ANIMREF-RE 42.5's tracked
+# plane words, with the frozen spawn word as the known-bad control).
+LEDGER = checks.Ledger("agent lifetime", floor=286)
 
 
 def section_weapon_damage():
@@ -518,6 +520,7 @@ def main():
     section_swing_back()
     section_chase()
     section_follow_router()
+    section_npc_plane()
     section_facing()
     section_enemy_skill()
     section_constants()
@@ -901,14 +904,19 @@ def _follow_run(state, pm, seconds=4.0, hz=20.0):
     px, py = state["pos"]
     halts, moved, prev, now = [], 0.0, ag["pos"], 0.0
     dt = 1.0 / hz
+    state.setdefault("_follows", [])
+
+    def _cap(op, vals, label="", quiet=False):
+        if "halts at (" in label:
+            halts.append(label)
+        elif op == authsrv.GAME_SMSG_AGENT_UPDATE_DESTINATION:
+            state["_follows"].append(vals)      # 1z-bz reads the plane words
+
     while now < seconds:
         now += dt
         ax, ay = ag["pos"]
         d = _m.hypot(px - ax, py - ay)
-        authsrv._npc_follow_tick(
-            lambda op, vals, label="", quiet=False: (
-                halts.append(label) if "halts at (" in label else None),
-            state, 1, 10, ag, (px, py), d, now, pm)
+        authsrv._npc_follow_tick(_cap, state, 1, 10, ag, (px, py), d, now, pm)
         moved += _m.dist(prev, ag["pos"])
         prev = ag["pos"]
     return moved, halts
@@ -1023,6 +1031,146 @@ def section_follow_router():
         authsrv.NPC_FOLLOW_ROUTER = saved
 
 
+class _Stairs:
+    """Ground is plane 0; x >= 500 is plane 29, the stairs. y > 900 the mesh cannot name.
+
+    This is ANIMREF-RE 42.5's own PASS shape reduced to a fixture: a (29, 0)
+    follow at the foot and (29, 29) after the crossing. The unnameable strip
+    exists because plane_at returns None rather than guessing, and the fallback
+    for None is the thing 42.5 spells out.
+    """
+
+    def clip(self, x0, y0, x1, y1, step=16.0):
+        return (x1, y1)
+
+    def plane_at(self, x, y, prefer=None):
+        if y > 900.0:
+            return None
+        return 29 if x >= 500.0 else 0
+
+
+def section_npc_plane():
+    """ANIMREF-RE 42.5, shipped: the follow's plane words track the mover.
+
+    Retail's server tracks each NPC's current plane -- 1,164 NPC-addressed
+    0x0029 carry field 3 != field 4 and 128 of 377 NPCs change their words over
+    a session. Ours stamped the SPAWN plane into both, which equals retail only
+    on flat ground; RUN-1zBW sent four follow orders onto plane-18-only bridge
+    deck all stamped plane 0 while the operator watched the Hatcher walk
+    underneath.
+    """
+    import authsrv
+    print("\nANIMREF-RE 42.5 / MOVECODE-1z-bz: the follow's plane words track "
+          "the mover")
+    LEDGER.ok(authsrv.NPC_PLANE_TRACK is True
+              and "--no-npc-plane-track" in open(
+                  authsrv.__file__, encoding="utf-8").read()
+              and authsrv.capture_flags().get("NPC_PLANE_TRACK") is True,
+              "it ships ON with its revert flag, recorded in the capture header",
+              "the revert is also how the (cur, cur) fallback would be tested "
+              "if the client refuses (dest, cur)")
+
+    pm = _Stairs()
+    saved = authsrv.NPC_PLANE_TRACK
+    try:
+        # AT THE FOOT: the mover is on the ground, the player is up the stairs.
+        st = _fresh_follow((0.0, 0.0), (600.0, 0.0), player_plane=29)
+        _follow_run(st, pm, seconds=0.05)
+        fol = _last_follow(st)
+        LEDGER.ok(fol is not None and fol[2] == 29 and fol[3] == 0,
+                  "AT THE FOOT the follow reads (29, 0): field 3 the "
+                  "DESTINATION's plane, field 4 the MOVER's -- 42.5's derived "
+                  "shape, and the case the old code could not express",
+                  f"{fol[2]}/{fol[3]} -- retail's NPC 11 climbs (13, 0) then "
+                  f"(13, 13) then (0, 13)")
+
+        # AFTER THE CROSSING the mover is on 29 too, and the words equalise.
+        st = _fresh_follow((520.0, 0.0), (900.0, 0.0), player_plane=29,
+                           agent_plane=0)        # still carrying the stale spawn word
+        _follow_run(st, pm, seconds=0.05)
+        fol = _last_follow(st)
+        LEDGER.ok(fol is not None and fol[2] == 29 and fol[3] == 29,
+                  "AFTER THE CROSSING it reads (29, 29) -- and note field 4 "
+                  "corrected itself from the stale spawn 0 without any step, "
+                  "because it is resolved at the copy's own point",
+                  f"{fol[2:4] if fol else fol}")
+
+        # THE MOVER'S PLANE IS TRACKED AS THE COPY STEPS.
+        st = _fresh_follow((0.0, 0.0), (900.0, 0.0), player_plane=29)
+        _follow_run(st, pm, seconds=3.0)
+        LEDGER.ok(st["agents"][10]["plane"] == 29
+                  and st["agents"][10]["pos"][0] >= 500.0,
+                  "the mover's own plane FOLLOWS it across: the copy walked "
+                  "past x=500 and agent['plane'] became 29",
+                  f"pos {st['agents'][10]['pos']} plane "
+                  f"{st['agents'][10]['plane']}")
+
+        # THE MESH CANNOT SAY -> the mover's plane, per 42.5, NOT -1 and not a guess.
+        st = _fresh_follow((0.0, 0.0), (600.0, 950.0), player_plane=29)
+        _follow_run(st, pm, seconds=0.05)
+        fol = _last_follow(st)
+        LEDGER.ok(fol is not None and fol[2] == 0 and fol[3] == 0,
+                  "where the mesh CANNOT name the destination's plane, field 3 "
+                  "falls back to the mover's -- 42.5's wording, and never -1 "
+                  "(the word field's extension is UNDECIDABLE)",
+                  f"{fol[2:4] if fol else fol}")
+        LEDGER.ok(fol is not None and all(isinstance(v, int) and v >= 0
+                                         for v in (fol[2], fol[3])),
+                  "and both words stay non-negative ints on every path above",
+                  f"{fol[2:4] if fol else fol!r}")
+
+        # A MESH WITH NO plane_at AT ALL -- every pre-1z-bz fixture.
+        class _Flat:
+            def clip(self, x0, y0, x1, y1, step=16.0):
+                return (x1, y1)
+        st = _fresh_follow((0.0, 0.0), (600.0, 0.0), player_plane=29,
+                           agent_plane=7)
+        _follow_run(st, pm=_Flat(), seconds=0.05)
+        fol = _last_follow(st)
+        LEDGER.ok(fol is not None and fol[2] == 7 and fol[3] == 7,
+                  "a pathmap with no plane_at() degrades to the agent's own "
+                  "word twice instead of raising",
+                  f"{fol[2:4] if fol else fol}")
+
+        # THE KNOWN-BAD ARM: the frozen spawn plane, on the SAME crossing order.
+        authsrv.NPC_PLANE_TRACK = False
+        st = _fresh_follow((0.0, 0.0), (600.0, 0.0), player_plane=29)
+        _follow_run(st, pm, seconds=3.0)
+        fol = _last_follow(st)
+        LEDGER.ok(fol is not None and fol[2] == 0 and fol[3] == 0
+                  and st["agents"][10]["plane"] == 0,
+                  "REVERT ARM (--no-npc-plane-track): the same crossing order "
+                  "reads (0, 0) and the mover's plane never moves off its "
+                  "spawn word -- RUN-1zBW's 49 of 49, reproduced",
+                  f"{fol[2:4] if fol else fol}, agent plane "
+                  f"{st['agents'][10]['plane']}")
+        LEDGER.ok(True,
+                  "so the section's positives are the fix and not the fixture: "
+                  "the same geometry gives (29, 0) with the flag on and (0, 0) "
+                  "with it off")
+    finally:
+        authsrv.NPC_PLANE_TRACK = saved
+
+
+def _fresh_follow(agent_pos, player_pos, player_plane, agent_plane=0):
+    """A world whose hostile has NOT set off yet, so the OPENING follow order
+    fires on the first tick. _follow_world pre-arms the follow, which suppresses
+    the send entirely -- this section's first draft read an empty list because
+    of it, which is a fixture that measured nothing rather than a fix that
+    failed."""
+    st = _follow_world(agent_pos, player_pos)
+    st["plane"] = player_plane
+    st["agents"][10]["follow"] = None
+    st["agents"][10]["moving"] = False
+    st["agents"][10]["plane"] = agent_plane
+    return st
+
+
+def _last_follow(state):
+    fols = state.get("_follows") or []
+    return fols[-1] if fols else None
+
+
 def section_chase():
     """It follows the player, and halts where the client's own disc parks it.
 
@@ -1103,9 +1251,14 @@ def section_chase():
               f"{fol} -- 45 of 45 retail NPC follows name the player in the "
               "fifth field, none carries 0; that field is agent+0x98, the "
               "agent the client's resolver stops against (sec.38.2)")
-    LEDGER.ok(fol[2] == fol[3],
-              "and both plane words carry the same plane",
-              f"{fol[2]}/{fol[3]} -- (0,0) on 205 of 206 retail NPC follows")
+    LEDGER.ok(fol[2] == fol[3] == state["agents"][10]["plane"],
+              "and on a SAME-PLANE order both words carry the mover's own "
+              "plane -- which is what (0,0) on 205 of 206 retail NPC follows "
+              "is: not a constant, but field 4 = the mover's current plane "
+              "agreeing with field 3 because nothing is crossing "
+              "(ANIMREF-RE 42.5; the crossing case is section_npc_plane)",
+              f"{fol[2]}/{fol[3]} against agent plane "
+              f"{state['agents'][10]['plane']}")
     LEDGER.ok(not _swings(state),
               "and it does not swing from out there",
               f"{far:.0f} units against a reach of {reach:.0f}")

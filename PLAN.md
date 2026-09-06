@@ -1741,6 +1741,16 @@ openings) — the ruling does not wait on it.
 
 ## 8. Immediate next actions
 
+### ★★★ MOVEMENT 2026-09-05 — ANIMREF-RE §42.5's PLANE FIX SHIPPED (MOVECODE-1z-bz): the follow's two words are the **destination's plane and the mover's tracked plane**, not the plane the hostile spawned on — `(29, 0)` at the foot of the stairs, `(29, 29)` after the crossing; `--no-npc-plane-track` reverts
+
+**[FINDINGS](studies/movecode/FINDINGS.md) §1z-bz. Asked by the owner on §1z-bx.6 item 2. No client run. The fix is §42.5's; this session supplied the exposure (§1z-bx), the instrument (§1z-bx.5) and the tests.**
+
+* **Retail tracks and we froze.** 1,164 NPC-addressed `0x0029` carry field 3 ≠ field 4 and 128 of 377 NPCs change their words over a session; ours stamped the SPAWN plane into both, which equals retail only on flat ground. Zero exposure until RUN-1zBW put four follow orders onto plane-18-only bridge deck stamped plane 0 and the operator watched the Hatcher walk underneath.
+* **Field 4** = the mover's plane at its own point (`_router_plane`'s exact call, reused so the NPC path and the router's waypoints cannot drift), written back every tick and after every step in all three integrators — routed, straight-line and legacy. **Field 3** = the destination's plane, the player's report where the mesh offers it, else the mover's. **Never −1.**
+* **`(dest, cur)` is DERIVED, not observed:** retail's follows are `(cur, cur)` 63/63, but none of those 63 is a cross-plane chase. The crossing shape comes from the 1,164 crossing GRANTS. `--no-npc-plane-track` is §42.5's stated fallback and the arm to test with if the client refuses it.
+* **Tests:** `test_agentlife` `section_npc_plane`, floor 278 → 286 (green 301), reproducing §42.5's predicted signature and running the frozen-word arm as the control. **The pin §42.5 said would move, moved:** `fol[2] == fol[3]` is now `== agent["plane"]` — retail's 205-of-206 `(0,0)` is a flat map, not a constant.
+* **Still owed:** §42.5's PASS is a RUN — `(29, 0)` then `(29, 29)`, the Hatcher's copies on plane-29 ground **with plane 29 in agenttap's new column**, and a screenshot on the treads. **This is the third default shipped today**; if the next session feels wrong, revert in order: the fence bound, the router, this.
+
 ### ★★★ MOVEMENT 2026-09-05 — THE A* ROUTER IS WIRED INTO THE NPC FOLLOW (MOVECODE-1z-by): the hostile's **own copy** walks a routed corridor, **2,174.8 u out of RUN-1zBW's wedge against the straight line's 0.0 u**; the wire is byte-identical and `--no-npc-follow-router` reverts
 
 **[FINDINGS](studies/movecode/FINDINGS.md) §1z-by. Asked by the owner on §1z-bx.6 item 1. No client run.**

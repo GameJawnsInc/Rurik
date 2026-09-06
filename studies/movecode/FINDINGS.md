@@ -15890,3 +15890,90 @@ and a player genuinely past the leash **must**.
   trajectory and the test; the next session with a hostile is the confirmation, and it is one
   flag away from the old behaviour.
 - **It does not make the chase in RUN-1zBW succeed**, and no fix could: that player left.
+## 1z-bz. ANIMREF-RE §42.5's PLANE FIX, SHIPPED — the follow's two words are now **the destination's plane and the mover's tracked plane**, not the plane the hostile spawned on. `(29, 0)` at the foot of the stairs, `(29, 29)` after the crossing, which is §42.5's own predicted signature. `--no-npc-plane-track` reverts, and it is also how the client would be tested if it refuses the crossing shape
+
+**Asked:** "ship the plane fix" — the owner, on §1z-bx.6 item 2. Zero client runs. Ident
+`MOVECODE-1z-bz`. The fix is §42.5's, not this session's; what this session added is the
+exposure (§1z-bx), the instrument (§1z-bx.5) and the tests. OBSERVED unless marked.
+
+### 1z-bz.1 What was wrong, and why it survived a month of runs
+
+The follow stamped `agent.get("plane", 0)` — **the plane the hostile spawned on** — into both
+wire fields, on the opening order and every re-path, for the life of the session.
+
+ANIMREF §42 derived that retail does the opposite, over 61 live connections: its server
+**tracks each NPC's current plane**. NPC-addressed `0x0029` carry **field 3 ≠ field 4 in 1,164
+cases**, and **128 of 377** NPCs change their plane words over their grants. NPC 11's sequence
+is the rule written out — `(13, 0)` climbing, `(13, 13)` once there, `(0, 13)` coming back.
+
+**Ours equals retail's only while the mover stays on its spawn plane**, and Lakeside's flat
+ground made that true for every earlier run. The symptom had **zero exposure until an operator
+took the enemy near a bridge**: RUN-1zBW sent four follow orders onto plane-18-only deck, every
+one stamped plane 0 (§1z-bx.2), and the operator reported the Hatcher *"didn't walk on the
+bridge but rather terrain-walked on the ground below"*.
+
+### 1z-bz.2 The two words, both §42.5's
+
+| field | what it now carries |
+|---|---|
+| **4** | the **mover's** current plane, resolved at the copy's own point with `_router_plane`'s exact call, keeping the previous value when the mesh cannot say |
+| **3** | the **destination's** plane — the player's reported plane where the mesh offers it there (`plane_at(px, py, prefer=state["plane"])`, the client's fresh report never overruled by the mesh), else the mover's |
+
+`_router_plane` is reused rather than reimplemented, so the NPC path and the router's own
+waypoints cannot drift apart; the new wrapper adds only the guards that helper does not need —
+the flag, no mesh, and a mesh stub with no `plane_at()`.
+
+The mover's plane is written back **every tick and after every step**, in the routed arm, the
+straight-line arm, and the legacy chase arm — §42.5 item 1 names that integrator too.
+
+**`(dest, cur)` is DERIVED, not observed, and that is stated at the call site.** Retail's
+follows are `(cur, cur)` 63 of 63 — but **not one of those 63 is a cross-plane chase**, because
+no retail hostile ever chased a player across a plane in the 21 captures. The crossing shape
+comes from the 1,164 crossing **grants**, not from a follow. If the client refuses it, §42.5's
+stated fallback is the mover's plane twice, and `--no-npc-plane-track` is how that gets tested.
+
+**No `-1`.** The word field's extension is undecidable (`studies/movement/FINDINGS.md`,
+"65535 is UNDECIDABLE"), so the fallback is always a real plane.
+
+### 1z-bz.3 The tests, and the pin §42.5 said would have to move
+
+`test_agentlife.py` `section_npc_plane`, floor 278 → **286** (green run 301). The fixture is
+§42.5's PASS shape reduced to a stub — ground is plane 0, `x ≥ 500` is plane 29, and a strip the
+mesh cannot name:
+
+- **at the foot: `(29, 0)`** — the case the old code could not express;
+- **after the crossing: `(29, 29)`**, with field 4 correcting itself off a stale spawn word
+  without any step, because it is resolved at the copy's point rather than remembered;
+- the mover's plane **follows it across** as the copy walks past the boundary;
+- where the mesh cannot say, field 3 falls back to **the mover's**, and both words stay
+  non-negative ints;
+- a pathmap with **no `plane_at()`** degrades to the agent's own word twice instead of raising;
+- **the known-bad arm** (`--no-npc-plane-track`) reads `(0, 0)` on the *same* crossing order with
+  the mover's plane never leaving its spawn word — RUN-1zBW's 49 of 49, reproduced.
+
+**§42.5 predicted one existing pin would have to change**, and it did: `test_agentlife`'s chase
+section pinned `fol[2] == fol[3]`, "both plane words carry the same plane". That is now
+`fol[2] == fol[3] == agent["plane"]` — on a same-plane order the words agree **because field 4
+is the mover's and nothing is crossing**, which is what retail's 205-of-206 `(0,0)` actually is:
+not a constant, but a flat map.
+
+**Two fixture defects found on the way, both of which measured nothing rather than failing
+loudly.** The section's first draft read an empty send list, because `_follow_world` pre-arms
+the follow and a pre-armed follow suppresses the opening order entirely; and its second fixture
+placed the two bodies 80 u apart, inside `enemy_reach()`, where the tick correctly orders no
+walk at all. Both are now `_fresh_follow`, which builds a hostile that has not set off.
+
+### 1z-bz.4 What this does NOT establish
+
+- **The client has not seen it.** §42.5's PASS criteria are a run — a `(29, 0)` follow at the
+  foot, `(29, 29)` after, **the Hatcher's copies on plane-29 ground with plane 29 in agenttap's
+  new column**, and a screenshot with the body on the treads. The column exists as of §1z-bx.5
+  and has never recorded a run. **REFUTED IF** the Hatcher does not move on the `(29, 0)` order,
+  or snaps — the phasing door is an AgTrack mechanism and whether an NPC has one is UNREAD.
+- **It is the third default shipped today** (the fence bound §1z-bw, the router §1z-by, this).
+  They are independent in code and each has its own revert, but a single session that feels
+  wrong will not tell them apart. If the next run is bad, revert them one at a time in that
+  order.
+- **It interacts with §1z-by and the interaction is untested.** A routing copy crosses more
+  geometry than a wedged one, so it will generate more crossing orders than any capture holds.
+  That is the point, and it is also the risk.
