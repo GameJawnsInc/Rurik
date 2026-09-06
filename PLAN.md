@@ -1741,6 +1741,16 @@ openings) — the ruling does not wait on it.
 
 ## 8. Immediate next actions
 
+### ★★★ MOVEMENT 2026-09-05 — RUN-1zCA: **ANIMREF-RE §42.5 PASSES ON ALL FOUR CLAUSES** (MOVECODE-1z-ca), a month after it was written and could not be run. The follow climbs `(29, 0)`, sits `(29, 29)` and descends `(0, 29)` — retail's own three-phase sequence, three times over — and the Hatcher is on the stairs for **486 of the 511 samples the player is**, against RUN-1zAB's 48-of-48 `(0, 0)`
+
+**[FINDINGS](studies/movecode/FINDINGS.md) §1z-ca. Sheet [RUN-1zCA.md](studies/movecode/RUN-1zCA.md). First tape ever to carry the plane column.**
+
+* **All three exposure floors MET** — 24 orders onto plane-29-only ground, RUN-1zAB's own figure to the unit.
+* **P2 was the clause that could have sent the fix back** and it passed: 262–321 u walked after each `(29,0)`, largest single step 31.7 u against ~26 u of ordinary walking. The client accepts a crossing order it has never been observed to receive in retail.
+* **The `(0, 29)` descent is now OBSERVED on a follow** — twice — which retail's own 21 captures do not contain. We are ahead of the reference here, not matching it.
+* **THE OPERATOR FOUND THE RESIDUAL:** the body sinks ~ankle-deep into a tread while parked. **The plane words do not explain it** — every one reads 29 through the hold, the segment/target points are INFINITE so their zero plane is residue, field 3 reaches the segment plane 0.06 s after the order, and the player shows the same pattern on a different message family. **Render height, and the tape has no z.** Registered, unfixed, and the next step is an instrument rather than a patch.
+* **Caveat:** three defaults shipped that day and this run cannot separate them — the router is why the Hatcher reached the stairs at all, so this is a verdict on the stack.
+
 ### ★★★ MOVEMENT 2026-09-05 — ANIMREF-RE §42.5's PLANE FIX SHIPPED (MOVECODE-1z-bz): the follow's two words are the **destination's plane and the mover's tracked plane**, not the plane the hostile spawned on — `(29, 0)` at the foot of the stairs, `(29, 29)` after the crossing; `--no-npc-plane-track` reverts
 
 **[FINDINGS](studies/movecode/FINDINGS.md) §1z-bz. Asked by the owner on §1z-bx.6 item 2. No client run. The fix is §42.5's; this session supplied the exposure (§1z-bx), the instrument (§1z-bx.5) and the tests.**

@@ -15977,3 +15977,134 @@ walk at all. Both are now `_fresh_follow`, which builds a hostile that has not s
 - **It interacts with §1z-by and the interaction is untested.** A routing copy crosses more
   geometry than a wedged one, so it will generate more crossing orders than any capture holds.
   That is the point, and it is also the risk.
+## 1z-ca. RUN-1zCA — **ANIMREF-RE §42.5 PASSES on all four clauses**, a month after it was written and could not be run. The follow's words climb `(29, 0)`, sit `(29, 29)` and descend `(0, 29)` — **retail's own three-phase sequence, three times over** — the client walks every crossing order without snapping, and the Hatcher is on the stairs for **486 of the 511 samples the player is**, against RUN-1zAB's 48-of-48 `(0, 0)`. **And the operator found the residual the numbers missed:** the body sinks about ankle-deep into a tread while parked, which the plane words do **not** explain
+
+**Ran 2026-09-05 23:32, 77.2 s, scripted, hands off.** Sheet [RUN-1zCA.md](RUN-1zCA.md).
+Capture `authsrv-20260905T233210-c1`, tape `1zca-agenttap.jsonl` — **the first tape ever to
+carry the plane column** (§1z-bx.5). OBSERVED unless marked.
+
+### 1z-ca.1 Validity and exposure, read first
+
+`NPC_PLANE_TRACK` True, `NPC_FOLLOW_ROUTER` True, `KBD_SYNC_LEAD_ON` True, `AGTRACK_REPIN`
+True, `ROUTER` True, `SPAWN_ENEMY` True, origin `ours`. Every walk leg ran its full commanded
+duration. 50 agent-10 `0x002A`, decoded from their own payload bytes, never from a label.
+
+| the registered floor | measured | |
+|---|---|---|
+| follow orders onto plane-29-**only** ground ≥ 5 | **24** | MET |
+| tape samples, player's plane column = 29 ≥ 20 | **511** | MET |
+| a follow order issued while the player reports 29 ≥ 1 | **28** | MET |
+
+The 24 is RUN-1zAB's own figure to the unit (24 of 48), so the route reproduced its exposure
+exactly.
+
+### 1z-ca.2 ★★★ P1 — the words change, into retail's own sequence
+
+RUN-1zAB: **48 orders, all `(0, 0)`.** Here, 50 orders in **four** classes — and read the
+order of them, because that is the finding:
+
+| t (s) | words | |
+|---|---|---|
+| 0.84 | `(0, 0)` | on the ground |
+| **11.88** | **`(29, 0)`** | climbing — destination the stairs, mover still on the ground |
+| **12.92** | **`(29, 29)`** | on the stairs |
+| **21.42** | **`(0, 29)`** | descending — destination the ground, mover still on the stairs |
+| 25.90 / 26.41 / 30.38 | `(29,0)` → `(29,29)` → `(0,29)` | the whole cycle again |
+| 32.41 / 42.24 / 50.78 / 51.29 | `(29,29)` → `(0,0)` → `(29,0)` → `(29,29)` | and a third |
+
+Counts: `(29,29)` ×26, `(0,0)` ×18, `(29,0)` ×4, `(0,29)` ×2. **§42.4's retail NPC 11 reads
+`(13, 0)` climbing, `(13, 13)` once there, `(0, 13)` coming back.** That is this table with a
+different plane index. **P1 MET.**
+
+### 1z-ca.3 ★★★ P2 — the client accepts the crossing order, and does not snap
+
+This was the clause that could have sent the fix back: `(dest, cur)` is derived from 1,164
+crossing **grants** and had never been observed on a **follow**, because no retail hostile ever
+chased a player across a plane in 21 captures.
+
+On all four `(29, 0)` orders, the drawn body over the following 1.5 s:
+
+| order t | travelled | largest single step |
+|---|---|---|
+| 11.88 | 284.0 u | 31.7 u |
+| 12.41 | 321.1 u | 29.1 u |
+| 25.90 | 262.1 u | 28.8 u |
+| 50.78 | 266.1 u | 28.8 u |
+
+At the tape's ~11 Hz and the client's 288 u/s, one sample of ordinary walking is ≈ 26 u. **The
+largest step anywhere is 31.7 u** — walking, not a teleport. **P2 MET: it moves, and it does
+not snap.**
+
+### 1z-ca.4 ★★★ P3 and the symptom census — the column exists, and the symptom is 95% gone
+
+The Hatcher's own plane column reads **29 in 642 of 846 samples**, first at t=12.97, ~1.1 s
+after the `(29, 0)` order. Against our mesh at its own x/y: **471 agree, 9 disagree**, and
+**366 our mesh cannot name at all** — a real gap in our reconstruction, stated rather than
+hidden.
+
+**The census that answers the operator's original report** (*"terrain-walks UNDER the stairs"*):
+
+| | |
+|---|---|
+| samples with the **player** on plane 29 | **511** |
+| …the Hatcher's column also reading 29 | **486 (95.1%)** |
+| …the Hatcher's column reading 0 | **25 (4.9%)**, and they were 150–332 u apart (p50 259) when it did |
+
+So on the 25 it is not *under* the player — it is behind and below, still climbing. **This is
+the observation that turns §1z-bx.2's RECONSTRUCTION into an OBSERVATION**, and it could not
+have been made before §1z-bx.5 added the column.
+
+**The 9 disagreements are two short episodes at the same transition**, four samples each:
+t=12.97–13.35 at (10311, 8238) the client says 29 where our mesh says 0, and t=44.93–45.20 at
+(10361, 8351) the client says 0 where our mesh says 29. Both are the no-height limitation of
+our own trapezoid file on stacked geometry, and the client is the authority.
+
+**P4 MET.** `walk3-shot.png` (t=17.64, inside the `(29, 29)` window): the Hatcher stands on a
+tread beside the player, boots on the stone, engaged. Not under the staircase.
+
+### 1z-ca.5 ★★★ THE RESIDUAL THE OPERATOR FOUND, and the numbers did not
+
+> *"the hatcher fell back into the stairs slightly. not a full terrain-walk, more like ankles
+> sunken into the stair."*
+
+**Confirmed visually.** `hold007.png` (t=68.07) against `walk3-shot.png` (t=17.64): in the
+earlier frame the Hatcher's boots stand clear on the tread; in the hold its lower legs are cut
+off at the stone. It is at stair height, not ground height — a partial sink, exactly as
+described.
+
+**And the plane words do not explain it.** Through the entire 269-sample hold the Hatcher is
+parked at one point, zero velocity, and **every plane word that governs it reads 29** — async
+`m_point` 29, sync `m_point` 29, and the player 29 too.
+
+The zeros that first looked like the cause are inert:
+
+- the segment and target planes read 0 in the hold — **but `segx` and `tx` are INFINITE for all
+  269 samples**. There is no segment and no target while parked, so their plane word is
+  residue, not an order we sent.
+- **field 3 demonstrably does reach the segment plane**: 109 samples carry segment plane 29,
+  the first at t=11.94 — **0.06 s after** the `(29, 0)` order at t=11.88.
+- **the player shows the identical pattern** (segment plane 0 ×685 / 29 ×161) while driven by a
+  completely different message family, so this is the client's own bookkeeping and not the NPC
+  follow's.
+
+**So the residual is a RENDER-HEIGHT question, and no instrument in this tree can answer it.**
+The tape reads x, y and now three plane words — **it does not read z**, which is the same gap
+§42.2 flagged when it labelled the render half RECONSTRUCTION. The parked point (10511, 8375)
+is also one our own mesh cannot name, so we cannot even say which tread it should be on.
+**RECONSTRUCTION, unmeasured, and registered rather than guessed at.**
+
+### 1z-ca.6 Regressions, and what this run does NOT establish
+
+`repincheck` 0 violations (and **zero `0x002C` in the whole run** — no exposure for that check,
+which is not a pass). `gate2census` unchanged: still 0 gate-2 fires waiver-carried, still none
+since the tolerance shipped. `fencelatency` unchanged at 26 measured shuts, max 6.087 s.
+`followroute` re-run after the plane change: 2,174.8 u against 0.0 u, unchanged.
+
+- **Three defaults shipped the same day and this run cannot separate them** (§1z-bw's fence
+  bound, §1z-by's router, §1z-bz's planes). The router in particular is why the Hatcher reached
+  the stairs at all, so P1–P4 are a verdict on the *stack*, not on the plane fix alone.
+- **The `(0, 29)` descent shape is now OBSERVED on a follow** — two of them — which retail's own
+  corpus does not contain. We are ahead of the reference here, not matching it.
+- **Zero `0x002C` means the AgTrack path had no exposure at all** in this run.
+- **The residual sink is unfixed and unexplained**, and the next step for it is an instrument
+  (agent z, or a render-side read), not a patch.

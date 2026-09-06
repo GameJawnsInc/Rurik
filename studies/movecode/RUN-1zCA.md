@@ -110,4 +110,19 @@ than a null.
 
 ---
 
-## RESULT — not yet run.
+## RESULT — RAN 2026-09-05 23:32, 77.2 s. **ALL FOUR CLAUSES PASS.** Scored in [FINDINGS.md](FINDINGS.md) §1z-ca.
+
+| | |
+|---|---|
+| exposure | **all three floors MET** — 24 orders onto plane-29-only (RUN-1zAB's own 24), 511 player samples on 29, 28 orders while the player is on 29 |
+| **P1** the words change | **MET** — `(29,0)` → `(29,29)` → `(0,29)`, retail's NPC 11 sequence, **three times over**; 4 classes against RUN-1zAB's 48-of-48 `(0,0)` |
+| **P2** the client accepts | **MET** — 262–321 u walked in the 1.5 s after each `(29,0)`, largest single step 31.7 u against ~26 u of ordinary walking. No snap |
+| **P3** the column agrees | **MET** — the Hatcher reads plane 29 in 642 of 846 samples; **486 of the 511 samples the player is on 29 (95.1%)**; 471 agree / 9 disagree with our mesh |
+| **P4** the body on the treads | **MET** — `walk3-shot.png`, t=17.64 |
+
+**And a residual the predictions did not name, found by the operator:** the body sinks about
+ankle-deep into a tread while parked (`hold007.png`). **The plane words do not explain it** —
+through the whole hold every one reads 29, the segment and target points are INFINITE (so their
+zero plane is residue, not an order), field 3 demonstrably reaches the segment plane 0.06 s
+after the first crossing order, and the player shows the same pattern on a different message
+family. It is a render-height question and **the tape has no z**. §1z-ca.5, registered.
