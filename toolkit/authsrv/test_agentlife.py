@@ -61,7 +61,10 @@ from codec import Codec  # noqa: E402
 #      their steps are built, outside that function's own try. Those are now
 #      SKIPPED and named rather than fatal, and the section asserts the walk
 #      encoded something, because 0 failures over 0 steps is not a pass.
-LEDGER = checks.Ledger("agent lifetime", floor=268)
+# +10 at MOVECODE-1z-by (section_follow_router: the hostile's own copy
+# walks a routed corridor, with the straight-line arm as the known-bad
+# control). Floor from a real green run, never a head-count.
+LEDGER = checks.Ledger("agent lifetime", floor=278)
 
 
 def section_weapon_damage():
@@ -514,6 +517,7 @@ def main():
     section_pool_fraction()
     section_swing_back()
     section_chase()
+    section_follow_router()
     section_facing()
     section_enemy_skill()
     section_constants()
@@ -844,6 +848,179 @@ class _Wall:
     def clip(self, x0, y0, x1, y1, step=16.0):
         self.asked += 1
         return (max(x1, 400.0), y1)
+
+
+class _Corner:
+    """The wedge, in miniature: clip() cannot leave, route() can.
+
+    This is RUN-1zBW's measured geometry reduced to a fixture. The server's
+    Hatcher sat at a walkable point ~7 u from a trapezoid edge where clip()
+    returned 0.000 u in every one of 24 probed directions, while pm.route from
+    that same point found a path 49 times out of 49.
+
+    The corridor deliberately runs the WRONG WAY first (+x, away from a player
+    at -x), because that is what escaping a corner looks like and it is what
+    trips a straight-line leash.
+    """
+
+    def __init__(self, escape=True):
+        self.escape = escape
+        self.routes = 0
+        self.clips = 0
+
+    def clip(self, x0, y0, x1, y1, step=16.0):
+        self.clips += 1
+        # Nothing may leave the corner in a straight line -- but movement
+        # ALONG the corridor is allowed, which is what makes the two arms
+        # differ rather than the fixture just freezing everything.
+        if x1 > x0 + 1e-9:                 # eastward: the escape lane
+            return (x1, y1)
+        return (x0, y0)
+
+    def route(self, x0, y0, x1, y1, **kw):
+        self.routes += 1
+        if not self.escape:
+            return None
+        return [(x0, y0), (x0 + 300.0, y0), (x1, y1)]
+
+
+def _follow_world(agent_pos, player_pos):
+    import authsrv
+    entry = {"name": "hatcher", "dead": False, "pos": agent_pos, "plane": 0,
+             "moving": True, "moved_at": 0.0,
+             "follow": {"told": player_pos, "sent_at": 0.0, "t0": 0.0},
+             "allegiance": agents.ALLEGIANCE_HOSTILE}
+    return {"agents": {10: entry}, "pos": player_pos, "player_dead": False}
+
+
+def _follow_run(state, pm, seconds=4.0, hz=20.0):
+    """Drive _npc_follow_tick directly, returning (u travelled, halt labels)."""
+    import authsrv
+    import math as _m
+    ag = state["agents"][10]
+    px, py = state["pos"]
+    halts, moved, prev, now = [], 0.0, ag["pos"], 0.0
+    dt = 1.0 / hz
+    while now < seconds:
+        now += dt
+        ax, ay = ag["pos"]
+        d = _m.hypot(px - ax, py - ay)
+        authsrv._npc_follow_tick(
+            lambda op, vals, label="", quiet=False: (
+                halts.append(label) if "halts at (" in label else None),
+            state, 1, 10, ag, (px, py), d, now, pm)
+        moved += _m.dist(prev, ag["pos"])
+        prev = ag["pos"]
+    return moved, halts
+
+
+def section_follow_router():
+    """MOVECODE-1z-by: the hostile's OWN copy walks a routed corridor.
+
+    RUN-1zBW measured what the straight line costs: the copy wedged 7 u from a
+    trapezoid edge, all 15 later follow orders clipped 0.000 u, the chase was
+    dead for 155 s, and the client drew the body 965.6 u away -- which nothing
+    in the protocol can reconcile, since 0x0028 carries no point and an NPC
+    never receives a 0x002C. On the real mesh the routed arm walks 2,174.8 u
+    out of that corner and halts inside the 80 u disc where the straight-line
+    arm walks 0.0 u and never arrives.
+    """
+    import authsrv
+    import math as _m
+    print("\nMOVECODE-1z-by: the NPC follow's own copy walks a ROUTED corridor")
+    LEDGER.ok(authsrv.NPC_FOLLOW_ROUTER is True
+              and "--no-npc-follow-router" in open(
+                  authsrv.__file__, encoding="utf-8").read()
+              and authsrv.capture_flags().get("NPC_FOLLOW_ROUTER") is True,
+              "it ships ON with its revert flag, and the capture records which "
+              "arm produced the run",
+              "a run whose header cannot name the arm costs a later session a "
+              "reconstruction")
+
+    saved = authsrv.NPC_FOLLOW_ROUTER
+    try:
+        # THE KNOWN-BAD ARM FIRST, so the fixture is proved able to freeze a
+        # chase before the fix is credited with unfreezing one.
+        authsrv.NPC_FOLLOW_ROUTER = False
+        pm = _Corner()
+        st = _follow_world((0.0, 0.0), (-400.0, 0.0))
+        off_moved, off_halts = _follow_run(st, pm)
+        LEDGER.ok(off_moved == 0.0 and not off_halts,
+                  "REVERT ARM (--no-npc-follow-router): the copy cannot leave "
+                  "the corner at all and the chase never arrives -- 0.0 u, "
+                  "which is RUN-1zBW's measured 15-of-15",
+                  f"moved {off_moved:.2f} u, halts {off_halts}")
+        LEDGER.ok(pm.routes == 0,
+                  "and the revert arm asks the router NOTHING, so the two arms "
+                  "differ in the one thing under test",
+                  f"{pm.routes} route call(s)")
+
+        authsrv.NPC_FOLLOW_ROUTER = True
+        pm = _Corner()
+        st = _follow_world((0.0, 0.0), (-400.0, 0.0))
+        on_moved, on_halts = _follow_run(st, pm)
+        ag = st["agents"][10]
+        LEDGER.ok(on_moved > 300.0,
+                  "ROUTED: the same copy in the same corner walks the corridor "
+                  "out",
+                  f"moved {on_moved:.1f} u to {ag['pos']}")
+        LEDGER.ok(pm.routes >= 1,
+                  "by actually asking the router", f"{pm.routes} route call(s)")
+        LEDGER.ok(on_moved > off_moved,
+                  "and the arms are ordered the right way round -- the fix "
+                  "moves the copy and the known-bad arm does not",
+                  f"{on_moved:.1f} u against {off_moved:.1f} u")
+
+        # ONE A* PER FOLLOW_ROUTE_RETRY, not per tick: 4 s at 20 Hz is 80 ticks.
+        LEDGER.ok(pm.routes <= int(4.0 / authsrv.FOLLOW_ROUTE_RETRY) + 2,
+                  "the corridor is CACHED -- at most one solve per "
+                  f"FOLLOW_ROUTE_RETRY ({authsrv.FOLLOW_ROUTE_RETRY} s), not "
+                  "one per tick",
+                  f"{pm.routes} solves over 80 ticks")
+
+        # NO ROUTE -> the straight-line clip, unchanged. Not a crash, not a stall.
+        pm = _Corner(escape=False)
+        st = _follow_world((0.0, 0.0), (-400.0, 0.0))
+        none_moved, _ = _follow_run(st, pm)
+        LEDGER.ok(pm.routes >= 1 and none_moved == 0.0,
+                  "route() returning None falls back to the straight-line clip "
+                  "rather than raising or freezing differently",
+                  f"{pm.routes} solves, moved {none_moved:.2f} u")
+
+        # A MESH WITH NO route() AT ALL -- every older fixture, and a bare
+        # machine. It must degrade, not explode.
+        class _Old:
+            def clip(self, x0, y0, x1, y1, step=16.0):
+                return (x0, y0)
+        st = _follow_world((0.0, 0.0), (-400.0, 0.0))
+        old_moved, _ = _follow_run(st, _Old())
+        LEDGER.ok(old_moved == 0.0,
+                  "a pathmap with no route() at all degrades to the clip arm "
+                  "instead of raising -- every pre-1z-by fixture is one",
+                  f"moved {old_moved:.2f} u")
+
+        # THE LEASH MAY NOT BE TRIPPED BY OUR OWN DETOUR. The corridor runs
+        # +300 x away from a player at -x, so the straight-line distance grows;
+        # on the real capture that leashed the chase 3 s EARLY.
+        far = -(authsrv.AGGRO_RANGE - 150.0)      # inside the leash, near its edge
+        pm = _Corner()
+        st = _follow_world((0.0, 0.0), (far, 0.0))
+        _m2, halts = _follow_run(st, pm, seconds=1.0)
+        LEDGER.ok(not any("leash" in h for h in halts),
+                  "a corridor that detours AWAY from the player does not leash "
+                  "the chase: the leash reads the corridor's solve point too "
+                  "and takes the min, which cannot fire earlier than the "
+                  "straight-line arm would",
+                  f"halts {halts}")
+        # ...and a player who genuinely leaves still leashes.
+        st = _follow_world((0.0, 0.0), (-(authsrv.AGGRO_RANGE + 400.0), 0.0))
+        _m3, halts2 = _follow_run(st, _Corner(), seconds=0.2)
+        LEDGER.ok(any("leash" in h for h in halts2),
+                  "CONTROL: a player genuinely past the leash still ends the "
+                  "chase -- the guard above did not simply disable it",
+                  f"halts {halts2}")
+    finally:
+        authsrv.NPC_FOLLOW_ROUTER = saved
 
 
 def section_chase():

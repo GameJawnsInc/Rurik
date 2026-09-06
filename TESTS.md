@@ -3245,7 +3245,7 @@ when map 280 is absent, and §14(g) when Pre-Searing is absent skip-declare);
   cannot mean the detector is blind. Floor 16; sections 1-4 print a `skip`
   without the vault. No socket, no client. ~4 s),
   `toolkit/authsrv/test_movement_fidelity.py`,
-  `toolkit/authsrv/test_agentlife.py` (WORLD_REMOVE_AGENT and its two refusals,
+  `toolkit/authsrv/test_agentlife.py` (**`section_follow_router` is MOVECODE-1z-by (2026-09-05): the hostile's OWN copy walks a routed corridor.** The fixture is RUN-1zBW's wedge in miniature -- a `clip()` that cannot leave the corner and a `route()` that can, with the corridor deliberately running the WRONG WAY first, because that is what escaping a corner looks like and it is what trips a straight-line leash. It runs **the known-bad arm first** (`--no-npc-follow-router`: 0.0 u moved, no arrival, and zero route calls, so the arms differ in the one thing under test), then the routed arm (900 u out), then checks the two are ordered the right way round; that the corridor is CACHED (3 solves over 80 ticks, not one per tick); all four fallbacks to today's behaviour -- `route()` None, a mesh with no `route()` at all, the flag off, no pathmap; and BOTH leash directions -- our own detour must not end the chase, and a player genuinely past the leash must. Floor 268 -> 278 from a real green run of 292. The rest is WORLD_REMOVE_AGENT and its two refusals,
   that an unframeable opcode stops the framer instead of being framed past, and
   the whole enemy: a hostile that swings back, chases, turns to face you and
   casts — each phase checked as a SHAPE the wire could contradict rather than as

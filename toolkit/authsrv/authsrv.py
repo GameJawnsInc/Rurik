@@ -15576,7 +15576,7 @@ def face_player(send, state, agent_id, agent, conn_id, force=False):
          f"at {ENEMY_TURN_RATE:.3f} rad/s")
 
 
-def enemy_move_tick(send, state, conn_id):
+def enemy_move_tick(send, state, conn_id, rec=None):
     """Hostile agents walk toward the player until they are close enough to swing.
 
     TWO CLOCKS HAVE TO AGREE. The client is told a DESTINATION and animates its own
@@ -15620,7 +15620,7 @@ def enemy_move_tick(send, state, conn_id):
         dist = math.hypot(px - ax, py - ay)
         if NPC_FOLLOW:
             _npc_follow_tick(send, state, conn_id, agent_id, agent,
-                             (px, py), dist, now, pm)
+                             (px, py), dist, now, pm, rec)
             continue
         chasing = (not state["player_dead"]
                    and ENEMY_MELEE_RANGE < dist <= AGGRO_RANGE)
@@ -15685,7 +15685,142 @@ def enemy_move_tick(send, state, conn_id):
         agent["pos"] = (nx, ny)
 
 
-def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, pm):
+# ---- MOVECODE-1z-by: the NPC follow's own copy walks a ROUTED corridor ------
+#
+# THE DEFECT, MEASURED (RUN-1zBW, FINDINGS sec.1z-bx.3). enemy_move_tick's
+# docstring has said since ANIMREF-RE 40 that "`pathmap.route` is an A* and it
+# is NOT wired in here", and called the cost honest: "a hostile on the far side
+# of a building will stand against the wall for as long as you stay there."
+# The operator's own session measured what that costs when the wall is a
+# trapezoid EDGE rather than a building. The server's Hatcher stopped at
+# (10683.46, 4329.52) -- a walkable point ~7 u from its trapezoid's left edge,
+# with the mesh ending within 4-16 u in all 24 probed directions -- and:
+#
+#   * ALL 15 follow orders after t=20.793 clipped 0.000 u: the copy could not
+#     take one step in any of them, and they fell 149-1003 u short;
+#   * pm.route from that same point returns a path 49 of 49, including 4
+#     waypoints and 2,193 u out of the corner clip() could not leave;
+#   * the chase was dead for 155 s of a 190 s session, the client drew the body
+#     965.6 u from our copy, and NOTHING IN THE PROTOCOL CAN RECONCILE THEM --
+#     0x0028 carries no point and an NPC never receives a 0x002C;
+#   * so the operator stood 285.8 u from a Hatcher they could see while never
+#     coming within 1,241 u of the copy the 1,200 u leash is tested on. That is
+#     the "inconsistent aggro behavior" they reported.
+#
+# THE WIRE IS UNCHANGED, and that is the point. The follow's 0x002A names the
+# PLAYER (field 5 = PLAYER_AGENT_ID) and the client paths for itself -- retail's
+# shape, and the client's body was never the thing that broke. This fixes the
+# copy that every range check reads.
+#
+# ONE A* PER AGENT PER FOLLOW_ROUTE_RETRY, not per tick: the route is cached on
+# the agent and re-solved only when the goal has moved past FOLLOW_REPATH_MOVED,
+# the corridor is exhausted, or a hop disagreed with clip(). That cadence is
+# FOLLOW_REPATH_INTERVAL's, so a routing follow costs the same order of A* as
+# the click path already pays per click.
+#
+# WHERE IT STILL FALLS BACK: no pathmap, the flag off, or route() returning
+# None. The fallback is the straight-line clip byte for byte, so
+# --no-npc-follow-router reproduces today's behaviour exactly.
+#
+# WHAT IT DELIBERATELY DOES NOT TOUCH: the plane words. The follow still stamps
+# `agent.get("plane", 0)` frozen at spawn on both fields (ANIMREF sec.42, and
+# sec.1z-bx.2 measured 49 of 49 orders carrying (0,0) with four destinations on
+# plane-18-only bridge deck). route() can hand back the corridor's own plane per
+# waypoint via with_planes=True and that is precisely sec.42's fix -- but it is
+# a SECOND default, and shipping two at once means one run convicts the pair and
+# clears neither. Registered, not taken here.
+NPC_FOLLOW_ROUTER = True      # False (--no-npc-follow-router): straight-line clip.
+FOLLOW_ROUTE_RETRY = 0.5      # s. At most one A* per agent per this, ours.
+
+
+def _follow_route_solve(agent, ax, ay, px, py, pm, now, rec, agent_id):
+    """Solve and cache a corridor from (ax, ay) to the player, or clear it.
+
+    Cached on the agent as `froute` = {"wps": [...], "i": n, "to": (px, py)}.
+    `froute_at` rate-limits the solve whether it succeeded or failed -- a
+    failing route re-solved every tick would spend the tick budget on A*."""
+    if now - agent.get("froute_at", -1e9) < FOLLOW_ROUTE_RETRY:
+        return
+    agent["froute_at"] = now
+    t0 = time.time()
+    try:
+        wps = pm.route(ax, ay, px, py)
+    except Exception as ex:                      # a mesh gap is not a crash
+        wps, ex_s = None, repr(ex)
+    else:
+        ex_s = None
+    ms = (time.time() - t0) * 1000.0
+    if not wps or len(wps) < 2:
+        agent["froute"] = None
+        if rec is not None:
+            rec.event("npc_route", agent=agent_id, act="no-route",
+                      ms=round(ms, 2), err=ex_s)
+        return
+    # wps[0] is where we already stand; the corridor is the rest.
+    agent["froute"] = {"wps": [(float(x), float(y)) for x, y in wps[1:]],
+                       "i": 0, "to": (float(px), float(py)),
+                       "from": (float(ax), float(ay))}
+    if rec is not None:
+        rec.event("npc_route", agent=agent_id, act="routed",
+                  n_wp=len(wps) - 1, ms=round(ms, 2))
+
+
+def _follow_advance(agent, px, py, budget, stop, pm, now, rec=None, agent_id=None):
+    """Advance the agent's own copy up to `budget` u toward the player, along a
+    routed corridor when one can be had. Returns the straight-line distance to
+    the player afterwards -- which is what the arrival test reads.
+
+    THE BUDGET IS NOT CAPPED BY THE STRAIGHT-LINE DISTANCE, unlike the fallback,
+    and that is deliberate: a copy routing around a wall is closer in a straight
+    line than along its path, so capping at `dist - stop` would starve exactly
+    the case this exists for. Overshoot is prevented instead by stopping the
+    walk the moment the straight-line distance reaches `stop` -- the corridor
+    ends AT the player, so there is nowhere else for it to go."""
+    ax, ay = agent["pos"]
+    fr = agent.get("froute")
+    stale = (fr is None or fr["i"] >= len(fr["wps"])
+             or math.hypot(px - fr["to"][0], py - fr["to"][1]) > FOLLOW_REPATH_MOVED)
+    if stale:
+        _follow_route_solve(agent, ax, ay, px, py, pm, now, rec, agent_id)
+        fr = agent.get("froute")
+    if not fr:
+        return math.hypot(px - ax, py - ay)      # caller falls back
+    wps, i = fr["wps"], fr["i"]
+    while budget > 1e-9 and i < len(wps):
+        if math.hypot(px - ax, py - ay) <= stop:
+            break
+        wx, wy = wps[i]
+        d = math.hypot(wx - ax, wy - ay)
+        if d <= 1e-9:
+            i += 1
+            continue
+        hop = min(budget, d)
+        nx, ny = ax + (wx - ax) / d * hop, ay + (wy - ay) / d * hop
+        cx, cy = pm.clip(ax, ay, nx, ny)
+        moved = math.hypot(cx - ax, cy - ay)
+        ax, ay = cx, cy
+        if moved < hop - 1e-6:
+            # The corridor and our own clip disagree about this hop. route()
+            # guarantees walkability, so this is our two samplers differing at
+            # a seam: take what clip allowed, drop the corridor and re-solve on
+            # the next tick rather than grinding against the same edge.
+            agent["froute"] = None
+            if rec is not None:
+                rec.event("npc_route", agent=agent_id, act="clip-disagreed",
+                          want=round(hop, 2), got=round(moved, 2))
+            agent["pos"] = (ax, ay)
+            return math.hypot(px - ax, py - ay)
+        budget -= moved
+        if moved >= d - 1e-6:
+            i += 1
+    agent["pos"] = (ax, ay)
+    if agent.get("froute"):
+        agent["froute"]["i"] = i
+    return math.hypot(px - ax, py - ay)
+
+
+def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, pm,
+                     rec=None):
     """One hostile's chase, in retail's shape (ANIMREF-RE 40; NPC_FOLLOW).
 
     A follow STARTS when the player is noticed (inside AGGRO_RANGE -- ours,
@@ -15725,15 +15860,35 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
     def _halt(why):
         agent["follow"] = None
         agent["moving"] = False
+        agent.pop("froute", None)       # 1z-by: a new follow re-solves
+        agent.pop("froute_at", None)
         agent["moved_at"] = now
         send(GAME_SMSG_AGENT_STOP_MOVING, agents.agent_stop_moving(agent_id),
              f"agent {agent_id} halts at ({agent['pos'][0]:.0f},"
              f"{agent['pos'][1]:.0f}): {why} [ANIMREF-RE 40]")
 
-    if state["player_dead"] or dist > AGGRO_RANGE:
+    # MOVECODE-1z-by: OUR OWN CORRIDOR MAY NOT END THE CHASE. A route out of a
+    # corner runs AWAY from the player before it runs toward them -- the wedge
+    # RUN-1zBW measured is escaped by a 309 u leg due EAST of a player to the
+    # west -- so judging the leash on the detoured copy lets our own pathing
+    # leash a chase the player never escaped. Measured on that capture's real
+    # trajectory: the routed arm thrashed, re-noticing at 1199 u, detouring to
+    # 1207 u and leashing at t=32.5 against the straight-line arm's t=35.5.
+    #
+    # So the leash reads the corridor's SOLVE POINT as well, and takes the
+    # MINIMUM. min() is the direction that cannot regress: where the copy has
+    # closed, the current distance is smaller and the test is exactly today's;
+    # only a detour makes the solve point the smaller one, and a player who
+    # genuinely runs away still crosses both. AGGRO_RANGE is ours (invented),
+    # and this makes the leash slightly more patient in exactly one case.
+    leash_d = dist
+    _fr = agent.get("froute")
+    if NPC_FOLLOW_ROUTER and _fr and _fr.get("from"):
+        leash_d = min(dist, math.hypot(px - _fr["from"][0], py - _fr["from"][1]))
+    if state["player_dead"] or leash_d > AGGRO_RANGE:
         if fol is not None:
             _halt("the player is dead" if state["player_dead"]
-                  else f"{dist:.0f} u is past the {AGGRO_RANGE:.0f} u leash")
+                  else f"{leash_d:.0f} u is past the {AGGRO_RANGE:.0f} u leash")
         agent["moved_at"] = now
         return
     stop = follow_stop_radius(agent)
@@ -15788,14 +15943,27 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
     # of the player -- the same arithmetic the legacy arm ran at 150 u.
     elapsed = max(0.0, now - agent.get("moved_at", now))
     agent["moved_at"] = now
-    step = min(ENEMY_MOVE_RATE * agents.DEFAULT_RUN_SPEED * elapsed, dist - stop)
-    if step > 0.0 and dist > 0.0:
-        nx = ax + (px - ax) / dist * step
-        ny = ay + (py - ay) / dist * step
-        if pm is not None:
-            nx, ny = pm.clip(ax, ay, nx, ny)
-        agent["pos"] = (nx, ny)
-        dist = math.hypot(px - nx, py - ny)
+    budget = ENEMY_MOVE_RATE * agents.DEFAULT_RUN_SPEED * elapsed
+    routed = False
+    if NPC_FOLLOW_ROUTER and pm is not None and budget > 0.0 and dist > stop:
+        # MOVECODE-1z-by. Returns the new straight-line distance, or leaves the
+        # copy untouched and reports the old one when no corridor could be had,
+        # in which case we fall through to the straight-line clip below.
+        before = agent["pos"]
+        newdist = _follow_advance(agent, px, py, budget, stop, pm, now,
+                                  rec, agent_id)
+        if agent.get("froute") or agent["pos"] != before:
+            dist, routed = newdist, True
+            ax, ay = agent["pos"]
+    if not routed:
+        step = min(budget, dist - stop)
+        if step > 0.0 and dist > 0.0:
+            nx = ax + (px - ax) / dist * step
+            ny = ay + (py - ay) / dist * step
+            if pm is not None:
+                nx, ny = pm.clip(ax, ay, nx, ny)
+            agent["pos"] = (nx, ny)
+            dist = math.hypot(px - nx, py - ny)
     if dist <= stop + 1e-6:
         if not HALT_ON_CLOCK:
             _halt(f"arrived, {dist:.0f} u from the player")
@@ -18327,7 +18495,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # Walk BEFORE swinging, so an agent that arrives on this
                         # tick can open its swing on the same tick rather than
                         # standing in reach for one interval doing nothing.
-                        enemy_move_tick(send, state, conn_id)
+                        enemy_move_tick(send, state, conn_id, rec)
                         enemy_attack_tick(send, state, conn_id)
                         # The third sweep, and the first that mutates state["agents"]
                         # on a schedule rather than only when the player acts. Last,
@@ -23158,6 +23326,21 @@ def main():
                          "body trails its sync copy and an instant halt froze "
                          "it short of the disc -- CASE 8 v2's 'long range "
                          "attacks' with the server's copy at exactly 80 u.")
+    ap.add_argument("--no-npc-follow-router", action="store_true",
+                    help="MOVECODE-1z-by REVERT: a hostile's own server-side "
+                         "copy walks a STRAIGHT LINE clipped by the pathmap "
+                         "instead of a routed corridor, which is what "
+                         "enemy_move_tick's docstring has described since "
+                         "ANIMREF-RE 40. RUN-1zBW measured the cost: the "
+                         "copy wedged 7 u from a trapezoid edge, all 15 "
+                         "later follow orders clipped 0.000 u, the chase was "
+                         "dead for 155 s and the client drew the body 965 u "
+                         "away with no protocol path back (0x0028 carries no "
+                         "point, an NPC never gets a 0x002C). pm.route "
+                         "escapes that corner 49 of 49. The wire is identical "
+                         "either way -- the follow's 0x002A names the PLAYER "
+                         "and the client paths itself; this is only our own "
+                         "copy, which every range check reads. Known-bad arm.")
     ap.add_argument("--legacy-npc-chase", action="store_true",
                     help="THE REVERT ARM for ANIMREF-RE 40: a hostile chases "
                          "with a 0x0029 to the player's POINT, re-announced "
@@ -24849,6 +25032,13 @@ def main():
         print("[map] --halt-on-arrival: a hostile's 0x0028 goes out the instant "
               "the server's copy reaches the disc (ANIMREF-RE 40.9's revert; "
               "the client's rendered body halts short).", flush=True)
+    if a.no_npc_follow_router:
+        global NPC_FOLLOW_ROUTER
+        NPC_FOLLOW_ROUTER = False
+        print("[map] --no-npc-follow-router: a hostile's own copy walks a "
+              "straight line clipped by the mesh (MOVECODE-1z-by's revert). "
+              "RUN-1zBW: the copy wedges on a trapezoid edge and the chase "
+              "dies -- 15 of 15 follow orders clipping 0.000 u.", flush=True)
     if a.legacy_npc_chase:
         global NPC_FOLLOW
         NPC_FOLLOW = False

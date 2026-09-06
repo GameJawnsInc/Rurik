@@ -15779,3 +15779,114 @@ instrument. The plane column is.
 3. **The dropped-click / silent-client hole** (§1z-bx.4): our re-pin is refused `stale-report`
    exactly when the client has gone silent and is about to snap itself.
 4. §1z-o.6's counterexample now has 19 instances, on a staircase, and is no longer n=1.
+## 1z-by. THE A\* ROUTER IS WIRED INTO THE NPC FOLLOW — the hostile's **own copy** walks a routed corridor instead of a straight line clipped by the mesh. On RUN-1zBW's real wedge it travels **2,174.8 u and closes to the 80 u disc** where the straight-line arm travels **0.0 u and never arrives**. The wire is byte-identical either way. `--no-npc-follow-router` reverts. And wiring it exposed one interaction that had to be fixed with it: **our own detour was tripping the leash**
+
+**Asked:** "wire the router into the NPC follow" — the owner, on §1z-bx.6 item 1. Zero client
+runs. Ident `MOVECODE-1z-by`. OBSERVED unless marked.
+
+### 1z-by.1 What was broken, and what was NOT
+
+§1z-bx.3 measured it on the operator's own session: the server's copy of the Hatcher stopped
+at **(10683.46, 4329.52)** — a walkable point about **7 u** from its trapezoid's left edge,
+with the mesh ending within 4–16 u in all 24 probed directions — and **all 15 follow orders
+after t=20.793 clipped 0.000 u**. The chase was dead for **155 s of a 190 s session**.
+
+`enemy_move_tick`'s docstring has said this since ANIMREF-RE 40 and called the cost honest:
+*"`pathmap.route` is an A\* and it is NOT wired in here … a hostile on the far side of a
+building will stand against the wall for as long as you stay there."* **What the run showed is
+that the wall need not be a building.** A trapezoid edge is enough, and `pm.route` leaves that
+same corner **49 times out of 49**.
+
+**THE WIRE IS NOT WHAT WAS BROKEN, and this change does not touch it.** The follow's `0x002A`
+already names the **player agent** in field 5 and the client paths for itself — retail's shape,
+7 live chases. The client's body was fine. What broke is **our copy**, which every range check
+reads (`AGGRO_RANGE`, `enemy_reach()`, `follow_stop_radius()`), and which the protocol cannot
+re-sync: `0x0028` carries no point and an NPC never receives a `0x002C`. That is why the
+operator stood **285.8 u from a Hatcher they could see** while never coming within **1,241 u**
+of the copy the leash is tested on.
+
+### 1z-by.2 ★★★ The evidence, on the real mesh, with the known-bad arm run
+
+`studies/movecode/review/followroute.py`. Both scenarios score
+`NPC_FOLLOW_ROUTER` False and True against map 146's own navmesh.
+
+**A. The positive control** — the player parked **331 u** away, inside the leash, with `clip()`
+returning **0.00 u** toward them (and toward all eight probed directions) while a 4-waypoint
+route exists:
+
+| arm | copy travelled | ended | outcome |
+|---|---|---|---|
+| `--no-npc-follow-router` | **0.0 u** | 330.8 u from the player | never arrives, never halts |
+| shipped | **2,174.8 u** | **74.9 u** from the player | halts inside the 80 u disc at t=7.6 |
+
+The tool **refuses to report** if the straight-line arm moves at all: a fixture that does not
+reproduce the wedge cannot score the fix.
+
+**B. RUN-1zBW's own trajectory**, replayed from the wedge with the player's 242 accepted
+reports: **705.6 u against 0.0 u**. Both arms still leash, and **that is correct** — that
+player kept going and was ~3,000 u away by t=60. The capture's own record is that the copy
+never moved again after t=20.79.
+
+### 1z-by.3 ★★ Wiring it exposed a second defect, and it is shipped with it
+
+**A route out of a corner runs AWAY from the player before it runs toward them.** The escape leg
+here is **309 u due east** of a player to the west. Judged on the detoured copy, the
+straight-line **leash fired on our own pathing**: replayed on the real trajectory, the routed
+arm leashed at **t=32.5 against the straight-line arm's t=35.5** — three seconds *earlier* —
+and thrashed, re-noticing at 1,199 u, detouring to 1,207 u and leashing, over and over.
+
+**A fix that introduces a new failure in the case it exists for is not a fix.** So the leash now
+reads the corridor's **solve point** as well and takes the **minimum**:
+
+```
+leash_d = min(dist, |player - froute["from"]|)
+```
+
+`min()` is the direction that **cannot regress**. Where the copy has closed, the current
+distance is the smaller one and the test is exactly today's; only a detour makes the solve point
+smaller; and a player who genuinely leaves crosses both. Re-measured, the routed arm's halt is
+now `1251 u` from the anchor — a real distance — instead of `1207 u` of our own detour.
+`AGGRO_RANGE` is ours (invented), and this makes the leash slightly more patient in exactly one
+case, which is stated rather than hidden.
+
+### 1z-by.4 The shape of the change
+
+- **One A\* per agent per `FOLLOW_ROUTE_RETRY` (0.5 s)**, not per tick. The corridor is cached on
+  the agent and re-solved only when the goal moves past `FOLLOW_REPATH_MOVED`, the corridor is
+  exhausted, or a hop disagreed with `clip()`. That is `FOLLOW_REPATH_INTERVAL`'s cadence, so a
+  routing follow costs the same order of A\* the click path already pays per click. Pinned by a
+  test: 3 solves over 80 ticks.
+- **The budget is not capped by the straight-line distance**, unlike the fallback, and
+  deliberately: a copy routing around a wall is *closer* in a straight line than along its path,
+  so `dist - stop` would starve exactly the case this exists for. Overshoot is prevented by
+  stopping the walk when the straight-line distance reaches the stop radius — the corridor ends
+  at the player, so there is nowhere else to go.
+- **Four fallbacks, all to today's behaviour byte for byte:** no pathmap, the flag off,
+  `route()` returning `None`, and a mesh with no `route()` at all (every pre-1z-by fixture, and
+  `test_agentlife`'s own `_Wall`). Each is pinned.
+- **A hop that disagrees with `clip()`** takes what clip allowed, drops the corridor and
+  re-solves next tick rather than grinding against the same edge, and records `clip-disagreed`.
+- **Telemetry:** `npc_route` rows (`routed` / `no-route` / `clip-disagreed`) with the waypoint
+  count and the solve time, so a capture can show whether the router fired or fell back. `rec`
+  is threaded into `enemy_move_tick` and `_npc_follow_tick` for it; both default to `None`.
+
+**Tests:** `test_agentlife.py` `section_follow_router`, floor 268 → **278** (the file's green run
+reads 292). It runs the known-bad arm **first**, proves the fixture can freeze a chase before
+crediting the fix with unfreezing one, checks the two arms are ordered the right way round,
+pins the cache, all four fallbacks, and both leash directions — the detour must **not** leash,
+and a player genuinely past the leash **must**.
+
+### 1z-by.5 What this does NOT do
+
+- **It does not touch the plane words.** The follow still stamps `agent.get("plane", 0)` frozen
+  at spawn on both fields — §1z-bx.2's 49 of 49. `route()` can return the corridor's own plane
+  per waypoint (`with_planes=True`) and that is precisely ANIMREF §42's fix, but it is a
+  **second default**, and shipping two at once means one run convicts the pair and clears
+  neither. **Registered, not taken here** — and note it now matters more, not less: a routing
+  copy crosses more geometry than a wedged one.
+- **It does not touch the legacy chase arm** (`--legacy-npc-chase`), which still walks a
+  straight-line clip. That arm is off by default and its own revert.
+- **It has not run against the client.** Its witnesses are the real navmesh, the real
+  trajectory and the test; the next session with a hostile is the confirmation, and it is one
+  flag away from the old behaviour.
+- **It does not make the chase in RUN-1zBW succeed**, and no fix could: that player left.

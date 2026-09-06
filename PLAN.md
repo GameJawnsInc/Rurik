@@ -1741,6 +1741,17 @@ openings) — the ruling does not wait on it.
 
 ## 8. Immediate next actions
 
+### ★★★ MOVEMENT 2026-09-05 — THE A* ROUTER IS WIRED INTO THE NPC FOLLOW (MOVECODE-1z-by): the hostile's **own copy** walks a routed corridor, **2,174.8 u out of RUN-1zBW's wedge against the straight line's 0.0 u**; the wire is byte-identical and `--no-npc-follow-router` reverts
+
+**[FINDINGS](studies/movecode/FINDINGS.md) §1z-by. Asked by the owner on §1z-bx.6 item 1. No client run.**
+
+* **The defect** (§1z-bx.3): the server's copy wedged 7 u from a trapezoid edge, all 15 later follow orders clipped 0.000 u, the chase was dead 155 s, and the client drew the body 965.6 u away with no protocol path back. `enemy_move_tick`'s docstring had described this since ANIMREF-RE 40; what the run added is that **the wall need not be a building** — an edge is enough, and `pm.route` escapes 49 of 49.
+* **The wire is NOT what was broken and is untouched.** The follow's `0x002A` names the player agent and the client paths itself. This fixes **our copy**, which every range check reads and which `0x0028`/no-`0x002C` cannot re-sync.
+* **Evidence, both arms on the real mesh** (`review/followroute.py`, which refuses to report if the straight-line arm moves): parked player 331 u out — routed **2,174.8 u, halts inside the 80 u disc**; straight-line **0.0 u, never arrives**. RUN-1zBW's own trajectory — 705.6 u against 0.0 u (both still leash; that player left).
+* **Wiring it exposed a second defect, fixed with it:** a corridor detours AWAY first, so the straight-line leash **fired on our own pathing** — the routed arm leashed 3 s EARLY and thrashed at the boundary. The leash now also reads the corridor's solve point and takes the **minimum**, the direction that cannot regress.
+* **Shape:** one A* per agent per 0.5 s (cached, pinned at 3 solves over 80 ticks); four fallbacks to today's behaviour byte for byte; `npc_route` telemetry. `test_agentlife` `section_follow_router`, floor 268 → 278, green run 292 — the known-bad arm runs **first**.
+* **NOT done, deliberately:** the plane words are still frozen at spawn (ANIMREF §42's fix is a second default; it now matters *more*, since a routing copy crosses more geometry).
+
 ### ★★★ MOVEMENT 2026-09-05 — RUN-1zBW, THE OPERATOR'S OWN SESSION UNDER THE SHIPPED DEFAULT: **"felt good"** — and it found a defect nobody had registered, **our own fence gate holding the keyboard lead off for 28.7% of the session on a belief the client contradicts 93% of the time** (MOVECODE-1z-bw / 1z-bx)
 
 **[FINDINGS](studies/movecode/FINDINGS.md) §1z-bw (movement) and §1z-bx (the plane faults). Sheet [RUN-1zBW.md](studies/movecode/RUN-1zBW.md) with the operator's verbatim answers. 190 s, both arms exercised (229 `0x003D`, 92 `0x003E`); scored by two adversarial fan-outs, 18 agents, 114 claims, 72 challenged.**
