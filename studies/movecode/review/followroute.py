@@ -100,6 +100,11 @@ def at(track, t):
 def run(pm, router, player_at, t0, t1, hz=20.0):
     """Drive _npc_follow_tick over [t0, t1]; player_at(t) -> (x, y)."""
     authsrv.NPC_FOLLOW_ROUTER = router
+    # NPCTRACK-Q1 (2026-09-06): the corridor integrator this file measures is the
+    # REVERT arm now (--no-npc-client-model). Under the default the copy is the
+    # client's own sync copy, which dead-reckons straight and never wedges -- so
+    # both arms here would move and the vacuity guard would fire. Pin the arm.
+    authsrv.NPC_CLIENT_MODEL = False
     p0 = player_at(t0)
     agent = {"pos": WEDGE, "plane": 0, "name": "hatcher", "moved_at": t0,
              "moving": True, "follow": {"told": p0, "sent_at": t0, "t0": t0}}
@@ -130,6 +135,7 @@ def main():
         print("no navmesh for map 146 -- ZERO TRIALS, nothing here is quotable")
         return 3
     saved = authsrv.NPC_FOLLOW_ROUTER
+    saved_model = authsrv.NPC_CLIENT_MODEL
     try:
         print("wedge (%.2f, %.2f) on our mesh: %s"
               % (WEDGE + (pm.on_mesh(WEDGE[0], WEDGE[1], 1.0),)))
@@ -173,6 +179,7 @@ def main():
               "     MOVES. The capture's own record: it never moved again after t=20.79.")
     finally:
         authsrv.NPC_FOLLOW_ROUTER = saved
+        authsrv.NPC_CLIENT_MODEL = saved_model
     return 0
 
 

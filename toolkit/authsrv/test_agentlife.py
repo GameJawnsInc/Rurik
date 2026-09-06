@@ -68,7 +68,11 @@ from codec import Codec  # noqa: E402
 # plane words, with the frozen spawn word as the known-bad control).
 # +8 at GROUNDZ-Q5 (section_plane_repath: the stationary plane correction,
 # with the stale word left standing as the known-bad control).
-LEDGER = checks.Ledger("agent lifetime", floor=294)
+# +21 at NPCTRACK-Q1 (section_client_model, 20: the hostile's copy is the
+# client's own dead-reckoner and disc, with the corridor integrator as the
+# known-bad control; and the chase section's wall pin split by arm, 1).
+# Floor from a real green run of 331.
+LEDGER = checks.Ledger("agent lifetime", floor=315)
 
 
 def section_weapon_damage():
@@ -524,6 +528,7 @@ def main():
     section_follow_router()
     section_npc_plane()
     section_plane_repath()
+    section_client_model()
     section_facing()
     section_enemy_skill()
     section_constants()
@@ -949,6 +954,13 @@ def section_follow_router():
               "reconstruction")
 
     saved = authsrv.NPC_FOLLOW_ROUTER
+    # NPCTRACK-Q1 (2026-09-06): the corridor integrator this section exercises
+    # is now the REVERT arm (--no-npc-client-model). Under the default the copy
+    # is the client's own sync copy, which dead-reckons straight and never
+    # wedges -- and never routes. Everything below is about the corridor, so
+    # it runs on that arm; section_client_model covers the default.
+    saved_model = authsrv.NPC_CLIENT_MODEL
+    authsrv.NPC_CLIENT_MODEL = False
     try:
         # THE KNOWN-BAD ARM FIRST, so the fixture is proved able to freeze a
         # chase before the fix is credited with unfreezing one.
@@ -1032,6 +1044,7 @@ def section_follow_router():
                   f"halts {halts2}")
     finally:
         authsrv.NPC_FOLLOW_ROUTER = saved
+        authsrv.NPC_CLIENT_MODEL = saved_model
 
 
 class _Stairs:
@@ -1168,6 +1181,220 @@ def section_plane_repath():
     finally:
         authsrv.NPC_PLANE_REPATH = saved
     LEDGER.ok(authsrv.NPC_PLANE_REPATH is True,
+              "and the module global is restored after the revert arm")
+
+class _Flat:
+    """Open ground, plane 0 everywhere: the model is the thing under test."""
+
+    def clip(self, x0, y0, x1, y1, step=16.0):
+        return (x1, y1)
+
+    def plane_at(self, x, y, prefer=None):
+        return 0
+
+
+def _model_pos(state):
+    p = state["agents"][10]["pos"]
+    return (round(p[0], 1), round(p[1], 1))
+
+
+def section_client_model():
+    """NPCTRACK-Q1: the hostile's copy is the client's own sync copy.
+
+    Measured on three stairs runs (studies/npctrack/FINDINGS.md): at the halt
+    the server's copy of the Hatcher sat a median 53.8 u from the body the
+    client drew, while the client's own two copies agreed to 12 u -- the
+    server's corridor integrator was the drift. The client walks its sync copy
+    STRAIGHT to the ordered point and stops it at r+r+56 from the player's
+    world-0 copy inside a forward cone (ANIMREF-RE 38.2); agtrack_mirror's
+    SyncAgent plus that disc reproduces the tape to 11.6 u at the halts.
+    """
+    import authsrv
+    FOLLOW = authsrv.GAME_SMSG_AGENT_UPDATE_DESTINATION
+    HALT = authsrv.GAME_SMSG_AGENT_STOP_MOVING
+    SPEED = authsrv.GAME_SMSG_AGENT_UPDATE_SPEED
+    MOVE = authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT
+    stop = authsrv.follow_stop_radius()
+    print("\nNPCTRACK-Q1: the hostile's copy is the client's own dead-reckoner")
+    LEDGER.ok(authsrv.NPC_CLIENT_MODEL is True
+              and "--no-npc-client-model" in open(
+                  authsrv.__file__, encoding="utf-8").read()
+              and authsrv.capture_flags().get("NPC_CLIENT_MODEL") is True,
+              "it ships ON with its revert flag, recorded in the capture header")
+    pm = _Flat()
+    saved = authsrv.NPC_CLIENT_MODEL
+    try:
+        # 1. THE STANDING CASE reproduces section_chase's own pin: player at
+        #    the origin, hostile 900 u out, the disc parks it at exactly 80.
+        st = _fresh_follow((900.0, 0.0), (0.0, 0.0), player_plane=0)
+        sent = _tick_parked(st, pm, now=0.0)
+        LEDGER.ok([op for op, _v, _l in sent] == [SPEED, FOLLOW],
+                  "the opening tick still announces a rate and ONE follow",
+                  f"{[hex(op) for op, _v, _l in sent]}")
+        _tick_parked(st, pm, now=1.0)
+        LEDGER.ok(_model_pos(st) == (612.0, 0.0),
+                  "one second later the copy is where the client's dead-"
+                  "reckoner puts it: 288 u along the ordered line",
+                  f"{_model_pos(st)} -- +0x78 + v * dt, agtrack_mirror.SyncAgent")
+        st["agents"][10]["follow"]["sent_at"] = 29.9   # the clock is fresh
+        _tick_parked(st, pm, now=30.0)
+        d = math.hypot(*st["agents"][10]["pos"])
+        LEDGER.ok(abs(d - stop) < 0.5,
+                  "and a huge step parks it at the disc, 80 u out, solved on "
+                  "the leg's own line rather than sub-stepped",
+                  f"{d:.2f} u against {stop:.0f}")
+        fol = st["agents"][10]["follow"]
+        LEDGER.ok(fol is not None and fol.get("arrived_at") is not None,
+                  "the park IS the arrival, and the halt waits for the clock "
+                  "(ANIMREF-RE 40.9)")
+        fol["sent_at"] -= 0.6
+        halted = _tick_parked(st, pm, now=30.05)
+        LEDGER.ok([op for op, _v, _l in halted] == [HALT]
+                  and st["agents"][10]["follow"] is None
+                  and abs(math.hypot(*st["agents"][10]["pos"]) - stop) < 0.5,
+                  "the halt is ONE bare 0x0028 and the model does not move "
+                  "under it -- the client's copy was already parked",
+                  f"{[hex(op) for op, _v, _l in halted]} at "
+                  f"{math.hypot(*st['agents'][10]['pos']):.1f} u")
+
+        # 2. THE DIVERGENCE the tapes measured (F4): the client's world-0 copy
+        #    of the player stands 300 u to the side of the server's copy. The
+        #    ordered point is state["pos"]; the client walks to it and the disc
+        #    (around world-0) never fires, so the copy arrives AT the point.
+        #    The old integrator would park 80 u from state["pos"]. That 80 u
+        #    is the arms' difference and the model's answer is the client's.
+        st = _fresh_follow((900.0, 0.0), (0.0, 0.0), player_plane=0)
+        st["last_report"] = (0.0, 300.0, True, 0.0)     # standing, world-0 here
+        _tick_parked(st, pm, now=0.0)
+        _tick_parked(st, pm, now=10.0)
+        LEDGER.ok(_model_pos(st) == (0.0, 0.0),
+                  "DIVERGENCE: with the client's frame 300 u aside, the copy "
+                  "walks all the way to the ORDERED point -- the disc never "
+                  "fires -- which is what 24 of 40 measured halts showed",
+                  f"{_model_pos(st)}")
+        authsrv.NPC_CLIENT_MODEL = False
+        st = _fresh_follow((900.0, 0.0), (0.0, 0.0), player_plane=0)
+        st["last_report"] = (0.0, 300.0, True, 0.0)
+        _tick_parked(st, pm, now=0.0)
+        _tick_parked(st, pm, now=10.0)
+        authsrv.NPC_CLIENT_MODEL = saved
+        LEDGER.ok(abs(math.hypot(*st["agents"][10]["pos"]) - stop) < 0.5,
+                  "REVERT ARM (--no-npc-client-model): the same order parks "
+                  "the server's copy 80 u from ITS player, blind to the frame "
+                  "-- the known-bad arm, and the two differ by the 80 u the "
+                  "client never walked",
+                  f"{_model_pos(st)}")
+
+        # 3. THE CONE: a frame point BEHIND the walking copy does not stop it,
+        #    even inside 80 u (38.2's +-60 degree forward cone).
+        st = _fresh_follow((0.0, 0.0), (900.0, 0.0), player_plane=0)
+        st["last_report"] = (-50.0, 0.0, True, 0.0)     # 50 u behind
+        _tick_parked(st, pm, now=0.0)
+        _tick_parked(st, pm, now=1.0)
+        LEDGER.ok(_model_pos(st) == (288.0, 0.0),
+                  "a frame point 50 u BEHIND the copy is inside the disc and "
+                  "outside the cone: no stop, the walk continues",
+                  f"{_model_pos(st)}")
+
+        # 4. THE MESSAGES, as the client's handlers apply them.
+        ag = st["agents"][10]
+        authsrv._npc_model_emit(ag, HALT, [10], 1.0)   # at the model's own clock (1.0 s in)
+        _tick_parked(st, pm, now=5.0)
+        LEDGER.ok(_model_pos(st) == (288.0, 0.0),
+                  "a 0x0028 halts the model IN PLACE mid-leg, and it stays",
+                  f"{_model_pos(st)} four seconds later")
+        st = _fresh_follow((0.0, 0.0), (900.0, 0.0), player_plane=0)
+        st["last_report"] = (-50.0, 0.0, True, 0.0)
+        ag = st["agents"][10]
+        authsrv._npc_model_emit(ag, SPEED, [10, 0.5], 0.0)
+        authsrv._npc_model_emit(ag, FOLLOW, [10, (900.0, 0.0), 0, 0, 1], 0.0)
+        authsrv._npc_model_advance(st, ag, 0.5, elapsed=0.5)
+        authsrv._npc_model_emit(ag, SPEED, [10, 1.0], 0.5)  # mid-leg: ignored
+        ag["follow"] = {"told": (900.0, 0.0), "sent_at": 0.0, "t0": 0.0}
+        ag["moving"] = True
+        ag["moved_at"] = 0.5
+        _tick_parked(st, pm, now=1.0)
+        LEDGER.ok(_model_pos(st) == (144.0, 0.0),
+                  "a 0x002B is a pure store: the NEXT bake runs at 0.5, and "
+                  "one sent MID-LEG leaves the current leg's velocity alone",
+                  f"{_model_pos(st)} -- 144 u in 1 s, not 288 and not 216")
+        authsrv._npc_model_emit(ag, MOVE, [10, (144.0, 0.0), 0, 0], 1.0)
+        _tick_parked(st, pm, now=1.2)
+        LEDGER.ok(_model_pos(st) == (144.0, 0.0) and not ag["cmodel_moving"],
+                  "GROUNDZ-F9's zero-distance 0x0029 arms an arrival at the "
+                  "copy's own point and moves nothing (the bake's <= 1.0 u "
+                  "short-circuit)",
+                  f"{_model_pos(st)}")
+
+        # 5. RE-SEED: something else moved agent["pos"] (a respawn). The model
+        #    follows it rather than dragging the body back.
+        ag["pos"] = (5000.0, 5000.0)
+        authsrv._npc_model_advance(st, ag, 2.0, elapsed=0.8)
+        LEDGER.ok(_model_pos(st) == (5000.0, 5000.0),
+                  "a teleport of agent['pos'] by anything else re-seeds the "
+                  "model there", f"{_model_pos(st)}")
+
+        # 6. THE FRAME (F5): standing report -> that point; a click in flight
+        #    -> not the report; a guard -> its mirror; neither -> state["pos"].
+        st = {"pos": (1.0, 2.0)}
+        LEDGER.ok(authsrv._npc_frame(st, 0.0) == (1.0, 2.0),
+                  "no report, no guard: the frame is state['pos']")
+        st["last_report"] = (7.0, 8.0, True, 0.0)
+        LEDGER.ok(authsrv._npc_frame(st, 0.0) == (7.0, 8.0),
+                  "the last accepted report was a STOP: the frame is that "
+                  "point (world-0 == the body when standing, 40.11)")
+        st["click_moving_at"] = 0.5
+        LEDGER.ok(authsrv._npc_frame(st, 0.0) == (1.0, 2.0),
+                  "but not while a click leg is in flight -- the client is "
+                  "silent and moving; the report is stale")
+
+        class _Sync:
+            def position(self, ms):
+                return (5.0, 5.0)
+
+        class _Mirror:
+            sync = _Sync()
+
+        class _Guard:
+            mirror = _Mirror()
+
+            def _ms(self, now):
+                return 0
+
+        st = {"pos": (1.0, 2.0), "agtrack_guard": _Guard(),
+              "last_report": (7.0, 8.0, False, 0.0)}
+        LEDGER.ok(authsrv._npc_frame(st, 0.0) == (5.0, 5.0),
+                  "the player MOVING and a guard present: the mirror's sync "
+                  "copy is the frame -- the best the server has (p50 17.5 u "
+                  "at the halts against the true world-0's 11.6)")
+
+        # 7. PARKED OUT OF REACH is not a stuck state: the halt goes out on
+        #    the clock and a FRESH follow opens on the next tick (retail's
+        #    chase 3), never a re-path per tick.
+        st = _fresh_follow((900.0, 0.0), (0.0, 0.0), player_plane=0)
+        st["last_report"] = (200.0, 0.0, True, 0.0)     # world-0 200 u ahead
+        _tick_parked(st, pm, now=0.0)
+        st["agents"][10]["follow"]["sent_at"] = 9.9
+        _tick_parked(st, pm, now=10.0)
+        LEDGER.ok(abs(st["agents"][10]["pos"][0] - 280.0) < 0.5
+                  and abs(st["agents"][10]["pos"][1]) < 0.5
+                  and st["agents"][10]["follow"].get("arrived_at") is not None,
+                  "the disc around a frame 200 u from the server's player "
+                  "parks the copy at 280 u -- out of reach, and ARRIVED",
+                  f"{_model_pos(st)}")
+        st["agents"][10]["follow"]["sent_at"] -= 0.6
+        a = _tick_parked(st, pm, now=10.05)
+        b = _tick_parked(st, pm, now=10.10)
+        LEDGER.ok([op for op, _v, _l in a] == [HALT]
+                  and [op for op, _v, _l in b] == [SPEED, FOLLOW],
+                  "it halts on the clock where it stands, and the next tick "
+                  "opens a FRESH follow rather than resuming a walk the "
+                  "client's copy cannot make",
+                  f"{[hex(op) for op, _v, _l in a]} then "
+                  f"{[hex(op) for op, _v, _l in b]}")
+    finally:
+        authsrv.NPC_CLIENT_MODEL = saved
+    LEDGER.ok(authsrv.NPC_CLIENT_MODEL is True,
               "and the module global is restored after the revert arm")
 
 
@@ -1536,18 +1763,39 @@ def section_chase():
               "ends an arrival; retail's non-arrival ends are a 0x0029 leash "
               "leg this server has no wander to send")
 
-    # 8. A WALL STOPS IT. pathmap.clip is sampled rather than solved, and it is
-    #    the whole of our collision story -- pathmap.route is an A* and is NOT
-    #    wired in, so an agent meets a wall and waits there.
+    # 8. A WALL, by arm. On the corridor integrator (the revert arm since
+    #    NPCTRACK-Q1) pathmap.clip is sampled rather than solved and is the
+    #    whole of that arm's collision story: the copy meets the wall and
+    #    waits. On the default the copy is the client's own SYNC copy, which
+    #    dead-reckons straight (agtrack_mirror.SyncAgent: pos = +0x78 + v*dt,
+    #    no clamp, no mesh) -- the drawn body paths around, and the two agreed
+    #    to <= 12 u at 38 of 40 measured halts (studies/npctrack F2/F4). So
+    #    the default does not consult clip at all, and that is the decode,
+    #    not an omission.
+    authsrv.NPC_CLIENT_MODEL = False
+    try:
+        state = _world(dist=900.0)
+        state["pathmap"] = _Wall()
+        _walk(state)                       # announce, then walk
+        _walk(state, n=4, elapsed=1.0)
+        x = state["agents"][10]["pos"][0]
+        LEDGER.ok(state["pathmap"].asked >= 1 and x >= 400.0,
+                  "REVERT ARM: a hostile is stopped by the pathmap rather than "
+                  "walking through it",
+                  f"x={x:.0f} against a wall at 400, clip asked "
+                  f"{state['pathmap'].asked} time(s)")
+    finally:
+        authsrv.NPC_CLIENT_MODEL = True
     state = _world(dist=900.0)
     state["pathmap"] = _Wall()
-    _walk(state)                       # announce, then walk
+    _walk(state)
     _walk(state, n=4, elapsed=1.0)
     x = state["agents"][10]["pos"][0]
-    LEDGER.ok(state["pathmap"].asked >= 1 and x >= 400.0,
-              "a hostile is stopped by the pathmap rather than walking through it",
-              f"x={x:.0f} against a wall at 400, clip asked "
-              f"{state['pathmap'].asked} time(s)")
+    LEDGER.ok(state["pathmap"].asked == 0 and x < 400.0,
+              "DEFAULT (NPCTRACK-Q1): the client's sync copy dead-reckons "
+              "straight through it and clip is never asked -- what the "
+              "client computes, measured to 10 u on the stairs tapes",
+              f"x={x:.0f}, clip asked {state['pathmap'].asked} time(s)")
 
     # 9. THE LEGACY ARM STILL RUNS, one flag away, so a run can convict either.
     authsrv.NPC_FOLLOW = False

@@ -173,7 +173,12 @@ drawn body, because the server never learns where the client put an NPC — whic
 `agenttap` exists to cover.
 
 **Q6 therefore reduces to the DRIFT**, not to the payload: our copy sitting 24 u from the drawn
-body of a *parked* hostile is the defect underneath, and it belongs to the NPC-tracking arc.
+body of a *parked* hostile is the defect underneath, and it belongs to the NPC-tracking arc —
+**[studies/npctrack/FINDINGS.md](../npctrack/FINDINGS.md)**, opened 2026-09-06, which measured it
+at a median 53.8 u over 40 halts and shipped the client's own model as the server's copy
+(NPCTRACK-Q1). (Time base note: the `t` values in this file's tables are CAPTURE seconds; the
+tape's own clock starts 1.16 s later. The 90 ms claim holds in wall time: the plane word
+changed +43 ms after the correction's send.)
 **Do not patch this blind** — the drift
 itself (our copy 24 u from the drawn body on a parked NPC) may be the more interesting defect,
 and it belongs to the NPC-tracking arc rather than to this one.

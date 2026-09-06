@@ -1741,6 +1741,16 @@ openings) — the ruling does not wait on it.
 
 ## 8. Immediate next actions
 
+### ★★★ MOVEMENT 2026-09-06 — NPCTRACK: the NPC-tracking arc opened, the drift MEASURED on 40 halts, the client's own equations reproduce the tape, and the server's copy of a hostile is now that model (NPCTRACK-F1..F7, Q1 SHIPPED, RUN-R1 registered)
+
+**[studies/npctrack/FINDINGS.md](studies/npctrack/FINDINGS.md). Ident word NPCTRACK. Opened after GROUNDZ-Q6 reduced the render arc's residual to "our copy of a parked hostile sits 24 u from the body the client draws".**
+
+* **THE DRIFT, MEASURED (F1-F3):** over 40 halts on three scripted stairs runs the server's copy of the Hatcher sat a **median 53.8 u** from the drawn body (p90 193, max 526), while the client's own two copies of it agreed to 12 u on 38 of 40. Server-versus-client, not the handoff. The client's sync copy stood at the disc on 15 halts, at the ordered point on 1, neither on 24; it was still walking when our halt landed on 10 of 40.
+* **THE CLIENT'S RULE, REPLICATED WITH THE CLIENT'S OWN EQUATIONS (F4):** `agtrack_mirror.SyncAgent` -- the decoded dead-reckoner the server already runs for the player -- fed with the Hatcher's own grants, plus ANIMREF §38.2's disc stop (r+r+56, ±60° cone), reproduces the tape's sync copy to **10 u median over 2,460 samples and 11.6 u at the 40 halts, ONE over 40 u.** Without the disc 70 u; without the cone two halts at 210 u. A first-cut integrator of my own reproduced it only to 16 u with a 143 u tail and ranked the frames the wrong way round; it is superseded and not cited.
+* **THE FRAME (F5):** the disc references the player's WORLD-0 copy, which the wire never carries. The best the server can compute -- the last accepted report while standing, the AgTrack mirror while moving -- scores **p50 17.5 / p90 78 u** at the halts against the true frame's 11.6 / 22.8, the mirror alone 24 / 110, `state["pos"]` 42 / 174, today's integrator 54 / 193. The residual is the mirror's own error while the player moves (p50 ~20 u, p90 60-90, once 91 u standing for 25 s) -- **NPCTRACK-Q2, handed to MOVECODE.**
+* **SHIPPED (Q1, F7):** the server's copy of a hostile under follow is that model, driven by the follow's own sends; nothing changes on the wire, the halt is keyed on the model parking (retail's shape), a copy parked out of reach re-follows. `--no-npc-client-model` reverts; `test_agentlife` floor 294 -> 315 (green 331); the corridor router (1z-by) now lives on the revert arm only.
+* **RUN-NPCTRACK-R1 registered:** the stairs route, predicting copy-vs-client-sync at the halts p50 ≤ 30 u (desk 17.5) against the measured 54, over-40 halts ≤ 30% against 65%; scored by `studies/npctrack/review/npcdrift.py`.
+
 ### ★★★ MOVEMENT 2026-09-05 — THE Z COLUMN CANNOT BE ADDED (MOVECODE-1z-cb): **the fourth word of every agent point is a hardcoded zero**, there is no height in the agent's movement record at all, and no assert `asserts.py` reads in `AgAgent` names one — **a floor, not a census** (the tool is short by ~370 sites and says so) — settled from the pinned binary in three instructions, with no run
 
 **[FINDINGS](studies/movecode/FINDINGS.md) §1z-cb. Asked after §1z-ca.5 registered the residual ankle-sink as needing an instrument.**

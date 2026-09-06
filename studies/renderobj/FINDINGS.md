@@ -277,7 +277,10 @@ either — 31 of its orders landed on an already-parked body and moved one by up
 
 **F9's payload is the closest of the three** (24 / 48 / 195 u). **There is no server-side point
 that reliably sits on the drawn body**, because the server never learns where the client put an
-NPC. So Q6 reduces to the DRIFT itself, which belongs to the NPC-tracking arc.
+NPC. So Q6 reduces to the DRIFT itself, which belongs to the NPC-tracking arc — **opened the same
+day: [studies/npctrack/FINDINGS.md](../npctrack/FINDINGS.md), ident word NPCTRACK.** Its F1
+measured the drift on 40 halts (median 53.8 u, not 24), F4 reproduced the client's copy with the
+client's own equations, and Q1 shipped that model as the server's copy.
 
 ## Open
 

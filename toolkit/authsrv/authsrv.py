@@ -4132,6 +4132,11 @@ def _take_client_position(state, reported, plane, rec, source, now=None,
         # (9463, 7946), which our own navmesh puts on plane 0. The click arm then
         # reads that plane to decide whether it can place the player at all.
         state["pos"] = reported
+        # NPCTRACK-Q1: the last accepted report and whether it was a 0x0047 --
+        # the hostile model's STANDING frame (world-0 equals the drawn body
+        # when standing, ANIMREF-RE 40.11; _npc_frame).
+        state["last_report"] = (float(reported[0]), float(reported[1]),
+                                bool(stop), now)
         state["plane"] = plane
         state["pos_seen"] = now
         state["pos_rejects"] = 0
@@ -15937,6 +15942,231 @@ def _npc_plane_correct(send, conn_id, agent_id, agent, plane, now):
     return True
 
 
+# ---- NPCTRACK-Q1: the server's copy of a hostile IS the client's own -------
+#
+# WHAT WAS WRONG, measured (studies/npctrack/FINDINGS.md F1-F3: 40 halts over
+# three scripted stairs runs, 1zCA / GROUNDZ-R1 / GROUNDZ-R2). At the halt the
+# server's copy of the Hatcher sat a MEDIAN 53.8 u from the copy the client was
+# drawing (p90 193, max 526 u), while the client's own two copies of it agreed
+# to within 12 u on 38 of the 40. The drift is server-versus-client, and it is
+# the INTEGRATOR: this server walked its copy along its own corridor toward the
+# LIVE player and parked it 80 u from state["pos"]. The client walks its sync
+# copy STRAIGHT to the point the last 0x002A named, and stops it when the
+# collision resolver finds the player's WORLD-0 copy inside r+r+56 u and a
+# +-60 degree forward cone (ANIMREF-RE 38.2), or when the leg ends at the
+# point, or when our 0x0028 lands. Never re-fetching the target is the client's
+# rule ("the server's re-path is the contract"), and it is why the two copies
+# part: between re-paths the server's copy tracked a player the client's did
+# not know had moved.
+#
+# THE MODEL IS THE CLIENT'S OWN EQUATIONS, ALREADY IN THE TREE.
+# agtrack_mirror.SyncAgent is the decoded dead-reckoner (0x005FFB40) and bake
+# (0x005FE950) this server already runs for the PLAYER's world-0 copy. Fed with
+# the hostile's own movement messages -- each 0x002A/0x0029 a bake, each 0x002B
+# a pure store of moveSpeed for the NEXT bake, each 0x0028 a halt in place --
+# plus the resolver's disc stop, it reproduces the tape's sync copy of agent 10
+# to a median 10 u over 2,460 samples and 11.6 u at the 40 halts, ONE halt over
+# 40 u (FINDINGS F4). Without the disc stop it is 70 u; without the cone two
+# halts sit at 210 u. Both terms are the client's (38.2), neither is tuned.
+#
+# THE FRAME is the one thing the server does not have exactly: the client's
+# disc references the player's world-0 copy, which the wire never carries.
+# Measured (F5) at the same 40 halts, model-versus-client-sync:
+#     the true world-0 (tape only)                     p50 11.6  p90  22.8
+#     the last accepted report while STANDING, the
+#       AgTrack mirror's sync copy while MOVING        p50 17.5  p90  78.3   <- this
+#     the mirror alone                                 p50 24.3  p90 110.0
+#     state["pos"] alone                               p50 41.8  p90 173.8
+#     today's integrator                               p50 53.8  p90 193.3
+# Standing is when world-0 equals the drawn body (ANIMREF-RE 40.11, 0 u), and
+# a 0x0047 is how the server knows it. The residual is the mirror's own error
+# while the player moves (p50 ~20 u, p90 60-90 u, and once 91 u standing for
+# 25 s) -- NPCTRACK-Q2, handed to the MOVECODE arc; nothing here can beat it.
+#
+# WHAT THIS CHANGES ON THE WIRE: nothing. Same follows, same re-paths, same
+# halt on the same clock. The halt is keyed on the MODEL parking (disc, point
+# or halt) rather than on a corridor walk reaching 80 u, so it lands on a body
+# the client has already stopped -- retail's shape (ANIMREF-RE 40.2: p50 0.496
+# s after the last follow, a no-op on a parked body). A copy parked OUT of
+# reach halts on the clock too and a fresh follow opens on the next tick, which
+# is retail's chase 3 (halt, then a fresh follow 0.23 s later). What changes is
+# where the server believes the hostile STANDS, which every range check, the
+# leash, the plane word and GROUNDZ-F9's correction payload read.
+#
+# --no-npc-client-model reverts to the corridor integrator -- the known-bad
+# arm and RUN-NPCTRACK-R1's control.
+NPC_CLIENT_MODEL = True    # False (--no-npc-client-model): the server's own walk.
+NPC_DISC_COS_CONE = 0.5    # the resolver's +-60 degree cone, fcomp [0x009458BC]. OBSERVED.
+
+
+def _npc_model(agent, now):
+    """The client's sync copy of this hostile, as the client computes it.
+
+    Lazily seeded at agent["pos"], and RE-SEEDED whenever something other than
+    the model has moved agent["pos"] since it last wrote it (a respawn, the
+    legacy arm, a hand-placed fixture) -- so a stale model can never outlive a
+    teleport, and the revert flag can flip mid-session.
+
+    ITS CLOCK IS THE FOLLOW'S OWN: the elapsed time the integrator accumulates
+    from agent["moved_at"] (`cmodel_clock`, seconds), not the wall. That is
+    what the server's step has always been measured in, and it is what every
+    chase fixture fakes by rewinding moved_at -- a model on the wall clock
+    would stand still under a test that pretends thirty seconds passed."""
+    import agtrack_mirror as _am
+    sa = agent.get("cmodel")
+    pos = (float(agent["pos"][0]), float(agent["pos"][1]))
+    if sa is None or agent.get("cmodel_wrote") != pos:
+        sa = _am.SyncAgent()
+        agent["cmodel"] = sa
+        agent["cmodel_clock"] = 0.0
+        agent["cmodel_last_ms"] = 0
+        sa.set_position(pos[0], pos[1], agent.get("plane", 0), 0)
+        agent["cmodel_wrote"] = pos
+        agent["cmodel_moving"] = False
+    return sa
+
+
+def _npc_ms(agent, now=None):
+    return int(round(agent.get("cmodel_clock", 0.0) * 1000.0))
+
+
+def _npc_model_write(agent, sa, ms):
+    p = sa.position(ms)
+    if p is not None:
+        agent["pos"] = (float(p[0]), float(p[1]))
+        agent["cmodel_wrote"] = agent["pos"]
+
+
+def _npc_model_emit(agent, opcode, values, now):
+    """One movement message we send THIS hostile, applied to its model exactly
+    as the client's handlers apply it (ANIMREF-RE 38.2, agtrack_mirror):
+    0x0029/0x002A = consume a pending arrival, then setter + bake; 0x002B = a
+    pure store of moveSpeed that the CURRENT leg keeps ignoring; 0x0028 = the
+    halt in place. Fed from the follow's own send sites, not from the socket
+    choke point, so a test driving _npc_follow_tick with a stub send feeds it
+    the same way the server does."""
+    if not NPC_CLIENT_MODEL:
+        return
+    sa = _npc_model(agent, now)
+    ms = _npc_ms(agent, now)
+    if opcode in (GAME_SMSG_AGENT_MOVE_TO_POINT,
+                  GAME_SMSG_AGENT_UPDATE_DESTINATION):
+        x, y = values[1]
+        p1 = values[2] if len(values) > 2 else None
+        p2 = values[3] if len(values) > 3 else None
+        sa.consume_arrival(ms)
+        sa.bake_grant(float(x), float(y), p1, p2, ms)
+        agent["cmodel_moving"] = True
+    elif opcode == GAME_SMSG_AGENT_UPDATE_SPEED:
+        sa.move_speed = float(values[1])
+    elif opcode == GAME_SMSG_AGENT_STOP_MOVING:
+        p = sa.position(ms) or (sa.x78, sa.y78)
+        sa.set_position(p[0], p[1], sa.plane if sa.plane is not None else 0, ms)
+        agent["cmodel_moving"] = False
+    else:
+        return
+    _npc_model_write(agent, sa, ms)
+
+
+def _npc_mirror_pos(state, now):
+    """The AgTrack mirror's sync copy of the player -- the server's model of the
+    client's world-0 -- under the guard's own lock; None without a guard."""
+    g = state.get("agtrack_guard")
+    if g is None:
+        return None
+    lock = state.get("agtrack_guard_lock")
+    try:
+        if lock is not None:
+            with lock:
+                return g.mirror.sync.position(g._ms(now))
+        return g.mirror.sync.position(g._ms(now))
+    except Exception:
+        return None
+
+
+def _npc_frame(state, now):
+    """Where the CLIENT holds the player's world-0 copy -- the frame the
+    resolver's disc runs in (F5). The last accepted report while the player
+    STANDS (the last thing heard was a 0x0047 and no click leg is in flight:
+    world-0 equals the drawn body when standing, ANIMREF-RE 40.11); the
+    mirror's sync copy while they MOVE; state["pos"] when there is neither."""
+    lr = state.get("last_report")
+    if lr is not None and lr[2] and state.get("click_moving_at") is None:
+        return (lr[0], lr[1])
+    p = _npc_mirror_pos(state, now)
+    if p is not None:
+        return (float(p[0]), float(p[1]))
+    px, py = state.get("pos", (0.0, 0.0))
+    return (float(px), float(py))
+
+
+def _npc_disc_hit_ms(sa, fx, fy, radius, t0_ms, t1_ms):
+    """The first instant in [t0, t1] at which the moving copy is within
+    `radius` of (fx, fy) AND has it inside the forward cone -- solved on the
+    leg's own line (position = +0x78 + v * dt, agtrack_mirror.SyncAgent), which
+    is exact where the client's per-frame check is 16 ms coarse. Returns
+    (hit_ms, (x, y)) -- the next whole ms and the exact boundary point on the
+    line -- or None if the disc is never entered on that interval, or the
+    frame point is behind."""
+    if t1_ms < t0_ms:
+        return None
+    vx, vy = sa.vx, sa.vy
+    v2 = vx * vx + vy * vy
+    if v2 <= 0.0:
+        return None
+    p0 = sa.position(t0_ms)
+    if p0 is None:
+        return None
+    qx, qy = p0[0] - fx, p0[1] - fy
+    q2 = qx * qx + qy * qy
+    r2 = radius * radius
+    if q2 <= r2:
+        hit, ph = t0_ms, p0
+    else:
+        b = qx * vx + qy * vy
+        disc = b * b - v2 * (q2 - r2)
+        if disc < 0.0:
+            return None
+        s = (-b - math.sqrt(disc)) / v2            # seconds from t0
+        if s < 0.0:
+            return None
+        hit = t0_ms + int(math.ceil(s * 1000.0))
+        if hit > t1_ms:
+            return None
+        ph = (p0[0] + vx * s, p0[1] + vy * s)      # ON the disc, exactly
+    dx, dy = fx - ph[0], fy - ph[1]
+    d = math.hypot(dx, dy)
+    if d > 1e-9 and (vx * dx + vy * dy) / (math.sqrt(v2) * d) < NPC_DISC_COS_CONE:
+        return None                                # behind or beside: no stop
+    return hit, ph
+
+
+def _npc_model_advance(state, agent, now, elapsed=0.0):
+    """Advance the model by `elapsed` seconds, applying the resolver's
+    stop-at-reach on the way (0x006020B0: velocity 0, targets +INF, follow
+    cleared) and the leg's own arrival. Writes agent["pos"]. Returns True when
+    the copy is PARKED afterwards -- disc, point or halt -- which is what the
+    follow calls arrival. `now` is wall time, used only to read the mirror."""
+    sa = _npc_model(agent, now)
+    agent["cmodel_clock"] = agent.get("cmodel_clock", 0.0) + max(0.0, elapsed)
+    ms = _npc_ms(agent)
+    last_ms = agent.get("cmodel_last_ms", ms)
+    agent["cmodel_last_ms"] = ms
+    if agent.get("cmodel_moving") and sa.t_arrive != 0:
+        fx, fy = _npc_frame(state, now)
+        hit = _npc_disc_hit_ms(sa, fx, fy, follow_stop_radius(agent),
+                               last_ms, min(ms, sa.t_arrive))
+        if hit is not None:
+            hit_ms, p = hit
+            sa.set_position(p[0], p[1], sa.plane if sa.plane is not None
+                            else 0, hit_ms)
+            agent["cmodel_moving"] = False
+    if sa.consume_arrival(ms):
+        agent["cmodel_moving"] = False
+    _npc_model_write(agent, sa, ms)
+    return not agent.get("cmodel_moving")
+
+
 def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, pm,
                      rec=None):
     """One hostile's chase, in retail's shape (ANIMREF-RE 40; NPC_FOLLOW).
@@ -15980,13 +16210,19 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
     plane = agent["plane"] = _npc_plane(pm, ax, ay, agent.get("plane", 0))
     dest_plane = _npc_dest_plane(pm, state, px, py, plane)
 
+    def _send(op, vals, label):
+        # NPCTRACK-Q1: every movement message this follow sends the hostile
+        # also drives its model, from the same call.
+        send(op, vals, label)
+        _npc_model_emit(agent, op, vals, now)
+
     def _halt(why):
         agent["follow"] = None
         agent["moving"] = False
         agent.pop("froute", None)       # 1z-by: a new follow re-solves
         agent.pop("froute_at", None)
         agent["moved_at"] = now
-        send(GAME_SMSG_AGENT_STOP_MOVING, agents.agent_stop_moving(agent_id),
+        _send(GAME_SMSG_AGENT_STOP_MOVING, agents.agent_stop_moving(agent_id),
              f"agent {agent_id} halts at ({agent['pos'][0]:.0f},"
              f"{agent['pos'][1]:.0f}): {why} [ANIMREF-RE 40]")
 
@@ -16022,16 +16258,16 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
             # branch RUN-1zCA's sunken Hatcher sat in for 22 s. A parked hostile
             # gets no other send, so a plane word that went stale as it arrived
             # would stand for the rest of the session.
-            _npc_plane_correct(send, conn_id, agent_id, agent, plane, now)
+            _npc_plane_correct(_send, conn_id, agent_id, agent, plane, now)
             agent["moved_at"] = now
             return
         if not agent.get("moving"):
             # The rate, once per walk. See the docstring: ours, kept.
             agent["moving"] = True
-            send(GAME_SMSG_AGENT_UPDATE_SPEED,
-                 agents.agent_update_speed(agent_id, ENEMY_MOVE_RATE),
-                 f"agent {agent_id} speed {ENEMY_MOVE_RATE} "
-                 f"({ENEMY_MOVE_RATE * agents.DEFAULT_RUN_SPEED:.0f} u/s)")
+            _send(GAME_SMSG_AGENT_UPDATE_SPEED,
+                  agents.agent_update_speed(agent_id, ENEMY_MOVE_RATE),
+                  f"agent {agent_id} speed {ENEMY_MOVE_RATE} "
+                  f"({ENEMY_MOVE_RATE * agents.DEFAULT_RUN_SPEED:.0f} u/s)")
             print(f"[c{conn_id}] agent {agent_id} ({agent['name']}) follows "
                   f"the player, {dist:.0f} u out, halts at {stop:.0f} u",
                   flush=True)
@@ -16041,10 +16277,10 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
         # The first step is measured from here, not from before the walk
         # was announced -- an agent cannot have travelled before it set off.
         agent["moved_at"] = now
-        send(GAME_SMSG_AGENT_UPDATE_DESTINATION,
-             [agent_id, (float(px), float(py)), dest_plane, plane,
-              PLAYER_AGENT_ID],
-             f"FOLLOW: agent {agent_id} -> player at ({px:.0f},{py:.0f}) "
+        _send(GAME_SMSG_AGENT_UPDATE_DESTINATION,
+              [agent_id, (float(px), float(py)), dest_plane, plane,
+               PLAYER_AGENT_ID],
+              f"FOLLOW: agent {agent_id} -> player at ({px:.0f},{py:.0f}) "
              f"plane {plane}->{dest_plane}, {dist:.0f} u out, halts at "
              f"{stop:.0f} u [ANIMREF-RE 40]")
         return
@@ -16052,7 +16288,11 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
     # step; the halt when the follow's half-second next fires -- unless the
     # player has left reach meanwhile, in which case the walk resumes.
     if fol.get("arrived_at") is not None:
-        if dist > enemy_reach():
+        # NPCTRACK-Q1: under the model the copy is where the CLIENT parked it
+        # and cannot resume by itself -- it halts on the clock wherever that
+        # is, and a copy halted out of reach gets a fresh follow on the next
+        # tick (retail's chase 3: halt, fresh follow 0.23 s later).
+        if not NPC_CLIENT_MODEL and dist > enemy_reach():
             fol.pop("arrived_at", None)
         else:
             if now - fol["sent_at"] >= FOLLOW_REPATH_INTERVAL:
@@ -16077,15 +16317,36 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
         fol["sent_at"] = now
         agent["plane_told"] = plane          # GROUNDZ-Q5
         agent["plane_told_at"] = now
-        send(GAME_SMSG_AGENT_UPDATE_DESTINATION,
-             [agent_id, (float(px), float(py)), dest_plane, plane,
-              PLAYER_AGENT_ID],
-             f"FOLLOW re-path: agent {agent_id} -> player at ({px:.0f},{py:.0f}) "
+        _send(GAME_SMSG_AGENT_UPDATE_DESTINATION,
+              [agent_id, (float(px), float(py)), dest_plane, plane,
+               PLAYER_AGENT_ID],
+              f"FOLLOW re-path: agent {agent_id} -> player at ({px:.0f},{py:.0f}) "
              f"plane {plane}->{dest_plane}, {dist:.0f} u out [ANIMREF-RE 40]")
     # Advance our own copy, capped so it parks at the disc rather than on top
     # of the player -- the same arithmetic the legacy arm ran at 150 u.
     elapsed = max(0.0, now - agent.get("moved_at", now))
     agent["moved_at"] = now
+    if NPC_CLIENT_MODEL:
+        # NPCTRACK-Q1: the copy is the client's own sync copy, driven by the
+        # orders above and parked by the resolver's disc in the client's
+        # frame. No corridor, no clip: the client's sync copy dead-reckons
+        # straight (the drawn body paths; the two agree to <= 12 u at 38 of
+        # 40 measured halts). The plane word is still resolved at the copy's
+        # point (1z-bz) and the halt still waits for the clock (40.9).
+        parked = _npc_model_advance(state, agent, now, elapsed)
+        ax, ay = agent["pos"]
+        agent["plane"] = _npc_plane(pm, ax, ay, plane)
+        dist = math.hypot(px - ax, py - ay)
+        if parked:
+            if not HALT_ON_CLOCK:
+                _halt(f"parked, {dist:.0f} u from the player")
+                return
+            if fol.get("arrived_at") is None:
+                fol["arrived_at"] = now
+            if now - fol["sent_at"] >= FOLLOW_REPATH_INTERVAL:
+                _halt(f"parked, {dist:.0f} u from the player; the "
+                      "half-second clock had already fired")
+        return
     budget = ENEMY_MOVE_RATE * agents.DEFAULT_RUN_SPEED * elapsed
     routed = False
     if NPC_FOLLOW_ROUTER and pm is not None and budget > 0.0 and dist > stop:
@@ -23471,6 +23732,16 @@ def main():
                          "body trails its sync copy and an instant halt froze "
                          "it short of the disc -- CASE 8 v2's 'long range "
                          "attacks' with the server's copy at exactly 80 u.")
+    ap.add_argument("--no-npc-client-model", action="store_true",
+                    help="NPCTRACK-Q1 REVERT: walk the server's copy of a "
+                         "hostile along its own corridor toward the live "
+                         "player and park it 80 u out, instead of running the "
+                         "client's own dead-reckoner and disc stop over the "
+                         "orders we send. Measured cost over 40 halts on three "
+                         "stairs runs: the server's copy sat a median 53.8 u "
+                         "(p90 193, max 526) from the body the client drew, "
+                         "while the client's own two copies agreed to 12 u. "
+                         "Known-bad arm; RUN-NPCTRACK-R1's control.")
     ap.add_argument("--no-plane-repath", action="store_true",
                     help="GROUNDZ-Q5 REVERT: do not correct a hostile's plane "
                          "word after it stops. GROUNDZ-R1 measured what that "
@@ -25204,6 +25475,13 @@ def main():
         print("[map] --halt-on-arrival: a hostile's 0x0028 goes out the instant "
               "the server's copy reaches the disc (ANIMREF-RE 40.9's revert; "
               "the client's rendered body halts short).", flush=True)
+    if a.no_npc_client_model:
+        global NPC_CLIENT_MODEL
+        NPC_CLIENT_MODEL = False
+        print("[map] --no-npc-client-model: a hostile's copy walks the "
+              "server's own corridor toward the live player and parks at 80 u "
+              "(NPCTRACK-Q1's revert). Measured: a median 53.8 u from the "
+              "drawn body at the halt.", flush=True)
     if a.no_plane_repath:
         global NPC_PLANE_REPATH
         NPC_PLANE_REPATH = False
