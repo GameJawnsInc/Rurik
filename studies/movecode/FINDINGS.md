@@ -16383,3 +16383,230 @@ contradiction.** The check that finds this class is cheap and general: when two 
 in one file answer the same geometric question, feed them one input and diff the answers
 — which is exactly what §16's four-arm table is, and what `modelleg.py`'s column (a) is
 over 783 real reports.
+
+## 1z-cd. THE CROSS-PLANE LEAD GUARD IS **REFUTED**, at 0 of 240 — NPCTRACK's wall case asked the keyboard lead to refuse a grant whose plane differs from the mover's, and `A2_LEAD_PLANE_CLIP` has made that impossible since §1z-ap: the point granted at the specimen is on the mover's **own** plane, one 2 u sample short of the seam, in the **same trapezoid** as the report. The tape then says what really happened, and it is sharper than the brief or F10 — **the client never installed the destination at all** (19 of the run's 20 non-degenerate leads land verbatim in its own `m_targetPoint`; this one is the exception, and both world copies hold the invalid-position sentinel for the whole 5 s). No knob shipped; what ships is the invariant, held where losing it would be invisible
+
+**Asked as an implementation, arrived at as a refutation.** The brief was: *"make the
+lead refuse or shorten a point whose plane differs from the mover's when no same-plane
+route exists"*, on the reading that the `0x0029` at the staircase names the stair tread
+on plane 29. Ident `MOVECODE-1z-cd`. Every figure below is reproducible with
+`python studies/movecode/review/leadplane.py --check` — no client, no replay, no
+simulator: the capture, the `kbd_leg` row that records what actually went on the wire,
+and our own navmesh.
+
+This is the sibling of §1z-cc and the opposite result. There, one of two clippers was
+missing `pm.clip`'s plane term and the cost was 604 u. Here the term is present, has
+been since 2026-09-04, and the proposed repair would have added a branch that cannot
+execute.
+
+### 1z-cd.1 ★★★ The specimen, and the granted point is on plane 0 — OBSERVED
+
+Capture `authsrv-20260906T094349-c1`, map 148, t = 25.42 → 30.43. The run is the same
+stairs route as §1z-cc's specimen, twenty minutes later:
+
+```
+25.420  0x003D  reported (10014.534, 8526.463) plane 0, vec2 (767.144, 0.000), mt 1
+25.420  0x0025  MOVE_DIRECTION (1.000, 0.000) type 1
+25.421  0x0029  KBD LEAD (10119,8526) from (10015,8526) plane 0
+25.421  grant_verdict  dest [10118.534, 8526.463]  lead_clipped=true
+                       lead_clip_why="plane-seam"  plane_dest=0 plane_cur=0
+                       plane_differs=false
+25.421  kbd_leg arm    dest [10118.534, 8526.463] plane 0
+        ... five seconds of silence, the body does not move ...
+30.426  0x0047  (10014.534, 8526.463)   drift 603.9      <- §1z-cc's number, since fixed
+```
+
+Scored on the real map-148 navmesh at that report, the claim the brief rests on does not
+survive first contact:
+
+| quantity | measured |
+|---|---|
+| `planes_at(10118.534, 8526.463)` — **the granted point** | `{0}` |
+| `plane_at(granted, prefer=0)` | `0` — **the mover's own plane** |
+| `planes_at(10120.534, 8526.463)` — one 2 u sample further | `{29}` |
+| `pm.route(report → granted, start_plane=0, goal_plane=0)` | 2 waypoints, **same trapezoid** |
+| reach of the grant | 104.0 u |
+
+**The brief's `planes_at(10120, 8526) == {29}` is correct and is not the granted point.**
+The grant is at x = 10118.534. The plane-aware clip stopped it on the last sample it had
+already tested on plane 0, which is what `pm.clip`'s plane term is defined to do:
+
+```python
+if plane is not None and self.plane_at(px, py, prefer=plane) != plane:
+    return last
+last = (px, py)
+```
+
+`last` is only ever assigned a sample that passed the plane test, so **a plane-aware clip
+cannot return a point off the plane it was given** — the returned point is on the mover's
+plane or is the origin. The precondition "a point whose plane differs from the mover's"
+is unreachable while the term is on, and the second clause ("when no same-plane route
+exists") is false twice over: the same-plane route exists, and so does the *cross*-plane
+one, because the wedge's east edge is a **file-linked portal** (`portal_at(grant, 0→29)`
+is `True`) and `pm.route` crosses it in two waypoints.
+
+### 1z-cd.2 ★★★ The corpus: 0 of 240 with the clip in force, 49 of 282 without — OBSERVED
+
+One specimen is not a rule, so every keyboard lead in the vault was scored: the plane of
+the point the server **actually granted** (the `kbd_leg` arm row's own `dest`, which is
+what the `0x0029` carried) against the plane of the report it was anchored at. 39
+captures, **1,086 report→grant pairs**.
+
+**Two corrections to an earlier draft of this census, both of which sharpen it.** The
+first is the denominator. **564 of the 1,086 are zero-distance leads** — the fallback,
+the fence-zeroed grant, ROUTER-B3's off-mesh origin — whose destination *is* the client's
+own report, so cross-plane is impossible **by construction** and not by the plane term.
+Counting them as scored trials halves every rate and makes the guard's exposure look
+smaller than it is, which is the subcount shape this repo keeps being bitten by. They are
+set aside; **522 pairs are non-trivial.**
+
+The second is the segmentation. The draft inferred the arm from the presence of the word
+`plane-seam`; each capture in fact carries its **own `flags` row**, recording
+`A2_LEAD_PLANE_CLIP`, `A2_LEAD_ORIGIN_SEAM` and `A2_LEAD_SEAM_CLIP` at startup. It also
+matters that `A2_LEAD_PLANE_CLIP` being true is **not** the same as the plane clip being
+*in force*: `a2_clip_lead`'s `elif A2_LEAD_SEAM_CLIP` branch takes §1z-bc's seam walk
+**instead of** the plane clip while still naming the seam. In force is therefore
+`PLANE_CLIP and not SEAM_CLIP`, read off the row.
+
+| arm, from the capture's own `flags` row | moving grants | granted off the mover's plane |
+|---|---|---|
+| plane clip **IN FORCE** (the shipped defaults) | 240 | **0** (0.0%) |
+| clip reverted (`--no-lead-plane-clip`) or bypassed (`--lead-seam-clip`) | 53 | 13 (24.5%) |
+| older than the flags row (pre-2026-09-04) | 229 | 36 (15.7%) |
+
+**The 49 are the positive control and they are the whole point of quoting them.** A
+census that reports zero because its detector is broken is worth nothing, so the same
+detector was run where the clip is *not* in force — the deliberate known-bad arms and the
+captures recorded before `A2_LEAD_PLANE_CLIP` shipped (`42f6009`, 2026-09-04) — and it
+finds the defect at **17.4%**, in the shape §1z-ap describes: 36 of the 49 went out
+`why="clear"` at the full 520 u, plane 29 → plane 0 or the reverse, which is RUN-1zAO's
+warp. Only against that does the 0 of 240 mean "the term works" rather than "the question
+was asked wrong". Note what the middle row costs: the `--lead-seam-clip` arm, refuted as a
+default by §1z-bc for other reasons, grants cross-plane at a rate indistinguishable from
+having no plane term at all.
+
+By the door the grant went out of, with the clip in force: `clear` 139, `clipped` 62,
+`plane-seam` 39 — **cross-plane 0 in every one**. The two doors where the term is *not*
+applied cannot produce a cross-plane point either: `origin-unwalkable` grants the report
+itself (the zero-lead, ROUTER-B3) and `no-mesh` disables clipping on a mesh that has said
+nothing, which is not the same claim as a different plane.
+
+**One honest caveat on "cannot", found by trying to break it.** `clip`'s final exit
+`return (x1, y1)` returns the *caller's* endpoint, while the sample it tested was
+`x0 + dx * 1.0` — and those are not bit-identical in IEEE-754 for roughly one coordinate
+pair in ten. The discrepancy is at ULP scale, it cannot move a point across a trapezoid
+edge in any realistic geometry, and that exit was not taken at the specimen (the loop
+returned `last` at i = 52 of n = 260). It is recorded because the claim is an invariant and
+an invariant with an unstated exception is worth less than one with a stated one.
+
+### 1z-cd.3 ★★★ So what *did* stop the body: **the client never installed the destination** — OBSERVED
+
+The lead is exonerated; the symptom is real, and the `agenttap` tape for this very
+capture (`vault/research/npctrack/r1-agenttap.jsonl`, joined at
+`tape_t = cap_t − 0.95998 s` from `wall_unix` on both sides, the two epochs agreeing to
+15 µs) says something sharper than "the body could not move".
+
+**19 of the run's 20 non-degenerate `0x0029` leads land verbatim — bit-exact floats — in
+the client's own world-0 `m_targetPoint`, within −25 ms to +49 ms of the grant. The 104 u
+grant at cap 25.4212 is the one that does not.** `grep` for `10118.5341796875` over the
+tape returns 0, and a numeric scan of all 832 samples × 2 agents × 2 copies finds no
+value within 2.0 u of it. Across the 55 samples inside the 5.006 s of silence **both**
+copies hold one distinct value for every field: `m_segmentPoint` and `m_targetPoint` at
+`(inf, inf)` — the client's own `AGENT_INVALID_POSITION` sentinel
+(`toolkit/clientscan/movetap.py:524`), not a decode artifact — velocity `(0, 0)`, and the
+drawn body at the report point to the bit, with `ground_z` constant so it did not sink
+either. Nothing on the wire in the gap could have cleared a target: 99 ticks, a ping, a
+latency report and three combat rows, and **zero movement opcodes**.
+
+**This refutes NPCTRACK-F10's own wording for this excursion** — *"world-0 frozen with our
+destination written and unwalked"*. The destination was **not** written. F10's numbers are
+unaffected (the mirror still walks the lead's full length while the body stands still);
+what changes is the mechanism, and it changes in a useful direction.
+
+The shape of the refusal is the finding. A body that accepted a destination and was then
+blocked — by a wall or by a creature's collision cylinder — would hold a target with zero
+velocity. **Holding the invalid-position sentinel with no segment at all is the client's
+pathfinder declining to produce a path**, which is §1z-bc's named client-side class (*"the
+declared plane at a wedge tip — the R7 `pathCount == 0` class"*). That substantially
+downgrades the collision candidate: agent 10 was 80.1 u away at 24.8° off the pressed
+heading and swinging in melee at that instant, but a cylinder in the way does not produce
+an unset target.
+
+What is left is a flat disagreement between two navmeshes, and it is ours that is wrong.
+Measured on our own: the player stands **+0.002 u from the west edge** of trapezoid
+`p0#2510` — a triangle, apex north at (10069, 8577), 104.8 u wide at the player's y — and
+an eight-direction plane-aware clip gives **104.0 u east** (the pressed heading), 0.0 u
+north/west/NE/NW, 520.0 u south. The body moved **0 u** east across three presses
+(t = 25.42, 32.14, 36.88) and then **512 u south** without difficulty at t = 39.29. On the
+north press our mesh independently answered 0.0 u and the server correctly granted a
+zero-lead. So the disagreement is narrow and specific: **we hold 104 u of plane-0 ground
+due east that the client's pathfinder will not path into at all** — the prop-geometry
+residual `a2_clip_lead`'s docstring and §1z-cc both already name (*"we carry no prop
+geometry"*), the staircase side being a model rather than a trapezoid.
+
+**The registerable question this leaves, and it is a run's:** the client refused a 104 u
+destination outright. Would it have installed a shorter one — is the refusal about the
+*endpoint* being unreachable, or about the whole corridor? Nothing on the server side can
+answer that, because both readings predict the same wire. Filed at NPCTRACK-Q2.
+
+**The tape's own named blind spot:** the samples bracketing the grant are ~65–110 ms
+apart, so a destination written *and* cleared entirely inside that window is not excluded.
+It would have to be cleared with no wire message and no motion, and it cannot account for
+the remaining 4.9 s.
+
+### 1z-cd.4 ★★ What shipped: no knob, one invariant — DECISION
+
+**No default moved and no flag was added.** A guard whose precondition is false 240 times
+out of 240 is the thing this repo calls a check that cannot fail, and adding it would put
+a dead branch in the recv loop and a line in the run sheets implying the question was
+still live.
+
+What ships is `test_kbdsync` **section 17** (+9, floor 135 → 144), which holds the
+invariant that made the guard vacuous, in the places where losing it would be invisible.
+§1z-cc is the argument for it: the plane term sat in one of this file's two clippers for
+two days, its absence in the other was undetectable from any test or row, and the cost
+was 604 u. The same term in `a2_clip_lead` is one refactor from the same fate, and the
+corpus would then look exactly like the 49 above.
+
+Section 17 asserts, over §16's seam fixture — everything in it walkable, so only the
+plane term can stop a ray:
+
+* **at the primitive** — the point `a2_clip_lead` grants is on the mover's own plane, it
+  stops one step short of the seam, and it names the door;
+* **on the wire** — the same, through the real receive arm, on the bytes of the `0x0029`;
+* **the word against the point** — the grant's plane fields are the *mover's* plane and
+  are **not** computed from the destination, so the invariant is the only thing keeping
+  the word true of the point. With the term reverted the message is not merely long, it
+  is internally inconsistent: word 0, point on plane 29. No length check would see that;
+* **the refresh** — `kbd_lead_refresh_tick` is this file's other lead-sending site, and
+  §1z-cc's defect was precisely *one of two sites*. It re-aims through `a2_clip_lead`, so
+  the seam refuses the extension (`refresh-blocked`, `why="plane-seam"`) rather than
+  pushing the destination across it;
+* **the known-bad arm on all three** — `--no-lead-plane-clip` reddens each, so the section
+  measures the term and not the fixture;
+* **the regression it must not cause** — aimed away from the seam the lead is still clear
+  at its full 520 u, so the 248 u of margin over the client's own report trigger
+  (§1z-ab.4) is untouched.
+
+`studies/movecode/review/leadplane.py --check` carries the corpus half, with a **ceiling
+of zero** on cross-plane grants under the shipped arm and a **floor** on what the same
+detector must still find before it. A non-zero on the ceiling means this refutation has
+expired and the guard is back on the table — which is the only honest way to write down a
+negative on a corpus that keeps growing ([[corpus-counts-redden]]).
+
+### 1z-cd.5 ★ The lesson, and it is not "the brief was wrong" — METHOD
+
+The brief was a careful reading of real measurements. What made it wrong is a single
+sample step: `planes_at(10120, 8526)` **is** `{29}`, and the granted point is at
+10118.534. Two numbers 2 u apart, one of them the grant and one of them not.
+
+The general form is worth keeping, because §1z-cc is its mirror image. Both sections are
+about the same keyword in the same primitive, and the two questions look identical from
+the outside — *does our navmesh let this ray leave the plane?* In one the answer was a
+604 u defect; in the other, a branch that could never run. **The thing that separated
+them was scoring the ARTIFACT the server actually emitted** — `clip_to_walkable`'s output
+in one case, the `kbd_leg` row's `dest` in the other — rather than a point re-derived
+nearby. An early draft of this section's own census re-derived the reach with
+`plane=None` and reported 520 u where the server had granted 104, which would have
+"confirmed" the brief; the error was mine and it was caught by scoring against the
+recorded grant instead ([[validate-the-simulator-against-the-thing-itself]]).

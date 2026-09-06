@@ -57,8 +57,12 @@ from test_position_trust import receive_arm, Sent, FakeRec   # noqa: E402
 # behaviour kept as the revert arm and exercised); +21 at 1z-cc (section 16:
 # the SERVER'S OWN model leg -- the plane term at the primitive, the leg bound
 # as a pure function, the four arms through the real receive arm, and open
-# ground unchanged).
-LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=135)
+# ground unchanged); +9 at 1z-cd (section 17: the GRANTED lead's own plane held
+# as an invariant at the primitive, on the wire and through the refresh, with
+# the word-against-point check and the known-bad arm that reddens all three --
+# the cross-plane guard NPCTRACK proposed is refuted at 0 of 488 and ships as
+# nothing).
+LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=144)
 check = checks.adopt(LEDGER)
 
 SRC = open(authsrv.__file__, encoding="utf-8").read()
@@ -1216,6 +1220,185 @@ def main():
           "bound reads a mesh REFUSAL and nothing else",
           f"dest={st['dest']} why={row['lead_clip_why']} "
           f"bound={row['model_bound']}")
+
+
+    print("\n17. MOVECODE-1z-cd: THE GRANTED LEAD'S OWN PLANE, pinned as an "
+          "invariant -- and the cross-plane guard REFUTED for want of one case")
+    # WHAT THIS SECTION IS, and it is not a new policy. NPCTRACK's wall case
+    # proposed that the keyboard lead should REFUSE or SHORTEN a point whose
+    # plane differs from the mover's when no same-plane route exists. Measured
+    # on the real map-148 mesh at the specimen it was commissioned for
+    # (capture `authsrv-20260906T094349-c1` t=25.4197, report (10014.5, 8526.5)
+    # plane 0, the client's own 767.1 u vec2 due +x), the grant that went out
+    # was (10118.5, 8526.5) -- `planes_at` {0}, the MOVER'S OWN PLANE, one 2 u
+    # sample short of the seam at 10120.5 where plane 29 starts, with
+    # `pm.route` returning a two-waypoint same-plane path because origin and
+    # destination are the SAME TRAPEZOID. The precondition is false, and the
+    # corpus says it is false everywhere: 240 MOVING grants with the plane clip
+    # in force, ZERO off the mover's plane, while the same detector finds 49 of
+    # 282 where it is reverted, bypassed or predates the flag. (Zero-distance
+    # leads are excluded from both -- their destination IS the report, so
+    # cross-plane is impossible by construction and counting them halves the
+    # rate.) `A2_LEAD_PLANE_CLIP` shipped in 42f6009, 2026-09-04.
+    # studies/movecode/review/leadplane.py --check re-asserts both sides.
+    #
+    # So no knob was added. What ships instead is the INVARIANT that made the
+    # guard vacuous, held where it can be broken: 1z-cc's whole lesson is that
+    # `pm.clip`'s plane term sat in one of this file's two clippers for two
+    # days and nobody could see the other was missing it. A term whose absence
+    # is invisible is one refactor from being lost, and the corpus would then
+    # read exactly like the 49 above.
+    #
+    # THE FIXTURE IS SECTION 16'S SEAM, deliberately: everything in it is
+    # walkable, so a plane-BLIND clip runs the ray to its end and only the
+    # plane term can stop it. That is what makes the known-bad arm below
+    # informative rather than decorative.
+    FAR = [1, [1000.5, 2000.25], 0, [766.0, 0.0], 1]      # +x, across the seam
+
+    # ---- (a) THE INVARIANT, at the primitive ------------------------------
+    st = {"pos": (1000.0, 2000.0), "plane": 0, "pathmap": _Stairs()}
+    lead = authsrv.kbd_lead_dest([1000.5, 2000.25], [766.0, 0.0])[0]
+    got, clipped, why = authsrv.a2_clip_lead(st, [1000.5, 2000.25], lead)
+    mesh = _Stairs()
+    check(mesh.plane_at(got[0], got[1]) == mesh.plane_at(1000.5, 2000.25)
+          and clipped and why == "plane-seam"
+          and abs(got[0] - 1098.5) < 1e-6,
+          "THE INVARIANT: the point `a2_clip_lead` grants is on the MOVER'S "
+          "OWN PLANE -- `pm.clip`'s plane term only ever returns a sample it "
+          "has already tested on that plane, so the granted point cannot be "
+          "across the seam. It stops one step short of it and names the door",
+          f"granted {got} plane {mesh.plane_at(got[0], got[1])} why={why}")
+    _saved_lp = authsrv.A2_LEAD_PLANE_CLIP
+    try:
+        authsrv.A2_LEAD_PLANE_CLIP = False
+        blind, b_clipped, b_why = authsrv.a2_clip_lead(
+            st, [1000.5, 2000.25], lead)
+    finally:
+        authsrv.A2_LEAD_PLANE_CLIP = _saved_lp
+    check(mesh.plane_at(blind[0], blind[1]) == 29 and not b_clipped
+          and b_why == "clear" and abs(blind[0] - 1520.5) < 1e-6,
+          "KNOWN-BAD ARM (--no-lead-plane-clip): the SAME ray over the SAME "
+          "geometry is granted its full 520 u onto plane 29 and called CLEAR "
+          "-- so (a) is measuring the plane term and not the fixture, and this "
+          "is the shape of all 49 corpus grants where the clip is not in force",
+          f"granted {blind} plane {mesh.plane_at(blind[0], blind[1])} "
+          f"why={b_why}")
+    check(authsrv.A2_LEAD_PLANE_CLIP is _saved_lp is True,
+          "and the module global is restored after the revert arm")
+
+    # ---- (b) THE SAME, THROUGH THE REAL RECEIVE ARM -----------------------
+    # The primitive is not the wire. What the client is told is what matters,
+    # so the invariant is re-asserted on the bytes the 0x0029 actually carries.
+    st = {"pos": (1000.0, 2000.0), "plane": 0, "pos_seen": 0.0,
+          "pathmap": _Stairs()}
+    st, w = drive_heading(FAR, lead=True, state=st)
+    mv = w.of(MOVE)
+    row = st["_rec"].of("grant_verdict")[-1]
+    check(len(mv) == 1 and abs(mv[0][1][1][0] - 1098.5) < 1e-6
+          and mesh.plane_at(*mv[0][1][1]) == 0
+          and row["lead_clip_why"] == "plane-seam" and row["lead_clipped"],
+          "ON THE WIRE: the 0x0029 the client receives names a point on the "
+          "mover's own plane, and the verdict row names the seam door",
+          f"sent {mv[0][1][1] if mv else None} why={row['lead_clip_why']}")
+
+    # ---- (c) THE PLANE WORD MUST NOT LIE ABOUT THE POINT ------------------
+    # The grant's plane fields are the MOVER'S plane (`plane`, from the report),
+    # NOT computed from the destination -- so the invariant in (a) is the only
+    # thing keeping the word true of the point. That is precisely why it is
+    # worth a guard: when the term is off the message is not merely long, it is
+    # INTERNALLY INCONSISTENT, telling the client "walk to this point, which is
+    # on plane 0" about a point on plane 29.
+    check(mv[0][1][2] == 0 and mv[0][1][3] == 0
+          and mv[0][1][2] == mesh.plane_at(*mv[0][1][1]),
+          "the plane WORDS the grant carries equal the plane the granted "
+          "POINT is actually on",
+          f"words {mv[0][1][2]},{mv[0][1][3]} point plane "
+          f"{mesh.plane_at(*mv[0][1][1])}")
+    _saved_lp = authsrv.A2_LEAD_PLANE_CLIP
+    try:
+        authsrv.A2_LEAD_PLANE_CLIP = False
+        st2 = {"pos": (1000.0, 2000.0), "plane": 0, "pos_seen": 0.0,
+               "pathmap": _Stairs()}
+        st2, w2 = drive_heading(FAR, lead=True, state=st2)
+    finally:
+        authsrv.A2_LEAD_PLANE_CLIP = _saved_lp
+    mv2 = w2.of(MOVE)
+    check(len(mv2) == 1 and mv2[0][1][2] == 0
+          and mesh.plane_at(*mv2[0][1][1]) == 29,
+          "KNOWN-BAD ARM: the word says plane 0 and the point is on plane 29 "
+          "-- the grant contradicts itself, which is the failure (c) exists to "
+          "catch and which no length check would have seen",
+          f"words {mv2[0][1][2]},{mv2[0][1][3]} point plane "
+          f"{mesh.plane_at(*mv2[0][1][1])}")
+
+    # ---- (d) THE REFRESH RIDES THE SAME CLIP ------------------------------
+    # `kbd_lead_refresh_tick` is the file's OTHER site that puts a lead point on
+    # the wire, and 1z-cc's defect was exactly one of two sites missing a term.
+    # It re-aims through `a2_clip_lead`, so the seam refuses the extension
+    # rather than pushing the destination across it.
+    _sv = (authsrv.KBD_SYNC_LEAD_ON, authsrv.KBD_LEAD_REFRESH)
+    try:
+        authsrv.KBD_SYNC_LEAD_ON, authsrv.KBD_LEAD_REFRESH = True, True
+        SP = 190.0
+        rleg = {"x0": 1000.5, "y0": 2000.25, "dest": (1100.5, 2000.25),
+                "plane": 0, "t0": 100.0, "speed": SP, "wd_fired": False,
+                "refreshed": 0}
+        eta = 100.0 + 100.0 / SP
+        st3 = {"pos": (1000.5, 2000.25), "plane": 0, "kbd_moving_at": 99.0,
+               "pathmap": _Stairs(), "kbd_leg": rleg}
+        w3, r3 = Sent(st3), FakeRec()
+        sent = authsrv.kbd_lead_refresh_tick(
+            w3, st3, 1, r3, now=eta - authsrv.KBD_LEAD_REFRESH_MARGIN)
+        blocked = [e for e in r3.of("kbd_leg") if e.get("act") == "refresh-blocked"]
+        check(sent is False and not w3.of(MOVE) and len(blocked) == 1
+              and blocked[0]["why"] == "plane-seam",
+              "THE REFRESH cannot push a lead across the seam either: the "
+              "extension is clipped back to the leg it already has, nothing "
+              "goes out, and the row names the seam as the refusal",
+              f"sent={sent} rows={[e.get('act') for e in r3.of('kbd_leg')]}")
+    finally:
+        (authsrv.KBD_SYNC_LEAD_ON, authsrv.KBD_LEAD_REFRESH) = _sv
+
+    # ---- (e) THE REGRESSION THIS MUST NOT CAUSE ---------------------------
+    # Away from the seam the lead keeps its derived 520 u. The 248 u of margin
+    # over the client's own report trigger (1z-ab.4) is what stops the copy
+    # parking mid-cruise, and an invariant that bought its cleanliness by
+    # shortening every lead would be the cure being worse.
+    st4 = {"pos": (1000.0, 2000.0), "plane": 0, "pos_seen": 0.0,
+           "pathmap": _Stairs()}
+    st4, w4 = drive_heading([1, [1000.5, 2000.25], 0, [-766.0, 0.0], 1],
+                            lead=True, state=st4)
+    row4 = st4["_rec"].of("grant_verdict")[-1]
+    mv4 = w4.of(MOVE)
+    check(row4["lead_clip_why"] == "clear" and not row4["lead_clipped"]
+          and abs(mv4[0][1][1][0] - 480.5) < 1e-6
+          and mesh.plane_at(*mv4[0][1][1]) == 0,
+          "AIMED AWAY FROM THE SEAM the lead is CLEAR at its full 520 u and "
+          "still on the mover's plane -- the invariant costs nothing where "
+          "there is no seam to cross",
+          f"sent {mv4[0][1][1] if mv4 else None} why={row4['lead_clip_why']}")
+
+    # ---- (f) THE CORPUS NUMBERS ARE AUDITABLE -----------------------------
+    # The refutation in this section's header is a claim about 1,086 grants, and
+    # a claim that cannot be re-run is an assertion. The census ships with its
+    # own bars, INCLUDING the positive control -- without which its zero would
+    # be indistinguishable from a broken detector ([[negative-needs-positive-
+    # control]]).
+    _lp = os.path.join(os.path.dirname(os.path.dirname(HERE)),
+                       "studies", "movecode", "review", "leadplane.py")
+    _lps = open(_lp, encoding="utf-8").read() if os.path.exists(_lp) else ""
+    check(bool(_lps) and "CEIL_ON_CROSS = 0" in _lps
+          and "FLOOR_OFF_CROSS" in _lps and "POSITIVE CONTROL" in _lps
+          # and it must read the ARM off the capture rather than infer it: an
+          # earlier draft inferred it from the `plane-seam` word and mixed the
+          # `--lead-seam-clip` arm, which BYPASSES the plane clip, into the
+          # segment that is supposed to prove the plane clip works.
+          and "A2_LEAD_SEAM_CLIP" in _lps and 'kind") != "flags"' in _lps,
+          "the corpus census ships beside this file with a CEILING OF ZERO on "
+          "cross-plane grants where the clip is IN FORCE, a FLOOR on what the "
+          "same detector must still find where it is not, and it reads the arm "
+          "from each capture's own flags row instead of inferring it",
+          f"leadplane.py {'found' if _lps else 'MISSING'}")
 
     return LEDGER.verdict()
 

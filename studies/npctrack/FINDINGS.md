@@ -327,6 +327,56 @@ waypoint) — MOVECODE's dig, not a tuning knob here.
   (The "91 u for 25 s" this entry first carried was the replay's own artifact, F10.) It is the
   whole residual between F5's hybrid (17.5 u) and the truth (11.6). The one repair tried offline
   is refuted (F10); what would close it is the client's local-leg model — MOVECODE's.
+
+  **The WALL CASE half of that residual went to MOVECODE and came back REFUTED, 2026-09-06
+  ([movecode §1z-cd](../movecode/FINDINGS.md)).** The reading taken over was that our
+  `0x0029` names the stair tread — a point on plane 29 the client's own navmesh cannot reach
+  from the ground through the staircase side — and that the lead should refuse or shorten a
+  grant whose plane differs from the mover's. Scored on the real map-148 mesh at the specimen
+  (`authsrv-20260906T094349-c1` t = 25.4197), **the granted point is on plane 0, the mover's
+  own plane**: the grant is (10118.5, 8526.5) and `planes_at` there is `{0}`, one 2 u sample
+  short of the seam at 10120.5, with `pm.route` returning a same-plane path because origin and
+  destination are the **same trapezoid**. `A2_LEAD_PLANE_CLIP` has made a cross-plane grant
+  impossible since 2026-09-04 (`pm.clip` only ever returns a sample it has already tested on
+  the given plane), and the corpus agrees at **0 of 240** moving grants with the clip in force
+  against **49 of 282** where it is reverted, bypassed or predates the flag — the positive
+  control that makes the zero mean something. (Zero-distance leads are excluded from both:
+  their destination IS the report, so cross-plane is impossible by construction, and counting
+  them halves every rate.) So the lead is exonerated.
+
+  **And the tape corrects THIS ENTRY'S OWN mechanism, in F10's item 2.** F10 reads *"world-0
+  frozen with our destination written and unwalked"*. On `r1-agenttap.jsonl`, joined to the
+  capture at `tape_t = cap_t − 0.95998 s`, **the destination was never written**: 19 of the
+  run's 20 non-degenerate `0x0029` leads land verbatim in the client's own world-0
+  `m_targetPoint` within −25..+49 ms, and the 104 u grant at cap 25.4212 is the one that does
+  not — `grep` for `10118.5341796875` returns 0 over the whole tape, and no sampled value is
+  within 2.0 u of it. Across all 55 samples of the silence **both** copies hold
+  `m_segmentPoint` and `m_targetPoint` at the client's own `AGENT_INVALID_POSITION` sentinel
+  (`(inf, inf)`, `toolkit/clientscan/movetap.py:524`), velocity `(0, 0)`, the drawn body at the
+  report point to the bit and `ground_z` constant; no movement opcode goes out in the gap that
+  could have cleared a target. **The numbers in this entry do not change** — the mirror still
+  walks the lead's full 57–132 u while the body stands still — but "frozen with a destination"
+  should read "frozen with NO destination", and that is a different fault with a different fix.
+
+  What the wall case measurably IS, and it is still open: **the client's own pathfinder declined
+  to produce a path.** A body that took a destination and was then blocked — by a wall or by a
+  creature — would hold a target with zero velocity; holding the invalid-position sentinel with
+  no segment at all is a refusal to path, §1z-bc's named `pathCount == 0` class. That
+  substantially **downgrades the collision candidate**: agent 10 was 80.1 u away at 24.8° off
+  the pressed heading and swinging in melee at that instant, but a cylinder in the way does not
+  leave the target unset. What is left is a navmesh disagreement, and ours is the wrong one:
+  our mesh holds **104 u of plane-0 ground due east** the client will not path into. The player
+  stands +0.002 u from the west edge of a triangular trapezoid; the body moved 0 u across three
+  east presses (t = 25.42, 32.14, 36.88) then **512 u south** without difficulty at t = 39.29,
+  and on the north press our mesh independently answered 0.0 u and the server correctly granted
+  a zero-lead. The leading reading is **prop geometry we do not carry** — the staircase side is
+  a model, not a trapezoid, the residual `a2_clip_lead`'s docstring and §1z-cc both already name.
+
+  **The run's question, registerable as it stands:** the client refused a 104 u destination
+  outright. Would it have installed a SHORTER one — is the refusal about the endpoint being
+  unreachable, or about the whole corridor? Nothing on the server side can answer it, because
+  both readings predict the same wire, and the tape's own blind spot is the ~65–110 ms between
+  the samples bracketing the grant.
 - **`NPCTRACK-Q3` — the sync copy against the drawn body ACROSS AN OBSTACLE.** F2 holds on the
   stairs route, whose walls are the staircase sides. On the operator's bridge session the two
   still agreed to 28.8 u at the halts, but en route around the wedge is unmeasured, and a sync

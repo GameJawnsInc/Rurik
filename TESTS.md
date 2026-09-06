@@ -3824,8 +3824,30 @@ when map 280 is absent, and §14(g) when Pre-Searing is absent skip-declare);
   the change. The last two checks are the regression it must not cause: on open
   ground the model keeps the client's own 766 u ray against the lead's derived 520,
   because that 248 u is the margin over the client's own report trigger and capping
-  it would park the model mid-cruise. Floor 33 → 60 → 69 → 84 → 106 → 114 →
-  135 from the
+  it would park the model mid-cruise. **Section 17 (MOVECODE-1z-cd) added nine,
+  and it ships a REFUTATION rather than a knob:** NPCTRACK's wall case asked the
+  keyboard lead to refuse a grant whose plane differs from the mover's, and that
+  precondition is false 240 times out of 240 -- `pm.clip`'s plane term only ever
+  returns a sample it has ALREADY tested on the given plane, so a plane-aware clip
+  cannot land off it, and at the specimen the grant is on plane 0 one 2 u sample
+  short of the seam with a same-plane route to it. What ships instead is the
+  INVARIANT that made the guard vacuous, held in the places where losing it would
+  be invisible -- §16's whole lesson being that the same keyword sat in one of
+  this file's two clippers for two days undetected. Over §16's seam fixture it
+  pins the granted point's plane at the primitive, on the wire through the real
+  receive arm, and through `kbd_lead_refresh_tick` (this file's OTHER lead-sending
+  site -- one of two sites is exactly how §16's defect happened), plus the check
+  no length test would make: the grant's plane WORDS are the mover's and are not
+  computed from the destination, so with `--no-lead-plane-clip` the message is not
+  merely long but internally inconsistent, saying plane 0 about a point on plane
+  29. The known-bad arm reddens all three, and the last check pins the regression
+  it must not cause -- aimed away from the seam the lead is still clear at its full
+  520 u. The corpus half is `studies/movecode/review/leadplane.py --check`, which
+  carries a CEILING OF ZERO on cross-plane grants under the shipped arm and a FLOOR
+  on what the same detector must still find in the captures recorded before the
+  term shipped -- without that positive control the zero would be
+  indistinguishable from a broken census. Floor 33 → 60 → 69 → 84 → 106 → 114 →
+  135 → 144 from the
   green runs. No vault, no client. ~2 s),
   `toolkit/authsrv/test_livewire.py` (the committed retail-decode recipe,
   RETHINK instrument #2 — the campaign's referee moved out of a deletable
