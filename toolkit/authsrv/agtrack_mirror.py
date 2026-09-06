@@ -72,6 +72,36 @@ ZERO_DIST_SQ = 1.0         # the bake's short-circuit: distSq <= 1.0 writes
                            # +0x78 = D directly (studies/movement/
                            # FINDINGS.md:3736)
 
+# THE AGENT-AVOIDANCE PASS (NPCTRACK-F14, 2026-09-06; the function is decoded
+# in studies/movecode/FINDINGS.md 1z-be.2 and its tail in studies/npctrack/
+# FINDINGS.md F14). The shared setter 0x00602A40 runs 0x006011F0 over every
+# other agent in the same world right after the bake (0x00602AF8), and the
+# tick re-runs it at a collision deadline it arms (+0x44). Per neighbour, in
+# this order: closing (rel . relv <= 0, 0x0060164E), the forward cone
+# (unit(rel) . unit(v) > 0.5, 0x00601791 fcomp [0x009458BC]), overlap
+# (combinedRadius^2 >= d^2, 0x006017BC). On overlap the sidestep computer
+# 0x00600500 returns AGENT_INVALID_POSITION -- and the copy HALTS in place,
+# 0x00601899 -- when the obstacle's disc covers m_targetPoint (0x006005D8) or
+# the waypoint is off the mesh (0x0070A150); else it bakes the waypoint with
+# isWaypoint = 1 (0x00601936): start + perpendicular-away x ((R + 10) -
+# |distFromLine|). Not overlapping: deadline = now + max(min(ttc_ms, 60000),
+# 1) with ttc the quadratic root (0x005FEEC0), and the tick re-runs the pass
+# when due -- the first world-0 tick with d <= R, which is what the per-tick
+# pass below reproduces (the world-0 tick steps 100 ms on the tapes, so the
+# client fires up to one step after contact; this mirror fires at contact).
+# Scored against seven tapes (232 player grants): 24 of 26 sidesteps
+# reproduced to 0.2 u median, 14 of 14 halts confirmed by the tape.
+MIRROR_AVOID = True        # False: the sync copy walks every leg straight
+                           # (the pre-F14 mirror; authsrv --no-mirror-avoid)
+AVOID_COMBINED_RADIUS = 80.0   # 0x005FED20 for two radius-12 agents on layer
+                           # 0: 12 + 12 + pad 56 (ANIMREF-RE 38.2; the only
+                           # pair the corpus holds -- other radii UNMEASURED)
+AVOID_COS_CONE = 0.5       # f32 @0x009458BC -- the 60 deg forward cone
+AVOID_PAD = 10.0           # the sidestep's clearance beyond combinedRadius
+                           # (studies/movement/FINDINGS.md:3314)
+AVOID_RETRY_MAX = 6        # +0x64 against 6 (0x006018B8); every bake resets
+AVOID_TTC_CLAMP_MS = 60000.0   # f64 @0x00A53750 / f32 @0x00A53758
+
 # Verdict codes returned by AgTrackMirror.on_* event methods.
 NOT_TESTED = "not-tested"      # fence closed / recorded instead / q invalid
 MATCH = "match"                # reprieve -- no snap, chain truncated
@@ -247,6 +277,14 @@ class SyncAgent(object):
         self.vy = 0.0
         self.max_speed = DEFAULT_MAX_SPEED
         self.move_speed = DEFAULT_MOVE_SPEED
+        # F14: the avoidance pass's own state.  `target` is m_targetPoint
+        # (+0x9C, the WIRE point); `dest` above is the SEGMENT end (+0x88),
+        # which a sidestep replaces while the target stands.
+        self.target = None       # (x, y) or None (the +inf sentinel)
+        self.is_waypoint = False  # m_flags bit 18 (0x40000)
+        self.avoid_retry = 0     # +0x64
+        self.n_sidestep = 0
+        self.n_avoid_halt = 0
 
     # -- the resolver 0x005FF820: arrived -> dest verbatim; else dead-reckon
     def position(self, now_ms):
@@ -261,6 +299,16 @@ class SyncAgent(object):
             return (self.x78, self.y78)
         dt = (now_ms - self.t_epoch) * 0.001
         return (self.x78 + self.vx * dt, self.y78 + self.vy * dt)
+
+    def velocity(self, now_ms):
+        """The baked velocity while the leg is in flight, zero once the
+        arrival tick has passed (the resolver's own clamp, position())."""
+        if self.x78 is None or (self.t_arrive != 0 and now_ms >= self.t_arrive):
+            return (0.0, 0.0)
+        return (self.vx, self.vy)
+
+    def walking(self, now_ms):
+        return self.t_arrive != 0 and now_ms < self.t_arrive
 
     # -- the settle 0x005FF880: dead-reckon +0x78 in place, on the world clock
     #    (studies/movement/FINDINGS.md:2783-2786)
@@ -303,6 +351,11 @@ class SyncAgent(object):
             # own behaviour), so the sim starts defined.  MODEL-CHOICE.
             self.x78, self.y78 = float(x), float(y)
         self.dest = (float(x), float(y), plane_first)
+        # the setter writes m_targetPoint (+0x9C) = the point too, clears bit
+        # 18 (0x00602A65), and the bake resets the retry counter (0x005FEA42)
+        self.target = (float(x), float(y))
+        self.is_waypoint = False
+        self.avoid_retry = 0
         if plane_second is not None:
             self.plane = plane_second
         self.settle(now_ms)
@@ -334,8 +387,131 @@ class SyncAgent(object):
             self.plane = plane
         self.vx = self.vy = 0.0
         self.dest = None
+        self.target = None
+        self.is_waypoint = False
         self.t_arrive = 0
         self.t_epoch = now_ms
+
+    # -- F14: the sidestep bake (0x00601936, isWaypoint = 1): a leg to the
+    #    waypoint at the baked speed; m_targetPoint stands.
+    def bake_waypoint(self, wx, wy, now_ms):
+        self.settle(now_ms)
+        s = self.max_speed * self.move_speed
+        dx, dy = float(wx) - self.x78, float(wy) - self.y78
+        dist = math.sqrt(dx * dx + dy * dy)
+        self.dest = (float(wx), float(wy), self.plane)
+        self.is_waypoint = True
+        if s <= 0.0 or dist <= 0.0:
+            self.vx = self.vy = 0.0
+            self.t_epoch = now_ms
+            self.t_arrive = max(now_ms + 1, 1)
+            return
+        self.vx, self.vy = dx / dist * s, dy / dist * s
+        self.t_epoch = now_ms
+        self.t_arrive = now_ms + max(int(dist * 1000.0 / s), 1)
+        self.n_sidestep += 1
+
+    # -- F14: a waypoint's arrival -- the tick at 0x0060029F finds bit 18 set
+    #    and re-bakes toward m_targetPoint with isWaypoint = 0 (0x006002B5),
+    #    skipping the arrival notify.  Returns True when that happened.
+    def consume_waypoint(self, now_ms):
+        if not self.is_waypoint or self.t_arrive == 0 or now_ms < self.t_arrive:
+            return False
+        if self.dest is not None:
+            self.x78, self.y78 = self.dest[0], self.dest[1]
+        self.t_epoch = now_ms
+        self.vx = self.vy = 0.0
+        self.t_arrive = 0
+        tgt = self.target
+        self.is_waypoint = False
+        if tgt is None:
+            self.dest = None
+            return True
+        # the re-bake: settle is a no-op at the epoch; measure from +0x78
+        s = self.max_speed * self.move_speed
+        dx, dy = tgt[0] - self.x78, tgt[1] - self.y78
+        dist = math.sqrt(dx * dx + dy * dy)
+        self.dest = (tgt[0], tgt[1], self.plane)
+        self.avoid_retry = 0
+        if dist * dist <= ZERO_DIST_SQ or s <= 0.0:
+            self.x78, self.y78 = tgt[0], tgt[1]
+            self.t_arrive = max(now_ms + 1, 1)
+            return True
+        self.vx, self.vy = dx / dist * s, dy / dist * s
+        self.t_arrive = now_ms + max(int(dist * 1000.0 / s), 1)
+        return True
+
+    # -- F14: the pass's halt (0x00601899 -> 0x006020B0): the copy stops at
+    #    `point`, velocity zeroed, both target blocks invalidated.
+    def avoid_halt(self, now_ms):
+        p = self.position(now_ms)
+        if p is None:
+            return
+        self.set_position(p[0], p[1], self.plane, now_ms)
+        self.n_avoid_halt += 1
+
+    # -- F14: ONE run of the agent-avoidance pass 0x006011F0 on this copy at
+    #    `now_ms`, against `obstacles` = iterable of (x, y, vx, vy) for every
+    #    other agent's world-0 copy.  Returns None (nothing), "sidestep" (a
+    #    waypoint was baked), or "halt".  `mesh_ok(x, y)` stands in for the
+    #    computer's 0x0070A150 validation; None = accept.
+    def avoid(self, now_ms, obstacles, mesh_ok=None):
+        if not MIRROR_AVOID or not obstacles or not self.walking(now_ms):
+            return None                                 # +0x48 must be armed
+        p = self.position(now_ms)
+        if p is None:
+            return None
+        vx, vy = self.vx, self.vy
+        sp = math.sqrt(vx * vx + vy * vy)
+        if sp <= 0.0:
+            return None
+        R2 = AVOID_COMBINED_RADIUS * AVOID_COMBINED_RADIUS
+        for ob in obstacles:
+            ox, oy, ovx, ovy = ob[0], ob[1], ob[2], ob[3]
+            if ox == p[0] and oy == p[1]:
+                continue                                # 0x006016C5: same point
+            rx, ry = ox - p[0], oy - p[1]
+            rvx, rvy = ovx - vx, ovy - vy
+            if rx * rvx + ry * rvy > 0.0:
+                continue                                # separating (arg4 = 0)
+            d2 = rx * rx + ry * ry
+            if d2 <= 0.0:
+                continue
+            d = math.sqrt(d2)
+            if (rx * vx + ry * vy) / (d * sp) <= AVOID_COS_CONE:
+                continue                                # outside the cone
+            if R2 < d2:
+                continue                                # not yet: the deadline
+            # overlap -- the computer's exits, in the client's order
+            tgt = self.target
+            if tgt is None:
+                continue
+            if self.x78 == tgt[0] and self.y78 == tgt[1]:
+                self.avoid_halt(now_ms)                 # 0x0060182D: at target
+                return "halt"
+            self.avoid_retry += 1
+            if self.avoid_retry > AVOID_RETRY_MAX:
+                self.avoid_halt(now_ms)                 # 0x006018B8
+                return "halt"
+            if (tgt[0] - ox) ** 2 + (tgt[1] - oy) ** 2 <= R2:
+                self.avoid_halt(now_ms)                 # 0x006005D8: covered
+                return "halt"
+            dx, dy = tgt[0] - p[0], tgt[1] - p[1]
+            L = math.sqrt(dx * dx + dy * dy)
+            if L <= 0.0:
+                self.avoid_halt(now_ms)
+                return "halt"
+            ux, uy = dx / L, dy / L
+            across = -rx * uy + ry * ux                 # + = obstacle to the left
+            disp = (AVOID_COMBINED_RADIUS + AVOID_PAD) - abs(across)
+            side = -1.0 if across > 0.0 else 1.0        # away; a tie goes left
+            wx, wy = p[0] - uy * side * disp, p[1] + ux * side * disp
+            if mesh_ok is not None and not mesh_ok(wx, wy):
+                self.avoid_halt(now_ms)                 # 0x0070A150 refused
+                return "halt"
+            self.bake_waypoint(wx, wy, now_ms)
+            return "sidestep"
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -453,6 +629,10 @@ class AgTrackMirror(object):
         # reader never runs (the long-chain model).  The replay adjudicates
         # the value against the corpus -- see agtrack_replay.py.
         self.prune_ms = prune_ms
+        # F14: the other agents' world-0 copies, for the avoidance pass --
+        # a callable(now_ms) -> iterable of (x, y, vx, vy), or None (no other
+        # agents modelled: every leg walks straight, the pre-F14 mirror).
+        self.obstacles = None
         # counters for consumers
         self.n_push = 0
         self.n_clear = 0
@@ -627,9 +807,34 @@ class AgTrackMirror(object):
         open, an append when it is closed."""
         self.sync.consume_arrival(now_ms)
         self.sync.bake_grant(x, y, plane_first, plane_second, now_ms)
-        return self.evaluate(now_ms, async_pos,
-                             event="grant-0x%04X" % opcode,
-                             no_reset=no_reset)
+        v = self.evaluate(now_ms, async_pos,
+                          event="grant-0x%04X" % opcode,
+                          no_reset=no_reset)
+        # F14: the setter runs the avoidance pass in the same call
+        # (0x00602AF8).  Its sidestep bake dispatches again at the same
+        # instant and position, which re-asks the question just answered;
+        # its halt dispatches from the same point.  Neither is evaluated
+        # twice here (MODEL-CHOICE: an identical query at the identical
+        # instant is the verdict above).
+        self._avoid(now_ms)
+        return v
+
+    def _avoid(self, now_ms):
+        if self.obstacles is None or not MIRROR_AVOID:
+            return None
+        obs = self.obstacles(now_ms)
+        if not obs:
+            return None
+        return self.sync.avoid(now_ms, obs, mesh_ok=self._avoid_mesh_ok())
+
+    def _avoid_mesh_ok(self):
+        m = self.mesh
+        if m is None or isinstance(m, NoMesh):
+            return None
+        pm = getattr(m, "pm", None)
+        if pm is not None and hasattr(pm, "on_mesh"):
+            return pm.on_mesh
+        return None
 
     def on_update_position(self, x, y, plane, now_ms):
         """A 0x002C: AgTrack::Clear FIRST (0x005FDA78), then SetPosition on
@@ -767,9 +972,19 @@ class AgTrackMirror(object):
         FINDINGS.md:3675), then the keep-alive sweep, then reader 2's
         prune."""
         v = None
-        if self.sync.consume_arrival(now_ms):
+        if self.sync.consume_waypoint(now_ms):
+            # F14: a waypoint's arrival re-bakes toward m_targetPoint
+            # (0x006002B5) -- a bake dispatch at a new point, evaluated;
+            # no arrival notify (0x0060029F skips it on bit 18).
+            v = self.evaluate(now_ms, async_pos, event="waypoint",
+                              no_reset=no_reset)
+        elif self.sync.consume_arrival(now_ms):
             v = self.evaluate(now_ms, async_pos, event="arrival",
                               no_reset=no_reset)
+        # F14: the tick's own pass (0x006004BF), on every walking tick --
+        # the deadline it arms is due at the first tick with d <= R.
+        if self.sync.walking(now_ms):
+            self._avoid(now_ms)
         self.sweep(now_ms)
         self.render_prune(now_ms)
         return v

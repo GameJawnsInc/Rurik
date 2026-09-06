@@ -366,7 +366,10 @@ client's mesh (the computer validates its waypoint through `0x0070A150` and retu
 obstacleCenter)`*, with a constant at `0x00943898` and calls into `0x0070A0E0`, `0x0046E000`
 and `0x00487BC0` in the 170 instructions read — and reading it is the next step, in the movement
 arc where the function lives. **With it, the mirror can sidestep too, and the server has every
-input: the hostile's position is the client's own copy since Q1.**
+input: the hostile's position is the client's own copy since Q1.** *(CORRECTED in F14, the same
+day: the caller that fires around a parked AGENT is the agent-avoidance pass `0x006011F0`
+(movecode §1z-be.2), not `0x00600840`, whose predictor is the terrain trace; the trigger is
+read there, and it is shipped.)*
 
 **The wall was handed over and came back corrected the same afternoon**
 ([movecode §1z-cc, §1z-cd](../movecode/FINDINGS.md)). The 604 u the report track ran during the
@@ -434,6 +437,123 @@ thing-itself]]): a claim about the client from a join of two clocks needs a symm
 the client's own instrument before it is a claim. This one was two hours old and cost one hooked
 run to retract, which is the cheapest version of the mistake.
 
+## NPCTRACK-F14 — the sidestep's trigger DECODED and SHIPPED: it is the client's agent-avoidance pass, and the same pass is what halted the copy at the wall
+
+F11 left one thing unread — the trigger — and named the wrong function for it. The sidestep
+computer `0x00600500` has two callers, and the one that fires around a PARKED AGENT is the
+**agent-avoidance pass `0x006011F0`** (movecode §1z-be.2's decode: the shared setter runs it at
+`0x00602AF8` right after the bake, args `(time, &m_point, 1, 0)`), not the terrain-avoidance
+sibling `0x00600840` F11 pointed at (whose `AgAgent:1352` predictor is the swept TERRAIN trace,
+0 fires in every hooked capture). This session read the pass's tail and the tick's re-run, and
+the whole trigger is now on record. Per other agent in the same world, in this order:
+
+1. the copy must be walking (`+0x48` armed, `0x006016AA`) and the point must differ from the
+   obstacle's (`0x006016C5`);
+2. **closing**: `rel · relv > 0` with `rel = other − point`, `relv = v_other − v_this` skips
+   (`0x0060164E`, arg4 = 0 at both the setter and the tick) — a parked agent behind is
+   separating, one ahead is closing;
+3. **the cone**: `unit(rel) · unit(v_this) > 0.5` (`0x00601791 fcomp [0x009458BC]`), the same
+   60° the disc stop uses;
+4. **overlap**: `combinedRadius² ≥ d²` (`0x006017BC`, `0x005FED20` → 80 u for two radius-12
+   agents on layer 0). **Not overlapping → a deadline**: `0x005FEEC0` solves
+   `|rel + relv·t| = R` (`t = (−c − √(c² − a′b)) / b` with `a′ = d² − R²`, `b = |relv|²`,
+   `c = rel·relv`, +INF when `b = 0`, the discriminant ≤ 0 or `t < 0`), the running minimum
+   goes to `+0x44` as `time + max(min(t × 1000, 60000), 1)` (`[0x00943898]` = 1000.0,
+   `[0x00A53750]`/`[0x00A53758]` = 60000, `0x006019C6 ftol`), and the tick calls the pass again
+   when it is due (`0x00600495`–`0x006004BF`, arg3 = 1). Since the deadline lands at contact
+   and the tick re-arms 1 ms when it finds `d` a hair over `R`, **the sidestep fires on the
+   first world-0 tick with `d ≤ R`** — which is what a per-tick pass reproduces.
+5. **On overlap**, the computer's exits in the client's order: the obstacle is our TARGET agent
+   → notify 5 + park (the disc stop, `0x0060181C`, Q1's); we are already at `m_targetPoint`
+   (`0x0060182D`) or the retry counter `+0x64` has passed 6 (`0x006018B8`) → halt; the
+   obstacle's disc **covers `m_targetPoint`** (`0x006005D8`, before any query) or the waypoint
+   fails the mesh (`0x0070A150`) or `stepclear` → `AGENT_INVALID_POSITION` → **halt in place,
+   `0x00601899`** (teleport to the point, velocity zero, both target blocks invalid; notify 4 on
+   world 1 only); else **bake the waypoint with isWaypoint = 1** (`0x00601936`), then terrain
+   avoidance and `0x005FFCB0` on the new leg. At the waypoint's arrival the tick finds bit 18
+   set and re-bakes toward `m_targetPoint` with isWaypoint = 0, no notify (`0x0060029F` →
+   `0x006002B5`). The setter clears bit 18 and every bake resets `+0x64`, so a wire grant
+   mid-sidestep re-aims from the dead-reckoned point and runs the pass afresh.
+
+**The census that accepts it — seven tapes, 232 player grants** (the three pinned runs, R1,
+R1's control, R2, R3), the pass replayed on the mirror's sync copy against the hostile's sync
+copy off the tape, scored against every waypoint leg the tape shows (bit 18 rising or its
+epoch changing, finite segment):
+
+| | fired both | model only | tape only | quiet both | halts predicted | halts the tape confirms |
+|---|---|---|---|---|---|---|
+| pooled | **24** | 1 | 1 | 206 | **14** | **14 of 14** |
+
+Waypoint error at the matched fires **p50 0.2 u** (the first presses, fired AT the setter with
+the hostile 64–75 u dead ahead), p90 13.8, max 15.3 — every error over 5 u is a deadline-driven
+fire where the client's copy stood 9–15 u further along than the model's at the bake, i.e. the
+client fired **one world-0 tick after contact**: the tape's `clock0` steps **100 ms** (sometimes
+50) on r1/r2/r3, so a fire lands 0–100 ms after contact and this mirror fires at contact.
+MEASURED, not modelled (the tick's phase is unknown). The one disagreement is one event: on
+GROUNDZ-R2 the client's tick at ~37.56 s fired with the 37.606 s grant already applied (a 46 ms
+stamp lag), the model fired at contact 37.515 with the old target and again after the grant —
+15 u for 0.3 s, then the cascade's one missed short leg. The model-only/tape-only pair are that.
+Everything F11 called quiet is quiet for a reason the pass names: beside the copy (7–25 u
+along, 75–80 aside) is **outside the cone** (cos 0.09–0.31); from a standing copy `+0x48` is
+not armed; the stairs never reached the mesh check on these tapes (the `--mesh` arm changed
+nothing).
+
+**And the hook agrees, which is the instrument the tape is not.** RUN-R3's `movehook` window
+holds agent 1's sync object (`0x2614F640`) for 32 s: 17 setter calls, **exactly one bake
+returning to `0x0060193B`** — the sidestep at 46.5 s, `pt (9275, 7900) → tgt (9795, 7900)`,
+with its waypoint re-bake `0x006002BA` (flags `0x00060005`, bit 18) 312 ms later — and
+**exactly one teleport returning to `0x0060189E`**, at the wall lead
+`(10029, 8540) → (10105, 8540)`, in the same millisecond as its setter and bake, **with no
+`stepclear` and no `mapfindpath` record between them**. The model fires once and halts once in
+that window, at those two grants, and nowhere else.
+
+**THE HALTS ARE THE WALL SILENCE, and this corrects three documents.** All 14 predicted halts
+are the computer's first exit: **our lead's endpoint lay inside the parked hostile's 80 u
+disc**, so the client halted the sync copy in the setter's own call and the target block never
+outlived the millisecond. R1's specimen (cap 25.4212, the grant `(10118.5, 8526.5)` with the
+hostile at `(10076, 8556)`): **51.7 u** from the target; R3's: 35 u; R1's control run halted
+seven times this way in its chase phase, with 50–160 u leads ending beside a hostile walking
+in. The tape confirms each halt within one sample (velocity zero, both target blocks at the
+sentinel, `stop = 0`). So F10's *"frozen with our destination written"*, 1z-cd's *"the
+client's pathfinder declined to produce a path"* and this arc's Q2 entry (*"104 u of plane-0
+ground the client will not path into — prop geometry we do not carry"*) are all the same
+misreading: the destination WAS installed, and what stopped world-0 was the hostile's
+collision disc around the lead's END, the exact class 1z-cd downgraded because *"a cylinder in
+the way does not leave the target unset"* — it does, when it covers the target, because the
+halt invalidates both blocks. 1z-cd's registerable question (*"would it have installed a
+SHORTER one?"*) is answered from the bytes: the refusal is about the endpoint. The drawn body
+stood too because its own quarterstep (16 u, the hostile 80 u off at 24.8°) is the same pass on
+world 1 — 1z-be.3's run-2 S press, *"target covered → no sidestep → notify 4"* —
+RECONSTRUCTION for world 1 on that run, OBSERVED for world 0. The mesh is not implicated by
+this specimen; a correction is appended at movecode §1z-cd.3.
+
+**What shipped** (`MIRROR_AVOID`, revert `--no-mirror-avoid`, in the capture header):
+`agtrack_mirror.SyncAgent.avoid` transcribes the pass (steps 1–5, `AVOID_*` constants cited),
+`bake_waypoint` / `consume_waypoint` / `avoid_halt` the three writes, and `AgTrackMirror` runs
+it at `on_grant` (the setter's call) and on every walking tick; `AgTrackGuard.set_obstacles`
+feeds both mirrors, and `authsrv._npc_obstacles` answers with every other agent's **client
+model** — the hostile's SyncAgent since Q1, so the obstacle is the copy the client actually
+avoids — or its server position standing. `test_agtrack_mirror` §17 (68 → 92) pins every tape
+shape including the revert arm and a no-provider vacuity control; `test_agtrack_guard` §15
+(81 → 89) the feed and the provider. The stepclear query (`0x005FEF70`) inside the computer is
+not modelled; other radii/layers are UNMEASURED and take 80; the hostile's own copy gets no
+pass (nothing on these maps for it to avoid).
+
+**What it buys the frame (Q2), like for like on the seven tapes through the shipped code,
+obstacles = the tape's hostile copy:**
+
+| | pass ON | pass OFF (the revert arm) |
+|---|---|---|
+| mirror vs the client's world-0 while MOVING, p50 / p90 / max (n = 1,509 samples) | **10.1 / 19.9 / 105** | 14.8 / 89.3 / 150.9 |
+| per run, p90 | 16–25 | 76–105 |
+| the hybrid frame at the 120 halts, p50 / p75 / p90 | **1.5 / 9.4 / 17.6** | 3.6 / 17.4 / 49.9 |
+
+F10's ~100 u first-press excursion is gone (the per-run maxima 25–36 u, one 105 = the cascade
+above); the wall silence's mirror walk is gone (the mirror halts where the client does). What
+is left of Q2 is the tick phase (≤ 29 u for ≤ 100 ms at 288 u/s), the mesh/`stepclear` arm
+these tapes never exercised, and 1zCA's one 357 u halt that both arms share and that is not
+this mechanism.
+
 ## Open
 
 - **`NPCTRACK-Q2` — the AgTrack mirror's POSITION fidelity, handed to MOVECODE.** The mirror was
@@ -498,6 +618,17 @@ run to retract, which is the cheapest version of the mistake.
   unreachable, or about the whole corridor? Nothing on the server side can answer it, because
   both readings predict the same wire, and the tape's own blind spot is the ~65–110 ms between
   the samples bracketing the grant.
+
+  **CLOSED on both halves, 2026-09-06 (F14).** The first-press excursion's trigger is the
+  agent-avoidance pass, decoded and shipped in the mirror (`MIRROR_AVOID`): the mirror's
+  error against the client's world-0 while moving is p90 **19.9 u** over 1,509 samples against
+  89.3 on the revert arm. And the wall half was never a navmesh disagreement: the lead's
+  endpoint lay 51.7 u from the parked hostile, inside its disc, and the same pass halted the
+  copy in the setter's own call — the "104 u of plane-0 ground the client will not path into"
+  above is withdrawn as a mechanism (the ground may or may not be prop-covered; this specimen
+  cannot say). What remains is the world-0 tick's phase (fires land 0–100 ms after contact,
+  ≤ 29 u), the mesh/`stepclear` arm no tape reached, and one 357 u halt on 1zCA shared by
+  both arms.
 - **`NPCTRACK-Q3` — the sync copy against the drawn body ACROSS AN OBSTACLE.** F2 holds on the
   stairs route, whose walls are the staircase sides. On the operator's bridge session the two
   still agreed to 28.8 u at the halts, but en route around the wedge is unmeasured, and a sync
@@ -517,6 +648,15 @@ run to retract, which is the cheapest version of the mistake.
 - ~~**`NPCTRACK-Q7`**~~ **withdrawn with F13**: the sync copy has no local re-target; its
   setter is wire-only (R3's hook, 26 of 26). The mirror's velocity term is not needed for a
   mechanism that does not exist.
+- **`NPCTRACK-Q8` — a lead that ends inside a hostile's disc halts world-0 at once (F14).**
+  MEASURED: 14 halts on seven tapes, seven of them on the old arm's chase phase, each a lead
+  of 50–160 u ending within 80 u of the hostile's copy. The mirror now halts with the client,
+  so the frame and the re-pin guard read it right; whether the player ever SEES it is
+  unmeasured — the drawn body halts by the same pass on world 1 (1z-be.3) when its own short
+  step is covered, and on every specimen here it stood anyway. The lever, if a symptom ever
+  names one, is MOVECODE's: clip the keyboard lead to end outside every agent's disc, which
+  turns the halt into the sidestep the client would take. Not built: no symptom, and a lead
+  the client refuses costs the frame nothing now.
 - **`NPCTRACK-Q5` — the operator's picture is still world-0's.** The drawn hostile parks 80 u from
   the player's WORLD-0 copy, and that copy is p50 34 / 23 / 40 u from the drawn player while
   moving on these runs (p90 284 / 91 / 247). Q1 makes the server agree with the client about

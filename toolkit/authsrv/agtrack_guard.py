@@ -211,6 +211,11 @@ class AgTrackGuard(object):
         # errs toward the veto.  RECONSTRUCTION -- 9 approach grants in 3 of
         # 1,311 captures, unmeasured.
         self.async_dest = None
+        # NPCTRACK-F14: the other agents' world-0 copies for the mirror's
+        # avoidance pass -- a callable(now_seconds) -> [(x, y, vx, vy)], set
+        # by the server (authsrv._npc_obstacles) after seeding.  None = no
+        # other agents modelled; the mirror walks every leg straight.
+        self.obstacles = None
         # shadow counters
         self.n_pass = 0
         self.n_pass_gates = 0
@@ -223,6 +228,25 @@ class AgTrackGuard(object):
         if self.epoch is None:
             self.epoch = now
         return int(round((now - self.epoch) * 1000.0))
+
+    def set_obstacles(self, provider):
+        """Install the world's other agents for the avoidance pass (F14).
+        The mirror asks in its own ms clock; the provider answers in server
+        seconds, so the inverse of _ms() sits between them.  The twin
+        (the no-resets world) gets the same feed: a sidestep is a client
+        behaviour in both worlds."""
+        self.obstacles = provider
+        if provider is None:
+            self.mirror.obstacles = None
+            self.twin.obstacles = None
+            return
+
+        def at_ms(ms):
+            if self.epoch is None:
+                return ()
+            return provider(self.epoch + ms / 1000.0)
+        self.mirror.obstacles = at_ms
+        self.twin.obstacles = at_ms
 
     # ---- feeds (no sends, no server-state mutation) ----------------------
 

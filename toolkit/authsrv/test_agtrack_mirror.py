@@ -11,6 +11,7 @@ Synthetic throughout -- no vault, no client, bare machine.  The corpus replay
 (the arc's step 2) is agtrack_replay.py's job, not this file's.
 """
 
+import math
 import os
 import sys
 
@@ -21,8 +22,10 @@ sys.path.insert(0, os.path.dirname(HERE))
 import checks                    # noqa: E402
 import agtrack_mirror as am      # noqa: E402
 
-# Floor from the 2026-08-30 green run: 64 checks, all unconditional.
-LEDGER = checks.Ledger("agtrack mirror transcription", floor=68)
+# Floor from the 2026-08-30 green run: 64 checks, all unconditional; 68 after
+# 1z-bf; +24 at NPCTRACK-F14 (sec.17, the agent-avoidance pass): 92 on the
+# 2026-09-06 green run.
+LEDGER = checks.Ledger("agtrack mirror transcription", floor=92)
 check = checks.adopt_named(LEDGER)
 
 
@@ -369,6 +372,184 @@ def main():
     m2.tick(60_000)
     check("render_prune: None = the reader never runs (long-chain model)",
           m2.chain_len >= 2)
+
+    # ---- 17. NPCTRACK-F14: the agent-avoidance pass on the sync copy -----
+    # The client's setter runs 0x006011F0 over every other agent right after
+    # the bake, and its tick re-runs it at the deadline it arms.  Decoded in
+    # studies/movecode/FINDINGS.md 1z-be.2 and studies/npctrack/FINDINGS.md
+    # F14; scored on seven tapes -- 24 of 26 sidesteps to 0.2 u, 14 of 14
+    # halts.  Each fixture below is one of those tapes' shapes.
+    R = am.AVOID_COMBINED_RADIUS
+    check("F14 ships ON in the mirror module", am.MIRROR_AVOID is True)
+
+    def _walking(start, grant, obstacles, now=1_000, mesh=None):
+        m = am.AgTrackMirror(mesh=mesh)
+        m.sync.x78, m.sync.y78, m.sync.plane = start[0], start[1], 0
+        m.obstacles = (lambda ms: obstacles)
+        m.on_grant(grant[0], grant[1], 0, 0, now)
+        return m
+
+    # (a) THE FIRST PRESS (every tape): a parked hostile 75 u ahead, dead on
+    # the line to a 520 u lead -- the setter's own pass sidesteps AT ONCE.
+    m = _walking((0.0, 0.0), (520.0, 0.0), [(75.0, 0.0, 0.0, 0.0)])
+    s = m.sync
+    check("sidestep: a parked obstacle 75 u ahead on the line fires at the "
+          "setter -- the segment is now the waypoint, bit 18 set",
+          s.is_waypoint and s.dest is not None
+          and abs(s.dest[0] - 0.0) < 1e-6 and abs(s.dest[1] - (R + am.AVOID_PAD)) < 1e-6)
+    check("sidestep: the tie (obstacle exactly on the line) goes LEFT, +y "
+          "for +x travel, by (R + 10) - 0 = 90 u",
+          s.dest[1] > 0 and abs(s.dest[1] - 90.0) < 1e-6)
+    check("sidestep: the leg is perpendicular at the baked speed",
+          abs(s.vx) < 1e-6 and abs(s.vy - 288.0) < 1e-6)
+    check("sidestep: m_targetPoint still holds the WIRE point",
+          s.target == (520.0, 0.0))
+    check("sidestep: the arrival tick is the waypoint's, 312 ms out "
+          "(90 u / 288)", s.t_arrive == 1_000 + int(90.0 * 1000.0 / 288.0))
+    check("sidestep: the pass counts it", s.n_sidestep == 1 and s.n_avoid_halt == 0)
+    # the waypoint's arrival: the tick re-bakes toward the target, no notify
+    m.tick(1_000 + 312)
+    check("waypoint arrival: the tick re-bakes toward m_targetPoint with "
+          "bit 18 CLEAR (0x006002B5), from the waypoint",
+          not s.is_waypoint and s.dest is not None
+          and s.dest[0] == 520.0 and s.dest[1] == 0.0
+          and abs(s.x78 - 0.0) < 1e-6 and abs(s.y78 - 90.0) < 1e-6
+          and s.vx > 0 and s.vy < 0)
+    # the resumed leg passes the obstacle 76 u off its new line -- inside R,
+    # but at contact the obstacle sits 25 u along / 76 aside (cos 0.31):
+    # OUTSIDE the cone, so the copy walks on.  No second sidestep here.
+    for t in range(1_312, 3_000, 16):
+        m.tick(t)
+    check("the resumed 520 u leg re-enters the disc outside the cone and "
+          "walks on -- one sidestep, then the target",
+          s.n_sidestep == 1 and not s.is_waypoint)
+
+    # (a2) A SHORTER lead (200 u): the resumed leg passes the obstacle 51 u
+    # off its line, contact at cos 0.77 -- the tick's pass sidesteps a SECOND
+    # time from the dead-reckoned point, by (90 - 51.3) = 38.7 u (F11's short
+    # second legs).
+    m = _walking((0.0, 0.0), (200.0, 0.0), [(75.0, 0.0, 0.0, 0.0)])
+    s = m.sync
+    m.tick(1_312)
+    fired = None
+    for t in range(1_328, 3_000, 16):
+        m.tick(t)
+        if s.is_waypoint:
+            fired = t
+            break
+    d2 = math.hypot(s.dest[0] - s.x78, s.dest[1] - s.y78) if fired else 0.0
+    check("a 200 u lead: the resumed leg re-enters the disc INSIDE the cone "
+          "and sidesteps AGAIN from the dead-reckoned point, ~152 ms after "
+          "the re-bake, by (R + 10) - 51.3 = 38.7 u",
+          fired is not None and s.n_sidestep == 2 and abs(fired - 1_464) <= 20
+          and abs(d2 - 38.7) < 2.0)
+
+    # (b) THE CONE: the same obstacle 75 u away but 55 deg off the heading
+    # (cos 0.57) fires; at 65 deg (cos 0.42) it does not -- 0x009458BC's 0.5.
+    a55 = math.radians(55.0)
+    m = _walking((0.0, 0.0), (520.0, 0.0), [(75.0 * math.cos(a55), 75.0 * math.sin(a55), 0.0, 0.0)])
+    check("cone: an obstacle at 55 deg off the heading (cos 0.57 > 0.5) fires",
+          m.sync.is_waypoint)
+    a65 = math.radians(65.0)
+    m = _walking((0.0, 0.0), (520.0, 0.0), [(75.0 * math.cos(a65), 75.0 * math.sin(a65), 0.0, 0.0)])
+    check("cone: at 65 deg (cos 0.42 <= 0.5) it does NOT -- the copy walks "
+          "straight past an obstacle beside it (the tapes' 29 quiet grants)",
+          not m.sync.is_waypoint and m.sync.dest[0] == 520.0)
+
+    # (c) CLOSING: an obstacle 75 u BEHIND is separating -> skipped
+    m = _walking((0.0, 0.0), (520.0, 0.0), [(-75.0, 0.0, 0.0, 0.0)])
+    check("closing: an obstacle behind the copy is separating and skipped",
+          not m.sync.is_waypoint)
+
+    # (d) THE HALT (the wall silence, RUN-R1/R2/R3; 14 of 14 on the tapes):
+    # our lead ENDS inside the parked hostile's disc -> the sidestep computer
+    # returns AGENT_INVALID_POSITION before any query and the copy halts in
+    # place -- velocity zero, both target blocks invalid.
+    m = _walking((0.0, 0.0), (76.0, 0.0), [(55.0, 28.0, 0.0, 0.0)])
+    s = m.sync
+    check("halt: a 76 u lead ending 35 u from the parked hostile (disc "
+          "covers m_targetPoint) halts the copy AT THE SETTER: v = 0, "
+          "dest and target invalid, position unmoved",
+          s.vx == 0.0 and s.vy == 0.0 and s.dest is None and s.target is None
+          and s.t_arrive == 0 and s.x78 == 0.0 and s.y78 == 0.0
+          and s.n_avoid_halt == 1)
+    check("halt: no sidestep was baked", s.n_sidestep == 0)
+
+    # (e) THE DEADLINE ARM: an obstacle 200 u ahead on the line fires nothing
+    # at the setter; the ticks walk the copy to contact and fire there.
+    m = _walking((0.0, 0.0), (520.0, 0.0), [(200.0, 0.0, 0.0, 0.0)])
+    s = m.sync
+    check("deadline: 200 u ahead is not yet overlapping -- the setter's pass "
+          "leaves the straight leg", not s.is_waypoint and s.dest[0] == 520.0)
+    fired = None
+    for t in range(1_016, 3_000, 16):
+        m.tick(t)
+        if s.is_waypoint:
+            fired = t
+            break
+    check("deadline: the tick's pass fires at the first tick with d <= R -- "
+          "contact at (200-80)/288 = 417 ms, so 1_424 +- one 16 ms tick",
+          fired is not None and abs(fired - 1_424) <= 16)
+    check("deadline: the waypoint starts from the dead-reckoned point, x ~ 120",
+          fired is not None and abs(s.x78 - 120.0) < 5.0
+          and abs(s.dest[1] - 90.0) < 1e-6)
+
+    # (f) A MOVING obstacle closing head-on is met earlier: its velocity
+    # enters relv (0x005FEEC0's quadratic is on rel + relv t).
+    m = am.AgTrackMirror()
+    m.sync.x78, m.sync.y78, m.sync.plane = 0.0, 0.0, 0
+    m.obstacles = (lambda ms: [(300.0 - 288.0 * (ms - 1_000) / 1000.0, 0.0, -288.0, 0.0)])
+    m.on_grant(520.0, 0.0, 0, 0, 1_000)
+    s = m.sync
+    fired = None
+    for t in range(1_016, 3_000, 16):
+        m.tick(t)
+        if s.is_waypoint:
+            fired = t
+            break
+    check("a head-on obstacle at 300 u closing at 288 u/s meets the copy at "
+          "(300-80)/576 = 382 ms, not 764", fired is not None and abs(fired - 1_382) <= 20)
+
+    # (g) THE MESH: the computer validates the waypoint (0x0070A150); a mesh
+    # that refuses it halts the copy instead.
+    class _RefuseAll(object):
+        pm = type("PM", (), {"on_mesh": staticmethod(lambda x, y: False)})()
+    m = _walking((0.0, 0.0), (520.0, 0.0), [(75.0, 0.0, 0.0, 0.0)], mesh=_RefuseAll())
+    check("mesh: a refused waypoint is INVALID -> the copy halts (the stairs' "
+          "quiet grants, F11)", m.sync.n_avoid_halt == 1 and not m.sync.is_waypoint
+          and m.sync.vx == 0.0)
+
+    # (h) THE REVERT ARM and the vacuity control: the flag off, or no
+    # provider, walks the first-press shape straight -- so (a) is measuring
+    # the pass and nothing else.
+    saved = am.MIRROR_AVOID
+    try:
+        am.MIRROR_AVOID = False
+        m = _walking((0.0, 0.0), (520.0, 0.0), [(75.0, 0.0, 0.0, 0.0)])
+        check("REVERT (MIRROR_AVOID off): the first-press shape walks straight "
+              "-- the known-bad arm the tapes measured at ~100 u",
+              not m.sync.is_waypoint and m.sync.dest[0] == 520.0
+              and m.sync.n_sidestep == 0)
+    finally:
+        am.MIRROR_AVOID = saved
+    m = am.AgTrackMirror()
+    m.sync.x78, m.sync.y78, m.sync.plane = 0.0, 0.0, 0
+    m.on_grant(520.0, 0.0, 0, 0, 1_000)
+    check("no provider: the mirror walks straight (every pre-F14 caller is "
+          "unchanged)", not m.sync.is_waypoint and m.sync.dest[0] == 520.0)
+    check("and the module global is restored", am.MIRROR_AVOID is True)
+
+    # (i) a hard grant mid-sidestep re-bakes from the dead-reckoned point,
+    # clears bit 18 and the retry counter (the setter, 0x00602A65 +
+    # 0x005FEA42), then runs the pass again -- the tapes' back-to-back legs.
+    m = _walking((0.0, 0.0), (520.0, 0.0), [(75.0, 0.0, 0.0, 0.0)])
+    s = m.sync
+    m.obstacles = (lambda ms: [])
+    m.on_grant(600.0, 0.0, 0, 0, 1_100)
+    check("a grant during a waypoint leg: the setter clears bit 18, re-aims "
+          "from the dead-reckoned point (0, 28.8) at the new target",
+          not s.is_waypoint and s.target == (600.0, 0.0)
+          and abs(s.x78) < 1e-6 and abs(s.y78 - 28.8) < 1e-6 and s.avoid_retry == 0)
 
     return LEDGER.verdict()
 

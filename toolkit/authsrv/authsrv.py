@@ -4941,6 +4941,8 @@ def _agtrack_guard_seed(state, pos, plane, conn_id):
         mesh = _am.MeshAdapter(pm) if pm is not None else None
         g = _ag.AgTrackGuard(mesh=mesh)
         g.on_placement(pos[0], pos[1], plane, time.time())
+        if MIRROR_AVOID:
+            g.set_obstacles(_npc_obstacles(state))      # NPCTRACK-F14
         state["agtrack_guard"] = g
         state["agtrack_guard_lock"] = threading.Lock()
     except Exception as e:
@@ -16107,6 +16109,19 @@ def _npc_plane_correct(send, conn_id, agent_id, agent, plane, now):
 # --no-npc-client-model reverts to the corridor integrator -- the known-bad
 # arm and RUN-NPCTRACK-R1's control.
 NPC_CLIENT_MODEL = True    # False (--no-npc-client-model): the server's own walk.
+
+# NPCTRACK-F14 (2026-09-06): the player's world-0 copy SIDESTEPS a parked
+# hostile and HALTS when our lead ends inside its disc -- the client's
+# agent-avoidance pass (0x006011F0), now run by the AgTrack mirror over the
+# hostiles' client models (agtrack_mirror.SyncAgent.avoid; the decode and the
+# 232-grant census are studies/npctrack/FINDINGS.md F14). The mirror is the
+# frame the hostile's disc stop runs in while the player moves (F5), and the
+# keyboard re-pin guard reads it too. --no-mirror-avoid reverts to the
+# straight-leg mirror: measured on the tapes, every first press then carries
+# ~100 u of frame error for 0.3 s, and the wall silence reads as a mirror
+# walking a leg the client refused (RUN-R1: 604 -> 98 u was 1z-cc's; the
+# ~100 u that remains is this).
+MIRROR_AVOID = True        # False (--no-mirror-avoid): the mirror walks straight.
 NPC_DISC_COS_CONE = 0.5    # the resolver's +-60 degree cone, fcomp [0x009458BC]. OBSERVED.
 
 
@@ -16177,6 +16192,39 @@ def _npc_model_emit(agent, opcode, values, now):
     else:
         return
     _npc_model_write(agent, sa, ms)
+
+
+def _npc_obstacles(state):
+    """F14: the world's other agents as the mirror's avoidance pass sees them
+    -- every agent in state["agents"] but the player, at its client model's
+    position and velocity (a hostile's SyncAgent, NPCTRACK-Q1) or, for an
+    agent the server does not model, its server position standing still.
+    Combined radius is the mirror's constant (80 u for two radius-12 agents,
+    the only pair measured); other sizes are UNMEASURED and take the same.
+    Returns a callable(now_seconds) -> list of (x, y, vx, vy)."""
+    def at(now):
+        out = []
+        agents = state.get("agents") or {}
+        for aid, ag in list(agents.items()):
+            if aid == PLAYER_AGENT_ID or not isinstance(ag, dict):
+                continue
+            if ag.get("dead"):
+                continue                       # a corpse is not in the pass
+            sa = ag.get("cmodel") if NPC_CLIENT_MODEL else None
+            if sa is not None and sa.x78 is not None:
+                ms = _npc_ms(ag, now)
+                p = sa.position(ms)
+                if p is None:
+                    continue
+                vx, vy = sa.velocity(ms)
+                out.append((float(p[0]), float(p[1]), float(vx), float(vy)))
+            else:
+                pos = ag.get("pos")
+                if pos is None:
+                    continue
+                out.append((float(pos[0]), float(pos[1]), 0.0, 0.0))
+        return out
+    return at
 
 
 def _npc_mirror_pos(state, now):
@@ -23924,6 +23972,15 @@ def main():
                          "body trails its sync copy and an instant halt froze "
                          "it short of the disc -- CASE 8 v2's 'long range "
                          "attacks' with the server's copy at exactly 80 u.")
+    ap.add_argument("--no-mirror-avoid", action="store_true",
+                    help="NPCTRACK-F14 REVERT: the server's mirror of the "
+                         "player's world-0 copy walks every leg straight, "
+                         "ignoring the client's agent-avoidance pass -- the "
+                         "sidestep around a parked hostile 80 u ahead and the "
+                         "halt when our lead ends inside its disc. Measured on "
+                         "seven tapes: the pass reproduces 24 of 26 sidesteps "
+                         "to 0.2 u and 14 of 14 halts; without it every first "
+                         "press carries ~100 u of frame error for 0.3 s.")
     ap.add_argument("--no-npc-client-model", action="store_true",
                     help="NPCTRACK-Q1 REVERT: walk the server's copy of a "
                          "hostile along its own corridor toward the live "
@@ -25691,6 +25748,16 @@ def main():
         print("[map] --halt-on-arrival: a hostile's 0x0028 goes out the instant "
               "the server's copy reaches the disc (ANIMREF-RE 40.9's revert; "
               "the client's rendered body halts short).", flush=True)
+    if a.no_mirror_avoid:
+        global MIRROR_AVOID
+        MIRROR_AVOID = False
+        import agtrack_mirror as _am_flag
+        _am_flag.MIRROR_AVOID = False
+        print("[map] --no-mirror-avoid: the mirror of the player's world-0 "
+              "copy walks every leg straight (NPCTRACK-F14's revert): no "
+              "sidestep around a parked hostile, no halt on a lead ending in "
+              "its disc. Measured: ~100 u of frame error per first press.",
+              flush=True)
     if a.no_npc_client_model:
         global NPC_CLIENT_MODEL
         NPC_CLIENT_MODEL = False

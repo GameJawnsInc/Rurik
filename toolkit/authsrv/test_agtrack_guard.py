@@ -36,9 +36,11 @@ AS_SRC = open(authsrv.__file__, encoding="utf-8").read()
 # guard with a mesh stub (every other fixture here is mesh=None, so that
 # branch had never executed in a test) and the three re-pin arms over it,
 # the third of which is the deleted waiver's own licence shape and goes RED
-# on the pre-1z-bt build: 81 on the green run.
+# on the pre-1z-bt build: 81 on the green run.  +8 at NPCTRACK-F14 (sec.15:
+# the obstacle feed reaches both mirrors, and authsrv's provider reads the
+# hostiles' client models): 89 on the 2026-09-06 green run.
 # Each from a real green run, never from a guess.
-LEDGER = checks.Ledger("agtrack guard: the derived pre-emit rule", floor=81)
+LEDGER = checks.Ledger("agtrack guard: the derived pre-emit rule", floor=89)
 check = checks.adopt_named(LEDGER)
 
 
@@ -654,6 +656,53 @@ def main():
           "above is the AGE, not the pair (the clause 1z-bn refused is gone "
           "too, and neither is doing the work here)",
           g2c.repin_state(1000.2) == (ag.REPIN_DUE, "gate2-offmesh"))
+
+    # ---- 15. NPCTRACK-F14: the obstacle feed reaches BOTH mirrors ----------
+    # The server hands the guard a provider in SECONDS; the mirrors ask in
+    # their own ms clock.  A parked hostile 75 u ahead of a 520 u lead must
+    # sidestep the mirror AND the twin (a sidestep is a client behaviour in
+    # both worlds), and the authsrv provider must read a hostile's client
+    # model, not its server position.
+    gf = ag.AgTrackGuard()
+    gf.on_placement(0.0, 0.0, 0, 2000.0)
+    seen = []
+
+    def _prov(now_s):
+        seen.append(now_s)
+        return [(75.0, 0.0, 0.0, 0.0)]
+    gf.set_obstacles(_prov)
+    gf.on_emit(0x29, 520.0, 0.0, 0, 0, 2000.5)
+    check("F14: the provider is asked in server SECONDS (the guard's epoch + "
+          "ms), at the emit's own instant", seen and abs(seen[-1] - 2000.5) < 1e-6)
+    check("F14: the mirror sidestepped the parked hostile at the setter",
+          gf.mirror.sync.is_waypoint and abs(gf.mirror.sync.dest[1] - 90.0) < 1e-6)
+    check("F14: and so did the twin -- the no-resets world is the same client",
+          gf.twin.sync.is_waypoint)
+    gf.set_obstacles(None)
+    gf.on_emit(0x29, 520.0, 0.0, 0, 0, 2001.0)
+    check("F14: set_obstacles(None) detaches both -- the next grant walks "
+          "straight", not gf.mirror.sync.is_waypoint and not gf.twin.sync.is_waypoint)
+    check("F14 ships ON with its revert flag, recorded in the capture header",
+          authsrv.MIRROR_AVOID is True and "--no-mirror-avoid" in AS_SRC
+          and authsrv.capture_flags().get("MIRROR_AVOID") is True)
+    # the authsrv provider: a hostile with a client model answers at the
+    # model's position and velocity; one without answers at its server
+    # position, standing; the player is never an obstacle
+    st = {"agents": {authsrv.PLAYER_AGENT_ID: {"pos": (0.0, 0.0)},
+                     10: {"pos": (900.0, 0.0), "plane": 0},
+                     11: {"pos": (5.0, 6.0)}}}
+    sa = authsrv._npc_model(st["agents"][10], 0.0)
+    sa.bake_grant(612.0, 0.0, 0, 0, 0)              # walking -x from 900 at 288
+    st["agents"][10]["cmodel_clock"] = 0.5
+    obs = authsrv._npc_obstacles(st)(123.0)
+    by = {(round(o[0]), round(o[1])): o for o in obs}
+    check("authsrv._npc_obstacles: a modelled hostile answers at its client "
+          "model's dead-reckoned point (900 - 144) with its velocity (-288, 0)",
+          (756, 0) in by and abs(by[(756, 0)][2] + 288.0) < 1e-6)
+    check("... an unmodelled agent answers at its server position, standing",
+          (5, 6) in by and by[(5, 6)][2] == 0.0 and by[(5, 6)][3] == 0.0)
+    check("... and the player is never an obstacle to itself",
+          (0, 0) not in by and len(obs) == 2)
 
     return LEDGER.verdict()
 

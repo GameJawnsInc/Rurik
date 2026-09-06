@@ -16554,6 +16554,24 @@ apart, so a destination written *and* cleared entirely inside that window is not
 It would have to be cleared with no wire message and no motion, and it cannot account for
 the remaining 4.9 s.
 
+> **CORRECTED 2026-09-06, NPCTRACK-F14 — the blind spot is exactly where it happened, and the
+> mechanism is the one this section downgraded.** The destination WAS installed: the setter
+> baked it and, in the same call, the agent-avoidance pass `0x006011F0` (§1z-be.2, step 4)
+> found the parked hostile inside the 60° cone at ≤ 80 u and asked the sidestep computer,
+> whose FIRST exit is *"the obstacle's disc covers `m_targetPoint`"* (`0x006005D8`) — and
+> **our lead's endpoint `(10118.5, 8526.5)` sat 51.7 u from the hostile at `(10076, 8556)`**.
+> That exit halts the copy at `0x00601899`, which invalidates BOTH target blocks; so a
+> cylinder in the way DOES leave the target unset when it covers the target, and the
+> sentinel-with-no-segment shape does not discriminate a pathfinder refusal from this. RUN-R3
+> under the hook has the same shape on the same wall: setter → bake → teleport returning to
+> `0x0060189E` in one millisecond, no `stepclear`, no `mapfindpath`. The 104 u of plane-0
+> ground is therefore NOT shown to be prop-covered by this specimen (it may be; nothing here
+> says), the registered question is answered — the refusal is about the ENDPOINT, a shorter
+> lead ending outside the disc would have walked (and sidestepped) — and the body's own
+> 0 u east is the same pass on world 1 with its 16 u quarterstep covered, §1z-be.3's run-2
+> shape (RECONSTRUCTION for world 1; OBSERVED for world 0). Fourteen such halts on seven tapes,
+> all reproduced by the mirror's new pass: `studies/npctrack/FINDINGS.md` F14.
+
 ### 1z-cd.4 ★★ What shipped: no knob, one invariant — DECISION
 
 **No default moved and no flag was added.** A guard whose precondition is false 240 times
