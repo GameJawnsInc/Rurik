@@ -554,6 +554,47 @@ is left of Q2 is the tick phase (≤ 29 u for ≤ 100 ms at 288 u/s), the mesh/`
 these tapes never exercised, and 1zCA's one 357 u halt that both arms share and that is not
 this mechanism.
 
+## NPCTRACK-F15 — the client parks the hostile INSIDE the disc, by its next tick's worth of walking; Q1's residual is that, derived, and Q4 closes with it
+
+F14's pass is also the hostile's own disc stop — its target-agent exit (`0x0060181C`: the
+blocker is the agent in `+0x98`, notify 5 and park at the copy's own point). The server's Q1
+model parks the copy exactly ON the 80 u disc, solved on the leg's line (`_npc_disc_hit_ms`).
+The client cannot: its pass runs at the world-0 tick, the deadline it armed at the setter lands
+at contact, and the park is the copy's dead-reckoned point at the first tick that finds
+`d ≤ R` — so the client's park should sit INSIDE the disc by whatever the copy walked between
+contact and that tick, and never outside it. A prediction with a sign and a bound.
+
+**MEASURED on the seven tapes** (`studies/npctrack/review/parkcensus.py`): 185 stops of the
+hostile's sync copy, of which 61 are our own `0x0028` landing on a walking copy and 21 are
+arrivals at the ordered point (the tick's `0x00600333`, the copy on its previous target); the
+**103 disc parks** that remain, by the player's state at the park:
+
+| player | n | d to world-0: p10 / p50 / p90 | min / max | inside the disc (80 − d) |
+|---|---|---|---|---|
+| STANDING | 37 | 63.8 / 71.1 / 79.6 | 61.8 / 84.9 | **mean 8.4 u**, histogram [0,5) 8 · [5,10) 14 · [10,15) 9 · [15,20) 5, one at −4.9 |
+| moving | 66 | 76.9 / 84.2 / 92.4 | 60.2 / 96.1 | the 33 ms sample lags the park and the player walked on |
+
+At a standing player **36 of 37 parks are inside the disc** (the one outside, by 4.9 u, is a
+player whose world-0 the tape read 33 ms after the park), and the depth is 0–18 u: the sync copy walks 0–63 ms past contact before its tick parks it. So
+**Q1's number — 6.7 / 11.8 / 15.7 u median at the halts, and RUN-R2's "the model's own parks
+vs the client's copy, p50 7.5" — is this**: the model stops on the disc, the client 8 u short of
+it on average, and the rest is F5's frame. It is the floor of what the server can know: the
+tick's phase is the client's, invisible from the wire. (An estimator that parks the model half
+a tick inside the disc would zero the MEAN error; it is not built — the 8 u is invisible to the
+player and a fudge of the mean is not a derivation.) The 100 ms step the tape's `clock0` shows
+does not put a bound of 29 u on this: the depth's maximum is 18 u, so the tick that runs the
+pass is finer than the clock's coarsest step (the tape also shows 50 ms steps); UNVERIFIED
+which, and it does not matter to the server.
+
+**Q4 closes on the same decode.** §38.2's *"velocity extrapolation inside the reach test"* is
+F14 step 4: the other agent is dead-reckoned to the tick's time from its own `+0x78/+0xB0/+0x58`,
+the deadline is the quadratic on `rel + relv·t` with `relv = v_other − v_this`, and the park
+happens at the first tick with `d ≤ R` on those positions. F4's model has no extrapolation term
+and reproduces the tape to 10 u because a standing or slowly moving frame makes the term small
+(a head-on closing at 576 u/s would put the park up to 29 u deeper per 50 ms — one park at
+60.2 u is the only candidate in the corpus). The server's `_npc_disc_hit_ms` already solves the
+hit against the frame at each tick; nothing to change.
+
 ## Open
 
 - **`NPCTRACK-Q2` — the AgTrack mirror's POSITION fidelity, handed to MOVECODE.** The mirror was
@@ -634,10 +675,11 @@ this mechanism.
   still agreed to 28.8 u at the halts, but en route around the wedge is unmeasured, and a sync
   copy that dead-reckons straight through a wall while the body paths around it is what the
   decode says should happen. Only a wedge run with the tape can say how far apart they get.
-- **`NPCTRACK-Q4` — the resolver's velocity extrapolation of the target** (§38.2: *"the client
-  tracks a moving target only through the velocity extrapolation inside the reach test"*). F4's
-  model has none and reproduces the tape to 10 u, so its horizon is short or its effect small;
-  unmeasured.
+- ~~**`NPCTRACK-Q4` — the resolver's velocity extrapolation of the target**~~ **CLOSED 2026-09-06
+  (F15)**: it is the agent-avoidance pass's deadline on `rel + relv·t` with the other agent
+  dead-reckoned to the tick (F14 step 4); small here because the frame stands or walks slowly
+  at the parks. And the parks themselves land 0–18 u INSIDE the disc at the client's next tick
+  (mean 8.4 u at a standing player, n = 37, 36 of 37 inside), which is Q1's residual, derived.
 - **`NPCTRACK-Q6` — the mid-chase halt cadence.** Behind a running player the server's report
   track leads the client's world-0 by ~100 u, so the copy parks at world-0's disc every re-path
   interval, halts, and is re-followed 0.05 s later: 23 halts and 23 opens in 77 s against 13
@@ -676,6 +718,16 @@ this mechanism.
 - **[RUN-R3.md](RUN-R3.md)** — ran 12:56 under `movehook`: **P1 REFUTED, F13 withdrawn** — the
   sync copy's setter is wire-only (26 of 26); our halts hit a parked copy 13 of 15 times; the tape's
   Q1 number a third time, 15.7 u at the halt (6.7, 11.8 before; old arm 46–68).
+
+## Review tools
+
+- `python studies/npctrack/review/npcdrift.py <tape>` — Q1's instant metric, the walking count,
+  the F1–F5 pooled numbers and the pinned-tape control.
+- `python studies/npctrack/review/avoidcensus.py [--no-avoid]` — F14: the shipped mirror's
+  agent-avoidance pass replayed on the seven tapes, scored against the tape's waypoint legs and
+  halts, and the frame with and without it.
+- `python studies/npctrack/review/parkcensus.py [-v]` — F15: where the client parks the
+  hostile relative to the player's world-0, disc parks separated from arrivals and our halts.
 
 ## Method notes
 
