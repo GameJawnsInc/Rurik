@@ -252,6 +252,18 @@ halt (§40.2 chase 3) at a higher rate, because retail's server player IS the fr
 **NPCTRACK-Q6**. The two worst parks (77.5 / 77.8 u) are the two where the live frame sat 33–35 u
 behind the true world-0 — the mirror's error, Q2, as F5 predicted.
 
+**The control ran the same morning (10:06, `--no-npc-client-model`, agent-driven) and closes the
+comparison:** same-instant p50 **54.8 u** on the old arm against **11.8** on the model, 7 of 12
+halts over 40 u against 4 of 23, 3 of 12 halts on a walking client copy against 0 of 23, the wire
+shape identical to the pinned runs (12 / 39 / 12), and F4's model reproducing that tape's client
+copy to 10.2 u — a fourth tape. **Q1 is CONFIRMED with a control.** The registered +0.5 s metric
+read 21.6 u on the control — it would have passed the OLD arm — so it is unreliable in both
+directions and is retired from the verdict lines. One caveat the control raises rather than
+settles: the drawn hostile parked closer to the drawn player on the old arm (83.5 u against 101,
+one run each); what the operator sees behind a running player is the model arm's re-follow
+cadence (Q6) against the old arm's swing from an imaginary spot, and only their next session can
+rank those.
+
 ## Open
 
 - **`NPCTRACK-Q2` — the AgTrack mirror's POSITION fidelity, handed to MOVECODE.** The mirror was
@@ -288,7 +300,8 @@ behind the true world-0 — the mirror's error, Q2, as F5 predicted.
 - **[RUN-R1.md](RUN-R1.md)** — three attempts: without its tape (the sheet's own path bug; the
   wire found F8), a 5 s cut, and the full run at 09:43 (F9): **P1/P2 refuted as registered, the
   comparator at fault; 11.8 u at the halt's instant against 46–68; P3 met; P4b refuted and
-  explained (Q6)**. The control session (P1′–P3′) is registered and unrun.
+  explained (Q6)**; the control at 10:06: **P1′–P3′ MET, 54.8 u against 11.8** — Q1 CONFIRMED with a
+  control.
 
 ## Method notes
 

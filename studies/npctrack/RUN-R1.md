@@ -237,4 +237,40 @@ error), and the visible cost is the halt-and-re-follow cadence behind a running 
 `vault/research/npctrack/r1-control-agenttap.jsonl`, scored by the same tool. **P1′:** the
 control's same-instant p50 ≥ 40 u (the pinned runs read 46–68). **P2′:** the control's same-instant
 over-40 fraction ≥ 50 %. **P3′:** the control's cut fraction ≥ 20 % (pinned 25 %). A control that
-comes out at 12 u convicts the tape, not the fix.
+comes out at 12 u convicts the tape, not the fix. **RAN 10:06 — see CONTROL RESULT below.**
+
+---
+
+## CONTROL RESULT — RAN 2026-09-06 10:06, 77 s, `--no-npc-client-model`, with the tape. **P1′, P2′, P3′ all MET: the old arm reproduces the old drift on the instant metric, same route, same morning.** The scorer stands.
+
+Agent-driven (no aiming, the operator's "go"); tape `vault/research/npctrack/r1-control-agenttap.jsonl`
+(817 of 817), capture `authsrv-20260906T100642-c1` (header `NPC_CLIENT_MODEL: false`, no
+`npc_model` rows). Wire shape identical to the pinned runs: 12 opens, 39 re-paths, 12 halts, 0
+halts out of reach, 41 swings, nothing inside 0.4 s.
+
+| copy vs the client's sync copy | control (old arm, 10:06) | Q1 + F8 (09:43) | the three pinned runs |
+|---|---|---|---|
+| **at the halt's own instant, p50** | **54.8** | **11.8** | 59.3 / 45.7 / 68.0 |
+| p75 / p90 / max | 90.1 / 131.5 / 177.4 | 35.3 / 72.2 / 78.4 | — |
+| halts over 40 u | 7 of 12 (58 %) | 4 of 23 (17 %) | 26 of 40 |
+| halts landing on a walking client copy | 3 of 12 (25 %) | 0 of 23 | 10 of 40 |
+| drawn hostile → drawn player at the halt, p50 | 83.5 | 101.0 | 115–125 |
+
+**P1′ MET** (54.8 ≥ 40), **P2′ MET** (58 % ≥ 50 %), **P3′ MET** (25 % ≥ 20 %). The two arms differ by
+the thing under test and nothing else, and the control lands inside the pinned runs' band.
+
+**The registered +0.5 s metric read 21.6 u on this control** — it would have called the OLD arm
+"MET" on P1 as registered. So that metric is unreliable in both directions, not merely against
+the new arm: on the old arm a halt out of reach is followed by a fresh follow too (3 of 12 walking
+within 0.5 s here, 12 of 40 on the pinned runs), and the walk closes the gap the halt had opened.
+The instant metric is the instrument; the +0.5 s one is retired from the verdict lines and kept
+only as the record of what was registered.
+
+**One more positive control, free:** F4's model in the true frame reproduces this tape's client
+copy to 10.2 u at the halts (2 of 12 over 40 u) — a fourth tape, the same result.
+
+**Two things this control does not settle.** The drawn hostile parks closer to the drawn player on
+the old arm here (83.5 u against 101 on the model arm) — one run each, and the model arm's
+hostile keeps re-following a running player where the old arm's server stood and swung from an
+imaginary spot; which the operator prefers to look at is a question for their next session, not
+for a tape. And the mid-chase halt cadence (Q6) is the model arm's alone: 23 halts against 12.

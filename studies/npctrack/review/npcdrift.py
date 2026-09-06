@@ -4,6 +4,7 @@
     python studies/npctrack/review/npcdrift.py                      # the three pinned stairs tapes
     python studies/npctrack/review/npcdrift.py <agenttap.jsonl>     # score one run (RUN-NPCTRACK-R1)
     python studies/npctrack/review/npcdrift.py <agenttap.jsonl> <gamesrv.jsonl>
+    python studies/npctrack/review/npcdrift.py <agenttap.jsonl> --control   # the revert arm's inverted bars
 
 THE QUANTITY. At every 0x0028 halt the server sent agent 10, the halt's own label
 carries the server's copy of the body ("agent 10 halts at (x,y)"), and the agenttap
@@ -461,6 +462,8 @@ def pooled(results):
 
 
 def main(argv):
+    control = "--control" in argv
+    argv = [a for a in argv if a != "--control"]
     if len(argv) >= 2:
         tape = argv[1]
         head, rows = W.load(tape)
@@ -491,6 +494,18 @@ def main(argv):
         now = R["copy_vs_sync_now"]
         p50n = statistics.median(now)
         fracn = sum(1 for x in now if x > OVER) / float(len(now))
+        if control:
+            # THE CONTROL ARM (--no-npc-client-model) must come out RED on the
+            # instant metric, or the scorer -- not the fix -- is what the run
+            # convicted (RUN-R1.md, RE-REGISTERED).
+            print("  CONTROL ARM (--no-npc-client-model): the bars are inverted -- this arm must reproduce the old drift")
+            print("  P1' same-instant p50 %.1f u  -> %s (bar >= 40; the pinned runs 59.3 / 45.7 / 68.0)"
+                  % (p50n, "MET" if p50n >= 40.0 else "REFUTED -- the scorer is suspect"))
+            print("  P2' halts over %.0f u at that instant: %.0f%%  -> %s (bar >= 50%%; pinned 26 of 40)"
+                  % (OVER, 100 * fracn, "MET" if fracn >= 0.50 else "REFUTED -- the scorer is suspect"))
+            print("  P3' halts on a walking client copy: %.0f%%  -> %s (bar >= 20%%; pinned 25%%)"
+                  % (100 * cut, "MET" if cut >= 0.20 else "REFUTED"))
+            return 0
         print("  P1' copy-vs-client-sync at the halt's OWN instant p50 %.1f u  -> %s (bar <= 30; the pinned runs on this metric 59.3 / 45.7 / 68.0)"
               % (p50n, "MET" if p50n <= 30.0 else "REFUTED"))
         print("  P2' halts over %.0f u at that instant: %.0f%%  -> %s (bar <= 30%%; pinned 26 of 40)"
