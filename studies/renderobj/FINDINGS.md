@@ -241,6 +241,33 @@ reproduced.
 run that scores it is the stairs route again. Until then this is derived-and-tested, not
 confirmed.
 
+
+## GROUNDZ-F10 — R2: the correction works and its payload is wrong
+
+**GROUNDZ-R2, 2026-09-06** ([RUN-R2.md](RUN-R2.md)), a one-change A/B against R1.
+
+**CONFIRMED:** a zero-distance `0x0029` carries the plane and the client applies it **within
+90 ms** — plane 29 → 0 on the very next tape sample, with the ground z re-resolving 10.2 u in
+the same step. GROUNDZ-F9's mechanism is real.
+
+**REFUTED, and it is F9's own defect:** the grant is zero-distance in OUR model and **24.04 u
+from where the client draws the body**, because `_npc_plane_correct` sends `agent["pos"]`. The
+client teleported the body onto our point. **That is the harm class the movement arc exists to
+remove**, re-introduced on the NPC path at 24 u.
+
+**ZERO TRIALS on the sink:** the Hatcher parked where our mesh has no trapezoid, so its plane
+could not be adjudicated on any of 213 samples (R1 disagreed on 213 of 213).
+
+**A metric correction that outlives this run:** "the height gap to the player" measures the
+staircase's SLOPE, not the sink, whenever the bodies stand at different points — R2's gap is
+*larger* than R1's while the planes agree. The sink metric is **does the client's plane equal
+the plane our mesh assigns its own x/y**. R1's 32.5 u is "the run where the plane was
+demonstrably wrong", not a threshold.
+
+**`GROUNDZ-Q6`:** carry a point the client already believes — the last point we ORDERED — not
+our drifting copy. Not patched blind: the 24 u drift on a parked NPC may be the better defect,
+and it belongs to the NPC-tracking arc.
+
 ## Open
 
 - ~~`GROUNDZ-Q5` — ship the plane-change re-path~~ **SHIPPED, GROUNDZ-F9.** Unverified against a
