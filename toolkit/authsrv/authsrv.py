@@ -15891,7 +15891,7 @@ def _npc_plane(pm, x, y, carry, state=None):
         pos = state.get("pos")
         if (isinstance(rp, int) and rp >= 0 and pos is not None
                 and math.hypot(float(pos[0]) - x, float(pos[1]) - y)
-                <= follow_stop_radius()):
+                <= follow_stop_radius() + NPC_PLANE_REACH_SLACK):
             return rp
     return p
 
@@ -16083,6 +16083,16 @@ NPC_PLANE_REPATH = True   # False (--no-plane-repath): leave the stale word.
 # the carry, as before. The client's word, never a guess between our own
 # trapezoids. --no-npc-plane-reach reverts to holding the stale word.
 NPC_PLANE_REACH = True    # False (--no-npc-plane-reach): hold the carried word.
+# RUN-1zCE (2026-09-06, the same afternoon F11 was confirmed): the model parks
+# ON the disc -- follow_stop_radius() from the frame, by construction -- and
+# F11's reach test was `<= follow_stop_radius()`, so whether the fallback fired
+# at the terrace park was float noise: R3's park measured 79.96 u from the
+# report and fired, 1zCE's 80.02 u and did not, and the hostile sat 7.9 s on
+# plane 29 with its height cached exactly as before F11. The slack is the
+# swing's own deadband -- enemy_reach() is the disc plus one bounding radius --
+# so "parked in reach" means the same thing to the correction as to the swing
+# that fires beside it. 200 u away the carry still stands (test_agentlife).
+NPC_PLANE_REACH_SLACK = BOUNDING_RADIUS
 
 
 def _npc_plane_correct(send, conn_id, agent_id, agent, plane, now):

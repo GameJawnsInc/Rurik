@@ -73,7 +73,7 @@ from codec import Codec  # noqa: E402
 # known-bad control; and the chase section's wall pin split by arm, 1).
 # Floor from a real green run of 331. +1 at NPCTRACK-F8 (the hold rule
 # replaces the fresh-follow pin: three checks for two), green 333.
-LEDGER = checks.Ledger("agent lifetime", floor=323)
+LEDGER = checks.Ledger("agent lifetime", floor=325)
 
 
 def section_weapon_damage():
@@ -1123,6 +1123,28 @@ def section_plane_reach():
                   "200 u from the player the report says nothing about the "
                   "mover's ground: the carried word stands, as 42.5 wrote it",
                   f"{fol[2:4] if fol else fol}")
+        # ON THE DISC ITSELF (RUN-1zCE): the model parks at exactly
+        # follow_stop_radius() from the frame, and the reach test used to sit on
+        # that same number -- R3's park at 79.96 u fired, 1zCE's at 80.02 u did
+        # not, and the hostile spent 7.9 s on plane 29 with its height cached.
+        # The disc, and the swing's own deadband beyond it, must name the ground.
+        st = _fresh_follow((520.0, 950.0), (600.0, 950.0), player_plane=0,
+                           agent_plane=29)
+        _follow_run(st, pm, seconds=0.05)
+        LEDGER.ok(st["agents"][10]["plane"] == 0,
+                  "a mover parked EXACTLY on the disc (80.0 u from the report) "
+                  "on uncovered ground takes the reported plane -- the knife "
+                  "edge RUN-1zCE fell off", f"agent plane {st['agents'][10]['plane']}")
+        st = _fresh_follow((520.0, 950.0),
+                           (520.0 + authsrv.follow_stop_radius()
+                            + authsrv.NPC_PLANE_REACH_SLACK - 1.0, 950.0),
+                           player_plane=0, agent_plane=29)
+        _follow_run(st, pm, seconds=0.05)
+        LEDGER.ok(st["agents"][10]["plane"] == 0
+                  and authsrv.NPC_PLANE_REACH_SLACK == authsrv.BOUNDING_RADIUS,
+                  "one step short of the slack's end it still does, and the slack "
+                  "is the swing's own deadband (enemy_reach - the disc), not a "
+                  "number of its own", f"agent plane {st['agents'][10]['plane']}")
         # A SEAM IS NOT SILENCE: on named ground the mesh's own answer wins
         # even with the player in reach on another plane.
         st = _fresh_follow((520.0, 0.0), (580.0, 0.0), player_plane=0,

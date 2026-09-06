@@ -320,6 +320,16 @@ missing trapezoids themselves, which are the pathmap's ~~(the terrace is walkabl
 and absent in our decode of the same data — worth a look at what `from_chunk` drops there)~~
 **— struck by F12: the client's BODY never entered it either. Nothing is missing.**
 
+**RUN-1zCE (the same evening) found the reach test's knife edge.** The model parks ON the disc,
+exactly `follow_stop_radius()` from the frame, and this fallback's test was `<=
+follow_stop_radius()`: R3's park measured 79.96 u from the report and fired, RUN-1zCE run 1's
+80.02 u did not, and the Hatcher sat 7.9 s on plane 29 with its height cached as if F11 had
+never shipped (0 of 83 exposure samples). The reach now admits the swing's own deadband —
+`NPC_PLANE_REACH_SLACK = BOUNDING_RADIUS`, the 12 u by which `enemy_reach()` exceeds the disc —
+pinned in `test_agentlife` at exactly 80.0 u and one step short of the slack's end, the 200 u
+carry unchanged (floor 323 → 325). Run 2, registered before it ran: the mover's word turned 0 on
+the follow re-path half a second BEFORE the park, 82 of 82 samples, height live.
+
 ## GROUNDZ-F12 — Q7 CLOSED: nothing is missing from the mesh. The stairs are plane 29, the hole above them is a hole in the client's mesh too, and the two symptoms behind the question were a keyboard lead aimed INTO a wall (fixed, MOVECODE-1z-ce) and a hostile ordered straight THROUGH one (NPCTRACK-Q9)
 
 **Asked:** *"dig into Q7, why the stairs are missing from the mesh."* Ident `GROUNDZ-F12`. Desk

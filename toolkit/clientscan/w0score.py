@@ -151,6 +151,18 @@ TGT_SAME = 0.1
 # CONTAMINATED and no CONFIRMED verdict is printed. RUN-1zT reads 59.6%;
 # the baseline and the 08:46 mouse session read 0.0%; the double-driven
 # first attempt reads 3.7% (operator input kept re-seizing the body).
+#
+# A FALSE POSITIVE THIS DETECTOR CANNOT SEE (MOVECODE-1z-ce, RUN-1zCE): a
+# WALL-SLIDE grant is, by construction, the next vertex of the wall the body
+# is sliding along -- which is also the client's own mover's waypoint along
+# that wall (sec.1z-bd.2). So on a stair climb the body's target equals our
+# granted point on ~32% of moving samples (46 of 145, 47 of 148 on the two
+# 1zCE runs) while the fence is OPEN on every sample and the body slides at
+# its collision speed (206 u/s, 103 u per report) rather than the grant's
+# 288. That is the client walking its own wall, not our order. Before reading
+# this line as enslavement, check the fence word on the tape and the body's
+# speed against the grant's; a slide grant matched with the fence open is
+# the client agreeing with retail's rule, which is what it is for.
 ENSLAVED_FRAC = 0.25
 # Per leg: the leg is ENSLAVED above this fraction of its moving samples,
 # FREE at zero, MIXED between. RUN-1zT's Q/E/S legs read 100%, its opening

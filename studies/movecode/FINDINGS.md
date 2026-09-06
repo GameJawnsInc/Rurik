@@ -16715,3 +16715,29 @@ drawn body on the climb instead of 100–139, and the hostile's halts on the sta
 16 over 40 u. And not the whole of R3's red bar: the hostile still parks in whatever frame
 world-0 provides, and NPCTRACK-Q9 (the client walks a hostile's 0x002A dead straight) is the
 other half of what the owner saw.
+
+### 1z-ce.5 RUN-1zCE, the same evening, twice — P1 and P3 MET, P2 halved, P4 found F11's knife edge
+
+[RUN-1zCE.md](RUN-1zCE.md). R3's own script on the tree at `0d3f163`, R3 itself the control
+through one instrument (`review/slidescore.py`, world-0 through the client's accessor):
+
+| | R3 | run 1 | run 2 |
+|---|---|---|---|
+| climb grants wall-slide / zero | 0 / 11 | 12 / 0 | 12 / 0 |
+| world-0 vs body in the climb, p50 / p90 | 111 / 127 u | 51 / 94 | 47 / 95 |
+| ahead / behind | 0 / 58 | 23 / 40 | 27 / 38 |
+| hostile halts over 40 u | 6 of 16 | 1 of 16 | 0 of 16 |
+
+The body's climb is identical on all three (103 u per report, the terrace at 17.9 s, no
+re-pin). P2's registered bar (40 / 80) was not met and not refuted (> 80 refutes): the residual
+is a sawtooth — the sync copy walks the vertex lead at 288 u/s, the body slides at 206, world-0
+reaches the vertex first, parks, and the body passes it until the next report names the next
+vertex. Retail's rule plus the client's own speed; not tuned. Run 1 REFUTED P4: the Hatcher
+parked 80.02 u from the report where F11's reach test said `<= 80`, and sat 7.9 s on plane 29 —
+the model parks ON the disc, so the test sat on its own knife edge (R3's 79.96 u fired). The
+reach now admits the swing's deadband (`NPC_PLANE_REACH_SLACK = BOUNDING_RADIUS`), registered
+before run 2, which then read 82 of 82. Two traps re-met: the tape's raw `x, y` is m_point
+(sample-and-hold) and my first scorer read it as a half-second dead time
+([[movetap-point-column-trap]]); and `w0score`'s enslavement detector reads 32 % on a slide
+because the slide grant IS the client's own wall waypoint — fence open, body at 206 u/s, not
+enslaved (documented at the detector).
