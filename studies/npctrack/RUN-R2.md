@@ -77,7 +77,7 @@ inside the silence against the `0x003D`/`0x0047` report point that brackets it.
 
 ---
 
-## RESULT — RAN 2026-09-06 12:47, 76 s, agent-driven, main after 1z-cd. **P1, P2, P4 MET; P3 REFUTED (5 of 23, and the mechanism is new, F13); P5 met vacuously on the registered quantity and decisively on the one that discriminates.**
+## RESULT — RAN 2026-09-06 12:47, 76 s, agent-driven, main after 1z-cd. **P1, P2, P4 MET; P3 REFUTED as registered (5 of 23) by an instrument that over-reads on this arm — the hook's client-side count is 2 of 15 (F13, withdrawn); P5 met vacuously on the registered quantity and decisively on the one that discriminates.**
 
 Tape `vault/research/npctrack/r2-agenttap.jsonl` (675 of 675), capture `authsrv-20260906T124708-c1`
 (`NPC_CLIENT_MODEL`, `MODEL_LEG_BOUND`, `MODEL_PLANE_CLIP` all true). 23 halts, 38 follow orders,
@@ -96,14 +96,18 @@ keyboard arc's clip. Q1's number no longer stands on one sample. **P2 MET** (17 
 the wire shape is R1's to the message, nothing inside 0.4 s, four plane-word classes, 675 of
 675 `groundz.ok`.
 
-**P3 REFUTED — 5 of 23 halts landed on a walking client copy, and every one of the five is the
-same thing.** At the model's park instant the client's copy was parked too, within 0.6–6.4 u of
-the model's point and with velocity zero. Between that park and our halt 0.3–2.7 s later the
-client's copy **re-targeted itself and walked again** — a new `m_targetPoint` with no order from
-us (t = 13.37 → (10596, 8503) with our last order at 12.88 naming (10522, 8431)), 24–143 u of
-travel in the half second before the halt. Our `0x0028` then cut a walk the client had started on
-its own. That is F13, a fact about the client the arc had not measured, and it moves P3 from a
-model-fidelity metric to a question about what the client does between our orders.
+**P3 REFUTED as registered — 5 of 23 halts read as landing on a walking client copy — and the
+instrument is what failed, not the halt.** At the model's park instant the client's copy was parked
+too, within 0.6–6.4 u of the model's point. The "walk" the tape shows at the halt's stamp is the
+FRESH FOLLOW's leg: under F8 the fresh follow trails the halt by 50 ms, and the capture stamps a
+send up to 67 ms after the client has applied it, so the last sample before the halt's stamp
+already carries the next order (12.88–13.95 s: the halt is stamped 13.39, the fresh follow to
+(10596, 8503) is stamped 13.44, and the tape shows that leg baked at 13.37). The first write-up of
+this paragraph read it as the client re-targeting itself; that is F13, withdrawn the same afternoon
+by RUN-R3's hook, which is also the client-side instrument for P3: **our halts landed on a parked
+sync copy 13 of 15 times and cut a walk 2 of 15** in its window. On the old arm the next order
+came ≥ 0.5 s after a halt and the tape's column was fair; on this arm it is not, and the tool says
+so on the line.
 
 **P5 — met on the registered quantity, vacuously:** no follow order went out inside the silence
 on this run, and none did on R1 either (F8's hold suppressed them on both; the seven runaway

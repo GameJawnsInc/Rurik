@@ -391,46 +391,48 @@ and ≤ 30 u held-heading transients. Q2 stays open on the predictor only.
 instant (R1 11.8, the old arm 54.8), 4 of 23 over 40 u, the wire shape identical to R1's. During
 the silent leg at the staircase side the server's player copy now stops 98 u from the body
 instead of 604, and the hostile **swings four times** at a player standing beside it instead of
-holding out of reach for five seconds. One registered prediction is refuted, P3 — 5 of 23 halts
-landed on a walking client copy — and all five are F13.
+holding out of reach for five seconds. One registered prediction is refuted as written, P3 — 5 of
+23 halts on a walking client copy by the tape's instrument — and F13 (withdrawn) explains why that
+instrument over-reads on this arm; the hook's client-side count is 2 of 15.
 
-## NPCTRACK-F13 — the client's follow re-targets ITSELF, on its own clock, and §38.2 says it does not
+## NPCTRACK-F13 — WITHDRAWN the same afternoon: "the client's follow re-targets itself" was my join artifact, and RUN-R3's hook says so
 
-Read off three tapes by the Hatcher's sync `m_targetPoint`, which agenttap records: a target
-change that no server order to agent 10 within the previous 0.35 s explains.
+**What was claimed** (committed at `5c90065`, two hours before this): that the Hatcher's sync
+`m_targetPoint` changed 24 / 19 / 23 times over three tapes with no server order within 0.35 s,
+at a 0.56 s cadence, landing 144 u from our last ordered point — a client-side follow re-target,
+contested against ANIMREF-RE §38.2's *"no local chase"*.
 
-| tape | target changes | unexplained by any order | follow field at those instants |
-|---|---|---|---|
-| RUN-R2 | 37 | **24** | `1` (the player), every one |
-| RUN-R1 | 36 | **19** | `1` |
-| GROUNDZ-R2 | 41 | **23** | `1` |
+**What was wrong: the join window.** I searched for an explaining order only in the 0.35 s
+BEFORE each tape event. The capture stamps a send when the server's recorder writes the row,
+which on these three tapes is **−67 ms to +38 ms** (p10..p90, p50 −11 ms) around the sample in
+which the client already shows the order applied — the stamp can trail the client. With a
+symmetric ±0.2 s window the count is **0 / 0 / 0**. The "0.56 s cadence" was our own re-path
+interval, the "144 u from the last order" was the distance between consecutive re-path points at
+288 u/s, and the "0.5 s after our last order" was the next order, stamped a few tens of
+milliseconds after the tape showed it. [RUN-R2.md](RUN-R2.md)'s window at 12.88–13.95 s shows it
+line by line.
 
-On RUN-R2 the unexplained re-targets come a median **0.51 s after our last order** and **0.56 s
-apart** from each other, and the new target sits on the player's world-0 or ahead of it: 0.0 u at
-21.58 and 44.85 (the player standing), 2–8 u at 47.75–49.29, and while the player walks at 288
-u/s the new target is **144.0 u from our last ordered point** in eight cases (0.5 s of the player's
-speed), 158.4 u in four (0.55 s), 79–128 u where the player was at the stairs' 190/216 u/s. So
-the client keeps the follow's destination moving at the followed agent's velocity between our
-orders, re-baking about every half second. **OBSERVED on the tape**, three runs, 66 events.
+**What the hook says** ([RUN-R3.md](RUN-R3.md), the route under `movehook`, agent-driven): with
+the tape's own pointers naming the two objects (sync `0x27ADFD38`, async `0x27ADDAA0`), **every
+setter and bake on the sync copy returns to the `0x002A` wire handler — 26 of 26** — and the async
+copy's 41 setter calls return to `0x00604A48`, inside AgTrack: the handoff that drags the drawn
+body after the sync copy, plus three path-solver re-bakes. No non-wire caller touches the sync
+copy. **§38.2 stands, and the movement arc's decode was right where my tape read was wrong.**
 
-**This is CONTESTED against ANIMREF-RE §38.2's static read** — *"nothing reads `+0x98` to fetch
-the followed agent's current position … the client tracks a moving target only through the
-velocity extrapolation inside the reach test; the server's re-path is the contract"*. The tape
-says the target point itself advances, and the movement arc's own hook capture cannot arbitrate
-because the wall-press run had no hostile. [RUN-R3.md](RUN-R3.md) is that run with the hook on:
-its P1 is that the Hatcher's sync setter has a non-wire caller on the half-second cadence, and
-its refutation is every setter record returning to the wire handlers, which would mean the tape's
-join is wrong.
+**What survives, and it is P3's instrument that changes.** RUN-R2's five "halts on a walking
+copy" are this artifact in another dress: under F8 a fresh follow trails the halt by 50 ms, and
+the last tape sample before the halt's stamp already shows the fresh follow's leg. The client's
+own evidence is the hook's teleport census on the sync copy: **our halts landed on a parked body
+13 of 15 times and cut a walk 2 of 15** (the resolver's own disc parks are the other 13
+teleports, from `0x0060181C`, and one is the tick's arrival). So the tape's "walking at the halt"
+column is good to ±70 ms and no better, which is fine on the old arm (the next order came ≥ 0.5 s
+after a halt) and not fine on this one; `review/npcdrift.py` says so on the line it prints, and
+the hook is the instrument for P3 from here. Q7 is withdrawn.
 
-**What it changes here.** (1) P3's five cuts on R2 are our `0x0028` landing on a walk the client
-started by itself after both copies had parked; the halt is not a no-op in that case, it is a
-cut, and F3's "one quarter of halts" census on the old arm was reading the same thing. (2) Q6's
-mid-chase cadence has a client half: the client's own re-target every ~0.5 s and our re-path
-every 0.5 s interleave, aimed at two player positions ~100 u apart while walking. (3) The model
-of F4 has no local re-target and still scored 6.7–11.8 u at the halts, because at a park the
-two coincide; between parks it is missing a term the server could supply — the mirror carries the
-player's world-0 **velocity**, which is what the client extrapolates with. That is **NPCTRACK-Q7**,
-gated on R3 naming the caller.
+**The lesson is the note this repo already has** ([[feedback-validate-the-simulator-against-the-
+thing-itself]]): a claim about the client from a join of two clocks needs a symmetric window and
+the client's own instrument before it is a claim. This one was two hours old and cost one hooked
+run to retract, which is the cheapest version of the mistake.
 
 ## Open
 
@@ -512,10 +514,9 @@ gated on R3 naming the caller.
   to the client, noisier than retail, whose server player IS the frame and whose copy therefore
   never arrives behind a player running at its own speed. The lever is the frame (Q2), not the
   follow.
-- **`NPCTRACK-Q7` — the client's own follow re-target (F13).** What advances the hostile's sync
-  target between our orders, on what clock, and by which velocity — R3's hook names the caller;
-  the tape says ~0.5 s and the followed agent's world-0 velocity. Once known, the F4 model gains
-  a term the server already holds (the mirror's velocity), and P3's cuts have a rule.
+- ~~**`NPCTRACK-Q7`**~~ **withdrawn with F13**: the sync copy has no local re-target; its
+  setter is wire-only (R3's hook, 26 of 26). The mirror's velocity term is not needed for a
+  mechanism that does not exist.
 - **`NPCTRACK-Q5` — the operator's picture is still world-0's.** The drawn hostile parks 80 u from
   the player's WORLD-0 copy, and that copy is p50 34 / 23 / 40 u from the drawn player while
   moving on these runs (p90 284 / 91 / 247). Q1 makes the server agree with the client about
@@ -532,8 +533,9 @@ gated on R3 naming the caller.
 - **[RUN-R2.md](RUN-R2.md)** — ran 12:47 (F12): **6.7 u at the halt, Q1 twice**; P3 refuted (5 of
   23, all F13's local re-target); 1z-cc reaches this arc's wire — the report track's drift at the
   wall 604 → 98 u and the hostile swings four times at a standing player instead of holding.
-- **[RUN-R3.md](RUN-R3.md)** — registered, running: the same route under `movehook`, to name the
-  caller of F13's re-target (P1: a non-wire return address on the Hatcher's sync setter, ≥ 10).
+- **[RUN-R3.md](RUN-R3.md)** — ran 12:56 under `movehook`: **P1 REFUTED, F13 withdrawn** — the
+  sync copy's setter is wire-only (26 of 26); our halts hit a parked copy 13 of 15 times; the tape's
+  Q1 number a third time, 15.7 u at the halt (6.7, 11.8 before; old arm 46–68).
 
 ## Method notes
 

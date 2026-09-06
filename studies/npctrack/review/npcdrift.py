@@ -503,6 +503,7 @@ def main(argv):
             print("     CONFOUND: the client copy was walking within 0.5 s of %d of %d halts -- a halt followed by a fresh follow; that metric reads the walk, not the drift (F9)" % (walks, len(v)))
         print("  P3 client copy still walking when the halt landed: %.0f%%  -> %s (bar <= 15%%; pinned 25%%)"
               % (100 * cut, "MET" if cut <= 0.15 else "REFUTED"))
+        print("     CAVEAT (F13, withdrawn): this column reads the last tape sample before the halt's capture STAMP, which can trail the client by up to 67 ms; under the client model a fresh follow trails the halt by 50 ms, so a parked copy can read as walking. The client-side instrument is movehook's teleport census on the sync copy (RUN-R3: 13 of 15 halts on a parked copy).")
         now = R["copy_vs_sync_now"]
         p50n = statistics.median(now)
         fracn = sum(1 for x in now if x > OVER) / float(len(now))
