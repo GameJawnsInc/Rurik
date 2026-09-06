@@ -71,7 +71,8 @@ from codec import Codec  # noqa: E402
 # +21 at NPCTRACK-Q1 (section_client_model, 20: the hostile's copy is the
 # client's own dead-reckoner and disc, with the corridor integrator as the
 # known-bad control; and the chase section's wall pin split by arm, 1).
-# Floor from a real green run of 331.
+# Floor from a real green run of 331. +1 at NPCTRACK-F8 (the hold rule
+# replaces the fresh-follow pin: three checks for two), green 333.
 LEDGER = checks.Ledger("agent lifetime", floor=315)
 
 
@@ -1368,9 +1369,13 @@ def section_client_model():
                   "copy is the frame -- the best the server has (p50 17.5 u "
                   "at the halts against the true world-0's 11.6)")
 
-        # 7. PARKED OUT OF REACH is not a stuck state: the halt goes out on
-        #    the clock and a FRESH follow opens on the next tick (retail's
-        #    chase 3), never a re-path per tick.
+        # 7. PARKED OUT OF REACH OF THE SERVER'S PLAYER BUT AT THE DISC OF THE
+        #    CLIENT'S FRAME: the halt goes out on the clock, and then the
+        #    follow WAITS for the frame to move. RUN-NPCTRACK-R1 measured the
+        #    alternative: a fresh follow every 0.56 s that the model (and the
+        #    client) parked at once, 37 halts in 77 s against 13 on every
+        #    pinned run, seven of them at one point while the frame stood
+        #    still. When the client's belief catches up, the follow opens.
         st = _fresh_follow((900.0, 0.0), (0.0, 0.0), player_plane=0)
         st["last_report"] = (200.0, 0.0, True, 0.0)     # world-0 200 u ahead
         _tick_parked(st, pm, now=0.0)
@@ -1385,13 +1390,24 @@ def section_client_model():
         st["agents"][10]["follow"]["sent_at"] -= 0.6
         a = _tick_parked(st, pm, now=10.05)
         b = _tick_parked(st, pm, now=10.10)
+        c = _tick_parked(st, pm, now=10.60)
         LEDGER.ok([op for op, _v, _l in a] == [HALT]
-                  and [op for op, _v, _l in b] == [SPEED, FOLLOW],
-                  "it halts on the clock where it stands, and the next tick "
-                  "opens a FRESH follow rather than resuming a walk the "
-                  "client's copy cannot make",
-                  f"{[hex(op) for op, _v, _l in a]} then "
-                  f"{[hex(op) for op, _v, _l in b]}")
+                  and not b and not c
+                  and st["agents"][10]["follow"] is None,
+                  "it halts on the clock where it stands, and then HOLDS: no "
+                  "fresh follow while the copy is inside reach of the client's "
+                  "frame (F8 -- the follow would only park again)",
+                  f"{[hex(op) for op, _v, _l in a]} then {b} then {c}")
+        LEDGER.ok(not _swings(st),
+                  "and it does not swing from there either -- the swing reads "
+                  "the server's own player, 280 u away",
+                  "faithful on both counts: the client draws it parked")
+        st["last_report"] = (0.0, 0.0, True, 10.6)      # the belief catches up
+        d = _tick_parked(st, pm, now=10.65)
+        LEDGER.ok([op for op, _v, _l in d] == [SPEED, FOLLOW],
+                  "and the moment the client's frame moves out of reach the "
+                  "follow opens -- a fresh one, not a resumed walk",
+                  f"{[hex(op) for op, _v, _l in d]}")
     finally:
         authsrv.NPC_CLIENT_MODEL = saved
     LEDGER.ok(authsrv.NPC_CLIENT_MODEL is True,

@@ -62,7 +62,9 @@ exactly as `1zCA` / `GROUNDZ-R1` / `GROUNDZ-R2` did. Terminal 1:
 python toolkit/harness/session.py --exe vault/run/2026-07-29_221c13772c7a/Gw.exe --enemy --walk "wait:3 W:5 shot:1 S:4 shot:1 W:5 Q:3 E:3 S:4 W:4" --hold 20 --shots 2.0 --game-args "--map 146 --explorable --no-enemy-skills --enemy-hit 0.02 --skills 0,0,0,0,0,0,0,0"
 ```
 
-Terminal 2, the tape, started **immediately** — not after the client is up:
+Terminal 2, the tape, started **immediately** — not after the client is up. **WITHOUT THIS FILE THE
+RUN SCORES NOTHING: P1–P3 read the client's copies, which only the tape carries.** The first
+attempt (below) ran without it.
 
 ```powershell
 python toolkit/clientscan/agenttap.py --agents 1,10 --seconds 180 --wait 300 --out vault/research/npctrack/r1-agenttap.jsonl
@@ -83,3 +85,55 @@ for the run and the three verdict lines for P1–P3. P4 is read off the capture'
 the plane words as RUN-1zCA's scoring did; P5 is the same tool on the control tape.
 
 **Score the tape before the screenshots.**
+
+---
+
+## RESULT — RAN 2026-09-06 09:23, 77 s, default arm, **WITHOUT THE TAPE.** P1–P3 ZERO TRIALS; **P4 REFUTED on the wire, and the cause is fixed (NPCTRACK-F8)**; P5 not run.
+
+**The tape was never written.** `vault/research/npctrack/` does not exist, and `agenttap.py` creates
+that directory before it writes a byte — so the tape command did not run to the point of writing.
+Everything P1–P3 need (the client's sync copy at each halt) is on the tape and nowhere else. Per §2
+this is a targeting failure: **zero trials on Q1's central claim, in either direction.**
+
+**What the capture alone could say — P4, and it went RED.**
+
+| | this run | the three pinned runs |
+|---|---|---|
+| follow opens / re-paths / halts | **37 / 14 / 37** | 13 / 37 / 13 · 14 / 33 / 14 · 13 / 39 / 13 |
+| halts with the copy > 92 u from the server's player | **27 of 37** | 0 of 40 |
+| smallest gap between two follow orders | 0.508 s | — |
+| swings by agent 10 | 41 | 42 · 45 · 43 |
+| plane-word classes on the follows | (0,0) 16, (29,29) 18, (29,0) 13, (0,29) 4 | the same four |
+
+Not a per-tick storm (no two orders inside 0.4 s) but a **half-second loop**: halt, fresh follow
+0.05 s later, park, halt. Seven halts at (10081, 8565) between t=26.46 and 29.81 while the label
+said the player was 237 → 394 → 537 u away.
+
+**The mechanism, read off the capture.** At t=25.34 the client sent one `0x003D` heading from
+(10012, 8524); the server answered a `0x0025` and a lead grant to (10120, 8524) and armed a
+keyboard leg. **Then nothing for five seconds** — and the `0x0047` at 30.32 reports (10012, 8524)
+again: the body never moved (the route's W leg into the staircase side). The server's report
+track dead-reckoned `state["pos"]` to (10616, 8524), 604 u from the body; the client's world-0
+copy sat at our lead point, 56 u from the hostile's copy. **The model parked at once in that
+frame, exactly as the client's resolver would** (inside 80 u, inside the cone). The follow-open
+test, unchanged from the old integrator, then read the report track — 537 u away — and opened a
+fresh follow, which parked at once again. The pinned runs had the same silent stretch (RUN-R2's
+T1 = 317 u at its t=26.87); the old integrator hid it by walking its copy to 80 u from the
+fictional player and swinging from there.
+
+**The fix — NPCTRACK-F8, shipped 2026-09-06.** The open rule runs in both frames: a copy already
+inside the swing reach of where the CLIENT believes the player stands, and inside the ±60° cone of
+the leg it would be ordered, is not re-followed until that belief moves; it does not swing either,
+because the swing reads the server's own player. During the mismatch it stands where the client
+draws it. `test_agentlife` `section_client_model` pins the hold and the release (three checks for
+the old two); green 333. The model now also records every disc park and every hold into the
+capture (`npc_model` rows with the frame it used), so the next run explains a park without a tape.
+
+**P5 was not run** (no control session).
+
+## RE-RUN — the same sheet, the tape mandatory
+
+§4's two commands, unchanged; the server build now carries F8. Score with §5. The registered
+predictions stand as written, plus one from this run: **P4b — halts with the copy > 92 u from the
+server's player ≤ 5 of ~13**, against this run's 27 of 37 (the pinned runs' 0 of 40 is the old
+integrator's construction, not a bar).

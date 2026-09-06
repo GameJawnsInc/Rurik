@@ -166,8 +166,9 @@ p90 58–78. That residual is the mirror's, not this arc's — **NPCTRACK-Q2**.
 - **Arrival is the model parking** — disc, point or halt. The `0x0028` still waits for the
   half-second clock (§40.9), so it lands on a body the client has already stopped, which is
   retail's shape (§40.2: p50 0.496 s after the last follow, a no-op on a parked body). A copy
-  parked OUT of reach halts on the clock and gets a fresh follow on the next tick — retail's
-  chase 3 (*"a halt, then a fresh follow 0.23 s later"*), never a re-path per tick.
+  parked out of reach of the server's player halts on the clock; whether a fresh follow then
+  opens is F8's rule, below — the first cut opened one on the next tick and RUN-R1's wire
+  showed why that is wrong.
 - **Nothing changes on the wire.** Same follows, same re-paths, same halts. What changes is where
   the server believes the hostile stands.
 - **The corridor router (1z-by) now exists only on the revert arm.** The client's sync copy
@@ -183,7 +184,38 @@ p90 58–78. That residual is the mirror's, not this arc's — **NPCTRACK-Q2**.
 
 **Desk prediction for the run:** copy-vs-client-sync at the halts p50 ≈ 17.5 u (F5's hybrid)
 against the measured 53.8, over-40 halts ≈ 9 / 40 against 26 / 40. `RUN-NPCTRACK-R1` is
-registered on those numbers; until it runs, Q1 is derived and desk-validated, not confirmed.
+registered on those numbers; until it runs WITH ITS TAPE, Q1 is derived and desk-validated, not
+confirmed.
+
+## NPCTRACK-F8 — RUN-R1's wire: the open rule must run in the client's frame too
+
+RUN-R1 ran on 2026-09-06 at 09:23 **without its tape** ([RUN-R1.md](RUN-R1.md) RESULT), so P1–P3
+have zero trials. The capture alone caught a regression: **37 halts and 37 fresh follows in 77 s
+against 13 on every pinned run, 27 of the 37 halts with the copy more than 92 u from the server's
+player against 0 of 40 before**, and seven halts at one point in 3.4 s.
+
+**The mechanism is a silent keyboard leg.** At t=25.34 the client sent one heading; the server
+answered with a lead grant 108 u ahead and armed its keyboard leg; then no report for five
+seconds, and the stop that ended it reported the same point — the body never moved (the route's
+W leg into the staircase side). The server's report track dead-reckoned `state["pos"]` 604 u
+ahead of the body; the client's world-0 copy sat at our lead point, 56 u from the hostile's copy.
+**The model parked at once in that frame, as the client's resolver would** (inside 80 u, inside
+the cone) — faithful. The follow-open test, unchanged from the old integrator, then read the
+report track 537 u away and opened a fresh follow, which parked at once again, every half second.
+The pinned runs had the same silent stretch (RUN-R2's T1 = 317 u at its t=26.87); the old
+integrator hid it by walking its copy to 80 u from the fictional player and swinging from there.
+
+**The rule, shipped the same day:** a copy already inside the swing reach of the CLIENT's frame
+AND inside the ±60° cone of the leg it would be ordered — the exact question `_npc_disc_hit_ms`
+asks at a leg's first instant — is **not re-followed until that belief moves**, and it does not
+swing either, because the swing reads the server's own player. During the mismatch the hostile
+stands where the client draws it, which is the honest picture. Retail never meets this case:
+its server's player copy IS the frame. Ours has two, and this is where they disagree
+([NPCTRACK-Q5](#open)). A frame point BEHIND the copy does not hold it, for the same reason it
+does not park it (the cone) — the first draft of the rule forgot the cone and the test's own cone
+check caught it. The model now records every disc park (`npc_model act=disc`, with the frame it
+used) and every hold (`act=hold`) into the capture, so a park can be explained without a tape.
+`test_agentlife` `section_client_model` pins the hold, the no-swing, and the release; green 333.
 
 ## Open
 
@@ -211,8 +243,9 @@ registered on those numbers; until it runs, Q1 is derived and desk-validated, no
 
 ## Runs
 
-- **[RUN-R1.md](RUN-R1.md)** — registered, not run. The stairs route a fourth time, scoring Q1
-  against F1's 53.8 u with `--no-npc-client-model` as the control.
+- **[RUN-R1.md](RUN-R1.md)** — ran once WITHOUT its tape (P1–P3 zero trials; the wire found
+  F8). **Re-run pending, tape mandatory**: the stairs route, scoring Q1 against F1's 53.8 u with
+  `--no-npc-client-model` as the control, plus P4b (halts out of reach ≤ 5) from the first attempt.
 
 ## Method notes
 

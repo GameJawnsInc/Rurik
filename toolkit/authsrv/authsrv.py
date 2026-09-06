@@ -15987,11 +15987,25 @@ def _npc_plane_correct(send, conn_id, agent_id, agent, plane, now):
 # halt on the same clock. The halt is keyed on the MODEL parking (disc, point
 # or halt) rather than on a corridor walk reaching 80 u, so it lands on a body
 # the client has already stopped -- retail's shape (ANIMREF-RE 40.2: p50 0.496
-# s after the last follow, a no-op on a parked body). A copy parked OUT of
-# reach halts on the clock too and a fresh follow opens on the next tick, which
-# is retail's chase 3 (halt, then a fresh follow 0.23 s later). What changes is
-# where the server believes the hostile STANDS, which every range check, the
-# leash, the plane word and GROUNDZ-F9's correction payload read.
+# s after the last follow, a no-op on a parked body). What changes is where the
+# server believes the hostile STANDS, which every range check, the leash, the
+# plane word and GROUNDZ-F9's correction payload read.
+#
+# THE OPEN RULE RUNS IN BOTH FRAMES (NPCTRACK-F8, RUN-R1's wire, 2026-09-06).
+# The first cut re-opened a follow whenever the copy stood out of reach of
+# state["pos"], as before. RUN-R1 showed the cost: during a silent keyboard
+# leg (no report for 4.4 s, so no lead grant, so the client's world-0 stayed
+# at its last stop point while the report track dead-reckoned 600 u the other
+# way) the copy parked at the disc of the STALE frame, the halt fired, the
+# server saw the report track 537 u away and opened a fresh follow, which the
+# model -- and the client -- parked at once in the same frame. Seven halts at
+# one point in 3.4 s; 37 halts and 37 opens in 77 s against 13 on every
+# pinned run. So a copy already inside reach of where the CLIENT believes the
+# player stands is NOT re-followed until that belief moves: the follow would
+# only park again. It still does not swing -- the swing reads the server's
+# own player -- so during the mismatch it stands where the client draws it,
+# which is the honest picture. Retail never meets this because its server's
+# player copy IS the frame; ours has two, and this is where they disagree.
 #
 # --no-npc-client-model reverts to the corridor integrator -- the known-bad
 # arm and RUN-NPCTRACK-R1's control.
@@ -16141,7 +16155,27 @@ def _npc_disc_hit_ms(sa, fx, fy, radius, t0_ms, t1_ms):
     return hit, ph
 
 
-def _npc_model_advance(state, agent, now, elapsed=0.0):
+def _npc_frame_reach(state, agent, now, player):
+    """Would a follow toward `player` park AT ONCE in the client's frame? The
+    same test _npc_disc_hit_ms runs at a leg's first instant: the frame point
+    (where the client believes the player stands, F5) inside the swing reach
+    of the copy AND inside the +-60 degree cone of the leg about to be ordered.
+    A frame point BEHIND the copy does not park it, so it does not hold it.
+    -> (would_park, frame, dist)."""
+    fx, fy = _npc_frame(state, now)
+    ax, ay = agent["pos"]
+    dx, dy = fx - ax, fy - ay
+    d = math.hypot(dx, dy)
+    if d > enemy_reach():
+        return False, (fx, fy), d
+    vx, vy = player[0] - ax, player[1] - ay
+    v = math.hypot(vx, vy)
+    if d <= 1e-9 or v <= 1e-9:
+        return True, (fx, fy), d
+    return (vx * dx + vy * dy) / (v * d) >= NPC_DISC_COS_CONE, (fx, fy), d
+
+
+def _npc_model_advance(state, agent, now, elapsed=0.0, rec=None, agent_id=None):
     """Advance the model by `elapsed` seconds, applying the resolver's
     stop-at-reach on the way (0x006020B0: velocity 0, targets +INF, follow
     cleared) and the leg's own arrival. Writes agent["pos"]. Returns True when
@@ -16161,6 +16195,14 @@ def _npc_model_advance(state, agent, now, elapsed=0.0):
             sa.set_position(p[0], p[1], sa.plane if sa.plane is not None
                             else 0, hit_ms)
             agent["cmodel_moving"] = False
+            if rec is not None:
+                # WHICH frame parked it, so a capture explains a park
+                # without a tape (RUN-R1 could not).
+                rec.event("npc_model", agent=agent_id, act="disc",
+                          at=[round(p[0], 1), round(p[1], 1)],
+                          frame=[round(fx, 1), round(fy, 1)],
+                          srv=[round(state.get("pos", (0.0, 0.0))[0], 1),
+                               round(state.get("pos", (0.0, 0.0))[1], 1)])
     if sa.consume_arrival(ms):
         agent["cmodel_moving"] = False
     _npc_model_write(agent, sa, ms)
@@ -16261,6 +16303,24 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
             _npc_plane_correct(_send, conn_id, agent_id, agent, plane, now)
             agent["moved_at"] = now
             return
+        if NPC_CLIENT_MODEL:
+            # NPCTRACK-F8: out of reach of the server's player, but inside
+            # reach of where the CLIENT believes the player stands -- a fresh
+            # follow would park at once in that frame (RUN-R1: 37 halts in
+            # 77 s). Hold until the frame moves; no swing either, because the
+            # swing reads state["pos"]. Recorded once per hold, not per tick.
+            in_reach, frame, dframe = _npc_frame_reach(state, agent, now,
+                                                       (px, py))
+            if in_reach:
+                if not agent.get("cmodel_hold") and rec is not None:
+                    rec.event("npc_model", agent=agent_id, act="hold",
+                              frame=[round(frame[0], 1), round(frame[1], 1)],
+                              dist_frame=round(dframe, 1),
+                              dist_srv=round(dist, 1))
+                agent["cmodel_hold"] = True
+                agent["moved_at"] = now
+                return
+            agent["cmodel_hold"] = False
         if not agent.get("moving"):
             # The rate, once per walk. See the docstring: ours, kept.
             agent["moving"] = True
@@ -16333,7 +16393,7 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
         # straight (the drawn body paths; the two agree to <= 12 u at 38 of
         # 40 measured halts). The plane word is still resolved at the copy's
         # point (1z-bz) and the halt still waits for the clock (40.9).
-        parked = _npc_model_advance(state, agent, now, elapsed)
+        parked = _npc_model_advance(state, agent, now, elapsed, rec, agent_id)
         ax, ay = agent["pos"]
         agent["plane"] = _npc_plane(pm, ax, ay, plane)
         dist = math.hypot(px - ax, py - ay)
