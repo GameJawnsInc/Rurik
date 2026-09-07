@@ -433,3 +433,15 @@ npctrack's Q3 closure and RUN-FEEL (the wall).
 three refutable predictions a live reader must satisfy are in `GROUNDZ-F3`/`F5`: `+0x8C` must
 bit-equal `+0x30` immediately after a store; `+0x8C` must equal `model+0x18` for the same agent;
 and `+0x8C` must vary on a slope and hold constant on flat ground.
+
+
+## GROUNDZ-F13 — Q5's correction from the hold branch (RUN-1zCG, 2026-09-07)
+
+The owner: *"the Hatcher terrain walks for about a second entering the stairs, more from the
+bottom."* The tape: five entries from the foot with the client plane word **0 on the stairs'
+trapezoids for 0.4–1.7 s**. At 98.3 s the copy parked in the CLIENT's frame (NPCTRACK-F8's hold:
+out of reach of the server's player, in reach of the frame) and sat 1.0 s with the plane 0 it
+climbed in on — Q5's zero-distance `0x0029` ran only in the in-reach-of-the-server branch, and
+the hold is the branch a parked hostile actually sits in while the player walks. Same send, same
+rate floor, from the hold too (`test_agentlife` `section_hold_plane`). The remaining 0.5 s is the
+drawn body taking the plane one order after the sync copy — the client's own handoff.

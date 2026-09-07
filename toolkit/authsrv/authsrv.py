@@ -16248,6 +16248,7 @@ FOLLOW_ROUTE_RETRY = 0.5      # s. At most one A* per agent per this, ours.
 # leaves when the copy arrives at it.
 NPC_FOLLOW_CORRIDOR = True    # False (--no-npc-corridor): a bare 0x002A across any wall.
 NPC_LEG_DONE = 4.0            # u. The copy stands on the leg's end: the next leg, now.
+NPC_LEG_ORIGIN_STEP = 16.0    # u. An off-mesh copy is stepped onto the mesh before routing.
 
 
 def _follow_leg(pm, ax, ay, px, py, plane, dest_plane):
@@ -16259,12 +16260,33 @@ def _follow_leg(pm, ax, ay, px, py, plane, dest_plane):
     plane the corridor names for it, and how many vertices remain after it."""
     if not (NPC_FOLLOW_CORRIDOR and pm is not None and hasattr(pm, "route")):
         return None
+    # RUN-1zCG (2026-09-07, the owner: "wall clipping near the bottom and top of
+    # the stairs"): the copy stood 1.5-11 u off our mesh -- the seam at the
+    # stairs' foot, the hole's edge -- three times, route() refused the origin,
+    # and the follow fell back to the bare 0x002A the client walks straight:
+    # 31-65 u through the stairs' flank and the hole. The copy is the client's
+    # own (Q1) and the client walks from wherever it is, so the corridor is
+    # solved from the nearest point our mesh holds, as door B (1z-cg) does.
+    if (not pm.walkable(ax, ay)) and hasattr(pm, "nearest_walkable"):
+        nw = pm.nearest_walkable(ax, ay, NPC_LEG_ORIGIN_STEP)
+        if nw is not None:
+            ax, ay = float(nw[0]), float(nw[1])
+    # And the GOAL: the player's report sits in the edge class on a slide (1z-bd.2),
+    # which route() refuses as a goal exactly as it refuses an origin (135 s on the
+    # same tape: the report on the hole's east edge, the route None, the bare
+    # follow through the hole). The leg's own destination stays the report; only
+    # the corridor is solved to the mesh point beside it.
+    gx, gy = px, py
+    if (not pm.walkable(gx, gy)) and hasattr(pm, "nearest_walkable"):
+        nw = pm.nearest_walkable(gx, gy, NPC_LEG_ORIGIN_STEP)
+        if nw is not None:
+            gx, gy = float(nw[0]), float(nw[1])
     try:
-        r = pm.route(ax, ay, px, py, start_plane=plane, goal_plane=dest_plane,
+        r = pm.route(ax, ay, gx, gy, start_plane=plane, goal_plane=dest_plane,
                      with_planes=True)
     except TypeError:                                  # a stub without kwargs
         try:
-            r = pm.route(ax, ay, px, py)
+            r = pm.route(ax, ay, gx, gy)
         except Exception:
             r = None
     except Exception:                                  # a mesh gap is not a crash
@@ -16916,6 +16938,15 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
                               dist_frame=round(dframe, 1),
                               dist_srv=round(dist, 1))
                 agent["cmodel_hold"] = True
+                # RUN-1zCG (2026-09-07, the owner: "the Hatcher terrain walks
+                # for a second entering the stairs"): a copy parked in the
+                # CLIENT's frame at the stairs' foot sat here with the plane
+                # word 0 it climbed in on for 1.0 s (tape 98.3-99.3) -- Q5's
+                # correction ran only in the in-reach-of-the-server branch
+                # above, and the hold is the branch a parked hostile actually
+                # sits in while the player walks (F8). Same send, same rate
+                # floor, this branch too.
+                _npc_plane_correct(_send, conn_id, agent_id, agent, plane, now)
                 agent["moved_at"] = now
                 return
             agent["cmodel_hold"] = False

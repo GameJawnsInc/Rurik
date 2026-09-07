@@ -16879,3 +16879,51 @@ already off, revert, no route, header): +14, floor 162 → 176.
 snaps on the scorecard, at least two door-tagged leads, the player's drawn body on the mesh.
 `sessionscore.py` is the instrument from now on: run it on every session before believing
 "felt good".
+
+## 1z-ch. THE ROUTER'S CORNER DETOURS — three defects in one pass, found on the owner's RUN-1zCG: the corner pull did not converge, a portal crossing was held at the overlap's centre, and a pulled path that grazed a corner was thrown away for the raw midpoint corridor. Five corridors at 3–7× the straight distance became 1.01–1.85×
+
+**What the owner said:** *"weird chase behaviour around corners — he'll walk the opposite direction
+first, then path around, instead of wall-hugging."* And it was not only the Hatcher: their own click
+at 112 s was routed **700 u east** before turning west, world-0 ran that leg, the separation hit
+300 u and the client's gate 1 snapped the body 325 u ("warping near the top").
+
+**Measured.** Five corridors from the session's `FOLLOW … leg:` sends and the click, re-solved on
+the same mesh: 778 u for 256 straight (3.0×), 692/210 (3.3×), 1,737/250 (6.9×), 1,592/260 (6.1×),
+1,881/256 (7.3×); the first vertex 200–900 u the wrong way. 6 of 23 corridor legs on the session
+pointed more than 90° off the player's bearing. Traced with the pull instrumented:
+
+1. **Four rounds do not converge.** `_pull_corners` is Gauss-Seidel from the shared-edge
+   MIDPOINTS; at the stairs' foot three crossings started at x = 9215 / 9168 / 9328 with the taut
+   line at ~10260, and after `CORNER_PULL_ROUNDS = 4` they stood at 9891 / 9460 / 9488 — each
+   round moves a crossing only as far as its still-wrong neighbours allow. The string pull then
+   kept one of them, and the corridor went 900 u west. **Fix:** the crossings are SEEDED on the
+   straight line from the origin to the goal (clamped into their spans) and the pass runs to
+   `CORNER_PULL_EPS`, capped at 64 rounds; the seed alone converges in a round or two.
+2. **A portal crossing was held fixed at the overlap's centre.** `_shared_edge` answers
+   `_overlap_point` — the centre of the 2-D region two portal-linked trapezoids share — and the
+   pull held it (a "crossing with no interval"). At 52.7 s the Hatcher stood at (11164, 9061), on
+   both the stairs' top and the terrace, and was sent to the region's centre **(10993, 9268), 270 u
+   north-west**, before coming back; RUN-Q9's own leg round the hole was this same point. **Fix:**
+   `_overlap_rows` samples the region (nine rows of y with the x-interval inside both), and the
+   pull slides the crossing to the row-and-x nearest the taut line, the same clamped minimiser an
+   edge uses. 52.7 s: 692 → 389 u; the Q9 leg becomes the hole's corner (11272, 9151).
+3. **A pulled path whose shortcut grazed a corner was discarded whole.** At 19.6 s the pull gave
+   a legal 284 u path; the string pull's 16 u sightline then cut a corner (the hole's north-west
+   vertex) that `route()`'s 2 u gate refused, and the candidate was dropped for the raw midpoint
+   corridor at 778 u. **Fix:** the pulled path WITHOUT the shortcut is a candidate, gated only
+   when the shortened one failed and only if it is shorter than the midpoint answer — the
+   chase-band latency bar (50 ms) is why it is lazy: gated unconditionally it put the max at 84 ms;
+   lazy, 35 ms (plane-blind 26), p50 1.0 ms.
+
+**After.** 284/256 (1.11×), 389/210 (1.85×), 255/250 (1.02×), 262/260 (1.01×), 319/256 (1.25×);
+the click 1.15×; the session's 23 legs re-solved: backwards 6 → 3, mean 1.05×; RUN-Q9's 2 legs
+unchanged in direction. `test_pathmap` §13's monotonicity control holds (0 of 119 pulled paths
+longer) and §14's tick bar passes; `test_router` 126. RECONSTRUCTION on the client until the
+owner's next session: the prediction is a Hatcher that comes round a corner along the wall, and
+no click that sets off the wrong way.
+
+**Two smaller doors from the same tape**, both in the follow: the corridor is solved from the
+nearest mesh point when the copy or the player's report stands in a seam (`NPC_LEG_ORIGIN_STEP`,
+16 u; three bare follows through the stairs' flank and the hole, 31–65 u off-mesh, came from
+`route()` refusing an origin 1.5–11 u off), and GROUNDZ-Q5's plane correction fires from F8's hold
+branch (the foot's 1.0 s of plane 0). [RUN-1zCG.md](RUN-1zCG.md) carries the session.

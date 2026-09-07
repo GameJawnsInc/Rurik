@@ -73,7 +73,7 @@ from codec import Codec  # noqa: E402
 # known-bad control; and the chase section's wall pin split by arm, 1).
 # Floor from a real green run of 331. +1 at NPCTRACK-F8 (the hold rule
 # replaces the fresh-follow pin: three checks for two), green 333.
-LEDGER = checks.Ledger("agent lifetime", floor=344)
+LEDGER = checks.Ledger("agent lifetime", floor=348)
 
 
 def section_weapon_damage():
@@ -533,6 +533,7 @@ def main():
     section_client_model()
     section_corridor_wire()
     section_enemy_count()
+    section_hold_plane()
     section_facing()
     section_enemy_skill()
     section_constants()
@@ -3950,10 +3951,20 @@ class _WallMesh:
             return (x0, y0)
         return (x1, y1)
 
+    def walkable(self, x, y):
+        return not (x < -100.0 - 1e-9 and y > -150.0 and x > -100.0 - 12.0)   # a 12 u seam west of the wall
+
+    def nearest_walkable(self, x, y, r):
+        if self.walkable(x, y):
+            return (x, y)
+        return (-100.0, y) if r >= 12.0 else None
+
     def route(self, x0, y0, x1, y1, **kw):
         self.routes += 1
         if self.raise_:
             raise RuntimeError("a mesh gap")
+        if not self.walkable(x0, y0):
+            return None                                   # route() refuses an off-mesh origin
         if y0 > -150.0 and x1 < -100.0 <= x0:
             path = [(x0, y0), (0.0, -200.0), (x1, y1)]
             planes = [0, 29, 0]
@@ -4077,6 +4088,18 @@ def section_corridor_wire():
                   "one route per ORDER (the start, the leg's end), never per tick",
                   f"{pm.routes} route call(s) over 80 ticks")
 
+        # THE SEAM (RUN-1zCG): a copy standing 6 u off the mesh in the seam is
+        # stepped onto it before routing; the corridor still goes out.
+        pm = _WallMesh()
+        st = _corridor_world((-106.0, 0.0), (-400.0, 0.0))
+        sends, _ = _corridor_run(st, pm, seconds=1.0)
+        moves = [s for s in sends if s[0] in (MOVE, DEST)]
+        LEDGER.ok(moves and moves[0][0] == MOVE and tuple(moves[0][1][1]) == CORNER,
+                  "an OFF-MESH copy (6 u into a seam, where route() refuses the origin) "
+                  "is stepped onto the mesh and still gets its corridor leg -- RUN-1zCG's "
+                  "bare follows through the stairs' flank and the hole",
+                  f"ops {[hex(s[0]) for s in moves]}")
+
         # THE OPEN: a start south of the opening has a clear line -- byte for
         # byte the follow RUN-FEEL / RUN-1zCE / RUN-1zCA confirmed.
         pm = _WallMesh()
@@ -4182,6 +4205,42 @@ def section_enemy_count():
                   "at 8 (ids 10..17; 20 is the first world NPC)", "")
     finally:
         authsrv.ENEMY_COUNT = saved
+
+
+def section_hold_plane():
+    """RUN-1zCG (2026-09-07): the plane correction fires from the HOLD branch too.
+
+    The owner: "the Hatcher terrain walks for a second entering the stairs".
+    The tape: a copy parked in the CLIENT's frame at the stairs' foot (out of
+    reach of the server's player, in reach of the frame -- F8's hold) kept the
+    plane 0 it climbed in on for 1.0 s, because Q5's correction ran only in
+    the in-reach-of-the-server branch. Same send, same rate floor, this branch.
+    """
+    import authsrv
+    MOVE = authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT
+    print("\nRUN-1zCG: the plane correction from the hold branch")
+    saved = authsrv.NPC_CLIENT_MODEL
+    authsrv.NPC_CLIENT_MODEL = True
+    try:
+        st = _parked(29, 0, player=(760.0, 0.0), pos=(520.0, 0.0))   # 240 u: out of the server's reach
+        st["last_report"] = (560.0, 0.0, True)                        # the frame 40 u ahead: in reach, in the cone
+        st["click_moving_at"] = None
+        sent = _tick_parked(st, pm=_Stairs() if "_Stairs" in globals() else None)
+        corr = [v for op, v, lab in sent if op == MOVE and "PLANE CORRECT" in lab]
+        LEDGER.ok(len(corr) == 1 and corr[0][2] == 29 and corr[0][3] == 29
+                  and not any(op == authsrv.GAME_SMSG_AGENT_UPDATE_DESTINATION for op, _v, _l in sent),
+                  "HELD in the client's frame with a stale word: ONE zero-distance 0x0029 "
+                  "carrying the copy's own plane 29, and no follow opens (the hold holds)",
+                  f"sends {[(hex(op), v[2:4]) for op, v, _l in sent]}")
+        st = _parked(29, 29, player=(760.0, 0.0), pos=(520.0, 0.0))
+        st["last_report"] = (560.0, 0.0, True)
+        st["click_moving_at"] = None
+        sent = _tick_parked(st, pm=None)
+        LEDGER.ok(not any(op == MOVE for op, _v, _l in sent),
+                  "and a word already right sends nothing from the hold",
+                  f"sends {[hex(op) for op, _v, _l in sent]}")
+    finally:
+        authsrv.NPC_CLIENT_MODEL = saved
 
 
 if __name__ == "__main__":

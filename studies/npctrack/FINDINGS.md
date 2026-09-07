@@ -813,7 +813,7 @@ number on the six prior stairs tapes is 12.8–93.8 u.
   moving on these runs (p90 284 / 91 / 247). Q1 makes the server agree with the client about
   where the hostile stands; it does not move the hostile closer to where the operator is looking.
   That is MOVECODE's two-world problem, unchanged.
-- ~~**`NPCTRACK-Q9`**~~ **CLOSED 2026-09-07 — the corridor is ON THE WIRE (F16 below, [RUN-Q9.md](RUN-Q9.md)): `0x0029` legs to the route's vertices while geometry intervenes, the `0x002A` naming the player once the line is clear; the Hatcher's drawn body 0.15 u worst off our mesh on the stairs route against 60.3 u on the direct control.** The record as it stood:
+- ~~**`NPCTRACK-Q9`**~~ **CLOSED 2026-09-07 — the corridor is ON THE WIRE (F16 below, [RUN-Q9.md](RUN-Q9.md)): `0x0029` legs to the route's vertices while geometry intervenes, the `0x002A` naming the player once the line is clear; the Hatcher's drawn body 0.15 u worst off our mesh on the stairs route against 60.3 u on the direct control.** **Addendum 2026-09-07 (RUN-1zCG):** the copy's origin and the player's report are stepped onto the mesh (`nearest_walkable`, 16 u) before `route()` — three bare follows through the stairs' flank and the hole (31–65 u off-mesh) came from a copy 1.5–11 u off our mesh in a seam, which `route()` refused as an origin (and at 135 s the report on the hole's edge as a goal). The record as it stood:
   ~~the follow's wire carries no corridor, and the client walks a hostile's
   0x002A dead straight.~~ OBSERVED ([GROUNDZ-F12.5](../renderobj/FINDINGS.md)): on the feel tape
   the Hatcher's sync copy and drawn body are identical on every sample as it cuts through the

@@ -235,7 +235,25 @@ PULL_SAMPLE_BUDGET = 20000
 # either way -- sec.1w spent a lane's evidence on 1e-4 u excursions of exactly
 # that kind, seen from the other side. It is capped at a quarter-span so a
 # narrow doorway never insets itself shut.
-CORNER_PULL_ROUNDS = 4
+# RUN-1zCG (2026-09-07, the owner: "weird chase behavior around corners, he'll
+# walk the opposite direction first"): five corridors on the session ran 3-7x
+# the straight distance with their first vertex 200-900 u the wrong way. Traced
+# (studies/movecode/FINDINGS.md sec.1z-ch): three defects in this pass and the
+# gate below it. (1) FOUR ROUNDS DO NOT CONVERGE when a chain of crossings all
+# start ~1,000 u off the taut line -- each round moves a crossing only as far as
+# its still-wrong neighbours allow (the stairs' foot: three crossings at
+# x = 9215 / 9168 / 9328 reached 9891 / 9460 / 9488 in four rounds, the taut
+# line being at ~10260). The crossings now START on the straight line from the
+# origin to the goal, clamped into their spans, and the pass runs until it
+# moves under CORNER_PULL_EPS, capped at CORNER_PULL_ROUNDS_MAX. (2) A PORTAL
+# CROSSING WAS HELD AT THE OVERLAP'S CENTRE -- 270 u behind a hostile that was
+# already standing in the overlap (52.7 s). It now slides within the overlap
+# region like an edge crossing slides along its span (_overlap_rows). (3) When
+# the pulled path's shortcut grazed a corner at the 2 u gate, route() threw
+# the whole candidate away and returned the raw midpoint corridor (19.6 s, 778
+# u for 256); the pulled path WITHOUT the shortcut is now a candidate too.
+CORNER_PULL_ROUNDS = 4          # the old cap; kept as the floor of rounds run
+CORNER_PULL_ROUNDS_MAX = 64
 CORNER_PULL_INSET = 8.0
 CORNER_PULL_EPS = 0.5
 
@@ -1384,7 +1402,28 @@ class PathingMap:
         # so the answer route() gave before the pull existed is untouched.
         pulled = self._pull_corners(pts, spans)
         best = None
-        for cand in ((pulled, pts) if pulled is not pts else (pts,)):
+        self._pulled_passed = False
+        # (3) THE PULLED PATH IS A CANDIDATE IN ITS OWN RIGHT: its string-pull
+        # shortcut can graze a corner the 2 u gate refuses (19.6 s: the hole's
+        # north-west corner), and the unshortened pulled path is legal where
+        # the raw midpoint corridor is 3x longer.
+        # LAZY: the pulled-and-shortened path is tried first and, when it
+        # passes, returned -- the other two are never shorter than a passing
+        # one in practice and gating the unshortened path at 2 u on every
+        # route put the chase-band max at 84 ms against the 50 ms tick.
+        cands = ((pulled, "pull"), (pts, "pull"), (pulled, "raw")) if pulled is not pts else ((pts, "pull"),)
+        for cand, mode in cands:
+            if mode == "raw":
+                # Only when the shortened pull failed its gate AND the raw
+                # pulled path could beat the midpoint answer: gating it at 2 u
+                # over a 50,000 u corridor is the cost the chase-band bar
+                # measures, and it is spent only where it can win.
+                rlen = sum(((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2) ** 0.5
+                           for a, b in zip(cand, cand[1:]))
+                if best is not None and rlen >= best[0]:
+                    continue
+                if best is not None and best[1] is not None and self._pulled_passed:
+                    continue
             step = (CORNER_PULL_GATE_STEP if cand is pulled and pulled is not pts
                     else 16.0)
             # THE SEAM TERM (MOVECODE-1z-bb): the pull and the gate both carry
@@ -1395,7 +1434,11 @@ class PathingMap:
             # fallback waypoint (a far centre when two linked trapezoids do
             # not overlap in 2D); the pulled candidate is where it bites.
             self._pull_idx = None
-            cpath = self._string_pull(cand, planes=pls)
+            if mode == "raw":
+                cpath = list(cand)
+                self._pull_idx = list(range(len(cand)))
+            else:
+                cpath = self._string_pull(cand, planes=pls)
             # Each survivor's plane, by the INDEX the pull kept it at. The
             # pull records that (`_pull_idx`); a replacement pull that does
             # not (test_pathmap's pre-fix reconstruction) falls back to
@@ -1418,7 +1461,11 @@ class PathingMap:
                     j += 1
             if any(self._gate_clip(a, b, pa, step) != b
                    for a, b, pa in zip(cpath, cpath[1:], cpl)):
+                if mode == "pull" and cand is pulled:
+                    self._pulled_passed = False
                 continue
+            if mode == "pull" and cand is pulled:
+                self._pulled_passed = True
             clen = sum(((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2) ** 0.5
                        for a, b in zip(cpath, cpath[1:]))
             if best is None or clen < best[0]:
@@ -1442,7 +1489,10 @@ class PathingMap:
         """
         if a.plane != b.plane:
             pt = self._overlap_point(a, b)
-            return (pt, None) if span else pt
+            if span:
+                rows = self._overlap_rows(a, b)
+                return pt, (("portal", rows) if rows else None)
+            return pt
         slot = next((k for k, n in enumerate(a.neighbours)
                      if n == b.index), None)
         if slot is None or slot < 2:
@@ -1498,11 +1548,61 @@ class PathingMap:
         if len(pts) < 3 or rounds <= 0:
             return pts
         pts = list(pts)
+        # (1) START ON THE STRAIGHT LINE origin -> goal, clamped into each span:
+        # the seed the Gauss-Seidel pass converges from in a round or two where
+        # the midpoints needed dozens.
+        sx, sy = pts[0]
+        gx_, gy_ = pts[-1]
+        for i in range(1, len(pts) - 1):
+            span = spans[i]
+            if span is None:
+                continue
+            if isinstance(span[0], str):
+                continue                        # a portal seeds from its centre
+            lo, hi, y = span
+            if abs(gy_ - sy) > 1e-9:
+                want = sx + (gx_ - sx) * (y - sy) / (gy_ - sy)
+            else:
+                want = (sx + gx_) * 0.5
+            pts[i] = (min(max(want, lo), hi), y)
+        rounds = max(rounds, CORNER_PULL_ROUNDS_MAX) if rounds == CORNER_PULL_ROUNDS else rounds
         for _ in range(rounds):
             moved = 0.0
             for i in range(1, len(pts) - 1):
                 span = spans[i]
                 if span is None:
+                    continue
+                if isinstance(span[0], str):
+                    # (2) A PORTAL CROSSING: the point of the overlap region
+                    # nearest the taut line between its neighbours -- per
+                    # row the same clamped minimiser as an edge, the best row
+                    # kept.
+                    ax, ay = pts[i - 1]
+                    bx, by = pts[i + 1]
+                    best = None
+                    for (y, lo, hi) in span[1]:
+                        inset = min(CORNER_PULL_INSET, (hi - lo) * 0.25)
+                        lo2, hi2 = lo + inset, hi - inset
+                        if lo2 > hi2:
+                            lo2 = hi2 = (lo + hi) * 0.5
+                        da, db = ay - y, by - y
+                        if da * db < 0.0:
+                            want = ax + (bx - ax) * (y - ay) / (by - ay)
+                        elif abs(da) < 1e-9 and abs(db) < 1e-9:
+                            want = (ax + bx) * 0.5
+                        else:
+                            den = (2.0 * y - by) - ay
+                            want = (ax if abs(den) < 1e-9
+                                    else ax + (bx - ax) * (y - ay) / den)
+                        nx = lo2 if want < lo2 else (hi2 if want > hi2 else want)
+                        cost = (((nx - ax) ** 2 + (y - ay) ** 2) ** 0.5
+                                + ((bx - nx) ** 2 + (by - y) ** 2) ** 0.5)
+                        if best is None or cost < best[0]:
+                            best = (cost, (nx, y))
+                    if best is not None:
+                        moved = max(moved, ((best[1][0] - pts[i][0]) ** 2
+                                            + (best[1][1] - pts[i][1]) ** 2) ** 0.5)
+                        pts[i] = best[1]
                     continue
                 lo, hi, y = span
                 # Keep off the exact corner: the interval's ends are shared
@@ -1560,6 +1660,25 @@ class PathingMap:
         if left > right:
             return b.centre
         return ((left + right) * 0.5, y)
+
+    def _overlap_rows(self, a, b, n=9):
+        """The region two portal-linked trapezoids share, as rows (y, lo, hi)
+        -- the x-interval inside both at each of `n` y-samples of their
+        y-overlap. Empty when they do not overlap in 2D (the far-centre
+        fallback waypoint, which the pull then holds fixed as before)."""
+        lo = max(a.y_bottom, b.y_bottom)
+        hi = min(a.y_top, b.y_top)
+        if lo > hi:
+            return []
+        rows = []
+        for k in range(n):
+            y = lo + (hi - lo) * (k / (n - 1) if n > 1 else 0.5)
+            al, ar = self._x_at(a, y)
+            bl, br = self._x_at(b, y)
+            left, right = max(al, bl), min(ar, br)
+            if left <= right:
+                rows.append((y, left, right))
+        return rows
 
     def _sightline(self, x0, y0, x1, y1, step=16.0):
         """(is every sample walkable, how many samples that took).
