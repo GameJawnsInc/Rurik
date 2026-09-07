@@ -275,6 +275,33 @@ def score_tape(tape, mesh, cap_path, cap_reps=None):
                 snaps.append((round(sm["t"], 1), round(j)))
         prev = (f, pt)
     out["snaps"] = snaps
+    # THE MID-AIR SIGNATURE (MOVECODE-1z-cl, RUN-1zCG session 4's end): the drawn
+    # body PARKED on a plane word our mesh does not offer at its point -- the
+    # client draws it at that plane's cached height (F11) and its keyboard
+    # mover cannot resolve its own start, so it hangs there until something
+    # else moves it. Episodes of consecutive parked samples; the longest is
+    # the number. Moving samples are excluded: a body crossing a seam carries
+    # the old word for a sample or two by the client's own lag.
+    if mesh is not None:
+        eps = []
+        cur = None
+        for sm in rows:
+            a = (sm.get("agents") or {}).get("1")
+            if not a or not a.get("async") or "x" not in a["async"]:
+                continue
+            b = a["async"]
+            v = math.hypot(b.get("vx", 0.0), b.get("vy", 0.0))
+            pt = W.live(b, sm.get("clock1"))
+            pls = mesh.pm.planes_at(pt[0], pt[1]) if hasattr(mesh, "pm") else set()
+            bad = (v <= 1.0 and bool(pls) and b.get("plane") not in pls)
+            if bad and cur is None:
+                cur = sm["t"]
+            elif not bad and cur is not None:
+                eps.append((round(cur, 1), round(sm["t"] - cur, 2)))
+                cur = None
+        if cur is not None:
+            eps.append((round(cur, 1), round(rows[-1]["t"] - cur, 2)))
+        out["midair"] = eps
     if mesh is not None:
         # The drawn body off our mesh, split by whether the client's OWN report at
         # that instant was on it: off with the report on-mesh is a body put somewhere
@@ -432,6 +459,13 @@ def report(cap_path, tape, mesh, mid, c, t):
         line("client snaps (fence shut + body jump > %.0f u)" % SNAP_JUMP,
              "%d %s" % (len(sn), sn[:4] if sn else ""), "OK   " if not sn else "RED  ",
              "live path: FEEL2 1 (181 u into the hole); 1zBW 5; 1zCG s3 1 (255 u); scripted runs 0")
+        ma = t.get("midair")
+        if ma is not None:
+            longest = max((d for _t0, d in ma), default=0.0)
+            line("player parked on a plane word our mesh lacks at its point (mid-air)",
+                 "%d episode(s), longest %.1f s %s" % (len(ma), longest, ma[:3] if ma else ""),
+                 "OK   " if longest < 1.0 else "RED  ",
+                 "1z-cl: session 4 ended 12 s in mid-air at the stairs' foot; F11's cached height")
         if "player_off" in t:
             n, worst, far, unc = t["player_off"]
             line("player drawn body off our mesh, worst / > 2 u", "%.2f u / %d of %d%s" % (

@@ -6073,15 +6073,18 @@ def kbd_lead_refresh_tick(send, state, conn_id, rec=None, now=None):
             rec.event("kbd_leg", act="refresh-blocked", why=clip_why,
                       grew=round(grew, 1))
         return False
-    # The plane words are MATCHED by construction (1z-z's armer-kill): field 4
-    # is field 3, so this send cannot recreate sec.0.11's stage-1 route either.
+    # The plane words were MATCHED by construction (1z-z's armer-kill) until
+    # 1z-cl: now the mesh's at the two points, which is the same pair
+    # wherever the copy's point offers the destination's plane.
+    f3, f4 = a2_lead_words(state, dest, leg.get("report_plane") or plane)
     send(GAME_SMSG_AGENT_MOVE_TO_POINT,
-         [PLAYER_AGENT_ID, [float(dest[0]), float(dest[1])], plane, plane],
+         [PLAYER_AGENT_ID, [float(dest[0]), float(dest[1])], f3, f4],
          f"KBD LEAD REFRESH ({dest[0]:.0f},{dest[1]:.0f}): the leg from "
          f"({reported[0]:.0f},{reported[1]:.0f}) pushed {grew:.0f} u further, "
-         f"plane {plane}, the arrival was {KBD_LEAD_REFRESH_MARGIN:.2f}s out "
+         f"plane {f3}" + (f" carry {f4}" if f4 != f3 else "")
+         + f", the arrival was {KBD_LEAD_REFRESH_MARGIN:.2f}s out "
          f"[MOVECODE-1z-ae]")
-    state["zl_last_grant_plane"] = plane
+    state["zl_last_grant_plane"] = f3
     # ORIGIN AND t0 UNTOUCHED: only the destination moves, so the position
     # model is continuous across the refresh and the ray keeps its report.
     state["kbd_leg"] = dict(leg, dest=(float(dest[0]), float(dest[1])),
@@ -6093,16 +6096,107 @@ def kbd_lead_refresh_tick(send, state, conn_id, rec=None, now=None):
     return True
 
 
+def kbd_lead_chain_due(state, leg, now):
+    """(due, why) -- pure. Should a door-B lead be re-run at the copy's
+    arrival so the NEXT corridor vertex goes out now? `why` names the
+    refusal, because a chain that only logs its sends cannot be scored
+    against the idle it exists to remove."""
+    if not (KBD_LEAD_CHAIN and KBD_SYNC and KBD_SYNC_LEAD_ON):
+        return False, "off"
+    if not leg or leg.get("ray") is None:
+        return False, "no-leg"
+    why = leg.get("clip_why") or ""
+    if "w0-route" not in why and "w0-clip" not in why:
+        return False, "not-a-door-leg"
+    if leg.get("chain_stopped"):
+        return False, "stopped"
+    if leg.get("chained", 0) >= KBD_LEAD_CHAIN_MAX:
+        return False, "spent"
+    if state.get("kbd_moving_at") is None:
+        return False, "stopped-body"
+    if state.get("fence_shut_at") is not None:
+        return False, "fence-shut"
+    g = state.get("agtrack_guard")
+    if g is None:
+        return False, "no-mirror"
+    try:
+        s = g.mirror.sync
+        ms = g._ms(now)
+        if s.t_arrive == 0:
+            return True, "parked"
+        if ms >= s.t_arrive - KBD_LEAD_CHAIN_MARGIN * 1000.0:
+            return True, "arriving"
+    except Exception:                                  # noqa: BLE001
+        return False, "no-mirror"
+    return False, "walking"
+
+
+def kbd_lead_chain_tick(send, state, conn_id, rec=None, now=None):
+    """MOVECODE-1z-cl: the corridor chain for the player's copy.
+
+    Polled beside kbd_lead_refresh_tick. When a door-B lead's vertex is
+    reached (the mirror's arrival, its clock), the lead is re-run from the
+    leg's own report and ray through the same clip and doors, and the next
+    vertex goes out without waiting for the heading floor. Returns whether
+    it sent. A re-run that lands within A2_LEAD_W0_TOL of the current dest
+    is no progress: the chain stops for this leg and says so once.
+    """
+    leg = state.get("kbd_leg")
+    if now is None:
+        now = time.time()
+    due, why = kbd_lead_chain_due(state, leg, now)
+    if not due:
+        return False
+    if state.get("action_hold") and not GRANT_DURING_HOLD:
+        return False
+    reported = (leg["x0"], leg["y0"])
+    dest, clipped, clip_why = a2_clip_lead(state, reported, list(leg["ray"]))
+    dest, src, clip_why = _fence_gate_lead(state, reported, dest, "kbd",
+                                           clip_why)
+    if src != "kbd":
+        return False
+    moved = math.hypot(dest[0] - leg["dest"][0], dest[1] - leg["dest"][1])
+    if moved <= A2_LEAD_W0_TOL:
+        leg["chain_stopped"] = True
+        if rec is not None:
+            rec.event("kbd_leg", act="chain-stop", why="no-progress",
+                      clip_why=clip_why, n=leg.get("chained", 0),
+                      dest=[round(dest[0], 1), round(dest[1], 1)])
+        return False
+    f3, f4 = a2_lead_words(state, dest, leg.get("report_plane") or leg["plane"])
+    n = leg.get("chained", 0) + 1
+    send(GAME_SMSG_AGENT_MOVE_TO_POINT,
+         [PLAYER_AGENT_ID, [float(dest[0]), float(dest[1])], f3, f4],
+         f"KBD LEAD CHAIN {n} ({dest[0]:.0f},{dest[1]:.0f}) from "
+         f"({reported[0]:.0f},{reported[1]:.0f}) plane {f3}"
+         + (f" carry {f4}" if f4 != f3 else "")
+         + f" [{clip_why}] world-0 {why} at the vertex [MOVECODE-1z-cl]")
+    state["zl_last_grant_plane"] = f3
+    # ORIGIN AND t0 UNTOUCHED (the refresh's rule): the position model stays
+    # continuous and the ray keeps its report; only the vertex advances.
+    state["kbd_leg"] = dict(leg, dest=(float(dest[0]), float(dest[1])),
+                            plane=f3, clip_why=clip_why, chained=n)
+    if rec is not None:
+        rec.event("kbd_leg", act="chain", n=n, why=why, clip_why=clip_why,
+                  moved=round(moved, 1), dest=[round(dest[0], 1), round(dest[1], 1)],
+                  plane=f3, plane_cur=f4)
+    return True
+
+
 def heading_hold_note(reported, point, plane, plane_cur, moving, a2_src,
-                      lead_clipped, clip_why, dir_src, now):
+                      lead_clipped, clip_why, dir_src, now, ray=None,
+                      report_plane=None):
     """The held heading grant: everything the send would have used, as it
-    was at refusal. Pure constructor."""
+    was at refusal. Pure constructor. 1z-cl: `ray` (the unclipped lead
+    destination) and `report_plane` ride along for the chain and the words."""
     return {"at": now,
             "reported": (float(reported[0]), float(reported[1])),
             "point": [float(point[0]), float(point[1])],
             "plane": plane, "plane_cur": plane_cur, "moving": moving,
             "a2_src": a2_src, "lead_clipped": bool(lead_clipped),
-            "clip_why": clip_why, "dir_src": dir_src}
+            "clip_why": clip_why, "dir_src": dir_src,
+            "ray": (None if ray is None else (float(ray[0]), float(ray[1]))),
+            "report_plane": (plane if report_plane is None else report_plane)}
 
 
 def heading_hold_tick(send, state, conn_id, rec=None, now=None):
@@ -6171,21 +6265,29 @@ def heading_hold_tick(send, state, conn_id, rec=None, now=None):
                   plane_cur=hold["plane_cur"],
                   plane_differs=bool(hold["plane_cur"] != hold["plane"]))
     rp = hold["reported"]
+    f3, f4 = hold["plane"], hold["plane_cur"]
+    if hold["a2_src"] == "kbd":
+        # 1z-cl: the words at SEND time -- world-0 may have moved since the
+        # refusal that parked this note.
+        f3, f4 = a2_lead_words(state, pt, hold.get("report_plane", hold["plane"]),
+                               hold["plane_cur"])
     send(GAME_SMSG_AGENT_MOVE_TO_POINT,
-         [PLAYER_AGENT_ID, list(pt), hold["plane"], hold["plane_cur"]],
+         [PLAYER_AGENT_ID, list(pt), f3, f4],
          f"HELD HEADING ({pt[0]:.0f},{pt[1]:.0f}) from ({rp[0]:.0f},{rp[1]:.0f}) "
-         f"plane {hold['plane']}"
-         + (f" carry {hold['plane_cur']}"
-            if hold["plane_cur"] != hold["plane"] else "")
+         f"plane {f3}"
+         + (f" carry {f4}" if f4 != f3 else "")
          + f" [{hold['a2_src'] or 'zero-lead'}] re-baked {age * 1000:.0f} ms "
          f"after the floor refused it [MOVECODE-1z-y]")
-    state["zl_last_grant_plane"] = hold["plane"]
+    state["zl_last_grant_plane"] = f3
     if hold["a2_src"] == "kbd" and KBD_LEAD_KILL:
-        state["kbd_leg"] = a2_leg_note(rp, pt, hold["plane"], hold["moving"],
-                                       now)
+        state["kbd_leg"] = a2_leg_note(rp, pt, f3, hold["moving"], now,
+                                       ray=hold.get("ray"),
+                                       clip_why=hold.get("clip_why"),
+                                       report_plane=hold.get("report_plane"))
         if rec is not None:
             rec.event("kbd_leg", act="arm", src="held", dest=list(pt),
-                      speed=state["kbd_leg"]["speed"], plane=hold["plane"])
+                      speed=state["kbd_leg"]["speed"], plane=f3,
+                      clip_why=hold.get("clip_why"))
     return True
 
 
@@ -6474,6 +6576,31 @@ A2_LEAD_W0_STEP = 4.0         # u: the leg from world-0 is sampled this often ag
 # trapezoid (measured on RUN-1zCE run 2's tape), and a leg from world-0 to the
 # foot vertex crosses it; the hole this door exists for is 62 u deep.
 A2_LEAD_W0_SEAM = 3.0
+# MOVECODE-1z-cl (RUN-1zCG session 4, six client snaps). THE PLANE WORDS ARE THE
+# MESH'S AT THE POINTS, not the report's. Door B replaced the destination with
+# a corridor vertex on another plane and the words stayed the body's (29, 29)
+# for a ground vertex; every snap put the body on world-0's point WITH world-0's
+# word, and the last one (96.06 s) left it hanging in mid-air on a plane with no
+# surface under it (F11) and unable to walk -- the client's keyboard mover
+# could not resolve its own start (1z-o.6's shape). Field 3 = a plane the mesh
+# offers at the DESTINATION (the report's where it does); field 4 = a plane it
+# offers at the mirror's world-0 (field 3 where it does) -- retail's own
+# crossing shape, (far plane, mover's plane), which differs only across a
+# seam (NPCTRACK-F16: 144 of 3,151). --no-lead-plane-words reverts to the
+# report's plane on both words.
+A2_LEAD_PLANE_WORDS = True
+# THE CORRIDOR CHAIN. A door-B lead names ONE vertex; world-0 reached it in
+# 0.03-0.7 s and then stood for the rest of the 0.5 s heading floor -- 11.6 s of
+# idle over the session's 39 door leads, world-0 at ~100 u/s against the body's
+# 288 -- until the body was 299 u ahead and the client's gate 1 snapped it back
+# to the foot of the stairs. At the copy's arrival (the mirror's own clock, the
+# same one the NPC follow's leg-end uses) the lead is re-run from the leg's
+# report and ray through the same doors and the next vertex goes out at once.
+# --no-kbd-lead-chain reverts. Bounded per leg; a chain that makes no progress
+# stops and says so.
+KBD_LEAD_CHAIN = True
+KBD_LEAD_CHAIN_MAX = 12          # sends per leg
+KBD_LEAD_CHAIN_MARGIN = 0.10     # s before the copy's arrival at the vertex
 
 
 def _leg_last_on_mesh(pm, x0, y0, x1, y1):
@@ -6491,6 +6618,48 @@ def _leg_last_on_mesh(pm, x0, y0, x1, y1):
             return last
         last = (px, py)
     return (x1, y1)
+
+
+def a2_lead_words(state, dest, plane, cur=None):
+    """(field3, field4) for a keyboard lead to `dest` armed on a report that
+    named `plane` (MOVECODE-1z-cl). Field 3 is a plane our mesh offers at the
+    destination -- the report's own where it does, else plane_at(prefer) --
+    and field 4 one it offers at the mirror's world-0 (field 3 where it does).
+    `cur` is the field 4 the caller's own policy chose (the matched word, or
+    the raw carry under --no-kbd-matched-plane): where the mesh has no say
+    -- no mesh, no mirror, a point it does not hold -- the words are the
+    caller's, untouched, so those arms stay measurable. Pure apart from the
+    reads."""
+    if cur is None:
+        cur = plane
+    if not A2_LEAD_PLANE_WORDS:
+        return plane, cur
+    pm = state.get("pathmap")
+    f3 = plane
+    if pm is not None and hasattr(pm, "planes_at") and hasattr(pm, "plane_at"):
+        try:
+            pls = pm.planes_at(float(dest[0]), float(dest[1]))
+            if pls and plane not in pls:
+                p = pm.plane_at(float(dest[0]), float(dest[1]), prefer=plane)
+                if p is not None:
+                    f3 = p
+        except Exception:                              # noqa: BLE001
+            f3 = plane
+    f4 = cur if f3 == plane else f3
+    w0 = _lead_w0_origin(state)
+    if w0 is not None and pm is not None and hasattr(pm, "planes_at") and hasattr(pm, "plane_at"):
+        try:
+            pls = pm.planes_at(w0[0], w0[1])
+            if pls:
+                if f3 in pls:
+                    f4 = f3
+                else:
+                    p = pm.plane_at(w0[0], w0[1], prefer=f3)
+                    if p is not None:
+                        f4 = p
+        except Exception:                              # noqa: BLE001
+            pass
+    return f3, f4
 
 
 def _lead_origin_door(state, dest, pm):
@@ -6544,6 +6713,11 @@ def _lead_origin_door(state, dest, pm):
         disc = follow_stop_radius()
         for k in range(1, len(path)):
             vx_, vy_ = float(path[k][0]), float(path[k][1])
+            # 1z-cl: the vertex world-0 already stands on (the origin was
+            # stepped onto the mesh, so path[1] can be the copy's own point)
+            # is a zero-length lead that costs a whole heading floor; skip it.
+            if math.hypot(vx_ - mx, vy_ - my) <= A2_LEAD_W0_TOL:
+                continue
             if any(math.hypot(vx_ - ox, vy_ - oy) < disc for ox, oy in discs):
                 continue
             if k > 1:
@@ -6797,18 +6971,25 @@ A2_WATCHDOG_SPEED_FLOOR = 0.66 * 288.0
 A2_WATCHDOG_SLACK = 1.0
 
 
-def a2_leg_note(reported, dest, plane, mt, now):
+def a2_leg_note(reported, dest, plane, mt, now, ray=None, clip_why=None,
+                report_plane=None):
     """The a2_leg record armed at each fired d1 grant. Pure constructor.
 
     Everything the containment pair needs to answer for a silent client:
     origin, dest, the plane the report named, the family speed the copy
     will actually walk at (for the position model), and the send instant.
-    `wd_fired` marks the watchdog's once-per-leg latch.
+    `wd_fired` marks the watchdog's once-per-leg latch. 1z-cl: `ray` is the
+    lead's UNCLIPPED destination and `clip_why` the clip chain's tag, so the
+    corridor chain can re-run the doors from the same report; `report_plane`
+    the plane the report named (`plane` is the wire's field 3).
     """
     rate = FAMILY_RATE.get(mt, 1.0)
     return {"x0": float(reported[0]), "y0": float(reported[1]),
             "dest": (float(dest[0]), float(dest[1])), "plane": plane,
-            "t0": now, "speed": rate * 288.0, "wd_fired": False}
+            "t0": now, "speed": rate * 288.0, "wd_fired": False,
+            "ray": (None if ray is None else (float(ray[0]), float(ray[1]))),
+            "clip_why": clip_why,
+            "report_plane": (plane if report_plane is None else report_plane)}
 
 
 def a2_leg_position(leg, now):
@@ -19677,6 +19858,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             # refresh -- the arrival it pre-empts is on
                             # the client's clock, not on a report.
                             kbd_lead_refresh_tick(send, state, conn_id, rec)
+                            kbd_lead_chain_tick(send, state, conn_id, rec)
                         # The timed three quarters of every skill cycle
                         # (E5/E3/E6), before the swings so a cast completing
                         # this tick is visible to everything after it.
@@ -19874,6 +20056,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                     grant_flush_tick(send, state, conn_id, rec)
                     heading_hold_tick(send, state, conn_id, rec)
                     kbd_lead_refresh_tick(send, state, conn_id, rec)
+                    kbd_lead_chain_tick(send, state, conn_id, rec)
                 # ROUTER-B2: the chain scheduler rides the same quiet
                 # ticks (recv-thread-only sending, same as the flush).
                 if ROUTER and kind == "game":
@@ -19906,6 +20089,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                 grant_flush_tick(send, state, conn_id, rec)
                 heading_hold_tick(send, state, conn_id, rec)
                 kbd_lead_refresh_tick(send, state, conn_id, rec)
+                kbd_lead_chain_tick(send, state, conn_id, rec)
             # ROUTER-B2: a due leg gets the same pre-batch claim -- the
             # batch may carry the very input that abandons the chain, and
             # a leg whose ETA passed before that input arrived was owed.
@@ -21225,6 +21409,11 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                 a2_matched = False
                                 a2_lead_clipped = False
                                 a2_clip_why = None
+                                # 1z-cl: the wire's two plane words. The
+                                # report's, matched, unless the KBD branch
+                                # below asks the mesh at the two points.
+                                a2_ray = None
+                                lead_f3, lead_f4 = plane, zl_plane_cur
                                 if D1_LEAD:
                                     # sec.0.11's armer-kill, BEFORE the
                                     # verdict row so plane_cur records what
@@ -21283,6 +21472,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                     a2_dest, a2_src = kbd_lead_dest(
                                         reported, heading)
                                     if a2_src == "kbd":
+                                        a2_ray = list(a2_dest)
                                         (a2_dest, a2_lead_clipped,
                                          a2_clip_why) = (
                                             a2_clip_lead(state, reported,
@@ -21295,6 +21485,14 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                         _fence_gate_lead(state, reported,
                                                          a2_dest, a2_src,
                                                          a2_clip_why))
+                                    if a2_src == "kbd":
+                                        # 1z-cl: AFTER the doors -- the
+                                        # point may be on another plane
+                                        # than the report, and world-0 on
+                                        # a third.
+                                        lead_f3, lead_f4 = a2_lead_words(
+                                            state, a2_dest, plane, zl_plane_cur)
+                                        zl_plane_cur = lead_f4
                                 # MOVECODE-1z-cc. THE SERVER'S OWN MODEL LEG MAY
                                 # NOT OUT-WALK THE ORDER IT JUST GAVE, when the
                                 # point it gave was one OUR OWN MESH cut short.
@@ -21418,12 +21616,12 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                                           if CANCEL_ANSWER
                                                           else None),
                                               plane_carry=bool(PLANE_CARRY),
-                                              plane_dest=(plane if zero_ok
+                                              plane_dest=(lead_f3 if zero_ok
                                                           else None),
-                                              plane_cur=(zl_plane_cur if zero_ok
+                                              plane_cur=(lead_f4 if zero_ok
                                                          else None),
                                               plane_differs=(
-                                                  bool(zl_plane_cur != plane)
+                                                  bool(lead_f4 != lead_f3)
                                                   if zero_ok else None),
                                               # REALFIX-F1b. `carry` NAMES the
                                               # arm in the row, because
@@ -21490,9 +21688,9 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                         reported,
                                         (a2_dest if a2_dest is not None
                                          else reported),
-                                        plane, zl_plane_cur, moving, a2_src,
+                                        lead_f3, lead_f4, moving, a2_src,
                                         a2_lead_clipped, a2_clip_why, dir_src,
-                                        now_z)
+                                        now_z, ray=a2_ray, report_plane=plane)
                                 elif zero_ok:
                                     state["heading_hold"] = None
                                 if zero_ok:
@@ -21553,9 +21751,9 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                                else ""))
                                         zl_label = (
                                             zl_head
-                                            + f" plane {plane}"
-                                            + (f" carry {zl_plane_cur}"
-                                               if zl_plane_cur != plane
+                                            + f" plane {lead_f3}"
+                                            + (f" carry {lead_f4}"
+                                               if lead_f4 != lead_f3
                                                else "")
                                             + (" PC-SPOOF" if pcs_fired
                                                else "")
@@ -21616,7 +21814,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                     if zl_send_ok:
                                         send(GAME_SMSG_AGENT_MOVE_TO_POINT,
                                              [PLAYER_AGENT_ID, zl_point,
-                                              plane, zl_plane_cur],
+                                              lead_f3, lead_f4],
                                              zl_label)
                                         # R4's LEG WINDOW. Any grant supersedes an
                                         # in-flight cancel leg (a fresh order
@@ -21638,7 +21836,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                         # that went out WITH the point the copy is
                                         # now bound for, so it advances when a grant
                                         # does and stays put when one is refused.
-                                        state["zl_last_grant_plane"] = plane
+                                        state["zl_last_grant_plane"] = lead_f3
                                         # sec.0.11 containment: arm the leg record
                                         # the ETA watchdog and the click model
                                         # read. Only a REAL d1 lead arms it -- a
@@ -21666,8 +21864,10 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                             # kill consults on a press or a
                                             # click; popped by any report.
                                             state["kbd_leg"] = a2_leg_note(
-                                                reported, zl_point, plane,
-                                                moving, now_z)
+                                                reported, zl_point, lead_f3,
+                                                moving, now_z, ray=a2_ray,
+                                                clip_why=a2_clip_why,
+                                                report_plane=plane)
                                             if rec is not None:
                                                 _kl = state["kbd_leg"]
                                                 rec.event(
@@ -21675,7 +21875,8 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                                     src="kbd",
                                                     dest=list(_kl["dest"]),
                                                     speed=_kl["speed"],
-                                                    plane=_kl["plane"])
+                                                    plane=_kl["plane"],
+                                                    clip_why=a2_clip_why)
                                         # REALFIX-F1b's queue, on the same rule and
                                         # for the same reason. CONSUME what arrived,
                                         # DISCARD the leg this grant just superseded
@@ -21689,7 +21890,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                         # send has now moved.
                                         if ARRIVAL_CARRY:
                                             arrival_carry_advance(
-                                                state, now_z, ac_arrival, plane,
+                                                state, now_z, ac_arrival, lead_f3,
                                                 reported)
                                 # NO `else` HERE, but the refusal IS held --
                                 # thirty lines up, not on this branch.
@@ -25021,6 +25222,18 @@ def main():
                          "avoidance pass halts world-0 (NPCTRACK-F14/Q8) while "
                          "the body sidesteps on -- RUN-FEEL2 63.8 s: world-0 "
                          "stalled 1.2 s, the body 230 u ahead. Known-bad arm.")
+    ap.add_argument("--no-lead-plane-words", action="store_true",
+                    help="MOVECODE-1z-cl REVERT: the keyboard lead's two plane "
+                         "words are the REPORT's plane, matched, even where the "
+                         "destination (a door-B vertex) or world-0 sits on "
+                         "another plane -- RUN-1zCG session 4 ended with the "
+                         "body hanging in mid-air on such a word, unable to walk. "
+                         "Known-bad arm.")
+    ap.add_argument("--no-kbd-lead-chain", action="store_true",
+                    help="MOVECODE-1z-cl REVERT: a door-B lead names one corridor "
+                         "vertex and world-0 idles there until the next 0.5 s "
+                         "heading tick (11.6 s idle over session 4's 39 door "
+                         "leads; six gate-1 snaps). Known-bad arm.")
     ap.add_argument("--no-lead-w0-origin", action="store_true",
                     help="MOVECODE-1z-cg REVERT (door B): the lead is clipped "
                          "from the REPORT only, though the client bakes it from "
@@ -26798,7 +27011,7 @@ def main():
     global KBD_LEAD_REFRESH, A2_LEAD_PLANE_CLIP, A2_LEAD_SEAM_CLIP, A2_LEAD_ORIGIN_SEAM
     global A2_LEAD_WALL_SLIDE
     global A2_LEAD_DISC_CLEAR
-    global A2_LEAD_W0_ORIGIN
+    global A2_LEAD_W0_ORIGIN, A2_LEAD_PLANE_WORDS, KBD_LEAD_CHAIN
     if a.legacy_kbd_sync:
         KBD_SYNC = False
         KBD_SYNC_HOLD = False
@@ -26840,6 +27053,14 @@ def main():
         A2_LEAD_WALL_SLIDE = not a.no_lead_wall_slide
         A2_LEAD_DISC_CLEAR = not a.no_lead_disc_clear
         A2_LEAD_W0_ORIGIN = not a.no_lead_w0_origin
+        A2_LEAD_PLANE_WORDS = not a.no_lead_plane_words
+        KBD_LEAD_CHAIN = not a.no_kbd_lead_chain
+        if not A2_LEAD_PLANE_WORDS:
+            print("[map] --no-lead-plane-words: the keyboard lead carries the "
+                  "report's plane on both words (1z-cl's revert).", flush=True)
+        if not KBD_LEAD_CHAIN:
+            print("[map] --no-kbd-lead-chain: a door-B vertex waits for the "
+                  "next heading tick (1z-cl's revert).", flush=True)
         if not A2_LEAD_DISC_CLEAR:
             print("[map] --no-lead-disc-clear: a keyboard lead may end inside a "
                   "hostile's disc, where the client halts world-0 (1z-cg's "

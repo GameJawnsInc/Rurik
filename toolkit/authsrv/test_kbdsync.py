@@ -62,7 +62,7 @@ from test_position_trust import receive_arm, Sent, FakeRec   # noqa: E402
 # the word-against-point check and the known-bad arm that reddens all three --
 # the cross-plane guard NPCTRACK proposed is refuted at 0 of 488 and ships as
 # nothing).
-LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=187)
+LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=201)
 check = checks.adopt(LEDGER)
 
 SRC = open(authsrv.__file__, encoding="utf-8").read()
@@ -778,9 +778,9 @@ def main():
     i_stop = SRC.index('rec.event("kbd_leg", act="clear", by="0x0047"')
     check("fence_shut_at" not in SRC[i_stop - 3000:i_stop + 3000],
           "and the stop arm does not touch it")
-    check(SRC.count("_fence_gate_lead(state, reported,") == 3,
-          "both lead branches pass through the gate, after their clip chains "
-          "(the def and two call sites)")
+    check(SRC.count("_fence_gate_lead(state, reported,") == 4,
+          "both lead branches and 1z-cl's corridor chain pass through the "
+          "gate, after their clip chains (the def and three call sites)")
 
     print("\n14. MOVECODE-1z-ae: REFRESH BEFORE MATURATION -- the arrival that "
           "armed 1z-ad's lock never fires")
@@ -1708,6 +1708,13 @@ def main():
         def planes_at(self, x, y):
             return {0} if self.walkable(x, y) else set()
 
+        def containing(self, x, y):
+            # the send choke's plane echo reads trapezoid planes here (1z-cl:
+            # the chain's send runs through the real choke in this test)
+            class _T:
+                plane = 0
+            return [_T()] if self.walkable(x, y) else []
+
         def clip(self, x0, y0, x1, y1, step=2.0, plane=None):
             d = math.hypot(x1 - x0, y1 - y0)
             n = max(1, int(d / step))
@@ -1875,6 +1882,148 @@ def main():
           and authsrv.CLIENT_RESEED_PREV_FAR == 100.0,
           "22e. ships ON with its revert, in the header; the thresholds are the "
           "session's own numbers with room (373 / 9.5 / 236 measured)", "")
+
+    # 21i. MOVECODE-1z-cl: door B never names the vertex world-0 stands on.
+    # RUN-1zCG session 4: route() from an origin stepped onto the mesh
+    # returned the copy's own point as path[1] -- a 0 u lead that cost a
+    # whole heading floor (93.83 s: "(10238,7992) leg 0 u"). world-0 sits ON
+    # the stub corridor's vertex (190, 1060); the leg to the dest crosses the
+    # hole, so the answer is the leg's last on-mesh point, not the vertex.
+    print("\n21i. MOVECODE-1z-cl: the vertex world-0 already stands on is skipped")
+    st21i = {"pathmap": _Hole(), "agtrack_guard": _Guard((190.0, 1060.0))}
+    d21i, tag21i = authsrv._lead_origin_door(st21i, [350.0, 940.0], st21i["pathmap"])
+    check(tag21i == "w0-clip" and math.hypot(d21i[0] - 190.0, d21i[1] - 1060.0) > 4.0,
+          "21i. path[1] == world-0's own point is skipped; the next point's leg "
+          "fails the hole, so the leg's last on-mesh point -- never a 0 u lead",
+          f"got {d21i} tag {tag21i}")
+
+    # ---- 23. MOVECODE-1z-cl: the plane words are the mesh's at the two points
+    # Session 4, 93.83-96.06 s: door B's vertex (10238,7992) is a plane-0
+    # corner, the report was on the stairs (29), the words went out (29, 29),
+    # the client's gate 1 snapped the body onto world-0 WITH that word and left
+    # it hanging in mid-air, unable to walk (F11; 1z-o.6's shape). Retail's
+    # own crossing pair is (destination plane, mover's plane).
+    print("\n23. MOVECODE-1z-cl: the lead's plane words are the mesh's, not the report's")
+
+    class _Stairs:
+        """x < 500 is ground (plane 0), x >= 500 the stairs (plane 29)."""
+        def planes_at(self, x, y):
+            return {0} if x < 500.0 else {29}
+
+        def plane_at(self, x, y, prefer=None):
+            p = self.planes_at(x, y)
+            return prefer if prefer in p else min(p)
+
+    st23 = {"pathmap": _Stairs(), "agtrack_guard": _Guard((450.0, 0.0))}
+    check(authsrv.a2_lead_words(st23, (400.0, 0.0), 29) == (0, 0),
+          "23a. THE SESSION-4 SHAPE: a ground vertex named by a report on the "
+          "stairs, world-0 on the ground -> (0, 0), not (29, 29)",
+          f"{authsrv.a2_lead_words(st23, (400.0, 0.0), 29)}")
+    check(authsrv.a2_lead_words(st23, (600.0, 0.0), 29) == (29, 0),
+          "23b. a destination on the stairs with world-0 still on the ground -> "
+          "(29, 0): retail's crossing pair, far plane then the mover's",
+          f"{authsrv.a2_lead_words(st23, (600.0, 0.0), 29)}")
+    st23b = {"pathmap": _Stairs(), "agtrack_guard": _Guard((650.0, 0.0))}
+    check(authsrv.a2_lead_words(st23b, (600.0, 0.0), 29) == (29, 29),
+          "23c. both on the stairs -> (29, 29), matched as before",
+          f"{authsrv.a2_lead_words(st23b, (600.0, 0.0), 29)}")
+    check(authsrv.a2_lead_words({}, (600.0, 0.0), 29, 0) == (29, 0)
+          and authsrv.a2_lead_words({"pathmap": _Stairs()}, (600.0, 0.0), 29, 0) == (29, 0),
+          "23d. no mesh, or no mirror: the caller's own words stand (the raw "
+          "carry arm stays measurable)",
+          f"{authsrv.a2_lead_words({}, (600.0, 0.0), 29, 0)}")
+    _saved_pw = authsrv.A2_LEAD_PLANE_WORDS
+    try:
+        authsrv.A2_LEAD_PLANE_WORDS = False
+        got23e = authsrv.a2_lead_words(st23, (400.0, 0.0), 29)
+    finally:
+        authsrv.A2_LEAD_PLANE_WORDS = _saved_pw
+    check(got23e == (29, 29),
+          "23e. KNOWN-BAD ARM (--no-lead-plane-words): the report's plane on "
+          "both words -- session 4's end state", f"{got23e}")
+    check(authsrv.A2_LEAD_PLANE_WORDS is True and "--no-lead-plane-words" in SRC
+          and "A2_LEAD_PLANE_WORDS" in SRC[SRC.index("global A2_LEAD_W0_ORIGIN"):
+                                          SRC.index("global A2_LEAD_W0_ORIGIN") + 200]
+          and authsrv.capture_flags().get("A2_LEAD_PLANE_WORDS") is True
+          and SRC.count("a2_lead_words(") - SRC.count("def a2_lead_words(") == 4,
+          "23f. ships ON with its revert, in the header; the four lead senders "
+          "(the arm, the held heading, the refresh, the chain) all ask it", "")
+
+    # ---- 24. MOVECODE-1z-cl: the corridor chain for the player's copy
+    # Session 4: world-0 reached each door-B vertex in 0.03-0.7 s and idled for
+    # the rest of the 0.5 s heading floor -- 11.6 s over 39 door leads -- while
+    # the body ran 288 u/s; six gate-1 snaps. At the mirror's arrival the lead
+    # is re-run from the leg's own report and ray through the same doors.
+    print("\n24. MOVECODE-1z-cl: a door-B lead chains to the next vertex at the copy's arrival")
+    import time as _t
+
+    def _chain_state(w0, t_arrive=0, clip_why="clear+w0-route", fence=None, moving=True):
+        g = _Guard(w0)
+        g.mirror.sync.t_arrive = t_arrive
+        now = _t.time()
+        st = {"pos": (400.0, 1000.0), "plane": 0, "pathmap": _Hole(),
+              "agtrack_guard": g, "kbd_moving_at": (now - 0.3) if moving else None,
+              "fence_shut_at": fence,
+              "kbd_leg": authsrv.a2_leg_note((400.0, 1000.0), (190.0, 1060.0), 0, 1, now,
+                                             ray=(700.0, 1100.0), clip_why=clip_why)}
+        return st
+
+    st24 = _chain_state((190.0, 1060.0))
+    w24, r24 = Sent(st24), FakeRec()
+    sent24 = authsrv.kbd_lead_chain_tick(w24, st24, 0, r24)
+    mv = w24.of(MOVE)
+    check(sent24 and mv and "KBD LEAD CHAIN 1" in mv[0][2]
+          and abs(mv[0][1][1][0] - 700.0) < 1e-6 and abs(mv[0][1][1][1] - 1100.0) < 1e-6
+          and st24["kbd_leg"]["chained"] == 1
+          and tuple(st24["kbd_leg"]["dest"]) == (700.0, 1100.0)
+          and st24["kbd_leg"]["x0"] == 400.0
+          and r24.of("kbd_leg") and r24.of("kbd_leg")[-1]["act"] == "chain",
+          "24a. THE CHAIN: world-0 parked on the corridor vertex -> the lead is "
+          "re-run from the leg's report and ray, the leg from the vertex is "
+          "clear, the ray goes out at once; the leg advances, its origin stays",
+          f"sent {sent24} wire {mv} leg {st24['kbd_leg']}")
+    st24b = _chain_state((150.0, 1000.0), t_arrive=5000)
+    w24b = Sent(st24b)
+    check(not authsrv.kbd_lead_chain_tick(w24b, st24b, 0, FakeRec()) and not w24b.of(MOVE)
+          and authsrv.kbd_lead_chain_due(st24b, st24b["kbd_leg"], _t.time())[1] == "walking",
+          "24b. the copy still walking to the vertex: nothing sent ('walking')", "")
+    st24c = _chain_state((190.0, 1060.0), fence=_t.time())
+    w24c = Sent(st24c)
+    check(not authsrv.kbd_lead_chain_tick(w24c, st24c, 0, FakeRec()) and not w24c.of(MOVE)
+          and authsrv.kbd_lead_chain_due(st24c, st24c["kbd_leg"], _t.time())[1] == "fence-shut",
+          "24c. the fence shut (ours or the client's, 1z-cj): no chain into it", "")
+    st24d = _chain_state((190.0, 1060.0), clip_why="clear")
+    w24d = Sent(st24d)
+    check(not authsrv.kbd_lead_chain_tick(w24d, st24d, 0, FakeRec()) and not w24d.of(MOVE)
+          and authsrv.kbd_lead_chain_due(st24d, st24d["kbd_leg"], _t.time())[1] == "not-a-door-leg",
+          "24d. a lead the doors did not move has no corridor: nothing to chain", "")
+    st24e = _chain_state((150.0, 1000.0))          # parked (t_arrive 0) but never moved
+    w24e, r24e = Sent(st24e), FakeRec()
+    check(not authsrv.kbd_lead_chain_tick(w24e, st24e, 0, r24e) and not w24e.of(MOVE)
+          and st24e["kbd_leg"].get("chain_stopped") is True
+          and r24e.of("kbd_leg") and r24e.of("kbd_leg")[-1]["act"] == "chain-stop"
+          and not authsrv.kbd_lead_chain_due(st24e, st24e["kbd_leg"], _t.time())[0],
+          "24e. NO PROGRESS (the doors give the same vertex again): the chain stops "
+          "for this leg, says so once, and stays stopped", f"{r24e.of('kbd_leg')}")
+    _saved_ch = authsrv.KBD_LEAD_CHAIN
+    try:
+        authsrv.KBD_LEAD_CHAIN = False
+        st24f = _chain_state((190.0, 1060.0))
+        w24f = Sent(st24f)
+        got24f = authsrv.kbd_lead_chain_tick(w24f, st24f, 0, FakeRec())
+    finally:
+        authsrv.KBD_LEAD_CHAIN = _saved_ch
+    check(not got24f and not w24f.of(MOVE),
+          "24f. KNOWN-BAD ARM (--no-kbd-lead-chain): the vertex waits for the "
+          "next heading tick -- session 4's idle", "")
+    check(authsrv.KBD_LEAD_CHAIN is True and "--no-kbd-lead-chain" in SRC
+          and authsrv.capture_flags().get("KBD_LEAD_CHAIN") is True
+          and authsrv.KBD_LEAD_CHAIN_MAX == 12 and authsrv.KBD_LEAD_CHAIN_MARGIN == 0.10
+          and SRC.count("kbd_lead_chain_tick(send, state, conn_id, rec)") == 3
+          and SRC.index("kbd_lead_chain_tick(send, state, conn_id, rec)")
+          > SRC.index("kbd_lead_refresh_tick(send, state, conn_id, rec)"),
+          "24g. ships ON with its revert, in the header; polled at all three "
+          "tick sites, after the refresh", "")
 
     return LEDGER.verdict()
 

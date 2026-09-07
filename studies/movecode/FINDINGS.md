@@ -17107,3 +17107,74 @@ and the question is closed, not open.
 **Instruments.** `sessionscore.py` (the live-path snap); the replay and the two censuses ran as
 one-off scripts against `guardretro.events`, `w0score.series` and `cmsgstream.timed`, and
 their numbers are the tables above.
+
+## 1z-cl. SESSION 4: SIX CLIENT SNAPS AND A BODY LEFT HANGING IN MID-AIR — world-0 walked door B's corridor one vertex per heading tick and idled 0.3 s at each while the body ran up the stairs at 288 u/s, the client's gate 1 snapped the body back onto world-0 at the foot, and the snap carried the REPORT's plane word onto a point with no surface under it. Two fixes: the lead's plane words are the mesh's at the two points, and a door-B lead chains to the next vertex at the copy's arrival. Door B no longer names the vertex world-0 stands on
+
+**The session** ([RUN-1zCG.md](RUN-1zCG.md) session 4, capture `authsrv-20260907T144522-c1`,
+tape `1zcg4`, 108 s, 216 reports, 152 fired leads): *"the Hatcher commits too hard at
+waypoints around the top of the stairs; warps when colliding with him at the top and bottom
+walls; ended suspended in mid-air and stuck; the main point of contention is pathing desync
+around the stairs' walls."* The scorecard: **6 client snaps** on the live path (214, 391, 279,
+247, 226, 718 u), 3 re-pins (two gate-2 on a world-0 in the edge class at the foot, one
+arrival-risk), the last 12 s of the tape with the body parked at (10264, 8184) on plane word 29
+where our mesh offers plane 0 only.
+
+**The geometry.** The foot of the stairs is reached from the south through a ground tongue
+(x 10100–10260, y 8020–8280) whose entrance is a 16 u pair of corners at (10222, 7992) and
+(10238, 7992), and whose east edge ends at (10264, 8184) before the stairs' first plane-29
+trapezoid at (10340, 8300). Every route from the southern ground onto the stairs threads
+those three corners; the router's corridor is correct on our mesh, and the Hatcher's legs to
+the same corners ("commits too hard at waypoints") are the same corridor walked to its
+vertices, as retail's NPCs do (F16: vertices ON corners).
+
+**The mechanism, every snap the same shape.** The body ran up the stairs on plane 29; the
+leads from its reports were wall-slide / plane-seam clipped to short points; door B, whose
+leg from world-0 to those points crossed the flank wall, replaced each with the corridor's
+FIRST vertex from world-0 — one of the three foot corners, 0–50 u away. World-0 reached it in
+0.03–0.7 s and then stood for the rest of the 0.5 s heading floor: **11.6 s of idle over the
+session's 39 door leads, 0.30 s mean, world-0 at ~100 u/s against the body's 288** — and six
+of those legs were 0 u long (door B returned the vertex world-0 already stood on, because the
+route's origin had been stepped onto the mesh). When the body was 299 u ahead the client's
+gate 1 fired: body onto world-0 at the foot, fence shut, the yank the owner felt. The mirror
+and the tape agree on world-0 throughout (the guard's model is right; the retro of a
+"MATCH does not exempt a separation past gate 1" re-pin rule pre-empted only 2 of the 6 —
+under a held key the last report is stale past the 0.347 s freshness gate by the time the
+separation reads red — and is not shipped).
+
+**The end state, and the plane word.** The snap SetPositions the body onto world-0 WITH
+world-0's plane word (movement/FINDINGS :3246, both copies). At 95.34 s that word was 29 on
+(10257, 8153), a ground point: our lead at 93.83 s had carried (29, 29) — the report's plane,
+the body being on the stairs — for a door-B vertex on plane 0. The body was drawn at plane
+29's cached height (F11: a plane with no surface under the point) and could not walk: three
+reports at the same point, then silence, the fence shut to the end. The client's keyboard mover
+could not resolve its own start (§1z-o.6's shape, from the other side). §1z-ck item 3 called
+these words "a census, not a defect" because the client tolerates them while WALKING; it does
+not tolerate being SNAPPED onto one and parked there. Three of the six snaps landed the body on a
+word the mesh does not offer at the landing; the scorer now prints the episodes ("player parked
+on a plane word our mesh lacks at its point"): session 4 three, longest 12.0 s; session 3 two,
+longest 2.75 s — the "keys dead 2.9 s" of §1z-cj was this too.
+
+**Shipped.** (1) `A2_LEAD_PLANE_WORDS` (`a2_lead_words`, at all four lead senders — the arm,
+the held heading, the refresh, the chain): field 3 is a plane our mesh offers at the
+DESTINATION (the report's own where it does) and field 4 one it offers at the mirror's
+world-0 (field 3 where it does) — retail's crossing shape, (far plane, mover's plane), equal
+except across a seam; where the mesh has no say the caller's words stand, so the matched and
+raw-carry arms stay measurable. Retrodicted on session 4: 23 of 152 leads change, and the
+three mid-air landings would have carried plane 0. `--no-lead-plane-words`. (2) `KBD_LEAD_CHAIN`
+(`kbd_lead_chain_tick`, polled beside the refresh at all three tick sites): a door-B lead's leg
+record carries the lead's ray and clip tag; at the mirror's arrival at the vertex (its own
+clock, the NPC follow's leg-end rule) the lead is re-run from the leg's report and ray through
+the same clip and doors and the next vertex goes out at once — bounded 12 per leg, refused
+under a shut fence or a stopped body, and a re-run that lands within 4 u of the current dest
+stops the chain for that leg and says so. `--no-kbd-lead-chain`. (3) Door B skips a vertex
+within 4 u of world-0. `test_kbdsync` 21i, §23 (six), §24 (seven), floor 187 → 201;
+`test_d1lead` and `test_position_trust`'s source pins moved to the new spellings (four
+`a2_clip_lead` call sites, `lead_f3`/`lead_f4` at the one send).
+
+**Not built.** The separation re-pin (above). A glide of the guard's async estimate along a
+held key's heading would make it fire in time; it would double-count the budget's age term
+and is design work, not a desk fix. The Hatcher's corner-exact legs are the router's true
+corners on this mesh; whether retail's NPCs round them is F16's next question.
+
+**Session 5 is the verbatim check** (registered on the run sheet): zero client snaps, zero
+mid-air episodes, door-B idle under 2 s, world-0 vs body moving p50 under 100 u.

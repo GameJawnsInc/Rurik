@@ -739,13 +739,13 @@ def main():
                    - src.count("def a2_clip_lead("))
     _clip_anchored = (src.count("a2_clip_lead(state, reported,")
                       - src.count("def a2_clip_lead(state, reported,"))
-    check(_clip_calls == 3
+    check(_clip_calls == 4
           and src.count("def a2_clip_lead(state, reported, dest)") == 1
           and _clip_anchored == _clip_calls
           and "a2_clip_lead(state, state[" not in src,
-          "the D2 clip has its def and THREE call sites (D1's, 1z-t's and "
-          "1z-ae's refresh), and EVERY call is anchored on the REPORT in "
-          "hand, verbatim",
+          "the D2 clip has its def and FOUR call sites (D1's, 1z-t's, "
+          "1z-ae's refresh and 1z-cl's corridor chain), and EVERY call is "
+          "anchored on the REPORT in hand, verbatim",
           "state['pos']-anchored is --heading-grant's graveyard (R2-1): "
           "a ray from the model's belief aims the lead from somewhere "
           "the client is not -- a warp with a plausible destination")
@@ -999,7 +999,7 @@ def main():
     i_zllast = -1
     _probe = 0
     while True:
-        _probe = src.find('state["zl_last_grant_plane"] = plane', _probe)
+        _probe = src.find('state["zl_last_grant_plane"] = lead_f3', _probe)
         if _probe < 0:
             break
         if "sec.0.11" in src[_probe:_probe + 120]:
@@ -1052,9 +1052,12 @@ def main():
           "gate passes on the model would place the player at the leg's "
           "START -- the exact staleness being corrected, half-fixed")
     check("zl_point = (a2_dest" in src
-          and "plane, zl_plane_cur]," in src,
+          and "lead_f3, lead_f4]," in src
+          and src.count("lead_f3, lead_f4 = plane, zl_plane_cur") == 1
+          and src.count("zl_plane_cur = lead_f4") == 1,
           "the ONE 0x0029 send consumes a2_dest through zl_point and its "
-          "field 4 still reads zl_plane_cur verbatim",
+          "field 4 reads lead_f4, which is zl_plane_cur unless 1z-cl's "
+          "mesh words moved it (one initialiser, one override, verbatim)",
           "a second 0x0029 send site is the two-arms-one-clock defect; a "
           "private field-4 expression at the send strands the plane "
           "policy inert")

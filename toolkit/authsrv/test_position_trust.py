@@ -3411,10 +3411,13 @@ def main():
           f"heading count is the positive control")
     pc_payload_field4 = payload[3] if len(payload) > 3 else None
     check(isinstance(pc_payload_field4, ast.Name)
-          and pc_payload_field4.id == "zl_plane_cur"
-          and isinstance(payload[2], ast.Name) and payload[2].id == "plane",
-          "and the zero-lead send's field 3 is still the node `plane` while "
-          "field 4 is the carried value",
+          and pc_payload_field4.id == "lead_f4"
+          and isinstance(payload[2], ast.Name) and payload[2].id == "lead_f3"
+          and "lead_f3, lead_f4 = plane, zl_plane_cur" in open(authsrv.__file__, encoding="utf-8").read(),
+          "and the zero-lead send's field 3 is the node `lead_f3` (initialised "
+          "from `plane`, the destination's) while field 4 is `lead_f4` "
+          "(initialised from the carried value) -- MOVECODE-1z-cl moved both "
+          "behind the mesh's answer at the two points",
           f"field3={ast.dump(payload[2]) if len(payload) > 2 else None} "
           f"field4={ast.dump(pc_payload_field4) if pc_payload_field4 else None}"
           f" -- field 3 is the DESTINATION's plane and the destination is the "

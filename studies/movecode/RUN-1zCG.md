@@ -37,7 +37,7 @@ and the three scripted stairs climbs change nothing.
 ## The run
 
 ```powershell
-python toolkit/clientscan/agenttap.py --agents 1,10 --seconds 240 --wait 300 --out vault/research/movecode/1zcg4-agenttap.jsonl
+python toolkit/clientscan/agenttap.py --agents 1,10 --seconds 240 --wait 300 --out vault/research/movecode/1zcg5-agenttap.jsonl
 ```
 
 ```powershell
@@ -181,3 +181,38 @@ every tape (see §1z-cj). `--no-client-reseed-latch` reverts.
 (`kbd-drop`; retail answers 7 of 7 such clicks, ROUTER review §1.7). It is a registered run
 question with its own exposure floor (`--answer-kbd-click`), and with (b) in place the stuck
 window is gone before the click matters.
+
+---
+
+## RESULT, session 4 — 2026-09-07 14:45 (capture `authsrv-20260907T144522-c1`, tape `movecode/1zcg4-agenttap.jsonl`, 108 s, 216 reports, 152 fired leads)
+
+*"1zCG wasn't great. The Hatcher commits too hard at waypoints around the top of the stairs.
+Warps when colliding with him around the top and bottom walls. Ended suspended in mid-air and
+stuck. The main point of contention is pathing desync around the stairs' walls."*
+
+| | measured | |
+|---|---|---|
+| client snaps, live path | **6** (214, 391, 279, 247, 226, 718 u) | REFUTES P1 |
+| 0x002C re-pins | 3 (2 gate2-offmesh at the foot's edge class, 1 arrival-risk) | WATCH |
+| the player parked on a plane word our mesh lacks at its point | 3 episodes, **longest 12.0 s** (the end) | RED, new metric |
+| world-0 vs the body moving p50 / p90 | 132 / 350 u | WATCH |
+| door-B leads / their idle at the vertex | 39 / **11.6 s** (0.30 s mean; six 0 u legs) | **§1z-cl** |
+| the Hatcher's drawn body off our mesh | 17.5 u worst, 27 of 1,217 | RED |
+
+**The chain** ([FINDINGS §1z-cl](FINDINGS.md)): every snap is the body climbing the stairs
+on plane 29 while world-0 walks door B's corridor to the foot one vertex per 0.5 s heading
+tick, idling 0.3 s at each; at 299 u the client's gate 1 snaps the body onto world-0 at the
+foot; the last snap (95.34 s) carried the report's plane word 29 onto a plane-0 point and left
+the body hanging in mid-air, unable to walk, for the run's last 12 s. **Fixed:** the lead's
+plane words are the mesh's at the destination and at world-0 (`--no-lead-plane-words`), a
+door-B lead chains to the next vertex at the copy's arrival (`--no-kbd-lead-chain`), and door
+B never names the vertex world-0 stands on.
+
+**Session 5 — registered, not run.** Same route, same script with `1zcg5`:
+
+- **P1 — zero client snaps** on the live path (session 4: 6, session 3: 1).
+- **P2 — zero mid-air episodes** ≥ 1 s (session 4: 12.0 s, session 3: 2.75 s).
+- **P3 — the chain runs**: ≥ 5 `kbd_leg act=chain` rows (the exposure floor; the stairs must be
+  climbed from the tongue), and the door-B idle under 2 s in total.
+- **P4 — world-0 vs the body moving p50 under 100 u** (session 4: 132).
+- Recorded, not scored: the Hatcher's legs at the foot corners (F16's own shape).
