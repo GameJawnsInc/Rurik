@@ -6306,7 +6306,207 @@ A2_LEAD_WALL_SLIDE = True     # False (--no-lead-wall-slide): a blocked ray stay
 A2_LEAD_WALL_SLIDE_FLOOR = 4.0
 
 
+# ---- MOVECODE-1z-cg: TWO DOORS ON THE LEAD, one per link of the owner's snap ---
+#
+# RUN-FEEL2's tape (2026-09-06, 63.8 s; found by sessionscore.py on 2026-09-07):
+# the client's OWN gate snapped the drawn body 166 u INTO the hole above the
+# stairs, froze it 1.5 s, and the next lead pulled it 452 u out. "Falls through
+# the stairs" -- the player's body this time, not the Hatcher's. Every link is
+# a mechanism this repo had already decoded:
+#
+#   1. two keyboard leads ended 61 and 78 u from the parked Hatcher -- INSIDE
+#      its 80 u disc -- and the client's agent-avoidance pass halted world-0 on
+#      each (NPCTRACK-F14 / Q8: "disc covers m_targetPoint -> HALT"). World-0
+#      sat at (11387, 8762) for 1.2 s, velocity 0, no segment, while the body
+#      ran 230 u north along the hole's edge at 288 u/s.
+#   2. the next lead, to (11245, 9428), was CLEAR from the report (11481, 8965)
+#      -- our ray never crosses the hole -- but the client bakes a grant from
+#      ITS OWN settled +0x78 (movement/FINDINGS 3724-3736), i.e. from the
+#      stalled world-0, and that leg crosses the hole 62 u deep on our own
+#      decode of the map. The tape shows world-0 leaving our mesh at 63.45 s
+#      and 59 u inside it by 63.72 s.
+#   3. gate 2 (pathCount == 0 at world-0's point) fired: the fence shut, the
+#      body teleported onto world-0, 61 u inside the hole (separation 20 u).
+#      Our guard had predicted MATCH at delivery -- correctly, the delivery
+#      matched -- and read gate 2 only 1.1 s after the snap, when the report
+#      was too stale to re-pin onto.
+#
+# The 1zBW session's six snaps are a different class (world-0 on the mesh,
+# separation 122-474 u: the fence latch 1z-bw bounded). Scripted runs: zero.
+#
+# THE DOORS. Both are the client's own rules restated as preconditions on what
+# we send, the way 1z-ap/1z-bf/1z-ce each were:
+#
+#   A. THE DISC (Q8's lever, recorded there as "clip the keyboard lead to end
+#      outside every agent's disc"). A lead may not END inside a hostile's
+#      disc, because world-0 halts there while the body -- whose target is the
+#      heading, far beyond -- sidesteps and keeps going. Extend the lead along
+#      its own ray to one bounding radius past the disc's far edge when the
+#      mesh reaches that far (world-0 then sidesteps as the body does); else
+#      shorten it to one radius short of the disc. A_2_LEAD_DISC_CLEAR.
+#   B. THE ORIGIN. The leg the client walks starts at ITS world-0, not at the
+#      report, so the lead's straight line must hold from the mirror's copy of
+#      world-0 as well. Where it does not, the lead becomes the first vertex of
+#      the corridor from world-0 to the dest (NPCTRACK-Q9's rule on the
+#      player's own sync copy), or the clip's stop from world-0 when no route
+#      can be had. Nothing here lengthens a ray past the report's clip.
+#      A2_LEAD_W0_ORIGIN. Skipped when the guard has no mirror (bare machine).
+#
+# Why not a pre-emptive 0x002C instead: it would put a fence shut and a
+# teleport on the wire where retail's server -- whose copy IS world-0 and
+# whose grants are always walkable from it -- sends nothing. The doors make
+# our grants walkable from world-0, which is retail's invariant.
+A2_LEAD_DISC_CLEAR = True     # False (--no-lead-disc-clear): a lead may end inside a hostile's disc.
+A2_LEAD_W0_ORIGIN = True      # False (--no-lead-w0-origin): the lead is clipped from the report only.
+A2_LEAD_MAX_CHORD = 767.0     # u: the client's report-trigger chord (1z-ab) -- the bound above a lead.
+A2_LEAD_W0_TOL = 4.0          # u: the leg from world-0 may stop this short of the dest and still count as reaching it.
+
+
+def _lead_disc_door(state, reported, dest, pm, plane):
+    """Door A. (dest, tag) -- tag None when no disc holds the dest."""
+    if not A2_LEAD_DISC_CLEAR or not state.get("agents"):
+        return dest, None
+    rx, ry = float(reported[0]), float(reported[1])
+    dx, dy = float(dest[0]) - rx, float(dest[1]) - ry
+    L = math.hypot(dx, dy)
+    if L < A2_LEAD_WALL_SLIDE_FLOOR:
+        return dest, None
+    ux, uy = dx / L, dy / L
+    disc = follow_stop_radius()
+    try:
+        obst = _npc_obstacles(state)(time.time())
+    except Exception:                                  # noqa: BLE001
+        return dest, None
+    inside = [(ox, oy) for ox, oy, _vx, _vy in obst
+              if math.hypot(float(dest[0]) - ox, float(dest[1]) - oy) < disc]
+    if not inside:
+        return dest, None
+    ox, oy = min(inside, key=lambda o: math.hypot(o[0] - rx, o[1] - ry))
+    # where the ray enters and leaves this disc, as distances along it
+    along = (ox - rx) * ux + (oy - ry) * uy
+    across = abs((ox - rx) * -uy + (oy - ry) * ux)
+    half = math.sqrt(max(disc * disc - across * across, 0.0))
+    entry, exit_ = along - half, along + half
+    past = exit_ + BOUNDING_RADIUS
+    if past <= A2_LEAD_MAX_CHORD:
+        ex, ey = rx + ux * past, ry + uy * past
+        if pm is None:
+            return [ex, ey], "disc-past"
+        st = (pm.clip(rx, ry, ex, ey, step=A2_LEAD_CLIP_STEP, plane=plane)
+              if plane is not None else pm.clip(rx, ry, ex, ey, step=A2_LEAD_CLIP_STEP))
+        if math.hypot(st[0] - ex, st[1] - ey) <= A2_LEAD_W0_TOL:
+            return [ex, ey], "disc-past"
+    short = entry - BOUNDING_RADIUS
+    if short >= A2_LEAD_WALL_SLIDE_FLOOR:
+        return [rx + ux * short, ry + uy * short], "disc-short"
+    return dest, None
+
+
+def _lead_w0_origin(state):
+    """The mirror's copy of the client's world-0 (its settled +0x78 at bake), or None."""
+    g = state.get("agtrack_guard")
+    if g is None:
+        return None
+    try:
+        p = _npc_mirror_pos(state, time.time())
+        pl = getattr(getattr(g, "mirror", None), "sync", None)
+        pl = getattr(pl, "plane", None)
+    except Exception:                                  # noqa: BLE001
+        return None
+    if p is None:
+        return None
+    return (float(p[0]), float(p[1]), pl)
+
+
+A2_LEAD_W0_STEP = 4.0         # u: the leg from world-0 is sampled this often against the mesh.
+# The seam tolerance is the wall-slide's 3 u, not SEAM_TOL's 1 u: our decode of
+# the stairs' foot leaves a 1.4 u gap between the ground and the prefab's first
+# trapezoid (measured on RUN-1zCE run 2's tape), and a leg from world-0 to the
+# foot vertex crosses it; the hole this door exists for is 62 u deep.
+A2_LEAD_W0_SEAM = 3.0
+
+
+def _leg_last_on_mesh(pm, x0, y0, x1, y1):
+    """The last point along (x0,y0)->(x1,y1) our mesh holds (walkable, or on_mesh
+    within SEAM_TOL), sampled every A2_LEAD_W0_STEP; the origin if the first
+    sample already fails; the far end if every sample holds."""
+    d = math.hypot(x1 - x0, y1 - y0)
+    n = max(1, int(d / A2_LEAD_W0_STEP))
+    last = (x0, y0)
+    has_on = hasattr(pm, "on_mesh")
+    for i in range(1, n + 1):
+        f = i / n
+        px, py = x0 + (x1 - x0) * f, y0 + (y1 - y0) * f
+        if not (pm.walkable(px, py) or (has_on and pm.on_mesh(px, py, A2_LEAD_W0_SEAM))):
+            return last
+        last = (px, py)
+    return (x1, y1)
+
+
+def _lead_origin_door(state, dest, pm):
+    """Door B. (dest, tag) -- tag None when the leg from world-0 holds."""
+    if not A2_LEAD_W0_ORIGIN or pm is None:
+        return dest, None
+    w0 = _lead_w0_origin(state)
+    if w0 is None:
+        return dest, None
+    mx, my, mpl = w0
+    if not (pm.walkable(mx, my) or (hasattr(pm, "on_mesh") and pm.on_mesh(mx, my))):
+        return dest, None                     # world-0 already off: nothing to hold
+    # THE LEG TEST IS PLANE-BLIND AND SEAM-TOLERANT, on purpose. A wall-slide
+    # lead (1z-ce) runs ALONG a trapezoid side, and world-0 stands in the edge
+    # class there; the plane clip from that origin refuses at its first step
+    # (retrodicted: 12 of 54 FEEL2 leads, every one a confirmed-good slide,
+    # would have become zero leads). What gate 2 tests is whether world-0's
+    # point has a trapezoid under it at all, so that is what this samples --
+    # `on_mesh` within SEAM_TOL every A2_LEAD_W0_STEP along the leg -- and the
+    # door fires only where the leg really leaves every trapezoid: the hole.
+    st = _leg_last_on_mesh(pm, mx, my, float(dest[0]), float(dest[1]))
+    if math.hypot(st[0] - float(dest[0]), st[1] - float(dest[1])) <= A2_LEAD_W0_TOL:
+        return dest, None
+    path = None
+    if hasattr(pm, "route"):
+        # route() wants an origin INSIDE a trapezoid; world-0 in the edge class
+        # (1z-bd.2) is stepped onto the mesh first, as the wall-slide census does.
+        ox, oy = mx, my
+        if not pm.walkable(ox, oy) and hasattr(pm, "nearest_walkable"):
+            nw = pm.nearest_walkable(ox, oy, A2_LEAD_W0_SEAM * 2.0)
+            if nw is not None:
+                ox, oy = float(nw[0]), float(nw[1])
+        try:
+            path = pm.route(ox, oy, float(dest[0]), float(dest[1]))
+        except Exception:                              # noqa: BLE001
+            path = None
+    if path and len(path) >= 3:
+        return [float(path[1][0]), float(path[1][1])], "w0-route"
+    return [float(st[0]), float(st[1])], "w0-clip"
+
+
 def a2_clip_lead(state, reported, dest):
+    """The lead's clip from the report (1z-ap/1z-bg/1z-ce), then 1z-cg's two
+    doors on the result. Returns (dest, clipped, why); a door that fired
+    appends its tag to `why` ("clear+disc-past", "clipped+w0-route")."""
+    got, clipped, why = _a2_clip_lead_ray(state, reported, dest)
+    if why in ("no-mesh", "origin-unwalkable", "origin-ambiguous"):
+        return got, clipped, why
+    pm = state.get("pathmap")
+    plane = None
+    if pm is not None and hasattr(pm, "plane_at"):
+        try:
+            plane = pm.plane_at(float(reported[0]), float(reported[1]),
+                                prefer=state.get("plane"))
+        except Exception:                              # noqa: BLE001
+            plane = None
+    got, tag_a = _lead_disc_door(state, reported, got, pm, plane)
+    got, tag_b = _lead_origin_door(state, got, pm)
+    tags = [t for t in (tag_a, tag_b) if t]
+    if tags:
+        why = why + "+" + "+".join(tags)
+        clipped = True
+    return got, clipped, why
+
+
+def _a2_clip_lead_ray(state, reported, dest):
     """Clip a D1 lead's endpoint to the navmesh along the REPORT's own ray.
 
     (dest, clipped, why) -- why is one of "no-mesh" / "origin-unwalkable" /
@@ -24621,6 +24821,19 @@ def main():
                          "tip -- is refused as origin-unwalkable and the lead "
                          "becomes a zero-lead (179 of them in 26 runs). "
                          "Known-bad arm.")
+    ap.add_argument("--no-lead-disc-clear", action="store_true",
+                    help="MOVECODE-1z-cg REVERT (door A): a keyboard lead may END "
+                         "inside a hostile's 80 u disc, where the client's "
+                         "avoidance pass halts world-0 (NPCTRACK-F14/Q8) while "
+                         "the body sidesteps on -- RUN-FEEL2 63.8 s: world-0 "
+                         "stalled 1.2 s, the body 230 u ahead. Known-bad arm.")
+    ap.add_argument("--no-lead-w0-origin", action="store_true",
+                    help="MOVECODE-1z-cg REVERT (door B): the lead is clipped "
+                         "from the REPORT only, though the client bakes it from "
+                         "its own settled world-0 -- RUN-FEEL2 63.8 s: a leg "
+                         "clear from the report crossed the hole above the "
+                         "stairs from world-0, gate 2 snapped the body 166 u "
+                         "into it. Known-bad arm.")
     ap.add_argument("--no-lead-wall-slide", action="store_true",
                     help="MOVECODE-1z-ce REVERT: a keyboard lead whose heading "
                          "ray is blocked at the body stays a ZERO lead instead "
@@ -26369,6 +26582,8 @@ def main():
     global FENCE_LATCH_MAX_AGE
     global KBD_LEAD_REFRESH, A2_LEAD_PLANE_CLIP, A2_LEAD_SEAM_CLIP, A2_LEAD_ORIGIN_SEAM
     global A2_LEAD_WALL_SLIDE
+    global A2_LEAD_DISC_CLEAR
+    global A2_LEAD_W0_ORIGIN
     if a.legacy_kbd_sync:
         KBD_SYNC = False
         KBD_SYNC_HOLD = False
@@ -26399,6 +26614,16 @@ def main():
         A2_LEAD_SEAM_CLIP = bool(a.lead_seam_clip)
         A2_LEAD_ORIGIN_SEAM = not a.lead_origin_exact
         A2_LEAD_WALL_SLIDE = not a.no_lead_wall_slide
+        A2_LEAD_DISC_CLEAR = not a.no_lead_disc_clear
+        A2_LEAD_W0_ORIGIN = not a.no_lead_w0_origin
+        if not A2_LEAD_DISC_CLEAR:
+            print("[map] --no-lead-disc-clear: a keyboard lead may end inside a "
+                  "hostile's disc, where the client halts world-0 (1z-cg's "
+                  "revert, door A).", flush=True)
+        if not A2_LEAD_W0_ORIGIN:
+            print("[map] --no-lead-w0-origin: the lead is clipped from the "
+                  "report only; the client bakes it from world-0 (1z-cg's "
+                  "revert, door B).", flush=True)
         if not A2_LEAD_WALL_SLIDE:
             print("[map] --no-lead-wall-slide: a keyboard lead whose heading "
                   "ray is blocked at the body is a ZERO lead again (pre-1z-ce). "

@@ -3875,7 +3875,20 @@ when map 280 is absent, and §14(g)/§16(l-p) when Pre-Searing is absent skip-de
   origin slides to the same vertex; a head-on press stands; `--no-model-wall-slide` stands; a
   heading away from the wall is clipped normally; 50 u off the mesh still suspends collision;
   the receive arm writes the vertex as both the model leg and the lead; both switches in the
-  header. Floor 153 → 162 from the green run. No vault, no client. ~2 s),
+  header. Floor 153 → 162 from the green run. **Sections 20-21 (MOVECODE-1z-cg, 2026-09-07):
+  the lead's two doors, one per link of the owner's own fall-through snap.** §20, the DISC
+  (`A2_LEAD_DISC_CLEAR`): on a 2000 u square a lead ending 20 u from a hostile is pushed along
+  its ray to one radius past the disc (x = 692, `why=clear+disc-past`); a hostile 680 u off the
+  dest changes nothing; a corpse holds no disc; the known-bad arm (`--no-lead-disc-clear`) ends
+  inside; where the mesh cannot carry the lead past, it ends one radius SHORT
+  (`clipped+disc-short`); header. §21, the ORIGIN (`A2_LEAD_W0_ORIGIN`) on a stub mesh with a
+  hole and a stub guard holding the mirror's world-0: a lead clear from the report whose leg from
+  world-0 crosses the hole becomes the corridor's first vertex from world-0
+  (`clear+w0-route`); a world-0 whose leg holds changes nothing; no guard (a bare machine) skips
+  the door; a world-0 already off the mesh is left alone; the known-bad arm
+  (`--no-lead-w0-origin`) sends the clear-from-the-report lead; no route gives the leg's last
+  on-mesh point (`clear+w0-clip`); header. Floor 162 → 176 from the green run. No vault, no
+  client. ~2 s),
   `toolkit/authsrv/test_livewire.py` (the committed retail-decode recipe,
   RETHINK instrument #2 — the campaign's referee moved out of a deletable
   scratchpad. Guards `toolkit/authsrv/livewire.py`: the no-vault doors

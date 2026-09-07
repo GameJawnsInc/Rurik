@@ -16799,3 +16799,83 @@ A2 is 1z-ca's ankle sink — the client's own height resolution on stair geometr
 here touches it. RECONSTRUCTION on the client until the next stairs session: the prediction is
 no park more than 5 u off the stairs' edge during a climb, and the follow's aim point on a slide
 ON the wall, ≤ 41 u ahead of the body (the model at 288 u/s against the body's 206).
+
+## 1z-cg. THE PLAYER'S OWN FALL-THROUGH — the client's gate 2 snapped the body 166 u INTO the hole above the stairs after two leads ending inside the Hatcher's disc had halted world-0 and the next lead, clear from the REPORT, crossed the hole from where the client actually bakes it, its own world-0. Two doors on the keyboard lead, both the client's decoded rules restated as preconditions on what we send; `--no-lead-disc-clear` and `--no-lead-w0-origin` revert. Found by the new session scorer, not by a run sheet
+
+**How it was found.** `studies/movecode/review/sessionscore.py` — one scorecard per gamesrv
+capture, joined to its tape, every quantity the arc has convicted a defect on against the band
+its confirming run measured — was run on RUN-FEEL2 first and reddened three lines. Two were
+known (the Hatcher's parks off the mesh, 1z-cf; the hostile's drawn body through the hole, Q9).
+The third was new: **the player's drawn body 60.2 u off our mesh for 17 samples (1.5 s) while
+the client's own reports were on it.** The run sheet had scored A2 as the Hatcher's fall-through
+only. The owner's words were "falls through the stairs onto the ground below", and the tape
+says that happened to *them*.
+
+### 1z-cg.1 The chain, on the tape and the wire (tape clock; capture = tape + 1.06 s)
+
+| tape | what |
+|---|---|
+| 62.26, 62.76 | two keyboard leads of **16 and 49 u** (the report (11410, 8784) pressing the hole's east wall, heading 74° / 54°) end **61 and 78 u** from the parked Hatcher at (11364, 8837) — inside its 80 u disc. The client's agent-avoidance pass **halts world-0** on each (NPCTRACK-F14 / Q8: "disc covers m_targetPoint → HALT"): world-0 sits at (11387, 8762), velocity 0, no segment, from 62.53 to 63.26. |
+| 62.9 → 63.7 | the body slides north along the hole's edge at 288 u/s: reports (11495, 8897), (11481, 8965), (11400, 9080). World-0 is **230 u behind**. |
+| 63.26 (cap 64.33) | the lead to **(11245, 9428)** goes out. From the report (11481, 8965) the ray is CLEAR — `seg_off` 0.0 on our mesh. The client bakes a grant from **its own settled +0x78** (movement/FINDINGS 3724-3736), i.e. from (11387, 8762), and *that* leg crosses the hole **62 u deep**. |
+| 63.45 → 63.72 | world-0 (live, `w0score.live`) leaves our mesh: 0.5, 24, 47, 59 u inside the hole. The body is on the mesh 220 u away. |
+| **63.81** | the fence shuts, the body is at (11336, 8934) — **20 u from world-0, 61 u inside the hole**. Gate 2 (`pathCount == 0` at world-0's point). No 0x002C from us (ours was at 71.06). |
+| 65.43 | the next lead pulls the body **452 u** out to (11085, 9293). |
+
+Our guard predicted MATCH at delivery — correctly, the delivery matched; gate 2 is a per-tick
+test during the walk — and its own gate-2 reading (`agtrack_repin blocked gate2-offmesh
+stale-report`) came at cap 65.97, 1.1 s after the snap, when the report was too old to re-pin
+onto. RUN-1zBW's six snaps (the owner's 2026-09-05 session) are a different class: world-0 on
+the mesh, separation 122–474 u — the fence latch 1z-bw bounded. Every scripted tape in the
+vault: zero snaps.
+
+### 1z-cg.2 The doors
+
+Both live in `a2_clip_lead`, after the ray (moved to `_a2_clip_lead_ray`), and a door that fires
+appends its tag to `lead_clip_why` (`clear+w0-route`, `clipped+disc-short`, …) so every capture
+names it.
+
+- **Door A, the disc** (`A2_LEAD_DISC_CLEAR`). Q8 recorded the lever: *"clip the keyboard lead to
+  end outside every agent's disc."* A lead may not END inside a hostile's disc (`_npc_obstacles`,
+  the client models; corpses excluded as F14 excludes them), because world-0 halts there while
+  the body — whose target is the heading, far beyond — sidesteps on. Extend the lead along its
+  own ray to one bounding radius past the disc's far edge when that stays under the client's
+  767 u chord and the clip reaches it (world-0 then sidesteps as the body does); else shorten it
+  to one radius short of the disc. **It cannot help FEEL2's two halting leads**: the report itself
+  stood 70 u from the Hatcher, inside the disc, with the ray blocked 16–49 u out; the stall there
+  is the client's, and it is door B that stops the snap that followed.
+- **Door B, the origin** (`A2_LEAD_W0_ORIGIN`). The leg the client walks starts at ITS world-0,
+  so the lead must hold from the mirror's copy of world-0 too (`_npc_mirror_pos`, the AgTrack
+  guard's sync copy; skipped without a guard). The test is **plane-blind and seam-tolerant on
+  purpose**: `on_mesh(…, 3 u)` sampled every 4 u along the leg, because a wall-slide lead runs
+  along a trapezoid side where world-0 stands in the edge class, and the first draft — the plane
+  clip from that origin — turned **12 of FEEL2's 54 leads, every one a confirmed-good slide, into
+  zero leads**, and fired on the stairs' foot on all three scripted controls (our decode leaves a
+  1.4 u seam between the ground and the prefab's first trapezoid). Gate 2 asks whether world-0
+  has a trapezoid under it; so does this, and the hole it exists for is 62 u deep. Where the leg
+  fails, the lead becomes the **first vertex of the corridor from world-0** (NPCTRACK-Q9's rule
+  on the player's own copy; `route()` from `nearest_walkable` when world-0 is in the edge class),
+  or the leg's last on-mesh point when no route can be had. Nothing lengthens a ray past the
+  report's clip.
+
+Not a pre-emptive 0x002C: that would put a fence shut and a teleport on the wire where retail's
+server — whose copy IS world-0 and whose grants are always walkable from it — sends nothing.
+The doors make our grants walkable from world-0, which is retail's invariant.
+
+### 1z-cg.3 Retrodiction and tests
+
+`studies/movecode/review/w0origin.py --check` replays a session's fired keyboard leads through
+`a2_clip_lead` with the TAPE's world-0 (live) as the mirror and the tape's Hatcher as the
+obstacle. On FEEL2: **5 of 54 leads move**, the founding lead becomes the corridor vertex
+**(11470, 8843)** (`clear+w0-route`) — the hole's east corner, on the body's own track — and the
+other four are three more crossings of the same pocket (61.7, 76.3, 78.4 s) and one slide lead
+whose leg from world-0 crossed it; every new point is on the mesh. **On the three scripted
+climbs the arc confirmed (RUN-1zCE ×2, RUN-Q9): 0 of 19 leads change on each**, and 0 of 91 on
+RUN-1zBW, 0 of 35 on RUN-FEEL. `test_kbdsync` §20 (door A: past, untouched, corpse, revert,
+short, header) and §21 (door B on a stub mesh with a hole: route, holds, no guard, world-0
+already off, revert, no route, header): +14, floor 162 → 176.
+
+**RECONSTRUCTION until the owner's next session** — [RUN-1zCG.md](RUN-1zCG.md): zero client
+snaps on the scorecard, at least two door-tagged leads, the player's drawn body on the mesh.
+`sessionscore.py` is the instrument from now on: run it on every session before believing
+"felt good".

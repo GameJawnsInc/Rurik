@@ -62,7 +62,7 @@ from test_position_trust import receive_arm, Sent, FakeRec   # noqa: E402
 # the word-against-point check and the known-bad arm that reddens all three --
 # the cross-plane guard NPCTRACK proposed is refuted at 0 of 488 and ships as
 # nothing).
-LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=162)
+LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=176)
 check = checks.adopt(LEDGER)
 
 SRC = open(authsrv.__file__, encoding="utf-8").read()
@@ -1572,6 +1572,176 @@ def main():
           and authsrv.capture_flags().get("MODEL_WALL_SLIDE") is True,
           "19i. both doors ship ON, each with its own revert rebound through a "
           "declared global, both in the capture header", "")
+
+    # ---- 20. MOVECODE-1z-cg door A: a lead may not END inside a hostile's disc
+    # THE DEFECT, on RUN-FEEL2's tape (63.8 s): two leads ended 61 and 78 u from
+    # the parked Hatcher, the client's avoidance pass halted world-0 on each
+    # (F14/Q8), and the body ran 230 u ahead in 1.2 s. The fixture is a 2000 u
+    # square; the hostile is a plain agent record the obstacle list reads at
+    # its position.
+    print("\n20. MOVECODE-1z-cg door A: the disc")
+    _BIG = _pmod.Trapezoid(0, 0, 2000.0, 0.0, 0.0, 2000.0, 0.0, 2000.0,
+                           (_pmod.NO_NEIGHBOUR,) * 4)
+    _big = _pmod.PathingMap([_BIG], [{}])
+    _big._cross = {}
+
+    def _st20(hx, hy, dead=False):
+        return {"pos": (100.0, 1000.0), "plane": 0, "pathmap": _big,
+                "agents": {10: {"pos": (hx, hy), "dead": dead, "name": "hatcher",
+                                "plane": 0}}}
+    lead20 = authsrv.kbd_lead_dest([100.0, 1000.0], [766.0, 0.0])[0]
+    check(abs(lead20[0] - 620.0) < 1e-6,
+          "20-fixture: the raw lead is 520 u east, to x = 620", f"{lead20}")
+    g, c, w = authsrv.a2_clip_lead(_st20(600.0, 1000.0), [100.0, 1000.0], lead20)
+    check(c and w == "clear+disc-past" and abs(g[0] - 692.0) < 1e-6 and abs(g[1] - 1000.0) < 1e-6,
+          "20a. THE DOOR: a lead ending 20 u from a hostile is pushed along its "
+          "own ray to one radius PAST the disc -- x = 600 + 80 + 12 = 692, "
+          "why=clear+disc-past",
+          f"granted {g} why={w}")
+    g, c, w = authsrv.a2_clip_lead(_st20(1300.0, 1000.0), [100.0, 1000.0], lead20)
+    check(not c and w == "clear" and abs(g[0] - 620.0) < 1e-6,
+          "20b. a hostile 680 u off the dest changes nothing: the door reads the "
+          "DEST, not the ray", f"granted {g} why={w}")
+    g, c, w = authsrv.a2_clip_lead(_st20(600.0, 1000.0, dead=True), [100.0, 1000.0], lead20)
+    check(not c and w == "clear" and abs(g[0] - 620.0) < 1e-6,
+          "20c. a corpse is not in the pass (F14): the dead hostile's disc holds "
+          "nothing", f"granted {g} why={w}")
+    _saved_dc = authsrv.A2_LEAD_DISC_CLEAR
+    try:
+        authsrv.A2_LEAD_DISC_CLEAR = False
+        g, c, w = authsrv.a2_clip_lead(_st20(600.0, 1000.0), [100.0, 1000.0], lead20)
+    finally:
+        authsrv.A2_LEAD_DISC_CLEAR = _saved_dc
+    check(not c and w == "clear" and abs(g[0] - 620.0) < 1e-6,
+          "20d. KNOWN-BAD ARM (--no-lead-disc-clear): the lead ends inside the "
+          "disc, where the client halts world-0 -- FEEL2's stall",
+          f"granted {g} why={w}")
+    # the mesh ends at x = 2000: a hostile at 1950 cannot be passed, so the
+    # lead stops one radius short of its disc instead.
+    st20s = _st20(1950.0, 1000.0)
+    st20s["pos"] = (1500.0, 1000.0)
+    lead20s = authsrv.kbd_lead_dest([1500.0, 1000.0], [766.0, 0.0])[0]
+    g, c, w = authsrv.a2_clip_lead(st20s, [1500.0, 1000.0], lead20s)
+    check(c and w == "clipped+disc-short" and abs(g[0] - (1950.0 - 80.0 - 12.0)) < 1e-6,
+          "20e. where the mesh cannot carry the lead past the disc it ends one "
+          "radius SHORT of it: x = 1950 - 92 = 1858, why=clipped+disc-short",
+          f"granted {g} why={w}")
+    check(authsrv.A2_LEAD_DISC_CLEAR is True
+          and "--no-lead-disc-clear" in SRC and "global A2_LEAD_DISC_CLEAR" in SRC
+          and authsrv.capture_flags().get("A2_LEAD_DISC_CLEAR") is True,
+          "20f. door A ships ON with its revert, in the capture header", "")
+
+    # ---- 21. MOVECODE-1z-cg door B: the leg must hold from WORLD-0's origin
+    # THE DEFECT: the lead to (11245, 9428) was clear from the report but the
+    # client baked it from its stalled world-0 at (11387, 8762), through the
+    # hole above the stairs, and gate 2 snapped the body into it. The fixture
+    # is a stub mesh with a hole: walkable everywhere except the square
+    # [200, 300] x [950, 1050]; route() goes round by the hole's top-left
+    # corner. The guard is a stub holding the mirror's world-0.
+    print("\n21. MOVECODE-1z-cg door B: the world-0 origin")
+
+    class _Hole:
+        def __init__(self):
+            self.routes = 0
+
+        def _in_hole(self, x, y):
+            return 200.0 <= x <= 300.0 and 950.0 <= y <= 1050.0
+
+        def walkable(self, x, y):
+            return not self._in_hole(x, y)
+
+        def on_mesh(self, x, y, tol=1.0):
+            return self.walkable(x, y)
+
+        def plane_at(self, x, y, prefer=None):
+            return 0
+
+        def plane_near(self, x, y, prefer=None):
+            return 0
+
+        def planes_at(self, x, y):
+            return {0} if self.walkable(x, y) else set()
+
+        def clip(self, x0, y0, x1, y1, step=2.0, plane=None):
+            d = math.hypot(x1 - x0, y1 - y0)
+            n = max(1, int(d / step))
+            last = (x0, y0)
+            for i in range(1, n + 1):
+                f = i / n
+                p = (x0 + (x1 - x0) * f, y0 + (y1 - y0) * f)
+                if self._in_hole(*p):
+                    return last
+                last = p
+            return (x1, y1)
+
+        def route(self, x0, y0, x1, y1, **kw):
+            self.routes += 1
+            if self.clip(x0, y0, x1, y1) == (x1, y1):
+                return [(x0, y0), (x1, y1)]
+            return [(x0, y0), (190.0, 1060.0), (x1, y1)]
+
+    class _Guard:
+        def __init__(self, w0):
+            class _S:
+                pass
+            self.mirror = _S()
+            self.mirror.sync = _S()
+            self.mirror.sync.plane = 0
+            self.mirror.sync.position = lambda ms, _w=w0: _w
+
+        def _ms(self, now):
+            return 0
+
+    _hole = _Hole()
+    R21 = [250.0, 1200.0]                     # above the hole; the ray east is clear
+    lead21 = authsrv.kbd_lead_dest(R21, [766.0, 0.0])[0]
+    st21 = {"pos": tuple(R21), "plane": 0, "pathmap": _hole,
+            "agtrack_guard": _Guard((150.0, 1000.0))}     # world-0 left of the hole, level with it
+    g, c, w = authsrv.a2_clip_lead(st21, R21, lead21)
+    check(c and w == "clear+w0-route" and g == [190.0, 1060.0],
+          "21a. THE DOOR: the ray from the report is clear, but the leg from "
+          "world-0 crosses the hole, so the lead is the corridor's first vertex "
+          "from world-0 -- why=clear+w0-route",
+          f"granted {g} why={w}")
+    st21b = dict(st21, agtrack_guard=_Guard((250.0, 1150.0)))   # world-0 just behind the body
+    g, c, w = authsrv.a2_clip_lead(st21b, R21, lead21)
+    check(not c and w == "clear" and abs(g[0] - 770.0) < 1e-6,
+          "21b. a world-0 whose leg to the dest holds gets the lead unchanged",
+          f"granted {g} why={w}")
+    st21c = {"pos": tuple(R21), "plane": 0, "pathmap": _hole}
+    g, c, w = authsrv.a2_clip_lead(st21c, R21, lead21)
+    check(not c and w == "clear" and abs(g[0] - 770.0) < 1e-6,
+          "21c. no guard, no mirror (a bare machine): the door is skipped, not "
+          "guessed", f"granted {g} why={w}")
+    st21d = dict(st21, agtrack_guard=_Guard((250.0, 1000.0)))   # world-0 already IN the hole
+    g, c, w = authsrv.a2_clip_lead(st21d, R21, lead21)
+    check(not c and w == "clear" and abs(g[0] - 770.0) < 1e-6,
+          "21d. a world-0 already off the mesh has no leg to hold: unchanged "
+          "(the guard's gate-2 re-pin is that case's door)", f"granted {g} why={w}")
+    _saved_wo = authsrv.A2_LEAD_W0_ORIGIN
+    try:
+        authsrv.A2_LEAD_W0_ORIGIN = False
+        g, c, w = authsrv.a2_clip_lead(st21, R21, lead21)
+    finally:
+        authsrv.A2_LEAD_W0_ORIGIN = _saved_wo
+    check(not c and w == "clear" and abs(g[0] - 770.0) < 1e-6,
+          "21e. KNOWN-BAD ARM (--no-lead-w0-origin): the clear-from-the-report "
+          "lead goes out, and the client walks world-0 through the hole",
+          f"granted {g} why={w}")
+
+    class _NoRoute(_Hole):
+        def route(self, *a, **kw):
+            return None
+    st21f = dict(st21, pathmap=_NoRoute())
+    g, c, w = authsrv.a2_clip_lead(st21f, R21, lead21)
+    check(c and w == "clear+w0-clip" and g[0] < 200.0 and 1000.0 <= g[1] <= 1020.0,
+          "21f. no route from world-0: the lead is the clip's stop on the leg "
+          "from world-0, before the hole -- why=clear+w0-clip",
+          f"granted {g} why={w}")
+    check(authsrv.A2_LEAD_W0_ORIGIN is True
+          and "--no-lead-w0-origin" in SRC and "global A2_LEAD_W0_ORIGIN" in SRC
+          and authsrv.capture_flags().get("A2_LEAD_W0_ORIGIN") is True,
+          "21g. door B ships ON with its revert, in the capture header", "")
 
     return LEDGER.verdict()
 

@@ -80,3 +80,11 @@ to the same vertex the lead names** (245 / 263 / 170 u) instead of 136 u east in
 until the next stairs session: the prediction is no park more than 5 u off the stairs' edge
 while you climb, and the "falls through" gone; the "slightly sunken" that remains is 1z-ca's
 ankle sink on stair geometry, the client's own height resolution, unchanged by anything here.
+
+**Addendum 2026-09-07 — A2 had a second half, and it was YOURS.** `sessionscore.py` on this
+capture: the player's drawn body 60.2 u off our mesh for 1.5 s at 63.8 s (tape clock) with your
+reports on it — the client's own gate 2 snapping your body into the hole above the stairs after
+two leads ending inside the Hatcher's disc had halted world-0 and the next lead crossed the hole
+from there. That is "falls through the stairs" as you felt it. MOVECODE-1z-cg, two doors on the
+lead, retrodicted here (5 of 54 leads move; the founding one becomes the hole's corner vertex);
+[RUN-1zCG.md](RUN-1zCG.md) is your next session.
