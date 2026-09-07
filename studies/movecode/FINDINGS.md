@@ -17007,7 +17007,12 @@ clearance, almost none 4–12 u): no body-radius inset.
 
 **The stairs entry, for the record of options** (the owner asked): the drawn plane is wrong for
 0.36–0.82 s per entry, which is the follow's half-second re-path cadence, and retail's own update
-after a crossing order is p50 0.64 s / p25 0.28 / p90 2.08. Beating it means an UNCLOCKED send at
+after a crossing order is p50 0.64 s / p25 0.28 / p90 2.08. **That figure is NOT "retail-faithful"
+for these stairs, and the owner said so (2026-09-07): map 148 is an outpost, no hostile walks its
+stairs in retail, and the corpus holds no capture of a monster on stair geometry anywhere. What
+is measured is retail's plane-update cadence for hostiles crossing planes in explorables; whether
+a retail monster visibly sinks into a stair prefab for that half second is UNOBSERVED. The
+owner's ruling: leave it for now.** Beating it means an UNCLOCKED send at
 the model's crossing (one extra `0x002A` re-path when `_npc_plane` at the copy's point changes,
 ignoring `FOLLOW_REPATH_INTERVAL` for that one send) — inside retail's envelope (p10 0.11 s) but
 not its cadence; expected lag ~0.1 s plus the drawn body's own handoff, which took the plane at

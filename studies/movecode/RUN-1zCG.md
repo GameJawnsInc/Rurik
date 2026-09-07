@@ -149,7 +149,7 @@ couple seconds. Options?"*
 | | measured | |
 |---|---|---|
 | 0x002C re-pins | **1** (gate1-red) — down from 7 under 1z-ci; fence-shut refusals 0 of 127 | ✅ |
-| the stairs entries | 5 episodes, longest **0.82 s** (retail's own update p50 0.64 / p90 2.08) | at the floor; options below |
+| the stairs entries | 5 episodes, longest **0.82 s** (retail's plane-update cadence in explorables p50 0.64 / p90 2.08; no retail capture has a monster on stairs — the owner: an outpost, no NPC walks these in retail) | left for now, by the owner's ruling |
 | the player's drawn body off our mesh | 0.00 u | ✅ |
 | world-0 vs the body moving p50 | 136 u | WATCH |
 | **the stuck stretch** | 68.5–71.4 s: the client's own separation snap put the body on the hole's corner with ITS fence shut; keys dead 2.9 s; the escape click at 69.8 s dropped by our router (`kbd-drop`); then 71.4–74.9 s the body walked our leads as click-orders at 190 u/s (two 150–260 u yanks) until a walk-start reopened the fence | **§1z-cj** |
