@@ -5846,6 +5846,33 @@ FENCE_LATCH_MAX_AGE = 8.0     # s; --no-fence-latch-timeout restores the unbound
 # lifts nothing, which is the case 1z-aa's "never a lead into the window"
 # protects. --no-fence-rearm-moved reverts to the walk-start rule alone.
 FENCE_REARM_MOVED_ON = True   # False (--no-fence-rearm-moved): walk-start only.
+# ...AND THE CLIENT'S OWN SNAP SHUTS IT TOO (MOVECODE-1z-cj, 2026-09-07, the
+# owner's third RUN-1zCG session, "got stuck near the end for a couple
+# seconds"). The latch was stamped only by OUR 0x002C; the client's own
+# gate reseeds (1s.3: gate 1 on separation, gate 2 off-mesh, gate 3 the disc
+# or terrain) shut the same fence -- the tape: shut at 68.51 s with no
+# 0x002C from us, open again at 74.95 -- and the server, blind to it, kept
+# leading into the window: the body walked our leads as click-orders at
+# 190 u/s (sec.0.11 stage 2), the owner's keys were dead for 2.9 s and the
+# scorer read two more 150-260 u yanks. THE WIRE SHOWS THE RESEED: the
+# first report after it lands ON the mirror's world-0 (3 u here) while the
+# position model expected the body far away (drift 373 u) -- a body that
+# was 250 u from world-0 does not walk back onto it in one report interval
+# by its own keys. So a report that jumps back onto the mirror's copy is
+# the client's reseed, and it stamps the latch with that point as the pin;
+# the walked-off-pin rule then lifts it when the body next moves under its
+# own keys, and no lead goes into the window meanwhile.
+CLIENT_RESEED_LATCH = True    # False (--no-client-reseed-latch): only our 0x002C stamps the latch.
+CLIENT_RESEED_JUMP = 150.0    # u: the report's drift from the position model (session 3: 373).
+CLIENT_RESEED_ONTO = 24.0     # u: the report's distance to the mirror's world-0 (session 3: 9.5).
+# THE THIRD CONDITION, from the census across every tape with a capture: two
+# conditions alone flagged 26 reports of which 7 sat under a shut client fence
+# -- the 19 others were bodies PARKED on world-0 (a scripted wait, the spawn)
+# whose model had wandered, all with the previous report within 16 u of
+# world-0. A reseed is a body that WAS away (session 3: 236 u at the report
+# before) and reappears on world-0. With it: every client-only reseed on the
+# tapes kept (4 of 4), one false stamp left in 19, on a pre-1z-bw session.
+CLIENT_RESEED_PREV_FAR = 100.0   # u: the previous report's distance from world-0.
 FENCE_REARM_MOVED = 2.0 * 12.0   # u: two bounding radii off the pin point.
 
 
@@ -6501,7 +6528,29 @@ def _lead_origin_door(state, dest, pm):
         except Exception:                              # noqa: BLE001
             path = None
     if path and len(path) >= 3:
-        return [float(path[1][0]), float(path[1][1])], "w0-route"
+        # RUN-1zCG session 3 (2026-09-07, 68.5 s): the corridor's corner vertex
+        # stood 45 u from the Hatcher, the client's avoidance HALTED world-0
+        # on it (F14 -- door A's rule, which runs on the ray and never saw this
+        # vertex), the body ran on, the client's own separation gate snapped
+        # it back 255 u and shut its fence for 6.4 s. A vertex inside a
+        # hostile's disc is skipped for the next one whose leg from world-0
+        # holds; none -> the leg's last on-mesh point.
+        discs = []
+        if A2_LEAD_DISC_CLEAR and state.get("agents"):
+            try:
+                discs = [(ox, oy) for ox, oy, _vx, _vy in _npc_obstacles(state)(time.time())]
+            except Exception:                          # noqa: BLE001
+                discs = []
+        disc = follow_stop_radius()
+        for k in range(1, len(path)):
+            vx_, vy_ = float(path[k][0]), float(path[k][1])
+            if any(math.hypot(vx_ - ox, vy_ - oy) < disc for ox, oy in discs):
+                continue
+            if k > 1:
+                held = _leg_last_on_mesh(pm, mx, my, vx_, vy_)
+                if math.hypot(held[0] - vx_, held[1] - vy_) > A2_LEAD_W0_TOL:
+                    break
+            return [vx_, vy_], ("w0-route" if k == 1 else "w0-route-skip")
     return [float(st[0]), float(st[1])], "w0-clip"
 
 
@@ -20574,13 +20623,42 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # us it is moving under the keyboard", and it told us
                         # that whether or not we believed the coordinates it
                         # attached -- a refused report is still a report.
+                        # MOVECODE-1z-cj: the client's OWN reseed, read off
+                        # this report -- it lands on the mirror's world-0
+                        # while the model expected the body far away.
+                        _reseed_report = False
+                        if (CLIENT_RESEED_LATCH and state.get("fence_shut_at") is None
+                                and state.get("agtrack_guard") is not None):
+                            _w0 = _npc_mirror_pos(state, time.time())
+                            _model = state.get("pos")
+                            if _w0 is not None and _model is not None:
+                                _jump = math.hypot(reported[0] - _model[0],
+                                                   reported[1] - _model[1])
+                                _onto = math.hypot(reported[0] - _w0[0],
+                                                   reported[1] - _w0[1])
+                                _prev_onto = state.get("reseed_prev_onto", 0.0)
+                                state["reseed_prev_onto"] = _onto
+                                if (_jump > CLIENT_RESEED_JUMP and _onto < CLIENT_RESEED_ONTO
+                                        and _prev_onto > CLIENT_RESEED_PREV_FAR):
+                                    state["fence_shut_at"] = time.time()
+                                    state["fence_pin_pt"] = (float(reported[0]),
+                                                             float(reported[1]))
+                                    # This report is the reseed's own, not a
+                                    # walk-start: the walk-start clause below
+                                    # skips it (kbd_moving_at is written in
+                                    # exactly two places and stays so).
+                                    _reseed_report = True
+                                    if rec is not None:
+                                        rec.event("fence", act="shut", by="client-reseed",
+                                                  jump=round(_jump, 1), onto=round(_onto, 1),
+                                                  prev_onto=round(_prev_onto, 1))
                         _kbd_was_moving = state.get("kbd_moving_at") is not None
                         state["kbd_moving_at"] = time.time() if moving else None
                         # MOVECODE-1z-aa: the fence we shut RE-ARMS at a
                         # keyboard walk-start -- a moving report after the
                         # latch was clear (the tape: 7 of 8 such reports,
                         # 0 of 4 stops). A mid-walk re-report is not one.
-                        if (moving and not _kbd_was_moving
+                        if (moving and not _kbd_was_moving and not _reseed_report
                                 and state.get("fence_shut_at") is not None):
                             if rec is not None:
                                 rec.event("fence", act="rearm", by="walk-start",
@@ -24958,6 +25036,12 @@ def main():
                          "On RUN-R3's stair climb that is 15 zero leads in 8 s "
                          "and the sync copy trailing the body by 100-139 u. "
                          "Known-bad arm.")
+    ap.add_argument("--no-client-reseed-latch", action="store_true",
+                    help="MOVECODE-1z-cj REVERT: only our own 0x002C stamps the "
+                         "fence latch; the client's own gate snaps (a report that "
+                         "jumps back onto world-0) do not, and leads keep going "
+                         "into the shut window -- the owner's 2.9 s of dead keys "
+                         "and 190 u/s enslaved walking on session 3. Known-bad arm.")
     ap.add_argument("--no-fence-rearm-moved", action="store_true",
                     help="MOVECODE-1z-ci REVERT: the fence we shut re-arms only "
                          "at a keyboard walk-start (a moving report after a "
@@ -26710,6 +26794,7 @@ def main():
     global KBD_SYNC_HOLD, KBD_LEAD_KILL, KBD_SYNC_MATCHED, KBD_LEAD_FENCE_GATE
     global FENCE_LATCH_MAX_AGE
     global FENCE_REARM_MOVED_ON
+    global CLIENT_RESEED_LATCH
     global KBD_LEAD_REFRESH, A2_LEAD_PLANE_CLIP, A2_LEAD_SEAM_CLIP, A2_LEAD_ORIGIN_SEAM
     global A2_LEAD_WALL_SLIDE
     global A2_LEAD_DISC_CLEAR
@@ -26741,6 +26826,10 @@ def main():
         # 1z-bw: None restores the unbounded latch (the 1z-aa..1z-bv behaviour).
         FENCE_LATCH_MAX_AGE = None if a.no_fence_latch_timeout else 8.0
         FENCE_REARM_MOVED_ON = not a.no_fence_rearm_moved
+        CLIENT_RESEED_LATCH = not a.no_client_reseed_latch
+        if not CLIENT_RESEED_LATCH:
+            print("[kbd] --no-client-reseed-latch: the client's own snaps do not "
+                  "stamp the fence latch (1z-cj's revert).", flush=True)
         if not FENCE_REARM_MOVED_ON:
             print("[kbd] --no-fence-rearm-moved: the fence re-arms at a walk-start "
                   "only (1z-ci's revert; the latch runs to its bound under a "

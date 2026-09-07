@@ -36,7 +36,7 @@ and the three scripted stairs climbs change nothing.
 ## The run
 
 ```powershell
-python toolkit/clientscan/agenttap.py --agents 1,10 --seconds 240 --wait 300 --out vault/research/movecode/1zcg3-agenttap.jsonl
+python toolkit/clientscan/agenttap.py --agents 1,10 --seconds 240 --wait 300 --out vault/research/movecode/1zcg4-agenttap.jsonl
 ```
 
 ```powershell
@@ -138,3 +138,44 @@ leg from a point the client never reached. A vertex inside the player's disc is 
 follow (`test_agentlife` +1). Retail's own corridor vertices sit ON wall corners (of 1,965 NPC leg
 endpoints followed by a turn, 14% have under 4 u of clearance and almost none 4–12 u), so no
 body-radius inset is built: a hostile brushing a corner is retail's shape.
+
+---
+
+## RESULT, session 3 — 2026-09-07 12:12 (capture `authsrv-20260907T121212-c1`, tape `movecode/1zcg3-agenttap.jsonl`, 80 s, 176 reports, 127 fired leads, 839 tape samples)
+
+*"Still seeing the Hatcher sink into the stairs on approach. Also got stuck near the end for a
+couple seconds. Options?"*
+
+| | measured | |
+|---|---|---|
+| 0x002C re-pins | **1** (gate1-red) — down from 7 under 1z-ci; fence-shut refusals 0 of 127 | ✅ |
+| the stairs entries | 5 episodes, longest **0.82 s** (retail's own update p50 0.64 / p90 2.08) | at the floor; options below |
+| the player's drawn body off our mesh | 0.00 u | ✅ |
+| world-0 vs the body moving p50 | 136 u | WATCH |
+| **the stuck stretch** | 68.5–71.4 s: the client's own separation snap put the body on the hole's corner with ITS fence shut; keys dead 2.9 s; the escape click at 69.8 s dropped by our router (`kbd-drop`); then 71.4–74.9 s the body walked our leads as click-orders at 190 u/s (two 150–260 u yanks) until a walk-start reopened the fence | **§1z-cj** |
+
+**The chain, on the tape.** 65.9–68.0 s: the body ran round the east and north of the hole
+while world-0, 130 u behind on short clip-point leads (the ray blocked 17 u out at the hole's
+edge — retail grants the clip point there too, 5 of 5), was sent by door B along the corridor
+to the hole's corner **(11288, 9151)**. The Hatcher, chasing world-0's frame, stood 45 u from that
+corner, and the client's avoidance **halted world-0 on it** (F14 — door A's rule, which runs on
+the ray and never saw door B's vertex). The body ran on to 264 u; at 68.51 s the client's gate 1
+snapped it 255 u back onto world-0 and shut its fence. Our latch knew only our own `0x002C`, so
+the next lead went into the client's shut window: the body walked it as an order (190 u/s) — the
+yanks at 72.4 and 75.0 s — until the owner's re-press at 74.95 s re-armed the fence. The guard's
+sweep read the separation as red only at 71.2 s, blocked on a stale report: its async estimate is
+the last report, not a body still running under a held key, and world-0 was halted with no
+arrival to mature.
+
+**Fixed, 1z-cj:** (a) door B's vertex is checked against every hostile disc and skipped for the
+next point whose leg from world-0 holds; (b) the client's own reseed is read off the report —
+one that jumps more than 150 u off the position model, lands within 24 u of the mirror's
+world-0, and whose PREVIOUS report stood more than 100 u from world-0 (session 3: 373 / 9.5 /
+236 u) — and stamps the latch with that point as the pin, so no lead goes into the client's window
+and the walked-off-pin rule lifts it when the body next moves under its keys. Validated across
+every tape (see §1z-cj). `--no-client-reseed-latch` reverts.
+
+**Not moved:** the escape click. Our router drops a click while the keyboard is active
+(`kbd-drop`; retail answers 7 of 7 such clicks, ROUTER review §1.7). It is a registered run
+question with its own exposure floor (`--answer-kbd-click`), and with (b) in place the stuck
+window is gone before the click matters.

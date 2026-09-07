@@ -16958,3 +16958,59 @@ later `29->29`. Retail's own mover-plane update after a crossing order: p50 0.64
 p90 2.08 (954 NPC orders with field 3 ≠ field 4 across the live corpus). An unclocked send at the
 model's crossing would beat retail; it is not built. `sessionscore.py` now prints the episodes
 against that band.
+
+## 1z-cj. THE STUCK STRETCH — door B's corridor vertex inside the Hatcher's disc halted world-0, the client's own separation gate snapped the body back and shut its fence, and the server, blind to a fence it did not shut itself, led into the window. Two fixes: the vertex checked against every disc, and the client's own reseed read off the wire
+
+**Session 3, 68.5–74.9 s** ([RUN-1zCG.md](RUN-1zCG.md) session 3 carries the tape). The two halves:
+
+**(a) The vertex in the disc.** Door B (1z-cg) routes world-0 round geometry to the corridor's
+first vertex; door A (a lead may not END inside a hostile's disc) runs on the ray before door B
+and never sees that vertex. At 68.02 and 68.53 s the vertex (11288, 9151) stood 34–45 u from the
+Hatcher, which chases world-0's frame (F5) and so was standing beside it. F14: the client halts a
+copy whose target another agent's disc covers. World-0 halted 45 u short (the tape: velocity 0
+from 68.06 to 68.42 while the body ran 264 u away); the client's gate 1 fired at 68.51. **Fix:**
+door B checks each corridor vertex against `_npc_obstacles` and takes the next one whose leg
+from world-0 holds on the mesh, else the leg's last on-mesh point (`why` gains `w0-route-skip`).
+`test_kbdsync` 21h.
+
+**(b) The fence we did not shut.** The latch (`fence_shut_at`) was stamped only by OUR
+`0x002C`. The client's own gate reseeds (1s.3) shut the same fence: the tape reads shut at
+68.51 s with no `0x002C` from us, open again at 74.95 s at the owner's re-press. In between the
+server kept leading — into the client's shut window, which is sec.0.11 stage 2 verbatim: the body
+walked the leads as click-orders (190 u/s, the lead's own speed), the keys were dead, and the
+scorer read two more 150–260 u yanks. **The wire shows the reseed:** the first report after it
+lands ON the mirror's world-0 (3 u) while the position model expected the body 373 u away; a body
+250 u from world-0 does not walk back onto it in one report interval by its own keys. **Fix:** a
+report more than `CLIENT_RESEED_JUMP` (150 u) off the model that lands within `CLIENT_RESEED_ONTO`
+(24 u) of the mirror's world-0, and whose previous report stood more than `CLIENT_RESEED_PREV_FAR`
+(100 u) from world-0, stamps the latch with that point as the pin (`fence` row
+`by=client-reseed`); the report itself is not a walk-start; the walked-off-pin rule (1z-ci) lifts
+it when the body next moves under its keys. **The third condition came from the census across
+every tape with a capture:** the first two alone flagged 26 reports, 7 under a shut client fence
+and 19 not — every one of the 19 a body PARKED on world-0 (a scripted wait, the spawn) whose model
+had wandered, its previous report within 16 u of world-0; a reseed is a body that WAS away
+(session 3: 236 u) and reappears on world-0. With it, the four client-only reseeds on the tapes
+are kept (session 3's, and three on RUN-1zBW) and one false stamp remains in 19, on that pre-1z-bw
+session. `--no-client-reseed-latch` reverts; `test_kbdsync` §22 (the reseed, the same jump not
+onto world-0, no jump, a parked body's wandered model, the revert, the header), floor 180 → 187.
+
+**Recorded, not built.** (1) The guard's sweep read the separation as red 2.7 s late: its async
+estimate is the last report (no glide under a held key) and a HALTED world-0 has no arrival to
+mature, so clause 2 never fired; a re-pin onto the body at 68.6 s would have pre-empted the whole
+episode. (2) The escape click at 69.8 s: `router_route kbd-drop`, keyboard_age 1.5 s — retail
+answers such clicks 7 of 7 (ROUTER review §1.7); it is a registered run question with an exposure
+floor (`--answer-kbd-click`), not flipped here. (3) World-0's 130 u lag before the corridor came
+from clip-point leads at the hole's edge (the ray blocked 17 u out); retail grants the clip point
+there too (5 of 5 within a unit, `wallslide.pairs()` on rays blocked 4–64 u out), so those leads
+stay. (4) Retail's corridor vertices sit ON wall corners (1,965 turn endpoints: 14% under 4 u of
+clearance, almost none 4–12 u): no body-radius inset.
+
+**The stairs entry, for the record of options** (the owner asked): the drawn plane is wrong for
+0.36–0.82 s per entry, which is the follow's half-second re-path cadence, and retail's own update
+after a crossing order is p50 0.64 s / p25 0.28 / p90 2.08. Beating it means an UNCLOCKED send at
+the model's crossing (one extra `0x002A` re-path when `_npc_plane` at the copy's point changes,
+ignoring `FOLLOW_REPATH_INTERVAL` for that one send) — inside retail's envelope (p10 0.11 s) but
+not its cadence; expected lag ~0.1 s plus the drawn body's own handoff, which took the plane at
+the same order on 3 of 4 entries. Sending the far plane EARLY (field 4 = 29 while the copy is on
+plane-0 ground) is refused: F11 measured what the client does with a plane that has no surface
+under the point (a cached height, 52 u into the ground).

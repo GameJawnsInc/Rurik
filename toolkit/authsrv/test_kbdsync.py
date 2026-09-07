@@ -62,7 +62,7 @@ from test_position_trust import receive_arm, Sent, FakeRec   # noqa: E402
 # the word-against-point check and the known-bad arm that reddens all three --
 # the cross-plane guard NPCTRACK proposed is refuted at 0 of 488 and ships as
 # nothing).
-LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=180)
+LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=187)
 check = checks.adopt(LEDGER)
 
 SRC = open(authsrv.__file__, encoding="utf-8").read()
@@ -1738,6 +1738,11 @@ def main():
         def _ms(self, now):
             return 0
 
+        def __getattr__(self, name):
+            # the report and send paths call the real guard's hooks; a stub
+            # that raised there would get the guard DISABLED mid-check
+            return lambda *a, **k: None
+
     _hole = _Hole()
     R21 = [250.0, 1200.0]                     # above the hole; the ray east is clear
     lead21 = authsrv.kbd_lead_dest(R21, [766.0, 0.0])[0]
@@ -1788,6 +1793,88 @@ def main():
           and "--no-lead-w0-origin" in SRC and "global A2_LEAD_W0_ORIGIN" in SRC
           and authsrv.capture_flags().get("A2_LEAD_W0_ORIGIN") is True,
           "21g. door B ships ON with its revert, in the capture header", "")
+    # 21h. MOVECODE-1z-cj (a): the corridor vertex is checked against every
+    # hostile disc -- the client halts world-0 on a vertex a disc covers (F14;
+    # session 3's 68.5 s snap). The hostile stands ON the corner (190, 1060);
+    # the next point is the dest, whose leg from world-0 crosses the hole, so
+    # the answer is the leg's last on-mesh point.
+    st21h = dict(st21, agents={10: {"pos": (190.0, 1060.0), "dead": False,
+                                    "name": "hatcher", "plane": 0}})
+    g, c, w = authsrv.a2_clip_lead(st21h, R21, lead21)
+    check(c and w == "clear+w0-clip" and g[0] < 200.0 and 1000.0 <= g[1] <= 1020.0,
+          "21h. a corridor vertex INSIDE a hostile's disc is skipped (the client "
+          "would halt world-0 on it): the next point's leg fails the hole, so the "
+          "leg's last on-mesh point -- why=clear+w0-clip",
+          f"granted {g} why={w}")
+
+    # ---- 22. MOVECODE-1z-cj (b): the client's OWN reseed stamps the latch
+    # RUN-1zCG session 3, 68.5 s: the client's separation gate snapped the body
+    # 255 u back onto world-0 and shut its fence for 6.4 s; our latch knew only
+    # our own 0x002C, kept leading into the window, and the body walked the
+    # leads as click-orders at 190 u/s while the owner's keys were dead. The
+    # wire shows the reseed: the next report lands ON the mirror's world-0
+    # (3 u) while the position model expected the body 373 u away.
+    print("\n22. MOVECODE-1z-cj: the client's own reseed, read off the report")
+    st22 = {"pos": (1400.0, 2000.0), "plane": 7, "pos_seen": 0.0,
+            "kbd_moving_at": _t.time() - 0.3, "reseed_prev_onto": 236.0,   # the body WAS away
+            "agtrack_guard": _Guard((1000.0, 2000.0))}   # world-0 where the report lands
+    st22, w = drive_heading(REPORT, lead=True, state=st22)
+    frows = st22["_rec"].of("fence")
+    row = st22["_rec"].of("grant_verdict")[-1]
+    check(st22.get("fence_shut_at") is not None
+          and st22.get("fence_pin_pt") == (1000.5, 2000.25)
+          and frows and frows[-1]["act"] == "shut" and frows[-1]["by"] == "client-reseed"
+          and frows[-1]["jump"] >= 399.0 and frows[-1]["onto"] <= 1.0
+          and row["lead_clip_why"] == "fence-shut",
+          "22a. THE RESEED: a report 400 u off the model that lands on the mirror's "
+          "world-0 stamps the latch with itself as the pin (by=client-reseed), and "
+          "the lead of that report degrades -- no lead into the client's own window",
+          f"shut_at {st22.get('fence_shut_at')} pin {st22.get('fence_pin_pt')} fence {frows} why {row['lead_clip_why']}")
+    st22b = {"pos": (1400.0, 2000.0), "plane": 7, "pos_seen": 0.0,
+             "kbd_moving_at": _t.time() - 0.3, "reseed_prev_onto": 236.0,
+             "agtrack_guard": _Guard((1400.0, 2000.0))}   # world-0 at the model, 400 u from the report
+    st22b, w = drive_heading(REPORT, lead=True, state=st22b)
+    check(st22b.get("fence_shut_at") is None
+          and w.of(MOVE) and "KBD LEAD" in w.of(MOVE)[0][2],
+          "22b. the same jump NOT onto world-0 is a body that walked: no stamp, "
+          "the lead fires", f"shut_at {st22b.get('fence_shut_at')}")
+    st22c = {"pos": (1000.0, 2000.0), "plane": 7, "pos_seen": 0.0,
+             "kbd_moving_at": _t.time() - 0.3, "reseed_prev_onto": 236.0,
+             "agtrack_guard": _Guard((1000.0, 2000.0))}   # on world-0, but no jump
+    st22c, w = drive_heading(REPORT, lead=True, state=st22c)
+    check(st22c.get("fence_shut_at") is None,
+          "22c. a report on world-0 with no jump is the ordinary case: no stamp",
+          f"shut_at {st22c.get('fence_shut_at')}")
+    st22p = {"pos": (1400.0, 2000.0), "plane": 7, "pos_seen": 0.0,
+             "kbd_moving_at": _t.time() - 0.3, "reseed_prev_onto": 5.0,      # parked on world-0 before
+             "agtrack_guard": _Guard((1000.0, 2000.0))}
+    st22p, w = drive_heading(REPORT, lead=True, state=st22p)
+    check(st22p.get("fence_shut_at") is None and w.of(MOVE) and "KBD LEAD" in w.of(MOVE)[0][2]
+          and abs(st22p.get("reseed_prev_onto", -1) - 0.56) < 0.1,
+          "22c'. the same jump onto world-0 from a body that was ALREADY on it is a "
+          "wandered model, not a reseed (the census's 19): no stamp, the lead fires, "
+          "and the report's own distance is remembered for the next one",
+          f"shut_at {st22p.get('fence_shut_at')} prev {st22p.get('reseed_prev_onto')}")
+    _saved_crl = authsrv.CLIENT_RESEED_LATCH
+    try:
+        authsrv.CLIENT_RESEED_LATCH = False
+        st22d = {"pos": (1400.0, 2000.0), "plane": 7, "pos_seen": 0.0,
+                 "kbd_moving_at": _t.time() - 0.3, "reseed_prev_onto": 236.0,
+                 "agtrack_guard": _Guard((1000.0, 2000.0))}
+        st22d, w = drive_heading(REPORT, lead=True, state=st22d)
+    finally:
+        authsrv.CLIENT_RESEED_LATCH = _saved_crl
+    check(st22d.get("fence_shut_at") is None and w.of(MOVE) and "KBD LEAD" in w.of(MOVE)[0][2],
+          "22d. KNOWN-BAD ARM (--no-client-reseed-latch): the reseed goes unseen and "
+          "the lead goes into the client's shut window -- session 3's enslaved walk",
+          f"shut_at {st22d.get('fence_shut_at')}")
+    check(authsrv.CLIENT_RESEED_LATCH is True and "--no-client-reseed-latch" in SRC
+          and "global CLIENT_RESEED_LATCH" in SRC
+          and authsrv.capture_flags().get("CLIENT_RESEED_LATCH") is True
+          and authsrv.CLIENT_RESEED_JUMP == 150.0 and authsrv.CLIENT_RESEED_ONTO == 24.0
+          and authsrv.CLIENT_RESEED_PREV_FAR == 100.0,
+          "22e. ships ON with its revert, in the header; the thresholds are the "
+          "session's own numbers with room (373 / 9.5 / 236 measured)", "")
 
     return LEDGER.verdict()
 
