@@ -8548,27 +8548,76 @@ def clip_to_walkable(state, dest):
     if pm is None:
         return dest, False
     px, py = state["pos"]
+    sliver = False
     if not pm.walkable(px, py):
-        if not state.get("off_mesh_warned"):
-            state["off_mesh_warned"] = True
-            print(f"[map] standing at ({px:.0f}, {py:.0f}), which the navmesh "
-                  f"does not cover -- collision suspended for this character")
-        return dest, False
+        # 1z-cf: the EDGE class is not off the mesh. A report the mesh holds
+        # within SEAM_TOL of a trapezoid is the client's body standing on an
+        # edge, and it takes the clip like an inside origin, on the plane the
+        # edge names. Only ground genuinely beyond the tolerance suspends.
+        if (MODEL_ORIGIN_SEAM and hasattr(pm, "on_mesh")
+                and hasattr(pm, "plane_near") and pm.on_mesh(px, py)):
+            sliver = True
+        else:
+            if not state.get("off_mesh_warned"):
+                state["off_mesh_warned"] = True
+                print(f"[map] standing at ({px:.0f}, {py:.0f}), which the "
+                      f"navmesh does not cover -- collision suspended for "
+                      f"this character")
+            return dest, False
     state["off_mesh_warned"] = False
     plane = None
     if MODEL_PLANE_CLIP and hasattr(pm, "plane_at"):
-        plane = pm.plane_at(px, py, prefer=state.get("plane"))
+        if sliver:
+            plane = pm.plane_near(px, py, prefer=state.get("plane"))
+            if plane is None:
+                # An ambiguous sliver names no surface to clip on: the model
+                # STANDS, as the lead refuses (origin-ambiguous) -- never the
+                # unclipped ray.
+                return (px, py), True
+        else:
+            plane = pm.plane_at(px, py, prefer=state.get("plane"))
     if plane is None:
         stopped = pm.clip(px, py, dest[0], dest[1], step=COLLISION_STEP)
     else:
         stopped = pm.clip(px, py, dest[0], dest[1], step=COLLISION_STEP,
                           plane=plane)
+    if (MODEL_WALL_SLIDE and plane is not None and hasattr(pm, "wall_slide")
+            and math.hypot(stopped[0] - px, stopped[1] - py)
+            < A2_LEAD_WALL_SLIDE_FLOOR):
+        # 1z-cf: blocked at the body -> the body is sliding along the wall,
+        # and so does the model: the wall's next vertex in the heading's
+        # slide direction, the same rule the lead follows (1z-ce). A head-on
+        # press slides nowhere and the model stands.
+        pt, _sw = pm.wall_slide(px, py, dest[0] - px, dest[1] - py, plane,
+                                chord=KBD_SYNC_LEAD)
+        if (pt is not None and math.hypot(pt[0] - px, pt[1] - py)
+                >= A2_LEAD_WALL_SLIDE_FLOOR):
+            return (float(pt[0]), float(pt[1])), True
     return stopped, stopped != dest
 
 
 # MOVECODE-1z-cc, the second half: OUR OWN MODEL MAY NOT OUT-WALK THE ORDER WE
 # JUST GAVE. `--no-model-leg-bound` reverts.
 MODEL_LEG_BOUND = True
+
+# MOVECODE-1z-cf: THE MODEL'S SLIVER DOOR, AND ITS WALL SLIDE. clip_to_walkable
+# suspended collision outright when state["pos"] was outside exact containment
+# -- meant for a spawn on ground the mesh does not cover -- but the client
+# reports from the EDGE class (0.0-0.4 u outside a trapezoid side, 1z-bd.2 /
+# 1z-bf), so on a wall slide the model walked the raw heading INTO the wall,
+# bounded only by the lead's reach, and the NPC follow aimed the hostile at
+# that phantom: RUN-FEEL2 (2026-09-06, the owner's session) -- 25 of 108 reports
+# in the edge class, the model 100-136 u east of the body inside the wall
+# beside the stairs, the Hatcher ordered to "the player at (10694, 8458)" 145 u
+# off the stairs and drawn 67-170 u below the player on the terrain -- "falls
+# through the stairs onto the ground below". The same two doors the lead got
+# in 1z-bg and 1z-ce, on the model: an origin ON the mesh within SEAM_TOL clips
+# on the plane `plane_near` names (an ambiguous sliver STANDS, the lead's own
+# refusal shape), and a leg the clip stops at the body slides to the wall's
+# next vertex, which is where the client's body is going (206 u/s along the
+# wall on every tape). Two reverts, one per door.
+MODEL_ORIGIN_SEAM = True      # False (--model-origin-exact): a sliver origin suspends collision again.
+MODEL_WALL_SLIDE = True       # False (--no-model-wall-slide): a leg blocked at the body stands.
 
 
 def model_leg_bound(origin, model_dest, reported, lead_dest, lead_clipped, src):
@@ -24120,6 +24169,22 @@ def main():
                          "carrying it. Nothing on the wire changes either way "
                          "-- state['dest'] feeds the world tick's integrator "
                          "and no send site. Known-bad arm.")
+    ap.add_argument("--model-origin-exact", action="store_true",
+                    help="MOVECODE-1z-cf REVERT (door 1): the server's own "
+                         "position model suspends collision whenever its "
+                         "standing point is outside exact containment, as it "
+                         "did until 2026-09-06 -- including the edge class the "
+                         "client reports from (0.0-0.4 u outside a side), so "
+                         "on a wall slide the model walks the raw heading into "
+                         "the wall and the NPC follow aims the hostile at that "
+                         "phantom (RUN-FEEL2: the Hatcher 145 u off the stairs, "
+                         "drawn on the terrain below). Known-bad arm.")
+    ap.add_argument("--no-model-wall-slide", action="store_true",
+                    help="MOVECODE-1z-cf REVERT (door 2): a model leg the clip "
+                         "stops at the body STANDS instead of sliding to the "
+                         "wall's next vertex; the model then lags a sliding "
+                         "body by a report's worth (~100 u) and the follow aims "
+                         "behind it. Known-bad arm.")
     ap.add_argument("--no-model-leg-bound", action="store_true",
                     help="MOVECODE-1z-cc REVERT: the server's own model leg may "
                          "again end further along its ray than the lead grant "
@@ -25889,6 +25954,19 @@ def main():
               "clipped plane-blind (MOVECODE-1z-cc's revert). RUN-NPCTRACK-R1: "
               "604 u of model walk while the body stood still, against 98 u "
               "with the plane term.", flush=True)
+    if a.model_origin_exact:
+        global MODEL_ORIGIN_SEAM
+        MODEL_ORIGIN_SEAM = False
+        print("[map] --model-origin-exact: the server's own position model "
+              "suspends collision from an edge-class origin again (pre-1z-cf) "
+              "-- on a wall slide it walks the heading into the wall and the "
+              "NPC follow aims there.", flush=True)
+    if a.no_model_wall_slide:
+        global MODEL_WALL_SLIDE
+        MODEL_WALL_SLIDE = False
+        print("[map] --no-model-wall-slide: a model leg blocked at the body "
+              "stands (pre-1z-cf); the model lags a sliding body by a report.",
+              flush=True)
     if a.no_model_leg_bound:
         global MODEL_LEG_BOUND
         MODEL_LEG_BOUND = False

@@ -769,6 +769,11 @@ both are world-0's own sidestep after the park, the mechanism of F14 seen from t
   hole) under `movehook`'s `MapFindPath` tap: calls from the follower, their from-plane and
   `pathCount`. If H1, the fix is on the wire — the corridor's legs as 0x0029 to the hostile — and
   it is the first time this arc changes what the client is told to walk.
+  **And the follow's AIM POINT on a wall slide was a phantom (2026-09-07, MOVECODE-1z-cf):** the
+  server's position model walked the reported heading into the wall from every edge-class
+  report, so on the owner's climb the Hatcher was ordered 145 u off the stairs and drawn on the
+  terrain below — *"falls through the stairs"*. Fixed on the model side; the aim point is now on
+  the wall, ≤ 41 u ahead of the body.
 
 ## Runs
 

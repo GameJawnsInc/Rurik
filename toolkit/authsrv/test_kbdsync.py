@@ -62,7 +62,7 @@ from test_position_trust import receive_arm, Sent, FakeRec   # noqa: E402
 # the word-against-point check and the known-bad arm that reddens all three --
 # the cross-plane guard NPCTRACK proposed is refuted at 0 of 488 and ships as
 # nothing).
-LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=153)
+LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=162)
 check = checks.adopt(LEDGER)
 
 SRC = open(authsrv.__file__, encoding="utf-8").read()
@@ -1491,6 +1491,87 @@ def main():
     check(authsrv.capture_flags().get("A2_LEAD_WALL_SLIDE") is True,
           "18h. the switch is in the capture header, so a tape says which arm "
           "produced it", "")
+
+    print("\n19. MOVECODE-1z-cf: THE MODEL'S SLIVER DOOR AND WALL SLIDE -- the "
+          "server's own position model takes the lead's two doors")
+    # THE DEFECT, on the owner's tape (RUN-FEEL2, 2026-09-06): the client
+    # reports from the EDGE class (0.0-0.4 u outside a trapezoid side) while it
+    # slides along the stairs' wall, `clip_to_walkable` read that as "standing
+    # off the mesh" and SUSPENDED collision, the model walked the raw heading
+    # 100-136 u into the wall between reports, and the NPC follow ordered the
+    # Hatcher to that phantom: "the player at (10694, 8458)", 145 u off the
+    # stairs, the hostile drawn 67-170 u below the owner on the terrain --
+    # "falls through the stairs onto the ground below". Same square fixture as
+    # section 18; the report stands a twentieth of a unit outside its side.
+    SLV = (100.05, 50.0)
+    st19 = {"pos": SLV, "plane": 0, "pathmap": _sq}
+    got, blocked = authsrv.clip_to_walkable(st19, (SLV[0] + _H, SLV[1] + _H))
+    check(got == (100.0, 100.0) and blocked,
+          "19a. THE SLIVER DOOR: from 0.05 u outside the side, heading north-east "
+          "into the wall, the model leg is the wall's next vertex (100, 100) -- "
+          "not the raw 766 u heading",
+          f"dest {got} blocked={blocked}")
+    _saved_os = authsrv.MODEL_ORIGIN_SEAM
+    try:
+        authsrv.MODEL_ORIGIN_SEAM = False
+        raw, rb = authsrv.clip_to_walkable(st19, (SLV[0] + _H, SLV[1] + _H))
+    finally:
+        authsrv.MODEL_ORIGIN_SEAM = _saved_os
+    check(raw == (SLV[0] + _H, SLV[1] + _H) and not rb,
+          "19b. KNOWN-BAD ARM (--model-origin-exact): the same origin suspends "
+          "collision and the model walks the whole heading into the wall -- "
+          "the phantom the follow aimed at",
+          f"dest {raw} blocked={rb}")
+    st19i = {"pos": (100.0, 50.0), "plane": 0, "pathmap": _sq}
+    got, blocked = authsrv.clip_to_walkable(st19i, (100.0 + _H, 50.0 + _H))
+    check(got == (100.0, 100.0) and blocked,
+          "19c. an INSIDE origin on the side, same heading: the clip stops at the "
+          "body and the slide takes it to the same vertex",
+          f"dest {got} blocked={blocked}")
+    got, blocked = authsrv.clip_to_walkable(st19i, (100.0 + 766.0, 50.0))
+    check(got == (100.0, 50.0) and blocked,
+          "19d. a HEAD-ON press into the side slides nowhere: the model stands, "
+          "blocked, exactly where the body stands",
+          f"dest {got} blocked={blocked}")
+    _saved_ws = authsrv.MODEL_WALL_SLIDE
+    try:
+        authsrv.MODEL_WALL_SLIDE = False
+        stood, sb = authsrv.clip_to_walkable(st19i, (100.0 + _H, 50.0 + _H))
+    finally:
+        authsrv.MODEL_WALL_SLIDE = _saved_ws
+    check(stood == (100.0, 50.0) and sb,
+          "19e. KNOWN-BAD ARM (--no-model-wall-slide): the blocked leg stands and "
+          "the model lags the sliding body",
+          f"dest {stood} blocked={sb}")
+    got, blocked = authsrv.clip_to_walkable(st19, (SLV[0] - 766.0, SLV[1]))
+    check(blocked and got[0] < 20.0 and got[1] == 50.0,
+          "19f. from the sliver, a heading AWAY from the wall is clipped on the "
+          "plane the edge names and runs the square's width -- the door admits "
+          "the origin, it does not lengthen anything",
+          f"dest {got} blocked={blocked}")
+    st19o = {"pos": (150.0, 50.0), "plane": 0, "pathmap": _sq}
+    got, blocked = authsrv.clip_to_walkable(st19o, (150.0 + _H, 50.0 + _H))
+    check(got == (150.0 + _H, 50.0 + _H) and not blocked
+          and st19o.get("off_mesh_warned") is True,
+          "19g. 50 u off the mesh is still off the mesh: the spawn-on-uncovered-"
+          "ground door stands, collision suspended and said so",
+          f"dest {got} blocked={blocked}")
+    st19w = {"pos": SLV, "plane": 0, "pos_seen": 0.0, "pathmap": _sq}
+    st19w, w19 = drive_heading([1, [SLV[0], SLV[1]], 0, [_H, _H], 1],
+                               lead=True, state=st19w)
+    check(st19w.get("dest") == (100.0, 100.0) and st19w.get("clipped") is True
+          and w19.of(MOVE) and w19.of(MOVE)[0][1][1] == [100.0, 100.0],
+          "19h. THROUGH THE RECEIVE ARM: the model leg and the lead both name "
+          "the vertex (100, 100) -- the follow's aim point is on the wall, not "
+          "in it",
+          f"dest {st19w.get('dest')} lead {w19.of(MOVE)[0][1][1] if w19.of(MOVE) else None}")
+    check(authsrv.MODEL_ORIGIN_SEAM is True and authsrv.MODEL_WALL_SLIDE is True
+          and "--model-origin-exact" in SRC and "--no-model-wall-slide" in SRC
+          and "global MODEL_ORIGIN_SEAM" in SRC and "global MODEL_WALL_SLIDE" in SRC
+          and authsrv.capture_flags().get("MODEL_ORIGIN_SEAM") is True
+          and authsrv.capture_flags().get("MODEL_WALL_SLIDE") is True,
+          "19i. both doors ship ON, each with its own revert rebound through a "
+          "declared global, both in the capture header", "")
 
     return LEDGER.verdict()
 

@@ -3868,7 +3868,14 @@ when map 280 is absent, and §14(g)/§16(l-p) when Pre-Searing is absent skip-de
   and never consults the slide; the other slide direction; the cap at `KBD_SYNC_LEAD`;
   the wire (`0x0029` names the vertex on plane 0, the verdict row says wall-slide on a
   kbd lead); and the switch in the capture header. Floor 144 → 153 from the green
-  run. No vault, no client. ~2 s),
+  run. **Section 19 (MOVECODE-1z-cf, 2026-09-07): the MODEL'S sliver door and wall slide** —
+  `clip_to_walkable` from a report 0.05 u outside the square's side (the edge class the client
+  slides in) gives the wall's next vertex, not the raw 766 u heading (the known-bad arm,
+  `--model-origin-exact`, gives the heading: RUN-FEEL2's phantom the follow aimed at); an inside
+  origin slides to the same vertex; a head-on press stands; `--no-model-wall-slide` stands; a
+  heading away from the wall is clipped normally; 50 u off the mesh still suspends collision;
+  the receive arm writes the vertex as both the model leg and the lead; both switches in the
+  header. Floor 153 → 162 from the green run. No vault, no client. ~2 s),
   `toolkit/authsrv/test_livewire.py` (the committed retail-decode recipe,
   RETHINK instrument #2 — the campaign's referee moved out of a deletable
   scratchpad. Guards `toolkit/authsrv/livewire.py`: the no-vault doors
@@ -10077,7 +10084,10 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   other-agent machine (60/50 opens, 58 finish, 59 cancel, reopen, censor,
   timeout sweep), 0x00F1 recorded as a mark and never a close, and the
   property census keeping unknown ids; the batch clustering (eps=0 exact for live tapes, 5 ms for gamesrv logs whose sends stamp their own clocks); and scan_ours itself over a synthetic RURIK_VAULT -- hand-packed 0x009F rows the codec must frame, the tape-replay exclusion by label, and the era filter that makes the pre-castmech known-bad control possible. Floor 41),
-  `toolkit/authsrv/test_cancelwalk.py` (everything AROUND the CANCELWALK
+  `toolkit/authsrv/test_cancelwalk.py` (**2026-09-07: its halt-site finder now accepts the
+  `_send` wrapper `_npc_follow_tick` has used since NPCTRACK-Q1 (fb492bf); the two
+  site-count locks had been red on main from that commit until then.** Everything AROUND the
+  CANCELWALK
   runs — the walk-on-cancel experiment arms of `--cancel-answer`
   (`studies/movement/CANCELWALK.md` §5), whose verdicts are operator runs and
   deliberately not this file's. §1: `parse_cancel_answer` accepts exactly

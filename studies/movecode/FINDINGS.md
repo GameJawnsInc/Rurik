@@ -16741,3 +16741,61 @@ before run 2, which then read 82 of 82. Two traps re-met: the tape's raw `x, y` 
 ([[movetap-point-column-trap]]); and `w0score`'s enslavement detector reads 32 % on a slide
 because the slide grant IS the client's own wall waypoint — fence open, body at 206 u/s, not
 enslaved (documented at the detector).
+
+---
+
+## 1z-cf. THE MODEL'S SLIVER DOOR — the server's own position model suspended collision from an edge-class origin and walked the heading INTO the wall; the NPC follow aimed the Hatcher at that phantom, and the owner watched it "fall through the stairs onto the ground below". `clip_to_walkable` now takes the lead's two doors (1z-bg's seam origin, 1z-ce's wall slide); `--model-origin-exact` and `--no-model-wall-slide` revert
+
+**Asked:** RUN-FEEL2's A2 — *"sometimes still falls through the stairs onto the ground below or
+is slightly sunken at least."* Ident `MOVECODE-1z-cf`. Desk: the owner's tape and capture, the
+receive arm replayed on the real map. OBSERVED unless marked.
+
+### 1z-cf.1 What the tape shows
+
+51 samples with the Hatcher on the stairs by our mesh, all 51 with the client's plane word 29
+— the word was never wrong. But four parks of the climb put its copy **25 / 96 / 0 / 17 u EAST
+of the stairs' right edge**, on no trapezoid, and the client drew it **67–170 u below** the owner
+on the terrain under the stairs. A hostile parked ON the edge line reads only the slope's gap
+(p50 +31 u below a player 80 u up the stairs); 2–30 u off it reads +145. And the orders that
+put it there: *"FOLLOW: agent 10 -> player at (10694, 8458)"* at 9.03 s with the owner's body at
+(10644, 8550) on the edge — the target 145 u east of the stairs.
+
+### 1z-cf.2 ★★ The target is the server's own model, and the model had the door the lead lost in 1z-bg
+
+The follow's `player` is `state["pos"]`, advanced between reports by the world tick toward
+`state["dest"]` = `clip_to_walkable(state["pos"] + vec2)`. `clip_to_walkable` began: *"standing
+OUTSIDE the navmesh disables the check rather than freezing the character"* — `walkable()`,
+exact containment, a door written for a spawn on ground the mesh does not cover. The client
+reports from the EDGE class on a slide (0.0–0.4 u outside the side, 1z-bd.2 / 1z-bf): 25 of
+the session's 108 accepted reports, and every one of them opened that door for the next half
+second, so the model walked the raw heading — due east, or the south-east of a diagonal press —
+at 288 u/s into the wall, corrected only by the next report (`drift` 100–136 u on those rows).
+Replayed through the receive arm on the real map: from an inside report the leg clips to zero
+and the model stands; from an edge-class report the leg is *"collision suspended"*, 263 u east,
+and `model_leg_bound` trims it to the lead's reach along that same heading. The lead beside it
+had both doors closed: 1z-bg's seam origin (`on_mesh` + `plane_near`) and 1z-ce's slide.
+**1z-cc's lesson, a third time: this file has two clippers, and a door closed on one stays open
+on the other until somebody looks.**
+
+### 1z-cf.3 What ships
+
+`clip_to_walkable`: an origin outside exact containment but ON the mesh within SEAM_TOL clips
+on the plane `plane_near` names (an ambiguous sliver STANDS, the lead's own refusal shape);
+only ground beyond the tolerance suspends collision, as before. A leg the clip stops within
+`A2_LEAD_WALL_SLIDE_FLOOR` of the body slides to the wall's next vertex (`pathmap.wall_slide`,
+chord `KBD_SYNC_LEAD`), which is where the client's body is going (206 u/s along the wall on
+every tape); a head-on press slides nowhere and the model stands. `MODEL_ORIGIN_SEAM` and
+`MODEL_WALL_SLIDE`, one revert each. Replayed on the session's reports: the model leg runs
+**up the wall at 44.3° to the same vertex the lead names** (245 / 263 / 170 u) where it ran
+136 u east into it. `test_kbdsync` §19 (+9, floor 153 → 162): the sliver door, its known-bad
+arm (the raw heading), the inside origin, the head-on press, the slide's known-bad arm, a heading
+away from the wall clipped normally, 50 u off the mesh still suspended, the receive arm, and both
+switches in the header.
+
+### 1z-cf.4 What it is not, and what to watch
+
+The plane word (F11, right on every sample). The mesh (F12). The "slightly sunken" half of
+A2 is 1z-ca's ankle sink — the client's own height resolution on stair geometry — and nothing
+here touches it. RECONSTRUCTION on the client until the next stairs session: the prediction is
+no park more than 5 u off the stairs' edge during a climb, and the follow's aim point on a slide
+ON the wall, ≤ 41 u ahead of the body (the model at 288 u/s against the body's 206).

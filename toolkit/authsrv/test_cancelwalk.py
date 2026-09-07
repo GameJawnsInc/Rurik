@@ -81,10 +81,15 @@ def stop_moving_sites():
 
     walk(tree, [])
     sites = []
+    # `_send` is _npc_follow_tick's wrapper (NPCTRACK-Q1, fb492bf): the same
+    # `send`, plus the client-model bookkeeping every movement message the
+    # follow emits must also drive. The chase halt goes through it, and this
+    # finder read that as "two sites" for a day -- the two locks below were red
+    # on main from that commit until 2026-09-07 without anyone running them.
     for node in ast.walk(tree):
         if not (isinstance(node, ast.Call)
                 and isinstance(node.func, ast.Name)
-                and node.func.id == "send"
+                and node.func.id in ("send", "_send")
                 and node.args
                 and isinstance(node.args[0], ast.Name)
                 and node.args[0].id == "GAME_SMSG_AGENT_STOP_MOVING"):
