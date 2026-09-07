@@ -351,7 +351,7 @@ per-map-load reset on characters that are not new Factions characters.
 
 | field | reading | label |
 |---|---|---|
-| 1 `string16(128)` | the callout text, as a **server-allocated dynamic string handle** | **OBSERVED** — four code units, and the first unit **increments by one** between the two sightings (`0x4A9E` → `0x4A9F`). That is a handle, not text. Contrast the same stream at idx 335 (`0x005D`), whose 4-unit prefix is followed by `0x0107` and literal UTF-16 `character B` |
+| 1 `string16(128)` | the callout text, as a **server-allocated dynamic string handle** | **OBSERVED** — four code units, and the first unit **increments by one** between the two sightings (`0x4A9E` → `0x4A9F`). That is a handle, not text. Contrast the same stream at idx 335 (`0x005D`), whose 4-unit prefix is followed by `0x0107` and a literal UTF-16 character name |
 | 2 `u32` | 1, then 0 | **OBSERVED 2026-08-18 — it is a TEXT-STYLE flag: 0 renders the string cream/white, 1 renders it GOLD.** Two runs differing in this field alone (below) |
 
 > ### RUN 2026-08-18 — field 2 is a TEXT-STYLE flag, and both arms are on disk. OBSERVED
@@ -478,7 +478,7 @@ own vocabulary is "coded string" — this repo's EncString.
 
 **Wire context, OBSERVED:** every sighting is immediately preceded by
 `0x009F AGENT_PROPERTY_UPDATE_INT` setting property 22 on the same agent, and by `0x005D`
-whose decoded payload contains the readable substring `character B`.
+whose decoded payload contains the operator's own character name as a readable substring.
 `toolkit/clientscan/genericvalue.py --id 22` reads property 22 as `ApplyAnimation` —
 **UPSTREAM**, unverified against build 38797 specifically — consistent with an NPC playing a
 gesture before it speaks. Agent 11's string is byte-identical across all six of its
@@ -532,7 +532,7 @@ window, the world map and item notifies alike, and the subscription cannot be ti
 
 | field | reading | label |
 |---|---|---|
-| 1 | speaking agent, 12 both times — an **NPC**, not a player | **OBSERVED**. Agents 11–17 each get a `0x009B` `.dat` string id at spawn; player names arrive as *literal* text (`0x017D [381,'character B']`) |
+| 1 | speaking agent, 12 both times — an **NPC**, not a player | **OBSERVED**. Agents 11–17 each get a `0x009B` `.dat` string id at spawn; player names arrive as *literal* text (`0x017D [381,'<12-unit character name>']`) |
 | 2 `string16(32)` | that agent's **name string**, byte-identical in both sightings | **OBSERVED**, and the strong version of the argument: it equals `0x009B`'s string for agent 12 exactly (idx 160), and `0x009B` is our own established agent-name store (`studies/smsg/FINDINGS.md:1013`, handler `0x0091ec60` writing into the per-agent array at `ctx+0x7CC`, stride `0x38`) |
 | 3 `u8` | 1 both times | **UNVERIFIED** — zero variance |
 | 4 `string16(122)` | a second, *differing* string — the body | **OBSERVED** identity, role **RECONSTRUCTION** |
@@ -621,7 +621,7 @@ ever fires in our corpus, so **we have never observed the stored value being use
 those two.
 
 **Self-correction recorded so it is not re-run:** the skeptic first flagged
-`0x011A [… 272 … 'a guild name', 'PR' …]` as a guild tag on agent 272, which would have
+`0x011A [… 272 … <guild name>, <tag> …]` as a guild tag on agent 272, which would have
 made 272 a player and killed the reading. `0x011A` field 0 is a `u16` **map id**, not an
 agent id — a numeric collision. Withdrawn.
 
@@ -2222,8 +2222,8 @@ should not go into `overrides.json` on this evidence.
 >
 > **The row is retail's, field for field**, and it is the most constrained item row in
 > `content/items.toml`: **one distinct declaration across the whole corpus**, 49
-> connections spanning **five distinct characters** (character A, character B,
-> character C, character D, character E), differing only in the per-connection item id.
+> connections spanning **five distinct characters**, differing only in the
+> per-connection item id.
 > `file_id 0x8001B536`, `item_type 3`, `flags 0x20001000`, `value 5`, `model_id 32`, one
 > modifier word `0x24481400`. **Three of those were mistyped on first write** — decimal to
 > hex by hand — and the ENCODE caught it, not a reading; `test_playerbags.py` now pins our

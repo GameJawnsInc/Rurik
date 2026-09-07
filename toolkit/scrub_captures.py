@@ -20,9 +20,8 @@ one is why we record at all. This writes a second, derived set that is safe to c
 HOW THE SUBSTITUTION WORKS, and why not a hash.
 
   * Placeholders are assigned SEQUENTIALLY in order of first appearance, not derived
-    from the value. A hash would be reversible here: the password is short, and
-    anyone holding the scrubbed file plus the hash function could brute-force it in
-    seconds. Sequential assignment carries no information about the input at all.
+    from the value. A hash would be reversible here: the password is short, and anyone
+    holding the scrubbed file plus the hash function could brute-force it in seconds. Sequential assignment carries no information about the input at all.
   * The mapping is one-to-one and global, so the same value gets the same placeholder
     everywhere it appears -- the email in the `email` field and the same email inside
     `<LoginName>` land on the same token. Correlation survives; identity does not.

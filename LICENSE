@@ -1,0 +1,57 @@
+MIT License
+
+Copyright (c) 2026 GameJawnsInc
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+================================================================================
+SCOPE, AND TWO CARVE-OUTS
+================================================================================
+
+The MIT grant above covers this project's OWN work: everything under `toolkit/`
+and `schema/overrides.json`, the documentation, and the research in `studies/`.
+
+1. CONTENT ROWS SOURCED FROM THE GUILD WARS WIKI.
+
+   `content/*.toml` carries per-row provenance, and 26 rows record
+   `source = "wiki"` (22 in `content/world.toml`, 4 in `content/maps.toml`).
+   Those rows are derived from the Guild Wars Wiki (wiki.guildwars.com), which
+   is dual-licensed GFDL 1.2 / CC BY-NC-SA 2.5. They carry the wiki's terms,
+   not MIT — attribution is required, and the ShareAlike and NonCommercial arms
+   apply to them. Every such row names its page and revision id, so the set is
+   identifiable rather than diffuse. The rest of `content/` is MIT like the
+   code.
+
+2. THIRD-PARTY WORK THIS PROJECT BUILDS ON.
+
+   Several modules take an algorithm, a file layout or a constant table from an
+   upstream project. Each is registered in PLAN.md section 6.1 and credited in
+   THIRD-PARTY-NOTICES.md, which reproduces the licence text where the licence
+   asks for it. Those terms travel with the code that uses them.
+
+================================================================================
+WHAT IS NOT LICENSED HERE, BECAUSE IT IS NOT OURS TO LICENSE
+================================================================================
+
+Guild Wars, `Gw.exe` and `Gw.dat` are ArenaNet's. This repository contains none
+of their bytes and never has: no client files, no extracted assets, no
+decompiled code. See the header of `.gitignore` for the rationale and CLAUDE.md
+for the boundary this project holds itself to. Nothing above grants any right
+in ArenaNet's software or content, and running this server requires a copy of
+the game that you bought yourself.

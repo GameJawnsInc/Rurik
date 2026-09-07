@@ -9046,9 +9046,10 @@ GAME_CMSG_ROTATE_PLAYER = 0x0040
 #   commits a player line [sender playerId, channel] -- 47/47 live sender ids
 #   resolve in the same connection's 0x0059 table. 0x005E commits a
 #   server-composed line [subject playerId | 0, channel] -- 133/133 resolve as
-#   the player the line is ABOUT (125 self, 1 other: "player G is now level 17!",
-#   7 zero = district broadcasts). 0x005F (agent lines, sender enc-name in the
-#   tag) is not sent here yet: our NPCs have nothing to say.
+#   the player the line is ABOUT (125 self, 1 other: a level-up line about
+#   another player in the district, 7 zero = district broadcasts). 0x005F
+#   (agent lines, sender enc-name in the tag) is not sent here yet: our NPCs
+#   have nothing to say.
 GAME_CMSG_CHAT_SEND = 0x0064
 GAME_SMSG_CHAT_MESSAGE_CORE = 0x005D
 GAME_SMSG_CHAT_MESSAGE_SERVER = 0x005E
