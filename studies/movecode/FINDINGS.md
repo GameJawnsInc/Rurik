@@ -16927,3 +16927,34 @@ nearest mesh point when the copy or the player's report stands in a seam (`NPC_L
 16 u; three bare follows through the stairs' flank and the hole, 31–65 u off-mesh, came from
 `route()` refusing an origin 1.5–11 u off), and GROUNDZ-Q5's plane correction fires from F8's hold
 branch (the foot's 1.0 s of plane 0). [RUN-1zCG.md](RUN-1zCG.md) carries the session.
+
+## 1z-ci. THE FENCE LATCH UNDER A HELD KEY — the walk-start rule needs a stop the owner never makes; the latch ran to its 8 s bound after every re-pin while the client's fence was open in half a second, 79 of 151 leads degraded, world-0 579 u behind. The fence now also re-arms when the body has WALKED OFF the pin
+
+**Measured on the owner's second RUN-1zCG session (2026-09-07 10:59).** Seven `0x002C` re-pins in
+89 s. After each, the client's own fence dword (agenttap) read OPEN at +0.05 s on four, +0.35 s
+and +0.5 s on the others — 7 of 7 inside 0.5 s — and the first `0x003D` after the pin arrived at
++0.09 to +0.48 s. The server's latch (`fence_shut_at`, 1z-aa) waited for a moving report
+**after a stop** and got none: released at 41.8, 65.9 and 85.5 s by the 8 s bound (1z-bw), with
+44, 29, 13, 19, 13, 16 and 2 leads degraded to `fence-shut` in the meantime. World-0 stalled
+through each window, the separation reached 305, 579 and 304 u at the next pins, and the
+scorecard's world-0-vs-body p50 read 165 u moving.
+
+**The rule, derived from what the arc already measured.** 1z-aa.2: under a shut fence a held key
+does NOT drive the body (RUN-1zT's held W moved it 2.9 u and 0 u; the fence-shut regime walks
+GRANTS, and a pin is not one). So a moving report that stands more than two bounding radii from
+the pin point is a body walking under its own keyboard, which only an open fence allows. The
+harness's case — one key held by `SendInput`, the client's fence shut p50 3.0 s (1z-bw's 26
+shuts) — leaves the body ON the pin and re-arms nothing, which is the case 1z-aa's "never a lead
+into the window" protects. `FENCE_REARM_MOVED_ON` / `FENCE_REARM_MOVED = 24 u`;
+`--no-fence-rearm-moved` reverts to the walk-start rule alone. Retrodicted on the session: 74 of
+79 refusals lift, the first 0.36–0.87 s after each pin. `test_kbdsync`: on the pin keeps the
+latch, 100 u off re-arms (`by=walked-off-pin`) and the report's lead fires, the revert keeps the
+latch, the clear count in the source is now two (both in the `0x003D` arm, none in the stop arm).
+
+**Not moved, measured at the floor.** The Hatcher's stairs entries: the drawn plane wrong for
+0.36–0.73 s per entry (session 1: 0.4–1.7 s, before F13's hold-branch correction), each exactly
+the re-path cadence — the order carrying the copy onto the stairs says `0->29`, the next 0.5 s
+later `29->29`. Retail's own mover-plane update after a crossing order: p50 0.64 s, p25 0.28,
+p90 2.08 (954 NPC orders with field 3 ≠ field 4 across the live corpus). An unclocked send at the
+model's crossing would beat retail; it is not built. `sessionscore.py` now prints the episodes
+against that band.

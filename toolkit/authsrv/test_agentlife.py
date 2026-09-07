@@ -4100,6 +4100,18 @@ def section_corridor_wire():
                   "bare follows through the stairs' flank and the hole",
                   f"ops {[hex(s[0]) for s in moves]}")
 
+        # THE PLAYER AT THE CORNER (RUN-1zCG session 2, 82.9 s): a corridor whose
+        # first vertex lies inside the player's disc is a bare follow -- the
+        # client halts the copy on a target the player's disc covers (F14).
+        pm = _WallMesh()
+        st = _corridor_world((0.0, 0.0), (-60.0, -200.0))     # the player 60 u from the corner (0, -200)
+        sends, _ = _corridor_run(st, pm, seconds=1.0)
+        moves = [s for s in sends if s[0] in (MOVE, DEST)]
+        LEDGER.ok(moves and moves[0][0] == DEST and not any(s[0] == MOVE for s in sends),
+                  "a corridor vertex inside the PLAYER's 80 u disc is not sent: the follow "
+                  "names the player instead (the client would halt the copy on the vertex)",
+                  f"ops {[hex(s[0]) for s in moves]}")
+
         # THE OPEN: a start south of the opening has a clear line -- byte for
         # byte the follow RUN-FEEL / RUN-1zCE / RUN-1zCA confirmed.
         pm = _WallMesh()

@@ -62,7 +62,7 @@ from test_position_trust import receive_arm, Sent, FakeRec   # noqa: E402
 # the word-against-point check and the known-bad arm that reddens all three --
 # the cross-plane guard NPCTRACK proposed is refuted at 0 of 488 and ships as
 # nothing).
-LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=176)
+LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=180)
 check = checks.adopt(LEDGER)
 
 SRC = open(authsrv.__file__, encoding="utf-8").read()
@@ -688,6 +688,50 @@ def main():
           "and the lead of that same report fires -- the applier ran before "
           "the report was sent (the tape's 7 of 8)",
           f"sent {mv[0] if mv else None}")
+    # MOVECODE-1z-ci: a moving report that has WALKED OFF the pin point re-arms
+    # the fence without a stop (the owner never stops; the client's fence was
+    # open in 0.05-0.5 s on 7 of 7 pins), and a report still ON the pin does
+    # not (the scripted case: a shut fence does not drive a held key, 1z-aa.2).
+    st = {"pos": (1000.0, 2000.0), "plane": 7, "pos_seen": 0.0,
+          "fence_shut_at": _t.time() - 0.2, "kbd_moving_at": _t.time() - 0.3,
+          "fence_pin_pt": (1000.0, 2000.0)}
+    st, w = drive_heading(REPORT, lead=True, state=st)
+    check(st.get("fence_shut_at") is not None
+          and st["_rec"].of("grant_verdict")[-1]["lead_clip_why"] == "fence-shut",
+          "1z-ci: a moving report ON the pin point keeps the latch -- the body has "
+          "not walked, so the fence may still be shut (the harness's held key)",
+          f"shut_at {st.get('fence_shut_at')}")
+    st = {"pos": (1000.0, 2000.0), "plane": 7, "pos_seen": 0.0,
+          "fence_shut_at": _t.time() - 0.2, "kbd_moving_at": _t.time() - 0.3,
+          "fence_pin_pt": (900.0, 2000.0)}
+    st, w = drive_heading(REPORT, lead=True, state=st)
+    mv = w.of(MOVE)
+    frows = st["_rec"].of("fence")
+    check(st.get("fence_shut_at") is None and frows
+          and frows[-1]["act"] == "rearm" and frows[-1]["by"] == "walked-off-pin"
+          and frows[-1]["off"] >= 99.0
+          and len(mv) == 1 and mv[0][1][1] == [1520.5, 2000.25] and "KBD LEAD" in mv[0][2],
+          "1z-ci: the same mid-walk report 100 u OFF the pin re-arms the fence "
+          "(by=walked-off-pin, off 100 u) and the lead of that report fires",
+          f"fence rows {frows}, sent {mv[0] if mv else None}")
+    _saved_frm = authsrv.FENCE_REARM_MOVED_ON
+    try:
+        authsrv.FENCE_REARM_MOVED_ON = False
+        st = {"pos": (1000.0, 2000.0), "plane": 7, "pos_seen": 0.0,
+              "fence_shut_at": _t.time() - 0.2, "kbd_moving_at": _t.time() - 0.3,
+              "fence_pin_pt": (900.0, 2000.0)}
+        st, w = drive_heading(REPORT, lead=True, state=st)
+    finally:
+        authsrv.FENCE_REARM_MOVED_ON = _saved_frm
+    check(st.get("fence_shut_at") is not None
+          and st["_rec"].of("grant_verdict")[-1]["lead_clip_why"] == "fence-shut",
+          "1z-ci KNOWN-BAD ARM (--no-fence-rearm-moved): the same report keeps the "
+          "latch and the lead degrades -- the session's 79 refusals",
+          f"shut_at {st.get('fence_shut_at')}")
+    check(authsrv.FENCE_REARM_MOVED == 24.0 and "--no-fence-rearm-moved" in SRC
+          and "global FENCE_REARM_MOVED_ON" in SRC
+          and authsrv.capture_flags().get("FENCE_REARM_MOVED_ON") is True,
+          "1z-ci ships ON at two bounding radii, with its revert, in the header", "")
     # the hold stores the degraded point
     st = {"pos": (1000.0, 2000.0), "plane": 7, "pos_seen": 0.0,
           "fence_shut_at": _t.time() - 0.2, "kbd_moving_at": _t.time() - 0.3}
@@ -723,7 +767,9 @@ def main():
           > SRC.index("def _note_wire_move("),
           "the tracker is stamped in the send choke, once, so every sender "
           "counts", "a per-sender stamp would miss the next sender")
-    check(SRC.count('state["fence_shut_at"] = None') == 1
+    # 1z-ci: TWO clears now, both in the 0x003D arm -- the walk-start and the
+    # walked-off-pin re-arm -- and still none in the 0x0047 arm or the click path.
+    check(SRC.count('state["fence_shut_at"] = None') == 2
           and SRC.index('state["fence_shut_at"] = None')
           > SRC.index("_kbd_was_moving = state.get(\"kbd_moving_at\") is not None"),
           "cleared in ONE place, the 0x003D arm's walk-start test",

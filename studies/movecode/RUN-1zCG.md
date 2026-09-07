@@ -36,7 +36,7 @@ and the three scripted stairs climbs change nothing.
 ## The run
 
 ```powershell
-python toolkit/clientscan/agenttap.py --agents 1,10 --seconds 240 --wait 300 --out vault/research/movecode/1zcg-agenttap.jsonl
+python toolkit/clientscan/agenttap.py --agents 1,10 --seconds 240 --wait 300 --out vault/research/movecode/1zcg3-agenttap.jsonl
 ```
 
 ```powershell
@@ -99,3 +99,42 @@ smaller doors), one is recorded.
    our mesh in a seam, `route()` refused the origin (at 135 s also the goal — the report on the
    hole's edge), and the follow fell back to the straight order. **Fixed:** both ends stepped onto
    the mesh (`nearest_walkable`, 16 u) before routing.
+
+---
+
+## RESULT, session 2 — 2026-09-07 10:59 (capture `authsrv-20260907T105915-c1`, tape `movecode/1zcg2-agenttap.jsonl`, 89 s, 201 reports, 151 fired leads, 943 tape samples)
+
+*"Good improvements. The Hatcher still clips through the stairs on entry, top or bottom, only
+for about a second before stabilising. The around-the-wall pathing is better, and I got a tiny
+warp near the top of the stairs that is probably within acceptable margin."*
+
+(The run sheet's fixed `--out` name overwrote session 1's tape; this one is renamed
+`1zcg2-agenttap.jsonl` and the sheet's command should carry a new name per session.)
+
+| | measured | |
+|---|---|---|
+| client snaps | **1** (27.3 s, 138 u, the "tiny warp"): world-0 on the mesh, separation 179, no agent within 80 u — gate 3's terrain branch at the stairs' foot flank, where world-0 was 30 u off the report's line; not a class the doors cover | recorded |
+| the player's drawn body off our mesh | 0.00 u, 0 of 943 | ✅ |
+| the doors | 11 `+w0-route`, 1 `wall-slide+w0-route`; zero leads 1 of 151 | ✅ |
+| the Hatcher's stairs entries | **4, the drawn plane wrong for 0.36 / 0.36 / 0.46 / 0.73 s** (session 1: 0.4–1.7 s). Each is the re-path cadence: the order that carried the copy onto the stairs said `0->29`, the next order 0.5 s later `29->29`. **Retail's own update after a crossing order: p50 0.64 s, p25 0.28, p90 2.08** (954 NPC orders with field 3 ≠ field 4 on the live corpus, 796 followed by the far plane as field 4). At the wire's floor. | at retail's shape |
+| the Hatcher off our mesh | 14.3 u worst, 25 of 943: 34.6–35.8 s (16 u) and 83.9–85.1 s (31 u) at the stairs' foot flank, 77.2 s (12 u) at the hole's edge | see below |
+| **0x002C re-pins** | **7** (gate1-red 3, gate2-offmesh 3, budget-red 1), world-0 vs the body moving p50 165 u, separations 305 / 579 / 304 u at the gate-1 pins; **79 of 151 fired leads degraded to `fence-shut`** | the finding: §1z-ci |
+
+**§1z-ci, the fence latch under a held key.** The server's latch re-arms at a keyboard
+walk-start — a moving report after a stop — and the owner never stops, so after every re-pin
+the latch ran to its 8 s bound (7.06, 9.21 s; 13–44 leads refused each time) while the client's
+own fence read OPEN within 0.05–0.5 s on 7 of 7 pins. World-0 stalled, fell 300–579 u behind,
+and the next gate-1 re-pins were that. **Fixed:** the fence also re-arms at the first moving
+report more than two bounding radii off the pin point — a shut fence does not drive a held key
+(1z-aa.2 measured 0–2.9 u), so a body that has walked is a body whose fence is open. Retrodicted
+on this session: 74 of the 79 refusals lift, 0.36–0.87 s after each pin; the harness's held-key
+case (the fence shut ~3 s, 1z-bw) leaves the body on the pin and lifts nothing.
+`--no-fence-rearm-moved` reverts; `test_kbdsync` +4 (floor 176 → 180).
+
+**The foot flank at 84 s.** The corridor's first vertex — the corner at the stairs' foot — stood
+24 u from the player, and the client halts a copy whose target its target-agent's disc covers
+(F14), so the Hatcher's copy stood in the flank wall while our model walked on and sent the next
+leg from a point the client never reached. A vertex inside the player's disc is now the bare
+follow (`test_agentlife` +1). Retail's own corridor vertices sit ON wall corners (of 1,965 NPC leg
+endpoints followed by a turn, 14% have under 4 u of clearance and almost none 4–12 u), so no
+body-radius inset is built: a hostile brushing a corner is retail's shape.

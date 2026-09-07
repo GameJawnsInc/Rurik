@@ -4706,8 +4706,10 @@ def _note_wire_move(state, opcode, values, now, rec=None):
         state["sync_to"] = None
         state["sync_at"] = now
         # MOVECODE-1z-aa: a 0x002C SHUTS AgTrack's fence (12/12 on the
-        # movetap corpus); the 0x003D arm clears this at a walk-start.
+        # movetap corpus); the 0x003D arm clears this at a walk-start --
+        # or (1z-ci) at the first report that has WALKED OFF this point.
         state["fence_shut_at"] = now
+        state["fence_pin_pt"] = (float(point[0]), float(point[1]))
         # AND REALFIX-F1b's ARRIVAL QUEUE DIES WITH THE LEG. The binary is
         # explicit that it must: 0x00602B20's ARMED arm hands off to the
         # teleport primitive 0x006020B0, which CLEARS THE ARRIVAL TICK at
@@ -5824,6 +5826,27 @@ KBD_LEAD_FENCE_GATE = True    # False (--no-kbd-lead-fence-gate): leads into a s
 # duration above is quantised to a sample gap and the 6.087 is a LOWER bound
 # on that one shut; the margin absorbs that too.
 FENCE_LATCH_MAX_AGE = 8.0     # s; --no-fence-latch-timeout restores the unbounded latch.
+# ...AND IT RE-ARMS WHEN THE BODY WALKS OFF THE PIN (MOVECODE-1z-ci, 2026-09-07,
+# the owner's second RUN-1zCG session). The walk-start rule above needs a STOP
+# before the moving report, and a player holding the mouse buttons never
+# stops: on that session the latch ran to its 8 s bound after every pin (7.1,
+# 9.2 s) while the client's own fence read OPEN within 0.05-0.5 s (7 of 7
+# pins, agenttap), and 79 of 151 fired leads degraded to zero-length under a
+# fence that was not shut -- world-0 fell 300-579 u behind the body, which is
+# what the next three gate-1 re-pins were. The tape cannot say when the
+# client's walk-start applier ran, but the BODY can: under a shut fence a held
+# key does not drive it (1z-aa.2: RUN-1zT's held W moved it 2.9 u and 0 u --
+# the fence-shut regime walks GRANTS, and a pin is not one), so a moving
+# report more than FENCE_REARM_MOVED from the pin point is a body walking
+# under its own keyboard, which only an open fence allows. Two bounding
+# radii: the parked case measured 0-2.9 u, the first walking report 30 u
+# and up. Retrodicted on that session: 74 of the 79 refusals lift, the first
+# 0.36-0.87 s after each pin; a scripted pin (the harness holds one key and
+# the client's fence stays shut ~3 s, 1z-bw) leaves the body ON the pin and
+# lifts nothing, which is the case 1z-aa's "never a lead into the window"
+# protects. --no-fence-rearm-moved reverts to the walk-start rule alone.
+FENCE_REARM_MOVED_ON = True   # False (--no-fence-rearm-moved): walk-start only.
+FENCE_REARM_MOVED = 2.0 * 12.0   # u: two bounding radii off the pin point.
 
 
 def _fence_gate_lead(state, reported, dest, src, clip_why):
@@ -16298,6 +16321,16 @@ def _follow_leg(pm, ax, ay, px, py, plane, dest_plane):
     if not path or len(path) < 3:
         return None
     wx, wy = float(path[1][0]), float(path[1][1])
+    # RUN-1zCG session 2 (2026-09-07, 82.9 s): the corridor's first vertex --
+    # the corner at the stairs' foot -- stood 24 u from the PLAYER. The client
+    # halts a copy whose target its target-agent's disc covers (NPCTRACK-F14,
+    # the same rule 1z-cg's door A closes for the player's world-0), so the
+    # Hatcher's copy stood in the flank wall while our model walked on and
+    # sent the next leg from a point the client never reached. A vertex
+    # inside the player's disc IS the player, as far as the walk goes: the
+    # agent-addressed follow, whose target the resolver parks on.
+    if math.hypot(wx - px, wy - py) < follow_stop_radius():
+        return None
     wpl = plane
     if planes and len(planes) > 1 and planes[1] is not None:
         wpl = planes[1]
@@ -20554,6 +20587,24 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                           shut_for=round(
                                               time.time()
                                               - state["fence_shut_at"], 3))
+                            state["fence_shut_at"] = None
+                        elif (FENCE_REARM_MOVED_ON and moving
+                              and state.get("fence_shut_at") is not None
+                              and state.get("fence_pin_pt") is not None
+                              and math.hypot(reported[0] - state["fence_pin_pt"][0],
+                                             reported[1] - state["fence_pin_pt"][1])
+                              > FENCE_REARM_MOVED):
+                            # MOVECODE-1z-ci: the body has walked off the pin
+                            # under its own keyboard -- a shut fence does not
+                            # drive it (1z-aa.2) -- so the client's fence is open.
+                            if rec is not None:
+                                rec.event("fence", act="rearm", by="walked-off-pin",
+                                          shut_for=round(
+                                              time.time()
+                                              - state["fence_shut_at"], 3),
+                                          off=round(math.hypot(
+                                              reported[0] - state["fence_pin_pt"][0],
+                                              reported[1] - state["fence_pin_pt"][1]), 1))
                             state["fence_shut_at"] = None
                         # And the click-in-flight latch CLEARS on any
                         # 0x003D, moving or not: MEASURED, the client
@@ -24907,6 +24958,13 @@ def main():
                          "On RUN-R3's stair climb that is 15 zero leads in 8 s "
                          "and the sync copy trailing the body by 100-139 u. "
                          "Known-bad arm.")
+    ap.add_argument("--no-fence-rearm-moved", action="store_true",
+                    help="MOVECODE-1z-ci REVERT: the fence we shut re-arms only "
+                         "at a keyboard walk-start (a moving report after a "
+                         "stop). A player who never stops then keeps the latch "
+                         "to its 8 s bound after every re-pin while the client's "
+                         "fence is open in 0.5 s -- 79 of 151 leads refused on "
+                         "the owner's session, world-0 579 u behind. Known-bad arm.")
     ap.add_argument("--no-fence-latch-timeout", action="store_true",
                     help="MOVECODE-1z-bw REVERT: restore the UNBOUNDED "
                          "fence-gate latch, cleared only by a keyboard "
@@ -26651,6 +26709,7 @@ def main():
     global KBD_SYNC, KBD_SYNC_LEAD_ON, KBD_SYNC_SPEED_ON, KBD_SYNC_STOP_ON
     global KBD_SYNC_HOLD, KBD_LEAD_KILL, KBD_SYNC_MATCHED, KBD_LEAD_FENCE_GATE
     global FENCE_LATCH_MAX_AGE
+    global FENCE_REARM_MOVED_ON
     global KBD_LEAD_REFRESH, A2_LEAD_PLANE_CLIP, A2_LEAD_SEAM_CLIP, A2_LEAD_ORIGIN_SEAM
     global A2_LEAD_WALL_SLIDE
     global A2_LEAD_DISC_CLEAR
@@ -26681,6 +26740,11 @@ def main():
         KBD_LEAD_FENCE_GATE = not a.no_kbd_lead_fence_gate
         # 1z-bw: None restores the unbounded latch (the 1z-aa..1z-bv behaviour).
         FENCE_LATCH_MAX_AGE = None if a.no_fence_latch_timeout else 8.0
+        FENCE_REARM_MOVED_ON = not a.no_fence_rearm_moved
+        if not FENCE_REARM_MOVED_ON:
+            print("[kbd] --no-fence-rearm-moved: the fence re-arms at a walk-start "
+                  "only (1z-ci's revert; the latch runs to its bound under a "
+                  "held key).", flush=True)
         A2_LEAD_PLANE_CLIP = not a.no_lead_plane_clip
         A2_LEAD_SEAM_CLIP = bool(a.lead_seam_clip)
         A2_LEAD_ORIGIN_SEAM = not a.lead_origin_exact

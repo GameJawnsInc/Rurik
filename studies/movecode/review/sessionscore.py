@@ -63,6 +63,7 @@ W0_MOVING_P50_OK, W0_MOVING_P50_RED = 120.0, 200.0
 PLAYER_TAPE_OFF_OK, PLAYER_TAPE_OFF_RED = 1.0, 3.0
 HOSTILE_TAPE_OFF_OK, HOSTILE_TAPE_OFF_RED = 2.0, 5.0
 COPYSEP_P90_OK, COPYSEP_MAX_RED = 20.0, 80.0
+PLANE_LAG_OK, PLANE_LAG_RED = 1.0, 2.5      # s: retail's mover-plane update after a crossing order, p50 0.64 / p90 2.08
 LOCK_S = 12.0                             # a keyboard leg armed this long with no report
 FLOOR_REPORTS = 20                        # a 60 s scripted run carries 23
 SNAP_JUMP = 100.0                         # u: a drawn-body jump at a fence shut is a client snap
@@ -303,6 +304,32 @@ def score_tape(tape, mesh, cap_path, cap_reps=None):
         for r in W.series(head, rows, int(h)):
             d10.append(math.dist(r["w0"], r["body"]))
     out["copysep_p90"], out["copysep_max"] = q(d10, 0.9), q(d10, 1.0)
+    # THE STAIRS-ENTRY PLANE LAG (RUN-1zCG: "the Hatcher terrain walks for a
+    # second entering the stairs"): a hostile's drawn body standing on
+    # trapezoids of ONE plane while its client plane word names another --
+    # the interval from the crossing to the order that carries the new word.
+    # Retail's own update after a crossing order: p50 0.64 s, p90 2.08 (954
+    # NPC orders with field 3 != field 4 on the live corpus).
+    lags = []
+    if mesh is not None:
+        for h in hostiles:
+            cur = None
+            for sm in rows:
+                a = (sm.get("agents") or {}).get(h)
+                if not a or not a.get("async") or "x" not in a["async"]:
+                    continue
+                pl = a["async"].get("plane")
+                mp = mesh.pm.planes_at(a["async"]["x"], a["async"]["y"])
+                wrong = bool(mp) and pl is not None and pl not in mp and len(mp) == 1
+                if wrong:
+                    if cur is None:
+                        cur = [sm["t"], sm["t"]]
+                    cur[1] = sm["t"]
+                elif cur is not None:
+                    if sm["t"] - cur[0] >= 0.15:
+                        lags.append(round(sm["t"] - cur[0], 2))
+                    cur = None
+    out["plane_lags"] = lags
     if mesh is not None and len(hostiles) > 1 and "hostile_off" in out:
         reps = cap_reps or []
         rw = [r["wall_unix"] for r in reps]
@@ -409,6 +436,11 @@ def report(cap_path, tape, mesh, mid, c, t):
                  _v(worst, HOSTILE_TAPE_OFF_OK, HOSTILE_TAPE_OFF_RED), "Q9 0.15; before it 12.8-93.8")
         if len(t.get("hostiles") or []) != 1:
             line("hostiles on the tape", "%s" % (t.get("hostiles") or []), "  -  ", "the hostile rows pool every one of them")
+        pl = t.get("plane_lags") or []
+        line("hostile drawn on one plane, word naming another", "%d episodes%s" % (
+            len(pl), (", longest %.2f s" % max(pl)) if pl else ""),
+             _v(max(pl) if pl else None, PLANE_LAG_OK, PLANE_LAG_RED),
+             "retail's own update after a crossing: p50 0.64 s, p90 2.08")
         line("hostile sync copy vs drawn body, p90 / max", "%s / %s u" % (
             None if t["copysep_p90"] is None else round(t["copysep_p90"], 1),
             None if t["copysep_max"] is None else round(t["copysep_max"], 1)),
