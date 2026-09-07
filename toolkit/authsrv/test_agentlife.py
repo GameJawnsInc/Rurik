@@ -73,7 +73,7 @@ from codec import Codec  # noqa: E402
 # known-bad control; and the chase section's wall pin split by arm, 1).
 # Floor from a real green run of 331. +1 at NPCTRACK-F8 (the hold rule
 # replaces the fresh-follow pin: three checks for two), green 333.
-LEDGER = checks.Ledger("agent lifetime", floor=337)
+LEDGER = checks.Ledger("agent lifetime", floor=344)
 
 
 def section_weapon_damage():
@@ -532,6 +532,7 @@ def main():
     section_plane_reach()
     section_client_model()
     section_corridor_wire()
+    section_enemy_count()
     section_facing()
     section_enemy_skill()
     section_constants()
@@ -2510,7 +2511,7 @@ def _section_enemy_skill_bar_order():
               "and not a claim about a Hatcher")
 
     # 8. the content key reaches the entry, same rule as the other two
-    LEDGER.ok("skills" in inspect.getsource(authsrv.spawn_enemy),
+    LEDGER.ok("skills" in inspect.getsource(authsrv._spawn_one_enemy),   # the entry literal lives here since --enemies N
               "and spawn_enemy carries the skill from the content row",
               "`entry` is a closed literal; a key that is not named there never "
               "arrives, however it is spelled in world.toml")
@@ -4107,6 +4108,80 @@ def section_corridor_wire():
                   f"first {None if not moves else (hex(moves[0][0]), moves[0][1])}")
     finally:
         authsrv.NPC_FOLLOW_CORRIDOR = saved
+
+
+def section_enemy_count():
+    """NPCTRACK-Q10 groundwork: --enemies N spawns N hostiles, ids 10..10+N-1,
+    one shared definition, distinct walkable spots; N == 1 is byte for byte
+    today's spawn."""
+    import authsrv
+    print("\nNPCTRACK-Q10 groundwork: --enemies N")
+
+    class _Send:
+        def __init__(self):
+            self.sent = []
+
+        def __call__(self, op, vals, label="", quiet=False):
+            self.sent.append((op, list(vals), label))
+
+    class _Mesh:
+        """Walkable everywhere but due east of the origin at the offset."""
+        def walkable(self, x, y):
+            return not (abs(x - (1000.0 + authsrv.ENEMY_OFFSET[0])) < 1.0 and abs(y - 1000.0) < 1.0)
+
+        def planes_at(self, x, y):
+            return {0} if self.walkable(x, y) else set()
+
+    saved = authsrv.ENEMY_COUNT
+    try:
+        authsrv.ENEMY_COUNT = 1
+        st = {"pathmap": _Mesh()}
+        authsrv.spawn_enemy(_Send(), st, (1000.0, 1000.0, 0), 1)
+        ids = sorted(st["agents"])
+        LEDGER.ok(ids == [authsrv.ENEMY_AGENT_ID],
+                  "N == 1: one hostile, the standing enemy's own id", f"{ids}")
+        one = st["agents"][authsrv.ENEMY_AGENT_ID]
+        LEDGER.ok(one["pos"] != (1000.0 + authsrv.ENEMY_OFFSET[0], 1000.0),
+                  "and its spot skips the one point the mesh refuses (enemy_spot's "
+                  "own rule, unchanged)", f"{one['pos']}")
+
+        authsrv.ENEMY_COUNT = 3
+        st = {"pathmap": _Mesh()}
+        send = _Send()
+        authsrv.spawn_enemy(send, st, (1000.0, 1000.0, 0), 1)
+        ids = sorted(st["agents"])
+        LEDGER.ok(ids == [10, 11, 12],
+                  "N == 3: three hostiles under 10, 11, 12 -- the unallocated block "
+                  "(probes 2..7, world NPCs 20..22, henchman 30)", f"{ids}")
+        spots = [st["agents"][i]["pos"] for i in ids]
+        LEDGER.ok(len(set(spots)) == 3 and all(st["pathmap"].walkable(*p) for p in spots),
+                  "at three DISTINCT spots the mesh accepts", f"{spots}")
+        LEDGER.ok(len({st["agents"][i]["definition"] for i in ids}) == 1
+                  and all(st["agents"][i]["allegiance"] == agents.ALLEGIANCE_HOSTILE for i in ids)
+                  and all(st["agents"][i]["npc"] is agents.HATCHER for i in ids),
+                  "one shared definition (per template, as sculpt_hostile already "
+                  "shares with the watcher), every one hostile, every one a hatcher", "")
+        creates = [v for op, v, _l in send.sent if op == authsrv.GAME_SMSG_AGENT_CREATE] \
+            if hasattr(authsrv, "GAME_SMSG_AGENT_CREATE") else None
+        LEDGER.ok(creates is None or len(creates) == 3,
+                  "and three bodies went out on the wire",
+                  "" if creates is None else f"{len(creates)} create(s)")
+
+        authsrv.ENEMY_COUNT = 2
+        st = {}                                    # no navmesh: the plain offsets
+        authsrv.spawn_enemy(_Send(), st, (0.0, 0.0, 0), 1)
+        LEDGER.ok(sorted(st["agents"]) == [10, 11]
+                  and st["agents"][10]["pos"] == (authsrv.ENEMY_OFFSET[0], 0.0)
+                  and st["agents"][11]["pos"] == (0.0, authsrv.ENEMY_OFFSET[0]),
+                  "without a navmesh the spots are the compass ring at the plain "
+                  "offset, east then north", f"{[st['agents'][i]['pos'] for i in (10, 11)]}")
+        LEDGER.ok("--enemies" in open(authsrv.__file__, encoding="utf-8").read()
+                  and "global ENEMY_COUNT" in open(authsrv.__file__, encoding="utf-8").read()
+                  and authsrv.ENEMY_COUNT_MAX == 8,
+                  "the flag exists, rebinds through a declared global, and is capped "
+                  "at 8 (ids 10..17; 20 is the first world NPC)", "")
+    finally:
+        authsrv.ENEMY_COUNT = saved
 
 
 if __name__ == "__main__":

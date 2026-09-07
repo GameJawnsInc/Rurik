@@ -447,7 +447,7 @@ def _drive_cycle():
 
     # And the key has to be able to GET there from content, which is the half that was
     # missing: spawn_enemy builds `entry` and only names it copies survive.
-    LEDGER.ok("resend_definition" in inspect.getsource(authsrv.spawn_enemy),
+    LEDGER.ok("resend_definition" in inspect.getsource(authsrv._spawn_one_enemy),   # the entry literal lives here since --enemies N
               "and spawn_enemy carries the key from the content row into the entry",
               "without that line the hatch is unreachable from content/world.toml no "
               "matter what an operator writes there -- the key loads, and stops at a "

@@ -5,6 +5,7 @@
     python studies/npctrack/review/npcdrift.py <agenttap.jsonl>     # score one run (RUN-NPCTRACK-R1)
     python studies/npctrack/review/npcdrift.py <agenttap.jsonl> <gamesrv.jsonl>
     python studies/npctrack/review/npcdrift.py <agenttap.jsonl> --control   # the revert arm's inverted bars
+    python studies/npctrack/review/npcdrift.py <agenttap.jsonl> <gamesrv.jsonl> --agent 11   # the second hostile (--enemies 2)
 
 THE QUANTITY. At every 0x0028 halt the server sent agent 10, the halt's own label
 carries the server's copy of the body ("agent 10 halts at (x,y)"), and the agenttap
@@ -126,7 +127,9 @@ def cap_t0(rows):
     return None
 
 
-def npc_events(rows, agent_id=AGENT):
+def npc_events(rows, agent_id=None):
+    if agent_id is None:
+        agent_id = AGENT          # read at call time: --agent rebinds the module's AGENT
     """[(t, kind, data)] for one NPC, decoded from the sent rows' own bytes:
     0x002A = agent u32, x f32, y f32, plane u16 x2, target u32; 0x0029 the same
     without the target; 0x0028 = agent; 0x002B = agent, rate f32."""
@@ -474,7 +477,13 @@ def pooled(results):
 
 
 def main(argv):
+    global AGENT
     control = "--control" in argv
+    if "--agent" in argv:
+        # NPCTRACK-Q10: score the SECOND hostile (agent 11 under --enemies 2).
+        i = argv.index("--agent")
+        AGENT = int(argv[i + 1])
+        argv = argv[:i] + argv[i + 2:]
     argv = [a for a in argv if a != "--control"]
     if len(argv) >= 2:
         tape = argv[1]

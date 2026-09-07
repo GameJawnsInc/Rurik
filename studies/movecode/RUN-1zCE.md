@@ -119,7 +119,12 @@ target equals our granted point whenever it slides. The fence is `open` on every
 and the body moves at 206 u/s, not the grant's 288 — the client walking its own wall, not our
 order. Documented at the detector's constant; not a change to it.
 
-**Open from this run:** retail's 0x003D cadence on the live corpus is 0.5 s at the median but
+~~**Open from this run:** retail's 0x003D cadence on the live corpus is 0.5 s at the median but
 945 of 2,797 intervals are 0.1–0.4 s, where ours are a flat 0.5; on a slide a faster report
 shortens the vertex park. Whether that cadence is the client's own or a response to something
-retail sends is unmeasured.
+retail sends is unmeasured.~~ **CLOSED at the desk 2026-09-07:** the fast intervals are
+HEADING CHANGES, not a cadence — of retail's 945 intervals under 0.45 s, 838 carry a turn of
+more than 5° between the two reports (688 moving, 150 standing) and 107 are straight; the
+owner's own hand-driven RUN-FEEL2 reads the same shape on our server (47 of 53 fast intervals
+are turns). The keyboard climb is straight, so it reports on the 512 u chord alone. The
+client's rule, on both servers; nothing retail sends.

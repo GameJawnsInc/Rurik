@@ -293,9 +293,38 @@ def score_tape(tape, mesh, cap_path, cap_reps=None):
                     far += 1
                     worst = max(worst, d)
             out[key] = (n, worst, far, worst_uncovered)
-    p10 = W.series(head, rows, 10)
-    d10 = [math.dist(r["w0"], r["body"]) for r in p10]
+    # EVERY hostile on the tape (agenttap --agents 1,10,11,...): the copy
+    # separation pooled, and the off-mesh census per hostile above reads 10
+    # only -- extended here to the worst over all of them.
+    hostiles = sorted({a for sm in rows for a in (sm.get("agents") or {}) if a != "1"}, key=int)
+    out["hostiles"] = hostiles
+    d10 = []
+    for h in hostiles:
+        for r in W.series(head, rows, int(h)):
+            d10.append(math.dist(r["w0"], r["body"]))
     out["copysep_p90"], out["copysep_max"] = q(d10, 0.9), q(d10, 1.0)
+    if mesh is not None and len(hostiles) > 1 and "hostile_off" in out:
+        reps = cap_reps or []
+        rw = [r["wall_unix"] for r in reps]
+        n = far = 0
+        worst = worst_unc = 0.0
+        for h in hostiles:
+            for sm in rows:
+                a = (sm.get("agents") or {}).get(h)
+                if not a or not a.get("async") or "x" not in a["async"]:
+                    continue
+                n += 1
+                d = mesh.off(a["async"]["x"], a["async"]["y"])
+                if d <= FAR:
+                    continue
+                i = bisect.bisect_right(rw, head["t0"] + sm["t"]) - 1
+                rep_off = mesh.off(*reps[i]["reported"]) if i >= 0 else 0.0
+                if rep_off > OFF_MESH_REPORT_OK:
+                    worst_unc = max(worst_unc, d)
+                else:
+                    far += 1
+                    worst = max(worst, d)
+        out["hostile_off"] = (n, worst, far, worst_unc)
     return out
 
 
@@ -378,6 +407,8 @@ def report(cap_path, tape, mesh, mid, c, t):
             line("hostile drawn body off our mesh, worst / > 2 u", "%.2f u / %d of %d%s" % (
                 worst, far, n, ("  (+ %.1f u beside a player on uncovered ground)" % unc) if unc > FAR else ""),
                  _v(worst, HOSTILE_TAPE_OFF_OK, HOSTILE_TAPE_OFF_RED), "Q9 0.15; before it 12.8-93.8")
+        if len(t.get("hostiles") or []) != 1:
+            line("hostiles on the tape", "%s" % (t.get("hostiles") or []), "  -  ", "the hostile rows pool every one of them")
         line("hostile sync copy vs drawn body, p90 / max", "%s / %s u" % (
             None if t["copysep_p90"] is None else round(t["copysep_p90"], 1),
             None if t["copysep_max"] is None else round(t["copysep_max"], 1)),

@@ -17882,15 +17882,39 @@ def enemy_spot(state, ox, oy):
     normal outcome -- the archive is the player's own install and is not
     required to be present.
     """
+    return enemy_spots(state, ox, oy, 1)[0]
+
+
+# NPCTRACK-Q10 groundwork (2026-09-07): every movement measurement this repo has
+# made was one player and ONE hostile. Two chasers share the player's world-0
+# frame, each other's disc (the avoidance pass runs per agent, F14), and the
+# keyboard lead's new disc door (1z-cg) -- none of it measured. `--enemies N`
+# spawns N standing hostiles (ids 10..10+N-1: 11..17 are unallocated, the
+# probes are 2..7, the world NPCs 20..22, the henchman 30, heroes 200+), one
+# definition shared (a definition is per template, and sharing within a
+# template is the rule sculpt_hostile already exercises). The ticks iterate
+# every agent already; nothing below this line changes for N == 1.
+ENEMY_COUNT = 1               # --enemies N, 1..8.
+ENEMY_COUNT_MAX = 8
+
+
+def enemy_spots(state, ox, oy, n):
+    """`n` distinct spots near the player, walkable ones first -- the eight
+    compass points at ENEMY_OFFSET's distance, then the same eight at one and
+    a half times it. The plain offset when there is no navmesh (a normal
+    outcome: the archive is the player's own install). Never fewer than `n`
+    points: a spot the mesh refuses is still returned, last, and the spawn
+    line says so."""
+    d = ENEMY_OFFSET[0]
+    ring = [(d, 0), (0, d), (-d, 0), (0, -d), (d, d), (-d, d), (d, -d), (-d, -d)]
+    cands = [(ox + dx, oy + dy) for dx, dy in ring] + \
+            [(ox + 1.5 * dx, oy + 1.5 * dy) for dx, dy in ring]
     pm = state.get("pathmap")
     if pm is None:
-        return ox + ENEMY_OFFSET[0], oy + ENEMY_OFFSET[1]
-    d = ENEMY_OFFSET[0]
-    for dx, dy in ((d, 0), (0, d), (-d, 0), (0, -d),
-                   (d, d), (-d, d), (d, -d), (-d, -d)):
-        if pm.walkable(ox + dx, oy + dy):
-            return ox + dx, oy + dy
-    return ox + ENEMY_OFFSET[0], oy + ENEMY_OFFSET[1]
+        return cands[:n]
+    good = [c for c in cands if pm.walkable(c[0], c[1])]
+    bad = [c for c in cands if not pm.walkable(c[0], c[1])]
+    return (good + bad)[:n]
 
 
 # ------------------------------------------------------- the area population
@@ -18143,8 +18167,15 @@ def spawn_enemy(send, state, origin, conn_id):
     see `create_agent_world`, which now owns both halves.
     """
     ox, oy, plane = origin
-    x, y = enemy_spot(state, ox, oy)
+    spots = enemy_spots(state, ox, oy, max(1, min(ENEMY_COUNT, ENEMY_COUNT_MAX)))
+    for i, (x, y) in enumerate(spots):
+        _spawn_one_enemy(send, state, ENEMY_AGENT_ID + i, x, y, plane, conn_id,
+                         n_of=(i + 1, len(spots)))
 
+
+def _spawn_one_enemy(send, state, agent_id, x, y, plane, conn_id, n_of=(1, 1)):
+    """One hostile body under `agent_id` at (x, y). The entry is spawn_enemy's
+    own, unchanged; only the id and the spot vary across --enemies N."""
     entry = {
         "pos": (x, y), "plane": plane,
         "health": float(ENEMY_MAX_HEALTH), "max_health": float(ENEMY_MAX_HEALTH),
@@ -18175,7 +18206,7 @@ def spawn_enemy(send, state, origin, conn_id):
             "effects": agents.EFFECT_TRANSITION,
         })
 
-    create_agent_world(send, state, ENEMY_AGENT_ID, entry,
+    create_agent_world(send, state, agent_id, entry,
                        "burrowing hostile" if ENEMY_BURROWS else "hostile",
                        conn_id=conn_id)
     # NOT SENT, and the reason is worth keeping. 0x002F is ldufr's
@@ -18194,8 +18225,11 @@ def spawn_enemy(send, state, origin, conn_id):
     # The health and attack-speed sends that used to sit here moved into
     # create_agent_world, unchanged and in the same order, so that a burrow
     # re-create issues exactly what the first create did.
-    print(f"[c{conn_id}] enemy {ENEMY_AGENT_ID} ({agents.HATCHER['name']}) "
-          f"at ({x:.0f}, {y:.0f}) plane {plane}, {ENEMY_MAX_HEALTH} hp"
+    _pm = state.get("pathmap")
+    _offm = "" if _pm is None or _pm.walkable(x, y) else ", OFF our mesh"
+    print(f"[c{conn_id}] enemy {agent_id} ({agents.HATCHER['name']}, "
+          f"{n_of[0]} of {n_of[1]}) "
+          f"at ({x:.0f}, {y:.0f}) plane {plane}{_offm}, {ENEMY_MAX_HEALTH} hp"
           + (f", burrowing ({ENEMY_BURROW_OUT:.1f}s out / "
              f"{ENEMY_BURROW_HIDDEN:.1f}s hidden)" if ENEMY_BURROWS else ""),
           flush=True)
@@ -25031,6 +25065,12 @@ def main():
                          "the player loses the race (25 damage a hit into 100 HP, "
                          "four hits, against the seven the player needs) and never "
                          "lands one.")
+    ap.add_argument("--enemies", type=int, default=1, metavar="N",
+                    help="spawn N standing hostiles instead of one (ids 10..10+N-1, "
+                         "one shared definition, walkable spots around the "
+                         "arrival point). 1..8. NPCTRACK-Q10: two chasers share "
+                         "the player's frame and each other's disc, and nothing "
+                         "has measured that.")
     ap.add_argument("--no-enemy", action="store_true",
                     help="Do not spawn the standing hostile NPC. The world is "
                          "then the player alone, which is what most probes "
@@ -27105,6 +27145,14 @@ def main():
         print("PRACTICE TARGET: the hostile stands still and does not attack. "
               "It can still be hit, killed and revived.")
 
+    if a.enemies != 1:
+        global ENEMY_COUNT
+        if not (1 <= a.enemies <= ENEMY_COUNT_MAX):
+            ap.error(f"--enemies {a.enemies}: 1..{ENEMY_COUNT_MAX} (ids 10..17 are "
+                     f"the unallocated block; 20 is the first world NPC)")
+        ENEMY_COUNT = a.enemies
+        print(f"[enemy] --enemies {ENEMY_COUNT}: hostiles 10..{ENEMY_AGENT_ID + ENEMY_COUNT - 1}, "
+              f"one shared definition, spots around the arrival point.", flush=True)
     if a.no_enemy:
         global SPAWN_ENEMY
         SPAWN_ENEMY = False

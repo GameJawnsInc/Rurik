@@ -661,6 +661,14 @@ number on the six prior stairs tapes is 12.8–93.8 u.
 
 ## Open
 
+- **`NPCTRACK-Q10` — two hostiles.** Every measurement in this arc and in MOVECODE was one
+  player and one hostile. Two chasers share the player's frame, each other's discs (F14's pass
+  runs per agent), the follow's park, Q9's corridor and 1z-cg's disc door — unmeasured.
+  Groundwork shipped 2026-09-07: `--enemies N` (ids 10..10+N-1, one shared definition, the
+  compass ring of walkable spots; `enemy_spots`; `test_agentlife` `section_enemy_count`), and
+  `sessionscore.py` pools every hostile on the tape. [RUN-Q10.md](RUN-Q10.md) registered;
+  `npcdrift.py` takes `--agent N` so P2 can be read for the second body.
+
 - **`NPCTRACK-Q2` — the AgTrack mirror's POSITION fidelity, handed to MOVECODE.** The mirror was
   built and validated for snap VERDICTS; as a position it is p50 0.0 u from the client's world-0
   over five tapes, p90 30–92, max 107–152, and **F10 locates every excursion**: the first press's
