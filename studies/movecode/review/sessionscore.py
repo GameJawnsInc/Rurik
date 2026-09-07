@@ -251,8 +251,16 @@ def score_tape(tape, mesh, cap_path, cap_reps=None):
     # THE CLIENT'S OWN SNAP: the fence shuts (a 0x002C, ours or the client's own
     # separation gate) and the drawn body JUMPS. Ours land on the body by design
     # (harm 0 u, 1z-ak); a jump is the client's gate teleporting the body onto a
-    # world-0 that fell behind -- the yank the owner feels (FEEL2 63.8 s: 166 u
-    # into the hole above the stairs, then 452 u out of it).
+    # world-0 that fell behind -- the yank the owner feels (FEEL2 63.8 s: 181 u
+    # into the hole above the stairs).
+    #
+    # ON THE LIVE PATH, NEVER THE RAW COLUMN (MOVECODE-1z-ck). agenttap's x,y is
+    # the copy's last WRITTEN point, sample-and-hold: under a shut fence the body
+    # walks our leads as click-orders at 288 u/s and the column stands still for
+    # a second, then catches up in one sample -- which this metric read as a
+    # 150-450 u teleport. Session 3 of RUN-1zCG scored 3 snaps on the raw column
+    # and has 1 on the live path; FEEL2's "452 u out of the hole" was the same
+    # walk. w0score.live is the client's own position_at, clamp and all.
     snaps = []
     prev = None
     for sm in rows:
@@ -260,7 +268,7 @@ def score_tape(tape, mesh, cap_path, cap_reps=None):
         if not a or not a.get("async") or "x" not in a["async"]:
             continue
         f = (a.get("fence") or {}).get("fence_state")
-        pt = (a["async"]["x"], a["async"]["y"])
+        pt = W.live(a["async"], sm.get("clock1"))
         if prev is not None:
             j = math.dist(prev[1], pt)
             if j > SNAP_JUMP and (f == "shut" or prev[0] == "shut"):
@@ -423,7 +431,7 @@ def report(cap_path, tape, mesh, mid, c, t):
         sn = t.get("snaps") or []
         line("client snaps (fence shut + body jump > %.0f u)" % SNAP_JUMP,
              "%d %s" % (len(sn), sn[:4] if sn else ""), "OK   " if not sn else "RED  ",
-             "FEEL2 2 (166 u into the hole, 452 out); 1zBW 6+; scripted runs 0")
+             "live path: FEEL2 1 (181 u into the hole); 1zBW 5; 1zCG s3 1 (255 u); scripted runs 0")
         if "player_off" in t:
             n, worst, far, unc = t["player_off"]
             line("player drawn body off our mesh, worst / > 2 u", "%.2f u / %d of %d%s" % (

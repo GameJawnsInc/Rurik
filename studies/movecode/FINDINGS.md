@@ -16820,7 +16820,7 @@ says that happened to *them*.
 | 63.26 (cap 64.33) | the lead to **(11245, 9428)** goes out. From the report (11481, 8965) the ray is CLEAR — `seg_off` 0.0 on our mesh. The client bakes a grant from **its own settled +0x78** (movement/FINDINGS 3724-3736), i.e. from (11387, 8762), and *that* leg crosses the hole **62 u deep**. |
 | 63.45 → 63.72 | world-0 (live, `w0score.live`) leaves our mesh: 0.5, 24, 47, 59 u inside the hole. The body is on the mesh 220 u away. |
 | **63.81** | the fence shuts, the body is at (11336, 8934) — **20 u from world-0, 61 u inside the hole**. Gate 2 (`pathCount == 0` at world-0's point). No 0x002C from us (ours was at 71.06). |
-| 65.43 | the next lead pulls the body **452 u** out to (11085, 9293). |
+| 65.43 | the body arrives at (11085, 9293) — it WALKED the next lead as a click-order, 460 u at 288 u/s with the fence shut (read as a 452 u pull off the sample-and-hold column until §1z-ck). |
 
 Our guard predicted MATCH at delivery — correctly, the delivery matched; gate 2 is a per-tick
 test during the walk — and its own gate-2 reading (`agtrack_repin blocked gate2-offmesh
@@ -16977,8 +16977,9 @@ from world-0 holds on the mesh, else the leg's last on-mesh point (`why` gains `
 `0x002C`. The client's own gate reseeds (1s.3) shut the same fence: the tape reads shut at
 68.51 s with no `0x002C` from us, open again at 74.95 s at the owner's re-press. In between the
 server kept leading — into the client's shut window, which is sec.0.11 stage 2 verbatim: the body
-walked the leads as click-orders (190 u/s, the lead's own speed), the keys were dead, and the
-scorer read two more 150–260 u yanks. **The wire shows the reseed:** the first report after it
+walked the leads as click-orders (at 288 u/s — §1z-ck; this said 190) and the keys were dead;
+the scorer's "two more 150–260 u yanks" were that walk read off the sample-and-hold column
+(§1z-ck item 1). **The wire shows the reseed:** the first report after it
 lands ON the mirror's world-0 (3 u) while the position model expected the body 373 u away; a body
 250 u from world-0 does not walk back onto it in one report interval by its own keys. **Fix:** a
 report more than `CLIENT_RESEED_JUMP` (150 u) off the model that lands within `CLIENT_RESEED_ONTO`
@@ -16997,9 +16998,11 @@ onto world-0, no jump, a parked body's wandered model, the revert, the header), 
 **Recorded, not built.** (1) The guard's sweep read the separation as red 2.7 s late: its async
 estimate is the last report (no glide under a held key) and a HALTED world-0 has no arrival to
 mature, so clause 2 never fired; a re-pin onto the body at 68.6 s would have pre-empted the whole
-episode. (2) The escape click at 69.8 s: `router_route kbd-drop`, keyboard_age 1.5 s — retail
-answers such clicks 7 of 7 (ROUTER review §1.7); it is a registered run question with an exposure
-floor (`--answer-kbd-click`), not flipped here. (3) World-0's 130 u lag before the corridor came
+episode. **WITHDRAWN in §1z-ck item 2:** the guard's MATCH before the snap is the client's own
+verdict on the same configuration five times over. (2) The escape click at 69.8 s:
+`router_route kbd-drop`, keyboard_age 1.5 s — retail answers such clicks 7 of 7 (ROUTER review
+§1.7). **This sentence called it "a registered run question"; it was run and REFUTED on
+2026-08-28 (RUN-R1B B1, §1q.5) and stays OFF.** (3) World-0's 130 u lag before the corridor came
 from clip-point leads at the hole's edge (the ray blocked 17 u out); retail grants the clip point
 there too (5 of 5 within a unit, `wallslide.pairs()` on rays blocked 4–64 u out), so those leads
 stay. (4) Retail's corridor vertices sit ON wall corners (1,965 turn endpoints: 14% under 4 u of
@@ -17019,3 +17022,88 @@ not its cadence; expected lag ~0.1 s plus the drawn body's own handoff, which to
 the same order on 3 of 4 entries. Sending the far plane EARLY (field 4 = 29 while the copy is on
 plane-0 ground) is refused: F11 measured what the client does with a plane that has no surface
 under the point (a cached height, 52 u into the ground).
+
+## 1z-ck. THE DESK PASS ON THE STUCK STRETCH'S LOOSE ENDS — the scorer's snap metric was reading the sample-and-hold column (session 3 had ONE client snap, not three; FEEL2's "452 u out" was a walk), the guard's "2.7 s late" sweep is withdrawn (its MATCH before the snap is the client's own verdict, five times over), and door B's plane words are a census and not a defect (retail's own wire names a plane our mesh lacks at the point in 2–7% of grants). No knob shipped
+
+No session. The owner asked for desk work; three items from §1z-cj's "recorded, not built"
+list and one the desk found on its own.
+
+**1. The scorer's client-snap metric was on the raw column (FIXED, `sessionscore.py`).** The
+metric differenced the agenttap tape's `async.x, y`, which is the copy's last WRITTEN point —
+sample-and-hold, the trap movetap's `point` column set in REALFIX §0.14 and the `sync` column
+set again in RUN-1zCE. Under a shut fence the body walks our leads as click-orders (§0.11
+stage 2) at 288 u/s — the client's own run speed, not the 190 u/s §1z-cj wrote — and the raw
+column stands still for 0.4–1.6 s, then catches up in one sample: a 150–450 u "teleport" that
+never happened. On the live path (`w0score.live`, the client's `position_at` with its clamp):
+
+| tape | raw column | live path |
+|---|---|---|
+| RUN-1zCG session 3 | 3: 68.5 s 255 u, 72.4 s 151 u, 75.0 s 261 u | **1: 68.5 s 255 u** |
+| RUN-1zCG session 2 | 1: 27.3 s 138 u | 1: 27.3 s 119 u |
+| RUN-FEEL2 | 2: 63.8 s 166 u, 65.4 s 452 u | **1: 63.8 s 181 u** |
+| RUN-1zBW | 8 | 5 (43.6, 63.3, 68.0, 126.0, 130.0 s) |
+| every scripted tape | 0 | 0 |
+
+So §1z-cj's chain stands with one correction: ONE snap, one shut fence, one enslaved walk of
+6.4 s — the "two more 150–260 u yanks" at 72.4 and 75.0 s were the body walking the 72.86 s
+and 74.95 s leads at 288 u/s, and FEEL2's "the next lead pulls the body 452 u out" (§1z-cg)
+was the same walk, 460 u in 1.6 s with the fence shut. The scorer's hint line carries the
+live-path figures now. Third time for this trap; the rule is in the memory and now in the
+scorer's own comment.
+
+**2. The 69.47 s snap, and the guard's "2.7 s late" (WITHDRAWN).** §1z-cj recorded that the
+guard's sweep read the separation as red 2.7 s late and that "a re-pin onto the body at 68.6 s
+would have pre-empted the whole episode". The guard was replayed over the capture with
+`guardretro`'s feed (positive control: 130 of 133 logged verdicts reproduced) and, at each
+lead in the window, the reprieve walk was taken apart: which chain segment matched, whether it
+was degenerate, and whether the match needed a pathfind from a plane our mesh does not offer at
+the copy's point. At 68.47, 68.98 and 69.49 s the mirror said MATCH, as the server's own rows
+say. **The same configuration — the (29, 29) lead to the plane-0 corner vertex (11288, 9151),
+the copy halted at it, the only matching segments needing a cross-plane pathfind — occurred
+five more times without a snap:** session 3 at 28.79, 29.31, 29.82 s and session 2 at 47.15,
+47.67, 48.18 s, with the fence open throughout and the body 300–700 u from the copy (gate 1
+would have fired on a miss). The client's reprieve walk matched there, so the guard's MATCH
+before the snap was the client's own rule's answer, and a re-pin at 68.6 s would have needed a
+prediction the decoded gates do not make. Withdrawn. What the snap was: separation 264 u at the
+last sample before it (gate 1 red is 299.33 u), the fence shut, the body set 19 u past the halt
+point — so gate 2, or the L1-6 branch REALFIX §0.11 left open (a snap during plane-mismatch
+resolution below every distance gate). **The one discriminator on the tape:** at 69.47 s the
+copy had been HALTED BY AVOIDANCE (F14) 45 u short of the vertex, 34–45 u from the Hatcher, and
+had resumed 67 ms before our grant landed (q = the halt point + 19 u toward the vertex); in all
+five controls it had ARRIVED at the vertex. 1z-cj (a) removes that configuration. Labelled:
+OBSERVED, five tolerated; CONTESTED, the snap's branch — a hook read decides it, not a run.
+
+**3. Door B's plane words (CENSUS, no change).** Door B replaces the lead's destination with a
+corridor vertex but the plane words stay the report's — `a2_clip_lead` returns no plane, and
+`a2_matched_field4` copies field 3 into field 4 before the doors run. Across every lead since
+2026-09-05 with a tape (836): **16 carried a field 3 our mesh does not offer at the destination
+— all 16 door-B vertex leads, sessions 2 and 3 — and 64 a field 4 not offered at the mirror's
+world-0.** The client tolerated 15 of the 16 (the 16th is the snap in item 2, whose
+discriminator is not the word) and every one of the 64. **The retail control**, `cmsgstream`
+over the live corpus against our meshes, player and NPC grants where the point is on our mesh:
+
+| retail's wire | count | rate |
+|---|---|---|
+| player `0x0029`, field 3 not offered at the destination | 76 of 3,553 | 2.1% |
+| NPC `0x0029`, field 3 not offered at the destination | 243 of 7,241 | 3.4% |
+| player `0x0029`, field 4 not offered at the mover's last report point | 229 of 3,422 | 6.7% |
+| the CLIENT's own `0x003D` plane, not offered at its own report point | 31 | — |
+
+So a plane word absent on OUR mesh at the point is retail's normal wire — or our mesh's plane
+assignment near seams differs from the client's; the corpus cannot say which, and it does not
+matter for the ruling — and not a defect to repair. It also says the mirror's plane-lenient
+`route()` (prefer semantics: a start plane nothing matches falls back to every candidate) is the
+right model of the client's reprieve pathfind, 5 of 5. The "geometry-free zero" of
+movement/FINDINGS :3502 (a plane word selecting the wrong trapezoid set at `0x0072AE40`) is
+therefore NOT what the reprieve does with a merely absent plane; it stays the record for gate
+2's start resolution (§1z-o.6, one observation). The rule a session might have shipped here —
+"the word must name a plane the mesh offers at the point" — is refuted as a retail rule by the
+control, and would have been iteration on a hunch.
+
+**4. Not touched, and the record corrected.** §1z-cj called `--answer-kbd-click` "a registered
+run question"; it was RUN on 2026-08-28 (RUN-R1B's B1 arm) and REFUTED (§1q.5) — it stays OFF
+and the question is closed, not open.
+
+**Instruments.** `sessionscore.py` (the live-path snap); the replay and the two censuses ran as
+one-off scripts against `guardretro.events`, `w0score.series` and `cmsgstream.timed`, and
+their numbers are the tables above.

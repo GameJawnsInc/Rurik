@@ -11,7 +11,8 @@ scorecard is the instrument, and the owner's eye is the tie-break.
 
 RUN-FEEL2's tape held a second "fall through the stairs" the run sheet never scored: at 63.8 s
 the client's own gate 2 snapped the PLAYER's body 166 u into the hole above the stairs, froze it
-1.5 s, and the next lead pulled it 452 u out ([FINDINGS §1z-cg](FINDINGS.md)). Two doors on the
+1.5 s, and the body then walked the next lead 460 u as a click-order — "pulled 452 u out" until
+[§1z-ck](FINDINGS.md) read the live path ([FINDINGS §1z-cg](FINDINGS.md)). Two doors on the
 keyboard lead close the two links (a lead ending inside the Hatcher's disc, which halts
 world-0; a lead clear from the report but not from world-0, which the client bakes from).
 Retrodicted on FEEL2 (`studies/movecode/review/w0origin.py --check`): the founding lead becomes
@@ -152,7 +153,7 @@ couple seconds. Options?"*
 | the stairs entries | 5 episodes, longest **0.82 s** (retail's plane-update cadence in explorables p50 0.64 / p90 2.08; no retail capture has a monster on stairs — the owner: an outpost, no NPC walks these in retail) | left for now, by the owner's ruling |
 | the player's drawn body off our mesh | 0.00 u | ✅ |
 | world-0 vs the body moving p50 | 136 u | WATCH |
-| **the stuck stretch** | 68.5–71.4 s: the client's own separation snap put the body on the hole's corner with ITS fence shut; keys dead 2.9 s; the escape click at 69.8 s dropped by our router (`kbd-drop`); then 71.4–74.9 s the body walked our leads as click-orders at 190 u/s (two 150–260 u yanks) until a walk-start reopened the fence | **§1z-cj** |
+| **the stuck stretch** | 68.5–71.4 s: the client's own snap put the body on the hole's corner with ITS fence shut; keys dead 2.9 s; the escape click at 69.8 s dropped by our router (`kbd-drop`); then 71.4–74.9 s the body walked our leads as click-orders at 288 u/s until a walk-start reopened the fence. **Corrected by §1z-ck:** the session had ONE client snap (the raw column read two more, 151 and 261 u, at 72.4 and 75.0 s — the walk itself) | **§1z-cj, §1z-ck** |
 
 **The chain, on the tape.** 65.9–68.0 s: the body ran round the east and north of the hole
 while world-0, 130 u behind on short clip-point leads (the ray blocked 17 u out at the hole's
@@ -161,8 +162,9 @@ to the hole's corner **(11288, 9151)**. The Hatcher, chasing world-0's frame, st
 corner, and the client's avoidance **halted world-0 on it** (F14 — door A's rule, which runs on
 the ray and never saw door B's vertex). The body ran on to 264 u; at 68.51 s the client's gate 1
 snapped it 255 u back onto world-0 and shut its fence. Our latch knew only our own `0x002C`, so
-the next lead went into the client's shut window: the body walked it as an order (190 u/s) — the
-yanks at 72.4 and 75.0 s — until the owner's re-press at 74.95 s re-armed the fence. The guard's
+the next lead went into the client's shut window: the body walked it as an order (288 u/s; the
+"yanks" at 72.4 and 75.0 s were this walk on the sample-and-hold column, §1z-ck) — until the
+owner's re-press at 74.95 s re-armed the fence. The guard's
 sweep read the separation as red only at 71.2 s, blocked on a stale report: its async estimate is
 the last report, not a body still running under a held key, and world-0 was halted with no
 arrival to mature.
