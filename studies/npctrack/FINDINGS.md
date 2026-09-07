@@ -605,6 +605,60 @@ hit against the frame at each tick; nothing to change.
 disc, 64.4–78.6 u, mean depth 6.9 u; two moving-player parks read 98–100 u at the sample and
 both are world-0's own sidestep after the park, the mechanism of F14 seen from the other side.*
 
+
+## NPCTRACK-F16 — Q9 CLOSED: retail's wire carries the corridor, and now ours does
+
+**The desk half, 2026-09-07.** The Q9 entry said the corpus had it "NOT FOUND either way" —
+retail's seven chases were in the open. That was the ANIMREF §40 census, which counted from the
+first `0x002A` and looked 0.3 s before it. Looking at every NPC-addressed movement order instead
+(two scratch scripts, recorded here by their numbers; the reusable instrument is
+`meshcensus.py --agent`):
+
+- **ArenaNet's server sends its NPCs point-addressed legs in bulk.** 19 decodable live stamps,
+  485 non-player agents with movement orders on the s2c game channel: **10,905 `0x0029`
+  against 464 `0x002A`**; 790 chains of consecutive `0x0029` to one agent, **539 of them with
+  a turn over 25°** between legs. OBSERVED.
+- **Every chase of the player opens with `0x0029` legs whose points are OFF the player.** Six
+  chasers name the connection's own player agent in a `0x002A` (agents 40, 41, 37, 103, 160,
+  36 across five stamps); between them they received **42 `0x0029` legs, all 42 with the leg's
+  point 200–5,979 u from the player's report at the send**. The `0x002A` points, by contrast,
+  sit where the server's copy of the player is (agent 160: 4–85 u from the report on 26 of 30
+  follows, §38.3's lag). OBSERVED.
+- **The handover is at a clear line.** Three chases routed on their own maps (file 113021
+  twice, 165811 once, the hostile's position taken from its last leg or spawn): our A* from
+  the hostile to the player is a **single segment in all three** — the line was clear — and
+  retail's opening legs stood 238–807 u from the player before the `0x002A` at 194 / 287 / 32
+  u. The one leash-return walk routed (agent 160, seven legs of 108–508 u with a 20° bend) is
+  **straight-clear on our mesh for all seven**. So on the wire: point legs while walking a
+  path, the agent-addressed follow where a straight line reaches the target. OBSERVED for the
+  shape; **what the chase-opening legs mean to retail's AI (an approach phase, a leg cap, or
+  a corridor on ground our mesh reads as open) is UNVERIFIED and not needed** — the derivation
+  uses only that both messages exist for NPCs and where each appears.
+- **Not modelled, and said so:** retail's NPC legs run p50 406 / p90 767 u (1,981 NPC leg
+  pairs ≥ 200 u), and the next leg leaves mid-leg (dt ÷ leg-time p50 0.51 — a re-plan cadence
+  as much as an arrival). Neither is needed to get round a wall. The 1z-by comment's "the
+  client paths for itself" is struck in the source; §40's "nothing before the first follow,
+  7/7" stands as a 0.3 s window (the legs sit 1.0–2.5 s before it).
+
+**The rule shipped** (`NPC_FOLLOW_CORRIDOR`, `--no-npc-corridor`; `_follow_leg` and `_order` in
+`_npc_follow_tick`): at every order the follow already makes — the start, the half-second
+re-path, and now the copy's arrival at a leg's end — route the copy to the player; a route
+with an intermediate vertex sends `0x0029` to its FIRST vertex on the plane the corridor names
+for it (1z-bz's field 3, `route(with_planes=True)`), a route of two points sends the `0x002A`
+exactly as before. The Q1 model bakes the leg as the client does, so the copy every range
+check reads walks the client's leg; the leash reads the solve point (1z-by's rule, same
+direction). In the open nothing changes byte for byte. `test_agentlife` `section_corridor_wire`
+(+12, floor 325 → 337): the known-bad arm first (the first order names the player, no leg ever,
+the copy through the wall, zero route calls), then the fix (a `0x0029` to the corner carrying
+`(29, 0)`, the `0x002A` at 0.7 s once the line is clear, the copy through the corner to 0.0 u,
+the halt at 80.0 u, two route calls over 80 ticks), the open unchanged, and two fallbacks.
+
+**The run half** — [RUN-Q9.md](RUN-Q9.md): P1–P3 MET, the Hatcher's drawn body **0.15 u** worst
+off our mesh over 670 samples against **60.3 u** on the same script under the previous default,
+two corridor legs on the wire (the stairs' foot, plane 0 → 29; round the hole at the top, 29 →
+0), the chase parking at 76–80 u. `meshcensus.py --agent 10` is the instrument, and the same
+number on the six prior stairs tapes is 12.8–93.8 u.
+
 ## Open
 
 - **`NPCTRACK-Q2` — the AgTrack mirror's POSITION fidelity, handed to MOVECODE.** The mirror was
@@ -751,8 +805,9 @@ both are world-0's own sidestep after the park, the mechanism of F14 seen from t
   moving on these runs (p90 284 / 91 / 247). Q1 makes the server agree with the client about
   where the hostile stands; it does not move the hostile closer to where the operator is looking.
   That is MOVECODE's two-world problem, unchanged.
-- **`NPCTRACK-Q9` — the follow's wire carries no corridor, and the client walks a hostile's
-  0x002A dead straight.** OBSERVED ([GROUNDZ-F12.5](../renderobj/FINDINGS.md)): on the feel tape
+- ~~**`NPCTRACK-Q9`**~~ **CLOSED 2026-09-07 — the corridor is ON THE WIRE (F16 below, [RUN-Q9.md](RUN-Q9.md)): `0x0029` legs to the route's vertices while geometry intervenes, the `0x002A` naming the player once the line is clear; the Hatcher's drawn body 0.15 u worst off our mesh on the stairs route against 60.3 u on the direct control.** The record as it stood:
+  ~~the follow's wire carries no corridor, and the client walks a hostile's
+  0x002A dead straight.~~ OBSERVED ([GROUNDZ-F12.5](../renderobj/FINDINGS.md)): on the feel tape
   the Hatcher's sync copy and drawn body are identical on every sample as it cuts through the
   hole above the stairs — 45 u from any trapezoid at the deepest — and parks 8.4 u inside the
   wall, 76 u from the player; the hostile's sync copy is > 2 u off our mesh while moving on 4 of
@@ -788,6 +843,9 @@ both are world-0's own sidestep after the park, the mechanism of F14 seen from t
 - **[RUN-FEEL.md](RUN-FEEL.md)** — the owner's own session, 15:48: **Q5, Q6 and Q3 closed in
   their words and on the tape**; the Hatcher drawn 52 u into the terrace above the stairs is a
   missing trapezoid and a held plane word — GROUNDZ-F11, shipped.
+- **[RUN-Q9.md](RUN-Q9.md)** — 2026-09-07 01:33, agent-driven, RUN-1zCE's script: **P1–P3 MET**
+  — the Hatcher's drawn body 0.15 u worst off our mesh (control 60.3 u), two corridor legs on the
+  wire (the exposure floor exactly), the chase parking at 76–80 u.
 - **[RUN-R4.md](RUN-R4.md)** — ran 15:13, agent-driven, after F14/F15 shipped: **F14 holds
   out of sample** — 3 of 3 sidesteps to 0.3 u, the one predicted halt confirmed on the tape,
   mirror vs world-0 while moving p90 25.1 u, Q1 9.1 u, zero re-pins, the wire shape as R2/R3.

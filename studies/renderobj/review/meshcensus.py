@@ -240,7 +240,9 @@ def main(argv):
             ("%.1f" % f["on_leg"]) if f["on_leg"] < 1e17 else "-",
             ("%.0f" % f["jump"]) if f["jump"] is not None else "-",
             f["cls"], f["cap"]))
-    tp = census_tapes(mesh, tapes)
+    # --agent N scores another agent's drawn body (NPCTRACK-Q9: the hostile, 10).
+    agent = argv[argv.index("--agent") + 1] if "--agent" in argv else "1"
+    tp = census_tapes(mesh, tapes, agent=agent)
     for name, n, worst, nfar in tp:
         print("  tape %-45s player drawn-body samples %5d | worst off our mesh %.2f u | > %.0f u: %d" % (name, n, worst, FAR, nfar))
     if "--check" not in argv:

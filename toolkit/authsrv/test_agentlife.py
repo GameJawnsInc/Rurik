@@ -73,7 +73,7 @@ from codec import Codec  # noqa: E402
 # known-bad control; and the chase section's wall pin split by arm, 1).
 # Floor from a real green run of 331. +1 at NPCTRACK-F8 (the hold rule
 # replaces the fresh-follow pin: three checks for two), green 333.
-LEDGER = checks.Ledger("agent lifetime", floor=325)
+LEDGER = checks.Ledger("agent lifetime", floor=337)
 
 
 def section_weapon_damage():
@@ -531,6 +531,7 @@ def main():
     section_plane_repath()
     section_plane_reach()
     section_client_model()
+    section_corridor_wire()
     section_facing()
     section_enemy_skill()
     section_constants()
@@ -3929,6 +3930,183 @@ def section_pool_fraction():
     LEDGER.ok(dmg and all(-1.0 <= f <= 1.0 for f in dmg),
               "and so does the damage a real swing sends",
               f"{dmg} against HIT_FRACTION={authsrv.HIT_FRACTION}")
+
+
+class _WallMesh:
+    """NPCTRACK-Q9's hole in miniature. A wall stands on x = -100 between a
+    hostile at the origin and a player at (-400, 0); it is open south of
+    y = -150. route() goes round by the corner (0, -200) while the start stands
+    north of the opening, and answers the corner on plane 29 when asked with
+    with_planes; clip() refuses the straight line through the wall."""
+
+    def __init__(self, listonly=False, raise_=False):
+        self.routes = 0
+        self.listonly = listonly
+        self.raise_ = raise_
+
+    def clip(self, x0, y0, x1, y1, step=16.0):
+        if x1 < -100.0 <= x0 and y0 > -150.0:
+            return (x0, y0)
+        return (x1, y1)
+
+    def route(self, x0, y0, x1, y1, **kw):
+        self.routes += 1
+        if self.raise_:
+            raise RuntimeError("a mesh gap")
+        if y0 > -150.0 and x1 < -100.0 <= x0:
+            path = [(x0, y0), (0.0, -200.0), (x1, y1)]
+            planes = [0, 29, 0]
+        else:
+            path = [(x0, y0), (x1, y1)]
+            planes = [0, 0]
+        if kw.get("with_planes") and not self.listonly:
+            return path, planes
+        return path
+
+
+def _corridor_world(agent_pos, player_pos):
+    st = _follow_world(agent_pos, player_pos)
+    ag = st["agents"][10]
+    ag["follow"] = None          # the follow has not STARTED: the first order is under test
+    ag["moving"] = False
+    return st
+
+
+def _corridor_run(state, pm, seconds=4.0, hz=20.0):
+    """Drive the follow from a standing start; every send, and the copy's trail."""
+    import authsrv
+    import math as _m
+    ag = state["agents"][10]
+    px, py = state["pos"]
+    sends, trail, now = [], [], 0.0
+    dt = 1.0 / hz
+
+    def _cap(op, vals, label="", quiet=False):
+        sends.append((op, vals, label, now))
+
+    while now < seconds:
+        now += dt
+        ax, ay = ag["pos"]
+        authsrv._npc_follow_tick(_cap, state, 1, 10, ag, (px, py),
+                                 _m.hypot(px - ax, py - ay), now, pm)
+        trail.append(ag["pos"])
+    return sends, trail
+
+
+def section_corridor_wire():
+    """NPCTRACK-Q9: the follow's corridor goes ON THE WIRE.
+
+    The owner's stairs session (GROUNDZ-F12.5): the Hatcher's sync copy and its
+    drawn body identical on every sample as it cut through the hole above the
+    stairs, 45 u from any trapezoid, parked 8.4 u inside the wall. The client
+    walks a hostile's 0x002A dead straight and our wire carried no corridor.
+    Retail's does (F16): 0x0029 legs to points while geometry intervenes, the
+    0x002A naming the player once the line is clear.
+    """
+    import authsrv
+    import math as _m
+    MOVE = authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT
+    DEST = authsrv.GAME_SMSG_AGENT_UPDATE_DESTINATION
+    print("\nNPCTRACK-Q9: the corridor on the wire -- 0x0029 legs round a wall, "
+          "0x002A once the line is clear")
+    LEDGER.ok(authsrv.NPC_FOLLOW_CORRIDOR is True
+              and "--no-npc-corridor" in open(
+                  authsrv.__file__, encoding="utf-8").read()
+              and authsrv.capture_flags().get("NPC_FOLLOW_CORRIDOR") is True,
+              "it ships ON with its revert flag, and the capture records which "
+              "arm produced the run",
+              "a run whose header cannot name the arm costs a later session a "
+              "reconstruction")
+    saved = authsrv.NPC_FOLLOW_CORRIDOR
+    CORNER = (0.0, -200.0)
+    try:
+        # THE KNOWN-BAD ARM FIRST: the shape every stairs tape recorded.
+        authsrv.NPC_FOLLOW_CORRIDOR = False
+        pm = _WallMesh()
+        st = _corridor_world((0.0, 0.0), (-400.0, 0.0))
+        sends, trail = _corridor_run(st, pm)
+        moves = [s for s in sends if s[0] in (MOVE, DEST)]
+        LEDGER.ok(moves and moves[0][0] == DEST and moves[0][1][4] == authsrv.PLAYER_AGENT_ID
+                  and not any(s[0] == MOVE for s in sends),
+                  "REVERT ARM (--no-npc-corridor): the first order names the "
+                  "player and no 0x0029 leg is ever sent",
+                  f"ops {[hex(s[0]) for s in moves]}")
+        LEDGER.ok(min(_m.hypot(p[0] - CORNER[0], p[1] - CORNER[1]) for p in trail) > 100.0
+                  and pm.routes == 0,
+                  "and the copy walks the straight line, never near the corner, "
+                  "having asked the router nothing -- the Hatcher through the hole",
+                  f"nearest {min(_m.hypot(p[0] - CORNER[0], p[1] - CORNER[1]) for p in trail):.0f} u, "
+                  f"{pm.routes} route call(s)")
+
+        authsrv.NPC_FOLLOW_CORRIDOR = True
+        pm = _WallMesh()
+        st = _corridor_world((0.0, 0.0), (-400.0, 0.0))
+        sends, trail = _corridor_run(st, pm)
+        moves = [s for s in sends if s[0] in (MOVE, DEST)]
+        first = moves[0] if moves else None
+        LEDGER.ok(first is not None and first[0] == MOVE
+                  and tuple(first[1][1]) == CORNER,
+                  "THE FIX: the first order is a 0x0029 to the corridor's first "
+                  "vertex, not the player",
+                  f"first {None if first is None else (hex(first[0]), first[1])}")
+        LEDGER.ok(first is not None and first[0] == MOVE
+                  and first[1][2] == 29 and first[1][3] == 0,
+                  "carrying 1z-bz's plane words -- field 3 the plane the corridor "
+                  "names for the vertex (29), field 4 the mover's own (0)",
+                  f"planes {None if first is None else first[1][2:4]}")
+        after = [s for s in moves if s[3] > (first[3] if first else 0.0)]
+        nxt = after[0] if after else None
+        LEDGER.ok(nxt is not None and nxt[0] == DEST
+                  and nxt[1][4] == authsrv.PLAYER_AGENT_ID
+                  and 0.6 <= nxt[3] - first[3] <= 1.0,
+                  "the copy arrives at the vertex (200 u at 288 u/s = 0.69 s) and "
+                  "the NEXT order is the 0x002A naming the player, the line now "
+                  "clear -- retail's handover",
+                  f"next {None if nxt is None else (hex(nxt[0]), round(nxt[3] - first[3], 2))}")
+        LEDGER.ok(min(_m.hypot(p[0] - CORNER[0], p[1] - CORNER[1]) for p in trail) <= 5.0,
+                  "and the copy every range check reads went ROUND, through the "
+                  "corner",
+                  f"nearest {min(_m.hypot(p[0] - CORNER[0], p[1] - CORNER[1]) for p in trail):.1f} u")
+        halts = [s for s in sends if "halts at (" in s[2]]
+        ag = st["agents"][10]
+        LEDGER.ok(halts and _m.hypot(ag["pos"][0] + 400.0, ag["pos"][1]) <= authsrv.follow_stop_radius() + 5.0,
+                  "the chase still ARRIVES: a halt at the disc, 80 u from the player",
+                  f"halts {len(halts)}, parked {_m.hypot(ag['pos'][0] + 400.0, ag['pos'][1]):.1f} u out")
+        LEDGER.ok(pm.routes <= 3,
+                  "one route per ORDER (the start, the leg's end), never per tick",
+                  f"{pm.routes} route call(s) over 80 ticks")
+
+        # THE OPEN: a start south of the opening has a clear line -- byte for
+        # byte the follow RUN-FEEL / RUN-1zCE / RUN-1zCA confirmed.
+        pm = _WallMesh()
+        st = _corridor_world((0.0, -300.0), (-400.0, 0.0))
+        sends, trail = _corridor_run(st, pm, seconds=2.0)
+        moves = [s for s in sends if s[0] in (MOVE, DEST)]
+        LEDGER.ok(moves and moves[0][0] == DEST and not any(s[0] == MOVE for s in sends),
+                  "in the OPEN nothing changes: the first order is the 0x002A "
+                  "naming the player and no leg is sent",
+                  f"ops {[hex(s[0]) for s in moves]}")
+
+        # FALLBACKS: a route() that raises, and one that answers a bare list.
+        pm = _WallMesh(raise_=True)
+        st = _corridor_world((0.0, 0.0), (-400.0, 0.0))
+        sends, _ = _corridor_run(st, pm, seconds=1.0)
+        moves = [s for s in sends if s[0] in (MOVE, DEST)]
+        LEDGER.ok(moves and moves[0][0] == DEST,
+                  "a route() that raises falls back to the agent-addressed "
+                  "follow -- a mesh gap is not a crash",
+                  f"ops {[hex(s[0]) for s in moves]}")
+        pm = _WallMesh(listonly=True)
+        st = _corridor_world((0.0, 0.0), (-400.0, 0.0))
+        sends, _ = _corridor_run(st, pm, seconds=1.0)
+        moves = [s for s in sends if s[0] in (MOVE, DEST)]
+        LEDGER.ok(moves and moves[0][0] == MOVE and tuple(moves[0][1][1]) == CORNER
+                  and moves[0][1][2] == 0,
+                  "a route() with no plane column still legs to the vertex, "
+                  "field 3 falling back to the mover's plane",
+                  f"first {None if not moves else (hex(moves[0][0]), moves[0][1])}")
+    finally:
+        authsrv.NPC_FOLLOW_CORRIDOR = saved
 
 
 if __name__ == "__main__":

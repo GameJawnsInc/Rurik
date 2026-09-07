@@ -1741,6 +1741,10 @@ openings) — the ruling does not wait on it.
 
 ## 8. Immediate next actions
 
+### ★★★ MOVEMENT 2026-09-07 — NPCTRACK-Q9 CLOSED: **the corridor is ON THE WIRE.** The client never pathed a hostile's `0x002A` (GROUNDZ-F12.5: through the hole above the stairs, 45 u off any trapezoid), and 1z-by's "the wire is unchanged, the client paths for itself" was wrong. Retail's wire says how: 10,905 NPC-addressed `0x0029` legs in the live corpus, every chase of the player opening with legs OFF the player and handing over to the `0x002A` where the line is clear (F16). Shipped: `NPC_FOLLOW_CORRIDOR` — `0x0029` to the route's first vertex on the corridor's plane while geometry intervenes, the `0x002A` as before once clear; `--no-npc-corridor` reverts; `test_agentlife` +12 (floor 337). RUN-Q9 (agent-driven, RUN-1zCE's script): the Hatcher's drawn body **0.15 u worst off our mesh against 60.3 u** on the direct control, two legs on the wire, the chase parking at 76–80 u. [studies/npctrack/FINDINGS.md](studies/npctrack/FINDINGS.md) F16, [RUN-Q9.md](studies/npctrack/RUN-Q9.md).
+
+- **Open after it:** the owner's eye on the same route (the Hatcher should now come round the hole rather than through it); the two open notes carried from 1z-cf (retail's report cadence, the ankle sink); and the multi-agent case, which nothing here has ever measured.
+
 ### ★★★ MOVEMENT 2026-09-06 — GROUNDZ-Q7 CLOSED and MOVECODE-1z-ce SHIPPED: **the stairs were never missing from the mesh**; the climb's zero leads were a heading aimed INTO the wall the body slides along, and retail's answer — the next vertex of that wall — is now ours (`A2_LEAD_WALL_SLIDE`, `--no-lead-wall-slide` reverts)
 
 **[renderobj F12](studies/renderobj/FINDINGS.md) · [movecode §1z-ce](studies/movecode/FINDINGS.md) · [npctrack Q9](studies/npctrack/FINDINGS.md). Desk only.**

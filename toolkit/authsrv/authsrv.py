@@ -15982,6 +15982,9 @@ def _npc_dest_plane(pm, state, px, py, mover_plane):
 # PLAYER (field 5 = PLAYER_AGENT_ID) and the client paths for itself -- retail's
 # shape, and the client's body was never the thing that broke. This fixes the
 # copy that every range check reads.
+# (2026-09-07: "the client paths for itself" was WRONG -- the client walks an
+# NPC's 0x002A dead straight, GROUNDZ-F12.5 -- and the corridor now goes on
+# the wire too: NPCTRACK-Q9, the block after FOLLOW_ROUTE_RETRY below.)
 #
 # ONE A* PER AGENT PER FOLLOW_ROUTE_RETRY, not per tick: the route is cached on
 # the agent and re-solved only when the goal has moved past FOLLOW_REPATH_MOVED,
@@ -16002,6 +16005,81 @@ def _npc_dest_plane(pm, state, px, py, mover_plane):
 # clears neither. Registered, not taken here.
 NPC_FOLLOW_ROUTER = True      # False (--no-npc-follow-router): straight-line clip.
 FOLLOW_ROUTE_RETRY = 0.5      # s. At most one A* per agent per this, ours.
+
+# ---- NPCTRACK-Q9: the corridor goes ON THE WIRE ------------------------------
+#
+# WHAT 1z-by LEFT UNDONE, and GROUNDZ-F12 then caught on tape. The block above
+# says "the wire is unchanged, and that is the point ... the client paths for
+# itself". It does not. On the owner's stairs session the Hatcher's sync copy
+# and its drawn body were IDENTICAL on every sample as it cut through the hole
+# above the stairs -- 45 u from any trapezoid at the deepest -- and parked 8.4 u
+# inside the wall (studies/npctrack/FINDINGS.md Q9). The client walks a
+# hostile's 0x002A dead straight; the router only ever moved OUR copy, and
+# NPCTRACK-Q1 then replaced that copy with the client's own straight line.
+#
+# WHAT RETAIL'S WIRE DOES (the corpus half, 2026-09-07, F16). ArenaNet's server
+# sends its NPCs 0x0029 legs in bulk -- 10,905 across the live corpus, 790
+# chains of consecutive legs, 539 of them with a turn over 25 degrees -- and
+# every chase of the player it holds (6 chasers, 42 legs) opens with run-speed
+# 0x0029 legs whose points are 200-800 u OFF the player, then hands over to the
+# 0x002A naming the player for the final approach. Every one of those chases
+# and every leg of the one leash-return walk routed (agent 160, 7 legs) is a
+# straight-clear segment on the client's own mesh, and the 0x002A follows all
+# sit where a straight line reaches the player (3 of 3 routed on their own
+# maps: our A* is a single segment there). So the shape on the wire is: a
+# point-addressed leg while there is geometry to get round, the agent-addressed
+# follow once the line is clear. That is what the follow now sends.
+#
+# THE RULE, derived and nothing more: at every order the follow already makes
+# (the start, the half-second re-path, and now the copy's arrival at a leg's
+# end) route the copy to the player; a route with an intermediate vertex sends
+# 0x0029 to its FIRST vertex, on the plane the corridor names for it (1z-bz's
+# field 3); a route of two points -- the line is clear -- sends the 0x002A
+# exactly as before. The model (NPCTRACK-Q1) bakes a 0x0029 as the client does,
+# so the copy every range check reads walks the same leg the client walks.
+# In the open nothing changes byte for byte: RUN-FEEL / RUN-1zCE / RUN-1zCA
+# were all in the open and stay the confirmed shape.
+#
+# NOT TAKEN, and said so: retail's NPC legs are capped around 768 u (p90 767
+# over 1,981 NPC leg pairs; the player's own click legs at 512) and the next
+# leg goes out before the copy arrives (dt / (leg / 288) p50 0.51, which is a
+# re-plan cadence as much as an arrival). Neither is needed to get round a
+# wall, so neither is invented here: a leg runs to the vertex, and the next leg
+# leaves when the copy arrives at it.
+NPC_FOLLOW_CORRIDOR = True    # False (--no-npc-corridor): a bare 0x002A across any wall.
+NPC_LEG_DONE = 4.0            # u. The copy stands on the leg's end: the next leg, now.
+
+
+def _follow_leg(pm, ax, ay, px, py, plane, dest_plane):
+    """NPCTRACK-Q9: the next thing to tell the client about this chase.
+
+    None when the straight line from the copy to the player is clear (or no
+    route can be had, or the corridor is off) -- the agent-addressed 0x002A
+    as before. Else (wx, wy, wplane, more): the corridor's first vertex, the
+    plane the corridor names for it, and how many vertices remain after it."""
+    if not (NPC_FOLLOW_CORRIDOR and pm is not None and hasattr(pm, "route")):
+        return None
+    try:
+        r = pm.route(ax, ay, px, py, start_plane=plane, goal_plane=dest_plane,
+                     with_planes=True)
+    except TypeError:                                  # a stub without kwargs
+        try:
+            r = pm.route(ax, ay, px, py)
+        except Exception:
+            r = None
+    except Exception:                                  # a mesh gap is not a crash
+        r = None
+    if isinstance(r, tuple) and len(r) == 2:
+        path, planes = r
+    else:
+        path, planes = r, None
+    if not path or len(path) < 3:
+        return None
+    wx, wy = float(path[1][0]), float(path[1][1])
+    wpl = plane
+    if planes and len(planes) > 1 and planes[1] is not None:
+        wpl = planes[1]
+    return wx, wy, wpl, len(path) - 2
 
 
 def _follow_route_solve(agent, ax, ay, px, py, pm, now, rec, agent_id):
@@ -16541,6 +16619,47 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
              f"agent {agent_id} halts at ({agent['pos'][0]:.0f},"
              f"{agent['pos'][1]:.0f}): {why} [ANIMREF-RE 40]")
 
+    def _order(tag, why):
+        # NPCTRACK-Q9: one order to the client -- a corridor leg (0x0029 to the
+        # route's first vertex) while geometry intervenes, else the follow
+        # naming the player (0x002A) exactly as ANIMREF-RE 40 always sent it.
+        f = agent["follow"]
+        cx, cy = agent["pos"]
+        leg = _follow_leg(pm, cx, cy, px, py, plane, dest_plane)
+        if leg is not None:
+            wx, wy, wpl, more = leg
+            prev = f.get("leg")
+            f["leg"] = (wx, wy)
+            f["solve_from"] = (float(cx), float(cy))
+            if prev is not None and math.hypot(prev[0] - wx, prev[1] - wy) < 1.0 \
+                    and tag == " re-path":
+                return                  # the same leg is already in flight
+            _send(GAME_SMSG_AGENT_MOVE_TO_POINT,
+                  [agent_id, (wx, wy), wpl, plane],
+                  f"FOLLOW{tag} leg: agent {agent_id} -> corridor vertex "
+                  f"({wx:.0f},{wy:.0f}) plane {plane}->{wpl}, {more} more, then "
+                  f"the player at ({px:.0f},{py:.0f}) {dist:.0f} u out "
+                  f"[NPCTRACK-Q9]")
+            return
+        f.pop("leg", None)
+        f.pop("solve_from", None)
+        _send(GAME_SMSG_AGENT_UPDATE_DESTINATION,
+              [agent_id, (float(px), float(py)), dest_plane, plane,
+               PLAYER_AGENT_ID],
+              f"FOLLOW{tag}: agent {agent_id} -> player at ({px:.0f},{py:.0f}) "
+              f"plane {plane}->{dest_plane}, {dist:.0f} u out{why}")
+
+    def _leg_done():
+        # The copy stands on the corridor leg's end (the model lands on it
+        # exactly at consume_arrival; the legacy integrator passes within a
+        # tick's step) and the player is still out of the disc: next leg.
+        f = agent.get("follow")
+        if not f or f.get("leg") is None:
+            return False
+        lx, ly = f["leg"]
+        cx, cy = agent["pos"]
+        return math.hypot(cx - lx, cy - ly) <= NPC_LEG_DONE
+
     # MOVECODE-1z-by: OUR OWN CORRIDOR MAY NOT END THE CHASE. A route out of a
     # corner runs AWAY from the player before it runs toward them -- the wedge
     # RUN-1zBW measured is escaped by a 309 u leg due EAST of a player to the
@@ -16559,6 +16678,12 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
     _fr = agent.get("froute")
     if NPC_FOLLOW_ROUTER and _fr and _fr.get("from"):
         leash_d = min(dist, math.hypot(px - _fr["from"][0], py - _fr["from"][1]))
+    if fol is not None and fol.get("solve_from"):
+        # NPCTRACK-Q9: a corridor LEG on the wire is the same detour, on the
+        # client's copy this time -- same rule, same direction (min never
+        # regresses a chase the player did not escape).
+        leash_d = min(leash_d, math.hypot(px - fol["solve_from"][0],
+                                          py - fol["solve_from"][1]))
     if state["player_dead"] or leash_d > AGGRO_RANGE:
         if fol is not None:
             _halt("the player is dead" if state["player_dead"]
@@ -16610,12 +16735,7 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
         # The first step is measured from here, not from before the walk
         # was announced -- an agent cannot have travelled before it set off.
         agent["moved_at"] = now
-        _send(GAME_SMSG_AGENT_UPDATE_DESTINATION,
-              [agent_id, (float(px), float(py)), dest_plane, plane,
-               PLAYER_AGENT_ID],
-              f"FOLLOW: agent {agent_id} -> player at ({px:.0f},{py:.0f}) "
-             f"plane {plane}->{dest_plane}, {dist:.0f} u out, halts at "
-             f"{stop:.0f} u [ANIMREF-RE 40]")
+        _order("", f", halts at {stop:.0f} u [ANIMREF-RE 40]")
         return
     # A follow in flight. ARRIVED and waiting for the clock: no re-path, no
     # step; the halt when the follow's half-second next fires -- unless the
@@ -16650,11 +16770,7 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
         fol["sent_at"] = now
         agent["plane_told"] = plane          # GROUNDZ-Q5
         agent["plane_told_at"] = now
-        _send(GAME_SMSG_AGENT_UPDATE_DESTINATION,
-              [agent_id, (float(px), float(py)), dest_plane, plane,
-               PLAYER_AGENT_ID],
-              f"FOLLOW re-path: agent {agent_id} -> player at ({px:.0f},{py:.0f}) "
-             f"plane {plane}->{dest_plane}, {dist:.0f} u out [ANIMREF-RE 40]")
+        _order(" re-path", " [ANIMREF-RE 40]")
     # Advance our own copy, capped so it parks at the disc rather than on top
     # of the player -- the same arithmetic the legacy arm ran at 150 u.
     elapsed = max(0.0, now - agent.get("moved_at", now))
@@ -16670,6 +16786,18 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
         ax, ay = agent["pos"]
         agent["plane"] = _npc_plane(pm, ax, ay, plane, state=state)
         dist = math.hypot(px - ax, py - ay)
+        if parked and dist > stop and _leg_done():
+            # NPCTRACK-Q9: the copy reached a corridor vertex, not the player.
+            # The next leg leaves now, on the same clock bookkeeping a re-path
+            # keeps, so the half-second halt clock does not read this as an
+            # arrival.
+            fol["told"] = (px, py)
+            fol["sent_at"] = now
+            agent["plane_told"] = plane
+            agent["plane_told_at"] = now
+            plane = agent["plane"]
+            _order(" leg-end", " [ANIMREF-RE 40]")
+            return
         if parked:
             if not HALT_ON_CLOCK:
                 _halt(f"parked, {dist:.0f} u from the player")
@@ -16703,6 +16831,15 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
             agent["pos"] = (nx, ny)
             agent["plane"] = _npc_plane(pm, nx, ny, plane, state=state)   # 1z-bz
             dist = math.hypot(px - nx, py - ny)
+    if dist > stop + 1e-6 and _leg_done():
+        # NPCTRACK-Q9 on the revert integrator: same rule as the model arm.
+        fol["told"] = (px, py)
+        fol["sent_at"] = now
+        agent["plane_told"] = agent["plane"]
+        agent["plane_told_at"] = now
+        plane = agent["plane"]
+        _order(" leg-end", " [ANIMREF-RE 40]")
+        return
     if dist <= stop + 1e-6:
         if not HALT_ON_CLOCK:
             _halt(f"arrived, {dist:.0f} u from the player")
@@ -24195,6 +24332,17 @@ def main():
                          "client's own report trigger. Corpus residual behind "
                          "the plane term: 2 events of 783, <= 1.4 u. Known-bad "
                          "arm.")
+    ap.add_argument("--no-npc-corridor", action="store_true",
+                    help="NPCTRACK-Q9 REVERT: a hostile's follow is a bare "
+                         "0x002A naming the player across any geometry, which "
+                         "the client walks DEAD STRAIGHT (the owner's stairs "
+                         "session: the Hatcher through the hole above the "
+                         "stairs, 45 u off any trapezoid, parked 8 u inside "
+                         "the wall). The default routes the copy and sends "
+                         "0x0029 legs to the corridor's vertices while one "
+                         "intervenes, the 0x002A once the line is clear -- "
+                         "retail's own shape on its 6 corpus chases. Known-bad "
+                         "arm.")
     ap.add_argument("--no-npc-follow-router", action="store_true",
                     help="MOVECODE-1z-by REVERT: a hostile's own server-side "
                          "copy walks a STRAIGHT LINE clipped by the pathmap "
@@ -25973,6 +26121,13 @@ def main():
         print("[map] --no-model-leg-bound: the server's own model leg may "
               "out-walk a lead our mesh cut short (MOVECODE-1z-cc's revert).",
               flush=True)
+    if a.no_npc_corridor:
+        global NPC_FOLLOW_CORRIDOR
+        NPC_FOLLOW_CORRIDOR = False
+        print("[map] --no-npc-corridor: a hostile's follow names the player "
+              "across any wall and the client walks it straight through "
+              "(NPCTRACK-Q9's revert; the Hatcher through the hole above the "
+              "stairs).", flush=True)
     if a.no_npc_follow_router:
         global NPC_FOLLOW_ROUTER
         NPC_FOLLOW_ROUTER = False

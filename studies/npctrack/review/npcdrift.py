@@ -80,7 +80,7 @@ PINNED = [
 
 HALT_RE = __import__("re").compile(r"agent (\d+) halts at \((-?\d+),(-?\d+)\)")
 FOLLOW_RE = __import__("re").compile(
-    r"FOLLOW(?: re-path)?: agent (\d+) -> player at \((-?\d+),(-?\d+)\)")
+    r"FOLLOW(?: re-path| leg-end)?: agent (\d+) -> player at \((-?\d+),(-?\d+)\)")
 
 
 # ---------------------------------------------------------------------------
