@@ -80,6 +80,17 @@ That comparison was run when this landed -- 94 files, same 93/1/0 split, same 4,
 checks, same single red file -- which is the evidence that the pool is safe here rather
 than the assumption that it is.
 
+THE ONE EXCEPTION, written down 2026-09-08 after that sentence sent a session hunting
+for shared state that does not exist: a check asserting a WALL-CLOCK budget can disagree
+for a third reason, which is neither a collision nor a flake but CONTENTION. Four busy
+workers make every process slower, so a test holding something to a real-time deadline
+reads the pool rather than the code. `test_pathmap.py` holds `route()` to the world's
+50 ms tick with only ~39 ms of idle worst case, and it passed 120 checks alone and
+failed two here on identical code and its own fixtures. It normalises for measured
+machine load now -- serial and pool agree again -- but the rule to carry forward is
+that a timing check is the one kind whose verdict a scheduler may legitimately change,
+and the fix belongs in THAT check rather than in this runner's concurrency.
+
 `--since`: THE ONLY FEATURE HERE THAT CAN MAKE THE SUITE SMALLER. Twelve minutes is
 still too long to sit through after every edit, so `--since HEAD` runs the tests
 reachable from what actually changed -- 3 minutes for a change under `authsrv/`,

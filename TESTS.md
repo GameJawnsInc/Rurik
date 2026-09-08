@@ -2095,9 +2095,38 @@ due east lands on the stairs' side vertex (10671.37, 8577), 316 u at 44.3 deg, w
 the shipped lead was 0 u; 4 u short of that vertex the answer is still that vertex
 (the decomposition's split points count, because retail's do); the next side's vertex
 after it. The live-corpus derivation is `studies/movecode/review/wallslide.py --check`.
-Floor 116 against a green 120 on 38833 (the archive-conditional §6 checks, §13
-when map 280 is absent, and §14(g)/§16(l-p) when Pre-Searing is absent skip-declare);
-~110 s, `--routes` shrinks section 10),
+**THE THREE TIMING CHECKS ARE NORMALISED FOR MACHINE LOAD (2026-09-08), and the
+reason is the sharpest statement of this file's own thesis so far.** Run alone it
+passed 120 checks; run inside `run_suite.py`, which runs four files at once, it
+failed two -- at a heavier load, three, §14's included. It was neither a regression
+nor a collision (nothing here is shared between processes) but a wall clock reading
+the BOX rather than the code, and `confirmed_over_tick`'s best-of-5 could not save
+it: a minimum survives a scheduling hiccup and not sustained contention, where all
+five repeats inflate together. MEASURED against 3, 8 and 16 busy siblings, route()'s
+total ran 1.27x, 1.69x and 1.67x and its max 1.44x, 1.81x and 1.79x, with an idle
+worst case of 39 ms against a 50 ms tick -- 1.3x of headroom, so any load at all
+crosses it. **The threshold did not move**, because raising it is throwing the check
+away (the defect it guards was 336 ms) -- and CPU time is not the answer either:
+`time.process_time()` on Windows updates on the ~15.6 ms scheduler tick against
+0.5 ms routes, and the inflation happens with cores to spare, so it is cache and
+clock contention rather than being descheduled. Instead each run MEASURES how fast
+the box is while it runs -- a fixed arithmetic loop, min-of-15, touching nothing
+under test -- and divides the wall clock by it; the probe was chosen because it
+tracks route() at every load level tested (1.27-1.36x, 1.81-1.87x, 1.78-1.82x)
+where a dict walk under-reads at 1.35x and a bucketed scan over-reads at 2.49x.
+Two guards keep a load correction from becoming an excuse. Past `LOAD_FACTOR_CAP`
+(3.0) the three checks declare a SKIP rather than pass something meaningless. And
+the load-bearing one is a **positive control that runs every time**: the pre-fix
+router is re-timed through the same estimator on its own worst pair and must STILL
+blow the tick (15.8 ticks measured), so a normalisation soft enough to excuse a
+genuinely slow router reddens there first. It never skips for load -- dividing by a
+bigger factor makes it harder, not easier. The known-bad arm was built and run both
+ways: a route() costing exactly 2x reddens all three checks **idle AND under eight
+busy siblings**, while the real router is green in both, which is the whole claim.
+Floor 117 against a green 121 on 38833 (the archive-conditional §6 checks, §13
+when map 280 is absent, §14(g)/§16(l-p) when Pre-Searing is absent, the three
+timing checks past the load cap and the control on a `--routes` sample too small to
+hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 10),
   `toolkit/mapdata/test_spawncheck.py` (the map-row spawn census, `spawncheck.py`,
   which answers a clause `PLAN.md` §3.2 had carried unmeasured since it was written:
   *"how many of the nine pass the trapezoid test has not been re-run, so the map figure

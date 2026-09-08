@@ -132,6 +132,18 @@ into a pass. `--only <substring>` filters, `--list` enumerates and stops.
 and is how you check a suspected collision: a parallel run that disagrees with a serial
 one about any file's verdict is a collision, not a flake.
 
+**With ONE exception, and it cost half a day on 2026-09-08 by sending the search after
+shared state that does not exist.** A check that asserts a WALL-CLOCK budget disagrees
+between serial and parallel for a third reason: contention. `test_pathmap.py` holds
+`route()` to the world's 50 ms tick and its idle worst case is ~39 ms, so four busy
+siblings tip it over; it passed 120 checks alone and failed two in the pool, on
+identical code, with nothing shared between the processes. The fix is not a bigger
+threshold -- each run now measures how fast the box is while it runs and normalises,
+with a positive control that re-times the pre-fix router through the same estimator
+every run so the correction cannot go soft unnoticed (`TESTS.md`, `test_pathmap.py`
+at `CALIB_REF_MS`). **So: if the disagreeing check is about elapsed time, suspect the
+box; anything else, suspect a collision.**
+
 **Four is measured, not guessed, and raising it will not help.** Wall clock is flat from
 4 to 8 workers — 621 s, 595 s, 623 s — while the summed cost of the same 96 files goes
 2,484 s → 3,498 s → 4,196 s. Eight workers spend 1,700 CPU-seconds fighting for the disk

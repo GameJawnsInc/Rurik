@@ -43,6 +43,18 @@ in this file so BEFORE and AFTER are two live answers in one process, the way
 test_codescan.py's §8 reproduces the old grouping inline. A number copied out of
 a session log is not a control.
 
+THE THREE TIMING CHECKS ARE NORMALISED FOR MACHINE LOAD, and that is new on
+2026-09-08. This file passed 120 checks alone and failed two inside
+`run_suite.py`, which runs four files at once -- not a regression and not a
+collision, since nothing here is shared between processes, but a wall clock
+reading the box rather than the code. The 50 ms threshold did NOT move. Each run
+measures how fast the machine is while it runs (a fixed arithmetic loop that
+touches nothing under test) and divides; the constants, the evidence that the
+probe tracks route() across three load levels, and the two guards that keep the
+correction from becoming an excuse are at CALIB_REF_MS below. The load-bearing
+one is a positive control in section 10 (e): the pre-fix router is pushed
+through the same estimator every run and must still blow the tick.
+
     python toolkit/mapdata/test_pathmap.py
     python toolkit/mapdata/test_pathmap.py --sample 60
     python toolkit/mapdata/test_pathmap.py --routes 400   # a quicker section 10
@@ -135,6 +147,68 @@ TAIL_ROUTES = 1500
 LENGTH_MEAN_MAX = 1.01
 LENGTH_WORST_MAX = 1.25
 
+# -- the load correction, and why a wall clock alone could not stay honest --
+#
+# THE 50 ms TICK IS A WALL-CLOCK BUDGET, so the three checks that hold route()
+# to it are wall-clock measurements -- and a wall clock on a shared box measures
+# the machine as much as the code. That is not hypothetical. On 2026-09-08
+# `test_pathmap.py` PASSED 120 checks run alone and FAILED under
+# `run_suite.py`, which runs four files at once; it was neither a regression nor
+# a collision, because nothing here is shared between processes. It was load.
+# `confirmed_over_tick`'s best-of-5 was already there for exactly this and was
+# not enough: a scheduling hiccup does not survive a re-time, but SUSTAINED
+# contention does -- eight busy siblings raise every route by the same factor,
+# so the minimum of five is inflated too.
+#
+# The tempting fixes are both wrong. Raising the threshold until it passes
+# throws away the check (the pre-fix worst case was 336 ms, and that is what
+# this is guarding); measuring CPU time instead of wall clock does not work on
+# Windows, where `time.process_time()` is updated on the ~15.6 ms scheduler
+# tick and these routes take 0.5 ms -- and would not have helped anyway,
+# because the inflation MEASURED below happens with cores to spare, so it is
+# cache and clock contention rather than being descheduled.
+#
+# So the run measures how fast the box is WHILE IT RUNS, and normalises. The
+# probe is a fixed arithmetic loop with no dependency on anything under test:
+# if route() gets slower the probe does not, so a real regression still reddens.
+# The threshold never moves -- TICK_MS stays 50.0 and the numbers compared to it
+# are divided by the measured factor.
+#
+# MEASURED 2026-09-08, 12 cores, Python 3.14.4, over the 1,500-pair chase sweep
+# on Pre-Searing, against 3, 8 and 16 busy sibling processes. The probe tracks
+# route() across every load level, which is the whole claim and the reason it is
+# this loop rather than a dict walk (1.35x where route read 1.81x) or a bucketed
+# scan (2.49x):
+#
+#     load          route total   route max   this probe
+#     idle (twice)     0.99x        1.15x        1.01-1.08x
+#     3 siblings       1.27x        1.44x        1.27-1.36x
+#     8 siblings       1.69x        1.81x        1.81-1.87x
+#     16 siblings      1.67x        1.79x        1.78-1.82x
+#
+# CALIB_REF_MS is this machine idle -- min-of-15, whose own run-to-run spread is
+# 1.05..1.09x, taken at the FLOOR of five such runs (7.560, 7.681, 7.692, 7.782,
+# 7.834) so the factor sits at or just above 1.0 when nothing else is running
+# and the clamp, rather than a guess, absorbs the rest. It is a property of this
+# box and this interpreter, not of the code under test: on another machine or a
+# faster Python it will be wrong, and the two guards below are what keep that
+# from mattering. Wrong LOW is the harmless direction (the factor clamps to 1.0
+# and the tick is enforced as written); wrong HIGH buys leniency, which is what
+# the cap bounds and the control refuses.
+#
+# GUARD 1, the cap. Past LOAD_FACTOR_CAP the correction is extrapolating rather
+# than measuring, and the timing checks declare a SKIP instead of passing
+# something meaningless. A skip is printed and counted against the floor.
+# GUARD 2, and it is the load-bearing one: the pre-fix router is re-timed
+# through THIS estimator every run and must still blow the tick. A normalisation
+# that had gone soft enough to excuse a genuinely slow router fails that check
+# first -- see section 10 (e). At the cap the budget is 150 ms and the pre-fix
+# worst case is 336..700, so the control has room to convict.
+CALIB_ITERATIONS = 200000
+CALIB_REPEATS = 15
+CALIB_REF_MS = 7.60
+LOAD_FACTOR_CAP = 3.0
+
 
 def old_walkable(pm, x, y):
     """walkable() as it stood before 2026-08-13: a y band of Trapezoid objects.
@@ -217,15 +291,54 @@ def chase_pairs(pm, n, seed=8):
     return pairs
 
 
-def sweep(pm, pairs):
-    """Route every pair, timing each one. Returns (milliseconds, paths)."""
+def _calibrate():
+    """Milliseconds for a fixed arithmetic loop: how fast this box is RIGHT NOW.
+
+    Deliberately touches nothing under test -- no map, no pathmap module, no
+    allocation past a couple of floats -- so it answers "how loaded is the
+    machine" and never "how fast is route()". That independence is what lets the
+    normalisation below stay a load correction rather than a way of excusing a
+    slow router. The minimum over CALIB_REPEATS is the same estimator
+    `confirmed_over_tick` uses and for the same reason.
+    """
+    best = None
+    for _ in range(CALIB_REPEATS):
+        t0 = time.perf_counter()
+        a, x = 0.0, 1.0000001
+        for _ in range(CALIB_ITERATIONS):
+            a = a * x + 0.5
+            if a > 1e6:
+                a *= 1e-6
+        dt = (time.perf_counter() - t0) * 1000.0
+        best = dt if best is None else min(best, dt)
+    return best
+
+
+def measure_load():
+    """How many times slower than idle this box is running. Never below 1.0.
+
+    Clamped at 1.0 on purpose: a box faster than the reference does not earn a
+    TIGHTER budget than the tick, because 50 ms is a real wall-clock deadline
+    wherever the server runs. The correction only ever forgives load.
+    """
+    return max(1.0, _calibrate() / CALIB_REF_MS)
+
+
+def sweep(pm, pairs, with_planes=False):
+    """Route every pair, timing each one. Returns (milliseconds, paths, load).
+
+    `load` is measured immediately before and immediately after and averaged, so
+    it describes the box that produced THESE timings rather than the box at some
+    other moment of a twelve-minute suite.
+    """
+    lo = measure_load()
     ms, paths = [], []
     for (ax, ay, bx, by) in pairs:
         t0 = time.perf_counter()
-        p = pm.route(ax, ay, bx, by)
+        p = pm.route(ax, ay, bx, by, with_planes=with_planes)
         ms.append((time.perf_counter() - t0) * 1000.0)
         paths.append(p)
-    return ms, paths
+    return ms, paths, (lo + measure_load()) * 0.5
 
 
 def pct(xs, q):
@@ -233,7 +346,7 @@ def pct(xs, q):
     return s[min(len(s) - 1, int(round(q * (len(s) - 1))))]
 
 
-def confirmed_over_tick(pm, pairs, ms, repeats=5):
+def confirmed_over_tick(pm, pairs, ms, load, repeats=5, with_planes=False):
     """The routes that REALLY cost more than a tick, re-timed best of N.
 
     One timing on a shared machine measures the computation and whatever else
@@ -250,31 +363,49 @@ def confirmed_over_tick(pm, pairs, ms, repeats=5):
     look. Only the candidates are re-timed, so a run with nothing over the tick
     pays nothing at all -- and the estimator only ever moves a number DOWN, so
     it can hide a slow route only by hiding one that is not reliably slow.
+
+    THAT WAS NOT ENOUGH, and 2026-09-08 is the record of it: a minimum survives
+    a hiccup but not SUSTAINED contention, where every one of the five repeats
+    is slow by the same factor. So each re-timing is divided by a load factor
+    measured at the moment it is taken -- see CALIB_REF_MS above -- and the
+    comparison is against an unchanged 50 ms. `load` is the factor that was in
+    force when `ms` was collected and selects the candidates; the confirmation
+    re-measures, because the two happen at different moments.
+
+    Returns (index, normalised_ms, raw_ms, load_at_confirmation) per route.
     """
     out = []
     for k, v in enumerate(ms):
-        if v <= TICK_MS:
+        if v <= TICK_MS * load:
             continue
         ax, ay, bx, by = pairs[k]
-        best = min(_time_one(pm, ax, ay, bx, by) for _ in range(repeats))
-        if best > TICK_MS:
-            out.append((k, best))
+        now = measure_load()
+        best = min(_time_one(pm, ax, ay, bx, by, with_planes)
+                   for _ in range(repeats))
+        if best / now > TICK_MS:
+            out.append((k, best / now, best, now))
     return out
 
 
-def _time_one(pm, ax, ay, bx, by):
+def _time_one(pm, ax, ay, bx, by, with_planes=False):
     t0 = time.perf_counter()
-    pm.route(ax, ay, bx, by)
+    pm.route(ax, ay, bx, by, with_planes=with_planes)
     return (time.perf_counter() - t0) * 1000.0
 
 
-def latency_table(label, ms):
-    """Print the percentile table and return how many blew a whole tick."""
-    over = sum(1 for v in ms if v > TICK_MS)
+def latency_table(label, ms, load):
+    """Print the percentile table and return how many blew a whole tick.
+
+    Percentiles are RAW -- what the routes actually cost on this box today --
+    and the tick counts beside them are normalised, so a reader can see both the
+    wall clock and the claim being made about it.
+    """
+    over = sum(1 for v in ms if v > TICK_MS * load)
     print(f"      {label:<8} p50 {pct(ms, .5):7.3f}  p90 {pct(ms, .9):7.3f}  "
           f"p99 {pct(ms, .99):7.3f}  p99.9 {pct(ms, .999):8.3f}  "
-          f"max {max(ms):8.3f} ms = {max(ms) / TICK_MS:.2f} ticks, "
-          f"{over} over a tick, {sum(ms) / 1000.0:.2f} s total")
+          f"max {max(ms):8.3f} ms = {max(ms) / (TICK_MS * load):.2f} ticks at "
+          f"load {load:.2f}x, {over} over a tick, "
+          f"{sum(ms) / 1000.0:.2f} s total")
     return over
 
 
@@ -337,7 +468,20 @@ def all_valid(pm, paths):
 # Section 14 (2026-09-04, MOVECODE-1z-bb, the seam-aware pull) adds nine
 # unconditional checks on a synthetic bridge and four behind the Pre-Searing
 # load: floor 80 -> 89, green run 93 on 38833 (5 declared skips).
-LEDGER = checks.Ledger("pathing map", floor=116)
+# 2026-09-08, the load correction: section 10 (e) gains the positive control
+# that re-times the PRE-FIX router through the same estimator, so a green run
+# is 121 rather than 120 and the floor goes 116 -> 117 -- the same slack of
+# FOUR against a green run that this file has always carried. What uses that
+# slack is different, and deliberate: THREE of these checks -- section 10's
+# tick check, section 10's sabotage arm and section 14's seam-aware timing --
+# turn into declared skips on a box running past LOAD_FACTOR_CAP, and the
+# control declares a fourth on a `--routes` sample too small to hold a
+# pathological route. 117 is therefore the worst a healthy run can score, and
+# it is reached only by a small `--routes` on a very busy box. The control does
+# NOT skip for load: normalising by a bigger factor makes it harder to pass,
+# not easier, so it is safe at any load and it is the check that would catch a
+# correction gone soft.
+LEDGER = checks.Ledger("pathing map", floor=117)
 check = checks.adopt(LEDGER)
 
 
@@ -733,10 +877,10 @@ def main():
         saved10 = pathmap.SEAM_AWARE_ROUTE
         pathmap.SEAM_AWARE_ROUTE = False
         with as_before(pre):
-            before_ms, before_paths = sweep(pre, pairs)
-        after_ms, after_paths = sweep(pre, pairs)
-        over_before = latency_table("BEFORE", before_ms)
-        over_after = latency_table("AFTER", after_ms)
+            before_ms, before_paths, load_before = sweep(pre, pairs)
+        after_ms, after_paths, load_after = sweep(pre, pairs)
+        over_before = latency_table("BEFORE", before_ms, load_before)
+        over_after = latency_table("AFTER", after_ms, load_after)
 
         # (d) the component pre-check answers None without searching. It may
         #     only do that where the search would have failed anyway, so every
@@ -782,13 +926,60 @@ def main():
               f"path length within tolerance (mean <= {LENGTH_MEAN_MAX}, "
               f"worst <= {LENGTH_WORST_MAX})",
               f"mean {mean_r:.6f}, worst {max(ratios):.6f} over {len(ratios)}")
-        confirmed = confirmed_over_tick(pre, pairs, after_ms)
-        check(not confirmed,
-              "no route in the sweep blew a whole 50 ms tick",
-              f"{over_after} candidate(s) re-timed, {len(confirmed)} confirmed"
-              f"; max {max(after_ms):.1f} ms")
-        for k, best in confirmed[:4]:
-            print(f"        pair {k}: {best:.1f} ms on the best of 5")
+        # THE POSITIVE CONTROL FOR THE LOAD CORRECTION, and it runs first
+        # because the check under it means nothing without it. Everything the
+        # normalisation could get wrong shows up here as a green that should be
+        # red: put the PRE-FIX router back, take the pair it was slowest on, and
+        # push it through the same best-of-N-over-measured-load estimator. A
+        # router that really does blow the tick has to still blow it. The
+        # measured margin is wide -- 682 ms idle against a 50 ms tick, 13.6x --
+        # so this is not a knife-edge control, and at LOAD_FACTOR_CAP it is
+        # still 4.5x.
+        worst_k = max(range(len(before_ms)), key=lambda i: before_ms[i])
+        if before_ms[worst_k] < 4.0 * TICK_MS * load_before:
+            # The same lesson `ratio` below is annotated with, from the other
+            # side: the pathological pairs are ~1% of the set, so a small
+            # `--routes` can hold none of them and the control would be asking
+            # a mild route to look pathological. MEASURED: 13.4 ticks at the
+            # default 1,500 pairs, 1.3 at `--routes 400`.
+            LEDGER.skip("the load correction's positive control",
+                        f"the pre-fix arm's worst pair only reached "
+                        f"{before_ms[worst_k]:.0f} ms over {len(pairs)} routes,"
+                        " which is not a pathological route to convict")
+        else:
+            with as_before(pre):
+                ax, ay, bx, by = pairs[worst_k]
+                load_ctl = measure_load()
+                ctl_ms = min(_time_one(pre, ax, ay, bx, by)
+                             for _ in range(3)) / load_ctl
+            check(ctl_ms > TICK_MS,
+                  "a genuinely slow router STILL blows the tick through this "
+                  "estimator, so the load correction has not softened it away",
+                  f"the pre-fix code on its worst pair ({worst_k}) reads "
+                  f"{ctl_ms:.1f} ms = {ctl_ms / TICK_MS:.1f} ticks after "
+                  f"normalising by a measured {load_ctl:.2f}x")
+
+        if load_after > LOAD_FACTOR_CAP:
+            # Not a pass and not a fail: on a box this busy the wall clock is
+            # not measuring route(), and the correction above is extrapolating
+            # rather than measuring. Declared, printed, and counted against the
+            # floor -- never silent.
+            LEDGER.skip("the 50 ms tick over the chase-band sweep",
+                        f"the box is running {load_after:.2f}x slower than the "
+                        f"idle reference, past the {LOAD_FACTOR_CAP:.1f}x this "
+                        "correction is trusted to")
+            confirmed = []
+        else:
+            confirmed = confirmed_over_tick(pre, pairs, after_ms, load_after)
+            check(not confirmed,
+                  "no route in the sweep blew a whole 50 ms tick",
+                  f"{over_after} candidate(s) re-timed, {len(confirmed)} "
+                  f"confirmed; max {max(after_ms):.1f} ms raw = "
+                  f"{max(after_ms) / load_after:.1f} ms at a measured "
+                  f"{load_after:.2f}x load")
+        for k, best, raw, ld in confirmed[:4]:
+            print(f"        pair {k}: {best:.1f} ms on the best of 5 "
+                  f"({raw:.1f} raw at {ld:.2f}x)")
         # The other side of it: without this, a BEFORE reconstruction that had
         # quietly stopped reconstructing anything would make the AFTER numbers
         # look like a victory over nothing.
@@ -818,19 +1009,26 @@ def main():
         #     length and by nothing else in the timing half.
         real_pull = pre._string_pull
         pre._string_pull = lambda pts, budget=None, planes=None: list(pts)
-        raw_ms, raw_paths = sweep(pre, pairs)
+        raw_ms, raw_paths, load_raw = sweep(pre, pairs)
         del pre._string_pull
-        latency_table("RAW-SAB", raw_ms)
+        latency_table("RAW-SAB", raw_ms, load_raw)
         raw_ratios = length_ratios(after_paths, raw_paths)
         raw_mean, raw_worst = (sum(raw_ratios) / len(raw_ratios),
                                max(raw_ratios))
-        pre._string_pull = lambda pts, budget=None, planes=None: list(pts)
-        raw_confirmed = confirmed_over_tick(pre, pairs, raw_ms)
-        del pre._string_pull
-        check(not raw_confirmed,
-              "SABOTAGE (no smoothing) passes the timing check",
-              f"max {max(raw_ms):.1f} ms against the real {max(after_ms):.1f}, "
-              f"{len(raw_confirmed)} confirmed over a tick")
+        if load_raw > LOAD_FACTOR_CAP:
+            LEDGER.skip("SABOTAGE (no smoothing) passes the timing check",
+                        f"the box is running {load_raw:.2f}x slower than the "
+                        f"idle reference, past the {LOAD_FACTOR_CAP:.1f}x this "
+                        "correction is trusted to")
+        else:
+            pre._string_pull = lambda pts, budget=None, planes=None: list(pts)
+            raw_confirmed = confirmed_over_tick(pre, pairs, raw_ms, load_raw)
+            del pre._string_pull
+            check(not raw_confirmed,
+                  "SABOTAGE (no smoothing) passes the timing check",
+                  f"max {max(raw_ms):.1f} ms against the real "
+                  f"{max(after_ms):.1f}, {len(raw_confirmed)} confirmed over a "
+                  f"tick at a measured {load_raw:.2f}x load")
         check(raw_mean > LENGTH_MEAN_MAX and raw_worst > LENGTH_WORST_MAX,
               "and is caught by the length check, which is therefore real",
               f"mean {raw_mean:.3f} > {LENGTH_MEAN_MAX}, "
@@ -857,7 +1055,7 @@ def main():
 
         pre._sightline = counting_sightline
         pre._string_pull = watched_pull
-        sweep(pre, pairs)
+        sweep(pre, pairs)              # timings unused here; (g) is about spend
         del pre._sightline
         del pre._string_pull
         check(max(spend) < pathmap.PULL_SAMPLE_BUDGET,
@@ -867,7 +1065,7 @@ def main():
         saved_budget = pathmap.PULL_SAMPLE_BUDGET
         try:
             pathmap.PULL_SAMPLE_BUDGET = 20
-            tight_ms, tight_paths = sweep(pre, pairs)
+            tight_ms, tight_paths, _ = sweep(pre, pairs)
         finally:
             pathmap.PULL_SAMPLE_BUDGET = saved_budget
         longer = sum(1 for a, b in zip(after_paths, tight_paths)
@@ -1362,15 +1560,12 @@ def main():
             bx, by = ax + math.cos(ang) * d, ay + math.sin(ang) * d
             if pre.walkable(bx, by):
                 pairs14.append((ax, ay, bx, by))
-        got = {}
+        got, load14 = {}, {}
         try:
             for flag in (False, True):
                 pathmap.SEAM_AWARE_ROUTE = flag
-                ms14, paths14 = [], []
-                for (ax, ay, bx, by) in pairs14:
-                    t14 = time.perf_counter()
-                    paths14.append(pre.route(ax, ay, bx, by, with_planes=True))
-                    ms14.append((time.perf_counter() - t14) * 1000.0)
+                ms14, paths14, load14[flag] = sweep(pre, pairs14,
+                                                    with_planes=True)
                 got[flag] = (paths14, ms14)
         finally:
             pathmap.SEAM_AWARE_ROUTE = saved_flag
@@ -1393,11 +1588,30 @@ def main():
               f"by a blind crossing in the old path; None "
               f"{sum(1 for r in off_p if r is None)} vs "
               f"{sum(1 for r in on_p if r is None)}")
-        check(max(got[True][1]) < 50.0,
-              "the seam-aware route() stays under the 50 ms tick in the chase band",
-              f"max {max(got[True][1]):.1f} ms (plane-blind max "
-              f"{max(got[False][1]):.1f}); p50 {sorted(got[True][1])[150]:.2f} vs "
-              f"{sorted(got[False][1])[150]:.2f} ms")
+        # A single-shot maximum over 300 routes was what this asserted until
+        # 2026-09-08, and it is the most load-fragile shape in the file: no
+        # re-timing at all, so one descheduled route decided the verdict. Same
+        # treatment as section 10 -- candidates are re-timed best-of-5 and
+        # divided by a load factor measured while they are re-timed. The
+        # seam-aware arm is the one under test; the plane-blind arm is printed
+        # beside it as the same-run comparison it always was.
+        on_ms, off_ms = got[True][1], got[False][1]
+        if load14[True] > LOAD_FACTOR_CAP:
+            LEDGER.skip("the seam-aware route() under the 50 ms tick",
+                        f"the box is running {load14[True]:.2f}x slower than "
+                        f"the idle reference, past the {LOAD_FACTOR_CAP:.1f}x "
+                        "this correction is trusted to")
+        else:
+            over14 = confirmed_over_tick(pre, pairs14, on_ms, load14[True],
+                                         with_planes=True)
+            check(not over14,
+                  "the seam-aware route() stays under the 50 ms tick in the "
+                  "chase band",
+                  f"max {max(on_ms):.1f} ms raw = "
+                  f"{max(on_ms) / load14[True]:.1f} at a measured "
+                  f"{load14[True]:.2f}x, {len(over14)} confirmed "
+                  f"over a tick (plane-blind max {max(off_ms):.1f}); p50 "
+                  f"{sorted(on_ms)[150]:.2f} vs {sorted(off_ms)[150]:.2f} ms")
 
     print("\n15. on_mesh(): the mesh as the client resolves it at its edges (MOVECODE-1z-bf)")
     # THE DEFECT: the AgTrack guard's gate 2 asked walkable() -- exact
