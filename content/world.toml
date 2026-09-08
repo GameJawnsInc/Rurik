@@ -365,7 +365,7 @@ this skill does not scale."""
 # `data.attribValue[index] <= 12`, and CharData:202's bound of 13 on the
 # s_attribPoints lookup).
 #
-# THE POINT BUDGET IS MODELLED, since 2026-08-20 (84fd41d). This block is
+# THE POINT BUDGET IS MODELLED, since 2026-08-20 (cfde91d). This block is
 # rewritten rather than deleted because what it used to say was a list of four
 # limitations, and the same place is where their removal belongs: it said the
 # client's s_attribPoints cost table is not read, that spend is not tracked,

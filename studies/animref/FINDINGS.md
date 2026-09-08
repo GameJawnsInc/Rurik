@@ -187,7 +187,7 @@ session's R3 fixes, so the three fixed rows double as regression detectors):
   finish `['E5','58','8:0','8:1']` (ours 22, live 6), cancel `['8:0','59','E2']`
   both sides. The castmech wiring holds at population scale.
 - **D15's observable**: ours 12 (`50/A0_target0`) + 9 (`60/A0_target0`) vs
-  retail 0/758 — fixed this session (`5a8907e`); the rows must go to zero in
+  retail 0/758 — fixed this session (`fa8b77d`); the rows must go to zero in
   post-fix logs.
 - **D18 (NEW): the tick tail.** Our landed windups sit +16/+34 ms above our own
   ratio model (iv 1.33 n=54, iv 1.75 n=12) — the 20 Hz world tick delays the
@@ -1883,7 +1883,7 @@ the poll (`0x0081BD17 → 0x0081C090`). The payload `0x0081BA80` re-issues movem
 via `0x005FC900`. **Whether that path reaches the c2s send gate at `0x0081649E`
 was never checked** — §28 asserted the poll walks the body and simply did not ask
 whether the server is told. If it is not, our position belief goes stale and the
-**active re-pin** (`2f00ea5`, on by default since days earlier) yanks the body
+**active re-pin** (`d974fb9`, on by default since days earlier) yanks the body
 back. That is a discontinuous relocation: warping, by construction. UNVERIFIED —
 and it is the cheapest thing to settle, because it is static.
 
@@ -4085,7 +4085,7 @@ here. What an ANIMREF reader needs:
   enemy arc has a second cause and §40.12 item 2 (agent-vs-agent collision,
   the `0x006011F0` dig) moves up.
 
-## 41. THE PRESS SUPERSEDES THE KEYBOARD BELIEF — "couldn't resume attacking" was `kbd_moving_at` with no stop behind it, not the click latch (2026-09-03, `47f0cdc`)
+## 41. THE PRESS SUPERSEDES THE KEYBOARD BELIEF — "couldn't resume attacking" was `kbd_moving_at` with no stop behind it, not the click latch (2026-09-03, `8533045`)
 
 ### 41.1 The symptom, re-joined: the split is the session's first keyboard report
 

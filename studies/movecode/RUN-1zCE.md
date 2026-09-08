@@ -1,6 +1,6 @@
 # RUN-1zCE — the stair climb under the wall slide: does world-0 keep up with the body once a blocked lead becomes the wall's next vertex?
 
-**Registered before the run.** `MOVECODE-1z-ce` shipped at `0d3f163` from a desk derivation:
+**Registered before the run.** `MOVECODE-1z-ce` shipped at `5162824` from a desk derivation:
 RUN-GROUNDZ-R3's climb sent 15 keyboard leads of zero length (the client's heading due east into
 the wall the body slides along) and the sync copy trailed the drawn body 100–139 u for the climb;
 ArenaNet's server grants the wall's next vertex in the slide direction (49 of 62 live cases to
@@ -8,7 +8,7 @@ ArenaNet's server grants the wall's next vertex in the slide direction (49 of 62
 under it. **This is that climb: R3's own script, same route, same build but the one commit, so R3
 (`authsrv-20260906T161545-c1`, `renderobj/r3-agenttap.jsonl`) is the control** — the known-bad
 arm already run, on the identical route, two hours earlier. Agent-driven; no aiming. Server
-`main` at `0d3f163`.
+`main` at `5162824`.
 
 ## 1. Exposure
 
@@ -62,7 +62,7 @@ for the hostile's halts.
 ## RESULT — RAN TWICE, 2026-09-06 17:41 and 17:50, agent-driven. **P1 MET twice, P3 MET twice, P2 improved 2.3× but short of its bar, P4 REFUTED on run 1 by a knife edge in F11's reach test, fixed, and MET on run 2.**
 
 Run 1: capture `authsrv-20260906T174137-c1`, tape `movecode/1zce-agenttap.jsonl`, `main` at
-`0d3f163`. Run 2: `authsrv-20260906T175056-c1`, `1zce2-agenttap.jsonl`, the same tree plus
+`5162824`. Run 2: `authsrv-20260906T175056-c1`, `1zce2-agenttap.jsonl`, the same tree plus
 `NPC_PLANE_REACH_SLACK` (registered before run 2, below). Both scored beside R3 through
 `review/slidescore.py` — one instrument, the client's own position accessor for world-0.
 

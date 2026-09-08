@@ -4,7 +4,7 @@
 route): does the parked hostile stand where you expect (Q5); does the halt-and-refollow cadence
 behind you while you run feel wrong (Q6); and lead the Hatcher around a wall so a wall sits
 between it and you before the follow reopens (Q3). Enemy on, survivable, no walk script, the tape
-recording both copies of both bodies. Server `main` at `b610bcf`.
+recording both copies of both bodies. Server `main` at `c4ee6b2`.
 
 **Ran 2026-09-06 15:48** — capture `authsrv-20260906T154850-c1` (63 s of sends; 40 follows,
 22 halts, 1 plane correction, zero `0x002C`), tape `feel-agenttap.jsonl` (575 paired samples).

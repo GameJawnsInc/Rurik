@@ -879,7 +879,7 @@ stops with `[1.0,9]`+re-pin is the refuted `--stop-echo`'s wire effect, which
 R4 escaped only by scoping to an in-flight leg, and a pre-cast stop cannot be
 scoped that way; if ack freezes and the repin form is still wanted, it gets
 its own licensing paragraph here first. `test_cancelwalk.py` §6, floor 46
-after the adversarial review pass (two agents at f08d69a: the flag lattice
+after the adversarial review pass (two agents at f943aed: the flag lattice
 enumerated and every illegal cell refused exactly once, the licensing
 argument verified at code level — 0x0028 is not in `_note_wire_move`'s
 opcode set, so no grant clock — and a five-mutation probe; its one REAL
@@ -2044,7 +2044,7 @@ ruling; nothing ships on from this run.**
 
 ### 8.3a ⚠ DO NOT RUN R10 YET — the adversarial review found TWO BLOCKERS, and it did not finish (2026-08-25)
 
-**Status: the review pass over `b14aa1e` is INCOMPLETE.** Of three agents,
+**Status: the review pass over `5c834c2` is INCOMPLETE.** Of three agents,
 one finished (the reckon/send-site skeptic, verdict below); the lattice/
 routing reviewer and the 7-mutation prober both **died mid-run on an
 account usage limit**, having applied nothing (the prober never started;
@@ -2511,7 +2511,7 @@ residual). Any rep fails → its signature localises the error; fix and
 re-run. **Defaults are an owner ruling; nothing ships on from this
 run.**
 
-**The F34 fix's own adversarial pass (same day, over `c44930c`): NO
+**The F34 fix's own adversarial pass (same day, over `20200bf`): NO
 BLOCKER.** The 5-mutation probe went 5 of 5 RED with named FAILs and no
 tracebacks (gate deleted, refusal branch deleted, gate inverted, the
 console label dropped — telemetry is itself asserted — and the pair

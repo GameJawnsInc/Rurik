@@ -4,7 +4,7 @@
 seven tapes; the shipped default (`MIRROR_AVOID`) changed the kinematics of the one object the
 keyboard re-pin guard predicts snaps from, and every number it carries was fitted on captures
 that predate it. This run is the same route on a tape the pass has never seen. Same map,
-harness, client build and script as `RUN-R2`/`RUN-R3`; server `main` at `6a1664d` (F14 + F15).
+harness, client build and script as `RUN-R2`/`RUN-R3`; server `main` at `e23ebed` (F14 + F15).
 Agent-driven, no human aiming.
 
 ## 1. Exposure
@@ -67,7 +67,7 @@ census, P6 from `parkcensus`.
 
 ---
 
-## RESULT — RAN 2026-09-06 15:13, 78 s, agent-driven, `main` at `cc4a1d3`. **P1–P5 MET, P6 as F15 predicts. F14 holds on a tape it never saw.**
+## RESULT — RAN 2026-09-06 15:13, 78 s, agent-driven, `main` at `ab4556c`. **P1–P5 MET, P6 as F15 predicts. F14 holds on a tape it never saw.**
 
 Capture `authsrv-20260906T151305-c1` (`MIRROR_AVOID`, `NPC_CLIENT_MODEL`, `MODEL_LEG_BOUND`,
 `MODEL_PLANE_CLIP` all true in the header), tape `r4-agenttap.jsonl` 609 of 609 paired

@@ -1088,7 +1088,7 @@ the healthy ones in at least three further uncontrolled ways: it sent
 `MANIFEST_PHASE` (408) twice with **no** `MANIFEST_DONE` — the exact defect the
 same commit blamed for the client's "Invalid manifest phase" assertion — and it
 emitted **zero** `WORLD_SIMULATION_TICK` (0x001E) messages, while every healthy
-run ticks every ~50 ms from t=0.07. Commit `afedab6` shipped four fixes together
+run ticks every ~50 ms from t=0.07. Commit `18c5bee` shipped four fixes together
 (manifest phase, map_file_id, `PLAYER_DATA_DONE`, 0x008A) with no isolated
 revert and no A/B run recorded anywhere in the project. The client stopped
 requesting anything immediately after the two bad manifest messages — the

@@ -111,7 +111,7 @@ into the list.
 
 ### D1 — `0x0021` agent removal: we create agents and can never destroy one
 
-> **CLOSED 2026-08-10, and confirmed against a real client.** Implemented in `d2cfaac`
+> **CLOSED 2026-08-10, and confirmed against a real client.** Implemented in `1238226`
 > (`GAME_SMSG_WORLD_REMOVE_AGENT`, `remove_agent()` and its two refusals) and verified by
 > the `agent_removal` probe. **Both halves came back positive.** Step 1: the hostile
 > vanishes cleanly while the client is drawing and targeting it — no corpse, no nameplate,

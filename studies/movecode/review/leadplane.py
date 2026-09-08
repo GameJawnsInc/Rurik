@@ -27,7 +27,7 @@ is not None`, so a capture containing one had `A2_LEAD_PLANE_CLIP` ON. That is a
 SUFFICIENT condition and not a necessary one -- a run with the term on that never
 aimed at a seam shows none -- so the two segments are "term provably ON" and
 "unknown", never "term provably OFF". `A2_LEAD_PLANE_CLIP` and the word both
-shipped in 42f6009 on 2026-09-04, and the corpus splits on that commit to the
+shipped in df74661 on 2026-09-04, and the corpus splits on that commit to the
 capture.
 
 THE POSITIVE CONTROL IS THE POINT. A census that reports zero because it cannot

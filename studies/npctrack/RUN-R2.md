@@ -1,7 +1,7 @@
 # NPCTRACK-R2 — the stairs a fifth time, on the tree with the keyboard fixes in: does the frame hold up when the report track stops at the wall?
 
 **Registered before the run.** `NPCTRACK-R2`. Same route, map, harness and client build as
-`RUN-R1` and its control; the server is `main` at the commit after `da1ffc2`, which carries
+`RUN-R1` and its control; the server is `main` at the commit after `038b4ed`, which carries
 Q1 + F8 (this arc) **and** MOVECODE-1z-cc's two defaults (`MODEL_PLANE_CLIP`, `MODEL_LEG_BOUND`:
 the report track no longer dead-reckons 604 u through the staircase side during a silent
 keyboard leg). 1z-cd shipped no default. So against `RUN-R1` (09:43) the only server change is

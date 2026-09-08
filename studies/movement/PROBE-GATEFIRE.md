@@ -5,11 +5,11 @@
 them carries `gate_reach`, `state_record` or `hist_head`. Every address is build **38797**.
 
 Written 2026-08-20 against tree `C:/gd/Rurik/.claude/worktrees/gatefire-probe-plan-9c31de`;
-**the instrument merged to `C:/gd/Rurik` (main) as `066d6de` / `0841f5e` on 2026-08-20, and
+**the instrument merged to `C:/gd/Rurik` (main) as `442f3ff` / `e3dfb98` on 2026-08-20, and
 every command below now names main.** ⚠ **CORRECTED, and this was the most dangerous line in
 the file:** twenty-three commands used to begin
 `cd C:/gd/Rurik/.claude/worktrees/gatefire-probe-plan-9c31de`. That worktree is **still on
-disk**, still checked out at `6d3d96f`, and **36 commits behind**. A `cd` into it does not
+disk**, still checked out at `8ebc424`, and **36 commits behind**. A `cd` into it does not
 fail — it runs the pre-C1 instrument, whose `movetap.py` greps `gate_reach` **15** times,
 writes `shut:apply` **8** times, and contains **no** `gate1`, **no** `early_out_a` and **no**
 `print_episodes` at all. Copying the old commands produced a clean-looking capture with the
@@ -25,7 +25,7 @@ review, but four of its printed numbers did not. The aliasing guard was structur
 blind in exactly the band this probe's leading hypothesis lives in; two headline shares
 folded failed reads into real ones; one hypothesis was refuted by construction; and half
 the instrument the sample outputs described did not exist when they were written
-(**all nine changes have since landed and are merged** — `066d6de`, merged `0841f5e`,
+(**all nine changes have since landed and are merged** — `442f3ff`, merged `e3dfb98`,
 2026-08-20, after four adversarial rounds; §12 is that review's accepted residue).
 §3 step 2 is now a landing **checklist** rather than a blocking change list, and §5 is a
 verbatim statement of what this instrument cannot see that sits **before** the analysis,
@@ -356,7 +356,7 @@ repo's own rule is that a check which cannot fail is not a check. The `gate_reac
 *"As of writing, `movetap.py` contains **no `sep`, no `gate1`, no ASYNC-array read at
 `AGBASE+0x14C`**, and still writes `shut:apply` / `world1:apply`. Every sample output in
 steps 13 and 14 below describes code that does not exist yet. **The run does not launch
-until the greps in this step answer.**"* **All nine changes are merged at `0841f5e`.** `sep`
+until the greps in this step answer.**"* **All nine changes are merged at `e3dfb98`.** `sep`
 is written at `movetap.py:1120`, `gate1` / `gate1_why` / `async_ptr` / `async_count` in `gate1_read`
 (`movetap.py:1034`), the `AGBASE+0x14C` ASYNC read is live, and `shut:apply` occurs **zero**
 times in the file.
@@ -827,7 +827,7 @@ rule still applies to them exactly as it always did. Re-deriving them from a rea
 needs **both** witnesses moved together, the tier word here and `probedoc_fixtures.DOC_BLOCKS`,
 or §5 reddens.
 
-**How to tell if these blocks have gone stale:** they were produced at HEAD `f62f668` against
+**How to tell if these blocks have gone stale:** they were produced at HEAD `2361a83` against
 `movetap.py` sha256 `6bef2bb3b4c7663334ffb6af2f6d31515f536954be388401fb72c17e429fe443` and
 `movesync.py` sha256 `de282093612e7ae2c53a14d615f537f719c558aa141c0e54ad3b3aa7b580eb7c`. If
 either hash has moved, re-derive every block before quoting one — a printed sentence that
@@ -855,10 +855,10 @@ removed`) rather than as an unsigned share — still new output, still not quote
 
 ⚠ **REPINNED A THIRD TIME, 2026-08-29, for CANCELWALK-R5 and R7 — and the verdict this
 time is ZERO DRIFT, which is worth as much as a hit.** `movetap.py` moved in three commits
-none of the notes above records: `1613863` (R5 Tier-1, the walk-start footprint), `f3acf81`
-(H8 refuted at a desk) and `f62f668` (the R7 review), 392 insertions over 2026-08-24.
+none of the notes above records: `d08caa8` (R5 Tier-1, the walk-start footprint), `edb9c37`
+(H8 refuted at a desk) and `2361a83` (the R7 review), 392 insertions over 2026-08-24.
 **Not one line of it is a printer this section quotes.** An AST comparison of every
-top-level function across `8ce07f5..HEAD` returns `fence_verdict`, `gate1_verdict`,
+top-level function across `c91b90d..HEAD` returns `fence_verdict`, `gate1_verdict`,
 `print_episodes`, `count_flips`, `chain_cost_line`, `history_chain` and `early_outs`
 **byte-identical**; three functions were added (`_r5_fields`, `controller_read`,
 `_selftest_r5`) and eight changed, and the two new decoders carry **zero `print` sites** —
@@ -873,11 +873,11 @@ before trusting the next green.** A sha over the source cannot see the prose bet
 blocks, and nobody swept it at either earlier re-pin:
 
 * **The sentence carrying the pin was self-inconsistent.** It said the blocks were produced
-  at HEAD `0841f5e` against these hashes — but `movetap.py` at `0841f5e` hashes to
+  at HEAD `e3dfb98` against these hashes — but `movetap.py` at `e3dfb98` hashes to
   `eedaf547…`, not to the `9ef4b98d…` that was written beside it. The hash was moved twice
-  by the two notes above while the HEAD token was left behind, so `0841f5e` had been stale
+  by the two notes above while the HEAD token was left behind, so `e3dfb98` had been stale
   by two re-pins. `test_probedoc.py`'s `PIN_RE` matches only the sha, never the HEAD, so
-  nothing could catch it. Both now name `f62f668`.
+  nothing could catch it. Both now name `2361a83`.
 * **The third-tier paragraph above was false by 53 files.** It said
   `vault/captures/movetap/` holds five files, all 2026-08-19, none carrying `gate_reach`,
   `state_record` or `hist_head`, and that *"no post-C9 movetap capture exists anywhere,
@@ -1696,7 +1696,7 @@ counts, the percentages, the episode statistics, the poll rates, the `A` values,
 rows and the witness tallies. They are output of `movetap.fence_verdict`,
 `movetap.gate1_verdict`, `movetap.print_episodes` and `movesync.print_fence` over hand-laid
 state lists (block 7 over a seeded `random.Random(20260820)` exponential-dwell simulation),
-at HEAD `0841f5e`. **The shapes are a measurement of the code; the numbers are illustrations
+at HEAD `e3dfb98`. **The shapes are a measurement of the code; the numbers are illustrations
 and are not facts about the client.** §12's closing rule governs them.
 
 **OBSERVED, from the vault, in §6:** blocks 12 and 13 only —
@@ -1770,7 +1770,7 @@ going red — do not transcribe these cells into a write-up without re-deriving 
 
 10. RESIDUE 9 -- **CLOSED 2026-08-20, and it undercounted.** It read: *"PROBE-GATEFIRE.md §6's quoted block has drifted from what the code now prints. Its ALIASING line reads `phi 0.011 over 558 usable pairs, p(open) 0.287, white 0.409, A = 0.026`; the code prints a prose sentence with a different shape and does not print `white` at all. Its fence table shows three labels and omits `world1:append` and `shut:noop` ... The block is explicitly labelled a RECONSTRUCTION, so this is drift rather than a false claim."* Both halves were correct and there were **three more**: the header was 2 lines where the code prints 3; the `unread:*  0  0.0%` row was structurally unprintable, not merely absent; the EPISODES block was wrong in nearly every particular (no poll-rate line, no effective-n line, one Nyquist threshold instead of two, wrong seconds axis, no censoring marker); and the whole APPENDER WITNESS section was attributed to `movetap`, which has no such printer. §6 was rewritten from real printer output on 2026-08-20 and every block in it is now pasted verbatim with a provenance label. **The lesson this item is kept for:** the block carried a RECONSTRUCTION label and was still wrong in five ways, because a label on a shape does not check the shape. What replaces the label is the sha256 pin at the top of §6.
 
-11. PROCESS RESIDUE. Round 4 ran the affected tests against a tree carrying four other files' uncommitted work from prior rounds and from a parallel lane, so its 150-check green was a verdict on that tree at that moment, not on a merged state. **RE-RUN AFTER THE MERGE, 2026-08-20: `test_movesync.py` = 150 checks green on `0841f5e`, clean tree, and all twelve per-section `executed N of a floor of M` lines land where item 9 predicts.** Coverage was **7 test files + 2 selftests**; `toolkit/run_suite.py` was NOT run in either pass (forbidden by both briefs), so this is affected-test coverage and not suite coverage. Name the count when it is reported.
+11. PROCESS RESIDUE. Round 4 ran the affected tests against a tree carrying four other files' uncommitted work from prior rounds and from a parallel lane, so its 150-check green was a verdict on that tree at that moment, not on a merged state. **RE-RUN AFTER THE MERGE, 2026-08-20: `test_movesync.py` = 150 checks green on `e3dfb98`, clean tree, and all twelve per-section `executed N of a floor of M` lines land where item 9 predicts.** Coverage was **7 test files + 2 selftests**; `toolkit/run_suite.py` was NOT run in either pass (forbidden by both briefs), so this is affected-test coverage and not suite coverage. Name the count when it is reported.
 
 12. NEW, 2026-08-20 (document and instrument, found while syncing §6 to the code). **Refutation rule 3 cannot be scored on the outcome H1 most likely produces.** `A` exists only where the fence changed state; a STRAIGHT block with zero transitions prints 'there is no aliasing ratio to compute' (§6 block 3) and rule 3 has nothing to test. The refusal is correct -- inventing an `A` from zero transitions would be worse -- but it means the aliasing check is silent exactly where H1 lives, and a 15 ms-per-second fence that is never once caught open would print `100.0% shut:append`, one censored episode, and no ratio. From that block alone it is indistinguishable from a genuinely shut fence. What is available instead: refutation rules 1 and 2 (both unaffected), and arm (b) of the appender witness in `movesync`, which needs the FREE block's pairing to be read at all. Recorded in §1 rule 3, §5's third added note, and §8 item 6. THE FIX IF A FIFTH ROUND HAPPENS: nothing in the code -- the printer is already right. This is a hole in the REFUTATION SET, and closing it means adding a rule that a zero-transition STRAIGHT block can fail.
 

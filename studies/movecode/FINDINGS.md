@@ -66,7 +66,7 @@ So `codescan.py` gained **`--bit DISP:N`**, which *derives* the views rather tha
 trusting the caller to think of them, sweeps the field's displacement at each width
 **and** the mask and its complement as an immediate, and prints what it searched and
 what it cannot reach. It landed with `--upto` (read the instructions *ending* at a
-VA, aligned by consensus search) and a phantom filter. Commit `0e25e04`; the
+VA, aligned by consensus search) and a phantom filter. Commit `dcf77a2`; the
 instrument's own three self-inflicted defects and their controls are in
 [TESTS.md](../../TESTS.md) §12 for `test_codescan.py`.
 
@@ -1080,7 +1080,7 @@ than assumed: it is the agent passed as the source argument at every one of the 
 `readhook.py` now censuses world copies by address, names the sync side from
 `reseed`'s source argument, and **raises when an id is ambiguous** — a census that
 silently merged the copies would read exactly as clean as a correct one
-(`test_movehook.py` §12, both directions, commit `09b1b1a`).
+(`test_movehook.py` §12, both directions, commit `78ae755`).
 
 ### 1i.2 The twin is NOT frozen — §1h.3's "stale" is withdrawn
 
@@ -2012,7 +2012,7 @@ file already writes "which is what retail does (ROUTER.md §1: waypoint chains a
 leg-completion cadence)". `studies/movement/ROUTER.md` §1/§3 is a 605-line record of
 exactly the comparison the handoff says nobody made, dated 2026-08-26, and
 `python toolkit/clientscan/routerbench.py --census` still reproduces it bit-for-bit today
-at HEAD `1f36508`: `live clicks: 29, skipped connections: 1`,
+at HEAD `1547a8f`: `live clicks: 29, skipped connections: 1`,
 `kinds: {'part-way': 13, 'verbatim': 16}`, `within 0.2s: 29/29`. `--score` prints
 `scored clicks: 26   refused: 4` with exactly 13 rows at `firstwp=0.0u`. A handoff that
 sends a cold session to re-derive a committed, still-green measurement is the exact
@@ -3201,7 +3201,7 @@ is measured.
 ### 1r.7 §1r.3's RATE is DISQUALIFIED as a scoring number — it ranks the spawn-warping shipped arm above `--click-echo`
 
 **OBSERVED, 2026-08-28, at a desk.** No client run, no new capture: every number below
-comes from `readhook.py` at HEAD `7c56fb7` over the six movehook captures already in
+comes from `readhook.py` at HEAD `6c6465b` over the six movehook captures already in
 `vault/research/movecode/`. Scored by an adversarial pass that attacked seven vectors;
 the verdict was HOLDS, and **the pass found a stronger argument than the one I had
 written, plus two overreaches of mine that are corrected in place below.**
@@ -5904,7 +5904,7 @@ the k1 bin, only this session holds `keepalive_verdict` rows, and its two
   window WITHOUT the draft's 0x003D-only filter and the story inverts: **the client
   itself reported plane 0 first, in a 0x0047 stop-report at t=79.373 at that exact
   coordinate** — the draft's dump had filtered out the stop arm — and the era's code
-  (ddff031) builds the keepalive from `state["plane"]`+`state["client_pos"]`,
+  (228d156) builds the keepalive from `state["plane"]`+`state["client_pos"]`,
   written together on the accept path by that very stop. The client-side hook agrees:
   the displayed body's plane flips 0↔22 by its OWN reseed/teleport machinery (first
   flip t≈79.05, before any keepalive ever fired; only 2 keepalives fired in the whole
@@ -6967,7 +6967,7 @@ claimed 31 — lock #3). Two independent replays, written months apart in differ
 files, agree to the row.
 
 **The live zero is not evidence of quiet.** The repair shipped
-**2026-08-29 11:22:45 (`dcf9484`)**; all three would-fire captures predate it and
+**2026-08-29 11:22:45 (`a481a88`)**; all three would-fire captures predate it and
 their harness logs carry no plane-repair banner. The trigger has never been armed
 during a session that would have fired it.
 
@@ -7022,14 +7022,14 @@ until 2026-08-30, when a defect in `planecensus.label_captures` was found: it
 dropped any capture with zero `position_report`s, and the echo channel scores
 SENDS. The one capture it dropped holds the corpus's **only `0x002A`**, and that
 send is a trip. `test_planecensus.py` now pins it.) The live tripwire has
-logged **43**, in 3 captures, because it was introduced at `dcf9484` and has
+logged **43**, in 3 captures, because it was introduced at `a481a88` and has
 watched three sessions. Its retrospective exposure is ~6.5× what it has seen.
 
 ⚠ **Quote it as ≈3.7%, never to three significant figures.** Two careful
 independent measurements of this same quantity landed on 282/7,465 = 3.78% and
 282/7,543 = 3.74%, differing only on a capture-labelling convention. The rate is
 also **bimodal**: 75 of the 106 captures carrying player sends trip zero
-times, and `20260829T091543` alone trips **43 of 84 = 51%** — a pre-`dcf9484`
+times, and `20260829T091543` alone trips **43 of 84 = 51%** — a pre-`a481a88`
 capture, so the live tripwire missed the one session that would have supplied 43
 rows by itself.
 
@@ -7436,7 +7436,7 @@ asymmetry is the design:
   override is gated so the echo stays byte-verbatim outside the lead.
 
 The real defect was the **contract line**, and it was wrong the day it was written
-— `8cbcbc9` created the helper for `--d1-lead`, `995a515` (ROUTER-B2, same day)
+— `6651c91` created the helper for `--d1-lead`, `d3a5936` (ROUTER-B2, same day)
 added four router call sites and never revised it. **Fixed 2026-08-30**: the
 docstring now states the rule, carries this counterexample, and says "do not fix
 it by gating them"; `test_router.py` gained five locks pinning 3-ungated +
@@ -7644,7 +7644,7 @@ the geometry ★3's table was measured on is three reports in one session.
 ### 1z-o.10 ★ THE CENSUS AGAINST THE ARMED CORPUS — 95% of it is replay, and the live 5% is confounded
 
 §1z-n reads over 134 captures and states rates as if they were one population.
-They are two. The repair shipped at `dcf9484`, **2026-08-29 11:22:45**; every
+They are two. The repair shipped at `a481a88`, **2026-08-29 11:22:45**; every
 session before that ran with the trigger DISARMED, so every claim the census
 makes about them is a REPLAY — what the repair would have done, not what it did.
 Splitting on the harness banner (`"plane repair (default ON)"`, an artifact,
@@ -8443,7 +8443,7 @@ index (Q, bounds how non-reconstructible the mid-flight sample is — see the
 
 ## 1z-r. The mirror is built and replayed -- the SYNC SIM is confirmed by every warp in the corpus, and the chain's replay taught three things the decode alone could not
 
-**What exists now** (commit `6dff112`, branch `claude/agtrack-mirror`):
+**What exists now** (commit `472daa6`, branch `claude/agtrack-mirror`):
 `toolkit/authsrv/agtrack_mirror.py` -- §1z-q step 1, the server-side
 transcription of the chain machinery, every rule carrying its citation and
 every model choice labelled in place; `toolkit/authsrv/test_agtrack_mirror.py`
@@ -8846,7 +8846,7 @@ it rarely, and we answer with a point that was already old.
 
 ### 1z-t.4 ★ THE SHIPPED AgTrack GUARD IS STRUCTURALLY BLIND TO THIS — measured, from the run itself
 
-The active re-pin arm has been default ON since `2f00ea5` (§1z-s.5), and the
+The active re-pin arm has been default ON since `d974fb9` (§1z-s.5), and the
 obvious question is whether it already handles this. **It does not, and the kite
 proves it from both ends.** In `vault/captures/gamesrv/authsrv-20260902T213400-c1.jsonl`
 the guard evaluated **10 grants and returned `code=pass, why=match` on 10 of 10**,
@@ -9191,8 +9191,8 @@ client's arrival reconcile **snapped the drawn body 498 u** onto the sync copy's
 parked point (9412,8041) — and that snap **shut the AgTrack fence**, after which every
 grant is walked as an order and key releases go unreported: five keyboard reports,
 **no `0x0047` ever**, the stop echo never fired, the keyboard latch stayed armed
-(ANIMREF-RE §41, `f6fe4e5`; attribution to this lead corrected by that session in
-`faa5b94`). Zero clicks occurred between 22.06 and 27.99 s. Skeptic 3's correction:
+(ANIMREF-RE §41, `7073f79`; attribution to this lead corrected by that session in
+`c452b32`). Zero clicks occurred between 22.06 and 27.99 s. Skeptic 3's correction:
 the click gate still produced ~36% of the p90 tail (a 1.7 s excursion of refused
 post-snap clicks) — not blameless, not the cause.
 
@@ -9214,7 +9214,7 @@ I read the missing `0x0047` as the client executing a grant it did NOT propose a
 click-order, and built the fix: make the lead the client's OWN proposed endpoint
 (retail's D1 formula, `d1_lead_dest`). Desk evidence: per keyboard burst "closed by
 a `0x0047` within 3 s", 520 u lead 1 of 9 vs D1's own-endpoint ~70%. **Committed on
-the worktree as `8641930`, refuted by two skeptic lanes, reverted as `723641e`.**
+the worktree as `dbfd20a`, refuted by two skeptic lanes, reverted as `7f86185`.**
 What they established, each re-derived from captures:
 
 - **The mechanism is NOT FOUND in any decode and contradicted by the record.** The
@@ -10166,7 +10166,7 @@ time on an arm that is already opt-in and already measured p50 1.0 u. Then `0x00
 ## 1z-ad. THE RERUN REFUTES — the same script, same build, same flags, and the lead armed REALFIX §0.11's lock on five of eight legs; §1z-ac's "no lock" was n = 1 and is CORRECTED
 
 **Asked:** "rerun it on the fixed detector." Registered before launching (RUN-1zAB's
-rerun block, committed `55e4edc`), driven 2026-09-03 19:12, agent-driven, hands off.
+rerun block, committed `e522f84`), driven 2026-09-03 19:12, agent-driven, hands off.
 Capture `agenttap-20260903T191321` / `authsrv-20260903T191320-c1` / harness
 `20260903T191246`. Ident `MOVECODE-1z-ad`. **The lead stays OFF.**
 
@@ -10421,7 +10421,7 @@ Run A reported **zero `refresh-late` and three `refresh-blocked`**, and the firs
 was worthless: the blocked path set the same `refresh_late` latch the late path checks, so
 on exactly the legs where the clip had refused the extension — the legs where the arrival
 was therefore still coming — a `refresh-late` could not be emitted. Split into two latches
-and pinned by a test that drives blocked-then-late on one leg (`42a47e3`), which is how
+and pinned by a test that drives blocked-then-late on one leg (`19e2e5f`), which is how
 run B could report the late arrival at all. **A backstop that cannot say it lost is not a
 backstop**, and this one could not for a whole run.
 
@@ -10486,7 +10486,7 @@ instrument gap to close before the next fix is designed, and it needs no new the
 **Asked:** "close the instrument gap: run movetap against the lead arm." `movetap.py` reads
 AgTrack's `clientControlled` at the record; `agenttap` cannot see the fence at all
 (§1z-aa.1), which is why §1z-af had to leave the armer unidentified. Prediction registered
-before launching (RUN-1zAB's armer block, `a2a1560`). Ident `MOVECODE-1z-ag`.
+before launching (RUN-1zAB's armer block, `bf06a96`). Ident `MOVECODE-1z-ag`.
 
 ### 1z-ag.1 The answer, in the client's own memory
 
@@ -11030,7 +11030,7 @@ it is a young arm, shipped 09-02.
 Re-scoring the press arm by the re-pin's own licensing rule today reads **5** would-be
 violations, **all inside the 08:46 capture** — last accepted report 5.57/7.61/9.01/12.11/
 **13.48 s** stale, with the previous two accepted reports **12.7 u** apart (a body that was
-moving when it last spoke). `146218d`'s registration noted **7** on that day's
+moving when it last spoke). `26e704f`'s registration noted **7** on that day's
 1,262-capture corpus; today's re-sweep of the same rule finds 5, in the same single
 capture, with the same ages and the same 12.7 u report pair. The count is not reproducible
 across the two sweeps and **nothing here rests on it** — the harm is what was measured, not
@@ -14280,7 +14280,7 @@ default's own configuration.
 
 ### 1z-bl.8 THE ADVERSARIAL PANEL — what it strengthened, and the six things it corrects in the section above
 
-§1z-bl.1–.7 were written from my own read of the capture and committed at `9193da4`. A
+§1z-bl.1–.7 were written from my own read of the capture and committed at `bdc8e9c`. A
 four-lane panel plus two adversarial refuters then worked the same capture independently
 (the lanes were told the wire's leg verdicts and nothing else; the refuters were told to
 break the lanes). **All four lanes and both refuters independently reach §1z-bl's headline
@@ -14363,7 +14363,7 @@ and the operator's own regime.
 **A process failure of mine, recorded because it nearly cost the panel.** I removed the
 `movecode-1z-bl` worktree after merging **while the six agents were still running in it**.
 Both refuters found the pinned tree empty and deregistered mid-analysis, said so out loud per
-the cross-tree rule, verified that `main` at `54b1949` is a superset, and continued against
+the cross-tree rule, verified that `main` at `45249ab` is a superset, and continued against
 absolute vault paths — so nothing was lost. It should not have depended on their discipline:
 **do not remove a worktree while agents are pinned to it.**
 
@@ -14714,7 +14714,7 @@ reason.
 
 The two captures' whole `flags` dictionaries differ in **exactly one key**,
 `agtrack_guard.WAIVER_WALKSTART_ENDS_STILL`, and `git log` over the 2 h 10 m between the runs
-shows exactly one commit touching `authsrv`/`agtrack_guard`/`agtrack_mirror` — `c72c585`,
+shows exactly one commit touching `authsrv`/`agtrack_guard`/`agtrack_mirror` — `a237f58`,
 §1z-bn itself.
 
 The confound that mattered more was a lead that had silently degraded to nothing, which would
@@ -15419,7 +15419,7 @@ A census cannot go red when somebody re-introduces the licence. `test_agtrack_gu
 7. the same coincident pair **fresh** still matures, so (6) is the age and not the pair.
 
 **(6) was wrong on its first draft and the known-bad arm caught it.** Written with two
-walk-starts, it passed against `agtrack_guard.py` as of `30159d9` — the last commit carrying
+walk-starts, it passed against `agtrack_guard.py` as of `5bdd933` — the last commit carrying
 the waiver — because the 1z-bs build **refuses that pair on its own** (`WAIVER_NEWEST_MUST_BE_STOP`:
 a walk-start as the newest member ends the waiver). A check that passes on the broken arm is
 measuring the wrong quantity, not the wrong threshold. Re-aimed at `{walk-start → STOP}`,
@@ -15433,7 +15433,7 @@ out and imported.
   witness is RUN-1zBI (0 gate-2 verdicts in 38 evaluations, the wedge-tip sliver passing as
   `match`). This section is only about what the *deletion* could have touched.
 - **The census's population is entirely PRE-tolerance-fix, and that is worth saying plainly.**
-  The tolerance shipped at `b3bf37d`, 2026-09-04 20:17; the newest gate-2 fire in the corpus is
+  The tolerance shipped at `41afcfe`, 2026-09-04 20:17; the newest gate-2 fire in the corpus is
   `authsrv-20260904T174122-c1`, 17:41 the same day. **No gate-2 re-pin has fired since the fix**
   — consistent with §1z-bf and RUN-1zBI, and it also means all 17 come from the regime the fix
   replaced. A future gate-2 fire would be a genuinely off-mesh copy (> 1 u), a class this corpus
@@ -16477,7 +16477,7 @@ matters that `A2_LEAD_PLANE_CLIP` being true is **not** the same as the plane cl
 **The 49 are the positive control and they are the whole point of quoting them.** A
 census that reports zero because its detector is broken is worth nothing, so the same
 detector was run where the clip is *not* in force — the deliberate known-bad arms and the
-captures recorded before `A2_LEAD_PLANE_CLIP` shipped (`42f6009`, 2026-09-04) — and it
+captures recorded before `A2_LEAD_PLANE_CLIP` shipped (`df74661`, 2026-09-04) — and it
 finds the defect at **17.4%**, in the shape §1z-ap describes: 36 of the 49 went out
 `why="clear"` at the full 520 u, plane 29 → plane 0 or the reverse, which is RUN-1zAO's
 warp. Only against that does the 0 of 240 mean "the term works" rather than "the question
@@ -16718,7 +16718,7 @@ other half of what the owner saw.
 
 ### 1z-ce.5 RUN-1zCE, the same evening, twice — P1 and P3 MET, P2 halved, P4 found F11's knife edge
 
-[RUN-1zCE.md](RUN-1zCE.md). R3's own script on the tree at `0d3f163`, R3 itself the control
+[RUN-1zCE.md](RUN-1zCE.md). R3's own script on the tree at `5162824`, R3 itself the control
 through one instrument (`review/slidescore.py`, world-0 through the client's accessor):
 
 | | R3 | run 1 | run 2 |

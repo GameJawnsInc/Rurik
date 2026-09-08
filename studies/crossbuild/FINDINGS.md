@@ -532,7 +532,7 @@ wrote nothing and the run measures nothing.
 #### 4e-bis. A cross-copy census taken WHILE the client ran — and it weakens prediction 3
 
 Recorded separately and with its ordering stated, because it was gathered **after** the
-prediction above was committed (`0e23b34`) and **before** the result: it is evidence, not a
+prediction above was committed (`ea764a9`) and **before** the result: it is evidence, not a
 revision. Ten vault copies, censused read-only. `run/-probe` refused with `PermissionError`,
 which is itself the liveness witness — the client had the archive open exclusively.
 

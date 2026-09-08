@@ -5,7 +5,7 @@ per the probe rule: a prediction written afterwards can be rationalised into
 agreeing with anything.
 
 Behaviour under test: `MOVECODE-1z-t` / `KBD_SYNC`, shipped default ON
-(`studies/movecode/FINDINGS.md` §1z-t, merged `49c2291`).
+(`studies/movecode/FINDINGS.md` §1z-t, merged `d6a0931`).
 
 ---
 

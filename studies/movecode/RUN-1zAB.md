@@ -10,7 +10,7 @@ four gates built for it — §1z-y (a rate-refused re-aim HELD and re-baked at t
 floor; an in-flight lead KILLED on a press or a click), §1z-z (the lead grant's
 field 4 MATCHED to field 3), §1z-aa (no lead into a fence the server shut with a
 `0x002C`) — and §1z-ab's length (520 unchanged). Everything else is the shipped
-default of `main` at `bdb010f` or later: the router, the plane repair, the AgTrack
+default of `main` at `a0fc059` or later: the router, the plane repair, the AgTrack
 guard and its re-pin, the stop echo, the family rate.
 
 **Status: RAN TWICE. 2026-09-03 18:39 INCONCLUSIVE; the 19:12 rerun on the fixed

@@ -1,8 +1,8 @@
 # The Isle of the Nameless: what it is, what it can measure, and the order to do it in
 
-**2026-08-16.** Written in worktree `combat-end-to-end-a2242b` at `826b39b`
+**2026-08-16.** Written in worktree `combat-end-to-end-a2242b` at `fa3393b`
 (`git rev-parse --show-toplevel` → `C:/gd/Rurik/.claude/worktrees/combat-end-to-end-a2242b`;
-`git log --oneline -1` → `826b39b studies/combat 19: the player windup anomaly was skill
+`git log --oneline -1` → `fa3393b studies/combat 19: the player windup anomaly was skill
 damage all along`). Method: a workflow of four parallel surveys (client statics, the
 content/spawn pipeline, the server's combat ledger, the capture corpus), four instrument
 designs each attacked by an independent skeptic on five axes, and one completeness critic.
@@ -405,8 +405,8 @@ with the opcode at index 0 and the position a **tuple at `v[5]`** — reproduced
 `agents.py:529-541`. The analyser read agent 278's position as `(1, 9)`. The test
 passed because `test_behaviourrun.py:140-141` used a hand-made 5-field fixture that has
 never existed on any wire.
-**FIXED 2026-08-16, commit `c8c9c32` (merged to `main` as `65d803a`, merged here
-2a2bd54).** `encounters()` reads `tuple(v[5])` behind a `len(v) > 5` guard, and the test
+**FIXED 2026-08-16, commit `2b00aa3` (merged to `main` as `9254c24`, merged here
+f8cdea1).** `encounters()` reads `tuple(v[5])` behind a `len(v) > 5` guard, and the test
 builds real 24-value decoded creates. The trap was proven fixture-first: the corrected
 fixture against the unfixed analyser went red on exactly one check — separation
 9.0554 = √(1²+9²), the (type, kind) pair read as a coordinate — then green at its
@@ -880,7 +880,7 @@ disassembly of the readers at `0x5fa8de`–`0x5fc136` (carve-out (1), `codescan.
 Slashing/…/Sacrificial, **unread by anything**, and damage *type* is modelled nowhere);
 `s_effect` (§3.3); the property-44 pip quantum; the `0x00A4` projectile cross-check against
 the 13 samples already in the vault; the property-17 zero-variance test; the
-~~`behaviourrun.py:255` `v[3:5]` bug~~ (FIXED on `main`, `c8c9c32` — see §3.2's
+~~`behaviourrun.py:255` `v[3:5]` bug~~ (FIXED on `main`, `2b00aa3` — see §3.2's
 correction block); **whether `0x005F` is readable at all**, which decides
 whether §3.1 has a cross-check; and testing the wiki damage formula against the 22,524
 messages we already hold, which S3's own gap list flags as a free falsification nobody has
@@ -902,14 +902,14 @@ armor exponent NOT REACHED without the Suits. Rung 7 inherits the
 
 **Rung 4 — the loopback probes.** Our server, our client, no ArenaNet.
 **STATUS 2026-08-16 late: probes BUILT, VALIDATED, BLOCKED by a session-wide client
-death that is not this arc's.** The four probes exist (`ab309fa`/`021de16`,
+death that is not this arc's.** The four probes exist (`c22afd8`/`ec8d175`,
 `check_encodable` green over all 71) and seven launch attempts produced a clean
 diagnosis instead of a render: **every loopback session on this machine since ~19:57
 tonight dies ~2 s after the spawn burst** — client-initiated (game channel `0x0008`,
 auth channel `0x0009 UPDATE_CHARACTER_SETTINGS`, status→Offline, RST both, Code=007
 on screen). Exonerated by direct test: the probes (dies with none running), the
-session flags (dies plain), the heroes NameError (`fab28bb` fixed it; still dies),
-the missing `0x0009` ack (arm added `6ce3875`; the reset precedes any possible ack
+session flags (dies plain), the heroes NameError (`93523b8` fixed it; still dies),
+the missing `0x0009` ack (arm added `03ecf95`; the reset precedes any possible ack
 by **194 µs** — it is a departure courtesy, not a blocked request), the webgate
 (traffic identical to surviving runs), DH/keys (c2s decodes fine), the def-1470
 payload (dies without it), and map binding (the client loads, spawns, walks, then
@@ -924,7 +924,7 @@ survives past ~30 s.
 
 > **SUPERSEDED the same night, and the matrix is worth keeping.** Fourteen launches
 > completed the elimination: **the vault is exonerated too.** Survivor code
-> (`6d7eeeb`) + survivor flags (`--hero`) + current vault dies; a **pristine-snapshot
+> (`4423a26`) + survivor flags (`--hero`) + current vault dies; a **pristine-snapshot
 > restore of the 38833 run archive** (suspect set aside as
 > `Gw.dat.dead-sessions-20260816`) dies; map 449 dies; no-enemy dies; `--hero` on
 > current code dies. Also exonerated en route: the relink (its backup and journal are
@@ -956,7 +956,7 @@ survives past ~30 s.
 > and was still an artifact of the instrument. With `--keep-open` passed, every probe
 > ran to completion — see FINDINGS "Rung 4". The 38797-defaults pre-spawn failure
 > remains real and is the archive-family issue `studies/character/RUNS.md` documents.
-> The harness defect itself is FIXED on main as of 2026-08-17 (`34091f5`): `--hold`
+> The harness defect itself is FIXED on main as of 2026-08-17 (`5255c6c`): `--hold`
 > implies `--keep-open`, and `test_harness.py` pins the interaction.
 The `0x0042` condition render via `probes.py:1962` with skills 478/480/482; the lone
 property-17 render (now a presentation question only — B6 settled the ledger half:
@@ -1042,7 +1042,7 @@ used `run-live/2026-07-29_221c13772c7a` = build **38797**, but retail moved on:
 build points the pre-login patcher at a binary it wants to replace — and a rewritten
 `Gw.exe` takes the key-tap cave with it, which is the one failure that produces a full
 session of ciphertext with no key. `livesession.preflight()` now calls
-`check_build_matches_service()` (commit `5b7189b`), which reads the launch exe's build from
+`check_build_matches_service()` (commit `c14d196`), which reads the launch exe's build from
 its own getter and refuses **before the login** naming the staged directory that would
 work; ask the same question directly with `buildid.py --exe <path>`. Confirmed on both:
 38833 passes, 38797 is refused by name. The tap is not what picks the build — both live

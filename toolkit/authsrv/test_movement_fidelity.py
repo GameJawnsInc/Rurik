@@ -29,7 +29,7 @@ Three measurements, in decreasing order of how much they tell us:
 
   4. COLLISION FIRING, and 5. MESH COVERAGE. Added 2026-08-06, and they are here
      because they are R3's acceptance criterion -- "you walk to a wall and are
-     stopped" -- which was landed at `a97c7c4` and then assumed by every run
+     stopped" -- which was landed at `81b6002` and then assumed by every run
      afterwards rather than asserted by any of them. `clipped` is the server
      refusing a destination the navmesh does not contain; `on_mesh` is whether the
      client's own stop lands in our trapezoids. Mesh coverage is deliberately not
@@ -105,7 +105,7 @@ def game_channel_captures():
 
     Not by filename. The convention drifted twice and the glob never followed:
     before the host split the game channel was the second connection on the
-    authsrv host (`-c2`), after `3e86af3` it is the first on its own host
+    authsrv host (`-c2`), after `22b6125` it is the first on its own host
     (`captures/gamesrv/`, `-c1`), and the oldest captures carry no suffix at all.
 
     Measured against the vault on 2026-08-06, the old `authsrv-*-c2.jsonl` glob
@@ -306,7 +306,7 @@ def main():
               f"at least {ACCEPT_RATE_FLOOR:.0%} of stops need no teleport "
               f"(got {rate:.0%}, {accepted}/{len(reports)})")
         # R3's own acceptance criterion -- "you walk to a wall and are stopped" --
-        # had no gate anywhere until 2026-08-06. It was landed at a97c7c4 and
+        # had no gate anywhere until 2026-08-06. It was landed at 81b6002 and
         # thereafter assumed. These two checks are that gate, and they are scored
         # from the same corpus rather than needing a walk to be driven live.
         #

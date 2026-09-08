@@ -1,7 +1,7 @@
 # Isle of the Nameless — handoff to a cold session
 
 **Written 2026-08-18.** **This is NOT a status document.** `PLAN.md` §3's *R-ISLE* row is
-the status authority and it is current as of `89bcf68`; this file deliberately does not
+the status authority and it is current as of `6bd0438`; this file deliberately does not
 restate it, for the reason `CLAUDE.md` opens with. What is here is what the code and the
 commits cannot tell you: the traps, and the things a cold session predictably gets wrong.
 

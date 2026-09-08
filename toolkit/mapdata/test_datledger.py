@@ -1147,7 +1147,7 @@ def section_vault():
           "worth quoting")
 
     # ROUTE E IS A 38797-PINNED MEASUREMENT, so it is read from the copy that
-    # was preserved to serve exactly that (`0fc0bd7`: "every 38797-pinned
+    # was preserved to serve exactly that (`51797ca`: "every 38797-pinned
     # measurement ... RURIK_DAT at it reproduces an old number"). It used to
     # be read off `vault/dat_study`, which is the SERVER'S LIVE reference
     # archive and is resynced when the server's moves -- 38797 -> 38833 on

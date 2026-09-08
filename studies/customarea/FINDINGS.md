@@ -609,7 +609,7 @@ differ); MFT row 3's self-CRC over `mft[0:0x48]` continued over `mft[0x60:]` (tw
 controls differ); and each entry's CRC over its **stored** bytes (47/47 real rows
 sampled).
 
-**Three hazards, all cheap to remove — and all removed, 2026-08-10, `6f07fff` on
+**Three hazards, all cheap to remove — and all removed, 2026-08-10, `0d4278a` on
 `main`, along with a fourth this pass never saw.** The section below is left standing
 as written because the diagnosis is what mattered; what follows each item is what
 actually landed. **A fourth defect was found by the new test**, and it is the worst of
@@ -640,7 +640,7 @@ in our own writer rather than in a format reading.
    row's own reservation, immediately after the authored bytes. Whether the reader
    trusts the size field or scans past it is untested. Zero-fill the tail.
 
-**Fixed, `6f07fff`.** Hazard 1: the tuple is now `MUTATING_DESTS`, named once, and the
+**Fixed, `0d4278a`.** Hazard 1: the tuple is now `MUTATING_DESTS`, named once, and the
 test checks it against the parser's own actions so the next flag added cannot drift out
 of it — and `is_mutating()` compares identity rather than truthiness, because **row 0
 was the same bug waiting on a different input**. Hazards 2 and 3 turned out to be one
@@ -696,13 +696,13 @@ ships code adds its test to `CLAUDE.md`'s suite list **in the same commit**.
 | **A0** | Cache a per-map chunk index in the vault (row → `{chunk_id: (offset, size)}` + first 64 B of each chunk) — **in `vault/` only, never the repo, and no test fixture derived from it** | A full-corpus chunk query runs in under 5 s where it now takes 13–18 min | **cheap** | — |
 | **C0** | ✅ **Landed 2026-08-10 — §17.** Disassembled the load handlers for Map Parameters, Terrain, Path and PathEngine, plus the dispatcher, the bloat driver and both its callers | Met. Read sets and reject sets enumerated per handler; the 16-byte field identified as a UUIDv4 the loader never compares; `sequence` read, compared and discarded; **bloat does not run on a normal load**. Three rungs deleted as a result | **cheap, offline** | — |
 | **A1** | `toolkit/mapdata/mapchunks.py` — the 23-slot name table, the stage/type decomposition, the Dependencies decoder, the two stage framings | `test_mapchunks.py` asserts 349 pairs, 698 tiled, 134,290/134,290 refs, terrain size laws 349/349, floor set from a real green run; line added to `CLAUDE.md`'s suite in the same commit | **cheap** | A0 |
-| **A2** | ✅ **Landed 2026-08-10, `6f07fff`.** Fixed `datwrite.py`'s `--verify`/`--replace` no-op; wrote `test_datwrite.py` on a synthetic archive | Met, and it found a **fourth** defect nobody had diagnosed: `fix_mft_self_crc()` read through a stale buffered handle and could leave the archive failing its own self-checksum while reporting it correct | **cheap** | — |
-| **A3** | ✅ **Landed 2026-08-10, `6f07fff`** — folded into A2. `replace()` writes the whole block reservation as one journalled put, payload followed by zeros | Met. Both the tail-zeroing and the whole-reservation journal fell out of one change, and `--revert`'s "the client wrote here" detector now covers the reservation | **cheap** | A2 |
+| **A2** | ✅ **Landed 2026-08-10, `0d4278a`.** Fixed `datwrite.py`'s `--verify`/`--replace` no-op; wrote `test_datwrite.py` on a synthetic archive | Met, and it found a **fourth** defect nobody had diagnosed: `fix_mft_self_crc()` read through a stale buffered handle and could leave the archive failing its own self-checksum while reporting it correct | **cheap** | — |
+| **A3** | ✅ **Landed 2026-08-10, `0d4278a`** — folded into A2. `replace()` writes the whole block reservation as one journalled put, payload followed by zeros | Met. Both the tail-zeroing and the whole-reservation journal fell out of one change, and `--revert`'s "the client wrote here" detector now covers the reservation | **cheap** | A2 |
 | **B1** | `toolkit/mapdata/terrain.py`: decode a Bloated terrain chunk to `(map.toml, height.f32, tiles.u8, tag3.bin, tag9.bin, tag4/5, tag7 opaque)` and re-encode | **A retail terrain chunk round-trips byte-identically on 349 of 349 maps.** Anything less names the wrong layout | **cheap→moderate** | A1 |
 | **B2** | Whole-file round-trip: decode and re-encode an entire Bloated map payload | 349/349 byte-identical, both stages | **cheap** | B1 |
 | **B3** | Blender importer (`tools/blender/`, outside `toolkit/` — `bpy` is not stdlib) | A retail map's terrain appears in Blender at 96 units/cell with the right orientation, **and GWMB's export of the same map agrees after a transform declared in writing before the comparison runs** (it negates height and flips row order; it emits `(dims+1)²` vertices to our `dims²` samples). An undeclared transform makes this rung meaningless in both directions | **cheap** | B1, and §16-P6 resolved |
 | ~~**C1**~~ | ❌ **DELETED 2026-08-10 — answered statically by C0 (§17.2).** Normal load requests stream **1**, the re-bloat read requests **0**, the write-back targets **1**. Traced through five frames and re-derived from the other end by the verifier, then paired with the archive's `(flags 3, stream 1)` / `(1, 0)` structure at 349/349 | — no launch was needed | — | — |
-| **C2** | **The zero-authored-bytes delivery test.** Row 46196's payload, written stored over a candidate row, three arms (matched partner / stale partner / one size field off by four). **Pre-flight:** the first two items are now **satisfied by the tool itself** as of `6f07fff` — `replace()` journals the whole reservation and zeroes the freed tail, so §8 hazards 2 and 3 no longer need handling at the experiment level. Still mandatory: set `spawn_x`/`spawn_y` inside the copied map's own rect (≈1536, 1536 — its extent is 0..3072 on both axes, and every existing `maps.toml` spawn is thousands of units away); verify offline that the spawn lands in **exactly one** trapezoid of the authored mesh, the same test every other `maps.toml` row carries; diff the target row's MFT entry (offset/size/compression/crc) **before and after every arm** | Arm 1 loads and we stand on a flat square; arm 3 **must** fail with `Attempting to re-bloat`. Arm 2 vs 1 tells us whether a map is one payload or two. **"Loaded, but the MFT row changed" is a first-class outcome, not a pass** — arm 3's expected failure runs the re-bloat path, which re-opens `Gw.dat` for writing, so a successful re-bloat there rebuilds the *original retail map* into the row and "arm 2 loaded" would otherwise read as "a stale partner is fine" | **research, 1 launch** | A2, A3, C0, C1 |
+| **C2** | **The zero-authored-bytes delivery test.** Row 46196's payload, written stored over a candidate row, three arms (matched partner / stale partner / one size field off by four). **Pre-flight:** the first two items are now **satisfied by the tool itself** as of `0d4278a` — `replace()` journals the whole reservation and zeroes the freed tail, so §8 hazards 2 and 3 no longer need handling at the experiment level. Still mandatory: set `spawn_x`/`spawn_y` inside the copied map's own rect (≈1536, 1536 — its extent is 0..3072 on both axes, and every existing `maps.toml` spawn is thousands of units away); verify offline that the spawn lands in **exactly one** trapezoid of the authored mesh, the same test every other `maps.toml` row carries; diff the target row's MFT entry (offset/size/compression/crc) **before and after every arm** | Arm 1 loads and we stand on a flat square; arm 3 **must** fail with `Attempting to re-bloat`. Arm 2 vs 1 tells us whether a map is one payload or two. **"Loaded, but the MFT row changed" is a first-class outcome, not a pass** — arm 3's expected failure runs the re-bloat path, which re-opens `Gw.dat` for writing, so a successful re-bloat there rebuilds the *original retail map* into the row and "arm 2 loaded" would otherwise read as "a stale partner is fine" | **research, 1 launch** | A2, A3, C0, C1 |
 | ~~**C3**~~ | ❌ **DELETED 2026-08-10 — answered by C0 (§17.1): only after failure.** Its test premise was also impossible as written: there is no such thing as a "Stripped-only map", because a file id can only resolve to a `FIRST_STREAM` row and all 349 of those are stream 1 | — | — | — |
 | **D1** | Hand-author a Bloated map from our own builder — 32×32, flat, 2-trapezoid navmesh, everything else copied from the owner's archive at runtime | Our builder's output is **byte-identical to row 46196's payload**, **and the run reports which chunks it generated versus which it carried, with a floor on generated bytes.** Byte-identity alone can go green on a program that copies 8,471 bytes — §14 forbids the 232 bytes of ArenaNet constants from entering the repo, so a copying builder is the *expected* shape and the criterion must measure the part that isn't copying | **moderate** | B2, C2 |
 | **D2** | Change one number: raise a 4×4 block of heights by 500 units | The bump is visible in game and the client's collision agrees with our server's — walk onto it and the server's `on_mesh` stays true | **cheap** | D1 |
@@ -1160,7 +1160,7 @@ with §8's hazards 2 and 3 (a shrinking replace journals only `len(new)`, and th
 original tail survives), the client may write a bloat of the stale partner over our
 bytes, possibly past the reservation — after which `--revert` restores bytes at an
 offset the entry no longer uses, reports success, and all three CRC rules still verify.
-**Applied**, then **largely closed at the tool level 2026-08-10 (`6f07fff`)**: a
+**Applied**, then **largely closed at the tool level 2026-08-10 (`0d4278a`)**: a
 shrinking `replace()` now journals the whole block reservation and zeroes the tail, so
 the revert mechanism is sound and the experiment no longer has to compensate for it.
 What remains at the experiment level is the before/after MFT diff on every arm and
@@ -2341,7 +2341,7 @@ it. The fix is to exclude runs whose first bytes carry a container signature (`M
 or a plausible file-id table), or to prefer the *smallest* qualifying run, which is also
 what the client itself does.
 
-> **FIXED 2026-08-10, `ae96f28`** — "The largest free run holds a live MFT, and the
+> **FIXED 2026-08-10, `ef4b393`** — "The largest free run holds a live MFT, and the
 > planner aimed every insert at it." `datplan.py` no longer aims at the rotation slot,
 > and `toolkit/mapdata/test_datplan.py` (new, in `CLAUDE.md`'s suite) pins it. The
 > paragraph above is kept as written because it is the finding; this note is its
@@ -2360,7 +2360,7 @@ writer, or a careless copy, can create.
 1. **Our writer leaves the MFT describing extents that do not match the file.** Then the
    free map derived at open is wrong, the coalescer merges live bytes into it, and the
    client's next allocation — of any row, not necessarily ours — is entitled to them.
-   A shrinking `--replace` frees blocks; `6f07fff` made `--revert` honest about the whole
+   A shrinking `--replace` frees blocks; `0d4278a` made `--revert` honest about the whole
    reservation, but it does not stop the client taking the blocks.
 2. **We author a `USED|FIRST_STREAM` row at index ≥ 16 with no file-id record** (or a
    record with no row). The open-time reconcile deletes it, logs it by name, and frees its
@@ -2476,8 +2476,8 @@ high half) nor `0x1C` (the modification flag).
 Three, all found this pass, all in tools whose entire purpose is preventing false absence
 claims. Every past absence claim leaning on them needs re-reading.
 
-> **FIXED 2026-08-10, `27c30a9`** — "asserts.py knew one of the idiom's three shapes, and
-> --field one encoding of two" — with `c8e5884` following up on the call sites. The three
+> **FIXED 2026-08-10, `7da3ccd`** — "asserts.py knew one of the idiom's three shapes, and
+> --field one encoding of two" — with `2ef6f95` following up on the call sites. The three
 > defects below are kept as written; this note is their disposition. **The consequence
 > does not go away with the fix:** every absence claim made in this repo *before* those
 > commits was produced by the broken scanners, and this section's point was never the
@@ -2545,7 +2545,7 @@ rarer than it read — a container was observed re-allocated in place 159 consec
 deferred free guarantees it cannot land back on the old extent within the same commit. Do
 not expect `--revert`'s byte offsets to remain meaningful after arm 3, and do not expect to
 read the old payload back from the vacated offset (14 of 18 in the corpus). The
-full-reservation journal from `6f07fff` is what makes the revert honest; it does not stop
+full-reservation journal from `0d4278a` is what makes the revert honest; it does not stop
 the client taking the blocks.
 
 **E3 specifically.** Its stated reason for requiring an archive copy — "the write-back
@@ -7000,8 +7000,8 @@ Four independent readings, and none of them needed a client:
 
 And the timeline settles it independently of all four. §56's run was
 **11:25–11:31** on 2026-08-13 and the document was committed at 11:32
-(`53ec713`). `spawn_population` did not exist until **18:48 that evening**
-(`0f68c04`), seven hours later — the commit that introduced population at all,
+(`fef0de9`). `spawn_population` did not exist until **18:48 that evening**
+(`46effa6`), seven hours later — the commit that introduced population at all,
 and it populated **sculpt**, whose three positions are trapezoid centres read
 out of the sculpt mesh. At the moment of the §56 run there was no population
 feature, `--area` was not forwarded to the gamesrv, and no area had rows.

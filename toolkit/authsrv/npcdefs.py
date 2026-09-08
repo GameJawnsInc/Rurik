@@ -428,7 +428,7 @@ def live_captures(names=None):
     """Every live capture directory that has a decrypted game channel in it.
 
     Six live directories exist and only three carry decrypted game channels; the other
-    three lost their keys to a memory-only keyring (fixed 2026-08-07, commit 17b34cc).
+    three lost their keys to a memory-only keyring (fixed 2026-08-07, commit 4e16dec).
     Selecting by CONTENT rather than by name is the same rule test_codec.py's fixture
     picker learned the hard way -- a directory that looks like a capture and holds no
     channel would otherwise contribute silently nothing.

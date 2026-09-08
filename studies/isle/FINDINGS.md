@@ -1,7 +1,7 @@
 # Isle rung 3 — the offline bench: every question answered before a live minute
 
-**2026-08-16**, worktree `combat-end-to-end-a2242b` at `c83a7cc` (after the merge of
-`main`'s `65d803a`). Method: eight parallel bench agents, one per rung-3 item, then
+**2026-08-16**, worktree `combat-end-to-end-a2242b` at `26d562d` (after the merge of
+`main`'s `9254c24`). Method: eight parallel bench agents, one per rung-3 item, then
 independent skeptics on the three load-bearing verdicts (B1 gwinch, B8 chat oracle,
 B9 formula). Skeptic corrections are folded in below **with attribution** — where a
 skeptic refuted something the bench claimed, both halves are stated. Labels per
@@ -20,7 +20,7 @@ met.** The table, then the detail:
 | B4 | property 44 | **CONFIRMED offline**: net regen rate, quanta of 2/H — and it rides `0x00A2`, not `0x009F` |
 | B5 | `0x00A4` | **ANSWERED**: shooter + target-position + flight-time-in-seconds; combat F9's CONTESTED resolved |
 | B6 | property 17 crit | **still CONTESTED, materially moved toward crit**; the counterexample dissolved; a lone p17 kills |
-| B7 | `behaviourrun` v[3:5] | **FIXED on `main`** (`c8c9c32`, another session) — delegated, not re-derived here |
+| B7 | `behaviourrun` v[3:5] | **FIXED on `main`** (`2b00aa3`, another session) — delegated, not re-derived here |
 | B8 | `0x005F` readability | **READABLE-NUMBERS-ONLY guaranteed** (as candidates — see the correction); rung 7 is unblocked |
 | B9 | wiki formula vs corpus | **term-by-term**: quantization CORROBORATED 49/49; skill-base exact at rank 0; the armor exponent NOT REACHED |
 
@@ -213,8 +213,8 @@ properly at n≥2 per scoped group.
 
 ## B7. `behaviourrun.py` v[3:5] — fixed elsewhere, recorded here
 
-Fixed on `main` by the zealous-mahavira session (`c8c9c32`, merged `65d803a`,
-merged into this branch as `2a2bd54`); PLAN.md §3.2 carries the full correction
+Fixed on `main` by the zealous-mahavira session (`2b00aa3`, merged `9254c24`,
+merged into this branch as `f8cdea1`); PLAN.md §3.2 carries the full correction
 block including the no-tainted-numbers audit. Not re-derived by this bench.
 
 ## B8. The chat oracle: the NUMBERS are extractable without any key
@@ -326,7 +326,7 @@ silently inert** — `session.py:1272` runs `hold_open` only under `a.keep_open`
 `--hold`-only session tears down at the verdict, ~4 s after spawn, closing a healthy
 client whose orderly exit (game `0x0008`, auth `0x0009 UPDATE_CHARACTER_SETTINGS`,
 status→Offline) reads exactly like a client-side death. (**FIXED on main
-2026-08-17, `34091f5`**: `--hold` now implies `--keep-open` —
+2026-08-17, `5255c6c`**: `--hold` now implies `--keep-open` —
 `hold_implies_keep_open()` in `session.py`, with the flag interaction and its
 call site pinned in `test_harness.py`. The present tense above describes the
 harness as it was during this rung.) Fourteen launches were
@@ -335,7 +335,7 @@ exonerated code, archives (to the point of a pristine restore), maps, flags and 
 vault is preserved in PLAN.md's rung-4 status note as a monument. The 38797-default
 config's separate pre-spawn failure is the archive-family issue
 `studies/character/RUNS.md` already documents. Two keepers came out of the detour:
-the `0x0009 UPDATE_CHARACTER_SETTINGS` ack arm (`6ce3875` — the message is departure
+the `0x0009 UPDATE_CHARACTER_SETTINGS` ack arm (`03ecf95` — the message is departure
 courtesy, not a blocked request), and the focus-sampler pattern for separating "the
 client died" from "the harness closed it".
 
@@ -492,7 +492,7 @@ s2c stream frame to its FINAL byte under this key? ARC4 is wrong for every byte 
 first message and the framer walks off lengths it reads from the plaintext, so noise cannot
 walk 122 KB and land exactly on the end. **OBSERVED: 100.0% against 0.01%, and 100.0%
 against 0.11%** — not a close call. Re-assembly now reports **15/15 connections decrypted**,
-plan seal AGREE. `livesession._frames_completely` + `test_livesession` §13, commit `46a7ea6`.
+plan seal AGREE. `livesession._frames_completely` + `test_livesession` §13, commit `a7f14bc`.
 An independent witness agrees and was not used to decide: every connection's key is tapped
 **~8.7 s before** it opens, and the two leftovers pair that way too.
 

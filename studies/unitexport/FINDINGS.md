@@ -170,7 +170,7 @@ now measurable.
 ## 5.1 The gap closed, and the check that measured it went dead (2026-08-18)
 
 `test_unitexport.py` was the suite's only pre-existing red, and it had been
-red since at least 16a242f. The failing line was §5's own assertion:
+red since at least 0019052. The failing line was §5's own assertion:
 
 ```
 [FAIL] --opaque at least triples the hatcher's silhouette coverage
@@ -182,7 +182,7 @@ controlling.** Three causes were possible — the flag no longer reaching the
 viewer, the alpha wiring no longer applied in either path, or a coverage
 metric gone insensitive. It is the second, and it is the benign one.
 
-**MEASURED, cause.** The terrain arc's §7.17 work (commit `3b0d36f`) added
+**MEASURED, cause.** The terrain arc's §7.17 work (commit `c1dad12`) added
 `modelexport._alpha_class`, which labels a texture `opaque` / `cutout` /
 `erases`, and taught `import_gwmap.gwmodel_materials` to skip the alpha
 wiring for the `erases` class only. Exporting the hatcher today:

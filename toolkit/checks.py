@@ -4,7 +4,7 @@ WHY THIS EXISTS, with the two times it has already cost us.
 
 `toolkit/schema/test_codec.py` once printed ALL CHECKS PASSED and exited 0 with its
 primary fixture glob matching nothing. It had 130 real captured frames available and
-was checking none of them. Commit `024a982` fixed that file -- and only that file.
+was checking none of them. Commit `132d860` fixed that file -- and only that file.
 
 On 2026-08-06 `toolkit/authsrv/test_movement_fidelity.py` did the same thing in the
 partial form, which is harder to see: it skipped its speed section entirely, scored

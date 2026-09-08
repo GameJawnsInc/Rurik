@@ -1076,7 +1076,7 @@ value), with the exceptions stated:**
 **THE TWO THAT WERE NOT THE RESYNC**, and this is why the control is not
 optional:
 
-* **`test_mapscale` is a CODE change**, bisected to `b93ab1d` (WORLDMAPS-W24)
+* **`test_mapscale` is a CODE change**, bisected to `53c3911` (WORLDMAPS-W24)
   with `git archive` at nine commits over one unchanged archive. The tree
   scatter's world y was `gy*96+48` while z was sampled from the authored cell,
   standing every tree on terrain from a **different grid row**; W24 flipped it to

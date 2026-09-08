@@ -38,7 +38,7 @@ sys.path.insert(0, TOOLKIT)
 # `cage.py` lives in clientpatch/, not here, so without this line the `import
 # cage` below raises ModuleNotFoundError and THIS module -- the only one that
 # launches a client -- cannot be imported at all. That is how `test_harness.py`
-# sat red from 166ebbf, the commit that added the cage assertion, until
+# sat red from 7ac7fbc, the commit that added the cage assertion, until
 # 2026-08-06: the guard that makes every launch check the cage stopped the
 # launcher from loading. Stated here rather than left to whoever imports us
 # first; `session.py` used to work only because it imported drive_client one

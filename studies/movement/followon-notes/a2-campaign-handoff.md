@@ -89,7 +89,7 @@ can be the ASYNC copy re-seating (harmless) — check which endpoint moved.
 
 Everything is merged to `main` (final commit of this session: see
 `git log --oneline -1`; the arc is one linear chain of dated commits from
-`ecb6c1a` to session end). Defaults unchanged: `--d1-lead` is OPT-IN; the
+`da49233` to session end). Defaults unchanged: `--d1-lead` is OPT-IN; the
 shipped default (`--zero-lead --grant-suppress --cast-stop=pin`, plane-carry
 on) is byte-identical to pre-campaign behavior — every bundle change is
 D1-gated and lock-tested. Test floors at session end: test_d1lead 72,

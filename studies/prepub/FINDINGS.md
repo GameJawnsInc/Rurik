@@ -49,7 +49,7 @@ pinned two GUIDs as *"the real UUIDs observed on the wire"* — a `user_id` and 
 `token`. **They are not reproduced here, and that is the point of the finding rather than
 an omission from it:** this document would otherwise republish the exact thing it exists
 to retire, which is how the first draft of it was written and what the sweep in §7 caught
-on its own author. Read them out of `git show 4f6aa792` if you need them; after the
+on its own author. Read them out of `git show b9eef520` if you need them; after the
 history pass they are gone from there too.
 
 `toolkit/portal/webgate.py:180-181` computes those as `stable_guid("user:" + email)` and
@@ -227,7 +227,7 @@ names — rather than a conversion.** Not acted on here; it is the owner's to ru
 **This pass edited the working tree. It did not rewrite history, and history goes public
 in full.**
 
-* **F1's pinned GUIDs remain in the diffs and in one commit message** (`4f6aa792`). The
+* **F1's pinned GUIDs remain in the diffs and in one commit message** (`b9eef520`). The
   oracle is therefore still recoverable from `git log` by anyone who looks, even though
   the files are fixed. **This is the only finding whose remediation is incomplete.**
 * **F2's, F3's and F4's redacted strings remain in the blobs** of the commits that

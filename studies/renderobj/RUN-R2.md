@@ -5,7 +5,7 @@
 
 **It is a ONE-CHANGE A/B, and that is unusual enough to say out loud.** RUN-R1 is the
 known-bad arm: same route, same map, same harness, same client build. `git log` over the
-interval shows exactly one commit touching any server file — `601fd01`, the fix itself. So a
+interval shows exactly one commit touching any server file — `aadc3bb`, the fix itself. So a
 difference between R1 and R2 is the correction, or it is noise, and nothing else.
 
 ## 1. THE NUMBER THIS HAS TO MOVE

@@ -240,7 +240,7 @@ in that merge fixed it is not established; see Run 4.
 Run 3 recorded one thing it could not explain: the player's ENERGY readout fell
 to 10 and then 0 while alive, and did not track the maxima we send. The
 energy/adrenaline session supplied the difference — **Run 3 sent property 43 on
-`0x00A3`, and the channel fix to `0x00A2` landed in `b788ac1` at 14:24, after
+`0x00A3`, and the channel fix to `0x00A2` landed in `1d2ce82` at 14:24, after
 both arms had run** — and asked for the decisive re-run.
 
 ```bash
@@ -276,7 +276,7 @@ reverted whichever of them cured the drain, and no open item — MORALE-Q4–Q6,
 fact about the client's `0x00A3` parser, with no consumer waiting for it.
 
 The arm itself, recorded so nobody re-derives it: re-run this run's command on
-a tree with ONLY the channel hunk of `b788ac1` reverted — property 43 back on
+a tree with ONLY the channel hunk of `1d2ce82` reverted — property 43 back on
 `0x00A3`, the death/revive regen handling kept. Drain reproduces → the channel
 was the cure (and the client's `0x00A3` handler mis-takes a property retail
 never sends it on that opcode); readout stays 0-dead / 22-alive → the regen

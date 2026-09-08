@@ -96,7 +96,7 @@ Usage:
                                                                # repair RAN
 
 WHY `--armed` EXISTS. The census reads 134 captures as one population and it is
-two. The repair shipped at `dcf9484`, 2026-08-29 11:22:45; everything earlier is
+two. The repair shipped at `a481a88`, 2026-08-29 11:22:45; everything earlier is
 REPLAY. Split that way, 3 captures and 549 reports are prospective and 131 and
 11,205 are not -- and the two halves of the repair's case do not overlap at all:
 every logged echo is armed, every replayed fire is not. Nothing in the record
@@ -777,7 +777,7 @@ def main(argv=None):
     print(f"\n  WOULD-FIRE COUNT : {len(fires)}")
     print("  (the LIVE fire count is a different quantity -- grep the corpus "
           "for kind\n   'plane_repair'. The repair shipped 2026-08-29 at "
-          "dcf9484; captures older than\n   that ran with it disarmed, so a "
+          "a481a88; captures older than\n   that ran with it disarmed, so a "
           "live zero does not mean the trigger stayed quiet.)")
     streaks.sort(reverse=True)
     if streaks:

@@ -16,7 +16,7 @@ values arrive (studies/combat/PLAN.md step 8), which is why this contract
 lands FIRST (step 2, amendments C4/C8b/C9).
 
 RED-FIRST, per C8b, so the observed failure mode is on record rather than
-assumed. Against the pre-guard tree (cdefe83), section 1 measured:
+assumed. Against the pre-guard tree (82854b2), section 1 measured:
 
     hit_enemy with HIT_FRACTION poisoned to 1.5 raised ValueError only AFTER
     sending GV_ATTACK_STARTED (1 message on the wire) and after consuming the
@@ -502,9 +502,9 @@ def section_player_refill_due():
     out = io.StringIO()
     with contextlib.redirect_stdout(out):
         authsrv.player_refill_due(send, state, 0)
-    # FIVE MESSAGES SINCE c4d1161 (2026-08-22), four since 2026-08-20: the
+    # FIVE MESSAGES SINCE 875ae5a (2026-08-22), four since 2026-08-20: the
     # health pair (max, then the property-34 fraction), then the ENERGY trio --
-    # property 52 = 1.0, the int property 54 "+N" callout c4d1161 added in
+    # property 52 = 1.0, the int property 54 "+N" callout 875ae5a added in
     # retail's position, and property 43 back to the rate. The batch is retail's
     # resurrect instant, OBSERVED in capture 20260817T183756 (52/43/55) plus
     # retail's [54, 27, 22] callout; test_pools 8b pins its composition, so

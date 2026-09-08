@@ -2580,7 +2580,7 @@ that the client *accepts* it, not that it is what retail sends.
 
 **A METHOD FAULT THAT IS MINE.** The tree moved under the readers: two agents
 reported the implementation arriving uncommitted mid-run and `HEAD` moving from
-`0421806` to `1d3530f` beneath them. I was editing the tree the research was
+`eeb6d68` to `5b9cc28` beneath them. I was editing the tree the research was
 reading, which is exactly the hazard `CLAUDE.md` names about pinning subagents.
 It happened to catch real defects in the in-flight code — a corpse that could
 still cast, and `ValueError` uncaught on the world tick, both now fixed — but that

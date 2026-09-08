@@ -71,7 +71,7 @@ directory the harness prints, then close the client.
   Attempt 1 (38797 client, map 449): client hung up right after `0x0199` —
   the 38797 run archive cannot satisfy a 449 load (the load burst never got
   past the map id; same family as the 146/148 condition, different row).
-  **← CORRECTED by `fab28bb` (recorded here 2026-08-18): the archive reading
+  **← CORRECTED by `93523b8` (recorded here 2026-08-18): the archive reading
   was WRONG.** That commit measured the 38797 archive binding `0x345CC`
   byte-identical to `dat_study`, so the NameError below explains attempt 1
   too — "a server-side NameError and a bad map row present IDENTICALLY from
@@ -83,7 +83,7 @@ directory the harness prints, then close the client.
   the map and took the entire burst through `INSTANCE_LOAD_FINISH`** — then
   OUR gamesrv's handler died: `authsrv.py:6884` `NameError: HERO_ATTRIBS`,
   dead socket, `Code=007` on screen. That is the heroes-party commit at
-  `main`'s tip (`c96242f`): `HERO_ATTRIBS`, `HERO_SKILLBAR` and
+  `main`'s tip (`85fd12b`): `HERO_ATTRIBS`, `HERO_SKILLBAR` and
   `HERO_BODY_NPC` are assigned only inside the `--hero` CLI block with no
   module-level default, and the load path evaluates `HERO_ATTRIBS`
   unconditionally — so **every loopback instance load on current main

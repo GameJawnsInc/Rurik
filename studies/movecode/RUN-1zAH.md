@@ -2,14 +2,14 @@
 
 **One question, two arms, four runs of ~90 s of client time, no human aiming.**
 Registered before the run, per the probe rule. This scores `MOVECODE-1z-ah`
-(`studies/movecode/FINDINGS.md` §1z-ah, main `3b3285b`), whose §1z-ah.7 registered the
+(`studies/movecode/FINDINGS.md` §1z-ah, main `632b3c1`), whose §1z-ah.7 registered the
 prediction this sheet expands into a procedure.
 
 Behaviour under test: `agtrack_guard.STATIONARY_WAIVER` — the AgTrack re-pin's
 report-freshness gate is waived when the last two **accepted** reports agree to within
 the client's own `ZERO_DIST_SQ`, because a body measured still has a re-pin harm bound of
 1.0 u rather than `RUN_SPEED × age`. Everything else is the shipped default of `main` at
-`3b3285b` or later, and the lead is still opt-in (`--kbd-lead`), exactly as RUN-1zAB ran it.
+`632b3c1` or later, and the lead is still opt-in (`--kbd-lead`), exactly as RUN-1zAB ran it.
 
 **Status: RAN 2026-09-03 21:42-21:51, four runs. MECHANISM CONFIRMED (four retracts, every one at 0.0 u of harm, zero violations); OUTCOME **REFUTED** by this sheet's own clause -- arm T's second run had a held-key parked leg. The result block is below; `--kbd-lead` stays OFF and the waiver stays ON.**
 

@@ -1432,7 +1432,7 @@ currently sends about a dozen opcode types.
    `0x0025`'s vector as intended movement with facing != 1 until the facing-vs-
    movement question is settled, or the client will be 26.57–180° off.
 
-4. **`0x002E` for NPC facing.** ✅ **BUILT 2026-08-11** (`b37db6f`, `authsrv.py:1467`).
+4. **`0x002E` for NPC facing.** ✅ **BUILT 2026-08-11** (`5d13a1f`, `authsrv.py:1467`).
    ~~Previously never sent because nobody knew what went in~~ it. Field 2 = absolute
    target angle in radians (or ±inf to spin), field 3 = turn rate in rad/s, inside
    `[pi/100, 20pi]`. Keep both typed `dword` in the catalog — and note the commit records

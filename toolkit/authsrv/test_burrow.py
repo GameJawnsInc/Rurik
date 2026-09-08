@@ -180,7 +180,7 @@ def section_guard():
     authsrv.create_agent_world(send, state, 10, entry_back, "re-created")
     LEDGER.ok(10 in state["agents"] and state["agents"][10] is entry,
               "and the same id can then be re-created -- D1's finding, in code",
-              "a removed id is not poisoned (25701dd), so reuse needs nothing beyond "
+              "a removed id is not poisoned (38ffd80), so reuse needs nothing beyond "
               "the ordinary burst")
 
 

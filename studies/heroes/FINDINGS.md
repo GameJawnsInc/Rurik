@@ -2968,7 +2968,7 @@ itself.
 
 ## 9. Defects and corrections this arc produced
 
-- **`msgshape.py` printed `string16(0)` for every wide-string field — FIXED `c81d6d1`,
+- **`msgshape.py` printed `string16(0)` for every wide-string field — FIXED `0facfe8`,
   REGRESSION-CHECKED 2026-08-19.** `Field.__repr__` shows `self.cap`, but the `wstring`
   branch never passed `cap=` to the constructor — only `wire=`. The true capacity was
   recoverable only by back-solving from the wire total, which is why §1.1 said

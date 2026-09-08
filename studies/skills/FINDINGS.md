@@ -1317,7 +1317,7 @@ that would settle it against a real client.
 > *"the answer to §8's question"* has three live candidates — this document's desk
 > §8, `PLAN.md` §8's old heal-spam item, and `studies/isle` rung 8 — and the
 > paragraph cites isle three lines earlier. §36's *"a scope error of exactly the
-> kind [§4](#) warns about elsewhere"* was committed with an EMPTY href (`12ce246`)
+> kind [§4](#) warns about elsewhere"* was committed with an EMPTY href (`7496fc5`)
 > and names no document; neither §4 in this file is about scope. Whoever wrote
 > them can close them in a line; nobody else should.
 
@@ -2243,7 +2243,7 @@ mapped. The server tracks the pools authoritatively regardless.
 
 ## 25. The client consumes all of it — four runs, 2026-08-20 evening
 
-The substrate landed at `68d9850` (gate, debit, regen, adrenaline pools,
+The substrate landed at `b7512bb` (gate, debit, regen, adrenaline pools,
 death/revive emissions) and four loopback runs measured what the client does
 with each message. Predictions were written before the first launch
 (session scratchpad, `run-predictions.md`); every P below names its verdict.
@@ -2810,7 +2810,7 @@ counts: `test_codec.py` 29, `test_catalog.py` 13, `schema/test_smsgnames.py` 15,
 ## 27. E5 — the flames, on screen
 
 **2026-08-21, run `20260821T125215`, loopback, build 38797, server at
-`98806c0`.** The fifth run of the series §25 opened, and the one that closes
+`a0f4386`.** The fifth run of the series §25 opened, and the one that closes
 §25's P7. Predictions were registered before the client launched
 (session scratchpad, `e5-predictions.md`) and before the build workflow that
 produced the sender had reported.
@@ -2963,7 +2963,7 @@ is exactly what that retraction machinery is for, and the second time it has
 paid for itself.
 
 **`git add -A` in a shared worktree swept up another session's work.** Commit
-`98806c0` carries a peer session's `test_spawn_burst.py` repair and ~32 lines of
+`a0f4386` carries a peer session's `test_spawn_burst.py` repair and ~32 lines of
 `TESTS.md` alongside the adrenaline arc, under a message describing only the
 latter. Nothing was lost and nothing conflicted, but the commit is wrong about
 its own contents. It was left un-split deliberately: `git rebase -i` is
@@ -2975,7 +2975,7 @@ here and in the following commit's message instead — `git status` before
 ## 28. E6 — the spend, and the tax that proves the unit
 
 **2026-08-21, run `20260821T134216`, loopback, build 38797, server at
-`9916de8`.** Closes the first two items §27.5 left open. Predictions registered
+`7dec7c9`.** Closes the first two items §27.5 left open. Predictions registered
 before the client launched (`e6-predictions.md`), including the numbers.
 
 ### 28.1 The rig, and why the default bar is the instrument
@@ -3103,7 +3103,7 @@ read as a defect of that metric rather than of the client.
 ## 29. E7 — the wipe, and a metric that lied
 
 **2026-08-21, run `20260821T135905`, loopback, build 38797, server at
-`fa601a0`.** The last screen-side item on this channel. Predictions in
+`4c004d7`.** The last screen-side item on this channel. Predictions in
 `e7-predictions.md`, registered before launch.
 
 The design is the whole point: charge every pool, break off with `attack:0`,
@@ -3180,7 +3180,7 @@ have now had their headline numbers moved by a threshold choice — §27.4's
 ## 30. E8 — the outpost gate, and the overlay that is torn down
 
 **2026-08-21, runs `20260821T140826` (outpost) and `20260821T141108`
-(explorable), loopback, build 38797, server at `12ef6b1`.** The last
+(explorable), loopback, build 38797, server at `4e9d374`.** The last
 screen-side item on this channel, and the only NEGATIVE in the series.
 Predictions in `e8-predictions.md`.
 
@@ -3254,7 +3254,7 @@ claiming.
 ## 31. E9 — the blink warning, and we were already producing it
 
 **2026-08-21, run `20260821T141806`, loopback, build 38797, server at
-`dc1bbc8`.** Raised by the owner from GWW's Adrenaline page — *"A visual
+`2f10ec5`.** Raised by the owner from GWW's Adrenaline page — *"A visual
 warning appears, with partially filled skills will begin blinking"* — a
 behaviour §§25–30 never tested and never mentioned. Predictions in
 `e9-predictions.md`.
@@ -3868,7 +3868,7 @@ until an episode shows it.*
 ## 32. E10 — the recharge gate, read from the residue
 
 **2026-08-21, run `20260821T190847`, loopback, build 38797, server at
-`26ea691`.** §26.11 item 1, the last loopback-testable item on this channel.
+`a622237`.** §26.11 item 1, the last loopback-testable item on this channel.
 Predictions in `e10-predictions.md`. **The run's designed readout failed and the
 run still answers**, which is the part worth reading.
 

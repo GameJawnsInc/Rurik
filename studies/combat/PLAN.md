@@ -1,6 +1,6 @@
 # Combat end-to-end: the gate map, and the plan it orders
 
-**2026-08-14.** Produced in worktree `combat-end-to-end-a2242b` at `b1590c6` (suite
+**2026-08-14.** Produced in worktree `combat-end-to-end-a2242b` at `786dd8b` (suite
 baseline that HEAD: 94 green / 0 red, 4,584 checks). Method: a ten-agent workflow —
 eight parallel readers (server combat core, skills substrate, cast lifecycle,
 attribute wire, live-capture s2c mining, c2s corpus mining, studies-wide gap sweep,
@@ -67,7 +67,7 @@ unrefined, and the map found five hard gates and ten fidelity gates it did not n
   `0x0091D8C0` divides the wire count by 3 (the `0xAAAAAAAB` idiom) and forwards
   base+0 / base+n*4 / base+n*8 through `0x0080EB40` into a per-index loop calling the
   attribute writer `0x00819220` (`ATTRIBUTES.md:135-139`). The code comment at
-  `authsrv.py:552-557` still frames triples-vs-flat as open — STALE since `e4fc9963`
+  `authsrv.py:552-557` still frames triples-vs-flat as open — STALE since `3a5b48d6`
   (2026-08-05). **Which position is id vs rank_base vs rank_bonus remains
   UNVERIFIED** — inherited from Headquarter, a single out-of-lineage source reading a
   different build (`studies/character/FINDINGS.md:704-731`).
@@ -211,7 +211,7 @@ question, not a wire-mirroring one. CONTESTED, unreconciled in-repo: whether the
 client gates USE_SKILL on energy at all — sender disassembly shows three bail
 conditions and no energy check (`studies/skillcast/FINDINGS.md:519-533`) vs
 `agents.py`'s comment that an empty pool refuses all eight skills (whose own commit
-message blames a missing weapon, `5048f6a`). A loopback drain-pool probe settles it —
+message blames a missing weapon, `2c83451`). A loopback drain-pool probe settles it —
 with a positive control (amendment C10).
 
 **F3. Armor / mitigation / weapon damage.** No armor property id in any channel
@@ -534,7 +534,7 @@ capture-first), projectile reconciliation (F9 — research, not build).
 | ~~`0x003A` triple positions~~ | **RESOLVED for slots 1–2, §8a**: slot 1 = `attrib` (id), slot 2 = `baseValue` (rank), both named by the client's own asserts | slot 3 remains NOT NAMED — moves in lockstep with `baseValue`; Headquarter's `rank_bonus` still UNVERIFIED | step 6 item 1, or a rendered check |
 | ~~Panel reads the array `0x00819220` writes?~~ | **RESOLVED YES, §8b** — same TLS singleton, same locator, chain ends in `AttribBtns.cpp` vtable code | residual: the panel control's runtime `agentId` is an ASSUMPTION static analysis cannot close | step 7's operator check |
 | Tooltip rank interpolation | **RESOLVED, §8c**: `max(0, round(lo + (hi−lo)·rank/15.0))`, literal 15.0, no upper clamp | the rounding TIE-BREAK (half-up vs half-even) is unresolved — ±1.0 adjust, not ±0.5 | a rendered check on a .5-landing pair (skill 316) |
-| Client energy gate on USE_SKILL | sender disassembly: no energy check (skillcast §7) | agents.py comment: empty pool refuses all eight (5048f6a; commit msg blames missing weapon) | Loopback drain-pool probe with positive control (C10) |
+| Client energy gate on USE_SKILL | sender disassembly: no energy check (skillcast §7) | agents.py comment: empty pool refuses all eight (2c83451; commit msg blames missing weapon) | Loopback drain-pool probe with positive control (C10) |
 | "One cast per skill per session" without E5/E6 | skillcast study's own synthesis | flagged UNVERIFIED by both capture readers | Step 3 repeat-press acceptance (C10) |
 | E6 scheduler: keyed to E5 + recharge? | one measured cycle says yes (+3 ms) | unmeasured on the other 13+ cycles | Step 0b |
 | `0x00E4` in the self-cast cycle: consumed or discarded? | live server sends it in every cycle | in-tree MEASURED: handler returns early on self | Step 0a + step 3's discriminating operator check (C1) |
@@ -629,18 +629,18 @@ different report.json shapes into the same tree, for any future cataloger.)
 | Step | Status |
 |---|---|
 | 0 | ✅ 2026-08-14, this section |
-| 1 | ✅ 2026-08-14, `07c22b0` — 0x0037 → [0,0], binding check proven red-then-green |
-| 2 | ✅ 2026-08-14, `cdefe83`…`e9f7b7d` (10 commits) — extraction, red-first guard contract on all seven `_fraction` functions, connection-thread catch, overkill clamp-to-kill (`_damage_fraction`), first two-thread test. `test_guards.py`, floor 35 |
-| 3 | ✅ **BOTH HALVES** — offline 2026-08-14, `f5f65b2`+`77b65d1` — emitter (1,333 client-table rows, build stamped from bytes), the four-opcode cycle on the observed template, THE QUEUE LAW (E4 at accept, cast begins when the caster frees — fits 4/4 Necro cycles ≤14 ms; the naive press+activation model is refuted by +0.64 s/+0.57 s residuals), overrides names 227–230, cross-thread cast-timer test (200 presses → exactly 200 of each phase). Attack-skill E5 timing rides the weapon — recorded as unmodeled divergence. GV 58 deliberately unsent (0 of 21,543 live). **Loopback acceptance ✅ 2026-08-15, §15** — both halves: the client accepts E4/E5/E3/E6 without asserting, a repeat press after E6 produces a full second cycle, recharge is per-skill with concurrent timers (four cycles, max error 36 ms), and the operator confirms **both slots swept with slot 6 clearly longer than slot 7** — the comparison that shows the client honours the message's DURATION rather than just flashing an icon. §7's blocker (a new ArenaNet build's fresh archive) is gone. Cast ANIMATION remains unmeasured and belongs to the unrun `cast_anim` probe, §15c. ~~BLOCKED — see §7~~ |
-| 4 | ✅ 2026-08-14, `0ddfbd0`+`9d97f45`+`a7971b1` — `+0x44..+0x68` decoded as u32 (duration0/15, skill_arguments bitfield, scale0/15, bonus_scale0/15; +0x50 stays NOT FOUND). Reproduces the 4-skill FINDINGS anecdote byte-exact and asserts its green-render rule. **C7's wiki third witness ran and agrees with all 14 endpoint values GWW lists**, plus costs and recharge — and checks the other direction too (no unlisted set may render green), which is what makes Rush's constant-25-with-bit-clear a real discriminator. Emitted to the content rows; **nothing consumes them until step 8**. `test_skilltable` floor 26→46 |
+| 1 | ✅ 2026-08-14, `d2f3bd2` — 0x0037 → [0,0], binding check proven red-then-green |
+| 2 | ✅ 2026-08-14, `82854b2`…`634bd9f` (10 commits) — extraction, red-first guard contract on all seven `_fraction` functions, connection-thread catch, overkill clamp-to-kill (`_damage_fraction`), first two-thread test. `test_guards.py`, floor 35 |
+| 3 | ✅ **BOTH HALVES** — offline 2026-08-14, `3ce485c`+`16668a4` — emitter (1,333 client-table rows, build stamped from bytes), the four-opcode cycle on the observed template, THE QUEUE LAW (E4 at accept, cast begins when the caster frees — fits 4/4 Necro cycles ≤14 ms; the naive press+activation model is refuted by +0.64 s/+0.57 s residuals), overrides names 227–230, cross-thread cast-timer test (200 presses → exactly 200 of each phase). Attack-skill E5 timing rides the weapon — recorded as unmodeled divergence. GV 58 deliberately unsent (0 of 21,543 live). **Loopback acceptance ✅ 2026-08-15, §15** — both halves: the client accepts E4/E5/E3/E6 without asserting, a repeat press after E6 produces a full second cycle, recharge is per-skill with concurrent timers (four cycles, max error 36 ms), and the operator confirms **both slots swept with slot 6 clearly longer than slot 7** — the comparison that shows the client honours the message's DURATION rather than just flashing an icon. §7's blocker (a new ArenaNet build's fresh archive) is gone. Cast ANIMATION remains unmeasured and belongs to the unrun `cast_anim` probe, §15c. ~~BLOCKED — see §7~~ |
+| 4 | ✅ 2026-08-14, `44f9e10`+`2a1476b`+`fc90b18` — `+0x44..+0x68` decoded as u32 (duration0/15, skill_arguments bitfield, scale0/15, bonus_scale0/15; +0x50 stays NOT FOUND). Reproduces the 4-skill FINDINGS anecdote byte-exact and asserts its green-render rule. **C7's wiki third witness ran and agrees with all 14 endpoint values GWW lists**, plus costs and recharge — and checks the other direction too (no unlisted set may render green), which is what makes Rush's constant-25-with-bit-clear a real discriminator. Emitted to the content rows; **nothing consumes them until step 8**. `test_skilltable` floor 26→46 |
 | 5 | 🔶 **research half ✅ 2026-08-14, §8** — the triple's slots 1–2 named by ArenaNet's own asserts (`attrib`, `baseValue`), the panel's read path traced to `AttribBtns.cpp` (C8a closed), the tooltip formula measured (C6 closed). **Still to do in code**: adopt the gapped numbering, replace `ATTRIBUTE_COUNT = 42`, retire the stale `authsrv.py:552-557` comment, and pin the handler constants in a test |
-| 5 (cont.) | **code half ✅ 2026-08-15, `043e395`** — `attribtable.py` reads `s_attrib` and DISSOLVES the numbering contest (§10): index space contiguous 0..50, 42 owned by playable professions, 26/27/28 are profession 11's. 51 content rows emitted. Still open in code: `ATTRIBUTE_COUNT = 42` is a count of the wrong thing for a wire payload and step 7 replaces it |
+| 5 (cont.) | **code half ✅ 2026-08-15, `00a5a00`** — `attribtable.py` reads `s_attrib` and DISSOLVES the numbering contest (§10): index space contiguous 0..50, 42 owned by playable professions, 26/27/28 are profession 11's. 51 content rows emitted. Still open in code: `ATTRIBUTE_COUNT = 42` is a count of the wrong thing for a wire payload and step 7 replaces it |
 | 6 | ⬜ — the targeted live capture. Operator-driven; §3's shopping list |
-| 7 | ✅ **BOTH HALVES 2026-08-15** — wire `1339bfe` (§11), layout fixed and panel confirmed (§14g). **L6's attributability criterion is MET**: `--probe attributes` ran caged, the panel followed all three steps and the ranks matched the names, which also closes §8b's runtime-agent-binding gap by observation. Original wire note follows. 🔶→✅ (§11) — five real triples, bounds refused not clamped, payload bound to its content row and proven red. **L6's panel criterion is UNVERIFIED and needs one caged loopback run**: `--probe attributes`, whose step 3 reverses the ranks as the discriminator |
+| 7 | ✅ **BOTH HALVES 2026-08-15** — wire `7eda444` (§11), layout fixed and panel confirmed (§14g). **L6's attributability criterion is MET**: `--probe attributes` ran caged, the panel followed all three steps and the ranks matched the names, which also closes §8b's runtime-agent-binding gap by observation. Original wire note follows. 🔶→✅ (§11) — five real triples, bounds refused not clamped, payload bound to its content row and proven red. **L6's panel criterion is UNVERIFIED and needs one caged loopback run**: `--probe attributes`, whose step 3 reverses the ranks as the discriminator |
 | 7 (fix) | ⚠️→✅ **2026-08-15** (§14) — the payload shipped INTERLEAVED and `0x003A` is column-major, so every session since died on `CharData.cpp:202`. `attribute_triples` → `attribute_columns`; `arrsize(s_attribPoints)` read at last (13, correcting `consttable.py`'s 14) by the new `attribpoints.py`. Diagnosed statically from the crash dump's own stack — no client run, no int3. **Cure VERIFIED §14g**: caged run, 1,716 messages, t=78.2 s, no assert |
-| 8 | ✅ **2026-08-15, `e4bb222`** (§12) — `ENEMY_SKILL_FRACTION` retired; damage is the client's endpoints at the player's own attribute rank. **The step's premise was refuted mid-flight**: scale is not damage, 3 of the enemy's 4 skills are a heal/hex/enchantment, so meaning is GWW-sourced per skill and unmodelled skills return None. `test_skilldamage` 25 checks, sabotage-proven |
-| 9 | ✅ **2026-08-15, `34ee86b`** (§13) — the kill window is three messages in ArenaNet's order, reward byte-identical. The richer-looking `0x00EE` PAIR is refused as a non-kill mechanism, and two of this arc's own counts were corrected (5 deaths not 4; `0x0026`=8 four times not once). `test_killwindow` takes the corpus as its oracle, 21 checks |
-| 10 | ✅ **2026-08-15, `2610aa3`+merge** — `PLAN.md` §3 (R4a, R4b) and §8 updated dated and stamped; the profession ladder's L6 row annotated so the two ledgers agree. **Landing suite: 100 green / 1 red of 101, 4,947 checks.** The red is `test_contentids`, and it is ENVIRONMENTAL and attributed: `vault/run/2026-08-13_64fae3b1369b/Gw.dat` is held open by **another session's client, PID 16340, running from that directory since 11:47** — the archive is present (4.2 GB) and unreadable, which is the same "the client holds its own archive open" note main's own §8 carries. `test_contentids` passed at 23 checks earlier the same day with the archive free, and nothing in this arc touches archives, map content or `contentids.py`. Not killed, per the parallel-sessions rule |
+| 8 | ✅ **2026-08-15, `5fee879`** (§12) — `ENEMY_SKILL_FRACTION` retired; damage is the client's endpoints at the player's own attribute rank. **The step's premise was refuted mid-flight**: scale is not damage, 3 of the enemy's 4 skills are a heal/hex/enchantment, so meaning is GWW-sourced per skill and unmodelled skills return None. `test_skilldamage` 25 checks, sabotage-proven |
+| 9 | ✅ **2026-08-15, `bbe7f6d`** (§13) — the kill window is three messages in ArenaNet's order, reward byte-identical. The richer-looking `0x00EE` PAIR is refused as a non-kill mechanism, and two of this arc's own counts were corrected (5 deaths not 4; `0x0026`=8 four times not once). `test_killwindow` takes the corpus as its oracle, 21 checks |
+| 10 | ✅ **2026-08-15, `46fea4a`+merge** — `PLAN.md` §3 (R4a, R4b) and §8 updated dated and stamped; the profession ladder's L6 row annotated so the two ledgers agree. **Landing suite: 100 green / 1 red of 101, 4,947 checks.** The red is `test_contentids`, and it is ENVIRONMENTAL and attributed: `vault/run/2026-08-13_64fae3b1369b/Gw.dat` is held open by **another session's client, PID 16340, running from that directory since 11:47** — the archive is present (4.2 GB) and unreadable, which is the same "the client holds its own archive open" note main's own §8 carries. `test_contentids` passed at 23 checks earlier the same day with the archive free, and nothing in this arc touches archives, map content or `contentids.py`. Not killed, per the parallel-sessions rule |
 
 ## §19. The player's windup: the anomaly was skill damage, and §17b was contaminated (2026-08-16)
 
@@ -906,7 +906,7 @@ load-bearing.
 3. **`GV_ATTACK_STOPPED` is defined and never sent** (`agents.py:599`, zero uses
    in `authsrv.py`), so we cannot express a cancel even where we detect one.
 
-> **ITEMS 1 AND 3 CLOSED 2026-08-22** (`002f20f`, `2c8d3ba`, `3dcf9d5`;
+> **ITEMS 1 AND 3 CLOSED 2026-08-22** (`5f6e030`, `baa088a`, `5cb694a`;
 > `studies/castmech/FINDINGS.md` §3b/§7). The player's swing is two-phase
 > with the agents' own windup arithmetic; GV_ATTACK_STOPPED goes out in
 > retail's measured slots (the press burst right after E4 — 2/2 live, with
@@ -1389,14 +1389,14 @@ which is a stronger control than a panel that was never written.
 - ~~**The fix is verified statically only.**~~ **CLOSED by the same run.**
   The diagnosis was OBSERVED before it; the cure is OBSERVED now.
 - ~~**`crashwatch.ps1` is untracked**, committed by nobody.~~ **CLOSED the
-  same day**: the terrain arc landed it as `d0899cf`, "Crash detection,
+  same day**: the terrain arc landed it as `b913b7a`, "Crash detection,
   because liveness polling could never have caught it". It is the instrument
   that caught this crash after liveness polling missed it twice, and the
   verification run above should be watched with it rather than `Get-Process`.
 - **Column 3 is still RECONSTRUCTION**, exactly as §8a left it. Sending the
   rank there reproduces an invariant the client maintains; no assert names it.
 
-## §13. Step 9: the kill window, and the template that looked richer (2026-08-15, `34ee86b`)
+## §13. Step 9: the kill window, and the template that looked richer (2026-08-15, `bbe7f6d`)
 
 A kill sent one message — `0x00F1` with the death bit. It now sends the three
 the real service sends, same tick, same agent, in ArenaNet's order:
@@ -1445,7 +1445,7 @@ is observed but unsent: **`0x009F [3, agent, 0]`** — `GV_ATTACK_STOPPED` on th
 dying agent, on 3 of the 4 rewarded kills. It is a separate mechanism (an agent
 ceasing its attack) and is the obvious next candidate.
 
-## §12. Step 8: the premise was wrong, and the data said so (2026-08-15, `e4bb222`)
+## §12. Step 8: the premise was wrong, and the data said so (2026-08-15, `5fee879`)
 
 `ENEMY_SKILL_FRACTION = 0.25` is gone. Damage is now the skill's own scale
 endpoints interpolated by the client's own formula at a rank.
@@ -1502,7 +1502,7 @@ that is now a *content* decision (pick a damage bar), not a code one.
 lands on a .5 at any rank 0–15. Damage also still lands AT PRESS rather than at
 cast end; magnitudes moved, timing did not.
 
-## §11. Step 7 landed: the wire half of L6 (2026-08-15, `1339bfe`)
+## §11. Step 7 landed: the wire half of L6 (2026-08-15, `7eda444`)
 
 > **PARTLY SUPERSEDED by §14, same day.** Everything below about the ids, the
 > bounds, the refusals and the content binding stands. The **ORDERING does
@@ -1764,7 +1764,7 @@ names the energy-cost byte's lookup table — the `11→15, 12→25` encoding in
 > arrived mid-session and the harness selected its fresh archive. What
 > unblocked it is the first option this section lists — name the build and the
 > archive explicitly (`--exe vault/run/2026-08-13_64fae3b1369b/Gw.exe`,
-> `RURIK_DAT=vault/dat_study_38833/Gw.dat`) — plus `391e8ca`, which made
+> `RURIK_DAT=vault/dat_study_38833/Gw.dat`) — plus `9e65bfc`, which made
 > `session.py` pick by BUILD and NAME instead of by newest. The command below
 > is what ran, with `--map 90 --explorable` added and a longer hold.
 

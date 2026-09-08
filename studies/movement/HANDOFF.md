@@ -1,6 +1,6 @@
 # Movement — the arc handoff, and the entry point for all of it
 
-**Rewritten 2026-08-30 at `201324c`, tree clean, branch `main`.** The header this
+**Rewritten 2026-08-30 at `22bfe86`, tree clean, branch `main`.** The header this
 replaces was written 2026-08-19 and last touched 2026-08-20; ten days and roughly
 forty commits of movement work landed after it, on a channel it does not mention.
 **Everything from §0 down is that older record**, kept because its mechanism decode is
@@ -43,7 +43,7 @@ far to trust any number here: [studies/method/FINDINGS.md](../method/FINDINGS.md
 >    support rather than confirming it.
 > 3. **The replayed fire count REPRODUCES `FINDINGS` §1z-e.2 — it is a second
 >    derivation, not a discovery.** Live fires remain **0** (the repair shipped
->    2026-08-29 11:22:45, `dcf9484`, after the sessions in question). Replaying the
+>    2026-08-29 11:22:45, `a481a88`, after the sessions in question). Replaying the
 >    trigger gives **5 would-fire across 3 captures** — the same three sessions,
 >    times and claimed planes §1z-e.2 published, from an instrument written without
 >    knowledge of it. ⚠ **A first draft of §1z-n called these false fires. That was
@@ -103,7 +103,7 @@ far to trust any number here: [studies/method/FINDINGS.md](../method/FINDINGS.md
 >
 > **1. There is no single entry point, there is a CYCLE — and this file is now the
 > top of it.** `HANDOFF-WARP.md` sends you to FINDINGS §1p.10; `HANDOFF-PLANE.md`
-> sends you to `PLAN.md` §8 and §3; §3's R3 row (unedited since `2d784d9`,
+> sends you to `PLAN.md` §8 and §3; §3's R3 row (unedited since `d8a8251`,
 > 2026-08-20) sends you *here*; and this file, until today, said nothing about the
 > plane channel at all — it does not contain the string "movecode". Two more files
 > each declare themselves an entry point (`studies/movecode/PLAN.md`,
@@ -163,9 +163,9 @@ far to trust any number here: [studies/method/FINDINGS.md](../method/FINDINGS.md
 
 | Document | What it is for | Currency |
 |---|---|---|
-| **this file** | the arc's entry point; where each thread stands and what to do next | current at `201324c` |
+| **this file** | the arc's entry point; where each thread stands and what to do next | current at `22bfe86` |
 | `studies/movecode/FINDINGS.md` | **the record.** Newest sections supersede everything above them | current; **§1z-s** (the pre-emit rule DERIVED — three zones, three clauses; 217/251 corpus warps retrodictively pre-empted, 10/10 current regime; shadow telemetry shipped ON) is the newest, on §1z-q/§1z-r (decode + mirror). ⚠ Numbering skips `1z-p` on purpose — that heading is `RUN-R8.md`'s staleness test and R8 is still not run |
-| `studies/movecode/HANDOFF-PLANE.md` | deep-dive on the plane channel and the lock | **stops at §1z-i**; misses `1ce0171`, `30055e0`, `d710a67`, `131c84a`, and its own "written at `dcf9484`" stamp is wrong (last edited `2882627`) |
+| `studies/movecode/HANDOFF-PLANE.md` | deep-dive on the plane channel and the lock | **stops at §1z-i**; misses `8bc8609`, `6c9b699`, `1381e3a`, `25b829e`, and its own "written at `a481a88`" stamp is wrong (last edited `40e3d27`) |
 | `studies/movecode/HANDOFF-WARP.md` | deep-dive on the warp hunt and the candidate graveyard | lists `--router` REFUTED in two tables; §1y/§1z/§2a reversed that and every runsheet since passes it |
 | `studies/movement/CANCELWALK.md`, `REALFIX.md`, `ROUTER.md` | the shipped policy arms and their runs | see §C; several carry self-status headers that are wrong (§G) |
 | `studies/movement/PROBE-GATEFIRE.md` | the gate-fire operator procedure | §6 is pinned by `test_probedoc.py`; its prose is not — its "n = 0 captures" claim was corrected 2026-08-29 |
@@ -535,7 +535,7 @@ better-designed when it happens, by naming which geometry to press against.
    and not as a blanket invalidation**: r4a's off-mesh depths moved materially (median
    239 → 228.2 u), while §1z-g.1's 20.2 u moved 0.5 %. Re-derive the specific figure you
    are about to lean on; do not assume it is either fine or void.
-8. **`--map auto` picked the WRONG map before `1ce0171`** (an area term ranked another
+8. **`--map auto` picked the WRONG map before `8bc8609`** (an area term ranked another
    map above 280 on a map-280 capture, reporting OFF-MESH 3 instead of 63). Most
    published numbers do not record which mesh they were scored against.
 

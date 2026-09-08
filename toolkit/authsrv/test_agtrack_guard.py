@@ -639,7 +639,7 @@ def main():
     # the waiver actually licensed is {walk-start -> STOP}, 1z-bs's KEPT
     # branch, and it is the one the deletion removed.
     #
-    # VERIFIED against agtrack_guard.py as of 30159d9 (1z-bs, the last commit
+    # VERIFIED against agtrack_guard.py as of 5bdd933 (1z-bs, the last commit
     # carrying the waiver): this exact shape gives ("due", "gate2-offmesh")
     # with stationary() True there, against ("blocked", ...) here.
     g2c = ag.AgTrackGuard(mesh=_g2)

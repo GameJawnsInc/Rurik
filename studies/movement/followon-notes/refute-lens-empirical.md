@@ -70,7 +70,7 @@ with `opcode: 44`**.
 | the shipped sender's f-string | `authsrv.py:4148-4152` — `"RESYNC 0x002C at ({payload[0]:.0f},{payload[1]:.0f}) plane {plane} -- the CLIENT's own report, {age * 1000:.0f} ms old, closing a modelled {sep:.0f} u between the authoritative copy and it"` |
 | the capture's send label | `"RESYNC 0x002C at (10009,8045) plane 0 -- the CLIENT's own report, 0 ms old, closing a modelled 186 u between the authoritative copy and it"` — same string, same field order, same rounding |
 | the record shape | the capture's rows carry exactly `_maybe_resync`'s `rec.event("resync", fired, reason, age, separation, payload, plane, sync, ours)` (`authsrv.py:4130-4140`), reason vocabulary included (`in-agreement`, `rate-limited`, `resync`) |
-| the date | `--resync` landed in commit `3e40bde` *"The 0x002C resync, behind --resync, OFF by default"*, **2026-08-20 17:47:42 -0400**; the capture's own `wall` is **2026-08-20T22:21:29Z = 18:21 local**, **34 minutes later** |
+| the date | `--resync` landed in commit `b9b13c9` *"The 0x002C resync, behind --resync, OFF by default"*, **2026-08-20 17:47:42 -0400**; the capture's own `wall` is **2026-08-20T22:21:29Z = 18:21 local**, **34 minutes later** |
 
 This is not a lookalike. It is the flag, driven the same evening it was built.
 
@@ -96,7 +96,7 @@ positive result on the owner's own machine.
 
 **But `GRANTS 0`.** Opcode census on that file: `0x0029` = **0**, `0x002A` = 0, `0x002C` = 18,
 `0x0025` = 7. The build in that run *"stopped broadcasting position at all, except an impossible
-one"* (commit `259508e`). **With no grant, no far `+0x48` was ever armed, so the run cannot
+one"* (commit `b029905`). **With no grant, no far `+0x48` was ever armed, so the run cannot
 test the disarm and cannot test F35.** And no `movetap` tape exists for 2026-08-20, so no
 `+0x48` observation exists for any `--resync` fire, ever.
 
@@ -363,7 +363,7 @@ statement of the mechanism the corpus supports is:
   send at `t = 36.687` — a bit-exact coincidence, not a clock estimate.
 * **§1 falls** if `authsrv-20260820T182119-c1.jsonl` was produced by some *other* build that
   happened to print the identical f-string and the identical record schema. **I closed this
-  door — OBSERVED:** `git show 3e40bde:toolkit/authsrv/authsrv.py | grep -n` returns the sender
+  door — OBSERVED:** `git show b9b13c9:toolkit/authsrv/authsrv.py | grep -n` returns the sender
   at that commit's `:2722-2723` (`f"RESYNC 0x002C at (…) plane {plane} " f"-- the CLIENT's own
   report, {age * 1000:.0f} ms old, closing a "`) and the record at `:2709`
   (`rec.event("resync", fired=fire, reason=reason,`). The string and the schema both existed

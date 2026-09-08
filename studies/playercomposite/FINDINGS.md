@@ -352,7 +352,7 @@ a register copy or a biased pointer if it is read at all.
 ## 8. The rung LANDED (2026-08-22)
 
 **P1 was already done by the archive-write session** — `toolkit/mapdata/cpsdata.py`
-(the `CompositeTable`/`Record` decoder, `test_cpsdata.py`), landed `28cab35`.
+(the `CompositeTable`/`Record` decoder, `test_cpsdata.py`), landed `a9042cc`.
 This arc built the two rungs on top of it, plus the one-bit answer §7 above:
 
 **P2 — `toolkit/clientscan/composite.py`.** The client's static tables, read
@@ -652,7 +652,7 @@ have been.** `session.py`'s content preflight refused both attempts:
 So no 38797 loopback client currently has an Ascalon City that matches the
 server's archive. **This is not a defect in the probe** — the preflight is
 doing exactly its job, and the same wall stopped another session's
-cancel-family dry-run the same morning (`main` `1c3ab69`). Unblocking it is an
+cancel-family dry-run the same morning (`main` `1b4a96f`). Unblocking it is an
 archive-state decision (install the replacement into a pristine 38797 copy, or
 point the server at the client's newer row), and it belongs to whoever owns
 the vault's archive state rather than to this arc. The probe is one command
@@ -681,7 +681,7 @@ findings to 1. The survivor (map 143, whose client file genuinely differs) was
 handled the designed way rather than by editing more archive:
 `session.py --game-args='--map 148'` pins the run, and `served_maps()` narrows
 the preflight to the map actually loaded — the same mechanism a peer session
-added that morning (`main` `1c3ab69`).
+added that morning (`main` `1b4a96f`).
 
 **The run**: build 38797, loopback, `--keep-open --hold 110`, verdict **PASS
 (target: map)**, capture `vault/captures/harness/20260823T123900`. Trap armed
@@ -1003,7 +1003,7 @@ byte is CARRIED THROUGH, and the flags are OR-merged. No visual, as before.
 §9.9 and §9.10 both closed on the same sentence: *whether the override replaces
 the armour row or merges with it needs a site inside `0x0082EFAA` rather than
 at the record fetch.* This is that site. Two loopback runs, both costumes worn,
-predictions committed at `f522aaf` **before** either ran.
+predictions committed at `8bceeb4` **before** either ran.
 
 ### The function, and three arrays that close to the byte
 
@@ -1229,7 +1229,7 @@ mis-render thirty seconds into a run.
 
 Run: build 38797, loopback, `--map 148 --costume --costume-head
 --armour-flags-clear 0x20000000`, capture `20260823T180959`, verdict **PASS**,
-zero asserts. We declared `0x00001006`. Predictions, registered at `3320f6d`
+zero asserts. We declared `0x00001006`. Predictions, registered at `ae84e29`
 before it ran: OR → the row reads `0x20001006`; copy → `0x00001006`;
 assignment → `0x20000006`.
 
@@ -1353,7 +1353,7 @@ unlisted return address**. The vtable is a single value, `0xA96B5C`.
 The two instances have now appeared in exactly **one of five runs**, so the
 problem is reproducing them before naming them. Four server logs named one
 difference and only one: the run that produced them is the only run whose
-character MOVED. Registered at `abb8439` before the test:
+character MOVED. Registered at `35d1f63` before the test:
 
 | run | `MOVE_SET_HEADING` | `AGENT_MOVE_DIRECTION` | `ZERO LEAD` | extra instances |
 |---|---|---|---|---|
@@ -1393,7 +1393,7 @@ arms — `0x006E` with nine zeros, which wears nothing — still produced record
 fetches, **five indices at +18.64 and one at +29.67**. It said the answer
 needed a site inside the cache-build path rather than the resolver. Run
 `20260823T185745`, build 38797, PASS, zero asserts, predictions R1–R4
-committed at `3223e42` before it ran.
+committed at `c6ee5b7` before it ran.
 
 ### The clear path, read first
 
@@ -1498,7 +1498,7 @@ rather than explains.
 piece 93 also occupies. The other kind was untested: record **2817** is type
 **19 → component 1**, standalone in no five-record run, and **no armour slot
 holds component 1** (our five cover components 3, 5, 2, 6 and 4). T1–T4
-committed at `b10c4c3` before the run; capture `20260823T192207`, build 38797,
+committed at `87f785b` before the run; capture `20260823T192207`, build 38797,
 PASS, zero asserts.
 
 ### The row, and why it isolates the variable
@@ -1700,7 +1700,7 @@ recorded so that arc can weigh it.
 ## 9.17 Per-clear attribution: one fetch per clear, record 91 explained, §9.11's ⚠ CLOSED — and a writer this arc had not found (2026-08-23)
 
 Two `armor_slots` runs (`20260823T210213`, `20260823T210750`), W1–W3 and
-X1–X3 registered at `8dfad75` and `5a98afc` before them. Four results, two of
+X1–X3 registered at `227a38c` and `8bed731` before them. Four results, two of
 them corrections to my own work and one of them a genuine surprise.
 
 ### W1–W3: one fetch per clear, and it is the slot's own record

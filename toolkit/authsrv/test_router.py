@@ -548,7 +548,7 @@ def main():
           bool(doc) and "--d1-lead" not in doc[0],
           f"summary line is {doc[0]!r} -- it read 'for one --d1-lead send' "
           f"until 2026-08-30, which was wrong the day it was written "
-          f"(8cbcbc9 created the helper, 995a515 added four router sites the "
+          f"(6651c91 created the helper, d3a5936 added four router sites the "
           f"same day) and is what both mis-readings started from")
     check("and the docstring states the rule that replaces it",
           "THIS DOCSTRING SAID" in (authsrv.a2_matched_field4.__doc__ or "")

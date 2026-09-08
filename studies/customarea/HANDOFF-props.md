@@ -26,7 +26,7 @@
 > corrected in place on the way (§45).
 
 Written at the end of the session that read `0x10000004`, for whoever picks it
-up. **Everything below is committed and merged to `main`** (`52c624f`, merged).
+up. **Everything below is committed and merged to `main`** (`a459718`, merged).
 Suite green: **61 of 61 in 934 s**.
 
 ## Where things stand

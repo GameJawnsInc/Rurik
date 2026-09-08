@@ -4225,7 +4225,7 @@ def _forget_client_position(state, why):
 
     THE TRIPLE GOES TOGETHER, exactly as `_take_client_position` writes it:
     POSITION AND PLANE ARE ONE FACT. The write this replaced (ANIMREF-RE 39,
-    807ab89) set the position and the instant but NOT the plane, so the
+    2809d98) set the position and the instant but NOT the plane, so the
     cast-stop reckon -- which requires all three and type-checks the plane --
     would have paired a modelled point with the plane of a report taken
     somewhere else. That is the split `_take_client_position`'s own comment
@@ -6919,8 +6919,8 @@ def a2_matched_field4(plane, carried):
     verification run).
 
     ⚠ **THIS DOCSTRING SAID "for one --d1-lead send" UNTIL 2026-08-30 AND THAT
-    WAS WRONG THE DAY IT WAS WRITTEN.** `8cbcbc9` created the function for
-    --d1-lead; `995a515` (ROUTER-B2, SAME DAY) added four more call sites and
+    WAS WRONG THE DAY IT WAS WRITTEN.** `6651c91` created the function for
+    --d1-lead; `d3a5936` (ROUTER-B2, SAME DAY) added four more call sites and
     never revised the contract line. A reader who greps `D1_LEAD` then finds
     three router sites calling this unconditionally concludes they leak, and
     that conclusion is WRONG -- it was reached twice, by two separate analyses,
@@ -11160,7 +11160,7 @@ CLICK_LATCH_LEG_ETA = True
 # two shipped together, so neither is individually convicted. This one is the
 # arm that ARMS the client's resume poll (the gate-clear at 0x0081C090), which
 # is exactly the mechanism that could move the body with no c2s report and let
-# the active re-pin (2f00ea5) yank it -- the leading candidate for "warping"
+# the active re-pin (d974fb9) yank it -- the leading candidate for "warping"
 # and unmeasured at ship time. --e3-release turns it back on ALONE, which is
 # the A/B this needs.
 ANIMREF_E3_RELEASE = False    # True (--e3-release): free the hold at E3, see ^
@@ -12398,7 +12398,7 @@ def _press_supersedes(send, state, conn_id, target_id, rec=None):
     # A 0x002C is a PLACEMENT -- both copies land on its point -- so the belief
     # the approach's own snap guard reads (client_pos, the last report) must
     # NOT be left at the leg's start, where it out-votes the re-pin and sends
-    # the body back there. The first build of this fix (807ab89) got that by
+    # the body back there. The first build of this fix (2809d98) got that by
     # writing the MODEL into client_pos. The model is our integrator -- a lerp
     # along the leg record, whose own arming function names three error terms
     # (bent paths, a press truncating a bent path to its segment, a click

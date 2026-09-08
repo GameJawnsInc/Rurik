@@ -1,6 +1,6 @@
 # RUN-1zBI — the lead under the shipped guard: does the chain's first link still fire?
 
-**Registered before launching**, in [FINDINGS.md](FINDINGS.md) §1z-bi.6 (committed `e32a59b`,
+**Registered before launching**, in [FINDINGS.md](FINDINGS.md) §1z-bi.6 (committed `dff41be`,
 2026-09-05) and repeated here. `MOVECODE-1z-bj` scores it. **One run**, agent-driven, hands
 off, the owner away from the keyboard by their own word.
 

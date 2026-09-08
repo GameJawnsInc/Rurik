@@ -1,6 +1,6 @@
 # RUN-1zBK — the lead under the shipped guard, follower removed
 
-**Registered in [FINDINGS.md](FINDINGS.md) §1z-bj.5** (committed `5f6816b`, 2026-09-05): the
+**Registered in [FINDINGS.md](FINDINGS.md) §1z-bj.5** (committed `2a95145`, 2026-09-05): the
 `--no-enemy` arm of RUN-1zBI, to separate the short seam-clipped lead from the follower's
 avoidance disc. `MOVECODE-1z-bk` scores it. One run, agent-driven, hands off, owner away.
 

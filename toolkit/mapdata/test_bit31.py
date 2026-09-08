@@ -700,7 +700,7 @@ def section_vault():
     # registration style outright, so every id clears for a reason that has
     # nothing to do with our writes -- and what is worth asserting there is
     # that the disappearance is TOTAL and CLEAN rather than a decay, which is
-    # the claim 1ac7aee made from the four-archive table and nothing has
+    # the claim 818c622 made from the four-archive table and nothing has
     # checked from the bytes since.
     if n_study == STUDY_BIT31_38797:
         # THE FLOOR RISES WITH THE SUBJECT: a generation that still registers

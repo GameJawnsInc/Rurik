@@ -114,10 +114,10 @@ COPY = "2026-07-29_221c13772c7a-c2"
 # donor (row 7982, constants row 46196), same 5 trees at seed 1536,1536, the
 # repo checked out at two commits:
 #
-#   6b3d31d and every commit before it ... 32x32 -> 1,316 B
-#   b93ab1d and every commit after it .... 32x32 -> 1,312 B
+#   999b9a9 and every commit before it ... 32x32 -> 1,316 B
+#   53c3911 and every commit after it .... 32x32 -> 1,312 B
 #
-# b93ab1d is WORLDMAPS-W24, and the four bytes are a BUG FIX in `deploy.py`'s
+# 53c3911 is WORLDMAPS-W24, and the four bytes are a BUG FIX in `deploy.py`'s
 # tree scatter. Grid row 0 renders at world maxY, so the prop's world y must be
 # `(dim - 1 - gy) * 96 + 48`; it used to be `gy * 96 + 48` while z was sampled
 # from the authored cell, which stood every tree on terrain from a DIFFERENT

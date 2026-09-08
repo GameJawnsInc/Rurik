@@ -1,6 +1,6 @@
 # RUN-1zCG — the owner's next stairs session under the lead's two new doors
 
-**Registered 2026-09-07, before any session.** `main` at `43ef732` plus MOVECODE-1z-cg
+**Registered 2026-09-07, before any session.** `main` at `8ffee6d` plus MOVECODE-1z-cg
 (`A2_LEAD_DISC_CLEAR`, `A2_LEAD_W0_ORIGIN`; `--no-lead-disc-clear`, `--no-lead-w0-origin`).
 Hand-driven, the owner's own route: the stairs with the Hatcher chasing, pressing into the
 walls on the way up, the hole above the stairs walked round (not skipped this time — the

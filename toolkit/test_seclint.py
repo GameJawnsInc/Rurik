@@ -163,7 +163,7 @@ def main():
     hits = scan(broken)
     LEDGER.ok(("32", 2, 2) in hits,
               "restore its old number and the collision is CAUGHT",
-              "this is `## 32.` twice at d9f6809 -- the silent-extend probe and E10")
+              "this is `## 32.` twice at 78baede -- the silent-extend probe and E10")
     LEDGER.ok(len(hits) == 1,
               "and that is the ONLY thing it reports about the file",
               "the §1-§8 pair in the same document stays green, which is the whole "

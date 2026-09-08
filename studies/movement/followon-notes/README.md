@@ -1,7 +1,7 @@
 # The REALFIX follow-on recon — what the 2026-08-25 desk session settled
 
 **Branch `claude/movement-realfix-followon-a1`, worktree
-`.claude/worktrees/movement-realfix-followon-a1`, off `main` at `d5da5e8`.**
+`.claude/worktrees/movement-realfix-followon-a1`, off `main` at `88e44e5`.**
 
 Written against [CANCELWALK.md](../CANCELWALK.md) §0's *"Session handoff for the
 follow-on gaps"*. **The CANCELWALK arc stays CLOSED — nothing here reopens it.**
@@ -165,7 +165,7 @@ plainly, because the corollaries were mine:
 
 **`--resync` has been RUN.** `authsrv-20260820T182119-c1.jsonl` holds **52
 resync verdict rows, 18 fired, 18 `0x002C` sends** (I verified this count
-myself, independently of the lanes). Commit `3e40bde` lands the sender 34 min
+myself, independently of the lanes). Commit `b9b13c9` lands the sender 34 min
 before the capture's wall clock.
 
 **But it is not a test of the disarm**: that run sent **zero `0x0029`**

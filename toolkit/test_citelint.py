@@ -59,7 +59,7 @@ ROOT = os.path.dirname(HERE)
 PILOT = "studies/movement/PROBE-GATEFIRE.md"
 
 # MEASURED from a real green run on 2026-08-30 in the worktree
-# `.claude/worktrees/keen-pare-c3af01` at HEAD 201324c: **50 checks**, read off
+# `.claude/worktrees/keen-pare-c3af01` at HEAD 22bfe86: **50 checks**, read off
 # `python toolkit/test_citelint.py` and not counted in anyone's head. Every section
 # runs off files in git -- no vault, no socket, no client -- so there is no
 # bare-machine subset, no optional section and no declared skip, and the floor is the

@@ -1160,7 +1160,7 @@ def main():
           "exactly one line in the whole file writes state['client_pos']",
           f"{len(writers)} -- two writers is two policies, and the second one "
           f"is where an integrator's opinion gets in. This has gone red once "
-          f"for real: ANIMREF-RE 39 (807ab89) added a write in "
+          f"for real: ANIMREF-RE 39 (2809d98) added a write in "
           f"_press_supersedes carrying `_click_leg_start`'s dead-reckoned "
           f"point, which is the server's integrator by construction -- and "
           f"it wrote client_pos and client_pos_at but NOT client_plane, "

@@ -39,7 +39,7 @@ Convention: [studies/idents/CONVENTION.md](../idents/CONVENTION.md).
 `--resync` disarm run was scored: no default flips, no incremental ship rulings —
 movement gets fixed to retail accuracy, and this campaign is the ladder. Grounded by a
 four-lane recon (refutation graveyard / retail contract / defect ledger / client
-constraints) over this tree at `92a3c93`; every claim below carries its lane's label.
+constraints) over this tree at `5e5ff50`; every claim below carries its lane's label.
 
 ### 0.1 The diagnosis — one debt, four expressions, and scaffolding all the way down
 
@@ -598,7 +598,7 @@ one press of the lever run's nine.
 
 ### 0.9 REALFIX-A2 — `--d1-lead`, the bundle: D1 lead + speed truth + plane truth + retail stop-acks. Designed and registered 2026-08-26, before the build.
 
-**Grounding:** a two-lane recon over this tree at `c09a27d` — a 21-stamp live-corpus
+**Grounding:** a two-lane recon over this tree at `46a6ee1` — a 21-stamp live-corpus
 census (lane R1, scripts in the session scratchpad; every number live-origin only,
 `toolkit/origin.py` verified, 0 pooled) and a 25-claim tree constraint sheet (lane R2).
 The new corpus facts A2 is built on, all OBSERVED:
@@ -1777,7 +1777,7 @@ Enumerated expectation, ~44: fixtures + origin refusal (2) · C0 radius derivati
 **Offline first, and the offline pass answers a smaller question than it was drafted to answer.**
 
 1. **Land REALFIX-C0** (the radius derivation + the three document corrections). Nothing downstream is quotable without it.
-   ✅ **LANDED 2026-08-21** (`17a897a`+`b1e0840`): stdlib PE walk, both exhaustive scans land on the pinned boundaries bit-exact (`0x461C0000`/99.9199680, `0x47AF0000`/299.3325909, exactly-300.0-snaps), reproduced blind by an independent verifier from its own hand-decode of the nine instructions. `MATCH_RADIUS`/`GATE1_CUT` are asserted against their own derivation functions, so a drifted constant reddens.
+   ✅ **LANDED 2026-08-21** (`1160583`+`b76a561`): stdlib PE walk, both exhaustive scans land on the pinned boundaries bit-exact (`0x461C0000`/99.9199680, `0x47AF0000`/299.3325909, exactly-300.0-snaps), reproduced blind by an independent verifier from its own hand-decode of the nine instructions. `MATCH_RADIUS`/`GATE1_CUT` are asserted against their own derivation functions, so a drifted constant reddens.
 2. **Land `grantsim.py` + `test_grantsim.py` and pass C1–C5.** Deliverable: the calibration table, the two exposure metrics, the bracket per capture, and an explicit refusal to rank. **Expected outcome: P2 and P3 both score 0 snaps match-on and separate only on M1/M2 — that is a successful run, not a failed one.**
    ✅ **LANDED 2026-08-21**, floor **61** (bare-machine 19), 1 loud skip (C3's heading arm, which waited on `_heading_grant_ok`; **that skip is gone as of the same day** — the predicate landed, `lead_policy` carries the shipped rate limit, §6b drives both its arms, and the floors moved to **68** / bare-machine **26**). Calibration: predicted 69 vs measured 60 (1.15×, per-capture vector IMPLEMENTATION-PINNED), the three structural zeros exact, C2(c) 6.51×, match-deletion null 1.77×, rotation monotone, `rank_or_refuse()` returns None over the full 54-cell band — **the 766 u lead is worst in 27 of 27 match-ON cells and wins in 27 of 27 match-OFF cells**, so no ordering is printed. The expected outcome half-held: P2/P3 separate on M1/M2 as designed, but P2 scores 2/3 marginal match-ON snaps on the two coarse-cadence captures — four of five inside the instrument's own error band, printed with marginality and gap columns, not gated (n=1 non-marginal, the client's own measured teleport). Survived a 33-mutation adversarial campaign: 26 red on first pass, 5 genuine survivors each given a check and proven red, 2 survivals by design with grounds recorded.
 
@@ -2098,7 +2098,7 @@ After T1 the **clock** error is gone; what remains is **physical** and is not a 
 
 The five `agent+0x80` flip-to-grant lags are +0.018…+0.107 s, spread 0.089 s. **That spread is invariant under the offset** — under `offset=min` the same five lags read +1.018…+1.107 with the identical 0.089 s spread — so it proves nothing about which branch is true. What excludes the min branch is `ping_summary last_ms = 6` plus 0.089 s being one movetap sample interval at 9.5 Hz. **Do not restate ±0.1 s as a "fiducial spread".**
 
-> **REALFIX-T4 — pre-registered validator. ❌ NOT BUILT as of `facd3ec`; see §5 row 4½.** After T1, for every plane-word-changing grant the lag from the wire send to the observed `agent+0x80` flip must be **≥ 0 and ≤ 1/f_tap + 0.05 s**. A negative lag, or one > 0.25 s, means T1 did not take, and **every cross-tab reverts to being scored on the client-memory `+0x80` anchor alone** — which is where HUNT's plane table already sits, correctly.
+> **REALFIX-T4 — pre-registered validator. ❌ NOT BUILT as of `a18d686`; see §5 row 4½.** After T1, for every plane-word-changing grant the lag from the wire send to the observed `agent+0x80` flip must be **≥ 0 and ≤ 1/f_tap + 0.05 s**. A negative lag, or one > 0.25 s, means T1 did not take, and **every cross-tab reverts to being scored on the client-memory `+0x80` anchor alone** — which is where HUNT's plane table already sits, correctly.
 
 **And this stands whatever the clock does:** re-anchoring L1's landing 2×2 on a *fitted mean* lag (+0.077 s) instead of per-event moves E3 (own lag +0.018 s) into the wrong cell and degrades the table to [[2,1],[0,27]] with a phantom warp in the no-rewrite/below-cut cell. **Every landing cross-tab in L2 is anchored per-event on the client-memory `+0x80` flip, and the mean-lag sensitivity is printed beside the table.** The event identification itself needs no alignment at all — it is an adjacent-sample difference inside one movetap file.
 
@@ -2315,7 +2315,7 @@ Items 1–4 are instrument work with no policy content and can land before any c
 
 **What this does NOT settle.** The walk reads nodes; it does not yet recompute the match test at the operand (§2.4's "a node inside 100 u of `q` whose plane differs"), which is offline work on the captures L2 produces. And `HIST_MAX_NODES = 8` is a budget, not a bound on the chain: a block holds 256 nodes and is recycled on a 5,000 ms rule (`0x00604C03`), so `truncated:max-nodes` is a real and expected outcome on a long chain and **must not** be read as "no node within the radius".
 
-**REALFIX-T4 IS NOT BUILT, and this list did not say so.** §2.3's pre-registered validator — for every plane-word-changing grant, the lag from the wire send to the observed `agent+0x80` flip must be **≥ 0 and ≤ 1/f_tap + 0.05 s**, with a negative lag or one > 0.25 s meaning T1 did not take — exists nowhere in the tree but in this document. Items 1–4 above are T1, T2 and I1; **T4 is item 4½ and is UNBUILT as of `facd3ec`.** It matters because it is the validator that decides whether T1's anchor may be used at all: without it, an L2 run can produce a cross-tab anchored on a clock nobody checked. It is offline work on L2's own output (wire `wall_unix` against the movetap `+0x80` flip), so it can be built after the run — but the run must be read knowing the bound has not been applied. Consequence if it is skipped: fall back to what §2.3 already prescribes and score every cross-tab on the client-memory `+0x80` anchor alone.
+**REALFIX-T4 IS NOT BUILT, and this list did not say so.** §2.3's pre-registered validator — for every plane-word-changing grant, the lag from the wire send to the observed `agent+0x80` flip must be **≥ 0 and ≤ 1/f_tap + 0.05 s**, with a negative lag or one > 0.25 s meaning T1 did not take — exists nowhere in the tree but in this document. Items 1–4 above are T1, T2 and I1; **T4 is item 4½ and is UNBUILT as of `a18d686`.** It matters because it is the validator that decides whether T1's anchor may be used at all: without it, an L2 run can produce a cross-tab anchored on a clock nobody checked. It is offline work on L2's own output (wire `wall_unix` against the movetap `+0x80` flip), so it can be built after the run — but the run must be read knowing the bound has not been applied. Consequence if it is skipped: fall back to what §2.3 already prescribes and score every cross-tab on the client-memory `+0x80` anchor alone.
 
 ### ⚠ 2026-08-21, second pass — what a verifier lane and a mutation lane changed
 

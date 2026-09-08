@@ -59,7 +59,7 @@ ROOT = os.path.dirname(HERE)
 
 # ---------------------------------------------------------------------------
 # THE BASELINE. Observed 2026-08-20, immediately after the token pattern widened to
-# admit convention-form and ladder tokens (parent `42062ce`; the widening added
+# admit convention-form and ladder tokens (parent `b5baa35`; the widening added
 # exactly two sites, PLAN.md's R-IDENTS and R-ISLE rows), by `python toolkit/identlint.py`:
 #
 #     312 defining site(s) in 31 document(s); 152 distinct token(s);

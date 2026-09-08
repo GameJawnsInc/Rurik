@@ -4,7 +4,7 @@
 the operator. Everything below is written down first so the answers cannot be
 rationalised into agreeing with the fix afterwards.
 
-Behaviour under test: `MOVECODE-1z-t` / `KBD_SYNC`, default ON, merged `671c45d`.
+Behaviour under test: `MOVECODE-1z-t` / `KBD_SYNC`, default ON, merged `523e876`.
 Its *mechanism* is already closed — RUN-1zT measured the client's world-0 copy
 going from p50 237 u to 0.0 u from the body it draws. **This run asks a
 different question, and no amount of memory-scoring answers it:** does the
@@ -215,7 +215,7 @@ Two of the four silent presses have literally nothing within 0.7 s of them in th
 capture. The R11 lesson ("a suppressed grant is PRINTED, never silent") has not
 been applied to the swing.
 
-### CORRECTED the same day — the starver is the KEYBOARD latch, and it is FIXED at the swing gate (ANIMREF-RE §41, `47f0cdc`)
+### CORRECTED the same day — the starver is the KEYBOARD latch, and it is FIXED at the swing gate (ANIMREF-RE §41, `8533045`)
 
 The mechanism above was read from source, and **the capture it was written about
 refutes it.** Re-joined press by press — all **28** presses, not the ten that

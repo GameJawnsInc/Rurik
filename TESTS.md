@@ -63,7 +63,7 @@ Every one of these, in the order they were written:
   test so the extraction is checked without crashing a client. **And since
   2026-08-18 it checks that capturing the dialog RETRACTS THE VERDICT**, which is a
   different thing and was not true: `hold_open` has returned `"exited"` for a client
-  that died during the hold since `276080a`, and the comment at that `return` says
+  that died during the hold since `97f681a`, and the comment at that `return` says
   *"a corpse afterwards unmakes it"* — but the only call site was a **bare expression
   statement**, `ok` was never reassigned after it, and such a run still printed
   `RUN VERDICT: PASS` and exited 0. `customarea/FINDINGS.md` §31.4 recorded the
@@ -3139,7 +3139,7 @@ when map 280 is absent, and §14(g)/§16(l-p) when Pre-Searing is absent skip-de
   agreeing with ourselves and would pass on any self-consistent layout.
   **TWO sections were rebuilt on 2026-08-21, and the second is the cautionary
   one.** The old section 3 read one constant — `authsrv.ATTRIBUTE_POINTS == 0`,
-  the 8-of-8 live value — and `84fd41d` turned that constant into per-character
+  the 8-of-8 live value — and `cfde91d` turned that constant into per-character
   state at 08:55 on 2026-08-20, so this file spent a day raising
   `AttributeError` while being named in TESTS.md as part of the suite. **The
   burst still sends `0x0037`, so the fix was not a deletion**: the new §4 builds
@@ -3159,7 +3159,7 @@ when map 280 is absent, and §14(g)/§16(l-p) when Pre-Searing is absent skip-de
   `attribute_columns()` with no arguments while the burst calls
   `attribute_columns(live_ranks, bonuses)` — a binding that invokes a different
   overload than the caller under test binds nothing. The two diverged at 10:23
-  the same day (`8b50ca1`), and by exactly the finding of that commit: column 3
+  the same day (`3a2c524`), and by exactly the finding of that commit: column 3
   is base **plus equipped gear**, so the starter hammer's `+1` makes Hammer
   Mastery go out as 7 over a base of 6, which is what the client drew in capture
   `20260820T113942`. The section now calls what the burst calls, and its new
@@ -4128,7 +4128,7 @@ when map 280 is absent, and §14(g)/§16(l-p) when Pre-Searing is absent skip-de
   asserted to have **exactly one writer in the file** — the accept path. **§2g (MOVECODE-1z-bg, 2026-09-04): THE SLIVER ORIGIN.** The origin test was exact containment and the client's wedge-tip reports sit ≤ 0.5 u outside our edges (179 zero-leads in 26 runs). A `SliverPM` whose mesh begins at x = 0 pins: a 0.5 u sliver origin gets a real lead walked on the plane clip and stopped at the wall like an inside origin; ROUTER-B3's door stays shut (a ray into the edge returns the START, never the unclipped ray); 1.5 u is still `origin-unwalkable`; two planes with no report word refuse as `origin-ambiguous`; a mesh without `on_mesh`/`plane_near` keeps the exact test; the plane-blind arm never opens the door; the revert arm (`--lead-origin-exact`) reproduces the zero-lead; and the source locks (default ON, the flag bound from argv, the ambiguous word, `plane_near(prefer=the report's plane)`). Floor 110 → 118.
 
   **That lock went red for real on 2026-09-02, and the fix is worth reading
-  before the next one.** ANIMREF-RE §39 (`807ab89`) added a second writer in
+  before the next one.** ANIMREF-RE §39 (`2809d98`) added a second writer in
   `_press_supersedes`: when a press ends a click leg the server sends a 0x002C
   at the body's modelled position, and that build wrote the model into
   `client_pos` too. The reason was real — `_click_leg_start` falls back to
@@ -8379,7 +8379,7 @@ the same-tick ALIAS**: the
   pass the vacuity check alone. §4 pins the WIDE-STRING CAPACITY, a twice-
   documented display defect (`Field.__repr__` prints `self.cap` and the `wstring`
   branch passed no `cap=`, so all 141 wide strings read `string16(0)`) that was
-  fixed in `c81d6d1` and then sat four days with two study docs still calling it
+  fixed in `0facfe8` and then sat four days with two study docs still calling it
   open — a fix nothing pins reads exactly like a fix nobody made. It asserts the
   capacity histogram over all 141 fields on each vaulted build, identical across
   the three (§2's claim from another direction), and two opcodes whose capacity
@@ -9246,7 +9246,7 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   RATHER THAN AN ARITHMETIC ONE, which it was not until 2026-08-18**: it was
   77 minus the four vault-gated checks, sound as subtraction and impossible to
   observe, because TWO separate defects stopped a bare run before the verdict.
-  `import authsrv` (line 34, added by `5ab72e4` — the same commit that wrote
+  `import authsrv` (line 34, added by `7f626f2` — the same commit that wrote
   this floor) reached `probes.py`'s module-level `npc_template("def_1480")`, a
   vault-only row, so the run died at IMPORT and never reached check 1 of the 73;
   see `toolkit/test_bareimport.py`, which now guards exactly that. With the
@@ -9261,7 +9261,7 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   scores **73 with 3 declared skips, green** — measured, not derived.
   **This entry said "a healthy 74"
   until 2026-08-18**: 74 was the count before §20, which landed hours after
-  the recompute in `d0b97b9` — the same commit that wrote §20's paragraph
+  the recompute in `a93e05f` — the same commit that wrote §20's paragraph
   above and left the figure two sentences away from it untouched. It was
   **17 against a run of 22** when written, with a careful on-paper
   derivation — 13 row-independent checks plus 4 per row — and the file then
@@ -10098,7 +10098,7 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   timeout sweep), 0x00F1 recorded as a mark and never a close, and the
   property census keeping unknown ids; the batch clustering (eps=0 exact for live tapes, 5 ms for gamesrv logs whose sends stamp their own clocks); and scan_ours itself over a synthetic RURIK_VAULT -- hand-packed 0x009F rows the codec must frame, the tape-replay exclusion by label, and the era filter that makes the pre-castmech known-bad control possible. Floor 41),
   `toolkit/authsrv/test_cancelwalk.py` (**2026-09-07: its halt-site finder now accepts the
-  `_send` wrapper `_npc_follow_tick` has used since NPCTRACK-Q1 (fb492bf); the two
+  `_send` wrapper `_npc_follow_tick` has used since NPCTRACK-Q1 (d8bcb5c); the two
   site-count locks had been red on main from that commit until then.** Everything AROUND the
   CANCELWALK
   runs — the walk-on-cancel experiment arms of `--cancel-answer`
@@ -11073,7 +11073,7 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   and pin the helper's SUMMARY LINE rather than its source — the body now
   quotes the old wording inside its own correction block, and a substring
   check fires on the quote. The real defect was the contract line, and it was
-  wrong the day it was written (`8cbcbc9` created the helper; `995a515`
+  wrong the day it was written (`6651c91` created the helper; `d3a5936`
   added four router sites the same day and never revised it). **Section 5
   (2026-09-03, MOVECODE-1z-v) added thirty: the router is the DEFAULT with
   both conditions on, `--no-router` / `--router-raw-leg` /
@@ -11187,4 +11187,4 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   choke, no second fire, staleness/flag-off/bad-plane refusals. Synthetic,
   bare machine. The corpus retrodiction lives in `agtrack_replay.py
   --policy` (217/251 corpus warps pre-empted, 10/10 in the current regime
-  -- FINDINGS 1z-s). Floor 49 from the 2026-08-30 green run. ~2 s **§13 (MOVECODE-1z-bf, 2026-09-04): the gate-2 tolerance is a recorded, revertable switch** — `AGTRACK_GATE2_SEAM` ON by default and swept by `capture_flags()`, `--agtrack-gate2-exact` present and zeroing the mirror's constant (source lock), and the mirror's gate 2 reading `on_mesh` under the tolerance and `walkable()` without it (source lock). Floor 74 → 77), **§14 is now MOVECODE-1z-bv (2026-09-05): the gate-2 branch driven THROUGH the guard.** Every other fixture in this file passes `mesh=None`, so `gate2-offmesh` had never been executed by a test — it was covered one layer down in `test_agtrack_mirror` §10b. §14 pins: the branch is reachable and is genuinely gate 2 (gate 1 PASSES at 100 u separation, so a gate-1 fixture cannot masquerade as coverage); a **vacuity guard** — the identical geometry on a walkable mesh is not a gate-2 veto, so the mesh is what drives it; and the three re-pin arms over a gate-2 want — fresh MATURES (the corpus's 17, every one fresh), stale is BLOCKED with `repin_block_reason` naming it, and **stale + coincident + newest-a-STOP is still blocked**, which is the deleted waiver's own licence shape and reads `("due", "gate2-offmesh")` on `30159d9`. That last one was WRONG on its first draft — written with two walk-starts it passed on the old build too, because 1z-bs's own clause refused that pair; the known-bad arm caught it and it was re-aimed. Floor 74 → 81. **The old §14 and §15 (the waiver's walk-start and newest-must-be-stop clauses) were deleted with the waiver at MOVECODE-1z-bt** — their history is FINDINGS §1z-bn and §1z-bs, and §9 above is what replaced them),
+  -- FINDINGS 1z-s). Floor 49 from the 2026-08-30 green run. ~2 s **§13 (MOVECODE-1z-bf, 2026-09-04): the gate-2 tolerance is a recorded, revertable switch** — `AGTRACK_GATE2_SEAM` ON by default and swept by `capture_flags()`, `--agtrack-gate2-exact` present and zeroing the mirror's constant (source lock), and the mirror's gate 2 reading `on_mesh` under the tolerance and `walkable()` without it (source lock). Floor 74 → 77), **§14 is now MOVECODE-1z-bv (2026-09-05): the gate-2 branch driven THROUGH the guard.** Every other fixture in this file passes `mesh=None`, so `gate2-offmesh` had never been executed by a test — it was covered one layer down in `test_agtrack_mirror` §10b. §14 pins: the branch is reachable and is genuinely gate 2 (gate 1 PASSES at 100 u separation, so a gate-1 fixture cannot masquerade as coverage); a **vacuity guard** — the identical geometry on a walkable mesh is not a gate-2 veto, so the mesh is what drives it; and the three re-pin arms over a gate-2 want — fresh MATURES (the corpus's 17, every one fresh), stale is BLOCKED with `repin_block_reason` naming it, and **stale + coincident + newest-a-STOP is still blocked**, which is the deleted waiver's own licence shape and reads `("due", "gate2-offmesh")` on `5bdd933`. That last one was WRONG on its first draft — written with two walk-starts it passed on the old build too, because 1z-bs's own clause refused that pair; the known-bad arm caught it and it was re-aimed. Floor 74 → 81. **The old §14 and §15 (the waiver's walk-start and newest-must-be-stop clauses) were deleted with the waiver at MOVECODE-1z-bt** — their history is FINDINGS §1z-bn and §1z-bs, and §9 above is what replaced them),

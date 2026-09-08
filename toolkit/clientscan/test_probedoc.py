@@ -92,7 +92,7 @@ import probedoc_fixtures as FIX   # noqa: E402
 import vaultpath          # noqa: E402
 
 # MEASURED from a real green run on 2026-08-20 in
-# `.claude/worktrees/gatefire-doc-sync-3e12b7` at HEAD 0841f5e: **74 checks**
+# `.claude/worktrees/gatefire-doc-sync-3e12b7` at HEAD e3dfb98: **74 checks**
 # with both vault captures present, **72** with `RURIK_VAULT` pointed at an
 # empty directory (2 declared skips). 72 is the bare-machine subset and is the
 # floor, per checks.py's own rule -- set the floor to the mandatory core and let

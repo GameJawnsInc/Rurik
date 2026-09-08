@@ -2292,7 +2292,7 @@ witness. **A size question, not a design one.**
   the harmless direction and the first time in five that the error ran that way.
 
 The script resolves its toolkit from a `--toolkit` argument defaulting to main and **prints
-the tree and its HEAD commit** (`[tree] C:\gd\Rurik  HEAD 73b6561`), rather than hardcoding a
+the tree and its HEAD commit** (`[tree] C:\gd\Rurik  HEAD 1bab40b`), rather than hardcoding a
 foreign worktree the way `a4stage6.py` does. Run scripts live in `vault/research/` and are
 gitignored by design, so this one is not in the commit.
 

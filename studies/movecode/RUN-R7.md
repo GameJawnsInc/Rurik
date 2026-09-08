@@ -65,9 +65,9 @@ the server's startup banner is the authority, not a flag census taken somewhere
 else — and it was broken by a session that had just quoted it.** A capture's own
 verdict rows are the second witness; use both.
 
-⚠ **R7 ran with the plane repair ARMED.** It shipped at `dcf9484`, 2026-08-29
+⚠ **R7 ran with the plane repair ARMED.** It shipped at `a481a88`, 2026-08-29
 11:22:45; R7 started at 16:39. So R7's zero fires are a real prospective observation,
-unlike the pre-`dcf9484` sessions whose replayed fires are counterfactual (§1z-e.2).
+unlike the pre-`a481a88` sessions whose replayed fires are counterfactual (§1z-e.2).
 
 ## 2. What it produced, in one place
 

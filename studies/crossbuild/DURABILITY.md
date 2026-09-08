@@ -7,7 +7,7 @@
 > the live record** — it carries eleven further commits, including the play-session
 > durability result of 2026-08-13/14 and the `RESOLVED` annotations this file predates.
 > One thing it gets RIGHT and is worth keeping: §3.2's `entries[i].index == i + 1`. The
-> claim `main` retracted (in `aa00ce3`, "there was never a second convention, and I
+> claim `main` retracted (in `d135f8d`, "there was never a second convention, and I
 > invented one") was FINDINGS.md §4b.1's inference that `archive.py` and `datcheck.py`
 > number rows differently — they do not, and this file never said they did.**
 

@@ -1733,8 +1733,8 @@ untextured."
 > **THIS SECTION'S FIRST VERSION SAID "31.6% -> 0.11%, stale by 287x", AND
 > THAT WAS WRONG** -- caught the same day by dating the code rather than
 > trusting the improvement. Both the layered chain and the `none` fallback
-> landed in `da35145` at **10:51 on 2026-08-14**, and the 31.6% claim landed in
-> `39db117` at **13:01 the same day**. The binding code has not changed since.
+> landed in `f6541c5` at **10:51 on 2026-08-14**, and the 31.6% claim landed in
+> `d492c21` at **13:01 the same day**. The binding code has not changed since.
 > Nothing collapsed, and comparing the two numbers compares two different
 > metrics. The corrected account is below. It is a smaller claim and it is the
 > true one.

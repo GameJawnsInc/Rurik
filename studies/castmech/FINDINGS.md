@@ -814,7 +814,7 @@ c2s during an in-flight cast or swing, drop the scheduled hit, emit E2 and
 backswing needs **nothing** — it is client animation, and modeling it
 server-side would be modeling a fiction.
 
-> **WINS 1 AND 2 LANDED 2026-08-22** (`002f20f`, `2c8d3ba`, `3dcf9d5`), and
+> **WINS 1 AND 2 LANDED 2026-08-22** (`5f6e030`, `baa088a`, `5cb694a`), and
 > the §3b measurements sharpened win 2 on the way: the STOPPED rides the
 > press burst immediately after E4 (2/2, with the measured negative — no
 > close when no chain is live), a retarget stops the swing in flight (the

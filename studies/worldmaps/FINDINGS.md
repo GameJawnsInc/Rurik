@@ -79,7 +79,7 @@ Post-flight: the diff names exactly the two expected rows, `--assert-safe`
 clears everything. Full scoring of P1–P7, artifacts, and two honest caveats
 (the sheet's Gw.log capture is clobbered by the serve run's second client;
 the serve check's population half hit the server's benign no-rows line in
-both arms, orthogonal to compression — since closed on main, `ec5f426`:
+both arms, orthogonal to compression — since closed on main, `20cbd91`:
 `serve_run` gained a third verdict SERVED-UNPOPULATED, and the suspected
 content drift did not happen, plaza never had a spawn row and FINDINGS 56's
 "5 of 5" is its PROPS readback) are in

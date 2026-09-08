@@ -192,7 +192,7 @@ reports **zero gaps on all 14 streams**. A mid-stream attach fails all four test
 recorded per-connection `why` — *"c2s does not start with VERSION (got header 0x000c0500)"* —
 is verbatim the error text of the **old** `split_c2s`, which knew only the auth shape;
 `0x000C0500` *is* the game VERSION header, and it was named **from this capture** thirty-eight
-minutes of commit history later (`17b34cc`, 2026-08-07 13:27: *"it is why the first run split
+minutes of commit history later (`4e16dec`, 2026-08-07 13:27: *"it is why the first run split
 1 of 7"*). The defect was in the decoder, not in the instrument. The instrument was perfect
 and the vault holds its output intact.
 
@@ -233,10 +233,10 @@ in it.
 
 | capture | span | conns (auth+game) | keys tapped | keyring on disk | wire payload | decrypted then | decrypted now | GAME_SMSG | what happened |
 |---|---|---|---|---|---|---|---|---|---|
-| `20260807T124912` | 20.0 min | 7 (1+6) | 7 | **no** | 259,228 B | 1/7 | **1/7** | 0 | Assembler knew ONE VERSION shape, so the six game connections were refused at the split and **no key was ever tried against them**; the keyring was in memory, so six keys died at exit. **Permanent.** Fixed by `17b34cc` (both halves). |
-| `20260807T133758` | 1.1 min | 3 (1+2) | 3 | yes | 11,280 B | 1/3 | **3/3** | 387 | VERSION shapes now known; the **key criterion** was still a literal opcode list taken from our own loopback server, and the real service opened on `0x800a`/`0x8091`. Recorded reason: *"none of the 3 tapped key(s) decrypt this connection to a known first opcode."* **Recovered** by `--assemble` after `b125209`. |
+| `20260807T124912` | 20.0 min | 7 (1+6) | 7 | **no** | 259,228 B | 1/7 | **1/7** | 0 | Assembler knew ONE VERSION shape, so the six game connections were refused at the split and **no key was ever tried against them**; the keyring was in memory, so six keys died at exit. **Permanent.** Fixed by `4e16dec` (both halves). |
+| `20260807T133758` | 1.1 min | 3 (1+2) | 3 | yes | 11,280 B | 1/3 | **3/3** | 387 | VERSION shapes now known; the **key criterion** was still a literal opcode list taken from our own loopback server, and the real service opened on `0x800a`/`0x8091`. Recorded reason: *"none of the 3 tapped key(s) decrypt this connection to a known first opcode."* **Recovered** by `--assemble` after `db0980e`. |
 | `20260807T135532` | — | 0 | 9 | yes | 0 B | — | — | 0 | `wirecapture.py` died on a `KeyboardInterrupt`; `wire.jsonl` is 260 B of header and no manifest was ever written. Nine keys, nothing to decrypt. |
-| `20260807T141736` | — | 0 | 6 | yes | 0 B | 0/0 | 0/0 | 0 | `LIVE_PORTS` was `6111–6601`; the watchdog logged **ZERO packets for 255 s** while the client's own connection sampler named `:80`. This is the run that diagnosed port 80 (`194e39f`). |
+| `20260807T141736` | — | 0 | 6 | yes | 0 B | 0/0 | 0/0 | 0 | `LIVE_PORTS` was `6111–6601`; the watchdog logged **ZERO packets for 255 s** while the client's own connection sampler named `:80`. This is the run that diagnosed port 80 (`2ccdb90`). |
 | `20260807T143055` | 6.9 min | 6 (1+5) | 6 | yes | 201,017 B | **6/6** | 6/6 | 11,241 | Clean. |
 | `20260810T235916` | 5.1 min | 6 (1+5) | 6 | yes | 212,006 B | **6/6** | 6/6 | 10,896 | Clean, and the first manifest carrying `wire_sha256` / `keyring_sha256` / `pruned_records`. |
 
@@ -2104,7 +2104,7 @@ run, and is added to CLAUDE.md's suite list in the same commit as the test.** Th
 - `studies/presearing/MANIFEST.md:893, :960, :962` carry the same pre-R0b framing in three places, and the document
   is stale on two independent axes while its own Revision §8 knows about one of them and asks for a re-derivation
   nobody did.
-- Minor: §8.0's heading reads "suite 45/45"; **49 test files exist today** (four landed since `7b24cd6`:
+- Minor: §8.0's heading reads "suite 45/45"; **49 test files exist today** (four landed since `e7d2080`:
   `test_dispatch.py`, `test_datcheck.py`, `test_mapbuild.py`, `test_pathchunk.py`). The hash makes it honest rather
   than wrong, but the number a cold session reads is 45. §3.2's R4c-1 counts also trail the content store (9 map
   rows against "today 2", 2 NPC rows against "today 1").

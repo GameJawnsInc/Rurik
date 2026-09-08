@@ -1383,7 +1383,7 @@ def verdict_after_hold(ok, hold_result):
     """Fold the hold's outcome into the run verdict. It may only ever REMOVE a pass.
 
     THIS FUNCTION EXISTS BECAUSE THE RETURN ABOVE USED TO GO NOWHERE. `hold_open`
-    has returned "exited" for a client that died during the hold since 276080a --
+    has returned "exited" for a client that died during the hold since 97f681a --
     the portal commit -- and the comment at that `return` says "a corpse
     afterwards unmakes it". It did not: the only call site was a bare expression
     statement, `ok` was never reassigned after it, and a run whose client

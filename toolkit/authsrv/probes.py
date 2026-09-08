@@ -4287,9 +4287,9 @@ def _smsgsweep_steps(a, o, dwell=0.4):
         # (sets_for) and writes the result into THAT ROW.
         #
         # It also wrote a top-level copy for about an hour on 2026-08-12 -- which is the
-        # whole story. `p.get("set")` was correct when --set shipped (280a29b, 10:59) and
+        # whole story. `p.get("set")` was correct when --set shipped (f3e0d95, 10:59) and
         # became a no-op when the qualified `0x0083:2=1` form replaced the top-level key
-        # with sets_for (fdb63e6, 12:00). This line was not updated, so from then on every
+        # with sets_for (c7c7da6, 12:00). This line was not updated, so from then on every
         # --set run put the DEGENERATE payload on the wire while reporting the experiment.
         # Nothing downstream could catch it: the plan file is right, the capture is right,
         # and `record` scores the capture -- so the run reads as a measurement of a payload

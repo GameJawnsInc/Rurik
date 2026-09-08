@@ -14,11 +14,11 @@ the winners, then a brief. 108 raw gaps in, one ranked map out. Every number bel
 carries how it was obtained.
 
 **READ THIS BEFORE ACTING ON ANY "ABSENT" CLAIM.** The digs ran against this worktree at
-`392df23`, which was level with `main` when the session opened. `main` advanced **16
-commits during the session** (HEAD `305a1a5`, *"Merge: text viability, and the party pair
+`deff6ee`, which was level with `main` when the session opened. `main` advanced **16
+commits during the session** (HEAD `b42ce43`, *"Merge: text viability, and the party pair
 that unblocks the abbreviation"*). Every claim of the form *"nothing does X"* therefore
 carries a timestamp. The load-bearing ones were **re-verified against `main` by hand**
-after the digs returned and are marked ✔MAIN; the rest are as-of `392df23`.
+after the digs returned and are marked ✔MAIN; the rest are as-of `deff6ee`.
 
 ---
 
@@ -129,7 +129,7 @@ eight different sabotages, six of them GAME_SMSG opcode numbers —
 The mechanism is exactly the shape `CLAUDE.md` already records from 2026-08-11: the file
 references **9 opcode symbols and pins exactly one** to a hex literal — and that one
 symbol is the only opcode absent from the survivor list. ✔MAIN: was 1 of 9 —
-**CLOSED 2026-08-13** (`97892f9`), see §8 Lane A item 3: `test_agentlife.py`'s second
+**CLOSED 2026-08-13** (`cfa8d11`), see §8 Lane A item 3: `test_agentlife.py`'s second
 PINNED tuple now binds 15 GAME_SMSG opcode symbols to literals.
 
 **A documented check is silently disarmed.** `CLAUDE.md` records for `test_maprows` that

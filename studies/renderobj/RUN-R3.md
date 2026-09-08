@@ -5,7 +5,7 @@
 mesh has no trapezoid, `_npc_plane` held the carried 29, and the client drew the Hatcher 52 u
 into the ground for 16 s. The fix names that ground with the player's own reported plane when
 the hostile is within its stop radius of the report, and F9's correction then carries it.
-RECONSTRUCTION until a body rises. Server `main` at `63fdd95`. Agent-driven: a long W press
+RECONSTRUCTION until a body rises. Server `main` at `085121b`. Agent-driven: a long W press
 slides the body up the staircase (the R3/R4 route reached (10688, 8593) in 5 s; the owner's
 terrace points are 400–800 u further along the same diagonal), a short turn takes it around the
 wall, and two pauses let the Hatcher park beside it.
@@ -49,7 +49,7 @@ new tape, plus `npctrack/review/npcdrift.py` for P3.
 
 ---
 
-## RESULT — RAN 2026-09-06 16:15, agent-driven, `main` at `5c5999e`. **P1 MET, P2 MET, P3 met on the wire and on Q1's median with one sub-bar red. F11 is CONFIRMED: the correction went out 50 ms after the park and the body stood on the surface.**
+## RESULT — RAN 2026-09-06 16:15, agent-driven, `main` at `949e7c9`. **P1 MET, P2 MET, P3 met on the wire and on Q1's median with one sub-bar red. F11 is CONFIRMED: the correction went out 50 ms after the park and the body stood on the surface.**
 
 Capture `authsrv-20260906T161545-c1`, tape `r3-agenttap.jsonl` (670 paired samples over 63 s).
 The route did what it was written to do: W:9 slid the body up the staircase to the terrace at

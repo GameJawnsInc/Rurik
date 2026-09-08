@@ -34,7 +34,7 @@ question that opened this arc.
 
 ## 2. What is already measured — do not re-derive this
 
-All **OBSERVED (mine, 2026-08-20)**, from `C:/gd/Rurik` at `9ee3010`, by grep over
+All **OBSERVED (mine, 2026-08-20)**, from `C:/gd/Rurik` at `b79afa0`, by grep over
 `PLAN.md`, `HANDOFF.md`, `TESTS.md` and `studies/`. 52 study arcs, 80 study documents.
 
 ### 2.1 The census — 108 single-letter work-item rows across 10 documents
@@ -169,7 +169,7 @@ landing, per decision 6's own pattern: each ruling below, in place.**
 (**ANNOTATED 2026-08-20:** shipped — the tool is `toolkit/whichrung.py`, per this
 section's own suggestion, and the live home of the one-liner below and its caveats is
 now [CONVENTION.md](CONVENTION.md) §4. This section is the historical proposal; the
-line-number claims below were true at `9ee3010` and are not maintained.)
+line-number claims below were true at `b79afa0` and are not maintained.)
 
 This works today and is the cheapest possible mitigation. It matches only *defining*
 rows (a table row beginning with the token) and headings, not every passing mention:
@@ -196,7 +196,7 @@ documents written after it, and there are 80 written before it.
 - **Zero code changed means zero tests** — unless decision 5 produces a checker, in
   which case run `test_srclint.py` and the new test, not the full suite.
 - **Add the PLAN.md §3 row and the §8 next-action** when it lands, in the same commit.
-  (**ANNOTATED 2026-08-20:** done as TWO commits — the landing `f8d63a1`, then the
+  (**ANNOTATED 2026-08-20:** done as TWO commits — the landing `9697c8c`, then the
   PLAN.md rows — so the §3 row could stamp the real landing hash instead of guessing
   it. The §3 header's same-commit rule binds the row and its hash, which the split
   satisfies.)

@@ -540,7 +540,7 @@ behaviour change and each currently a guess:
 **Superseded.** The first version of this item claimed 0x003D set a destination
 one world unit away, so that arrival fired every tick and teleported the
 character continuously. That is wrong, and the commit that introduced it
-(`5ed61ff`) carries the wrong version in its message. Measurement, not reading,
+(`6f8f543`) carries the wrong version in its message. Measurement, not reading,
 settled it — `toolkit/authsrv/analyze_movement.py` over the 2026-08-05 capture,
 52 samples of 0x003D. What follows replaces it.
 
@@ -3918,7 +3918,7 @@ Four tests, each able to fail, establish that the truncation is **world-anchored
 
 **REALFIX-P4 · `0x0027` RE-ARM — CUT.** `0x0027`'s setter `0x00602910` settles the agent by dead-reckoning to *now* and rewriting `+0x78` **to the runaway point**, then re-issues the outstanding grant. It re-*aims*; it does not re-*pin*. `0x0027` at spawn is a measured no-op (`+0x5C` already 288.0, `+0x60` already 1.0, in 4,115/4,115 movetap samples). It needs a new SMSG constant, a new builder in `agents.py` and a new wire test — `0x0027` has **no constant, no builder and no call site anywhere in the repo**, its only namesake being `GAME_CMSG_ATTACK_SKILL` in the opposite direction — bought for a candidate the mechanism read grades FAILS provably and the harness admits it cannot score. **Recorded as a dead candidate with grounds; its one genuinely new property (it reaches both copies, no `[esi+0x1e0]` gate) is subsumed by any family that never lets a destination go stale.**
 
-**REALFIX-P5 · `0x002C` CLIENT-PIN — already built (`--resync`) ~~, never run~~.** *["never run" CORRECTED 2026-08-25: `authsrv-20260820T182119-c1.jsonl` holds 52 resync verdict rows, 18 fired, 18 `0x002C` sends, landed by commit `3e40bde` 34 min before the capture — but that run sent ZERO `0x0029` (grants), so it never armed an arrival and is NOT a test of the disarm. The missing experiment is one evening with grants enabled and a movetap attached; protocol registered at `followon-notes/p5-resync-disarm.md` §8, staged 2026-08-25. `RESYNC_SEPARATION` reconciled to 100.0 the same day — the ruling is on the constant in `authsrv.py`.]* Fires only on the client's own last accepted report, never our integrator, under four refusals (report age ≤ 100/288 = 0.347 s; zero refused-report streak; separation ≥ threshold; rate ≥ 0.5 s). O1 is n/a by construction — `0x002C` clears the AgTrack record first (`0x005FDA78`) then SetPositions both copies, so no follow-up reaches a gate and no roster reseed happens. **Delta from the REMOVED `0x002C` build = TWO terms** (payload changed from `state["pos"]` to `state["client_pos"]`; three refusal gates that did not exist), so it is not a clean ablation either. **It trades snaps for yanks**: the removed build's five sends "carried the client 630, 189 and 765 units… that is the warp the player described" (`authsrv.py:2580-2585`). **O6 is UNVERIFIED, not satisfied** — the quantity that decides whether it is safe is the async array, which nothing in this repo has ever read.
+**REALFIX-P5 · `0x002C` CLIENT-PIN — already built (`--resync`) ~~, never run~~.** *["never run" CORRECTED 2026-08-25: `authsrv-20260820T182119-c1.jsonl` holds 52 resync verdict rows, 18 fired, 18 `0x002C` sends, landed by commit `b9b13c9` 34 min before the capture — but that run sent ZERO `0x0029` (grants), so it never armed an arrival and is NOT a test of the disarm. The missing experiment is one evening with grants enabled and a movetap attached; protocol registered at `followon-notes/p5-resync-disarm.md` §8, staged 2026-08-25. `RESYNC_SEPARATION` reconciled to 100.0 the same day — the ruling is on the constant in `authsrv.py`.]* Fires only on the client's own last accepted report, never our integrator, under four refusals (report age ≤ 100/288 = 0.347 s; zero refused-report streak; separation ≥ threshold; rate ≥ 0.5 s). O1 is n/a by construction — `0x002C` clears the AgTrack record first (`0x005FDA78`) then SetPositions both copies, so no follow-up reaches a gate and no roster reseed happens. **Delta from the REMOVED `0x002C` build = TWO terms** (payload changed from `state["pos"]` to `state["client_pos"]`; three refusal gates that did not exist), so it is not a clean ablation either. **It trades snaps for yanks**: the removed build's five sends "carried the client 630, 189 and 765 units… that is the warp the player described" (`authsrv.py:2580-2585`). **O6 is UNVERIFIED, not satisfied** — the quantity that decides whether it is safe is the async array, which nothing in this repo has ever read.
 
 **REALFIX-P6 · GRANT-SUPPRESS (control, shipped, run once).** 1.39/min vs 11.49/min span (8.3×), 903 vs 9,687 u/min (10.7×), `ours`, **n = 1 A/B pair with two identical-play baselines differing 1.7× in rate**. It removes the bake caller only; arrivals, `0x002C`, collision resolution and the resync's own SetPositions still dispatch. **It works by making us quiet, not by making us correct**, and `state["pos"]` silently stops tracking — an UNMEASURED cost in aggro radius, `clip_to_walkable` and interaction range. **The correct interim ship and the wrong destination.**
 
@@ -5574,7 +5574,7 @@ bridges), so per-landing verdicts are our mesh's word, not the client's.
 
 **OBSERVED, `ours`.** Two arms, map 148, build 38797, owner-driven under the
 pre-registered L9 protocol (`REALFIX.md` §"REALFIX-L9", committed before the
-run at `8e160b7`). Control `20260822T165425` + `movetap-20260822T165434`
+run at `9e6153f`). Control `20260822T165425` + `movetap-20260822T165434`
 (1,207 samples, 124.1 s, 9.7 Hz); treatment `20260822T165910` +
 `movetap-20260822T165918` (1,133 samples, 134.0 s, 8.5 Hz — 93% of the
 capture span, over the registration's 90% null-license floor). Arms earned
@@ -5791,7 +5791,7 @@ it.** `test_handshake` had been red on "the exe's build matches the key file
 the server will load" — exe 38849 against key file `2026-08-20_21511009c460`,
 `_build_of_keyfile()` returning None. The drift itself was dealt with on
 2026-08-21 (the skills arc rebuilt on 38849, ran its probe there and closed the
-build gap, `d21ac05`; the RUNBOOK gained its two mid-run-update entries), but
+build gap, `5b6d4b9`; the RUNBOOK gained its two mid-run-update entries), but
 the REGISTRATION half never happened: no `pinned.BUILDS` row and no
 `vault/client/` pristine snapshot, so the newest patched client was
 unrepresentable — the same shape as the 38833 gap of 2026-08-19.
@@ -5812,7 +5812,7 @@ filter still lands on one. **The pin stays 38797** (`PINNED` is an explicit
 the 2026-08-14 registration also paid: `pinned.py` 12 → 13, **+1, ours**. The
 literal was 156 and the tree measured **188 before this arc touched anything**
 — `clientscan/typenames.py` 0 → **32**, an 18th file, from a parallel session's
-SKILLS-T1 (`326f439`) that moved neither literal. Both literals are now 189 and
+SKILLS-T1 (`01abf22`) that moved neither literal. Both literals are now 189 and
 the note records which 32 are not ours, because leaving the pair red for a
 peer's work is how it goes blind to the next real drift — the 86-vs-113 failure
 already recorded there, now twice.
@@ -5858,7 +5858,7 @@ CURRENT tree:** `test_handshake` 23 · `test_pinned` 150 · `test_buildid` 51 ·
 found by re-running against an up-to-date tree and both worth a peer session's
 attention. (1) `toolkit/authsrv/authsrv.py:12567` raises **`NameError: conn_id`**
 — the heading arm's new `cancel_on_move(send, state, conn_id)` from commit
-`3dcf9d5` ("Movement cancels the cast"), which `test_position_trust`'s extracted
+`5cb694a` ("Movement cancels the cast"), which `test_position_trust`'s extracted
 `_arm` closure cannot satisfy; **red identically on `main`**, so it is a real
 fault in that arc rather than a stale checker. (2) This worktree was **38
 commits behind `main`** and could not load content at all — a peer had written

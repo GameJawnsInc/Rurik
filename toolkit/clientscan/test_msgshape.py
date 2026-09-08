@@ -294,7 +294,7 @@ print("\n4. wide-string fields print their REAL capacity")
 # The defect this pins: `Field.__repr__` prints `self.cap`, and the `wstring`
 # branch of `fields()` did not pass `cap=`, so all 141 wide strings in the image
 # printed `string16(0)` -- a capacity a reader has no reason to distrust. Fixed
-# in c81d6d1; recorded in studies/heroes/FINDINGS.md §9 and PLAN.md, both of
+# in 0facfe8; recorded in studies/heroes/FINDINGS.md §9 and PLAN.md, both of
 # which said "will mislead anyone who trusts the printed number" for four days
 # with nothing checking it.
 #

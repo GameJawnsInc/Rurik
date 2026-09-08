@@ -1,6 +1,6 @@
 # HANDOFF — the warp hunt, from a cold session
 
-**Written 2026-08-27 at commit `7ed5704`. REVISED 2026-08-28: R1 is DONE and this file
+**Written 2026-08-27 at commit `0ef21aa`. REVISED 2026-08-28: R1 is DONE and this file
 was wrong about it.** Read this before proposing anything: the mechanism is settled,
 **seven** server-side candidates have been measured, and the four that looked most
 obvious are all refuted with numbers attached.

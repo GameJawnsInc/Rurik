@@ -1,6 +1,6 @@
 # HANDOFF — the stationary waiver, from a cold session
 
-**Written 2026-09-05 at commit `990c6d7`, at the close of the session that shipped
+**Written 2026-09-05 at commit `908a654`, at the close of the session that shipped
 `MOVECODE-1z-bn`. Rewritten the same day by the next session (`MOVECODE-1z-bs`), which closed
 the one experiment this file named, at a desk. UPDATED again the same day: the owner ruled on
 Q15 and the waiver is DELETED (`MOVECODE-1z-bt`). This file is now the record of a closed

@@ -65,8 +65,8 @@ Steps the server actually sends and read the overrides off the PLAN when plan() 
 them per ROW.
 
 The regression is the shape worth remembering: `p.get("set")` was CORRECT when --set
-shipped (280a29b, 2026-08-12 10:59), and became a no-op an hour later when the qualified
-`--set 0x0083:2=1` form replaced the top-level key with sets_for (fdb63e6, 12:00). One
+shipped (f3e0d95, 2026-08-12 10:59), and became a no-op an hour later when the qualified
+`--set 0x0083:2=1` form replaced the top-level key with sets_for (c7c7da6, 12:00). One
 side of a two-module contract moved and the other was not touched, so nothing errored and
 nothing downstream could catch it: the plan file is right, the capture is right, and
 `record` scores the capture -- so a --set run reads as a measurement of the all-zero
@@ -1170,7 +1170,7 @@ def main():
     # Every check above this line runs inside smsgsweep: plan() resolves the overrides,
     # apply_set applies them, encodable() encodes them. The consumer is somewhere else
     # entirely -- probes._smsgsweep_steps builds the Steps the server actually sends --
-    # and it read the overrides off the PLAN after plan() moved them per ROW (fdb63e6).
+    # and it read the overrides off the PLAN after plan() moved them per ROW (c7c7da6).
     # So the module agreed with itself perfectly while --set sent the degenerate payload.
     # This section is the only place the two halves are made to meet.
     try:
@@ -1211,7 +1211,7 @@ def main():
                               {int(k): v for k, v in (p9.get("set") or {}).items()})
         LEDGER.ok(broken == base_a and [broken] != got,
                   "CONTROL: the old plan-level lookup yields the DEGENERATE payload",
-                  f"{broken} -- `p.get('set')` reads {{}} from every plan since fdb63e6 moved "
+                  f"{broken} -- `p.get('set')` reads {{}} from every plan since c7c7da6 moved "
                   f"the overrides per row, so apply_set returned its input untouched "
                   f"and the run measured all-zero while the report said otherwise")
         # A fix that reads rows[0]["set"] for every row passes a one-row plan and is wrong

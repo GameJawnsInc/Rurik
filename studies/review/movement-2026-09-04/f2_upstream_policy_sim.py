@@ -1,6 +1,6 @@
 """READ-ONLY desk check for panel item prior-art-and-retail-F2.
 
-Drives toolkit/authsrv/agtrack_mirror.py (HEAD d0cc63c) with a SYNTHETIC event
+Drives toolkit/authsrv/agtrack_mirror.py (HEAD 9f7d91a) with a SYNTHETIC event
 stream shaped like each upstream's keyboard policy, and prints the verdict the
 mirror gives at the first post-walk click grant.  Prints only; writes nothing.
 

@@ -81,7 +81,7 @@ def stop_moving_sites():
 
     walk(tree, [])
     sites = []
-    # `_send` is _npc_follow_tick's wrapper (NPCTRACK-Q1, fb492bf): the same
+    # `_send` is _npc_follow_tick's wrapper (NPCTRACK-Q1, d8bcb5c): the same
     # `send`, plus the client-model bookkeeping every movement message the
     # follow emits must also drive. The chase halt goes through it, and this
     # finder read that as "two sites" for a day -- the two locks below were red

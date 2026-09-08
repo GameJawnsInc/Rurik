@@ -1,6 +1,6 @@
 # Cross-build resilience — what an ArenaNet update breaks, and what we do about it
 
-**Plan, 2026-08-12. Supersedes the handoff note of the same day (`ec54c5a`).** That note
+**Plan, 2026-08-12. Supersedes the handoff note of the same day (`5e64307`).** That note
 collected the question and was right about most of it, but it was written without running
 anything. This pass ran things. Its §2 is carried forward **verified row by row**, its
 census headline is withdrawn as unreproducible, two of its claims are refuted, and the
@@ -37,11 +37,11 @@ through as it lands.
 > **The 38833 patch did NOT spring it**, exactly as §4 of FINDINGS predicted — the tracer
 > sits on an inert copy no updater reaches. Nothing was lost; the owner's standing answer is
 > to rebase mods over an update.
-> `msgshape.py` derives the message tables (`db26a00`), `asserts.py` derives its callee
-> (`458b79d`), `pinned.find()` verifies what it returns and fails closed (`25cd1c4`), the
-> census is measured (`06bfcc3`), `genericvalue.py` is gated (`0a5b501`), `avevents.py`
-> derives its allocators (`01e35df`), the build number is readable and the older build is
-> **38519** (`b18f3ac`), and captures now carry a build stamp. Both vaulted builds come back
+> `msgshape.py` derives the message tables (`17b21f5`), `asserts.py` derives its callee
+> (`010586b`), `pinned.find()` verifies what it returns and fails closed (`7b08632`), the
+> census is measured (`042474d`), `genericvalue.py` is gated (`47ad28a`), `avevents.py`
+> derives its allocators (`d91017b`), the build number is readable and the older build is
+> **38519** (`280b01a`), and captures now carry a build stamp. Both vaulted builds come back
 > clean from every tool in the arc.
 >
 > The measurements below are left in the past tense they were written in, because they are
@@ -97,7 +97,7 @@ classification calls in §6 stay on Opus/Fable.
 
 **And stage by path.** Another session is usually live in the shared `C:\gd\Rurik` checkout.
 `git add -A` there stages whatever anyone else has in flight — that is how this very file
-was swept into an unrelated commit and had to be untracked again (`4d5799b`).
+was swept into an unrelated commit and had to be untracked again (`b91e868`).
 
 ---
 
@@ -142,7 +142,7 @@ Four guards already exist and are the pattern the rest should follow:
 
 ## 3. ~~Fix first: `msgshape.py` returns a confident falsehood on any other build~~
 
-✅ **LANDED 2026-08-12, `db26a00`.** *(estimated "days"; it took one session, and the
+✅ **LANDED 2026-08-12, `17b21f5`.** *(estimated "days"; it took one session, and the
 estimate is scored here rather than quietly dropped — the derivation route was already
 written down in the module's own comment, which is most of why.)* On the older build:
 25 tables, 751 declared entries, 666 messages, 2,417 cmd slots, **0** entries lost to the
@@ -244,7 +244,7 @@ recovery does not need it.
 
 ## 4. ~~Second: `asserts.py`, de-pinned~~
 
-✅ **LANDED 2026-08-12, `458b79d`.** *(estimated "hours", and it was.)* Both builds return
+✅ **LANDED 2026-08-12, `010586b`.** *(estimated "hours", and it was.)* Both builds return
 `single-routine=True`, one distinct callee, no warning. The callee is derived twice —
 consensus over ~19,700 call sites (one distinct target, 100.0000%, both builds) and a
 27-byte signature — and the two must agree or it refuses. `test_codescan.py` §10 is the
@@ -277,7 +277,7 @@ added to `test_codescan.py` with the three shape counts as the assertion.
 
 ## 5. ~~`pinned.find()` fails open, and twelve tools trust it~~
 
-✅ **LANDED 2026-08-12, `25cd1c4`**, and it went first because §3's and §4's acceptance is
+✅ **LANDED 2026-08-12, `7b08632`**, and it went first because §3's and §4's acceptance is
 "on **both** vaulted builds" and `pinned.py` did not know a second build existed. *(hours,
 as estimated.)* `find()` hashes what it returns and refuses; the live install is opt-in;
 `BUILDS` is the registry and `test_srctree.py` reads its stamps from it.
@@ -706,9 +706,9 @@ full") should point at the command rather than at prose.
 
 | # | Deliverable | Acceptance |
 |---|---|---|
-| 1 | ~~`msgshape.py` re-derived~~ | ✅ `db26a00`. 25 tables and 666 messages on both builds; a vacuous census exits 2; `test_msgshape.py` 37 checks, floor 37 |
-| 2 | ~~`asserts.py` de-pinned~~ | ✅ `458b79d`. `single-routine=True`, no warning, both builds; `test_codescan.py` §10, floors re-measured to 93 / 45 |
-| 3 | ~~`pinned.find()` fails closed~~ | ✅ `25cd1c4`. Refuses the live-install substitution; `BUILDS` is the one home; `test_pinned.py` 41 checks with a positive control on every refusal |
+| 1 | ~~`msgshape.py` re-derived~~ | ✅ `17b21f5`. 25 tables and 666 messages on both builds; a vacuous census exits 2; `test_msgshape.py` 37 checks, floor 37 |
+| 2 | ~~`asserts.py` de-pinned~~ | ✅ `010586b`. `single-routine=True`, no warning, both builds; `test_codescan.py` §10, floors re-measured to 93 / 45 |
+| 3 | ~~`pinned.find()` fails closed~~ | ✅ `7b08632`. Refuses the live-install substitution; `BUILDS` is the one home; `test_pinned.py` 41 checks with a positive control on every refusal |
 | 4 | ~~Class-(a) census~~ | ✅ `buildpins.py` + `test_buildpins.py` 40 checks; `FINDINGS.md` §2 carries the table with a verdict per row; 68 sites, 7 files, 37 outstanding |
 | 5 | ~~Conversions landed~~ | ✅ `SIG_KEYS` has ONE implementation, not three that agree (`dhbuild.locate_keys`); the patcher and the go/no-go delegate to it; §7.2's two signatures are in `sigcorpus.py` and checked. `test_dhbuild` 43, `test_sigcorpus` 34 |
 | 6 | ~~Build identity~~ | ✅ `buildid.py` + `test_buildid.py` 23 checks; the older build is **38519**; `pinned.BUILDS` is asserted against a fresh read of each image |

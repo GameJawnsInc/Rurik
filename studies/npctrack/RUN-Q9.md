@@ -1,6 +1,6 @@
 # RUN-NPCTRACK-Q9 — the corridor on the wire, on the stairs route
 
-**Registered before the run, 2026-09-07.** `main` at `f0579f8` plus the uncommitted
+**Registered before the run, 2026-09-07.** `main` at `96ec883` plus the uncommitted
 NPCTRACK-Q9 change (`NPC_FOLLOW_CORRIDOR`, `--no-npc-corridor`; `test_agentlife`
 `section_corridor_wire`, green 355). Agent-driven: RUN-1zCE's script exactly, which already
 carries the hole crossing (`Q:2 W:3` down p0#2496's left edge after the climb), so the Hatcher

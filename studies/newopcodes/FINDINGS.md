@@ -1330,7 +1330,7 @@ observed reader and it rides a window context).
 > **REFINED 2026-08-17, after the refused channel was recovered.** The pass ran with one
 > game channel excluded — `58389`, 3,173 messages — because `tape.py` refused its
 > timestamp mapping over a 216-byte discrepancy. That was diagnosed and fixed in parallel
-> (`5efeab0`: repacketized retransmit, the channel was fine), so the corpus is now
+> (`7ad7c9e`: repacketized retransmit, the channel was fine), so the corpus is now
 > complete. Re-counted over all three captures: **5 sightings, not 4**.
 >
 > The extra sighting does not add payload variance, and understanding WHY upgrades the

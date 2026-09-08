@@ -27,7 +27,7 @@ crashes on an empty glob. One tree, stated once, checked with
 
 ## 0. What this run is
 
-The plane repair (`plane_repair_track`, §1z-d.2 — ON by default since `dcf9484`)
+The plane repair (`plane_repair_track`, §1z-d.2 — ON by default since `a481a88`)
 has **never fired against a live client**. Its trigger is now validated offline in
 both directions: the r5stuck replay is the true-positive side (fires at
 t=44.98/55.12/70.80, first 5.11 s after the freeze), and §1z-e.2's whole-corpus

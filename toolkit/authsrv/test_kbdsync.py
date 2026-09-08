@@ -1285,7 +1285,7 @@ def main():
     # 282 where it is reverted, bypassed or predates the flag. (Zero-distance
     # leads are excluded from both -- their destination IS the report, so
     # cross-plane is impossible by construction and counting them halves the
-    # rate.) `A2_LEAD_PLANE_CLIP` shipped in 42f6009, 2026-09-04.
+    # rate.) `A2_LEAD_PLANE_CLIP` shipped in df74661, 2026-09-04.
     # studies/movecode/review/leadplane.py --check re-asserts both sides.
     #
     # So no knob was added. What ships instead is the INVARIANT that made the

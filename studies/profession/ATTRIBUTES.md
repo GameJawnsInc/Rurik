@@ -576,7 +576,7 @@ triples rather than one array of `[0] * 42`, per §1.2.~~ Independent of every r
 sequenced last only because nothing else depends on it.
 
 > **🔶 THE SERVER-SIDE HALF LANDED 2026-08-15**, in the combat arc rather than this
-> one — [studies/combat/PLAN.md](../combat/PLAN.md) §11, commit `1339bfe`. What that
+> one — [studies/combat/PLAN.md](../combat/PLAN.md) §11, commit `7eda444`. What that
 > arc needed from L6 was ranks on the wire so skill damage could scale by them, so it
 > built the emission and left this ladder's client-side work alone.
 >

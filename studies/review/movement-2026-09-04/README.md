@@ -1,6 +1,6 @@
 # Reproduction scripts for the 2026-09-04 movement review
 
-Read-only census scripts written by the review's agents against the tree at `d0cc63c`,
+Read-only census scripts written by the review's agents against the tree at `9f7d91a`,
 kept so that the numbers in [../MOVEMENT-2026-09-04.md](../MOVEMENT-2026-09-04.md)
 regenerate instead of rotting. **They are unpromoted**: no tests, no `TESTS.md` entry,
 no floors; several hard-code `C:/gd/Rurik` and read the local vault through

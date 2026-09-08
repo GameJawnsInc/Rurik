@@ -400,7 +400,7 @@ instrument over-reads on this arm; the hook's client-side count is 2 of 15.
 
 ## NPCTRACK-F13 — WITHDRAWN the same afternoon: "the client's follow re-targets itself" was my join artifact, and RUN-R3's hook says so
 
-**What was claimed** (committed at `5c90065`, two hours before this): that the Hatcher's sync
+**What was claimed** (committed at `293dbc9`, two hours before this): that the Hatcher's sync
 `m_targetPoint` changed 24 / 19 / 23 times over three tapes with no server order within 0.35 s,
 at a 0.56 s cadence, landing 144 u from our last ordered point — a client-side follow re-target,
 contested against ANIMREF-RE §38.2's *"no local chase"*.

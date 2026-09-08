@@ -311,7 +311,7 @@ BUILDS = (
           )),
     # ArenaNet updated mid-run 2026-08-20; the skills arc rebuilt on 38849 and
     # closed the build gap (identical ghost behaviour, studies/skills 32.7,
-    # commit d21ac05), but the pinned row lagged, so test_handshake's build-vs-
+    # commit 5b6d4b9), but the pinned row lagged, so test_handshake's build-vs-
     # keyfile check reddened -- 38849 exe against a keyfile no BUILDS row named.
     # Snapshotted here 2026-08-22 (snapshot_client.py, MANIFEST verified byte-
     # identical). The PIN stays 38797 (below); this row only lets the newest

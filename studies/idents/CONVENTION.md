@@ -173,7 +173,7 @@ the test, where provlint's are.
 **OBSERVED (the commits and their monotonicity —
 `git log --all --format='%s' | grep -E '^[0-9]+:'`) + RECONSTRUCTION (what the number
 meant), 2026-08-20.** A run of bare-integer subject prefixes starts at `29:`
-(`b3d282a`) and climbs monotonically, all dated 2026-08-19/20 (HANDOFF §2.4) — and the
+(`4f28d69`) and climbs monotonically, all dated 2026-08-19/20 (HANDOFF §2.4) — and the
 count is deliberately NOT pinned here: it grew by one (`43:`) between this arc's
 census and its landing, because each subject is immutable but the SET grows until
 minting stops. Run the command; do not trust a copy. No document ever defined the

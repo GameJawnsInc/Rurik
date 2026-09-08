@@ -864,7 +864,7 @@ def section_error_dialog():
     # expression statement, `ok` was never reassigned after it, and a run whose
     # client asserted during the hold still printed RUN VERDICT: PASS and exited 0.
     # `customarea/FINDINGS.md` 31.4 recorded this defect as FIXED and the `return`
-    # landed in the same commit as the portal (276080a) -- the statement shipped and
+    # landed in the same commit as the portal (97f681a) -- the statement shipped and
     # the wiring did not, which is the failure mode this repo keeps naming: a rule
     # nothing checks is a wish. The walk path immediately above it retracts
     # correctly, and that similarity is what made the gap easy to read past.

@@ -4,18 +4,18 @@
 > [studies/movement/HANDOFF.md](../movement/HANDOFF.md)**, which is the arc's entry
 > point as of 2026-08-30 and carries the staleness table for every document here.
 >
-> **CURRENCY, stated so it cannot lie:** this file was last edited at `2882627`
-> (section 1z-i) and its old self-stamp claimed `dcf9484`, which was already wrong.
-> **Sections 4.1–4.3 below are current only through `2882627`.** Four commits landed
+> **CURRENCY, stated so it cannot lie:** this file was last edited at `40e3d27`
+> (section 1z-i) and its old self-stamp claimed `a481a88`, which was already wrong.
+> **Sections 4.1–4.3 below are current only through `40e3d27`.** Four commits landed
 > after it that this file does not otherwise record, all of them defects in the arc's
 > OWN instruments rather than findings about the client:
 >
 > | commit | what it was |
 > |---|---|
-> | `1ce0171` | 1z-j — the map identifier picked the WRONG map; a scoring pass believed it and read OFF-MESH 3 instead of 63 |
-> | `30055e0` | 1z-k — the motion window: one expression, three defects, and the reader had been CRASHING on run 1 |
-> | `d710a67` | 1z-l — `nearest_walkable`: an axis clamp is not a nearest point, and off-mesh depths were up to 3× too big |
-> | `131c84a` | 1z-m — `RET_MAX_POINTS` 4 → 9 as capture v8; v7 stays readable on purpose |
+> | `8bc8609` | 1z-j — the map identifier picked the WRONG map; a scoring pass believed it and read OFF-MESH 3 instead of 63 |
+> | `6c9b699` | 1z-k — the motion window: one expression, three defects, and the reader had been CRASHING on run 1 |
+> | `1381e3a` | 1z-l — `nearest_walkable`: an axis clamp is not a nearest point, and off-mesh depths were up to 3× too big |
+> | `25b829e` | 1z-m — `RET_MAX_POINTS` 4 → 9 as capture v8; v7 stays readable on purpose |
 >
 > **They did NOT move this arc's headline** — `pathdiff` on r7 still reproduces
 > AGREE 97 / DIFFER 34 / UNCOMPARED 13 / OFF-MESH 63 — but they moved older figures
@@ -54,7 +54,7 @@
 > candidate instance. The next action is the corpus-wide plane-disagreement census;
 > the reasoning is in the arc handoff's section D.
 
-**Written 2026-08-29 at commit `dcf9484`, tree clean, branch `main`.** This hands off
+**Written 2026-08-29 at commit `a481a88`, tree clean, branch `main`.** This hands off
 two days of work on a channel the arc had never scored and a client failure mode it had
 never seen. Read §5 before you propose a fix — the most obvious one is refused twice in
 this repo's own history, and a cold session will propose it within ten minutes.
@@ -140,7 +140,7 @@ next measurement is for.
 cause. The healthy run has 76/76 zero-length grants and a 46.7 s stretch at one
 position, and does not lock.
 
-## 3. What landed in `dcf9484`
+## 3. What landed in `a481a88`
 
 * **The plane repair** — `plane_repair_track` / `_maybe_plane_repair` in
   `toolkit/authsrv/authsrv.py`, **ON by default**, `--no-plane-repair` reverts. After
@@ -176,7 +176,7 @@ through it before you believe it.**
 
 > **EXPOSURE, stated once because it has been quoted three different wrong ways**
 > (47 sessions; 27 minutes; 1,216 logs). The tracker only exists in builds after
-> `dcf9484`, and the set of sessions carrying any `plane_repair_due` row is exactly
+> `a481a88`, and the set of sessions carrying any `plane_repair_due` row is exactly
 > the set started after it — a clean natural experiment. **Three sessions have ever
 > run armed: R6, R6b and R7.** That is **63.0 min wall**, of which only **23.9 min
 > carries position reports at all** (R6b's last ~23 min carry none). Never write a

@@ -1,6 +1,6 @@
 # RUN-NPCTRACK-Q10 — two hostiles, the first multi-agent measurement
 
-**Registered 2026-09-07, not yet run.** `main` at `ea105c4` plus `--enemies N`. Every movement
+**Registered 2026-09-07, not yet run.** `main` at `a6c979b` plus `--enemies N`. Every movement
 measurement in this repo so far was one player and ONE hostile (agent 10). Two chasers share
 the player's world-0 frame, each other's discs (the client's avoidance pass runs per agent,
 F14), the follow's disc park, the corridor on the wire (Q9), and the keyboard lead's new disc
