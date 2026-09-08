@@ -30,8 +30,14 @@ the codebase is mostly documentation, research, and plans. not meant for human c
 
 **the recommended way to develop, or to ask anything at all, is to open the checkout in
 your favorite coding harness and just ask.**
-"How does the handshake work?", "why is my client stuck on Connecting to ArenaNet?",
-"what would it take to make a new zone?"
+
+"how do i start a game session?"
+
+"how do I walk around on my own custom map?"
+
+"how far along is X feature?"
+
+"which mechanics are functional?"
 
 questions like these are easy for the agent to find
 
