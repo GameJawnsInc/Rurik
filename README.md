@@ -5,8 +5,11 @@ under development (v0.0.1 or something)
 it's a guild wars 1 server emulator + mod kit. 
 
 **research project, not a private server** 
+
 published as information and preservative
+
 there is no public server
+
 as of now - no support, no releases, no roadmap, ignoring issues and PRs (unless you convince me)
 
 [MIT-licensed](LICENSE), with a carve out for some wiki-derived content 
