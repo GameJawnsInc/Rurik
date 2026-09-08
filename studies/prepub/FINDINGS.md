@@ -45,12 +45,12 @@ before it was acted on.
 ## 2. PREPUB-F1 — the credential oracle. **OBSERVED**, and the one that mattered
 
 `toolkit/portal/sessionstore.py:9-14` and `toolkit/authsrv/test_handshake.py:103-105`
-pinned two GUIDs as *"the real UUIDs observed on the wire"*:
-
-```
-user_id  E696B44C-04FC-DF92-9EE1-B0CC329B424A
-token    233B382E-3CD2-E5B6-7018-7F547D2760A7
-```
+pinned two GUIDs as *"the real UUIDs observed on the wire"* — a `user_id` and a game
+`token`. **They are not reproduced here, and that is the point of the finding rather than
+an omission from it:** this document would otherwise republish the exact thing it exists
+to retire, which is how the first draft of it was written and what the sweep in §7 caught
+on its own author. Read them out of `git show 4f6aa792` if you need them; after the
+history pass they are gone from there too.
 
 `toolkit/portal/webgate.py:180-181` computes those as `stable_guid("user:" + email)` and
 `stable_guid("token:" + email)`, and `stable_guid` at `webgate.py:66-74` is published in
