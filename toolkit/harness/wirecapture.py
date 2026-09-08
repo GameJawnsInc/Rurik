@@ -38,6 +38,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
 import origin  # noqa: E402
+import vaultpath  # noqa: E402
 import tcptable  # noqa: E402
 
 C2S = "c2s"
@@ -676,7 +677,15 @@ def main():
         ports |= {int(port)}
     if not ports:
         raise SystemExit("name the ports to sniff: --server <ip:port> and/or --ports 6112,6601")
-    n, path = capture_session(a.pid, ip, ports, a.out, a.seconds)
+    # WHERE THE CAPTURE MAY LAND (the audit's sec 9 item 3: an output path from the command line used to be written wherever it pointed).
+    # This writes ciphertext and metadata from the owner's own session; the
+    # refusal is resolved BEFORE the sniffer starts, so a bad path costs
+    # nothing rather than being discovered after a run that cannot be redone.
+    try:
+        out = vaultpath.resolve_out(a.out, "a wire capture")
+    except ValueError as exc:
+        raise SystemExit(str(exc))
+    n, path = capture_session(a.pid, ip, ports, out, a.seconds)
     print(f"recorded {n} segments to {path}")
     return 0
 

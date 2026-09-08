@@ -69,6 +69,20 @@ SKIP = {
 EXTRA_ALIASES = {
     "Fournux/Tyria-Extractor": {"Tyria-Extractor", "Fournux"},
     "gwdevhub/GuildWarsMapBrowser": {"GWMB"},
+    # The notice credits this project by its real name, which is not its repo
+    # slug: `## GWCA -- GregLando113, JaborGW, and gwdevhub/GWToolbox++`. Without
+    # this spelling the heading rule below cannot see its own notice.
+    "gwdevhub/GWToolboxpp": {"GWToolbox++"},
+}
+
+# Slugs whose BARE repo name is an ordinary English word. The generated alias set
+# is {slug, slug.split("/")[1]}, and for `gw-preservation/server` that second
+# element is `server` -- which appears in 195 of this repository's modules,
+# because this repository IS a server. That row said "named in 195 modules" and
+# meant nothing at all: it was measuring the English language. Dropping the bare
+# form leaves the slug itself, which is what a real citation writes.
+NO_BARE_ALIAS = {
+    "gw-preservation/server": "`server` matches 195 modules; this project is one",
 }
 
 # Upstreams named in real modules where NOTHING is derived. Each row is a
@@ -85,6 +99,17 @@ NO_DERIVATION = {
         "ships with an off-by-one. Every one of those is our reading corroborated "
         "by theirs, which is the use PLAN.md section 1.1 explicitly permits. No "
         "layout, no constant table, no code.",
+    "gw-preservation/server":
+        "Named ONCE, at content.py:76, inside the SOURCES table that DEFINES the "
+        "`gw-preservation` provenance label -- and the constant immediately below "
+        "it, UNLICENSED, is what makes a content row citing that label REFUSE TO "
+        "LOAD unless it records what we verified the value against. The slug is "
+        "written there so the refusal can name the thing it refuses, which is the "
+        "opposite of deriving from it. Note the register spells this source "
+        "`gw-preservation` without the repo name (PLAN.md section 6.1, the "
+        "content rows), so it cannot be matched off the register text; before "
+        "2026-09-08 the row scored `6.1: yes` only because the generated bare "
+        "alias `server` matched the word in 195 modules.",
     "apoguita/Py4GW_Reforged_Native":
         "Named ONCE, at areatable.py:35, inside an argument that it is NOT an "
         "independent witness: several projects do them identically and GWCA's own "
@@ -102,13 +127,27 @@ ATTRIBUTION_REQUIRED = {
     "ldufr/Headquarter": "MIT",
     "gwdevhub/GuildWarsMapBrowser": "custom, requires repo link + visible credit",
     "Jonathan-Greve/GuildWarsMapBrowser": "custom, requires repo link + visible credit",
+    # ADDED 2026-09-08 (studies/prepub/FINDINGS.md sec 9 item 1). These three were
+    # missing, and they are the ones whose tables ship INSIDE toolkit/ --
+    # agents.py's WEAPON_TYPE_*/ALLEGIANCE_* pairs and genericvalue.py's 32-entry
+    # GenericValueID table. So the checker reported the tree clean for weeks while
+    # the one upstream it most needed to watch was outside its own list, which is
+    # worse than no checker: it produced a green light. Three slugs rather than
+    # one because there are three GWCA copies and they do not agree (the notice
+    # says which is which); all three are MIT, attribution required.
+    "GregLando113/GWCA": "MIT",
+    "JaborGW/GWCA": "MIT",
+    "gwdevhub/GWToolboxpp": "MIT",
 }
 
 
 def aliases():
     out = {}
     for slug, _why in mirror_priorart.REPOS:
-        out.setdefault(slug, set()).update({slug, slug.split("/")[1]})
+        names = {slug}
+        if slug not in NO_BARE_ALIAS:
+            names.add(slug.split("/")[1])
+        out.setdefault(slug, set()).update(names)
     for slug, extra in EXTRA_ALIASES.items():
         out.setdefault(slug, set()).update(extra)
     return out
@@ -168,6 +207,22 @@ def notices_text(root=None):
                 encoding="utf-8", errors="replace").read()
 
 
+def notice_headings(root=None):
+    """The `## ` headings of THIRD-PARTY-NOTICES.md -- the sections it actually has.
+
+    WHY A HEADING AND NOT THE WHOLE FILE. The old check asked whether the slug
+    appeared ANYWHERE in the notices, and the notices end with a section called
+    "What is deliberately NOT here" whose whole point is to name upstreams this
+    repository does NOT credit -- because they carry no licence and nothing is
+    derived from them. One line there reads "`gw-preservation/*` and
+    `Py4GW_Reforged` carry no licence at all", and on the strength of it BOTH
+    Py4GW slugs scored `notice: yes` (measured 2026-09-08, before this change).
+    The checker was reading a disclaimer as an attribution: the exact inversion of
+    what it is for. A notice is a section with a heading; that is what this reads.
+    """
+    return [ln for ln in notices_text(root).splitlines() if ln.startswith("## ")]
+
+
 def audit(root=None, no_derivation=None):
     """(unaccounted, stale, orphan, missing_notice), each a sorted list.
 
@@ -180,19 +235,23 @@ def audit(root=None, no_derivation=None):
     root = root or REPO
     nd = NO_DERIVATION if no_derivation is None else no_derivation
     alias, hits = aliases(), named_in_code(root)
-    reg, notices = register_text(root), notices_text(root)
+    reg, heads = register_text(root), notice_headings(root)
 
     def anywhere(hay, slug):
         return any(n in hay for n in alias[slug])
 
+    def credited(slug):
+        """Named in a notice SECTION HEADING -- see notice_headings."""
+        return any(any(n in h for n in alias[slug]) for h in heads)
+
     unaccounted = sorted(s for s in hits
                          if not anywhere(reg, s)
-                         and not anywhere(notices, s)
+                         and not credited(s)
                          and s not in nd)
     stale = sorted(s for s in nd if anywhere(reg, s))
     orphan = sorted(s for s in nd if s not in hits)
     missing_notice = sorted(s for s in ATTRIBUTION_REQUIRED
-                            if anywhere(reg, s) and not anywhere(notices, s))
+                            if anywhere(reg, s) and not credited(s))
     return unaccounted, stale, orphan, missing_notice
 
 
@@ -203,14 +262,14 @@ def main():
     args = ap.parse_args()
 
     alias, hits = aliases(), named_in_code()
-    reg, notices = register_text(), notices_text()
+    reg, heads = register_text(), notice_headings()
     print(f"{len(hits)} upstreams named in toolkit/ outside the registries "
           f"({len(SKIP)} files skipped by construction)\n")
     print(f"  {'upstream':38} {'6.1':>5} {'notice':>7} {'no-deriv':>9}  modules")
     print("  " + "-" * 84)
     for slug in sorted(hits):
         r = any(n in reg for n in alias[slug])
-        n = any(x in notices for x in alias[slug])
+        n = any(any(x in h for x in alias[slug]) for h in heads)
         d = slug in NO_DERIVATION
         flag = "" if (r or n or d) else "   <-- UNACCOUNTED"
         print(f"  {slug:38} {'yes' if r else '--':>5} {'yes' if n else '--':>7} "

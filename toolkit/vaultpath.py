@@ -22,6 +22,11 @@ Resolution, first hit wins:
 Rules 2-4 are accepted only if the directory is actually there, so a wrong
 guess falls through instead of being returned.
 
+Two jobs, and the second arrived 2026-09-08: `require_dir()` says where a
+fixture may be READ from, and `resolve_out()` says where a capture may be
+WRITTEN -- refusing every checkout of this repository, since the vault is
+personal data and the repository is public.
+
 Callers that need a fixture call require_dir(): it raises SystemExit with the
 path it looked at and why it believed in it, rather than handing back a path
 that is not there and letting the caller decide to shrug.
@@ -111,6 +116,111 @@ def require_dir(*parts, why=None):
     lines.append("  Set RURIK_VAULT to the vault directory, or see RUNBOOK.md.")
     raise SystemExit("\n".join(lines))
 
+
+
+
+# --------------------------------------------------------------- the write guard
+#
+# WHERE A CAPTURE MAY LAND. `require_dir` above answers "where do I READ the
+# fixture from"; this answers "where am I allowed to WRITE", and it is the other
+# half of the same rule.
+#
+# The vault is personal data recorded from the owner's own account, and it stays
+# local (CLAUDE.md). That was enforced by `.gitignore` and by habit until
+# 2026-09-08, when studies/prepub/FINDINGS.md sec 9 measured the gap: three capture
+# tools took an output path from the command line and wrote wherever they were
+# pointed, so a mistyped `--out` put a capture inside the checkout, where
+# `.gitignore` covers the vault BY DIRECTORY and therefore did not cover it at all.
+# The repository is public now. The commit gate (toolkit/githooks/pre_commit.py)
+# refuses such a file at `git commit`; this refuses it at the point of WRITING,
+# which is better, because the file never exists to be found later.
+#
+# The implementation lives here rather than in any one tool because four modules
+# already had their own copy of it (`atex`, `bit31`, `mapexport`, `shotlabel`) and
+# the repository's own pattern is that the write guard is IMPORTED, not re-typed --
+# `refindex.py` says so in as many words.
+
+
+def _inside(path, root):
+    path, root = os.path.abspath(path), os.path.abspath(root)
+    return path == root or path.startswith(root + os.sep)
+
+
+def repo_root():
+    """The checkout this file belongs to (may be a worktree, not the main tree)."""
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def working_tree_roots():
+    """Every checkout of this repository a write could land in.
+
+    A git worktree is a second checkout of the SAME repository, and `repo_root()`
+    there is not the main tree. A refusal that tested only the tree it is running
+    in would happily write a capture into the other one -- same repository, same
+    publication. So the main tree is resolved too: through `git rev-parse
+    --git-common-dir` when git is on PATH, and otherwise by reading the `.git`
+    GITFILE directly, so the guard still holds on a machine with no git (the
+    bare-machine defect class -- a guard that quietly weakens where it cannot run
+    its tool is the silent-success failure `checks.py` exists to refuse).
+    """
+    roots = [os.path.abspath(repo_root())]
+
+    common = _git_common_dir(roots[0])
+    if not common:
+        dotgit = os.path.join(roots[0], ".git")
+        if os.path.isfile(dotgit):                  # a worktree: ".git" is a file
+            try:
+                with open(dotgit, encoding="utf-8", errors="replace") as fh:
+                    line = fh.read().strip()
+            except OSError:
+                line = ""
+            if line.startswith("gitdir:"):
+                gitdir = line.split(":", 1)[1].strip()
+                if not os.path.isabs(gitdir):
+                    gitdir = os.path.join(roots[0], gitdir)
+                node = os.path.abspath(gitdir)
+                while os.path.basename(node) != ".git":
+                    parent = os.path.dirname(node)
+                    if parent == node:
+                        node = None
+                        break
+                    node = parent
+                common = node
+
+    if common:
+        main = os.path.dirname(os.path.abspath(common))
+        if main and not _inside(main, roots[0]):
+            roots.append(main)
+    return roots
+
+
+def resolve_out(path, what="capture output"):
+    """The absolute path a write may use, or ValueError naming the tree it refused.
+
+    THE ORDER IS LOAD-BEARING and it is `shotlabel.resolve_out`'s order: the vault
+    sits INSIDE the main working tree (`<repo>/vault`), so a checkout test that ran
+    first would refuse every legitimate destination there is. The vault is checked
+    first and returns immediately.
+
+    Anywhere outside both -- a scratch directory, another disk -- is allowed and
+    deliberately so: this guard is about not writing personal data into a public
+    repository, not about confining the caller to one directory.
+    """
+    path = os.path.abspath(path)
+    if _inside(path, os.path.abspath(vault_root())):
+        return path
+    for root in working_tree_roots():
+        if _inside(path, root):
+            where = ("the MAIN checkout, which this worktree shares a repository with"
+                     if root != os.path.abspath(repo_root()) else "this checkout")
+            raise ValueError(
+                f"refusing to write {what} into the working tree: {path}\n"
+                f"  That tree is {root} -- {where}.\n"
+                f"  The vault is personal data and stays local (CLAUDE.md); this\n"
+                f"  repository is public, so a file written here is one `git add -A`\n"
+                f"  from being published and cannot be recalled afterwards.\n"
+                f"  Write under {vault_path('captures')} instead.")
+    return path
 
 if __name__ == "__main__":
     print(f"vault:  {vault_root()}")

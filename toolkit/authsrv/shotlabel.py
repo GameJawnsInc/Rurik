@@ -110,44 +110,17 @@ MARK = "PROBE[smsgsweep]"
 
 
 # ---------------------------------------------------------------- where it may write
+#
+# DELEGATED, not re-typed. This module used to carry the implementation and three
+# capture tools carried none, which is how `studies/prepub/FINDINGS.md` sec 9 item 3
+# came to be written: a guard that lives in one tool guards one tool. It moved to
+# `vaultpath` on 2026-09-08 -- the module every one of those tools already imports
+# to find the vault -- and this file now delegates, the same shape `modelexport`
+# and `unitexport` use for `mapexport.resolve_outdir`, and for the reason
+# `refindex.py:161` states outright: the write guard is IMPORTED, not re-typed,
+# because two copies is how one of them goes stale without anybody noticing.
 
-def _inside(path, root):
-    path, root = os.path.abspath(path), os.path.abspath(root)
-    return path == root or path.startswith(root + os.sep)
-
-
-def working_tree_roots():
-    """Every checkout of this repository a write could land in.
-
-    Same shape and the same reason as `mapbuild.working_tree_roots`: in a git worktree
-    `REPO_ROOT` is NOT the main checkout, so a refusal that tested it alone would let
-    a page of client screenshots be written straight into the other tree of the same
-    repository.
-    """
-    roots = [os.path.abspath(REPO_ROOT)]
-    dotgit = os.path.join(REPO_ROOT, ".git")
-    if not os.path.isfile(dotgit):
-        return roots
-    try:
-        with open(dotgit, "r", encoding="utf-8", errors="replace") as fh:
-            line = fh.read().strip()
-    except OSError:
-        return roots
-    if not line.startswith("gitdir:"):
-        return roots
-    gitdir = line.split(":", 1)[1].strip()
-    if not os.path.isabs(gitdir):
-        gitdir = os.path.join(REPO_ROOT, gitdir)
-    node = os.path.abspath(gitdir)
-    while os.path.basename(node) != ".git":
-        parent = os.path.dirname(node)
-        if parent == node:
-            return roots
-        node = parent
-    main = os.path.dirname(node)
-    if main and not _inside(main, roots[0]):
-        roots.append(main)
-    return roots
+working_tree_roots = vaultpath.working_tree_roots
 
 
 def resolve_out(path):
@@ -156,20 +129,12 @@ def resolve_out(path):
     The page embeds cropped frames of the retail client. That is ArenaNet's rendered
     expression rather than anything we measured, and `CLAUDE.md`'s provenance gate
     keeps it out of this repository permanently -- in EVERY tree, not just this one.
+
+    Delegates to `vaultpath.resolve_out`, which applies the identical rule (vault
+    first, because the vault sits inside the main checkout; then every working tree)
+    and raises the same ValueError. Only the noun in the message differs.
     """
-    path = os.path.abspath(path)
-    vault = os.path.abspath(vaultpath.vault_root())
-    if _inside(path, vault):
-        return path
-    for root in working_tree_roots():
-        if _inside(path, root):
-            raise ValueError(
-                f"refusing to write client screenshots into the working tree: {path}\n"
-                f"  That tree is {root}"
-                + (" -- the MAIN checkout, which this worktree shares a repository "
-                   "with.\n" if root != os.path.abspath(REPO_ROOT) else "\n")
-                + f"  Write under {vaultpath.vault_path('labelling')}.")
-    return path
+    return vaultpath.resolve_out(path, "client screenshots")
 
 
 # ---------------------------------------------------------------- reading a run

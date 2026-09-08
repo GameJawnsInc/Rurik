@@ -39,15 +39,15 @@ sys.path.insert(0, HERE)
 import checks     # noqa: E402
 import derivlint  # noqa: E402
 
-# MEASURED: 20 on the first green run. The floor is 17, not 20, and the
-# derivation is the point -- checks.py wants the MANDATORY CORE, not today's
-# total. Sections 1-4 are 17 checks and are independent of how many rows
-# NO_DERIVATION holds; section 5 adds one per row, and there are three. So a
-# tree where every upstream had earned a real 6.1 row -- the direction this
-# is supposed to move -- would legitimately run 17, and pinning 20 would turn
-# that improvement into a red suite. Nothing here needs the vault, a client
-# or a socket, so nothing can skip.
-LEDGER = checks.Ledger("derivlint: the second gate's checker", floor=17)
+# The floor is the MANDATORY CORE, not today's total -- checks.py's guidance.
+# Sections 1-4 and 6-8 are independent of how many rows NO_DERIVATION holds;
+# section 5 adds one check PER ROW, and rows come and go (a fourth arrived
+# 2026-09-08 for gw-preservation/server). A tree where every upstream had
+# earned a real 6.1 row -- the direction this is supposed to move -- would
+# legitimately run fewer, and pinning the total would turn that improvement
+# into a red suite. Nothing here needs the vault, a client or a socket, so
+# nothing can skip.
+LEDGER = checks.Ledger("derivlint: the second gate's checker", floor=30)
 check = checks.adopt(LEDGER)
 
 _TMP = []
@@ -173,6 +173,68 @@ def main():
               f"{slug}'s row cites a site rather than asserting a verdict",
               f"{why[:80]}... -- a bare 'nothing taken' is the silent skip this "
               f"list exists to replace")
+
+    # ---- 6. a notice is a SECTION, not a substring -------------------------
+    print("\n6. a disclaimer is not an attribution: the notice must be a heading")
+    # The real defect, rebuilt. THIRD-PARTY-NOTICES.md ends with a section that
+    # names the upstreams this repository deliberately does NOT credit, because
+    # they grant nothing. Under the old whole-file substring rule that section
+    # was indistinguishable from an attribution: measured 2026-09-08 on the real
+    # tree, BOTH Py4GW slugs scored `notice: yes` on the strength of one line
+    # saying they carry no licence at all.
+    mod = '# from Fournux/Tyria-Extractor\n'
+    disclaimer = ("# Third-party notices\n\n## What is deliberately NOT here\n\n"
+                  "`Tyria-Extractor` carries no licence we rely on here.\n")
+    root = synth_root(mod, register_rows=LANDSCAPE, notices=disclaimer)
+    _u, _s, _o, missing = derivlint.audit(root, no_derivation={})
+    check("Fournux/Tyria-Extractor" in missing,
+          "an attribution-required upstream named ONLY in a disclaimer is MISSING",
+          f"missing={missing} -- the old substring rule read this as a notice")
+    credited = ("# Third-party notices\n\n## Tyria-Extractor -- Fournux\n\n"
+                "**Licence: MIT** -- attribution required.\n")
+    root = synth_root(mod, register_rows=LANDSCAPE, notices=credited)
+    _u, _s, _o, missing2 = derivlint.audit(root, no_derivation={})
+    check(not missing2,
+          "and the same upstream under a `## ` heading is credited",
+          f"missing={missing2} -- both arms move, so the rule is the heading "
+          f"and not the file")
+    heads = derivlint.notice_headings()
+    check(len(heads) >= 5 and all(h.startswith("## ") for h in heads),
+          "and the real notices file parses into its sections",
+          f"{len(heads)} headings -- zero would make every notice check vacuous")
+    check(not any("deliberately NOT here" in h.lower() for h in heads
+                  if "py4gw" in h.lower()),
+          "the disclaimer section credits nobody, by construction")
+
+    # ---- 7. the bare-word alias that measured the English language ----------
+    print("\n7. `server` is not an alias: it matched 195 modules and meant nothing")
+    alias = derivlint.aliases()
+    check("server" not in alias["gw-preservation/server"],
+          "the bare repo name is dropped for gw-preservation/server",
+          f"aliases={sorted(alias['gw-preservation/server'])}")
+    check("gw-preservation/server" in alias["gw-preservation/server"],
+          "but the slug itself still is -- a real citation writes the slug")
+    check(all(slug.split("/")[1] in alias[slug]
+              for slug in alias if slug not in derivlint.NO_BARE_ALIAS),
+          "and every other upstream keeps its bare name",
+          "the drop is one measured exception, not a policy change")
+    noise = synth_root("# the server started listening\n")
+    check("gw-preservation/server" not in derivlint.named_in_code(noise),
+          "a module using the WORD server no longer counts as naming it",
+          "this is the whole defect: 195 modules, and this repository is a server")
+
+    # ---- 8. the upstreams whose tables ship inside toolkit/ -----------------
+    print("\n8. ATTRIBUTION_REQUIRED covers the upstream that ships in toolkit/")
+    for slug in ("GregLando113/GWCA", "JaborGW/GWCA", "gwdevhub/GWToolboxpp"):
+        check(slug in derivlint.ATTRIBUTION_REQUIRED,
+              f"{slug} is attribution-required",
+              "F5: derivlint reported clean for weeks because the one upstream "
+              "whose constant tables ship inside toolkit/ was not in this set")
+    _u, _s, _o, missing_real = derivlint.audit()
+    check(not missing_real,
+          "and every one of them has a notice in the REAL tree",
+          f"missing={missing_real} -- this goes red if a notice section is "
+          f"deleted or renamed, which is the point of adding them")
 
     for p in _TMP:
         shutil.rmtree(p, ignore_errors=True)

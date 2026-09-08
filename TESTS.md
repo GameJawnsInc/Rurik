@@ -11228,3 +11228,31 @@ every blob and message hours earlier by the history rewrite (`studies/prepub/FIN
 them out. `probe_self` runs the content rules over this file and is the check that
 proves it. Stdlib only, no vault, no socket, no client. 76 checks, floor 60; the
 wrapper's index-mode check declares a skip until the wrapper is tracked. ~3 s)
+
+`toolkit/test_vaultpath.py` (**the vault resolver and the WRITE guard.** `vaultpath`
+is the most-depended-on module in the toolkit and it had no test at all until
+2026-09-08, which is not a small omission: its entire reason for existing is that a
+fixture path resolving silently to the wrong place turns every assertion behind it
+into a no-op. Section 1 pins the resolution ORDER, including that an explicit
+`RURIK_VAULT` is honoured **even when it points at nothing** -- a typo must be
+reported, not replaced by a different vault -- with a control asserting the fixture
+really is absent so the check cannot pass for the wrong reason. Section 2 pins that
+`require_dir` RAISES, naming the path, the vault and what the caller wanted it for.
+Sections 3-6 are `resolve_out`, added for the audit's sec 9 item 3: **three capture
+tools took an output path from the command line and wrote wherever they were
+pointed**, so a mistyped `--out` put a capture inside the checkout, where
+`.gitignore` covers the vault by DIRECTORY and so did not cover it at all. The
+commit gate refuses such a file at `git commit`; this refuses it at the point of
+writing, which is better because the file never exists. **The ORDER of the two tests
+is the whole design and section 4 is its control**: the vault lives INSIDE the main
+checkout, so a guard that tested the checkout first would refuse every legitimate
+destination there is -- the check names that fact rather than assuming it. Section 5
+asserts by AST that `wirecapture.py`, `drive_client.py` and `authsrv.py` actually
+CALL the guard, because a guard nothing calls is the same as no guard and this
+repository has shipped that exact shape twice (`test_atex.py`, `test_marks.py`); it
+also pins that `shotlabel.py` kept the public name while DELETING its own copy of
+the walk, per `refindex.py:161` -- the write guard is imported, not re-typed.
+Section 6 builds a synthetic worktree with git monkeypatched OUT and asserts the
+main checkout is still found by reading the `.git` gitfile, so the guard does not
+quietly weaken on a machine without git. Stdlib only, no vault fixture needed,
+bare-machine safe. 24 checks, floor 23. ~1 s)

@@ -54,7 +54,7 @@ sys.path.insert(0, os.path.join(TOOLKIT, "clientscan"))
 # has to load on a bare machine or the launcher stops loading at all.
 sys.path.insert(0, os.path.join(TOOLKIT, "mapdata"))
 from tcptable import connections  # noqa: E402
-from vaultpath import vault_path  # noqa: E402
+from vaultpath import resolve_out, vault_path  # noqa: E402
 import buildid  # noqa: E402
 import cage  # noqa: E402
 import accounts  # noqa: E402
@@ -1086,7 +1086,13 @@ def main():
     print(f"archive: {datcheck.assert_archive_safe(client_dat, why='launch')['summary']}")
 
     stamp = time.strftime("%Y%m%dT%H%M%S")
-    outdir = os.path.join(a.outdir, stamp)
+    # WHERE THE RUN MAY WRITE (the audit's sec 9 item 3: an output path from the command line used to be written wherever it pointed). The DEFAULT is already the
+    # vault; this is about the path an operator passes, and it is resolved
+    # before the client is launched rather than after.
+    try:
+        outdir = resolve_out(os.path.join(a.outdir, stamp), "a client run")
+    except ValueError as exc:
+        raise SystemExit(str(exc))
     os.makedirs(outdir, exist_ok=True)
 
     # Instrumentation FIRST. See the module docstring.

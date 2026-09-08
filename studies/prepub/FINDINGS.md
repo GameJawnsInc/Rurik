@@ -313,10 +313,26 @@ about this project's own past and becomes a live exposure with strangers attache
 
 Three follow-ups, in the order I would do them:
 
-1. **`derivlint` misses attribution-required upstreams that are not in its list** (F5).
+1. ~~**`derivlint` misses attribution-required upstreams that are not in its list** (F5).
    Add both GWCA slugs and `gwdevhub/GWToolboxpp`; require a notice match to be a `## `
    heading rather than any substring; drop the bare-word alias `server`, which is why
-   `gw-preservation/server` matches 194 modules and tells you nothing.
+   `gw-preservation/server` matches 194 modules and tells you nothing.~~ **LANDED
+   2026-09-08**, all three, and the middle one was worse than this row knew. The
+   substring rule did not merely admit weak evidence: `THIRD-PARTY-NOTICES.md` ends
+   with a section naming the upstreams this repository deliberately does NOT credit,
+   and one line of it -- *"`gw-preservation/*` and `Py4GW_Reforged` carry no licence
+   at all"* -- was enough to score **both Py4GW slugs `notice: yes`**. The checker was
+   reading a disclaimer as an attribution. A notice is now a `## ` SECTION HEADING,
+   `GWToolbox++` is registered as an alias so the GWCA heading can credit the project
+   by the name it actually uses, and the three GWCA-family slugs are in
+   `ATTRIBUTION_REQUIRED`. Dropping the bare `server` alias took that row from **195
+   modules to 1** -- it had been measuring the English language, in a repository that
+   is a server -- and the one real citation is `content.py:76`, where the slug is
+   written inside the table that REFUSES it, so it earned a `NO_DERIVATION` row.
+   Tightening also exposed that the register spells that source `gw-preservation`
+   without the repo name, so its old `6.1: yes` had been the word `server` matching
+   too. `test_derivlint.py` 32 checks, floor 30; the disclaimer case is rebuilt
+   against a synthetic root and both arms move.
 2. ~~**A `.githooks/pre-commit` that refuses staged vault-shaped paths** regardless of
    location, plus one line in `RUNBOOK.md` to install it.~~ **LANDED 2026-09-08**
    (`toolkit/githooks/pre_commit.py`, `toolkit/test_precommit.py`, 76 checks; install
@@ -332,11 +348,21 @@ Three follow-ups, in the order I would do them:
    at extensions that do not exist in this project (`*.gwcap` appears nowhere else in the
    tree) while the formats that *do* exist — `authsrv-*.jsonl`, `*.raw`, `hold*.png` —
    are covered only by their directory.
-3. **Three capture tools default their output path into the checkout rather than the
+3. ~~**Three capture tools default their output path into the checkout rather than the
    vault** (`wirecapture.py --out`, `authsrv.py --vault`, `drive_client.py --outdir`).
    `shotlabel.py:152 resolve_out` already implements the correct refusal — it walks the
    `.git` gitfile so it catches worktrees too — and three other modules already use it.
-   Route these three through it.
+   Route these three through it.~~ **LANDED 2026-09-08.** The guard MOVED rather than
+   being called across a package boundary: it now lives in `toolkit/vaultpath.py`, the
+   module all three already import to find the vault, and `shotlabel` delegates to it
+   with its own noun — the shape `modelexport` and `unitexport` already use for
+   `mapexport.resolve_outdir`, and the rule `refindex.py:161` states outright: the
+   write guard is IMPORTED, not re-typed. Each tool resolves its path BEFORE doing
+   anything expensive — before the sniffer starts, before the client launches, before
+   `authsrv` opens a socket — so a bad path costs nothing instead of being discovered
+   after a run that cannot be redone. `vaultpath` had no test at all before this;
+   `test_vaultpath.py` is 24 checks and asserts by AST that all three tools really
+   call it, since a guard nothing calls is the same as no guard.
 
 None of these is a disclosure today. All three are the mechanism by which one becomes
 possible on a repository other people can now push to.

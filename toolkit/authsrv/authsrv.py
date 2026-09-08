@@ -47,7 +47,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from codec import Codec  # noqa: E402
 from sessionstore import SessionStore, wire_to_uuid  # noqa: E402
-from vaultpath import vault_path  # noqa: E402
+from vaultpath import resolve_out, vault_path  # noqa: E402
 import probes  # noqa: E402
 import labelrun  # noqa: E402
 import agents
@@ -25863,6 +25863,16 @@ def main():
                          "escape hatch so a stale sessions.json cannot be mistaken for a "
                          "wire bug. Never the default: the rejection path has to stay exercised.")
     a = ap.parse_args()
+
+    # WHERE THIS SERVER MAY WRITE ITS CAPTURES (the audit's sec 9 item 3: an output path from the command line used to be written wherever it pointed).
+    # Every connection thread writes ciphertext and session metadata under
+    # `a.vault`, so the refusal belongs HERE, at startup, before a socket is
+    # open -- not per connection, where it would fire mid-session with a
+    # client already attached.
+    try:
+        a.vault = resolve_out(a.vault, "server captures")
+    except ValueError as exc:
+        raise SystemExit(str(exc))
 
     if a.list_probes:
         print("Probes -- scripted one-packet experiments against our own client.")
