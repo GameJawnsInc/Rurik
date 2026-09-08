@@ -21,7 +21,8 @@ WHAT IT MEASURES, and where each band comes from (all OBSERVED on the named run)
             moving. A session under the floor prints NOT ENOUGH and scores nothing --
             a scorecard on ten reports is the same defect as a test with no floor.
 
-  PLAYER    0x002C re-pins sent (RUN-FEEL2: 1, a pre-empted budget-red snap; RUN-1zBP's
+  PLAYER    0x002B->destination pairs a 0x001E split (1z-cm: retail 0 of 2,404; session 5's
+            crash was one, under a due arrival); 0x002C re-pins sent (RUN-FEEL2: 1, a pre-empted budget-red snap; RUN-1zBP's
             known-bad arm: 3 against 0); the wire-only LOCK signature (1z-am.3, restated
             for a hand-driven session as a keyboard leg armed and never cleared for
             LOCK_S while nothing reports); zero leads (1z-ce: the climb's 15 of 15
@@ -48,11 +49,13 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(HERE)))
-for sub in ("toolkit", "toolkit/clientscan", "toolkit/mapdata", "studies/renderobj/review"):
+for sub in ("toolkit", "toolkit/clientscan", "toolkit/mapdata", "toolkit/authsrv",
+            "studies/renderobj/review"):
     sys.path.insert(0, os.path.join(ROOT, sub))
 
 import vaultpath                                   # noqa: E402
 import w0score as W                                # noqa: E402
+import stalepair                                   # noqa: E402
 
 # ---- bands: (ok_max, red_min) per metric; between them is WATCH ------------
 REPIN_OK, REPIN_RED = 1, 4                # 0x002C sent to the player
@@ -158,6 +161,9 @@ def score_capture(rows, mesh):
     out["zero_leads"] = zero
     out["zero_frac"] = (zero / len(fired)) if fired else None
     out["clip_why"] = why
+    # 1z-cm: a 0x001E between a 0x002B and its destination is the client's
+    # AgAgent.cpp:1198 assert whenever an arrival is due at that tick; retail 0 of 2,404.
+    out["stale_pairs"] = stalepair.census(rows)
     out["repins"] = sum(1 for r in rows if r.get("kind") == "sent" and r.get("opcode") == 0x2C)
     out["repin_why"] = [r.get("why") for r in rows if r.get("kind") == "agtrack_repin_fire"]
     drifts = [r["drift"] for r in reps if isinstance(r.get("drift"), (int, float))]
@@ -419,6 +425,14 @@ def report(cap_path, tape, mesh, mid, c, t):
     print("PLAYER")
     line("0x002C re-pins sent", "%d %s" % (c["repins"], c["repin_why"] or ""),
          _v(c["repins"], REPIN_OK, REPIN_RED), "FEEL2 1 (pre-empted); known-bad arm 3")
+    sp = c["stale_pairs"]
+    line("0x002B->destination pairs split by a 0x001E", "%d of %d" % (sp["split"], sp["pairs"]),
+         "OK   " if not sp["split"] else "RED  ",
+         "1z-cm: retail 0 of 2,404 (same packet); under a due arrival it is AgAgent.cpp:1198"
+         + ("; at t=%s" % [s[1] for s in sp["splits"]] if sp["splits"] else ""))
+    if sp["bare"]:
+        line("bare 0x002B (no destination within 12 sends)", "%d" % sp["bare"], "WATCH",
+             "the loading-screen assert class; at t=%s" % [b[1] for b in sp["bares"]])
     line("lock signature (armed leg, no report, >= %.0f s)" % LOCK_S,
          "none" if not c["locks"] else "at t=%s" % c["locks"],
          "OK   " if not c["locks"] else "RED  ", "1z-am.3 restated for a hand-driven session")

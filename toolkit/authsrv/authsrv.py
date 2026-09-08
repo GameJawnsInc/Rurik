@@ -64,6 +64,7 @@ import morale  # noqa: E402
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))), "harness"))
 import control  # noqa: E402
+import stalepair  # noqa: E402
 
 _QUEST_ROWS = None
 
@@ -6601,6 +6602,20 @@ A2_LEAD_PLANE_WORDS = True
 KBD_LEAD_CHAIN = True
 KBD_LEAD_CHAIN_MAX = 12          # sends per leg
 KBD_LEAD_CHAIN_MARGIN = 0.10     # s before the copy's arrival at the vertex
+# THE RATE/DESTINATION PAIR MAY NOT BE SPLIT BY A TICK (MOVECODE-1z-cm). 0x002B's
+# setter SETS the client's INTERNAL_FLAG_MOVEMENT_STALE (0x00602A22), the destination
+# setter CLEARS it (0x00602A65), and the movement tick -- an ARRIVAL record fired by
+# 0x001E's AgTimer::Advance -- asserts it clear (AgAgent.cpp:1198, 0x0060015C). The
+# receive thread sends the pair as two locked writes and the world tick thread's
+# 0x001E landed between them on RUN-1zCG session 5 (seq 2723/2724/2725, 0.3 ms) with
+# a STOP-ECHO's arrival due: the client asserted. Retail: 2,403 of 2,403 pairs at a
+# wire gap of zero, a tick between them 0 times. The gate lives in send(): a 0x002B
+# opens a pair, its agent's next 0x0029/0x002A closes it, a tick from another thread
+# waits on the send condition until then, bounded -- a pair still open at the bound is
+# a BARE rate message (the 2026-08 loading-screen assert class), dropped and named.
+# --no-stale-pair-gate reverts to the per-message lock. stalepair.py has the record.
+STALE_PAIR_GATE = True
+STALE_PAIR_GATE_MAX = stalepair.HOLD_MAX_S   # s a tick may wait on an open pair
 
 
 def _leg_last_on_mesh(pm, x0, y0, x1, y1):
@@ -19438,6 +19453,10 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
         # one keystream across two messages and produce plaintext neither end
         # could read. The lock covers crypt and sendall together, not separately.
         send_lock = threading.Lock()
+        # MOVECODE-1z-cm: the condition a world tick waits on while another thread
+        # has a 0x002B on the wire and its destination not yet written. Same lock.
+        send_cond = threading.Condition(send_lock)
+        stale_gate = stalepair.StalePairGate()
 
         # We never write s2c CIPHERTEXT anywhere: rec.frame is only ever called
         # with 'c2s', so the .raw sidecar holds one direction. The only way to
@@ -19499,9 +19518,37 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                 # would have done, then feeds the emit to the mirror pair.
                 _agtrack_shadow_emit(state, opcode, values, rec)
             blob = codec.encode(smsg, opcode, values)
+            held = None
             with send_lock:
+                # MOVECODE-1z-cm: a tick may not split a rate message from its
+                # destination -- the client's arrival record would assert
+                # AgAgent.cpp:1198 on the STALE flag the 0x002B just set. The wait
+                # releases the lock, so the thread finishing the pair gets in.
+                if STALE_PAIR_GATE and opcode == GAME_SMSG_WORLD_SIMULATION_TICK:
+                    held = stalepair.hold_tick(stale_gate, send_cond,
+                                               threading.get_ident(),
+                                               max_wait=STALE_PAIR_GATE_MAX)
                 seq = next(s2c_seq)
                 sock.sendall(s2c.crypt(blob))
+                if STALE_PAIR_GATE:
+                    if stale_gate.note(opcode, values, threading.get_ident(),
+                                       time.monotonic()) == "close":
+                        send_cond.notify_all()
+            if held is not None and (held[0] > 0.0 or held[1] or held[2]):
+                waited_ms, bare_other, bare_own = held[0] * 1000.0, held[1], held[2]
+                if bare_other or bare_own or waited_ms >= 2.0:
+                    print(f"[c{conn_id}] stale-pair gate: tick held {waited_ms:.1f} ms"
+                          + (f"; BARE 0x002B from another thread for agents "
+                             f"{bare_other} -- no destination within "
+                             f"{STALE_PAIR_GATE_MAX * 1000:.0f} ms, the client's STALE "
+                             f"flag is set and its next arrival asserts" if bare_other else "")
+                          + (f"; BARE 0x002B from the ticking thread itself for agents "
+                             f"{bare_own}" if bare_own else ""),
+                          flush=True)
+                rec.event("stale_pair_gate", waited_ms=round(waited_ms, 3),
+                          bare_other=list(bare_other), bare_own=list(bare_own),
+                          holds=stale_gate.holds, opened=stale_gate.opened,
+                          closed=stale_gate.closed)
             # quiet is for the 20 Hz position tick only: it would bury every
             # other line in the console. It still goes into the capture, because
             # "did we actually send position updates" is exactly the question a
@@ -19533,8 +19580,17 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
             """
             op = int.from_bytes(blob[:2], "little") if len(blob) >= 2 else -1
             with send_lock:
+                # MOVECODE-1z-cm: a tape's 0x002B is as splittable as a live one, and
+                # this door has no decoded values -- note_blob reads the agent off the
+                # bytes. A tape never sends 0x001E through here, so there is nothing to
+                # hold; what matters is that a pair OPENED by a tape still blocks the
+                # world tick, and that closing it wakes one.
                 seq = next(s2c_seq)
                 sock.sendall(s2c.crypt(blob))
+                if STALE_PAIR_GATE:
+                    if stalepair.note_blob(stale_gate, blob, threading.get_ident(),
+                                           time.monotonic()) == "close":
+                        send_cond.notify_all()
             if not quiet:
                 print(f"[c{conn_id}] s2c {label} ({len(blob)}B)", flush=True)
             rec.event("sent", seq=seq, opcode=op, label=label,
@@ -25235,6 +25291,11 @@ def main():
                          "vertex and world-0 idles there until the next 0.5 s "
                          "heading tick (11.6 s idle over session 4's 39 door "
                          "leads; six gate-1 snaps). Known-bad arm.")
+    ap.add_argument("--no-stale-pair-gate", action="store_true",
+                    help="MOVECODE-1z-cm REVERT: the send lock is per message again, so "
+                         "the world tick's 0x001E may land between a 0x002B and its "
+                         "0x0029/0x002A (24 splits in 2,701 September pairs; session "
+                         "5's AgAgent.cpp:1198 assert). Known-bad arm.")
     ap.add_argument("--no-lead-w0-origin", action="store_true",
                     help="MOVECODE-1z-cg REVERT (door B): the lead is clipped "
                          "from the REPORT only, though the client bakes it from "
@@ -27022,7 +27083,7 @@ def main():
     global KBD_LEAD_REFRESH, A2_LEAD_PLANE_CLIP, A2_LEAD_SEAM_CLIP, A2_LEAD_ORIGIN_SEAM
     global A2_LEAD_WALL_SLIDE
     global A2_LEAD_DISC_CLEAR
-    global A2_LEAD_W0_ORIGIN, A2_LEAD_PLANE_WORDS, KBD_LEAD_CHAIN
+    global A2_LEAD_W0_ORIGIN, A2_LEAD_PLANE_WORDS, KBD_LEAD_CHAIN, STALE_PAIR_GATE
     if a.legacy_kbd_sync:
         KBD_SYNC = False
         KBD_SYNC_HOLD = False
@@ -27066,6 +27127,11 @@ def main():
         A2_LEAD_W0_ORIGIN = not a.no_lead_w0_origin
         A2_LEAD_PLANE_WORDS = not a.no_lead_plane_words
         KBD_LEAD_CHAIN = not a.no_kbd_lead_chain
+        STALE_PAIR_GATE = not a.no_stale_pair_gate
+        if not STALE_PAIR_GATE:
+            print("[map] --no-stale-pair-gate: a 0x001E may split a 0x002B from its "
+                  "destination (1z-cm's revert; the AgAgent.cpp:1198 assert class).",
+                  flush=True)
         if not A2_LEAD_PLANE_WORDS:
             print("[map] --no-lead-plane-words: the keyboard lead carries the "
                   "report's plane on both words (1z-cl's revert).", flush=True)

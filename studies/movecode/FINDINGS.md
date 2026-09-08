@@ -17178,3 +17178,108 @@ corners on this mesh; whether retail's NPCs round them is F16's next question.
 
 **Session 5 is the verbatim check** (registered on the run sheet): zero client snaps, zero
 mid-air episodes, door-B idle under 2 s, world-0 vs body moving p50 under 100 u.
+
+## 1z-cm. THE STALE-PAIR CRASH — SESSION 5 ended in the client's OWN assert `!(m_flags & INTERNAL_FLAG_MOVEMENT_STALE)` (AgAgent.cpp:1198). The owner was boxed into the corner at the foot of the stairs by the Hatcher and spammed clicks; our world-tick thread's `0x001E` landed on the wire between the click's `0x002B` and its `0x0029`, and the client's next arrival record ran on an agent whose STALE flag was set. Retail never splits the pair — 2,403 of 2,403 at a wire gap of zero. Shipped: one gate in `send()`; `--no-stale-pair-gate` reverts
+
+**The session** ([RUN-1zCG.md](RUN-1zCG.md) session 5, capture `authsrv-20260908T183848-c1`,
+tape `1zcg5`, 143 s, 225 reports, 144 fired leads): *"i put myself around the wall at the
+bottom of the stairs, in the very corner. the hatcher then walked up to me. this blocked me in
+— couldn't escape the corner and couldn't move past the hatcher. i started spamming move
+commands and got this error."* The client then wrote its crash dialog and dropped the
+connection (`ConnectionResetError` at capture t=143.08). The arc has scored snaps, sinks and
+stalls; **this is the first defect it closed from a CRASH**, and the crash dialog —
+`Assertion: X / File.cpp(N)` — is text the retail client shows any player who crashes, not extraction
+(CLAUDE.md provenance gate, the crash-dialog clause). The dialog is filed verbatim at
+`vault/research/movecode/1zcg5-crash.txt`.
+
+**The assert, and the chain — OBSERVED, static, re-read on the pinned build (38797) for this
+section.** Bit 19 of `m_flags` (`agent+0x20`) is `INTERNAL_FLAG_MOVEMENT_STALE`
+(§1j.3, mask from `shr eax,0x13` at `0x0060014E` guarding the assert). Three sites touch
+it and only three:
+
+* **SET** at `0x00602A22` — `or dword [esi+0x20], 0x80000` — inside the `0x002B`
+  (AGENT_UPDATE_SPEED) rate/facing setter `0x00602990`. A rate change means "I am waiting for
+  a destination".
+* **CLEAR** at `0x00602A65` — `and dword [ebx+0x20], 0xfff7ffff` — inside the destination
+  setter `0x00602A40`, reached by `0x0029` (AGENT_MOVE_TO_POINT) and `0x002A`.
+* **TESTED** at `0x0060015C`, line 1198, the first block of the movement tick `0x00600140`:
+  `mov eax,[esi+0x20]; shr eax,0x13; not eax; test al,1; jne ok; push 0x4ae` (`0x4ae` = 1198).
+  The tick is an ARRIVAL-timer callback (§1v.1: 0.62/s, reached through
+  `0x001E` → handler `0x005fcf70` → `AgTimer::Advance` `0x00603FE0`, call at `0x005FCFA3`;
+  the dump's `Rt:0x005fcfa8` is that call's return, and the dump's `Pc:0x005b7bdb` is the
+  assert-report helper the tick jumps to on the failed `test`). **So the tick refuses to run
+  an arrival on an agent whose rate landed but whose destination has not.**
+
+**Why it fired here and had not before.** The flag can sit SET across ticks harmlessly — the
+tape shows it set for 90 ms over two ticks at 29.3 s of this very session — because the tick
+only asserts when an ARRIVAL is DUE at that tick. Session 5's `0x002B` was answered to a
+zero-distance STOP-ECHO 50 ms earlier: an arrival was due at the very next advance, and the
+`0x001E` split the pair before the `0x0029` cleared the flag. Across our September gamesrv
+captures the split has happened **24 times in 2,701 pairs** (`census` in
+`toolkit/authsrv/stalepair.py`), and **this is the only one that asserted** — at the other 23
+no arrival was due at that tick. So the crash needs BOTH: the tick thread interleaving between
+the receive thread's two locked writes, and an arrival due at that same tick. That is why it
+took five sessions and a stopped, boxed-in player spamming clicks at a zero-distance
+STOP-ECHO to produce it, and why "we have split the pair for weeks without a crash" was never
+evidence that the split was safe.
+
+**The wire — OBSERVED.** Capture: seq **2723** `0x002B` to the player at t=92.2903 s, seq
+**2724** `0x001E` at 92.2905, seq **2725** the click's `0x0029` at 92.2906. The seq is taken
+under the send lock at crypt time (authsrv.py's keystream counter), so it IS the wire order.
+The client's last frame is the click at 92.289 s; the tape's world-0 player copy reads
+`flags 0xA0005` (bit 19 set) from that instant to the end of the tape, its target still the
+STOP-ECHO's — the client hung on the assert.
+
+**The retail control — OBSERVED, origin-gated (`studies/movecode/review/stalepair_retail.py`
+over the LIVE corpus).** 2,404 `0x002B` on 61 connections; 2,403 followed by the same agent's
+destination; **wire gap exactly ZERO on 2,403 of 2,403** — the rate and the destination are
+one packet, every time; a `0x001E` between them **0 times**. What retail does put between,
+rarely: `0x0021` (23), an item/effect burst (~13). ArenaNet's server serialises the pair;
+ours did not, because `send()` took the lock per message and three threads (the receive loop,
+`world_tick`, a probe) each call it.
+
+**Shipped — one gate at the chokepoint every send passes through.** `toolkit/authsrv/
+stalepair.py`: a `0x002B` OPENS a pair for its agent; that agent's next `0x0029`/`0x002A`
+CLOSES it; a `0x001E` from another thread WAITS on the send lock's condition while a pair is
+open (bounded at 100 ms), and the destination's send `notify_all()`s it. A pair still open at
+the bound is a BARE rate message — the class behind the 2026-08 "loading-screen" assert
+([PLAN.md §8](../../PLAN.md)) — dropped and named loudly rather than held forever; a pair the
+ticking thread itself opened is named the same way and never waited on (it would wait on
+itself). The wait releases the lock, so the receive thread finishing the pair always gets in.
+`send_raw` — the tape player's door, which writes pre-formed plaintext and has no decoded
+values — notes through the same gate on the bytes (`note_blob`), so a REPLAYED `0x002B` blocks
+the world tick exactly like a live one; that hole was open for one commit and is pinned.
+`--no-stale-pair-gate` reverts to the per-message lock exactly (the known-bad arm). Measured
+cost: a tick that lands mid-pair is held by the pair's own width (0.3 ms in session 5; a
+`route()` at its 35 ms bound at most), and only when a pair is genuinely open.
+
+**The obvious objection, checked: the client's clock does not drift.** `world_tick` computes
+`delta_ms` from `prev_tick` to `now` and stamps `prev_tick = now` BEFORE it calls `send()`, so
+a hold delays the message without changing the number in it; the elapsed time the hold covers
+is carried by the NEXT tick's delta. The clock stays cumulative-exact and only its cadence gets
+lumpier, by at most one tick period. That matters because the whole reason `0x001E` is sent
+unconditionally is that a client which cannot advance its own clock freezes after its first
+prediction (the 2026-08-05 symptom in `authsrv.py`'s own comment) — a fix that quietly starved
+the clock would trade a rare crash for a constant stutter.
+
+**Tests.** `toolkit/authsrv/test_stalepair.py` (5 sections, floor 40): the gate's bookkeeping;
+`hold_tick` against a REAL `threading.Condition` and a second thread (a tick ordered after the
+closing destination; the bound on a pair nobody closes; the own-thread pair never waited on; a
+fake clock for the deadline arithmetic); `census()` on synthetic rows and **on the crash
+capture itself — exactly ONE split, seq 2723 — and session 4's, none** (the known-bad arm
+measured on the thing); the retail control (pairs ≥ 2,403, splits == 0 as an INVARIANT, zero
+wire gap); source pins on `send()`. `sessionscore.py` now prints "0x002B→destination pairs
+split by a 0x001E" on every session (RED on any split) and a bare-rate WATCH row.
+
+**Not built.** The gate closes the crash. It does not touch the six snaps or the corner-box
+geometry session 4 opened — the owner could not escape the corner because the Hatcher's disc
+filled the only exit, which is NPCTRACK-Q6/Q10 (the hostile parks ON the player's escape path),
+not a movement-sync defect. Session 6 is a clean stairs run under the gate: zero crashes, and
+the session-5 P1–P4 checks that never got their run because the client died at 92 s.
+
+**Method note.** The diagnosis was entirely static + capture: rebase the crash dialog's trace
+against the pinned binary, read the three flag sites and the tick's first block, join the tape's
+`flags` word to the wire by seq, and census the retail corpus for the control. No `int3`, no
+second run — the dialog named the assert and the capture named the packet order. This is the
+`feedback-diagnose-asserts-statically-first` path, and it worked to the first decimal.
+
