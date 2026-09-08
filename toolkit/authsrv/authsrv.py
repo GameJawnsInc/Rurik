@@ -17135,6 +17135,11 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
             if prev is not None and math.hypot(prev[0] - wx, prev[1] - wy) < 1.0 \
                     and tag == " re-path":
                 return                  # the same leg is already in flight
+            if rec is not None:
+                rec.event("npc_order", agent=agent_id, act="corridor-leg",
+                          tag=tag.strip(), solve_from=[float(cx), float(cy)],
+                          to=[float(wx), float(wy)], plane=plane, dest_plane=wpl,
+                          more=more, dist=round(float(dist), 1))
             _send(GAME_SMSG_AGENT_MOVE_TO_POINT,
                   [agent_id, (wx, wy), wpl, plane],
                   f"FOLLOW{tag} leg: agent {agent_id} -> corridor vertex "
@@ -17144,6 +17149,22 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
             return
         f.pop("leg", None)
         f.pop("solve_from", None)
+        # MOVECODE-1z-cn: NAME THE OPERAND. This branch sends an agent-addressed
+        # follow, which the client does not path -- it dead-reckons the drawn body
+        # in a STRAIGHT LINE to the point (movement/FINDINGS :1147). So when the
+        # chord from the copy to the point crosses geometry, the body walks into
+        # the wall and parks off the mesh: the stairs' foot flank, RED on every
+        # session since RUN-1zCG session 1. Which of _follow_leg's four exits sent
+        # us here decides the fix, and the census could pin the origin on only 128
+        # of 432 orders by inferring it from the label -- one of the six bad chords
+        # is UNEXPLAINED for exactly that reason. The row costs nothing and makes
+        # the capture answer the question itself (studies/movecode/review/
+        # flankcensus.py reads it).
+        if rec is not None:
+            rec.event("npc_order", agent=agent_id, act="follow-bare", tag=tag.strip(),
+                      solve_from=[float(cx), float(cy)],
+                      to=[float(px), float(py)],
+                      plane=plane, dest_plane=dest_plane, dist=round(float(dist), 1))
         _send(GAME_SMSG_AGENT_UPDATE_DESTINATION,
               [agent_id, (float(px), float(py)), dest_plane, plane,
                PLAYER_AGENT_ID],

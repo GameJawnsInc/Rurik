@@ -17283,3 +17283,121 @@ against the pinned binary, read the three flag sites and the tick's first block,
 second run — the dialog named the assert and the capture named the packet order. This is the
 `feedback-diagnose-asserts-statically-first` path, and it worked to the first decimal.
 
+## 1z-cn. THE FOOT-FLANK TRACE — the standing RED is the hostile's drawn body walking a STRAIGHT CHORD through the flank wall, because `0x002A` is dead-reckoned and not pathed. The point we order is always on the mesh; the LINE to it is not. Three causes, one of them still unnamed, and no knob shipped
+
+**The RED.** `sessionscore.py` has printed "hostile drawn body off our mesh" on every
+hand-driven session since RUN-1zCG session 1 — 14.3 u worst, then 12.5, then 17.5, then 12.5 —
+always at the stairs' foot flank, and nothing had traced it. The owner's own words for it at
+session 4 were *"the Hatcher commits too hard at waypoints around the top of the stairs"*.
+Traced here from session 5's tape at the owner's request, with sessions 2–4 as the corpus.
+Session 1's tape is not in the vault, so it is excluded rather than guessed at.
+
+### 1z-cn.1 ★★★ The mechanism, end to end — OBSERVED
+
+`0x002A` is agent-addressed and carries a point, and **the client does not path it**: it
+dead-reckons the drawn body in a straight line to that point (`movement/FINDINGS.md`:1147,
+`0x005FFB40` linear until the arrival tick). So the quantity that decides whether the body
+leaves the mesh is not the point — it is the **chord** from where the client's copy actually
+is to the point we ordered.
+
+1. We send a bare `0x002A` whose chord crosses the flank wall.
+2. The client walks the drawn body along that chord, into non-walkable ground.
+3. Its own collision halts the body against the wall, **short of a point that is itself on
+   our mesh**: session 5's three parks stop 14.6 / 113.1 / 75.4 u short of an ordered point
+   whose own off-mesh distance is 0.31 / 0.00 / 0.00 u.
+4. The body PARKS there until the next order — and that is the RED the scorer reports.
+5. **The next order is then solved FROM that off-mesh point.** Session 3's park at
+   (11422, 8901) is the origin of the bad chord 1.1 s later; session 4's park at
+   (11318, 9079) is the origin of its bad chord at 33.17 s. The defect feeds itself.
+
+**The ordered POINT is never the problem.** Over session 5's 159 hostile destination orders,
+**0 had a point off our mesh**. The chord is a different question and nothing was asking it.
+
+### 1z-cn.2 ★★★ Why no corridor leg went out instead — three causes, `flankcensus.py`
+
+`NPC_FOLLOW_CORRIDOR` (F16/Q9) exists precisely to send a point-addressed `0x0029` leg round
+the geometry. `_follow_leg` returns None — and `_order` then sends the bare `0x002A` — through
+**four different exits that the code cannot tell apart**, because the test is one line:
+`if not path or len(path) < 3: return None`. Pooled over sessions 2–5 (432 hostile `0x002A`,
+operand pinned on 128, chord beyond the 2 u edge class on 6):
+
+| cause | n | chords |
+|---|---|---|
+| `route()` returned a **2-point path** — it says the line is clear | 3 | 2.4, 4.2, 5.1 u |
+| the **inside-disc rule** dropped a real corridor | 2 | 4.4, 21.5 u |
+| **UNEXPLAINED** at the pinning resolution available | 1 | 54.3 u |
+
+**The 2-point cause is a broken contract, and it is the gate's sampling.** `route()`'s
+docstring promises *"walking it in straight segments never leaves the navmesh"*. Its
+per-segment gate is `step = CORNER_PULL_GATE_STEP (2.0) if cand is pulled and pulled is not
+pts else 16.0`, and `clip()` says of itself *"a gap narrower than `step` can be stepped
+over"*. Session 2's specimen `(11391,9081) -> (11269,9153)`, both endpoints on the mesh:
+the gate **reaches the destination at a 16 u step and fails at 2 u**, and the true excursion
+is 2.6 u. So the unpulled candidate is admitted on a sampling the pulled one would refuse.
+
+**The inside-disc cause is a rule doing its job with nowhere to go.** §1z-ci added
+`if math.hypot(wx - px, wy - py) < follow_stop_radius(): return None` because the client
+halts a copy whose target its target-agent's disc covers (F14). The rule is right. Its
+FALLBACK is not: when the corner the hostile must round is itself within 80 u of the player —
+which is exactly what a player standing just around the flank corner produces — the corridor
+is discarded and a straight follow goes out through the wall. Session 4's 21.5 u chord is this.
+
+### 1z-cn.3 ★★ Our mesh is not short there — the client's own reports are the referee
+
+The pocket the bodies park in is genuinely not walkable, so this is not an edge-decode
+problem. Over **18,635 player position reports** pooled from every gamesrv capture on map 148,
+the nearest report to each park point is **4.5 / 12.9 / 8.8 / 4.3 u** — in each case
+essentially equal to that point's own off-mesh distance, i.e. **no reported player body has
+ever stood inside any of these pockets**. *Caveat carried rather than hidden: that pool is
+contaminated — 2,875 of the 18,635 sit beyond 2 u of this mesh, some by thousands of units,
+so captures whose geometry is elsewhere are stamped `map_id 148`. Contamination can only make
+this referee more permissive (a spurious nearby report would weaken the claim, not
+strengthen it), so the negative stands; the pool itself wants its own look.*
+
+**NOT settled, and it must not be assumed:** how far INTO a wall the client will rest a body —
+whether its collision surface at the flank differs from our trapezoids by the ~12 u we
+measure. What is settled is that we send chords through that wall.
+
+### 1z-cn.4 ★★ What was REFUTED on the way, each by its own measurement
+
+* **"We order the hostile to points off the mesh."** REFUTED: 0 of 159 (§1z-cn.1).
+* **"We solve from the wrong copy"** — the NPC analogue of 1z-cg's `A2_LEAD_W0_ORIGIN`, world-0
+  versus the drawn body. REFUTED: re-running `_follow_leg` from each copy flips the verdict on
+  **0 of 7**; the two copies are 0–143 u apart and it never changes the answer.
+* **"The plane preference turns a corridor into 'clear'."** REFUTED: `_follow_leg` called with
+  and without the wire's own plane words gives the same verdict on **0 of 7**.
+* **"It is the sample-and-hold column again"** (§1z-ck's trap, three censuses lost to it).
+  REFUTED for this metric: the RED is the body AT REST, where the raw column IS the client's
+  position — raw and live agree exactly on all 15 parked samples. (The MOVING samples do
+  differ, 22 versus 42 beyond 2 u, and are not what the scorer reports.)
+* **An instrument error of my own, recorded because it cost the first three passes.** Filtering
+  at exact containment rather than the edge class produced **25 false rows**: `clip()` refuses
+  an endpoint a fraction of a unit outside a trapezoid, which is the sliver `on_mesh()`'s
+  SEAM_TOL exists for (1z-bf: 17 of 17 gate-2 re-pins were ≤ 0.5 u out). The census filters
+  at 2 u for that reason.
+
+### 1z-cn.5 What ships, and what deliberately does not
+
+**Shipped: the operand, in the capture.** `_order` now writes an `npc_order` row at BOTH exits
+— `solve_from`, `to`, both plane words, and which exit it took. No behaviour change, one
+`rec.event`. It exists because the census can pin the origin on only 128 of 432 orders by
+inferring it from the label's "N u out", and the worst chord in the corpus (54.3 u) is
+UNEXPLAINED for exactly that reason. Session 6's capture answers this question by itself.
+
+**Shipped: `studies/movecode/review/flankcensus.py`**, the standing instrument.
+
+**NOT shipped, and the reason is a rule this arc already paid for.** Two fixes are derived and
+ready — gate the unpulled route candidate at the pulled candidate's own 2 u step, and clip an
+in-disc corridor to its last vertex OUTSIDE the disc rather than discarding it. Neither goes
+in now, because **session 6 is `1z-cm`'s verbatim check** and shipping movement defaults on top
+of it means one run convicts the pair, clearing neither. They are their own arm, after
+session 6, each with its revert flag. The third cause is not derived at all yet, and a fix for
+two of three causes shipped as if it were the answer is how a residual gets tuned away instead
+of named.
+
+**And retail's answer for the in-disc case is NOT FOUND.** F16 measured retail's chase legs at
+200–5,979 u from the player, so ArenaNet never lands an NPC leg inside the disc either — but
+our live corpus holds no instance of a corner within 80 u of the player, which is the
+geometry in question. Deriving that fix from the corpus we have would be inventing it.
+
+

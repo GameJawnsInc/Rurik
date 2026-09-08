@@ -247,6 +247,11 @@ thread has a `0x002B`/destination pair open (`--no-stale-pair-gate` reverts).
 - **P1–P4** as session 5 registered them (zero snaps, zero mid-air ≥ 1 s, chain ≥ 5, p50 < 100 u).
 - Recorded: whether the corner-box itself recurs — the Hatcher filling the only exit is
   NPCTRACK-Q6/Q10, not a sync defect, and is out of MOVECODE's scope.
+- **Recorded, not scored: the foot flank** ([FINDINGS §1z-cn](FINDINGS.md)). The capture now
+  carries `npc_order` rows naming what `_order` solved from at BOTH exits, so
+  `python studies/movecode/review/flankcensus.py` can pin every hostile order rather than the
+  128 of 432 the label allows. The two derived fixes are deliberately NOT in this build — this
+  run is 1z-cm's check, and a second movement default would have one run convict the pair.
 
 *Map note: the mesh selector scored this capture against map 148; the run command names map 146.
 The stalepair finding is wire-only and map-independent, so this is not chased here.*
