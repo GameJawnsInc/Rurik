@@ -110,11 +110,15 @@ HISTORICAL = {
 # Two must resolve at the SYMBOL tier and one at the LINE tier. Without these, a
 # resolver that silently matched nothing would leave sections 6 and 8 green.
 CONTROLS = [
-    (PILOT, "movetap.py:1469", "ok-symbol", "SELFTEST_FLOOR",
-     "`SELFTEST_FLOOR` at `movetap.py:1469` -- correct before this arc and still "
-     "correct; the check that proves the symbol tier fires at all"),
+    (PILOT, "movetap.py:1481", "ok-symbol", "SELFTEST_FLOOR",
+     "`SELFTEST_FLOOR` at `movetap.py:1481` -- was `:1469` until 3e7ed3a2 "
+     "(MOVECODE-1z-cb, 2026-09-05) inserted twelve lines at `movetap.py:460` and "
+     "moved every citation below it; the document was re-pointed with it on "
+     "2026-09-07, and this control MUST move with the document, because it names "
+     "the citation text and a stale one has zero hits. The check that proves the "
+     "symbol tier fires at all"),
     (PILOT, "movesync.py:2759", "ok-symbol", "SELFTEST_FLOOR",
-     "the SECOND citation in `(`SELFTEST_FLOOR` at `movetap.py:1469` and "
+     "the SECOND citation in `(`SELFTEST_FLOOR` at `movetap.py:1481` and "
      "`movesync.py:2759`)`. It only resolves because `pair_symbol` erases an "
      "intervening citation instead of refusing the pairing, so this control is "
      "what stops that rule from being quietly removed"),
@@ -200,7 +204,7 @@ def main():
     check(paired("`sep` is written at\n`movetap.py:791`, and")[0] == "sep",
           "pairs across a hard-wrapped newline")
     # One symbol, a LIST of citations: the second must still pair.
-    two = "(`SELFTEST_FLOOR` at `movetap.py:1469` and `movesync.py:2759`)"
+    two = "(`SELFTEST_FLOOR` at `movetap.py:1481` and `movesync.py:2759`)"
     para = next(iter(citelint.paragraphs(two)))[0]
     ticks = list(citelint.TICK.finditer(para))
     second = list(citelint.CITE.finditer(para))[1]
@@ -327,7 +331,7 @@ def main():
     # The whole file is worth nothing if this cannot fail. So: take the real
     # document, move ONE known-green citation's line number by one, and require the
     # scanner to catch it, name it, and catch nothing else.
-    ctrl = CONTROLS[0][1]                      # `movetap.py:1469`, ok-symbol
+    ctrl = CONTROLS[0][1]                      # `movetap.py:1481`, ok-symbol
     mod, lineno = ctrl.split(":")
     moved = f"{mod}:{int(lineno) + 1}"
     scratch = pilot_text.replace(f"`{ctrl}`", f"`{moved}`")
