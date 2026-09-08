@@ -277,11 +277,23 @@ pushed first, so the rewrite covered them).
   branches and tags reach, immediately before the push. Zero residual. 536 commit
   citations across 105 files (`.md`, `.py`, `.toml` — the draft covered `.md` only) were
   re-stamped through filter-repo's commit map in `f85a926e`; the diff is hash-only.
-* **What stays.** The pre-rewrite bundle and both commit maps sit in `vault/backup/`,
-  local like everything else there. The repository was private for the whole of its
-  history until this point, so no clone of the old objects exists outside this machine;
-  GitHub's API stopped resolving the old tip on the force-push.
-* **Two traps for the next pass.** GitHub Desktop auto-fetches every few minutes and
+* **What stays, and what a force-push does NOT do.** The pre-rewrite bundle and both
+  commit maps sit in `vault/backup/`, local like everything else there. The repository
+  was private for the whole of its history until this point, so no clone of the old
+  objects exists outside this machine. **But the force-push did not remove them from
+  GitHub.** The public commits endpoint refused the old tip afterwards, which is the
+  check the first draft of this addendum relied on; the git-database endpoint
+  (`/git/commits/<sha>`, `/git/blobs/<sha>`) still served every old commit tried —
+  including the one whose message carries the real GUID, with the real address in its
+  author field — and the old `sessionstore.py` blob with both credential GUIDs, to
+  anyone holding a SHA. GitHub's web UI renders such commits too. The documented
+  remedies are a support ticket or waiting for GitHub's own collection; with zero forks,
+  issues, pull requests, releases, keys and hooks there was nothing to lose, so
+  **the remote repository was deleted and re-created private from the rewritten
+  history on 2026-09-08 03:36Z**, main pushed as the only ref, and every old commit
+  and blob SHA verified to return 404 before the visibility change. A re-created
+  repository is the only state a force-push can be *shown* to have reached.
+* **Three traps for the next pass.** The force-push one is above. GitHub Desktop auto-fetches every few minutes and
   dragged the entire old history back into the local object store between the rewrite
   and the push; a scan over all objects would have reported it as residual. Verify over
   `--branches --tags`, close Desktop, and prune after the push. And the classifier that
