@@ -45,7 +45,7 @@ sys.path.insert(0, HERE)
 import buildpins as BP                                       # noqa: E402
 import checks                                                # noqa: E402
 
-LEDGER = checks.Ledger("build-coupled census", floor=40)
+LEDGER = checks.Ledger("build-coupled census", floor=49)
 check = checks.adopt(LEDGER)
 
 # One module holding the SAME address twice: once as prose, once as code. This
@@ -284,5 +284,88 @@ check(len(cited) > len(live) * 3,
       "prose citations outnumber live constants several times over",
       f"{len(cited)} vs {len(live)} -- which is why counting was never the "
       f"deliverable, and why 'scrub the addresses' would be the wrong reading")
+
+
+print("\n6. which pins name the build they were read on")
+# WHY THIS SECTION EXISTS. `studies/crossbuild/PLAN.md` says "a bare VA with no
+# build is the defect, not the VA", and this census counted VAs for a fortnight
+# without ever saying which ones were bare. The same repair has now been made
+# three times -- atex.TABLES_BUILD (2026-08-15), gatetrace.BUILD (2026-08-30),
+# and groundz.py arriving unanchored on 2026-09-06 having been written after
+# both -- which is the shape of a rule nothing checks. `buildpins.anchors()`
+# answers it; this section holds it to an answer that can be wrong.
+amap = BP.anchors(rows, BP.HERE)
+labels = {v["anchor"] for v in amap.values()}
+check(set(amap) == {r["file"] for r in live},
+      "6a. every class-(a) file is classified, and nothing else is",
+      f"{len(amap)} classified against {len({r['file'] for r in live})} files "
+      f"carrying a live constant")
+# THE VACUITY GUARD, and the rest of the section rests on it: a classifier that
+# answered the same thing everywhere would satisfy every count below. All three
+# labels must actually occur.
+check(labels == set(BP.ANCHOR_ORDER),
+      "6b. and the classifier really separates -- all three answers occur, so "
+      "the counts below are not one label repeated",
+      f"{sorted(labels)}")
+
+# One named case per label, each a file this changelog has already argued about.
+check(amap["mapdata/atex.py"]["anchor"] == BP.ANCHOR_OWN
+      and amap["mapdata/atex.py"]["own_builds"] == [38797],
+      "6c. atex.py is own-build and declares 38797 -- the file TABLES_BUILD was "
+      "added to, and the shape this column asks for",
+      str(amap["mapdata/atex.py"]))
+check(amap["clientscan/movetap.py"]["anchor"] == BP.ANCHOR_PIN,
+      "6d. movetap.py -- the largest block at 49 -- is anchored only by the "
+      "REPOSITORY's pin: correct while its addresses and pinned.PINNED agree, "
+      "silent if the pin moves without them",
+      str(amap["clientscan/movetap.py"]))
+check(amap["clientscan/groundz.py"]["anchor"] == BP.ANCHOR_NONE
+      and amap["clientscan/groundz.py"]["text_builds"] == [38797],
+      "6e. groundz.py is UNANCHORED and names 38797 in prose only -- the +2 of "
+      "the 2026-09-08 bill, and the case that motivated this section",
+      str(amap["clientscan/groundz.py"]))
+
+bare, bare_files = BP.unanchored(amap)
+check((bare, bare_files) == (73, 8),
+      "6f. 73 pin(s) in 8 file(s) name NO build at all -- 31% of the census, "
+      "and a rebase is undetectable in every one. This is a BILL like the 235 "
+      "above: when it moves, say which file moved it and whether the direction "
+      "was a new bare module or a repair",
+      f"{bare} pin(s) in {bare_files} file(s)")
+prose_only = [f for f, v in amap.items()
+              if v["anchor"] == BP.ANCHOR_NONE and v["text_builds"]]
+silent = [f for f, v in amap.items()
+          if v["anchor"] == BP.ANCHOR_NONE and not v["text_builds"]]
+check(len(prose_only) == 5 and len(silent) == 3,
+      "6g. and the split names two different repairs: 5 file(s) name a build in "
+      "PROSE and did not encode it, 3 name none anywhere",
+      f"prose-only {sorted(prose_only)}; silent {sorted(silent)}")
+
+# `imports_pinned` on synthetic source, because the classification turns on it
+# and a helper checked only through its own consumers is checked by nothing.
+# Both import forms, the dotted one, and a negative that must not be swept in.
+_YES_PLAIN = "import pinned\nX = 1\n"
+_YES_FROM = "from pinned import find\nX = 1\n"
+_YES_DOTTED = "import clientscan.pinned\nX = 1\n"
+_NO = "import struct\n# import pinned -- in a COMMENT\nX = 'import pinned'\n"
+check(all(BP.imports_pinned(ast.parse(src))
+          for src in (_YES_PLAIN, _YES_FROM, _YES_DOTTED))
+      and not BP.imports_pinned(ast.parse(_NO)),
+      "6h. imports_pinned sees both import forms and the dotted one, and is NOT "
+      "fooled by the word in a comment or a string -- an AST question answered "
+      "with the AST, which is this instrument's whole argument",
+      "plain/from/dotted true, comment-and-string false")
+
+# WHAT THIS SECTION MUST NOT BE READ AS. own-build is a PRECONDITION and never a
+# guard: gatetrace.BUILD existed while `git grep gatetrace.BUILD` came back
+# empty, so three VAs carried a build nothing could read. This column says a
+# reader CAN hand these addresses to pinned.find(); whether anything does is a
+# different question and this file does not pretend to answer it.
+check(amap["clientscan/gatetrace.py"]["anchor"] == BP.ANCHOR_OWN,
+      "6i. gatetrace.py classifies own-build -- and it is the standing proof "
+      "that own-build is not guarded, because it would have read own-build on "
+      "2026-08-29 while nothing in the tree read its BUILD at all",
+      str(amap["clientscan/gatetrace.py"]))
+
 
 sys.exit(LEDGER.verdict())

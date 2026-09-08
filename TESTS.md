@@ -8817,12 +8817,38 @@ the same-tick ALIAS**: the
   wrong the whole time, because **no test asserts a number in prose**. The two
   test literals are on everyone's checklist and this sentence was on nobody's;
   that is the same failure the changelog records against the literals themselves,
-  with a document standing in for the second witness. It had been RED at 86/13 —
+  with a document standing in for the second witness. **§6 (2026-09-08) answers the
+  question the census spent a fortnight not answering**: not how many addresses
+  there are, but **which of them name the build they were read on**.
+  `studies/crossbuild/PLAN.md` states the rule as “a bare VA with no build is the
+  defect, not the VA”, and the same repair had been made three times —
+  `atex.TABLES_BUILD`, `gatetrace.BUILD`, and `groundz.py` arriving unanchored
+  *after both* — with the meter reporting none of it. `anchors()` classifies every
+  class-(a) file three ways: **own-build** (carries a build number as a live
+  constant, so `pinned.find(<mod>.BUILD)` can re-read its addresses on the build
+  they came from), **repo-pin** (no constant, imports `pinned`, so it reads
+  whatever `pinned.PINNED` is that day — a real anchor, since `select(None)`
+  returns the pin rather than the newest build, but the REPOSITORY’s build and not
+  a statement about these addresses), and **unanchored** (neither; a rebase is
+  undetectable there). **MEASURED: 4 / 10 / 8 files and 25 / 137 / 73 pins, so 31%
+  of the liability is bare**, split again into the 5 files that name a build in
+  prose and did not encode it and the 3 that name none anywhere. The unanchored
+  count prints unconditionally, not behind the flag, because a bill nobody is
+  shown is not a bill. **What it must not be read as is a safety rating**, and §6i
+  is that sentence made into a check: `gatetrace.py` classifies own-build, and it
+  is the standing proof that own-build is not guarded — its `BUILD` existed while
+  `git grep gatetrace.BUILD` came back empty. The section carries its own vacuity
+  guard (§6b: all three labels must occur, so a classifier answering one thing
+  everywhere cannot satisfy the counts) and a synthetic unit check on
+  `imports_pinned` (§6h: both import forms and the dotted one true, the word in a
+  comment or a string false). **Three sabotages were built and run and all three
+  redden**: a classifier stuck on one label (6 red), `imports_pinned` always true
+  (5), always false (5) — §6b catches every one. Floor 40 → 49. It had been RED at 86/13 —
   `framebus.py` 13 → 21, `movetap.py` 0 → 1 (`RVA_TLS_INDEX`, and the 14th file)
   and `pinned.py` 8 → 12 (`PATCHED_TEXT` gaining the key-tap's cave and jump when
   the patched-digest set was added). The docstring's changelog names each, which
   is the format that makes a moved census a result rather than a surprise. No
-  vault, no client, no socket. Floor 40, ~2 s),
+  vault, no client, no socket. Floor 49, ~2 s),
   `toolkit/test_updatecheck.py` (the before/after update commands —
   `studies/crossbuild/PLAN.md` §11, and the one deliverable of that arc that
   expires if nobody runs it in time: an update is not schedulable and half the

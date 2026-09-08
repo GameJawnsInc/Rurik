@@ -2,6 +2,7 @@
 
     python toolkit/buildpins.py                  # the census, by class
     python toolkit/buildpins.py --live           # only class (a), the liability
+    python toolkit/buildpins.py --anchors        # which pins name no build
     python toolkit/buildpins.py --json FILE      # write a baseline to diff later
     python toolkit/buildpins.py --diff BEFORE    # what moved since that baseline
 
@@ -63,7 +64,14 @@ handled well -- an allowlist that rejects-and-logs rather than a single constant
 -- but a reader must not take this census as "every build-coupled fact in the
 tree". It is every build-coupled ADDRESS.
 
-READ ONLY. Parses source; opens no client and no archive.
+COUNTING WAS NEVER THE WHOLE DELIVERABLE, and for a fortnight it was all this
+file did. `studies/crossbuild/PLAN.md` states the rule as "a bare VA with no
+build is the defect, not the VA" -- and the census could say how many addresses
+there were without saying which of them were bare, so the same repair was made
+three times in three modules and the meter reported none of it. It does now:
+see the anchor block below `summarise`, and `--anchors` for the per-file answer.
+The summary prints the unanchored count unconditionally, because a bill nobody
+is shown is not a bill.
 
 READ ONLY. Parses source; opens no client and no archive.
 """
@@ -290,6 +298,98 @@ def summarise(rows):
     return out
 
 
+# ------------------------------------------------- which pins name a build --
+# THE QUESTION THIS ANSWERS, and it is one question, not a safety rating: can a
+# reader tell FROM THE MODULE'S OWN CODE which client build its addresses were
+# read on, and hand that to `pinned.find()` to re-read them?
+#
+# `studies/crossbuild/PLAN.md` states the rule as "a bare VA with no build is
+# the defect, not the VA", and this census counted the VAs for a fortnight
+# without ever answering which ones were bare. That gap has now cost the same
+# repair three times -- `atex.TABLES_BUILD` (2026-08-15), `gatetrace.BUILD`
+# (2026-08-30) and `clientscan/groundz.py` arriving unanchored on 2026-09-06,
+# written after both -- which is the shape of a rule nothing checks. So the
+# meter reports it.
+#
+# THE THREE ANSWERS, and the middle one is the interesting one:
+#
+#   own-build   the module carries a build number as a LIVE constant. Its
+#               addresses say which build they came from and they survive the
+#               repository's pin moving. This is what `atex.TABLES_BUILD` added.
+#   repo-pin    no build constant, but the module imports `pinned`, so it reads
+#               whatever `pinned.PINNED` is that day. That is a real anchor and
+#               a deliberate one -- `select(None)` returns the pin rather than
+#               the newest build, so it does not drift on its own -- but it is
+#               the REPOSITORY'S build, not a statement about these addresses.
+#               If the pin moves and the addresses were not re-derived, nothing
+#               in the module notices.
+#   unanchored  neither. Nothing connects these addresses to a build or to an
+#               image, so a rebase cannot be detected here at all.
+#
+# WHAT THIS DOES NOT SAY, and the distinction is load-bearing: `own-build` is
+# NOT `guarded`. `gatetrace.BUILD` existed while `git grep gatetrace.BUILD` came
+# back empty -- three VAs with a build written beside them and no check able to
+# read it. A NO in this column is a defect; a YES is only a precondition.
+#
+# `text_builds` is every known build number appearing anywhere in the file,
+# prose included. For an `unanchored` file it is necessarily prose-only, and it
+# splits the repair: "the author knew the build and did not encode it" is a
+# different job from "nobody recorded it at all".
+ANCHOR_OWN, ANCHOR_PIN, ANCHOR_NONE = "own-build", "repo-pin", "unanchored"
+ANCHOR_ORDER = (ANCHOR_OWN, ANCHOR_PIN, ANCHOR_NONE)
+
+
+def imports_pinned(tree):
+    """Does this module import `pinned`, under either import form?"""
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Import):
+            if any(a.name.split(".")[-1] == "pinned" for a in n.names):
+                return True
+        elif isinstance(n, ast.ImportFrom):
+            if (n.module or "").split(".")[-1] == "pinned":
+                return True
+    return False
+
+
+def anchors(rows, root):
+    """{file: {anchor, pins, addresses, own_builds, text_builds}} over class (a).
+
+    Keyed by file rather than by row because the property is the module's: one
+    address in a module that names its build is anchored and its neighbour is
+    too. The pin COUNT rides along so the liability is visible where it sits --
+    eight files is a small number and seventy-three addresses is not.
+    """
+    out = {}
+    for rel in sorted({r["file"] for r in rows if r["klass"] == LIVE}):
+        sel = [r for r in rows if r["klass"] == LIVE and r["file"] == rel]
+        with open(os.path.join(root, rel), encoding="utf-8",
+                  errors="replace") as fh:
+            src = fh.read()
+        try:
+            tree = ast.parse(src)
+        except SyntaxError:                                  # pragma: no cover
+            continue
+        own = sorted({r["value"] for r in sel if r["kind"] == "build-number"})
+        out[rel] = {
+            "anchor": (ANCHOR_OWN if own else
+                       ANCHOR_PIN if imports_pinned(tree) else ANCHOR_NONE),
+            "pins": len(sel),
+            "addresses": sum(1 for r in sel if r["kind"] == "va"),
+            "own_builds": own,
+            # Whole numbers only, and via findall rather than a word-boundary
+            # pattern: 38797 inside 387970 is not a build.
+            "text_builds": sorted(BUILD_NUMBERS.intersection(
+                int(t) for t in re.findall("[0-9]+", src))),
+        }
+    return out
+
+
+def unanchored(anchor_map):
+    """(pins, files) whose module names no build at all -- the reportable bill."""
+    sel = [v for v in anchor_map.values() if v["anchor"] == ANCHOR_NONE]
+    return sum(v["pins"] for v in sel), len(sel)
+
+
 def baseline(rows):
     """The diffable shape: class (a) only, keyed by where it is.
 
@@ -305,7 +405,21 @@ def baseline(rows):
 
 
 def diff(before, after):
-    """(gone, arrived, moved) between two baselines."""
+    """(gone, arrived, moved) between two baselines.
+
+    IT UNDER-REPORTS `moved`, AND THE SIZE OF THAT IS MEASURED. The key is
+    (file, symbol), so a symbol bound to a LIST of addresses collapses to one
+    entry and a move is reported once however many addresses moved.
+    MEASURED 2026-09-08 diffing the 233 baseline against the tree: nine
+    `compositetrap.UPSTREAM_CALLERS` rows moved by +5 in the call-site re-key
+    and this reported ONE. The counts on either side are right and the arrival
+    and departure lists are right -- it is only the per-row move detail that
+    is lossy -- but an audit that needs the rows should count them off the two
+    baselines directly rather than trusting this line. Not keyed by ordinal
+    instead, because a list that gains an element at the front would then
+    report every element after it as moved, which is a worse lie than a
+    smaller true one.
+    """
     def key(r):
         return (r["file"], r["symbol"])
     b = {key(r): r for r in before}
@@ -321,6 +435,9 @@ def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", default=HERE, help="tree to scan (default toolkit/)")
     ap.add_argument("--live", action="store_true", help="list class (a) only")
+    ap.add_argument("--anchors", action="store_true",
+                    help="per class-(a) file: does it name the build its "
+                         "addresses were read on")
     ap.add_argument("--json", metavar="FILE", help="write a baseline here")
     ap.add_argument("--diff", metavar="BEFORE", help="compare against a baseline")
     a = ap.parse_args(argv)
@@ -343,6 +460,19 @@ def main(argv=None):
           f"{s[TEST]['distinct_values']:4d} distinct, "
           f"{s[TEST]['files']:3d} file(s)   red on a new build is correct")
 
+    # UNCONDITIONAL, not behind --anchors, and that is the whole point of adding
+    # it: the census counted the liability for a fortnight while saying nothing
+    # about which of it was bare, and a bill nobody is shown is not a bill.
+    amap = anchors(rows, a.root)
+    bare, bare_files = unanchored(amap)
+    tally = {k: sum(1 for v in amap.values() if v["anchor"] == k)
+             for k in ANCHOR_ORDER}
+    print(f"      of (a): {bare} pin(s) in {bare_files} file(s) name NO build "
+          f"at all   <- a rebase is undetectable there")
+    print(f"              anchors by file: "
+          + ", ".join(f"{tally[k]} {k}" for k in ANCHOR_ORDER)
+          + "   (naming a build is a precondition, not a guard)")
+
     if a.live:
         print()
         for r in sorted((r for r in rows if r["klass"] == LIVE),
@@ -350,9 +480,33 @@ def main(argv=None):
             print(f"  {r['file']}:{r['line']:<5d} {r['text']:<12} "
                   f"{r['kind']:<14} {r['symbol']}")
 
+    if a.anchors:
+        print()
+        for k in ANCHOR_ORDER:
+            sel = [(f, v) for f, v in sorted(amap.items()) if v["anchor"] == k]
+            if not sel:
+                continue
+            print(f"  {k} -- {sum(v['pins'] for _f, v in sel)} pin(s) in "
+                  f"{len(sel)} file(s)")
+            for f, v in sel:
+                if v["anchor"] == ANCHOR_OWN:
+                    note = "declares " + ", ".join(str(b) for b in v["own_builds"])
+                elif v["anchor"] == ANCHOR_PIN:
+                    note = "reads pinned.PINNED"
+                elif v["text_builds"]:
+                    note = ("names " + ", ".join(str(b) for b in v["text_builds"])
+                            + " in PROSE only")
+                else:
+                    note = "no build named anywhere in the file"
+                print(f"      {f:<38} {v['pins']:>3} pin(s)   {note}")
+
     if a.json:
         with open(a.json, "w", encoding="utf-8") as fh:
-            json.dump({"baseline": baseline(rows)}, fh, indent=1)
+            # A SIBLING key: `diff()` reads only ["baseline"], so a baseline
+            # written before this existed still compares cleanly -- which
+            # matters, because the way this census is audited is to scan an old
+            # commit's tree with that commit's own instrument.
+            json.dump({"baseline": baseline(rows), "anchors": amap}, fh, indent=1)
         print(f"\nbaseline written: {a.json} "
               f"({len(baseline(rows))} class-(a) site(s))")
 
