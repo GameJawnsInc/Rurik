@@ -243,6 +243,51 @@ and it is deliberately not taken here. **If the answer is "accept it", record it
 ruling** — an accepted risk that is written down is a decision, and one that is not is
 just a thing nobody looked at.
 
+**Addendum 2026-09-08 — the rewrite ran, and the three bullets above are discharged.**
+Owner's decision, 2026-09-07: rewrite, not accept. Two `git filter-repo` passes, run by the
+owner on the local machine before the first public push, verified by a local session
+against this machine's history rather than the remote's view of it (the local checkout
+was 19 commits ahead of `origin/main` when the handoff arrived; they were merged and
+pushed first, so the rewrite covered them).
+
+* **Identity.** `--mailmap`: all 2,680 commits now carry the id-prefixed GitHub noreply
+  address. The remote draft used the bare `<login>@users.noreply` form, which GitHub
+  only honours for accounts created before July 2017; this account dates from 2023, so
+  that form would have dropped the attribution the mailmap existed to keep. Confirmed
+  after the push through the API: tip and root commit both resolve to the account.
+* **Strings.** `--replace-text` and `--replace-message`, 28 entries: F1's two GUIDs in
+  their dashed and `bytes_le` forms → the synthetic loopback pair the tree already uses
+  (so the message at `b9eef520` now carries the synthetic pair, not the real one); the
+  password length; F4's account path; F2's five character names; F3's twelve players,
+  two guild names and the tag; and three entries the remote draft's list did not have —
+  **the two UTF-16 spaced runs §3 itself warned about** ("search the encoded forms, not
+  just the strings": the list that was written from that finding still missed them), and
+  the 14-byte phrase from `studies/review/FINDINGS.md`. One literal was three letters and
+  as a bare substring would have rewritten "Cluster" in 110 historical blobs; it went in
+  as a word-bounded regex.
+* **This document.** §3 quoted the first four UTF-16 units of one run as its evidence,
+  which is the §7 slip a second time in the same file; a second one-entry pass replaced
+  it, in history and in the tree, with the placeholder now at that line.
+* **Verification.** Before the rewrite: the replace list was simulated over every blob
+  (6,437) and commit message (2,686) on this machine, searching the result for every
+  alternate form — other case, dashless and braced GUIDs, UTF-16 and ASCII hex,
+  underscored and squashed names, forward-slash paths — plus in-word collateral; that
+  simulation is what found the three missing entries and the collateral. After: a pickaxe
+  census of every literal across all refs, then the same scan restricted to what local
+  branches and tags reach, immediately before the push. Zero residual. 536 commit
+  citations across 105 files (`.md`, `.py`, `.toml` — the draft covered `.md` only) were
+  re-stamped through filter-repo's commit map in `f85a926e`; the diff is hash-only.
+* **What stays.** The pre-rewrite bundle and both commit maps sit in `vault/backup/`,
+  local like everything else there. The repository was private for the whole of its
+  history until this point, so no clone of the old objects exists outside this machine;
+  GitHub's API stopped resolving the old tip on the force-push.
+* **Two traps for the next pass.** GitHub Desktop auto-fetches every few minutes and
+  dragged the entire old history back into the local object store between the rewrite
+  and the push; a scan over all objects would have reported it as residual. Verify over
+  `--branches --tags`, close Desktop, and prune after the push. And the classifier that
+  guards an automated session blocks every invocation of filter-repo, including
+  `--version`: the command has to be handed to the owner verbatim.
+
 ---
 
 ## 9. The standing weakness this pass leaves behind

@@ -1743,6 +1743,14 @@ openings) — the ruling does not wait on it.
 ✅ **CLOSED 2026-09-07, by the owner. It goes public, and the gate is met — by an
 audit, not by a scrub of the vault, because the vault was never the exposure.**
 
+**Addendum 2026-09-08 — history rewritten before the first public push.** Two
+`git filter-repo` passes: the author identity on all 2,680 commits is the id-prefixed
+GitHub noreply address, and every string §2–§5 of the study redacted from the tree is
+gone from every blob and commit message in every encoding, verified by simulation before
+and a reachable-only scan after. 536 commit citations re-stamped in `f85a926e`. The
+study's §8 records what changed and how it was checked; its "history goes public in
+full" caveat no longer applies.
+
 §6's risk row has carried this since 2026-08-05: *"the repo stays private, and a
 credential-scrubbing / anonymising pass is a gate before any public push"*. That
 sentence was written about `vault/captures/portal/*.jsonl`, which holds the owner's
