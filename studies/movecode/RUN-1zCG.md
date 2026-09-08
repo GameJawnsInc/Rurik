@@ -208,11 +208,45 @@ plane words are the mesh's at the destination and at world-0 (`--no-lead-plane-w
 door-B lead chains to the next vertex at the copy's arrival (`--no-kbd-lead-chain`), and door
 B never names the vertex world-0 stands on.
 
-**Session 5 — registered, not run.** Same route, same script with `1zcg5`:
+## RESULT, session 5 — 2026-09-08 18:38 (capture `authsrv-20260908T183848-c1`, tape `movecode/1zcg5-agenttap.jsonl`, 143 s, 225 reports, 144 fired leads) — **THE CLIENT CRASHED**
 
-- **P1 — zero client snaps** on the live path (session 4: 6, session 3: 1).
-- **P2 — zero mid-air episodes** ≥ 1 s (session 4: 12.0 s, session 3: 2.75 s).
-- **P3 — the chain runs**: ≥ 5 `kbd_leg act=chain` rows (the exposure floor; the stairs must be
-  climbed from the tongue), and the door-B idle under 2 s in total.
-- **P4 — world-0 vs the body moving p50 under 100 u** (session 4: 132).
-- Recorded, not scored: the Hatcher's legs at the foot corners (F16's own shape).
+*"i put myself around the wall at the bottom of the stairs, in the very corner. the hatcher then
+walked up to me. this blocked me in — couldn't escape the corner and couldn't move past the
+hatcher. i started spamming move commands and got this error."* — then the client's crash dialog
+(`vault/research/movecode/1zcg5-crash.txt`):
+
+```
+Assertion: !(m_flags & INTERNAL_FLAG_MOVEMENT_STALE)
+P:\Code\Engine\Agent\AgAgent.cpp(1198)      Build: 38797   When: 9/8/2026 18:40:20
+```
+
+**The P1–P4 checks did not get their run**: the client died at tape t=92.3 s (capture t=91.5),
+half the intended session. What the tape and scorecard hold up to the crash:
+
+| | measured | |
+|---|---|---|
+| the assert | `AgAgent.cpp:1198`, the movement tick's STALE-flag guard | **§1z-cm** |
+| the split on the wire | seq 2723 `0x002B` / 2724 `0x001E` / 2725 `0x0029`, 0.3 ms | OBSERVED |
+| client snaps up to the crash | 1 (119 u at 41.2 s) | — |
+| player parked on a plane word the mesh lacks (mid-air) | 0 episodes | ✅ P2 held so far |
+| world-0 vs body moving p50 / p90 | 164 / 300 u | over P4's 100 u — but half a session |
+| the Hatcher off our mesh, worst | 12.5 u (22 of 1,623), the foot flank | RED, unchanged from s4 |
+
+**The chain** ([FINDINGS §1z-cm](FINDINGS.md)): the corner-box put the owner spamming clicks;
+each click sent a `0x002B` then a `0x0029`, and `world_tick`'s `0x001E` slipped between them.
+The `0x002B` SET the client's `MOVEMENT_STALE` flag; the click was answered to a zero-distance
+STOP-ECHO, so an arrival was due at the very next tick; that tick ran on the stale flag and
+asserted. Retail serialises the pair (2,403 of 2,403 at a zero wire gap); our per-message send
+lock did not. **Fixed:** `STALE_PAIR_GATE` holds a `0x001E` on the send condition while another
+thread has a `0x002B`/destination pair open (`--no-stale-pair-gate` reverts).
+
+**Session 6 — registered, not run.** The clean stairs run the crash pre-empted, under the gate:
+
+- **P0 — zero crashes**; `sessionscore.py`'s "pairs split by a 0x001E" reads **0** (the gate's
+  own signature; the known-bad arm `--no-stale-pair-gate` reproduces the split).
+- **P1–P4** as session 5 registered them (zero snaps, zero mid-air ≥ 1 s, chain ≥ 5, p50 < 100 u).
+- Recorded: whether the corner-box itself recurs — the Hatcher filling the only exit is
+  NPCTRACK-Q6/Q10, not a sync defect, and is out of MOVECODE's scope.
+
+*Map note: the mesh selector scored this capture against map 148; the run command names map 146.
+The stalepair finding is wire-only and map-independent, so this is not chased here.*
