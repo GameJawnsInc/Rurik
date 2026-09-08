@@ -8807,8 +8807,11 @@ the same-tick ALIAS**: the
   instrument excludes itself and says so. `--diff` exits **1 for a changed
   census, which is a result**, 0 for unchanged, the same contract `datcheck.py`
   draws. **68/7 is the founding measurement and not today's**: the census pin is
-  a literal in the test and it is **233 across 21 files** as of 2026-08-29, with
-  1,812 prose citations and 446 test expectations — and note what this line's own
+  a literal in the test and it is **235 across 22 files** as of 2026-09-08, with
+  2,044 prose citations and 447 test expectations — the +2 being `groundz.py`,
+  the GROUNDZ AgentView height reader, whose two array VAs are a second hand-copy
+  of `agentprobe.py`'s and whose only desk check compares one of them against a
+  copy of itself — and note what this line's own
   history says about itself, because it is the point. It read **99 across 14
   files** for ten days and six census moves (113, 134, 135, 151, 156, 189, 204),
   wrong the whole time, because **no test asserts a number in prose**. The two

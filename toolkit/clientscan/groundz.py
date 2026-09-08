@@ -42,10 +42,22 @@ NOT INCLUDED, deliberately: the model's own copy at `model+0x18`. Reaching it ne
 and is not decoded yet (GROUNDZ-F5). The model handle at `+0x60` is returned raw so the
 next session starts from it.
 
-NOTHING HERE HAS BEEN READ OUT OF A RUNNING CLIENT. Every offset is static disassembly of
-vault/client/2026-07-29_221c13772c7a/Gw.exe. The three refutable predictions are in
-studies/renderobj/FINDINGS.md GROUNDZ-F3/F5; until one of them is checked live, treat a
-number from this file as UNVERIFIED.
+READ LIVE ON 2026-09-06 AND IT HELD, and this paragraph said the exact opposite for two
+days -- "NOTHING HERE HAS BEEN READ OUT OF A RUNNING CLIENT ... treat a number from this
+file as UNVERIFIED" -- which is a stale warning telling a reader to distrust a measured
+result. Every offset began as static disassembly of
+vault/client/2026-07-29_221c13772c7a/Gw.exe; GROUNDZ-R1 (studies/renderobj/FINDINGS.md,
+RUN-R1.md) then put it against a running 38797 client and it held: 799 of 799 samples ok
+for both agents with ZERO refusals, the round trip holding on every one, and +0x8C ==
++0x30 on every one -- the self-check with no free parameter. The height varies 171.30 u
+across the stairs against 21.60 u on the flat, so it is not a constant a wrong offset
+happened to land on. A number from this file is OBSERVED on 38797.
+
+WHAT IS STILL OPEN is GROUNDZ-F5, the model's own copy named below. And what this file
+cannot tell you is whether its two array VAs are stale on a DIFFERENT build: it names no
+build constant and resolves nothing through `pinned`, so a rebase surfaces as a named
+refusal at run time rather than as a red test at a desk. test_buildpins.py's census
+entry for 2026-09-08 is the record of that, and of why it was not fixed there.
 
 Pure stdlib. Takes a `read(addr, n)` closure so it runs on a bare machine with fake
 memory -- the same shape movetap.agtrack_fence uses, and the reason it can be tested
