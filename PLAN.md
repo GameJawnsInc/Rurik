@@ -1786,6 +1786,43 @@ chosen it. **Do not re-litigate it in a later session** — the same standing as
 
 ---
 
+**Q17. Does `content/maps.toml`'s `name = "Lion's Arch"` cross the provenance
+gate's "commit the id, resolve the string at run time" bullet?**
+✅ **CLOSED 2026-09-08, by the owner. No. The bullet is scoped to authored bodies
+of text, and the place names stay as they are.**
+
+The pre-publication audit ([studies/prepub/FINDINGS.md](studies/prepub/FINDINGS.md)
+§7) left this open deliberately rather than deciding it: `content/maps.toml` carries
+about ten literal ArenaNet place names, and `CLAUDE.md`'s bullet then read *"Names
+and authored text: commit the id, resolve the string at run time"*. Read strictly,
+the word *Names* covered them.
+
+**The ruling is that the bullet was about authored text and the word "Names" was
+carrying more than it should.** The boundary is the same one §7 Q3 draws for the
+gate as a whole — MEASUREMENT versus EXPRESSION. A body of authored text is
+ArenaNet's expression and stays an id: quest descriptions, dialogue, reward
+strings, item and skill names, which is exactly what `questdefs.py`, `reskin.py`
+and `attribtable.py` already do. **A short proper noun used as a LABEL is not.**
+A place name is how a reader knows which map a row describes; the prose in
+`studies/` and in `CLAUDE.md` itself uses those names freely; and they are
+published on ArenaNet's own wiki, which is one of this repository's cited sources
+(`source = "wiki"`, 26 rows, with its own `THIRD-PARTY-NOTICES.md` section).
+Converting ten of them to string ids would cost every content row its legibility
+and protect nothing — and eight of `maps.toml`'s eighteen `name` rows are *our own*
+labels for created chains and test slots, which the strict reading would have swept
+up too.
+
+**Recorded because a rule that is quietly not followed is worse than one that is
+written down and scoped.** The direction of error in this repository is
+over-refusal — §7 Q3's own history is four days of sessions refusing what the rule
+never said, and 46 citations rewritten and reverted the same day. This is that
+pattern caught one step earlier: the audit flagged the mismatch instead of either
+converting the names or ignoring it, and the ruling names the boundary rather than
+leaving the next cold session to re-derive it. `CLAUDE.md`'s bullet now carries the
+scope; nothing in `toolkit/` changed, because nothing ever enforced this in code.
+
+---
+
 ## 8. Immediate next actions
 
 ### ★★★ MOVEMENT 2026-09-07 — RUN-1zCG SESSION 4 SCORED and MOVECODE-1z-cl SHIPPED: **six client snaps and a body left hanging in mid-air.** The owner ("wasn't great… warps at the top and bottom walls… ended suspended in mid-air and stuck"): every snap was the body climbing the stairs while world-0 walked door B's corridor to the foot ONE VERTEX PER 0.5 s HEADING TICK, idling 0.3 s at each (11.6 s over 39 door leads, six of them 0 u long), until the client's gate 1 snapped the body back at 299 u; the last snap carried the report's plane word (29) onto a plane-0 point and the body hung at that plane's cached height for 12 s, unable to walk (F11, 1z-o.6's shape from the other side). Fixed: the lead's two plane words are the MESH's at the destination and at world-0 (retail's crossing pair; `--no-lead-plane-words`), a door-B lead CHAINS to the next vertex at the copy's arrival (`--no-kbd-lead-chain`), door B skips the vertex world-0 stands on; the scorer prints the mid-air episodes. `test_kbdsync` 201. Not shipped: a separation re-pin (retro pre-empts 2 of 6 — the last report is stale past the freshness gate under a held key). Session 5 registered: zero snaps, zero mid-air, the chain ≥ 5, p50 < 100 u. [RUN-1zCG.md](studies/movecode/RUN-1zCG.md) session 4, [FINDINGS §1z-cl](studies/movecode/FINDINGS.md).

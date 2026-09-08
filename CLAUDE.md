@@ -49,9 +49,21 @@ of the three was 40 hours stale. `PLAN.md` §8 is the live next-actions list.
     disclosure. `toolkit/provlint.py` + `test_provlint.py` are an accumulation
     tripwire, not a gate, and there is NO obligation to hand-sweep for citations they
     miss. Full record: [studies/provenance/FINDINGS.md](studies/provenance/FINDINGS.md).
-  - **Names and authored text: commit the id, resolve the string at run time** from the
+  - **Authored text: commit the id, resolve the string at run time** from the
     owner's own archive — `model_id = 419, name_string_id = 2519`. This is the pattern
-    `mapbuild.py` already proves with FINDINGS 14's five mandatory chunks.
+    `mapbuild.py` already proves with FINDINGS 14's five mandatory chunks, and
+    `questdefs.py`, `reskin.py` and `attribtable.py` all follow it.
+    **SCOPED 2026-09-08, owner's ruling, `PLAN.md` §7 Q17: this bullet is about
+    AUTHORED BODIES OF TEXT** — descriptions, dialogue, quest and reward strings,
+    item and skill names — **not about a short proper noun used as a label.**
+    `content/maps.toml` may say `name = "Lion's Arch"`. A place name is how a
+    reader knows which map a row is, the surrounding prose in `studies/` and this
+    file uses those names freely, and they are published on ArenaNet's own wiki;
+    converting ten of them to string ids would cost every content row its
+    legibility and protect nothing. This bullet used to read "Names and authored
+    text", and the pre-publication audit correctly flagged the mismatch rather
+    than quietly deciding it — the same over-refusal the gate above is scarred by,
+    caught one step earlier this time.
   - **This does not touch the second gate.** `PLAN.md` §6.1's derivation register is about
     *other people's* work and is a licence question. "We relaxed provenance" never covers
     both.

@@ -213,12 +213,21 @@ history is `authsrv.py`. `.gitignore` held from the first commit exactly as
 requests; zero issues. Publishing `main` publishes exactly the tree and history audited
 here.
 
-**One judgment call left open, deliberately.** `content/maps.toml` carries ~10 literal
-place names (`"Ascalon City"`), which sits slightly across `CLAUDE.md`'s *"commit the id,
-resolve the string at run time"* bullet. Published place names are the mildest possible
-case of that rule and the surrounding prose uses them freely. **Recommendation: a one-line
-ruling scoping that bullet to authored *bodies* of text — descriptions, dialogue, item
-names — rather than a conversion.** Not acted on here; it is the owner's to rule.
+**One judgment call left open, deliberately — ~~and it is the owner's to rule~~ RULED
+2026-09-08.** `content/maps.toml` carries ~10 literal place names (`"Ascalon City"`),
+which sits slightly across `CLAUDE.md`'s *"commit the id, resolve the string at run
+time"* bullet. Published place names are the mildest possible case of that rule and the
+surrounding prose uses them freely. **Recommendation: a one-line ruling scoping that
+bullet to authored *bodies* of text — descriptions, dialogue, item names — rather than a
+conversion.**
+
+> **The owner ruled exactly that** (`PLAN.md` §7 **Q17**): the bullet is about authored
+> bodies of text, a short proper noun used as a label is not one, and the names stay.
+> `CLAUDE.md`'s bullet now carries the scope and no longer opens with the word *Names*,
+> which was the word doing the over-reaching. Nothing in `toolkit/` changed — nothing
+> ever enforced this in code, which is why it could sit unnoticed until a pass went
+> looking. Worth recording that this is the over-refusal pattern §7 Q3 is scarred by,
+> caught one step earlier: flagged as a question rather than actioned as a conversion.
 
 ---
 
