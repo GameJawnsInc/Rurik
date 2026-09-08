@@ -1,58 +1,51 @@
 # Rurik
 
-A local Guild Wars 1 server emulator plus a content toolkit. You point the retail client
-at your own machine, and it logs in, renders your character, loads a real map and walks
-on the game's own geometry.
+under development (v0.0.1 or something)
 
-**Public, but not a product.** This is one person's research project, published so the
-work is readable and reusable — not run as a service. There is no public shard, no
-support, no releases and no roadmap promises, and issues may go unanswered. It is
-[MIT-licensed](LICENSE), with one carve-out: the 26 `content/` rows derived from the
-Guild Wars Wiki carry the wiki's own CC BY-NC-SA 2.5 / GFDL 1.2 terms. **You supply your
-own legally purchased copy of the game** — none of ArenaNet's bytes are here, and none
-ever will be.
+it's a guild wars 1 server emulator + mod kit. 
 
-**Where the project actually is: [PLAN.md](PLAN.md) §3.** That table is the single
-status authority — dated, and stamped with a commit hash per rung. This file deliberately
-does not restate it, because every document here that tried went stale and disagreed.
+**research project, not a private server** 
+published as information and preservative
+there is no public server
+as of now - no support, no releases, no roadmap, ignoring issues and PRs (unless you convince me)
+
+[MIT-licensed](LICENSE), with a carve out for some wiki-derived content 
+(CC BY-NC-SA 2.5 / GFDL 1.2). 
+
+**no .dat file is distributed**
+none of ArenaNet's bytes are here
 
 ---
 
-## This is an AI-first project
+##AI-first project
 
-Rurik is written to be worked on with an agentic coding harness, and it is not really
-optimised for reading by hand. The reasons are structural, not stylistic:
+this project was written to be developed from an agentic coding harness
 
-- The documentation is larger than the code. `PLAN.md` is over a megabyte, `TESTS.md`
-  approaching one, and `studies/` holds sixty-odd research arcs of measured findings.
-  Nobody reads that; you ask questions of it.
-- Every claim is labelled by confidence — OBSERVED, UPSTREAM, RECONSTRUCTION,
-  CORROBORATED, CONTESTED, UNVERIFIED, NOT FOUND — so an agent can tell what was
-  measured from what was assumed, and so can you when it quotes back.
-- Most findings are the result of capturing the real client and reading it. The
-  provenance of a number matters more than the number, and it travels with the number.
+it is not meant to be developed by hand (though nothing is stopping you from trying)
 
-**The recommended way to develop, or to ask anything at all, is to open the checkout in
-[Claude Code](https://claude.com/claude-code) (or a comparable harness) and just ask.**
+the codebase is mostly documentation, research, and plans. not meant for human consumption.
+
+**the recommended way to develop, or to ask anything at all, is to open the checkout in
+your favorite coding harness and just ask.**
 "How does the handshake work?", "why is my client stuck on Connecting to ArenaNet?",
-"what would it take to make a new zone?" — all of those are answerable from this repo,
-and answering them is what its layout is for.
+"what would it take to make a new zone?"
 
-[CLAUDE.md](CLAUDE.md) is the house rules and is loaded automatically. Read it yourself
-before your first session: it carries the non-negotiables below, and the reasoning for
-each one is the expensive part.
+questions like these are easy for the agent to find
 
 ---
 
 ## What you need
 
-- Windows, PowerShell.
-- **Your own legally purchased Guild Wars install**, at `C:\gw`. Rurik reads bytes out
-  of it; it never patches or launches it.
+- Windows, PowerShell. (this is how i developed it)
+- **Your own legally purchased Guild Wars install**
 - Python 3. Standard library only — there is nothing to `pip install` for the server path.
 
-Nothing ArenaNet-authored ships in this repo. Everything derived regenerates from your
-own install through the extraction steps below.
+
+## END OF HUMAN AUTHORING, SLOP SETUP BELOW
+
+not much to look at yet. movement code is getting pretty reliable and much of the roadmap is planned
+
+combat is in early days
 
 ## Setup — one time, and again after every ArenaNet update
 
