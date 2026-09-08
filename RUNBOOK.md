@@ -147,6 +147,36 @@ former hogs were cut on 2026-08-15 — 584 s → 183 s and 480 s → ~330 s stan
 removing accidental work, with every assertion and every reported number unchanged; see
 TESTS.md for `search_all` and `Archive.magic`.
 
+
+### Once per clone: install the commit gate
+
+```bash
+git config core.hooksPath .githooks
+```
+
+**One line, and it is not optional now the repository is public.** It points git at
+`.githooks/pre-commit`, which runs `toolkit/githooks/pre_commit.py` and refuses a
+commit that stages a vault-shaped path or credential-shaped content — a capture, a
+key, a binary, a real email address, a `C:\Users\<real name>` path, a character name
+travelling as UTF-16 hex. It is per-clone because `core.hooksPath` is local
+configuration: a fresh clone, a new worktree with its own config, or a machine you
+have not run this on is **unguarded until you run it**. Check with
+`git config core.hooksPath`, which must print `.githooks`.
+
+**Why a hook and not just `.gitignore`:** the ignore rules cover the vault by
+DIRECTORY, so a capture written into the checkout root — by a tool whose `--out`
+defaulted there, or a copy made to look at something — is not ignored at all and
+`git add -A` takes it. That was survivable while the repository was private. It is
+not now: a push is a publication, and rewriting history afterwards does not remove
+the objects from GitHub (`studies/prepub/FINDINGS.md` §8, which is why the remote
+had to be deleted and re-created).
+
+The gate prints what it refused and why, one line per finding with a line number
+where it read content. If a refusal is wrong, `git commit --no-verify` is the
+deliberate way through — that is the override CLAUDE.md's rule permits, since you
+have read the refusal and decided, and it leaves the decision on the record. What
+the rule forbids is skipping a red you have not read.
+
 ### While you are working: only what your edits reach
 
 Ten minutes is still too long after every edit, so during the loop:

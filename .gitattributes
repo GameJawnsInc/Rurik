@@ -17,3 +17,13 @@
 # rather than about which tree checked it out. Anything else generated-and-hashed
 # belongs here too.
 toolkit/clientscan/movehook/sites.h text eol=lf
+
+# 2026-09-08: the commit gate's wrapper is a SHELL SCRIPT that git itself runs, and
+# `core.autocrlf=true` on this machine would check it out with CRLF endings. A CRLF
+# sh script fails on every clone that is not Windows -- `bad interpreter: /bin/sh^M`
+# -- and the failure mode is the one this repository has already paid for twice: the
+# hook stops running and nothing says so, which is the same silent-success defect
+# toolkit/checks.py exists to refuse. The repository is public now, so the clone that
+# hits it will not be ours. Same reasoning as sites.h above: pin the bytes that a
+# tool, rather than a reader, consumes.
+.githooks/pre-commit text eol=lf

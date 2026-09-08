@@ -11188,3 +11188,43 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   bare machine. The corpus retrodiction lives in `agtrack_replay.py
   --policy` (217/251 corpus warps pre-empted, 10/10 in the current regime
   -- FINDINGS 1z-s). Floor 49 from the 2026-08-30 green run. ~2 s **§13 (MOVECODE-1z-bf, 2026-09-04): the gate-2 tolerance is a recorded, revertable switch** — `AGTRACK_GATE2_SEAM` ON by default and swept by `capture_flags()`, `--agtrack-gate2-exact` present and zeroing the mirror's constant (source lock), and the mirror's gate 2 reading `on_mesh` under the tolerance and `walkable()` without it (source lock). Floor 74 → 77), **§14 is now MOVECODE-1z-bv (2026-09-05): the gate-2 branch driven THROUGH the guard.** Every other fixture in this file passes `mesh=None`, so `gate2-offmesh` had never been executed by a test — it was covered one layer down in `test_agtrack_mirror` §10b. §14 pins: the branch is reachable and is genuinely gate 2 (gate 1 PASSES at 100 u separation, so a gate-1 fixture cannot masquerade as coverage); a **vacuity guard** — the identical geometry on a walkable mesh is not a gate-2 veto, so the mesh is what drives it; and the three re-pin arms over a gate-2 want — fresh MATURES (the corpus's 17, every one fresh), stale is BLOCKED with `repin_block_reason` naming it, and **stale + coincident + newest-a-STOP is still blocked**, which is the deleted waiver's own licence shape and reads `("due", "gate2-offmesh")` on `5bdd933`. That last one was WRONG on its first draft — written with two walk-starts it passed on the old build too, because 1z-bs's own clause refused that pair; the known-bad arm caught it and it was re-aimed. Floor 74 → 81. **The old §14 and §15 (the waiver's walk-start and newest-must-be-stop clauses) were deleted with the waiver at MOVECODE-1z-bt** — their history is FINDINGS §1z-bn and §1z-bs, and §9 above is what replaced them),
+
+`toolkit/test_precommit.py` (**THE COMMIT GATE — the audit's §9 item 2, and the
+first rule in this repository that runs without being remembered.**
+`toolkit/githooks/pre_commit.py` refuses a commit that stages a vault-shaped path
+or credential-shaped content; `.githooks/pre-commit` is the sh wrapper git runs,
+installed per clone with `git config core.hooksPath .githooks`. **Why it exists:
+`.gitignore` covers the vault BY DIRECTORY** — `authsrv-*.jsonl`, `*.raw`,
+`hold*.png` are ignored because they sit under `vault/` and for no other reason —
+so a capture written to the checkout root by a tool whose `--out` defaulted there
+is not ignored at all. Demonstrated before the hook existed: a root-level
+`authsrv-<stamp>-c1.jsonl` staged cleanly. That was survivable while the repo was
+private and stopped being so on 2026-09-08. **The rules are measured, not guessed**
+— a census of both trees (20,208 `.png`, 5,914 `.jsonl`, 3,400 `.raw`, 2,153
+`.f32` in the vault; the tracked tree is `.py .md .toml .c .h .ps1 .json
+.wikitext` and holds no binary of any kind) — and they include the shapes the
+audit found by hand: a real-looking email (with a synthetic allowlist, since every
+address in the tree is `example.com`/`*.invalid`/the GitHub noreply), a
+`C:\Users\<real name>` path, and **UTF-16 text inside a hex dump**, which is how
+two character names survived a tree-wide string search (PREPUB-F2). `.cs`/`.java`
+route to the SECOND gate — a file in either is almost certainly an upstream copy
+needing a `PLAN.md` §6.1 row first. **The load-bearing half is that it refuses
+NOTHING the tree already holds**, because a gate that reddens a clean commit
+teaches `--no-verify` as a reflex: §1 runs every path rule over all 700 tracked
+paths, §2 every content rule over all ~690 tracked text files, both asserting
+zero. §3 drives real temporary indexes — refusals carry path and line, a clean
+file inside a dirty commit is not named, a NUL byte under `.md` is caught, a
+DELETION is never judged (`--diff-filter=ACMR`, or the gate would block its own
+cleanups), the module's exit codes and printed override read back. §4 pins the
+wrapper and that THIS clone has `core.hooksPath` set. §5 breaks each rule on
+purpose and asserts only that rule's own control goes green.
+**EVERY FIXTURE IS ASSEMBLED FROM PARTS AT RUN TIME, and that is the file's real
+lesson**: §2 sweeps every tracked text file including itself, so a literal secret
+here would redden the sweep it exercises and the hook would refuse the commit that
+added the test. The first draft was written with literals — and they were the REAL
+ones, a credential GUID and an encoded character-name fragment, both removed from
+every blob and message hours earlier by the history rewrite (`studies/prepub/FINDINGS.md`
+§8). Committing it would have put them back, in the one file whose job is keeping
+them out. `probe_self` runs the content rules over this file and is the check that
+proves it. Stdlib only, no vault, no socket, no client. 76 checks, floor 60; the
+wrapper's index-mode check declares a skip until the wrapper is tracked. ~3 s)

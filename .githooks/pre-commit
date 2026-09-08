@@ -1,0 +1,13 @@
+#!/bin/sh
+# Refuse a commit that stages a vault-shaped path or credential-shaped content.
+# What and why: toolkit/githooks/pre_commit.py. Install: git config core.hooksPath .githooks
+# Deliberate override, after reading the refusal: git commit --no-verify
+#
+# If python cannot be found the commit FAILS rather than passing: a gate whose failure
+# mode is silent success is worse than no gate (toolkit/checks.py).
+for c in python py python3; do
+    command -v "$c" >/dev/null 2>&1 && exec "$c" toolkit/githooks/pre_commit.py
+done
+echo "pre-commit: no python on PATH, so the commit gate could not run." >&2
+echo "Install python, or use 'git commit --no-verify' having checked the paths yourself." >&2
+exit 1

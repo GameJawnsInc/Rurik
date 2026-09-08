@@ -317,8 +317,18 @@ Three follow-ups, in the order I would do them:
    Add both GWCA slugs and `gwdevhub/GWToolboxpp`; require a notice match to be a `## `
    heading rather than any substring; drop the bare-word alias `server`, which is why
    `gw-preservation/server` matches 194 modules and tells you nothing.
-2. **A `.githooks/pre-commit` that refuses staged vault-shaped paths** regardless of
-   location, plus one line in `RUNBOOK.md` to install it. The `.gitignore` belt is aimed
+2. ~~**A `.githooks/pre-commit` that refuses staged vault-shaped paths** regardless of
+   location, plus one line in `RUNBOOK.md` to install it.~~ **LANDED 2026-09-08**
+   (`toolkit/githooks/pre_commit.py`, `toolkit/test_precommit.py`, 76 checks; install
+   per clone with `git config core.hooksPath .githooks`). The gap was demonstrated
+   before it was closed: a root-level `authsrv-<stamp>-c1.jsonl` staged cleanly,
+   ignored by nothing. It refuses the content shapes this pass found BY HAND too --
+   a real-looking address against a synthetic allowlist, a Windows profile path
+   naming a real account (F4), and §3's UTF-16-inside-a-hex-dump, the form that
+   defeated a tree-wide string search. Its fixtures are assembled at run time rather
+   than written out, because its own sweep reads every tracked text file: the first
+   draft embedded a real credential GUID and an encoded name fragment, hours after
+   the rewrite removed both, in the one file whose job is keeping them out. The `.gitignore` belt is aimed
    at extensions that do not exist in this project (`*.gwcap` appears nowhere else in the
    tree) while the formats that *do* exist — `authsrv-*.jsonl`, `*.raw`, `hold*.png` —
    are covered only by their directory.
