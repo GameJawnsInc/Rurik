@@ -33,7 +33,7 @@ point when routed) are route()'s own contract and ARE gated in the test.
 
 MESH SELECTION (the Q7 wrong-mesh trap, as code): the wire names its own map
 -- s2c opcode 409's third field carries the map id at instance load (OBSERVED
-2026-08-26: 409=[409,1,146,...] on the character C connection, [409,1,280,...]
+2026-08-26: 409=[409,1,146,...] on the map-146 connection, [409,1,280,...]
 on the Isle specimen), so selection is wire-first: resolve that id through
 content's map rows to a pathing file id. The coverage census over the
 connection's own reported positions is then a VERIFICATION, not a selector --

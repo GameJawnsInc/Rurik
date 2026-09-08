@@ -237,9 +237,9 @@ origin = "live"
 verified = """OBSERVED, and the strongest item row in this file. Every field is read \
 off ArenaNet's own GAME_SMSG 0x0161 declaring the backpack container, and the row is \
 CONSTANT: across the whole live corpus there is exactly ONE distinct backpack \
-declaration -- 49 connections spanning FIVE distinct characters (character A, Redwar \
-Tywin, character C, character D, character E) and three campaigns -- differing only in the \
-per-connection item id, which is an arbitrary handle exactly as the bag ids and the \
+declaration -- 49 connections spanning FIVE distinct characters and three campaigns -- \
+differing only in the per-connection item id, which is an arbitrary handle exactly as \
+the bag ids and the \
 0x0144 inventory key are. So the id is ours to allocate and everything else is theirs.
 
 The extractor is `toolkit/authsrv/invcensus.py` (`bag_shapes()`), build 38833; the join \

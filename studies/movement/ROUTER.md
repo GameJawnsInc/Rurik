@@ -86,7 +86,7 @@ D1-band heading answer short of its own bit-exact prediction was truncated
 by retail's geometry, so our clip of the same ray tests mesh identity
 directly — Q7's method, committed. Map 280 aggregate: **231/647 clipped
 stops agree ≤3u (35.7%)** — Q7's 248/701 (35.4%) reproduced by an
-independent implementation. Map 146 (character C-area, wire-named):
+independent implementation. Map 146 (wire-named at instance load):
 **24/33 (73%)** — content's 146 mesh is the right mesh. The D1 formula's
 bit-band rate reproduces everywhere (e.g. 185/195 on one connection).
 Anchor locks in the test: 63805 (506 pairs / 297 exact / 209 clipped / 65

@@ -606,8 +606,8 @@ same agent) fired on **4 of 4 kills** — a fourth kill nobody had catalogued si
 conn `:62994` (agent 38, t=19.912, single `[0,26]`). 3 of 4 kills carry a single
 `[0,26]`; only the Wolf carries the pair (`[10,0]`+`[0,126]`). **And the pair is not
 a kill shape**: 6 of its 7 occurrences are 6.8–31.5 s from any death marker, inside
-a recurring ~20-message other-player broadcast burst (name blobs "character C" /
-"character D", 0x005D/0x005E, 0x007E pairs) that is always preceded by
+a recurring ~20-message other-player broadcast burst (character-name blobs,
+0x005D/0x005E, 0x007E pairs) that is always preceded by
 `0x009C [agent, 100]` — and `0x009C` fires 13× (once per connection at load, once
 before each non-kill burst), never near a lone kill. The X values {100, 250, 500}
 reproduce EXACTLY at matching map/slot positions across the two independently
