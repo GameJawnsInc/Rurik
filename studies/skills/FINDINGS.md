@@ -1076,12 +1076,12 @@ major contributors. The identity chain closes on three separate tokens:
 
 ```
 git -C gwdevhub__GWToolboxpp log --format='%an <%ae>' | sort -u
-  Ziox            <laurent.dufresne@hotmail.com>
-  reduf           <laurent.dufresne@hotmail.com>
-  Laurent Dufresne <laurent.dufresne@hotmail.com>
+  Ziox            <<one hotmail address, identical on all four lines>>
+  reduf           <<one hotmail address, identical on all four lines>>
+  Laurent Dufresne <<one hotmail address, identical on all four lines>>
 
 git -C ldufr__OpenTyria log --format='%an <%ae>' | sort -u
-  Laurent Dufresne <laurent.dufresne@hotmail.com>      (all 180 commits)
+  Laurent Dufresne <<one hotmail address, identical on all four lines>>      (all 180 commits)
 ```
 
 A third project outside both confirms the handle:
