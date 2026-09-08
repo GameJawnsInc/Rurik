@@ -4,7 +4,12 @@ The two run as separate processes: the portal issues a user id and a game token
 over HTTP, and the client then presents both to AuthSrv over the encrypted auth
 channel. AuthSrv has to recognise them.
 
-Confirmed empirically from our own logs plus a live capture of build 38797:
+Confirmed empirically from our own logs plus a live capture of build 38797. The pair
+below is regenerated from the synthetic loopback credential (`accounts.py` SYNTHETIC,
+`loopback@rurik.invalid`) rather than quoted from that capture -- `stable_guid` is
+`sha256` and is published two files away, so quoting the real issued ids would have
+published a confirm-a-guess oracle for the account they were derived from. The encoding
+is what this block is for and it is unchanged:
 
     portal /users/login.xml        issued user_id  E696B44C-04FC-DF92-9EE1-B0CC329B424A
     portal /my_account/token.xml   issued token    233B382E-3CD2-E5B6-7018-7F547D2760A7

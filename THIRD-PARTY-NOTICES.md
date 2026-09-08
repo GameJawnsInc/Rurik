@@ -174,6 +174,75 @@ SOFTWARE.
 
 ---
 
+## GWCA — GregLando113, JaborGW, and gwdevhub/GWToolbox++
+
+**Used by:** `toolkit/authsrv/agents.py` (the nine `WEAPON_TYPE_*` and six
+`ALLEGIANCE_*` constant pairs — GWCA's comment is the only source for the values and
+they are not re-derived here), `toolkit/clientscan/genericvalue.py` (the 32-entry
+`GenericValueID` table read from `Include/GWCA/Packets/StoC.h`, consumed by
+`avevents.py`), and the `GAME_SMSG` opcode names in `studies/newopcodes/` that reached
+`schema/overrides.json` as one of two witnesses beside OpenTyria. Rows are in
+[PLAN.md](PLAN.md) §6.1.
+
+**Licence: MIT** — permissive, **attribution required**, which is what this section is
+for. It was missing until 2026-09-07: `derivlint.py` reported the tree clean because
+GWCA is not in its `ATTRIBUTION_REQUIRED` set, so nothing was checking the one upstream
+whose tables ship inside `toolkit/`. Found by the pre-publication audit
+([studies/prepub/FINDINGS.md](studies/prepub/FINDINGS.md)).
+
+**There are three GWCA copies and they do not agree** — `GregLando113__GWCA` and
+`JaborGW__GWCA` are archived, `gwdevhub__GWToolboxpp/Dependencies/GWCA` is the
+maintained fork, and the archived copies sit +1 above `0x003B` in the `GAME_SMSG`
+table. `PLAN.md` §6.1's mirror-trap note is the place that is written down; quoting a
+GWCA value without saying *which* GWCA is how that trap fires.
+
+```
+MIT License
+
+Copyright (c) 2016 GregLando113
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+---
+
+## Guild Wars Wiki — wiki.guildwars.com, and its contributors
+
+**Used by:** 26 rows in `content/` — 22 in `content/world.toml` and 4 in
+`content/maps.toml` — each carrying `source = "wiki"` with the page and revision id it
+was read from. Also cited throughout `studies/` wherever a client-derived number is
+checked against what the game displays to players; `.claude/skills/browse-gw-wiki/`
+is the tool that reads it and the place the citation format is defined.
+
+**Licence: GFDL 1.2 / CC BY-NC-SA 2.5 (dual)** — **attribution required**, and unlike
+every other entry in this file the grant is *not* permissive: the ShareAlike and
+NonCommercial arms travel with the material. That is why `LICENSE`'s first carve-out
+names these rows specifically rather than sweeping `content/` under MIT. Per-row
+provenance is what makes the carve-out enforceable — the affected set is 26 identified
+rows, not "some of the content".
+
+**Attribution:** Guild Wars Wiki contributors, wiki.guildwars.com. Each row names its
+page and the revision id it was read at, which is the attribution the licence asks for
+and also the thing that lets a reader check whether the page has moved under us since.
+
+---
+
 ## What is deliberately NOT here
 
 **`gw-preservation/*` and `Py4GW_Reforged` carry no licence at all, which means all rights

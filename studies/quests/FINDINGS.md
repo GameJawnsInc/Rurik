@@ -683,7 +683,7 @@ Quest traffic, re-censused for this document:
 
 **The two big sessions are the same scripted route run twice.** Not just the same opcode census to the message — the same `0x003B` sequence in the same order: `80 offer → 80 accept → 1462 offer → 1462 accept → 80 turn-in → [218|222] accept → [218|222] turn-in → [82|86] accept → [82|86] turn-in → 62 accept → 62 code-4`. They differ at exactly two slots. No lane noticed this, and it turns out to be the key to §5.
 
-**Two different characters** — extracted as literal UTF-16 runs inside the `0x0080`/`0x004C` strings: **`character C`** (2026-08-07) and **`character D`** (2026-08-10).
+**Two different characters** — extracted as literal UTF-16 runs inside the `0x0080`/`0x004C` strings: an **11-unit** name (2026-08-07) and an **8-unit** name (2026-08-10). The names themselves stay in `vault/captures/live/`; the lengths are what §5's arithmetic uses.
 
 ### 4.2 What is not there — and these negatives are the shopping list
 
@@ -757,7 +757,7 @@ Lanes C/D/E read the wire. Lane F read GWW. Neither consulted the other. **Five 
 
 **CORROBORATED — two lineages sharing no author, no code and no ancestry.** And the discriminator is sharper than the count, because of §4.1's structural finding: the two sessions run the *same script* and differ at exactly two slots. **The id that varies between them is precisely the one GWW says is profession-specific, and the two values it takes are the two profession tests.** Under a wrong id binding, that alignment has no reason to exist.
 
-**And there is a third, entirely accidental witness sitting in the payloads.** The character names are literal UTF-16 inside ArenaNet's own dialog strings: the only session containing quest **82** (*Necromancer* Test) belongs to **`character C`**; the only session containing quest **86** (*Ranger* Test) belongs to **`character D`**. That is the owner's own naming joke, not a measurement, and it is labelled **RECONSTRUCTION** for exactly that reason — but it is a signal that a wrong binding would not produce, and it is the kind of check this repo prefers: one the artifact could have refuted.
+**And there is a third, entirely accidental witness sitting in the payloads.** The character names are literal UTF-16 inside ArenaNet's own dialog strings, and the operator named each character after the profession it was rolled for: the only session containing quest **82** (*Necromancer* Test) belongs to a necromancer-named character; the only session containing quest **86** (*Ranger* Test) belongs to a differently-named one. That is the operator's own naming joke, not a measurement, and it is labelled **RECONSTRUCTION** for exactly that reason — but it is a signal that a wrong binding would not produce, and it is the kind of check this repo prefers: one the artifact could have refuted.
 
 **Open, and cheap: quests 218 and 222 occupy the same structural slot in the two runs and vary with the character, and neither appears in lane F's sampled id bands (41–89 Prophecies Pre-Searing, 1182–1190 Vanguard, 1462 Reforged).** The cheapest decisive test is a single GWW search: `insource:"| id = 218"`. Note that lane F's 41–89 band is itself a sample of ~18 pages out of 70, not a census — and 218/222 are the evidence for that.
 
@@ -1001,7 +1001,7 @@ Codes `0x00` and `0x06` never appear. Kinds **19 and 20 are absent** — an unex
 
 **OBSERVED. Every `0x003B` code `0x03` is answered with exactly four messages in a fixed order: `0x0080`, `0x0081`, `0x007E` (kind 16), `0x007E` (kind 17). 4 of 4**, at `+0.037` to `+0.048` s. Never two `0x0080`, never one or three options.
 
-**OBSERVED. A check that could have failed and did not.** Screen 2's line length differs between the two sessions by exactly the difference in the player's character-name length: q80 is 43 units in `143055` and 40 in `235916`; q1462 is 44 and 41. The substituted literal is 11 code units (`<11 UTF-16 units: the player's own character name>`) against 8 (`<8 UTF-16 units: the second character name>`). 11 − 8 = 3 = 43 − 40 = 44 − 41.
+**OBSERVED. A check that could have failed and did not.** Screen 2's line length differs between the two sessions by exactly the difference in the player's character-name length: q80 is 43 units in `143055` and 40 in `235916`; q1462 is 44 and 41. The substituted literal is 11 code units against 8 — the two characters' names, which is all the check uses. 11 − 8 = 3 = 43 − 40 = 44 − 41.
 
 **OBSERVED, and it is the finding that makes reward authoring cheap: there is no reward message and no reward string. The reward is a 19-code-unit SUFFIX inside the same coded string, byte-identical between the `0x0080` dialog line and `0x004C`'s description slot in 17 of 17 (screen, quest) pairs.**
 

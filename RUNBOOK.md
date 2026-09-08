@@ -824,7 +824,7 @@ everything except `run/` and `dat_study/`."** Measured 2026-08-06, that shipped 
 sitting in `authsrv/`, `gamesrv/` and `selftest/` — none of which the scrubber looked at.
 The recipe was the exposure, not the vault.
 
-Placeholders are assigned sequentially rather than hashed (the password is short; a
+Placeholders are assigned sequentially rather than hashed (the password is short enough that a
 hash would be brute-forceable), are the same length as what they replace so
 `Content-Length` and the base64 width stay honest, and are one-to-one so the same value
 lands on the same placeholder everywhere — correlation survives, identity does not.

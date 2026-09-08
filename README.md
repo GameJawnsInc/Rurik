@@ -1,12 +1,16 @@
 # Rurik
 
-A private, local Guild Wars 1 server emulator plus a content toolkit. You point the
-retail client at your own machine, and it logs in, renders your character, loads a real
-map and walks on the game's own geometry.
+A local Guild Wars 1 server emulator plus a content toolkit. You point the retail client
+at your own machine, and it logs in, renders your character, loads a real map and walks
+on the game's own geometry.
 
-**Limited private release.** This is one person's research project, shared with a few
-people. There is no public shard, no support, no releases and no roadmap promises. If
-you are reading this, you were handed it directly.
+**Public, but not a product.** This is one person's research project, published so the
+work is readable and reusable — not run as a service. There is no public shard, no
+support, no releases and no roadmap promises, and issues may go unanswered. It is
+[MIT-licensed](LICENSE), with one carve-out: the 26 `content/` rows derived from the
+Guild Wars Wiki carry the wiki's own CC BY-NC-SA 2.5 / GFDL 1.2 terms. **You supply your
+own legally purchased copy of the game** — none of ArenaNet's bytes are here, and none
+ever will be.
 
 **Where the project actually is: [PLAN.md](PLAN.md) §3.** That table is the single
 status authority — dated, and stamped with a commit hash per rung. This file deliberately

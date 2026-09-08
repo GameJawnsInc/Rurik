@@ -71,6 +71,7 @@ from codec import Codec  # noqa: E402
 sys.path.insert(0, os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "portal"))
 from sessionstore import SessionStore, uuid_to_wire  # noqa: E402
+import webgate  # noqa: E402  -- for stable_guid, so the test ids derive the way the portal's do
 import checks  # noqa: E402
 
 SELFTEST_VAULT = r"C:\gd\Rurik\vault\captures\selftest"
@@ -99,10 +100,15 @@ PORT = 6112
 # chosen, so the two can never drift apart again.
 BUILD = None
 
-# Reuses the real UUIDs observed on the wire, so the encoding stays exercised.
+# Derived through the portal's own `stable_guid` rather than pinned to the pair observed
+# on the wire. The encoding stays exercised either way -- `uuid_to_wire` still gets a real
+# GUID with all five fields populated -- and the derivation is the stronger check, since a
+# change to `stable_guid` now moves the test with it instead of silently disagreeing.
+# The pinned pair was removed 2026-09-07: `stable_guid` is sha256 and ships in this repo,
+# so a pinned id is a confirm-a-guess oracle for whatever address produced it.
 TEST_EMAIL = "selftest@rurik.local"
-TEST_USER_ID = "E696B44C-04FC-DF92-9EE1-B0CC329B424A"
-TEST_TOKEN = "233B382E-3CD2-E5B6-7018-7F547D2760A7"
+TEST_USER_ID = webgate.stable_guid("user:" + TEST_EMAIL)
+TEST_TOKEN = webgate.stable_guid("token:" + TEST_EMAIL)
 
 
 def server_keys():

@@ -2325,7 +2325,7 @@
    "282": {
     "opcode": 282,
     "name": "TOWN_ALLIANCE_OBJECT",
-    "why": "126 sightings across 7 of 8 channels in the 2026-08-17 Factions captures -- the best-evidenced result of that pass. Shape SOURCED (msgshape.py 0x011A, build 38797, RECV table 0x00bca870). Payload carries a guild NAME and TAG as literal text ('a guild name' / 'a tag'), the only literal text in the family; first field is a word and NOT an agent id. Proposed as GUILD_LADDER_ENTRY and killed by two independent refutations converging on this name; UPSTREAM at delta 0 in BOTH ldufr__OpenTyria and the MAINTAINED gwdevhub GWCA mirror (see PLAN.md 6.1's mirror-trap note: the archived GWCA copies are +1 above 0x003B). studies/newopcodes/FINDINGS.md",
+    "why": "126 sightings across 7 of 8 channels in the 2026-08-17 Factions captures -- the best-evidenced result of that pass. Shape SOURCED (msgshape.py 0x011A, build 38797, RECV table 0x00bca870). Payload carries a guild NAME and TAG as literal text (a real guild's, kept in vault/captures/live/ per studies/newopcodes/FINDINGS.md 231), the only literal text in the family; first field is a word and NOT an agent id. Proposed as GUILD_LADDER_ENTRY and killed by two independent refutations converging on this name; UPSTREAM at delta 0 in BOTH ldufr__OpenTyria and the MAINTAINED gwdevhub GWCA mirror (see PLAN.md 6.1's mirror-trap note: the archived GWCA copies are +1 above 0x003B). studies/newopcodes/FINDINGS.md",
     "name_confidence": "high"
    },
    "291": {
@@ -2920,7 +2920,7 @@
     "opcode": 94,
     "name": "CHAT_MESSAGE_SERVER",
     "name_confidence": "high",
-    "why": "OBSERVED, studies/chat/FINDINGS.md. Commit tag for a SERVER-composed line: [subject playerId | 0, channel]. Word resolution over all 133 live sightings: 125 = the operator's own playerId (0x017D name joined to the 0x0059 row, 16 connections, four characters), 7 = 0 (district broadcasts whose subject is a literal name in the body), 1 = another player -- and that one is the reading's proof: [51, 10] with body template 1796 args {13: 51, 1: 17} is 'player G is now level 17!', playerId 51 = player G in that connection's own player table. Channels observed: 10 (gold/item/XP/level notifications, n=92), 7 (warnings, n=40), 6 (the /bow translation, 51 ms after the typed command, n=1). The typed text of a slash command is never echoed; the server answers with a template on this tag."
+    "why": "OBSERVED, studies/chat/FINDINGS.md. Commit tag for a SERVER-composed line: [subject playerId | 0, channel]. Word resolution over all 133 live sightings: 125 = the operator's own playerId (0x017D name joined to the 0x0059 row, 16 connections, four characters), 7 = 0 (district broadcasts whose subject is a literal name in the body), 1 = another player -- and that one is the reading's proof: [51, 10] with body template 1796 args {13: 51, 1: 17} renders as '<player 51> is now level 17!' -- arg slot 13 resolves playerId 51 against that connection's own player table. Channels observed: 10 (gold/item/XP/level notifications, n=92), 7 (warnings, n=40), 6 (the /bow translation, 51 ms after the typed command, n=1). The typed text of a slash command is never echoed; the server answers with a template on this tag."
    },
    "95": {
     "opcode": 95,
@@ -2932,7 +2932,7 @@
     "opcode": 97,
     "name": "CHAT_MESSAGE_LOCAL",
     "name_confidence": "high",
-    "why": "OBSERVED, studies/chat/FINDINGS.md -- the sender/body cross-check PLAN.md 8.3 asked for, run offline on ArenaNet's own traffic. Commit tag for an in-instance PLAYER line: [sender playerId, channel]. 47 of 47 live sightings resolve against the same connection's 0x0059 PLAYER_INFO table, and the id space is per-instance: playerId 57 is 'player A' on one connection and 'player B' on another. Bodies are the typed text verbatim ('wtb Axe grip of the paragon' [57,12]; \"i'd say necro is more survivability and ele is damage\" [17,3]); the channel byte separates by content with zero exceptions (3 = conversation, 12 = trade adverts, 11 = the operator's own ctrl-click callouts echoed back, n=40). That echo -- the server sending the operator's own lines back tagged with their playerId -- is the render path our CHAT_SEND handler replicates."
+    "why": "OBSERVED, studies/chat/FINDINGS.md -- the sender/body cross-check PLAN.md 8.3 asked for, run offline on ArenaNet's own traffic. Commit tag for an in-instance PLAYER line: [sender playerId, channel]. 47 of 47 live sightings resolve against the same connection's 0x0059 PLAYER_INFO table, and the id space is per-instance: playerId 57 resolves to two different players on two different connections. Bodies are the typed text verbatim (a 27-unit trade advert [57,12]; a 53-unit conversation line [17,3] -- the text itself stays in vault/captures/live/); the channel byte separates by content with zero exceptions (3 = conversation, 12 = trade adverts, 11 = the operator's own ctrl-click callouts echoed back, n=40). That echo -- the server sending the operator's own lines back tagged with their playerId -- is the render path our CHAT_SEND handler replicates."
    },
    "54": {
     "opcode": 54,

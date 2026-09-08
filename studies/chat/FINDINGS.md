@@ -11,6 +11,17 @@ coded strings parsed with `toolkit/clientscan/codedstr.py`. Every count below is
 one scan over that corpus; the scan scripts are throwaway (scratchpad), the numbers
 are restated here with enough method to re-derive each.
 
+> **Other players' names and their typed lines are redacted here, and this is the same
+> ruling `studies/newopcodes/FINDINGS.md` §231 already made for guild names and tags:**
+> *"they are on the wire and they are plaintext, and that fact is itself a protocol
+> finding worth recording — but a roster of real [people] does not need to be in git to
+> make the point."* These are third parties on ArenaNet's live service who did not consent
+> to being recorded. Every sender below keeps its **playerId and connection**, which is
+> what each claim actually rests on, and every body keeps its **channel, content class and
+> unit length**, which is what §5's channel finding rests on. The literal text is in
+> `vault/captures/live/` and stays there. Redacted 2026-09-07 in the pre-publication pass
+> (`studies/prepub/FINDINGS.md`); no count, no claim and no cross-check changed.
+
 Label vocabulary per `studies/character/FINDINGS.md`.
 
 ---
@@ -69,7 +80,7 @@ the same connection's `0x0059 PLAYER_INFO` table** (field 1 → field 7 name), a
 check run per connection that could have failed on any row. The strong cases are
 outposts with real populations (31, 64, 13 players known), and the resolution is
 demonstrably per-instance: **playerId 57 resolves to two different names on two
-different connections** ("player A" on `143055/:60935`, "player B" on
+different connections** (one player on `143055/:60935`, a different one on
 `235916/:61193`) — a reader that pooled tables across connections would get one
 of them wrong, which is `studies/reconstruction` §8.2(c)'s id-reuse control
 arriving on the player table.
@@ -82,11 +93,11 @@ Real lines from ArenaNet's wire, sender resolved from `0x0059`, body decoded by
 
 | capture/conn | tag | sender | line |
 |---|---|---|---|
-| `143055/:60935` | `[57, 12]` | player A | "wtb Axe grip of the paragon" |
-| `235916/:61193` | `[66, 3]` | player C | "both are very viable " |
-| `235916/:61193` | `[17, 3]` | player D | "i'd say necro is more survivability and ele is damage" |
-| `235916/:61193` | `[84, 12]` | player E | "WTS EL Master of Whispers Tonic" |
-| `183756/:58389` | `[4, 12]` then `[4, 3]` | player F | the same 130-unit services advert, sent to two channels, each copy split 121+remainder |
+| `143055/:60935` | `[57, 12]` | player A | a WTB advert, 27 units |
+| `235916/:61193` | `[66, 3]` | player B | a conversation line, 21 units |
+| `235916/:61193` | `[17, 3]` | player C | a conversation line, 53 units |
+| `235916/:61193` | `[84, 12]` | player D | a WTS advert, 31 units |
+| `183756/:58389` | `[4, 12]` then `[4, 3]` | player E | the same 130-unit services advert, sent to two channels, each copy split 121+remainder |
 
 **The channel byte separates by content with zero exceptions**: every
 free-conversation line is channel 3, every WTS/WTB advert is channel 12 —
@@ -112,14 +123,15 @@ four different characters), **7 × 0**, **1 × another player**. Zero unresolved
 
 The one other-player case is the reading's sharpest support: `143055/:60935`
 `[51, 10]` with body `#1796 #13 #51 #1 #17` — template 1796 with **arg slot 13
-= playerId 51** ("player G") and arg slot 1 = 17 — i.e. *"player G is now level
-17!"*, the exact phrase family the isle probes rendered on our own client. So
+= playerId 51** (another player in that district) and arg slot 1 = 17 — i.e.
+*"&lt;player 51&gt; is now level 17!"*, the exact phrase family the isle probes
+rendered on our own client. So
 the word is **the player the line is about** (usually you: your gold, your
 items, your level), and 0 means no in-instance subject — all seven zeros are
 district-wide announcements whose subject is a *literal name* in the body
-(`#73531 #10 #2656 "<player name>"`; observed naming "player H",
-"player J", "player K" ×3, "Ce L L", and once with three trailing
-numeric args, "player M" — Hall-of-Heroes-broadcast-shaped,
+(`#73531 #10 #2656 "<player name>"`; observed naming **five distinct players,
+one of them three times**, and the last of the seven carrying three trailing
+numeric args as well — Hall-of-Heroes-broadcast-shaped,
 UNVERIFIED which announcement template 73531 is, its record being encrypted).
 
 **Arg slot 13 renders a playerId as a name** — witnessed twice in unrelated
