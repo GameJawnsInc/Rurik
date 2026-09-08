@@ -17,7 +17,7 @@ none of ArenaNet's bytes are here
 
 ---
 
-##AI-first project
+## AI-first project
 
 this project was written to be developed from an agentic coding harness
 
