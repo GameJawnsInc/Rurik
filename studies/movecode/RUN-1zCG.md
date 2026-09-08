@@ -36,21 +36,35 @@ and the three scripted stairs climbs change nothing.
 
 ## The run
 
+**Session 6, 2026-09-08.** Terminal 1 first, and leave it running -- it waits up to 300 s for
+the client process to appear, so it must be armed BEFORE the launch:
+
 ```powershell
-python toolkit/clientscan/agenttap.py --agents 1,10 --seconds 240 --wait 300 --out vault/research/movecode/1zcg5-agenttap.jsonl
+python toolkit/clientscan/agenttap.py --agents 1,10 --seconds 240 --wait 300 --out vault/research/movecode/1zcg6-agenttap.jsonl
 ```
+
+Terminal 2 brings up the whole stack and launches the client:
 
 ```powershell
 python toolkit/harness/session.py --exe vault/run/2026-07-29_221c13772c7a/Gw.exe --enemy --hold 200 --game-args "--map 146 --explorable --no-enemy-skills --enemy-hit 0.02 --skills 0,0,0,0,0,0,0,0"
 ```
 
-HANDS OFF until "body is in the map" (about 25 s), then 200 s of your own play, then it tears
-itself down.
+HANDS OFF THE KEYBOARD until "body is in the map" (about 25 s) -- the harness is typing the
+login and the map entry, and a stray key lands in its script. Then **200 s of your own play**,
+and it tears itself down on its own; nothing is left parked on screen.
+
+*(`--map 146` is correct and the capture will say map 148: `content/maps.toml` records the two
+sharing one FILE id, so the geometry and the mesh the scorer picks are the same either way.
+Session 5's map note is settled by this.)*
 
 ## Scoring
 
 ```powershell
 python studies/movecode/review/sessionscore.py
+```
+
+```powershell
+python studies/movecode/review/flankcensus.py
 ```
 
 reads the newest capture and finds the tape by wall overlap; `w0origin.py --tape
@@ -240,7 +254,20 @@ asserted. Retail serialises the pair (2,403 of 2,403 at a zero wire gap); our pe
 lock did not. **Fixed:** `STALE_PAIR_GATE` holds a `0x001E` on the send condition while another
 thread has a `0x002B`/destination pair open (`--no-stale-pair-gate` reverts).
 
-**Session 6 — registered, not run.** The clean stairs run the crash pre-empted, under the gate:
+**Session 6 — REGISTERED 2026-09-08, predictions below fixed BEFORE the run.** The clean
+stairs run the crash pre-empted, under the gate. Build: `main` at the 1z-cn merge —
+`STALE_PAIR_GATE` ON, `KBD_LEAD_CHAIN` / `A2_LEAD_PLANE_WORDS` ON (1z-cl, still unchecked by a
+run), and **neither 1z-cn fix in**, deliberately. Same route as sessions 1–5: up the stairs
+from the southern tongue with the Hatcher chasing, pressing into the walls on the way, the
+hole above the stairs walked round. **Press into the flank corner at the foot too** — that is
+where 1z-cn's chords live and where session 5 crashed.
+
+**The two questions to answer in words afterwards, asked now so the run cannot be
+rationalised into agreeing** (feedback: ask run questions before the run):
+
+1. Did anything warp, stick, or leave you hanging in mid-air — and if so, where?
+2. Did the Hatcher clip through the stairs' flank or commit oddly at the corners?
+
 
 - **P0 — zero crashes**; `sessionscore.py`'s "pairs split by a 0x001E" reads **0** (the gate's
   own signature; the known-bad arm `--no-stale-pair-gate` reproduces the split).
