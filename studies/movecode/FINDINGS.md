@@ -18067,3 +18067,96 @@ thread by a tick, and rate 1.0 is otherwise the identity it should be.
   the known-bad arm's capture fails it by construction. The band to watch beside it: back+side
   moving mean **10–32 u** against the shipped 26–46. A session outside the band is a finding,
   not a tuning target.
+
+
+## 1z-cv. SHAPE 2'S SCORER, DERIVED AND SETTLED — the felt reach at the halt, split by which mechanism parked the copy, replayed from the order's own geometry. On it **shape 2 is DEAD (33 better / 130 worse of 277 halts), and so are its two cousins.** The distance the owner feels is **world-0's own lag behind the drawn body** (p50 122–185 u while moving), which no follow target can touch. Nothing ships; the corner's remaining lever is the keyboard sync
+
+§1z-cs.2 left shape 2 — order the follow from `_npc_frame` instead of `state["pos"]` — undecided
+because two retrodiction scorers disagreed and neither was pre-registered: the order's error
+against the DRAWN body ranked it worse, against WORLD-0 better. Both are proxies. The owner feels
+neither; the owner feels **the Hatcher's drawn body standing outside melee reach of their own
+drawn body at the halt** (§1z-cp.2). This section derives the scorer from the follow's own
+mechanism, validates a replay of that mechanism on the shipped arm, and only then reads the
+counterfactuals through it. Desk, no run. Instrument: `studies/movecode/review/haltreach.py`.
+
+### 1z-cv.1 ★★★ What decides the felt distance — read off the code, then measured at 277 halts
+
+`_npc_model_advance` (NPCTRACK-Q1's copy, which the client's own resolver mirrors to 6.7–15.7 u)
+dead-reckons the hostile toward the ORDERED point and parks it in one of two ways: **a DISC park**
+— the leg enters the 80 u disc around `_npc_frame` (world-0 while the player moves, the last stop
+report while they stand) with the frame in the ±60° cone — or **a POINT park**, arrival at the
+ordered point with no disc entered. So at a disc park the halt point sits 80 u from the FRAME
+whatever we ordered, and the felt distance is `80 (± the angle) + |frame − body|`; only at a
+point park does the ordered point reach the outcome at all. That is the whole of the scorer
+question, and the six RUN-1zCG sessions (2–7, joined to their agenttap tapes at the halt's wall
+instant; the join validated per halt by the server's own park point against the tape's hostile
+body, p50 4–8 u, 277 of 336 halts joined) confirm it halt by halt — OBSERVED:
+
+| mechanism | class | n | felt p50 | beyond 92 u | park→world-0 p50 | world-0→body p50 | order→body p50 | order→world-0 p50 |
+|---|---|---|---|---|---|---|---|---|
+| disc | moving | 138 | **196.0** | 109 | 95.6 | **122.0** | 134.7 | 46.0 |
+| disc | still | 48 | 77.5 | 10 | 76.9 | 0.0 | 17.0 | 15.6 |
+| point | moving | 83 | **143.9** | 66 | 130.3 | **184.7** | 144.1 | 130.3 |
+| point | still | 8 | 164.3 | 5 | 163.5 | 35.4 | 164.3 | 163.5 |
+
+**Which proxy predicts the felt distance** (median |felt − proxy|): on the 186 disc parks,
+`80 + |world-0 − body|` misses by **23.1 u** while `|order − body|` misses by 62.8 and
+`80 + |order − world-0|` by 70.5; on the 91 point parks `|order − body|` misses by **0.3 u** (the
+copy stands ON the ordered point) and the frame proxies by 80–143. So §1z-cs.2's world-0 scorer was
+"mechanistically right about the frame and wrong about the outcome": the disc IS around world-0,
+but the outcome adds world-0's own error against the body, which that scorer ignored; the
+drawn-body scorer was exact on point parks and irrelevant on disc parks. **Neither is the scorer.
+The scorer is the felt reach at the halt, mechanism-split**, and it was measured here before any
+counterfactual was read.
+
+**190 of 277 halts stand beyond the 92 u swing reach, and the quantity that predicts them is
+world-0's lag** — p50 154.5 u on those halts. While the player stands, world-0 equals the body
+and the Hatcher closes to p50 77.5 u; while they move it does not, and the Hatcher parks on the
+client's own disc around a copy 122–185 u behind. That is *"if i approach the corner slowly i
+can get him hitting me from actual melee range"* with its mechanism attached, and it is not the
+follow's target.
+
+### 1z-cv.2 ★★★ The replay, validated on the shipped arm before it costed anything
+
+`park_of(start, target, centre)` is the resolver's own rule (`_npc_disc_hit_ms` on the leg's
+line: first entry into the disc with the centre in the cone, else the target) applied to the
+order's start and point and the tape's world-0 at the order instant. On the SHIPPED arm it
+names the mechanism on **238 of 277** halts and its felt distance sits **9.6 u p50** (p90 83.9) from
+the measured one — [[validate-the-simulator-against-the-thing-itself]] before a counterfactual.
+Every counterfactual below is scored against the replay's own shipped prediction, never against
+the measured column, so the replay's residual cannot pose as an effect.
+
+| shape | all: beyond reach | better / worse | moving p50 | still p50 |
+|---|---|---|---|---|
+| shipped (replayed) | 209 of 277 | — | 159.5 | 90.8 |
+| **2** — order the frame (world-0) | **217** | **33 / 130** | 216.8 | 93.9 |
+| 3 — order the last accepted report (retail's direction, §1z-cq.3) | 217 | 22 / 125 | 195.9 | 104.8 |
+| 4 — the report only on a repeated coordinate (the wall-held tell) | 208 | 5 / 8 | 160.3 | 91.3 |
+
+Shape 2 turns every park into a disc park 80 u from world-0 — and world-0 is farther from the
+body than the model is on 130 of 277 halts, so the Hatcher stands *farther*. Shape 3 loses the
+same way (the report lags the body by its age, and the lagging disc still catches the chord).
+Shape 4's trigger was live at 26 halts and moves 13 of them, 5 up and 8 down. **None ships.**
+§1z-cs.2's vacuity worry about `_npc_frame_reach` under a full swap is moot with it.
+
+### 1z-cv.3 What this says about the corner, and what it does not
+
+* **§1z-cp's corner is two things, and the follow's target is the smaller.** The phantom model
+  (the lead walked into the wall) is real and costs the **8 still point parks** (felt p50 164 u,
+  5 beyond reach) — the only halts any frame order helps. The other 182 beyond-reach halts are
+  the client's own disc around a world-0 that lags the moving body by 122–185 u, i.e. **the
+  keyboard sync's standing RED** (`sessionscore.py`'s world-0-vs-body band, 1z-t's quantity),
+  seen from the hostile's side. That is where the felt reach lives, and it is the lead's arc,
+  not the follow's.
+* **Retail's felt reach while moving is NOT FOUND**: its world-0 lag is ~74 u (1z-t), so on this
+  mechanism its Hatcher would park ~150 u out while the player runs — kiting a melee NPC in
+  Guild Wars is real — but we hold no tape of retail's drawn bodies against its own NPCs
+  (§1z-cp.5), so that is a RECONSTRUCTION and the still/moving asymmetry is the only part
+  OBSERVED here.
+* The replay's p90 residual (83.9 u) is the halts where world-0 moved between the order and the
+  halt, or the copy re-pathed; the mechanism split (238 of 277) is what the counterfactuals
+  rest on, and the 39 misses are printed per halt rather than absorbed.
+* **What to score next on a hand-driven session**: `haltreach.py --cap <capture>` — the disc/point
+  split and the felt p50 by class are the numbers; the pre-registered expectation for ANY change
+  to the follow is that it moves the `point` rows and cannot move the `disc` rows, and a change
+  to the keyboard lead is expected to move `world-0→body` and with it every moving disc park.
