@@ -5,6 +5,7 @@
     python studies/movecode/review/floorcensus.py --check    # sec.1z-cw's figures as bars
     python studies/movecode/review/floorcensus.py --ours-only / --retail-only
     python studies/movecode/review/floorcensus.py --ours-only --cap C [--cap C2]   # named runs
+    python studies/movecode/review/floorcensus.py --ours-only --parked   # the parked copy (1z-cw.6)
 
 TWO HALVES, two corpora, never pooled (toolkit/origin.py's rule; livewire gates LIVE).
 
@@ -173,6 +174,56 @@ def ours(paths):
     return verdicts, acc, samples, sep_by, per_session
 
 
+def parked(paths):
+    """1z-cw.6: the copy PARKED while the body moves and a refusal is in force -- which
+    grant parked it, where, how long after, and for how long. One record per episode."""
+    eps = []
+    for cap in paths:
+        rows = W.load_gamesrv(cap)
+        tape = S.find_tape(rows)
+        if tape is None:
+            continue
+        head, trows = W.load(tape)
+        p1 = W.series(head, trows, 1)
+        gv = [r for r in rows if r.get("kind") == "grant_verdict" and r.get("arm") == "zero-lead"]
+        gw = [r["wall_unix"] for r in gv]
+        fired = [r for r in gv if r.get("fired")]
+        fw = [r["wall_unix"] for r in fired]
+        cur = None
+        for smp in p1:
+            i = bisect.bisect_right(gw, smp["w"]) - 1
+            v = gv[i] if i >= 0 else None
+            on = (smp["vbody"] > 1.0 and smp["v0"] <= 1.0
+                  and v is not None and not v.get("fired"))
+            if on and cur is None:
+                j = bisect.bisect_right(fw, smp["w"]) - 1
+                g = fired[j] if j >= 0 else None
+                cur = {"t0": smp["w"], "w0": smp["w0"], "grant": g,
+                       "since": (smp["w"] - g["wall_unix"]) if g else None}
+            elif not on and cur is not None:
+                cur["dur"] = smp["w"] - cur["t0"]
+                eps.append(cur)
+                cur = None
+    return eps
+
+
+def report_parked(eps):
+    print(f"\nTHE PARKED COPY under a refusal (1z-cw.6): {len(eps)} episodes")
+    if not eps:
+        return
+    dur = [e["dur"] for e in eps]
+    since = [e["since"] for e in eps if e["since"] is not None]
+    print(f"  duration p50 {q(dur, .5):.2f} s, p90 {q(dur, .9):.2f}, total {sum(dur):.1f} s; "
+          f"park begins p50 {q(since, .5):.2f} s after the last fired grant (p90 {q(since, .9):.2f})")
+    why = collections.Counter((e["grant"] or {}).get("lead_clip_why") for e in eps)
+    print("  the grant that parked it, by clip: " + ", ".join(f"{k} {v}" for k, v in why.most_common(8)))
+    src = collections.Counter(((e["grant"] or {}).get("lead_src"), (e["grant"] or {}).get("reason")) for e in eps)
+    print("  its source / reason: " + ", ".join(f"{k[0]}/{k[1]} {v}" for k, v in src.most_common(4)))
+    d = [math.dist(e["w0"], e["grant"]["dest"]) for e in eps if e["grant"] and e["grant"].get("dest")]
+    print(f"  the copy sits ON that grant's point: within 8 u on {sum(1 for x in d if x < 8)} of {len(d)}, "
+          f"|copy - dest| p50 {q(d, .5):.1f} u -- it ARRIVED at a lead the wall or the fence cut short")
+
+
 def main(argv):
     check = "--check" in argv
     do_retail = "--ours-only" not in argv
@@ -218,6 +269,8 @@ def main(argv):
                 tape = S.find_tape(rows)
                 if tape is not None and "1zcg" in os.path.basename(tape):
                     paths.append(cap)
+        if "--parked" in argv:
+            report_parked(parked(paths))
         verdicts, acc, samples, sep_by, per = ours(paths)
         tot_v = sum(verdicts.values())
         print(f"\nOURS: {len(paths)} hand-driven sessions with a tape; heading evaluations {tot_v}")
