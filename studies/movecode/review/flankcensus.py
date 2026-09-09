@@ -107,7 +107,7 @@ def parked_off_mesh(mesh, rows, agent=str(HOSTILE)):
 
 
 def classify(pm, mesh, origin, dest, f3, f4):
-    """Why _follow_leg sent the bare 0x002A for this order."""
+    """Why _follow_leg sent the bare 0x002A for this order, as TODAY's code answers it."""
     ax, ay = origin
     if not pm.walkable(ax, ay):
         nw = pm.nearest_walkable(ax, ay, authsrv.NPC_LEG_ORIGIN_STEP)
@@ -126,6 +126,14 @@ def classify(pm, mesh, origin, dest, f3, f4):
     n = len(path) if path else 0
     if n == 0:
         return "no-route", n
+    # REPLAYED UNDER THE CURRENT BUILD, WHICH MAY NO LONGER AGREE WITH THE WIRE.
+    # This classifies a bare 0x002A that a PAST capture carries by asking today's code
+    # why it went out -- and after MOVECODE-1z-co today's code often would not send it at
+    # all. Saying UNEXPLAINED there reads like a defect when it is the fix working, so ask
+    # _follow_leg directly first and name it for what it is.
+    leg_now = authsrv._follow_leg(pm, origin[0], origin[1], dest[0], dest[1], f4, f3)
+    if leg_now is not None:
+        return "FIXED SINCE: this build sends a corridor leg here", n
     if n == 2:
         # route() promises "walking it in straight segments never leaves the navmesh".
         # Its gate samples the UNPULLED candidate at 16 u; a narrow excursion survives.
