@@ -5589,3 +5589,40 @@ flat 417, from a different threshold. The synthetic positive control never
 skips, so the test cannot go vacuously green on a bare machine.
 
 Nothing here changes §42.3–42.5; the overheal finding is the peer's alone.
+
+### 42.7 The probe RAN: the full-pool number draws, and nothing asserts — OBSERVED (`20260909T163556`, agent-driven, loopback)
+
+`session.py --keep-open --hold 40 --shots 1 --game-args "--probe heal_number
+--explorable"`, owner's go-ahead, frames every 1.28 s, four sends at
+t = 6.81 / 9.82 / 13.82 / 17.84 s of the game capture. Read off the frames
+(cropped and looked at, per §42.2), against §42.4's predictions:
+
+| step | send | orb (HUD, exact) | what floated over the player |
+|---|---|---|---|
+| control | `[16, a, a, −0.46]` | **54** | a yellow **"−46"** (`hold004`, +1.5 s) |
+| arm A | `[55, a, a, +0.46]` onto 54 | **100** | a pale blue **"+46"**, fading (`hold006`) |
+| arm B | `[55, a, a, +0.46]` onto 100 | **100** | not caught — both neighbouring frames sit outside its ~1.5 s life |
+| arm B′ | `[55, a, a, +0.10]` onto 100 | **100** | a pale blue **"+10"** (`hold013`, +0.7 s) |
+
+- **The full-pool number draws, and it is the amount SENT.** "+10" over a
+  pool that read 100 before and after — the wiki's sentence reproduced on
+  our client from our own wire. So `heal_agent`'s new rule (§42.3) is what
+  the client expects, and the number a player sees on an overheal is the
+  skill's amount, not the zero that landed.
+- **No assert.** The client took two positive 55s onto a full pool, kept
+  running through the 40 s hold and the teardown (`RUN VERDICT: PASS`,
+  `undecodable 0`; the only "assert" strings in the log are the probe's own
+  prose). The `fraction <= 1.0f` cap in §42.3 therefore did not bind here
+  and stays a cap with no witness on either side above 0.652.
+- **Arm B's miss is cadence, not a null.** The number lives ~1.5 s and the
+  frames are 1.28 s apart with ±1 s alignment on the capture's wall stamp,
+  so each event is caught about half the time; arm B′ is the same condition
+  (a 55 onto 100) and was caught. The peer's `callouts.py` band from the
+  2026-08-20 run read 0 in every frame of this run because the number
+  floated ~60 px lower here (bbox rows 498–636 against the band's 445–485);
+  its `--bbox` mode found all three heal-coloured events and none after the
+  damage send. Whole-frame bbox first, then crop; a band is per-run.
+
+**SKILLS-HN is closed on every clause.** What remains open in §42.5 is the
+four negative 55s and the periodic 0.04/0.08 gains, neither of which is the
+heal number's question.
