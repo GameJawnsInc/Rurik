@@ -18275,3 +18275,27 @@ registration is amended accordingly (§RUN-1zCW). The lesson is [[accrued-under-
 an aggregate attributed by the verdict in force needs the known-bad arm on a script that
 reproduces the regime before a share is claimed — and here the script existed only after the
 claim, which is the wrong order.
+
+
+### 1z-cw.6 The parked copy, asked — it ARRIVED at a lead the wall or the fence cut short, and the refusal only held it there. OBSERVED, five hand-driven sessions, 210 episodes
+
+`floorcensus.py --ours-only --parked`. An episode is the copy standing (`v0` ≤ 1) while the body
+moves and a `heading-rate` refusal is in force. 210 of them, **p50 0.21 s, total 47 s**, and each
+begins **p50 0.32 s after the last fired grant** (p10 0.14, p90 0.46): the copy walked that grant's
+leg to its end and stopped. **147 of 210 sit ON the granted point** (|copy − dest| p50 0.0 u). The
+grants that parked it, by what cut them: **fence-shut 55, wall-slide 37, clipped 33,
+clipped+w0-route 15, wall-slide+w0-route 14, plane-seam 12** — and only 26 of 210 were clean
+leads; 183 of 210 were themselves the hold's deferred re-bakes.
+
+So the hand-driven lag's mechanism near walls is now named: **a lead the fence or the mesh cuts
+short is reached in a third of a second, the copy parks on it behind the moving body, and the
+next re-aim arrives a report interval later** — up to 0.5 s under the old floor, ~0.24 s
+without it. The floor's share of each episode is the difference (p50 0.21 s of parking → under
+1z-cw the same episodes should run ~0.1 s shorter), which is why RUN-1zCW's open-ground
+script, whose leads never parked, showed a few units and why the hand-driven number should
+move by a fraction, not to zero. The rest is the wall regime itself: `fence-shut` degrades the
+lead to the REPORT (1z-aa: never a lead into a fence we shut), so the copy is ordered to a
+point at or behind the body every time the fence is shut; `wall-slide` and `clipped` end the
+lead at the wall. Which of those three is retail-unfaithful is the next derivation, and it is
+the corner's — the fence-shut class is where the client's own separation gate has taken over,
+and a lead withheld there is the enslavement guard doing its job.
