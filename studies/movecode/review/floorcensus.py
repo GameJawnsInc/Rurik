@@ -174,7 +174,7 @@ def ours(paths):
     return verdicts, acc, samples, sep_by, per_session
 
 
-def parked(paths):
+def parked_episodes(paths):
     """1z-cw.6: the copy PARKED while the body moves and a refusal is in force -- which
     grant parked it, where, how long after, and for how long. One record per episode."""
     eps = []
@@ -270,7 +270,7 @@ def main(argv):
                 if tape is not None and "1zcg" in os.path.basename(tape):
                     paths.append(cap)
         if "--parked" in argv:
-            report_parked(parked(paths))
+            report_parked(parked_episodes(paths))
         verdicts, acc, samples, sep_by, per = ours(paths)
         tot_v = sum(verdicts.values())
         print(f"\nOURS: {len(paths)} hand-driven sessions with a tape; heading evaluations {tot_v}")
