@@ -17528,3 +17528,93 @@ see it — the "arriving from the side" staleness that function's docstring alre
 A capture that could not name which gate produced it would cost the next A/B its meaning. The
 sweep also picks up `SEAM_AWARE_ROUTE`, which has had a revert flag since §1z-bb and was
 likewise unrecorded until now.
+
+
+## 1z-cp. SESSION 7: the flank RED is GONE (23.65 → 0.00 u), and the owner's own words name the next defect exactly — **the follow chases a position model that walks a keyboard lead the player's body never travelled.** Pressed into the corner, the body is held by the wall while reporting a walking velocity; we grant a ~500 u lead along that heading; the model integrates it and drifts 144–259 u out of the corner; the Hatcher parks 80 u from the phantom
+
+**The owner** ([RUN-1zCG.md](RUN-1zCG.md) session 7): *"the range of his approach is strange,
+almost like he's following a server position where I'm not quite pushed into the corner like I
+am on the client. if i approach the corner slowly i can get him hitting me from actual melee
+range. if i collide with him near the corner there are some warps."* All three are measured
+below; the first two are **CONFIRMED with the owner's own causal reading**, and the mechanism
+is sharper than "not quite pushed into the corner".
+
+### 1z-cp.1 ★★★ 1z-co held — the standing RED since session 1 is gone
+
+| | s4 | s5 | s6 | **s7** |
+|---|---|---|---|---|
+| hostile drawn body off our mesh, worst | 17.5 u | 12.5 u | 23.65 u | **0.00 u** (0 of 744) |
+| halt points off our mesh beyond 2 u | — | 1 | 1 | **0** |
+| chords leaving our mesh | 3 of 29 pinned | 1 of 35 | 5 of 102 | **0 of 41** |
+
+P1 (< 5 u) and P2 (zero bad chords) **MET**. **P3's exposure floor was NOT**: 41 pinned orders
+against the 60 registered, and the in-disc clip fired **once** (t=59.50, solve from the corner
+point itself). So the fixes are confirmed on the number that matters and the *clip's own* arm
+is thin — a shorter session than the one it was sized against.
+
+### 1z-cp.2 ★★★ "The range of his approach is strange" — CONFIRMED, and the control is the owner's own
+
+The follow parks at `follow_stop_radius()` from **the server's copy** of the player, and that
+copy is not where the client draws the body. At the session's 36 halts:
+
+| | Hatcher's body → the DRAWN player | beyond the 92 u swing reach |
+|---|---|---|
+| player STILL | p50 **77.0 u** | 3 of 17 |
+| player MOVING | p50 **100.6 u** | **10 of 19** |
+
+and the quantity that causes it, per tape sample:
+
+| \|report − drawn body\| | p50 | p90 | max |
+|---|---|---|---|
+| player still | **0.0 u** | 81.7 | 128.7 |
+| player moving | **41.3 u** | 126.2 | 256.4 |
+
+**That IS *"if i approach the corner slowly i can get him hitting me from actual melee
+range"*, in numbers**: standing still collapses the gap to zero and the Hatcher closes inside
+its swing reach; moving opens it to 41 u and leaves it outside the reach on 10 of 19 halts.
+The owner's causal reading was right and this is its control.
+
+### 1z-cp.3 ★★★ But the corner case is OURS, and it is not the report lag — OBSERVED
+
+The report lag above is the client's own cadence and retail lives with it too (F16: retail's
+`0x002A` points sit 4–85 u from the report). What is ours is the **position model running away
+along a granted lead**. Our own drift at each accepted report: p50 14.0, p90 72.5, **max 259.2
+u** — and the eight reports beyond 100 u tell one story:
+
+* **Seven of the eight are the player standing at exactly (10488, 8117)**, the corner point.
+* Each is preceded by a **~500 u `HELD HEADING` lead granted FROM that same point** —
+  e.g. 39.21 s, `(10488,8117) -> (10353,7615)`, 520 u.
+* The body never moves: consecutive reports repeat the coordinate to the decimal, **while the
+  tape shows the client reporting a velocity of 184–288 u/s.** A body pressed into a wall is
+  exactly this — the mover is trying, the collision holds it, the displacement is zero.
+* Our model integrates the lead anyway and is 144–259 u away when the next report lands
+  (39.58 s: drift **230.4 u**; 45.09 s: **259.2 u**).
+* `_npc_follow_tick` is handed `state["pos"]` — **the model, not the report** — so the follow
+  targets the phantom and the Hatcher parks 80 u from *it*.
+
+**The Hatcher was 68–265 u away at all eight, so agent collision is NOT the blocker** — it is
+the map's own wall, which the client enforces along that heading and our mesh does not.
+
+### 1z-cp.4 ★★ The warp is the same story from the other end — OBSERVED
+
+*"if i collide with him near the corner there are some warps."* One client snap, 57.7 s, 164 u.
+The tape: the body runs into the corner at 259 u/s, stops dead at (10488, 8117) at 57.49, the
+fence shuts, and at 57.67 the body is **set back 164 u to (10349, 8029)** — where world-0 stood.
+We sent no `0x002C` (0 re-pins all session), so it is the client's own gate reseeding the drawn
+body onto a world-0 that our refused leads had left behind (world-0 vs body p90 **155.2 u**).
+Same root: the leads the corner refuses.
+
+### 1z-cp.5 What this says to do next, and what it does not
+
+**Derived, not yet built.** The server holds the evidence it is ignoring: three consecutive
+reports at one coordinate is the client saying "I did not move", and a model that walks 259 u
+through that is a model overriding its own measurement. The candidate is to stop the model
+advancing along a lead the reports do not corroborate, and/or to hand the follow a position the
+client has confirmed rather than the free-running model. **Both touch `D1_LEAD`'s doctrine
+(§1z-bu) and the follow's target in one step, so neither is a rider on this finding** — it
+wants its own derivation, and a run that presses the corner deliberately.
+
+**NOT claimed:** that our approach range is worse than retail's. Retail parks on a lagged copy
+too (F16, 4–85 u), and we have no tape of retail's drawn bodies against its own NPCs, so the
+FELT quantity has no retail control. What is certainly ours is the 144–259 u corner excursion,
+which is a model error, not a lag.

@@ -392,3 +392,40 @@ its absence still proves nothing.
 1. Does the Hatcher still clip through the stairs' flank or the corner you back into?
 2. Anything new or worse than session 6 — warps, sticking, or the chase behaving oddly at
    corners now that it takes them rather than cutting them?
+
+
+---
+
+## RESULT, session 7 — 2026-09-08 23:08 (capture `authsrv-20260908T230801-c1`, tape `movecode/1zcg7-agenttap.jsonl`, 104 s, 163 reports, 90 fired leads)
+
+*"the range of his approach is strange, almost like he's following a server position where I'm
+not quite pushed into the corner like I am on the client. if i approach the corner slowly i can
+get him hitting me from actual melee range. if i collide with him near the corner there are some
+warps."*
+
+| | registered | measured | |
+|---|---|---|---|
+| **P1** | hostile drawn body worst < 5 u | **0.00 u**, 0 of 744 (s6 23.65) | ✅ |
+| **P2** | zero bad chords | **0 of 41** | ✅ |
+| **P3** | ≥ 60 pinned orders, ≥ 1 in-disc clip | **41** orders, clip fired **once** | ❌ under the floor |
+| **P4** | nothing else moves | 0 re-pins (s6 3), 0 split pairs, **1 client snap** | mostly ✅ |
+
+Also clean for the first time: halt points off our mesh **0**, hostile plane-lag episodes **0**.
+
+**1z-co is confirmed on the number it was built for** — the flank RED that stood since session
+1 reads 0.00 u — with the caveat that P3's floor was not met, so the in-disc clip's own arm is
+thin (one firing).
+
+**The owner's three observations are one mechanism and it is the next defect**
+([FINDINGS §1z-cp](FINDINGS.md)): the follow targets `state["pos"]`, the server's position
+model, and in the corner that model walks a ~500 u keyboard lead the player's body never
+travels — the wall holds the body still while the client keeps reporting a walking velocity, so
+the model drifts **144–259 u** out of the corner and the Hatcher parks 80 u from a phantom.
+The slow-approach control is the owner's own and it is decisive: standing still,
+|report − drawn| is **0.0 u** at the median and the Hatcher closes to 77 u; moving, it is
+**41.3 u** and 10 of 19 halts stand beyond the 92 u swing reach. The warps are the same root
+seen from the other end — the client's own gate reseeding the body onto a world-0 the refused
+corner leads left 155 u behind.
+
+**Session 8 is not registered yet**: the fix touches `D1_LEAD`'s doctrine and the follow's
+target together, and wants its own derivation first.
