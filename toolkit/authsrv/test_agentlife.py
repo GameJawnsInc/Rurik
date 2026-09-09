@@ -73,7 +73,7 @@ from codec import Codec  # noqa: E402
 # known-bad control; and the chase section's wall pin split by arm, 1).
 # Floor from a real green run of 331. +1 at NPCTRACK-F8 (the hold rule
 # replaces the fresh-follow pin: three checks for two), green 333.
-LEDGER = checks.Ledger("agent lifetime", floor=379)   # 1z-co adds section_disc_clip (+12); from the green run
+LEDGER = checks.Ledger("agent lifetime", floor=380)   # SKILLS-HN +1 (the enemy's overheal goes out); from the green run
 
 
 def section_weapon_damage():
@@ -2191,10 +2191,15 @@ def section_enemy_skill():
                           authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET)
                 and v and v[0] == agents.GV_SKILL_ACTIVATED]
 
-    def dmg_floats(sent):
+    def dmg_floats(sent, props=(agents.PROP_DAMAGE, agents.GV_CRITICAL)):
+        # DAMAGE only. Until SKILLS-HN (2026-09-09) this read every 0x00A3
+        # float, which was fine while an overheal sent nothing; now the
+        # enemy's Restore Condition on its own full pool sends a positive 55
+        # (retail does, healjoin.py P4), and a heal is not damage.
         return [struct.unpack("<f", struct.pack("<I", v[-1]))[0]
                 for op, v, _l in sent
-                if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET]
+                if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET
+                and v[0] in props]
 
     # 1. the opening cast
     state = _world()
@@ -2258,6 +2263,12 @@ def section_enemy_skill():
                   f"{fl} -- 276 Restore Condition heals 10-70 (GWW). The old flat "
                   f"fraction made a heal hurt the player; dealing its magnitude AS "
                   f"damage would have been worse, not better")
+        heals = dmg_floats(land, props=(agents.GV_HEALTH_GAIN,))
+        LEDGER.ok(len(heals) == 1 and heals[0] > 0,
+                  "and what it DOES send is one positive 55 on its own full pool",
+                  f"{heals} -- the overheal is on retail's wire (healjoin.py P4: "
+                  f"46 heals onto full pools) and the client draws the blue "
+                  f"number for it; the old rule sent nothing here")
         # The damage skill on the same bar, to prove the path is not simply dead.
         LEDGER.ok(holy[1] == "standalone" and holy[0] == 46,
                   "while 312 Holy Strike on the same bar DOES damage, at 46",
