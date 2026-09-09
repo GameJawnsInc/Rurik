@@ -4102,7 +4102,7 @@ def _position_verdict(state, reported, now):
 
 
 def _take_client_position(state, reported, plane, rec, source, now=None,
-                          stop=False, on_mesh=None, clipped=None):
+                          stop=False, on_mesh=None, clipped=None, mt=None):
     """The ONE place the player's position is adopted. Returns whether it was.
 
     Both receive sites route through here. They used to hold different policies
@@ -4118,6 +4118,11 @@ def _take_client_position(state, reported, plane, rec, source, now=None,
     if now is None:
         now = time.time()
     px, py = state["pos"]
+    # MOVECODE-1z-cr: the report's own movementType, DECLARED by the caller rather than
+    # stashed on state. There are two call sites and only one of them has a movementType;
+    # a stash would hand the stop arm the PREVIOUS report's value, and this function has
+    # already cost the file once for two call sites holding a policy by omission (above).
+    # None means "this arm has no movementType", never "the client was not moving".
     if stop:
         accept, reason = True, "stop-report"
         jump = math.hypot(reported[0] - px, reported[1] - py)
@@ -4192,7 +4197,12 @@ def _take_client_position(state, reported, plane, rec, source, now=None,
                   server_plane=state["plane"], clipped=clipped,
                   on_mesh=on_mesh,
                   kbd_age=(None if _kbd_at is None
-                           else round(now - _kbd_at, 3)))
+                           else round(now - _kbd_at, 3)),
+                  # MOVECODE-1z-cr: 1z-cq had to RECONSTRUCT whether a report was a
+                  # moving one, because the field the server branches on never reached
+                  # the capture. `mt` is that field verbatim (values[4] of the 0x003D);
+                  # None on the 0x0047 arm, which carries no movementType at all.
+                  mt=mt)
     # The guard's report feed: accepted reports advance its async belief,
     # refusals arm its refused-report gate; both re-arm its record.
     if state.get("agtrack_guard") is not None:
@@ -21023,8 +21033,9 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # site and cast_stop_reckon (CANCELWALK-B1).
                         state["click_moving_at"] = None
                         _approach_abandon(state)   # ANIMREF-RE 38
+                        # MOVECODE-1z-cr: mt DECLARED, never inferred downstream.
                         a2_pos_taken = _take_client_position(
-                            state, reported, plane, rec, "0x003D")
+                            state, reported, plane, rec, "0x003D", mt=moving)
                         # F-A's EAGER VOID (sec.0.14, the through-floor fix's
                         # core): a newer ACCEPTED report voids any held click
                         # -- the player's hands, speaking now, outrank the
@@ -21120,6 +21131,30 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             model_dest, blocked = clip_to_walkable(
                                 state, (px + heading[0], py + heading[1]))
                             state["dest"], state["clipped"] = model_dest, blocked
+                            # MOVECODE-1z-cr: THE PHANTOM LEG, NAMED WHERE IT IS ARMED.
+                            # This assignment is the whole of MOVECODE-1z-cp: the 20 Hz
+                            # integrator (authsrv.py, "state[\"pos\"] = (px +") walks
+                            # state["pos"] toward this destination at a flat 14.4 u per
+                            # tick until the next report lands, and the NPC follow orders
+                            # from the result. The vec2 is fixed-magnitude (765-768 u), so
+                            # a report the client sends while its body is held by geometry
+                            # arms a ~767 u leg the body never travels -- and 1z-cq could
+                            # only RECONSTRUCT that, because none of these operands reached
+                            # the capture. A census can now join this row to the drift the
+                            # next position_report measures, which is what closes it.
+                            if rec is not None:
+                                rec.event("kbd_dest", act="arm", mt=moving,
+                                          frm=[float(px), float(py)],
+                                          heading=[float(heading[0]),
+                                                   float(heading[1])],
+                                          ray=[float(px + heading[0]),
+                                               float(py + heading[1])],
+                                          dest=[float(model_dest[0]),
+                                                float(model_dest[1])],
+                                          clipped=bool(blocked),
+                                          leg=round(math.hypot(
+                                              model_dest[0] - px,
+                                              model_dest[1] - py), 1))
                             # THE SHIPPED GATE, now a NAMED variable because a
                             # second path asks the same question. `legacy_dir`
                             # is byte-for-byte the condition that stood here
@@ -22844,7 +22879,11 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         _take_client_position(state, reported, plane, rec,
                                               "0x0047", stop=True,
                                               on_mesh=on_mesh,
-                                              clipped=was_clipped)
+                                              clipped=was_clipped,
+                                              # A stop carries no movementType: the
+                                              # client is telling us it has finished,
+                                              # not how it was moving (1z-cr).
+                                              mt=None)
                         # THE OTHER CALL SITE, same policy, same function. A
                         # stop is the cheapest resync there is: the client is
                         # standing still at the point it just reported, so the

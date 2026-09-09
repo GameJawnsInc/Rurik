@@ -17735,3 +17735,45 @@ built or costed here:
 `moving` field or the heading vector it carries, so the arming of each phantom leg is a
 RECONSTRUCTION rather than an observation. `npc_order` (§1z-cn) was the same lesson; the row should
 name its operand before the next run, or session 8 will re-derive this from the outside again.
+
+
+## 1z-cr. THE RECORDING GAP CLOSED — the report row now carries its movementType and the phantom leg names itself where it is armed. No behaviour change; two capture rows and a consumer
+
+§1z-cq's derivation ended on a reconstruction: how each phantom leg was armed could only be
+inferred, because **neither the `0x003D`'s movementType nor the heading vector that becomes
+`state["dest"]` reached the capture** — both in hand at the site that arms the leg, neither
+written. That is the same lesson `npc_order` taught at §1z-cn, arriving a second time, and a
+reconstruction is what session 8 would have had to repeat from the outside.
+
+### 1z-cr.1 What was added
+
+* **`mt` on every `position_report` row** — `values[4]` of the `0x003D` verbatim. It is a
+  **DECLARED parameter** of `_take_client_position`, not a stash on `state`, because that
+  function has **two** call sites and only one carries a movementType. A stash would hand the
+  `0x0047` arm the *previous* report's value, which is worse than nothing — and this is the very
+  function whose own comment records that its two sites once "held different policies … the
+  second policy existed by omission". Both sites now declare it: `mt=moving` on the `0x003D`
+  arm, `mt=None` on the stop arm, where None means *"this arm has no movementType"* and never
+  *"the client was not moving"*.
+* **A `kbd_dest` row at the assignment that arms the leg**, carrying the model point it was built
+  from, the heading vec2, the movementType, the **raw ray endpoint**, the clipped destination and
+  the leg's length. Recording the ray *and* the clipped point is what makes our own mesh's effect
+  visible rather than inferred.
+* **A consumer, because a row nothing reads is not a closed gap.** `sessionscore.py` joins each
+  arming to the next accepted report and prints *phantom legs (armed, then not travelled)* —
+  a leg whose closing report came back within one integrator step (14.4 u) of where the leg
+  started, with the drift it produced. **A capture written before this reads NOT RECORDED, never
+  zero**; a null that looks clean is the failure this arc keeps paying for.
+
+### 1z-cr.2 What it does NOT do
+
+It fixes nothing. §1z-cq's conclusion stands untouched: every candidate fix is refuted on the
+specimen, the fix must be prospective, and the two surviving shapes are uncosted. This only makes
+the next run's evidence **OBSERVED** where it was RECONSTRUCTION — so session 8 can settle from
+the inside what §1z-cq had to infer from the outside.
+
+`test_position_trust` §1z-cr, **15 fixture-free checks, floors 227 → 242 bare and 235 → 250 full**,
+each re-measured on a real run of its own configuration rather than computed. They pin `mt=0`
+surviving as `0` rather than reading as absent (a falsy operand is still an operand), the stop
+arm's explicit `None`, both call sites declaring rather than defaulting, and the `kbd_dest` row
+sitting at the assignment itself with all six operands.

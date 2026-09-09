@@ -21,7 +21,10 @@ WHAT IT MEASURES, and where each band comes from (all OBSERVED on the named run)
             moving. A session under the floor prints NOT ENOUGH and scores nothing --
             a scorecard on ten reports is the same defect as a test with no floor.
 
-  PLAYER    0x002B->destination pairs a 0x001E split (1z-cm: retail 0 of 2,404; session 5's
+  PLAYER    phantom legs (1z-cr: a keyboard leg armed from the client's heading that the
+            body then did not travel -- the model walks it and the follow orders from the
+            result, 1z-cp; NOT RECORDED on captures before 1z-cr, which is not zero);
+            0x002B->destination pairs a 0x001E split (1z-cm: retail 0 of 2,404; session 5's
             crash was one, under a due arrival); 0x002C re-pins sent (RUN-FEEL2: 1, a pre-empted budget-red snap; RUN-1zBP's
             known-bad arm: 3 against 0); the wire-only LOCK signature (1z-am.3, restated
             for a hand-driven session as a keyboard leg armed and never cleared for
@@ -166,6 +169,45 @@ def score_capture(rows, mesh):
     # 1z-cm: a 0x001E between a 0x002B and its destination is the client's
     # AgAgent.cpp:1198 assert whenever an arrival is due at that tick; retail 0 of 2,404.
     out["stale_pairs"] = stalepair.census(rows)
+    # MOVECODE-1z-cr: THE PHANTOM LEG, counted at its source. Each `kbd_dest` row is a
+    # keyboard leg armed from the client's own heading; the 20 Hz integrator then walks
+    # state["pos"] toward it at 14.4 u per tick until the next report lands, and the NPC
+    # follow orders from the result (1z-cp). Joining each arming to the NEXT accepted
+    # report gives the drift that leg actually produced -- OBSERVED, where 1z-cq could
+    # only reconstruct it. A capture written before 1z-cr carries no such rows, and that
+    # reads as NOT RECORDED rather than as zero.
+    arms = [r for r in rows if r.get("kind") == "kbd_dest" and r.get("act") == "arm"]
+    if not arms:
+        out["phantom"] = None
+    else:
+        rt2 = [r["t"] for r in reps]
+        legs = []
+        for a in arms:
+            i = bisect.bisect_right(rt2, a["t"])
+            if i >= len(reps):
+                continue
+            nxt = reps[i]
+            d = nxt.get("drift")
+            frm = a.get("frm") or [0.0, 0.0]
+            travelled = math.dist(frm, nxt["reported"])
+            legs.append({"t": round(a["t"], 2), "leg": a.get("leg"),
+                         "mt": a.get("mt"), "clipped": bool(a.get("clipped")),
+                         "drift": d if isinstance(d, (int, float)) else None,
+                         "travelled": round(travelled, 1)})
+        # A leg the body did not travel: the report that closed it came back within one
+        # integrator step (14.4 u) of where the leg STARTED, so the client went nowhere
+        # while our model walked the leg.
+        stuck = [l for l in legs if l["travelled"] <= 14.4]
+        out["phantom"] = {
+            "armed": len(legs),
+            "stuck": len(stuck),
+            "worst_drift": max([l["drift"] for l in stuck
+                                if l["drift"] is not None], default=0.0),
+            "worst_leg": max([l["leg"] for l in stuck
+                              if l["leg"] is not None], default=0.0),
+            "rows": sorted([l for l in stuck if l["drift"]],
+                           key=lambda z: -(z["drift"] or 0))[:4],
+        }
     out["repins"] = sum(1 for r in rows if r.get("kind") == "sent" and r.get("opcode") == 0x2C)
     out["repin_why"] = [r.get("why") for r in rows if r.get("kind") == "agtrack_repin_fire"]
     drifts = [r["drift"] for r in reps if isinstance(r.get("drift"), (int, float))]
@@ -457,6 +499,18 @@ def report(cap_path, tape, mesh, mid, c, t):
     if sp["bare"]:
         line("bare 0x002B (no destination within 12 sends)", "%d" % sp["bare"], "WATCH",
              "the loading-screen assert class; at t=%s" % [b[1] for b in sp["bares"]])
+    ph = c.get("phantom")
+    if ph is None:
+        line("phantom legs (armed, then not travelled)", "NOT RECORDED", "  -  ",
+             "this capture predates MOVECODE-1z-cr's kbd_dest rows -- not zero, unmeasured")
+    else:
+        line("phantom legs (armed, then not travelled)",
+             "%d of %d armed" % (ph["stuck"], ph["armed"]),
+             "OK   " if ph["worst_drift"] <= 100.0 else "RED  ",
+             "1z-cp: the model walks these and the follow orders from it; worst drift "
+             "%.0f u, worst leg %.0f u%s" % (
+                 ph["worst_drift"], ph["worst_leg"],
+                 (" at t=%s" % [r["t"] for r in ph["rows"]]) if ph["rows"] else ""))
     line("lock signature (armed leg, no report, >= %.0f s)" % LOCK_S,
          "none" if not c["locks"] else "at t=%s" % c["locks"],
          "OK   " if not c["locks"] else "RED  ", "1z-am.3 restated for a hand-driven session")

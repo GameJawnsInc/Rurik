@@ -4096,7 +4096,18 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   archive. Floor 36 against a green run of 41 — exactly the 5-check
   real-mesh section of headroom. ~2 s with the archive),
   `toolkit/authsrv/test_position_trust.py` (the position-trust policy: it may
-  refuse a client-reported position, but it may never **latch**. The old
+  refuse a client-reported position, but it may never **latch**.
+  **MOVECODE-1z-cr (2026-09-09) adds 15 fixture-free checks and moves both floors
+  (227 → 242 bare, 235 → 250 full, each re-measured on a real run of its own
+  configuration).** They are about the CAPTURE, not the wire: 1z-cq could only
+  RECONSTRUCT how each phantom leg was armed because neither the `0x003D`'s
+  movementType nor the heading vector that becomes `state["dest"]` reached the file.
+  The checks pin `mt` riding every report row verbatim (including `mt=0`, which must
+  not read back as absent, and `None` on the stop arm, which carries no movementType
+  at all), both call sites DECLARING it rather than leaning on the default — this
+  function has already cost the file once for two call sites holding a policy by
+  omission — and the `kbd_dest` row sitting AT the assignment that arms the leg,
+  carrying its origin, heading, raw ray, clipped destination and length. The old
   `_adopt_client_position` refused anything more than `900 u` from
   `state["pos"]` — the value the refusal was preventing from being corrected —
   so once the model was more than 900 u wrong every true report was also more

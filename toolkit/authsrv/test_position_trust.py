@@ -80,6 +80,7 @@ import json
 import math
 import os
 import struct
+import re
 import sys
 import time
 
@@ -248,8 +249,13 @@ import grantsim   # noqa: E402
 # configuration: 235 from a normal run, 227 with RURIK_VAULT at an empty
 # directory, which also printed its 2 declared skips. The 8-check difference
 # is still exactly section 10's 4 and section 13's 4.
-FLOOR_BARE = 227
-FLOOR_FULL = 235
+# MOVECODE-1z-cr (2026-09-09) adds 15 fixture-free checks -- the report row's
+# movementType and the kbd_dest arming row -- so BOTH floors move by 15 and the
+# 8-check difference is unchanged. Re-measured on real runs of each configuration,
+# not computed: 250 with the fixtures, 242 with RURIK_VAULT at an empty directory
+# (which printed its 2 declared skips, as it should).
+FLOOR_BARE = 242
+FLOOR_FULL = 250
 LEDGER = checks.Ledger("the position-trust policy: refuse, but never latch",
                        floor=FLOOR_BARE)
 check = checks.adopt(LEDGER)
@@ -4059,6 +4065,80 @@ def main():
           f"single `state[...] = ...` in either would let a rate-limit refusal "
           f"consume the queue and drop the in-flight leg while nothing went on "
           f"the wire. arrival_carry_advance is the ONE mutation")
+
+
+    # ---- MOVECODE-1z-cr: the recording gap 1z-cq named ----------------------
+    #
+    # 1z-cq could not OBSERVE how each phantom leg was armed -- only reconstruct
+    # it -- because neither the 0x003D's movementType nor the heading vector that
+    # becomes state["dest"] reached the capture. Both were in hand at the site
+    # that arms the leg. These checks are about the CAPTURE, not the wire: a row
+    # that does not name its operand costs the next session a reconstruction, and
+    # this file has now paid that twice (npc_order in 1z-cn, this in 1z-cq).
+    print("\nMOVECODE-1z-cr: the report row names its movementType, and the "
+          "phantom leg names itself where it is armed")
+
+    rec = FakeRec()
+    st = fresh()
+    authsrv._take_client_position(st, ANCHOR, 0, rec, "0x003D", mt=4)
+    rows = rec.of("position_report")
+    check(len(rows) == 1 and rows[0].get("mt") == 4,
+          "1z-cr. the report row carries the movementType VERBATIM",
+          f"got {None if not rows else rows[0].get('mt')} -- 4 is the backpedal "
+          f"enum, the one whose rate the integrator ignores (1z-cq.5)")
+
+    # THE STOP ARM CARRIES None, AND THAT IS NOT THE SAME AS 'not moving'.
+    rec2 = FakeRec()
+    st2 = fresh()
+    authsrv._take_client_position(st2, ANCHOR, 0, rec2, "0x0047", stop=True, mt=None)
+    r2 = rec2.of("position_report")
+    check(len(r2) == 1 and r2[0].get("mt") is None,
+          "1z-cr. a stop reports mt None -- it carries no movementType at all",
+          f"got {None if not r2 else r2[0].get('mt')}")
+
+    # mt=0 IS A REAL VALUE and must not read back as absent -- the whole point of
+    # declaring it rather than inferring it downstream.
+    rec3 = FakeRec()
+    authsrv._take_client_position(fresh(), ANCHOR, 0, rec3, "0x003D", mt=0)
+    r3 = rec3.of("position_report")
+    check(len(r3) == 1 and r3[0].get("mt") == 0 and r3[0]["mt"] is not None,
+          "1z-cr. mt=0 survives as 0, not as absent -- a falsy operand is still "
+          "an operand", f"got {r3[0].get('mt')!r}")
+
+    # THE DEFAULT IS None, NOT A GUESS: a caller that says nothing gets nothing
+    # recorded, never a fabricated movementType.
+    rec4 = FakeRec()
+    authsrv._take_client_position(fresh(), ANCHOR, 0, rec4, "0x003D")
+    check(rec4.of("position_report")[0].get("mt") is None,
+          "1z-cr. and an undeclared mt records None rather than a default")
+
+    # SOURCE PINS: both call sites declare it, which is the property that stops
+    # the two arms drifting apart by omission the way they did before (:4110).
+    _src = open(authsrv.__file__, encoding="utf-8").read()
+    check('state, reported, plane, rec, "0x003D", mt=moving)' in _src,
+          "1z-cr. the 0x003D arm passes its own `moving` through")
+    check(re.search(r'"0x0047", stop=True,\s*\n\s*on_mesh=on_mesh,\s*\n\s*'
+                    r'clipped=was_clipped,(?:\s*\n\s*#[^\n]*)*\s*\n\s*mt=None\)',
+                    _src) is not None,
+          "1z-cr. and the stop arm declares mt=None EXPLICITLY rather than "
+          "leaning on the default",
+          "the file's own lesson at :4110 is that these two sites held different "
+          "policies by omission")
+
+    # THE ARMING ROW: it must name what the leg was made of, at the site that
+    # decides it. A row emitted anywhere else would be a reconstruction again.
+    i_dest = _src.find('state["dest"], state["clipped"] = model_dest, blocked')
+    i_row = _src.find('rec.event("kbd_dest"')
+    check(0 < i_dest < i_row < i_dest + 2200,
+          "1z-cr. the kbd_dest row sits AT the assignment that arms the leg",
+          f"dest@{i_dest} row@{i_row}")
+    _seg = _src[i_row:i_row + 900]
+    for _f in ("mt=moving", "frm=", "heading=", "ray=", "dest=", "clipped=", "leg="):
+        check(_f in _seg, f"1z-cr. the kbd_dest row carries {_f.rstrip('=')}",
+              "a leg named without its operands is the gap 1z-cq hit")
+    check("float(heading[0])" in _seg and "float(px + heading[0])" in _seg,
+          "1z-cr. and it records the heading AND the raw ray it makes, so the "
+          "clip's effect is visible rather than inferred")
 
     return LEDGER.verdict()
 
