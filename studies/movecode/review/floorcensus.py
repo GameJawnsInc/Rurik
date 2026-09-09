@@ -4,6 +4,7 @@
     python studies/movecode/review/floorcensus.py            # both halves
     python studies/movecode/review/floorcensus.py --check    # sec.1z-cw's figures as bars
     python studies/movecode/review/floorcensus.py --ours-only / --retail-only
+    python studies/movecode/review/floorcensus.py --ours-only --cap C [--cap C2]   # named runs
 
 TWO HALVES, two corpora, never pooled (toolkit/origin.py's rule; livewire gates LIVE).
 
@@ -206,11 +207,17 @@ def main(argv):
     if do_ours:
         d = vaultpath.require_dir("captures", "gamesrv")
         paths = []
-        for cap in sorted(glob.glob(os.path.join(d, "authsrv-2026090[6-9]*-c1.jsonl"))):
-            rows = W.load_gamesrv(cap)
-            tape = S.find_tape(rows)
-            if tape is not None and "1zcg" in os.path.basename(tape):
-                paths.append(cap)
+        if "--cap" in argv:
+            # named captures (RUN-1zCW's arms): whatever tape overlaps them
+            for i, a in enumerate(argv):
+                if a == "--cap" and i + 1 < len(argv):
+                    paths.append(argv[i + 1])
+        else:
+            for cap in sorted(glob.glob(os.path.join(d, "authsrv-2026090[6-9]*-c1.jsonl"))):
+                rows = W.load_gamesrv(cap)
+                tape = S.find_tape(rows)
+                if tape is not None and "1zcg" in os.path.basename(tape):
+                    paths.append(cap)
         verdicts, acc, samples, sep_by, per = ours(paths)
         tot_v = sum(verdicts.values())
         print(f"\nOURS: {len(paths)} hand-driven sessions with a tape; heading evaluations {tot_v}")

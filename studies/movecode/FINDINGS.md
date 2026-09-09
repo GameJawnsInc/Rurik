@@ -18247,3 +18247,31 @@ arm's grant rate is bounded by the client's own report cadence and cannot exceed
 * Not touched: `KBD_SYNC_LEAD` = 520 u against retail's ~766 u endpoint (1z-t's chord choice,
   made under the floor regime and now worth re-costing on a floor-free session), and the click
   arm's floor.
+
+
+### 1z-cw.5 RUN-1zCW — the A/B ran, agent-driven, and **REFUTED the size of the effect**: the floor costs 2–4 u at p50 on a steering script that reproduces its refusals, not the 100+ u implied above
+
+Four scripted runs on the same day (`studies/movecode/RUN-1zCW.md`; pair 1 inconclusive because
+the harness's single-step legs never report inside the floor, pairs 2–3 on a new `steer` walk
+step that holds a key while turning the view). The control arm reproduced the regime on the
+floor's own operand — 58% of reports inside 0.5 s of the previous grant, 42–43% refused — and
+world-0 sat **21.2 / 24.8 u** from the body against **18.7 / 21.9 u** on the shipped arm: ratio
+0.88 twice, against the registered < 0.5. P4 clean on all four (no snaps, no splits, no crash).
+
+**Corrected, against §1z-cw.1:** "67% of the lag accrued under a refusal" is a co-occurrence in
+the operator's regime, not the floor's share. Refusals and lag happen together when the owner
+steers near walls; produce the refusals on open ground and the lag stays away. The walk-start
+reading (a stop-echo grant, an instant re-press refused, the copy parked 0.5 s) is refuted on
+the same captures — 895 of 934 refusals are steering re-reports — and so is the family-speed
+reading (movespeed ratio 1.00). **Still standing and unexplained: 39% of the refused-lag accrued
+with the copy PARKED under a re-report refusal**, and the wall-lead classes (clipped, wall-slide,
+fence-shut, plane-seam) carry 8–24% of the lag on every census. That parked copy is the next
+census, not the floor.
+
+**What stays shipped, and on what ground.** `KBD_GRANT_FLOOR = 0.0` rests on §1z-cw.2 — retail
+answers every heading report — which this run does not touch, and on four clean runs. Its
+benefit claim is withdrawn to "a few units on the regime measured"; the next-session
+registration is amended accordingly (§RUN-1zCW). The lesson is [[accrued-under-is-not-caused-by]]:
+an aggregate attributed by the verdict in force needs the known-bad arm on a script that
+reproduces the regime before a share is claimed — and here the script existed only after the
+claim, which is the wrong order.
