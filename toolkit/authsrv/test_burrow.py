@@ -85,7 +85,7 @@ TRANSITION_TOLERANCE = 0.08      # the capture's own spread is +/-60 ms
 # can skip, and it takes the floor with it -- the same call test_rotate.py makes: a
 # claim about ArenaNet's bytes that did not read ArenaNet's bytes has not been checked,
 # and a green exit code would say otherwise.
-LEDGER = checks.Ledger("burrowing", floor=25)
+LEDGER = checks.Ledger("burrowing", floor=31)   # 2026-09-09: +6, the stale swing timer
 
 
 class FakeSend:
@@ -482,7 +482,104 @@ def main():
     section_cycle()
     print("\n4. a tape that hands the client on must hang up")
     section_transfer_close(codec)
+    print("\n5. a swing does not survive the burrow")
+    section_stale_timers()
     return LEDGER.verdict()
+
+
+# ------------------------------------------------------- 5. the stale swing timer
+def section_stale_timers():
+    """studies/combat/PLAN.md 17e, found by code reading on 2026-08-16 and left: nothing
+    cleared `swing_lands_at` / `cast_lands_at` across a burrow cycle. `remove_agent`
+    popped the entry untouched, `burrow_tick` never touched those keys, and
+    `create_agent_world` reinstalled it verbatim -- so a swing armed just before the
+    worm went under (invisible while EFFECT_TRANSITION blocked evaluation) fired on
+    re-emergence against a stale timestamp: a MELEE_ATTACK_FINISHED and its damage
+    with no ATTACK_STARTED the client's NEW object ever saw. The fix mirrors the dead
+    branch of enemy_attack_tick: a body in transition drops its swing, the way a
+    corpse does. Drives the cycle with the transitions shrunk to zero, as section 3."""
+    real = (authsrv.BURROW_EMERGE_SECONDS, authsrv.BURROW_SUBMERGE_SECONDS)
+    authsrv.BURROW_EMERGE_SECONDS = authsrv.BURROW_SUBMERGE_SECONDS = 0.0
+    try:
+        _drive_stale_timers()
+    finally:
+        authsrv.BURROW_EMERGE_SECONDS, authsrv.BURROW_SUBMERGE_SECONDS = real
+
+
+def _gvs(send):
+    """The GV ids of every int property update sent (target or not), in order."""
+    return [v[0] for op, v, _l in send.sent
+            if op in (authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+                      authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT)]   # STARTED names a target; FINISHED does not
+
+
+def _drive_stale_timers():
+    send = FakeSend()
+    state = {"agents": {}, "pos": (0.0, 0.0)}
+    # A worm OUT of the ground, in reach, that fights back and carries no skill bar
+    # (a cast in flight would be resolved before the swing and is asserted on the
+    # timer alone below). `burrow_at` far off so the first attack tick sees it out.
+    entry = make_entry(out=60.0, hidden=0.02)     # once back out it STAYS out
+    entry.update({"burrow_phase": authsrv.BURROW_OUT, "burrow_at": time.time() + 60.0,
+                  "effects": 0, "attacks_back": True, "pos": (85.0, 0.0),
+                  "skills": [], "skill_ready": []})
+    authsrv.create_agent_world(send, state, 10, entry, "spawn")
+    send.clear()
+    authsrv.enemy_attack_tick(send, state, None)
+    LEDGER.ok(entry.get("swing_lands_at") is not None
+              and _gvs(send) == [agents.GV_ATTACK_STARTED],
+              "a worm out of the ground and in reach opens a swing, and its landing is armed",
+              f"swing_lands_at {entry.get('swing_lands_at')}, GVs {_gvs(send)} -- the "
+              "fixture: the swing the cycle below must not carry through the ground")
+
+    # The landing falls due while the worm is under, and a cast timer sits beside it.
+    entry["swing_lands_at"] = time.time() - 0.01
+    entry["cast_lands_at"] = time.time() - 0.01
+    entry["burrow_at"] = 0.0
+    send.clear()
+    authsrv.burrow_tick(send, state, None)            # OUT -> SUBMERGING
+    LEDGER.ok(entry.get("burrow_phase") == authsrv.BURROW_SUBMERGING
+              and entry.get("effects", 0) & agents.EFFECT_TRANSITION,
+              "it goes under: SUBMERGING, the transition bit set",
+              f"phase {entry.get('burrow_phase')}, effects {entry.get('effects')}")
+    authsrv.enemy_attack_tick(send, state, None)      # the world tick's attack sweep sees the transition
+    LEDGER.ok(entry.get("swing_lands_at") is None and entry.get("cast_lands_at") is None
+              and not entry.get("swinging"),
+              "and the attack sweep DROPS the armed swing and cast on the transition, as it does for a corpse",
+              f"swing_lands_at {entry.get('swing_lands_at')}, cast_lands_at "
+              f"{entry.get('cast_lands_at')}, swinging {entry.get('swinging')} -- until "
+              "2026-09-09 the transition branch was a bare `continue`, and both timers "
+              "rode the entry through remove_agent and create_agent_world untouched")
+
+    authsrv.burrow_tick(send, state, None)            # SUBMERGING -> HIDDEN (popped)
+    LEDGER.ok(10 not in state["agents"] and 10 in state.get("hidden", {}),
+              "it is hidden: out of state['agents'], in state['hidden']",
+              f"agents {sorted(state['agents'])}, hidden {sorted(state.get('hidden', {}))}")
+    time.sleep(0.03)
+    for _ in range(3):                                # HIDDEN -> EMERGING -> OUT
+        authsrv.burrow_tick(send, state, None)
+    back = state["agents"].get(10)
+    LEDGER.ok(back is not None and back.get("burrow_phase") == authsrv.BURROW_OUT
+              and not (back.get("effects", 0) & agents.EFFECT_TRANSITION),
+              "it re-emerges and is fully out again",
+              f"phase {back and back.get('burrow_phase')}, effects {back and back.get('effects')}")
+
+    # THE CHECK: the first attack tick on the re-created body must OPEN a swing the
+    # client's new object sees begin -- never land one it never saw start.
+    send.clear()
+    err = None
+    try:
+        authsrv.enemy_attack_tick(send, state, None)
+    except Exception as ex:                                       # noqa: BLE001
+        err = ex
+    gvs = _gvs(send)
+    LEDGER.ok(err is None and gvs[:1] == [agents.GV_ATTACK_STARTED]
+              and agents.GV_MELEE_ATTACK_FINISHED not in gvs,
+              "the first swing after re-emergence STARTS -- no landing, no damage, no cast, from a timer the ground swallowed",
+              f"error {err!r}, GVs {gvs} -- the stale-timer shape is a "
+              f"MELEE_ATTACK_FINISHED ({agents.GV_MELEE_ATTACK_FINISHED}) and damage "
+              "with no ATTACK_STARTED before it, or land_skill called on a body with "
+              "no cast (`casting` None)")
 
 
 def section_transfer_close(codec):

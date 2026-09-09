@@ -6019,7 +6019,17 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   opcodes we already implement" and it is five messages, so a test that asserted the
   doc would have locked the error in. Its capture half decodes the tape WHOLE via
   `tape.decode_all` and asserts the byte accounting first, so every count beneath it is
-  of all 3,604 messages rather than the 3,500 the per-event idiom read),
+  of all 3,604 messages rather than the 3,500 the per-event idiom read. **Section 5
+  (2026-09-09) is the stale swing timer, `studies/combat/PLAN.md` 17e's bug found by
+  reading on 2026-08-16 and left for three weeks:** a worm out of the ground opens a
+  swing, its landing and a cast timer fall due while it is under, and the first attack
+  tick after it re-emerges must START a swing the client's new object sees begin --
+  never land one from a timer the ground swallowed. Red-first: before the fix that tick
+  landed a cast (`GV 58`, "agent 10 cast skill 0") on the re-created body, because
+  `remove_agent` pops the entry with both timers intact, `burrow_tick` never touched
+  them and `create_agent_world` reinstalls it verbatim. The fix is in
+  `enemy_attack_tick`'s transition branch, which was a bare `continue` and now drops
+  the swing as the corpse branch does. Floor 25 -> 31 from a real green run of 31),
   `toolkit/authsrv/test_charstore.py` (the §6 persistence layer against a scratch
   vault, no server started: round-trips, the client's settings blob served back
   verbatim, and ensure-never-overwrites — the disease persistence exists to cure is

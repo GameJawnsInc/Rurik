@@ -16137,7 +16137,20 @@ def enemy_attack_tick(send, state, conn_id):
         # A body mid-burrow is half in the world and must not swing out of it. The
         # hidden ones are not in state["agents"] at all, so this covers only the
         # 2.00 s transitions either side.
+        # AND IT DROPS THE SWING IT WAS MID-WAY THROUGH, as the corpse branch above
+        # does. Until 2026-09-09 this was a bare `continue`: `remove_agent` pops the
+        # entry with `swing_lands_at` / `cast_lands_at` intact, `burrow_tick` never
+        # touches them, and `create_agent_world` reinstalls the entry verbatim -- so
+        # a landing armed just before the worm went under fired on the FIRST tick
+        # after it re-emerged, against a stale timestamp: a MELEE_ATTACK_FINISHED and
+        # damage (or a land_skill) the client's NEW object never saw begin.
+        # studies/combat/PLAN.md 17e found it by reading; test_burrow section 5
+        # reproduces it and pins this.
         if agent.get("effects", 0) & agents.EFFECT_TRANSITION:
+            agent["swinging"] = False
+            agent["swing_lands_at"] = None
+            agent["cast_lands_at"] = None
+            agent["casting"] = None
             continue
         ax, ay = agent["pos"]
         # REACH, not notice. This read AGGRO_RANGE until the chase existed, which
