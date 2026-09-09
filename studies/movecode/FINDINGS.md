@@ -18387,3 +18387,41 @@ and the check is the owner's next session.
 expected to move by the fence-shut share only, **not** under 100 u. The next derivation is
 1z-cy.3's: the wall-slide vertex on OUR stairs against retail's slide chord, and the `w0-route`
 legs' length — the lever is lead length near walls.
+
+
+## 1z-cz. THE SHORT LEADS, ASKED CLASS BY CLASS — the wall-slide vertex is retail's own on the same trapezoids, retail has never walked the corner, and the corridor legs are a consequence of the lag they add to. Desk, nothing ships
+
+**Asked:** §1z-cy.3's next derivation — the wall-slide vertex on our stairs against retail's
+slide chord, and the `w0-route` legs' length. Ident `MOVECODE-1z-cz`. Desk only: `review/wallslide.py`'s
+pair builder over the live corpus, our six sessions, `content/maps.toml`. OBSERVED unless marked.
+
+1. **The wall-slide vertex is faithful by 1z-ce's own result, and the p50 gap was a map
+   difference.** §1z-ce.2 already settled the rule at the decomposition's SPLIT vertices ("the
+   vertex 4 u ahead is the answer, not the wall's geometric corner 700 u on", 27 of 33) on the same
+   trapezoid data our stairs are cut from; retail's 375 u p50 was its maps' walls, ours' 97 u is
+   the stairs' short sides. Same rule, same data, different rooms. No lever here.
+2. **Retail has never walked the corner, so no same-geometry witness for it exists.** Map 146 is
+   file `0x1B97D`, one of the corpus's six maps: **261 retail report pairs on it, 0 inside our
+   sessions' box** (x 9783–11731, y 7739–9508), 9.6 % clipped at all, 4 of 261 within 20 u of a
+   wall. On that map's open ground our pipeline reproduces retail's grant length to **p50 −2 u**
+   where retail clipped (n 25; the −161 u tail is our 520 u cap against the client's 767 chord),
+   so the lead pipeline is faithful where retail can be seen, and the corner's regime is
+   documented only by the owner's own sessions.
+3. **The `w0-route` corridor legs (13.6 % of fired leads, p50 103–186 u) are door B of 1z-cg,
+   and door B exists because world-0 lags:** it routes the leg *from world-0* when the straight
+   leg from the lagging copy to the report's clipped chord leaves the mesh. Retail's server never
+   faces that case — "its copy IS world-0 and its grants are always walkable from it" (1z-cg.2) —
+   so the class is ours, but it is downstream of the lag rather than a cause with its own witness:
+   it fires in proportion to how far world-0 has fallen behind, and it feeds back by handing the
+   copy a short first vertex. With the fence-shut zeros gone (1z-cy) the copy should fall behind
+   less and this class should shrink with it. **REGISTERED for the owner's next session**: the
+   `w0-route` share of fired leads (was 13.6 %) and of parked grants (was 29 of 255) both DOWN;
+   if the share holds while fence-shut reads zero, door B is the next lever and a corridor-free
+   arm (`--no-lead-w0-origin`, the existing revert) gets one hand-driven session.
+4. **The 1z-cr `kbd_dest` row is what this needed and did not have**: the six sessions predate
+   it, so the heading ray behind each routed leg could not be replayed against the plain chord.
+   The next session records it; the replay is one script when it does.
+
+Nothing ships. The stairs' short leads are retail's rule on retail's data; the unfaithful class
+(fence-shut) left in 1z-cy; the remaining ours-only class is a consequence to be measured after
+it.
