@@ -3974,6 +3974,19 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   the literal is gone from the file, that the speed is written on the line after the dest at
   both arming sites, and that only the `0x003D` arm consults the table (§25i–l).
 
+  **MOVECODE-1z-cw (2026-09-09) moves `test_kbdsync.py`'s floor 220 → 224** (§26: the keyboard
+  arm's own floor ships at 0.0 and is carried in the capture header; a report 0.1 s after the
+  last grant is answered at once with no hold; the same instant grants and clock skew still
+  refuses; `--kbd-grant-floor 0.5` reproduces the refusal and the hold), and every check that
+  pins the hold's MECHANISM (§3's (a1), the 1z-z crossing hold and the 1z-aa fence hold) now sets
+  `KBD_GRANT_FLOOR = 0.5` around itself — the arm the hold exists for — rather than relying on a
+  default that no longer refuses. **`test_position_trust.py` 250 → 251 / 242 → 243** (one
+  fixture-free check: the shipped floor and a 0.1 s report answered), with §14's boundary,
+  vocabulary and shared-clock checks, §15's rate cells and §16's refused-report drives run
+  under the 0.5 s arm explicitly. **`test_grantsim.py` stays at 86**: the lead-spine pin reads 3
+  of 6 under the 0.5 s arm AND 6 of 6 shipped, and the C3 perturbation now moves
+  `KBD_GRANT_FLOOR` (1.0 → two grants, 0.5 → three, 0.0 → all six).
+
   `toolkit/authsrv/test_livewire.py` (the committed retail-decode recipe,
   RETHINK instrument #2 — the campaign's referee moved out of a deletable
   scratchpad. Guards `toolkit/authsrv/livewire.py`: the no-vault doors

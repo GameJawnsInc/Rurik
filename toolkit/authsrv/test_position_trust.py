@@ -254,8 +254,11 @@ import grantsim   # noqa: E402
 # 8-check difference is unchanged. Re-measured on real runs of each configuration,
 # not computed: 250 with the fixtures, 242 with RURIK_VAULT at an empty directory
 # (which printed its 2 declared skips, as it should).
-FLOOR_BARE = 242
-FLOOR_FULL = 250
+# MOVECODE-1z-cw (2026-09-09) adds ONE fixture-free check (the keyboard arm's shipped
+# floor is 0.0 and a report 0.1 s after the last grant is answered), so both floors
+# move by 1: 251 with the fixtures, 243 bare, each from a real run.
+FLOOR_BARE = 243
+FLOOR_FULL = 251
 LEDGER = checks.Ledger("the position-trust policy: refuse, but never latch",
                        floor=FLOOR_BARE)
 check = checks.adopt(LEDGER)
@@ -2076,7 +2079,20 @@ def main():
           f"for exactly that, and a predicate that mutates would make its "
           f"replay depend on call order")
 
+    # MOVECODE-1z-cw: the keyboard arm's floor is its OWN and ships at 0.0 --
+    # retail answers 99.5% of heading reports inside the old 0.5 s window. The
+    # rule-2 mechanism below is pinned under the revert arm (--kbd-grant-floor
+    # 0.5, the value that shipped until 2026-09-09); the shipped default first.
+    ship0 = authsrv._heading_grant_ok({"grant_at": 1000.0}, 1000.1)
+    check(authsrv.KBD_GRANT_FLOOR == 0.0 and ship0[:2] == (True, "zero-lead")
+          and abs(ship0[2] - 0.1) < 1e-6
+          and "KBD_GRANT_FLOOR" in authsrv.capture_flags(),
+          "SHIPPED (1z-cw): the keyboard arm's floor is 0.0 and a report 0.1 s after "
+          "the last grant is answered -- retail's contract, in the capture header",
+          f"{ship0}")
     floor = authsrv.GRANT_MIN_INTERVAL
+    _saved_kf = authsrv.KBD_GRANT_FLOOR
+    authsrv.KBD_GRANT_FLOOR = floor
     under = authsrv._heading_grant_ok({"grant_at": 1000.0}, 1000.0 + floor - 1e-6)
     at = authsrv._heading_grant_ok({"grant_at": 1000.0}, 1000.0 + floor)
     check(under == (False, "heading-rate", under[2]) and at[0] is True
@@ -2099,6 +2115,7 @@ def main():
           f"{skew} -- `since` is -1.0 under clock skew. Over-refusing costs one "
           f"grant the next 0x003D replaces in ~0.29 s; under-refusing is the "
           f"cadence this flag exists to bound")
+    authsrv.KBD_GRANT_FLOOR = _saved_kf
 
     # RULE 1 IS ABSENT, AND THAT IS THE POINT. This is the check that stops
     # somebody "simplifying" the heading arm back onto _grant_verdict: that
@@ -2131,9 +2148,14 @@ def main():
     # arms of both predicates are DRIVEN and the strings collected from what
     # they return.
     heading_words = set()
-    for st_h, now_h in (({}, 1000.0),                      # fires
-                        ({"grant_at": 1000.0}, 1000.0)):   # refuses
-        heading_words.add(authsrv._heading_grant_ok(st_h, now_h)[1])
+    _saved_kf = authsrv.KBD_GRANT_FLOOR
+    authsrv.KBD_GRANT_FLOOR = floor                        # 1z-cw: the refusing arm
+    try:
+        for st_h, now_h in (({}, 1000.0),                      # fires
+                            ({"grant_at": 1000.0}, 1000.0)):   # refuses
+            heading_words.add(authsrv._heading_grant_ok(st_h, now_h)[1])
+    finally:
+        authsrv.KBD_GRANT_FLOOR = _saved_kf
     click_words = set()
     saved_gs2 = authsrv.GRANT_SUPPRESS
     try:
@@ -2175,8 +2197,14 @@ def main():
     wire = Sent(shared, now=2000.0)
     wire(authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT,
          [authsrv.PLAYER_AGENT_ID, [1.0, 2.0], 0, 0], "a click grant")
-    check(authsrv._heading_grant_ok(shared, 2000.1)[1] == "heading-rate"
-          and authsrv._heading_grant_ok(shared, 2000.0 + floor)[1] == "zero-lead",
+    _saved_kf = authsrv.KBD_GRANT_FLOOR
+    authsrv.KBD_GRANT_FLOOR = floor                        # 1z-cw: the refusing arm
+    try:
+        _sh_young = authsrv._heading_grant_ok(shared, 2000.1)[1]
+        _sh_at = authsrv._heading_grant_ok(shared, 2000.0 + floor)[1]
+    finally:
+        authsrv.KBD_GRANT_FLOOR = _saved_kf
+    check(_sh_young == "heading-rate" and _sh_at == "zero-lead",
           "the floor reads the SHARED grant clock, so a CLICK grant delays a "
           "heading grant",
           f"grant_at={shared.get('grant_at')} -- under --zero-lead "
@@ -2387,7 +2415,12 @@ def main():
 
     # THE RATE LIMIT, ON THE ARM. A second report inside the floor grants
     # NOTHING and holds NOTHING.
-    st_r, w_r, r_r = drive([HEAD, SAME], True, stamp_age=0.0)
+    _saved_kf = authsrv.KBD_GRANT_FLOOR
+    authsrv.KBD_GRANT_FLOOR = authsrv.GRANT_MIN_INTERVAL   # 1z-cw: the refusing arm
+    try:
+        st_r, w_r, r_r = drive([HEAD, SAME], True, stamp_age=0.0)
+    finally:
+        authsrv.KBD_GRANT_FLOOR = _saved_kf
     refused = [e for e in r_r.of("grant_verdict") if e["fired"] is False]
     check(len(w_r.of(authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT)) == 1
           and len(refused) == 1 and refused[0]["reason"] == "heading-rate",
@@ -2408,7 +2441,11 @@ def main():
     # A/B's treatment arm quieter than the control on a message it does not
     # even govern.
     TURNED = [1, [1400.5, 2000.25], 7, [0.0, 766.0], 1]
-    st_t, w_t, r_t = drive([HEAD, TURNED], True, stamp_age=0.0)
+    authsrv.KBD_GRANT_FLOOR = authsrv.GRANT_MIN_INTERVAL   # 1z-cw: the refusing arm
+    try:
+        st_t, w_t, r_t = drive([HEAD, TURNED], True, stamp_age=0.0)
+    finally:
+        authsrv.KBD_GRANT_FLOOR = _saved_kf
     late = r_t.of("grant_verdict")[-1]
     check(len(w_t.of(authsrv.GAME_SMSG_AGENT_MOVE_DIRECTION)) == 2
           and len(w_t.of(authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT)) == 1
@@ -3172,9 +3209,14 @@ def main():
     # last one named. If a refusal advanced it, the next grant would carry the
     # plane of a point the copy was never sent to, which is a worse error than
     # the one F1 fixes.
-    st_l, w_l, r_l = drive_pc([(pc_report(1000.5, 0), True),
-                               (pc_report(1200.5, 18), False),
-                               (pc_report(1500.5, 18), True)], carry=True)
+    _saved_kf = authsrv.KBD_GRANT_FLOOR
+    authsrv.KBD_GRANT_FLOOR = authsrv.GRANT_MIN_INTERVAL   # 1z-cw: the refusing arm
+    try:
+        st_l, w_l, r_l = drive_pc([(pc_report(1000.5, 0), True),
+                                   (pc_report(1200.5, 18), False),
+                                   (pc_report(1500.5, 18), True)], carry=True)
+    finally:
+        authsrv.KBD_GRANT_FLOOR = _saved_kf
     lim = payloads(w_l)
     refusals_l = [e for e in r_l.of("grant_verdict") if e["fired"] is False]
     check(len(lim) == 2 and len(refusals_l) == 1
@@ -3818,7 +3860,12 @@ def main():
     # third grant still carries what the copy reached.
     ac_refused = [(pc_report(1000.5, 7), True), (pc_report(1400.0, 18), False),
                   (pc_report(1800.0, 18), True)]
-    _s_r, w_r, _r_r = drive_ac(ac_refused, carry=True)
+    _saved_kf = authsrv.KBD_GRANT_FLOOR
+    authsrv.KBD_GRANT_FLOOR = authsrv.GRANT_MIN_INTERVAL   # 1z-cw: the refusing arm
+    try:
+        _s_r, w_r, _r_r = drive_ac(ac_refused, carry=True)
+    finally:
+        authsrv.KBD_GRANT_FLOOR = _saved_kf
     ref_pay = payloads(w_r)
     check(len(ref_pay) == 2 and [p[3] for p in ref_pay] == [7, 7],
           "REFUSAL: a rate-refused report arms no entry, so the next grant "

@@ -751,9 +751,12 @@ def heading_verdict(state, now):
     """(fired, reason, since_last) from `authsrv._heading_grant_ok`.
 
     THE REAL PREDICATE, and unlike the click arm's it needs NO flag wrangling:
-    `_heading_grant_ok` carries rule 2 and nothing else, reads no module global,
-    and short-circuits on nothing, so there is no `ZERO_LEAD` to set and restore
-    around the call. The lead policies below apply it as their rate limit, which
+    `_heading_grant_ok` carries rule 2 and nothing else and short-circuits on
+    nothing, so there is no `ZERO_LEAD` to set and restore around the call.
+    Since MOVECODE-1z-cw it reads ONE module global, `KBD_GRANT_FLOOR` (0.0
+    shipped: retail answers every heading report; 0.5 is the arm that shipped
+    until 2026-09-09), so a replay of a capture recorded under the old arm must
+    set it from that capture's `flags` row -- test_grantsim does so explicitly. The lead policies below apply it as their rate limit, which
     is what makes REALFIX-C3's heading arm a policy gate rather than a
     paraphrase of one.
 

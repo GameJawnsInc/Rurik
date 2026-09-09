@@ -7787,6 +7787,24 @@ GRANT_LOCAL_WINDOW = 3.0
 # same run to zero; this is the backstop for the case rule 1 does not cover --
 # a player spam-clicking while NOT keyboarding.
 GRANT_MIN_INTERVAL = 0.5
+# MOVECODE-1z-cw (2026-09-09): derivation (a) above is a MISREADING, and the keyboard
+# arm no longer shares this floor. The 0.492 s median is the gap between consecutive
+# player 0x0029s in the live corpus -- which is the CLIENT's own re-report cadence,
+# because ArenaNet answers every 0x003D: over 26 live connections / 2,800 heading
+# reports, 70.3% arrive INSIDE 0.5 s of the previous player grant and 99.5% of those
+# are answered within 0.3 s (p50 35 ms); 57% of consecutive player grants are under
+# 0.5 s apart (studies/movecode/review/floorcensus.py). A server that refused inside
+# 0.5 s would answer a third of retail's traffic. The floor stays on the CLICK arm,
+# where derivation (b) still holds and the 257 grants/min reproduction is the case.
+#
+# What it cost on the keyboard arm, measured on five hand-driven RUN-1zCG sessions:
+# 934 of 1,619 heading evaluations refused `heading-rate` (561 of them re-baked late by
+# the 1z-y hold, 124 fired at once), and 65% of ALL along-track lag between the
+# client's world-0 copy and the drawn body accrued under those refusals -- 26% of it
+# with world-0 PARKED at a matured lead while the body ran on (sec.1z-cw). That lag is
+# the whole of the felt reach at a hostile's halt (sec.1z-cv), so this is where the
+# corner symptom lives.
+KBD_GRANT_FLOOR = 0.0     # s. Retail's contract: every heading report is answered.
 # HOW LONG A DEFERRED GRANT MAY WAIT BEFORE IT STOPS BEING THE PLAYER'S CHOICE.
 # A rate-limited click is held, not dropped, or ordinary double-clicking would
 # lose every second click. The hold is due within one GRANT_MIN_INTERVAL by
@@ -7990,7 +8008,12 @@ def _keepalive_ok(state, now):
 def _heading_grant_ok(state, now):
     """Pure: may a ZERO-LEAD heading grant go on the wire right now?
 
-    Returns (grant, reason, since_last). No side effects, exactly like
+    Returns (grant, reason, since_last). Reads KBD_GRANT_FLOOR (0.0 shipped
+    since MOVECODE-1z-cw: retail answers every heading report, and the floor
+    this shared with the click arm cost 65% of world-0's lag behind the body);
+    everything below about GRANT_MIN_INTERVAL describes the arm as it shipped
+    from 2026-08-20 to 2026-09-09 and the `--kbd-grant-floor 0.5` arm today.
+    No side effects, exactly like
     _grant_verdict, _resync_verdict and _position_verdict -- and for the reason
     _grant_verdict's own docstring gives: an offline scorer has to be able to
     run THIS decision rather than a paraphrase of it that agrees with it by
@@ -8058,7 +8081,11 @@ def _heading_grant_ok(state, now):
     """
     last = state.get("grant_at")
     since = None if last is None else now - last
-    if since is not None and since < GRANT_MIN_INTERVAL:
+    # MOVECODE-1z-cw: the keyboard arm's OWN floor, 0.0 by default -- retail answers
+    # every heading report (99.5% inside the old 0.5 s window, p50 35 ms). The
+    # comparison is unchanged so clock skew (a negative `since`) still refuses, and
+    # --kbd-grant-floor 0.5 restores the shipped floor exactly (the known-bad arm).
+    if since is not None and since < KBD_GRANT_FLOOR:
         return False, "heading-rate", since
     return True, "zero-lead", since
 
@@ -19091,6 +19118,11 @@ def capture_flags():
         if isinstance(v, bool) or v is None or (
                 isinstance(v, str) and len(v) <= 32):
             out[name] = v
+    # MOVECODE-1z-cw: the keyboard arm's grant floor is a FLOAT with a revert arm
+    # (--kbd-grant-floor 0.5), and the sweep above sees bools only. A capture that
+    # cannot say which floor produced its 934 refusals -- or its zero -- costs the
+    # next A/B its meaning, so it is carried by name.
+    out["KBD_GRANT_FLOOR"] = KBD_GRANT_FLOOR
     # MOVECODE-1z-co added `pathmap` for exactly the reason this loop exists: the fine
     # route gate is a switch with a revert flag (--route-gate-coarse) that lives in the
     # MESH module, so authsrv's own globals sweep cannot see it, and a capture that
@@ -25522,6 +25554,13 @@ def main():
                          "it walks the client's full ~768 u ray while the grant reached "
                          "520 u (session 4 t=48.98: 247 u of drift, 356 u of aim error "
                          "across two follow orders). Known-bad arm.")
+    ap.add_argument("--kbd-grant-floor", type=float, default=None, metavar="SECONDS",
+                    help="MOVECODE-1z-cw REVERT at 0.5: the keyboard arm refuses a heading "
+                         "report inside this many seconds of the previous player grant "
+                         "(the floor it shared with the click arm until 2026-09-09; 934 of "
+                         "1,619 evaluations refused over five sessions, 65%% of world-0's "
+                         "lag behind the body). Shipped 0.0: retail answers every report. "
+                         "Known-bad arm at 0.5.")
     ap.add_argument("--no-model-family-rate", action="store_true",
                     help="MOVECODE-1z-cu REVERT: the position model integrates every "
                          "keyboard leg at a flat 288 u/s, so a backpedalling body "
@@ -27331,7 +27370,7 @@ def main():
     global A2_LEAD_WALL_SLIDE
     global A2_LEAD_DISC_CLEAR
     global A2_LEAD_W0_ORIGIN, A2_LEAD_PLANE_WORDS, KBD_LEAD_CHAIN, STALE_PAIR_GATE
-    global NPC_LEG_DISC_CLIP, MODEL_BOUND_CLEAR_LEAD, MODEL_FAMILY_RATE
+    global NPC_LEG_DISC_CLIP, MODEL_BOUND_CLEAR_LEAD, MODEL_FAMILY_RATE, KBD_GRANT_FLOOR
     if a.legacy_kbd_sync:
         KBD_SYNC = False
         KBD_SYNC_HOLD = False
@@ -27381,6 +27420,13 @@ def main():
             print("[map] --no-bound-clear-leads: the model leg out-walks a clear "
                   "grant by up to the client's ray minus KBD_SYNC_LEAD "
                   "(1z-ct's revert).", flush=True)
+        if a.kbd_grant_floor is not None:
+            if a.kbd_grant_floor < 0.0:
+                raise SystemExit("--kbd-grant-floor must be >= 0")
+            KBD_GRANT_FLOOR = float(a.kbd_grant_floor)
+            print(f"[map] --kbd-grant-floor {KBD_GRANT_FLOOR}: the keyboard arm refuses a "
+                  f"heading report inside {KBD_GRANT_FLOOR} s of the previous grant "
+                  f"(1z-cw's revert is 0.5; retail answers every report).", flush=True)
         MODEL_FAMILY_RATE = not a.no_model_family_rate
         if not MODEL_FAMILY_RATE:
             print("[map] --no-model-family-rate: the position model walks every "

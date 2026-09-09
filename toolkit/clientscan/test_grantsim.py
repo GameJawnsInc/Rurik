@@ -485,18 +485,30 @@ def main():
     heads = [m for m in moves if m["op"] == GS.OP_HEADING and m["mt"]]
     at_t = {m["t"]: m for m in heads}
     spine = []
-    for pol in (GS.policy_p2_zerolead, GS.policy_p3_shortlead, GS.policy_p_endpoint):
-        got = pol(moves)
-        offs = sorted({round(D[0] - at_t[t]["pos"][0], 6)
-                       for (t, D, _a, _b, _k) in got})
-        spine.append((pol.lead, offs, len(got), sorted(t for t, *_ in got)))
+    # MOVECODE-1z-cw: the 3-of-6 pin is the 0.5 s ARM's (--kbd-grant-floor 0.5);
+    # the keyboard arm ships with no floor since 2026-09-09 (retail answers every
+    # report), under which the same policies grant all six -- pinned beside it.
+    _A = GS._authsrv()
+    _saved_kf = _A.KBD_GRANT_FLOOR
+    try:
+        _A.KBD_GRANT_FLOOR = _A.GRANT_MIN_INTERVAL
+        for pol in (GS.policy_p2_zerolead, GS.policy_p3_shortlead, GS.policy_p_endpoint):
+            got = pol(moves)
+            offs = sorted({round(D[0] - at_t[t]["pos"][0], 6)
+                           for (t, D, _a, _b, _k) in got})
+            spine.append((pol.lead, offs, len(got), sorted(t for t, *_ in got)))
+    finally:
+        _A.KBD_GRANT_FLOOR = _saved_kf
+    shipped_n = [len(pol(moves)) for pol in (GS.policy_p2_zerolead, GS.policy_p3_shortlead,
+                                             GS.policy_p_endpoint)]
     check(len(heads) == 6 and all(n == 3 for _l, _o, n, _t in spine)
           and all(ts == [0.0, 0.5, 1.0] for _l, _o, _n, ts in spine)
+          and shipped_n == [6, 6, 6] and _A.KBD_GRANT_FLOOR == 0.0
           and spine[0][0] == 0.0 and spine[0][1] == [0.0]
           and abs(spine[1][0] - 85.919968) < 5e-7 and spine[1][1] == [85.919968]
           and spine[2][0] == 766.0 and spine[2][1] == [766.0],
           "the lead spine is 0 / 85.919968 / 766 u and each policy GRANTS at "
-          "its own, three of six under the shipped floor",
+          "its own, three of six under the 0.5 s arm and six of six shipped (1z-cw)",
           f"{[(round(l, 6), o, n, ts) for l, o, n, ts in spine]} over "
           f"{len(heads)} moving headings 0.25 s apart -- P3's 85.919968 u is "
           f"MATCH_RADIUS - 14.0, the arm of min(RUN_SPEED * 0.30, "
@@ -805,6 +817,11 @@ def main():
           "rather than a paraphrase that agrees with it by construction, or "
           "stop calling C3 the policy gate")
     floor = A.GRANT_MIN_INTERVAL
+    # MOVECODE-1z-cw: the floor is the keyboard arm's own (KBD_GRANT_FLOOR, 0.0
+    # shipped); the mechanism below runs under the 0.5 s revert arm explicitly and
+    # the shipped default is pinned at the end of the block.
+    _saved_kf = A.KBD_GRANT_FLOOR
+    A.KBD_GRANT_FLOOR = floor
     # BOTH ARMS BY HAND. The refused arm first, because a predicate that never
     # refuses would pass the allowed one on its own.
     young = GS.heading_verdict({"grant_at": 100.0}, 100.0 + floor - 1e-6)
@@ -873,17 +890,20 @@ def main():
     # `fired = _since is None or _since >= 0.5` and this file stayed green at
     # 66 of 66. So perturb the SERVER's own constant and require the policy's
     # grant instants to follow: a paraphrase carrying a hard-coded 0.5 cannot.
-    saved_min = A.GRANT_MIN_INTERVAL
     try:
-        A.GRANT_MIN_INTERVAL = 1.0
+        A.KBD_GRANT_FLOOR = 1.0
         widened = GS.policy_p2_zerolead(moves)
     finally:
-        A.GRANT_MIN_INTERVAL = saved_min
+        A.KBD_GRANT_FLOOR = floor
     restored = GS.policy_p2_zerolead(moves)
+    A.KBD_GRANT_FLOOR = _saved_kf
+    shipped = GS.policy_p2_zerolead(moves)
     check([t for t, *_ in widened] == [0.0, 1.0]
-          and [t for t, *_ in restored] == [0.0, 0.5, 1.0],
+          and [t for t, *_ in restored] == [0.0, 0.5, 1.0]
+          and [t for t, *_ in shipped] == [0.0, 0.25, 0.5, 0.75, 1.0, 1.25],
           "C3 (heading) the POLICY runs the shipped predicate: doubling the "
-          "server's own GRANT_MIN_INTERVAL moves the policy's grant instants",
+          "server's own KBD_GRANT_FLOOR moves the policy's grant instants, and the "
+          "shipped 0.0 (1z-cw) answers all six",
           f"at 1.00 s the same stream grants at {[t for t, *_ in widened]} and "
           f"at the shipped {floor:.2f} s it grants at "
           f"{[t for t, *_ in restored]} -- an inline paraphrase carrying a "
