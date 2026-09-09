@@ -9098,6 +9098,27 @@ MODEL_ORIGIN_SEAM = True      # False (--model-origin-exact): a sliver origin su
 MODEL_WALL_SLIDE = True       # False (--no-model-wall-slide): a leg blocked at the body stands.
 
 
+# MOVECODE-1z-ct (2026-09-09): the bound also applies when our mesh did NOT cut the
+# grant. On an unclipped keyboard lead the grant is anchored at `reported` along
+# unit(heading) with |lead| = KBD_SYNC_LEAD, and the model ray shares that origin and
+# direction, so the trim lands the model ON the granted point -- measured bit-exact on
+# session 4's t=48.982 leg (body 520.0 u, model 767.1 u, drift 247.1 -> 0.0).
+#
+# IT IS NOT A FIX FOR sec.1z-cp's CORNER and must not be scored as one: a wall-slid model
+# dest is already chorded at KBD_SYNC_LEAD (see wall_slide's `chord=` below), so there
+# `model_reach <= lead_reach` and the bound returns "within" whatever this flag says.
+#
+# THE COST IS REAL AND LANDS ON THE SAME RARE SET AS THE BENEFIT. The trim can only bite
+# where the model actually walks past the lead's reach, which needs a report gap over
+# KBD_SYNC_LEAD / DEFAULT_RUN_SPEED = 1.806 s: 6 of 740 gaps and 1 of 159 lead-clear legs
+# over sessions 4/6/7. The docstring's own "286 clear leads in the corpus" counts legs this
+# is INERT on. What it costs on the legs it does bite is that the model ARRIVES (the
+# integrator's `arrived` branch clears state["walking"]), so the next report's 0x0025 fires
+# a grant it would otherwise have withheld -- the 248 u the docstring calls DELIBERATE.
+# --no-bound-clear-leads restores the "lead-clear" refusal exactly.
+MODEL_BOUND_CLEAR_LEAD = True
+
+
 def model_leg_bound(origin, model_dest, reported, lead_dest, lead_clipped, src):
     """Pure: trim the model leg to the REACH the grant ordered. -> (dest, why)
 
@@ -9139,7 +9160,7 @@ def model_leg_bound(origin, model_dest, reported, lead_dest, lead_clipped, src):
     # neither is an order to walk anywhere, so neither bounds anything.
     if src not in ("kbd", "d1") or lead_dest is None:
         return None, "no-lead"
-    if not lead_clipped:
+    if not lead_clipped and not MODEL_BOUND_CLEAR_LEAD:
         return None, "lead-clear"
     lead_reach = math.hypot(float(lead_dest[0]) - float(reported[0]),
                             float(lead_dest[1]) - float(reported[1]))
@@ -9149,7 +9170,12 @@ def model_leg_bound(origin, model_dest, reported, lead_dest, lead_clipped, src):
     if model_reach <= lead_reach or model_reach <= 0.0:
         return None, "within"
     f = lead_reach / model_reach
-    return (float(origin[0]) + mx * f, float(origin[1]) + my * f), "bounded"
+    # 1z-ct: the two cases are NOT interchangeable downstream. A mesh-cut leg is genuinely
+    # `clipped` and the 0x0047 arm reads that; a clear lead was cut by the ORDER'S reach and
+    # nothing about the mesh, so it gets its own word and the call site does not claim a
+    # clip that never happened.
+    return ((float(origin[0]) + mx * f, float(origin[1]) + my * f),
+            "bounded" if lead_clipped else "bounded-clear")
 
 # The reply to CHAR_CREATION_REQUEST_ARMORS. The name is a red herring: nothing is
 # being created and no armour is sent. OpenTyria (GameSrv.c:1557) answers it with
@@ -21705,7 +21731,15 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                     # The leg WAS cut short, by the same mesh and
                                     # for the same reason the grant was, so the
                                     # 0x0047 arm's `was_clipped` must read it.
-                                    state["clipped"] = True
+                                    # MOVECODE-1z-ct: ONLY on the mesh case. A
+                                    # "bounded-clear" leg was trimmed by the
+                                    # order's own reach with no mesh refusal
+                                    # anywhere, and telling the 0x0047 arm it was
+                                    # clipped would be a lie to a downstream
+                                    # consumer -- the shape 1z-cq's review
+                                    # refused A2_LEAD_HELD_STILL for.
+                                    if a2_model_bound == "bounded":
+                                        state["clipped"] = True
                                 if rec is not None:
                                     # EVERY evaluation, fired or refused, on the
                                     # SAME channel the click arm uses -- a log
@@ -25430,6 +25464,12 @@ def main():
                          "vertex and world-0 idles there until the next 0.5 s "
                          "heading tick (11.6 s idle over session 4's 39 door "
                          "leads; six gate-1 snaps). Known-bad arm.")
+    ap.add_argument("--no-bound-clear-leads", action="store_true",
+                    help="MOVECODE-1z-ct REVERT: the model leg is bounded by the order "
+                         "ONLY when our own mesh cut the grant short, so on a clear lead "
+                         "it walks the client's full ~768 u ray while the grant reached "
+                         "520 u (session 4 t=48.98: 247 u of drift, 356 u of aim error "
+                         "across two follow orders). Known-bad arm.")
     ap.add_argument("--no-npc-leg-disc-clip", action="store_true",
                     help="MOVECODE-1z-co REVERT: a corridor whose first vertex is inside "
                          "the player's disc is DISCARDED and the bare 0x002A goes out "
@@ -27233,7 +27273,7 @@ def main():
     global A2_LEAD_WALL_SLIDE
     global A2_LEAD_DISC_CLEAR
     global A2_LEAD_W0_ORIGIN, A2_LEAD_PLANE_WORDS, KBD_LEAD_CHAIN, STALE_PAIR_GATE
-    global NPC_LEG_DISC_CLIP
+    global NPC_LEG_DISC_CLIP, MODEL_BOUND_CLEAR_LEAD
     if a.legacy_kbd_sync:
         KBD_SYNC = False
         KBD_SYNC_HOLD = False
@@ -27278,6 +27318,11 @@ def main():
         A2_LEAD_PLANE_WORDS = not a.no_lead_plane_words
         KBD_LEAD_CHAIN = not a.no_kbd_lead_chain
         STALE_PAIR_GATE = not a.no_stale_pair_gate
+        MODEL_BOUND_CLEAR_LEAD = not a.no_bound_clear_leads
+        if not MODEL_BOUND_CLEAR_LEAD:
+            print("[map] --no-bound-clear-leads: the model leg out-walks a clear "
+                  "grant by up to the client's ray minus KBD_SYNC_LEAD "
+                  "(1z-ct's revert).", flush=True)
         NPC_LEG_DISC_CLIP = not a.no_npc_leg_disc_clip
         if not NPC_LEG_DISC_CLIP:
             print("[map] --no-npc-leg-disc-clip: an in-disc corridor is discarded and the "

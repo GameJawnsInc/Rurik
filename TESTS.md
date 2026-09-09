@@ -3951,6 +3951,17 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   None — reporting one MORE vertex still owed, since the clipped point stops short of the one
   the corridor was heading for — with `--no-npc-leg-disc-clip` restoring the discard.
 
+  **MOVECODE-1z-ct (2026-09-09) moves `test_kbdsync.py`'s floor 201 → 208** and REPLACES the
+  check that pinned `model_leg_bound`'s `lead-clear` refusal, because the refusal is what 1z-ct
+  removes. The new checks pin the DERIVATION (on an unclipped lead the trim lands ON the granted
+  point — session 4's specimen, 0.051 u), the distinct `"bounded-clear"` verdict and the call
+  site setting `state["clipped"]` only on the mesh case, and a known-bad arm that REPRODUCES the
+  defect (`--no-bound-clear-leads` returns `lead-clear` and the model keeps its full ray past a
+  520 u grant). Two open-ground checks were RE-AIMED rather than re-baselined: they asserted the
+  248 u margin as a DISTANCE, and what they were really protecting — the model not parking
+  mid-cruise — survives as TIME (1.806 s of unbroken walking to reach the cap), which is what
+  they now assert.
+
   `toolkit/authsrv/test_livewire.py` (the committed retail-decode recipe,
   RETHINK instrument #2 — the campaign's referee moved out of a deletable
   scratchpad. Guards `toolkit/authsrv/livewire.py`: the no-vault doors

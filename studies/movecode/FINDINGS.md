@@ -17872,3 +17872,87 @@ one that sent us here — it wants its own arm, its own predicate and a corpus w
 6-in-740 exposure. Shape 2 needs its scorer chosen in advance and its vacuity repaired before it
 can even be costed honestly. **§1z-cp's corner remains unfixed and now has no live candidate**,
 which is the true state and better said plainly than dressed up.
+
+
+## 1z-ct. SHAPED 1 SHIPPED, on its own arm — the model leg is bounded by the ORDER even when our mesh did not cut the grant. 11 firings in 392 opportunities across the September corpus, mean model-vs-body error **186.1 → 37.7 u (80% removed)**, every firing better and none worse. `--no-bound-clear-leads` reverts. **It is NOT a fix for §1z-cp's corner and must never be scored as one**
+
+§1z-cs costed this and found it viable after my own first costing got it backwards. It ships
+here alone, with the predicate that costs it correctly registered in advance.
+
+### 1z-ct.1 ★★★ Why the shape is derived and not a tuned cap
+
+On an **unclipped** keyboard lead the grant is anchored at `reported` along `unit(heading)` with
+|lead| = `KBD_SYNC_LEAD` = 520.0, and the model ray is built from the **same origin and the same
+direction** — `clip_to_walkable(state, (px + heading[0], py + heading[1]))`. So trimming the model
+leg to the lead's own reach does not approximate the granted point, **it lands on it**. Measured on
+session 4's t=48.982 specimen: **0.051 u** from the grant. That is the whole derivation, and it is
+the property that would break silently if either anchor ever moved — so `test_kbdsync` pins it.
+
+### 1z-ct.2 ★★★ What it buys, on the corpus and with the right predicate
+
+**Scored on realized advance against lead reach, never on drift.** Scoring it on drift is exactly
+what produced §1z-cs's wrong verdict: drift is |reported − ours|, the model-vs-body *separation*,
+and it disagrees with the bound about *which gap* whenever the body also travels.
+
+The capture's own `model_bound` field gives the exact denominator — 102 September captures:
+
+| verdict | rows |
+|---|---|
+| `within` | 1,194 |
+| **`lead-clear`** (what this newly considers) | **392** |
+| `bounded` (the mesh case, already shipped) | 309 |
+| `no-lead` | 248 |
+
+Of the 392, the model out-walks the 520 u grant on **11 (2.81%)**. On those 11:
+
+| | today | with the bound |
+|---|---|---|
+| mean model-vs-body error at the next report | **186.1 u** | **37.7 u** |
+| total across the 11 | 2,047 u | 415 u |
+
+**Every one of the 11 improves; none regresses.** The best is session 4's t=48.982 at 247.1 → 0.0 u,
+where three follow orders fired inside the window and the cap removes **356.5 u of aim error**
+across two of them, taking one from far outside the 92 u swing reach to **9.2 u**.
+
+### 1z-ct.3 ★★ The cost, and where the docstring's own objection actually lands
+
+`model_leg_bound`'s docstring defended the 248 u gap as DELIBERATE: the model must out-run the
+client's report trigger "or it parks mid-cruise, sets `state["walking"] = False`, and turns the next
+report's `0x0025` from a turn signal into a per-report one." **That objection is right about the
+mechanism and wrong about its size**, and the difference is why it was worth re-costing:
+
+* The cap can only be REACHED after `KBD_SYNC_LEAD / DEFAULT_RUN_SPEED` = **1.806 s** of unbroken
+  walking. The client reports every ~0.25 s, so on any normal cruise the destination is rewritten
+  long before the model arrives. **The margin the docstring defended survives as TIME where it was
+  asserted as DISTANCE** — and that is the stronger statement, so `test_kbdsync`'s two open-ground
+  checks were re-aimed onto it rather than re-baselined.
+* Of the 11 firings, **9 gain a new arrival** (the model reaches the cap where today it would not),
+  and 2 already arrive. So the whole cost is **9 extra `walking = False` transitions across a month
+  of captures**, each turning one later report's `0x0025` into a grant.
+* The docstring's "286 clear leads in the corpus affected" over-counts the cost exactly as my first
+  metric over-counted the benefit: it counts legs the cap is INERT on. **Cost and benefit land on
+  the same rare set.**
+
+### 1z-ct.4 ★★ What it does NOT do, stated so it is never scored wrongly
+
+**It cannot touch §1z-cp's corner.** A wall-slid model destination is already chorded at
+`KBD_SYNC_LEAD` (`chord=KBD_SYNC_LEAD`, authsrv.py:9069-9070), so there `model_reach <= lead_reach`
+and the bound returns `"within"` whatever this flag says. §1z-cp remains unfixed with no live
+candidate; this is a different defect that the derivation happened to surface.
+
+**And it does not claim a clip that never happened.** `"bounded-clear"` is its own verdict: the call
+site sets `state["clipped"] = True` only on the mesh verdict `"bounded"`, because a clear lead was
+cut by the order's reach and by no mesh, and telling the `0x0047` arm otherwise would be a lie to a
+downstream consumer — the shape §1z-cq's review refused `A2_LEAD_HELD_STILL` for.
+
+### 1z-ct.5 The arm, and an exposure warning that matters
+
+`test_kbdsync` floor 201 → **208**. The **known-bad arm reproduces the defect rather than merely
+differing**: with `--no-bound-clear-leads` the specimen returns `lead-clear` and the model keeps its
+full ray while the grant reached 520 u — the 247.1 u this exists to remove.
+
+**REGISTERED, and read this before scoring a run:** at 11 firings in 392 opportunities over a
+hundred captures, **a single session will most likely fire this zero times.** A quiet session is
+therefore NOT evidence either way. The arm is scored on the CORPUS retrodiction above, plus any
+firing a later session happens to produce — and the predicate is **realized advance vs lead reach**,
+never drift. A run sheet that scores this on one session's drift would repeat §1z-cs's error.

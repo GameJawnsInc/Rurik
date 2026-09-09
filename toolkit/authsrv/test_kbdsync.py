@@ -62,7 +62,7 @@ from test_position_trust import receive_arm, Sent, FakeRec   # noqa: E402
 # the word-against-point check and the known-bad arm that reddens all three --
 # the cross-plane guard NPCTRACK proposed is refuted at 0 of 488 and ships as
 # nothing).
-LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=201)
+LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=208)   # 1z-ct: +7, from the green run
 check = checks.adopt(LEDGER)
 
 SRC = open(authsrv.__file__, encoding="utf-8").read()
@@ -1135,12 +1135,66 @@ def main():
           == ((100.0, 0.0), "bounded"),
           "BOUNDED: a 700 u model leg against a 100 u lead our mesh cut short "
           "is trimmed to the lead's own REACH, on the model's own ray")
+    # MOVECODE-1z-ct (2026-09-09): the clear lead is bounded TOO, and it gets its
+    # OWN verdict. This check used to assert (None, "lead-clear") and the paragraph
+    # below it is kept as the revert arm, because the reasoning it recorded is still
+    # exactly right about the COST -- it was wrong only about the cost's SIZE.
     check(LB(O, (700.0, 0.0), R, (100.0, 0.0), False, "kbd")
-          == (None, "lead-clear"),
-          "LEAD-CLEAR is untouched, and this is the derived scope: 520 u of "
-          "lead against the client's 768 u vec2 is 248 u of DELIBERATE margin "
-          "over its own report trigger (p99 chord 515.1 u), so capping a clear "
-          "lead would park the model mid-cruise")
+          == ((100.0, 0.0), "bounded-clear"),
+          "1z-ct: a CLEAR lead bounds too, and says so in its own word -- the "
+          "call site must be able to tell a mesh cut from a reach cut")
+    check(LB(O, (700.0, 0.0), R, (100.0, 0.0), True, "kbd")[1] == "bounded",
+          "1z-ct: and the mesh case keeps the word it always had, because that "
+          "is the one that licenses state[\"clipped\"] downstream")
+    # THE SPECIMEN, from session 4 t=48.982 (1z-cs.1). On an UNCLIPPED keyboard
+    # lead the grant is anchored at `reported` along unit(heading) at
+    # KBD_SYNC_LEAD, and the model ray is built from the same origin and the same
+    # direction -- so the trim lands ON the granted point. That is what makes this
+    # a derivation and not a tuned cap, and it is the one property that would
+    # break silently if either anchor ever moved.
+    _sp_o = (10386.63671875, 8390.7724609375)
+    _sp_grant = (10745.4, 8767.2)
+    _sp_ray = (10915.8, 8946.1)
+    _sp_d, _sp_w = LB(_sp_o, _sp_ray, _sp_o, _sp_grant, False, "kbd")
+    check(_sp_w == "bounded-clear"
+          and math.hypot(_sp_d[0] - _sp_grant[0], _sp_d[1] - _sp_grant[1]) < 0.2,
+          "1z-ct SPECIMEN: the trim lands ON the granted point (session 4's "
+          "t=48.982 leg: body 520.0 u, model 767.1 u, drift 247.1 -> 0.0)",
+          f"{_sp_d} is "
+          f"{math.hypot(_sp_d[0] - _sp_grant[0], _sp_d[1] - _sp_grant[1]):.3f} u "
+          f"from the grant")
+    # THE KNOWN-BAD ARM, and it must reproduce the defect rather than merely
+    # differ: with the flag off the model keeps the whole 768 u ray while the
+    # grant reached 520, which is the 247 u of drift 1z-cs measured.
+    _saved_bc = authsrv.MODEL_BOUND_CLEAR_LEAD
+    try:
+        authsrv.MODEL_BOUND_CLEAR_LEAD = False
+        _rev = LB(O, (700.0, 0.0), R, (100.0, 0.0), False, "kbd")
+        _rev_sp = LB(_sp_o, _sp_ray, _sp_o, _sp_grant, False, "kbd")
+    finally:
+        authsrv.MODEL_BOUND_CLEAR_LEAD = _saved_bc
+    check(_rev == (None, "lead-clear"),
+          "REVERT ARM (--no-bound-clear-leads): LEAD-CLEAR again, exactly as "
+          "before 1z-ct -- 520 u of lead against the client's 768 u vec2 is 248 u "
+          "of margin over its own report trigger (p99 chord 515.1 u), and the "
+          "cost of capping is that the model ARRIVES and clears state[\"walking\"]")
+    check(_rev_sp == (None, "lead-clear"),
+          "and the revert arm reproduces the DEFECT on the specimen: the model "
+          "keeps its full ray while the grant reached 520 u -- 247.1 u of drift, "
+          "which is what the arm exists to be scored against")
+    check(authsrv.MODEL_BOUND_CLEAR_LEAD is True
+          and "--no-bound-clear-leads" in open(
+              authsrv.__file__, encoding="utf-8").read(),
+          "1z-ct ships ON with its revert flag")
+    # THE CALL SITE MUST NOT CLAIM A CLIP THAT NEVER HAPPENED. A clear lead was
+    # cut by the ORDER's reach and by no mesh; telling the 0x0047 arm otherwise
+    # is the shape 1z-cq's review refused A2_LEAD_HELD_STILL for.
+    _src_ct = open(authsrv.__file__, encoding="utf-8").read()
+    _i_ct = _src_ct.find('if a2_model_bound == "bounded":')
+    _i_cl = _src_ct.find('state["clipped"] = True', _i_ct)
+    check(0 < _i_ct < _i_cl < _i_ct + 200,
+          "1z-ct: state[\"clipped\"] is set ONLY on the mesh verdict, so a "
+          "reach-trimmed leg never reports a mesh refusal that did not happen")
     check(LB(O, (700.0, 0.0), R, (100.0, 0.0), True, "fallback")
           == (None, "no-lead")
           and LB(O, (700.0, 0.0), R, None, True, None) == (None, "no-lead"),
@@ -1241,29 +1295,43 @@ def main():
     st = {"pos": (1000.0, 2000.0), "plane": 7, "pos_seen": 0.0}
     st, w = drive_heading(REPORT, lead=True, state=st)
     row = st["_rec"].of("grant_verdict")[-1]
-    check(st["dest"] == (1766.5, 2000.25)
+    check(st["dest"] == (1520.5, 2000.25)
           and row["lead_clip_why"] == "no-mesh"
-          and row["model_bound"] == "lead-clear"
+          and row["model_bound"] == "bounded-clear"
           and w.of(MOVE)[0][1][1] == [1520.5, 2000.25],
-          "NO MESH IN HAND: the model keeps the client's own 766 u ray and the "
-          "lead its derived 520, because a mesh that said nothing cannot have "
-          "refused anything -- `a2_clip_lead` answers `no-mesh` with "
-          "lead_clipped False and the bound refuses `lead-clear` on it. "
-          "Section 2's numbers unchanged to the bit",
+          "NO MESH IN HAND: the WIRE is unchanged to the bit (the lead is still "
+          "its derived 520), and MOVECODE-1z-ct now trims the model to that same "
+          "reach -- a mesh that said nothing cannot refuse anything, but the "
+          "ORDER still bounds the model that follows it",
           f"dest={st['dest']} why={row['lead_clip_why']} "
           f"bound={row['model_bound']}")
+    # AND THE THING THE 248 u MARGIN WAS REALLY PROTECTING, which 1z-ct does not
+    # take away. The margin used to be asserted as a DISTANCE; what stops the
+    # model parking mid-cruise is TIME. It can only reach the cap after
+    # KBD_SYNC_LEAD / DEFAULT_RUN_SPEED of unbroken walking, and the client
+    # reports far more often than that, so a cruising leg is rewritten long
+    # before the model arrives and state["walking"] is never cleared under it.
+    _t_to_cap = authsrv.KBD_SYNC_LEAD / authsrv.DEFAULT_RUN_SPEED
+    check(_t_to_cap > 1.5,
+          "1z-ct: the model needs %.3f s of unbroken walking to reach the cap, "
+          "so the margin survives as TIME where it used to be asserted as "
+          "distance -- this is why the cap is inert on a cruise" % _t_to_cap,
+          "measured on the corpus: 11 of 392 lead-clear legs ever get there")
     st = {"pos": (1000.0, 2000.0), "plane": 0, "pos_seen": 0.0,
           "pathmap": _Stairs()}
-    # Same mesh, but aimed AWAY from the seam: nothing is clipped, nothing is
-    # bounded, and the 248 u margin survives the fix.
+    # Same mesh, but aimed AWAY from the seam: nothing is CLIPPED, the wire is
+    # unchanged, and since MOVECODE-1z-ct the model is trimmed to the order's
+    # own reach instead of walking the client's full ray past it. The ray would
+    # end at x = 234.5 (1000.5 - 766); the 520 u grant ends at x = 480.5.
     st, w = drive_heading([1, [1000.5, 2000.25], 0, [-766.0, 0.0], 1],
                           lead=True, state=st)
     row = st["_rec"].of("grant_verdict")[-1]
-    check(row["lead_clip_why"] == "clear" and row["model_bound"] == "lead-clear"
-          and abs(st["dest"][0] - 234.5) < 1e-6,
-          "AWAY FROM THE SEAM the lead reads clear, the bound refuses "
-          "`lead-clear`, and the model still walks the full 766 u -- the "
-          "bound reads a mesh REFUSAL and nothing else",
+    check(row["lead_clip_why"] == "clear" and row["model_bound"] == "bounded-clear"
+          and abs(st["dest"][0] - 480.5) < 1e-6
+          and w.of(MOVE)[0][1][1] == [480.5, 2000.25],
+          "AWAY FROM THE SEAM the lead reads clear and the WIRE is unchanged; "
+          "1z-ct trims the model to the order's own reach rather than "
+          "letting it walk the client's full 766 u ray past a 520 u grant",
           f"dest={st['dest']} why={row['lead_clip_why']} "
           f"bound={row['model_bound']}")
 
