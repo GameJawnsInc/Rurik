@@ -302,6 +302,20 @@ SEAM_AWARE_ROUTE = True
 SEAM_TOL = 1.0
 SEAM_STEP = 2.0
 
+# THE GATE'S OWN SAMPLING (MOVECODE-1z-co, 2026-09-08). route()'s per-segment gate re-clips
+# the PULLED candidate at CORNER_PULL_GATE_STEP (2 u) and every other candidate at 16 u, and
+# clip() says of itself that "a gap narrower than `step` can be stepped over". So a 2-point
+# path -- which _follow_leg reads as "the line is clear", sending an agent-addressed 0x002A
+# the client dead-reckons in a STRAIGHT LINE -- could carry a chord that leaves the mesh.
+# MEASURED on RUN-1zCG (1z-cn): session 2's (11391,9081)->(11269,9153), both ends on the mesh,
+# PASSES the gate at 16 u and FAILS at 2 u; true excursion 2.6 u. Three of the corpus's six
+# bad chords are this. The docstring's promise -- "walking it in straight segments never
+# leaves the navmesh" -- is what the fine step makes true.
+# ROUTE_GATE_FINE = False (authsrv --route-gate-coarse) restores the 16 u sampling exactly,
+# and is the known-bad arm test_pathmap drives.
+ROUTE_GATE_FINE = True
+RAW_GATE_STEP_COARSE = 16.0
+
 # THE WALL SLIDE (MOVECODE-1z-ce, 2026-09-06): how far from a wall a body counts
 # as pressed against it, for wall_slide(). The client's keyboard mover lays its
 # waypoints ALONG trapezoid edges (sec.1z-bd.2) and reports from 0.0-0.4 u either
@@ -1424,8 +1438,9 @@ class PathingMap:
                     continue
                 if best is not None and best[1] is not None and self._pulled_passed:
                     continue
-            step = (CORNER_PULL_GATE_STEP if cand is pulled and pulled is not pts
-                    else 16.0)
+            step = (CORNER_PULL_GATE_STEP
+                    if (ROUTE_GATE_FINE or (cand is pulled and pulled is not pts))
+                    else RAW_GATE_STEP_COARSE)
             # THE SEAM TERM (MOVECODE-1z-bb): the pull and the gate both carry
             # the corridor's plane per waypoint, so a shortcut is refused when
             # a body on the kept point's plane would reach a plane change no

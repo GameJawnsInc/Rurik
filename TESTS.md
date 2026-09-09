@@ -3934,6 +3934,21 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   notifies; the flag and `--no-stale-pair-gate`). The capture and retail sections skip
   loudly without the vault. Floor 40 from the green run. ~60 s, most of it the retail
   decode),
+  **MOVECODE-1z-co (2026-09-08) adds a section to two files rather than a file of its
+  own.** `toolkit/mapdata/test_pathmap.py` §17 (floor 117 → 129): route()'s gate re-clipped
+  the pulled candidate at 2 u and every other at 16 u, so a 2-point "the line is clear" path
+  could carry a chord off the mesh — the fixture is a SYNTHETIC 6 u notch that no 16 u sample
+  lands in, with the arithmetic control proving the coarse samples straddle it and the fine
+  ones do not, the known-bad arm (`ROUTE_GATE_FINE` False) returning the 2-point path, and the
+  fix returning a 4-point corridor whose every segment holds at 2 u.
+  `toolkit/authsrv/test_agentlife.py` `section_disc_clip` (floor 348 → 379): an in-disc
+  corridor is clipped to one margin outside the player's disc and stays ON the corridor's own
+  segment, with each of the three None branches (origin already inside the disc, a leg shorter
+  than an arrival, a point the mesh refuses) checked for its own reason, and `_follow_leg`
+  driven through a stub corridor to prove it now returns the clipped leg where it returned
+  None — reporting one MORE vertex still owed, since the clipped point stops short of the one
+  the corridor was heading for — with `--no-npc-leg-disc-clip` restoring the discard.
+
   `toolkit/authsrv/test_livewire.py` (the committed retail-decode recipe,
   RETHINK instrument #2 — the campaign's referee moved out of a deletable
   scratchpad. Guards `toolkit/authsrv/livewire.py`: the no-vault doors
