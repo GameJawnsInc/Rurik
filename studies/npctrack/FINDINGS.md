@@ -904,3 +904,42 @@ number on the six prior stairs tapes is 12.8–93.8 u.
   walking; the census confirmed the sign and the bound (0–18 u, 36 of 37). That turns Q1's
   "7–16 u" from an unexplained residual into a floor. What would have been a fudge is parking
   the model half a tick inside to zero the mean — not built.
+
+
+## NPCTRACK-Q10 — two hostiles, RAN twice (2026-09-09, agent-driven): **they park in ONE BODY, the wire shape is retail's, and nothing ships**
+
+`RUN-Q10.md` carries the table. In one line per prediction, both runs agreeing: **P1
+REFUTED** — both Hatchers chase and park, but from ~10.5 s on their sync copies sit 0.0 u
+apart, the drawn bodies with them, and the server's halt labels name the same point for
+both agents on the same tick; **P2 MET** (`npcdrift` at the halt's instant 3.8 / 5.4 u for
+agent 10 and 13.8 / 13.2 u for agent 11, the second hostile's drift 2.5–3.5× the first's,
+unexplained; copysep p90 ≤ 21.9 u); **P3 MET** (one `0x002C` per run, zero snaps); **P4
+NOT MEASURED** (zero corridor legs: the compass-ring spawns put both hostiles 80 u from
+the player on open ground). `sessionscore` refused both runs at 11 reports under its
+floor of 20 and P3 was read off the tape directly.
+
+**Why the pass did not separate them (OBSERVED on the tape, F14's own rules):** the two
+copies converged **side by side** — 13 u apart in run a, 65 u in run b, both walking at
+288 toward the same target point — and an obstacle beside the mover sits outside the
+avoidance pass's ±60° forward cone (rule 3), so the pass never fires and two agents
+dead-reckoning to one point from beside each other meet there. The server's copies do the
+same for the same reason: our hostile's model is Q1's SyncAgent with the player's disc
+and no obstacle pass, and where the client's pass is blind, a model without it is
+faithful.
+
+**Retail's wire, at the desk (`review/chasercensus.py`, `--any-target`):** chases of the
+player never overlap in the corpus (0 pairs in 8 chases); two NPCs on any one target give
+14 overlapping pairs over 28 connections, and **ArenaNet's `0x002A` to co-chasers is
+bit-identical on 12 of 13** (the point is the target's own server position; the rich pair
+at `20260819T132414` shows six identical points in a row for agents 29 and 30 on 36). Its
+`0x0029` legs to two NPCs at once are not kept apart either: 7,635 simultaneous pairs,
+separation p5 49 / p10 108 u, 292 under two radii, 1st percentile 0.0. OBSERVED. What
+retail's server does with its own copies between order and halt is **UNVERIFIED** — not on
+the wire; the pair's halts land at different instants (180.28 vs 184.30 s) but the chases
+also opened 1.5–3 s apart.
+
+**Nothing ships**, by the derive-don't-iterate rule: the order is retail's, the client's
+blindness is the client's, and a server-side park bearing per chaser would be a
+reconstruction with no witness. Recorded as a lever for the owner's eye. The instruments:
+`review/q10run.py` drives a run (`--label b` for a second tape), `npcdrift.py --agent 11`
+scores the second hostile, `chasercensus.py` is the retail census.
