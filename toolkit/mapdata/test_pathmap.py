@@ -481,7 +481,7 @@ def all_valid(pm, paths):
 # NOT skip for load: normalising by a bigger factor makes it harder to pass,
 # not easier, so it is safe at any load and it is the check that would catch a
 # correction gone soft.
-LEDGER = checks.Ledger("pathing map", floor=117)
+LEDGER = checks.Ledger("pathing map", floor=129)   # 1z-co adds sec.17 (+8); from the green run
 check = checks.adopt(LEDGER)
 
 
@@ -1774,6 +1774,92 @@ def main():
 
     dt = time.perf_counter() - t0
     print(f"\nwalked the archive in {dt:.1f}s")
+
+    # ---- 17. THE GATE'S OWN SAMPLING (MOVECODE-1z-co) ---------------------
+    #
+    # route() promises "walking it in straight segments never leaves the
+    # navmesh". Its per-segment gate re-clips the PULLED candidate at 2 u and
+    # every other candidate at 16 u, and clip() says of itself that "a gap
+    # narrower than `step` can be stepped over" -- so a 2-POINT path, which the
+    # NPC follow reads as "the line is clear" before sending an agent-addressed
+    # 0x002A the client dead-reckons STRAIGHT, could carry a chord that leaves
+    # the mesh. MEASURED on RUN-1zCG (1z-cn): three of the corpus's six bad
+    # chords are this, and session 2's specimen passes the gate at 16 u, fails
+    # at 2 u, and truly leaves the mesh by 2.6 u.
+    #
+    # SYNTHETIC, because the property is about the SAMPLING and a real mesh
+    # cannot place the gap where it needs to be: a 6 u notch in y that no 16 u
+    # sample lands in, with a narrow neck to the west so a way round exists.
+    print("\n17. the route gate's sampling: a notch no 16 u sample lands in")
+    Tz2 = pathmap.Trapezoid
+    NO2 = pathmap.NO_NEIGHBOUR
+    #          plane idx  y_top  y_bot   xtl    xtr    xbl    xbr   neighbours
+    N0 = Tz2(0, 0,  46.0,   0.0,   0.0, 300.0,   0.0, 300.0, (1, 1, NO2, NO2))
+    N1 = Tz2(0, 1,  52.0,  46.0,   0.0,  20.0,   0.0,  20.0, (2, 2, 0, 0))
+    N2 = Tz2(0, 2, 100.0,  52.0,   0.0, 300.0,   0.0, 300.0, (NO2, NO2, 1, 1))
+    notch = pathmap.PathingMap([N0, N1, N2], [{}])
+    A, B = (150.0, 10.0), (150.0, 90.0)
+    check(notch.walkable(*A) and notch.walkable(*B)
+          and not notch.walkable(150.0, 49.0),
+          "17. the fixture: both ends on the mesh, the notch between them off it",
+          f"A={notch.walkable(*A)} B={notch.walkable(*B)} "
+          f"notch={notch.walkable(150.0, 49.0)}")
+    # The sampling itself, stated as arithmetic so the fixture cannot rot into
+    # one where both steps agree and the checks below pass vacuously.
+    dist = 80.0
+    coarse_ys = [10.0 + dist * i / int(dist / 16.0) for i in range(int(dist / 16.0) + 1)]
+    check(not any(46.0 < y < 52.0 for y in coarse_ys),
+          "17. CONTROL: no 16 u sample lands inside the notch",
+          f"samples {['%.0f' % y for y in coarse_ys]} against the notch 46-52")
+    check(any(46.0 < 10.0 + dist * i / int(dist / 2.0) < 52.0
+              for i in range(int(dist / 2.0) + 1)),
+          "17. and a 2 u sample does",
+          "if this fails the notch is narrower than the fine step too")
+    saved_fine = pathmap.ROUTE_GATE_FINE
+    try:
+        # THE KNOWN-BAD ARM: the shipped-before answer, which is the defect.
+        pathmap.ROUTE_GATE_FINE = False
+        coarse = notch.route(A[0], A[1], B[0], B[1])
+        check(coarse is not None and len(coarse) == 2,
+              "17. REVERT ARM (--route-gate-coarse): route returns a 2-POINT "
+              "path -- 'the line is clear'",
+              f"got {None if coarse is None else len(coarse)} points: {coarse}")
+        worst = 0.0
+        for i in range(0, 81):
+            y = 10.0 + 80.0 * i / 80.0
+            if not notch.walkable(150.0, y):
+                worst = max(worst, 1.0)
+        check(worst > 0.0,
+              "17. and that straight segment DOES leave the mesh -- the "
+              "contract broken",
+              "the fixture must actually carry a hole, or this proves nothing")
+        # THE FIX.
+        pathmap.ROUTE_GATE_FINE = True
+        fine = notch.route(A[0], A[1], B[0], B[1])
+        check(fine is None or len(fine) >= 3,
+              "17. SHIPPED: the fine gate refuses the straight line -- a "
+              "corridor, or nothing, never a false 'clear'",
+              f"got {None if fine is None else len(fine)} points: {fine}")
+        if fine:
+            bad = 0
+            for p, q in zip(fine, fine[1:]):
+                n = max(1, int(((q[0] - p[0]) ** 2 + (q[1] - p[1]) ** 2) ** 0.5 / 2.0))
+                for i in range(n + 1):
+                    f = i / n
+                    if not notch.walkable(p[0] + (q[0] - p[0]) * f,
+                                          p[1] + (q[1] - p[1]) * f):
+                        bad += 1
+            check(bad == 0,
+                  "17. and every segment of what it DOES return holds at 2 u",
+                  f"{bad} off-mesh samples on the returned path {fine}")
+        check(pathmap.CORNER_PULL_GATE_STEP == 2.0
+              and pathmap.RAW_GATE_STEP_COARSE == 16.0,
+              "17. the two steps are the named constants, not literals",
+              f"pull {pathmap.CORNER_PULL_GATE_STEP}, coarse "
+              f"{pathmap.RAW_GATE_STEP_COARSE}")
+    finally:
+        pathmap.ROUTE_GATE_FINE = saved_fine
+
     return LEDGER.verdict()
 
 

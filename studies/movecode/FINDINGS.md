@@ -17401,3 +17401,90 @@ our live corpus holds no instance of a corner within 80 u of the player, which i
 geometry in question. Deriving that fix from the corpus we have would be inventing it.
 
 
+## 1z-co. THE TWO FLANK FIXES SHIPPED — route()'s gate now samples the unpulled candidate at the same 2 u as the pulled one, and an in-disc corridor is CLIPPED to the disc instead of thrown away. 9 of the corpus's 11 bad chords go to 0.0 u; 222 of 228 routes are byte-identical; the residual 2 are named and belong to the class these fixes shrink
+
+**Why now and not at 1z-cn.** Both fixes were derived at the trace and deliberately withheld:
+session 6 was `1z-cm`'s verbatim check, and a second movement default would have let one run
+convict the pair. Session 6 scored (the gate held and fired, `RUN-1zCG.md` session 6), so the
+arm is free.
+
+### 1z-co.1 ★★★ Fix 1 — the gate's own sampling. OBSERVED, and it was a broken contract
+
+`route()` promises *"walking it in straight segments never leaves the navmesh"*. Its
+per-segment gate was `step = CORNER_PULL_GATE_STEP (2.0) if cand is pulled and pulled is not
+pts else 16.0`, and `clip()` says of itself *"a gap narrower than `step` can be stepped over"*.
+So the **unpulled** candidate was admitted on a sampling eight times coarser than the pulled
+one — and a 2-point path is exactly what `_follow_leg` reads as "the line is clear" before
+sending an agent-addressed `0x002A` the client dead-reckons **straight**.
+
+`ROUTE_GATE_FINE = True` gates every candidate at 2 u; `--route-gate-coarse` restores 16.0 to
+the literal. `pathmap.RAW_GATE_STEP_COARSE` names the old number so neither step is a literal
+in the expression any more.
+
+### 1z-co.2 ★★★ Fix 2 — an in-disc corridor is clipped, not discarded. DERIVED from F14
+
+§1z-ci refused a corridor whose first vertex sits inside the player's disc, because the client
+halts a copy whose target that disc covers (F14). **The rule is right and stays.** Its
+FALLBACK was the defect: the caller then sent the bare `0x002A` straight through the wall,
+which is the worst available answer precisely when the corner being rounded is near the player.
+
+`_disc_clip_leg` keeps the corridor and returns the last point on `(copy → vertex)` that is
+one margin OUTSIDE the disc: still walkable, still toward the corner, and its target no longer
+inside the disc, so F14's halt does not apply to it. It returns None — and the bare follow
+stands, as before — for three stated reasons: the origin already inside the disc (the hostile
+is at its stop radius and the agent-addressed follow is the right message), a clipped leg
+shorter than an arrival (`NPC_LEG_DONE`), or a point our own mesh refuses.
+`--no-npc-leg-disc-clip` restores the discard.
+
+### 1z-co.3 ★★★ Measured before shipping, all three questions
+
+| | 16 u gate (revert) | 2 u gate (shipped) |
+|---|---|---|
+| `route()` on 228 real hostile orders | p50 **0.133** ms, p90 0.475, max 10.7 | p50 **0.165** ms, p90 0.648, max 1.9 |
+
+**The budget holds.** The world tick is 50 ms and `test_pathmap`'s bar is 35 ms; the fine gate
+costs ~0.03 ms at the median. It was the one thing that could have refused this fix.
+
+**What moves is small and it is the right thing: 222 of 228 routes come back byte-identical.**
+All 6 that change go from a 2-point straight line to a 3–4 point corridor — **0 routes lost
+entirely, 0 gained**. The fix adds corners exactly where the straight line was bad and nowhere
+else.
+
+**Retrodiction over the pooled corpus (sessions 2–6, 11 chords beyond the 2 u edge class):
+9 of 11 become a corridor leg with a chord of 0.0 u.** Including session 4's 21.5 u and
+session 6's 30.5 u, the two worst the in-disc rule was throwing away.
+
+### 1z-co.4 ★★ The 2 that remain, named rather than tuned away
+
+`s3 t=67.14` (4.9 u) and `s4 t=33.17` (3.9 u) still send the bare follow, and they share one
+cause: **the copy's own position was already OFF our mesh** (`walkable` False at the origin).
+`_follow_leg` steps an off-mesh origin onto the mesh before routing — it must, or `route()`
+refuses the call — and from that stepped proxy the line genuinely is clear. The client,
+though, walks from where the body actually is, and *that* chord clips by 4–5 u.
+
+This is the 1z-cg `A2_LEAD_W0_ORIGIN` shape on a third axis: not world-0 versus the drawn body
+(refuted at 0 of 7 in §1z-cn), but **the real position versus the stepped-onto-mesh proxy**.
+It is self-limiting — it needs an already-off-mesh copy, which is the state these two fixes
+exist to stop producing — so it should decay rather than persist. **No third fix is invented
+for it here**; if session 7 still shows it, it gets its own derivation.
+
+### 1z-co.5 Tests, and the capture header
+
+`test_pathmap` §17 (floor 117 → **129**): a SYNTHETIC notch — 6 u of missing mesh that no 16 u
+sample lands in, with a neck to the west so a way round exists — plus the arithmetic control
+that the coarse samples really do straddle it and the fine ones really do land in it. The
+**known-bad arm first**: with `ROUTE_GATE_FINE` False `route()` returns the 2-point path and
+that segment does leave the mesh; with it True the answer is a 4-point corridor and every
+segment holds at 2 u. `test_agentlife.section_disc_clip` (floor 348 → **379**): the clipped
+point lands exactly one margin outside the disc and ON the corridor's own segment, each of the
+three None branches for its own reason, and `_follow_leg` driven through a stub corridor to
+prove it now returns the clipped leg where it returned None — reporting one MORE vertex still
+owed, because the clipped point stops short of the vertex the corridor was heading for — with
+`--no-npc-leg-disc-clip` restoring the discard.
+
+**`capture_flags()` now sweeps `pathmap` as well as `agtrack_guard`.** The fine gate is a
+switch with a revert flag living in the MESH module, where authsrv's own globals sweep cannot
+see it — the "arriving from the side" staleness that function's docstring already warns about.
+A capture that could not name which gate produced it would cost the next A/B its meaning. The
+sweep also picks up `SEAM_AWARE_ROUTE`, which has had a revert flag since §1z-bb and was
+likewise unrecorded until now.

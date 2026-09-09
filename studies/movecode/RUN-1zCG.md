@@ -343,3 +343,52 @@ unblocked for their own arm.
 samples**, and 14 of the session's reports land up to 8.3 u off it, where session 5 had none.
 The client is saying it stands where our decode has nothing, at the corner the owner pressed.
 UNVERIFIED whether that is missing geometry in our decode or something else.
+
+
+---
+
+## Session 7 — REGISTERED 2026-09-08, predictions fixed BEFORE the run (MOVECODE-1z-co's check)
+
+Build: `main` at the 1z-co merge — **both flank fixes ON** (`pathmap.ROUTE_GATE_FINE`,
+`NPC_LEG_DISC_CLIP`), on top of everything session 6 already carried. The capture header names
+both arms (`capture_flags()` now sweeps `pathmap`).
+
+**The route matters more than usual: the chords live at the flank corners.** Same stairs
+route, and **press into the corner at the foot with the Hatcher on you**, the way session 6
+ended — that is the geometry that produced 10 of the corpus's 11 bad chords. Walk the hole
+above the stairs round rather than skipping it.
+
+```powershell
+python toolkit/clientscan/agenttap.py --agents 1,10 --seconds 240 --wait 300 --out vault/research/movecode/1zcg7-agenttap.jsonl
+```
+
+```powershell
+python toolkit/harness/session.py --exe vault/run/2026-07-29_221c13772c7a/Gw.exe --enemy --hold 200 --game-args "--map 146 --explorable --no-enemy-skills --enemy-hit 0.02 --skills 0,0,0,0,0,0,0,0"
+```
+
+HANDS OFF THE KEYBOARD until "body is in the map" (~25 s), then 200 s of play; it tears itself
+down.
+
+**Predictions.**
+
+- **P1 — the Hatcher's drawn body stays on our mesh: worst < 5 u** (s4 17.5, s5 12.5, s6
+  **23.65**). This is the number the arc has printed RED on every hand-driven session and the
+  one both fixes exist to move.
+- **P2 — zero bad chords.** `flankcensus.py` reads **0** orders whose chord leaves our mesh
+  beyond 2 u (s6: 5 of 102). The retrodiction says 9 of 11 go to 0.0 u.
+- **P3 — the exposure floor, so a null cannot be an empty run**: at least **60 hostile
+  destination orders** with the operand pinned from `npc_order` rows, and at least one
+  in-disc clip actually taken. A session that never corners the Hatcher measures nothing here.
+- **P4 — nothing else moves**: 0 crashes and 0 split rate/destination pairs (1z-cm still
+  holding), client snaps 0, `0x002C` re-pins ≤ 3, and the router's own timing inside its
+  band — `sessionscore.py`'s other rows within their session-6 values.
+
+**Carried, still unchecked and NOT scored here**: §1z-cl's mid-air fix has never met its
+trigger (session 6 was a zero-exposure null). If a mid-air episode appears it is a finding;
+its absence still proves nothing.
+
+**The two questions to answer in words**, fixed now:
+
+1. Does the Hatcher still clip through the stairs' flank or the corner you back into?
+2. Anything new or worse than session 6 — warps, sticking, or the chase behaving oddly at
+   corners now that it takes them rather than cutting them?

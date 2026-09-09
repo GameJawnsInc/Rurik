@@ -16518,6 +16518,56 @@ FOLLOW_ROUTE_RETRY = 0.5      # s. At most one A* per agent per this, ours.
 NPC_FOLLOW_CORRIDOR = True    # False (--no-npc-corridor): a bare 0x002A across any wall.
 NPC_LEG_DONE = 4.0            # u. The copy stands on the leg's end: the next leg, now.
 NPC_LEG_ORIGIN_STEP = 16.0    # u. An off-mesh copy is stepped onto the mesh before routing.
+# THE IN-DISC CORRIDOR (MOVECODE-1z-co). sec.1z-ci made _follow_leg refuse a corridor whose
+# first vertex sits inside the player's disc, because the client halts a copy whose target
+# that disc covers (F14) -- the rule is right. Its FALLBACK was not: the caller then sends the
+# bare agent-addressed 0x002A, which the client dead-reckons STRAIGHT, and when the corner
+# being rounded is itself within the stop radius -- exactly what a player standing just around
+# the flank corner produces -- that straight line goes through the wall (1z-cn: 2 of the
+# corpus's 6 bad chords, one of them 21.5 u off our mesh). The corridor is kept and the leg
+# CLIPPED to the last point on it outside the disc: still walkable, still toward the corner,
+# and its target no longer inside the disc, so F14's halt does not apply.
+# --no-npc-leg-disc-clip restores the discard.
+NPC_LEG_DISC_CLIP = True
+NPC_LEG_DISC_MARGIN = 1.0     # u. Stop this far OUTSIDE the disc, never on its edge.
+
+
+def _disc_clip_leg(pm, ax, ay, wx, wy, px, py):
+    """The last point on (ax,ay)->(wx,wy) that is OUTSIDE the player's disc, or None.
+
+    MOVECODE-1z-co. The corridor's first vertex is inside the disc, where the client would
+    halt the copy (F14). The way round is still the corridor, so keep its direction and stop
+    short of the disc instead of discarding it. None when there is nothing worth sending --
+    the origin already inside the disc (the hostile is at its stop radius, and the
+    agent-addressed follow is the right message), or the clipped point too close to the
+    origin to be a leg, or a point our own mesh will not hold.
+    """
+    r = follow_stop_radius() + NPC_LEG_DISC_MARGIN
+    d0 = math.hypot(ax - px, ay - py)
+    if d0 <= r:
+        return None                       # already at the stop radius: nothing to walk to
+    dx, dy = wx - ax, wy - ay
+    seg = math.hypot(dx, dy)
+    if seg <= 1e-6:
+        return None
+    # |A + t*D - P| = r, the far crossing of a segment that starts outside and ends inside:
+    # exactly one root in (0, 1), so the quadratic cannot be ambiguous here.
+    fx, fy = ax - px, ay - py
+    a = dx * dx + dy * dy
+    b = 2.0 * (fx * dx + fy * dy)
+    c = fx * fx + fy * fy - r * r
+    disc = b * b - 4.0 * a * c
+    if disc <= 0.0:
+        return None
+    t = (-b - math.sqrt(disc)) / (2.0 * a)
+    if not (0.0 < t < 1.0):
+        return None
+    cx2, cy2 = ax + dx * t, ay + dy * t
+    if math.hypot(cx2 - ax, cy2 - ay) < NPC_LEG_DONE:
+        return None                       # a leg shorter than an arrival is not a leg
+    if not pm.walkable(cx2, cy2):
+        return None                       # never grant a point our own mesh refuses
+    return cx2, cy2
 
 
 def _follow_leg(pm, ax, ay, px, py, plane, dest_plane):
@@ -16567,6 +16617,7 @@ def _follow_leg(pm, ax, ay, px, py, plane, dest_plane):
     if not path or len(path) < 3:
         return None
     wx, wy = float(path[1][0]), float(path[1][1])
+    remaining = len(path) - 2
     # RUN-1zCG session 2 (2026-09-07, 82.9 s): the corridor's first vertex --
     # the corner at the stairs' foot -- stood 24 u from the PLAYER. The client
     # halts a copy whose target its target-agent's disc covers (NPCTRACK-F14,
@@ -16576,11 +16627,21 @@ def _follow_leg(pm, ax, ay, px, py, plane, dest_plane):
     # inside the player's disc IS the player, as far as the walk goes: the
     # agent-addressed follow, whose target the resolver parks on.
     if math.hypot(wx - px, wy - py) < follow_stop_radius():
-        return None
+        # MOVECODE-1z-co: clip the leg to the corridor rather than throwing the corridor
+        # away. Walk back along (ax,ay)->(wx,wy) to the last point outside the player's
+        # disc; below it there is nothing useful to send and the bare follow stands.
+        clipped = _disc_clip_leg(pm, ax, ay, wx, wy, px, py) if NPC_LEG_DISC_CLIP else None
+        if clipped is None:
+            return None
+        wx, wy = clipped
+        # The clipped point sits BEFORE path[1], so the corridor still owes that
+        # vertex as well: one more than the unclipped case. The count is only the
+        # record's, but a later session reads that line to reconstruct the walk.
+        remaining += 1
     wpl = plane
     if planes and len(planes) > 1 and planes[1] is not None:
         wpl = planes[1]
-    return wx, wy, wpl, len(path) - 2
+    return wx, wy, wpl, remaining
 
 
 def _follow_route_solve(agent, ax, ay, px, py, pm, now, rec, agent_id):
@@ -18939,7 +19000,14 @@ def capture_flags():
         if isinstance(v, bool) or v is None or (
                 isinstance(v, str) and len(v) <= 32):
             out[name] = v
-    for modname in ("agtrack_guard",):
+    # MOVECODE-1z-co added `pathmap` for exactly the reason this loop exists: the fine
+    # route gate is a switch with a revert flag (--route-gate-coarse) that lives in the
+    # MESH module, so authsrv's own globals sweep cannot see it, and a capture that
+    # cannot name which gate produced it costs the next A/B its meaning. `pathmap` is
+    # stdlib-only, so importing it here is free on the bare-machine path too. It also
+    # picks up SEAM_AWARE_ROUTE, which has had a revert flag since 1z-bb and was
+    # likewise unrecorded until now.
+    for modname in ("agtrack_guard", "pathmap"):
         # IMPORTED, not looked up. `sys.modules.get` was the first draft and
         # RUN-1zAH caught it in the act: the guard is imported LAZILY at
         # character placement, which is AFTER this header row is written, so
@@ -25312,6 +25380,16 @@ def main():
                          "vertex and world-0 idles there until the next 0.5 s "
                          "heading tick (11.6 s idle over session 4's 39 door "
                          "leads; six gate-1 snaps). Known-bad arm.")
+    ap.add_argument("--no-npc-leg-disc-clip", action="store_true",
+                    help="MOVECODE-1z-co REVERT: a corridor whose first vertex is inside "
+                         "the player's disc is DISCARDED and the bare 0x002A goes out "
+                         "straight through the wall (1z-cn: 2 of 6 bad chords, one 21.5 u "
+                         "off our mesh). Known-bad arm.")
+    ap.add_argument("--route-gate-coarse", action="store_true",
+                    help="MOVECODE-1z-co REVERT: route()'s gate samples the unpulled "
+                         "candidate at 16 u again, so a 2-point 'clear' path can carry a "
+                         "chord that leaves the mesh (1z-cn: 3 of 6 bad chords). Known-bad "
+                         "arm.")
     ap.add_argument("--no-stale-pair-gate", action="store_true",
                     help="MOVECODE-1z-cm REVERT: the send lock is per message again, so "
                          "the world tick's 0x001E may land between a 0x002B and its "
@@ -27105,6 +27183,7 @@ def main():
     global A2_LEAD_WALL_SLIDE
     global A2_LEAD_DISC_CLEAR
     global A2_LEAD_W0_ORIGIN, A2_LEAD_PLANE_WORDS, KBD_LEAD_CHAIN, STALE_PAIR_GATE
+    global NPC_LEG_DISC_CLIP
     if a.legacy_kbd_sync:
         KBD_SYNC = False
         KBD_SYNC_HOLD = False
@@ -27149,6 +27228,18 @@ def main():
         A2_LEAD_PLANE_WORDS = not a.no_lead_plane_words
         KBD_LEAD_CHAIN = not a.no_kbd_lead_chain
         STALE_PAIR_GATE = not a.no_stale_pair_gate
+        NPC_LEG_DISC_CLIP = not a.no_npc_leg_disc_clip
+        if not NPC_LEG_DISC_CLIP:
+            print("[map] --no-npc-leg-disc-clip: an in-disc corridor is discarded and the "
+                  "bare follow goes straight through the wall (1z-co's revert).", flush=True)
+        try:
+            import pathmap as _pm_gate
+            _pm_gate.ROUTE_GATE_FINE = not a.route_gate_coarse
+            if a.route_gate_coarse:
+                print("[map] --route-gate-coarse: route()'s gate samples the unpulled "
+                      "candidate at 16 u again (1z-co's revert).", flush=True)
+        except Exception:                                     # noqa: BLE001
+            pass
         if not STALE_PAIR_GATE:
             print("[map] --no-stale-pair-gate: a 0x001E may split a 0x002B from its "
                   "destination (1z-cm's revert; the AgAgent.cpp:1198 assert class).",

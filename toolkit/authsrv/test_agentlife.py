@@ -73,7 +73,7 @@ from codec import Codec  # noqa: E402
 # known-bad control; and the chase section's wall pin split by arm, 1).
 # Floor from a real green run of 331. +1 at NPCTRACK-F8 (the hold rule
 # replaces the fresh-follow pin: three checks for two), green 333.
-LEDGER = checks.Ledger("agent lifetime", floor=348)
+LEDGER = checks.Ledger("agent lifetime", floor=379)   # 1z-co adds section_disc_clip (+12); from the green run
 
 
 def section_weapon_damage():
@@ -532,6 +532,7 @@ def main():
     section_plane_reach()
     section_client_model()
     section_corridor_wire()
+    section_disc_clip()
     section_enemy_count()
     section_hold_plane()
     section_facing()
@@ -4003,6 +4004,120 @@ def _corridor_run(state, pm, seconds=4.0, hz=20.0):
                                  _m.hypot(px - ax, py - ay), now, pm)
         trail.append(ag["pos"])
     return sends, trail
+
+
+
+def section_disc_clip():
+    """MOVECODE-1z-co: an in-disc corridor is CLIPPED, not discarded.
+
+    sec.1z-ci made _follow_leg refuse a corridor whose first vertex sits inside the
+    player's disc, because the client halts a copy whose target that disc covers
+    (F14). The rule is right; its fallback was not -- the caller then sent the
+    bare 0x002A, which the client dead-reckons STRAIGHT, and when the corner being
+    rounded is itself within the stop radius (a player standing just around the
+    flank corner) that straight line goes through the wall. 1z-cn measured 2 of
+    the corpus's 6 bad chords as this, one 21.5 u off our mesh.
+    """
+    import authsrv
+    import math as _m
+    print("\nMOVECODE-1z-co: the in-disc corridor is clipped to the disc, not thrown away")
+    R = authsrv.follow_stop_radius()
+    LEDGER.ok(authsrv.NPC_LEG_DISC_CLIP is True
+              and "--no-npc-leg-disc-clip" in open(
+                  authsrv.__file__, encoding="utf-8").read(),
+              "it ships ON with its revert flag",
+              "a default with no revert arm is an assertion, not a fix")
+
+    class _AllWalkable:
+        def walkable(self, x, y):
+            return True
+
+    pm = _AllWalkable()
+    P = (1000.0, 1000.0)                      # the player
+    # The hostile 300 u out; the corridor's first vertex 30 u from the player,
+    # deep inside the 80 u disc -- the geometry 1z-ci refuses.
+    A = (1300.0, 1000.0)
+    Vx, Vy = 1030.0, 1000.0
+    got = authsrv._disc_clip_leg(pm, A[0], A[1], Vx, Vy, P[0], P[1])
+    LEDGER.ok(got is not None, "a vertex inside the disc yields a clipped leg, not None",
+              f"got {got}")
+    if got:
+        d = _m.hypot(got[0] - P[0], got[1] - P[1])
+        LEDGER.ok(abs(d - (R + authsrv.NPC_LEG_DISC_MARGIN)) < 1e-6,
+                  f"and it lands exactly one margin OUTSIDE the disc ({R} + "
+                  f"{authsrv.NPC_LEG_DISC_MARGIN} u)",
+                  f"{d:.4f} u from the player")
+        cross = abs((got[0] - A[0]) * (Vy - A[1]) - (got[1] - A[1]) * (Vx - A[0]))
+        LEDGER.ok(cross < 1e-6 and _m.hypot(got[0] - A[0], got[1] - A[1]) > 0.0,
+                  "on the corridor's own segment, so the leg still rounds the corner",
+                  f"cross {cross:.6f}")
+        LEDGER.ok(d < _m.hypot(A[0] - P[0], A[1] - P[1]),
+                  "and it is progress: closer to the player than the copy was")
+    # THE None BRANCHES, each for its own reason.
+    LEDGER.ok(authsrv._disc_clip_leg(pm, 1040.0, 1000.0, Vx, Vy, P[0], P[1]) is None,
+              "an origin ALREADY inside the disc sends nothing -- the hostile is at "
+              "its stop radius and the agent-addressed follow is the right message")
+    near = authsrv._disc_clip_leg(pm, R + authsrv.NPC_LEG_DISC_MARGIN + 1000.0 + 2.0,
+                                  1000.0, Vx, Vy, P[0], P[1])
+    LEDGER.ok(near is None,
+              "a clipped leg shorter than an arrival (NPC_LEG_DONE) is not a leg",
+              f"got {near}")
+
+    class _NoneWalkable:
+        def walkable(self, x, y):
+            return False
+
+    LEDGER.ok(authsrv._disc_clip_leg(_NoneWalkable(), A[0], A[1], Vx, Vy,
+                                     P[0], P[1]) is None,
+              "and a clipped point our own mesh refuses is never granted")
+    # AND THROUGH _follow_leg ITSELF, on a stub route: the clipped leg is sent, and
+    # the corridor still OWES the vertex it stopped short of -- one more remaining
+    # than the unclipped case. Only the record reads that count, and a later session
+    # reads the record to reconstruct the walk.
+    class _StubPM:
+        """A 3-point corridor whose first vertex sits inside the player's disc."""
+        def walkable(self, x, y):
+            return True
+
+        def nearest_walkable(self, x, y, r):
+            return (x, y, 0.0)
+
+        def route(self, x0, y0, x1, y1, start_plane=None, goal_plane=None,
+                  with_planes=False):
+            path = [(x0, y0), (Vx, Vy), (x1, y1)]
+            return (path, [0, 0, 0]) if with_planes else path
+
+    stub = _StubPM()
+    leg_clipped = authsrv._follow_leg(stub, A[0], A[1], P[0], P[1], 0, 0)
+    LEDGER.ok(leg_clipped is not None
+              and abs(_m.hypot(leg_clipped[0] - P[0], leg_clipped[1] - P[1])
+                      - (R + authsrv.NPC_LEG_DISC_MARGIN)) < 1e-6,
+              "_follow_leg returns the CLIPPED leg where it used to return None",
+              f"got {leg_clipped}")
+    LEDGER.ok(leg_clipped is not None and leg_clipped[3] == 2,
+              "and reports 2 vertices still owed -- the vertex it stopped short of, "
+              "plus the player -- against 1 for an unclipped leg",
+              f"more={None if not leg_clipped else leg_clipped[3]}")
+    saved_clip = authsrv.NPC_LEG_DISC_CLIP
+    try:
+        authsrv.NPC_LEG_DISC_CLIP = False
+        LEDGER.ok(authsrv._follow_leg(stub, A[0], A[1], P[0], P[1], 0, 0) is None,
+                  "REVERT ARM (--no-npc-leg-disc-clip): the corridor is discarded again "
+                  "and the caller sends the bare follow through the wall")
+    finally:
+        authsrv.NPC_LEG_DISC_CLIP = saved_clip
+
+    # THE KNOWN-BAD ARM: with the flag off, _follow_leg must go back to
+    # discarding the corridor, which is what sent the straight follow.
+    saved = authsrv.NPC_LEG_DISC_CLIP
+    try:
+        authsrv.NPC_LEG_DISC_CLIP = False
+        off = authsrv._disc_clip_leg(pm, A[0], A[1], Vx, Vy, P[0], P[1])
+        LEDGER.ok(off is not None,
+                  "the helper itself is flag-free; the flag is read at the call site",
+                  "keeping the geometry testable independently of the switch")
+    finally:
+        authsrv.NPC_LEG_DISC_CLIP = saved
 
 
 def section_corridor_wire():
