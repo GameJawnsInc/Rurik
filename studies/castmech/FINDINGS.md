@@ -802,7 +802,7 @@ projectile from a knocked-down creature stalls until the KD ends.
 | CASTMECH-P1 | the interrupt wire shape: does E2 come with a recharge-start (E5? E7/E8?) when a cast is genuinely interrupted, vs alone for a cancel? | live capture, shopping-list item 5 of combat/PLAN §3 (engineered interrupts, n≥2 causes) — or loopback: send E2 mid-sweep and watch whether the client's bar treats the skill as recharging |
 | CASTMECH-P2 | does the client *predict* a movement-cancel (stop the cast bar on a move press) or wait for the server's E2? | loopback: begin a cast, script a move press, send no E2 — does the bar keep filling? Settles who owns cancel detection |
 | CASTMECH-P3 | the swing gate model (M4's three-way): does a re-press after a quarterstep land the next hit on the original schedule? | capture: operator quarterstepping the Isle dummies at fixed cadence vs mashing — hit-to-hit deltas discriminate gate-from-start (1.33 I) from no-gate (0.92 I) |
-| CASTMECH-P4 | `+0x40` sweep vs the Aftercast page's exception lists (Dolyak 0? Ranger interrupts 0.75? Factions preparations 0.75?) | offline, next `skilltable.py` regeneration; pure client-table read with WIKI as the cross-witness |
+| ~~CASTMECH-P4~~ | ~~`+0x40` sweep vs the Aftercast page's exception lists~~ **RAN 2026-09-09, §9**: Dolyak 0 ✓, non-Prophecies preparations 0.75 ✓, shadow steps and flash enchantments 0 ✓, Norn forms 0 ✓; the ranged-attack rows hold 0.6/1.0/1.5 and are NOT the wiki's aftercast → CASTMECH-P7 | `toolkit/clientscan/aftercastsweep.py` |
 | CASTMECH-P5 | movement lockout during aftercast on OUR wire: retail refuses movement for 0.75 s post-cast; our server applies move messages whenever they arrive | decide and label: either police `cast_busy_until` in the move handler or record the divergence beside §17e's |
 | CASTMECH-P6 | the player's windup at scale (n=2 clean auto-attack samples) | the §19 NEEDS-CAPTURE stands: 20+ swings, in range, no skills |
 
@@ -851,3 +851,78 @@ safe), decodes every game connection whole, refuses partial frames, prints
 before the numbers. Wiki pages were read through the browser per
 `browse-gw-wiki` (the in-app browser passes GWW's WAF; scripted HTTP does
 not), with revision timestamps pulled once via the on-page MediaWiki API.
+
+## 9. CASTMECH-P4 ran: the `+0x40` sweep against the wiki's Aftercast page — 2026-09-09
+
+**CLOSED as a desk item, with one class re-labelled rather than confirmed.**
+`toolkit/clientscan/aftercastsweep.py` (new, stdlib, reads the pinned 38797
+client through `pinned.find()`) tabulates `+0x40` over all 3,443 rows and the
+1,333-row player corpus, by `type_code` and profession, and lists every row
+off its type's modal value. The prediction was registered in its docstring
+first: spells, signets, glyphs, chants and the like at 0.75; attacks, stances,
+shouts, preparations at 0. The cross-witness is **WIKI (GWW, "Aftercast
+delay", rev. 2026-09-04)**, read through the browser, with each exception id
+resolved to its page by an `insource:"id = N"` search and its campaign read
+off the infobox.
+
+**MEASURED, the corpus histogram:** 0.75 s × 931, 0 × 386, 1.0 × 6, 1.5 × 6,
+0.6 × 3, 0.25 × 1 — six distinct values, the two big ones 98.8 % of the corpus.
+95 rows sit off their type's modal value.
+
+**Where the field and the wiki agree, class by class (CORROBORATED):**
+
+| class | wiki rule | field |
+|---|---|---|
+| Ranger preparations (type 19), 14 rows | "Ranger preparations from Prophecies or Core" have no delay; the rest do | the 7 at 0.75 are exactly the non-Prophecies set — 893, 946, 1199 (Factions), 1470, 1723 (Nightfall), 2068, 2145 (EotN); the 7 at 0 are Prophecies/Core |
+| Assassin spells at 0 — 769, 770, 1032, 1040, 1651, 1653, 2420 | "Shadow steps that do not exclusively target a foe" have none | all seven are shadow steps (Viper's Defense, Return, Heart of Shadow, Spirit Walk, Death's Retreat, Swap, Ebon Escape); Shadow Meld 1654 (an enchantment shadow step) is at 0 too |
+| Dervish enchantments at 0 — 27 of 46 | "All skills without an activation time, including flash enchantment spells" | every one checked (1493, 1497, 1500, 1754) is a **Flash Enchantment Spell** with no activation |
+| Signet 361 at 0 | "All signets except Dolyak Signet" | 361 **is** Dolyak Signet |
+| Forms 2374, 2379, 2384 at 0 | "All forms, except for the elite Norn ones (Raven, Ursan, Volfen)" | those three ids are exactly Ursan, Volfen and Raven Blessing |
+| Touch skills 2011, 2215, 1146 at 0 | named exceptions Grapple, Brawling Headbutt, Shove | those three ids, exactly |
+| Enchantment 2423 at 0 | named exception Dwarven Stability | 2423 is Dwarven Stability |
+| Skill 2416 at 0.75 with no activation | one of "five skills without activation times" that do have a delay | 2416 is Air of Superiority |
+
+**Where they disagree (CONTESTED, field vs wiki; the wire has seen none of these):**
+
+- **Bow and spear attacks with an activation time** — 17 rows at 0.6, 1.0 or
+  1.5 (Hunter's Shot, Quick Shot, Distracting Shot, Savage Shot, Concussion
+  Shot, Penetrating Attack, Melandru's Shot, Needling Shot, Magebane Shot,
+  Disrupting Shot, the spear throws...). The wiki: "attack skills with
+  specified activation time (noticeably interrupts and some dagger skills)"
+  have **no** aftercast. The values are not a function of the activation
+  either (Quick Shot ½ s → 1.0; Savage Shot ½ s → 1.5; Penetrating ¾ s →
+  0.6). **For this class the field is not the wiki's aftercast**, and what it
+  is — a projectile or animation term is the obvious candidate — is NOT
+  FOUND. Power Shot (394), the one bow attack the wire has measured E5→E3
+  on, carries 0 and is not in this set.
+- Four stances at 0.75 (1037 Dark Escape, 1474 Storm's Embrace, 1724
+  Expert's Dexterity, 2218 Drunken Master) and six shouts at 0.75 (412, 415,
+  447, 1556, 1558, 2112) against the wiki's "shouts, stances ... no delay".
+- Three of the wiki's "five skills without activation times" carry 0, not
+  0.75: 2142 Feral Aggression, 2207 Inspirational Speech, 2208 Burning Shield.
+- Signets 2 (Resurrection Signet, 0), 3 (Signet of Capture, 0.25) and 1364
+  (Signet of Suffering, 0) are not on the wiki's exception list.
+- 815 Scorpion Wire (wiki: no delay) reads 0.75; 87 Verata's Gaze (wiki: no
+  delay) reads 0.75; 3430 Vow of Revolution reads 0.
+
+**The wire census, which is the referee and does not reach the contested
+rows.** Every `0x00E5 → 0x00E3` pair for the same (agent, skill) across the
+live corpus: eleven skills, and the gap matches `+0x40` on ten of them — 348,
+364, 394, 780, 783 at 0.000 (n = 1, 29, 2, 2, 1) and 1, 105, 153, 814, 858 at
+0.732–0.765 against 0.75 (n = 6, 3, 2, 2, 5). The eleventh is Resurrection
+Signet (2): one pair at 24.9 s, which is not an aftercast and is set aside.
+None of the contested ids has ever been cast on a captured connection, so
+**§3's "E3 = E5 + aftercast" is OBSERVED for the 0/0.75 classes and
+UNVERIFIED for the ranged-attack class**, where one Savage Shot on a live bar
+would settle it in a single cycle.
+
+**What this changes for the server: nothing today.** `skill_timing()` feeds
+`+0x40` to the E3 schedule for every skill; for the ten wire-witnessed skills
+that is retail's own gap. A Savage Shot on a future bar would get E3 at
++1.5 s where the wiki says 0 — flagged here so the divergence is named before
+it is noticed on screen. CASTMECH-P4 is closed; the ranged-attack term is
+registered as **CASTMECH-P7**: what does `+0x40` hold for attack skills with
+an activation time, and is E3 scheduled from it?
+
+Reproduce: `python toolkit/clientscan/aftercastsweep.py`; the wire census is
+the E5→E3 census in `studies/skills/FINDINGS.md` §41's reproduction block.

@@ -26,8 +26,8 @@ import authsrv      # noqa: E402
 import agents       # noqa: E402
 import effects      # noqa: E402
 
-# Floor set from a real green run (39 checks, 2026-08-22).
-LEDGER = checks.Ledger("effect mechanics", floor=39)
+# Floor set from a real green run (39 checks, 2026-08-22; 99 checks, 2026-09-09 SKILLS-DW).
+LEDGER = checks.Ledger("effect mechanics", floor=99)
 check = checks.adopt(LEDGER)
 
 FRENZY, RUSH, ROF, GLYPH, IGNITE, FAINT = 346, 319, 307, 200, 431, 135
@@ -252,5 +252,311 @@ try:
 finally:
     authsrv.ARMOUR_TERM = saved_armour
     authsrv.ENERGY = saved_energy
+
+# ---------------------------------------------------------------------------
+# SKILLS-DW (2026-09-09): the agent status word, and Deep Wound's maximum.
+# studies/skills/FINDINGS.md 41; deepwoundjoin.py is the corpus read.
+DEEP_WOUND = effects.CONDITION_BY_NAME["Deep Wound"]
+BLEEDING = effects.CONDITION_BY_NAME["Bleeding"]
+OP_STATUS = authsrv.GAME_SMSG_AGENT_UPDATE_STATUS
+OP_INT = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
+OP_APPLY, OP_REMOVE = authsrv.GAME_SMSG_EFFECT_APPLY, authsrv.GAME_SMSG_EFFECT_REMOVE
+ENEMY = 10
+
+
+def dw_state(health=100.0, enemy=False):
+    state = fresh_state(health=health)
+    authsrv.player_pools(state)
+    state["player_health"] = float(health)
+    if enemy:
+        state["agents"][ENEMY] = {"name": "hatcher", "dead": False,
+                                  "pos": (0.0, 0.0), "health": 100.0,
+                                  "max_health": 100.0, "skills": (),
+                                  "skill_ready": []}
+    return state
+
+
+def shape(sent):
+    """[(opcode, first two values)] -- the batch as a reader would see it."""
+    return [(op, tuple(v[:3])) for op, v, _l in sent]
+
+
+def apply_dw(send, state, target=PLAYER, seconds=10.0):
+    return authsrv.apply_condition(send, state, target, DEEP_WOUND, seconds,
+                                   12, 0, by_skill=337)
+
+
+print("== 10. status_word: retail's bits, from the live episodes alone ==")
+sw = effects.status_word
+check(sw([]) == 0, "no episodes, no bits")
+check(sw([{"skill": DEEP_WOUND, "type_code": 8}]) == 0x22,
+      "Deep Wound = 0x02 condition | 0x20 deep wound (retail's 0x22, 2 of 2)")
+check(sw([{"skill": 483, "type_code": 8}]) == 0x42
+      and sw([{"skill": 484, "type_code": 8}]) == 0x42,
+      "Disease and Poison share 0x40 (retail 0x42, 1 each)")
+check(sw([{"skill": 481, "type_code": 8}]) == 0x0A,
+      "Crippled = 0x0A (retail, 2 of 2)")
+check(sw([{"skill": BLEEDING, "type_code": 8}]) == 0x03,
+      "Bleeding = 0x03 (retail, n=1)")
+check(sw([{"skill": 480, "type_code": 8}]) == 0x02
+      and sw([{"skill": 2077, "type_code": 8}]) == 0x02,
+      "Burning and Cracked Armor carry only the condition bit")
+check(sw([{"skill": 135, "type_code": 4}]) == 0x800, "a hex sets 0x800")
+check(sw([{"skill": 307, "type_code": 6}]) == 0x80, "an enchantment sets 0x80")
+check(sw([{"skill": 348, "type_code": 15}]) == 0
+      and sw([{"skill": 346, "type_code": 3}]) == 0,
+      "a shout and a stance move nothing (42 of 42 shout applies carried no word)")
+check(sw([{"skill": DEEP_WOUND, "type_code": 8},
+          {"skill": BLEEDING, "type_code": 8},
+          {"skill": 135, "type_code": 4}], dead=True) == 0x833,
+      "the word is the OR of everything live plus death (0x10)")
+
+print("== 11. the apply batch on a FULL pool: retail's three messages, in order ==")
+sent, send = collector()
+state = dw_state()
+ep = apply_dw(send, state)
+check(ep is not None and ep["skill"] == DEEP_WOUND, "the episode opened")
+check(shape(sent)[:3] == [(OP_APPLY, (PLAYER, DEEP_WOUND, 12)),
+                          (OP_STATUS, (PLAYER, 0x22)),
+                          (OP_INT, (agents.PROP_HEALTH_MAX, PLAYER, 80))],
+      "[0x0042 482, 0x00F1 0x22, 0x009F 42=80] -- retail's batch, retail's order",
+      f"got {shape(sent)[:3]}")
+check(len(sent) == 3, "and nothing else (no regen: Deep Wound has no pips)",
+      f"sent {len(sent)}")
+check(authsrv.player_max_health(state) == 80.0, "the server's maximum is 80")
+check(state["player_health"] == 80.0,
+      "a full pool stays full: 100 + (80-100) = 80 of 80 (wiki: still at full health)")
+check(state["deep_wound"] == {PLAYER: 20}, "the book holds the 20")
+check(authsrv.player_full_max_health(state) == 100.0,
+      "the unconditioned maximum the enemy's hit scales from is still 100")
+
+print("== 12. a DAMAGED pool: the client's signed delta, in the server's own book ==")
+sent, send = collector()
+state = dw_state(health=25.0)
+apply_dw(send, state)
+check(state["player_health"] == 5.0,
+      "25 + (80-100) = 5 -- the number the HUD must read (health_shrink's delta)",
+      f"health={state['player_health']}")
+sent, send = collector()
+state = dw_state(health=10.0)
+apply_dw(send, state)
+check(state["player_health"] == -10.0 and not state.get("player_dead"),
+      "below zero and NOT dead: Deep Wound never kills by itself (wiki)",
+      f"health={state['player_health']} dead={state.get('player_dead')}")
+saved_armour, saved_energy = authsrv.ARMOUR_TERM, authsrv.ENERGY
+try:
+    authsrv.ARMOUR_TERM = False
+    authsrv.ENERGY = False
+    enemy = {"name": "hatcher", "dead": False, "pos": (0.0, 0.0)}
+    base = 100.0 * authsrv.ENEMY_HIT_FRACTION
+    sent, send = collector()
+    authsrv.land_swing(send, state, ENEMY, enemy, 0)
+    check(state.get("player_dead") is True,
+          "the next health loss triggers it: one swing kills the -10 player")
+    # and the blow itself is unchanged by the smaller pool
+    sent, send = collector()
+    state2 = dw_state(health=100.0)
+    apply_dw(send, state2)
+    sent, send = collector()
+    authsrv.land_swing(send, state2, ENEMY, enemy, 0)
+    check(abs((80.0 - state2["player_health"]) - base) < 1e-9,
+          "the enemy's swing deals the SAME base hit under Deep Wound "
+          "(scaled from the full maximum, not the reduced one)",
+          f"drop={80.0 - state2['player_health']} base={base}")
+    frac_msgs = [v for op, v, _l in sent
+                 if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET
+                 and v[0] == agents.PROP_DAMAGE]
+    check(bool(frac_msgs) and abs(float(frac_msgs[0][3])
+                                 - float(authsrv._f32(-base / 80.0))) < 1e-6,
+          "the wire fraction divides by the REDUCED maximum, the number the "
+          "client holds after our own 0x009F 42",
+          f"got {frac_msgs[0][3] if frac_msgs else None} want {authsrv._f32(-base / 80.0)}")
+finally:
+    authsrv.ARMOUR_TERM, authsrv.ENERGY = saved_armour, saved_energy
+
+print("== 13. healing under Deep Wound: -20%, health gain exempt, a heal can kill ==")
+sent, send = collector()
+state = dw_state(health=40.0)
+apply_dw(send, state)                       # 40 -> 20 of 80
+sent, send = collector()
+landed = authsrv.heal_agent(send, state, PLAYER, PLAYER, 50.0, 0)
+check(landed == 40.0 and state["player_health"] == 60.0,
+      "a 50 heal lands 40 (wiki: 20% less benefit from healing)",
+      f"landed={landed} health={state['player_health']}")
+sent, send = collector()
+state = dw_state(health=40.0)
+apply_dw(send, state)
+landed = authsrv.heal_agent(send, state, PLAYER, PLAYER, 50.0, 0, healing=False)
+check(landed == 50.0, "a health GAIN (healing=False, Reversal of Fortune) is not cut",
+      f"landed={landed}")
+sent, send = collector()
+state = dw_state(health=40.0)
+landed = authsrv.heal_agent(send, state, PLAYER, PLAYER, 50.0, 0)
+check(landed == 50.0, "control: no Deep Wound, the full 50 lands")
+sent, send = collector()
+state = dw_state(health=10.0)
+apply_dw(send, state)                       # -10 of 80
+sent, send = collector()
+authsrv.heal_agent(send, state, PLAYER, PLAYER, 5.0, 0)
+check(state.get("player_dead") is True,
+      "a 5 heal (4 after the cut) leaves -6: the gain did not clear zero, "
+      "and the player dies (wiki)", f"health={state['player_health']}")
+sent, send = collector()
+state = dw_state(health=10.0)
+apply_dw(send, state)
+sent, send = collector()
+authsrv.heal_agent(send, state, PLAYER, PLAYER, 20.0, 0)
+check(state.get("player_dead") is not True and state["player_health"] == 6.0,
+      "a 20 heal (16 after the cut) clears zero: alive at 6",
+      f"health={state['player_health']} dead={state.get('player_dead')}")
+
+print("== 14. the close: expiry restores, in retail's order; death strips silently ==")
+sent, send = collector()
+state = dw_state(health=25.0)
+ep = apply_dw(send, state)                  # 5 of 80
+ep["expires_at"] = 0.0
+sent, send = collector()
+authsrv.effect_tick(send, state, 0)
+check(shape(sent)[:3] == [(OP_REMOVE, (PLAYER, ep["buff"])),
+                          (OP_STATUS, (PLAYER, 0)),
+                          (OP_INT, (agents.PROP_HEALTH_MAX, PLAYER, 100))],
+      "[0x0044, 0x00F1 0, 0x009F 42=100] -- retail's close, retail's order",
+      f"got {shape(sent)[:3]}")
+check(state["player_health"] == 25.0 and authsrv.player_max_health(state) == 100.0
+      and not state["deep_wound"],
+      "the 20 comes back with the maximum: 25 of 100, book empty")
+# strip at death
+sent, send = collector()
+state = dw_state(health=100.0)
+apply_dw(send, state)
+sent, send = collector()
+authsrv.kill_player(send, state, 0, "test")
+ops = [op for op, _v, _l in sent]
+check(OP_REMOVE in ops, "death strips the episode (0x0044 goes out)")
+check(not any(op == OP_INT and v[0] == agents.PROP_HEALTH_MAX
+              for op, v, _l in sent),
+      "and sends NO 0x009F 42 onto the corpse -- the revive carries the maximum")
+check(not state["deep_wound"] and authsrv.player_max_health(state) == 100.0,
+      "the book is restored so the revive's own maximum reads 100")
+check(state["status_word"][PLAYER] == effects.STATUS_DEAD,
+      "the status book records the death word the kill path sent itself")
+status_msgs = [v for op, v, _l in sent if op == OP_STATUS]
+check(status_msgs == [[PLAYER, agents.EFFECT_DEAD]],
+      "exactly ONE status message in the death batch, the measured 0x10",
+      f"got {status_msgs}")
+
+print("== 15. a second condition: the word is the whole word ==")
+sent, send = collector()
+state = dw_state()
+apply_dw(send, state)
+sent, send = collector()
+ep_b = authsrv.apply_condition(send, state, PLAYER, BLEEDING, 10.0, 12, 0,
+                               by_skill=382)
+words = [v[1] for op, v, _l in sent if op == OP_STATUS]
+check(words == [0x23], "Bleeding on top of Deep Wound sends 0x23, the OR",
+      f"got {[hex(w) for w in words]}")
+# close the Deep Wound alone: 0x03 remains, not 0
+for e in state["effects"].on_agent(PLAYER):
+    if e["skill"] == DEEP_WOUND:
+        e["expires_at"] = 0.0
+sent, send = collector()
+authsrv.effect_tick(send, state, 0)
+words = [v[1] for op, v, _l in sent if op == OP_STATUS]
+check(words == [0x03], "closing Deep Wound with Bleeding live leaves 0x03",
+      f"got {[hex(w) for w in words]}")
+# re-sending the same word is refused: a third condition that adds no bit
+sent, send = collector()
+authsrv.apply_condition(send, state, PLAYER, 480, 3.0, 12, 0, by_skill=0)
+check(not [1 for op, _v, _l in sent if op == OP_STATUS],
+      "Burning on top of Bleeding adds no bit and sends no word "
+      "(retail: 2 of 7 Burning applies carried none -- the ones with a "
+      "condition already live)")
+
+print("== 16. the enemy takes it too, and its heal can kill it ==")
+sent, send = collector()
+state = dw_state(enemy=True)
+apply_dw(send, state, target=ENEMY)
+agent = state["agents"][ENEMY]
+check(shape(sent)[:3] == [(OP_APPLY, (ENEMY, DEEP_WOUND, 12)),
+                          (OP_STATUS, (ENEMY, 0x22)),
+                          (OP_INT, (agents.PROP_HEALTH_MAX, ENEMY, 80))],
+      "the same batch for an agent", f"got {shape(sent)[:3]}")
+check(agent["max_health"] == 80.0 and agent["health"] == 80.0,
+      "agent book: 80 of 80")
+agent["health"] = -10.0
+sent, send = collector()
+authsrv.heal_agent(send, state, ENEMY, ENEMY, 5.0, 0)
+check(agent["dead"] is True
+      and [v for op, v, _l in sent if op == OP_STATUS] == [[ENEMY, agents.EFFECT_DEAD]],
+      "a heal that does not clear zero kills the agent through kill_agent's "
+      "measured template (status 0x10)")
+check(not state["deep_wound"].get(ENEMY) and agent["max_health"] == 100.0,
+      "death stripped it and restored the agent's book")
+
+print("== 17. the known-bad arms ==")
+saved_dw, saved_sw = authsrv.DEEP_WOUND, authsrv.STATUS_WORD
+try:
+    authsrv.DEEP_WOUND = False
+    sent, send = collector()
+    state = dw_state(health=25.0)
+    apply_dw(send, state)
+    check(shape(sent) == [(OP_APPLY, (PLAYER, DEEP_WOUND, 12)),
+                          (OP_STATUS, (PLAYER, 0x22))],
+          "--no-deep-wound: the apply and the word, no maximum", f"got {shape(sent)}")
+    check(state["player_health"] == 25.0 and authsrv.player_max_health(state) == 100.0,
+          "and the books do not move")
+    sent, send = collector()
+    check(authsrv.heal_agent(send, state, PLAYER, PLAYER, 50.0, 0) == 50.0,
+          "and heals are not cut")
+    authsrv.DEEP_WOUND = True
+    authsrv.STATUS_WORD = False
+    sent, send = collector()
+    state = dw_state()
+    apply_dw(send, state)
+    check(shape(sent) == [(OP_APPLY, (PLAYER, DEEP_WOUND, 12)),
+                          (OP_INT, (agents.PROP_HEALTH_MAX, PLAYER, 80))],
+          "--no-status-word: the apply and the maximum, no word -- the "
+          "pre-2026-09-09 wire plus the new mechanic", f"got {shape(sent)}")
+finally:
+    authsrv.DEEP_WOUND, authsrv.STATUS_WORD = saved_dw, saved_sw
+
+print("== 18. the reduction rule: 20%, capped at 100 ==")
+check(authsrv.deep_wound_reduction(480) == 96, "480 -> 96 (retail's 384, 2 of 2)")
+check(authsrv.deep_wound_reduction(100) == 20, "100 -> 20")
+check(authsrv.deep_wound_reduction(600) == 100, "600 -> 100: the wiki's cap binds")
+check(authsrv.deep_wound_reduction(505) == 100, "505 -> 100, not 101")
+
+print("== 19. the corpus, with no free parameter (deepwoundjoin) ==")
+try:
+    import deepwoundjoin
+    rows = deepwoundjoin.census()
+    n, joined, exact, cj, ce, stray, orders = deepwoundjoin.score(rows)
+    check(n >= 2, f"the live corpus holds Deep Wound applies (n={n})")
+    check(joined == n and exact == n,
+          "every 482 apply is joined to a same-batch prop-42 of exactly 0.8x",
+          f"n={n} joined={joined} exact={exact}")
+    check(cj == ce and ce >= 2,
+          "every close restores the previous maximum", f"joined={cj} exact={ce}")
+    check(stray == 0, "no other prop-42 moves inside a Deep Wound episode")
+    check(orders == [2],
+          "the prop-42 sits exactly two messages behind the effect message "
+          "(the status word between them), on every apply and close",
+          f"offsets={orders}")
+    sc = deepwoundjoin.status_census()
+    def newly(skill):
+        return set(sc["set"].get(skill, {}))
+    check(newly(482) <= {0x22, 0x20} and sc["n"].get(482, 0) >= 2,
+          "482's apply sets 0x20 (with 0x02 when no condition was live)",
+          f"{ {hex(b) for b in newly(482)} }")
+    check(newly(481) == {0x0A}, "481 sets 0x0A")
+    check(newly(483) == {0x42} and newly(484) == {0x42}, "483 and 484 set 0x42")
+    check(newly(160) == {0x80} and sc["set"][160][0x80] >= 50,
+          "the enchantment 160 sets 0x80, fifty-plus times")
+    check(newly(179) == {0x800}, "the hex 179 sets 0x800")
+    check(sc["no_status"].get(364, 0) >= 40 and not newly(364) - {0},
+          "the shout 364 moves no bit (40+ applies with no word)")
+except Exception as exc:                                     # noqa: BLE001
+    LEDGER.skip("section 19 (corpus)", f"{type(exc).__name__}: {exc}")
+
 
 sys.exit(LEDGER.verdict())

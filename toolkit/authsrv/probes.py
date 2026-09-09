@@ -3540,6 +3540,66 @@ def _unlock_211_steps(agent_id):
     ]
 
 
+def _deep_wound_steps(agent_id):
+    """SKILLS-DW: retail's Deep Wound batch, arm by arm, read off the HUD number.
+
+    Retail's apply is three messages in one batch -- [0x0042 482, 0x00F1
+    word|0x22, 0x009F 42 = max*0.8] -- and its close the mirror (isle 8.2,
+    deepwoundjoin.py, 2 of 2 each). The server now sends exactly that. What a
+    capture cannot say is what each message DOES on screen, so this sends them
+    one arm at a time: the episode alone, then the full batch on a full pool,
+    then the full batch on a damaged pool (where the client's signed delta,
+    `health_shrink`, predicts a number no other reading predicts).
+    """
+    a = agent_id
+    return [
+        Step(4.0, 0x0042, [a, 482, 0, 1, _f32(12.0)],
+             "ARM A: 66 skill 482 for 12 s, ALONE -- no status word, no maximum",
+             "the condition icon and its brown arrow appear; the HUD number "
+             "stays 100/100. THE QUESTION: does the right 20% of the health "
+             "bar turn grey? Prediction: NO -- the grey rides status bit 0x20 "
+             "(step 4), not the episode. Grey here refutes that and says the "
+             "client types Deep Wound from the skill id alone."),
+        Step(8.0, 0x0044, [a, 1], "68: remove it", "icon goes, nothing else moves."),
+        Step(4.0, 0x0042, [a, 482, 0, 2, _f32(12.0)],
+             "ARM B: the retail batch on a FULL pool -- 1 of 3, the apply",
+             "icon back."),
+        Step(0.0, 0x00F1, [a, 0x22],
+             "ARM B 2 of 3: status word 0x22 (0x02 condition | 0x20 deep wound)",
+             "prediction: the right 20% of the bar greys NOW, before the "
+             "maximum moves."),
+        Step(0.0, 0x009F, [42, a, 80],
+             "ARM B 3 of 3: int property 42 = 80",
+             "HUD 80/80 with the bar FULL -- the delta (100 + (80-100) = 80) "
+             "lands on the new maximum exactly, so a full pool stays full, "
+             "which is the wiki's 'still considered at full health'."),
+        Step(8.0, 0x0044, [a, 2], "68: remove -- the close, 1 of 3", "icon goes."),
+        Step(0.0, 0x00F1, [a, 0], "close 2 of 3: status word 0",
+             "the grey 20% clears."),
+        Step(0.0, 0x009F, [42, a, 100], "close 3 of 3: int property 42 = 100",
+             "HUD 100/100: the 20 came back with the maximum."),
+        Step(4.0, 0x00A3, [16, a, a, _f32(-0.75)],
+             "damage -0.75 -- the pool to a quarter",
+             "HUD 25/100. The run's own control, measured twice before."),
+        Step(4.0, 0x0042, [a, 482, 0, 3, _f32(12.0)],
+             "ARM C: the retail batch on a DAMAGED pool -- the apply", "icon."),
+        Step(0.0, 0x00F1, [a, 0x22], "ARM C: status 0x22", "grey 20%."),
+        Step(0.0, 0x009F, [42, a, 80],
+             "ARM C: int property 42 = 80 onto 25 of 100",
+             "THE HUD NUMBER. Signed delta (health_shrink, MEASURED): 25 + "
+             "(80-100) = 5 of 80. A FRACTION reading gives 20; 'ignored' gives "
+             "25. Three mechanisms, three numbers -- and 5 is what the server's "
+             "own book now says, so the orb must read what the log reads."),
+        Step(8.0, 0x0044, [a, 3], "ARM C close 1 of 3", "icon goes."),
+        Step(0.0, 0x00F1, [a, 0], "ARM C close 2 of 3: status 0", "grey clears."),
+        Step(0.0, 0x009F, [42, a, 100], "ARM C close 3 of 3: maximum 100",
+             "HUD 25/100 -- the delta gives the 20 back and the pool is where "
+             "the damage left it. 45 would mean the restore was a refill to "
+             "the fraction; 5 would mean the maximum moved without the "
+             "health."),
+    ]
+
+
 def _condition_render_steps(agent_id):
     """Isle rung 4: does 0x0042 carrying a CONDITION skill id render a condition?
 
@@ -6207,6 +6267,28 @@ PROBES = {
              "click is involved. Run with --shots so the boundary at +10 s is "
              "caught in frames rather than from memory; the two sends=False "
              "steps are observation points and deliberately transmit nothing.",
+    ),
+    "deep_wound": lambda a, o: Probe(
+        question="What does each message of retail's Deep Wound batch do on "
+                 "screen -- the episode, the status word 0x22, and the "
+                 "maximum -- and does the client's signed delta hold when the "
+                 "maximum falls onto a damaged pool?",
+        predicts="ARM A (episode alone): icon, no grey, 100/100. ARM B (full "
+                 "batch, full pool): grey 20% at the status word, HUD 80/80 at "
+                 "the maximum, 100/100 again at the close. ARM C (full batch on "
+                 "25/100): HUD 5/80, then 25/100 at the close. Any grey in ARM "
+                 "A refutes the status-bit reading; 20 or 25 in ARM C refutes "
+                 "the signed delta for this message pair.",
+        steps=_deep_wound_steps(a),
+        note="SKILLS-DW (studies/skills/FINDINGS.md 41). Run --explorable, "
+             "like health_max and health_shrink: damage on an outpost map is "
+             "swallowed. The readout is the HUD orb's printed NUMBER, bottom "
+             "centre -- bar fills are only good to a few points, the number "
+             "is exact (RESKIN 18.13) -- plus whether the right 20% of the "
+             "health bar is greyed. Every message here is one the server now "
+             "sends on its own when --enemy-skills 337 lands an axe; this "
+             "probe separates the three so the run that follows has one "
+             "question per message.",
     ),
     "condition_render": lambda a, o: Probe(
         question="Does 0x0042 carrying a CONDITION skill id (type_code 8) "

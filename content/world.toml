@@ -214,6 +214,20 @@ verified = """args = 4 (bonus only), bonus 5->25, scale 0->0. Wiki gives one
 variable, `Bleeding` 5->25. The bitfield picked the slot before the wiki was
 read. Costs 4 adrenaline, which this server does not model."""
 
+[skill_effect.337]
+bonus_scale_means = "Deep Wound"
+[skill_effect.337.provenance]
+source = "wiki"
+page = 'GWW, "Dismember", {{Skill progression}}, rev. 2023-10-09'
+verified = """SKILLS-DW (2026-09-09). Client row 337: type_code 14 (Axe Attack),
+args = 4 (bonus only), bonus 5->20, scale 0->0, adrenaline 5 (120 units --
+the wiki's own Notes say "exactly 120 units ... 4 strikes and 20 units").
+Wiki gives one variable, `Deep Wound duration` 5->20 at Axe Mastery 0..15,
+so the label names the condition and the client's bonus slot carries the
+seconds, the same join Sever Artery's row makes. The enemy's axe is what
+makes this the run skill: `--enemy-skills 337` puts a Deep Wound on the
+player from the standing Hatcher's own bar once it has swung five times."""
+
 [skill_effect.346]
 scale_means = "Attack speed increase"
 damage_taken_multiplier = 2.0

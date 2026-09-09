@@ -3423,6 +3423,38 @@ GAME_SMSG_EFFECT_REMOVE = effects.OP_EFFECT_REMOVE    # 68
 # that only appears behind a flag is an effect nobody watches.
 EFFECTS = True
 
+# ---- THE AGENT STATUS WORD ON AN EFFECT, and DEEP WOUND's maximum ----------
+# (SKILLS-DW, 2026-09-09, studies/skills/FINDINGS.md 41.)
+#
+# Retail follows EVERY condition, hex and enchantment apply with `0x00F1`
+# [agent, m_status] -- the agent's whole status word, not a delta -- and the
+# close with the word cleared (effects.status_word carries the bit table and
+# the witness counts; deepwoundjoin.py is the census). Until today this
+# server sent `0x00F1` for exactly two things, death and revive, as absolute
+# 0x10 and 0, so no condition ever coloured the client's health bar and no
+# hex ever darkened it. `push_status` sends the word when it changes;
+# `--no-status-word` is the known-bad arm (the icon appears, the bar stays
+# plain).
+#
+# Deep Wound (482) is the one condition whose mechanic is on the WIRE rather
+# than in the client: retail's apply batch is [0x0042 482, 0x00F1, 0x009F
+# 42 = max*0.8] and its close [0x0044, 0x00F1, 0x009F 42 = max], 2 of 2 each
+# in the Isle capture (isle 8.2, mechanised by deepwoundjoin.py). The CLIENT
+# then applies the maximum change as a SIGNED delta to current health --
+# `--probe health_shrink` (studies/unitsetup 8 Q5): 25 + (50-100) = -25 in
+# the store, displayed as 1, and the restore returns to 25 -- so the server's
+# own book does the same arithmetic and never clamps. WIKI (GWW, "Deep
+# Wound", rev. 2026-03-02): -20% of maximum health, never more than 100, the
+# loss "also removed from your current health", healing received -20%, and
+# it "can never kill you by itself" -- the death waits for the next health
+# loss, or a gain that does not clear zero. `--no-deep-wound` is the
+# known-bad arm: the episode opens and times out, the maximum never moves.
+STATUS_WORD = True     # False (--no-status-word): no 0x00F1 rides an effect.
+DEEP_WOUND = True      # False (--no-deep-wound): 482 is an icon and nothing else.
+DEEP_WOUND_FRACTION = 0.2        # WIKI: "reduced by 20%"
+DEEP_WOUND_CAP = 100             # WIKI: "never ... by more than 100 health"
+DEEP_WOUND_HEAL_FACTOR = 0.8     # WIKI: "20% less benefit from healing"
+
 # ---- WHAT A SKILL COSTS, wired 2026-08-20 ---------------------------------
 #
 # The other half of R4b. `effects.py` models what a cast PUTS ON somebody;
@@ -12982,6 +13014,70 @@ def attack_tick(send, state, conn_id, rec=None):
                              "lands_at": now + swing_windup(interval)}
 
 
+
+def kill_agent(send, state, target_id, agent, conn_id, now):
+    """Put an agent down. ONE place since SKILLS-DW (2026-09-09).
+
+    This body lived inline at the bottom of `hit_enemy` -- the only thing that
+    could kill an agent was a hit. A Deep Wound's health loss triggered by a
+    heal that does not clear zero is a second caller (`heal_agent`), so the
+    measured three-message template moves here unchanged rather than being
+    copied: the same reason `kill_player` exists.
+    """
+    # Death is bit 4 of the effects word, not a message. Seven guesses at a
+    # death message failed before this was read out of the client
+    # (studies/agentprops/FINDINGS.md 1c).
+    agent["dead"], agent["died_at"] = True, now
+    # AND A CORPSE CARRIES NO CHARGE. WIKI, same page: all adrenaline is
+    # lost upon death. STILL nothing on the wire for it, and the reason
+    # changed on 2026-08-21: it is not that adrenaline has no opcode (it
+    # has four) but that they are SELF-SCOPED, 9 of 9 -- an 0x00D0 naming
+    # an enemy is traffic retail never produces. The player's own death
+    # DOES send one; `kill_player` is where. The energy pool is left alone
+    # rather than zeroed: the revive path refills it, and no capture shows
+    # what happens to an NPC's energy at death because no capture shows an
+    # NPC's energy at all.
+    if ENERGY:
+        agent_adrenaline(agent).clear()
+    # A CORPSE CARRIES NO EFFECTS. Not tidiness: `bufflog` classifies a
+    # removal landing before apply + duration as `stripped` and names
+    # death as one of its three causes, so leaving them running would put
+    # an episode on the wire that our own reader scores as `open` for the
+    # rest of the session.
+    strip_effects(send, state, target_id, conn_id, "the agent died")
+    # THE ORDER IS ARENANET'S, read off the two uncontaminated kills in the
+    # corpus (agent 278 t=23.202 and agent 40 t=23.511): status, then the
+    # reward, then the flags byte. Same tick, same agent, all three.
+    send(GAME_SMSG_AGENT_UPDATE_STATUS, [target_id, agents.EFFECT_DEAD],
+         f"KILL agent {target_id}")
+    # A SINGLE [0, 26], and the single is the finding. The pair
+    # [10,0]+[0,X] looks like the richer template and is NOT a kill shape:
+    # 6 of its 7 occurrences fire 6.8-31.5 s from any death, inside a
+    # recurring broadcast burst that is always preceded by 0x009C
+    # [agent, 100]. The seventh landed on the Wolf's kill tick by
+    # coincidence -- and that tick carries the 0x009C marker too, which is
+    # what gives the coincidence away. The three CLEAN kills carry one
+    # message and no 0x009C. studies/combat/PLAN.md 13.
+    send(GAME_SMSG_AGENT_KILL_REWARD,
+         [KILL_REWARD_ATTR, KILL_REWARD_VALUE],
+         f"kill reward [{KILL_REWARD_ATTR}, {KILL_REWARD_VALUE}]")
+    send(GAME_SMSG_AGENT_UPDATE_FLAGS, [target_id, AGENT_FLAGS_KILLED],
+         f"flags {AGENT_FLAGS_KILLED} on the dying agent {target_id}")
+    # AFTER the measured three-message template, never inside it: the
+    # status/reward/flags order is ArenaNet's own tick shape, and the
+    # accrual only appends to it (and only under --persist).
+    accrue_kill_rewards(send, state, conn_id)
+    # ...and so does the other half of the death penalty. WIKI (GWW, "Death
+    # Penalty", Counters): in PvE "gaining 75 experience will remove 1% DP",
+    # so the kill reward that just went out is also the way back up. Sends
+    # nothing at all while morale is neutral, which is every session in
+    # which nothing has died -- and nothing on the first two kills after a
+    # death either, because 26 XP is not a percent yet.
+    morale_experience(send, state, conn_id, KILL_REWARD_VALUE)
+    print(f"[c{conn_id}] agent {target_id} ({agent['name']}) is dead; "
+          f"back up in {REVIVE_AFTER:.0f}s", flush=True)
+
+
 def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
               exact=None, swing=True, label="one swing", armed=False,
               skill_strike=False):
@@ -13188,58 +13284,7 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
             dealt / float(agent["max_health"]), now)
 
     if agent["health"] <= 0.0:
-        # Death is bit 4 of the effects word, not a message. Seven guesses at a
-        # death message failed before this was read out of the client
-        # (studies/agentprops/FINDINGS.md 1c).
-        agent["dead"], agent["died_at"] = True, now
-        # AND A CORPSE CARRIES NO CHARGE. WIKI, same page: all adrenaline is
-        # lost upon death. STILL nothing on the wire for it, and the reason
-        # changed on 2026-08-21: it is not that adrenaline has no opcode (it
-        # has four) but that they are SELF-SCOPED, 9 of 9 -- an 0x00D0 naming
-        # an enemy is traffic retail never produces. The player's own death
-        # DOES send one; `kill_player` is where. The energy pool is left alone
-        # rather than zeroed: the revive path refills it, and no capture shows
-        # what happens to an NPC's energy at death because no capture shows an
-        # NPC's energy at all.
-        if ENERGY:
-            agent_adrenaline(agent).clear()
-        # A CORPSE CARRIES NO EFFECTS. Not tidiness: `bufflog` classifies a
-        # removal landing before apply + duration as `stripped` and names
-        # death as one of its three causes, so leaving them running would put
-        # an episode on the wire that our own reader scores as `open` for the
-        # rest of the session.
-        strip_effects(send, state, target_id, conn_id, "the agent died")
-        # THE ORDER IS ARENANET'S, read off the two uncontaminated kills in the
-        # corpus (agent 278 t=23.202 and agent 40 t=23.511): status, then the
-        # reward, then the flags byte. Same tick, same agent, all three.
-        send(GAME_SMSG_AGENT_UPDATE_STATUS, [target_id, agents.EFFECT_DEAD],
-             f"KILL agent {target_id}")
-        # A SINGLE [0, 26], and the single is the finding. The pair
-        # [10,0]+[0,X] looks like the richer template and is NOT a kill shape:
-        # 6 of its 7 occurrences fire 6.8-31.5 s from any death, inside a
-        # recurring broadcast burst that is always preceded by 0x009C
-        # [agent, 100]. The seventh landed on the Wolf's kill tick by
-        # coincidence -- and that tick carries the 0x009C marker too, which is
-        # what gives the coincidence away. The three CLEAN kills carry one
-        # message and no 0x009C. studies/combat/PLAN.md 13.
-        send(GAME_SMSG_AGENT_KILL_REWARD,
-             [KILL_REWARD_ATTR, KILL_REWARD_VALUE],
-             f"kill reward [{KILL_REWARD_ATTR}, {KILL_REWARD_VALUE}]")
-        send(GAME_SMSG_AGENT_UPDATE_FLAGS, [target_id, AGENT_FLAGS_KILLED],
-             f"flags {AGENT_FLAGS_KILLED} on the dying agent {target_id}")
-        # AFTER the measured three-message template, never inside it: the
-        # status/reward/flags order is ArenaNet's own tick shape, and the
-        # accrual only appends to it (and only under --persist).
-        accrue_kill_rewards(send, state, conn_id)
-        # ...and so does the other half of the death penalty. WIKI (GWW, "Death
-        # Penalty", Counters): in PvE "gaining 75 experience will remove 1% DP",
-        # so the kill reward that just went out is also the way back up. Sends
-        # nothing at all while morale is neutral, which is every session in
-        # which nothing has died -- and nothing on the first two kills after a
-        # death either, because 26 XP is not a percent yet.
-        morale_experience(send, state, conn_id, KILL_REWARD_VALUE)
-        print(f"[c{conn_id}] agent {target_id} ({agent['name']}) is dead; "
-              f"back up in {REVIVE_AFTER:.0f}s", flush=True)
+        kill_agent(send, state, target_id, agent, conn_id, now)
 
 
 _MISSING_SKILL_ROWS = set()
@@ -15194,6 +15239,10 @@ def apply_effect(send, state, caster_id, skill_id, rank, target_id, conn_id):
     print(f"[c{conn_id}] {family} {skill_id} on agent {ep['agent']}: "
           f"buff {ep['buff']}, {ep['duration']:.1f}s (rank {ep['rank']}){tag}",
           flush=True)
+    # THE STATUS WORD RIDES BEHIND THE APPLY -- a hex sets 0x800, an
+    # enchantment 0x80, everything else on this path moves nothing and sends
+    # nothing (effects.status_word).
+    push_status(send, state, ep["agent"], conn_id)
     return ep
 
 
@@ -15213,6 +15262,22 @@ def strip_effects(send, state, agent_id, conn_id, why):
         send(GAME_SMSG_EFFECT_REMOVE, [ep["agent"], ep["buff"]],
              f"EFFECT_REMOVE(buff {ep['buff']}, skill {ep['skill']}, "
              f"STRIPPED: {why})")
+    if agent_id == PLAYER_AGENT_ID:
+        dead = bool(state.get("player_dead"))
+    else:
+        _agent = state.get("agents", {}).get(agent_id)
+        dead = bool(_agent and _agent.get("dead"))
+    for ep in gone:
+        if ep["skill"] == effects.CONDITION_BY_NAME["Deep Wound"]:
+            deep_wound_close(send, state, agent_id, conn_id, dead=dead)
+    if dead:
+        # The kill path sends the death word itself, in its measured slot;
+        # record it so the next effect on the revived body is compared
+        # against what the client was actually told.
+        if STATUS_WORD:
+            state.setdefault("status_word", {})[agent_id] = effects.STATUS_DEAD
+    elif gone:
+        push_status(send, state, agent_id, conn_id)
     if gone:
         print(f"[c{conn_id}] stripped {len(gone)} effect(s) from agent "
               f"{agent_id}: {why}", flush=True)
@@ -15327,6 +15392,12 @@ def apply_condition(send, state, target_id, condition_id, seconds, rank,
     print(f"[c{conn_id}] {name} on agent {ep['agent']}: buff {ep['buff']}, "
           f"{ep['duration']:.1f}s (inflicted by skill {by_skill} at rank "
           f"{rank})", flush=True)
+    # RETAIL'S BATCH, in retail's order: the apply above, then the status
+    # word (0x02 | the condition's own bit), then -- for Deep Wound alone --
+    # the maximum. [0x0042, 0x00F1, 0x009F 42] on 2 of 2 (deepwoundjoin.py).
+    push_status(send, state, ep["agent"], conn_id)
+    if condition_id == effects.CONDITION_BY_NAME["Deep Wound"]:
+        deep_wound_open(send, state, ep["agent"], conn_id)
     # AND THE DEGENERATION IT CARRIES, if it carries any. Sent here rather than
     # from the tick because the corpus's mid-life property-44s fire when the
     # RATE CHANGES, and applying a condition is the change.
@@ -15450,6 +15521,143 @@ def push_regen(send, state, agent_id, conn_id):
     return rate
 
 
+def agent_status_word(state, agent_id):
+    """This agent's `m_status` word as the server's own books imply it."""
+    table = state.get("effects")
+    live = table.on_agent(agent_id) if table else []
+    if agent_id == PLAYER_AGENT_ID:
+        dead = bool(state.get("player_dead"))
+    else:
+        agent = state.get("agents", {}).get(agent_id)
+        dead = bool(agent and agent.get("dead"))
+    return effects.status_word(live, dead)
+
+
+def push_status(send, state, agent_id, conn_id):
+    """Tell the client this agent's status word, if an effect changed it.
+
+    RETAIL'S SHAPE (deepwoundjoin.py's census, 2026-09-09): the `0x00F1`
+    rides the SAME batch as the `0x0042`/`0x0044` that moved a bit, right
+    behind it and ahead of any property the effect also carries -- Deep
+    Wound's batch is [0x0042, 0x00F1, 0x009F 42], 2 of 2. It is the whole
+    word (a second condition arriving re-sends 0x02 | its own bit), so this
+    recomputes from the live episodes rather than flipping bits by hand, and
+    sends only on change: a shout moves no bit and retail sends nothing for
+    one (46 of 47 shout applies carry no 0x00F1).
+
+    The death and revive paths send their own absolute words (0x10 and 0)
+    and are NOT routed through here -- those batches are measured to the
+    message (`kill_player`, `revive_due`) and this must not reorder them.
+    `strip_effects` records the dead word so the book agrees with what they
+    sent.
+    """
+    if not STATUS_WORD:
+        return None
+    word = agent_status_word(state, agent_id)
+    seen = state.setdefault("status_word", {})
+    if seen.get(agent_id, 0) == word:
+        return None
+    seen[agent_id] = word
+    send(GAME_SMSG_AGENT_UPDATE_STATUS, [agent_id, word],
+         f"status 0x{word:04X} on agent {agent_id}")
+    return word
+
+
+def deep_wound_reduction(maximum):
+    """How much Deep Wound takes off a maximum. WIKI rule, retail-exact at 480.
+
+    round() rather than floor: the one retail witness is 480 -> 384, which
+    every rounding fits; below a multiple of 5 the rounding is UNVERIFIED and
+    named so here rather than hidden in an int().
+    """
+    return min(DEEP_WOUND_CAP, int(round(float(maximum) * DEEP_WOUND_FRACTION)))
+
+
+def deep_wound_open(send, state, agent_id, conn_id):
+    """Deep Wound lands: the maximum falls, the current health falls with it.
+
+    ONE reduction per agent -- `apply_condition` already keeps one episode per
+    (agent, condition), and an extension of a live Deep Wound leaves the book
+    alone (the maximum is already down; retail's re-application shape is
+    UNWITNESSED and nothing is invented for it). The health delta is SIGNED
+    and UNCLAMPED because the client's is (`health_shrink`): a player at 10 of
+    100 reads -10 in both books and 1 on the HUD, and dies to the next point
+    of damage -- which is the wiki's rule to the letter.
+
+    Returns the reduction, or None when the mechanic is off or the agent is
+    unknown.
+    """
+    if not DEEP_WOUND:
+        return None
+    book = state.setdefault("deep_wound", {})
+    if agent_id in book:
+        return book[agent_id]
+    if agent_id == PLAYER_AGENT_ID:
+        player_pools(state)
+        reduction = deep_wound_reduction(player_max_health(state))
+        book[agent_id] = reduction
+        state["player_health"] -= reduction
+        new_max = player_max_health(state)
+        health = state["player_health"]
+    else:
+        agent = state.get("agents", {}).get(agent_id)
+        if not agent:
+            return None
+        reduction = deep_wound_reduction(agent["max_health"])
+        book[agent_id] = reduction
+        agent["max_health"] = float(agent["max_health"]) - reduction
+        agent["health"] = float(agent["health"]) - reduction
+        new_max, health = agent["max_health"], agent["health"]
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+         [agents.PROP_HEALTH_MAX, agent_id, int(new_max)],
+         f"Deep Wound: maximum health {int(new_max)} on agent {agent_id} "
+         f"(-{reduction})")
+    print(f"[c{conn_id}] Deep Wound on agent {agent_id}: maximum "
+          f"{new_max + reduction:.0f} -> {new_max:.0f}, health now "
+          f"{health:.0f}" + (" (BELOW ZERO: the next health loss kills, a "
+                             "gain that clears zero does not)"
+                             if health <= 0 else ""), flush=True)
+    return reduction
+
+
+def deep_wound_close(send, state, agent_id, conn_id, dead=False):
+    """Deep Wound ends: the maximum comes back, and so does the health it took.
+
+    `dead` is the strip-at-death case and it sends NOTHING: the client's
+    death path zeroes the pools and the revive batch re-sends the maximum and
+    sets the bar (`revive_due`, `revive_player`), so a `0x009F 42` here would
+    land on a corpse as a signed +reduction -- the `Health non-zero on
+    resurrect` class from studies/agentprops 1f. The book is still put right,
+    because the revive reads it.
+    """
+    book = state.get("deep_wound") or {}
+    if agent_id not in book:
+        return None
+    reduction = book.pop(agent_id)
+    if agent_id == PLAYER_AGENT_ID:
+        state["player_health"] = state.get("player_health", 0.0) + reduction
+        new_max = player_max_health(state)
+    else:
+        agent = state.get("agents", {}).get(agent_id)
+        if not agent:
+            return reduction
+        agent["max_health"] = float(agent["max_health"]) + reduction
+        agent["health"] = float(agent["health"]) + reduction
+        new_max = agent["max_health"]
+    if dead:
+        print(f"[c{conn_id}] Deep Wound stripped from dead agent {agent_id}: "
+              f"book restored (+{reduction}), nothing sent -- the revive "
+              f"carries the maximum", flush=True)
+        return reduction
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+         [agents.PROP_HEALTH_MAX, agent_id, int(new_max)],
+         f"Deep Wound ends: maximum health {int(new_max)} on agent {agent_id} "
+         f"(+{reduction})")
+    print(f"[c{conn_id}] Deep Wound off agent {agent_id}: maximum back to "
+          f"{new_max:.0f}", flush=True)
+    return reduction
+
+
 def degen_tick(send, state, conn_id):
     """Spend health on degeneration. NO damage numbers, and that is measured.
 
@@ -15571,7 +15779,7 @@ def resolve_taker_conversion(send, state, conversion, conn_id):
     """
     ep = conversion["episode"]
     heal_agent(send, state, ep["agent"], ep["agent"], conversion["heal"],
-               conn_id)
+               conn_id, healing=False)     # "gains that amount of Health"
     effect_table(state).close(ep["buff"])
     send(GAME_SMSG_EFFECT_REMOVE, [ep["agent"], ep["buff"]],
          f"EFFECT_REMOVE(buff {ep['buff']}, skill {ep['skill']}, CONVERTED "
@@ -15733,8 +15941,23 @@ def speed_tick(send, state, conn_id):
           flush=True)
 
 
-def heal_agent(send, state, target_id, caster_id, amount, conn_id):
+def heal_agent(send, state, target_id, caster_id, amount, conn_id,
+               healing=True):
     """Put health BACK, and draw the number. Returns what actually landed.
+
+    `healing` says whether this is HEALING in the wiki's sense, which a Deep
+    Wound cuts by 20%, or a HEALTH GAIN, which it does not -- WIKI (GWW, "Deep
+    Wound", rev. 2026-03-02): the reduction "does not affect life stealing,
+    health gain, and health regeneration". Reversal of Fortune's description
+    says the ally "gains that amount of Health", so its conversion passes
+    False; Healing Signet and Restore Condition are heals and take the cut.
+    (RoF's concise text says "converts ... to healing" -- the two disagree,
+    the long description's verb is used, UNVERIFIED either way.)
+
+    A HEAL CAN KILL, and only under Deep Wound: the wiki's "if triggered by
+    health gain, then you will only die if that health gain does not bring
+    your health above zero". A player at -10 healed for 5 is at -5 and dies
+    here; healed for 20 is at 10 and lives.
 
     THE DIRECTION THIS SERVER NEVER HAD. Until 2026-08-20 the only way health
     moved up here was `GV_HEALTH`'s setter, which is silent -- it moves the orb
@@ -15767,6 +15990,11 @@ def heal_agent(send, state, target_id, caster_id, amount, conn_id):
         if not agent or agent.get("dead"):
             return 0.0
         before, pool = float(agent["health"]), float(agent["max_health"])
+    if healing and DEEP_WOUND and target_id in (state.get("deep_wound") or {}):
+        cut = float(amount) * (1.0 - DEEP_WOUND_HEAL_FACTOR)
+        amount = float(amount) - cut
+        print(f"[c{conn_id}] heal on agent {target_id} cut by {cut:.1f} "
+              f"(Deep Wound: -20% healing)", flush=True)
     landed = min(float(amount), pool - before)
     if landed <= 0.0:
         print(f"[c{conn_id}] heal of {amount} on agent {target_id} OVERHEALS "
@@ -15785,6 +16013,16 @@ def heal_agent(send, state, target_id, caster_id, amount, conn_id):
           f"{before + landed:.0f}/{pool:.0f}"
           + (" (self)" if target_id == caster_id else f" by {caster_id}"),
           flush=True)
+    # THE GAIN THAT DOES NOT CLEAR ZERO. Only reachable under a Deep Wound
+    # that took the pool below zero; everywhere else `before` is >= 0 and a
+    # positive `landed` cannot leave it there.
+    if before + landed <= 0.0:
+        if target_id == PLAYER_AGENT_ID:
+            kill_player(send, state, conn_id,
+                        "a heal under Deep Wound that did not clear zero")
+        else:
+            kill_agent(send, state, target_id, state["agents"][target_id],
+                       conn_id, time.time())
     return landed
 
 
@@ -15812,6 +16050,11 @@ def effect_tick(send, state, conn_id):
               f"expired (buff {ep['buff']}, "
               f"{now - ep['applied_at']:.2f}s of {ep['duration']:.1f}s)",
               flush=True)
+        # The close's batch is the apply's in reverse: the remove above, the
+        # status word with the bit cleared, then Deep Wound's maximum back.
+        push_status(send, state, ep["agent"], conn_id)
+        if ep["skill"] == effects.CONDITION_BY_NAME["Deep Wound"]:
+            deep_wound_close(send, state, ep["agent"], conn_id)
         # A condition running out is a rate change too, and it is the one a
         # server is most likely to forget: the icon goes and the arrows stay.
         push_regen(send, state, ep["agent"], conn_id)
@@ -15951,11 +16194,24 @@ def player_base_health(state):
     return morale.base_health(int(state.get("level", START_LEVEL)))
 
 
-def player_max_health(state):
-    """Maximum health as the client should currently see it, morale included."""
+def player_full_max_health(state):
+    """Maximum health at this morale with NO condition on it.
+
+    The number `land_swing` scales the enemy's hit from: ENEMY_HIT_FRACTION is
+    "the figure at AR 60" as a fraction of the player's pool, and a Deep Wound
+    shrinking the pool must not shrink the blow.
+    """
     return float(morale.effective_max(agents.PLAYER_HEALTH,
                                       player_base_health(state),
                                       player_morale(state)))
+
+
+def player_max_health(state):
+    """Maximum health as the client should currently see it -- morale, and a
+    live Deep Wound's reduction, because that is the number the client holds
+    after our own `0x009F 42` and every wire fraction divides by it."""
+    return (player_full_max_health(state)
+            - float((state.get("deep_wound") or {}).get(PLAYER_AGENT_ID, 0)))
 
 
 def player_max_energy(state):
@@ -17649,7 +17905,7 @@ def land_swing(send, state, agent_id, agent, conn_id):
     # PHYSICAL, so the pieces' `+20 vs. physical damage` counts; that is a
     # reading, not a measurement, and it is the cheapest thing here for a
     # capture to overturn.
-    dealt = player_max_health(state) * ENEMY_HIT_FRACTION
+    dealt = player_full_max_health(state) * ENEMY_HIT_FRACTION
     location = None
     if ARMOUR_TERM:
         location = roll_hit_location()
@@ -25877,6 +26133,18 @@ def main():
                          "model was measured at 288 u/s; see "
                          "MOVE_SPEED_EFFECTS' comment before flipping it "
                          "under the movement composite.")
+    ap.add_argument("--no-deep-wound", action="store_true",
+                    help="SKILLS-DW REVERT: Deep Wound (482) opens and closes "
+                         "as an icon and moves nothing -- no 0x009F 42, no "
+                         "health delta, full healing. Retail moves the "
+                         "maximum by exactly 20%% in the apply's own batch "
+                         "(2 of 2, isle 8.2 / deepwoundjoin.py).")
+    ap.add_argument("--no-status-word", action="store_true",
+                    help="SKILLS-DW REVERT: send no 0x00F1 status word when a "
+                         "condition, hex or enchantment opens or closes -- "
+                         "the pre-2026-09-09 wire, where the only status "
+                         "messages were death and revive. Retail sends the "
+                         "word behind every such apply and close.")
     ap.add_argument("--no-effects", action="store_true",
                     help="do not open or close effect episodes. The control "
                          "for the 0x0042/0x0044 channel: with it a stance is "
@@ -28041,6 +28309,17 @@ def main():
         print("MOVE SPEED EFFECTS: open movement-speed episodes declare the "
               "player's 0x0027 base (Rush = 360 u/s). The REALFIX fences were "
               "measured at 288 -- watch the movement instruments.")
+
+    if a.no_deep_wound:
+        global DEEP_WOUND
+        DEEP_WOUND = False
+        print("NO DEEP WOUND: 482 is an icon -- the maximum never moves, heals "
+              "are not cut (--no-deep-wound, the known-bad arm).", flush=True)
+    if a.no_status_word:
+        global STATUS_WORD
+        STATUS_WORD = False
+        print("NO STATUS WORD: no 0x00F1 rides an effect apply or close "
+              "(--no-status-word, the known-bad arm).", flush=True)
 
     if a.no_effects:
         global EFFECTS

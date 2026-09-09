@@ -5246,3 +5246,152 @@ field"** — because it called a PE method that does not exist, mapped every VA 
 `None`, and searched empty windows. The positive control (require the KNOWN
 namer's `mov eax,[edi+0x0C]` at `0x004F9C48` to be visible before believing any
 zero) is what caught it, and it is why §40.2's numbers are worth reading at all.
+
+
+## 41. SKILLS-DW — Deep Wound's maximum, and the status word every condition carries (2026-09-09)
+
+**What this closes.** `effects.py` listed six of the ten conditions as
+modelled-nothing; Deep Wound (482) comes off that list, and on the way the
+census found a whole channel this server had never sent: the agent STATUS
+WORD that rides behind every condition, hex and enchantment on retail's wire.
+Both ship, each behind its own revert flag, with the probe that scores them
+registered below before it ran.
+
+### 41.1 The retail join, mechanised — OBSERVED
+
+`studies/isle` §8.2 read the one capture with a Deep Wound by eye: property 42
+moved 480 → 384 on the apply and back on the close, twice. `toolkit/authsrv/
+deepwoundjoin.py` now does the join over the whole live corpus with the
+prediction in its docstring (P1–P4), and `test_mechanics` §19 pins it with no
+free parameter:
+
+```
+20260821T155022 10.0.0.210:59491->3.233.201.47:80
+  APPLY t=80.424  agent 25 buff 117  max 480 -> wire 384 (predicted 384)  prop-42 at +2 msgs, +0.000 s
+  APPLY t=150.696 agent 25 buff 113  max 480 -> wire 384 (predicted 384)  prop-42 at +2 msgs, +0.000 s
+  CLOSE t=106.063 agent 25 buff 117  wire 480 (restores 480)              prop-42 at +2 msgs, +0.000 s
+  CLOSE t=163.896 agent 25 buff 113  wire 480 (restores 480)              prop-42 at +2 msgs, +0.000 s
+      batch: [0x42 (25, 482)] [0xF1 (25, 34)] [0x9F (42, 25)]      # apply
+      batch: [0x44 (25, 117)] [0xF1 (25, 0)]  [0x9F (42, 25)]      # close
+482 applies 2: joined 2, exact x0.8 2; closes 2/2 exact; stray prop-42 0; prop-42 offset [2]
+```
+
+The corpus is still **n = 2** for 482 (one capture; the census excludes
+nothing). The WIKI cap — never more than 100 — cannot bind at 480 and is
+carried as a rule, not a measurement. Rounding below a multiple of 5 is
+UNVERIFIED (480 × 0.2 is exact); `deep_wound_reduction` rounds and says so.
+
+### 41.2 The message in between is the STATUS WORD, and it is on every condition — OBSERVED
+
+The `+2 msgs` offset is the finding. Retail's apply batch is not two messages
+but three: `0x0042`, then **`0x00F1` [agent, word]**, then the maximum. `0x00F1`
+is `GAME_SMSG_AGENT_UPDATE_STATUS` — the `m_status` word `ChCliInt.h:254`
+tests for `CHAR_STATUS_DEAD` (schema/overrides.json 241) — and this server
+had only ever sent it for death (0x10) and revive (0). Censused over every
+`0x0042` in the live corpus (`deepwoundjoin.status_census`), reading the bits
+NEWLY SET in the word that follows each apply against the agent's previous
+word:
+
+| skill | type | bits newly set | n | cleared at the remove |
+|---|---|---|---|---|
+| 478 Bleeding | condition | 0x03 | 1 | (remove not in capture) |
+| 479 Blind, 485 Dazed, 486 Weakness, 2077 Cracked Armor | condition | 0x02 | 1, 1, 1, 2 | 0x02 |
+| 480 Burning | condition | 0x02 × 5, **none × 2** | 7 | 0x02 × 5 |
+| 481 Crippled | condition | 0x0A | 2 | 0x0A |
+| 482 Deep Wound | condition | 0x22, then 0x20 alone (0x02 already up: 2077 was live) | 2 | 0x22 |
+| 483 Disease, 484 Poison | condition | 0x42 | 1 each | 0x42 |
+| 160, 814, 984 | enchantment | 0x80 | 57, 2, 2 | 0x80 (52, 2, 2) |
+| 179, 998 | hex | 0x800 | 1, 3 | 0x800 |
+| 364, 348 | shout | **no 0x00F1 at all** | 42, 4 | — |
+| 999 (Isle) | ? | 0x400 / 0xC00 | 2 | same |
+
+Three rules fall out and all three are in `effects.status_word`: the word is
+the **OR of everything live** (482's second apply added only 0x20 because
+0x02 was already set; the two Burning applies with no status message landed
+while another condition was up, so the word had not changed); it is sent
+**only on change**; and it has a bit per bar coloration — which is GWW's own
+health-bar table (WIKI, "Health", rev. 2026-05-12: hexed, poison/disease,
+bleeding, deep wound) plus crippled. 0x20 is therefore the grey 20 % of the
+bar the Deep Wound page describes, and 0x800 is the hexed bar darkening this
+server never produced. Bit 0x400 (skill 999) is recorded and not mapped.
+
+### 41.3 What shipped — `authsrv.py`, `effects.py`, both flagged
+
+- **`push_status`** recomputes the word from the live episodes plus death and
+  sends `0x00F1` when it changes, right behind the `0x0042`/`0x0044`. The
+  death and revive batches are untouched (measured to the message); the
+  strip-at-death records the dead word so the book agrees with what the kill
+  path sent. `--no-status-word` is the pre-today wire.
+- **`deep_wound_open` / `deep_wound_close`**: on a 482 apply the maximum
+  falls by `min(100, round(20 %))` and is sent as `0x009F 42` third in the
+  batch; current health falls by the same amount in the server's book —
+  **SIGNED and UNCLAMPED**, because the client's is (`--probe health_shrink`,
+  studies/unitsetup §8 Q5: 25 + (50−100) = −25 in the store, 1 on the HUD, 25
+  again on restore). `player_max_health` carries the reduction so every wire
+  fraction divides by the number the client now holds; `player_full_max_health`
+  is what the enemy's base hit scales from, so a wounded player is not hit
+  softer. The close restores both, in retail's order; a death strip restores
+  the book and sends **nothing** (the revive batch carries the maximum —
+  a `0x009F 42` onto a corpse is the `Health non-zero on resurrect` class).
+  `--no-deep-wound` leaves 482 an icon.
+- **WIKI rules (GWW, "Deep Wound", rev. 2026-03-02), each a labelled line:**
+  healing −20 % in `heal_agent` (`healing=False` exempts a health GAIN —
+  Reversal of Fortune's description says the ally "gains that amount of
+  Health", its concise text says "healing"; the long form's verb is used,
+  UNVERIFIED); "can never kill you by itself" — no kill check on the apply,
+  the next damage kills, and a heal that does not clear zero kills
+  (`kill_agent` is factored out of `hit_enemy` to give the agent side the same
+  door).
+- **Content:** `skill_effect.337` (Dismember, Axe Attack, 120 adrenaline,
+  `Deep Wound duration` 5..20 in the client's bonus slot) so
+  `--enemy-skills 337` lands one from the standing Hatcher's own axe.
+- **Tests:** `test_mechanics` §10–19, floor 39 → 99, both known-bad arms
+  pinned and the fraction proven discriminating (0.25 reddens 12 checks).
+
+### 41.4 What is registered, not settled
+
+- The two Burning applies with no status message are explained by
+  "unchanged word" on the census's own data; the two-condition close order
+  (which bits clear when one of two conditions ends) is modelled as the OR
+  and witnessed only at 482's second close (2077 gone 0.3 s earlier → 0).
+- RoF as health gain vs healing — above.
+- An extension of a live Deep Wound (`apply_condition`'s REMOVE-then-APPLY)
+  leaves the maximum where it is; retail's shape for that is unwitnessed.
+- `degen_tick` still does not kill an AGENT that bleeds out; pre-existing.
+- 0x400 / skill 999.
+
+### 41.5 The probe, registered before the run — `--probe deep_wound`
+
+Three arms, read off the HUD orb's printed number (exact) and the bar's right
+20 %: **A** the episode alone → icon, no grey, 100/100 (grey here means the
+client types Deep Wound from the id and the status bit is redundant); **B**
+the full batch on a full pool → grey at the status word, 80/80 at the
+maximum, 100/100 at the close; **C** the full batch on 25/100 → **5**/80
+(signed delta), 25/100 at the close. 20 or 25 in arm C refutes the delta for
+this message pair.
+
+Reproduce: `python toolkit/authsrv/deepwoundjoin.py` (the join and the bit
+census); the E5→E3 census castmech §9 cites is the same decode with
+`0x00E5`/`0x00E3` paired per (agent, skill).
+
+### 41.6 The probe RAN, and arm C landed on 5 — OBSERVED (`20260909T144731`, agent-driven, loopback)
+
+`session.py --keep-open --hold 75 --shots 1 --game-args "--probe deep_wound
+--explorable"`, per-second screenshots. This is a fixed-position HUD readout,
+not a world-anchored click, so it was agent-drivable (feedback: owner drives
+world-anchored aiming, not fixed UI).
+
+- **Arm C, the discriminator** (frames at the maximum=80 onto a damaged pool
+  of 25): the health orb reads **5**, and the right ~20 % of the bar is
+  **greyed** — the signed-delta prediction exactly, and the grey the wiki's
+  own text describes. A fraction reading predicted 20 and "ignored" predicted
+  25; both are refuted at a glance.
+- **The close** (maximum back to 100): the orb reads **25** and the grey is
+  gone — 25/100, the pool where the damage left it, the 20 returned with the
+  maximum.
+- Arm A / arm B ran first and are consistent (100/100 throughout arm A and at
+  arm B's close; 80/80 at arm B's maximum). The grey-vs-episode question of
+  arm A (does the icon alone grey the bar, or only the 0x20 status bit) is not
+  separable at the frame cadence here and is left as the one open sub-clause;
+  the shipped server sends the bit either way, so nothing downstream turns on
+  it. Verdict PASS, `undecodable 0`.
