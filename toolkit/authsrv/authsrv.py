@@ -3454,6 +3454,20 @@ DEEP_WOUND = True      # False (--no-deep-wound): 482 is an icon and nothing els
 DEEP_WOUND_FRACTION = 0.2        # WIKI: "reduced by 20%"
 DEEP_WOUND_CAP = 100             # WIKI: "never ... by more than 100 health"
 DEEP_WOUND_HEAL_FACTOR = 0.8     # WIKI: "20% less benefit from healing"
+#
+# THE HEAL NUMBER (SKILLS-HN, studies/skills 42). Retail sends property 55
+# carrying the skill's own amount whether or not the pool has room for it:
+# 46 heals in the live corpus land on pools that are full by construction
+# and 593 of 750 exceed the loss still owed (healjoin.py, P4), and WIKI (GWW
+# "Heal", rev. 2023-08-05) says the blue number "is shown even when no health
+# are actually gained (usually because the character is at full health)". So
+# an overheal is not silent: the wire carries the nominal amount, the client
+# clamps its own pool and draws the number, and this server's book clamps the
+# same way. Until 2026-09-09 `heal_agent` sent NOTHING on a full pool and
+# shrank the wire fraction to what landed -- a RECONSTRUCTION that test and
+# docstring both called "retail's convention". `--no-overheal-number` is that
+# old behaviour, the known-bad arm.
+OVERHEAL_NUMBER = True  # False (--no-overheal-number): a full pool sends nothing.
 
 # ---- WHAT A SKILL COSTS, wired 2026-08-20 ---------------------------------
 #
@@ -15978,9 +15992,20 @@ def heal_agent(send, state, target_id, caster_id, amount, conn_id,
     because that assert only fires in the POSITIVE direction and this is the
     first thing this server has ever sent on it that is not a revive.
 
-    OVERHEAL IS SILENT AND IS NOT AN ERROR. A heal on a full bar lands zero and
-    sends nothing, which is what retail looks like: no green number appears
-    when nothing was restored.
+    OVERHEAL IS ON THE WIRE, AND THE NUMBER IS THE SKILL'S OWN AMOUNT. This
+    paragraph used to read "a heal on a full bar lands zero and sends nothing,
+    which is what retail looks like: no green number appears when nothing was
+    restored" -- a RECONSTRUCTION, and wrong on both counts. SKILLS-HN
+    (studies/skills 42): retail's live corpus carries 46 positive 55s onto
+    pools that are full by construction and 593 of 750 heals exceed the loss
+    still owed (healjoin.py P4), and WIKI (GWW "Heal", rev. 2023-08-05) says
+    the number "is shown even when no health are actually gained". And the
+    number is BLUE, not green -- the 2026-08-20 frames had a pale blue '+46'
+    over the player 3 of 3, missed by a scan for saturated green. So the wire
+    fraction is `amount / pool` (capped at the whole pool: `_fraction` refuses
+    above 1.0 and retail's largest witness is 0.652, so a heal bigger than the
+    maximum has no witness either way), the book adds only what fits, and the
+    client does the same clamp. `--no-overheal-number` restores the old rule.
     """
     if target_id == PLAYER_AGENT_ID:
         player_pools(state)
@@ -15995,12 +16020,19 @@ def heal_agent(send, state, target_id, caster_id, amount, conn_id,
         amount = float(amount) - cut
         print(f"[c{conn_id}] heal on agent {target_id} cut by {cut:.1f} "
               f"(Deep Wound: -20% healing)", flush=True)
-    landed = min(float(amount), pool - before)
-    if landed <= 0.0:
-        print(f"[c{conn_id}] heal of {amount} on agent {target_id} OVERHEALS "
-              f"({before:.0f}/{pool:.0f}) -- nothing sent", flush=True)
-        return 0.0
-    frac = _fraction(landed / pool, agents.GV_HEALTH_GAIN,
+    landed = max(0.0, min(float(amount), pool - before))
+    if not OVERHEAL_NUMBER:
+        # The known-bad arm: the pre-2026-09-09 rule, silent on a full pool
+        # and shrinking the wire to what landed.
+        if landed <= 0.0:
+            print(f"[c{conn_id}] heal of {amount} on agent {target_id} "
+                  f"OVERHEALS ({before:.0f}/{pool:.0f}) -- nothing sent "
+                  f"(--no-overheal-number)", flush=True)
+            return 0.0
+        wire = landed
+    else:
+        wire = min(float(amount), pool)
+    frac = _fraction(wire / pool, agents.GV_HEALTH_GAIN,
                      f"a heal on agent {target_id}")
     if target_id == PLAYER_AGENT_ID:
         state["player_health"] = before + landed
@@ -16008,9 +16040,11 @@ def heal_agent(send, state, target_id, caster_id, amount, conn_id,
         state["agents"][target_id]["health"] = before + landed
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
          [agents.GV_HEALTH_GAIN, target_id, caster_id, frac],
-         f"heal {landed:.0f} on agent {target_id}")
-    print(f"[c{conn_id}] agent {target_id} healed {landed:.0f}: "
-          f"{before + landed:.0f}/{pool:.0f}"
+         f"heal {wire:.0f} on agent {target_id}"
+         + (f" ({landed:.0f} lands)" if landed < wire else ""))
+    print(f"[c{conn_id}] agent {target_id} healed {landed:.0f}"
+          + (f" of {wire:.0f} sent" if landed < wire else "")
+          + f": {before + landed:.0f}/{pool:.0f}"
           + (" (self)" if target_id == caster_id else f" by {caster_id}"),
           flush=True)
     # THE GAIN THAT DOES NOT CLEAR ZERO. Only reachable under a Deep Wound
@@ -26139,6 +26173,13 @@ def main():
                          "health delta, full healing. Retail moves the "
                          "maximum by exactly 20%% in the apply's own batch "
                          "(2 of 2, isle 8.2 / deepwoundjoin.py).")
+    ap.add_argument("--no-overheal-number", action="store_true",
+                    help="SKILLS-HN REVERT: a heal on a full pool sends "
+                         "nothing, and a partial one sends only what landed "
+                         "-- the pre-2026-09-09 wire. Retail sends the "
+                         "skill's own amount regardless (healjoin.py P4: 46 "
+                         "heals onto full pools) and the client draws the "
+                         "blue number even then (GWW 'Heal').")
     ap.add_argument("--no-status-word", action="store_true",
                     help="SKILLS-DW REVERT: send no 0x00F1 status word when a "
                          "condition, hex or enchantment opens or closes -- "
@@ -28320,6 +28361,12 @@ def main():
         STATUS_WORD = False
         print("NO STATUS WORD: no 0x00F1 rides an effect apply or close "
               "(--no-status-word, the known-bad arm).", flush=True)
+    if a.no_overheal_number:
+        global OVERHEAL_NUMBER
+        OVERHEAL_NUMBER = False
+        print("NO OVERHEAL NUMBER: a heal on a full pool sends nothing and a "
+              "partial one sends only what landed (--no-overheal-number, the "
+              "known-bad arm).", flush=True)
 
     if a.no_effects:
         global EFFECTS

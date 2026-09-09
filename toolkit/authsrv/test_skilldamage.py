@@ -43,7 +43,7 @@ import effects  # noqa: E402
 # (S5) + 3 rank chain (S6) + 2 wire (S7). Nothing here is conditional: every
 # section reads content rows that ship in the repo plus the vault overlay, so
 # a short run means a section stopped rather than passed.
-LEDGER = checks.Ledger("skill damage", floor=40)
+LEDGER = checks.Ledger("skill damage", floor=44)   # SKILLS-HN +4, from the green run
 check = LEDGER.ok
 
 
@@ -247,13 +247,59 @@ def main():
           f"asserts `fraction <= 1.0f` at CharPool.cpp:84 and that assert only "
           f"fires in the POSITIVE direction, so this is the first thing this "
           f"server sends that can actually reach it")
+    # SKILLS-HN (studies/skills 42). This check used to pin the OPPOSITE --
+    # "a heal on a FULL bar sends nothing at all ... overheal is silent in
+    # retail too, no green number appears" -- and both halves were a
+    # reconstruction: retail sends property 55 onto full pools (healjoin.py
+    # P4, 46 witnesses), and the number is blue, drawn from the 55 alone.
     before = len(sent)
     check(authsrv.heal_agent(send, state, authsrv.PLAYER_AGENT_ID,
                              authsrv.PLAYER_AGENT_ID, 50, 0) == 0.0
-          and len(sent) == before,
-          "and a heal on a FULL bar sends nothing at all",
-          "overheal is silent in retail too -- no green number appears when "
-          "nothing was restored. Sending a zero would draw a 0")
+          and len(sent) == before + 1
+          and abs(authsrv._f32_of(sent[-1][1][3]) - 0.5) < 1e-6
+          and state["player_health"] == 100.0,
+          "a heal on a FULL bar still goes out, carrying the skill's own "
+          "amount (0.5 of the pool), lands 0 and moves the book nowhere",
+          f"sent {len(sent) - before}, fraction "
+          f"{authsrv._f32_of(sent[-1][1][3]) if len(sent) > before else None}, "
+          f"health {state['player_health']} -- WIKI (GWW 'Heal'): the blue "
+          f"number 'is shown even when no health are actually gained'")
+    state["player_health"] = 70.0
+    before = len(sent)
+    check(authsrv.heal_agent(send, state, authsrv.PLAYER_AGENT_ID,
+                             authsrv.PLAYER_AGENT_ID, 50, 0) == 30.0
+          and abs(authsrv._f32_of(sent[-1][1][3]) - 0.5) < 1e-6
+          and state["player_health"] == 100.0,
+          "a PARTIAL overheal (50 onto 70/100) sends 0.5 -- the amount, not "
+          "the 30 that landed -- and the book clamps at the pool",
+          f"fraction {authsrv._f32_of(sent[-1][1][3])}, health "
+          f"{state['player_health']} (RECONSTRUCTION for the partial case: "
+          f"the corpus cannot see a pool, only that full ones get the amount)")
+    state["player_health"] = 40.0
+    before = len(sent)
+    check(authsrv.heal_agent(send, state, authsrv.PLAYER_AGENT_ID,
+                             authsrv.PLAYER_AGENT_ID, 250, 0) == 60.0
+          and abs(authsrv._f32_of(sent[-1][1][3]) - 1.0) < 1e-6,
+          "a heal bigger than the whole pool is capped at 1.0 on the wire",
+          "`_fraction` refuses above 1.0 (CharPool.cpp:84) and retail's "
+          "largest 55 is 0.652, so this branch has no witness either way")
+    state["player_health"] = 100.0
+    authsrv.OVERHEAL_NUMBER = False
+    try:
+        before = len(sent)
+        check(authsrv.heal_agent(send, state, authsrv.PLAYER_AGENT_ID,
+                                 authsrv.PLAYER_AGENT_ID, 50, 0) == 0.0
+              and len(sent) == before,
+              "--no-overheal-number (the known-bad arm): a full bar sends "
+              "nothing, as before 2026-09-09")
+        state["player_health"] = 70.0
+        check(authsrv.heal_agent(send, state, authsrv.PLAYER_AGENT_ID,
+                                 authsrv.PLAYER_AGENT_ID, 50, 0) == 30.0
+              and abs(authsrv._f32_of(sent[-1][1][3]) - 0.3) < 1e-6,
+              "and the partial case shrinks the wire to what landed (0.3)")
+    finally:
+        authsrv.OVERHEAL_NUMBER = True
+        state["player_health"] = 100.0
 
     print("\n9. a SPELL does not swing a hammer, and its damage is its own")
     # BOTH HALVES WERE WRONG UNTIL 2026-08-20 and the run is what showed it

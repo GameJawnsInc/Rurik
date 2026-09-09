@@ -3600,6 +3600,35 @@ def _deep_wound_steps(agent_id):
     ]
 
 
+def _heal_number_steps(agent_id):
+    """SKILLS-HN: the heal number on a damaged pool, then on a full one.
+
+    Retail's heal batch is `[58, 21, 21, 55, 55]` or just `[58, 55]` -- no
+    property rides beside a 55 that does not also ride beside damage
+    (healjoin.py, 800 events), so whatever the client draws it draws from the
+    55 alone. The 2026-08-20 frames show it: a pale blue '+46' over the
+    player, 3 of 3, missed by a scan for green. What no capture can show is
+    OUR client's screen on a full pool, where retail sends the number anyway.
+    """
+    a = agent_id
+    return [
+        Step(4.0, 0x00A3, [16, a, a, _f32(-0.46)],
+             "damage -0.46: the pool to 54 of 100",
+             "orb 54; a damage number draws (the run's own control)."),
+        Step(3.0, 0x00A3, [55, a, a, _f32(0.46)],
+             "ARM A: heal +0.46 onto 54 -- lands whole",
+             "a pale blue '+46' rises from the player's head, orb 100."),
+        Step(4.0, 0x00A3, [55, a, a, _f32(0.46)],
+             "ARM B: heal +0.46 onto a FULL pool -- the overheal",
+             "WIKI: the same '+46', orb stays 100. The retired rule sent "
+             "nothing here. An assert dialog is the refutation that matters."),
+        Step(4.0, 0x00A3, [55, a, a, _f32(0.10)],
+             "ARM B again, smaller: +0.10 onto full",
+             "'+10' if the number is the amount SENT rather than the amount "
+             "that landed (which is 0)."),
+    ]
+
+
 def _condition_render_steps(agent_id):
     """Isle rung 4: does 0x0042 carrying a CONDITION skill id render a condition?
 
@@ -6289,6 +6318,30 @@ PROBES = {
              "sends on its own when --enemy-skills 337 lands an axe; this "
              "probe separates the three so the run that follows has one "
              "question per message.",
+    ),
+    "heal_number": lambda a, o: Probe(
+        question="Does a property-55 gain draw its number on a FULL pool, the "
+                 "way it does on a damaged one -- and does the client take "
+                 "the overheal without asserting?",
+        predicts="ARM A (damaged pool): a pale blue '+46' floats up from the "
+                 "player and the orb reads 100 -- the positive control, "
+                 "already seen 3 of 3 in 20260820T190917 once the frames "
+                 "were read for BLUE instead of green. ARM B (full pool): "
+                 "WIKI says the same '+46' draws with the orb unmoved; the "
+                 "retired rule predicted nothing to send at all. No assert "
+                 "either arm -- retail sends 55 onto full pools 46 times in "
+                 "the corpus and its client survives. A '+46' in A and "
+                 "nothing in B refutes the wiki for this client; an assert "
+                 "in B (CharPool.cpp:84's `fraction <= 1.0f`) means the "
+                 "clamp is ours to do and OVERHEAL_NUMBER must cap.",
+        steps=_heal_number_steps(a),
+        note="SKILLS-HN (studies/skills/FINDINGS.md 42). Run --explorable. "
+             "The number floats above the player's own head at screen "
+             "centre and fades in ~1.5 s, so per-second frames catch it "
+             "about once each; read the frame, do not trust a colour "
+             "threshold -- the 2026-08-20 null was a scan for saturated "
+             "GREEN, and the glyphs are (151,233,250)-ish sky blue on a "
+             "white core. Fixed-position readout: agent-drivable.",
     ),
     "condition_render": lambda a, o: Probe(
         question="Does 0x0042 carrying a CONDITION skill id (type_code 8) "

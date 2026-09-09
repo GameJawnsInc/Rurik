@@ -5395,3 +5395,137 @@ world-anchored aiming, not fixed UI).
   separable at the frame cadence here and is left as the one open sub-clause;
   the shipped server sends the bit either way, so nothing downstream turns on
   it. Verdict PASS, `undecodable 0`.
+
+## 42. SKILLS-HN — the heal number was in the frames all along (it is BLUE), and retail sends the overheal (2026-09-09)
+
+**What this closes.** §19's last paragraph — *"And it draws no number for
+it ... 0–8 saturated green pixels ... OPEN"* — carried for three weeks as
+"the client applies property 55 and draws nothing". Both halves of that were
+an instrument error: the scan looked for the wrong colour, and nobody looked
+at the frame. The desk half of the closing brief (census every retail 55 for
+a sibling property, the way the damage and Deep Wound batches were found)
+ran first and found no candidate; the frames were then re-read and the
+number was there, three times out of three. **No new run was needed.** On
+the way, the census refuted a second claim the same paragraph's neighbour
+carried into a test — that an overheal is silent.
+
+### 42.1 The census, with its predictions registered first — OBSERVED
+
+`toolkit/authsrv/healjoin.py` (P1–P4 in its docstring, pinned by
+`test_mechanics` §20 as floors). Every property-55 event on `0x00A3` across
+the 61 live game connections that frame whole, each with its batch — a
+contiguous run with no gap above the 50 ms shoulder — and, for the control,
+every 16/17 damage event the same way:
+
+```
+property-55 events 800: positive 796, self-directed 748; damage 16/17 events 1762
+sibling on the same agent   heal batches   damage batches
+  9F:58  skill_finished          746            17
+  9F:21  caster visual           486            34
+  A3:55  a second gain           451            17
+  A0:20  recipient visual        104           224
+  A3:16  damage                   46           238
+  A2:44  regen                    19           149
+  (nothing else above 15)
+within the set this server already sends: 720 of 800; bare [58, 55]: 185
+0x001E in the batch: heals 800/800, damage 1762/1762
+```
+
+Shapes, wire order, same agent: `58 21 21 55 55 ·1E` ×266, `58 55 ·1E`
+×173, then the same two with a tick on either side. **Nothing rides beside a
+heal that does not also ride beside damage** — 58 and 21 are the cast end
+(castmech §3c, ANIMREF-R8), 20 is the recipient visual and is *commoner* on
+damage, and `0x001E` is the world tick closing every batch of either kind, a
+terminator this server has sent since the movement arc. 185 heals ride with
+nothing but the 58. So whatever the client draws for a heal, it draws from
+the 55 alone, and there is no candidate for a probe to test. (Count
+reconciliation: §19 saw 506 events, ANIMREF §18 saw 861; the corpus grew,
+and §18 grouped by (batch, agent) over both float channels. 800 is this
+decode over `vault/captures/live/` as of today, and the test pins ≥ 800.)
+
+### 42.2 The frames re-read: a pale blue "+46", 3 of 3 — OBSERVED (`20260820T190917`)
+
+The run §19 cites is a walk run with per-second frames; the server capture
+(`gamesrv/authsrv-20260820T190936-c1.jsonl`) puts the three heals at
+t = 12.86, 21.56, 30.25 s and the four Holy Strike hits at 6.31, 15.51,
+24.05, 33.25 s, and the frames' mtimes put `w007`, `w014` and `w021` at
++1.25, +1.17 and +0.98 s after each heal. Cropped to the screen centre and
+looked at: **each carries a "+46" floating above the player**, rising with
+the cast's pink Healing Signet burst below it; `w006` at +0.04 s has the
+burst and no number yet; `w009` at +1.04 s after a hit carries the **"−46"**
+damage number in the same place — the positive control §19 never ran.
+
+The glyphs are sky blue on a white core — `(151,233,250)`, `(122,214,238)`,
+`(57,183,217)` — and a box over them counts **178** pixels with
+`b ≥ 150 and b > r + 20` against **6** in the same box one frame later.
+§19's scan asked for *saturated green* (`g ≥ 160, g − max(r,b) ≥ 60`); a
+first re-scan here asked for *saturated blue* (`b − max(r,g) ≥ 60`) and was
+flat at 417 across all 45 frames, which is the HUD's own blue. Neither
+threshold can see a pale glyph, and the 0–8 green pixels §19 reported were
+the key-press frames' own noise (114 at each `key1` frame, 57 elsewhere).
+**A colour-threshold null on a floating number is not a null until the frame
+has been looked at**, and the number in it was legible at a glance.
+
+WIKI agrees on the colour, and says one thing more — GWW, "Heal", rev.
+2023-08-05: *"The healing player and healed player see blue numbers showing
+the amount healed. Blue numbers are shown even when no health are actually
+gained (usually because the character is at full health)."* The hosted
+`hud-heal-54-to-100.png` in that run directory is a 1080×2424 phone capture
+and carries no HUD pixels the scan can read; the CONFIRMED 54 → 100 readout
+§19 built on stands on its own.
+
+### 42.3 The overheal is on the wire — OBSERVED, and a RECONSTRUCTION retracted
+
+`heal_agent`'s docstring and `test_skilldamage` §8 both said *"overheal is
+silent in retail too — no green number appears when nothing was restored"*,
+and the server sent nothing on a full pool and shrank a partial heal's wire
+fraction to what landed. The wiki sentence above says the opposite, and the
+client cannot print an amount it never received, so `healjoin` P4 asked the
+corpus: a positive 55 on an agent that has taken **no health loss at all** on
+its connection before it — no 16/17, no negative 44, no negative 55, no 34
+setter — lands on a pool that is full by construction (agents spawn full,
+agentprops 1). **46 such events**, values 0.0414 / 0.0829 / 0.18 / 0.3243,
+never zero; and of the 750 heals on pools the ledger has seen damaged, **593
+exceed the loss it still owes** — a floor, since the ledger credits no regen.
+Retail sends the skill's own amount regardless of the pool; the client clamps
+and draws it.
+
+**Shipped (SKILLS-HN, default ON, revert `--no-overheal-number`).**
+`heal_agent` now sends `min(amount, pool) / pool` — the amount, capped at the
+whole pool because `_fraction` refuses above 1.0 (CharPool.cpp:84) and
+retail's largest witness is 0.652, so a heal larger than the maximum has no
+witness either way — and adds to the book only what fits. The partial case
+(a 50 onto 70/100 sends 0.5, not 0.3) is RECONSTRUCTION: the corpus sees
+that full pools get the amount, not what a half-full one gets. Pins:
+`test_skilldamage` §8 (full pool sends 0.5 and moves nothing; partial sends
+the amount; a 250 onto 100 caps at 1.0; both known-bad arms; floor 40 → 44),
+`test_agentlife` (`dmg_floats` reads DAMAGE only, and the enemy's Restore
+Condition on its own full pool now sends exactly one positive 55; floor
+379 → 380), `test_mechanics` §20 (the census, floors; 99 → 106).
+
+### 42.4 The probe, registered and NOT run — `--probe heal_number`
+
+Arm A: damage −0.46 then heal +0.46 → the "+46" of §42.2, the control.
+Arm B: +0.46 and then +0.10 onto the FULL pool → WIKI predicts "+46" and
+"+10" with the orb unmoved; the retired rule predicted nothing to send. The
+refutation that matters is an assert in arm B — retail's client takes 46 of
+these in the corpus, but a `fraction <= 1.0f` dialog here would mean the
+clamp is ours and the cap in §42.3 must tighten. It is a fixed-position
+readout (the number floats from the player's own head at screen centre, ~1.5
+s), so it is agent-drivable; it was not launched in this session because the
+original question closed on existing frames and a launch is a shared-machine
+event. `session.py --keep-open --hold 40 --shots 1 --game-args "--probe
+heal_number --explorable"`, and read the frames, do not threshold them.
+
+### 42.5 What is settled, and what is not
+
+- SETTLED: the client annotates a heal from property 55 alone, in pale blue,
+  3 of 3, with the damage number as the same-run control. §19's "draws no
+  number" is RETRACTED as an instrument error, and `PLAN.md` §8's "worth one
+  probe" item is closed without one.
+- SETTLED (wire): retail sends the 55 on a full pool, 46 of 46 non-zero.
+- OPEN: what OUR client draws on a full pool, and whether it asserts —
+  §42.4. Also the four negative 55s (sacrifice, UNVERIFIED since §19), and
+  the periodic 0.0414/0.0829 gains on agents 10/16 in `20260817T231139`
+  (every ~2 s, never attributed to a cast — a regen-like effect riding the
+  heal channel; not this section's question).

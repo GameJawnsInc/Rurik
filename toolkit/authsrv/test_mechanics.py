@@ -27,7 +27,7 @@ import agents       # noqa: E402
 import effects      # noqa: E402
 
 # Floor set from a real green run (39 checks, 2026-08-22; 99 checks, 2026-09-09 SKILLS-DW).
-LEDGER = checks.Ledger("effect mechanics", floor=99)
+LEDGER = checks.Ledger("effect mechanics", floor=106)
 check = checks.adopt(LEDGER)
 
 FRENZY, RUSH, ROF, GLYPH, IGNITE, FAINT = 346, 319, 307, 200, 431, 135
@@ -557,6 +557,48 @@ try:
           "the shout 364 moves no bit (40+ applies with no word)")
 except Exception as exc:                                     # noqa: BLE001
     LEDGER.skip("section 19 (corpus)", f"{type(exc).__name__}: {exc}")
+
+# -- 20. SKILLS-HN: the heal number needs no sibling, and retail sends the
+#        overheal (studies/skills/FINDINGS.md 42; healjoin.py is the corpus
+#        read, its predictions P1-P4 in its docstring). FLOORS, not values: the
+#        live corpus grows on confirming evidence, so a count pinned exactly
+#        would redden on the next capture.
+print("== 20. the heal batch on retail's wire, and the overheal (healjoin) ==")
+try:
+    import healjoin
+    hs = healjoin.score(healjoin.census())
+    check(hs["n"] >= 800, f"the live corpus holds property-55 gains (n={hs['n']})")
+    check(hs["positive"] >= 0.99 * hs["n"],
+          "P1: 55 is the health-GAIN direction, positive in 99%+",
+          f"{hs['positive']} of {hs['n']}")
+    check(hs["within_known"] >= 0.85 * hs["n"],
+          "P2: a heal's same-agent siblings are messages this server already "
+          "sends (58, the 20/21 visuals, 8, 42, another 55) in 85%+ of batches "
+          "(measured 90.0% on 800; the floor sits under it on purpose)",
+          f"{hs['within_known']} of {hs['n']} -- outside the set: "
+          + ", ".join(f"{k} x{v}" for k, v in hs["siblings"].items()
+                      if k not in ("9F:58", "9F:21", "A0:20", "9F:8", "9F:42",
+                                   "A3:55")))
+    check(hs["bare_58_55"] >= 150,
+          "P2: the bare [58, 55] batch -- a heal with nothing else "
+          "target-facing -- is common, so no sibling is REQUIRED to draw",
+          f"{hs['bare_58_55']} bare batches")
+    check(hs["tick_heal"] == hs["n"] and hs["tick_damage"] == hs["n_damage"],
+          "P3: the world tick 0x001E closes every heal AND every damage batch "
+          "-- a terminator, not a candidate",
+          f"heals {hs['tick_heal']}/{hs['n']}, damage "
+          f"{hs['tick_damage']}/{hs['n_damage']}")
+    check(hs["virgin"] >= 40 and all(v > 0 for v in hs["virgin_values"]),
+          "P4: retail sends a positive 55 onto a pool that is FULL by "
+          "construction (no prior loss on the connection) -- the overheal is "
+          "on the wire, the client clamps",
+          f"{hs['virgin']} virgin-pool heals, values {hs['virgin_values']}")
+    check(hs["exceeds_loss"] >= 500,
+          "P4: and most heals exceed the loss the ledger still owes "
+          "(a floor -- the ledger is regen-blind)",
+          f"{hs['exceeds_loss']} of {hs['non_virgin']}")
+except Exception as exc:                                     # noqa: BLE001
+    LEDGER.skip("section 20 (corpus)", f"{type(exc).__name__}: {exc}")
 
 
 sys.exit(LEDGER.verdict())
