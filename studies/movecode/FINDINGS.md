@@ -17777,3 +17777,98 @@ each re-measured on a real run of its own configuration rather than computed. Th
 surviving as `0` rather than reading as absent (a falsy operand is still an operand), the stop
 arm's explicit `None`, both call sites declaring rather than defaulting, and the `kbd_dest` row
 sitting at the assignment itself with all six operands.
+
+
+## 1z-cs. THE COSTING, and BOTH of my verdicts were wrong. Shape 1 is **viable and cheap** — one gate line — but it is for the LONG REPORT GAP, not the corner. Shape 2 is **UNDECIDED**, because the two available scorers disagree and the metric was never pre-registered. One line shipped: the follow order now records the frame beside the point it ordered
+
+§1z-cq registered two prospective shapes. I costed both, called both dead, and three adversarial
+lenses refuted me on each — not on judgement, on the arithmetic. Both corrections are recorded
+here against me, because the costing is the deliverable and a wrong costing closes a route.
+
+### 1z-cs.1 ★★★ Shape 1 — NOT DEAD. My predicate measured the wrong quantity
+
+I tested *"report gaps whose DRIFT exceeds the 520 u clear-lead reach"* and found 0 of 162, so I
+called the extension inert. **`model_leg_bound` does not act on drift.** It trims the model leg's
+REACH from its own origin (`f = lead_reach / model_reach`, authsrv.py:9151); drift is
+|reported − ours|, the model-vs-body SEPARATION. The two differ whenever the body ALSO travels,
+and they disagree about *which gap*, not merely how many.
+
+**The verbatim counter-example, session 4, t=48.982 → 51.831 (a 2.85 s gap), which my predicate
+missed because its drift is only 247.1 u:**
+
+| | |
+|---|---|
+| body net travel | **520.0 u** |
+| model net travel | **767.1 u** |
+| model capped along its own ray | (10745.4, 8767.2) |
+| drift with the cap | **0.0 u**, against 247.1 u shipped |
+
+**The cap lands bit-identically on the client's own next report, and that is structural rather
+than luck**: `kbd_lead_dest` anchors the lead at `reported` along unit(heading) with
+|lead| = `KBD_SYNC_LEAD` = 520.0, and the model ray is built from the same origin and the same
+direction (authsrv.py:21131-21133). On an unclipped lead the trimmed model destination **IS** the
+granted point. Three follow orders fired inside that window; the cap removes **356.5 u of aim
+error** across two of them (127.8 and 228.7 u), and takes one from far outside the 92 u swing
+reach to **9.2 u**.
+
+**But it is NOT a fix for §1z-cp, and the right reason is not the one I gave.** A wall-slid model
+destination is *already* chorded at 520 u (`chord=KBD_SYNC_LEAD`, authsrv.py:9069-9070), so at the
+corner `model_reach <= lead_reach` and the extended bound returns `"within"`. It cannot touch the
+specimen whatever the gate does.
+
+**And the docstring's cost side over-counts exactly as my benefit side did.** "286 clear leads in
+the corpus affected" counts legs the cap is INERT on: it can only bite where the model actually
+walks past 520 u, which is **1 of 159** lead-clear legs across sessions 4/6/7 — and needs a report
+gap over 520/288 = **1.806 s**, which is 6 of 740 gaps here. Cost and benefit land on the *same
+rare set*. The change is one deletion (`if not lead_clipped: return None, "lead-clear"`), needs no
+new constant, and wants its own arm with the predicate **pre-registered as realized advance vs
+lead reach**, never drift.
+
+### 1z-cs.2 ★★★ Shape 2 — UNDECIDED, and my specimen claim was false
+
+Confirmed: only **4 of 40** session-7 orders take the standing branch, where the model is already
+right (p50 0.0, max 7.0) and the frame improves exactly one order by 7 u. Pooled over three
+sessions the frame is farther from the DRAWN body on **196 of 246** orders (p50 21.6 → 114.4 u).
+
+**What I got wrong.** (1) I claimed shape 2 *misses the specimen* because both 172.8 u orders take
+the mirror branch. The branch reasoning is right and the mirror branch is confirmed — but
+"mirror branch" does not imply "misses": at **both** order instants |world-0 − drawn body| = 0.0 u
+and the mirror was sitting on world-0, so shape 2 would have helped there. (2) My
+"park points beyond the swing reach 19 → 22 of 36" **does not reproduce** — the same measurement
+gives 6 → 13 on the live columns and 8 → 9 on the raw ones. It is withdrawn.
+
+**And the verdict turns entirely on a metric nobody pre-registered.** The two available scorers
+disagree, which is the whole result:
+
+* **drawn-body error** ranks shape 2 **worse** (better 28 / worse 117 pooled) but cannot separate
+  the operator's own outcome (113.5 vs 113.9 u).
+* **world-0 error** ranks it **better**, is the frame the client's disc demonstrably runs in
+  (75.1 u against a derived 80.0 over 328 parks), and *does* separate the outcome (77.5 vs 113.9).
+
+Scoring the mirror branch against world-0 is partly circular — `_npc_frame`'s mirror branch IS a
+world-0 model — and scoring it against the drawn body is what the owner feels. **Pick the scorer
+BEFORE the run, not after.** Until then shape 2 is undecided, not dead.
+
+**A real regression it also carries:** under the full swap `_npc_frame_reach` receives
+`player == frame`, so its cone test compares a vector with itself and returns cos = 1
+unconditionally — the guard its own docstring names ("a frame point BEHIND the copy does not park
+it") goes **vacuous**. Any version of shape 2 must resolve the frame for the ORDER without feeding
+it to that test.
+
+### 1z-cs.3 ★ Shipped: one line, the third time this lesson has landed
+
+The `npc_order` row now carries `frame=` beside the point it ordered. The capture recorded
+`_npc_frame`'s output only at disc/hold instants, so costing shape 2 had to BRACKET each order and
+substitute a proxy for a value the server had in its hand — my world-0 proxy turned out fair
+(recorded frame sits p50 0.0 u from the tape's world-0 on mirror rows) but it should never have
+been needed. §1z-cn shipped `npc_order`, §1z-cr shipped `mt` and `kbd_dest`, and this is the same
+lesson a third time: **the row names its operand.** Zero behaviour change; `test_agentlife` 379,
+`test_position_trust` 250, `test_srclint` 26.
+
+### 1z-cs.4 Where this leaves the arc
+
+Neither shape ships today. Shape 1 is viable, cheap and **aimed at a different defect** than the
+one that sent us here — it wants its own arm, its own predicate and a corpus wide enough to hold
+6-in-740 exposure. Shape 2 needs its scorer chosen in advance and its vacuity repaired before it
+can even be costed honestly. **§1z-cp's corner remains unfixed and now has no live candidate**,
+which is the true state and better said plainly than dressed up.

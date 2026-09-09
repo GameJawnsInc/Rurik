@@ -17207,9 +17207,12 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
                     and tag == " re-path":
                 return                  # the same leg is already in flight
             if rec is not None:
+                _fr = _npc_frame(state, now)          # 1z-cs, as above
                 rec.event("npc_order", agent=agent_id, act="corridor-leg",
                           tag=tag.strip(), solve_from=[float(cx), float(cy)],
-                          to=[float(wx), float(wy)], plane=plane, dest_plane=wpl,
+                          to=[float(wx), float(wy)],
+                          frame=[round(_fr[0], 1), round(_fr[1], 1)],
+                          plane=plane, dest_plane=wpl,
                           more=more, dist=round(float(dist), 1))
             _send(GAME_SMSG_AGENT_MOVE_TO_POINT,
                   [agent_id, (wx, wy), wpl, plane],
@@ -17232,9 +17235,17 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
         # the capture answer the question itself (studies/movecode/review/
         # flankcensus.py reads it).
         if rec is not None:
+            # MOVECODE-1z-cs: the FRAME beside the point we actually ordered. The
+            # capture recorded _npc_frame's output only at disc/hold instants, so
+            # costing the "order from the frame instead of state[\"pos\"]" shape had
+            # to BRACKET each order and substitute a proxy for a value the server
+            # held in its hand. Third time this lesson has landed (npc_order at
+            # sec.1z-cn, mt/kbd_dest at sec.1z-cr): the row names its operand.
+            _fr = _npc_frame(state, now)
             rec.event("npc_order", agent=agent_id, act="follow-bare", tag=tag.strip(),
                       solve_from=[float(cx), float(cy)],
                       to=[float(px), float(py)],
+                      frame=[round(_fr[0], 1), round(_fr[1], 1)],
                       plane=plane, dest_plane=dest_plane, dist=round(float(dist), 1))
         _send(GAME_SMSG_AGENT_UPDATE_DESTINATION,
               [agent_id, (float(px), float(py)), dest_plane, plane,
