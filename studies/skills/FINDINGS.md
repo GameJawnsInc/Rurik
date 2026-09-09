@@ -5529,3 +5529,63 @@ heal_number --explorable"`, and read the frames, do not threshold them.
   the periodic 0.0414/0.0829 gains on agents 10/16 in `20260817T231139`
   (every ~2 s, never attributed to a cast — a regen-like effect riding the
   heal channel; not this section's question).
+
+### 42.6 Blind replication by a parallel session, and two things it adds (2026-09-09, later)
+
+A second session was handed the same brief the same afternoon and worked it
+with neither side seeing the other (§42.1–42.5 landed at 15:28 while this one
+was mid-census; the two were compared only afterwards). It is a replication
+in the sense `feedback-blind-replication` asks for — independent decode,
+independent batch definition, rival answer withheld — and it agrees.
+
+**The census, replicated with a third column.** A ±50 ms window from each
+anchor (§42.1 uses a contiguous run under the 50 ms shoulder) over the same
+corpus: **796 positive 55s, 746 self-directed, 0 lone; int 58 value 0 on the
+cause in 796 of 796; int 21 on the target in 484**; same-segment shape
+`58 21 21 55 55` ×340 and `58 55` ×209 (the window is wider than §42.1's run,
+so its shape counts are higher; the members are the same). The addition is a
+**base-rate control** — the same labels beside every 97th message of the
+corpus (1,542 anchors) — so a sibling can be read against "is it just always
+there": 58-on-target reads 93.7 % beside heals, 0.8 % beside damage, **0.9 %
+at base**; 21-on-target 60.8 % / 1.7 % / **1.3 %**; and **no other
+target-addressed value clears 12 % of heals** (the next is `0x00F1` at 11.8 %,
+which reads 6.8 % at base and 14.7 % beside damage — a status word, not a
+number). Same conclusion as §42.1 from a second instrument: the batch carries
+no number for the healed agent but 55 itself.
+
+**The client half, which §42 did not need and records anyway.**
+`avevents.py --id 55` (build 38797): property 55 queues AgentView **effect
+event kind 0x0B** (`0x008131D7 → 0x007E0130 → 0x007F7580`), the kind that
+property **52, energy gain**, queues; damage 16 and 17 queue **kind 0x02**
+(`0x007DFB60 → 0x007F6E70`). So §19's implicit model — the number the client
+draws for 16 should appear for 55 the same way — was pointed at the wrong
+renderer from the start: a heal never enters the damage annotator. The
+kind-0x0B builder reads a float pair from a per-selector table at
+`[this+0x108]` (55 → row 0, 56 → row 1), keeps the larger, and allocates; its
+consumer was not decoded, because §42.2's frames made that unnecessary.
+
+**The scan, as an instrument with controls — `toolkit/harness/callouts.py`,
+pinned by `test_callouts.py`.** §42.2 read the frames by eye and counted one
+box by hand; this makes the count repeatable and gives it the two controls
+§19 lacked. The glyph colour MEASURED off `w007.png` is RGB ≈ (96–144,
+208–224, 224–240); the class `B > 190, G > 180, R < 160, B ≥ G, B − R > 70`
+counts, in a fixed band where the number floated (`900–1000 × 445–485`):
+
+| heal sent (UTC, server `sent` rows) | control frame | number frame | in-band pixels |
+|---|---|---|---|
+| 23:09:48.863 | `w006` +0.04 s: **0** | `w007` +1.25 s | **101** |
+| 23:09:57.561 | `w013` −0.04 s: **0** | `w014` +1.17 s | **101** |
+| 23:10:06.252 | `w020` −0.24 s: **0** | `w022` +2.20 s | **24** |
+
+`w021` (+0.98 s) reads 0 in that band because its `+46` sits ~40 px lower —
+the band is a screen position, and the frame shows the number at a glance —
+which is why the tool prints the whole-frame bounding box for re-aiming
+rather than pretending the band is the finding. Two wrong-colour detectors
+are kept as checks that can go red: the 2026-08-20 green class reads 0 on a
+block of the glyph colour and 100 on a green block, and a saturated-blue
+class (`B > 170, G < 150`) reads a **constant 78 pixels in all 45 frames**,
+every one of them the upper-left effect icon — the same shape as §42.2's
+flat 417, from a different threshold. The synthetic positive control never
+skips, so the test cannot go vacuously green on a bare machine.
+
+Nothing here changes §42.3–42.5; the overheal finding is the peer's alone.

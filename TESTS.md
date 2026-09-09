@@ -9765,6 +9765,16 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   only so no ArenaNet text enters the tree. ~2 s),
   `toolkit/harness/test_accounts.py` (the account selector, and that the primary is
   refused),
+  `toolkit/harness/test_callouts.py` (**the floating-number scanner that finds the
+  heal number the 2026-08-20 green scan missed** — FINDINGS §42.6. The stdlib PNG
+  reader round-trips a fixture it wrote through all five filter types and refuses
+  a 16-bit PNG by name; the `heal` colour class (MEASURED off `w007.png`, a light
+  cyan) counts a 10×10 glyph block as exactly 100 and a saturated-green block as 0,
+  while the `green` class does the reverse — **the 2026-08-20 blind spot kept as a
+  check that can go red**; the band restricts the count. Then the vault frames:
+  `w007`/`w014`/`w022` of `20260820T190917` carry the callout in the number band
+  (101/101/24) and the frame before each reads 0. Skips the vault section by name
+  on a bare machine, but the synthetic positive control never skips; floor 12),
   `toolkit/harness/test_marks.py` (the pre-registered operator-mark channel — §10.5.1's
   {t, kind, text} writer on `wire.jsonl`'s own clock, which two studies call a
   precondition for the next live run. Its criterion is that a mark taken at a segment's
