@@ -62,7 +62,7 @@ from test_position_trust import receive_arm, Sent, FakeRec   # noqa: E402
 # the word-against-point check and the known-bad arm that reddens all three --
 # the cross-plane guard NPCTRACK proposed is refuted at 0 of 488 and ships as
 # nothing).
-LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=208)   # 1z-ct: +7, from the green run
+LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=220)   # 1z-cu: +12, from the green run
 check = checks.adopt(LEDGER)
 
 SRC = open(authsrv.__file__, encoding="utf-8").read()
@@ -2092,6 +2092,116 @@ def main():
           > SRC.index("kbd_lead_refresh_tick(send, state, conn_id, rec)"),
           "24g. ships ON with its revert, in the header; polled at all three "
           "tick sites, after the refresh", "")
+
+    # MOVECODE-1z-cu. The world tick's integrator walked state["pos"] toward
+    # state["dest"] at a flat 14.4 u per tick whatever the 0x003D's movementType
+    # said, while a2_leg_note gave the lead model of the SAME heading
+    # FAMILY_RATE[mt] * 288 -- so a backpedal was integrated 51% too fast even
+    # while the body genuinely moved (sec.1z-cq.5). Measured on our own client
+    # before shipping (studies/movecode/review/modelrate.py, 51 captures, 3,372
+    # gaps): sustained body rates 0.986 / 0.651 / 0.739 x 288, ratios 0.660 and
+    # 0.750 to the table's 0.66 / 0.75; backpedal drift with the body moving
+    # 83.4 -> 27.7 u mean, 303 of 390 better, 7 worse by <= 4.9 u.
+    print("\n25. MOVECODE-1z-cu: the integrator walks at the family's own rate, "
+          "written beside the dest at both sites that arm one")
+    MLS = authsrv.model_leg_speed
+    check(MLS(1) == 288.0 and MLS(2) == 288.0 and MLS(3) == 288.0
+          and abs(MLS(4) - 190.08) < 1e-9 and abs(MLS(6) - 190.08) < 1e-9
+          and MLS(7) == 216.0 and MLS(8) == 216.0,
+          "25a. THE TABLE, as u/s: forward 288, backpedal 190.08, strafe 216 -- "
+          "the numbers a2_leg_note already writes on the kbd_leg row",
+          f"{[MLS(m) for m in range(1, 9)]}")
+    check(MLS(9) == 288.0 and MLS(None) == 288.0 and abs(MLS(4, base=300.0) - 198.0) < 1e-9,
+          "25b. an mt outside the census walks at the base (the sender has already "
+          "printed the miss once); the base is a parameter, not a second literal",
+          f"{MLS(9)} {MLS(None)} {MLS(4, base=300.0)}")
+    _saved_fr = authsrv.MODEL_FAMILY_RATE
+    try:
+        authsrv.MODEL_FAMILY_RATE = False
+        _bad4, _bad8 = MLS(4), MLS(8)
+    finally:
+        authsrv.MODEL_FAMILY_RATE = _saved_fr
+    check(_bad4 == 288.0 and _bad8 == 288.0 and authsrv.MODEL_FAMILY_RATE is True
+          and "--no-model-family-rate" in SRC
+          and authsrv.capture_flags().get("MODEL_FAMILY_RATE") is True,
+          "25c. KNOWN-BAD ARM (--no-model-family-rate): every family walks at 288 "
+          "again -- the flat integrator exactly; ships ON, in the capture header",
+          f"bad arm {_bad4} {_bad8}")
+    # the arm itself, both families, through the shipped 0x003D body
+    _back = [1, [1000.5, 2000.25], 7, [-766.0, 0.0], 4]
+    s25, _ = drive_heading(_back, lead=True)
+    r25 = s25["_rec"]
+    _kd = [r for r in r25.of("kbd_dest") if r.get("act") == "arm"]
+    _kl = [r for r in r25.of("kbd_leg") if r.get("act") == "arm"]
+    check(s25.get("dest") is not None
+          and abs(s25.get("dest_speed", 0.0) - 190.08) < 1e-9
+          and _kd and abs(_kd[-1].get("speed", 0.0) - 190.08) < 1e-9
+          and _kd[-1].get("mt") == 4,
+          "25d. a backpedal report (mt 4) arms the model leg WITH its speed beside "
+          "the dest, and the kbd_dest row names it",
+          f"dest {s25.get('dest')} speed {s25.get('dest_speed')} row {_kd[-1:]}")
+    check(_kl and abs(_kl[-1]["speed"] - s25["dest_speed"]) < 1e-9,
+          "25e. ONE heading, ONE speed: the lead model's kbd_leg row and the "
+          "integrator's dest_speed carry the same number",
+          f"kbd_leg {_kl[-1:]} dest_speed {s25.get('dest_speed')}")
+    s25f, _ = drive_heading(REPORT, lead=True)
+    check(s25f.get("dest_speed") == 288.0,
+          "25f. and a forward report (mt 1) arms 288 -- rate 1.0 is the identity, "
+          "so every forward gap in the corpus is untouched (2,383 of 2,383)",
+          f"{s25f.get('dest_speed')}")
+    # THE SPECIMEN, session 7 t=49.726 (authsrv-20260908T230801-c1): mt 6, a
+    # 0.752 s gap, 15 ticks, the body moved 140.8 u. The shipped integrator's
+    # own recorded output (`ours` at the closing report) is reproduced from
+    # the rule first -- 15 x 14.4 = 216.0 u, 75.15 u from the body -- and then
+    # the fixed rule on the same direction lands 1.71 u from it.
+    _p0 = (10513.2958984375, 8031.15625)
+    _p1 = (10583.6474609375, 7909.134765625)
+    _m1 = (10621.183225046416, 7844.029755998796)
+    _L = math.hypot(_m1[0] - _p0[0], _m1[1] - _p0[1])
+    _ux, _uy = (_m1[0] - _p0[0]) / _L, (_m1[1] - _p0[1]) / _L
+    _ship = 15 * authsrv.DEFAULT_RUN_SPEED * authsrv.TICK_SECONDS
+    _fix = 15 * MLS(6) * authsrv.TICK_SECONDS
+    _mf = (_p0[0] + _ux * _fix, _p0[1] + _uy * _fix)
+    _d_ship = math.hypot(_m1[0] - _p1[0], _m1[1] - _p1[1])
+    _d_fix = math.hypot(_mf[0] - _p1[0], _mf[1] - _p1[1])
+    check(abs(_L - 216.0) < 1e-6 and abs(_ship - 216.0) < 1e-9
+          and abs(_d_ship - 75.15) < 0.01,
+          "25g. THE SPECIMEN, shipped arm reproduced from the rule: 15 ticks x 14.4 "
+          "= 216.0 u is exactly the model advance the capture recorded, 75.15 u "
+          "from the body",
+          f"L {_L:.3f} rule {_ship:.3f} drift {_d_ship:.2f}")
+    check(abs(_fix - 142.56) < 1e-9 and _d_fix < 2.0 and _d_fix < _d_ship / 40,
+          "25h. the same 15 ticks at the backpedal's 9.504 u: 142.56 u, landing "
+          "1.7 u from where the body actually was (75.15 -> 1.71, 98% removed)",
+          f"fix {_fix:.3f} drift {_d_fix:.2f}")
+    # source pins: the literal is gone from the integrator, the speed is read
+    # there once, and written beside the dest at exactly the two arming sites
+    _i_int = SRC.index('step = (float(state.get("dest_speed") or DEFAULT_RUN_SPEED)')
+    check(SRC.count("DEFAULT_RUN_SPEED * TICK_SECONDS") == 0
+          and SRC.count('state.get("dest_speed")') == 1
+          and SRC.index("KEEPALIVE re-grant") < _i_int
+          < SRC.index("NOTHING IS BROADCAST FROM HERE"),
+          "25i. the integrator reads dest_speed ONCE, where the flat literal was, "
+          "and the literal is gone from the file",
+          f"literal {SRC.count('DEFAULT_RUN_SPEED * TICK_SECONDS')}")
+    _i_arm = SRC.index('state["dest_speed"] = model_leg_speed(moving)')
+    _i_dest = SRC.index('state["dest"], state["clipped"] = model_dest, blocked')
+    check(SRC.count('state["dest_speed"] = model_leg_speed(moving)') == 1
+          and 0 < _i_arm - _i_dest < 200
+          and SRC.count("model_leg_speed(") == 2,
+          "25j. the 0x003D arm writes the speed on the line after the dest it "
+          "belongs to, and nothing else consults the table through the helper",
+          f"gap {_i_arm - _i_dest} calls {SRC.count('model_leg_speed(')}")
+    _i_ap = SRC.index('state["dest_speed"] = speed\n')
+    _i_apd = SRC.index('state["dest"] = stop_point if run > 0.0 else None')
+    check(SRC.count('state["dest_speed"] = speed\n') == 1 and 0 < _i_ap - _i_apd < 80,
+          "25k. the attack approach writes ITS leg's speed (the declared base, a "
+          "forward run) beside its dest -- so the integrator never reads a stale "
+          "family speed on a click leg",
+          f"gap {_i_ap - _i_apd}")
+    _i_row = SRC.index('rec.event("kbd_dest", act="arm", mt=moving,')
+    check('speed=state["dest_speed"]' in SRC[_i_row:_i_row + 200],
+          "25l. the row names its operand: kbd_dest carries the speed it armed", "")
 
     return LEDGER.verdict()
 

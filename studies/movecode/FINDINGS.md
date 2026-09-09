@@ -17956,3 +17956,114 @@ hundred captures, **a single session will most likely fire this zero times.** A 
 therefore NOT evidence either way. The arm is scored on the CORPUS retrodiction above, plus any
 firing a later session happens to produce — and the predicate is **realized advance vs lead reach**,
 never drift. A run sheet that scores this on one session's drift would repeat §1z-cs's error.
+
+
+## 1z-cu. THE INTEGRATOR WALKS AT THE FAMILY'S OWN RATE — §1z-cq.5's separable defect, measured on our own client and shipped. Backpedal drift with the body moving **83.4 → 27.7 u mean** (303 of 390 gaps better, 7 worse by ≤ 4.9 u), strafe **56.5 → 27.1 u**, forward untouched. `--no-model-family-rate` reverts. **Not the corner, and not scored as one**
+
+§1z-cq.5 found it on the way to something else: the world tick advanced `state["pos"]` toward
+`state["dest"]` at `DEFAULT_RUN_SPEED * TICK_SECONDS` = 14.4 u per tick whatever the `0x003D`'s
+movementType said, while `a2_leg_note` — the same heading, the same file, three thousand lines
+up — gave the lead model `FAMILY_RATE[mt] * 288`. A backpedalling body (mt 4–6, 190.08 u/s) was
+therefore integrated 51% too fast **even while it was genuinely moving**, and the NPC follow, the
+leash and the range gate read the result. Desk work, no run; the derivation is the corpus.
+
+### 1z-cu.1 ★★★ The body's own rate per family, on OUR client — OBSERVED
+
+`studies/movecode/review/modelrate.py`, 79 September gamesrv captures (2026-09-03 → session 7),
+origin `ours` on every one. Consecutive accepted `0x003D` reports on an unchanged heading (the
+arm's own `turned` test, cos > 0.996) give the body's displacement over the gap; v / 288 per
+movementType is the check with no free parameter. On **sustained** legs (gap ≥ 1.0 s, the chord
+trigger's own cadence):
+
+| family | n | v / 288, p50 | p25–p75 | / forward | table |
+|---|---|---|---|---|---|
+| forward (mt 1–3) | 232 | **0.986** | 0.976–0.988 | 1.000 | 1.00 |
+| backpedal (mt 4–5) | 59 | **0.651** | 0.648–0.652 | **0.660** | 0.66 |
+| strafe (mt 7–8) | 40 | **0.739** | 0.728–0.741 | **0.750** | 0.75 |
+
+The ratios are the table's values to three places. The common 1.4% is the same on every family
+and cancels in the ratio; whose it is (the capture's clock has been the suspect before —
+`movetap`'s `now` measured 1.36% slow, and `cast_stop_reckon`'s inline 0.652 is exactly
+0.66 × 0.986, a displacement census with that factor folded in) is RECONSTRUCTION and not this
+section's question. What IS settled: `FAMILY_RATE`'s "CONTESTED, and THIS PROBE IS THE DECIDER"
+comment is now decided for the drawn body on our own server — 0.66 and 0.75 are what the body
+walks, not just what the wire says.
+
+**A class to name so nobody scores it wrong.** Over ALL gaps ≥ 0.1 s the same census reads
+0.737 / 0.558 / 0.618 — because the 0.3–0.6 s class (789 of 1,060 forward samples) reads ~0.72 ×
+table on EVERY family. It is the scripted harness's 0.5 s re-report cadence (the captures at
+0.71 are the `--walk` runs to a one; the hand-driven sessions read 0.87–0.94 at mixed gaps), a
+per-gap loss that is family-independent and therefore not a rate. UNVERIFIED as to mechanism;
+OBSERVED as to being family-independent, which is all this fix needs.
+
+### 1z-cu.2 ★★★ The integrator, reproduced from its own output, then re-run at the family rate — OBSERVED
+
+Each accepted `0x003D` adopts the report as `state["pos"]` and arms `state["dest"]`; the next
+`position_report` row records `ours`, where the integrator had walked to. So the shipped
+model's advance and its direction are on the capture, not simulated: **2,057 walking gaps
+advanced a WHOLE number of 14.4 u ticks (residual max 0.070, p50 1e-13), tick period p50
+0.0501 s**, and the recorded `drift` equals |ours − reported| on 3,372 of 3,372. That is the
+instrument validated against the thing itself before any counterfactual is read
+([[validate-the-simulator-against-the-thing-itself]]). The fixed arm walks the same direction
+for the same ticks at `FAMILY_RATE[mt] × 14.4`, capped where the faster walker parked. 337
+gaps with a click inside them are excluded (another writer of `state["pos"]`), 0 refused.
+
+Drift at the closing report, split by whether the BODY moved over the gap (> one tick step):
+
+| family | class | n | ship p50 | fix p50 | ship mean | fix mean | better | worse | max worse |
+|---|---|---|---|---|---|---|---|---|---|
+| backpedal | moving | 390 | 66.2 | **12.3** | 83.4 | **27.7** | 303 | 7 | 4.9 |
+| backpedal | held | 143 | 14.4 | 9.5 | 97.6 | 90.2 | 83 | 10 | 4.4 |
+| strafe | moving | 388 | 38.6 | **12.2** | 56.5 | **27.1** | 283 | 10 | 7.1 |
+| strafe | held | 68 | 8.7 | 7.6 | 92.2 | 80.9 | 31 | 5 | 3.3 |
+| forward | moving | 2,142 | 30.4 | 30.4 | 49.7 | 49.7 | 0 | 1 | 0.6 |
+| forward | held | 241 | 14.3 | 14.3 | 64.9 | 64.9 | 0 | 0 | 0.0 |
+
+The specimen `test_kbdsync` §25 pins: session 7 t=49.726, mt 6, a 0.752 s gap, 15 ticks, the
+body moved 140.8 u. The rule reproduces the recorded advance exactly (15 × 14.4 = 216.0 u,
+75.15 u from the body); at 9.504 u per tick the same 15 ticks land 142.56 u out, **1.71 u**
+from where the body was. The forward row's one 0.6 u change is a receive stamp trailing the tick
+thread by a tick, and rate 1.0 is otherwise the identity it should be.
+
+### 1z-cu.3 What ships
+
+* `MODEL_FAMILY_RATE = True` and `model_leg_speed(mt, base=None)`, a pure helper returning
+  `FAMILY_RATE[mt] × 288` — the number `a2_leg_note` already writes on the `kbd_leg` row, so the
+  two models of one heading walk at one speed (§25e checks they agree on the same report).
+* **The speed is written BESIDE the dest at both sites that arm one**: `state["dest_speed"]` on
+  the `0x003D` arm (the family speed) and at the attack approach (its own declared-base run), so
+  the integrator reads one leg's one speed and can never read a stale family on a click leg.
+  The `kbd_dest` row carries it — the row names its operand, a fourth time.
+* The integrator reads `state.get("dest_speed") or DEFAULT_RUN_SPEED`; the flat literal is gone
+  from the file (§25i pins the count at zero).
+* `--no-model-family-rate` reverts to the flat integrator exactly; the known-bad arm reproduces
+  the defect on the helper (§25c). `test_kbdsync` floor **208 → 220**, twelve checks, from the
+  green run. `modelrate.py` reads each capture's `flags` row and scores a capture recorded under
+  this fix as what it is (its fix column becomes the identity), so the next session's capture
+  cannot be read as if it were the flat arm.
+
+### 1z-cu.4 What it does NOT do, and what to watch
+
+* **It is not §1z-cp's corner.** The held class — the body stood, the model walked, the phantom
+  leg — shrinks by the rate and no more (97.6 → 90.2 u mean on backpedal), because the drift
+  there is `speed × gap` on a leg the body never travels. The corner still has no live candidate.
+* It reads `DEFAULT_RUN_SPEED`, not `declared_speed_base`, as `a2_leg_note` does; under
+  `MOVE_SPEED_EFFECTS` (default OFF) both models would be slow together. Its own item if a
+  speed effect ever ships on by default.
+* `cast_stop_reckon`'s 0.652 stays unreconciled with the table's 0.66 in code; §1z-cu.1 says
+  where the difference most likely comes from, and that is a one-line change for whoever
+  reads the clock question.
+* **The pooled 83.4 u is not what a hand-driven session reads.** It is dominated by the
+  scripted runs' 2.7 s backpedal legs (the worst-ten list is all of those). On the six
+  hand-driven RUN-1zCG sessions alone, back+side moving drift mean reads **26.0–46.2 u shipped →
+  9.7–32.0 u fixed**, and the whole-session drift p90 (`sessionscore.py`'s PLAYER row) **does
+  not move** — 64–100 u on either arm — because that quantile is the held class, which is the
+  corner. Anyone scoring this on p90 would call it inert; that is the wrong instrument.
+* **Exposure for the next session**: a hand-driven session carries 21–48 back+side moving gaps
+  (sessions 1–7), so this fires on every session, unlike 1z-ct. REGISTERED, with the check
+  that has no free parameter first: on the operator's next session `modelrate.py` prints the
+  integrator as `family-rate (1z-cu)` and **reproduces every walking gap at a whole number of
+  ticks at the FAMILY step (9.504 / 10.8 / 14.4 u)** — a flat integrator cannot pass that, and
+  the known-bad arm's capture fails it by construction. The band to watch beside it: back+side
+  moving mean **10–32 u** against the shipped 26–46. A session outside the band is a finding,
+  not a tuning target.
