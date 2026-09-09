@@ -282,3 +282,64 @@ rationalised into agreeing** (feedback: ask run questions before the run):
 
 *Map note: the mesh selector scored this capture against map 148; the run command names map 146.
 The stalepair finding is wire-only and map-independent, so this is not chased here.*
+
+---
+
+## RESULT, session 6 — 2026-09-08 20:39 (capture `authsrv-20260908T203914-c1`, tape `movecode/1zcg6-agenttap.jsonl`, 104 s, 364 reports, 165 fired leads, 153 clicks answered)
+
+*"no crashes now, feels smooth. couldn't retrigger the air-walk, but don't call it fixed —
+it's not clear how to repro exactly. i spent the end of the run spam clicking while in the
+corner and didn't hit any crashes or asserts."*
+
+| | registered | measured | |
+|---|---|---|---|
+| **P0** | zero crashes, zero split pairs | **0 crashes, 0 asserts; 0 of 158 pairs split** — and **the gate FIRED once** (92.65 s, tick held 0.27 ms, 138 pairs opened / 138 closed, 0 bare) | ✅ **with a positive control** |
+| **P1** | zero client snaps | **0** separation-gate snaps. The one 155 u jump is OUR OWN grant's arrival teleport | ✅ after an instrument fix |
+| **P2** | zero mid-air ≥ 1 s | **0 episodes — but ZERO EXPOSURE**, the trigger never occurred | **not a pass** |
+| **P3** | ≥ 5 `act=chain` rows | **4** | under the floor: under-measured |
+| **P4** | world-0 vs body moving p50 < 100 u | **130.3 u** (s4 132, s5 164) | ❌ REFUTED |
+
+**P0, and why the gate firing matters more than the zero.** A zero on a rare race proves little
+by itself; what makes this a check is that **the race actually happened and was closed**. The
+gate held a tick once, at 92.65 s — inside the 90–100 s window where the owner was
+spam-clicking in the corner (48 of the session's 153 clicks). Session 5 split 1 pair in 130;
+session 6 split 0 of 158 and holds 1. The one occurrence became a hold. **n = 1: one event, not
+a rate**, and the crash also needs an arrival due at that tick, which nothing here can observe —
+so this is "the mechanism fired and was handled once", not "the crash is impossible".
+
+**P1 needed the instrument corrected first, and this is §1z-ck's lesson a second time on the
+same metric.** The scorer read one "client snap" of 155 u at 81.2 s. It is not the gate: the
+landing point sits **0.5 u from an `AGENT_MOVE_TO_POINT ... ROUTER one leg` WE sent 0.2 s
+earlier**, so it is that grant's own arrival teleport — every grant we send arms the teleport
+branch and never the glide branch (`movement/FINDINGS.md`:1147), and spam-clicking lands one
+every ~0.1 s. `sessionscore.py` now books a jump landing on a point we granted as a **grant
+arrival** and prints it beside the snap count, so the exclusion can never quietly swallow a
+real one. **Run against the known-bad arms it still ranks them badly**: s2 1, s3 1, s5 1, and
+s4 **5** snaps — which also corrects §1z-cl's "six": one of those six (42.2 s, 279 u) was a
+grant arrival too.
+
+**P2 is a zero-exposure null and must not be read as a pass.** The mid-air class needs a jump
+that lands carrying a plane word our mesh does not offer there (F11's cached height). The
+session's only jump landed at (10615, 8017) on plane 0, **where our mesh offers plane 0** — the
+precondition never occurred. The owner's *"couldn't retrigger the air-walk, but don't call it
+fixed"* is exactly right, and this is the mechanism-level reason for it: **§1z-cl's plane-words
+fix is still unchecked by any run.** The stairs themselves were well exposed (237 of 1,094
+samples with the body on mesh plane 29), so this is the trigger being rare, not the route
+being wrong.
+
+**P4 refuted, P3 under its floor.** The door-B chain fired 4 times against a registered floor of
+5, so it is under-measured rather than refuted; and world-0 still trails the body by 130 u at
+the median, which §1z-cl's chain was meant to move and has not.
+
+**The flank, recorded not scored** ([FINDINGS §1z-cn](FINDINGS.md)) — worse, as expected with
+both fixes deliberately out and the owner pressing the corner as asked: the hostile's drawn
+body reached **23.65 u off our mesh** (s5 12.5, s4 17.5), its worst yet. **The `npc_order` rows
+shipped in 1z-cn paid off immediately: 102 of 102 orders pinned exactly** (label inference
+managed 24–40 per session), 5 bad chords, **3 in-disc + 2 route-2pt, and zero UNEXPLAINED** —
+the corpus's one unexplained chord class is closed by the operand alone. Both fixes are now
+unblocked for their own arm.
+
+**New, and it wants its own look:** the player's own drawn body read **8.30 u off our mesh on 3
+samples**, and 14 of the session's reports land up to 8.3 u off it, where session 5 had none.
+The client is saying it stands where our decode has nothing, at the corner the owner pressed.
+UNVERIFIED whether that is missing geometry in our decode or something else.

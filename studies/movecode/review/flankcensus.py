@@ -152,7 +152,18 @@ def score(cap, tape, quiet=False):
     T = [sm["t"] + head["t0"] - capoff for sm in srows]
 
     out = {"cap": os.path.basename(cap), "tape": os.path.basename(tape), "map": mid,
-           "orders": 0, "pinned": 0, "bad": [], "parked": parked_off_mesh(mesh, srows)}
+           "orders": 0, "pinned": 0, "bad": [], "parked": parked_off_mesh(mesh, srows),
+           "operand": "inferred from the label"}
+    # MOVECODE-1z-cn shipped the operand into the capture. When it is there, use it: the
+    # label inference pins about a quarter of the orders and left the corpus's worst chord
+    # unexplained. Keyed by (t, rounded destination) so a row matches its own send.
+    orders = {}
+    for r in rows:
+        if r.get("kind") == "npc_order" and r.get("act") == "follow-bare":
+            to = r.get("to") or [0, 0]
+            orders[(round(r["t"], 2), round(to[0]), round(to[1]))] = r
+    if orders:
+        out["operand"] = "npc_order rows (exact)"
     for m in rows:
         if m.get("kind") != "sent" or m.get("opcode") != 0x2A:
             continue
@@ -164,16 +175,25 @@ def score(cap, tape, quiet=False):
         except (ValueError, struct.error):
             continue
         out["orders"] += 1
-        g = OUT_RE.search(m.get("label") or "")
-        i = bisect.bisect_left(T, m["t"]) - 1
-        if not g or i < 0:
-            continue
-        a = (srows[i].get("agents") or {}).get(str(HOSTILE))
-        if not a or "x" not in (a.get("sync") or {}):
-            continue
-        origin = (a["sync"]["x"], a["sync"]["y"])
-        if abs(math.dist(origin, (px, py)) - float(g.group(1))) > PIN_TOL:
-            continue
+        origin = None
+        exact = None
+        for dt in (0.0, 0.01, -0.01):
+            exact = orders.get((round(m["t"] + dt, 2), round(px), round(py)))
+            if exact:
+                break
+        if exact and exact.get("solve_from"):
+            origin = (float(exact["solve_from"][0]), float(exact["solve_from"][1]))
+        else:
+            g = OUT_RE.search(m.get("label") or "")
+            i = bisect.bisect_left(T, m["t"]) - 1
+            if not g or i < 0:
+                continue
+            a = (srows[i].get("agents") or {}).get(str(HOSTILE))
+            if not a or "x" not in (a.get("sync") or {}):
+                continue
+            origin = (a["sync"]["x"], a["sync"]["y"])
+            if abs(math.dist(origin, (px, py)) - float(g.group(1))) > PIN_TOL:
+                continue
         out["pinned"] += 1
         chord = mesh.seg_off(origin, (px, py), step=2.0)
         if chord <= FAR:
@@ -192,8 +212,8 @@ def score(cap, tape, quiet=False):
 def report(o):
     print("=" * 92)
     print(f"{o['cap']}   map {o['map']}   tape {o['tape']}")
-    print(f"  hostile 0x002A orders {o['orders']}, operand pinned {o['pinned']}, "
-          f"chord leaves our mesh {len(o['bad'])}")
+    print(f"  hostile 0x002A orders {o['orders']}, operand pinned {o['pinned']} "
+          f"[{o.get('operand', '?')}], chord leaves our mesh {len(o['bad'])}")
     if o["parked"]:
         worst = max(p[2] for p in o["parked"])
         print(f"  PARKED off our mesh: {len(o['parked'])} episode(s), worst {worst:.2f} u")
@@ -219,6 +239,7 @@ def main(argv):
         ("authsrv-20260907T121212-c1", "1zcg3-agenttap"),
         ("authsrv-20260907T144522-c1", "1zcg4-agenttap"),
         ("authsrv-20260908T183848-c1", "1zcg5-agenttap"),
+        ("authsrv-20260908T203914-c1", "1zcg6-agenttap"),
     ]
     tally = {}
     for capn, tapen in pairs:

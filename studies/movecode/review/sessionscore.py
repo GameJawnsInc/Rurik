@@ -70,6 +70,8 @@ PLANE_LAG_OK, PLANE_LAG_RED = 1.0, 2.5      # s: retail's mover-plane update aft
 LOCK_S = 12.0                             # a keyboard leg armed this long with no report
 FLOOR_REPORTS = 20                        # a 60 s scripted run carries 23
 SNAP_JUMP = 100.0                         # u: a drawn-body jump at a fence shut is a client snap
+GRANT_ARRIVAL_U = 4.0                     # u: a jump landing this close to a point we granted
+GRANT_ARRIVAL_S = 1.0                     # s: ...within this long is that grant's arrival teleport
 FLOOR_TAPE_MOVING = 60
 FAR = 2.0
 FOLLOW_STOP = 80.0                        # authsrv.follow_stop_radius(): r + r + 56
@@ -267,8 +269,23 @@ def score_tape(tape, mesh, cap_path, cap_reps=None):
     # 150-450 u teleport. Session 3 of RUN-1zCG scored 3 snaps on the raw column
     # and has 1 on the live path; FEEL2's "452 u out of the hole" was the same
     # walk. w0score.live is the client's own position_at, clamp and all.
+    #
+    # AND NOT EVERY JUMP IS THE GATE (RUN-1zCG session 6). Every grant we send arms the
+    # client's teleport branch, so at a grant's arrival tick the body is SET to the granted
+    # point (movement/FINDINGS :1147). Spam-clicking lands a grant every ~0.1 s, and session
+    # 6's single "snap" -- 155 u at 81.2 s -- put the body within 0.5 u of a `ROUTER one leg`
+    # point sent 0.2 s earlier. That is the client obeying us, which is the opposite of the
+    # thing this metric exists to count. A jump landing on a point we granted in the last
+    # GRANT_ARRIVAL_S is booked separately and both counts are printed, so the exclusion can
+    # never quietly swallow a real gate snap.
     snaps = []
+    grant_arrivals = []
     prev = None
+    try:
+        G = W.grants(W.load_gamesrv(cap_path))
+    except Exception:                                  # noqa: BLE001
+        G = []
+    gw = [g["w"] for g in G]
     for sm in rows:
         a = (sm.get("agents") or {}).get("1")
         if not a or not a.get("async") or "x" not in a["async"]:
@@ -278,9 +295,16 @@ def score_tape(tape, mesh, cap_path, cap_reps=None):
         if prev is not None:
             j = math.dist(prev[1], pt)
             if j > SNAP_JUMP and (f == "shut" or prev[0] == "shut"):
-                snaps.append((round(sm["t"], 1), round(j)))
+                w = head["t0"] + sm["t"]
+                lo = bisect.bisect_left(gw, w - GRANT_ARRIVAL_S)
+                hi = bisect.bisect_right(gw, w + 0.10)
+                on_grant = any(math.dist(g["dest"], pt) <= GRANT_ARRIVAL_U
+                               for g in G[lo:hi])
+                (grant_arrivals if on_grant else snaps).append(
+                    (round(sm["t"], 1), round(j)))
         prev = (f, pt)
     out["snaps"] = snaps
+    out["grant_arrivals"] = grant_arrivals
     # THE MID-AIR SIGNATURE (MOVECODE-1z-cl, RUN-1zCG session 4's end): the drawn
     # body PARKED on a plane word our mesh does not offer at its point -- the
     # client draws it at that plane's cached height (F11) and its keyboard
@@ -469,6 +493,10 @@ def report(cap_path, tape, mesh, mid, c, t):
         line("enslavement (body following a server grant)", "%s (%s)" % (
             t.get("enslaved"), None if t.get("enslaved_frac") is None else "%.1f%%" % (100 * t["enslaved_frac"])),
              "  -  ", "a wall slide reads ~32% here by design (w0score note)")
+        ga = t.get("grant_arrivals") or []
+        line("grant arrivals (a jump landing ON a point WE granted)",
+             "%d %s" % (len(ga), ga[:4] if ga else ""), "  -  ",
+             "not the gate: every grant arms the teleport branch; s6 spam-clicking made 1")
         sn = t.get("snaps") or []
         line("client snaps (fence shut + body jump > %.0f u)" % SNAP_JUMP,
              "%d %s" % (len(sn), sn[:4] if sn else ""), "OK   " if not sn else "RED  ",
