@@ -4387,6 +4387,23 @@ RESYNC = False
 # ship the working rule, not a flag to ask about -- both arms default ON;
 # --no-agtrack-shadow / --no-agtrack-repin disable.
 #
+# THE RE-PIN SHIPS OFF SINCE MOVECODE-1z-cy (2026-09-09), ON RETAIL'S OWN
+# CONTRACT: over 51 live connections ArenaNet's server sent the player a
+# 0x002C five times -- two at spawn, three while STANDING 26-72 s after a
+# stop -- and never once mid-walk.  Ours sent 17 across six hand-driven
+# sessions, every one mid-walk (ten at a walk-start report), and at 15 of
+# the 17 world-0 was already within 10 u of the drawn body, so the snap the
+# guard predicted had nothing visible to correct.  What each one DID do is
+# shut AgTrack's fence (1z-aa: 12 of 12): the lead degrades to the report,
+# the copy parks ~1.0 s while the body walks on, and world-0 sits 100-300 u
+# behind for the next seconds -- all 58 of the corpus's fence-shut parked
+# episodes trail one of these pins (1z-cw.6, p50 3.5 s).  The 1z-s benefit
+# (217 of 251 historical warps pre-empted) was measured under the pre-lead
+# regime that RUN-1zBO retired; under the shipped lead the client's snaps
+# do not sit near the pins (session 144522: 5 snaps, the nearest pin 0.5 s
+# AFTER one).  --agtrack-repin restores the active arm exactly; the shadow
+# telemetry is untouched.  FINDINGS 1z-cy.
+#
 # Every call site is fused: the first exception disables the guard for the
 # session with one loud line, because no arm of this may take down the
 # server.  Guard state is touched from two threads (the recv loop and
@@ -4420,7 +4437,7 @@ RESYNC = False
 GRANT_DURING_HOLD = True
 
 AGTRACK_SHADOW = True
-AGTRACK_REPIN = True
+AGTRACK_REPIN = False          # 1z-cy: retail never pins mid-walk; --agtrack-repin restores
 # GATE 2 ON-MESH TOLERANCE (MOVECODE-1z-bf, 2026-09-04). The guard's gate 2
 # asks pathmap.on_mesh(a, 1 u) -- inside a trapezoid OR within SEAM_TOL of one
 # -- instead of exact walkable(a). Every gate2-offmesh re-pin this server ever
@@ -25361,12 +25378,19 @@ def main():
                          "333 to 59 (FINDINGS sec.27). OFF by default.")
     ap.add_argument("--no-agtrack-repin", action="store_true",
                     help="Keep the guard's telemetry but disable its ACTIVE "
-                         "arm (ON by default; MOVECODE-1z-s): the single "
-                         "0x002C re-pin at the client's own fresh report "
-                         "when the next snap-test evaluation is predicted "
-                         "to fail. Additive -- with or without this, no "
-                         "grant is ever suppressed or held. Disabling "
-                         "restores the pre-1z-s wire behaviour exactly.")
+                         "arm: the single 0x002C re-pin at the client's own "
+                         "fresh report when the next snap-test evaluation is "
+                         "predicted to fail (MOVECODE-1z-s). OFF BY DEFAULT "
+                         "since MOVECODE-1z-cy, so this flag is the default "
+                         "spelled out; --agtrack-repin is the revert arm.")
+    ap.add_argument("--agtrack-repin", action="store_true",
+                    help="MOVECODE-1z-cy's revert arm: switch the guard's "
+                         "ACTIVE re-pin back ON (the 1z-s default until "
+                         "2026-09-09). Retail's server never sends the player "
+                         "a 0x002C mid-walk (0 of 51 live connections); ours "
+                         "sent 17 across six hand-driven sessions, all "
+                         "mid-walk, each shutting the fence for ~1 s of "
+                         "parked copy -- FINDINGS 1z-cy.")
     ap.add_argument("--no-plane-repair", action="store_true",
                     help="Disable the plane-lock repair (ON by default). The "
                          "repair sends ONE labelled 0x002C -- the client's own "
@@ -27211,11 +27235,19 @@ def main():
               "while the action hold is set (ANIMREF-R11, REFUTED -- expect "
               "the body relocation to vanish AND the slide to go with it, "
               "recovery lag p50 62 ms -> 406 ms).", flush=True)
+    if a.agtrack_repin and a.no_agtrack_repin:
+        ap.error("--agtrack-repin and --no-agtrack-repin name both arms")
+    global AGTRACK_REPIN
+    if a.agtrack_repin:
+        AGTRACK_REPIN = True
+        print("[map] --agtrack-repin: the 1z-cy REVERT ARM -- the guard's "
+              "active 0x002C re-pin is back on (retail never pins the "
+              "player mid-walk; every fence-shut park in the corpus trails "
+              "one of these).", flush=True)
     if a.no_agtrack_repin:
-        global AGTRACK_REPIN
         AGTRACK_REPIN = False
         print("[map] --no-agtrack-repin: the guard observes and records but "
-              "sends nothing; pre-1z-s wire behaviour exactly.")
+              "sends nothing; the 1z-cy default, spelled out.")
     if a.no_plane_repair:
         global PLANE_REPAIR
         PLANE_REPAIR = False

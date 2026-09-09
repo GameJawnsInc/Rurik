@@ -18301,3 +18301,89 @@ point at or behind the body every time the fence is shut; `wall-slide` and `clip
 lead at the wall. Which of those three is retail-unfaithful is the next derivation, and it is
 the corner's — the fence-shut class is where the client's own separation gate has taken over,
 and a lead withheld there is the enslavement guard doing its job.
+
+
+## 1z-cy. THE WALL-LEAD CLASSES, ASKED AGAINST RETAIL — fence-shut is OURS (the AGTRACK re-pin, which retail never sends mid-walk) and ships OFF; the corner's lag is the LENGTH of our leads near walls, a third of them under 50 u against retail's 4 %
+
+**Asked:** §1z-cw.6's next derivation — which of `fence-shut`, `wall-slide` and `clipped` is
+retail-unfaithful. Desk only: the live corpus through `livewire`, the six RUN-1zCG hand-driven
+sessions and their tapes, `review/floorcensus.py`'s two halves. Ident `MOVECODE-1z-cy`. OBSERVED
+unless marked.
+
+### 1z-cy.1 Retail's contract on the player's `0x002C`: never mid-walk
+
+Over **51 live connections**, ArenaNet's server sent the player agent a `0x002C` **five times**:
+two at spawn before any movement report, three while STANDING — 26.1, 26.1 and 71.7 s after the
+last `0x0047` stop — and **zero within 2 s of a `0x003D`**. (NPCs: eight.) Its wire never pins a
+walking player.
+
+### 1z-cy.2 Ours: seventeen `AGTRACK RE-PIN`s, all mid-walk, and every fence-shut park trails one
+
+The six hand-driven sessions carry **17 player `0x002C`s, every one `AGTRACK RE-PIN` (1z-s: "the
+client's own report; predicted snap pre-empted")** — gate2-offmesh 8, gate1-red 5, arrival-risk
+3, budget-red 1 — and every one mid-walk on the 2 s test above; **ten fired at a walk-start
+report with the body still standing.** Joined to the tape at the pin's own instant: **world-0
+was within 10 u of the drawn body on 15 of 17** (0.0 u on nine), so the snap the guard predicted
+had nothing visible to correct; one (t = 77.67, gate1-red) found the copy 130 u behind, the
+pin's intended case. What each pin then DOES is 1z-aa's own measurement: the fence shuts, the
+lead degrades to the report, and the copy parks — **1.00 s per pin of standing copy under a
+moving body (17.0 s over the 17)**, world-0 86–226 u behind at +1 s and 100–302 u at +3 s,
+including the one pin that had a lag to remove. **All 58 of §1z-cw.6's fence-shut parked
+episodes trail one of these pins** (age p50 3.5 s, p90 7.6 s; 45 of 58 under 6 s), and the
+fence-shut class is **95 of 829 fired leads (11.5 %), every one of length 0.0 u**. The client's
+own snaps (`sessionscore`'s fence-shut body jumps, 9 over the six sessions) sit nowhere near
+the pins — session 144522's five snaps have a pin 0.5 and 1.4 s AFTER two of them, the rest
+4.5–64 s away — so the pin is not pre-empting the snaps that happen. The reseed shutter (1z-ci's
+`fence shut by client-reseed`) is not the cause: the census attributes every episode to a
+`0x002C`.
+
+**What this does NOT explain, measured before it was claimed** ([[accrued-under-is-not-caused-by]],
+for the second time today): the along-track lag accrued within 6 s after a re-pin is **22.3 % of
+the sessions' total over 23.1 % of their moving time** — mean world-0-vs-body separation 151.6 u
+inside those windows against 159.0 u outside. The re-pin costs a second of parked copy per
+firing and 11.5 % of the leads; it is not the 130–160 u.
+
+### 1z-cy.3 The lead LENGTH census — the corner's lever, named
+
+Fired keyboard leads, |grant − report|, six sessions, 829 fired, against retail's 2,785 answered
+heading reports (`floorcensus.retail()`, 26 connections):
+
+| | ours | retail |
+|---|---|---|
+| p10 / p50 / p90 | 0 / **116** / 520 u | 147 / **766** / 768 u |
+| under 100 u | **46.4 %** | 7.1 % |
+| under 50 u | **31.8 %** | 4.0 % |
+| the full chord | 15.0 % at 520 | 65.4 % at ~766 |
+| the SHORT ones (< 700 / clipped) | wall-slide p50 **97** (n 241), clipped **108** (168), plane-seam 177 (61), fence-shut **0** (95), the `w0-route` corridor legs 103–186 (113) | p50 **296** u (n 965, 34.6 %) |
+
+At 288 u/s a 116 u lead is reached in 0.40 s and the next report is 0.24–0.5 s away: the copy
+is parked a quarter to a half of the time by construction, which is §1z-cw.6's parked copy
+(arrival p50 0.31 s after the grant) seen from the grant's side. Three things in the table are
+ours and not retail's: the **fence-shut zeros** (11.5 %, the re-pin, this section); the
+**`w0-route` corridor legs** to a first vertex (13.6 %, p50 103–186 u — retail routes no player
+lead, its wire is the clipped chord); and the **wall-slide vertex** (29 % of leads, p50 97 u
+against retail's 375 u slide chord in §1z-ce.2 — same rule, our stairs' sides are short, so the
+rule's faithfulness on OUR geometry is UNVERIFIED: 1z-ce scored it on retail's maps, and
+`wallslide.py --check` reproduces retail's vertices there). **The regime caveat is real**: the
+owner plays the corner and retail's players walk open ground, so the raw p50s are not the same
+question; the under-50 u share (31.8 % vs 4.0 %) and the two classes retail does not have are.
+
+### 1z-cy.4 What ships
+
+`AGTRACK_REPIN = False` — the active re-pin arm off, on retail's contract (1z-cy.1) and its own
+measured cost (1z-cy.2); `--agtrack-repin` is the revert arm, `--no-agtrack-repin` stays as the
+default spelled out, both together refused, the switch in the capture header by discovery.
+The guard's shadow telemetry is untouched. `test_agtrack_guard` §12 pins the default and drives
+the mechanism on the revert arm explicitly (floor 89 → 91). The 1z-s benefit — 217 of 251
+historical warps pre-empted — was measured under the pre-lead regime RUN-1zBO retired; no
+scripted run since has fired more than one (RUN-FEEL2's), so a scripted A/B has zero exposure
+and the check is the owner's next session.
+
+**REGISTERED for the operator's next session (hand-driven, the corner):** `0x002C re-pins sent`
+**0** (was 0–7 per session); `lead_clip_why = fence-shut` fired leads **0** (was 95 of 829);
+`floorcensus --parked`'s fence-shut episodes **0** (was 58 of 255); client snaps per session
+**≤ 1** on five of six as today (baseline 1, 1, 5, 1, 0, 1 — a session over 5 REFUTES the
+"nothing to pre-empt" reading and the revert arm goes back on); world-0 vs body moving p50
+expected to move by the fence-shut share only, **not** under 100 u. The next derivation is
+1z-cy.3's: the wall-slide vertex on OUR stairs against retail's slide chord, and the `w0-route`
+legs' length — the lever is lead length near walls.
