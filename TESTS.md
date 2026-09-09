@@ -3962,6 +3962,18 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   mid-cruise — survives as TIME (1.806 s of unbroken walking to reach the cap), which is what
   they now assert.
 
+  **MOVECODE-1z-cu (2026-09-09) moves `test_kbdsync.py`'s floor 208 → 220**, twelve checks in
+  §25: the family table as u/s and the base as a parameter (§25a–b); the known-bad arm
+  (`--no-model-family-rate` returns 288 for every family) shipping ON in the capture header
+  (§25c); a backpedal `0x003D` driven through the shipped arm arming `state["dest_speed"]` =
+  190.08 beside the dest, the `kbd_dest` row naming it, and the lead model's `kbd_leg` row
+  carrying the SAME number (§25d–e); a forward report arming 288 (§25f); THE SPECIMEN —
+  session 7 t=49.726, whose recorded model advance the rule reproduces exactly (15 × 14.4 =
+  216.0 u, 75.15 u from the body) and whose fixed advance lands 1.71 u from the body (§25g–h);
+  and source pins that the integrator reads `dest_speed` once where the flat literal was, that
+  the literal is gone from the file, that the speed is written on the line after the dest at
+  both arming sites, and that only the `0x003D` arm consults the table (§25i–l).
+
   `toolkit/authsrv/test_livewire.py` (the committed retail-decode recipe,
   RETHINK instrument #2 — the campaign's referee moved out of a deletable
   scratchpad. Guards `toolkit/authsrv/livewire.py`: the no-vault doors

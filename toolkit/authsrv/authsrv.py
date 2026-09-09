@@ -9118,6 +9118,48 @@ MODEL_WALL_SLIDE = True       # False (--no-model-wall-slide): a leg blocked at 
 # --no-bound-clear-leads restores the "lead-clear" refusal exactly.
 MODEL_BOUND_CLEAR_LEAD = True
 
+# MOVECODE-1z-cu. THE INTEGRATOR WALKS AT THE FAMILY'S OWN RATE. The world tick used to
+# advance state["pos"] toward state["dest"] at a flat run speed times the tick, 14.4 u
+# per tick, whatever the 0x003D's movementType said, while a2_leg_note -- the SAME
+# heading, the same file -- gave the lead model FAMILY_RATE[mt] * 288 (sec.1z-cq.5). So a
+# backpedalling body (mt 4-6, 190.08 u/s) was integrated 51% too fast even while it was
+# genuinely moving, and the NPC follow, the leash and the range gate read the result.
+#
+# DERIVED, not tuned, and MEASURED ON OUR OWN CLIENT before it shipped
+# (studies/movecode/review/modelrate.py over 51 September captures, 3,372 report gaps):
+#   * the body's own sustained rate, unchanged heading, gap >= 1 s: forward 0.986 x 288,
+#     backpedal 0.651, strafe 0.740 -- ratios to forward 0.660 and 0.750, the table's
+#     0.66 and 0.75 to three places (the common 1.4% is the capture clock, not the body);
+#   * the integrator reproduced from its own output: 2,057 walking gaps advanced a WHOLE
+#     number of 14.4 u ticks (residual 1e-13), tick period p50 0.0501 s;
+#   * drift at the closing report with the body MOVING: backpedal mean 83.4 -> 27.7 u
+#     (303 of 390 gaps better, 7 worse by at most 4.9 u), strafe 56.5 -> 27.1 u;
+#     forward untouched (rate 1.0 is the identity). The HELD class (the body stood, the
+#     model walked -- sec.1z-cp's phantom leg) shrinks by the rate and no more: this is
+#     not a fix for the corner and must not be scored as one.
+# The speed is written BESIDE `dest` at both sites that arm it (the 0x003D arm and the
+# attack approach), so the integrator reads one leg's one speed and never a stale one --
+# the kbd_dest row carries it, as the kbd_leg row already carried a2_leg_note's.
+# cast_stop_reckon's inline 0.652 (a displacement census) is still not reconciled with
+# FAMILY_RATE's 0.66 (the wire-modal float); this reads the table, as the lead does.
+# --no-model-family-rate restores the flat 288 u/s integrator exactly.
+MODEL_FAMILY_RATE = True
+
+
+def model_leg_speed(mt, base=None):
+    """Pure: the u/s the position model walks a keyboard leg of family `mt` at.
+
+    FAMILY_RATE[mt] x DEFAULT_RUN_SPEED -- the number a2_leg_note already writes on
+    the kbd_leg row, so the two models of one heading walk at one speed. An mt the
+    table does not name walks at the base (the sender has already printed the
+    census miss once); under --no-model-family-rate every family walks at the base.
+    """
+    if base is None:
+        base = DEFAULT_RUN_SPEED
+    if not MODEL_FAMILY_RATE:
+        return float(base)
+    return FAMILY_RATE.get(mt, 1.0) * float(base)
+
 
 def model_leg_bound(origin, model_dest, reported, lead_dest, lead_clipped, src):
     """Pure: trim the model leg to the REACH the grant ordered. -> (dest, why)
@@ -12374,11 +12416,13 @@ def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
     leg = _leg_record((px, py), stop_point, now, speed)
     state["click_leg"] = leg
     # And the server's own copy walks there: the world tick's integrator
-    # advances state["pos"] toward `dest` at DEFAULT_RUN_SPEED and clears
-    # it on arrival -- the same arithmetic the client's sync copy runs on
-    # the 0x002A. Retail's server owns this leg; ours must too, or the
-    # range gate would never see the body arrive.
+    # advances state["pos"] toward `dest` at the leg's own speed (1z-cu:
+    # this leg's, written beside it) and clears it on arrival -- the same
+    # arithmetic the client's sync copy runs on the 0x002A. Retail's
+    # server owns this leg; ours must too, or the range gate would never
+    # see the body arrive.
     state["dest"] = stop_point if run > 0.0 else None
+    state["dest_speed"] = speed
     state["approach"] = {"target": target_id, "t0": now,
                          "told": (tx, ty), "sent_at": now,
                          "eta": leg["eta"]}
@@ -20176,7 +20220,11 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                     px, py = state["pos"]
                     dx, dy = dest[0] - px, dest[1] - py
                     dist = math.hypot(dx, dy)
-                    step = DEFAULT_RUN_SPEED * TICK_SECONDS
+                    # MOVECODE-1z-cu: the leg's own speed, written beside `dest`
+                    # at both sites that arm it. A backpedal walks 9.504 u per
+                    # tick, not 14.4 (see MODEL_FAMILY_RATE).
+                    step = (float(state.get("dest_speed") or DEFAULT_RUN_SPEED)
+                            * TICK_SECONDS)
                     arrived = dist <= step
                     if arrived:
                         state["pos"], state["dest"] = dest, None
@@ -21168,11 +21216,14 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             model_dest, blocked = clip_to_walkable(
                                 state, (px + heading[0], py + heading[1]))
                             state["dest"], state["clipped"] = model_dest, blocked
+                            # MOVECODE-1z-cu: the leg's own speed, beside its dest.
+                            state["dest_speed"] = model_leg_speed(moving)
                             # MOVECODE-1z-cr: THE PHANTOM LEG, NAMED WHERE IT IS ARMED.
                             # This assignment is the whole of MOVECODE-1z-cp: the 20 Hz
                             # integrator (authsrv.py, "state[\"pos\"] = (px +") walks
-                            # state["pos"] toward this destination at a flat 14.4 u per
-                            # tick until the next report lands, and the NPC follow orders
+                            # state["pos"] toward this destination at the family's own
+                            # speed (1z-cu; a flat 14.4 u per tick before it) until the
+                            # next report lands, and the NPC follow orders
                             # from the result. The vec2 is fixed-magnitude (765-768 u), so
                             # a report the client sends while its body is held by geometry
                             # arms a ~767 u leg the body never travels -- and 1z-cq could
@@ -21181,6 +21232,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             # next position_report measures, which is what closes it.
                             if rec is not None:
                                 rec.event("kbd_dest", act="arm", mt=moving,
+                                          speed=state["dest_speed"],
                                           frm=[float(px), float(py)],
                                           heading=[float(heading[0]),
                                                    float(heading[1])],
@@ -25470,6 +25522,12 @@ def main():
                          "it walks the client's full ~768 u ray while the grant reached "
                          "520 u (session 4 t=48.98: 247 u of drift, 356 u of aim error "
                          "across two follow orders). Known-bad arm.")
+    ap.add_argument("--no-model-family-rate", action="store_true",
+                    help="MOVECODE-1z-cu REVERT: the position model integrates every "
+                         "keyboard leg at a flat 288 u/s, so a backpedalling body "
+                         "(190.08 u/s) is modelled 51%% ahead of where it is even while "
+                         "it moves (September corpus: backpedal drift 83 u mean against "
+                         "28 under the fix). Known-bad arm.")
     ap.add_argument("--no-npc-leg-disc-clip", action="store_true",
                     help="MOVECODE-1z-co REVERT: a corridor whose first vertex is inside "
                          "the player's disc is DISCARDED and the bare 0x002A goes out "
@@ -27273,7 +27331,7 @@ def main():
     global A2_LEAD_WALL_SLIDE
     global A2_LEAD_DISC_CLEAR
     global A2_LEAD_W0_ORIGIN, A2_LEAD_PLANE_WORDS, KBD_LEAD_CHAIN, STALE_PAIR_GATE
-    global NPC_LEG_DISC_CLIP, MODEL_BOUND_CLEAR_LEAD
+    global NPC_LEG_DISC_CLIP, MODEL_BOUND_CLEAR_LEAD, MODEL_FAMILY_RATE
     if a.legacy_kbd_sync:
         KBD_SYNC = False
         KBD_SYNC_HOLD = False
@@ -27323,6 +27381,11 @@ def main():
             print("[map] --no-bound-clear-leads: the model leg out-walks a clear "
                   "grant by up to the client's ray minus KBD_SYNC_LEAD "
                   "(1z-ct's revert).", flush=True)
+        MODEL_FAMILY_RATE = not a.no_model_family_rate
+        if not MODEL_FAMILY_RATE:
+            print("[map] --no-model-family-rate: the position model walks every "
+                  "keyboard leg at 288 u/s whatever the movementType (1z-cu's "
+                  "revert).", flush=True)
         NPC_LEG_DISC_CLIP = not a.no_npc_leg_disc_clip
         if not NPC_LEG_DISC_CLIP:
             print("[map] --no-npc-leg-disc-clip: an in-disc corridor is discarded and the "
