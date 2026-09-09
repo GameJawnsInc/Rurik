@@ -3987,6 +3987,14 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   of 6 under the 0.5 s arm AND 6 of 6 shipped, and the C3 perturbation now moves
   `KBD_GRANT_FLOOR` (1.0 → two grants, 0.5 → three, 0.0 → all six).
 
+  **RUN-1zCW (2026-09-09) moves `test_harness.py`'s floor 157 → 159**: the `steer:KEY,PX,SECONDS`
+  walk step parses (key upper-cased, pixels signed, seconds the hold) and refuses two fields, a
+  zero turn, a zero hold, a two-letter key and a non-number, and `session.steer` exists. It was
+  built because every single-step plan ends each leg in a stop, so no heading report ever arrived
+  inside the keyboard arm's old grant floor and the first A/B pair measured nothing; the operator
+  steers while moving, and this is the only step that does. `--settle SECONDS` exposes
+  `walk_legs`'s pause between steps for the same reason.
+
   `toolkit/authsrv/test_livewire.py` (the committed retail-decode recipe,
   RETHINK instrument #2 — the campaign's referee moved out of a deletable
   scratchpad. Guards `toolkit/authsrv/livewire.py`: the no-vault doors

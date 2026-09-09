@@ -64,7 +64,7 @@ import checks  # noqa: E402
 # measure, for the same two vault-dependent skips as before.
 # FLOOR: 141, MEASURED from a green run 2026-08-17 after section 10 gained
 # the camera-verb checks -- set from the run's own count, never arithmetic.
-LEDGER = checks.Ledger("harness", floor=157)
+LEDGER = checks.Ledger("harness", floor=159)   # 1z-cw: +2, the steer verb
 check = checks.adopt_named(LEDGER)
 
 
@@ -1245,6 +1245,22 @@ def section_hold_key():
               "20:11:39 and the first hold frame was stamped 20:13:58, 139 s "
               "later. As a walk step the fight and its frames overlap by "
               "construction")
+    LEDGER.ok(session.parse_walk("steer:w,300,3 steer:S,-200,1.5")
+              == [("steer", "W,300", 3.0), ("steer", "S,-200", 1.5)],
+              "the 2026-09-09 steer verb parses: a key held WHILE the view turns, "
+              "key upper-cased, pixels signed, seconds the hold",
+              "RUN-1zCW pair 1: every single-step plan ends each leg in a stop, "
+              "so no heading report ever arrived inside the old 0.5 s grant "
+              "floor and the A/B measured nothing -- the operator steers while "
+              "moving, and this is the only step that does")
+    LEDGER.ok(all(refused(session.parse_walk, bad)
+                  for bad in ("steer:W,300", "steer:W,0,3", "steer:W,300,0",
+                              "steer:WW,300,3", "steer:W,x,3"))
+              and callable(getattr(session, "steer", None)),
+              "steer refuses two fields, a zero turn, a zero hold, a two-letter "
+              "key and a non-number; and the executor exists",
+              "a steer that parsed to nothing would run as a plain hold and "
+              "the run would look like the control arm")
     LEDGER.ok(session.parse_walk("click:0.411,0.561")
               == [("click", "0.411,0.561", 1.0)],
               "the click verb parses: a window-relative point, no duration",

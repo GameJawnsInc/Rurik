@@ -1050,6 +1050,11 @@ def parse_walk(text):
                     for 38s, clicking nothing -- a HUD tooltip is the only
                     readable surface for some state, and this is how a probe
                     run reads one unattended
+        steer:W,300,3          hold W for 3 s WHILE right-dragging the view 300 px
+                    (positive = right) in quarter-second slices -- the
+                    operator's own regime, a body that keeps moving while its
+                    heading changes, which no sequence of single steps can
+                    produce (RUN-1zCW pair 1: every leg ends in a stop)
 
     -> [('key', 'W', 6.0), ('zoom', '', -14.0), ...]
 
@@ -1090,6 +1095,27 @@ def parse_walk(text):
             except ValueError:
                 raise SystemExit(f"walk step {spec!r}: attack wants an agent id")
             steps.append(("attack", str(agent_id), 0.0))
+            continue
+        if head == "steer":
+            parts = arg.split(",")
+            if len(parts) != 3:
+                raise SystemExit(f"walk step {spec!r}: steer wants KEY,PX,SECONDS")
+            k = parts[0]
+            if k in dc.NAMED_KEYS:
+                kname = k
+            elif len(k) == 1:
+                kname = k.upper()
+            else:
+                raise SystemExit(f"walk step {spec!r}: {k!r} is not a key")
+            try:
+                px, secs = float(parts[1]), float(parts[2])
+            except ValueError:
+                raise SystemExit(f"walk step {spec!r}: steer wants numbers")
+            if px == 0:
+                raise SystemExit(f"walk step {spec!r} turns the view nowhere")
+            if secs <= 0:
+                raise SystemExit(f"walk step {spec!r} holds for {secs}s")
+            steps.append(("steer", f"{kname},{px:g}", secs))
             continue
         if head in ("hover", "click"):
             # hover:FX,FY,SECONDS -- park the cursor over a window-relative
@@ -1139,8 +1165,38 @@ def parse_walk(text):
         else:
             raise SystemExit(f"walk step {spec!r}: {head!r} is not a key, "
                              f"a named key ({', '.join(sorted(dc.NAMED_KEYS))}), "
-                             f"zoom, pitch, yaw, shot, wait, hover or click")
+                             f"zoom, pitch, yaw, shot, wait, hover, click or steer")
     return steps
+
+
+def steer(hwnd, pid, vk, px, seconds, slice_s=0.25):
+    """Hold `vk` for `seconds` while right-dragging the view `px` pixels in slices.
+
+    The key is held on its own thread through dc.hold_key -- the same hold, the
+    same focus re-checks, the same guaranteed keyup -- and the drag runs beside
+    it as dc.orbit calls of px / n each, paced at `slice_s`; each slice is one
+    heading change the client reports with a fresh 0x003D while the body keeps
+    walking. Returns the seconds the key was actually held (hold_key's own
+    figure, cut short if focus was lost) so a short leg is visible as one.
+    """
+    held = [0.0]
+
+    def hold():
+        held[0] = dc.hold_key(hwnd, pid, vk, seconds)
+    th = threading.Thread(target=hold, daemon=True)
+    th.start()
+    time.sleep(0.15)                      # the body is walking before the first turn
+    n = max(1, int(round(seconds / slice_s)))
+    t0 = time.perf_counter()
+    for i in range(n):
+        if not th.is_alive():
+            break
+        dc.orbit(hwnd, pid, px / n, 0, steps=4)
+        due = t0 + (i + 1) * slice_s
+        while time.perf_counter() < due and th.is_alive():
+            time.sleep(0.01)
+    th.join(seconds + 2.0)
+    return held[0]
 
 
 def walk_legs(proc, legs, outdir, warn=3.0, settle=1.5, shot_every=0.0):
@@ -1249,6 +1305,10 @@ def walk_legs(proc, legs, outdir, warn=3.0, settle=1.5, shot_every=0.0):
         elif kind == "hover":
             fx, fy = (float(p) for p in key.split(","))
             did = value if dc.hover(hwnd, proc.pid, fx, fy, value) else 0.0
+        elif kind == "steer":
+            k, px = key.split(",")
+            vk = dc.NAMED_KEYS.get(k) if k in dc.NAMED_KEYS else ord(k)
+            did = steer(hwnd, proc.pid, vk, float(px), value)
         elif kind == "click":
             # A UI click at a FIXED window fraction -- a panel button, not a
             # world target. dc.click verifies the client owns the foreground
@@ -1644,7 +1704,7 @@ def run_client(a, outdir):
         if a.walk:
             if ok:
                 walked = walk_legs(proc, parse_walk(a.walk), outdir, warn=a.warn,
-                                   shot_every=a.shots)
+                                   settle=a.settle, shot_every=a.shots)
                 # A client that died mid-plan RETRACTS the verdict. It was read
                 # before the walk, so it is true about the spawn and silent
                 # about everything after -- and "PASS" is the wrong word for a
@@ -1771,6 +1831,11 @@ def main():
                          "client's -authsrv flag. 127/8 only. A second alias "
                          "(127.0.0.2) ran the probe that showed -authsrv plays "
                          "no part in the game dial (handshake PLAN §10).")
+    ap.add_argument("--settle", type=float, default=1.5, metavar="SECONDS",
+                    help="Pause after every walk step (default 1.5). RUN-1zCW: the "
+                         "default keeps every leg's next report 1.5 s from the "
+                         "previous grant, so a script cannot reproduce a report "
+                         "inside the keyboard arm's old 0.5 s floor without it.")
     ap.add_argument("--warn", type=float, default=3.0, metavar="SECONDS",
                     help="Countdown printed before the harness sends its first "
                          "click, so a human at the machine can take their hands "
