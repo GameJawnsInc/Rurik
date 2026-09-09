@@ -1787,6 +1787,15 @@ def main():
     # chords are this, and session 2's specimen passes the gate at 16 u, fails
     # at 2 u, and truly leaves the mesh by 2.6 u.
     #
+    # WHAT SHIPPED IS THE RE-CHECK, NOT A FINER GATE EVERYWHERE. Gating every
+    # candidate at 2 u was the first cut and section 14 above refused it: the
+    # chase band's worst route went 24.2 -> 42.4 ms against a 50 ms tick, and
+    # the pull's own candidates started failing into the RAW midpoint corridor
+    # (141 waypoints where 8 would do -- sec.1z-ch's defect, back again). Only a
+    # RETURNED 2-point path carries the straight-line claim, so only its single
+    # segment is re-checked. These checks read the same either way: the arm is
+    # what route() returns, not how it got there.
+    #
     # SYNTHETIC, because the property is about the SAMPLING and a real mesh
     # cannot place the gap where it needs to be: a 6 u notch in y that no 16 u
     # sample lands in, with a narrow neck to the west so a way round exists.

@@ -3935,9 +3935,11 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   loudly without the vault. Floor 40 from the green run. ~60 s, most of it the retail
   decode),
   **MOVECODE-1z-co (2026-09-08) adds a section to two files rather than a file of its
-  own.** `toolkit/mapdata/test_pathmap.py` §17 (floor 117 → 129): route()'s gate re-clipped
+  own.** `toolkit/mapdata/test_pathmap.py` §17 (floor 117 → 129): route()'s gate re-clips
   the pulled candidate at 2 u and every other at 16 u, so a 2-point "the line is clear" path
-  could carry a chord off the mesh — the fixture is a SYNTHETIC 6 u notch that no 16 u sample
+  could carry a chord off the mesh — what ships is a RE-CHECK of that one segment, because
+  gating everything at 2 u was the first cut and §14's own tick check refused it (the chase
+  band's worst route 24.2 → 42.4 ms, and the pull failing into 141-waypoint raw corridors) — the fixture is a SYNTHETIC 6 u notch that no 16 u sample
   lands in, with the arithmetic control proving the coarse samples straddle it and the fine
   ones do not, the known-bad arm (`ROUTE_GATE_FINE` False) returning the 2-point path, and the
   fix returning a 4-point corridor whose every segment holds at 2 u.

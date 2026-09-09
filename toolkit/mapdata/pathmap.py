@@ -302,17 +302,24 @@ SEAM_AWARE_ROUTE = True
 SEAM_TOL = 1.0
 SEAM_STEP = 2.0
 
-# THE GATE'S OWN SAMPLING (MOVECODE-1z-co, 2026-09-08). route()'s per-segment gate re-clips
-# the PULLED candidate at CORNER_PULL_GATE_STEP (2 u) and every other candidate at 16 u, and
-# clip() says of itself that "a gap narrower than `step` can be stepped over". So a 2-point
+# THE STRAIGHT-LINE CLAIM (MOVECODE-1z-co, 2026-09-08). The per-segment gate re-clips the
+# PULLED candidate at CORNER_PULL_GATE_STEP (2 u) and every other candidate at 16 u, and
+# clip() says of itself that "a gap narrower than `step` can be stepped over". So a TWO-POINT
 # path -- which _follow_leg reads as "the line is clear", sending an agent-addressed 0x002A
-# the client dead-reckons in a STRAIGHT LINE -- could carry a chord that leaves the mesh.
-# MEASURED on RUN-1zCG (1z-cn): session 2's (11391,9081)->(11269,9153), both ends on the mesh,
-# PASSES the gate at 16 u and FAILS at 2 u; true excursion 2.6 u. Three of the corpus's six
-# bad chords are this. The docstring's promise -- "walking it in straight segments never
-# leaves the navmesh" -- is what the fine step makes true.
-# ROUTE_GATE_FINE = False (authsrv --route-gate-coarse) restores the 16 u sampling exactly,
-# and is the known-bad arm test_pathmap drives.
+# the client dead-reckons in a STRAIGHT LINE with no waypoints at all -- could carry a chord
+# that leaves the mesh. MEASURED on RUN-1zCG (1z-cn): session 2's (11391,9081)->(11269,9153),
+# both ends on the mesh, PASSES the gate at 16 u and FAILS at 2 u; true excursion 2.6 u.
+# Three of the corpus's six bad chords are this.
+#
+# SCOPED TO THAT CLAIM, and the scoping is not tidiness -- it is the budget. Gating EVERY
+# candidate at 2 u was the first cut and it moved the chase band's worst route from 24.2 to
+# 42.4 ms against a 50 ms world tick (300 pairs, p50 1.204 -> 1.766, max 22.5 -> 39.8);
+# test_pathmap section 14's load-corrected check confirmed one route over the tick, which is
+# how this was caught before it shipped. A multi-point corridor is walked vertex to vertex
+# and its segments carry no such claim, so only the single segment of a returned 2-point path
+# is re-checked -- one extra clip, and the long-corridor timing is untouched by construction.
+# ROUTE_GATE_FINE = False (authsrv --route-gate-coarse) skips the re-check, restoring the
+# pre-1z-co answer exactly, and is the known-bad arm test_pathmap section 17 drives.
 ROUTE_GATE_FINE = True
 RAW_GATE_STEP_COARSE = 16.0
 
@@ -1438,8 +1445,7 @@ class PathingMap:
                     continue
                 if best is not None and best[1] is not None and self._pulled_passed:
                     continue
-            step = (CORNER_PULL_GATE_STEP
-                    if (ROUTE_GATE_FINE or (cand is pulled and pulled is not pts))
+            step = (CORNER_PULL_GATE_STEP if cand is pulled and pulled is not pts
                     else RAW_GATE_STEP_COARSE)
             # THE SEAM TERM (MOVECODE-1z-bb): the pull and the gate both carry
             # the corridor's plane per waypoint, so a shortcut is refused when
@@ -1476,6 +1482,17 @@ class PathingMap:
                     j += 1
             if any(self._gate_clip(a, b, pa, step) != b
                    for a, b, pa in zip(cpath, cpath[1:], cpl)):
+                if mode == "pull" and cand is pulled:
+                    self._pulled_passed = False
+                continue
+            # MOVECODE-1z-co: a TWO-POINT answer is a claim that the straight line is
+            # walkable, and callers act on it without waypoints. Re-check that one segment
+            # at the pull's own step before making the claim; a longer corridor makes no
+            # such claim and is not re-checked, which is what keeps the tick budget.
+            if (ROUTE_GATE_FINE and len(cpath) == 2
+                    and step != CORNER_PULL_GATE_STEP
+                    and self._gate_clip(cpath[0], cpath[1], cpl[0],
+                                        CORNER_PULL_GATE_STEP) != cpath[1]):
                 if mode == "pull" and cand is pulled:
                     self._pulled_passed = False
                 continue

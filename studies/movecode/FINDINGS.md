@@ -17417,9 +17417,37 @@ So the **unpulled** candidate was admitted on a sampling eight times coarser tha
 one — and a 2-point path is exactly what `_follow_leg` reads as "the line is clear" before
 sending an agent-addressed `0x002A` the client dead-reckons **straight**.
 
-`ROUTE_GATE_FINE = True` gates every candidate at 2 u; `--route-gate-coarse` restores 16.0 to
-the literal. `pathmap.RAW_GATE_STEP_COARSE` names the old number so neither step is a literal
-in the expression any more.
+**The first cut gated EVERY candidate at 2 u, and that was wrong — test_pathmap caught it
+before it reached a run.** Section 14's load-corrected check confirmed one chase-band route
+over the 50 ms tick, and an A/B on 300 chase-band pairs said why:
+
+| 300 chase-band pairs | p50 | p90 | max | worst single route |
+|---|---|---|---|---|
+| 16 u (before) | 1.204 ms | 3.295 | 22.5 | 24.2 ms |
+| 2 u everywhere (first cut) | 1.766 | 5.023 | 39.8 | **42.4 ms** |
+| the shipped scoping | 1.713 | 3.778 | 23.8 | 21.3 ms |
+
+**And the cost was not even the worst of it.** The blanket gate made the pull's own candidates
+fail, so route fell back to the RAW midpoint corridor: that 818 u pair came back with **141
+waypoints instead of 8** — re-introducing exactly the defect §1z-ch fixed ("a pulled path that
+grazes a corner was thrown away for the raw midpoint corridor").
+
+**The defect is narrower than the first fix was, and the scoping is derived from it.** The harm
+is a **two-point** answer: `_follow_leg` reads `len(path) < 3` as "the line is clear" and sends
+an agent-addressed `0x002A` that the client dead-reckons **straight, with no waypoints at all**.
+A multi-point corridor makes no such claim — it is walked vertex to vertex, and its segments
+were gated as they always were with no measured defect. So the gate is unchanged, and **only
+the single segment of a returned two-point path is re-checked** at the pull's own 2 u step.
+One extra clip, the long-corridor timing untouched by construction, and the retrodiction is
+**identical to the blanket version**: the same 9 of 11 chords fixed, the same 222 of 228 routes
+byte-identical, the same 6 changed. `--route-gate-coarse` skips the re-check, restoring the
+pre-1z-co answer exactly.
+
+**The method note, because it cost a shipped commit.** My first benchmark measured 228 real
+hostile orders and read p50 0.133 → 0.165 ms — true, and useless: those are SHORT routes, and
+the tail lives in the chase band. A benchmark taken in the wrong regime says "safe" about a
+change that doubles the worst case. The test that caught it is the one whose bar is stated
+against the tick the code actually runs on.
 
 ### 1z-co.2 ★★★ Fix 2 — an in-disc corridor is clipped, not discarded. DERIVED from F14
 
@@ -17438,12 +17466,14 @@ shorter than an arrival (`NPC_LEG_DONE`), or a point our own mesh refuses.
 
 ### 1z-co.3 ★★★ Measured before shipping, all three questions
 
-| | 16 u gate (revert) | 2 u gate (shipped) |
+| | before | shipped |
 |---|---|---|
-| `route()` on 228 real hostile orders | p50 **0.133** ms, p90 0.475, max 10.7 | p50 **0.165** ms, p90 0.648, max 1.9 |
+| `route()` on 228 real hostile orders | p50 0.133 ms | p50 0.165 ms |
+| `route()` on 300 chase-band pairs | p50 1.204, p90 3.295, max **22.5** ms | p50 1.713, p90 3.778, max **23.8** ms |
 
-**The budget holds.** The world tick is 50 ms and `test_pathmap`'s bar is 35 ms; the fine gate
-costs ~0.03 ms at the median. It was the one thing that could have refused this fix.
+**The budget holds — but only after the scoping above, and the first cut did not.** The world
+tick is 50 ms. The short-route benchmark alone would have shipped a 42 ms worst case; the
+chase-band row is the one that decides it.
 
 **What moves is small and it is the right thing: 222 of 228 routes come back byte-identical.**
 All 6 that change go from a 2-point straight line to a 3–4 point corridor — **0 routes lost
@@ -17453,6 +17483,16 @@ else.
 **Retrodiction over the pooled corpus (sessions 2–6, 11 chords beyond the 2 u edge class):
 9 of 11 become a corridor leg with a chord of 0.0 u.** Including session 4's 21.5 u and
 session 6's 30.5 u, the two worst the in-disc rule was throwing away.
+
+### 1z-co.3b ★ The latent edge the scoping leaves, measured at zero and stated anyway
+
+A re-check that refuses the only 2-point candidate can leave `route()` with nothing to return,
+and `_follow_leg` still reads `if not path or len(path) < 3` as "the line is clear" — §1z-cn's
+four-exits-one-branch conflation, untouched here. So in principle the re-check could turn a bad
+straight line into a bare follow down the SAME straight line. **Measured on the corpus it does
+not happen: 0 of 228 routes are lost entirely** (222 identical, 6 gaining vertices). It is a
+latent hazard rather than a live defect, and the fix for it is to split that branch — which is
+its own change, not a rider on this one.
 
 ### 1z-co.4 ★★ The 2 that remain, named rather than tuned away
 
