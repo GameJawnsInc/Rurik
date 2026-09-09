@@ -6297,7 +6297,32 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   OFF by default, with ON declaring 360 once, deduplicating, and RESTORING 288
   when the stance ends. §9 drives `land_swing` end to end: control, doubled, and
   fully-converted swings, with MELEE_ATTACK_FINISHED still opening the batch and
-  NO damage message after a full conversion. Offline, no vault; floor 39),
+  NO damage message after a full conversion. **§§10–19 are SKILLS-DW (2026-09-09):
+  the agent STATUS WORD and Deep Wound's maximum.** `effects.status_word` is pinned
+  bit by bit against the corpus census (`deepwoundjoin.status_census`): 482 is
+  0x22, Disease and Poison share 0x42, Crippled 0x0A, Bleeding 0x03, a hex 0x800,
+  an enchantment 0x80, a shout and a stance nothing, death 0x10 OR'd in. The apply
+  batch on a full pool must be exactly retail's three messages in retail's order
+  `[0x0042 482, 0x00F1 0x22, 0x009F 42=80]` and nothing else; on a damaged pool
+  the server's book does the client's SIGNED delta (25 → 5, 10 → −10 and NOT
+  dead, then one swing kills); the enemy's base hit is unchanged under the smaller
+  pool and the wire fraction divides by the reduced one; heals are cut 20%
+  (`healing=False` for a health gain is not), and a heal that does not clear zero
+  kills while one that does leaves the player alive at the arithmetic's number;
+  the expiry close is `[0x0044, 0x00F1 0, 0x009F 42=100]` with the 20 back; the
+  death strip sends the `0x0044` and NO `0x009F 42` onto the corpse, restores the
+  book, and leaves exactly ONE status message in the death batch (the measured
+  0x10); a second condition re-sends the whole word (0x23), closing one leaves the
+  other's bits (0x03), and one that adds no bit sends nothing; the enemy takes the
+  same batch and its own heal-below-zero dies through the factored `kill_agent`;
+  both known-bad arms are pinned (`--no-deep-wound`: apply + word, books still;
+  `--no-status-word`: apply + maximum, no word); the reduction rule is 480 → 96,
+  600 → 100 (the cap binds); and §19 reads the LIVE CORPUS with no free
+  parameter — every 482 apply joined to a same-batch prop-42 of exactly 0.8×,
+  every close restoring, zero stray prop-42s, the prop-42 exactly two messages
+  behind the effect on every one, plus the per-skill bit census. Proven
+  discriminating: `DEEP_WOUND_FRACTION = 0.25` reddens 12 checks. Offline except
+  §19, which skips by name without a vault; floor 39 → 99),
   `toolkit/authsrv/test_pools.py` (**what a skill COSTS** — R4b's other half, where
   `effects.py` models what a cast puts ON somebody and `pools.py` models what it
   takes. Until 2026-08-20 this server took nothing: two harness runs that day pressed

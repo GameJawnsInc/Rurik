@@ -266,6 +266,80 @@ PIP_HEALTH_PER_SECOND = 2.0
 MAX_PIPS = 10.0
 
 
+# THE AGENT STATUS WORD, and which effects move which bit. OBSERVED on
+# retail's wire (deepwoundjoin.py's census over the live corpus, 2026-09-09):
+# a `0x0042` apply is followed in the SAME batch by `0x00F1` [agent, word] --
+# the agent's whole `m_status` word (schema/overrides.json 241: ChCliInt.h:254
+# tests `m_status & CHAR_STATUS_DEAD` on this field), not a delta -- and the
+# `0x0044` close is followed by the word with the same bits cleared. Retail's
+# Deep Wound batch is exactly [0x0042 482, 0x00F1 0x22, 0x009F 42=max*0.8] and
+# its close [0x0044, 0x00F1 0x00, 0x009F 42=max], n=2 each (isle capture
+# 20260821T155022, agent 25).
+#
+# Which bit each effect sets, by the bits NEWLY SET in the word that follows
+# its apply (and cleared at its remove), with the witness count:
+#
+#   0x0002  any CONDITION: set on 479/480/485/486/2077 alone (n=10 applies),
+#           and in combination on 478 (0x03), 481 (0x0A), 482 (0x22), 483 and
+#           484 (0x42); cleared at the close of the LAST live condition
+#           (480 5/5, 482 2/2 with 2077 already gone, ...).
+#   0x0001  with Bleeding 478 (n=1, set; the remove was not in the capture).
+#   0x0008  with Crippled 481 (n=2 set, 2 cleared).
+#   0x0020  with Deep Wound 482 (n=2 set, 2 cleared) -- the grey 20% of the
+#           health bar, WIKI (GWW, "Deep Wound"): "the right 20% of the
+#           affected character's health bar turns gray".
+#   0x0040  with Disease 483 and Poison 484 (n=1 each, set and cleared) --
+#           GWW "Health" gives the two ONE bar coloration, which is what one
+#           shared bit looks like.
+#   0x0080  any ENCHANTMENT: 160 (57 set / 52 cleared), 814 (2/2), and the
+#           Isle's 984 (2/2).
+#   0x0800  any HEX: 179 (1/1) and the Isle's 998 (3/3).
+#   (none)  SHOUTS: 364's 47 applies carry no status message at all (46 of
+#           47 have no 0x00F1 in the batch; the one that does sets nothing).
+#   0x0400  set by the Isle's 999 (1 alone, 1 with 0x800); 999's identity is
+#           not in the player corpus and the bit is NOT mapped here.
+#
+# What the bits MEAN to the client is the health-bar coloration table on GWW
+# "Health" (hexed, poison/disease, bleeding, deep wound) -- which is exactly
+# the set above, plus crippled. That reading is WIKI; the bit assignments are
+# OBSERVED. `status_word` below is a pure function of the live episodes, so a
+# caller sends the word whenever it changes and never tracks bits by hand --
+# the same shape as `pips_from`, for the same reason (a tracked bit is a
+# second book that drifts).
+STATUS_CONDITION = 0x0002
+STATUS_BLEEDING = 0x0001
+STATUS_CRIPPLED = 0x0008
+STATUS_DEAD = 0x0010            # agents.EFFECT_DEAD, the bit this file did not name
+STATUS_DEEP_WOUND = 0x0020
+STATUS_POISONED = 0x0040        # Disease and Poison share it
+STATUS_ENCHANTED = 0x0080
+STATUS_HEXED = 0x0800
+CONDITION_STATUS_BITS = {
+    478: STATUS_BLEEDING, 481: STATUS_CRIPPLED, 482: STATUS_DEEP_WOUND,
+    483: STATUS_POISONED, 484: STATUS_POISONED,
+}
+TYPE_STATUS_BITS = {6: STATUS_ENCHANTED, 4: STATUS_HEXED}
+
+
+def status_word(episodes, dead=False):
+    """The agent's `m_status` word from its live episodes. OBSERVED bits only.
+
+    A condition episode (type_code 8, the ids in CONDITION_SKILLS) contributes
+    STATUS_CONDITION plus its own bit if it has one; an enchantment or hex
+    contributes its type's bit; anything else contributes nothing (shouts,
+    stances, preparations, glyphs -- none moved the word in the corpus). Death
+    is the one bit that is not an episode and is passed in.
+    """
+    word = STATUS_DEAD if dead else 0
+    for ep in episodes:
+        skill = ep["skill"]
+        if skill in CONDITION_SKILLS:
+            word |= STATUS_CONDITION | CONDITION_STATUS_BITS.get(skill, 0)
+        else:
+            word |= TYPE_STATUS_BITS.get(int(ep.get("type_code", 0)), 0)
+    return word
+
+
 def pips_from(episodes):
     """Net degeneration pips from a set of live episodes, capped at 10.
 
