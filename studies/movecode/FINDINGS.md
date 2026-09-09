@@ -18277,20 +18277,22 @@ reproduces the regime before a share is claimed — and here the script existed 
 claim, which is the wrong order.
 
 
-### 1z-cw.6 The parked copy, asked — it ARRIVED at a lead the wall or the fence cut short, and the refusal only held it there. OBSERVED, five hand-driven sessions, 210 episodes
+### 1z-cw.6 The parked copy, asked — it ARRIVED at a lead the wall or the fence cut short, and the refusal only held it there. OBSERVED, six hand-driven sessions, 255 episodes
 
 `floorcensus.py --ours-only --parked`. An episode is the copy standing (`v0` ≤ 1) while the body
-moves and a `heading-rate` refusal is in force. 210 of them, **p50 0.21 s, total 47 s**, and each
-begins **p50 0.32 s after the last fired grant** (p10 0.14, p90 0.46): the copy walked that grant's
-leg to its end and stopped. **147 of 210 sit ON the granted point** (|copy − dest| p50 0.0 u). The
-grants that parked it, by what cut them: **fence-shut 55, wall-slide 37, clipped 33,
-clipped+w0-route 15, wall-slide+w0-route 14, plane-seam 12** — and only 26 of 210 were clean
-leads; 183 of 210 were themselves the hold's deferred re-bakes.
+moves and a `heading-rate` refusal is in force. 255 of them, **p50 0.25 s, total 57.5 s**, and each
+begins **p50 0.31 s after the last fired grant** (p90 0.46): the copy walked that grant's
+leg to its end and stopped. **172 of 255 sit ON the granted point** (|copy − dest| p50 0.0 u). The
+grants that parked it, by what cut them: **fence-shut 58, wall-slide 50, clipped 43,
+clipped+w0-route 19, plane-seam 17, wall-slide+w0-route 16** — and only 29 of 255 were clean
+leads; 224 of 255 were themselves the hold's deferred re-bakes. (A five-session pass at the
+desk read 210 / 147 / p50 0.21 s before the instrument was committed; the figures here are the
+instrument's over six.)
 
 So the hand-driven lag's mechanism near walls is now named: **a lead the fence or the mesh cuts
 short is reached in a third of a second, the copy parks on it behind the moving body, and the
 next re-aim arrives a report interval later** — up to 0.5 s under the old floor, ~0.24 s
-without it. The floor's share of each episode is the difference (p50 0.21 s of parking → under
+without it. The floor's share of each episode is the difference (p50 0.25 s of parking → under
 1z-cw the same episodes should run ~0.1 s shorter), which is why RUN-1zCW's open-ground
 script, whose leads never parked, showed a few units and why the hand-driven number should
 move by a fraction, not to zero. The rest is the wall regime itself: `fence-shut` degrades the
