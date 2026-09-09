@@ -62,7 +62,7 @@ from test_position_trust import receive_arm, Sent, FakeRec   # noqa: E402
 # the word-against-point check and the known-bad arm that reddens all three --
 # the cross-plane guard NPCTRACK proposed is refuted at 0 of 488 and ships as
 # nothing).
-LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=220)   # 1z-cu: +12, from the green run
+LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=224)   # 1z-cw: +4, from the green run
 check = checks.adopt(LEDGER)
 
 SRC = open(authsrv.__file__, encoding="utf-8").read()
@@ -73,7 +73,10 @@ def drive_heading(values, *, kbd_sync=True, lead=True, speed=True,
                   carry=False, matched=True, fence=True):
     """One 0x003D through the SHIPPED heading arm. Returns (state, wire).
     `since` is the age of the last grant when the report arrives: 10 s
-    clears the rate floor, 0.1 s is refused `heading-rate` (1z-y)."""
+    clears any floor; 0.1 s is refused `heading-rate` (1z-y) ONLY under
+    `--kbd-grant-floor 0.5`, the arm this file sets where it pins the hold --
+    the shipped floor is 0.0 since MOVECODE-1z-cw (retail answers every
+    report), and section 26 pins that."""
     st = state if state is not None else {
         "pos": (1000.0, 2000.0), "plane": 7, "pos_seen": 0.0}
     w, r = Sent(st), FakeRec()
@@ -363,6 +366,13 @@ def main():
           "each gate has its revert flag, rebound through a declared global",
           "a behaviour with no revert arm is an assertion")
 
+    # MOVECODE-1z-cw: the hold is the coalescing half of a FLOOR, and the
+    # keyboard arm ships with none (KBD_GRANT_FLOOR = 0.0: retail answers 99.5%
+    # of heading reports inside the old window). The mechanism stays and is
+    # pinned here under the revert arm it exists for, --kbd-grant-floor 0.5;
+    # section 26 pins the shipped default.
+    _saved_floor = authsrv.KBD_GRANT_FLOOR
+    authsrv.KBD_GRANT_FLOOR = 0.5
     # (a1) HOLD: a report refused `heading-rate` stores the grant the arm
     # would have sent -- the LEAD from the report's own heading.
     st, w = drive_heading(REPORT, lead=True, since=0.1)
@@ -375,7 +385,7 @@ def main():
           "its own heading names, plane words as the arm computed them",
           f"hold={hold}")
     rec, w2 = FakeRec(), Sent(st)
-    t_floor = st["grant_at"] + authsrv.GRANT_MIN_INTERVAL
+    t_floor = st["grant_at"] + authsrv.KBD_GRANT_FLOOR
     check(authsrv.heading_hold_tick(w2, st, 0, rec, now=t_floor - 0.05) is False
           and not w2.rows and st.get("heading_hold") is not None,
           "inside the floor the hold is kept and nothing is sent",
@@ -465,6 +475,7 @@ def main():
           "KNOWN-BAD ARM (--no-kbd-hold): the refused report is dropped, "
           "nothing held, nothing sent -- the 08:46 shape",
           f"{st.get('heading_hold')}")
+    authsrv.KBD_GRANT_FLOOR = _saved_floor
 
     # (a2) KILL: a fired lead arms the keyboard leg record; a press or a
     # click ends it with a zero-lead grant at the modelled body.
@@ -600,8 +611,13 @@ def main():
           "on a same-plane lead the words already agree and the override is "
           "recorded as NOT having fired",
           f"row {row}")
-    st, w = drive_heading(REPORT_29, lead=True, carry=True, state=crossing(),
-                          since=0.1)
+    _saved_kf = authsrv.KBD_GRANT_FLOOR
+    authsrv.KBD_GRANT_FLOOR = 0.5                          # 1z-cw: the refusing arm
+    try:
+        st, w = drive_heading(REPORT_29, lead=True, carry=True, state=crossing(),
+                              since=0.1)
+    finally:
+        authsrv.KBD_GRANT_FLOOR = _saved_kf
     hold = st.get("heading_hold")
     check(hold is not None and hold["plane"] == 29 and hold["plane_cur"] == 29,
           "a refused crossing re-aim is HELD with the matched word, so the "
@@ -735,7 +751,12 @@ def main():
     # the hold stores the degraded point
     st = {"pos": (1000.0, 2000.0), "plane": 7, "pos_seen": 0.0,
           "fence_shut_at": _t.time() - 0.2, "kbd_moving_at": _t.time() - 0.3}
-    st, w = drive_heading(REPORT, lead=True, state=st, since=0.1)
+    _saved_kf = authsrv.KBD_GRANT_FLOOR
+    authsrv.KBD_GRANT_FLOOR = 0.5                          # 1z-cw: the refusing arm
+    try:
+        st, w = drive_heading(REPORT, lead=True, state=st, since=0.1)
+    finally:
+        authsrv.KBD_GRANT_FLOOR = _saved_kf
     hold = st.get("heading_hold")
     check(hold is not None and hold["point"] == [1000.5, 2000.25]
           and hold["a2_src"] == "fallback" and hold["clip_why"] == "fence-shut",
@@ -2202,6 +2223,50 @@ def main():
     _i_row = SRC.index('rec.event("kbd_dest", act="arm", mt=moving,')
     check('speed=state["dest_speed"]' in SRC[_i_row:_i_row + 200],
           "25l. the row names its operand: kbd_dest carries the speed it armed", "")
+
+    # MOVECODE-1z-cw. The keyboard arm shared GRANT_MIN_INTERVAL with the click
+    # arm, and the constant's own derivation (a) had read retail's 0.49 s median
+    # inter-grant gap as a floor: it is the CLIENT's re-report cadence, because
+    # ArenaNet answers every 0x003D -- 70.3% of its heading reports arrive inside
+    # 0.5 s of the previous player grant and 99.5% of those are answered in 35 ms
+    # (26 live connections, 2,800 reports; studies/movecode/review/floorcensus.py).
+    # On our five hand-driven sessions the floor refused 57.6% of evaluations and
+    # 67% of ALL along-track lag between world-0 and the drawn body accrued under
+    # those refusals -- the whole of the felt reach at a hostile's halt (1z-cv).
+    print("\n26. MOVECODE-1z-cw: the keyboard arm answers every heading report -- "
+          "retail's contract; the floor is the revert arm")
+    _hg_i = SRC.index("def _heading_grant_ok(")
+    _hg_body = SRC[_hg_i:SRC.index("\ndef ", _hg_i + 10)]
+    check(authsrv.KBD_GRANT_FLOOR == 0.0 and "--kbd-grant-floor" in SRC
+          and authsrv.capture_flags().get("KBD_GRANT_FLOOR") == 0.0
+          and "since < KBD_GRANT_FLOOR:" in _hg_body
+          and "GRANT_MIN_INTERVAL:" not in _hg_body,
+          "26a. ships at 0.0, the predicate reads the keyboard arm's OWN floor and "
+          "no longer the click arm's, and the capture header carries it by name "
+          "(a float the bool sweep cannot see)",
+          f"floor {authsrv.KBD_GRANT_FLOOR} header {authsrv.capture_flags().get('KBD_GRANT_FLOOR')}")
+    st26, w26 = drive_heading(REPORT, lead=True, since=0.1)
+    check(len(w26.of(MOVE)) == 1 and st26.get("heading_hold") is None
+          and st26["_rec"].of("grant_verdict")[-1]["reason"] == "zero-lead",
+          "26b. a report 0.1 s after the last grant is ANSWERED at once -- no refusal, "
+          "no hold (retail: 99.5% of such reports answered, p50 35 ms)",
+          f"sent {w26.of(MOVE)} hold {st26.get('heading_hold')}")
+    v_now = authsrv._heading_grant_ok({"grant_at": 1000.0}, 1000.0)
+    v_skew = authsrv._heading_grant_ok({"grant_at": 1001.0}, 1000.0)
+    check(v_now == (True, "zero-lead", 0.0) and v_skew[:2] == (False, "heading-rate"),
+          "26c. two reports at the SAME instant both grant, and a grant stamped in the "
+          "future still refuses -- the comparison is unchanged, only its operand",
+          f"now {v_now} skew {v_skew}")
+    _sv = authsrv.KBD_GRANT_FLOOR
+    try:
+        authsrv.KBD_GRANT_FLOOR = 0.5
+        st26d, w26d = drive_heading(REPORT, lead=True, since=0.1)
+    finally:
+        authsrv.KBD_GRANT_FLOOR = _sv
+    check(not w26d.of(MOVE) and st26d.get("heading_hold") is not None,
+          "26d. KNOWN-BAD ARM (--kbd-grant-floor 0.5): the same report is refused "
+          "and held, exactly the arm that shipped 2026-08-20 -> 2026-09-09",
+          f"sent {w26d.of(MOVE)}")
 
     return LEDGER.verdict()
 

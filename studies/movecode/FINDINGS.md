@@ -18160,3 +18160,90 @@ Shape 4's trigger was live at 26 halts and moves 13 of them, 5 up and 8 down. **
   split and the felt p50 by class are the numbers; the pre-registered expectation for ANY change
   to the follow is that it moves the `point` rows and cannot move the `disc` rows, and a change
   to the keyboard lead is expected to move `world-0→body` and with it every moving disc park.
+
+
+## 1z-cw. THE KEYBOARD ARM ANSWERS EVERY HEADING REPORT — the 0.5 s floor it shared with the click arm was ours alone (retail answers 99.5% of reports inside that window, p50 35 ms), it refused **57.6%** of our heading evaluations, and **67% of all along-track lag between world-0 and the drawn body accrued under its refusals**. `KBD_GRANT_FLOOR = 0.0` ships; `--kbd-grant-floor 0.5` is the arm that shipped 2026-08-20 → 2026-09-09
+
+§1z-cv ended on the quantity that IS the felt reach at a hostile's halt: world-0's lag behind the
+moving body (p50 122–185 u at halts, 131–166 u over five hand-driven sessions). This section
+asked the tapes and grant verdicts what leaves world-0 behind, before theorising. Desk, no run.
+Instrument: `studies/movecode/review/floorcensus.py` (`--check` carries every bar below).
+
+### 1z-cw.1 ★★★ Where the lag accrues — OBSERVED on five hand-driven sessions
+
+Per tape sample while the drawn body moves, the change in world-0's along-track offset behind
+it, attributed to the copy's state and the grant verdict in force (1z-t's `grant_verdict` rows):
+
+| copy | verdict in force | lag accrued | share |
+|---|---|---|---|
+| walking | **refused `heading-rate`** | 18,955 u | **39.7%** |
+| parked | **refused `heading-rate`** | 13,218 u | **27.7%** |
+| walking | fired, wall-slide | 1,877 u | 3.9% |
+| walking | fired, clipped | 1,765 u | 3.7% |
+| (everything else) | | | 25% |
+
+World-0 sits **149 u** (p50) from the body while a refusal is in force and **39 u** under a fresh
+clean grant. The refused report is not lost — the 1z-y hold re-bakes it when the floor opens — but
+for up to 0.5 s the copy walks the OLD lead, and on 630 samples it had already **parked at that
+lead's end while the body ran on** (28% of all lag, 288 u/s of it). Over the six sessions the
+verdict census reads **1,128 refused, 690 re-baked late, 139 fired at once** of 1,957 evaluations.
+The lag is longitudinal (along p50 −131 u, across 31 u; angle between the copies' headings p50
+20°), so it is not a turn the copy missed: it is the copy running the same line behind, at the
+same speed (v0/vbody p50 1.00, movespeed ratio 1.00), from a deficit it acquired parked.
+
+### 1z-cw.2 ★★★ What retail does — OBSERVED, origin live, 26 connections, 2,800 heading reports
+
+`_heading_grant_ok`'s own operand is `since` = the time since the previous player grant, and the
+floor refuses `since < 0.5`. Measured on the live corpus with that operand:
+
+| | |
+|---|---|
+| heading reports answered by the PLAYER's `0x0029` within 0.3 s | **2,785 of 2,800 (99.5%)** |
+| reports arriving INSIDE 0.5 s of the previous player grant | **1,969 (70.3%)** |
+| … of which answered anyway | **1,960 (99.5%)**, delay p50 **0.035 s**, p90 0.052 |
+| consecutive player-grant gaps under 0.5 s | 1,880 of 3,296 (57%) |
+| the granted point vs the report it answers | \|P − R\| p50 **765.5 u** along the heading, across 0.0 — the client's own proposed endpoint, 99.9% |
+
+**The constant's own derivation (a) was a misreading.** `GRANT_MIN_INTERVAL`'s comment derives
+0.5 s from "ArenaNet's player inter-grant gap, median 0.492 s" — and that median reproduces here
+(0.491 s) — but it is the CLIENT's re-report cadence, because the server answers every report;
+the distribution's p10 is 0.083 s and 57% of it sits under the "floor". A server holding that
+floor would refuse a third of retail's own traffic. Derivation (b), the separation ceiling, is
+about the click arm's spam reproduction (257 grants/min) and still stands there; the keyboard
+arm's grant rate is bounded by the client's own report cadence and cannot exceed retail's.
+
+### 1z-cw.3 What ships
+
+* `KBD_GRANT_FLOOR = 0.0`, the keyboard arm's OWN floor, read by `_heading_grant_ok` in place of
+  `GRANT_MIN_INTERVAL`; the comparison is unchanged so clock skew (a negative `since`) still
+  refuses. The click arm keeps its 0.5 s and its held-click machinery.
+* `--kbd-grant-floor SECONDS` restores any floor; **0.5 is the known-bad arm**, and the capture
+  header carries the float by name (the bool sweep could not see it, and a capture that cannot
+  say which floor produced its 934 refusals — or its zero — costs the next A/B its meaning).
+* The 1z-y hold and the 1z-ae refresh stay as built; under floor 0.0 the hold never stores and
+  the refresh's stamp no longer costs the report that follows it (§1z-ae.4's known side effect).
+* `test_kbdsync` §26 (floor 220 → 224): ships at 0.0, a report 0.1 s after a grant is answered
+  at once, the same instant still grants, skew still refuses, the 0.5 arm holds. The mechanism
+  tests in `test_kbdsync` §3, `test_position_trust` §14/§15/§16 and `test_grantsim` C3 run under
+  `--kbd-grant-floor 0.5` explicitly — they pin the revert arm's contract, which is what they
+  always tested — and `test_grantsim`'s lead-spine pin now reads 3 of 6 under 0.5 and 6 of 6
+  shipped. `test_position_trust` 250 → 251 / 242 → 243.
+
+### 1z-cw.4 What it does NOT claim, and what to watch
+
+* **The counterfactual is not replayed.** Nothing here simulates world-0 under per-report grants;
+  the derivation is retail's contract plus the attribution above. The natural experiment in the
+  same tapes — world-0 vs body p50 **39 u under a fresh clean grant against 149 u under a
+  refusal** — is the size of the effect to expect, not a prediction of it.
+* **REGISTERED for the operator's next session** (`floorcensus.py --ours-only` on its capture,
+  `sessionscore.py` for the band): zero `heading-rate` rows and zero `deferred-heading` rows in
+  the capture; world-0 vs body moving p50 **under 100 u** (five sessions read 131–166, session 7
+  57); and `haltreach.py`'s disc-park felt distance follows it down. Retail's ~74 u is the floor
+  this can reach; a session still above 100 u names the next contributor from the table above
+  (wall-slide and clipped leads, 8%).
+* The old (a) derivation's number was CORRECT and its reading wrong — [[a-constant-cannot-explain-
+  a-change]] in the other direction: a constant that reproduces exactly can still be the wrong
+  quantity.
+* Not touched: `KBD_SYNC_LEAD` = 520 u against retail's ~766 u endpoint (1z-t's chord choice,
+  made under the floor regime and now worth re-costing on a floor-free session), and the click
+  arm's floor.
