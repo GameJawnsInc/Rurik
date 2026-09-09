@@ -13,6 +13,7 @@ Synthetic throughout -- no vault, no client, bare machine.
 """
 
 import math
+import inspect
 import os
 import sys
 
@@ -40,7 +41,7 @@ AS_SRC = open(authsrv.__file__, encoding="utf-8").read()
 # the obstacle feed reaches both mirrors, and authsrv's provider reads the
 # hostiles' client models): 89 on the 2026-09-06 green run.
 # Each from a real green run, never from a guess.
-LEDGER = checks.Ledger("agtrack guard: the derived pre-emit rule", floor=89)
+LEDGER = checks.Ledger("agtrack guard: the derived pre-emit rule", floor=91)   # 1z-cy: +2
 check = checks.adopt_named(LEDGER)
 
 
@@ -246,6 +247,21 @@ def main():
     # Driven with a fake send that replicates the real choke's guard feed
     # (_agtrack_shadow_emit), so the fire's own bookkeeping -- both mirrors
     # Cleared, the rate limiter stamped -- runs the same one path.
+    # MOVECODE-1z-cy (2026-09-09): THE ARM SHIPS OFF. Retail's server never
+    # sends the player a 0x002C mid-walk (0 of 51 live connections: 2 at
+    # spawn, 3 standing 26-72 s after a stop); ours sent 17 across six
+    # hand-driven sessions, all mid-walk, each shutting the fence for ~1 s
+    # of parked copy, and all 58 fence-shut parks in the corpus trail one.
+    # The mechanism below is exercised on the REVERT arm (--agtrack-repin),
+    # explicitly, and the default is pinned first.
+    check("1z-cy: the active re-pin ships OFF -- retail never pins the player mid-walk",
+          authsrv.AGTRACK_REPIN is False)
+    _src = inspect.getsource(authsrv)
+    check("1z-cy: --agtrack-repin is the revert arm and both spellings are refused together",
+          '"--agtrack-repin"' in _src and '"--no-agtrack-repin"' in _src
+          and "a.agtrack_repin and a.no_agtrack_repin" in _src)
+    _default_repin = authsrv.AGTRACK_REPIN
+    authsrv.AGTRACK_REPIN = True                  # the revert arm, for the mechanism checks
     sent = []
 
     def fake_send(op, values, label, quiet=False):
@@ -297,7 +313,7 @@ def main():
         check("active: --no-agtrack-repin sends nothing", not fired
               and len(sent) == 1)
     finally:
-        authsrv.AGTRACK_REPIN = True
+        authsrv.AGTRACK_REPIN = True              # still on the revert arm for the plane check
     # invalid plane refuses (the u16 field cannot say -1)
     state4 = {"pathmap": None}
     authsrv._agtrack_guard_seed(state4, (0.0, 0.0), 0, conn_id=99)
@@ -309,6 +325,8 @@ def main():
     check("active: an unusable plane word refuses the fire",
           not fired and len(sent) == 1)
 
+
+    authsrv.AGTRACK_REPIN = _default_repin      # back to the shipped default (1z-cy: False)
 
     # ---- 9. MOVECODE-1z-bt: THE FRESHNESS GATE STANDS ON AGE ALONE ----------
     # The stationary waiver (1z-ah) and its two clauses (1z-bn, 1z-bs) are
