@@ -17584,9 +17584,14 @@ u** — and the eight reports beyond 100 u tell one story:
 * **Seven of the eight are the player standing at exactly (10488, 8117)**, the corner point.
 * Each is preceded by a **~500 u `HELD HEADING` lead granted FROM that same point** —
   e.g. 39.21 s, `(10488,8117) -> (10353,7615)`, 520 u.
-* The body never moves: consecutive reports repeat the coordinate to the decimal, **while the
-  tape shows the client reporting a velocity of 184–288 u/s.** A body pressed into a wall is
-  exactly this — the mover is trying, the collision holds it, the displacement is zero.
+* The body never moves: consecutive reports repeat the coordinate to the decimal.
+  **CORRECTED 2026-09-09 by §1z-cq — this bullet used to add "while the tape shows the client
+  reporting a velocity of 184–288 u/s", and that was MY misreading of the tape.** Those figures
+  are the DECLARED speed (`maxspeed` ×0x5C × `movespeed` ×0x60), which reads 62.7–288.0 with the
+  body standing still; 190.08 is exactly 0.66 × 288 and 288.0 is 1.0 × 288, which is the tell.
+  The drawn copy's actual velocity is **0.0** on essentially every corner-hold sample, and the
+  wire's `0x003D` carries no speed at all — only a fixed-length heading. The client is not
+  "trying against a wall": it has stood down and says so in its own memory.
 * Our model integrates the lead anyway and is 144–259 u away when the next report lands
   (39.58 s: drift **230.4 u**; 45.09 s: **259.2 u**).
 * `_npc_follow_tick` is handed `state["pos"]` — **the model, not the report** — so the follow
@@ -17618,3 +17623,115 @@ wants its own derivation, and a run that presses the corner deliberately.
 too (F16, 4–85 u), and we have no tape of retail's drawn bodies against its own NPCs, so the
 FELT quantity has no retail control. What is certainly ours is the 144–259 u corner excursion,
 which is a model error, not a lag.
+
+
+## 1z-cq. THE DERIVATION: every candidate fix is REFUTED ON THE SPECIMEN, and the reason is structural — the drift accrues in the FIRST report gap after a press, where no backward-looking predicate has any evidence to look at. What the corpus does derive is a DIRECTION: **ArenaNet's copy lags the client and never leads it; ours leads.** No knob shipped
+
+Twenty-two agents, six read-only lanes, four independent proposals, three adversarial lenses each.
+**All four proposals were refuted 3 of 3**, and the refutations are specific rather than reflexive:
+each was traced against session 7's own rows and each fails to fire at t=39.21/39.58, the moment
+the defect is named for. That is the result, and it is worth more than a shipped knob.
+
+### 1z-cq.1 ★★★ Two corrections to §1z-cp, both against me
+
+* **The client is not "trying against a wall".** §1z-cp.3 said the client reports 184–288 u/s of
+  velocity with zero displacement. It does not: that is the DECLARED speed (`maxspeed` × `movespeed`),
+  and the drawn copy's real velocity is **0.0** through the corner holds. Corrected in place above.
+* **The client REFUSES our long leads there, and the phantom is entirely ours.** Of the grants
+  ≥ 400 u sent while the body was demonstrably parked at the corner, **0 of 7 ever appear in either
+  world copy's `m_targetPoint`** (out to +2.0 s), against **12 of 18** for the same length band when
+  the body was not parked. The same 520 u point from the same origin was granted **four times**:
+  refused on the three parked ones and installed bit-for-bit on the fourth, **0.06 s after the body
+  set off**. World-0 sits ON the drawn body (p50 0.0 u, 71.9% under 1 u) rather than advancing along
+  our lead. So the client stood down, said so, and threw the lead away — while our 20 Hz integrator
+  walked `state["pos"]` 144–259 u out of the corner and the follow aimed the Hatcher at that.
+
+### 1z-cq.2 ★★★ Why all four candidates miss — and it is the same reason each time
+
+The integrator's fingerprint is exact: **every one of session 7's 163 report drifts decomposes as
+k × 14.4 u + r**, and 14.4 = `DEFAULT_RUN_SPEED × TICK_SECONDS` (authsrv.py:20132). The corner's
+big drifts are integer multiples — 144.0 = 10×14.4, 158.4 = 11×, 230.4 = 16×, 259.2 = 18×. A check
+that could have come out otherwise, and did not.
+
+The drift accrues **inside one report gap**. At the specimen: a `0x0047` STOP at t=38.68 clears
+`dest`; the `0x003D` at t=38.80 carries a heading vector `(-199.0, -740.9)` and rewrites
+`state["dest"]` to a **767 u ray**; the next report is **0.783 s** later, and 0.783 × 288 = 225 u
+≈ the 230.4 u drift. **Nothing in between corroborates or refutes it, because nothing arrives.**
+
+So every *retrospective* predicate is structurally blind here — and all four proposals were
+retrospective. The skeptics' phrase for it: *"a first-gap press is structurally outside any
+retrospective predicate, and the two largest session-7 drifts are both first-gap."* This kills, on
+the specimen and by construction rather than by threshold:
+
+| candidate | why it cannot fire |
+|---|---|
+| hold the model on a refuted leg | the refutation only exists at the END of the gap |
+| clamp the follow's order to a coincident-report streak | streak is 1 at both order instants; N=2 misses too |
+| a lead door on a held-still client | both specimens missed; and it reaches `state["dest"]` after all |
+| bridge the mesh's sliver voids | removes **zero** of the drift, and disarms `model_leg_bound` |
+
+My own four candidates died the same way, measured before the fan-out: swapping the follow onto the
+report regresses the moving case (model p50 13.5 u vs report 33.7 u, park points beyond reach 13/26
+→ 22/26); a freeze on repeated reports catches 5 of 8 and fires wrongly on 22%; a displacement
+window catches 11 of 23 and fires on 43%; and the physical `speed × elapsed` bound is **vacuous**,
+because the gaps reach 0.783–2.97 s and 288 u/s licenses 225–855 u.
+
+### 1z-cq.3 ★★★ What the corpus DOES derive — a direction, not a threshold
+
+**Retail's server copy lags the client and never leads it. OBSERVED**, origin-gated over 20 live
+captures / 61 connections / 3,079 player reports: across all 44 follows with a resolvable heading,
+ArenaNet's `0x002A` point **never** advances along the player's held heading further than
+288 u/s × the report's own age (**0 of 44**), and the two rows that exceed that reach sit
+**BEHIND** the player (−49.7 and −69.6 u). NPCTRACK-F16's agent-160 band is reproduced and
+slightly corrected: **24 of 30 within 3.8–85 u** (not 26 of 30 within 4–85), and all six
+out-of-band rows have a report 0.66–1.24 s stale, so the spread is report staleness, not a lead.
+
+**The wall-pressed follow itself is NOT FOUND, with a denominator** — 13 stall pairs in 6 episodes
+against 1,697 held-heading adjacent pairs, and **0** of retail's 45 NPC follows fall inside one. So
+retail cannot tell us what to do *in the corner*; it tells us the invariant that holds *everywhere
+else*, and ours violates its direction: **we lead, retail lags.**
+
+### 1z-cq.4 ★★ The machinery that already exists — nothing here wants building from scratch
+
+* **`model_leg_bound` is already the rule** — "the model may not out-walk the order we gave" — but
+  it returns `lead-clear` and does nothing **when our own mesh did not cut the lead**, which *is*
+  the corner. Session 7's rows show it inert there. This is the closest thing to the fix already in
+  the tree, and its gate is the single bit `lead_clipped`.
+* **`_npc_frame` (NPCTRACK-F5's hybrid) is already built and already called twice inside
+  `_npc_follow_tick`**, and measures **p50 17.5 / p90 78.3 u** against `state["pos"]`'s 41 — a better
+  frame the follow already has in its hand and does not use for the order.
+* **The doctrine at authsrv.py:1980 is narrower than it reads**: the integrator-parking it describes
+  is scoped to the CAST-STOP pin only. The AGTRACK re-pin, the resync and the plane-repair senders
+  all leave the phantom walking, so "make a `0x002C` fire" would not have fixed session 7.
+* `_walk_to_agent` (authsrv.py:235-242) **already refuses to set `dest`** for exactly this reason —
+  *"arrival is something the client TELLS us"*. The in-repo doctrine exists; the keyboard arm is
+  simply outside it.
+
+### 1z-cq.5 ★★ A separable defect found on the way, and it is not 1z-cp
+
+**The integrator walks at a flat 288 u/s literal while the same file computes the movement-type
+rate for its other model.** `step = DEFAULT_RUN_SPEED * TICK_SECONDS` (authsrv.py:20132) against
+`a2_leg_note`'s `rate = FAMILY_RATE.get(mt, 1.0)` / `speed = rate * 288.0` (authsrv.py:7001-7003).
+Session 7's own `kbd_leg` rows carry speeds `{288.0: 53, 190.08: 29, 216.0: 7}` — 0.66× and 0.75×.
+So a backpedal is integrated **51% too fast even when the body is genuinely moving**. That is its
+own fix with its own arm, and it is not a candidate for 1z-cp.
+
+### 1z-cq.6 What ships: nothing. What is registered
+
+**No knob.** Every candidate is refuted on the specimen, and shipping the least-refuted one would be
+choosing by elimination rather than by derivation — the thing "derive, don't iterate" forbids.
+
+**The fix must be PROSPECTIVE**, because the evidence a retrospective rule needs does not exist
+inside the gap where the drift accrues. Two shapes survive that constraint and neither has been
+built or costed here:
+
+1. **Bound the model against the ORDER, not the mesh** — extend `model_leg_bound` to bound the
+   model's advance whenever the client has not corroborated the leg, instead of only when our own
+   mesh cut it. It already encodes the rule; its gate is one bit.
+2. **Give the follow the frame it already has** — `_npc_frame`, measured better than `state["pos"]`
+   by more than 2×, rather than the free-running blend.
+
+**One recording gap to close first, and it is cheap:** the capture does not record the `0x003D`'s
+`moving` field or the heading vector it carries, so the arming of each phantom leg is a
+RECONSTRUCTION rather than an observation. `npc_order` (§1z-cn) was the same lesson; the row should
+name its operand before the next run, or session 8 will re-derive this from the outside again.
