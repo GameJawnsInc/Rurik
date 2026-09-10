@@ -18425,3 +18425,112 @@ pair builder over the live corpus, our six sessions, `content/maps.toml`. OBSERV
 Nothing ships. The stairs' short leads are retail's rule on retail's data; the unfaithful class
 (fence-shut) left in 1z-cy; the remaining ours-only class is a consequence to be measured after
 it.
+
+---
+
+## 1z-cr. SWINGCANCEL — "full animation, no damage" is TWO defects, and the smaller one was invisible because the swing path never had the press path's discipline
+
+**Desk and corpus, 2026-09-09, from RUN-1zCG session 8's operator note 3. No client
+run.** Shipped: `_swing_dropped` (`toolkit/authsrv/authsrv.py`), `armed_at` on the swing
+entry, `studies/movecode/review/swingcensus.py`, `test_playerswing` §12 (floor 116 → 123,
+the known-bad arm runs first). **No behaviour change** — see §1z-cr.5.
+
+### 1z-cr.1 The instrument gap, and it is the reason the symptom survived a green suite
+
+`_press_refused` is the swing path's R11 logger ("a suppressed grant is PRINTED, never
+silent"). Its first two lines:
+
+```python
+pend = state.get("press_pending")
+if pend is None or pend.get("answered") is not None:
+    return
+```
+
+**A swing in flight is BY DEFINITION one whose press was answered.** So every one of
+`attack_tick`'s five in-flight drop sites called a logger that had already declined to
+log. The press half of this path has had the discipline since ANIMREF-RE 41; the swing
+half never did, and nothing noticed because no test drove a drop and asked for a row.
+`test_playerswing` §12 now runs that arm **first**, with `_swing_dropped` stubbed out, and
+asserts the silence — the check that would have caught this.
+
+### 1z-cr.2 The census: 700 swings, and the silent ones are TWO populations — OBSERVED
+
+`swingcensus.py` over all 68 captures carrying a player swing. Where a capture predates
+`_swing_dropped` the branch is attributed **by elimination** — a `cancel:*` sends a
+labelled `attack_stopped` on the wire, `dead-player` and `target-gone` sit beside their own
+death messages, and **`reach` sends nothing at all**, so a silent swing whose window carries
+the server's own printed distance above `attack_reach()` is attributed there.
+
+| | n | visible before this arc? |
+|---|---|---|
+| landed | 585 of 700 | — |
+| **`cancel`** (a move, a retarget, a cancel action) | **104** | yes — `attack_stopped` on the wire |
+| `dead-player` | 5 | yes |
+| **`reach`** | **4** | **NO — no row, no print, no wire event** |
+| unattributed | 2 | — |
+
+**The dominant cause of "animation but no damage" across the whole corpus is the MOVEMENT
+CANCEL, 104 of 115** — that is the quarterstep interaction, it is wire-visible, and the
+operator's own verdict on it this session was *"worked pretty well"*. It is not the thing
+that was broken; it is named here so the next reader does not re-find it.
+
+### 1z-cr.3 The four `reach` drops are all in session 8, and the server's own labels name them — OBSERVED
+
+All four sit in the stuck-corner window after the revive, and the elimination is clean at
+each: no `attack_stopped` anywhere near, the player alive, the target alive.
+
+| swing | server's believed distance during the windup | landed? |
+|---|---|---|
+| t=138.54 | 55 → **158** u | no |
+| t=140.94 | 128 → **147** u | no |
+| t=146.67 | 121 → **151** u | no |
+| t=150.09 | 118 → 128 → **149** u | no |
+| *t=142.78, 144.62, 148.61, 152.03, 153.82 (controls, same window)* | *80–118 u, never above* | **yes** |
+
+The numbers are the server's own — it prints them in its `APPROACH` / halt / `FOLLOW`
+labels — and the split against `attack_reach() = 144.0` is exact: **every swing whose
+window crossed 144 u died, every swing that stayed under it landed.** The distances are
+sampled at the label instants rather than at the drop tick, so the attribution is
+elimination-plus-window, not a direct read; captures written from now on carry a
+`swing_verdict` row and are read directly.
+
+### 1z-cr.4 The root is NOT the swing path — it is §1z-cp.3's position model, second consumer
+
+The reach test's operand is `px, py = state.get("pos", ...)` — **the position MODEL, not
+the report.** §1z-cp.3 measured that model running away along a granted lead by **up to
+259 u while the drawn body stood still at the corner point (10488, 8117)**, and named
+`_npc_follow_tick` as its consumer. **`attack_tick` is a second consumer of the same
+defect**, and it was never listed as one.
+
+The tape is the control: at those four instants the **drawn** bodies were **55–110 u**
+apart (`1zcg8-agenttap.jsonl`), comfortably inside the 144 u reach. So the server whiffed
+four swings that, on the operator's screen, connected — which is note 3 exactly.
+
+**Label: the reach crossing is OBSERVED** (the server's own printed operands, plus the
+elimination). **That the model is wrong rather than the reach is CORROBORATED** (the tape's
+drawn bodies against the model's belief). **That correcting the operand would fix the
+symptom is a RECONSTRUCTION and is not shipped.**
+
+### 1z-cr.5 What is deliberately NOT shipped, and why
+
+The obvious fix — test reach against the last accepted **report** instead of the model — is
+**the same question §1z-cp raised for the follow and deliberately left open**, and the two
+consumers read the same field. Shipping this one alone would change the follow's regime by
+the back door and leave one run unable to convict either: the trap
+`feedback-ask-run-questions-before-the-run` names as "shipping two defaults at once means
+one run convicts the pair, clearing neither". So the operand question belongs to one
+derivation covering **both** consumers, with one revert flag, and it is registered rather
+than guessed.
+
+What ships is only the instrument, which cannot change a verdict — and the next hand-driven
+session answers by reading a row instead of by elimination.
+
+### 1z-cr.6 Open
+
+* **The operand, both consumers together** (`attack_tick`'s reach test and
+  `_npc_follow_tick`'s target): model or report? One derivation, one flag, one run.
+* **Is our movement cancel retail-faithful?** 104 of 115 silent swings, and the site's own
+  comment calls its corpus evidence "CORROBORATION rather than proof because its own
+  positive control failed". The bigger population by 26×, and untouched here.
+* **The 2 unattributed** (`20260901T125928` t=246.2, `20260902T134617` t=38.62): no stop,
+  no death, no printed distance in the window. The new row settles this class by itself.

@@ -44,7 +44,9 @@ import checks  # noqa: E402
 # FLOOR 116 from the green run of 2026-09-03 that added section 11 (ANIMREF-RE
 # 41: the press supersedes the keyboard belief, and every press leaves a
 # press_verdict row; 20 fixture-free checks). 96 with section 10 alone.
-LEDGER = checks.Ledger("player swing windup", floor=116)
+# SWINGCANCEL +7 (123), from the green run: 1 known-bad arm + 3 reach row
+# + 1 control + 2 other branches (studies/movecode 1z-cr).
+LEDGER = checks.Ledger("player swing windup", floor=123)
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -1808,6 +1810,99 @@ def main():
     section_reach_and_approach()
     section_press_supersedes_and_move_ends()
     section_press_ends_kbd_latch()
+    print("\n12. an in-flight swing DROP writes a row and prints (SWINGCANCEL)")
+    # RUN-1zCG session 8: 4 of the operator's 7 "full animation, no damage"
+    # swings left NO row anywhere. `_press_refused` returns early once the
+    # press is answered, and a swing in flight is by definition one whose
+    # press was answered -- so every in-flight drop went through a logger
+    # that had already declined to log. This section runs the known-bad arm
+    # FIRST: with the helper stubbed out, the reach drop is silent, which is
+    # the state the run caught.
+    class _Rec:
+        def __init__(self): self.rows = []
+        def event(self, kind, **kw): self.rows.append((kind, kw))
+
+    import authsrv
+
+    def _armed_world(dist):
+        """A player with a swing in flight and the target `dist` away."""
+        st = _state()
+        st["agents"][10]["pos"] = (float(dist), 0.0)
+        st["agents"][10]["plane"] = 0
+        st["attacking"] = 10
+        st["player_health"] = 100.0
+        st["player_dead"] = False
+        now = _tt.time()
+        st["player_swing"] = {"target": 10, "armed_at": now,
+                              "lands_at": now + 10.0}   # never lands on its own
+        return st
+
+    # THE KNOWN-BAD ARM: the old code path, with the drop unlogged.
+    saved = authsrv._swing_dropped
+    authsrv._swing_dropped = lambda *a, **k: None
+    try:
+        rec = _Rec()
+        st = _armed_world(400.0)          # far beyond attack_reach()
+        authsrv.attack_tick(lambda *a, **k: None, st, 0, rec=rec)
+        check(st["player_swing"] is None and not rec.rows,
+              "KNOWN-BAD ARM: the drop happens and writes NOTHING",
+              f"swing={st['player_swing']}, rows={rec.rows} -- this is what "
+              f"session 8 captured, and a check that cannot see it is the "
+              f"reason the symptom survived a green suite")
+    finally:
+        authsrv._swing_dropped = saved
+
+    # THE SHIPPED ARM: the same drop, now named.
+    rec = _Rec()
+    st = _armed_world(400.0)
+    authsrv.attack_tick(lambda *a, **k: None, st, 0, rec=rec)
+    rows = [kw for kind, kw in rec.rows if kind == "swing_verdict"]
+    check(st["player_swing"] is None and len(rows) == 1
+          and rows[0]["branch"] == "reach",
+          "the reach drop writes ONE swing_verdict row naming the branch",
+          f"rows={rows}")
+    check(rows and rows[0].get("dist", 0) > rows[0].get("reach", 1e9) - 1e-9
+          and rows[0]["target"] == 10,
+          "and it carries the OPERANDS the branch tested -- dist and reach",
+          f"dist={rows[0].get('dist')} reach={rows[0].get('reach')} -- the "
+          f"distance is read from state['pos'], the position MODEL; "
+          f"§1z-cp.3 measured that model running 259 u from the drawn body, "
+          f"which is why the row records the number rather than trusting it")
+    check(rows and "into_windup" in rows[0] and "lands_in" in rows[0],
+          "and how far into the windup the swing died",
+          f"into_windup={rows[0].get('into_windup')} "
+          f"lands_in={rows[0].get('lands_in')} -- a drop at 0.01 s and one at "
+          f"0.7 s look identical on the wire and are different bugs")
+
+    # A tick that drops NOTHING says nothing -- or the rows out-number swings.
+    rec = _Rec()
+    st = _armed_world(50.0)               # inside reach, swing survives
+    authsrv.attack_tick(lambda *a, **k: None, st, 0, rec=rec)
+    check(not [kw for kind, kw in rec.rows if kind == "swing_verdict"],
+          "CONTROL: a swing that is NOT dropped writes no row",
+          f"rows={rec.rows} -- the tick runs many times per swing")
+
+    # The other drop branches are named too, not just the one we caught.
+    rec = _Rec()
+    st = _armed_world(50.0)
+    st["player_dead"] = True
+    authsrv.attack_tick(lambda *a, **k: None, st, 0, rec=rec)
+    rows = [kw for kind, kw in rec.rows if kind == "swing_verdict"]
+    check(len(rows) == 1 and rows[0]["branch"] == "dead-player",
+          "a death mid-windup is named too",
+          f"rows={rows} -- session 8's swing at t=93.93 was exactly this and "
+          f"was equally silent")
+
+    rec = _Rec()
+    st = _armed_world(50.0)
+    st["player_swing_cancel"] = "movement"
+    authsrv.attack_tick(lambda *a, **k: None, st, 0, rec=rec)
+    rows = [kw for kind, kw in rec.rows if kind == "swing_verdict"]
+    check(len(rows) == 1 and rows[0]["branch"] == "cancel:movement",
+          "and so is a movement cancel, with the CANCELLER named",
+          f"rows={rows} -- this one was already visible on the wire as an "
+          f"attack_stopped; the row makes the three cancellers separable")
+
     return LEDGER.verdict()
 
 

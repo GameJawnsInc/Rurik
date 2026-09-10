@@ -10088,7 +10088,7 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   requires the replay control to close on each (52/52, 23/23, 11/11 starts),
   declared skip without them. Floor 14, the bare half, measured both ways —
   20 with the vault, 14 with `RURIK_VAULT` pointed at an empty directory),
-  `toolkit/authsrv/test_playerswing.py` (the player's auto swing is TWO
+  `toolkit/authsrv/test_playerswing.py` (**SWINGCANCEL (2026-09-09) added §12, floor 116 → 123**: an in-flight swing DROP writes a `swing_verdict` row naming the branch and the operands it tested — the **known-bad arm runs first**, with `_swing_dropped` stubbed out, asserting the silence RUN-1zCG session 8 captured; then the `reach` drop's row with its `dist`/`reach`/`into_windup`/`lands_in`, a CONTROL that an undropped swing writes nothing, and the `dead-player` and `cancel:movement` branches named. The gap it closes: `_press_refused` returns early once its press is `answered`, and a swing in flight is by definition one whose press was answered — studies/movecode §1z-cr.) Otherwise:  (the player's auto swing is TWO
   phases — ATTACK_STARTED, then the damage `swing_windup(ATTACK_INTERVAL)`
   later — where until 2026-08-22 it was one instant, the last attacker in the
   file with no mid-animation window (studies/combat 17e item 1; the windup

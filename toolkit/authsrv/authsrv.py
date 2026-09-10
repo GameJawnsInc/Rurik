@@ -12755,6 +12755,41 @@ def _press_row(rec, **kw):
             pass
 
 
+def _swing_dropped(state, rec, conn_id, branch, **detail):
+    """An ARMED swing was thrown away before it could land, and this is the
+    row that says so. R11 -- "a suppressed grant is PRINTED, never silent" --
+    applied to the half of the swing path that never had it.
+
+    THE GAP THIS CLOSES, measured rather than supposed (studies/movecode
+    §1z-cr, RUN-1zCG session 8): `_press_refused` writes nothing once the
+    press it describes has been ANSWERED (`pend["answered"] is not None`),
+    and a swing in flight is BY DEFINITION one whose press was answered --
+    so every one of `attack_tick`'s in-flight drops returned through a
+    logger that had already declined to log. Four of the operator's seven
+    "full animation, no damage" swings left the server with no row, no
+    print and no wire event of any kind. The press half of this path has
+    had the discipline since ANIMREF-RE 41; the swing half did not.
+
+    Emitted ONLY when a swing was actually armed -- a tick that drops
+    nothing says nothing, or the row would out-number the swings.
+    """
+    swing = state.get("player_swing")
+    if swing is None:
+        return
+    now = time.time()
+    detail.setdefault("target", state.get("attacking"))
+    detail["into_windup"] = round(now - swing.get("armed_at", now), 3)
+    detail["lands_in"] = round(swing.get("lands_at", now) - now, 3)
+    if rec is not None:
+        try:
+            rec.event("swing_verdict", branch=branch, **detail)
+        except Exception:      # telemetry must never take the tick down
+            pass
+    why = ", ".join(f"{k} {v}" for k, v in detail.items())
+    print(f"[c{conn_id}] SWING DROPPED in flight: {branch} ({why}) "
+          f"[SWINGCANCEL, studies/movecode 1z-cr]", flush=True)
+
+
 def _press_refused(state, rec, conn_id, branch, **detail):
     """attack_tick found a PENDING press and did not open its swing this
     tick. The FIRST refusal writes the row and prints -- the R11 rule, "a
@@ -12842,6 +12877,8 @@ def attack_tick(send, state, conn_id, rec=None):
     # here is dropping the in-flight swing so its damage never lands. Clear
     # the flag even when nothing is armed: a press between swings still asked.
     if state.get("player_swing_cancel"):
+        _swing_dropped(state, rec, conn_id,
+                       f"cancel:{state['player_swing_cancel']}")
         state["player_swing"] = None
         state["player_swing_cancel"] = None
     # ---- ANIMREF-RE §33 / F4: the pause accumulator resets HERE ----------
@@ -12869,11 +12906,13 @@ def attack_tick(send, state, conn_id, rec=None):
     if state.get("player_dead"):
         # A dead player does not keep hitting things, and does not land the
         # swing it was mid-way through either.
+        _swing_dropped(state, rec, conn_id, "dead-player")
         state["player_swing"] = None
         _press_refused(state, rec, conn_id, "dead-player", terminal=True)
         return
     target_id = state.get("attacking")
     if not target_id:
+        _swing_dropped(state, rec, conn_id, "move-ended-order")
         state["player_swing"] = None
         _approach_abandon(state)
         # A press still pending with no target: a move command arrived
@@ -12889,6 +12928,7 @@ def attack_tick(send, state, conn_id, rec=None):
         # carries [8, 31, 0] ~0.25 s after the death messages (t=20.1637,
         # n=1, castmech 3c).
         action_hold(send, state, 0, f"target {target_id} is gone")
+        _swing_dropped(state, rec, conn_id, "target-gone", target=target_id)
         state["attacking"] = None
         state["player_swing"] = None
         _approach_abandon(state)
@@ -12920,6 +12960,18 @@ def attack_tick(send, state, conn_id, rec=None):
         # again without re-clicking -- but the swing IN FLIGHT whiffs,
         # exactly as the agent loop drops `swing_lands_at` when the player
         # leaves reach.
+        #
+        # THIS IS THE BRANCH RUN-1zCG SESSION 8 CAUGHT, and the distance it
+        # tests is READ FROM THE POSITION MODEL, not from the report:
+        # `px, py` above is `state["pos"]`, which §1z-cp.3 measured running
+        # away along a granted lead by up to 259 u while the drawn body
+        # stood still. So this branch can whiff a swing the player can see
+        # connecting. The drop is recorded here; whether the test should
+        # read the model or the report is 1z-cr's open question and is NOT
+        # decided by this row.
+        _swing_dropped(state, rec, conn_id, "reach",
+                       dist=round(math.hypot(ax - px, ay - py), 1),
+                       reach=attack_reach())
         state["player_swing"] = None
         _press_refused(state, rec, conn_id, "reach",
                        dist=round(math.hypot(ax - px, ay - py), 1),
@@ -13107,6 +13159,7 @@ def attack_tick(send, state, conn_id, rec=None):
     if SWING_HOLDS_WALK_GATE:
         action_hold(send, state, 1, f"the swing at {target_id}")
     state["player_swing"] = {"target": target_id,
+                             "armed_at": now,
                              "lands_at": now + swing_windup(interval)}
 
 
