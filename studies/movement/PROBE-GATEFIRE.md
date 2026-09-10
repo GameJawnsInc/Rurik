@@ -827,12 +827,26 @@ rule still applies to them exactly as it always did. Re-deriving them from a rea
 needs **both** witnesses moved together, the tier word here and `probedoc_fixtures.DOC_BLOCKS`,
 or §5 reddens.
 
-**How to tell if these blocks have gone stale:** they were produced at HEAD `2361a83` against
-`movetap.py` sha256 `6bef2bb3b4c7663334ffb6af2f6d31515f536954be388401fb72c17e429fe443` and
+**How to tell if these blocks have gone stale:** they were produced at HEAD `2361a83`, and
+**re-derived unchanged at `e2468e5` on 2026-09-10**, against
+`movetap.py` sha256 `44d87c2f4df8c95fcfe826e7e052950cb1098ab04ee440c6495ce053b1115953` and
 `movesync.py` sha256 `de282093612e7ae2c53a14d615f537f719c558aa141c0e54ad3b3aa7b580eb7c`. If
 either hash has moved, re-derive every block before quoting one — a printed sentence that
 changed upstream makes this whole section a description of code that no longer exists, which
 is the failure this rewrite was commissioned to repair.
+
+> **The 2026-09-10 re-stamp, and what a moved hash did and did not mean.**
+> `movetap.py`'s hash moved from `6bef2bb…` to `44d87c2…` at `3e7ed3a2`
+> (2026-09-05, MOVECODE-1z-cb). **The blocks below were not stale**: the whole
+> diff is a thirteen-line COMMENT recording that the fourth word of an agent
+> point is a hardcoded zero and there is no z column to add — `A_POINT = 0x78`
+> is unchanged and no printer was touched — and `test_probedoc.py` re-derived
+> every block from the real printers and matched all of them byte for byte.
+> The instruction above is still the right one and was followed rather than
+> waived: **re-derive, then re-stamp**. A whole-file hash reddens on a comment,
+> which is the correct direction for a staleness signal a reader consults
+> without running the suite — it costs one re-derivation and it cannot miss a
+> real drift.
 
 ⚠ **REPINNED 2026-08-21 for REALFIX-T1 and REALFIX-I1, and the blocks below were re-read
 rather than re-hashed.** Both files changed: `movetap.py` gained the history-chain walk
