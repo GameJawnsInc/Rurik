@@ -11333,6 +11333,42 @@ CHAIN_RESTART_PACED = True    # False (--legacy-chain-restart): same-tick
 # full derivation, the animation-priority table it serves and the rival it
 # rules out are at attack_tick's own site. Reverts with LAW A as one arm.
 CHAIN_PAUSES_WHILE_MOVING = True   # False (--legacy-move-stops-chain)
+# THE PAUSE CHARGES WHATEVER THE TARGET (MOVECODE-1z-dg). §1z-dc measured the
+# accumulator charging 19 % of the real moving span, and RUN-1zDB/1zDC's rows
+# named the branch every starved tick left through: `no-target`. A real move's
+# report forgets the target (ANIMREF-RE 39, correctly), so every moving tick
+# returned ABOVE the accumulator and charged nothing -- and the client's own
+# re-press 30-40 ms after the 0x0047 opened a fresh chain at once, because
+# begin_attack resets the clock for a new target. Retail's gap across a move
+# is START-to-START = interval + moving span WITH that re-press inside it (28
+# of 28 pairs; 1z-dc.3: charging the whole span lands 2.701 s against retail's
+# 2.657), so on retail the re-press does not restart the clock. Two halves,
+# one mechanism: the clock is charged through a move whether or not a target
+# is held (at the top of attack_tick, before any return, never while dead),
+# and a press that re-targets the agent the move just forgot RESUMES the
+# chain on that clock; a genuinely new target keeps the immediate first
+# swing. The out-of-reach walk (the approach) is charged too -- it is the
+# same clock and the same moving body; the mid-chain re-approach sub-case has
+# no retail witness and is UNVERIFIED, stated rather than carved out.
+CHAIN_PAUSE_CHARGES_WITHOUT_TARGET = True   # --no-pause-charge-without-target reverts
+
+
+def _chain_pause_charge(state, now):
+    """Charge the swing clock for the moving time since the last moving tick
+    and stamp this one. Returns what was charged (0.0 on the first tick of a
+    run, whose stamp was None). The arithmetic §31 always had, moved into one
+    place so both placements (1z-dg's top-of-tick, the legacy bottom) share it."""
+    since = state.get("chain_pause_tick")
+    charged = 0.0
+    if since is not None and now > since:
+        charged = now - since
+        state["player_last_swing"] = \
+            state.get("player_last_swing", 0.0) + charged
+        st = state.setdefault("chain_pause_stats",
+                              {"charged": 0.0, "ticks_moving": 0, "left": {}})
+        st["charged"] += charged
+    state["chain_pause_tick"] = now
+    return charged
 
 # ANIMREF-RE §33 F1: end the property-8 hold AT THE LANDING, so the client's
 # walk gate is open across exactly the window §32 already ruled movable. The
@@ -11726,10 +11762,30 @@ def begin_attack(send, state, target_id, conn_id, rec=None):
         # Waiting a full interval makes the click feel ignored. Both timers:
         # last_hit gates the attack-skill path, player_last_swing gates the
         # two-phase auto swing (attack_tick).
+        #
+        # UNLESS THIS IS THE RE-PRESS AFTER A MOVE (MOVECODE-1z-dg): the
+        # move forgot exactly this target (cancel_on_move remembered it),
+        # and the clock was charged through the moving span. Retail's
+        # START-to-START gap across a move with the re-press inside it is
+        # interval + span (28 of 28), which a reset would collapse to
+        # "the stop plus 40 ms". So the chain RESUMES on the charged clock;
+        # the press row says so, and the tick answers it when the residual
+        # elapses. A genuinely new target keeps the immediate first swing.
         agent["last_hit"] = 0.0
-        state["player_last_swing"] = 0.0
-        print(f"[c{conn_id}] attacking agent {target_id} ({agent['name']})",
-              flush=True)
+        moved_from = state.get("chain_moved_from")
+        state["chain_moved_from"] = None
+        resumed = (CHAIN_PAUSE_CHARGES_WITHOUT_TARGET and moved_from is not None
+                   and moved_from.get("target") == target_id)
+        if resumed:
+            residual = max(0.0, (state.get("player_last_swing", 0.0)
+                                 + ATTACK_INTERVAL) - now)
+            print(f"[c{conn_id}] attacking agent {target_id} ({agent['name']}) "
+                  f"-- RESUMED after a move: the swing clock keeps its "
+                  f"{residual:.2f} s residual [MOVECODE-1z-dg]", flush=True)
+        else:
+            state["player_last_swing"] = 0.0
+            print(f"[c{conn_id}] attacking agent {target_id} ({agent['name']})",
+                  flush=True)
         # A previous order still unanswered is superseded by this one: its
         # row closes as `retarget` so it is never left open.
         pend = state.get("press_pending")
@@ -11739,7 +11795,7 @@ def begin_attack(send, state, target_id, conn_id, rec=None):
                        refused_by=pend.get("refused"), new_target=target_id)
         state["press_pending"] = {"t": now, "target": target_id,
                                   "refused": None, "ticks": 0,
-                                  "answered": None}
+                                  "answered": None, "resumed": resumed}
     else:
         # A REPEAT PRESS on the target the chain already holds: retail does
         # not re-arm the swing clock (128 same-target held presses, chain
@@ -11988,6 +12044,14 @@ def cancel_on_move(send, state, conn_id, moved=None):
     if not still:
         if state.get("attacking") and (pre_landing or MOVE_ENDS_CHAIN
                                        or not MOVE_KEEPS_CHAIN):
+            # REMEMBER WHOM THE MOVE FORGOT (MOVECODE-1z-dg): the client
+            # re-presses this target 30-40 ms after its 0x0047 (ANIMREF-RE
+            # 39, 28 of 28), and retail's gap across the move is START to
+            # START = interval + moving span -- the re-press resumes the
+            # chain on the paused clock rather than restarting it.
+            # begin_attack reads this; a press on any OTHER target drops it.
+            state["chain_moved_from"] = {"target": state["attacking"],
+                                         "t": now}
             state["attacking"] = None
         if MOVE_ENDS_CHAIN:
             # A move command ends OUR follow too -- the client's steering
@@ -13056,6 +13120,15 @@ def attack_tick(send, state, conn_id, rec=None):
     _moving_now = _player_body_moving(state)
     if not _moving_now:
         state["chain_pause_tick"] = None
+    elif (CHAIN_PAUSE_CHARGES_WITHOUT_TARGET and CHAIN_PAUSES_WHILE_MOVING
+          and not state.get("player_dead")):
+        # MOVECODE-1z-dg: the clock is charged HERE, before any of the four
+        # returns below, so a moving tick with no target (the move forgot
+        # it), a gone target or an out-of-reach body charges the same as one
+        # that reaches the accumulator. The notes below still say which
+        # branch the tick left through; `charged` on the row is now the
+        # whole span. Never while dead: a corpse's clock is nobody's.
+        _chain_pause_charge(state, time.time())
     if state.get("player_dead"):
         # A dead player does not keep hitting things, and does not land the
         # swing it was mid-way through either.
@@ -13156,17 +13229,14 @@ def attack_tick(send, state, conn_id, rec=None):
     # hand the pose back to locomotion.
     moving = CHAIN_PAUSES_WHILE_MOVING and _moving_now
     if moving:
-        since = state.get("chain_pause_tick")
-        if since is not None and now > since:
-            _charged = now - since
-            state["player_last_swing"] = \
-                state.get("player_last_swing", 0.0) + _charged
-            _st = state.setdefault("chain_pause_stats",
-                                   {"charged": 0.0, "ticks_moving": 0,
-                                    "left": {}})
-            _st["charged"] += _charged
+        if not CHAIN_PAUSE_CHARGES_WITHOUT_TARGET:
+            # The pre-1z-dg placement: charged only by a tick that got past
+            # the four returns above, which is the starvation §1z-dc
+            # measured. Kept as the flag's revert arm.
+            _chain_pause_charge(state, now)
+        # Under 1z-dg the charge was taken at the top of this tick; only
+        # the note is left to write here.
         _chain_pause_note(state, "charged")
-        state["chain_pause_tick"] = now
     else:
         state["chain_pause_tick"] = None
     swing = state.get("player_swing")
@@ -26485,6 +26555,17 @@ def main():
                          "the target-forget (1z-dd) and the chain pause's "
                          "read of a REPEATED still report as a body in "
                          "motion (1z-df).")
+    ap.add_argument("--no-pause-charge-without-target", action="store_true",
+                    help="the chain pause charges only ticks that reach the "
+                         "accumulator (below the no-target return), and a "
+                         "re-press after a move restarts the swing clock. "
+                         "The revert for MOVECODE-1z-dg: the shipped arm "
+                         "charges the whole moving span whatever the target "
+                         "holds and resumes the chain on that clock when the "
+                         "client re-presses the target the move forgot -- "
+                         "retail's START-to-START gap across a move is "
+                         "interval + span (1z-dc.3, within 1.7%%); ours "
+                         "charged 19%% of the span.")
     ap.add_argument("--no-spell-armour", action="store_true",
                     help="an incoming armour-respecting spell (Flare's `Fire "
                          "damage`) deals its stated amount instead of "
@@ -28676,6 +28757,12 @@ def main():
         MOVE_CANCEL_NEEDS_DISPLACEMENT = False
         print("NO MOVE-CANCEL DISPLACEMENT: a keyboard report cancels the "
               "chain whether or not the body moved (the pre-1z-db arm).")
+    if a.no_pause_charge_without_target:
+        global CHAIN_PAUSE_CHARGES_WITHOUT_TARGET
+        CHAIN_PAUSE_CHARGES_WITHOUT_TARGET = False
+        print("NO PAUSE CHARGE WITHOUT TARGET: the chain pause charges only "
+              "ticks that reach the accumulator, and a re-press after a move "
+              "restarts the swing clock (the pre-1z-dg arm, 19 % of the span).")
     if a.no_spell_armour:
         global SPELL_ARMOUR
         SPELL_ARMOUR = False

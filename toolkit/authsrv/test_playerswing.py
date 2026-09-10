@@ -49,7 +49,7 @@ import checks  # noqa: E402
 # retail's. MOVECODE-1z-db +5 (133): the displacement gate, known-bad arm
 # first. MOVECODE-1z-dc +4 (137): the chain-pause row. §13 needs the
 # gamesrv corpus and §13b the live one; each declares a skip by name.
-LEDGER = checks.Ledger("player swing windup", floor=153)
+LEDGER = checks.Ledger("player swing windup", floor=162)
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -1917,6 +1917,137 @@ def section_still_streak():
           "walk-start")
 
 
+def section_no_target_charge():
+    import agents
+    import authsrv
+
+    print("\n17. the pause charges the WHOLE moving span whatever the target, "
+          "and the re-press after a move RESUMES the chain (MOVECODE-1z-dg)")
+    # 1z-dc measured the accumulator charging 19 % of the real moving span;
+    # RUN-1zDB/1zDC's rows named the starved branch: `no-target`. Section 5's
+    # rig never saw it because it keeps `attacking` through the move -- the
+    # real lifecycle FORGETS the target on the move's report (cancel_on_move,
+    # ANIMREF-RE 39) and the client re-presses 30-40 ms after the 0x0047,
+    # which begin_attack answered with a fresh clock. This rig does both.
+    # Retail's START-to-START gap across a move with the re-press inside it
+    # is interval + moving span (1z-dc.3: 2.701 modelled against 2.657
+    # measured); the KNOWN-BAD arm collapses it to "the stop plus a tick".
+
+    class _Rec:
+        def __init__(self): self.rows = []
+        def event(self, kind, **kw): self.rows.append((kind, kw))
+
+    def lifecycle(charges, move_at=2.0, span=1.5, repress_target=10):
+        """Starts (synthetic clock) of a chain that a real move interrupts:
+        the move's report forgets the target, the body moves for `span`,
+        the stop clears the latch and the client re-presses `repress_target`
+        40 ms later. Returns (starts, rec rows)."""
+        sent = []
+        send = lambda op, vals, label="", quiet=False: \
+            sent.append((op, vals, label))
+        agent = {"name": "t", "dead": False, "last_hit": 0.0,
+                 "max_health": 1e9, "health": 1e9, "pos": (0.0, 0.0)}
+        state = {"agents": {10: agent, 11: dict(agent)}, "pos": (0.0, 0.0),
+                 "attacking": 10, "player_health": 100.0, "player_dead": False,
+                 "last_report": (0.0, 0.0, False, 999.0)}
+        rec = _Rec()
+        saved = authsrv.CHAIN_PAUSE_CHARGES_WITHOUT_TARGET
+        saved_time = authsrv.time.time
+        clock = [1000.0]
+        authsrv.time.time = lambda: clock[0]
+        authsrv.CHAIN_PAUSE_CHARGES_WITHOUT_TARGET = charges
+        try:
+            starts = []
+            forgot = repressed = False
+            for i in range(200):
+                clock[0] = 1000.0 + i * 0.05
+                t = i * 0.05
+                if t >= move_at and not forgot:
+                    # the arm's own path for a report that MOVED 60 u
+                    authsrv.cancel_on_move(send, state, 0, moved=60.0)
+                    forgot = True
+                moving = move_at <= t < move_at + span
+                state["kbd_moving_at"] = clock[0] if moving else None
+                if t >= move_at + span + 0.04 and forgot and not repressed:
+                    authsrv.begin_attack(send, state, repress_target, 0, rec=rec)
+                    repressed = True
+                before = len(sent)
+                authsrv.attack_tick(send, state, 0, rec=rec)
+                for op, vals, _l in sent[before:]:
+                    if (op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
+                            and vals[0] == agents.GV_ATTACK_STARTED):
+                        starts.append((clock[0], vals[2]))
+                agent["health"] = 1e9
+            return starts, rec.rows, state
+        finally:
+            authsrv.CHAIN_PAUSE_CHARGES_WITHOUT_TARGET = saved
+            authsrv.time.time = saved_time
+
+    def gap_across(starts, move_at=2.0):
+        before = [t for t, _ in starts if t - 1000.0 < move_at]
+        after = [t for t, _ in starts if t - 1000.0 >= move_at]
+        return (after[0] - before[-1]) if before and after else None
+
+    interval = authsrv.ATTACK_INTERVAL
+    span = 1.5
+    s_off, rows_off, st_off = lifecycle(False, span=span)
+    s_on, rows_on, st_on = lifecycle(True, span=span)
+    g_off, g_on = gap_across(s_off), gap_across(s_on)
+    check(g_off is not None and g_on is not None and len(s_on) >= 3,
+          "both arms produced starts before and after the move -- the rig "
+          "is not vacuous",
+          f"off={[(round(t - 1000, 2), a) for t, a in s_off]} "
+          f"on={[(round(t - 1000, 2), a) for t, a in s_on]}")
+    if g_off is None or g_on is None:
+        return
+    check(g_off < interval + span - 0.30,
+          "KNOWN-BAD ARM: the gap across the move is the stop plus a tick -- "
+          "the move forgot the target, every moving tick left at "
+          "`no-target` above the accumulator, and the re-press reset the "
+          "clock (1z-dc's 19 %)",
+          f"gap {g_off:.2f} s against interval+span {interval + span:.2f}")
+    check(abs(g_on - (interval + span)) <= 0.15,
+          "SHIPPED: the gap across the move is interval + moving span -- "
+          "retail's own START-to-START signature with the re-press inside it "
+          "(1z-dc.3: 2.701 modelled against 2.657 measured)",
+          f"gap {g_on:.2f} s against {interval + span:.2f}")
+    check(g_on > g_off + 0.5,
+          "and the two arms SEPARATE",
+          f"{g_on:.2f} against {g_off:.2f}")
+    cp_on = [kw for k, kw in rows_on if k == "chain_pause"]
+    cp_off = [kw for k, kw in rows_off if k == "chain_pause"]
+    check(cp_on and abs(cp_on[-1]["charged"] - span) <= 0.15
+          and cp_on[-1]["left"].get("no-target", 0) > 0,
+          "the row on the resumed swing says the WHOLE span was charged and "
+          "names the ticks that left at no-target",
+          f"{cp_on[-1] if cp_on else None}")
+    check(cp_off and cp_off[-1]["charged"] < 0.15,
+          "KNOWN-BAD ARM's row: the same ticks, charged nothing",
+          f"{cp_off[-1] if cp_off else None}")
+    pv_on = [kw for k, kw in rows_on if k == "press_verdict"]
+    check(any(kw.get("reason") == "swing" and kw.get("age", 0) > 0.5
+              for kw in pv_on),
+          "the re-press is ANSWERED by the tick when the residual elapses, "
+          "not refused -- its row carries the wait as `age`",
+          f"{[(kw.get('reason'), kw.get('age')) for kw in pv_on]}")
+    s_new, _rows, _st = lifecycle(True, span=span, repress_target=11)
+    g_new = gap_across(s_new)
+    check(g_new is not None and g_new < interval + span - 0.30
+          and s_new[-1][1] == 11,
+          "CONTROL: a press on a DIFFERENT target after the move is a "
+          "retarget and swings at once -- only the target the move forgot "
+          "resumes",
+          f"gap {g_new:.2f} s, last start at agent {s_new[-1][1] if s_new else None}")
+    st = _state()
+    st["attacking"] = 10
+    st["last_report"] = (0.0, 0.0, False, _tt.time())
+    authsrv.cancel_on_move(lambda *a, **k: None, st, 0, moved=0.0)
+    check(st.get("chain_moved_from") is None and st.get("attacking") == 10,
+          "and a STILL report remembers nothing -- it kept the target "
+          "(1z-dd), so there is nothing to resume",
+          f"moved_from={st.get('chain_moved_from')} attacking={st.get('attacking')}")
+
+
 def main():
     section_two_phases()
     section_start_to_start()
@@ -1933,6 +2064,7 @@ def main():
     section_press_supersedes_and_move_ends()
     section_press_ends_kbd_latch()
     section_still_streak()
+    section_no_target_charge()
     print("\n12. an in-flight swing DROP writes a row and prints (SWINGCANCEL)")
     # RUN-1zCG session 8: 4 of the operator's 7 "full animation, no damage"
     # swings left NO row anywhere. `_press_refused` returns early once the

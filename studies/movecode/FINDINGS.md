@@ -19277,3 +19277,71 @@ inter-swing gap in a hold at the metronome (1.75 s) after that first report.
 * The no-target charge (§1z-dd.4): a real move still forgets the target and the accumulator still
   never sees the moving span — 1z-dc's 19 % is untouched here. Next, its own flag.
 * The parked copy (§1z-dd.8) and the swept-disc clip (§1z-dd.6): untouched.
+
+---
+
+## 1z-dg. THE NO-TARGET CHARGE — **the pause charges the whole moving span whatever the target holds, and the re-press after a move RESUMES the chain on that clock.** §1z-dc's 19 % is now 100 % of the span; retail's START-to-START signature across a move (interval + span, the re-press inside it) is reproduced on the rig to one tick. Its own flag
+
+**2026-09-10.** Ident `MOVECODE-1z-dg`. Asked by the owner after 1z-df. OBSERVED unless marked.
+
+### 1z-dg.1 Two halves, and the second one is the half the earlier notes missed
+
+§1z-dd.4 named the starved branch: a real move's report forgets the target (ANIMREF-RE 39,
+correctly — 28 of 28 retail re-presses follow a real move), so every moving tick returned at
+`no-target` above the accumulator and charged nothing. Charging above that return is **half** the
+fix. The client re-presses the same target 30–40 ms after its `0x0047` (every `press_verdict` in
+RUN-1zDB/1zDC: age 0.003–0.050 s), and `begin_attack` on a target it no longer held resets
+`player_last_swing = 0.0` — "swing immediately on the first click" — which would wipe whatever the
+accumulator had charged. Retail's gap across a move is START-to-START = **interval + moving span
+with that re-press inside it** (§1z-dc.2: 1.330 → 2.657 s; §1z-dc.3: charging the whole span
+lands 2.701 against 2.657, within 1.7 %). So on retail the re-press does not restart the clock; it
+re-arms the target and the paused clock decides when the next swing opens.
+
+### 1z-dg.2 ★★★ Shipped
+
+* **`_chain_pause_charge(state, now)`** — §31's arithmetic in one place. Under
+  `CHAIN_PAUSE_CHARGES_WITHOUT_TARGET` it runs at the **top** of `attack_tick`, after
+  `_player_body_moving` and before any of the four returns (dead, no target, target gone, out of
+  reach) — never while dead. The legacy placement (below the returns) is the flag's revert arm.
+  The `chain_pause` row is unchanged in shape: `left` still names the branch each moving tick
+  returned through; `charged` is now the whole span.
+* **`cancel_on_move` remembers whom a real move forgot** (`chain_moved_from`, set beside the
+  1z-dd-gated target-forget); a still report keeps the target and remembers nothing.
+* **`begin_attack` resumes** when the press names that target: the clock is kept, the console says
+  `RESUMED after a move: the swing clock keeps its N s residual`, the press row carries
+  `resumed`, and the tick answers the press as `swing` when the residual elapses (`age` on the
+  row). Any other target is a retarget and keeps today's immediate first swing.
+* The out-of-reach walk (the approach) is charged too — the same clock and the same moving body.
+  The mid-chain re-approach sub-case (target steps out, the follow walks the body back in) has no
+  retail witness: **UNVERIFIED**, stated rather than carved out.
+* `--no-pause-charge-without-target` reverts both halves together (one behaviour, one A/B).
+  `test_playerswing` §17, known-bad first, floor 153 → 162; `test_cancelwalk` 124 green.
+
+### 1z-dg.3 The rig, and why §5 never caught it
+
+§5's rig keeps `attacking: 10` through the move and never calls `cancel_on_move` — so its chain
+was never forgotten and its accumulator never starved; the ratio it measures (1.829) is real for
+a chain that survives a move, which the real lifecycle's does not. §17 runs the real sequence on
+a synthetic clock: the move's report forgets the target through `cancel_on_move(moved=60)`, the
+latch is armed for 1.5 s, the stop clears it, and `begin_attack(10)` re-presses 40 ms later.
+
+| | known-bad | shipped | prediction |
+|---|---|---|---|
+| gap across the move | **1.80 s** (the stop + a tick) | **3.20 s** | interval + span = 3.25 |
+| resumed swing's row | `charged 0.0, no-target 30` | `charged 1.45, no-target 30` | the whole span, ticks named |
+| the re-press | answered at once | answered 1.4 s later as `swing` | the residual |
+| a press on agent 11 instead | swings at once | swings at once | a retarget is not a resume |
+
+### 1z-dg.4 What it changes on the tapes already in the vault, and what to watch
+
+* RUN-1zDC arm B (the known-bad arm, target forgotten by every tap): 20 rows of `no-target 29`,
+  charged 0 → 1.45 s a cycle under the rule. Arm A: unchanged (the target was kept; 1z-df now
+  zeroes those).
+* Session 8's mid-chain moves (§1z-dc.3's 208 gaps, 19 % charged): 100 % under the rule; the
+  predicted moving gap moves from 1.982 s toward 2.70 s against retail's 2.657.
+* **Felt:** after a quarterstep the next swing waits the residual instead of firing at the stop —
+  retail's own cadence, and the second half of the "floaty" chain §31 was derived for. Prediction
+  for the next hand-driven session: `press_verdict` rows after moves with `reason: swing` and
+  `age` ≈ the residual (0.5–1.5 s) instead of 0.02–0.05; `chain_pause` rows with `charged` ≈ the
+  moving span and `left: no-target`.
+* Untouched: the parked copy (§1z-dd.8) and the swept-disc clip (§1z-dd.6) — next, in that order.
