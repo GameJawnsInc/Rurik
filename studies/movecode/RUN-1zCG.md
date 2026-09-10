@@ -462,3 +462,73 @@ python toolkit/harness/session.py --exe vault/run/2026-07-29_221c13772c7a/Gw.exe
 
 HANDS OFF THE KEYBOARD until "body is in the map" (~25 s), then 200 s of play; it tears itself
 down. Scoring: `sessionscore.py`, `flankcensus.py`, `floorcensus.py --parked`.
+
+## RESULT, session 8 — 2026-09-09 22:13 (capture `authsrv-20260909T221342-c1`, tape `movecode/1zcg8-agenttap.jsonl`, 206 s, 416 reports, 372 fired leads, 135 hostile orders) — **ALL FIVE REGISTERED CRITERIA MET**
+
+**The owner's own session under the three 2026-09-09 defaults** (`KBD_GRANT_FLOOR = 0.0`,
+`AGTRACK_REPIN = False`, `FAMILY_RATE`), `main` at `4c8f9877`. Scored by `sessionscore.py`,
+`floorcensus.py --parked`, `flankcensus.py`.
+
+- **P1 — re-pins 0, fence-shut leads 0, fence-shut parks 0: MET.** The keyboard AGTRACK arm
+  attempted **11** re-pins and **every one was refused `stale-report`** (budget-red 3,
+  arrival-risk 2, and 6 more) — **0 keyboard re-pins on the wire.** The clip histogram carries
+  **no `fence-shut` class at all** (wall-slide 138, clear 92, clipped 61, …), and
+  `floorcensus --parked` reads **0 parked-under-refusal episodes** — because
+  `KBD_GRANT_FLOOR = 0.0` **answered every one of the 372 headings** (`fired` 372, `deferred`
+  0). The single `0x002C` that did go out (t=138.54) is an **APPROACH re-pin** — the
+  click/approach arm, not the keyboard arm 1z-cy turned off — fired legitimately when the
+  server's copy sat 189 u from the click-leg end during the stuck-corner window. Named, not
+  counted against P1.
+- **P2 — client snaps ≤ 5: MET, 1.** One snap at t=137.3, 229 u (§note 4 below).
+- **P3 — world-0 lag drops by the fence-shut share: MET, past the target.** The
+  `deferred-heading` refusal class that ran **29.6 % pooled across sessions 1–6 is GONE** (0 %
+  refused here), and moving world-0-vs-body **p50 44.0 u** is the **best hand-driven session on
+  record** — s1–6 read 130–166 u, s7 57.4 u. Answering every heading is what moved it.
+- **P4 — exposure floor: MET.** 135 hostile destination orders (≥ 60), 372 fired leads (≥ 150),
+  416 accepted reports.
+- **Gate 2 — zero snaps into the hole above the stairs: MET.** The one snap is on flat ground
+  beside the Hatcher, not the hole.
+
+`flankcensus`: **135 orders, operand pinned 135 exact, 1 chord off our mesh** (7.1 u, "in-disc
+rule dropped the corridor" — a routing choice, not a bad point); 2 parked-off-mesh episodes,
+worst 14.4 u — the known render sink.
+
+### The operator's five notes, dispositioned
+
+1. **Hatcher sank under the top of the stairs for a second** — the GROUNDZ off-mesh render
+   residual (hostile drawn body worst 14.4 u / 27 samples, player 22.9 u + 11.4 u on ground our
+   mesh lacks). **Agreed ignored for this map.** No regression.
+2. **Stuck in the corner, died, came back, wriggled out by wall-hugging** — the corner
+   **lead-length** lever, 1z-cy's named-but-unshipped next item: the click leads were **killed
+   at the wall as zero-lead grants** (`KBD LEAD KILLED on click: zero-lead grant at the modelled
+   body … N u of the lead unwalked`) and only the **wall-slide** leads escape. Death at t≈94,
+   revive t≈104 (`--enemy-hit 0.02` over a long stuck window). **Known; the fix is the wall
+   regime's lead length, not this session's defaults.**
+3. **Attacked/quarterstepped — worked well, but some swings drew a full animation and no
+   damage** → **NEW, and the run's yield.** Of **21 player swings, 14 landed** (damage or a
+   critical — one was `CRITICAL 12 to agent 10`) and **7 produced no outcome at all**: two were
+   **move-cancels** (`attack_stopped: the player moves before the swing landed`, t=70.9/75.2 —
+   quarterstepping cancelling the pending swing, plausibly retail-faithful), one was at the
+   **death** (t=93.9), and **four** (t=138.5/140.9/146.7/150.1) fell in the **stuck-corner
+   window after the revive and produced no `melee_attack_finished` for the player at all** —
+   the `attack_started` went out, the client drew the swing, and the server's swing never
+   completed. Registered for derivation, **not shipped**: one run is not a mechanism, and the
+   four silent ones are tangled with the stuck-corner state (P2's snap and the wall-hug leads
+   are in the same seconds). See PLAN §8 / a new SWINGCANCEL item.
+4. **A short warp through the Hatcher** — the one P2 snap: at t=137.3 the client's world-0
+   jumped ~200 u and the body reseeded to (9973, 8320) with the stop flag cleared, **29 u from
+   the Hatcher** — a warp *through* it. Gate-2 class (a lead reached inside the disc), within
+   P2's budget of 5 but real. The same root the arc has chased: world-0 outran the body into a
+   corner and the client's own gate reseeded it.
+5. **The Hatcher inside the player model, once or twice** — the follow halt overshooting: at
+   t=183/198/201/204 the Hatcher's drawn body sits **0.2–2.7 u from the player** (its sync copy
+   0–105 u away — the copy drifted, the drawn body did not). This is the NPCTRACK **Q6/Q10
+   park-in-body family** (a chaser halts at 80 u nominal but the drawn body ends on the target);
+   retail's own orders show the same shape and **nothing ships** for it (Q10).
+
+**Verdict: the three 2026-09-09 defaults land cleanly on the operator's own arm** — every
+registered criterion met, the deferred-heading refusal class eliminated, and world-0 lag at its
+lowest hand-driven p50. The residuals are three already-named items (the render sink, the corner
+lead length, the park-in-body halt) plus one new one (swings with no outcome in the stuck-corner
+window). **Session 9 is not registered**: it belongs to whichever of those the next derivation
+picks up.
