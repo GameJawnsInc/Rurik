@@ -19213,3 +19213,67 @@ the same flag, with §1z-dd.4's no-target charge as its sibling.
 * **Not settled here:** the parked copy (§1z-dd.8), untouched — the body never left the corner;
   and the exposure divergence (we quarterstep, retail stands), which this script deliberately
   reproduces rather than measures.
+
+---
+
+## 1z-df. THE THIRD DOOR — `_player_body_moving` on displacement: **a REPEATED still report is a body that did not move**, the chain pause charges nothing across it, and the single still report keeps charging because it may be a quarterstep. Same flag. Retail NOT FOUND (4 such reports in 61 connections, 0 gaps containing one)
+
+**2026-09-10.** Ident `MOVECODE-1z-df`. Asked by the owner after RUN-1zDC. OBSERVED unless marked.
+
+### 1z-df.1 The operand, measured before the fix (RUN-1zDC, §1z-de.3)
+
+Arm A's `chain_pause` rows: **charged p50 1.43 s on 18 of 20 cycles**, `left: charged 29` — every
+moving tick reached the accumulator and charged — on a body whose drawn position did not change by
+**0.0 u** over the whole run. The latch (`kbd_moving_at`) was armed by each tap's still `0x003D`; a
+tap into a wall sends no `0x0047` to clear it; `PRESS_ENDS_KBD_LATCH` ended it only at the next
+press. Without the run's retarget the gate would have been pushed past every press and no second
+swing would have opened (§1z-de.1, derived from `begin_attack` before launch).
+
+### 1z-df.2 ★★★ The predicate, and why it is not "ignore still reports"
+
+The client reports on a heading change and every ~1.8 s on a straight walk (the `0x003D` arm's own
+census); **a quarterstep is often one walk-start `0x003D` and one `0x0047`**, and the walk-start's
+position equals the stop's — displacement 0. A rule that ignored still reports would never arm the
+pause for a quarterstep, the owner's own regime, and §31's pause would be dead exactly where it
+was derived. What separates a wall tap from a walk-start is the **second** still report: a
+walk-start is one still report followed by motion or a stop; two consecutive `0x003D`s at the same
+position with no `0x0047` between them cannot be a walk — at 288 u/s any two reports more than 4 ms
+apart with the body moving differ by more than the 1 u epsilon (§1z-db.4's empty gap). Structural,
+not tuned: `KBD_STILL_STREAK_MIN = 2` is the smallest count that is not a walk-start.
+
+**Shipped:** `_kbd_report_still(state, moved)` counts consecutive still reports beside 1z-db's own
+displacement read in the `0x003D` arm; the `0x0047` arm resets the count beside its disarm of the
+latch; `_player_body_moving` treats streak ≥ 2 as a body that did not move, whatever the latch
+says, and falls through to the click latch. **`MOVE_CANCEL_NEEDS_DISPLACEMENT` gates it** — the
+third consumer of the same trigger under the one flag, so `--no-move-cancel-displacement` reverts
+all three doors and RUN-1zDC's arm B stays the known-bad arm for the set. `test_playerswing` §16,
+known-bad first, floor 142 → 153; `test_cancelwalk` 124 green.
+
+### 1z-df.3 Exposure, ours and retail's
+
+* **Ours** (`scratchpad stillstreak`, 199 captures with ≥ 20 reports): 19,455 accepted reports,
+  2,740 still, **743 repeated-still in 122 episodes over 46 captures, 160 within 2 s of a swing**.
+  Session 7 (`20260908T203914`) 125, session 8 (`20260909T221342`) 97 with 40 near swings,
+  RUN-1zDC's arm A 19 in one episode with 17 near swings. The class is the corner hold (§1z-cp.3's
+  "consecutive reports repeat the coordinate to the decimal") and it lives where the owner plays.
+* **Retail** (`review/stillwindup.py --streaks`, prediction first): **4 repeated-still reports in
+  61 connections, 0 inter-swing gaps containing one**; the 856 plain gaps sit on the 1.330 s
+  metronome (p10 1.319, p90 1.349). NOT FOUND — retail's player does not produce the class, so it
+  can neither confirm nor refute the rule. It rests on the derivation above.
+
+### 1z-df.4 Retrodiction on the run that measured it, and what a hand-driven hold will read
+
+On RUN-1zDC arm A the first tap follows the walk's `0x0047` (streak 1, charges as before); taps
+2–20 are streak ≥ 2 → **17 of the 18 charged rows read 0** under the rule, one cycle keeps its
+1.43 s. In a hand-driven corner hold under HEAD the sequence is now: the swing in flight lands
+(1z-db + 1z-dd), the first still report pauses the chain until the next report or press, and every
+further still report leaves it running — the chain swings through a held key against a wall,
+which is what a standing body does on retail. **Prediction for the next hand-driven corner
+session:** `chain_pause` rows with `charged` > 0 only on the FIRST report of each hold; the
+inter-swing gap in a hold at the metronome (1.75 s) after that first report.
+
+### 1z-df.5 What this does NOT do
+
+* The no-target charge (§1z-dd.4): a real move still forgets the target and the accumulator still
+  never sees the moving span — 1z-dc's 19 % is untouched here. Next, its own flag.
+* The parked copy (§1z-dd.8) and the swept-disc clip (§1z-dd.6): untouched.

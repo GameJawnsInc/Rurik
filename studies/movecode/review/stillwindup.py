@@ -117,5 +117,77 @@ def run(verbose=True):
     return table, still_rows, conns
 
 
-if __name__ == "__main__":
+if __name__ == "__main__" and "--streaks" not in sys.argv:
     run()
+
+
+# ---------------------------------------------------------------- 1z-df
+C2S_STOP = 0x47
+
+
+def retail_streaks(verbose=True):
+    """Does a REPEATED still report delay ArenaNet's player's next swing?
+
+    MOVECODE-1z-df: `_player_body_moving` now treats two consecutive keyboard
+    reports at the same position with no stop between as a body that did not
+    move, so the chain pause charges nothing across them. The retail check:
+    for the player's swings whose preceding inter-swing gap contains such a
+    streak, is the START-to-START gap the still metronome (~1.33 s) or the
+    moved gap (~2.66 s)? PREDICTION, stated first: the streaks are rare (retail
+    stands and auto-attacks) and the gaps that contain one sit on the metronome.
+    """
+    import livewire
+    import statistics as st
+    gaps_streak, gaps_plain, n_streak_reports, conns = [], [], 0, 0
+    for capdir, cf in livewire.live_connections():
+        try:
+            _c, merged, ok = livewire.decode_conn(capdir, cf)
+        except Exception:                                   # noqa: BLE001
+            continue
+        if not ok or not merged:
+            continue
+        conns += 1
+        pid = SC._player_of(merged)
+        if pid is None:
+            continue
+        # the player's report stream with a streak count
+        streak_t = []
+        prev, streak = None, 0
+        for (t, dr, op, v) in merged:
+            if dr != "c2s":
+                continue
+            if op == C2S_STOP:
+                streak, prev = 0, (prev if len(v) < 2 else (float(v[1][0]), float(v[1][1]))) if isinstance(v, list) and len(v) >= 2 and isinstance(v[1], (list, tuple)) else prev
+                continue
+            if op == SC.C2S_HEADING and len(v) >= 2:
+                p = (float(v[1][0]), float(v[1][1]))
+                d = math.hypot(p[0] - prev[0], p[1] - prev[1]) if prev else None
+                if d is not None and d <= STILL:
+                    streak += 1
+                    if streak >= 2:
+                        streak_t.append(t)
+                else:
+                    streak = 0
+                prev = p
+        n_streak_reports += len(streak_t)
+        starts = sorted(t for (t, dr, op, v) in merged
+                        if dr == "s2c" and op == 0xA0 and len(v) >= 4
+                        and v[1] == SC.STARTED and v[2] == pid)
+        for a, b in zip(starts, starts[1:]):
+            if b - a > 6.0:
+                continue
+            lo = bisect.bisect_right(streak_t, a)
+            hi = bisect.bisect_right(streak_t, b)
+            (gaps_streak if hi > lo else gaps_plain).append(b - a)
+    if verbose:
+        print(f"retail, {conns} connections: repeated-still reports {n_streak_reports}; "
+              f"inter-swing gaps containing one: {len(gaps_streak)}, plain: {len(gaps_plain)}")
+        for name, g in (("with a repeated-still streak", gaps_streak), ("plain", gaps_plain)):
+            if g:
+                print(f"  {name:28s} n={len(g):4d} p50 {st.median(g):.3f} s  "
+                      f"p10 {sorted(g)[len(g)//10]:.3f}  p90 {sorted(g)[len(g)*9//10]:.3f}")
+    return gaps_streak, gaps_plain, n_streak_reports, conns
+
+
+if __name__ == "__main__" and "--streaks" in sys.argv:
+    retail_streaks()

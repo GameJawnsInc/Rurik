@@ -49,7 +49,7 @@ import checks  # noqa: E402
 # retail's. MOVECODE-1z-db +5 (133): the displacement gate, known-bad arm
 # first. MOVECODE-1z-dc +4 (137): the chain-pause row. §13 needs the
 # gamesrv corpus and §13b the live one; each declares a skip by name.
-LEDGER = checks.Ledger("player swing windup", floor=142)
+LEDGER = checks.Ledger("player swing windup", floor=153)
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -1798,6 +1798,125 @@ def section_press_ends_kbd_latch():
           f"{n_kbd_writes} writes")
 
 
+def section_still_streak():
+    import agents
+    import authsrv
+
+    print("\n16. a REPEATED still report is a body that did not move -- the chain "
+          "pause's read of the keyboard latch (MOVECODE-1z-df)")
+    # RUN-1zDC arm A: the tap's still report kept the target (1z-dd) and ARMED
+    # the keyboard latch; a tap into a wall sends no 0x0047, so the pause
+    # charged p50 1.43 s a cycle (18 rows) on a body whose tape spread was
+    # 0.0 u, and without the run's retarget the next swing would have waited
+    # for the next press. The predicate is the one that separates a wall tap
+    # from a WALK-START: a walk-start is ONE still report (the body has not
+    # moved yet) followed by motion or a stop; two consecutive still reports
+    # with no stop between cannot be a walk. Retail: 4 repeated-still reports
+    # in 61 connections and 0 inter-swing gaps containing one (NOT FOUND;
+    # review/stillwindup.py --streaks), so this rests on the derivation.
+
+    st = _state()
+    authsrv._kbd_report_still(st, 0.0)
+    authsrv._kbd_report_still(st, 0.0)
+    check(st.get("kbd_still_streak") == 2,
+          "two consecutive still reports count a streak of 2",
+          f"streak={st.get('kbd_still_streak')}")
+    authsrv._kbd_report_still(st, 60.0)
+    check(st.get("kbd_still_streak") == 0,
+          "a report that MOVED resets it",
+          f"streak={st.get('kbd_still_streak')}")
+    authsrv._kbd_report_still(st, 0.0)
+    authsrv._kbd_report_still(st, None)
+    check(st.get("kbd_still_streak") == 0,
+          "and a report with no predecessor counts nothing (the first of a "
+          "session cancels as it always did, 1z-db)",
+          f"streak={st.get('kbd_still_streak')}")
+
+    def _latched(streak, needs=True):
+        s = _state()
+        s["kbd_moving_at"] = _tt.time()
+        s["kbd_still_streak"] = streak
+        saved = authsrv.MOVE_CANCEL_NEEDS_DISPLACEMENT
+        try:
+            authsrv.MOVE_CANCEL_NEEDS_DISPLACEMENT = needs
+            return authsrv._player_body_moving(s)
+        finally:
+            authsrv.MOVE_CANCEL_NEEDS_DISPLACEMENT = saved
+
+    check(_latched(2, needs=False) is True,
+          "KNOWN-BAD ARM: an armed latch with a repeated still report reads "
+          "as a body in motion",
+          "RUN-1zDC arm A, 20260910T154327: chain_pause charged p50 1.43 s "
+          "on 18 of 20 cycles, body spread 0.0 u on the tape")
+    check(_latched(2) is False,
+          "SHIPPED: a repeated still report is a body that did not move, "
+          "whatever the latch says",
+          "structural: at 288 u/s two reports > 4 ms apart with the body "
+          "moving differ by > 1 u, so two stills with no stop between cannot "
+          "be a walk")
+    check(_latched(1) is True,
+          "a SINGLE still report still reads as moving -- a walk-start's first "
+          "report is still too, and a quarterstep's whole motion often sits "
+          "between it and its 0x0047",
+          "the naive rule (ignore every still report) would never arm the "
+          "pause for a quarterstep at all")
+
+    class _Rec:
+        def __init__(self): self.rows = []
+        def event(self, kind, **kw): self.rows.append((kind, kw))
+
+    def _tick(needs):
+        s = _state()
+        s["agents"][10]["pos"] = (50.0, 0.0)          # in reach
+        s["attacking"] = 10
+        s["player_health"] = 100.0
+        s["player_dead"] = False
+        s["kbd_moving_at"] = _tt.time()
+        s["kbd_still_streak"] = 2
+        s["player_last_swing"] = 0.0
+        sent = []
+        rec = _Rec()
+        saved = authsrv.MOVE_CANCEL_NEEDS_DISPLACEMENT
+        try:
+            authsrv.MOVE_CANCEL_NEEDS_DISPLACEMENT = needs
+            authsrv.attack_tick(
+                lambda op, vals, label="", quiet=False: sent.append((op, vals)),
+                s, 0, rec=rec)
+        finally:
+            authsrv.MOVE_CANCEL_NEEDS_DISPLACEMENT = saved
+        opened = any(v and v[0] == agents.GV_ATTACK_STARTED for _op, v in sent)
+        return s, opened
+
+    s, opened = _tick(False)
+    check(not opened and s.get("player_swing") is None,
+          "KNOWN-BAD ARM: the tick after a repeated still report refuses the "
+          "open as `moving` -- the frozen chain RUN-1zDC's retarget was "
+          "designed around",
+          f"opened={opened} swing={s.get('player_swing')!r}")
+    s, opened = _tick(True)
+    check(opened and s.get("player_swing") is not None,
+          "SHIPPED: the same tick OPENS the swing -- the body did not move",
+          f"opened={opened} swing={s.get('player_swing')!r}")
+    check((s.get("chain_pause_stats") or {}).get("charged", 0.0) == 0.0
+          and s.get("chain_pause_tick") is None,
+          "and the pause charged nothing across it",
+          f"stats={s.get('chain_pause_stats')} tick={s.get('chain_pause_tick')}")
+
+    # The two arms that feed the count, pinned by source: fed once beside
+    # 1z-db's own displacement read, and reset where the stop disarms the
+    # latch -- the streak must not outlive the stop that ended the reports.
+    src = open(authsrv.__file__, encoding="utf-8").read()
+    check(src.count("_kbd_report_still(state, _moved)") == 1,
+          "the 0x003D arm feeds the streak exactly once, beside the "
+          "displacement 1z-db reads",
+          f"{src.count('_kbd_report_still(state, _moved)')} call(s)")
+    i = src.find('state["kbd_moving_at"] = None\n')
+    check(i > 0 and 'state["kbd_still_streak"] = 0' in src[i:i + 400],
+          "the 0x0047 arm resets the streak beside its disarm of the latch",
+          "a stop ends whatever the reports were; the next 0x003D is a "
+          "walk-start")
+
+
 def main():
     section_two_phases()
     section_start_to_start()
@@ -1813,6 +1932,7 @@ def main():
     section_reach_and_approach()
     section_press_supersedes_and_move_ends()
     section_press_ends_kbd_latch()
+    section_still_streak()
     print("\n12. an in-flight swing DROP writes a row and prints (SWINGCANCEL)")
     # RUN-1zCG session 8: 4 of the operator's 7 "full animation, no damage"
     # swings left NO row anywhere. `_press_refused` returns early once the

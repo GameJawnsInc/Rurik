@@ -11781,7 +11781,37 @@ def begin_attack(send, state, target_id, conn_id, rec=None):
 # only the wire STOP; the target-forget beneath it kept firing on the same
 # still report, and attack_tick then dropped the swing as `move-ended-order`
 # -- silently now, the stop having been suppressed. The flag gates both.
+#
+# THE THIRD DOOR IS THE CHAIN PAUSE (MOVECODE-1z-df, RUN-1zDC). With the
+# target kept, the tap's still report still ARMED `kbd_moving_at`, a tap into
+# a wall sends no 0x0047 to clear it, and _player_body_moving read the latch
+# as a body in motion: the pause charged p50 1.43 s a cycle on a body whose
+# tape spread was 0.0 u (18 rows), and without the run's retarget the next
+# swing would have waited for the next press. The predicate below is the
+# one that separates a wall tap from a WALK-START, whose first report is
+# also still (the body has not moved yet): a walk-start is ONE still report
+# followed by motion or a stop, so two consecutive still reports with no
+# stop between them cannot be a walk -- at 288 u/s any two reports more than
+# 4 ms apart with the body moving differ by more than the epsilon. Structural,
+# not tuned; the single still report keeps charging (it may be a quarterstep,
+# whose whole motion often sits between a walk-start and its 0x0047), and
+# the SECOND one stops it. Corpus exposure, our own captures: 743 repeated-
+# still reports in 122 episodes over 46 captures, 160 within 2 s of a swing.
 MOVE_CANCEL_NEEDS_DISPLACEMENT = True   # --no-move-cancel-displacement reverts
+KBD_STILL_STREAK_MIN = 2
+
+
+def _kbd_report_still(state, moved):
+    """Count consecutive keyboard reports that moved nothing (1z-df).
+
+    Called once per 0x003D beside 1z-db's own displacement read; the 0x0047
+    arm resets the count, because a stop ends whatever the reports were. A
+    report with no predecessor (None) or one that moved resets it too.
+    """
+    if moved is not None and moved <= MOVE_CANCEL_EPSILON:
+        state["kbd_still_streak"] = state.get("kbd_still_streak", 0) + 1
+    else:
+        state["kbd_still_streak"] = 0
 MOVE_CANCEL_EPSILON = 1.0               # u; the gap above is (0.001, 1) and empty
 
 
@@ -12426,7 +12456,16 @@ def _player_body_moving(state):
     """
     now = time.time()
     kbd = state.get("kbd_moving_at")
-    if kbd is not None:
+    # A REPEATED STILL REPORT IS A BODY THAT DID NOT MOVE, whatever the latch
+    # says (MOVECODE-1z-df). The latch is armed by every 0x003D and a tap
+    # into a wall sends no 0x0047, so RUN-1zDC's arm A charged the pause
+    # 1.43 s a cycle on a body with 0.0 u of tape spread. Two consecutive
+    # still reports with no stop between cannot be a walk (see the flag's
+    # comment); one can, and keeps charging. Same flag as the cancel and the
+    # target: the third consumer of the same trigger.
+    still_body = (MOVE_CANCEL_NEEDS_DISPLACEMENT
+                  and state.get("kbd_still_streak", 0) >= KBD_STILL_STREAK_MIN)
+    if kbd is not None and not still_body:
         # ANIMREF-RE 41: the keyboard latch is ENDED, for this reader only, by
         # an attack press newer than it. Its terminator (0x0047) can go
         # missing -- the 2026-09-03 08:46 session: 5 reports, 0 stops, the
@@ -21605,6 +21644,9 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                         float(values[1][1]) - float(_prev[1]))
                                 except Exception:          # noqa: BLE001
                                     _moved = None
+                            # The pause's own read of the same number
+                            # (MOVECODE-1z-df): consecutive still reports.
+                            _kbd_report_still(state, _moved)
                             cw_hit = cancel_on_move(send, state, conn_id,
                                                     moved=_moved)
                         # NO `state["plane"] = plane` HERE. It used to sit on
@@ -23555,6 +23597,9 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # there while refusing 196 of 196 in the reproduction.
                         # GRANT_LOCAL_WINDOW never had to decide any of them.
                         state["kbd_moving_at"] = None
+                        # A stop ends the still-report streak as well
+                        # (MOVECODE-1z-df): the next 0x003D is a walk-start.
+                        state["kbd_still_streak"] = 0
                         # The click-in-flight latch clears here too: a
                         # stop report ends whatever leg was running,
                         # click legs included -- arrival is a stop
@@ -26435,7 +26480,11 @@ def main():
                          "(studies/movecode 1z-db): retail's player loses "
                          "1.0%% of its still-player swings to a cancel and "
                          "ours lost 7.9%%, because `any 0x003D is movement` "
-                         "reads a field that is always set.")
+                         "reads a field that is always set. Reverts all three "
+                         "doors on the same trigger: the wire stop (1z-db), "
+                         "the target-forget (1z-dd) and the chain pause's "
+                         "read of a REPEATED still report as a body in "
+                         "motion (1z-df).")
     ap.add_argument("--no-spell-armour", action="store_true",
                     help="an incoming armour-respecting spell (Flare's `Fire "
                          "damage`) deals its stated amount instead of "
