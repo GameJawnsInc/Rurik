@@ -19680,3 +19680,77 @@ copy stood (its halts at 19.44–20.96 s land at (10514, 8037), not (10488, 8117
 * **A correction to §1z-dj.4's leg-B paragraph**, made here rather than there: the "parked
   world-0 refusing a clear lead" was the sample-and-hold artifact; the refusal that day was the
   23.54 s halt, and 1z-dj covers it.
+
+---
+
+## 1z-dl. THE CORNER'S MESH BOUNDARY, CENSUSED BOTH WAYS — **the real disagreement is ONE lip, north-east of the corner at ~(10510, 8095): 18 of 10,044 drawn-body samples off our mesh by 11–23 u (2 episodes), and 1z-dk's single waypoint disagreement, all the same place.** The (A) "wall we lack" signal is noise — my prediction was half wrong and it is worth saying which half. Nothing ships; the residual is sized, localized, and left as a MESH question the mod-platform framing does not want touched lightly
+
+**2026-09-10.** Ident `MOVECODE-1z-dl`. Asked by the owner after 1z-dk (its registered next step).
+Desk: `review/meshboundary.py` on thirteen paired tapes (RUN-1zDB legs A–4, RUN-1zDC 1/2,
+session 8, RUN-1zCW's six steer legs), the drawn body as referee, prediction first. OBSERVED.
+
+### 1z-dl.1 The prediction, and the half that was wrong
+
+Registered: **(A)** places the client's body could not enter that our mesh calls walkable — "rare
+and clustered north-east of the corner"; **(B)** places the client walked that our mesh calls
+off-mesh — "near zero". **(B) held; (A) did not, and the reason is instrument, not geometry.**
+
+**(A) as defined catches too much.** The class is a held heading (no order released or re-aimed
+inside 0.5 s), the drawn body still (< 2 u), our ray clear (≥ 20 u and 12 u ahead on mesh): 25
+instances (+1 with a hostile in the disc but outside the cone). But they are **scattered** — 611,
+685, 736, 759 u from the corner as often as near it — and our ray runs the full 767 u at almost
+all of them. A body that holds a heading and does not move for half a second has many causes
+that are not a wall: an attack-animation root (§1z-db's own windup), the operator easing off the
+key, a hostile's body (the disc, not our mesh), a slope the client will not climb. **"Client
+blocked, we walkable" is not "a wall we lack" unless the block is at a wall**, and the criterion
+cannot tell them apart. So (A) is **withdrawn as a mesh signal** — it measures held-still reports,
+of which a mesh gap is one minority cause. Stated rather than counted as 25 mesh defects.
+
+### 1z-dl.2 ★★★ (B) is the clean signal, and it is one lip
+
+Drawn-body samples off our mesh by > 3 u (`nearest_walkable`): **18 of 10,044, in 2 episodes,
+both on session 8, both at the same place:**
+
+| episode | worst depth | where | from the corner |
+|---|---|---|---|
+| 54.78–55.99 s | **11.4 u** | (10507, 8095) | 29 u |
+| 117.84–118.27 s | **22.9 u** | (10525, 8094) | 43 u |
+
+The capture confirms the first from our own server's mouth: at 54.80–55.73 s every grant there
+read `lead_clip_why: origin-unwalkable` and `on_mesh: false/null` — **our server already knew the
+client's reported position was off our mesh** and answered a zero-lead each time (the shipped
+origin-off-mesh door, ROUTER-B3). The client's body stood and swung there for over a second.
+
+**And it is the SAME lip as 1z-dk's one disagreement** (the waypoint at (10555, 8072), the corner's
+north-east side, the seed of the `--mesh` replay's 514 u cascade). Our plane-0 boundary near the
+corner (the `_Walls` dump): the south-west point is the diagonal (10502, 8071) → (10488, 8117), and
+the northern edge runs (10502, 8071) → (10613, 8072) with its outward normal pointing **south** —
+so everything north of y ≈ 8072 between x 10502 and 10613 is **outside** our mesh, and the client's
+body stood at y 8094–8104 there. **The client's walkable region extends ~25 u further north than
+our decode of the same trapezoids.** One lip, both directions of disagreement, ~25 u deep.
+
+### 1z-dl.3 What it settles, and why nothing ships
+
+* **The residual after 1z-dj is one mesh lip, ~0.18 % of samples, 1 of 72 halts.** 1z-dj parks the
+  model wherever the live mirror halts, and the mirror runs the pass with this same mesh — so it
+  halts correctly at 71 of 72, and mis-sidesteps only where this lip lets a waypoint pass that the
+  client's collision refuses. Fixing the lip would close that one case; nothing else reads it.
+* **A mesh edit is not this arc's to make lightly.** The navmesh is our decode of `Gw.dat`'s
+  trapezoids (`pathmap.from_chunk`), regenerated from the owner's own install; a hand-nudge of
+  one lip is a fork of that decode, and `project-rurik-mod-platform-framing` puts fidelity on
+  per-map authoring, not on patching the extractor's output. The honest move is to **name the
+  25 u discrepancy at (10502–10555, 8072–8095) as a decode-vs-client boundary difference** and
+  leave it: it is one corner of one map, it costs one mis-sidestep per corner hold, and 1z-dj
+  already absorbs the rest.
+* **Registered, not started:** whether the lip is a decode error (our trapezoid walk closes the
+  boundary too far south here) or a genuine client/`Gw.dat` mismatch — a `datplan` question on
+  file `0x1B97D`'s trapezoids around (10500, 8080), against the client's own `0x0070A150` verdict
+  from a run. Only worth it if the corner recurs as a felt defect after today's five ships; the
+  owner's next session is the test.
+
+### 1z-dl.4 A correction carried forward
+
+§1z-dd.6's (b) — "the body's own radius against a wall vertex" as a swept-disc candidate — stays
+refuted (1z-dj), and this sharpens why: where the body genuinely stood off our mesh it was **our
+boundary 25 u too tight**, not the body stopping a radius short of our wall. A swept disc would
+have made the near-corner worse, not better. The lever, if any, is the mesh lip, not the clip.
