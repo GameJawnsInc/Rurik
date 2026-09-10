@@ -6829,6 +6829,15 @@ one; the headline is not.**
 
 ### 1z-n.2 The census
 
+> **THE POPULATION, named 2026-09-10.** Every figure in 1z-n and 1z-o is measured
+> over the gamesrv corpus **as it stood at `2837b6e4` (2026-08-30 20:58:27 -0400)
+> — 1,217 captures**. It is a measurement of a population at a time, and it was
+> not saying so; `test_planecensus.py` pins that same cut (`CORPUS_CUT`) so the
+> checks and the prose share one population. **Re-measured on the 2026-09-09
+> corpus (1,348 captures) the shape is unchanged and the totals are not** — see
+> the growth note at the end of this section. Quote these numbers with the date,
+> or quote the re-measurement.
+
 **12,296 reports scored.** Keep the two words apart: **12,757 are ATTRIBUTED**
 (every report has a mesh id from its own capture), **12,619 are SCOREABLE**
 against `dat_study`, and **12,296 enter the headline** once stub meshes are
@@ -6889,6 +6898,46 @@ byte-identical coordinate (mesh offers only 37), recovers to **37** (server-caus
 8.9 s later, then declares **0** further on where the mesh does offer **[0]**.
 The plane word tracks geometry; the disagreements are transients over ground we
 have not decoded.
+
+#### 1z-n.2g Growth note — re-measured 2026-09-10 on the 2026-09-09 corpus
+
+The corpus grew from 1,217 to 1,348 gamesrv captures. **Nothing in the census
+changed**: re-scored over the pinned population every one of the ten published
+values above reproduces EXACTLY, which is what makes this growth rather than a
+moved constant (the corpus-counts-redden protocol — and the distance histogram
+below was recomputed with a control that reproduces its own published 7 / 114 /
+100 / 38 before publishing anything new).
+
+| figure | pinned (2026-08-30) | re-measured (2026-09-09) |
+|---|---|---|
+| reports scored | 12,296 | **19,661** |
+| off-mesh | 805 (6.5%) | **1,811 (9.2%)** |
+| on-mesh | 11,491 | **17,850** |
+| **DISAGREE** | 259 (2.25% of on-mesh) | **322 (1.80%)** |
+| distinct disagreeing points | 123 | **161** |
+| captures carrying a disagreement | 17 of 137 (12.4%) | **28 of 261 (10.7%)** |
+| direction N→0 / 0→N | 208 / 51 | **271 / 51** |
+| echo trips / on-mesh sends | 282 / 7,778 (3.6%) | **418 / 13,154 (3.2%)** |
+| captures with an echo trip | 31 | **63** |
+| visited stacking | 194/11,491 (1.69%) | **225/17,850 (1.26%)** |
+| distance buckets (<50 / 50–200 / 200–1k / >1k) | 7 / 114 / 100 / 38 | **12 / 140 / 131 / 39** |
+| harness cross-check | 176 of 176 agree | **303 of 303 agree** |
+
+**Every structural claim survives the re-measurement**, and these are the ones
+worth having: `|offered| == 1` on **322 of 322** (still one coverage defect with
+the roles swapped, not stacking); the `ambiguous` disarm still engages **0 of
+322**; the direction classes still partition DISAGREE with **dir-other = 0**;
+and the trigger-reach split holds its shape — **301 of the 322** reach
+`plane_repair_track` (14 `0x0047` stop-reports, 6 refused, 1 null source)
+against 239 of 259 before.
+
+**The one number that moved as a RATE rather than a total is off-mesh: 6.5% →
+9.2%.** The disagreement rate fell (2.25% → 1.80% of on-mesh) and so did visited
+stacking (1.69% → 1.26%) and the echo rate (3.6% → 3.2%). The newer captures are
+from the stairs and arena work of 2026-09, which walks more edge geometry than
+the 1z-n population did; **whether they belong in one pooled population with the
+original is a question this note deliberately does not answer** — it records both
+rather than silently merging them.
 
 ### 1z-n.3 ★ THE DISARM CLAUSE HAS NEVER ENGAGED — 0 of 259
 

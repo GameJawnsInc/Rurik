@@ -90,13 +90,66 @@ TRIPWIRE_TRUTH = {
 }
 
 
+# ---------------------------------------------------------------- THE POPULATION
+#
+# FINDINGS 1z-n / 1z-o's figures are a MEASUREMENT OF A POPULATION AT A TIME,
+# and until 2026-09-10 this file compared them against whatever the vault held
+# today. That is why it reddened: between 2026-08-30 and 2026-09-09 the corpus
+# grew 1,217 -> 1,348 gamesrv captures and every headline moved with it
+# (12,296 -> 19,661 scored, 259 -> 322 disagreements). NOTHING DRIFTED: re-scored
+# over the population below, all ten published values reproduce EXACTLY -- that
+# rescan is the control, and it is what says "growth" rather than "a moved
+# constant" (the corpus-counts-redden protocol; the previous re-stamp recorded
+# the same check in prose and then re-stamped anyway, which is why it recurred).
+#
+# So the population is PINNED here instead. The cut is the commit that last
+# stamped the record, `2837b6e4` (2026-08-30 20:58:27 -0400) -- two captures from
+# that day postdate it and are excluded, which is exactly the boundary that makes
+# the ten reproduce.
+#
+# WHAT THIS DOES AND DOES NOT GIVE UP. It does NOT stop measuring: every identity
+# in §6 and every prose figure in §7 is still re-derived from real captures, and
+# a census change still reddens here. What it gives up is noticing new captures,
+# and that is the right trade -- new captures are not a defect, and the file's
+# job is to catch a DRIFT. A shrinking population still reddens (a deleted
+# capture is a real event). To re-measure on purpose, move CUT and re-stamp both
+# the table below and the prose §7 reads; `scratchpad/refigure.py` +
+# `disthist.py` in the 2026-09-10 session emit every figure, the latter with a
+# control that reproduces the record's own histogram before publishing a new one.
+CORPUS_CUT = "20260830T205827"          # commit 2837b6e4
+_TS_RE = re.compile(r"(\d{8}T\d{6})")
+
+
+def _in_population(path):
+    """Is this capture inside the pinned population?"""
+    m = _TS_RE.search(os.path.basename(path))
+    return m is None or m.group(1) < CORPUS_CUT
+
+
+class _pinned_corpus:
+    """Restrict the vault walk to the pinned population, for one call."""
+
+    def __enter__(self):
+        self._glob, self._listdir = glob.glob, os.listdir
+        glob.glob = lambda pat, **kw: [p for p in self._glob(pat, **kw)
+                                       if _in_population(p)]
+        os.listdir = lambda p=".": [d for d in self._listdir(p)
+                                    if _in_population(d)]
+        return self
+
+    def __exit__(self, *exc):
+        glob.glob, os.listdir = self._glob, self._listdir
+        return False
+
+
 def main():
     if not os.path.isdir(CORPUS):
         LEDGER.skip("corpus", f"no capture corpus at {CORPUS}")
         return LEDGER.verdict()
 
     # ---- §1 the pin is in band, and it is total ----------------------
-    labels, unlabelled, cross = pc.label_captures(VAULT, 600.0)
+    with _pinned_corpus():
+        labels, unlabelled, cross = pc.label_captures(VAULT, 600.0)
     check(bool(labels), "captures with reports carry an in-band file id",
           f"labelled {len(labels)}, unlabelled {len(unlabelled)}")
     check(not unlabelled,
@@ -129,8 +182,13 @@ def main():
     # The corpus has exactly one such capture and it is not a curiosity: it
     # holds the corpus's ONLY 0x002A send, and that send is a TRIP. The bug
     # published 281/7,542 where the truth is 282/7,543.
+    # OVER THE PINNED POPULATION, like `labels` itself -- globbing the live
+    # corpus here while `labels` holds the pinned one reports every newer
+    # send-only capture as "missing from labels", which is an artefact of the
+    # two sides disagreeing about the population rather than a labelling bug.
     sendonly = []
-    for f in sorted(glob.glob(os.path.join(CORPUS, "*.jsonl"))):
+    for f in sorted(p for p in glob.glob(os.path.join(CORPUS, "*.jsonl"))
+                    if _in_population(p)):
         reports, sends, _e, fids2 = pc.read_capture(f)
         if sends and not reports and fids2:
             sendonly.append(os.path.basename(f))
@@ -348,10 +406,10 @@ def main():
           f"{tot['dir-other']} -- if these stop summing, one class is being "
           f"double-counted or dropped")
 
-    # Re-stamped 2026-08-30 evening: the owner's three RUN-R8-adjacent
-    # captures landed after the pin. The as-of-pin corpus reproduces the old
-    # 11754/670/259/7543 EXACTLY (scratchpad pin_rescan, this session), so
-    # this is growth, not a moved constant -- corpus-counts-redden protocol.
+    # These are measured over the PINNED population (see CORPUS_CUT at the top
+    # of this file), which is what the document's own figures are measured over.
+    # They are exact equalities on purpose: over a fixed population an exact
+    # value is checkable, and a census change still moves it.
     PUBLISHED = [
         ("scored reports", 12296, tot["scored"], "1z-n.2"),
         ("off-mesh", 805, tot["off-mesh"], "1z-n.2"),
@@ -443,19 +501,25 @@ def main():
                        r"\*\*(\d+) in 50", doc)
         buckets = re.findall(r"\*\*(\d+) clearly stale \(>1,000 u\) and (\d+) "
                              r"clearly underfoot", doc)
-        m8 = re.search(r"and 100 in 200", doc)
+        # GENERALISED 2026-09-10: this read `and 100 in 200` -- the 200-1,000
+        # bucket's value hardcoded into the anchor. A re-measure that moved it
+        # would not fail the sum check, it would fail to MATCH and silently
+        # LEDGER.skip, which is the vacuous-control defect this file exists to
+        # refuse. The bucket is now captured and summed like the other three.
+        m8 = re.search(r"and (\d+) in 200", doc)
         if m7 and buckets and m8:
             total, b50 = int(m7.group(1)), int(m7.group(2))
+            b200 = int(m8.group(1))
             stale, foot = int(buckets[0][0]), int(buckets[0][1])
             check(total == tot["disagree"],
                   "the distance histogram is scored on the CURRENT corpus",
                   f"it says {total} disagreements, the corpus has "
                   f"{tot['disagree']} -- it was stuck on a pre-fix 237 "
                   f"until 2026-08-30")
-            check(b50 + 100 + stale + foot == total,
+            check(b50 + b200 + stale + foot == total,
                   "and its four buckets SUM to that total",
-                  f"{foot} + {b50} + 100 + {stale} = "
-                  f"{foot + b50 + 100 + stale}, claimed {total}")
+                  f"{foot} + {b50} + {b200} + {stale} = "
+                  f"{foot + b50 + b200 + stale}, claimed {total}")
         else:
             LEDGER.skip("distance histogram",
                         "the histogram's sentence shape changed; re-anchor it")

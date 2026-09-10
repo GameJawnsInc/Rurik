@@ -7684,7 +7684,7 @@ the same-tick ALIAS**: the
   (r5bridge 6→8, r4a 5→8, r5 stays 0). Floor 9, 10 on a machine with the archive;
   skips whole if the archive or `sites.h` is absent.
 
-  `toolkit/clientscan/test_planecensus.py` (**the plane census, and the four ways a
+  `toolkit/clientscan/test_planecensus.py` (**2026-09-10: the POPULATION is now pinned (`CORPUS_CUT` = `2837b6e4`, 2026-08-30 20:58:27), and that is what fixed 14 red checks.** FINDINGS 1z-n/1z-o's figures are a measurement of a population at a time and this file compared them against whatever the vault held today, so every new capture reddened it — the corpus grew 1,217 → 1,348 between 08-30 and 09-09 and every headline moved (12,296 → 19,661 scored, 259 → 322 disagreements). **Nothing had drifted:** re-scored over the pinned population all ten published values reproduce EXACTLY, which is the control that says growth rather than a moved constant. The document now names that population and carries a dated re-measurement (1z-n.2g) rather than being hand-re-stamped, and §7's distance-histogram anchor was **generalised** — it hardcoded `and 100 in 200`, so a re-measure would have silently SKIPPED instead of checking, the vacuous-control defect this file exists to refuse. A SHRINKING corpus still reddens. Otherwise: **the plane census, and the four ways a
   census lies without going red**). `planecensus.py` is `noclipscore.py` section C
   pointed at the SERVER's corpus instead of a movehook capture — 11,754 scorable
   `position_report` rows against a handful — and it answers HANDOFF §D. It made two
