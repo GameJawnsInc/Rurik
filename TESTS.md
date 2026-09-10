@@ -4697,7 +4697,7 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   coverage: condition inverted, every suite green); §16 is
   fixture-free like §14 and §15, so all 33 of its checks land in both. No
   client. ~2 s),
-  `toolkit/clientscan/test_movesync.py` (SEPARATION -- the quantity that
+  `toolkit/clientscan/test_movesync.py` (**2026-09-10: §21's row-count check re-aimed, floor 131 → 132.** It asserted the real `Recorder` writes `len(reports) + 1` float-stamped rows — "the reports plus the origin row `Recorder.__init__` emits" — and `Recorder` has written TWO float-stamped preamble rows since `8b64aa0f` (2026-09-01) put a `flags` row beside `origin`, so the arithmetic was one short from that day and the STAMP was never the problem. Re-aimed at what its own message says it is for, "anything less means rows are losing the stamp": it now counts the FILE, so a third preamble row cannot break it and dropping a stamp anywhere still reddens it — split in two so the decode half (every written row comes back as a report) is still checked, which the row count alone cannot see. Otherwise: SEPARATION -- the quantity that
   actually predicts a warp, and the guard on the two instruments that reported
   the wrong one. `warpscan.py` scored a big client step against the points we
   had GRANTED and answered "NOT near any grant" for **10 of its 12** detections;

@@ -149,8 +149,11 @@ import vaultpath  # noqa: E402
 # so it adds a NET TWO to the vaulted run (181 -> 183, both counted) and NONE to
 # the bare one -- §16 skips whole when the live corpus is unreachable, which is
 # why the empty-vault number is 131 on both sides of the repair.
+# 2026-09-10: 131 -> 132. sec.21's "every row is float-stamped" check split in
+# two -- the row count (robust to a growing preamble) and the decode count (the
+# half that catches a decode regression); see the comment at that site.
 LEDGER = checks.Ledger("separation: the quantity that actually predicts a warp",
-                       floor=131)
+                       floor=132)
 check = checks.adopt(LEDGER)
 
 MOVETAP = "movetap-20260819T171436.jsonl"
@@ -1877,12 +1880,31 @@ def main():
             live = os.path.join(rdir, wrote[0])
             reps_r, w_real, _s = movesync.load_wire_reports(live)
             d_real = movesync.offset_detail(w_real)
+            # EVERY ROW, not "reports + 1". This asserted `len(reps_r) + 1`
+            # -- "the reports plus the origin row Recorder.__init__ emits" --
+            # and `Recorder` has written TWO float-stamped preamble rows since
+            # 8b64aa0f (2026-09-01) put a `flags` row beside `origin`. The
+            # arithmetic was one short from that day and the stamp was never
+            # the problem. What the check is actually for is its own second
+            # sentence, "anything less means rows are losing the stamp", so it
+            # now counts the file: a third preamble row cannot break it, and
+            # dropping a stamp anywhere still reddens it.
+            n_rows = sum(1 for _l in open(live, encoding="utf-8") if _l.strip())
             check(d_real["source"] == movesync.OFFSET_SRC_UNIX
-                  and d_real["n"] == len(reps_r) + 1,
+                  and d_real["n"] == n_rows,
                   f"the real `Recorder` writes {d_real['n']} float-stamped "
-                  f"row(s) and the loader reads them",
-                  "n is the reports plus the origin row Recorder.__init__ "
-                  "emits; anything less means rows are losing the stamp")
+                  f"row(s) -- EVERY row it wrote -- and the loader reads them",
+                  f"the file has {n_rows} rows and the offset estimator saw "
+                  f"{d_real['n']}; anything less means rows are losing the "
+                  f"stamp. Counted from the file rather than assumed, because "
+                  f"the preamble has grown once already")
+            preamble = n_rows - len(reps_r)
+            check(len(reps_r) == 200 and preamble >= 1,
+                  "and every decoded row comes back as a report, the preamble "
+                  f"aside ({preamble} non-report row(s))",
+                  f"{len(reps_r)} reports of 200 written; the preamble is "
+                  f"`origin` + `flags` today. This half is what would catch a "
+                  f"DECODE regression, which the row-count half cannot see")
             check(d_real["spread"] < 0.001,
                   f"REALFIX-T1 DEMONSTRATED END TO END: the offset spread over "
                   f"{d_real['n']} real rows is "
