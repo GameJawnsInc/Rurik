@@ -3500,7 +3500,7 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   on the 22 that ran, and the review's added checks landed the measured
   count back on 26 by coincidence; the history is in the floor comment.
   No vault, no client. ~1 s),
-  `toolkit/authsrv/test_pcspoof.py` (REALFIX §0.7 cell 2's lever, --pc-spoof --
+  `toolkit/authsrv/test_pcspoof.py` (**2026-09-10: floor 23 → 25.** The send lock had pinned `plane, zl_plane_cur],` VERBATIM and MOVECODE-1z-cl refactored the site to carry the two plane words in their own names, so the literal went stale and the lock reddened without the lever having moved — **re-aimed, not bumped**, onto the two links it was standing in for: the seeding line `lead_f3, lead_f4 = plane, zl_plane_cur` and the send that reads that pair. Tracing it exposed a real gap, now closed: **`--d1-lead` + `--pc-spoof` had no composition check here**, and under `--d1-lead` the statement after the spoof is `a2_matched_field4`, whose contract is that field 4 is OVERRIDDEN to match field 3 whenever it differs — which is precisely what the spoof produces, so the lever would be erased one line after firing. The refusal that makes this unreachable is load-bearing and is now pinned.) REALFIX §0.7 cell 2's lever, --pc-spoof --
   **the parked+`pc`-flip cell the owner could not stage by geography** (the
   plane seam is a bridge too narrow to strafe, run of 2026-08-25 ~23:17), so
   the flip became a server decision: the first fired zero-lead grant after

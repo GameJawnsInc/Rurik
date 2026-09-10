@@ -33,7 +33,11 @@ import checks      # noqa: E402
 # unhooking any single check reddens here. (History: the first draft
 # declared 21 from a count in the author's head before running; the run
 # said 23. The rule working, again -- same as test_familyrate's header.)
-LEDGER = checks.Ledger("the REALFIX-0.7 pc-spoof lever", floor=23)
+# 2026-09-10: 23 -> 25. The send lock became two (the seeding line and the
+# send itself, after MOVECODE-1z-cl split the words into their own names) and
+# the d1-lead composition cell was added -- see its comment for why that one
+# is load-bearing rather than decorative.
+LEDGER = checks.Ledger("the REALFIX-0.7 pc-spoof lever", floor=25)
 check = checks.adopt(LEDGER)
 
 
@@ -125,6 +129,24 @@ def main():
           "the note warns that spoofing your own ground plane is VOID",
           "plane_differs false on every rep is a run that measured "
           "nothing wearing a run's clothes")
+    # THE CELL THAT KEEPS THE LEVER FROM BEING SILENTLY ANNIHILATED, and it
+    # was NOT covered here until 2026-09-10 -- found by tracing why the send
+    # lock above went red. Under --d1-lead the very next statement after the
+    # spoof is `a2_matched_field4(plane, zl_plane_cur)`, whose whole contract
+    # is that "the carry's value is OVERRIDDEN to match whenever it differs"
+    # -- and a deliberately DIFFERENT field 4 is exactly what the spoof
+    # produces. So with both flags on, the spoof would be erased one line
+    # after it fired and every run would measure nothing while looking armed.
+    # The refusal is what makes that unreachable; it is load-bearing for this
+    # lever and now has a check of its own.
+    r, _ = comp(zero_lead=True, pc_spoof=26, d1_lead=True)
+    check(r is not None and "--d1-lead and --pc-spoof" in r,
+          "d1-lead with pc-spoof is REFUSED -- the cell that keeps "
+          "a2_matched_field4 from erasing the spoof it just wrote",
+          "field 4 MATCHES field 3 under A2, and the spoof's entire output "
+          "is a field 4 that does not match. Without this refusal the lever "
+          "is inert with both flags on, which is the failure mode the send "
+          "lock above names in prose and could not see")
     r, _ = comp(zero_lead=True, pc_spoof=26, family_rate_probe=True)
     check(r is None,
           "pc-spoof beside family-rate-probe is allowed (different wire "
@@ -164,12 +186,25 @@ def main():
           "the wire label appends PC-SPOOF on an exposed grant",
           "a human reading the gamesrv log finds the exposed sends "
           "without joining the verdict rows")
-    check("plane, zl_plane_cur]," in src,
-          "the one 0x0029 send still reads field 4 from zl_plane_cur "
-          "verbatim",
-          "the spoof works by REBINDING that name -- if the send site "
-          "grows its own field-4 expression the lever goes inert while "
-          "this suite stays green")
+    # RE-AIMED 2026-09-10. This asserted the send read `plane, zl_plane_cur],`
+    # VERBATIM, and MOVECODE-1z-cl refactored the site to carry the two plane
+    # words in their own names -- so the literal went stale and this lock went
+    # red without the lever having moved. The SUBJECT was never the spelling:
+    # it is that the name the spoof rebinds still reaches the wire. That is now
+    # two links, and both are pinned, so a break in either still reddens:
+    #   1. `lead_f3, lead_f4 = plane, zl_plane_cur` -- the spoofed word enters
+    #      the pair the send actually reads, and it happens BEFORE the D1_LEAD
+    #      block that may rebind them;
+    #   2. the 0x0029 send reads that pair.
+    check(src.count("lead_f3, lead_f4 = plane, zl_plane_cur") == 1,
+          "the spoofed zl_plane_cur is what seeds the send's own field-4 name",
+          "the spoof works by REBINDING zl_plane_cur -- if this seeding line "
+          "grows its own field-4 expression the lever goes inert while this "
+          "suite stays green")
+    check("lead_f3, lead_f4]," in src,
+          "and the one 0x0029 send reads that pair",
+          "the second link: a send that computed its own words would ignore "
+          "the seed above however faithfully it was set")
 
     return LEDGER.verdict()
 
