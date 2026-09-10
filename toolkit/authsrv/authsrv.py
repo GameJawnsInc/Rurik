@@ -12802,7 +12802,14 @@ def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
                     _forget_client_position(
                         state, "the approach re-pinned at the modelled "
                         "click-leg end")
-    px, py = state.get("pos", (0.0, 0.0))
+    # 1z-dm: the whole approach geometry runs in the client's frame -- the
+    # origin, the distance and the stop point -- so the leg ends where the
+    # client's own resolver will stop the body. `state["dest"]` is still the
+    # stop point, so the integrator walks state["pos"] to a correct
+    # destination even when it started behind.
+    mx, my = state.get("pos", (0.0, 0.0))
+    mx, my = float(mx), float(my)
+    px, py = _reach_frame(state, now)
     px, py = float(px), float(py)
     dist = math.hypot(tx - px, ty - py)
     stop = follow_stop_radius(agent)
@@ -12810,6 +12817,24 @@ def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
     f = run / dist if dist > 0.0 else 0.0
     stop_point = (px + (tx - px) * f, py + (ty - py) * f)
     speed = float(state.get("declared_speed_base") or DEFAULT_RUN_SPEED)
+    if rec is not None:
+        # ALL THREE OPERANDS AT EVERY SEND (1z-dm), because n = 10 is thin and
+        # the next session must be able to attribute this under EITHER arm.
+        lr = state.get("last_report")
+        try:
+            rec.event("approach", act=("re-path" if repath else "send"),
+                      target=target_id, repath=bool(repath),
+                      at=[round(tx, 1), round(ty, 1)],
+                      dist_frame=round(dist, 1),
+                      dist_model=round(math.hypot(tx - mx, ty - my), 1),
+                      dist_report=(None if lr is None else
+                                   round(math.hypot(tx - float(lr[0]),
+                                                    ty - float(lr[1])), 1)),
+                      report_age=(None if lr is None else round(now - float(lr[3]), 3)),
+                      frame_vs_model=round(math.hypot(px - mx, py - my), 1),
+                      stop=round(stop, 1))
+        except Exception:                              # noqa: BLE001
+            pass
     # The dest is the TARGET'S OWN position, not the stop point: that is the
     # message retail sends (bit-exact on 16/16 never-moved targets) and it
     # is what makes the client's own resolver stop the body at reach. Both
@@ -12959,7 +12984,9 @@ def approach_tick(send, state, conn_id, target_id, agent, now, rec=None):
         # stamped underneath us: the follow it named is over.
         _approach_abandon(state)
         ap = None
-    px, py = state.get("pos", (0.0, 0.0))
+    # 1z-dm: the client's own frame, which is where its resolver runs this
+    # same geometry -- not the position model.
+    px, py = _reach_frame(state, now)
     tx, ty = agent["pos"]
     dist = math.hypot(float(tx) - float(px), float(ty) - float(py))
     stop = follow_stop_radius(agent)
@@ -13248,11 +13275,23 @@ def attack_tick(send, state, conn_id, rec=None):
         ap = state.get("approach")
         if (pend is not None and pend.get("answered") is None
                 and ap is not None and ap.get("t0", 0.0) >= pend["t"]):
+            # 1z-dm: the SAME frame the gate below uses -- a row whose
+            # distance disagrees with the gate that read it is a trap for
+            # the next reader.
+            _fx, _fy = _reach_frame(state)
             _press_answered(state, rec, conn_id, "follow",
                             dist=round(math.hypot(
-                                float(agent["pos"][0]) - float(state.get("pos", (0.0, 0.0))[0]),
-                                float(agent["pos"][1]) - float(state.get("pos", (0.0, 0.0))[1])), 1))
-    px, py = state.get("pos", (0.0, 0.0))
+                                float(agent["pos"][0]) - _fx,
+                                float(agent["pos"][1]) - _fy), 1))
+    # 1z-dm: the reach gate reads the client's own frame. §1z-cx.4 left this
+    # operand open ("whether the test should read the model or the report is
+    # 1z-cx's open question"); the answer measured is NEITHER -- it is the
+    # frame the client's resolver runs the same geometry in, and the model's
+    # error here dropped a swing the operator could see connect.
+    # (No `now` here on purpose: attack_tick binds it BELOW this block, and
+    # passing the unbound name raised NameError on the world tick in the
+    # first cut of this change -- the helper reads the clock itself.)
+    px, py = _reach_frame(state)
     ax, ay = agent["pos"]
     if math.hypot(ax - px, ay - py) > attack_reach():
         # Out of reach. Under --attack-approach the follow above is walking
@@ -18015,6 +18054,53 @@ def _npc_disc_hit_ms(sa, fx, fy, radius, t0_ms, t1_ms):
     if d > 1e-9 and (vx * dx + vy * dy) / (math.sqrt(v2) * d) < NPC_DISC_COS_CONE:
         return None                                # behind or beside: no stop
     return hit, ph
+
+
+# THE PLAYER'S REACH GEOMETRY RUNS IN THE CLIENT'S FRAME (MOVECODE-1z-dm).
+# The approach's distance, its stop point and `attack_tick`'s 144 u reach gate
+# all read `state["pos"]` -- the position MODEL -- while the client's own
+# resolver runs the same geometry around its world-0 copy. §1z-cv.1 established
+# that mechanism from the other side ("the disc IS around world-0"): what it
+# killed was ORDERING the hostile to the frame, which cannot help because the
+# disc forms around the frame whatever we order. MEASURING in it is the same
+# finding used the way the client uses it.
+#
+# THE SIZE, and the trigger (10 approach sends across five tapes, scored
+# against the DRAWN body; studies/movecode 1z-dm): the model's error in the
+# distance to the target is p50 30.0 u, max 76.9, over 40 u on 5 of 10 -- and
+# the five clean ones are exactly those an APPROACH RE-PIN preceded. That
+# re-pin's threshold is the client's SNAP reprieve (R_MATCH = 100 u), the right
+# scale for "will the body warp" and the wrong one for gates that run at 80 u
+# (the stop radius) and 144 u (the reach): a 77 u error is invisible to the
+# guard and decisive at the gate. It dropped a swing the operator could see
+# connect (RUN-1zDB leg A, 38.27 s: the gate read 146.9 u against 144 while the
+# bodies were 86.4 u apart) -- the "full animation, no damage" family again,
+# from the third door.
+#
+# SCORED BEFORE SHIPPING, all three candidates, same instants:
+#   state["pos"]  p50 30.0  p90 76.9  max 76.9   over 40 u: 5 of 10
+#   last report   p50  1.0  p90 77.0  max 77.0   over 40 u: 2 of 10
+#   _npc_frame    p50  0.0  p90 77.0  max 77.0   over 40 u: 1 of 10
+# The frame is better on 4 and worse on 1 (42.09 s, 22.7 u, where the model had
+# just been re-pinned and the mirror had not caught up). The shared tail is one
+# instant where the body moved 77 u after its own stop report and NO operand on
+# the wire could know. n = 10 is thin and is why the `approach` row carries all
+# three distances at every send: the next session attributes this under either
+# arm rather than needing a dedicated run. --no-approach-frame reverts.
+APPROACH_READS_FRAME = True
+
+
+def _reach_frame(state, now=None):
+    """Where the player's body is, for reach geometry: the client's own frame
+    (1z-dm) or the position model under the revert. Never raises."""
+    if not APPROACH_READS_FRAME:
+        px, py = state.get("pos", (0.0, 0.0))
+        return float(px), float(py)
+    try:
+        return _npc_frame(state, time.time() if now is None else now)
+    except Exception:                                  # noqa: BLE001
+        px, py = state.get("pos", (0.0, 0.0))
+        return float(px), float(py)
 
 
 def _npc_frame_reach(state, agent, now, player):

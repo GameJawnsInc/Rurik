@@ -19754,3 +19754,95 @@ our decode of the same trapezoids.** One lip, both directions of disagreement, ~
 refuted (1z-dj), and this sharpens why: where the body genuinely stood off our mesh it was **our
 boundary 25 u too tight**, not the body stopping a radius short of our wall. A swept disc would
 have made the near-corner worse, not better. The lever, if any, is the mesh lip, not the clip.
+
+---
+
+## 1z-dm. THE APPROACH'S OWN MODEL LEG — **the player's reach geometry ran in the position MODEL while the client's resolver runs it in world-0, and the guard that would have caught it is threshold-matched to the wrong question.** The operand error is p50 30 u / max 77 u and it dropped a swing the operator could see connect; three candidates scored, the frame ships, and the row that re-decides it ships with it
+
+**2026-09-10.** Ident `MOVECODE-1z-dm`. Asked by the owner — 1z-dj's registered residual (leg A's
+103.8 u at the 38.02 s re-pin). Desk: five tapes through two new scratch censuses and the
+`avoidcensus` replay for the mirror branch, predictions first. OBSERVED unless marked.
+
+### 1z-dm.1 The defect, and why nothing had caught it
+
+Three sites read `state["pos"]` — the position model — for geometry the CLIENT decides:
+`approach_tick`'s distance (run or arrive), `_approach_send`'s stop point and leg, and
+`attack_tick`'s **144 u reach gate**. The client's own resolver runs the same geometry around its
+**world-0 copy** — §1z-cv.1 established exactly that from the other side (*"the disc IS around
+world-0"*).
+
+**The size, measured against the drawn body at all 10 approach sends in the corpus:** the model's
+error in the distance to the target is **p50 30.0 u, max 76.9, over 40 u on 5 of 10** — and split
+by operand, the hostile's model contributes p50 17.1 u while the player's contributes **p50 +30.0,
+max +76.9, and it is one-signed** (the server always believes the player is FARTHER out).
+
+**The trigger is a threshold matched to the wrong question.** The five clean sends are exactly
+the five an `APPROACH RE-PIN` preceded. That re-pin fires when the modelled click-leg end and the
+sync copy disagree by more than `R_MATCH = 100 u` — **the client's SNAP reprieve**, which is the
+right scale for *"will the body warp"* and the wrong one for gates that run at **80 u** (the stop
+radius) and **144 u** (the reach). A 77 u model error is invisible to the guard and decisive at
+the gate. This is `feedback-guards-pointed-one-way` in a new shape: the guard exists, it reads the
+right pair, and its threshold answers a different question than the consumer downstream of it.
+
+**What it cost, OBSERVED:** RUN-1zDB leg A, 38.27 s — the gate read **146.9 u against 144** and
+dropped the swing, while the tape has the two bodies **86.4 u** apart. The operator's "full
+animation, no damage" family, from a third door (after §1z-db's cancel and §1z-dd's target-forget).
+§1z-cx.4 filed this operand as an open question and declined to decide it on one row; ten rows and
+a tape decide it.
+
+### 1z-dm.2 ★★★ Three candidates, scored on the same instants before anything shipped
+
+| operand | p50 | p90 | max | over 40 u |
+|---|---|---|---|---|
+| `state["pos"]` — SHIPPED UNTIL NOW | 30.0 u | 76.9 | 76.9 | **5 of 10** |
+| the last accepted report | 1.0 u | 77.0 | 77.0 | 2 of 10 |
+| **`_npc_frame`** (F5's hybrid: the stop report while standing, the mirror while moving) | **0.0 u** | 77.0 | 77.0 | **1 of 10** |
+
+The frame is **better on 4, worse on 1** — the exception is 42.09 s (22.7 u) where the model had
+just been re-pinned and the mirror had not caught up. **The shared tail is one instant** (leg B,
+26.97 s): the body moved 77 u *after its own stop report*, and no operand on the wire could know.
+
+**The collision with §1z-cv, stated rather than skated past.** That section scored `_npc_frame` as
+an operand and killed it — 33 better / 130 worse of 277 halts. It is **not this claim**: it scored
+the frame as the hostile's ORDER TARGET, and its own mechanism finding is why that fails (the disc
+forms around the frame *whatever we order*, so ordering to it cannot move the outcome). The same
+finding says the frame is where the geometry HAPPENS — so measuring in it is that result used the
+way the client uses it. Different consumer, same evidence, opposite direction.
+
+### 1z-dm.3 Shipped
+
+`_reach_frame(state, now=None)` — the client's frame under `APPROACH_READS_FRAME`, `state["pos"]`
+under `--no-approach-frame`, never raising (it degrades to the model, not to the origin). Read at
+four sites: `approach_tick`'s distance, `_approach_send`'s origin/distance/stop point (so the leg
+**ends** where the client's resolver will stop the body; `state["dest"]` is still that point, so
+the integrator walks `state["pos"]` to a correct destination even when it started behind), the
+press row's `dist` (a row that disagrees with the gate that read it is a trap), and the reach gate.
+
+**And the row that re-decides it:** `approach` carries `dist_model`, `dist_frame`, `dist_report`,
+`report_age` and `frame_vs_model` at **every** send, under either arm. n = 10 is thin and the
+neighbouring verdict is n = 277, so the next session attributes this by reading rows rather than
+by needing a dedicated A/B.
+
+`test_playerswing` §18, known-bad arm first, floor 162 → 170. §12's known-bad arm **re-aimed, not
+loosened**: it asserted `not rec.rows` — an empty recorder — when its subject is that the swing
+drop is silent, and 1z-dm's `approach` row now rides the same tick; the assertion keeps its exact
+subject over swing/press rows. `test_cancelwalk` 124, `test_kbdsync` 236, `test_position_trust`
+251, `test_guards` 41, `test_mechanics` 106, `test_agentlife` 380, `test_movesync` 184 green.
+
+**One regression this change caused and a check now pins:** the reach gate sits ABOVE
+`attack_tick`'s own `now = time.time()`, so the first cut passed an unbound `now` and raised
+`NameError` on the world tick — compiling proved nothing. The helper reads its own clock, and §18
+exercises the gate on a bare state (no guard, no report, no click leg).
+
+### 1z-dm.4 What it does NOT settle
+
+* **n = 10.** The direction is one-signed and the mechanism is structural, but the size is thin
+  and the tail is untouched. The row is the answer to that, not a claim that it is settled.
+* **The frame's own bad regime.** `_npc_frame`'s mirror branch inherits the mirror's errors — leg
+  B's 514 u at the mesh lip (§1z-dj.4, §1z-dl). None of the 10 approach instants sat in it; a
+  corner approach could. The revert is one flag.
+* **The approach leg is still a raw straight chord** — no mesh clip, no route, unlike the keyboard
+  lead (`a2_clip_lead`) and the click arm (`route()`). Where geometry intervenes the client's body
+  walks around it and our leg walks through. Not touched here (this change moves the leg's frame,
+  not its shape), and **registered**: score the approach chord against the mesh on the corpus the
+  way §1z-cn scored the hostile's, before building anything.

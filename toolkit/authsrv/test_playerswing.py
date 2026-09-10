@@ -49,7 +49,7 @@ import checks  # noqa: E402
 # retail's. MOVECODE-1z-db +5 (133): the displacement gate, known-bad arm
 # first. MOVECODE-1z-dc +4 (137): the chain-pause row. §13 needs the
 # gamesrv corpus and §13b the live one; each declares a skip by name.
-LEDGER = checks.Ledger("player swing windup", floor=162)
+LEDGER = checks.Ledger("player swing windup", floor=170)
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -2048,6 +2048,139 @@ def section_no_target_charge():
           f"moved_from={st.get('chain_moved_from')} attacking={st.get('attacking')}")
 
 
+def section_reach_frame():
+    import agents
+    import authsrv
+
+    print("\n18. the player's reach geometry runs in the CLIENT's frame, not the "
+          "position model (MOVECODE-1z-dm)")
+    # Measured on 10 approach sends across five tapes, against the DRAWN body:
+    # the model's error in the distance to the target is p50 30.0 u, max 76.9,
+    # over 40 u on 5 of 10 -- and the five clean ones are exactly the ones an
+    # APPROACH RE-PIN preceded, because that re-pin's threshold is the client's
+    # 100 u SNAP reprieve while the gates it feeds run at 80 u (the stop
+    # radius) and 144 u (the reach). RUN-1zDB leg A, 38.27 s: the gate read
+    # 146.9 u against 144 while the bodies were 86.4 u apart, and the swing
+    # dropped. _npc_frame scored p50 0.0 / over-40 1 of 10 on the same
+    # instants; the last report p50 1.0 / 2 of 10.
+
+    class _Rec:
+        def __init__(self): self.rows = []
+        def event(self, kind, **kw): self.rows.append((kind, kw))
+
+    def _reach_state(model, frame_report):
+        """The model at `model`, the client's last STOP report at
+        `frame_report` -- _npc_frame's standing branch, no guard needed."""
+        st = _state()
+        st["agents"][10]["pos"] = (150.0, 0.0)       # 150 u from the ORIGIN
+        st["attacking"] = 10
+        st["player_health"] = 100.0
+        st["player_dead"] = False
+        st["pos"] = model
+        st["last_report"] = (frame_report[0], frame_report[1], True, _tt.time())
+        st["player_last_swing"] = 0.0
+        return st
+
+    # The specimen's shape: the body (and its stop report) at 20 u from the
+    # target -- well inside reach -- while the model lags 90 u behind it.
+    def _run(frame_on):
+        st = _reach_state((0.0, 0.0), (130.0, 0.0))
+        rec, sent = _Rec(), []
+        saved = authsrv.APPROACH_READS_FRAME
+        try:
+            authsrv.APPROACH_READS_FRAME = frame_on
+            authsrv.attack_tick(
+                lambda op, vals, label="", quiet=False: sent.append((op, vals, label)),
+                st, 0, rec=rec)
+        finally:
+            authsrv.APPROACH_READS_FRAME = saved
+        opened = any(v and v[0] == agents.GV_ATTACK_STARTED for _op, v, _l in sent)
+        walked = [l for _op, _v, l in sent if l.startswith("APPROACH")]
+        app = [kw for k, kw in rec.rows if k == "approach"]
+        return opened, walked, app
+
+    opened, walked, app = _run(False)
+    check(not opened and walked,
+          "KNOWN-BAD ARM (--no-approach-frame): the gate reads the MODEL, 150 u "
+          "from the target, so the swing is refused and the server WALKS the "
+          "body toward a target it is already standing 20 u from -- RUN-1zDB "
+          "leg A's 38.27 s drop, from the operand's side",
+          f"opened={opened} sent={walked}")
+    check(app and app[0]["dist_model"] == 150.0 and app[0]["dist_frame"] == 150.0,
+          "and under the revert the row's two distances AGREE, because the "
+          "frame IS the model there -- the row cannot be read as evidence for "
+          "an arm that is off",
+          f"{app[0] if app else None}")
+
+    opened, walked, app = _run(True)
+    check(opened and not walked,
+          "SHIPPED: the same tick reads the client's frame (20 u out), the "
+          "swing opens and no follow is sent",
+          f"opened={opened} sent={walked}")
+
+    # The row that makes this self-scoring on the next session, under EITHER
+    # arm: all three candidate operands at every approach send (n = 10 is thin,
+    # and 1z-cv killed _npc_frame as an ORDER TARGET on n = 277 -- a different
+    # use of the same estimate, so the next session must be able to re-decide).
+    st = _reach_state((0.0, 0.0), (130.0, 0.0))
+    st["agents"][10]["pos"] = (400.0, 0.0)         # out of reach in BOTH frames
+    rec = _Rec()
+    authsrv.attack_tick(lambda *a, **k: None, st, 0, rec=rec)
+    app = [kw for k, kw in rec.rows if k == "approach"]
+    check(app and app[0]["dist_model"] == 400.0 and app[0]["dist_frame"] == 270.0
+          and app[0]["dist_report"] == 270.0 and app[0]["frame_vs_model"] == 130.0,
+          "the `approach` row carries all THREE operands and their disagreement "
+          "at every send -- the model, the frame, the last report",
+          f"{app[0] if app else None}")
+
+    # THE REGRESSION THIS CHANGE ALREADY CAUSED ONCE, kept as a check: the
+    # reach gate sits ABOVE attack_tick's own `now = time.time()`, so passing
+    # `now` there is an unbound name and raised NameError on the world tick.
+    # A bare state with no guard and no report must reach the gate and open.
+    st = _state()
+    st["agents"][10]["pos"] = (50.0, 0.0)
+    st["attacking"] = 10
+    st["player_health"] = 100.0
+    st["player_dead"] = False
+    st["player_last_swing"] = 0.0
+    authsrv.attack_tick(lambda *a, **k: None, st, 0)
+    check(st.get("player_swing") is not None,
+          "and the gate runs on a BARE state -- no guard, no report, no click "
+          "leg: `_reach_frame` reads its own clock rather than a name the "
+          "caller binds twenty lines later (this raised NameError once)",
+          f"swing={st.get('player_swing')!r}")
+
+    st = _state()
+    st["pos"] = (5.0, 7.0)
+    check(authsrv._reach_frame(st) == (5.0, 7.0),
+          "CONTROL: with nothing to go on the frame IS the model -- the "
+          "helper degrades to today's operand rather than to the origin",
+          f"{authsrv._reach_frame(st)}")
+    saved = authsrv.APPROACH_READS_FRAME
+    try:
+        authsrv.APPROACH_READS_FRAME = False
+        st2 = _state()
+        st2["pos"] = (5.0, 7.0)
+        st2["last_report"] = (600.0, 0.0, True, _tt.time())
+        got = authsrv._reach_frame(st2)
+    finally:
+        authsrv.APPROACH_READS_FRAME = saved
+    check(got == (5.0, 7.0),
+          "and the revert really reverts: with the flag off a fresh stop report "
+          "600 u away does not move the operand",
+          f"{got}")
+
+    src = open(authsrv.__file__, encoding="utf-8").read()
+    check(authsrv.APPROACH_READS_FRAME is True
+          and "--no-approach-frame" in src
+          and authsrv.capture_flags().get("APPROACH_READS_FRAME") is True
+          and src.count("_reach_frame(state") >= 4,
+          "ships ON with its revert, on the capture's flags row, at all four "
+          "sites (approach_tick's distance, the send's geometry, the press "
+          "row's distance and the reach gate)",
+          f"{src.count('_reach_frame(state')} call sites")
+
+
 def main():
     section_two_phases()
     section_start_to_start()
@@ -2065,6 +2198,7 @@ def main():
     section_press_ends_kbd_latch()
     section_still_streak()
     section_no_target_charge()
+    section_reach_frame()
     print("\n12. an in-flight swing DROP writes a row and prints (SWINGCANCEL)")
     # RUN-1zCG session 8: 4 of the operator's 7 "full animation, no damage"
     # swings left NO row anywhere. `_press_refused` returns early once the
@@ -2099,9 +2233,17 @@ def main():
         rec = _Rec()
         st = _armed_world(400.0)          # far beyond attack_reach()
         authsrv.attack_tick(lambda *a, **k: None, st, 0, rec=rec)
-        check(st["player_swing"] is None and not rec.rows,
+        # RE-AIMED 2026-09-10 (1z-dm), not loosened: this asserted `not
+        # rec.rows` -- an EMPTY recorder -- when its subject is that the SWING
+        # DROP is silent. 1z-dm's `approach` row now rides the same tick (the
+        # target is 400 u away, so the approach sends), which is a different
+        # row saying a different thing. The subject keeps its exact assertion;
+        # the denominator stops being "everything anyone ever records".
+        _swing_rows = [r for r in rec.rows if r[0] in ("swing_verdict", "press_verdict")]
+        check(st["player_swing"] is None and not _swing_rows,
               "KNOWN-BAD ARM: the drop happens and writes NOTHING",
-              f"swing={st['player_swing']}, rows={rec.rows} -- this is what "
+              f"swing={st['player_swing']}, swing/press rows={_swing_rows} "
+              f"(all rows: {[r[0] for r in rec.rows]}) -- this is what "
               f"session 8 captured, and a check that cannot see it is the "
               f"reason the symptom survived a green suite")
     finally:
