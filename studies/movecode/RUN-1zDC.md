@@ -81,3 +81,28 @@ HANDS OFF THE KEYBOARD AND MOUSE for the whole run (~75 s each); the harness own
 ## 6. Scoring
 
 `swingcensus.py --cap` on both; the exposure/verdict script on both; the tape join for the walk.
+
+## 7. RESULT — ran 2026-09-10 15:43 (A) and 15:46 (B), agent-driven, both legs complete
+
+Captures `20260910T154327` (A, HEAD) and `20260910T154638` (B, known-bad); tapes
+`1zdc1/1zdc2-agenttap.jsonl`; harness `20260910T154257` / `20260910T154611`. Every plan step ran
+its asked duration; no focus loss. Full record: [FINDINGS §1z-de](FINDINGS.md).
+
+| clause | prediction | A (HEAD) | B (known-bad) | verdict |
+|---|---|---|---|---|
+| the walk | body ≤ 60 u from (10488, 8117) at the first press | **0 u**, spread 0.0 u over the run | **0 u**, spread 0.0 u | **met** |
+| hostiles | park ≤ 120 u | both at (10442, 8064), 70 u | both at (10441, 8063), 70 u | met |
+| swing floor ≥ 12 | | **18** | **20** | met |
+| B exposure ≥ 8 sub-1 u windups | ~20 | 18 of 18 | **20 of 20** | met |
+| **P1** still-cancels | B ≥ 50 %, A 0 | **0** (18 `SUPPRESSED`, 0 drops) | **20 of 20** `cancel:movement` | **CONFIRMED** |
+| **P2** landed | A ≥ 80 %, B ≤ 50 % | **18 of 18** | **0 of 20** | **CONFIRMED** |
+| **P3** verdict rows | every non-landing swing | n/a (none) | 20 of 20 | met |
+| **P5** `chain_pause` | A charged > 0, B `no-target` | charged **p50 1.43 s**, 18 rows | 0, `no-target` | as predicted |
+
+The tap's report landed **0.32–0.40 s into the windup** (p50 0.36) in both arms — the harness's
+per-step overhead (~0.25 s of window/foreground checks) stretched each cycle to 3.4 s, but the tap
+sat inside the 0.775 s windup every time. Hostile 10 died once in A (4 `dead-target` presses) and
+11 once in B (2); the retarget kept working through both.
+
+**MOVECODE-1z-db + 1z-dd are OBSERVED live: the still-report cancel class is gone at HEAD
+(0 of 18) and present on the known-bad arm (20 of 20), same corner, same script, one flag.**

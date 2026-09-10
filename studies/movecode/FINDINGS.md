@@ -19140,3 +19140,76 @@ which is why a raw replay of the morning's corner rays clips them to 0 u where t
 seam-origin door (§1z-bg) read them `clear`: the server's own function is the replay, not its
 primitives). The NPC reach reading the copy (§1z-dd.5's third consumer) is what turns a parked copy
 into eleven landed hits; it is the same defect.
+
+---
+
+## 1z-de. RUN-1zDC — the still-report class MANUFACTURED by script, and **1z-db + 1z-dd CONFIRMED live: 0 of 18 swings cancelled at HEAD against 20 of 20 on the known-bad arm**, same corner, same script, one flag; and the kept-target chain's pause measured at 1.43 s a cycle — §1z-dd.4's freeze, held off only by the retarget
+
+**2026-09-10 15:43–15:48.** Ident `MOVECODE-1z-de`. Registered as
+[RUN-1zDC](RUN-1zDC.md) before launch (`47b23891`), predictions and abort in §4 there. Agent-driven
+end to end: `mapscout`'s yaw calibration walked the body along the owner's own observed path,
+`attack:` orders went through the harness mailbox (polled every 50 ms tick), and `W:0.3` taps
+into the corner supplied the reports. Captures `20260910T154327` (A, HEAD) and `20260910T154638`
+(B, `--no-move-cancel-displacement`); tapes `1zdc1/1zdc2-agenttap.jsonl`. OBSERVED unless marked.
+
+### 1z-de.1 Why a script, and the one design decision that mattered
+
+Two hand-driven attempts (§1z-dd.1, §1z-dd.8) could not put a `0x003D` inside a windup: a steadily
+held key sends none. A tap of a movement key with the body wedged in the corner sends a still
+report (this morning's leg A, 14.34–17.03 s), and the harness can schedule one inside every windup.
+
+**The retarget is what made the arms comparable.** Under HEAD a still report KEEPS the target
+(1z-dd), so a repeat press is a `repeat` (retail does not re-arm the swing clock, ANIMREF-RE 37.3),
+and the tap's keyboard latch — never ended by a `0x0047`, because a tap into a wall sends none —
+pauses the chain until the next press. A plan that pressed 10 every cycle would have opened ONE
+swing in arm A and then frozen (§1z-dd.4, derived before the run from `begin_attack`'s branches).
+A press on a different target resets the gate and stamps the press in both arms, so each cycle was
+`attack:10 → tap → attack:11`: the swing at 10 opens at the press, the tap lands inside its windup,
+identically for A and B. Hostile 11 came from `--enemies 2` (300 u north of the arrival point; 10
+is 300 u east; the first walk leg went south, away from both).
+
+### 1z-de.2 ★★★ The result — every registered clause, both arms
+
+| | A — HEAD | B — known-bad |
+|---|---|---|
+| body at the first press / spread over the run | **(10488, 8117), 0 u / 0.0 u** | (10488, 8117), 0 u / 0.0 u |
+| both hostiles parked | (10442, 8064), 70 u — one body (Q10) | (10441, 8063), 70 u |
+| swings at 10 | **18** | **20** |
+| windups with a sub-1 u `0x003D` inside | 18 of 18 | **20 of 20** |
+| the tap's offset into the windup | p50 0.36 s (0.32–0.40) | p50 0.36 s (0.33–0.39) |
+| `chain cancel SUPPRESSED` prints | **18** | 0 |
+| `cancel:movement` / `attack_stopped` | **0 / 0** | **20 / 20** |
+| `move-ended-order` | **0** | 0 |
+| landed | **18 of 18** | **0 of 20** |
+| `swing_verdict` rows on non-landing swings | n/a | 20 of 20 (P3) |
+| `chain_pause` after the first press | **charged p50 1.43 s** on 18 rows | 0.00, `no-target` every row |
+
+**P1 and P2 CONFIRMED. The class 1z-db named and 1z-dd's second door was still leaking is gone at
+HEAD and total on the known-bad arm.** Retail's control is unchanged from §1z-dd.3: NOT FOUND, 0
+of 903 player windups carry a still report, so the rule stands on 1z-db's derivation — and now on a
+live A/B that separates the arms by 18 to 0.
+
+### 1z-de.3 ★★ P5 — §1z-dd.4's freeze, measured
+
+Arm A's `chain_pause` rows read `charged 1.43 s, 29 ticks, left: charged 29` on 18 of 20 cycles:
+from the tap's still report (latch armed, target kept) to the retarget press (latch ended), the
+pause charged the whole span. Nothing about that is wrong by §31's rule — the latch says the body is
+moving — and everything about it is wrong by §1z-db.4's: the body moved 0.0 u. **Without the
+retarget, the next swing waits for the next press**, structurally: the gate is pushed past every
+press by the charge the previous tap accrued. In the owner's hand regime that reads as *one swing
+lands, then nothing while the key is held* — an improvement on "full animation, no damage" (the
+swing now lands) and the same re-press afterwards. **Next derivation, now with a measured
+operand:** `_player_body_moving` on displacement — the third consumer of the same trigger, under
+the same flag, with §1z-dd.4's no-target charge as its sibling.
+
+### 1z-de.4 What the run also settled, and what it did not
+
+* **The harness can put the body on a corner to the unit.** 663 u of walk on four yaw+W legs
+  landed at (10488, 8117) exactly, both legs — the wall itself did the last 2 u. §1z-at's 16 u was
+  open ground; a wall is a better target.
+* **Step overhead is real:** each cycle asked 2.1 s and took 3.4 s (~0.25 s per step of window and
+  foreground checks). The tap still sat inside the windup because the overhead after `attack:10`
+  is what put it at 0.36 s. A future plan should price 0.25 s per step.
+* **Not settled here:** the parked copy (§1z-dd.8), untouched — the body never left the corner;
+  and the exposure divergence (we quarterstep, retail stands), which this script deliberately
+  reproduces rather than measures.
