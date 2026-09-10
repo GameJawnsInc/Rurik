@@ -429,3 +429,36 @@ corner leads left 155 u behind.
 
 **Session 8 is not registered yet**: the fix touches `D1_LEAD`'s doctrine and the follow's
 target together, and wants its own derivation first.
+
+## Session 8 — REGISTERED 2026-09-09, before any launch
+
+The derivations §7's note waited for landed on 2026-09-09 as three defaults, each with its
+own revert: MOVECODE-1z-cu (`FAMILY_RATE` in the position model), 1z-cw (`KBD_GRANT_FLOOR =
+0.0`), 1z-cy (`AGTRACK_REPIN = False`). Build: `main` at `4c8f9877`, everything ON. The
+criteria are 1z-cy's, registered there for "the owner's next session" and copied here so the
+sheet is the one place the run is scored:
+
+- **P1 — re-pins 0, fence-shut leads 0, fence-shut parks 0** (`floorcensus.py --parked` and the
+  capture's `flags` row; s6 carried 17 mid-walk re-pins across six sessions).
+- **P2 — client snaps ≤ 5** (today's sessions read 1/1/5/1/0/1; a session over 5 puts
+  `--agtrack-repin` back on for the next).
+- **P3 — world-0 lag behind the drawn body, moving samples only, drops by the fence-shut share**
+  (22.3 % over 23.1 % of moving time, 1z-cy) — not by the 130–160 u; that lever is lead length
+  and is not shipped.
+- **P4 — the exposure floor**: ≥ 60 hostile destination orders and ≥ 150 fired leads, or the
+  nulls above are not read.
+- **Gate 2 (1z-cg's own):** zero client snaps INTO the hole above the stairs — walk it round.
+
+Same route as sessions 6–7: the stairs with the Hatcher on you, into the corner at the foot,
+round the hole. Terminal 1 first, and leave it running — it waits up to 300 s for the client:
+
+```powershell
+python toolkit/clientscan/agenttap.py --agents 1,10 --seconds 240 --wait 300 --out vault/research/movecode/1zcg8-agenttap.jsonl
+```
+
+```powershell
+python toolkit/harness/session.py --exe vault/run/2026-07-29_221c13772c7a/Gw.exe --enemy --hold 200 --game-args "--map 146 --explorable --no-enemy-skills --enemy-hit 0.02 --skills 0,0,0,0,0,0,0,0"
+```
+
+HANDS OFF THE KEYBOARD until "body is in the map" (~25 s), then 200 s of play; it tears itself
+down. Scoring: `sessionscore.py`, `flankcensus.py`, `floorcensus.py --parked`.
