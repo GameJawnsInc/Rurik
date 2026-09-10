@@ -19071,3 +19071,72 @@ clip on agents and the candidate is refuted before it is built.
   stand as registered. §1z-dd.4's freeze prediction is a free read on the same tape (`chain_pause`
   rows with the target kept will show `charged`, and the inter-swing gap in the hold).
 * §1z-dd.4's pause fix and §1z-dd.6's swept-disc clip, in that order, each with its own arm.
+
+### 1z-dd.8 ★★★ The RE-RUN (legs 3 and 4, owner-driven, 2026-09-10 15:14) — the floor is missed AGAIN, the arms did not separate, and leg 4 is the cleanest specimen yet of the PARKED COPY: a 6 u grant, a 93 u client slide, then 14.6 s of client silence with the Hatcher landing eleven hits from 161 u
+
+Captures `20260910T151457` (leg 3, HEAD) and `20260910T151638` (leg 4, `--no-move-cancel-displacement`),
+tapes `1zdb3/1zdb4-agenttap.jsonl`, harness `20260910T151424` / `20260910T151608`. The owner's
+report, verbatim: *"P4 — i don't remember. b3 — i was able to attack, hatcher ran up to me. b4 — i was
+able to attack, but the hatcher was out of melee range and still attacking."*
+
+**Scoring, as registered.** Legs of **29 s and 21 s** (owner-ended, `GAME_CMSG 0x0008`; the Hatcher did
+not die this time). Swings **12 + 7** (leg 4 under the 12 floor). Accepted reports **10 + 10**, one still
+report each, and **no `0x003D` inside any windup on either leg** — arm B's exposure is **0 of 8** for the
+second time. **P1/P2 ABORT again; arm A's zero is not scored.** No `chain cancel SUPPRESSED` print on
+either log, so §1z-dd.3's gated door was never exercised live. Leg 3's one silent swing (t=28.57,
+`unattributed`) is the disconnect 0.8 s later, not a drop. **P4: not remembered.** `sessionscore`: both
+legs `NOT ENOUGH SESSION` (10 accepted reports against its floor of 20).
+
+**Why a hand regime misses this floor.** The client sends `0x003D` on a heading change or a walk start
+and every 0.5 s WHILE MOVING; a body blocked under a held, steady key sends nothing (§1z-cp.3's "stood
+down"), and this run's 10 reports per leg say the key was held steady. The exposers (`20260823T102742`:
+60 reports over 34 positions in the corner) were the operator turning and tapping while blocked. The
+class the run scores needs a report to land INSIDE a 0.82 s windup; steady pressure produces none.
+**The harness can manufacture it:** `attack:10` followed by `W:0.3` taps puts a walk-start `0x003D`
+(a still report by displacement, §1z-db.4) and a `0x0047` inside windups on a schedule, and
+`mapscout.emit_script` walks the body to a computed spot (§1z-at.2, 16 u). A scripted A/B needs no
+aiming. Offered, not launched.
+
+**The owner's two observations are the same defect under two regimes, and neither is the arm.**
+
+*Leg 3 (HEAD).* Body reaches the corner (10488, 8117) at 7.09 s **with a heading change there** (69.5°
+→ 93.3°), so a report carries the corner position; the copy is the body (w0 lag 0 throughout), the
+Hatcher parks at 71 u, twelve exchanges at 71 u. "Ran up to me."
+
+*Leg 4 (known-bad arm), OBSERVED at 30 Hz on the tape and on the server's own rows:*
+
+| t | client | server |
+|---|---|---|
+| 5.87 | `0x003D` at (10419.5, 8046.4), heading 63.4° (mt 1), body moving ~200 u/s | our clip stops the ray at **6.0 u** — the mesh edge — `clipped`, leg 0; **`KBD LEAD (10422, 8052)`** |
+| 5.80 → 6.27 | the body **slides 93 u along the wall** (steps 25.5, 22.8, 26.9, 19.5, 8.4 u per 1/30 s) to **(10488, 8117)** and stops, `vx = vy = 0` | world-0 walks to the grant and **parks at (10422, 8052)** |
+| 6.27 → 20.75 | **no `0x003D`, no `0x0047`, nothing** until the attack press at 8.95 — the periodic report due at ~6.37 found a body no longer moving, and the held key sends no stop | the copy sits **93 u** from the body for **14.6 s** (`parkedcopy`: the only ≥ 2 s split on today's four tapes; session 8's six were all with the body moving through them) |
+| 6.25 | | `FOLLOW` parks the Hatcher at (10368, 7993), "74 u from the player" — **161 u from the drawn body** |
+| 6.25 → 20.01 | | **11 of 13 Hatcher swings open at 161 u drawn; all 11 land.** The player's 7 swings land from there too |
+
+"Out of melee range and still attacking" is that table. It is §1z-cw.6's parked copy — a lead the mesh
+cut short, reached in a third of a second, the copy parked on it — with the clause that section relied
+on removed: *"the next re-aim arrives a report interval later"* — **here it never arrives**, because
+the body that would send it has stopped against the corner under a held key.
+
+**Where our rule and the measured retail rule agree, stated so the wrong lever is not pulled.** The
+wall-slide arm did NOT fire at 5.87: `pathmap.wall_slide` answers `no-wall` at `WALL_SLIDE_TOL = 3`
+(the wall is 6 u ahead of the report), and at tol 12 it names the decomposition's first split vertex
+**(10427, 8054), 8 u away** — the rule §1z-ce measured on retail (27 of 33: the vertex 4 u ahead, not
+the corner 700 u on). So **retail's grant here would be ~8 u and ours was 6 u: the grant is not the
+divergence.** What retail's COPY does in the 14.6 s of silence that follows a client slide has **no
+witness** (§1z-cz.2: retail has never walked this corner). §1z-cq.3's invariant — retail's copy lags,
+never leads — is consistent with retail parking exactly as we did.
+
+**Registered, the one check that decides it (F16's instrument, no run):** on the live corpus, after
+a retail wall-cut grant that the client's next report shows it slid past, do retail's NPC follow points
+(`0x002A`, its copy's position) advance along the wall BEFORE that next report? Yes → retail's server
+extrapolates the slide and the lever is server-side slide integration (RECONSTRUCTION today). No →
+retail's copy parks as ours does, the class is the client's own silence, and the only server-side
+answer is to break the silence (nothing measured licenses one yet).
+
+**Also on this tape, unchanged:** the report at 5.87 and the slide's end are both ON our mesh
+(`on_mesh` 1 u; the corner point sits inside no trapezoid, within 1 u of one — `plane_at` None,
+which is why a raw replay of the morning's corner rays clips them to 0 u where the server's
+seam-origin door (§1z-bg) read them `clear`: the server's own function is the replay, not its
+primitives). The NPC reach reading the copy (§1z-dd.5's third consumer) is what turns a parked copy
+into eleven landed hits; it is the same defect.

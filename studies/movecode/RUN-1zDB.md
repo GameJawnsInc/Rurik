@@ -156,3 +156,20 @@ correction: the Hatcher's own body is one of the two blockers in the corner (§1
 
 **Re-run under HEAD** with the regime that exposes — hold the key INTO THE WALL (not toward the
 Hatcher) and keep attacking — same two legs, same floors.
+
+### 9.1 The re-run (legs 3–4, same day, 15:14) — ABORT again
+
+Captures `20260910T151457` (3, HEAD) and `20260910T151638` (4, known-bad). Legs of 29 s and 21 s,
+owner-ended. Full record: [FINDINGS §1z-dd.8](FINDINGS.md).
+
+| clause | verdict | reading |
+|---|---|---|
+| swing floor (≥ 12 per leg) | 12 / **7** | leg 4 under |
+| arm B exposure (≥ 8 sub-1 u windups) | **NOT MET — 0** | 10 reports per leg, none inside a windup: a steady held key sends nothing |
+| **P1 / P2** | **ABORT** | the gated door never fired (`SUPPRESSED` absent from both logs) |
+| **P3** | n/a | no dropped swing; leg 3's one silent swing is the disconnect 0.8 s later |
+| **P4** | *"i don't remember"* | |
+| owner's b3 / b4 | **regime, not arm** | b3: a heading change on arrival reported the corner, copy = body, Hatcher at 71 u. b4: a 6 u grant, a 93 u client slide, 14.6 s of client silence, the Hatcher 161 u from the body landing 11 of 13 |
+
+**The regime cannot be produced by hand on demand; it can be produced by script** — `attack:10` +
+`W:0.3` taps in the corner (`mapscout.emit_script` to get there). Offered in §1z-dd.8, not launched.
