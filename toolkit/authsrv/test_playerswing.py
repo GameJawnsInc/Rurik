@@ -44,9 +44,11 @@ import checks  # noqa: E402
 # FLOOR 116 from the green run of 2026-09-03 that added section 11 (ANIMREF-RE
 # 41: the press supersedes the keyboard belief, and every press leaves a
 # press_verdict row; 20 fixture-free checks). 96 with section 10 alone.
-# SWINGCANCEL +7 (123), from the green run: 1 known-bad arm + 3 reach row
-# + 1 control + 2 other branches (studies/movecode 1z-cr).
-LEDGER = checks.Ledger("player swing windup", floor=123)
+# SWINGCANCEL +7 (123): 1 known-bad arm + 3 reach row + 1 control + 2 other
+# branches (1z-cr). MOVECODE-1z-cs +5 (128): the lifecycle pins, ours and
+# retail's. §13 needs the gamesrv corpus and §13b the live one; each
+# declares a skip by name without it.
+LEDGER = checks.Ledger("player swing windup", floor=128)
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -1902,6 +1904,63 @@ def main():
           "and so is a movement cancel, with the CANCELLER named",
           f"rows={rows} -- this one was already visible on the wire as an "
           f"attack_stopped; the row makes the three cancellers separable")
+
+    print("\n13. the swing lifecycle against retail's own (MOVECODE-1z-cs)")
+    # 1z-cs asked whether `attack_tick`'s reach gate and `_npc_follow_tick`
+    # should read the report instead of the position model, and the corpus
+    # REFUTED the repair: ArenaNet's own copy of the player sits 22-36 u from
+    # a FRESH report and 1014 u from a stale one, AHEAD of it 27 times to 18
+    # behind. What the same corpus names instead is the cancel rate. These
+    # pins are FLOORS and a CEILING, not exact values -- the live corpus grows
+    # (project-rurik-corpus-counts-redden).
+    import os
+    import sys as _sys
+    _here = os.path.dirname(os.path.abspath(__file__))
+    _sys.path.insert(0, os.path.join(_here, "..", "..", "studies", "movecode",
+                                     "review"))
+    try:
+        import swingcensus
+        cen = swingcensus.census()
+        sc = swingcensus.score(cen)
+    except Exception as exc:                                  # noqa: BLE001
+        LEDGER.skip("13. the swing lifecycle against retail's",
+                    f"no gamesrv corpus on this machine: {exc!r}")
+        return LEDGER.verdict()
+    check(sc["swings"] >= 700 and sc["landed"] >= 585,
+          "our own swing corpus is still at least what 1z-cs measured",
+          f"{sc['landed']} landed of {sc['swings']} swings (floors 585/700)")
+    silent = (sc["by_branch"].get("reach", 0)
+              + sc["by_branch"].get("unattributed", 0))
+    check(silent <= 0.03 * sc["swings"],
+          "the SILENT drop stays at retail's own rate (retail 0.8 %)",
+          f"{silent} of {sc['swings']} = "
+          f"{100.0*silent/sc['swings']:.1f} % -- retail's 11 of 1,332 is "
+          f"0.8 %, so this is a CEILING at 3 %, not a target. 1z-cr's four "
+          f"whiffs were never anomalous as a rate; they were anomalous in "
+          f"leaving no row")
+    cancel = sc["by_branch"].get("cancel", 0)
+    check(cancel >= 100,
+          "and the CANCEL population is still the arc's real divergence",
+          f"{cancel} of {sc['swings']} = {100.0*cancel/sc['swings']:.1f} % "
+          f"against retail's 6.1 % -- 2.4x. A floor, so this reddens if the "
+          f"census stops seeing them, never if the gap widens")
+    try:
+        r = swingcensus.retail()
+    except Exception as exc:                                  # noqa: BLE001
+        LEDGER.skip("13b. retail's half", f"no live corpus: {exc!r}")
+        return LEDGER.verdict()
+    n = r.get("started", 0)
+    check(n >= 1332 and r.get("damage", 0) >= 1235,
+          "retail's own lifecycle is still on the wire: >= 1,332 starts, "
+          ">= 1,235 landing damage",
+          f"{r.get('damage')} of {n} = {100.0*r.get('damage',0)/n:.1f} %")
+    check(r.get("silent", 0) <= 0.03 * n and r.get("stopped", 0) <= 0.12 * n,
+          "and its silent and stopped rates are the numbers 1z-cs compared to",
+          f"silent {r.get('silent')} ({100.0*r.get('silent',0)/n:.1f} %), "
+          f"stopped {r.get('stopped')} ({100.0*r.get('stopped',0)/n:.1f} %). "
+          f"The attacker slot is MEASURED: 0x00A0 is [prop, attacker, target], "
+          f"876 to 28 -- reading it victim-first turns 92.7 % into 0.8 %, and "
+          f"that was 1z-cs's first cut")
 
     return LEDGER.verdict()
 

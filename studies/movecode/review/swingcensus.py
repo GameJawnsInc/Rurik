@@ -38,7 +38,9 @@ import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(HERE, "..", "..", "..", "toolkit"))
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(HERE)))
+for _sub in ("toolkit", "toolkit/authsrv", "toolkit/clientscan"):
+    sys.path.insert(0, os.path.join(ROOT, _sub))
 
 import vaultpath      # noqa: E402
 
@@ -109,6 +111,61 @@ def swings(rows):
     return out
 
 
+# --------------------------------------------------------------- retail
+
+STARTED, STOPPED, FINISHED = 4, 3, 1     # GV_* on 0x00A0 / 0x009F
+
+
+def retail():
+    """What follows an `attack_started` on ArenaNet's own wire.
+
+    THE SLOT IS MEASURED, NOT ASSUMED: `0x00A0 [prop, attacker, target]` for
+    GV_ATTACK_STARTED, against `0x00A3 [prop, target, cause]` for the damage --
+    pairing each start to its next damage says attacker-first 876 times and
+    target-first 28, so v[2] is the attacker. (Reading it the other way turns
+    92.7% into 0.8% and was the first cut of this function.)
+    """
+    import livewire
+    tot = collections.Counter()
+    conns = 0
+    for capdir, cf in livewire.live_connections():
+        try:
+            _c, merged, ok = livewire.decode_conn(capdir, cf)
+        except Exception:                                   # noqa: BLE001
+            continue
+        if not ok or not merged:
+            continue
+        conns += 1
+        ev = collections.defaultdict(list)
+        for (t, dr, op, v) in merged:
+            if dr != "s2c":
+                continue
+            if op == 0xA0 and len(v) >= 4 and v[1] == STARTED:
+                ev[v[2]].append((t, "start"))
+            elif op == 0x9F and len(v) >= 3 and v[1] == FINISHED:
+                ev[v[2]].append((t, "finish"))
+            elif op == 0x9F and len(v) >= 3 and v[1] == STOPPED:
+                ev[v[2]].append((t, "stop"))
+            elif op == 0xA3 and len(v) >= 5 and v[1] in (16, 17):
+                ev[v[3]].append((t, "damage"))
+        for _a, rws in ev.items():
+            rws.sort()
+            for i, (t, k) in enumerate(rws):
+                if k != "start":
+                    continue
+                tot["started"] += 1
+                later = [k2 for t2, k2 in rws[i + 1:] if 0 < t2 - t <= 3.0]
+                if "damage" in later:
+                    tot["damage"] += 1
+                elif "finish" in later:
+                    tot["finish_no_damage"] += 1
+                elif "stop" in later:
+                    tot["stopped"] += 1
+                else:
+                    tot["silent"] += 1
+    return {"connections": conns, **dict(tot)}
+
+
 def census(paths=None):
     gs = vaultpath.require_dir("captures", "gamesrv",
                                why="swingcensus reads our own captures")
@@ -159,6 +216,29 @@ def main():
     if sc["reach_dists"]:
         print(f"  `reach` drops, server-believed distance (reach {REACH:.0f}): "
               f"{sc['reach_dists']}")
+    try:
+        r = retail()
+        n = r.get("started", 0)
+    except Exception as exc:                                # noqa: BLE001
+        print("\n(retail half unavailable: %r)" % (exc,))
+        n = 0
+    if n:
+        silent_ours = (sc["by_branch"].get("reach", 0)
+                       + sc["by_branch"].get("unattributed", 0))
+        cancel_ours = sc["by_branch"].get("cancel", 0)
+        sw = sc["swings"]
+        print("")
+        print("RETAIL, the same lifecycle on ArenaNet's wire "
+              "(%d connections, %d attack_started):" % (r["connections"], n))
+        print("  -> damage         %6d  %5.1f%%   OURS %5.1f%%"
+              % (r.get("damage", 0), 100.0 * r.get("damage", 0) / n,
+                 100.0 * sc["landed"] / sw))
+        print("  -> attack_stopped %6d  %5.1f%%   OURS %5.1f%%   <-- THE DIVERGENCE"
+              % (r.get("stopped", 0), 100.0 * r.get("stopped", 0) / n,
+                 100.0 * cancel_ours / sw))
+        print("  -> SILENT         %6d  %5.1f%%   OURS %5.1f%%   (at retail's own rate)"
+              % (r.get("silent", 0), 100.0 * r.get("silent", 0) / n,
+                 100.0 * silent_ours / sw))
     for name, sw in sorted(cen.items()):
         s = [x for x in sw if not x["landed"]]
         if not s:

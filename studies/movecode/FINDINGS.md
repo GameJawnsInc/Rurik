@@ -18534,3 +18534,99 @@ session answers by reading a row instead of by elimination.
   positive control failed". The bigger population by 26×, and untouched here.
 * **The 2 unattributed** (`20260901T125928` t=246.2, `20260902T134617` t=38.62): no stop,
   no death, no printed distance in the window. The new row settles this class by itself.
+
+---
+
+## 1z-cs. The OPERAND derivation, both consumers — **"read the report instead of the model" is REFUTED**, retail extrapolates too, and the real divergence is the CANCEL rate
+
+**Desk and corpus, 2026-09-09. No client run. Nothing ships behaviourally** — two
+instruments do: `studies/movecode/review/operandcensus.py` and the `retail()` half of
+`swingcensus.py`. Asked by the owner on §1z-cr.6 item 1.
+
+### 1z-cs.1 The question, and why it was answerable without guessing
+
+`_npc_follow_tick`'s chase target (§1z-cp.3) and `attack_tick`'s reach gate (§1z-cr.4)
+both read `state["pos"]` — the position MODEL. §1z-cp.3 measured that model 259 u from the
+drawn body; §1z-cr found four swings silently whiffed on it. The obvious repair is to read
+the last accepted REPORT instead. **That repair was never measured against ArenaNet**, and
+the corpus can measure it: retail's `0x002A` carries a POINT as well as a target agent, and
+that point is ArenaNet's own copy of the target at the send (NPCTRACK F16). The player's own
+position is the c2s `0x003D` report. So `|follow point − report|` is **ArenaNet's own
+model-vs-report error**, on their server, for free.
+
+**Two operand traps caught on the way, both by the numbers refusing to match established
+findings.** (a) c2s `0x003D` is `[vec2, dword, vec2, dword]` and only the FIRST vec2 is the
+position — the second is a **fixed-length ~766 u heading vector** (|v| = 765.0–768.0 across
+every connection), which is independent confirmation of §1z-cw's "retail grants the client's
+own ~766 u endpoint". (b) `0x00A0` for `GV_ATTACK_STARTED` is `[prop, ATTACKER, target]`,
+not victim-first like `0x00A3` damage — pairing each start to its next damage says
+attacker-first **876** times and target-first **28**. Reading it the other way turns 92.7%
+into 0.8%, and that was this section's first cut.
+
+### 1z-cs.2 Retail's copy vs the report, CONTROLLED FOR REPORT AGE — OBSERVED
+
+Uncontrolled, the comparison is meaningless: `|copy − report|` grows with the report's age
+whatever rule the server uses. Banded by age, at follow instants, same measurement both
+sides (`operandcensus.py`):
+
+| report age | RETAIL `|copy − report|` | OURS |
+|---|---|---|
+| 0–0.25 s | p50 **22.3**, max 70.8 (n=11) | p50 **28.6**, max 373.0 (n=221) |
+| 0.25–0.5 s | p50 **36.2**, max 84.9 (n=14) | p50 **60.6**, max 254.4 (n=220) |
+| 0.5–1.0 s | p50 **139.9**, max 229.1 (n=6) | p50 **145.3**, max 220.3 (n=30) |
+| 1.0–2.0 s | p50 **373.0**, max 517.0 (n=4) | p50 **312.0**, max 422.0 (n=24) |
+| ≥ 2.0 s | p50 **1014.8**, max **3857.9** (n=10) | none |
+
+**P1 CONFIRMED** — retail's copy is not the report verbatim; it is 22–36 u off even on a
+fresh one, so "the server just uses the last report" is false on ArenaNet's own wire.
+**P2 REFUTED** — retail's copy is *not* tightly bounded; at a stale report it reaches
+**3857 u**. **P3 REFUTED** — projected on the player's own travel, retail's copy sits
+**AHEAD of the report 27 times against 18 behind**: retail EXTRAPOLATES, it does not merely
+lag. **P4 REFUTED** — ours does not have the heavier tail; age-for-age ours is comparable at
+every band and **better at 1.0–2.0 s** (312 vs 373).
+
+**Therefore the proposed fix is refuted.** Reading the report instead of the model would put
+us at ~0 u from the report where ArenaNet sits at 22–1014 u — **less** retail-faithful, not
+more, and in the direction that would break the chase (a follow aimed at a stale report
+cannot lead a running player). Neither consumer's operand changes. This is the second time
+this arc has been saved by asking the corpus before shipping the obvious repair.
+
+### 1z-cs.3 So what IS different? The swing lifecycle, and it is the CANCEL — OBSERVED
+
+`swingcensus.py --retail`: what follows an `attack_started`, same three-way split, ArenaNet's
+61 live connections against our 68 captures.
+
+| | RETAIL (1,332 starts) | OURS (700 swings) |
+|---|---|---|
+| → damage | **92.7 %** | 83.6 % |
+| → `attack_stopped`, no damage | **6.1 %** | **14.9 %** ← 2.4× |
+| → SILENT (no event of any kind) | **0.8 %** | **0.9 %** |
+
+**The silent drop §1z-cr chased is at retail's own rate** — 0.9 % against 0.8 %. The four
+whiffs that produced the operator's note 3 are, as a *rate*, exactly what ArenaNet's own
+server does; what was wrong about them was that nothing recorded them (§1z-cr's instrument,
+which stands). **The real divergence is the cancel: we abandon a started swing 2.4× as often
+as retail does.** That is §1z-cr.6 item 2, and this promotes it from "the bigger population"
+to *the* open question in the swing path.
+
+### 1z-cs.4 Labels, and what this does not settle
+
+The age-banded retail figures rest on **n = 11/14/6/4/10** — thin, and the ≥2 s band carries
+the whole tail. The direction result (27 ahead / 18 behind) is n = 45. Both are **OBSERVED**
+for the sign and **UNVERIFIED for any constant**: nothing here licenses a tolerance, a clamp
+or a threshold, and none is shipped. The lifecycle comparison (n = 1,332 against 700) is the
+solid half. Our side pools scripted and hand-driven sessions; retail's pools NPC-vs-NPC with
+player swings, so the two populations are not the same mix — the 2.4× is a real gap in a
+quantity measured identically, not a controlled experiment.
+
+### 1z-cs.5 Open, re-ranked by this section
+
+1. **The movement cancel — now the arc's swing question.** 2.4× retail's rate; the site's own
+   comment calls its evidence "CORROBORATION rather than proof because its own positive
+   control failed". Derive `MOVE_KEEPS_CHAIN` / the pre-landing split against retail's 6.1 %.
+2. ~~The operand, both consumers~~ **CLOSED — refuted here.** Neither reads the report.
+3. **`attack_reach()`'s tolerance is still unmeasured**, and this section deliberately does
+   not invent one: retail's copy is 22–36 u off a *fresh* report, so a gate at exactly 144 u
+   on a copy with that error will whiff at the margin — which is what all four of §1z-cr's
+   did (147–158 u against 144). Whether retail's own gate carries slack is **NOT FOUND** on
+   the wire; its reach decision is not a message.
