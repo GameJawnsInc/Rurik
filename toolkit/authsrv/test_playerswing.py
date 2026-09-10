@@ -49,7 +49,7 @@ import checks  # noqa: E402
 # retail's. MOVECODE-1z-db +5 (133): the displacement gate, known-bad arm
 # first. MOVECODE-1z-dc +4 (137): the chain-pause row. §13 needs the
 # gamesrv corpus and §13b the live one; each declares a skip by name.
-LEDGER = checks.Ledger("player swing windup", floor=137)
+LEDGER = checks.Ledger("player swing windup", floor=142)
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -2033,6 +2033,63 @@ def main():
           f"stopped={len(stopped)} -- a 0x003E is an explicit move ORDER, not "
           f"a report, and the cast half of cancel_on_move is untouched on "
           f"both arms (castmech's evidence, not measured here)")
+
+    # 1z-dd: RUN-1zDB leg A, t=30.36 -- the suppression above printed "the
+    # swing keeps its windup" and the same report forgot the TARGET through
+    # a second, ungated door; attack_tick then dropped the swing 0.02 s
+    # later as `move-ended-order`, 62 ms before it landed, with no stop on
+    # the wire. The KNOWN-BAD ARM runs first, as before.
+    st, _stopped = _run(0.0, needs=False)
+    check(st.get("attacking") is None,
+          "KNOWN-BAD ARM: a report that moved 0.00 u also FORGETS THE TARGET",
+          f"attacking={st.get('attacking')!r} -- gamesrv.log 20260910T141335 "
+          f"line 396 'chain cancel SUPPRESSED ... keeps its windup', line 400 "
+          f"'SWING DROPPED in flight: move-ended-order ... lands_in 0.062'")
+
+    st, _stopped = _run(0.0)
+    check(st.get("attacking") == 10,
+          "SHIPPED: a report that moved 0.00 u keeps the target as well as the "
+          "swing",
+          f"attacking={st.get('attacking')!r}")
+
+    st, _stopped = _run(60.0)
+    check(st.get("attacking") is None,
+          "a REAL move (60 u) still forgets the target -- ANIMREF-RE 39's "
+          "28 of 28 re-presses were real moves",
+          f"attacking={st.get('attacking')!r}")
+
+    st, _stopped = _run(None)
+    check(st.get("attacking") is None,
+          "CONTROL: the CLICK arm (moved=None) still forgets the target",
+          f"attacking={st.get('attacking')!r}")
+
+    # And the swing a still report left alone LANDS on the next tick, with
+    # no `move-ended-order` row -- the whole point of the run.
+    class _Rec:
+        def __init__(self): self.rows = []
+        def event(self, kind, **kw): self.rows.append((kind, kw))
+
+    st, _stopped = _run(0.0)
+    st["agents"][10]["pos"] = (50.0, 0.0)          # in reach
+    st["player_swing"]["lands_at"] = _tt.time() - 0.01
+    st["player_last_swing"] = 0.0
+    rec = _Rec()
+    landed = []
+    saved_hit = authsrv.hit_enemy
+    try:
+        authsrv.hit_enemy = (lambda send, state, target, conn_id, armed=False,
+                             **kw: landed.append((target, armed)))
+        authsrv.attack_tick(lambda *a, **k: None, st, 0, rec=rec)
+    finally:
+        authsrv.hit_enemy = saved_hit
+    dropped = [kw for kind, kw in rec.rows
+               if kind == "swing_verdict" and kw.get("branch") == "move-ended-order"]
+    check(landed == [(10, True)] and not dropped and st.get("player_swing") is None,
+          "the swing a still report left alone LANDS on the next tick, and "
+          "writes no move-ended-order row",
+          f"landed={landed} dropped={dropped} swing={st.get('player_swing')!r} "
+          f"-- retail's still-report windups: NOT FOUND, 0 of 903 "
+          f"(review/stillwindup.py), so this rests on 1z-db's rule alone")
 
     print("\n15. the chain pause says how much it charged, and what left early "
           "(MOVECODE-1z-dc)")

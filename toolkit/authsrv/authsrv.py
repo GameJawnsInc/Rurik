@@ -11776,6 +11776,11 @@ def begin_attack(send, state, target_id, conn_id, rec=None):
 # windup in which the player's own report never moved, 36 of them with a
 # 0x003D nearest the stop. Retail's player loses 1.0% of its still-player
 # swings to a cancel; ours lost 7.9%.
+#
+# TWO DOORS, ONE GATE (MOVECODE-1z-dd, RUN-1zDB). The gate first covered
+# only the wire STOP; the target-forget beneath it kept firing on the same
+# still report, and attack_tick then dropped the swing as `move-ended-order`
+# -- silently now, the stop having been suppressed. The flag gates both.
 MOVE_CANCEL_NEEDS_DISPLACEMENT = True   # --no-move-cancel-displacement reverts
 MOVE_CANCEL_EPSILON = 1.0               # u; the gap above is (0.001, 1) and empty
 
@@ -11908,7 +11913,8 @@ def cancel_on_move(send, state, conn_id, moved=None):
     if still and chain_live and (pre_landing or not MOVE_KEEPS_CHAIN):
         print(f"[c{conn_id}] chain cancel SUPPRESSED: the report moved "
               f"{moved:.2f} u (<= {MOVE_CANCEL_EPSILON:.1f}), so the body did "
-              f"not move -- the swing keeps its windup [MOVECODE-1z-db]",
+              f"not move -- the swing keeps its windup and its target "
+              f"[MOVECODE-1z-db, 1z-dd]",
               flush=True)
     if chain_live and not still and (pre_landing or not MOVE_KEEPS_CHAIN):
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
@@ -11932,15 +11938,39 @@ def cancel_on_move(send, state, conn_id, moved=None):
     # with no press); the target is forgotten on ANY move command, and only
     # the swing in flight keeps the landing split above. --move-keeps-target
     # restores the post-landing keep.
-    if state.get("attacking") and (pre_landing or MOVE_ENDS_CHAIN
-                                   or not MOVE_KEEPS_CHAIN):
-        state["attacking"] = None
-    if MOVE_ENDS_CHAIN:
-        # A move command ends OUR follow too -- the client's steering wins
-        # on retail (the 0x002A is replaced by the server's projection of
-        # the 0x003D, 11/15 chains withheld). The arms clear the latch;
-        # this forgets the follow record and the copy's walk.
-        _approach_abandon(state)
+    # THE SAME GATE COVERS THE TARGET (MOVECODE-1z-dd). RUN-1zDB leg A,
+    # t=30.36: a 0x003D that moved 0.00 u printed the suppression above --
+    # "the swing keeps its windup" -- and the two lines below forgot the
+    # target anyway, so attack_tick's no-target branch dropped the same
+    # swing 0.02 s later as `move-ended-order`, 62 ms before it landed. The
+    # wire STOP was gated on displacement; the door under it was not, and a
+    # still report went on killing the swing SILENTLY (no 0x009F [3] for
+    # the client's animation to stop on) -- the operator's own "full
+    # animation, no damage", manufactured by the fix for it. ANIMREF-RE 39's
+    # "the target is forgotten on ANY move command" was measured on real
+    # moves (28 of 28 re-presses); a report whose position did not change
+    # is not one (1z-db.4's empty gap), and retail has NO witness either way
+    # -- 0 of 903 player windups carry a still report (review/stillwindup.py,
+    # prediction first), so this rests on 1z-db's rule and nothing weaker
+    # is claimed. The click arm (moved=None) and a real move are untouched;
+    # the same revert flag restores both doors together, so RUN-1zDB's arm B
+    # is the known-bad arm for both.
+    if not still:
+        if state.get("attacking") and (pre_landing or MOVE_ENDS_CHAIN
+                                       or not MOVE_KEEPS_CHAIN):
+            state["attacking"] = None
+        if MOVE_ENDS_CHAIN:
+            # A move command ends OUR follow too -- the client's steering
+            # wins on retail (the 0x002A is replaced by the server's
+            # projection of the 0x003D, 11/15 chains withheld). The arms
+            # clear the latch; this forgets the follow record and the copy's
+            # walk. (A still report leaves the follow to the latch: the
+            # 0x003D arm clears `click_moving_at`, approach_tick sees the
+            # stamp gone and abandons on its own -- and, target kept, may
+            # re-issue the approach next tick if the body is out of reach.
+            # Out-of-reach + still is NOT the regime RUN-1zDB exercised;
+            # stated so it is not scored as covered.)
+            _approach_abandon(state)
     dropped = _mark_cancelled(state, "movement", now, spare_mid_attack=True)
     for cast in state.get("pending_casts") or ():
         if cast.get("cancelled") == "movement" and not cast.get("released"):

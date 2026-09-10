@@ -18899,3 +18899,175 @@ clock is frozen — that is the mechanic, and a test that tried to have both was
   a p50 on thin data; it is the reference this section compares to, not a constant to fit.
 * `_player_body_moving` is **unchanged**. §1z-db's displacement gate was scoped to
   `cancel_on_move`'s chain half deliberately, and nothing here licenses widening it.
+
+---
+
+## 1z-dd. RUN-1zDB RAN, both legs, owner-driven — **the exposure floor was NOT met and P1/P2 abort as registered; P3 is green on its first live exercise; P5 NAMES §1z-dc's suppressor; and the one still report the run did produce killed the swing through a SECOND DOOR §1z-db never gated** — shipped under the same flag. Plus the ghost, in the owner's own words: §1z-cp.3's corner at its largest yet (drift 520 u, the lead cap itself), the Hatcher walks to the phantom and lands a hit from there, and a CONTESTED correction to §1z-cp.3's dismissal of agent collision
+
+**2026-09-10.** Ident `MOVECODE-1z-dd`. Captures `20260910T141412` (leg A, HEAD) and
+`20260910T141651` (leg B, `--no-move-cancel-displacement`), tapes `1zdb1/1zdb2-agenttap.jsonl`,
+harness dirs `20260910T141335` / `20260910T141623`. Scored with the registered scripts
+(`swingcensus.py --cap`, `sessionscore.py --cap --tape`) plus two session scripts kept in the
+scratchpad (a tape join printing orders against the drawn body, and heading-vs-bearing at every
+still report); one new review script, `review/stillwindup.py`, prediction first. OBSERVED unless
+marked. The owner's report, verbatim: *"got into the corner holding a movekey, attacked for a
+bit. i escaped when the hatcher ran away for no reason. i was in the corner but he gave me space
+to escape — almost like he was chasing a ghost of mine on the server that wasn't blocked. leg B i
+attempted to do about the same thing, the hatcher didn't chase exactly the same way though."*
+
+### 1z-dd.1 What ran, and the floor — ABORT on P1/P2, as pre-registered
+
+* Legs of **52 s and 43 s** of game connection, not the 110 s hold: in each the Hatcher DIED
+  (`KILL agent 10`, `hit agent 10: 0/100`) and ~5 s later the client sent `GAME_CMSG 0x0008`
+  (`GAME_CMSG_DISCONNECT` in OpenTyria's `opcodes.h` — UPSTREAM name) and reset the socket. The
+  owner ended each leg after the kill. (The capture's `version` row says `map_id 148` for the
+  harness's `--map 146`, as session 8's did; same place, the id the client announces.)
+* **Swings: 15 + 15 — the ≥ 12 floor is met.** Landed 13 + 13 (86.7 % both arms).
+* **Arm B's exposure floor is NOT met: 0 of the ≥ 8 sub-1 u windups.** Neither leg has a single
+  `0x003D` inside a windup on the accepted stream (A: one, the 30.36 s report below; B: zero).
+  The still reports exist — **17 and 19** consecutive sub-1 u displacements over 40 / 55 accepted
+  reports — but every one fell BETWEEN swings, where the maximal exposer (`20260823T102742`) had
+  one in EVERY windup. The regime the owner produced this time (tap, swing, tap) is not the held
+  key the exposers had; why is not explained here, only stated.
+* **So P1 and P2 are unreadable, and arm A's zero is NOT scored as a success** — the abort clause
+  was written for exactly this. Arm B's 2 of 15 `cancel:movement` (both on 0.0 u reports, t=10.21
+  and 18.67, `attack_stopped` sent) is the known-bad arm doing what it was built to do on the two
+  reports that did land in a windup; 2 of 15 is not the ≥ 50 % the exposers showed because the
+  exposure was 2, not 15.
+
+### 1z-dd.2 P3 — GREEN, 4 of 4
+
+Every non-landing swing carries a `swing_verdict` row, both arms: A `move-ended-order` (t=30.38,
+into_windup 0.713, lands_in 0.062) and `reach` (t=38.27, 146.9 u against 144 — the model-read
+distance, §1z-cx's open question, one more instance); B `cancel:movement` ×2. `swingcensus`
+attributes all four from the row (`by_source: swing_verdict 4`), none by elimination. §1z-cx's
+instrument did its job the first time it was asked to.
+
+### 1z-dd.3 ★★★ The second door — OBSERVED live (n = 1), read in the code, and SHIPPED under the same flag
+
+**Leg A, t=30.36.** The client's `0x003D` carries `pos (10488, 8117)`, identical to the previous
+report (drift 0.0), heading `(−327, −694)`. The server prints, in order (`gamesrv.log`
+`20260910T141335` lines 396 and 400):
+
+> `chain cancel SUPPRESSED: the report moved 0.00 u (<= 1.0), so the body did not move -- the swing keeps its windup [MOVECODE-1z-db]`
+> `SWING DROPPED in flight: move-ended-order (target None, into_windup 0.713, lands_in 0.062) [SWINGCANCEL, studies/movecode 1z-cx]`
+
+The same report. **`cancel_on_move` gated the wire STOP on displacement and, two statements
+later, forgot the target ungated** (`if state.get("attacking") and (pre_landing or
+MOVE_ENDS_CHAIN ...): state["attacking"] = None`); `attack_tick`'s next tick found no target and
+dropped the swing as `move-ended-order`, 62 ms before it would have landed. The consequence for
+the client is WORSE than before §1z-db: the stop `0x009F [3]` that used to end the animation is
+now suppressed, so the animation plays through and no damage lands — the operator's own "full
+animation, no damage", manufactured by the fix for it. Since §1z-db shipped this is the only
+capture with a still report inside a windup, and it did this.
+
+**Shipped:** the same `still` predicate now gates the target-forget and `cancel_on_move`'s own
+`_approach_abandon`; the click arm (`moved=None`) and a real move are untouched; the R11 print
+says "keeps its windup and its target"; **the flag is unchanged** — `--no-move-cancel-displacement`
+reverts BOTH doors, so RUN-1zDB's arm B is the known-bad arm for both and the A/B question is the
+same one. `test_playerswing` §14 +5, known-bad arm first, floor 137 → 142; `test_cancelwalk` 124
+green (its source pin reads `cancel_on_move` and holds).
+
+**Retail's control, prediction first (`review/stillwindup.py`): NOT FOUND, as predicted.** Of
+ArenaNet's player windups, **894 carry no report, 9 carry a moved one (7 stop, 2 land), 0 carry a
+still one** — the corpus never presses into a wall mid-swing (§1z-cz.2), so it can neither
+confirm nor refute the extension. It rests on §1z-db's rule alone: a report whose position did
+not change is not a move, and ANIMREF-RE 39's "forgotten on ANY move command" was measured on 28
+real ones. Stated so nothing stronger is read into it.
+
+**Scope, stated so it is not scored as covered:** with the target kept, a still report during an
+APPROACH still ends the follow (the `0x003D` arm clears `click_moving_at`; `approach_tick` sees
+the stamp gone and abandons) and, the body being out of reach, `approach_tick` re-issues the
+approach next tick. Out-of-reach + still is not the regime this run exercised.
+
+### 1z-dd.4 ★★ P5 — §1z-dc's suppressor is NAMED by the row: `no-target`, and it is the target-forget
+
+Every `chain_pause` row in both legs left through **`no-target`** — the mid-chain ones (A: 13
+ticks = 4 charged / 9 no-target, then 8, 7, 10, 9, 13 all no-target; B: 17 = 5 / 12, then 18,
+11, 14, 15, 13, 8) as well as the pre-engagement walks (95, 39, 134, 104, 19, 127 ticks, no order
+at all). Mechanism, read in the code and matching the rows: a real move's report forgets the
+target (correctly — it is a real move), so **the chain is empty for the whole moving span, the
+accumulator never sees a tick with a target, and the client's own re-press at the stop
+(`c2s ATTACK` 30–40 ms after every `0x0047`, ANIMREF-RE 39) opens a swing at once** — press age
+0.003–0.050 s on every `press_verdict` here. Retail's gap = interval + moving span (§1z-dc.3, to
+1.7 %) means retail's swing clock is charged WITH the target forgotten. **DERIVED fix: charge the
+moving span above the `no-target` return.** NOT shipped today — a second behavioural default in
+the same session convicts the pair and clears neither; it gets its own flag and its own question
+(*after a quarterstep, does the next swing wait?*) once §1z-dd.3 has scored.
+
+**A prediction that follows from §1z-dd.3, stated before anyone plays it:** §1z-dc.1's refutation
+of the spurious freeze was CONDITIONAL on the target-forget — no chain survived a still report, so
+the latch never had one to pause. Now one does. `_player_body_moving` still reads the keyboard
+latch, so **in a corner hold the in-flight swing lands and the NEXT swing waits until a newer
+press (PRESS_ENDS_KBD_LATCH) or the `0x0047`**. That is the `_player_body_moving` item
+§1z-db.6 / §1z-dc.6 both left open, and it is now the next consumer to derive, on displacement.
+
+### 1z-dd.5 ★★★ The ghost, on the tape — §1z-cp.3 exactly, at its largest
+
+Leg A, joined to the tape (drawn = the client's world-1 body; w0 = its world-0 copy; both agree
+to 0 u throughout the hold):
+
+| t | client | server |
+|---|---|---|
+| 27.0–34.9 | body at **(10488, 8117)**, unmoved; Hatcher at (10458, 8054), 70 u | swings exchange at 70 u |
+| 30.36 / 30.78 / 31.28 / 31.51 | four `0x003D`, all `pos (10488, 8117)`, headings −115° → −74° | each arms a 765–768 u ray, `clip=clear`, a **520 u** `KBD LEAD` sent; model drift 115 → 144 → 72 u |
+| 31.51 → 34.90 | **3.39 s of silence**, body unmoved | the model walks the whole lead: `ours = (10633, 7618)`, **drift 520.0 u** |
+| 32.06 → 33.64 | | four `FOLLOW` orders march the Hatcher to (10528, 7979) → (10633, 7618) — **the model** |
+| 34.15 | Hatcher drawn at (10633, 7618), **520 u from the body** | "halts … **0 u from the player**"; `attack_started` |
+| 34.76 | | **`damage 3 to the player` — landed from 520 u** |
+| 34.90 | body moves at last: heading −74.7°, 71 u in 0.5 s | |
+
+The owner's sentence is this table. Leg B is the same shape, smaller (worst drift 144 u).
+`sessionscore` REDs both legs on it — phantom legs **13 of 33** and **20 of 47** armed, worst leg
+768 u; snaps 2 and 1. §1z-cp.3's max was 259.2 u; **today's is 520.0 u, the lead cap itself**,
+because the report gap reached 3.39 s (§1z-cq.2's first-gap structure: nothing arrives to refute
+the model until the body finally moves). §1z-cq's refutations of every retrospective predicate
+stand, untouched. **New here: a THIRD consumer of the model** — the NPC's halt-in-reach and swing
+read the same `state["pos"]` the follow does, so a hostile can hit the player from wherever the
+phantom is (34.15–34.76). Recorded, not fixed: it is the same defect.
+
+### 1z-dd.6 ★★ CONTESTED — what blocks the body: a correction to §1z-cp.3's "agent collision is NOT the blocker"
+
+§1z-cp.3 ruled the Hatcher out **on distance alone** (68–265 u at the eight reports). The angle
+between the held heading and the Hatcher's bearing was never computed. Today, at every still
+report of the hold:
+
+| t | heading vs Hatcher's bearing | Hatcher at | body |
+|---|---|---|---|
+| A 30.36 | **0.0°** | 70 u | still |
+| A 30.78 | 0.9° | 70 u | still |
+| A 31.28 | 26.6° | 70 u | still |
+| A 31.51 | 41.4° (heading −73.9°) | 70 u | still |
+| **A 34.90** | 1.0° (heading **−74.7°**) | **496 u** | **moves, 71 u / 0.5 s** |
+| B 18.63 | 7.0° | 76 u | still |
+| B 22.60 | 5.3° | 72 u | still |
+
+**Same point, same heading to within 1°, the Hatcher 70 u away against 496 u away — the body
+stands, then walks.** The corner's WALLS are in our mesh: heading 107° clips at 0 u, −59° to −67°
+wall-slides 48 u to a vertex at bearing −73°. The OPEN sector (−74° to −131°) is where the
+Hatcher stood, and our zero-width ray walked the model straight through its body (`clip=clear`,
+768 u, at 0.0° off). Two blockers the position model lacks, both the client's own: **(a) the
+other agent's disc** — the client's resolver stops a body at `r + r + 56` (`approach_tick`'s
+docstring, decoded there); **(b) the body's own radius against a wall vertex** — a −75° ray
+misses the −73° vertex by 1.7 u, a body does not, and the body's 142 u/s at 34.90 is a slide
+along that wall once the Hatcher is out of the way. **CONTESTED, not OBSERVED**, because leg B's
+19.23–21.47 (headings 56–72° off the Hatcher, our mesh's wall 48 u ahead, body still) is not
+explained by (a) alone; (b) is a RECONSTRUCTION with the radius unread; and §1z-cp.3's 265 u
+cases are the wall and nothing else. Two things are true at once and only one was written down.
+
+**Registered, not started — the candidate §1z-cq did not list, and it is not retrospective:** read
+the agents' collision radii from the client (the `r + r + 56` rule is already decoded; the radius
+field is not), then clip the keyboard lead as a **swept disc** against trapezoid edges and against
+live agents' discs, at grant time. **Retail census FIRST:** does ArenaNet's `0x0029` ever grant a
+player lead whose chord passes through a live NPC's disc? If it does, retail's server does not
+clip on agents and the candidate is refuted before it is built.
+
+### 1z-dd.7 Open, and the next run
+
+* **P4 is pending**: the owner's verbatim answer to *"In which leg could you actually hit the
+  Hatcher while pressed into the wall?"* — asked, recorded when answered.
+* **Re-run RUN-1zDB's two legs under HEAD** (the second door now gated), with the regime that
+  exposes: hold the key **into the wall, not toward the Hatcher**, and keep attacking; the floors
+  stand as registered. §1z-dd.4's freeze prediction is a free read on the same tape (`chain_pause`
+  rows with the target kept will show `charged`, and the inter-swing gap in the hold).
+* §1z-dd.4's pause fix and §1z-dd.6's swept-disc clip, in that order, each with its own arm.

@@ -131,3 +131,28 @@ elimination, which is what makes P3 checkable at all.
 * **The cast half of `cancel_on_move`**, which still fires on the report on both arms. The
   bar is empty by design (`--skills 0,...`) so no cast happens; that is scoping, not
   evidence about casts.
+
+## 9. RESULT — ran 2026-09-10, both legs, owner-driven (MOVECODE-1z-dd)
+
+Captures `20260910T141412` (A) and `20260910T141651` (B); the owner ended each leg after killing
+the Hatcher (52 s and 43 s). Full record: [FINDINGS §1z-dd](FINDINGS.md).
+
+| clause | verdict | reading |
+|---|---|---|
+| swing floor (≥ 12 per leg) | **met** | 15 + 15 |
+| arm B exposure (≥ 8 sub-1 u windups) | **NOT MET — 0** | 19 still reports in B, every one BETWEEN swings, none inside a windup |
+| **P1** still-cancels B ≥ 50 %, A 0 | **ABORT** | unreadable: B's 2 of 15 are the two reports that did land in a windup; A's 0 is not scored |
+| **P2** landed A ≥ 80 %, B ≤ 50 % | **ABORT** | 86.7 % both arms — no exposure, no separation |
+| **P3** every silent swing has a `swing_verdict` | **GREEN, 4 of 4** | A: `move-ended-order`, `reach` 146.9 u; B: `cancel:movement` ×2 |
+| **P4** the owner's verbatim answer | **pending** | not yet asked in those words |
+| **P5** `chain_pause` free read | **NAMED** | every mid-chain moving tick left through `no-target` — the target-forget on the move |
+
+**What the run found instead**, on the one still-report-in-windup it did produce (A, t=30.36):
+the gate suppressed the wire stop and the same report forgot the target through an ungated door,
+so the swing dropped as `move-ended-order` 62 ms before landing — silently. Shipped under the
+same flag (§1z-dd.3). And the ghost the owner described is §1z-cp.3's corner at 520 u drift, with
+the Hatcher walking to the phantom and landing a hit from there (§1z-dd.5), plus a CONTESTED
+correction: the Hatcher's own body is one of the two blockers in the corner (§1z-dd.6).
+
+**Re-run under HEAD** with the regime that exposes — hold the key INTO THE WALL (not toward the
+Hatcher) and keep attacking — same two legs, same floors.
