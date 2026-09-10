@@ -10515,7 +10515,19 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   comment that had called value 8 a single sighting from one capture's count.
   Proven red by setting the reward to the Wolf's contaminated 126. Floor 6, the
   vault-less §1),
-  `toolkit/authsrv/test_skilldamage.py` (**SKILLS-HN (2026-09-09) flipped §8's
+  `toolkit/authsrv/test_skilldamage.py` (**SKILLS-FA (2026-09-09) added §11–§12,
+  floor 44 → 57**: an incoming `Fire damage` cast scales by the player's ONE
+  elemental rating (25, not the physical 45 — the `+20 vs. physical` never reaches
+  a spell), Flare's 20 at rank 0 lands as 36.68 = 20 × 2^((60−25)/40), Holy
+  Strike stays exactly its number with the term on, `--no-spell-armour` and
+  `--no-armour-term` each restore the stated amount; and §12 reads the live
+  corpus through `spellhitjoin.py` — every cast announced by a property-60 (103
+  of 103), one caster + one skill + one target is ONE value on every pair with
+  ≥ 3 hits (11 pairs, 68 hits, the player's own 4 of 4), the swing control shows
+  ≥ 3 values on 18 of 18 pairs, Mind Burn's second packet is a twin 16 (39), and
+  the one two-hit two-valued pair is pinned BY NAME as the mixed
+  Fireball + Incendiary Bonds batch so a second one reddens. §12 skips by name
+  without the vault. **SKILLS-HN (2026-09-09) flipped §8's
   overheal check**: it used to pin "a heal on a FULL bar sends nothing ... overheal
   is silent in retail too, no green number" — a reconstruction; retail sends the
   55 onto full pools (`healjoin.py` P4, 46 witnesses) and the number is blue. Now:

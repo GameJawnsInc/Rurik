@@ -27,6 +27,7 @@ server resolves lands on a .5 at any rank 0..15.
 """
 
 import os
+import struct
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -43,7 +44,9 @@ import effects  # noqa: E402
 # (S5) + 3 rank chain (S6) + 2 wire (S7). Nothing here is conditional: every
 # section reads content rows that ship in the repo plus the vault overlay, so
 # a short run means a section stopped rather than passed.
-LEDGER = checks.Ledger("skill damage", floor=44)   # SKILLS-HN +4, from the green run
+# SKILLS-HN +4 (44), SKILLS-FA +13 (57: 7 model + 6 corpus), each from its
+# green run. Section 12 needs the live corpus and declares a skip without it.
+LEDGER = checks.Ledger("skill damage", floor=57)
 check = LEDGER.ok
 
 
@@ -370,6 +373,145 @@ def main():
           f"{sent[0][1] if sent else sent} -- not the inflicting skill's. "
           f"That is what retail carries: the corpus's six condition applies "
           f"name 480 and 481, never the skill that caused them")
+
+    print("\n11. an INCOMING fire spell respects the player's armour: ONE rating, "
+          "ELEMENTAL, no location roll (SKILLS-FA)")
+    # 39.5 named this the one real gap in the enemy's skill path and 39.6 left
+    # it unbuilt because GWW is ambiguous about WHICH rating a spell scales
+    # against. studies/skills 43 settled the shape on retail's wire
+    # (spellhitjoin.py, section 12 below): one caster + one skill + one
+    # target is one value, every pair. The unit checks here are the model;
+    # the corpus check is the evidence.
+    elem = [authsrv.player_armour_at(k, physical=False)
+            for k, _w in authsrv.HIT_LOCATION_ODDS]
+    phys = [authsrv.player_armour_at(k, physical=True)
+            for k, _w in authsrv.HIT_LOCATION_ODDS]
+    check(len(set(elem)) == 1 and elem[0] == 25.0 and len(set(phys)) == 1
+          and phys[0] == 45.0,
+          "the five pieces read 25 elemental and 45 physical, all alike",
+          f"elemental {elem}, physical {phys} -- identifier 572 is the rating "
+          f"and 527 the `+20 vs. physical` (content/items.toml). Alike, so a "
+          f"single rating and a location roll are byte-identical on the wire "
+          f"today; what this section pins is WHICH number reaches a spell")
+    check(authsrv.player_spell_armour() == 25.0,
+          "and a spell resolves against the ELEMENTAL 25, not the physical 45",
+          f"{authsrv.player_spell_armour()} -- the `+20 vs. physical damage` "
+          f"is a physical bonus; GWW's own worked example counts the "
+          f"Elementalist's `+10 vs. Elemental` for nothing against an attack")
+    check(authsrv.spell_armour_for(194) == 25.0
+          and authsrv.spell_armour_for(312) is None
+          and authsrv.spell_armour_for(322) is None,
+          "Flare's `Fire damage` respects it; Holy Strike's `Holy damage` and "
+          "Power Attack's `+ Damage` do not",
+          f"194 -> {authsrv.spell_armour_for(194)}, 312 -> "
+          f"{authsrv.spell_armour_for(312)}, 322 -> "
+          f"{authsrv.spell_armour_for(322)}. WIKI (GWW, \"Damage\" sec. "
+          f"Properties): holy and untyped skill damage ignore armour, and "
+          f"`+<number>` rides an armour-respecting swing -- 39.2's rule, "
+          f"keyed on the LABEL and never on \"is it a skill\"")
+
+    # The cast itself, at rank 0 so Flare's 20 scales to 36.68 and does not
+    # kill the 100-pool player (at rank 12 the 56 becomes 102.7, an overkill
+    # the wire would carry as 1.0 -- the wiki's "below 60 takes MORE").
+    def _cast(skill_id, **flags):
+        saved = {k: getattr(authsrv, k) for k in flags}
+        saved_rank = authsrv.ENEMY_SKILL_RANK
+        out = []
+        st = {"agents": {}, "pos": (0.0, 0.0)}
+        ag = {"name": "t", "dead": False, "last_hit": 0.0, "max_health": 100.0,
+              "health": 100.0, "pos": (0.0, 0.0), "casting": 0,
+              "skills": ((skill_id, 1.0, 0.0),), "skill_ready": [0.0]}
+        st["agents"][10] = ag
+        try:
+            for k, v in flags.items():
+                setattr(authsrv, k, v)
+            authsrv.ENEMY_SKILL_RANK = 0
+            authsrv.land_skill(
+                lambda op, vals, label="", quiet=False: out.append((op, vals, label)),
+                st, 10, ag, 0)
+        finally:
+            for k, v in saved.items():
+                setattr(authsrv, k, v)
+            authsrv.ENEMY_SKILL_RANK = saved_rank
+        # The float rides the wire as its f32 bit pattern (v[3] is a dword).
+        dmg = [struct.unpack("<f", struct.pack("<I", v[3] & 0xFFFFFFFF))[0]
+               for op, v, _l in out
+               if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET
+               and v[0] == agents.PROP_DAMAGE]
+        return st, dmg
+
+    mult = authsrv.armour_multiplier(25.0)          # 2^((60-25)/40) = 1.834
+    st, dmg = _cast(194)
+    want = 20.0 * mult
+    check(len(dmg) == 1 and abs(dmg[0] + want / 100.0) < 1e-5   # f32 on the wire
+          and abs(st["player_health"] - (100.0 - want)) < 1e-6,
+          f"Flare's 20 lands as {want:.2f} against AR 25 -- the wiki's own "
+          f"multiplier, 2^((60-25)/40) = {mult:.4f}",
+          f"sent {dmg}, health {st['player_health']}. Below the 60 baseline "
+          f"the player takes MORE than the stated amount, which is what GWW "
+          f"says happens to an under-armoured target and what this server "
+          f"used to get backwards by dealing the stated 20")
+    st, dmg = _cast(194, SPELL_ARMOUR=False)
+    check(len(dmg) == 1 and abs(dmg[0] + 0.20) < 1e-6,
+          "`--no-spell-armour` restores the stated 20 (the revert arm)",
+          f"sent {dmg}")
+    st, dmg = _cast(194, ARMOUR_TERM=False)
+    check(len(dmg) == 1 and abs(dmg[0] + 0.20) < 1e-6,
+          "and so does `--no-armour-term`, the general control",
+          f"sent {dmg} -- a session that drops the swing's armour maths "
+          f"drops the spell's with it")
+    st, dmg = _cast(312)
+    check(len(dmg) == 1 and abs(dmg[0] + 0.10) < 1e-6,
+          "CONTROL: Holy Strike's 10 at rank 0 is still exactly 10 with the "
+          "term ON",
+          f"sent {dmg} -- armour-ignoring by type, untouched by this default")
+
+    print("\n12. the corpus: one caster, one skill, one target is ONE value "
+          "(spellhitjoin)")
+    # P1-P4 in spellhitjoin's own words. A location roll on a set whose
+    # pieces differ would put a second bucket on some pair; none has one.
+    # FLOORS, not exact values -- the live corpus grows.
+    try:
+        import spellhitjoin
+        sc = spellhitjoin.score(spellhitjoin.census())
+    except Exception as exc:                              # noqa: BLE001
+        LEDGER.skip("12. the corpus (spellhitjoin)",
+                    f"no live corpus to read on this machine: {exc!r}")
+        return LEDGER.verdict()
+    check(sc["n_cast"] >= 100 and sc["announced"] >= 0.95 * sc["n_cast"],
+          "P1 cast damage is announced by a property-60 from its cause",
+          f"{sc['announced']} of {sc['n_cast']} inside 4 s (floor 100, 95%)")
+    check(sc["pairs"] >= 10 and sc["pair_hits"] >= 60
+          and not sc["multi_valued"],
+          "P2 every (caster, skill, target) pair with >= 3 hits is ONE value",
+          f"{sc['pairs']} pairs over {sc['pair_hits']} hits, skills "
+          f"{sc['skills']}, multi-valued {sc['multi_valued']} -- a 1-in-8 "
+          f"head roll on any armour difference leaves one bucket with "
+          f"probability (7/8)^n, 0.03% at n = 60; DoT ticks set aside "
+          f"{sc['ticks_set_aside']}")
+    two = sc["two_hit_two_valued"]
+    check(len(two) <= 1 and all(k.startswith("10 186 12") for k in two),
+          "and the pairs BELOW the floor with two values are the one named "
+          "mixed batch, Fireball + Incendiary Bonds' payoff onto agent 12",
+          f"{two} -- the hex-end payoff lands 3.000 s after a 1 s cast and "
+          f"the projectile 0.4 s after its 58, in one batch (43.5). A second "
+          f"such pair is a new fact, not noise: read it before raising this")
+    check(len(sc["onto_player"]) >= 1
+          and all(n >= 3 and len(vals) == 1
+                  for n, vals in sc["onto_player"].values()),
+          "and the pairs onto the connection's OWN player are one value too",
+          f"{sc['onto_player']} -- the player is the one body whose armour "
+          f"this server models")
+    check(sc["swing_pairs"] >= 5 and sc["swing_pairs_3plus"] == sc["swing_pairs"],
+          "P3 CONTROL: every swing pair with >= 10 hits shows >= 3 values",
+          f"{sc['swing_pairs_3plus']} of {sc['swing_pairs']} (min distinct "
+          f"{sc['swing_min_distinct']}) -- the instrument sees a weapon's "
+          f"range where there is one")
+    check(sc["mind_burn_twins"] >= 10,
+          "P4 Mind Burn's conditional second packet is a twin 16 in one batch",
+          f"{sc['mind_burn_twins']} -- WIKI (GWW, \"Mind Burn\"): an "
+          f"additional 15..60 if the caster has more Energy; the wire carries "
+          f"it as a second identical packet, not a doubled one")
 
     return LEDGER.verdict()
 

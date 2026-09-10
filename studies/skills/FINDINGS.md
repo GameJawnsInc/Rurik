@@ -5138,6 +5138,12 @@ the swing path, which is where `studies/isle` rung 7 measured them.
 
 ### 39.6 Why the Flare fix is NOT made here — the armour VALUE is unsettled
 
+> **SUPERSEDED 2026-09-09 by §43 (SKILLS-FA).** The probe this section proposes
+> could not have answered the question — on loopback OUR server computes the
+> number — and the corpus did: one caster, one skill, one target is one value on
+> every pair (68 of 68 hits, the player's included). The term is shipped; the
+> rest of this section is kept as the record of why it waited.
+
 The type question is settled (§39.2): Fire is armour-respecting. **Which armour
 number a spell scales against is not**, and GWW is genuinely ambiguous on it.
 
@@ -5626,3 +5632,145 @@ t = 6.81 / 9.82 / 13.82 / 17.84 s of the game capture. Read off the frames
 **SKILLS-HN is closed on every clause.** What remains open in §42.5 is the
 four negative 55s and the periodic 0.04/0.08 gains, neither of which is the
 heal number's question.
+
+---
+
+## 43. SKILLS-FA — the incoming fire spell's armour: ONE rating, elemental, no location roll — and the probe §39.6 registered could never have answered it
+
+**Desk and corpus, 2026-09-09, pinned build 38797. No client run, and §43.1 says
+why one would have measured nothing.** Closes §39.5's "INCOMING is fixable" and
+§39.6's "the armour VALUE is unsettled". Shipped: `ARMOUR_RESPECTING_MEANS`,
+`SPELL_ARMOUR`, `player_spell_armour`, `spell_armour_for` and the term in
+`land_skill` (`toolkit/authsrv/authsrv.py`); `--no-spell-armour` reverts;
+`toolkit/authsrv/spellhitjoin.py` is the instrument; `test_skilldamage` §11–§12,
+floor 44 → 57.
+
+### 43.1 The registered probe measures our own code, not retail
+
+§39.6 proposed "one caged loopback run with `--enemy-skills 194` and a deliberately
+lopsided armour set … if the damage is single-valued the spell resolves against one
+rating; if it comes in five buckets it rolls a location". On loopback the number
+in the property-16 packet is computed by `land_skill` — by us. Whatever rule we
+wrote in would be the rule the run "found". That is the offline-agreement trap
+`CLAUDE.md` names ("agreement between two of our own components proves
+nothing"), and it is why this section is a corpus read and not a run. The client
+draws whatever fraction arrives; it holds no opinion about armour.
+
+### 43.2 The wiki, re-read: every hit-location sentence says "attack"
+
+> **WIKI (GWW, "Armor rating", as fetched 2026-09-09):** "Exact armor depends on
+> the damage type, but also in the player's and heroes' case, on the piece of the
+> armor that is hit." … "Each location has different odds to be hit. The chest has
+> the highest chances (three out of every eight **attacks**) …" … "The damage
+> multiplier can also be found for *non attack* skills if the attacker is the same
+> level as you with the equation" — and the equation names no location.
+
+> **WIKI (GWW, "Damage calculation" §Hit locations, as fetched 2026-09-09):**
+> "Any given **attack** on a player will hit one of these five locations, and only
+> the armor rating of this location is considered." The §Skills formula that
+> follows is `[Skill Damage] × 2^((3 × [Character Level] − 60)/40)` against a
+> single armor level.
+
+Ambiguous as §39.6 said, but leaning: the roll is described for attacks three
+times and never once for a spell. The wiki is a player-observation source
+(WIKI, strong for what a player sees); the instrument below is what a player
+could not see — many casts from one caster onto one target, each packet read.
+
+### 43.3 The instrument: `spellhitjoin.py`, predictions first — OBSERVED
+
+The join is the cast announcement the wire already carries: `0x00A0 [60
+SKILL_ACTIVATED, caster, target, skill]` (`agents.GV_SKILL_ACTIVATED`), then the
+damage in the batch the caster's property-58 closes, one activation later. The
+`age` column reproduces the wiki's activation times without being told them —
+Mind Burn 0.991–1.017 s (GWW: 1), Fireball 1.488–1.55 s (GWW: 1½) — which is what
+says the join is right. A Fire Storm tick shares batches with casts from the same
+caster; a value that also occurs as a no-58 hit from the same cause onto the same
+target within 5 s is set aside as a tick (12 of 103).
+
+| | predicted | measured |
+|---|---|---|
+| P1 cast damage is announced by a property-60 inside 4 s | ≥ 95 % | **103 of 103** |
+| P2 one caster + one skill + one target with ≥ 3 hits is ONE value | ≥ 10 pairs, ≥ 60 hits, 0 multi-valued | **11 pairs, 68 hits, 0 multi-valued** (all Mind Burn, skill 185) |
+| — onto the connection's OWN player | one value | **4 of 4 at 0.06042 = 29 on a 480 pool** (agent 11, RA, `20260817T231139`) |
+| P3 CONTROL: a swing pair with ≥ 10 hits shows ≥ 3 values | every pair | **18 of 18** (min 3 distinct) — the instrument sees a weapon's range where there is one |
+| P4 Mind Burn's conditional second packet is a twin 16 in one batch | ≥ 10 | **39** |
+
+P4 is a small wiki confirmation nobody asked for: GWW "Mind Burn" — "if you have
+more Energy than target foe, that foe and all adjacent foes take an additional
+15…60 fire damage" — and the wire carries it as a second identical packet, not a
+doubled one. The eight bodies are the eight Random Arenas characters of the
+2026-08-17 session (agents 7–14, two Elementalists casting); every one of the
+eleven pairs reads one fraction for the whole fight, the player's included.
+
+**What P2 says.** Under a 1-in-8 head roll on a set whose head differs from its
+chest by ANY amount, the chance of 68 hits landing in one bucket across eleven
+pairs is (7/8)^68 ≈ 1 × 10⁻⁴. So either spells resolve against one rating, or
+every one of eight arena characters wore five pieces of equal elemental armour.
+
+### 43.4 What the corpus cannot separate, said plainly
+
+A PvP character's five pieces usually ARE equal — max-rating set, one insignia
+throughout — and the arena characters' equipment is not on the wire (armour has
+no property id, `studies/presearing/R4C2-FEASIBILITY.md`). P2 refutes a location
+roll only *given* some per-piece difference, and that premise is unmeasured for
+those eight bodies. What tips it is the shape of the wiki (three "attack"
+sentences, a location-free spell formula) plus §43.5's simultaneity argument.
+**Label: the single rating is CORROBORATED (wiki wording + 68/68 on the wire),
+not OBSERVED against a known-lopsided set.** The one witness that would make it
+OBSERVED is a live one: a character whose head piece is missing or weaker taking
+a spell — Pre-Searing's starter set has no headgear, so the owner's first live
+character was exactly that body, and nothing cast at it in `20260807T143055`.
+An R0b runsheet line, human-driven; not scheduled here.
+
+### 43.5 The one two-valued pair, and it argues the same way
+
+`--pairs` lists one pair with two values at two hits — Fireball (186) from caster
+10 onto agent 12: 0.17658 and 0.12973 (98 and 72 on 555). Read in context it is a
+**mixed batch**, not a second bucket: caster 10 announced Incendiary Bonds (179) at
+−3.985 s and Fireball at −1.753 s; Incendiary's 1 s cast ends at −2.985 and its
+3 s hex ends at **+0.000**, which is exactly when the 72 lands; Fireball's 58 is at
+−0.252 and its projectile's 98 lands 0.4 s later. Same shape at 744.453/744.568
+and 752.803/752.846. The tool names these (`two_hit_two_valued`) and the test pins
+the count at ≤ 1 by name, so a second such pair reddens rather than hides.
+
+And the simultaneity is evidence on its own: at 744.45 the 98/61/53 packets land
+on agents 12/11/13 in one instant and the 72/45/39 packets 115 ms later, **the same
+0.735 ratio on three different bodies at once**. A per-hit location roll cannot
+give three characters the same ratio in the same tick; a second skill's payoff
+can. (Which rating puts Incendiary Bonds' 15…67 at 72 on that body is not
+resolved — the caster's rank and the target's rating are both off the wire.)
+
+### 43.6 Shipped, and the number it changes on our wire
+
+- `ARMOUR_RESPECTING_MEANS = {"Fire damage"}` beside `SCALE_MEANS_DAMAGE` —
+  §39.2's rule: the damage TYPE and its source decide, never "is it a skill".
+  `Holy damage` (a skill's) and `+ Damage` stay armour-ignoring; §39.5's three
+  traps hold.
+- `player_spell_armour()` — the ELEMENTAL rating (`physical=False`): the pieces'
+  `+20 vs. physical` does not reach a fire spell. Every piece this server equips
+  reads 25 elemental / 45 physical, so today a single rating and a location roll
+  are byte-identical on the wire; what is shipped is the claim. If the five ever
+  disagree it takes the chest's and says so on stdout — UNVERIFIED which rating a
+  lopsided set uses, and now impossible to ship silently.
+- `land_skill`: `base *= armour_multiplier(spell_ar)` before `taker_damage`,
+  GWW's order (the exponent is the damage calculation; Frenzy and a conversion
+  are "taken into account at the end").
+- **Flare at rank 12 on our AR-25 player is 56 × 2^((60−25)/40) = 102.7** — more
+  than the stated amount, the wiki's "a target with net armor below 60 takes
+  more" — and on a 100 pool that is an overkill the wire carries as 1.0. It used
+  to land as exactly 56. `--no-spell-armour` restores that; `--no-armour-term`
+  drops it with the swing's term.
+- **Not modelled, named:** the caster's LEVEL term (`2^((3L−60)/40)` on skill
+  damage). `ENEMY_SKILL_RANK = 12` stands in for a level-20 caster, and the
+  Hatcher's level is a placeholder (`content/npcs.toml`); when a real level lands
+  this is the next line.
+- `test_skilldamage` §11 (7 checks: the ratings, the label gate, the 36.68, both
+  reverts, the Holy control) and §12 (6: P1–P4, the player's pairs, the named
+  two-hit exception). Floor 44 → 57. §12 skips by name without the vault.
+
+### 43.7 Status
+
+§39.5 INCOMING: **CLOSED, shipped.** §39.6's probe: **struck** — it could not
+answer. The shape: **CORROBORATED** single elemental rating (§43.4's caveat is
+the residual). OUTGOING (`hit_enemy(exact=…)`) is unchanged and still blocked on a
+creature armour value that no channel carries.

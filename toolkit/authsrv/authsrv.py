@@ -2682,6 +2682,24 @@ SCALE_MEANS_DAMAGE = {
     "+ Damage": "additive",
 }
 
+# WHICH OF THOSE LABELS RESPECTS THE TAKER'S ARMOUR. The rule is the DAMAGE
+# TYPE plus its source, never "skill versus swing" (studies/skills 39.2):
+# WIKI (GWW, "Damage" sec. Properties, rev. 2020-08-11) -- shadow, holy and
+# untyped skill damage "ignore the target's armor and the skill deals exactly
+# its stated amount"; "+<number> damage" always comes in addition to regular,
+# armor-respecting damage. So `Holy damage` (a skill's) and `+ Damage` stay
+# out of this set, and `Fire damage` -- elemental -- is in it. A label absent
+# from SCALE_MEANS_DAMAGE never reaches the check.
+#
+# ONE RATING, ELEMENTAL, NO LOCATION ROLL -- studies/skills 43 (SKILLS-FA).
+# The corpus decided the shape the wiki leaves open: every hit-location
+# sentence GWW has says "attack", and retail's own casts onto eight arena
+# characters -- Mind Burn, one caster, one target -- read ONE value per pair
+# on every pair (spellhitjoin.py P2), where a 1-in-8 head roll over that many
+# hits would have shown a second bucket unless all eight sets were uniform.
+# The swing path keeps its roll (that one IS wiki's rule for attacks).
+ARMOUR_RESPECTING_MEANS = frozenset({"Fire damage"})
+
 # The healing labels, and they are a different DIRECTION rather than a negative
 # damage: they go out on property 55, positive, which the corpus identifies as
 # the health-gain channel (agents.GV_HEALTH_GAIN carries the measurement).
@@ -10563,6 +10581,65 @@ def player_armour_at(location_key, physical=True):
     return rating + bonus_armour(bonus)
 
 
+def player_spell_armour():
+    """The ONE rating an incoming armour-respecting spell resolves against.
+
+    ELEMENTAL -- `physical=False`, so the pieces' `+20 vs. physical damage`
+    does not reach a fire spell (WIKI, GWW "Damage calculation" sec. Example
+    of armor effect: the Elementalist's `+10 vs. Elemental` counts against a
+    physical attack for nothing, and the Warrior's +20 vs. physical the same
+    way for a spell). Today every piece this server equips reads 25 elemental
+    and 45 physical (content/items.toml, identifier 572 + 527), so a single
+    rating and a location roll are byte-identical on the wire; what differs
+    is the claim, and the corpus's is the single value (studies/skills 43).
+
+    IF THE FIVE PIECES EVER DISAGREE, this takes the CHEST'S -- the most
+    likely location under the wiki's own odds -- and says so on stdout once
+    per session, because which rating a spell scales against on a lopsided
+    set is exactly the thing no capture has yet measured (43.5). None when
+    the player is unarmoured, and the caller then deals the stated amount.
+    """
+    ratings = {}
+    for key, _w in HIT_LOCATION_ODDS:
+        ar = player_armour_at(key, physical=False)
+        if ar is not None:
+            ratings[key] = ar
+    if not ratings:
+        return None
+    if len(set(ratings.values())) > 1 and not _SPELL_ARMOUR_WARNED:
+        _SPELL_ARMOUR_WARNED.append(True)
+        print("SPELL ARMOUR: the five pieces disagree elementally "
+              f"{ratings}; a spell resolves against the CHEST's rating "
+              "-- UNVERIFIED which one retail uses on a lopsided set "
+              "(studies/skills 43.5)", flush=True)
+    chest = HIT_LOCATION_ODDS[0][0]
+    return ratings.get(chest, next(iter(ratings.values())))
+
+
+_SPELL_ARMOUR_WARNED = []
+
+
+def spell_armour_for(skill_id):
+    """The rating an incoming cast of `skill_id` scales by, or None (unscaled).
+
+    None means "deal the stated amount": the label is armour-ignoring, or
+    the term is off, or the player wears nothing. Read from the same
+    `skill_effect` row `skill_damage` reads, so a skill that resolves no
+    damage there resolves no armour here either.
+    """
+    if not (SPELL_ARMOUR and ARMOUR_TERM):
+        return None
+    try:
+        row = agents.WORLD.get("skill_effect", str(skill_id))
+    except Exception:                                     # noqa: BLE001
+        return None
+    if row.get("scale_means") not in ARMOUR_RESPECTING_MEANS:
+        return None
+    if SCALE_MEANS_DAMAGE.get(row.get("scale_means")) != "standalone":
+        return None
+    return player_spell_armour()
+
+
 def bonus_armour(net):
     """The Bonus-armour category's contribution, WITH its documented cap.
 
@@ -10722,6 +10799,11 @@ PLAYER_SWING_DAMAGE = weapon_damage_range(agents.STARTER_HAMMER)
 # a +N% damage modifier is decoded onto an item, that is where it comes from --
 # not from a number copied out of someone else's weapon.
 ARMOUR_TERM = True          # --no-armour-term is the control
+# An incoming armour-respecting SPELL scales by the player's armour too --
+# SKILLS-FA (studies/skills 43). Its own revert, because it is its own default:
+# `--no-spell-armour` restores "a cast deals its stated amount", and
+# `--no-armour-term` (the general control) drops it along with the swing's.
+SPELL_ARMOUR = True         # --no-spell-armour is the control
 ARMOUR_DIVISOR = 40.0
 # Weapon type -> the attribute it scales on. Hammer (item_type 15) scales on
 # Hammer Mastery (19). RETAIL PUTS THIS ON THE ITEM, in modifier identifier 633
@@ -18129,9 +18211,19 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # damages, so nothing today can observe the reordering.)
     damage = skill_damage(skill_id, ENEMY_SKILL_RANK)
     dealt, conversion, frac = 0.0, None, None
+    # THE PLAYER'S ARMOUR, for the labels that respect it (SKILLS-FA). One
+    # elemental rating, no location roll -- `player_spell_armour` says why
+    # -- applied BEFORE the taker's own episodes, which is GWW's order (the
+    # armour exponent is part of the damage calculation; Frenzy's doubling
+    # and a conversion are "taken into account at the end", "Damage
+    # calculation" sec. Damage modifiers). 39.5 left this unfixed for a
+    # fortnight because the VALUE was unsettled; 43 settled the shape.
+    spell_ar = spell_armour_for(skill_id) if damage is not None else None
     if damage is not None:
-        dealt, conversion = taker_damage(state, PLAYER_AGENT_ID,
-                                         float(damage[0]))
+        base = float(damage[0])
+        if spell_ar is not None:
+            base *= armour_multiplier(spell_ar)
+        dealt, conversion = taker_damage(state, PLAYER_AGENT_ID, base)
         if dealt > 0:
             frac = _damage_fraction(dealt, player_max_health(state),
                                     agents.PROP_DAMAGE, f"skill {skill_id}")
@@ -18219,7 +18311,9 @@ def land_skill(send, state, agent_id, agent, conn_id):
          f"skill {skill_id} deals {dealt:.0f} to the player")
 
     print(f"[c{conn_id}] player hit by skill {skill_id}: "
-          f"{state['player_health']:.0f}/{player_max_health(state):.0f}", flush=True)
+          f"{state['player_health']:.0f}/{player_max_health(state):.0f}"
+          + (f" ({damage[0]} against AR {spell_ar:.0f} elemental)"
+             if spell_ar is not None else ""), flush=True)
 
     if state["player_health"] <= 0.0:
         kill_player(send, state, conn_id)
@@ -26136,6 +26230,13 @@ def main():
                     help="Do not spawn the standing hostile NPC. The world is "
                          "then the player alone, which is what most probes "
                          "assume and what every session before 2026-08-06 was.")
+    ap.add_argument("--no-spell-armour", action="store_true",
+                    help="an incoming armour-respecting spell (Flare's `Fire "
+                         "damage`) deals its stated amount instead of "
+                         "scaling by the player's elemental armour rating. "
+                         "The revert for SKILLS-FA (studies/skills 43); "
+                         "--no-armour-term drops it too, along with the "
+                         "swing's.")
     ap.add_argument("--no-armour-term", action="store_true",
                     help="drop the armour exponent and criticals from the "
                          "player's swing, leaving the weapon's raw range. The "
@@ -28315,6 +28416,11 @@ def main():
         EQUIP_WEAPON = False
         print("NO WEAPON: the character's four weapon slots stay empty.")
 
+    if a.no_spell_armour:
+        global SPELL_ARMOUR
+        SPELL_ARMOUR = False
+        print("NO SPELL ARMOUR: an incoming fire spell deals its stated "
+              "amount, unscaled by the player's armour.")
     if a.no_armour_term:
         global ARMOUR_TERM
         ARMOUR_TERM = False
