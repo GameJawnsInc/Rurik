@@ -8984,7 +8984,7 @@ the same-tick ALIAS**: the
   the patched-digest set was added). The docstring's changelog names each, which
   is the format that makes a moved census a result rather than a surprise. No
   vault, no client, no socket. Floor 49, ~2 s),
-  `toolkit/test_updatecheck.py` (the before/after update commands —
+  `toolkit/test_updatecheck.py` (**2026-09-10: the class-(a) census literal is no longer DUPLICATED here, floor 26 → 27.** It sat at 233 while the census reached 235 — `test_buildpins.py` moved on 09-08 and this side did not — the SECOND time that exact staleness has been paid for (the first, 86 against a census of 113, is recorded in the check's own changelog). The check's contract was only ever "the two agree", and its own string already admitted there is no second reading of the tree here: `updatecheck.capture()` calls the same `buildpins.scan()` over the same directory, so this was a spelling check on a human edit. The number is now READ from `test_buildpins.py`'s source (`len(live) == N`; it runs its checks at module level, so importing it would execute the whole file), with a companion check that the anchor still EXISTS — a version that silently found no number would pass vacuously, the failure mode the pair exists to refuse. Moving the census now takes one edit, in the instrument that owns it. Otherwise: the before/after update commands —
   `studies/crossbuild/PLAN.md` §11, and the one deliverable of that arc that
   expires if nobody runs it in time: an update is not schedulable and half the
   arc's measurements need a BEFORE state. **§1 is provenance and is the check

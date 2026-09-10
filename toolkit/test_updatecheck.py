@@ -33,6 +33,7 @@ THE CHECKS THAT EARN THE FILE:
 Sections 2-4 need no vault. §1 and §5 read the vaulted client. Floor 26, ~60 s.
 """
 import json
+import re
 import os
 import sys
 import tempfile
@@ -49,7 +50,10 @@ import updatecheck as UC                                     # noqa: E402
 import vaultpath                                             # noqa: E402
 from gwpe import PE                                          # noqa: E402
 
-LEDGER = checks.Ledger("update check", floor=26)
+# 2026-09-10: 26 -> 27. The census check split in two -- the anchor still
+# exists in test_buildpins.py (else this would pass vacuously), and the two
+# measurements agree. The number itself is no longer duplicated here.
+LEDGER = checks.Ledger("update check", floor=27)
 check = checks.adopt(LEDGER)
 
 
@@ -215,10 +219,35 @@ if exe:
     check(state["schema"]["messages.json"]["validated_against_build"] == pinned.BUILD,
           "the schema stamp is read from where it actually lives",
           "nested under `provenance`; the top level answers None")
-    check(len(state["pins"]) == 233,
-          "and the class-(a) census rides along, at 233",
-          f"{len(state['pins'])} -- and it must agree with test_buildpins.py's own "
-          f"literal, which is the SAME MEASUREMENT and not a second one; see the "
+    # THE NUMBER IS NOT WRITTEN HERE ANY MORE -- it is READ from
+    # test_buildpins.py, which is the instrument that owns the census.
+    # Rewritten 2026-09-10 after this literal sat at 233 while the census
+    # reached 235: test_buildpins moved on 2026-09-08 and this side did not.
+    # That is the SECOND time -- the string below records the first, at 86
+    # against a census of 113 -- and the check's own contract is "what matters
+    # at THIS site is only that the two agree", which a duplicated constant
+    # cannot deliver and a read one cannot break. test_buildpins runs its
+    # checks at MODULE level, so importing it would execute the whole file;
+    # the source is read instead, the same way test_pcspoof and test_probedoc
+    # pin the things they must agree with.
+    _bp_src = os.path.join(HERE, "test_buildpins.py")
+    _bp_census = None
+    if os.path.isfile(_bp_src):
+        with open(_bp_src, encoding="utf-8") as _fh:
+            _m = re.search(r"len\(live\)\s*==\s*(\d+)", _fh.read())
+        if _m:
+            _bp_census = int(_m.group(1))
+    check(_bp_census is not None,
+          "test_buildpins.py still states the class-(a) census as a literal",
+          "the anchor `len(live) == N` is gone -- without it this check has "
+          "nothing to agree WITH and would pass vacuously, which is the whole "
+          "failure mode it exists to refuse")
+    check(_bp_census is not None and len(state["pins"]) == _bp_census,
+          f"and the class-(a) census agrees with test_buildpins.py, at "
+          f"{_bp_census}",
+          f"{len(state['pins'])} here against {_bp_census} there -- the SAME "
+          f"MEASUREMENT and not a second one, which is why this site no longer "
+          f"carries its own copy of the number; see the "
           f"end of this string. Was 64 "
           f"until 2026-08-14, when this tooling was cherry-picked onto a `main` that "
           f"had gained seven more build-coupled constants (modelfile.py's FVF stride "
@@ -284,6 +313,6 @@ if exe:
           f"moved together, on purpose: a baseline that "
           f"quietly disagreed with the census it is a baseline OF is how an update "
           f"report goes green over the wrong tree. "
-          f"233 on 2026-08-29: +29 and two new files -- compositetrap.py 14 -> 27, gatetrace.py 0 -> 4 and movehook/readhook.py 0 -> 12, measured against a worktree at ad287a2 scanned with that tree's own instrument. The mitigation reading is on test_buildpins.py's copy and was worse than usual: nine of compositetrap's new pins were call-site VAs matched against return addresses and could never fire, and three of gatetrace's four are guarded by byte patterns that occur thousands of times. The compositetrap half is FIXED as of 2026-08-30 -- re-keyed to call+5 and guarded by a pinned-image decode of both caller maps in test_compositetrap.py 6 -- and the 233 -> 224 reduction that fix made available was deliberately NOT taken, because the nine had never fired only because they could not. Both literals stay at 233; see test_buildpins.py's detail for why. gatetrace's three are still open. AND THE SENTENCE THIS DETAIL USED TO OPEN WITH WAS FALSE, so it has been struck rather than renumbered. It read \"it must agree with test_buildpins.py's own literal, which is the same number asserted from the other side\". THERE IS NO OTHER SIDE. updatecheck.capture() calls the same buildpins.scan(HERE) over the same directory, and buildpins.baseline() is a sorted() over a generator with no de-duplication, so its length equals the live-row count BY CONSTRUCTION -- measured, len(live) = len(baseline) = 233. Nothing an adversary can do to the tree reddens this check without also reddening test_buildpins.py. What it catches is a HUMAN who edits one file and not the other, which is worth catching and has happened twice, but it is a spelling check on the edit and not a second reading of the tree. Two instruments that share a sampler are one theorem; the honest version of this check is the one that says so.")
+          f"233 on 2026-08-29: +29 and two new files -- compositetrap.py 14 -> 27, gatetrace.py 0 -> 4 and movehook/readhook.py 0 -> 12, measured against a worktree at ad287a2 scanned with that tree's own instrument. The mitigation reading is on test_buildpins.py's copy and was worse than usual: nine of compositetrap's new pins were call-site VAs matched against return addresses and could never fire, and three of gatetrace's four are guarded by byte patterns that occur thousands of times. The compositetrap half is FIXED as of 2026-08-30 -- re-keyed to call+5 and guarded by a pinned-image decode of both caller maps in test_compositetrap.py 6 -- and the 233 -> 224 reduction that fix made available was deliberately NOT taken, because the nine had never fired only because they could not. Both literals stay at 233; see test_buildpins.py's detail for why. gatetrace's three are still open. AND THE SENTENCE THIS DETAIL USED TO OPEN WITH WAS FALSE, so it has been struck rather than renumbered. It read \"it must agree with test_buildpins.py's own literal, which is the same number asserted from the other side\". THERE IS NO OTHER SIDE. updatecheck.capture() calls the same buildpins.scan(HERE) over the same directory, and buildpins.baseline() is a sorted() over a generator with no de-duplication, so its length equals the live-row count BY CONSTRUCTION -- measured, len(live) = len(baseline) = 233. Nothing an adversary can do to the tree reddens this check without also reddening test_buildpins.py. What it catches is a HUMAN who edits one file and not the other, which is worth catching and has happened twice, but it is a spelling check on the edit and not a second reading of the tree. Two instruments that share a sampler are one theorem; the honest version of this check is the one that says so. 235 on 2026-09-08: +2 and a 22nd file. AND ON 2026-09-10 THIS SITE STOPPED CARRYING THE NUMBER AT ALL. It had sat at 233 while the census reached 235 -- test_buildpins.py moved on 09-08 and this side did not -- which is the SECOND time this exact staleness has been paid for, the first being the 86-against-113 recorded above. The paragraph before this one already named the reason: there is no second reading of the tree here, only a spelling check on a human edit, and a spelling check is worth having only until you can delete the thing being mis-spelled. The literal is now READ out of test_buildpins.py (`len(live) == N`, matched from its source -- it runs its checks at module level, so importing it would execute the whole file), and a companion check asserts that anchor still EXISTS, because a version of this that silently found no number would pass vacuously and that is the failure mode the pair was built to refuse. Moving the census now takes one edit, in the instrument that owns it, and this site follows it for free.")
 
 sys.exit(LEDGER.verdict())
