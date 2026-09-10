@@ -19505,3 +19505,94 @@ whose lead was clipped or short, ~0.9–1.8 s after the report; `sessionscore`'s
 signature (the copy standing while the body moves) down from 1z-cw.6's p50 0.25 s per episode;
 and in the corner, either `regrant-stop` rows (the wall, no slide) or a run of `regrant` rows
 with `wall-slide` clips (the crawl) — the tape then says whether the crawl reached the body.
+
+---
+
+## 1z-dj. THE SWEPT-DISC CLIP, ASKED — **REFUTED as a server rule (retail's grants pass through 243 of 291 standing-NPC discs; the body radius against a wall was already refuted by §1z-cz.2's −2 u), and REPLACED by the rule the client actually runs: the mirror's avoidance pass halts the copy, and now the position model parks where it halts.** Validated on the ghost's own four reports
+
+**2026-09-10.** Ident `MOVECODE-1z-dj`. Asked by the owner after 1z-di, on §1z-dd.6's registered
+candidate. Desk census on the live corpus, a replay on the run's own tapes, then the ship.
+OBSERVED unless marked.
+
+### 1z-dj.1 The census that was registered first, and what it refuted
+
+§1z-dd.6 named two blockers the position model lacks: **(a)** another agent's disc, **(b)** the
+body's own radius against a wall vertex. Both were candidates for a swept-disc clip at grant time.
+
+* **(b) is refuted by a measurement already in the record.** §1z-cz.2: on map 146's open ground our
+  zero-width ray clip reproduces retail's grant length to **p50 −2 u** where retail clipped
+  (n = 25). A swept disc stops a body radius (~12 u, `0x0020` field 11) short of a wall head-on;
+  retail's server does not. The radius is a client-side collision fact, not a server grant rule.
+* **(a) is refuted on retail's own wire, prediction first.** Standing NPCs — kind 9 on
+  `WORLD_CREATE_AGENT`, never moved in the connection, 1,511 of them across the corpus — have
+  exact positions; players in outposts walk among them. Of 3,233 player leads, **291 chords reach
+  a standing NPC's disc (80 u) within the client's 60° cone; 243 pass THROUGH it** (the grant ends
+  beyond the disc's exit), **4 end at contact**, 44 other. Retail's server does not clip leads on
+  agents. (Two instrument notes for the next reader: `livewire.decode_conn` carries no creates —
+  the census runs on `cmsgstream`; on the retail wire `0x0020`'s kind sits at value 4 and the
+  position is the first vec2, one slot right of `agents.create_agent`'s list because the op word
+  leads.)
+
+**Why retail's grant goes through and the client does not:** the client's own avoidance pass
+(NPCTRACK-F14, decoded from `0x006011F0`): per other agent, closing → within the 60° cone →
+overlap `d ≤ rA + rB + 56 = 80 u` → then, in the client's order, the obstacle is the target →
+park; the target point is covered, or the retry counter is spent, or **the sidestep waypoint fails
+the mesh** (`0x0070A150`) → **halt in place**; otherwise **sidestep** around it and continue. On
+open ground the body walks around an NPC; a grant clipped at contact would strand the copy behind
+it — which is exactly why §1z-cg's door A extends a lead **past** a disc rather than stopping
+short. The corner is the case where the sidestep fails.
+
+### 1z-dj.2 ★★★ The instrument was already shipped, and it was right; the model never listened
+
+The AgTrack mirror runs that pass on the player's copy, against the hostiles' client models,
+**with the capture's own mesh** (`_agtrack_guard_seed` builds it from `MeshAdapter(pm)` and
+`_npc_obstacles`; 14 of 14 halts confirmed on the NPCTRACK tapes). The position model —
+`state["pos"]`, walked by the integrator toward `state["dest"]`, the operand of the NPC follow
+(§1z-cp.3) and of the reach (§1z-dd.5) — never consulted it.
+
+`avoidcensus.py` gained a `--mesh` arm (its replay was built `mesh=None`, so every waypoint passed
+and the corner could only sidestep). RUN-1zDB leg A, the ghost's tape:
+
+| | meshless replay | **with the mesh (as the live guard is)** |
+|---|---|---|
+| halts | 4 | **7 — at 30.36, 30.78, 31.28, 31.51 s, all at (10488, 8117)**, the corner hold's four reports (§1z-dd.5's table), then 38.27, 42.09, 46.33 |
+| mirror vs the client's world-0, moving | p90 348.4, **max 506.8** | p90 25.1, **max 103.8** |
+| the hybrid frame at the halts | p90 433.6, max 520.0 | p90 21.8, **max 25.2** |
+
+The mirror halted the copy at the Hatcher's disc on every grant of the hold; the model walked
+those same grants 520 u (§1z-dd.5). The residual 103.8 u sits at 38.02 s — the APPROACH re-pin
+(`the server's copy sat 250 u from the modelled click-leg end`), the approach's own model leg,
+another consumer.
+
+### 1z-dj.3 Shipped — `MODEL_PARKS_ON_AVOID_HALT`, `--no-model-avoid-halt`
+
+Every shadow tick (before the 2 Hz sampler's early return) reads the mirror's `n_avoid_halt`
+under the guard's lock; a **new** halt parks `state["pos"]` at the mirror's point, clears the
+integrator's `dest` and consumes `kbd_leg` (so neither 1z-di's arrival re-grant nor 1z-y's kill
+can re-arm a copy the client has halted); a `kbd_leg act=avoid-halt` row carries the point, how
+far the model was pulled back and the leg's dest; the console line says so. **Nothing is sent**:
+the client halted itself (`0x00601899`: velocity zero, both target blocks invalid) and a grant
+would only re-arm it into the same pass. The next report re-arms everything as usual.
+`test_kbdsync` §24o–24s, known-bad arm first, floor 231 → 236.
+
+### 1z-dj.4 What it covers, and the class it does not
+
+* **Leg A's class — the pass halts the copy, the model walks on**: covered, and on the specimen
+  the four halts land on the four reports.
+* **Leg B's class is different and is named, not hidden.** Replayed with the mesh its mirror still
+  diverges **514 u at 23.78 s**: the lead from (10481, 8071) at −144° was `clear 767` on our mesh,
+  the Hatcher lay outside the cone, the mirror walked it — and on the tape the client's world-0
+  stayed at (10498, 8081) while the drawn body set off. That is §1z-cq's own observation, *"the
+  client REFUSES our long leads while parked — 0 of 7 grants ≥ 400 u appear in either world
+  copy's m_targetPoint vs 12 of 18 unparked; installed 0.06 s after the body set off"*: a parked
+  world-0 that does not install a grant, a client rule the mirror does not model and nobody has
+  decoded. It ends in the 25.7 s snap. **Registered:** decode the parked-copy refusal (the setter's
+  gate on a copy with `+0x48` unarmed?) — a codescan question with a tape to check it against.
+* Untouched: door A's endpoint rule, the first grant's clip and cap, the corridor chain, the
+  arrival re-grant. The swept-disc clip is closed as a candidate.
+
+**Prediction for the next corner session:** `AVOID HALT` lines and `kbd_leg avoid-halt` rows at
+the first report of each hold against a hostile, the model pulled back by the lead's walked
+length; the follow's orders then name the halt point, and the hostile parks 80 u from the body
+instead of 520 — the owner's "chasing a ghost" should not recur in leg A's regime. Leg B's regime
+(the parked copy refusing a grant) will still snap until its rule is decoded.

@@ -12,6 +12,9 @@ tape) on the arc's seven tapes, and scored two ways:
     python studies/npctrack/review/avoidcensus.py              # the shipped arm
     python studies/npctrack/review/avoidcensus.py --no-avoid   # the revert arm (MIRROR_AVOID off)
     python studies/npctrack/review/avoidcensus.py --tape T --cap C   # one fresh run, out of sample
+    python studies/npctrack/review/avoidcensus.py --mesh ...           # MOVECODE-1z-dj: the mirror built
+                                                                       # with the capture's pathmap, as the
+                                                                       # live guard is -- the corner halts
 
 Pinned 2026-09-06 (FINDINGS F14): avoid ON -- 232 grants, 24 both / 1 model-only / 1 tape-only,
 14 halts, waypoint error p50 0.2 u; mirror vs world-0 moving p50 10.1 / p90 19.9 / max 105
@@ -26,6 +29,7 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(ROOT, "toolkit", "clientscan"))
 sys.path.insert(0, os.path.join(ROOT, "toolkit", "authsrv"))
 sys.path.insert(0, os.path.join(ROOT, "toolkit"))
+sys.path.insert(0, os.path.join(ROOT, "toolkit", "mapdata"))
 import npcdrift as N                 # noqa: E402
 import agtrack_replay as AR          # noqa: E402
 import agtrack_mirror as am          # noqa: E402
@@ -120,7 +124,18 @@ def replay(run_rows, reps, end_t, hostile):
     finally:
         os.unlink(tmp.name)
     atrack = AR.AsyncTrack(reports)
-    mirror = am.AgTrackMirror(mesh=None, prune_ms=3000)
+    # MOVECODE-1z-dj: the --mesh arm. The live guard is built with the capture's
+    # own pathmap (MeshAdapter), so its pass refuses a sidestep waypoint that is
+    # off the mesh and HALTS -- the corner (RUN-1zDB leg A, 30.36 s). This replay
+    # ran meshless, so it could only ever sidestep. The file id is the capture's.
+    mesh = None
+    if MESH_ARM and _fid:
+        try:
+            from pathmap import PathingMap
+            mesh = am.MeshAdapter(PathingMap.load(_fid))
+        except Exception as e:                          # noqa: BLE001
+            print("  [mesh] 0x%X unavailable: %s" % (_fid, e))
+    mirror = am.AgTrackMirror(mesh=mesh, prune_ms=3000)
     sa = mirror.sync
 
     def obst(ms):
@@ -274,7 +289,12 @@ def runs_from(argv):
     return RUNS
 
 
+MESH_ARM = False
+
+
 def main(argv):
+    global MESH_ARM
+    MESH_ARM = "--mesh" in argv
     if "--no-avoid" in argv:
         am.MIRROR_AVOID = False
     P = dict(grants=0, both=0, model_only=0, tape_only=0, halts=0)

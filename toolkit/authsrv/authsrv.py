@@ -5157,6 +5157,10 @@ def _agtrack_shadow_tick(state, rec, send=None):
         return
     now = time.time()
     _agtrack_guard_call(state, "tick", now)
+    # 1z-dj: every tick, before the 2 Hz sampler below -- a halt the pass
+    # took on this tick (or on the grant's own setter, on the recv thread)
+    # parks the model within one tick.
+    _model_park_on_avoid_halt(state, rec, now)
     n = state.get("agtrack_guard_ticks", 0) + 1
     state["agtrack_guard_ticks"] = n
     if n % 10:
@@ -17756,6 +17760,86 @@ NPC_CLIENT_MODEL = True    # False (--no-npc-client-model): the server's own wal
 # ~100 u that remains is this).
 MIRROR_AVOID = True        # False (--no-mirror-avoid): the mirror walks straight.
 NPC_DISC_COS_CONE = 0.5    # the resolver's +-60 degree cone, fcomp [0x009458BC]. OBSERVED.
+# THE MODEL PARKS WHERE THE MIRROR HALTS (MOVECODE-1z-dj). The mirror above
+# already runs the client's avoidance pass with the capture's own mesh, and
+# it is right: replayed with the mesh on RUN-1zDB leg A it halts the
+# player's copy at the Hatcher's disc in the corner (7 halts; its copy within
+# 103.8 u of the client's world-0 at worst, 25.2 u at the halts), while the
+# position model -- state["pos"], walked by the integrator toward
+# state["dest"], the operand of the NPC follow (1z-cp.3) and of the reach
+# (1z-dd.5) -- walked the lead 520 u past it (drift 520.0 u, the ghost the
+# owner described). The swept-disc clip this was registered as is REFUTED as
+# a server rule: retail's grants pass THROUGH standing NPCs' discs (243 of 291
+# chords reaching a disc within the cone; 4 end at contact) because the
+# client SIDESTEPS a non-target obstacle and only HALTS when its waypoint
+# fails the mesh -- which is what the pass decides, per obstacle, and what a
+# clip at contact could not. So: when the mirror's pass halts the copy, the
+# model parks at the mirror's point, dest is cleared and the keyboard leg is
+# consumed -- NO send, the client has already halted itself (0x00601899:
+# velocity zero, both target blocks invalid), and a grant would only re-arm
+# the copy into the same pass. The next report re-arms everything as usual.
+# --no-model-avoid-halt reverts. Leg B of the same run is NOT covered: its
+# replay diverges 491.9 u with or without the mesh, at a point the pass did
+# not halt -- a mirror/mesh divergence, named in 1z-dj rather than hidden.
+MODEL_PARKS_ON_AVOID_HALT = True   # --no-model-avoid-halt reverts
+
+
+def _mirror_avoid_halt(state, now):
+    """(n_halts, (x, y)) of the mirror's sync copy, under the guard's lock;
+    None without a guard. The pass counts its halts on the SyncAgent
+    (`n_avoid_halt`); the point is where it parked the copy."""
+    g = state.get("agtrack_guard")
+    if g is None:
+        return None
+    lock = state.get("agtrack_guard_lock")
+    try:
+        if lock is not None:
+            with lock:
+                s = g.mirror.sync
+                return int(getattr(s, "n_avoid_halt", 0)), s.position(g._ms(now))
+        s = g.mirror.sync
+        return int(getattr(s, "n_avoid_halt", 0)), s.position(g._ms(now))
+    except Exception:                                  # noqa: BLE001
+        return None
+
+
+def _model_park_on_avoid_halt(state, rec, now):
+    """1z-dj: one shadow tick's read of the mirror's halt counter. A NEW halt
+    parks the position model at the mirror's point, clears the integrator's
+    dest and consumes the keyboard leg (so neither the arrival re-grant nor
+    the kill can re-arm a copy the client has halted). Idempotent per halt."""
+    if not MODEL_PARKS_ON_AVOID_HALT:
+        return False
+    got = _mirror_avoid_halt(state, now)
+    if got is None:
+        return False
+    n, pt = got
+    seen = state.get("avoid_halts_seen", 0)
+    if n <= seen:
+        return False
+    state["avoid_halts_seen"] = n
+    if pt is None:
+        return False
+    hx, hy = float(pt[0]), float(pt[1])
+    px, py = state.get("pos", (hx, hy))
+    moved = math.hypot(hx - float(px), hy - float(py))
+    state["pos"] = (hx, hy)
+    state["dest"] = None
+    leg = state.pop("kbd_leg", None)
+    if rec is not None:
+        try:
+            rec.event("kbd_leg", act="avoid-halt", n=n,
+                      point=[round(hx, 1), round(hy, 1)],
+                      model_moved=round(moved, 1),
+                      leg_dest=(None if not leg else [round(leg["dest"][0], 1),
+                                                       round(leg["dest"][1], 1)]))
+        except Exception:                              # noqa: BLE001
+            pass
+    print(f"[model] AVOID HALT: the mirror's pass halted the player's copy at "
+          f"({hx:.0f},{hy:.0f}); the position model parks there "
+          f"({moved:.0f} u from where it was) and the keyboard lead ends "
+          f"[MOVECODE-1z-dj]", flush=True)
+    return True
 
 
 def _npc_model(agent, now):
@@ -25939,6 +26023,13 @@ def main():
                          "body trails its sync copy and an instant halt froze "
                          "it short of the disc -- CASE 8 v2's 'long range "
                          "attacks' with the server's copy at exactly 80 u.")
+    ap.add_argument("--no-model-avoid-halt", action="store_true",
+                    help="MOVECODE-1z-dj REVERT: when the AgTrack mirror's "
+                         "avoidance pass halts the player's copy at another "
+                         "agent's disc, the position model keeps walking the "
+                         "lead -- RUN-1zDB leg A's ghost (drift 520 u, the "
+                         "Hatcher marched to the phantom and hit from there). "
+                         "Known-bad arm.")
     ap.add_argument("--no-mirror-avoid", action="store_true",
                     help="NPCTRACK-F14 REVERT: the server's mirror of the "
                          "player's world-0 copy walks every leg straight, "
@@ -27914,6 +28005,12 @@ def main():
         print("[map] --halt-on-arrival: a hostile's 0x0028 goes out the instant "
               "the server's copy reaches the disc (ANIMREF-RE 40.9's revert; "
               "the client's rendered body halts short).", flush=True)
+    if a.no_model_avoid_halt:
+        global MODEL_PARKS_ON_AVOID_HALT
+        MODEL_PARKS_ON_AVOID_HALT = False
+        print("[map] --no-model-avoid-halt: the position model walks a lead "
+              "the mirror's pass has halted the client's copy on (1z-dj's "
+              "revert; RUN-1zDB leg A's 520 u ghost).", flush=True)
     if a.no_mirror_avoid:
         global MIRROR_AVOID
         MIRROR_AVOID = False

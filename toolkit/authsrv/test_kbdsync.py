@@ -62,7 +62,7 @@ from test_position_trust import receive_arm, Sent, FakeRec   # noqa: E402
 # the word-against-point check and the known-bad arm that reddens all three --
 # the cross-plane guard NPCTRACK proposed is refuted at 0 of 488 and ships as
 # nothing).
-LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=231)   # 1z-di: +7 (24h-24n), from the green run
+LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=236)   # 1z-dj: +5 (24o-24s), from the green run
 check = checks.adopt(LEDGER)
 
 SRC = open(authsrv.__file__, encoding="utf-8").read()
@@ -2229,6 +2229,74 @@ def main():
           and "KBD LEAD RE-GRANT" in SRC and "MOVECODE-1z-di" in SRC,
           "24n. ships ON with its revert, on the capture's flags row, through the "
           "chain tick's own poll sites", "")
+
+    # MOVECODE-1z-dj: THE MODEL PARKS WHERE THE MIRROR HALTS. The mirror runs
+    # the client's avoidance pass with the mesh and halts the player's copy at
+    # a hostile's disc in the corner (RUN-1zDB leg A replayed --mesh: 7 halts,
+    # the copy within 25.2 u of world-0 at them) while the position model --
+    # the follow's and the reach's operand -- walked the lead 520 u past it.
+    # The swept-disc clip is REFUTED as a server rule (retail's grants pass
+    # through 243 of 291 standing-NPC discs reached within the cone; the client
+    # sidesteps), so the fix listens to the pass instead of second-guessing it.
+    def _halt_state(n_halts, halt_at, leg_dest=(1440.0, 1000.0)):
+        g = _Guard(halt_at)
+        g.mirror.sync.t_arrive = 0
+        g.mirror.sync.n_avoid_halt = n_halts
+        now = _t.time()
+        st = {"pos": (1000.0, 1000.0), "dest": leg_dest, "plane": 0, "pathmap": _Hole(),
+              "agtrack_guard": g, "kbd_moving_at": now - 0.2,
+              "kbd_leg": authsrv.a2_leg_note((920.0, 1000.0), leg_dest, 0, 1, now,
+                                             ray=(1440.0, 1000.0), clip_why="clear")}
+        return st
+
+    st24o = _halt_state(1, (940.0, 1000.0))
+    r24o = FakeRec()
+    authsrv._agtrack_shadow_tick(st24o, r24o)
+    rows24o = [r for r in r24o.of("kbd_leg") if r["act"] == "avoid-halt"]
+    check(tuple(st24o["pos"]) == (940.0, 1000.0) and st24o["dest"] is None
+          and "kbd_leg" not in st24o and st24o.get("avoid_halts_seen") == 1
+          and rows24o and rows24o[-1]["point"] == [940.0, 1000.0]
+          and rows24o[-1]["model_moved"] == 60.0,
+          "24o. THE PARK: the mirror's pass halted the copy -> the position model "
+          "parks at the mirror's point (60 u back from where the integrator had "
+          "walked it), the integrator's dest clears, the keyboard leg is consumed, "
+          "a row says so -- and NOTHING is sent: the client halted itself",
+          f"pos {st24o.get('pos')} dest {st24o.get('dest')} leg {st24o.get('kbd_leg')} rows {rows24o}")
+    st24o["pos"] = (1200.0, 1000.0)
+    st24o["dest"] = (1440.0, 1000.0)
+    r24o2 = FakeRec()
+    authsrv._agtrack_shadow_tick(st24o, r24o2)
+    check(tuple(st24o["pos"]) == (1200.0, 1000.0) and st24o["dest"] == (1440.0, 1000.0)
+          and not [r for r in r24o2.of("kbd_leg") if r["act"] == "avoid-halt"],
+          "24p. idempotent per halt: the same count on the next tick parks nothing "
+          "again -- the next report re-arms everything as usual",
+          f"pos {st24o.get('pos')} dest {st24o.get('dest')}")
+    st24q = _halt_state(1, (940.0, 1000.0))
+    _saved_ph = authsrv.MODEL_PARKS_ON_AVOID_HALT
+    try:
+        authsrv.MODEL_PARKS_ON_AVOID_HALT = False
+        authsrv._agtrack_shadow_tick(st24q, FakeRec())
+    finally:
+        authsrv.MODEL_PARKS_ON_AVOID_HALT = _saved_ph
+    check(tuple(st24q["pos"]) == (1000.0, 1000.0) and st24q["dest"] == (1440.0, 1000.0)
+          and "kbd_leg" in st24q,
+          "24q. KNOWN-BAD ARM (--no-model-avoid-halt): the model walks on past the "
+          "halted copy -- RUN-1zDB leg A, drift 520 u, the Hatcher marched to the "
+          "phantom and hit the player from there",
+          f"pos {st24q.get('pos')} dest {st24q.get('dest')}")
+    st24r = _halt_state(0, (940.0, 1000.0))
+    authsrv._agtrack_shadow_tick(st24r, FakeRec())
+    check(tuple(st24r["pos"]) == (1000.0, 1000.0) and st24r["dest"] == (1440.0, 1000.0)
+          and "kbd_leg" in st24r,
+          "24r. CONTROL: no halt, nothing parked -- the pass's sidestep and its "
+          "quiet ticks leave the model alone", "")
+    check(authsrv.MODEL_PARKS_ON_AVOID_HALT is True and "--no-model-avoid-halt" in SRC
+          and authsrv.capture_flags().get("MODEL_PARKS_ON_AVOID_HALT") is True
+          and SRC.count("\n    _model_park_on_avoid_halt(state, rec, now)\n") == 1
+          and SRC.index("\n    _model_park_on_avoid_halt(state, rec, now)\n")
+          < SRC.index('state["agtrack_guard_ticks"] = n'),
+          "24s. ships ON with its revert, on the flags row, read once per shadow "
+          "tick BEFORE the 2 Hz sampler's early return", "")
 
     # MOVECODE-1z-cu. The world tick's integrator walked state["pos"] toward
     # state["dest"] at a flat 14.4 u per tick whatever the 0x003D's movementType
