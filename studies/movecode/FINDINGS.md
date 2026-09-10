@@ -19596,3 +19596,87 @@ the first report of each hold against a hostile, the model pulled back by the le
 length; the follow's orders then name the halt point, and the hostile parks 80 u from the body
 instead of 520 — the owner's "chasing a ghost" should not recur in leg A's regime. Leg B's regime
 (the parked copy refusing a grant) will still snap until its rule is decoded.
+
+---
+
+## 1z-dk. THE PARKED COPY'S GRANT REFUSAL, DECODED — **there is no gate. The handler is gateless, the setter writes `m_targetPoint` unconditionally, and the "refusal" is the avoidance pass halting at the setter and invalidating the target blocks — F14's mechanism, confirmed on the specimen and by a census: 72 of 72 parked-with-a-hostile leads never installed, and our mesh agrees with the client's waypoint verdict at 71 of those 72.** Nothing ships; 1z-dj already covers the class; the one disagreement is a mesh boundary and it is named
+
+**2026-09-10.** Ident `MOVECODE-1z-dk`. Asked by the owner after 1z-dj (its registered codescan
+question). Desk: the pinned build 38797 through `codescan --dis`, the five tapes through
+`review/grantinstall.py` (prediction first), the mirror's own `avoid()` on three instants.
+OBSERVED unless marked.
+
+### 1z-dk.1 First, the premise corrected by the tape
+
+§1z-dj's leg-B residual — "the client's parked world-0 did not install a clear 767 u lead
+while the drawn body set off" — was read off agenttap's sync **`x, y`**, which is the settled
+`+0x78`: **sample-and-hold** (the memory note about agenttap's sync column, already learned once).
+The same copy's `tx, ty` (m_targetPoint) and `stop` (`+0x48`, the arrival timer) tell the truth:
+at 23.82 s the sync copy carried **our 23.79 s grant `(10062, 7764)`, velocity `(−233, −169)`
+= 288 u/s along it, and `+0x48 = 24586` = now + 520 u / 288**. It was installed and walked; the
+census's "world-0" held the last settled point. **But the grant before it was refused for real:**
+the 23.54 s lead never appeared in either copy's target (`inf` through 23.74) while the body
+stood, and `+0x48` read 0 throughout — a parked copy.
+
+### 1z-dk.2 ★★★ The binary: no gate anywhere on the path
+
+* **`0x005FD890`, the `0x0029` handler:** `call 0x47F660` (the manager), world[0] at `[eax+8]`,
+  the agent looked up by the message's id with two asserts (`0x24B` bounds, `0x201` non-null),
+  `{x, y, plane}` built from `[edi+8..0x10]` into a local, `field4` pushed, `isWaypoint = 0`
+  pushed, **`call 0x00602A40` unconditionally**, then `lea ecx,[esi+0x94]; call 0x603990`, return 1.
+* **`0x00602A40`, the setter:** one assert on flag `0x20000` at `[ebx+0x20]` (`0x91E`), clears
+  bit 19, writes `+0x80` unless `field4 == −1`, writes the destination `+0x88..0x94`, the waypoint
+  flag `+0x98`, **`m_targetPoint` `+0x9C..0xA8` — unconditionally**, then `call 0x005FE950` (the
+  bake), `call 0x005FFCB0`, `call 0x00600840` (the terrain trace), **`call 0x006011F0` (the
+  agent-avoidance pass, args `edi, esi, 1, 0`)**, `call 0x00600B70`, `call 0x00601F70`, `ret 0xC`.
+* **`0x006020B0`, the halt's SetPosition:** asserts finite (`0x812`), `call 0x005FF880`, stores
+  `0.0` to `+0xB0/+0xB4` (velocity zero), loads the sentinel `[0x948654]` for the target blocks,
+  writes `+0x78` — F14's "both target blocks invalid", which the tape shows as `tx = inf`.
+
+So a grant that "never appeared in the target point" was **written and then invalidated in the
+same call**, by the pass's halt. The observation was right; the mechanism was already on record.
+
+### 1z-dk.3 ★★★ The census, and the confound
+
+`grantinstall.py`, five tapes, every keyboard lead ≥ 100 u; a lead is INSTALLED when the sync
+target equals the grant within 0.25 s, SUPERSEDED when the target is a later grant by then, NEVER
+otherwise; "hostile in the cone" is the pass's own condition from the copy's settled point:
+
+| copy | obstacle | installed | superseded | never |
+|---|---|---|---|---|
+| **parked** (`+0x48 = 0`) | hostile in the cone | **0** | 11 | **61** |
+| parked | clear | 0 | 1 | 4 |
+| walking | clear | **165** | 38 | 6 |
+| walking | hostile in the cone | 12 | 1 | 1 |
+
+303 leads ≥ 100 u, 177 installed. **Parked with a hostile inside 80 u and the cone: 72 of 72 not
+installed.** The parked/walking split §1z-cq read as a rule is the corner: the copy is parked
+*because* it is blocked where the sidestep waypoint fails the mesh, and every one of those leads
+points at the hostile that blocks it.
+
+**The check that could have refuted the reading, and did not:** at each of the 72 client halts,
+compute the pass's own waypoint from the client's position and ask **our** mesh. **71 OFF — we
+halt too; 1 ON.** The ON one is leg B **18.64 s**, waypoint **(10555, 8072)**, 67 u east-south-east
+of the corner: our navmesh walkable, the client's collision not. That single disagreement is what
+the `--mesh` replay's 514 u cascade grew from — the mirror sidestepped where the client halted,
+its copy left the corner, and every later waypoint was computed 85 u from where the client's
+copy stood (its halts at 19.44–20.96 s land at (10514, 8037), not (10488, 8117)).
+
+**The specimen through the mirror's own pass** (`--specimen`): 23.54 → **halt** (waypoint
+`(10440, 8086)` off the mesh), 23.79 → **none** (cos 0.13, outside the cone), 30.36 → **halt**.
+
+### 1z-dk.4 What this settles
+
+* **Nothing new to ship.** The class is the pass's halt at the setter; 1z-dj parks the position
+  model wherever the live mirror halts, and the live mirror runs this pass with this mesh. On the
+  five tapes it would have halted at 71 of the 72 client halts.
+* **The residue, sized:** 5 parked halts with no hostile in the cone (4 of them the
+  parked-and-clear never-installed) and 6 walking-and-clear never-installed — 11 of 303 (3.6 %),
+  unattributed; and **one mesh disagreement** at the corner's north-east side. That point is the lever left: our trapezoid
+  boundary is outside the client's collision there (the same corner where the morning's clip ran
+  6 u to the mesh edge while the body slid 93 u along the wall, §1z-dd.8 — the boundary differs in
+  both directions). **Registered:** a corner census of our mesh boundary against the client's
+  refusals and slides (the tape supplies both), before any mesh edit.
+* **A correction to §1z-dj.4's leg-B paragraph**, made here rather than there: the "parked
+  world-0 refusing a clear lead" was the sample-and-hold artifact; the refusal that day was the
+  23.54 s halt, and 1z-dj covers it.
