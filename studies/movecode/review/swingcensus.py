@@ -9,7 +9,7 @@ deal damage even though the full animation played". 7 of 21 swings drew an
 `_press_refused` writes nothing once the press it describes has been ANSWERED,
 and a swing in flight is by definition one whose press was answered, so every
 one of `attack_tick`'s in-flight drops ran through a logger that had already
-declined to log (studies/movecode 1z-cr). `_swing_dropped` closes that from
+declined to log (studies/movecode 1z-cx). `_swing_dropped` closes that from
 2026-09-09 on; this reads the captures recorded BEFORE it existed, where the
 branch has to be inferred by elimination.
 
@@ -139,10 +139,10 @@ def _player_of(merged):
 def retail():
     """What follows an `attack_started` on ArenaNet's own wire.
 
-    SPLIT BY ATTACKER, and that split is the whole finding (1z-ct): pooled,
+    SPLIT BY ATTACKER, and that split is the whole finding (1z-db): pooled,
     retail cancels 6.1% of its swings -- but its PLAYER cancels 1.8% and its
     NPCs 15.2%, so a pooled figure compared against our player-only corpus
-    understated the gap by 3.4x. 1z-cs published the pooled 2.4x; the real
+    understated the gap by 3.4x. 1z-da published the pooled 2.4x; the real
     number is 8.3x, and this function now refuses to report the pooled one
     alone.
 
@@ -279,7 +279,7 @@ def main():
         pn, nn = pl.get("started", 0), npc.get("started", 0)
         if pn and nn:
             print("  SPLIT BY ATTACKER -- the pooled row above is a MIX and "
-                  "understates the gap 3.4x (1z-ct):")
+                  "understates the gap 3.4x (1z-db):")
             print("    retail PLAYER %5d starts: damage %5.1f%%  stopped %5.1f%%"
                   % (pn, 100.0 * pl.get("damage", 0) / pn,
                      100.0 * pl.get("stopped", 0) / pn))

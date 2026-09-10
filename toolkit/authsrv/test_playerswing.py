@@ -45,11 +45,11 @@ import checks  # noqa: E402
 # 41: the press supersedes the keyboard belief, and every press leaves a
 # press_verdict row; 20 fixture-free checks). 96 with section 10 alone.
 # SWINGCANCEL +7 (123): 1 known-bad arm + 3 reach row + 1 control + 2 other
-# branches (1z-cr). MOVECODE-1z-cs +5 (128): the lifecycle pins, ours and
-# retail's. MOVECODE-1z-ct +5 (133): the displacement gate, known-bad arm
-# first. §13 needs the gamesrv corpus and §13b the live one; each
-# declares a skip by name without it.
-LEDGER = checks.Ledger("player swing windup", floor=133)
+# branches (1z-cx). MOVECODE-1z-da +5 (128): the lifecycle pins, ours and
+# retail's. MOVECODE-1z-db +5 (133): the displacement gate, known-bad arm
+# first. MOVECODE-1z-dc +4 (137): the chain-pause row. §13 needs the
+# gamesrv corpus and §13b the live one; each declares a skip by name.
+LEDGER = checks.Ledger("player swing windup", floor=137)
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -1906,8 +1906,8 @@ def main():
           f"rows={rows} -- this one was already visible on the wire as an "
           f"attack_stopped; the row makes the three cancellers separable")
 
-    print("\n13. the swing lifecycle against retail's own (MOVECODE-1z-cs)")
-    # 1z-cs asked whether `attack_tick`'s reach gate and `_npc_follow_tick`
+    print("\n13. the swing lifecycle against retail's own (MOVECODE-1z-da)")
+    # 1z-da asked whether `attack_tick`'s reach gate and `_npc_follow_tick`
     # should read the report instead of the position model, and the corpus
     # REFUTED the repair: ArenaNet's own copy of the player sits 22-36 u from
     # a FRESH report and 1014 u from a stale one, AHEAD of it 27 times to 18
@@ -1928,7 +1928,7 @@ def main():
                     f"no gamesrv corpus on this machine: {exc!r}")
         return LEDGER.verdict()
     check(sc["swings"] >= 700 and sc["landed"] >= 585,
-          "our own swing corpus is still at least what 1z-cs measured",
+          "our own swing corpus is still at least what 1z-da measured",
           f"{sc['landed']} landed of {sc['swings']} swings (floors 585/700)")
     silent = (sc["by_branch"].get("reach", 0)
               + sc["by_branch"].get("unattributed", 0))
@@ -1936,7 +1936,7 @@ def main():
           "the SILENT drop stays at retail's own rate (retail 0.8 %)",
           f"{silent} of {sc['swings']} = "
           f"{100.0*silent/sc['swings']:.1f} % -- retail's 11 of 1,332 is "
-          f"0.8 %, so this is a CEILING at 3 %, not a target. 1z-cr's four "
+          f"0.8 %, so this is a CEILING at 3 %, not a target. 1z-cx's four "
           f"whiffs were never anomalous as a rate; they were anomalous in "
           f"leaving no row")
     cancel = sc["by_branch"].get("cancel", 0)
@@ -1956,16 +1956,16 @@ def main():
           ">= 1,235 landing damage",
           f"{r.get('damage')} of {n} = {100.0*r.get('damage',0)/n:.1f} %")
     check(r.get("silent", 0) <= 0.03 * n and r.get("stopped", 0) <= 0.12 * n,
-          "and its silent and stopped rates are the numbers 1z-cs compared to",
+          "and its silent and stopped rates are the numbers 1z-da compared to",
           f"silent {r.get('silent')} ({100.0*r.get('silent',0)/n:.1f} %), "
           f"stopped {r.get('stopped')} ({100.0*r.get('stopped',0)/n:.1f} %). "
           f"The attacker slot is MEASURED: 0x00A0 is [prop, attacker, target], "
           f"876 to 28 -- reading it victim-first turns 92.7 % into 0.8 %, and "
-          f"that was 1z-cs's first cut")
+          f"that was 1z-da's first cut")
 
     print("\n14. a report that moved NOTHING does not cancel the chain "
-          "(MOVECODE-1z-ct)")
-    # 1z-ct: `cancel_on_move`'s own docstring justified firing on every
+          "(MOVECODE-1z-db)")
+    # 1z-db: `cancel_on_move`'s own docstring justified firing on every
     # 0x003D with "every one of 7,988 corpus records carries movementType
     # 1..8, so any 0x003D is movement" -- which proves the FIELD IS SET, not
     # that the body moved. The KNOWN-BAD ARM runs first.
@@ -2033,6 +2033,89 @@ def main():
           f"stopped={len(stopped)} -- a 0x003E is an explicit move ORDER, not "
           f"a report, and the cast half of cancel_on_move is untouched on "
           f"both arms (castmech's evidence, not measured here)")
+
+    print("\n15. the chain pause says how much it charged, and what left early "
+          "(MOVECODE-1z-dc)")
+    # 1z-dc measured the pause charging 19 % of the real moving span (p50
+    # 0.234 s against 0.951 s) where charging the whole span reproduces
+    # retail (2.701 s against their 2.657 s). Three candidate suppressors
+    # were tested against the corpus and ALL THREE FAILED, so nothing about
+    # the cause is shipped -- what ships is the row that will name it. The
+    # KNOWN-BAD ARM is the state before it: a moving tick that returns early
+    # is indistinguishable from one that charged nothing.
+    import agents
+    import authsrv
+
+    class _R:
+        def __init__(self): self.rows = []
+        def event(self, kind, **kw): self.rows.append((kind, kw))
+
+    def _st_moving(dist, **over):
+        st = _state()
+        st["agents"][10]["pos"] = (float(dist), 0.0)
+        st["attacking"] = 10
+        st["player_health"] = 100.0
+        st["player_dead"] = False
+        st["kbd_moving_at"] = _tt.time()      # the latch _player_body_moving reads
+        st.update(over)
+        return st
+
+    saved_int = authsrv.ATTACK_INTERVAL
+    try:
+        # A moving tick that leaves through the REACH branch is counted.
+        rec = _R()
+        st = _st_moving(400.0)
+        authsrv.attack_tick(lambda *a, **k: None, st, 0, rec=rec)
+        stats = st.get("chain_pause_stats")
+        check(stats is not None and stats["left"].get("reach") == 1
+              and stats["ticks_moving"] == 1,
+              "a MOVING tick that returns at the reach branch is counted, with "
+              "the branch named",
+              f"{stats} -- before this row such a tick was indistinguishable "
+              f"from one that charged nothing, which is why 1z-dc could "
+              f"measure the 19 % shortfall and not attribute it")
+
+        # A moving tick that leaves through dead-player is counted separately.
+        rec = _R()
+        st = _st_moving(50.0, player_dead=True)
+        authsrv.attack_tick(lambda *a, **k: None, st, 0, rec=rec)
+        stats = st.get("chain_pause_stats")
+        check(stats is not None and stats["left"].get("dead-player") == 1,
+              "and so is one that returns at dead-player, under its own name",
+              f"{stats} -- four branches return above the accumulator and the "
+              f"row separates them")
+
+        # A tick that is NOT moving counts nothing at all.
+        rec = _R()
+        st = _st_moving(400.0)
+        st["kbd_moving_at"] = None
+        authsrv.attack_tick(lambda *a, **k: None, st, 0, rec=rec)
+        check(st.get("chain_pause_stats") is None,
+              "CONTROL: a STILL tick counts nothing -- the row is about the "
+              "pause, not about the tick",
+              f"{st.get('chain_pause_stats')}")
+
+        # The summary rides the swing that opens, then resets.
+        # The flush rides the swing that OPENS, and a swing can only open on
+        # a tick that is NOT moving -- while the body moves the clock is
+        # frozen, which is the mechanic itself. So: accumulate while moving,
+        # motion ends, the next swing opens and carries the summary out.
+        rec = _R()
+        st = _st_moving(50.0)
+        authsrv.begin_attack(lambda *a, **k: None, st, 10, 0)
+        st["chain_pause_stats"] = {"charged": 0.4, "ticks_moving": 9,
+                                   "left": {"reach": 3}}
+        st["kbd_moving_at"] = None            # motion ended
+        authsrv.attack_tick(lambda *a, **k: None, st, 0, rec=rec)
+        rows = [kw for kind, kw in rec.rows if kind == "chain_pause"]
+        check(len(rows) == 1 and rows[0]["charged"] == 0.4
+              and rows[0]["left"].get("reach") == 3
+              and st.get("chain_pause_stats") is None,
+              "the summary rides the swing that OPENS and then resets -- one "
+              "row per swing, not 20 per second",
+              f"rows={rows}, left={st.get('chain_pause_stats')}")
+    finally:
+        authsrv.ATTACK_INTERVAL = saved_int
 
     return LEDGER.verdict()
 

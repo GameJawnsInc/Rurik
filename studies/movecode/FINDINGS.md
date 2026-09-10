@@ -18428,14 +18428,14 @@ it.
 
 ---
 
-## 1z-cr. SWINGCANCEL — "full animation, no damage" is TWO defects, and the smaller one was invisible because the swing path never had the press path's discipline
+## 1z-cx. SWINGCANCEL — "full animation, no damage" is TWO defects, and the smaller one was invisible because the swing path never had the press path's discipline
 
 **Desk and corpus, 2026-09-09, from RUN-1zCG session 8's operator note 3. No client
 run.** Shipped: `_swing_dropped` (`toolkit/authsrv/authsrv.py`), `armed_at` on the swing
 entry, `studies/movecode/review/swingcensus.py`, `test_playerswing` §12 (floor 116 → 123,
-the known-bad arm runs first). **No behaviour change** — see §1z-cr.5.
+the known-bad arm runs first). **No behaviour change** — see §1z-cx.5.
 
-### 1z-cr.1 The instrument gap, and it is the reason the symptom survived a green suite
+### 1z-cx.1 The instrument gap, and it is the reason the symptom survived a green suite
 
 `_press_refused` is the swing path's R11 logger ("a suppressed grant is PRINTED, never
 silent"). Its first two lines:
@@ -18453,7 +18453,7 @@ half never did, and nothing noticed because no test drove a drop and asked for a
 `test_playerswing` §12 now runs that arm **first**, with `_swing_dropped` stubbed out, and
 asserts the silence — the check that would have caught this.
 
-### 1z-cr.2 The census: 700 swings, and the silent ones are TWO populations — OBSERVED
+### 1z-cx.2 The census: 700 swings, and the silent ones are TWO populations — OBSERVED
 
 `swingcensus.py` over all 68 captures carrying a player swing. Where a capture predates
 `_swing_dropped` the branch is attributed **by elimination** — a `cancel:*` sends a
@@ -18474,7 +18474,7 @@ CANCEL, 104 of 115** — that is the quarterstep interaction, it is wire-visible
 operator's own verdict on it this session was *"worked pretty well"*. It is not the thing
 that was broken; it is named here so the next reader does not re-find it.
 
-### 1z-cr.3 The four `reach` drops are all in session 8, and the server's own labels name them — OBSERVED
+### 1z-cx.3 The four `reach` drops are all in session 8, and the server's own labels name them — OBSERVED
 
 All four sit in the stuck-corner window after the revive, and the elimination is clean at
 each: no `attack_stopped` anywhere near, the player alive, the target alive.
@@ -18494,7 +18494,7 @@ sampled at the label instants rather than at the drop tick, so the attribution i
 elimination-plus-window, not a direct read; captures written from now on carry a
 `swing_verdict` row and are read directly.
 
-### 1z-cr.4 The root is NOT the swing path — it is §1z-cp.3's position model, second consumer
+### 1z-cx.4 The root is NOT the swing path — it is §1z-cp.3's position model, second consumer
 
 The reach test's operand is `px, py = state.get("pos", ...)` — **the position MODEL, not
 the report.** §1z-cp.3 measured that model running away along a granted lead by **up to
@@ -18511,7 +18511,7 @@ elimination). **That the model is wrong rather than the reach is CORROBORATED** 
 drawn bodies against the model's belief). **That correcting the operand would fix the
 symptom is a RECONSTRUCTION and is not shipped.**
 
-### 1z-cr.5 What is deliberately NOT shipped, and why
+### 1z-cx.5 What is deliberately NOT shipped, and why
 
 The obvious fix — test reach against the last accepted **report** instead of the model — is
 **the same question §1z-cp raised for the follow and deliberately left open**, and the two
@@ -18525,7 +18525,7 @@ than guessed.
 What ships is only the instrument, which cannot change a verdict — and the next hand-driven
 session answers by reading a row instead of by elimination.
 
-### 1z-cr.6 Open
+### 1z-cx.6 Open
 
 * **The operand, both consumers together** (`attack_tick`'s reach test and
   `_npc_follow_tick`'s target): model or report? One derivation, one flag, one run.
@@ -18537,17 +18537,17 @@ session answers by reading a row instead of by elimination.
 
 ---
 
-## 1z-cs. The OPERAND derivation, both consumers — **"read the report instead of the model" is REFUTED**, retail extrapolates too, and the real divergence is the CANCEL rate
+## 1z-da. The OPERAND derivation, both consumers — **"read the report instead of the model" is REFUTED**, retail extrapolates too, and the real divergence is the CANCEL rate
 
 **Desk and corpus, 2026-09-09. No client run. Nothing ships behaviourally** — two
 instruments do: `studies/movecode/review/operandcensus.py` and the `retail()` half of
-`swingcensus.py`. Asked by the owner on §1z-cr.6 item 1.
+`swingcensus.py`. Asked by the owner on §1z-cx.6 item 1.
 
-### 1z-cs.1 The question, and why it was answerable without guessing
+### 1z-da.1 The question, and why it was answerable without guessing
 
-`_npc_follow_tick`'s chase target (§1z-cp.3) and `attack_tick`'s reach gate (§1z-cr.4)
+`_npc_follow_tick`'s chase target (§1z-cp.3) and `attack_tick`'s reach gate (§1z-cx.4)
 both read `state["pos"]` — the position MODEL. §1z-cp.3 measured that model 259 u from the
-drawn body; §1z-cr found four swings silently whiffed on it. The obvious repair is to read
+drawn body; §1z-cx found four swings silently whiffed on it. The obvious repair is to read
 the last accepted REPORT instead. **That repair was never measured against ArenaNet**, and
 the corpus can measure it: retail's `0x002A` carries a POINT as well as a target agent, and
 that point is ArenaNet's own copy of the target at the send (NPCTRACK F16). The player's own
@@ -18563,7 +18563,7 @@ not victim-first like `0x00A3` damage — pairing each start to its next damage 
 attacker-first **876** times and target-first **28**. Reading it the other way turns 92.7%
 into 0.8%, and that was this section's first cut.
 
-### 1z-cs.2 Retail's copy vs the report, CONTROLLED FOR REPORT AGE — OBSERVED
+### 1z-da.2 Retail's copy vs the report, CONTROLLED FOR REPORT AGE — OBSERVED
 
 Uncontrolled, the comparison is meaningless: `|copy − report|` grows with the report's age
 whatever rule the server uses. Banded by age, at follow instants, same measurement both
@@ -18591,7 +18591,7 @@ more, and in the direction that would break the chase (a follow aimed at a stale
 cannot lead a running player). Neither consumer's operand changes. This is the second time
 this arc has been saved by asking the corpus before shipping the obvious repair.
 
-### 1z-cs.3 So what IS different? The swing lifecycle, and it is the CANCEL — OBSERVED
+### 1z-da.3 So what IS different? The swing lifecycle, and it is the CANCEL — OBSERVED
 
 `swingcensus.py --retail`: what follows an `attack_started`, same three-way split, ArenaNet's
 61 live connections against our 68 captures.
@@ -18602,14 +18602,14 @@ this arc has been saved by asking the corpus before shipping the obvious repair.
 | → `attack_stopped`, no damage | **6.1 %** | **14.9 %** ← 2.4× |
 | → SILENT (no event of any kind) | **0.8 %** | **0.9 %** |
 
-**The silent drop §1z-cr chased is at retail's own rate** — 0.9 % against 0.8 %. The four
+**The silent drop §1z-cx chased is at retail's own rate** — 0.9 % against 0.8 %. The four
 whiffs that produced the operator's note 3 are, as a *rate*, exactly what ArenaNet's own
-server does; what was wrong about them was that nothing recorded them (§1z-cr's instrument,
+server does; what was wrong about them was that nothing recorded them (§1z-cx's instrument,
 which stands). **The real divergence is the cancel: we abandon a started swing 2.4× as often
-as retail does.** That is §1z-cr.6 item 2, and this promotes it from "the bigger population"
+as retail does.** That is §1z-cx.6 item 2, and this promotes it from "the bigger population"
 to *the* open question in the swing path.
 
-### 1z-cs.4 Labels, and what this does not settle
+### 1z-da.4 Labels, and what this does not settle
 
 The age-banded retail figures rest on **n = 11/14/6/4/10** — thin, and the ≥2 s band carries
 the whole tail. The direction result (27 ahead / 18 behind) is n = 45. Both are **OBSERVED**
@@ -18619,7 +18619,7 @@ solid half. Our side pools scripted and hand-driven sessions; retail's pools NPC
 player swings, so the two populations are not the same mix — the 2.4× is a real gap in a
 quantity measured identically, not a controlled experiment.
 
-### 1z-cs.5 Open, re-ranked by this section
+### 1z-da.5 Open, re-ranked by this section
 
 1. **The movement cancel — now the arc's swing question.** 2.4× retail's rate; the site's own
    comment calls its evidence "CORROBORATION rather than proof because its own positive
@@ -18627,23 +18627,23 @@ quantity measured identically, not a controlled experiment.
 2. ~~The operand, both consumers~~ **CLOSED — refuted here.** Neither reads the report.
 3. **`attack_reach()`'s tolerance is still unmeasured**, and this section deliberately does
    not invent one: retail's copy is 22–36 u off a *fresh* report, so a gate at exactly 144 u
-   on a copy with that error will whiff at the margin — which is what all four of §1z-cr's
+   on a copy with that error will whiff at the margin — which is what all four of §1z-cx's
    did (147–158 u against 144). Whether retail's own gate carries slack is **NOT FOUND** on
    the wire; its reach decision is not a message.
 
 ---
 
-## 1z-ct. The MOVEMENT CANCEL derived — **the rule is retail's, the TRIGGER is not**: we fire on a report, not on a move, and §1z-cs's own "2.4×" was diluted 3.4× by a mix
+## 1z-db. The MOVEMENT CANCEL derived — **the rule is retail's, the TRIGGER is not**: we fire on a report, not on a move, and §1z-da's own "2.4×" was diluted 3.4× by a mix
 
-**Desk and corpus, 2026-09-09. No client run.** Asked by the owner on §1z-cs.5 item 1.
+**Desk and corpus, 2026-09-09. No client run.** Asked by the owner on §1z-da.5 item 1.
 Shipped: `MOVE_CANCEL_NEEDS_DISPLACEMENT` (`--no-move-cancel-displacement` reverts),
 `MOVE_CANCEL_EPSILON`, the attacker split in `swingcensus.retail()`;
 `test_playerswing` §14, floor 128 → 133, known-bad arm first.
 
-### 1z-ct.1 ★ A CORRECTION TO §1z-cs, FOUND BY THE FIRST CONTROL THIS SECTION RAN
+### 1z-db.1 ★ A CORRECTION TO §1z-da, FOUND BY THE FIRST CONTROL THIS SECTION RAN
 
-§1z-cs published "we abandon a started swing **2.4×** as often as retail" from retail's
-pooled 6.1 % against our 14.9 %. **Retail's pool is a MIX and ours is not** — §1z-cs said so
+§1z-da published "we abandon a started swing **2.4×** as often as retail" from retail's
+pooled 6.1 % against our 14.9 %. **Retail's pool is a MIX and ours is not** — §1z-da said so
 in its own caveat and then quoted the number anyway. Split by attacker:
 
 | | starts | → damage | → `attack_stopped` |
@@ -18657,7 +18657,7 @@ second row is the one to sit with: **our PLAYER's swing profile is retail's NPC 
 (83.6/14.9 against 81.1/15.2). `swingcensus.retail()` now refuses to print the pooled row
 without the split under it.
 
-### 1z-ct.2 The rule's DIRECTION is retail's — CONFIRMED, and it is not being weakened
+### 1z-db.2 The rule's DIRECTION is retail's — CONFIRMED, and it is not being weakened
 
 Retail's player swings, split by whether the player's own report moved during the windup:
 
@@ -18671,7 +18671,7 @@ So moving really does cancel a swing on ArenaNet's server — a 63× ratio in th
 right and **nothing here relaxes it**. n = 11 on the moved arm is thin and is stated as
 such; the still arm's 892 is not.
 
-### 1z-ct.3 The TRIGGER is the defect, and the site says so in its own words — OBSERVED
+### 1z-db.3 The TRIGGER is the defect, and the site says so in its own words — OBSERVED
 
 `cancel_on_move`'s docstring justified firing on every keyboard report:
 
@@ -18700,7 +18700,7 @@ fired on a windup in which the player's own report never moved, and **36 of thos
 `0x003D` nearest the stop** (13 no report near, 1 a `0x0047`). That is the keyboard arm, and
 it is exactly the arm the docstring above licenses.
 
-### 1z-ct.4 The threshold has an EMPTY gap under it, so it is not a free parameter
+### 1z-db.4 The threshold has an EMPTY gap under it, so it is not a free parameter
 
 16,711 consecutive accepted player reports (dt ≤ 1.5 s):
 
@@ -18717,7 +18717,7 @@ begins around 1 u — **the band between them is empty (0.1 %)**, so any epsilon
 gives the same answer. `MOVE_CANCEL_EPSILON = 1.0` is recorded as sitting in that gap rather
 than fitted to anything, and the test asserts a 0.5 u report is suppressed for that reason.
 
-### 1z-ct.5 Shipped, and deliberately narrow
+### 1z-db.5 Shipped, and deliberately narrow
 
 * `cancel_on_move(send, state, conn_id, moved=None)`. The **keyboard** (`0x003D`) arm now
   passes the displacement between the incoming report and `state["last_report"]` — read
@@ -18727,7 +18727,7 @@ than fitted to anything, and the test asserts a 0.5 u report is suppressed for t
   both arms, because its evidence is castmech's and **nothing measured here says it is
   wrong**. Scoping it wider would be shipping an unmeasured change beside a measured one.
 * A suppression **prints** (R11) — a cancel that does not happen is as invisible as one that
-  does, which is the whole lesson of §1z-cr.
+  does, which is the whole lesson of §1z-cx.
 * `test_playerswing` §14: the **known-bad arm first** (0.00 u still cancels), then the
   suppression at 0.00 and 0.50 u, a **real 60 u move still cancelling** (the rule is not
   weakened), and the click arm's `moved=None` control. `test_cancelwalk`'s source pin was
@@ -18735,7 +18735,7 @@ than fitted to anything, and the test asserts a 0.5 u report is suppressed for t
   than reading a latch the click arm also writes, and it now asserts that plus the new fact
   that only the keyboard arm passes `moved=`.
 
-### 1z-ct.6 What this does NOT settle
+### 1z-db.6 What this does NOT settle
 
 * **The predicted effect is a RECONSTRUCTION until a session scores it.** Removing the 50
   still-cancels would put our cancel rate near 7.7 %, still 4× retail's player. The
@@ -18746,3 +18746,107 @@ than fitted to anything, and the test asserts a 0.5 u report is suppressed for t
   is there it is a separate derivation.
 * **The 13 still-cancels with no report near the stop** are unattributed — retarget or
   cancel-action, both legitimate. The new print settles the class on the next session.
+
+---
+
+## 1z-dc. The CHAIN PAUSE consumer derived — the latch trap is **REFUTED** here, the pause is **starved** instead (19 % of the moving span), and three candidate causes all failed
+
+**Desk and corpus, 2026-09-10. No client run. Nothing ships behaviourally** — an
+instrument does: `_chain_pause_note` / `_chain_pause_flush` and the `chain_pause`
+telemetry row; `test_playerswing` §15, floor 133 → 137. Asked by the owner on §1z-db.6
+item 2.
+
+### 1z-dc.1 The incoming hypothesis, and its refutation
+
+§1z-db closed with: *"`_player_body_moving` still reads the latches rather than
+displacement for the chain PAUSE — if the same trap is there it is a separate
+derivation."* The predicted symptom was a **spurious freeze**: a latch armed by a held
+heading while the body stands still would pause the swing clock and starve the player's
+attack rate.
+
+**REFUTED at the outcome.** Our player's inter-swing gap with the body **still** is
+**p50 1.777 s against a declared `ATTACK_INTERVAL` of 1.75 s** (p90 1.884, n = 423). There
+is no spurious inflation to find; §1z-db's trap does not reach this consumer.
+
+### 1z-dc.2 The real divergence is the opposite sign — OBSERVED
+
+Inter-swing gap (start → start), split by whether the player's own report moved between
+them, measured identically on both servers so the weapon speed cancels within each:
+
+| | body STILL | body MOVED | ratio |
+|---|---|---|---|
+| **RETAIL player** | p50 **1.330 s** (n = 825) | p50 **2.657 s** (n = 44) | **1.997** |
+| **OURS** | p50 **1.777 s** (n = 423) | p50 **1.982 s** (n = 189) | **1.115** |
+
+Retail's still-gap of **1.330 s** is exactly the metronome §31.3 cited when the pause was
+first derived — an independent reproduction of that constant from a different instrument.
+**Retail pauses 2.0× on a move; we pause 1.115×.** We do not over-pause. We barely pause
+at all.
+
+### 1z-dc.3 Quantified: the pause charges 19 % of the moving span, and the missing 81 % IS retail
+
+Over 208 of our moving gaps, comparing what the accumulator charged
+(`gap − ATTACK_INTERVAL`) against the true moving span (summed report-to-report intervals
+whose endpoints differ by > 1 u):
+
+| | p50 | p90 |
+|---|---|---|
+| the true moving span in the gap | **0.951 s** | 4.439 |
+| the pause actually charged | **0.234 s** | 1.251 |
+| **fraction of the span charged** | **0.188** | 1.003 |
+
+**And charging the whole span reproduces retail to 1.7 %:** 1.75 + 0.951 = **2.701 s**
+against retail's measured **2.657 s**. So §31.3's model — `gap = interval + moving_span` —
+is **right**, and the accumulator is **starved**. That is a much better-posed defect than
+the one this section came in looking for.
+
+### 1z-dc.4 Three candidate suppressors, all REFUTED — and the replay that failed its own control
+
+1. **`PRESS_ENDS_KBD_LATCH`** (a press newer than the latch ends the "moving" read for this
+   reader). Replayed the accumulator tick-by-tick from each capture's own rows with the flag
+   **on and off**: **p50 0.650 s either way, identical.** Not the cause.
+2. **The replay itself is INVALID and is reported as such.** It gives 0.650 s where the
+   server actually charged **0.234 s**, so it does not reproduce the thing it models and
+   **no counterfactual may be read from it** — including its own refutation of (1), which is
+   therefore only "the flag does not move MY model". `feedback-validate-the-simulator-against-the-thing-itself`,
+   caught by running the control rather than by being clever.
+3. **The four early returns above the accumulator** (dead, no target, target gone, out of
+   reach). Tested on session 8, where the agenttap tape gives both bodies at 30 Hz: over 8
+   moving gaps the player was out of reach for **0.8 s of a 15.2 s** moving span, and
+   charged + out-of-reach = **2.1 s against 15.2 s**. Explains ~5 % of the shortfall.
+   Not the cause either.
+
+**So the suppressor is NOT NAMED.** Three hypotheses, three refutations, and a simulator
+that failed validation — which is precisely the state in which this repo builds an
+instrument instead of shipping a guess.
+
+### 1z-dc.5 What ships: the row, and only the row
+
+`attack_tick` now counts every **moving** tick and, when one returns through a branch above
+the accumulator, records **which branch** (`_chain_pause_note`). One `chain_pause` row per
+swing OPENED carries `charged`, `ticks_moving`, `left` (the branch histogram) and the
+declared `interval`, and prints when anything left early (R11). Per-tick rows would
+out-number swings 20:1, so the summary rides the next swing.
+
+**Why this is the right deliverable:** before it, a moving tick that returned early was
+**indistinguishable from one that charged nothing** — which is exactly why §1z-dc.3 could
+measure a 19 % shortfall and §1z-dc.4 could not attribute it. The next hand-driven session
+answers by reading a row. Same shape as §1z-cx, one consumer over.
+
+`test_playerswing` §15: a moving tick leaving at `reach` is counted under that name, one
+leaving at `dead-player` under its own, a CONTROL that a still tick counts nothing, and the
+flush riding the opening swing then resetting. Note the fixture's own lesson, written into
+it: a swing can only open on a tick that is **not** moving, because while the body moves the
+clock is frozen — that is the mechanic, and a test that tried to have both was wrong.
+
+### 1z-dc.6 Open
+
+* **Name the suppressor** — the new row does it, on the next session with movement and a
+  live chain. Until then the cause is **NOT FOUND**, not "probably the early returns".
+* **A negative charge exists and is unexplained:** session 8's gap at t=148.61→150.09 ran
+  **1.48 s against a 1.75 s interval**, i.e. a swing opened *faster* than the declared
+  metronome. One instance, noted rather than chased.
+* **Retail's moved arm is n = 44** (and n = 11 in §1z-db's windup split). The 1.997 ratio is
+  a p50 on thin data; it is the reference this section compares to, not a constant to fit.
+* `_player_body_moving` is **unchanged**. §1z-db's displacement gate was scoped to
+  `cancel_on_move`'s chain half deliberately, and nothing here licenses widening it.

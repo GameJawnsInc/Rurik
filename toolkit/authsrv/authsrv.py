@@ -11761,7 +11761,7 @@ def begin_attack(send, state, target_id, conn_id, rec=None):
                                     else None))
 
 
-# A 0x003D THAT MOVED NOTHING IS NOT MOVEMENT -- MOVECODE-1z-ct.
+# A 0x003D THAT MOVED NOTHING IS NOT MOVEMENT -- MOVECODE-1z-db.
 # `cancel_on_move`'s own docstring justified firing on every 0x003D with
 # "every one of 7,988 corpus records carries movementType 1..8, so any 0x003D
 # is movement". That census proves the FIELD IS SET; it does not prove the
@@ -11898,7 +11898,7 @@ def cancel_on_move(send, state, conn_id, moved=None):
     # animation after the animation completes".
     swing = state.get("player_swing")
     pre_landing = swing is not None and now < swing["lands_at"]
-    # THE BODY HAS TO HAVE MOVED (MOVECODE-1z-ct). Scoped to the CHAIN half
+    # THE BODY HAS TO HAVE MOVED (MOVECODE-1z-db). Scoped to the CHAIN half
     # deliberately: the cast half's cancel is castmech's, evidenced
     # separately, and nothing measured here says it is wrong -- so it keeps
     # firing on the report exactly as before. A suppression is PRINTED (R11),
@@ -11908,7 +11908,7 @@ def cancel_on_move(send, state, conn_id, moved=None):
     if still and chain_live and (pre_landing or not MOVE_KEEPS_CHAIN):
         print(f"[c{conn_id}] chain cancel SUPPRESSED: the report moved "
               f"{moved:.2f} u (<= {MOVE_CANCEL_EPSILON:.1f}), so the body did "
-              f"not move -- the swing keeps its windup [MOVECODE-1z-ct]",
+              f"not move -- the swing keeps its windup [MOVECODE-1z-db]",
               flush=True)
     if chain_live and not still and (pre_landing or not MOVE_KEEPS_CHAIN):
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
@@ -12791,13 +12791,57 @@ def _press_row(rec, **kw):
             pass
 
 
+def _chain_pause_note(state, branch):
+    """One moving tick of `attack_tick` that did NOT reach the accumulator.
+
+    THE GAP THIS CLOSES (studies/movecode 1z-dc). The freeze charges
+    `now - chain_pause_tick` only on ticks that reach the bottom of
+    `attack_tick`; four branches return above it (dead, no target, target
+    gone, out of reach). Measured against retail, the pause charges
+    **19 % of the real moving span** -- p50 0.234 s charged against a
+    0.951 s span -- and charging the whole span would put our moving gap at
+    2.701 s against retail's own 2.657 s, within 1.7 %. So the model is
+    right and the accumulator is starved, and NOTHING IN THE SERVER SAID SO:
+    a tick that leaves early is indistinguishable from a tick that charged
+    nothing. Three candidate suppressors were tested against the corpus and
+    all three failed (1z-dc.4), which is exactly why this counts rather than
+    guesses.
+
+    Per-tick rows would out-number the swings 20:1, so this only counts; the
+    summary rides the next swing's own row.
+    """
+    st = state.setdefault("chain_pause_stats",
+                          {"charged": 0.0, "ticks_moving": 0, "left": {}})
+    st["ticks_moving"] += 1
+    st["left"][branch] = st["left"].get(branch, 0) + 1
+
+
+def _chain_pause_flush(state, rec, conn_id):
+    """Emit and reset the pause summary -- one row per swing OPENED."""
+    st = state.pop("chain_pause_stats", None)
+    if st is None:
+        return
+    if rec is not None:
+        try:
+            rec.event("chain_pause", charged=round(st["charged"], 3),
+                      ticks_moving=st["ticks_moving"], left=dict(st["left"]),
+                      interval=float(ATTACK_INTERVAL))
+        except Exception:      # telemetry must never take the tick down
+            pass
+    if st["left"]:
+        print(f"[c{conn_id}] chain pause: charged {st['charged']:.3f} s over "
+              f"{st['ticks_moving']} moving tick(s); "
+              f"{sum(st['left'].values())} left early {st['left']} "
+              f"[MOVECODE-1z-dc]", flush=True)
+
+
 def _swing_dropped(state, rec, conn_id, branch, **detail):
     """An ARMED swing was thrown away before it could land, and this is the
     row that says so. R11 -- "a suppressed grant is PRINTED, never silent" --
     applied to the half of the swing path that never had it.
 
     THE GAP THIS CLOSES, measured rather than supposed (studies/movecode
-    §1z-cr, RUN-1zCG session 8): `_press_refused` writes nothing once the
+    §1z-cx, RUN-1zCG session 8): `_press_refused` writes nothing once the
     press it describes has been ANSWERED (`pend["answered"] is not None`),
     and a swing in flight is BY DEFINITION one whose press was answered --
     so every one of `attack_tick`'s in-flight drops returned through a
@@ -12823,7 +12867,7 @@ def _swing_dropped(state, rec, conn_id, branch, **detail):
             pass
     why = ", ".join(f"{k} {v}" for k, v in detail.items())
     print(f"[c{conn_id}] SWING DROPPED in flight: {branch} ({why}) "
-          f"[SWINGCANCEL, studies/movecode 1z-cr]", flush=True)
+          f"[SWINGCANCEL, studies/movecode 1z-cx]", flush=True)
 
 
 def _press_refused(state, rec, conn_id, branch, **detail):
@@ -12937,17 +12981,25 @@ def attack_tick(send, state, conn_id, rec=None):
     # RECONSTRUCTION -- found by reading, never observed firing. The fix is to
     # clear the stamp before anything can leave, so the accumulator can only
     # ever measure a contiguous run of ticks that reached it.
-    if not _player_body_moving(state):
+    # READ ONCE, at the top: the four branches below return above the
+    # accumulator and each needs to know whether this tick was a moving one
+    # (1z-dc). Same value the reset already used, so nothing changes here.
+    _moving_now = _player_body_moving(state)
+    if not _moving_now:
         state["chain_pause_tick"] = None
     if state.get("player_dead"):
         # A dead player does not keep hitting things, and does not land the
         # swing it was mid-way through either.
+        if _moving_now:
+            _chain_pause_note(state, "dead-player")
         _swing_dropped(state, rec, conn_id, "dead-player")
         state["player_swing"] = None
         _press_refused(state, rec, conn_id, "dead-player", terminal=True)
         return
     target_id = state.get("attacking")
     if not target_id:
+        if _moving_now:
+            _chain_pause_note(state, "no-target")
         _swing_dropped(state, rec, conn_id, "move-ended-order")
         state["player_swing"] = None
         _approach_abandon(state)
@@ -12964,6 +13016,8 @@ def attack_tick(send, state, conn_id, rec=None):
         # carries [8, 31, 0] ~0.25 s after the death messages (t=20.1637,
         # n=1, castmech 3c).
         action_hold(send, state, 0, f"target {target_id} is gone")
+        if _moving_now:
+            _chain_pause_note(state, "target-gone")
         _swing_dropped(state, rec, conn_id, "target-gone", target=target_id)
         state["attacking"] = None
         state["player_swing"] = None
@@ -13003,8 +13057,10 @@ def attack_tick(send, state, conn_id, rec=None):
         # away along a granted lead by up to 259 u while the drawn body
         # stood still. So this branch can whiff a swing the player can see
         # connecting. The drop is recorded here; whether the test should
-        # read the model or the report is 1z-cr's open question and is NOT
+        # read the model or the report is 1z-cx's open question and is NOT
         # decided by this row.
+        if _moving_now:
+            _chain_pause_note(state, "reach")
         _swing_dropped(state, rec, conn_id, "reach",
                        dist=round(math.hypot(ax - px, ay - py), 1),
                        reach=attack_reach())
@@ -13029,12 +13085,18 @@ def attack_tick(send, state, conn_id, rec=None):
     # move -- what pauses is the OPENING of the next one, which is the whole
     # point: the attack animation has to finish for the priority arbiter to
     # hand the pose back to locomotion.
-    moving = CHAIN_PAUSES_WHILE_MOVING and _player_body_moving(state)
+    moving = CHAIN_PAUSES_WHILE_MOVING and _moving_now
     if moving:
         since = state.get("chain_pause_tick")
         if since is not None and now > since:
+            _charged = now - since
             state["player_last_swing"] = \
-                state.get("player_last_swing", 0.0) + (now - since)
+                state.get("player_last_swing", 0.0) + _charged
+            _st = state.setdefault("chain_pause_stats",
+                                   {"charged": 0.0, "ticks_moving": 0,
+                                    "left": {}})
+            _st["charged"] += _charged
+        _chain_pause_note(state, "charged")
         state["chain_pause_tick"] = now
     else:
         state["chain_pause_tick"] = None
@@ -13194,6 +13256,7 @@ def attack_tick(send, state, conn_id, rec=None):
     # is on: retail holds on 6.2% of attack starts, we held on 100%.
     if SWING_HOLDS_WALK_GATE:
         action_hold(send, state, 1, f"the swing at {target_id}")
+    _chain_pause_flush(state, rec, conn_id)
     state["player_swing"] = {"target": target_id,
                              "armed_at": now,
                              "lands_at": now + swing_windup(interval)}
@@ -21499,7 +21562,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             # is the one instant whose answer they change.
                             # THE DISPLACEMENT THIS REPORT REPRESENTS, read
                             # before `_take_client_position` overwrites
-                            # `last_report` further down (MOVECODE-1z-ct).
+                            # `last_report` further down (MOVECODE-1z-db).
                             # None when there is no previous report to
                             # compare against -- the first report of a
                             # session cancels as it always did.
@@ -26338,8 +26401,8 @@ def main():
     ap.add_argument("--no-move-cancel-displacement", action="store_true",
                     help="a keyboard movement report cancels the auto-attack "
                          "chain even when the player's own reported position "
-                         "did not move. The revert for MOVECODE-1z-ct "
-                         "(studies/movecode 1z-ct): retail's player loses "
+                         "did not move. The revert for MOVECODE-1z-db "
+                         "(studies/movecode 1z-db): retail's player loses "
                          "1.0%% of its still-player swings to a cancel and "
                          "ours lost 7.9%%, because `any 0x003D is movement` "
                          "reads a field that is always set.")
@@ -28533,7 +28596,7 @@ def main():
         global MOVE_CANCEL_NEEDS_DISPLACEMENT
         MOVE_CANCEL_NEEDS_DISPLACEMENT = False
         print("NO MOVE-CANCEL DISPLACEMENT: a keyboard report cancels the "
-              "chain whether or not the body moved (the pre-1z-ct arm).")
+              "chain whether or not the body moved (the pre-1z-db arm).")
     if a.no_spell_armour:
         global SPELL_ARMOUR
         SPELL_ARMOUR = False

@@ -270,7 +270,7 @@ def section_handler_wiring():
           "ONE 0x0029 send site serves both the shipped default and the lead "
           "arms -- a second site would be the two-arms-one-clock defect the "
           "composition matrix refuses")
-    # RE-AIMED 2026-09-09 (MOVECODE-1z-ct): the keyboard arm now passes the
+    # RE-AIMED 2026-09-09 (MOVECODE-1z-db): the keyboard arm now passes the
     # report's DISPLACEMENT, so the call spans lines and the old literal
     # `cancel_on_move(send, state, conn_id)` no longer appears. The pin's
     # subject was never the argument list -- it is that this arm CAPTURES the

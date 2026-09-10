@@ -5,8 +5,8 @@ r"""How far does a server's own copy of the PLAYER sit from the player's own rep
 
 WHY THIS EXISTS. Two of our modules read `state["pos"]` -- the position MODEL --
 as "where the player is": `_npc_follow_tick`'s chase target (§1z-cp.3) and
-`attack_tick`'s reach gate (§1z-cr.4). §1z-cp.3 measured that model running
-**259 u** from the drawn body at the corner, and §1z-cr found four swings
+`attack_tick`'s reach gate (§1z-cx.4). §1z-cp.3 measured that model running
+**259 u** from the drawn body at the corner, and §1z-cx found four swings
 silently whiffed because of it. The obvious repair -- "read the last report
 instead" -- is a GUESS until somebody asks what ArenaNet's server does, and the
 corpus can answer directly.
