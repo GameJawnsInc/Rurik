@@ -12820,11 +12820,40 @@ def _approach_send(send, state, conn_id, target_id, agent, now, repath=False,
     if rec is not None:
         # ALL THREE OPERANDS AT EVERY SEND (1z-dm), because n = 10 is thin and
         # the next session must be able to attribute this under EITHER arm.
+        #
+        # AND THE CHORD ITSELF (1z-dn). The first cut of this row carried the
+        # three DISTANCES and neither endpoint, so the chord census had to
+        # reconstruct the origin from a tape or the last report and could only
+        # referee the two legs a tape covered. `origin`, `to` and `chord_cut`
+        # make the row self-contained: `chord_cut` is how far our own leg
+        # crosses ground the mesh refuses, which is 1z-cn's question asked of
+        # the player's follow ("the point we order is always on the mesh; the
+        # LINE to it is not"). It is a model-only quantity -- the WIRE carries
+        # the target's own position and the client paths itself -- but
+        # state["pos"] is the NPC follow's operand, so a leg through a wall is
+        # a phantom the hostile chases. Approaches are rare (18 in the whole
+        # corpus), so the mesh walk here costs nothing measurable.
         lr = state.get("last_report")
+        cut = None
+        pm_c = state.get("pathmap")
+        if pm_c is not None and run > 1.0:
+            try:
+                pl = pm_c.plane_at(px, py, prefer=state.get("plane"))
+                st_c = (pm_c.clip(px, py, stop_point[0], stop_point[1],
+                                  step=A2_LEAD_CLIP_STEP, plane=pl)
+                        if pl is not None else
+                        pm_c.clip(px, py, stop_point[0], stop_point[1],
+                                  step=A2_LEAD_CLIP_STEP))
+                cut = round(max(run - math.hypot(st_c[0] - px, st_c[1] - py), 0.0), 1)
+            except Exception:                          # noqa: BLE001
+                cut = None
         try:
             rec.event("approach", act=("re-path" if repath else "send"),
                       target=target_id, repath=bool(repath),
                       at=[round(tx, 1), round(ty, 1)],
+                      origin=[round(px, 1), round(py, 1)],
+                      to=[round(stop_point[0], 1), round(stop_point[1], 1)],
+                      run=round(run, 1), chord_cut=cut,
                       dist_frame=round(dist, 1),
                       dist_model=round(math.hypot(tx - mx, ty - my), 1),
                       dist_report=(None if lr is None else

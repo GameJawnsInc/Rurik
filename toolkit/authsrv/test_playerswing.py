@@ -49,7 +49,7 @@ import checks  # noqa: E402
 # retail's. MOVECODE-1z-db +5 (133): the displacement gate, known-bad arm
 # first. MOVECODE-1z-dc +4 (137): the chain-pause row. §13 needs the
 # gamesrv corpus and §13b the live one; each declares a skip by name.
-LEDGER = checks.Ledger("player swing windup", floor=170)
+LEDGER = checks.Ledger("player swing windup", floor=173)
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -2132,6 +2132,49 @@ def section_reach_frame():
           "the `approach` row carries all THREE operands and their disagreement "
           "at every send -- the model, the frame, the last report",
           f"{app[0] if app else None}")
+    # 1z-dn: and the CHORD, so the next census reads it from the row instead
+    # of reconstructing the origin from a tape. Origin (130,0), target (400,0),
+    # stop 80 -> the leg runs to (320,0), 190 u.
+    check(app and app[0]["origin"] == [130.0, 0.0] and app[0]["to"] == [320.0, 0.0]
+          and app[0]["run"] == 190.0,
+          "and the CHORD ITSELF -- its origin, its end and its length -- because "
+          "the first cut of this row carried three distances and neither "
+          "endpoint, so 1z-dn's census had to reconstruct them from a tape",
+          f"{app[0] if app else None}")
+    check(app and app[0]["chord_cut"] is None,
+          "chord_cut is None with no mesh loaded rather than 0.0 -- 'we did not "
+          "look' and 'we looked and it was clear' are different rows, and a "
+          "census that cannot tell them apart counts the first as the second",
+          f"chord_cut={app[0].get('chord_cut') if app else None}")
+
+    class _Wall:
+        """A mesh with a wall across x = 200: the chord is cut there."""
+        def walkable(self, x, y): return not (190.0 <= x <= 240.0)
+        def on_mesh(self, x, y, tol=1.0): return self.walkable(x, y)
+        def plane_at(self, x, y, prefer=None): return 0
+        def clip(self, x0, y0, x1, y1, step=2.0, plane=None):
+            d = math.hypot(x1 - x0, y1 - y0)
+            n = max(1, int(d / step))
+            last = (x0, y0)
+            for i in range(1, n + 1):
+                f = i / n
+                p = (x0 + (x1 - x0) * f, y0 + (y1 - y0) * f)
+                if not self.walkable(*p):
+                    return last
+                last = p
+            return (x1, y1)
+
+    st = _reach_state((0.0, 0.0), (130.0, 0.0))
+    st["agents"][10]["pos"] = (400.0, 0.0)
+    st["pathmap"] = _Wall()
+    rec = _Rec()
+    authsrv.attack_tick(lambda *a, **k: None, st, 0, rec=rec)
+    app = [kw for k, kw in rec.rows if k == "approach"]
+    check(app and app[0]["chord_cut"] is not None and app[0]["chord_cut"] > 100.0,
+          "a chord that crosses ground the mesh refuses says so and by how much "
+          "-- 1z-cn's question ('the point is on the mesh; the LINE is not') "
+          "asked of the player's own follow leg",
+          f"chord_cut={app[0].get('chord_cut') if app else None} of a 190 u leg")
 
     # THE REGRESSION THIS CHANGE ALREADY CAUSED ONCE, kept as a check: the
     # reach gate sits ABOVE attack_tick's own `now = time.time()`, so passing

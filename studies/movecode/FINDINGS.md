@@ -19846,3 +19846,83 @@ exercises the gate on a bare state (no guard, no report, no click leg).
   walks around it and our leg walks through. Not touched here (this change moves the leg's frame,
   not its shape), and **registered**: score the approach chord against the mesh on the corpus the
   way §1z-cn scored the hostile's, before building anything.
+
+---
+
+## 1z-dn. THE APPROACH CHORD, SCORED AGAINST THE MESH — **NOT A DEFECT, and the item closes.** 0 of 5 in-regime legs cut; where a tape can referee, the drawn body walked our chord to **0.2 u**; the only cut chords are cross-map legs from one capture, and those are RETAIL-FAITHFUL (ArenaNet answers presses up to **17,079 u** with a follow). The census corroborated §1z-dm independently and found one gap in §1z-dm's own row, now closed
+
+**2026-09-10.** Ident `MOVECODE-1z-dn`. Asked by the owner — §1z-dm's registered next step. Desk:
+`review/approachchord.py` over every capture that carries an approach (7 of 1,354), the live
+corpus for the retail control, predictions first. OBSERVED unless marked.
+
+### 1z-dn.1 The question, and what was NOT at risk
+
+§1z-cn traced the hostile's standing RED to a straight chord — *"the point we order is always on
+the mesh; the LINE to it is not"* — because `0x002A` is dead-reckoned, not pathed. The player's
+approach leg has the same shape: `_approach_send` builds `stop_point` as a raw straight-line
+point with no clip and no route. **But the wire is not at risk here**: the message carries the
+TARGET's own position and the client paths the body itself. A chord through a wall is a MODEL
+error — and it still costs, because `state["pos"]` is the NPC follow's operand (§1z-cp.3), so a
+leg through a wall is a phantom the hostile chases.
+
+**Predicted:** most chords clear (the corpus's approaches are 55–160 u); a minority near the
+stairs cut; the ordered point on the mesh in nearly all cases; and where the chord IS cut, the
+drawn body did not walk it.
+
+### 1z-dn.2 ★★★ The result — the chord is clean in every regime the corpus contains
+
+**18 approach sends across the whole corpus** (7 captures; the operand disagreement means 10 have
+a leg to walk once the body's own position is used as the origin).
+
+| | |
+|---|---|
+| chords the mesh cuts by > 5 u | **5 of 10** — and **all five are one capture**, `20260905T213122` |
+| in-regime legs (the corner and open-ground runs) | **0 of 5 cut** |
+| the five cut ones | legs of **7,768 / 7,400 / 7,346 / 1,445 / 1,375 u**, cut by 4,923 / 4,603 / 4,603 / 98 / 26 u |
+| ordered stop points off the mesh | 5 of 10 — **exactly those five** |
+| **the referee**, where a tape covers the leg | worst \|drawn body − our chord\| = **0.2 u** and 0.0 u (n = 2) |
+
+Where the corpus can referee it, **the body walked our chord**. §1z-cn's distinction does not
+carry over: on the hostile's side the point was always on the mesh and only the line was bad;
+on a cross-map player leg **both** are off, which is a different animal.
+
+### 1z-dn.3 ★★★ The cross-map legs are RETAIL-FAITHFUL — the surprise, and it is refuted rather than shipped
+
+Those five are real client presses (`c2s ATTACK`, zero harness attacks) with the player **1,455
+to 7,480 u** from the Hatcher, after a `TARGET_SELECT`. Our server answered each with a follow
+ordering a cross-map walk, and my first reading was that a range gate is missing.
+
+**The corpus refutes it.** Retail, 51 connections, 211 presses with both positions resolvable:
+distance at the press **p50 680 u, p90 1,362, max 17,079**; 141 over 500 u, 67 over 1,000, 13
+over 2,000 — and of the **79 answered by a `0x002A` within 0.5 s, the max answered distance is
+17,079 u.** ArenaNet's server does not refuse a press at range; it sends the follow. Ours is
+faithful, and the "missing range limit" is withdrawn before it was built. (The target position
+here is the last point the server sent for that agent, so the figures are approximate; the
+conclusion needs only that follows exist at kilometre range, and 13 do.)
+
+### 1z-dn.4 ★★ An independent corroboration of §1z-dm, from a census not built to test it
+
+On **4 of 18** sends the server ordered a walk from a believed **147–157 u** while the client's
+own body stood **inside the 80 u stop radius** (session 8's 141.30 and 150.45, leg A's 38.27, leg
+B's 26.97). That is §1z-dm's operand error arriving from the other side — this census reconstructs
+the geometry from the BODY and finds no leg to walk where the server saw 150 u of one. The two
+measurements share no code and agree.
+
+### 1z-dn.5 What ships: nothing behavioural, and one gap in yesterday's own row
+
+**The registered item closes as NOT A DEFECT.** No clip, no route, no range gate: each was
+considered and each is refused by the corpus rather than by taste.
+
+**The gap, found by needing it:** §1z-dm's `approach` row — shipped hours earlier this session —
+carries the three *distances* and **neither endpoint**, so this census had to reconstruct the
+origin from a tape (2 legs) or the last report, and could referee only where a tape reached. The
+row now carries `origin`, `to`, `run` and **`chord_cut`** — how far our own leg crosses ground the
+mesh refuses — computed through the same clip the lead arm uses. `chord_cut` is **None** when
+there is no mesh rather than 0.0, because *"we did not look"* and *"we looked and it was clear"*
+are different rows and a census cannot tell them apart otherwise. `test_playerswing` §18 +3,
+floor 170 → 173; `test_cancelwalk` 124, `test_kbdsync` 236, `test_guards` 41, `test_srclint` 26
+green.
+
+**A caveat on n, stated plainly:** 18 sends over 7 captures, 2 of them refereed by a tape. The
+chord verdict rests on those 2 plus the 0-of-5 in-regime clip result; the row is what makes the
+next session's census cheap and complete rather than a reconstruction.
