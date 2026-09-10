@@ -9,6 +9,8 @@ from the **disk**, never from prose, for reasons its own docstring records at le
 (an earlier runner harvested the list out of `CLAUDE.md` with a regex and silently ran
 63 of 71). This file is why each check exists; the disk is what runs.
 
+**A red keeps its output.** Since 2026-09-10 a failing test's whole stdout+stderr lands in `.suite-fail/<test>.txt` (gitignored, named on the summary line). The runner used to keep only the banner line, which is fine until a red does not reproduce: that day `test_movesync.py` failed one check in the suite and then passed standalone 3/3, under `--only`, and 30 consecutive times under four-way load — the single run that could have named the check was the one whose output was discarded. Green tests write nothing.
+
 Split out of `CLAUDE.md` on 2026-08-14, when the catalog had reached **2,458 of that
 file's 2,725 lines — 90%** — and the house rules a cold session actually needs were
 buried under it. Nothing here was rewritten in the move; only `CLAUDE.md`'s pointer and

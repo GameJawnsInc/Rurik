@@ -131,6 +131,7 @@ Exit code is 0 only when every file passed, none was SUSPECT, and every file RAN
 import argparse
 import ast
 import json
+import io
 import os
 import re
 import subprocess
@@ -208,6 +209,32 @@ def parse_result(stdout, returncode, stderr=""):
     return PASS, checks, ""
 
 
+# Where a failing test's output is kept. The runner used to discard it and
+# report only the banner line, which is fine until a red does not reproduce:
+# on 2026-09-10 `test_movesync.py` failed one check in the suite and then
+# passed standalone 3/3, under `--only`, and 30 consecutive times under
+# four-way load -- the single run that could have named the check was the one
+# whose output was thrown away. Keeping it costs nothing on a green run.
+FAILDIR = os.path.join(ROOT, ".suite-fail")
+
+
+def keep_failure(rel, stdout, stderr):
+    """Write a failing test's whole output where the reader can find it."""
+    try:
+        os.makedirs(FAILDIR, exist_ok=True)
+        name = rel.replace("/", "_").replace("\\", "_") + ".txt"
+        path = os.path.join(FAILDIR, name)
+        with io.open(path, "w", encoding="utf-8", errors="replace") as fh:
+            fh.write("$ python %s\n\n" % rel)
+            fh.write(stdout or "")
+            if stderr:
+                fh.write("\n--- stderr ---\n")
+                fh.write(stderr)
+        return os.path.relpath(path, ROOT)
+    except Exception:      # noqa: BLE001 -- diagnostics must never fail a run
+        return None
+
+
 def run_one(rel, root=None, python=None):
     root = root or ROOT
     t0 = time.time()
@@ -215,6 +242,10 @@ def run_one(rel, root=None, python=None):
                        capture_output=True, text=True,
                        encoding="utf-8", errors="replace")
     status, checks, note = parse_result(p.stdout, p.returncode, p.stderr)
+    if status != "PASS":
+        kept = keep_failure(rel, p.stdout, p.stderr)
+        if kept:
+            note = "%s  [output: %s]" % (note, kept)
     return status, checks, note, time.time() - t0
 
 

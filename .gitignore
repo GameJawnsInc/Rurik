@@ -130,3 +130,4 @@ Accounts.json
 # anyone else's hardware. It is a hint and never a source of truth -- run_suite.py
 # treats a missing or malformed one as absent, so deleting it costs one slow run.
 toolkit/.suite-timings.json
+.suite-fail/    # run_suite keeps a failing test's output here (2026-09-10); a cache, never a source of truth
