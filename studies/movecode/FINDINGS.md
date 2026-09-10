@@ -19345,3 +19345,82 @@ latch is armed for 1.5 s, the stop clears it, and `begin_attack(10)` re-presses 
   `age` ≈ the residual (0.5–1.5 s) instead of 0.02–0.05; `chain_pause` rows with `charged` ≈ the
   moving span and `left: no-target`.
 * Untouched: the parked copy (§1z-dd.8) and the swept-disc clip (§1z-dd.6) — next, in that order.
+
+---
+
+## 1z-dh. THE PARKED COPY, ASKED OF RETAIL — **the slide-then-silence class has NO retail witness (0 of 236), and the census found what retail does instead: its server RE-GRANTS the next chord, unprompted, when its copy reaches the end of a grant** (46 of 71 straight-walk silences, p50 +0.09 s after arrival). Ours parks. Registered as the next derivation, not shipped
+
+**2026-09-10.** Ident `MOVECODE-1z-dh`. Asked on §1z-dd.8's registered check. Desk only:
+`review/parkedcopy.py` on the live corpus (61 connections), prediction first. OBSERVED unless marked.
+
+### 1z-dh.1 The question, the prediction, and two false starts kept as the record
+
+§1z-dd.8: after a grant the client's body slid past, does retail's copy advance before the next
+report? **Predicted:** no — §1z-cq.3's "lags, never leads" — so ~0 advanced of N on the follow
+readout and ~0 unprompted grants.
+
+* **Instrument (1), the copy read off NPC follow points (NPCTRACK F16): NOT FOUND.** 227
+  slid-past windows (a short grant, the body travelled > grant + 20 u), but retail NPCs following
+  the player are rare in this corpus — **45 follow orders in 61 connections** — so **one** window
+  has a readout inside it. That one lags 94–238 u behind the grant along the travel, walking it,
+  never past it; the honoured-grant control (21 windows with follows) advanced 0. Below the ≥ 5
+  floor. Consistent with the prediction; not evidence.
+* **Instrument (2), grants that answer no report, first cut:** 161 of 3,681. Contaminated twice,
+  and both contaminations are worth writing down. (a) A grant answers a **click** (`0x003E`) as
+  well as a heading. (b) With clicks excluded, 40 of 81 "silences" still carried grants — because
+  `0x0026` ATTACK and `0x0027` interact hand the walk to the **server** (the approach and the
+  follow), the client is silent by design, and the `0x0029`s inside are the corridor's own legs
+  (NPCTRACK F16: 54 attacks and 23 interacts inside those windows). A true silence is the client
+  sending **nothing but `0x0009` heartbeats and `0x00C1` target selects.**
+
+### 1z-dh.2 ★★★ What the corrected instrument reads
+
+236 slid-past windows; **71 true silences** (next report > 1 s later, nothing from the client
+inside). Split by the angle between the held heading and the body's actual travel:
+
+| class | silences | with an unprompted grant inside | with a follow inside |
+|---|---|---|---|
+| **STRAIGHT** (heading within 10° of the travel) | **71** | **46** | 1 |
+| **SLIDE** (> 20° off — RUN-1zDB leg 4's class) | **0** | — | — |
+| between | 0 | — | — |
+
+**The b4 class does not occur on retail's wire in this corpus.** A slide that ends before the next
+periodic report and leaves the client silent is the owner's corner regime (§1z-dd.8); ArenaNet's
+players never produced it here. What retail's copy does in it is still NOT FOUND — and the
+straight silences say what retail's *server* does when a grant runs out before a report:
+
+* the unprompted grants land **p50 +0.09 s after the copy's arrival** at the previous grant
+  (`Lg / 288 u/s`; min −0.32, max +0.65). **16 of the 46** come as a **same-instant pair**: the
+  previous point restated, plus a point one chord further — `(0.98 s, 268.7 u)` + `(0.98 s,
+  1036.7 u)`, `(1.10, 302.0)` + `(1.10, 1067.0)`, `(1.67, 441.5)` + `(1.69, 885.5)` — 768, 765
+  and 444 u beyond, the client's own 767 u report-trigger chord (§1z-ab) and a clipped one; the
+  other 30 carry a single grant, whose relation to the previous point is 1z-di's first measurement.
+* the windows themselves are the client's 1.79 s straight-line report cadence (513 u at 288 u/s):
+  retail's first grant covered 250–440 u of it, its copy reached the end at 0.9–1.5 s, and the
+  server extended the walk along the held heading without being told anything.
+
+**So retail's copy lags the body but never PARKS**: when it reaches a grant's end it is sent on
+along the heading. §1z-da.2's "ahead of the report 27 times against 18 behind" and its 3,857 u
+at a stale report are this rule seen from the copy's side. Ours parks: §1z-cw.6's 255 episodes,
+"the copy walked that grant's leg to its end and stopped… the next re-aim arrives a report
+interval later" — and in the corner it never arrives (§1z-dd.8).
+
+### 1z-dh.3 What this decides, and what it does not
+
+* **The lever for the straight case is derived and retail-observed:** re-grant at the copy's
+  arrival, along the held heading, the point restated plus the next chord. Exposure ours: every
+  lead our copy reaches before the next report — 1z-cw.6's parked episodes (255 over six sessions,
+  p50 0.25 s parked each, 172 of 255 ON the granted point).
+* **The lever for b4 is a RECONSTRUCTION with no witness:** at the arrival re-grant, a heading
+  that presses into a wall would clip at 0 u again — unless the re-grant applies the wall-slide
+  rule (§1z-ce's first vertex), in which case the copy crawls vertex to vertex along the wall and
+  reaches the corner the body slid to. Two observed rules composed; the composition is unobserved.
+* Untouched by this: the NPC's reach reading the copy (§1z-dd.5), and the swept-disc clip
+  (§1z-dd.6) for the 520 u runaway the other way.
+
+**Registered next — MOVECODE-1z-di, the arrival re-grant.** Measure first, on the 46: the
+restated point against the previous grant (identical?); the second point's length distribution
+(768 vs clipped); whether a THIRD re-grant follows at the next arrival; the plane words; what
+ends the sequence (the `0x0047`, a heading change, a clip to zero). Then ship it under its own
+flag with the straight-walk signature as the test, and state the wall composition as the run
+question it is.
