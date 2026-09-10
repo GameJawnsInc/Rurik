@@ -11761,8 +11761,32 @@ def begin_attack(send, state, target_id, conn_id, rec=None):
                                     else None))
 
 
-def cancel_on_move(send, state, conn_id):
+# A 0x003D THAT MOVED NOTHING IS NOT MOVEMENT -- MOVECODE-1z-ct.
+# `cancel_on_move`'s own docstring justified firing on every 0x003D with
+# "every one of 7,988 corpus records carries movementType 1..8, so any 0x003D
+# is movement". That census proves the FIELD IS SET; it does not prove the
+# BODY MOVED, and §1z-cp.3 measured the client reporting a held heading while
+# the body stands still ("consecutive reports repeat the coordinate to the
+# decimal"). Measured over 16,711 consecutive accepted reports: 11.8% repeat
+# to the DECIMAL (exactly 0.0 u) and only 0.1% land in (0.001, 1) u -- the
+# populations are separated by an empty gap, so the epsilon below cannot bite
+# whatever value in it is chosen, and it is written down rather than tuned.
+#
+# WHAT IT COST: over 68 captures, 50 of our 104 chain cancels fired on a
+# windup in which the player's own report never moved, 36 of them with a
+# 0x003D nearest the stop. Retail's player loses 1.0% of its still-player
+# swings to a cancel; ours lost 7.9%.
+MOVE_CANCEL_NEEDS_DISPLACEMENT = True   # --no-move-cancel-displacement reverts
+MOVE_CANCEL_EPSILON = 1.0               # u; the gap above is (0.001, 1) and empty
+
+
+def cancel_on_move(send, state, conn_id, moved=None):
     """Movement input cancels what is in flight: the cast, and the chain.
+
+    `moved` is how far the player's own REPORT travelled to produce this
+    call, or None where the arm is an explicit move ORDER rather than a
+    report (the 0x003E click, which says "go there" whatever the body has
+    done so far). It gates the CHAIN half only -- see the guard at its site.
 
     Runs on the CONNECTION thread, from the two arms that mean "the player is
     moving" -- 0x003E (a click) and 0x003D with its movementType set (the
@@ -11874,7 +11898,19 @@ def cancel_on_move(send, state, conn_id):
     # animation after the animation completes".
     swing = state.get("player_swing")
     pre_landing = swing is not None and now < swing["lands_at"]
-    if chain_live and (pre_landing or not MOVE_KEEPS_CHAIN):
+    # THE BODY HAS TO HAVE MOVED (MOVECODE-1z-ct). Scoped to the CHAIN half
+    # deliberately: the cast half's cancel is castmech's, evidenced
+    # separately, and nothing measured here says it is wrong -- so it keeps
+    # firing on the report exactly as before. A suppression is PRINTED (R11),
+    # because a cancel that does not happen is as invisible as one that does.
+    still = (MOVE_CANCEL_NEEDS_DISPLACEMENT and moved is not None
+             and moved <= MOVE_CANCEL_EPSILON)
+    if still and chain_live and (pre_landing or not MOVE_KEEPS_CHAIN):
+        print(f"[c{conn_id}] chain cancel SUPPRESSED: the report moved "
+              f"{moved:.2f} u (<= {MOVE_CANCEL_EPSILON:.1f}), so the body did "
+              f"not move -- the swing keeps its windup [MOVECODE-1z-ct]",
+              flush=True)
+    if chain_live and not still and (pre_landing or not MOVE_KEEPS_CHAIN):
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
              [agents.GV_ATTACK_STOPPED, PLAYER_AGENT_ID, 0],
              "attack_stopped: the player moves"
@@ -21461,7 +21497,23 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             # WHAT IT HIT feeds the CANCELWALK arms below:
                             # a press that released a cast or stopped a swing
                             # is the one instant whose answer they change.
-                            cw_hit = cancel_on_move(send, state, conn_id)
+                            # THE DISPLACEMENT THIS REPORT REPRESENTS, read
+                            # before `_take_client_position` overwrites
+                            # `last_report` further down (MOVECODE-1z-ct).
+                            # None when there is no previous report to
+                            # compare against -- the first report of a
+                            # session cancels as it always did.
+                            _prev = state.get("last_report")
+                            _moved = None
+                            if _prev is not None and len(values) > 1:
+                                try:
+                                    _moved = math.hypot(
+                                        float(values[1][0]) - float(_prev[0]),
+                                        float(values[1][1]) - float(_prev[1]))
+                                except Exception:          # noqa: BLE001
+                                    _moved = None
+                            cw_hit = cancel_on_move(send, state, conn_id,
+                                                    moved=_moved)
                         # NO `state["plane"] = plane` HERE. It used to sit on
                         # this line, unconditional, 28 lines above the position
                         # guard -- so a refused report left us holding the
@@ -26283,6 +26335,14 @@ def main():
                     help="Do not spawn the standing hostile NPC. The world is "
                          "then the player alone, which is what most probes "
                          "assume and what every session before 2026-08-06 was.")
+    ap.add_argument("--no-move-cancel-displacement", action="store_true",
+                    help="a keyboard movement report cancels the auto-attack "
+                         "chain even when the player's own reported position "
+                         "did not move. The revert for MOVECODE-1z-ct "
+                         "(studies/movecode 1z-ct): retail's player loses "
+                         "1.0%% of its still-player swings to a cancel and "
+                         "ours lost 7.9%%, because `any 0x003D is movement` "
+                         "reads a field that is always set.")
     ap.add_argument("--no-spell-armour", action="store_true",
                     help="an incoming armour-respecting spell (Flare's `Fire "
                          "damage`) deals its stated amount instead of "
@@ -28469,6 +28529,11 @@ def main():
         EQUIP_WEAPON = False
         print("NO WEAPON: the character's four weapon slots stay empty.")
 
+    if a.no_move_cancel_displacement:
+        global MOVE_CANCEL_NEEDS_DISPLACEMENT
+        MOVE_CANCEL_NEEDS_DISPLACEMENT = False
+        print("NO MOVE-CANCEL DISPLACEMENT: a keyboard report cancels the "
+              "chain whether or not the body moved (the pre-1z-ct arm).")
     if a.no_spell_armour:
         global SPELL_ARMOUR
         SPELL_ARMOUR = False

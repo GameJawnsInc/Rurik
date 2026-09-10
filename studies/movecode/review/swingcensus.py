@@ -31,6 +31,7 @@ and are read directly instead -- the `source` column says which.
 Standard library only. Reads the vault through `vaultpath`.
 """
 import argparse
+import bisect
 import collections
 import json
 import os
@@ -114,10 +115,36 @@ def swings(rows):
 # --------------------------------------------------------------- retail
 
 STARTED, STOPPED, FINISHED = 4, 3, 1     # GV_* on 0x00A0 / 0x009F
+C2S_HEADING, S2C_LEG = 61, 41
+
+
+def _player_of(merged):
+    """The agent whose 0x0029 grants answer the c2s heading reports."""
+    c61 = [(t, v) for (t, dr, op, v) in merged
+           if dr == "c2s" and op == C2S_HEADING and len(v) >= 2]
+    s29 = [(t, v) for (t, dr, op, v) in merged
+           if dr == "s2c" and op == S2C_LEG and len(v) >= 3]
+    if len(c61) < 5 or not s29:
+        return None
+    cnt = collections.Counter()
+    st = [t for t, _ in s29]
+    for t, _ in c61:
+        i = bisect.bisect_left(st, t)
+        for j in range(i, min(i + 4, len(s29))):
+            if s29[j][0] - t <= 0.3:
+                cnt[s29[j][1][1]] += 1
+    return cnt.most_common(1)[0][0] if cnt else None
 
 
 def retail():
     """What follows an `attack_started` on ArenaNet's own wire.
+
+    SPLIT BY ATTACKER, and that split is the whole finding (1z-ct): pooled,
+    retail cancels 6.1% of its swings -- but its PLAYER cancels 1.8% and its
+    NPCs 15.2%, so a pooled figure compared against our player-only corpus
+    understated the gap by 3.4x. 1z-cs published the pooled 2.4x; the real
+    number is 8.3x, and this function now refuses to report the pooled one
+    alone.
 
     THE SLOT IS MEASURED, NOT ASSUMED: `0x00A0 [prop, attacker, target]` for
     GV_ATTACK_STARTED, against `0x00A3 [prop, target, cause]` for the damage --
@@ -127,6 +154,7 @@ def retail():
     """
     import livewire
     tot = collections.Counter()
+    by_who = {"player": collections.Counter(), "npc": collections.Counter()}
     conns = 0
     for capdir, cf in livewire.live_connections():
         try:
@@ -136,6 +164,7 @@ def retail():
         if not ok or not merged:
             continue
         conns += 1
+        pid = _player_of(merged)
         ev = collections.defaultdict(list)
         for (t, dr, op, v) in merged:
             if dr != "s2c":
@@ -149,21 +178,28 @@ def retail():
             elif op == 0xA3 and len(v) >= 5 and v[1] in (16, 17):
                 ev[v[3]].append((t, "damage"))
         for _a, rws in ev.items():
+            who = "player" if (pid is not None and _a == pid) else "npc"
             rws.sort()
             for i, (t, k) in enumerate(rws):
                 if k != "start":
                     continue
                 tot["started"] += 1
+                by_who[who]["started"] += 1
                 later = [k2 for t2, k2 in rws[i + 1:] if 0 < t2 - t <= 3.0]
                 if "damage" in later:
                     tot["damage"] += 1
+                    by_who[who]["damage"] += 1
                 elif "finish" in later:
                     tot["finish_no_damage"] += 1
+                    by_who[who]["finish_no_damage"] += 1
                 elif "stop" in later:
                     tot["stopped"] += 1
+                    by_who[who]["stopped"] += 1
                 else:
                     tot["silent"] += 1
-    return {"connections": conns, **dict(tot)}
+                    by_who[who]["silent"] += 1
+    return {"connections": conns, "player": dict(by_who["player"]),
+            "npc": dict(by_who["npc"]), **dict(tot)}
 
 
 def census(paths=None):
@@ -233,12 +269,26 @@ def main():
         print("  -> damage         %6d  %5.1f%%   OURS %5.1f%%"
               % (r.get("damage", 0), 100.0 * r.get("damage", 0) / n,
                  100.0 * sc["landed"] / sw))
-        print("  -> attack_stopped %6d  %5.1f%%   OURS %5.1f%%   <-- THE DIVERGENCE"
+        print("  -> attack_stopped %6d  %5.1f%%   OURS %5.1f%%"
               % (r.get("stopped", 0), 100.0 * r.get("stopped", 0) / n,
                  100.0 * cancel_ours / sw))
         print("  -> SILENT         %6d  %5.1f%%   OURS %5.1f%%   (at retail's own rate)"
               % (r.get("silent", 0), 100.0 * r.get("silent", 0) / n,
                  100.0 * silent_ours / sw))
+        pl, npc = r.get("player", {}), r.get("npc", {})
+        pn, nn = pl.get("started", 0), npc.get("started", 0)
+        if pn and nn:
+            print("  SPLIT BY ATTACKER -- the pooled row above is a MIX and "
+                  "understates the gap 3.4x (1z-ct):")
+            print("    retail PLAYER %5d starts: damage %5.1f%%  stopped %5.1f%%"
+                  % (pn, 100.0 * pl.get("damage", 0) / pn,
+                     100.0 * pl.get("stopped", 0) / pn))
+            print("    retail NPC    %5d starts: damage %5.1f%%  stopped %5.1f%%"
+                  % (nn, 100.0 * npc.get("damage", 0) / nn,
+                     100.0 * npc.get("stopped", 0) / nn))
+            print("    OURS (player) %5d swings: damage %5.1f%%  stopped %5.1f%%"
+                  "   <-- vs retail's PLAYER, the like-for-like"
+                  % (sw, 100.0 * sc["landed"] / sw, 100.0 * cancel_ours / sw))
     for name, sw in sorted(cen.items()):
         s = [x for x in sw if not x["landed"]]
         if not s:

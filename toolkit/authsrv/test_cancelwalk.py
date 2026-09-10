@@ -270,7 +270,16 @@ def section_handler_wiring():
           "ONE 0x0029 send site serves both the shipped default and the lead "
           "arms -- a second site would be the two-arms-one-clock defect the "
           "composition matrix refuses")
-    check("cw_hit = cancel_on_move(send, state, conn_id)" in src,
+    # RE-AIMED 2026-09-09 (MOVECODE-1z-ct): the keyboard arm now passes the
+    # report's DISPLACEMENT, so the call spans lines and the old literal
+    # `cancel_on_move(send, state, conn_id)` no longer appears. The pin's
+    # subject was never the argument list -- it is that this arm CAPTURES the
+    # return value instead of reading a state latch the click arm would also
+    # write. Both halves are asserted, plus the new one: only the 0x003D arm
+    # passes `moved=`, because a 0x003E click is an explicit move ORDER.
+    check("cw_hit = cancel_on_move(" in src
+          and src.count("moved=_moved") == 1
+          and src.count("cancel_on_move(send, state, conn_id)") == 1,
           "the 0x003D arm captures what the press hit from the return value "
           "-- a state latch would leak through the click arm, which calls "
           "cancel_on_move too")

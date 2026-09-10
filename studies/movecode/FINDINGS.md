@@ -18630,3 +18630,119 @@ quantity measured identically, not a controlled experiment.
    on a copy with that error will whiff at the margin — which is what all four of §1z-cr's
    did (147–158 u against 144). Whether retail's own gate carries slack is **NOT FOUND** on
    the wire; its reach decision is not a message.
+
+---
+
+## 1z-ct. The MOVEMENT CANCEL derived — **the rule is retail's, the TRIGGER is not**: we fire on a report, not on a move, and §1z-cs's own "2.4×" was diluted 3.4× by a mix
+
+**Desk and corpus, 2026-09-09. No client run.** Asked by the owner on §1z-cs.5 item 1.
+Shipped: `MOVE_CANCEL_NEEDS_DISPLACEMENT` (`--no-move-cancel-displacement` reverts),
+`MOVE_CANCEL_EPSILON`, the attacker split in `swingcensus.retail()`;
+`test_playerswing` §14, floor 128 → 133, known-bad arm first.
+
+### 1z-ct.1 ★ A CORRECTION TO §1z-cs, FOUND BY THE FIRST CONTROL THIS SECTION RAN
+
+§1z-cs published "we abandon a started swing **2.4×** as often as retail" from retail's
+pooled 6.1 % against our 14.9 %. **Retail's pool is a MIX and ours is not** — §1z-cs said so
+in its own caveat and then quoted the number anyway. Split by attacker:
+
+| | starts | → damage | → `attack_stopped` |
+|---|---|---|---|
+| **retail PLAYER** | 903 | **98.2 %** | **1.8 %** |
+| retail NPC | 429 | 81.1 % | 15.2 % |
+| **OURS (player)** | 700 | 83.6 % | **14.9 %** |
+
+**The real gap is 8.3×, not 2.4×** — the pooled figure understated it by 3.4×. And the
+second row is the one to sit with: **our PLAYER's swing profile is retail's NPC profile**
+(83.6/14.9 against 81.1/15.2). `swingcensus.retail()` now refuses to print the pooled row
+without the split under it.
+
+### 1z-ct.2 The rule's DIRECTION is retail's — CONFIRMED, and it is not being weakened
+
+Retail's player swings, split by whether the player's own report moved during the windup:
+
+| | n | → damage | → `attack_stopped` |
+|---|---|---|---|
+| player MOVED during the windup | 11 | 36.4 % | **63.6 %** |
+| player STILL | 892 | **99.0 %** | 1.0 % |
+
+So moving really does cancel a swing on ArenaNet's server — a 63× ratio in the cancel rate.
+`cancel_on_move`'s contract (WIKI, GWW "Auto attack": moving cancels auto-attacking) is
+right and **nothing here relaxes it**. n = 11 on the moved arm is thin and is stated as
+such; the still arm's 892 is not.
+
+### 1z-ct.3 The TRIGGER is the defect, and the site says so in its own words — OBSERVED
+
+`cancel_on_move`'s docstring justified firing on every keyboard report:
+
+> "0x003D with its movementType set (the keyboard; **every one of 7,988 corpus records
+> carries 1..8, so any 0x003D is movement**)"
+
+That census proves **the field is always set**. It does not prove the body moved, and
+§1z-cp.3 had already measured the client reporting a held heading while the body stands —
+*"consecutive reports repeat the coordinate to the decimal"*. Two different claims; the
+second one was never checked. Same shape as `feedback-verify-the-operand-not-just-the-predicate`.
+
+Splitting our own swings the same way retail's were split:
+
+| | n | → damage | → cancelled |
+|---|---|---|---|
+| our player MOVED during the windup | 70 | 22.9 % | 77.1 % |
+| **our player STILL** | 630 | 90.3 % | **7.9 %** |
+| *(retail, still)* | *892* | *99.0 %* | ***1.0 %*** |
+
+**Two separable divergences, and only the second is ours to fix.**
+**(a) Exposure** — our player moves during 10.0 % of windups against retail's 1.2 %. That is
+the operator quarterstepping against a corpus of players standing and auto-attacking: a
+REGIME difference, not a rule, and nothing is done about it.
+**(b) Cancel-given-STILL — 7.9 % against retail's 1.0 %, ~8×.** 50 of our 104 chain cancels
+fired on a windup in which the player's own report never moved, and **36 of those 50 carry a
+`0x003D` nearest the stop** (13 no report near, 1 a `0x0047`). That is the keyboard arm, and
+it is exactly the arm the docstring above licenses.
+
+### 1z-ct.4 The threshold has an EMPTY gap under it, so it is not a free parameter
+
+16,711 consecutive accepted player reports (dt ≤ 1.5 s):
+
+| displacement | share |
+|---|---|
+| **exactly 0.000 u** | **11.8 %** |
+| 0.001–1 u | **0.1 %** |
+| 1–5 u | 2.3 % |
+| 5–20 u | 8.9 % |
+| 20 u and up | 76.9 % (p50 55.9, p90 144.1) |
+
+The still population is the **exact repeats** §1z-cp.3 described, and the moving population
+begins around 1 u — **the band between them is empty (0.1 %)**, so any epsilon inside it
+gives the same answer. `MOVE_CANCEL_EPSILON = 1.0` is recorded as sitting in that gap rather
+than fitted to anything, and the test asserts a 0.5 u report is suppressed for that reason.
+
+### 1z-ct.5 Shipped, and deliberately narrow
+
+* `cancel_on_move(send, state, conn_id, moved=None)`. The **keyboard** (`0x003D`) arm now
+  passes the displacement between the incoming report and `state["last_report"]` — read
+  BEFORE `_take_client_position` overwrites it. The **click** (`0x003E`) arm passes `None`
+  and is untouched: a click is an explicit move ORDER, not a report of what the body did.
+* **The CHAIN half only.** The cast half of `cancel_on_move` still fires on the report, on
+  both arms, because its evidence is castmech's and **nothing measured here says it is
+  wrong**. Scoping it wider would be shipping an unmeasured change beside a measured one.
+* A suppression **prints** (R11) — a cancel that does not happen is as invisible as one that
+  does, which is the whole lesson of §1z-cr.
+* `test_playerswing` §14: the **known-bad arm first** (0.00 u still cancels), then the
+  suppression at 0.00 and 0.50 u, a **real 60 u move still cancelling** (the rule is not
+  weakened), and the click arm's `moved=None` control. `test_cancelwalk`'s source pin was
+  **re-aimed, not bumped**: its subject was that the arm captures the return value rather
+  than reading a latch the click arm also writes, and it now asserts that plus the new fact
+  that only the keyboard arm passes `moved=`.
+
+### 1z-ct.6 What this does NOT settle
+
+* **The predicted effect is a RECONSTRUCTION until a session scores it.** Removing the 50
+  still-cancels would put our cancel rate near 7.7 %, still 4× retail's player. The
+  remaining gap is exposure (a) plus whatever the 70 moved-windup cancels should really do —
+  our 77.1 % against retail's 63.6 %, on n = 11, which is too thin to act on.
+* **`_player_body_moving` is untouched** and still reads the latches, not displacement. It
+  gates the chain PAUSE (§31), a different consumer with its own evidence; if the same trap
+  is there it is a separate derivation.
+* **The 13 still-cancels with no report near the stop** are unattributed — retarget or
+  cancel-action, both legitimate. The new print settles the class on the next session.

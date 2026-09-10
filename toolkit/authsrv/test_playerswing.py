@@ -46,9 +46,10 @@ import checks  # noqa: E402
 # press_verdict row; 20 fixture-free checks). 96 with section 10 alone.
 # SWINGCANCEL +7 (123): 1 known-bad arm + 3 reach row + 1 control + 2 other
 # branches (1z-cr). MOVECODE-1z-cs +5 (128): the lifecycle pins, ours and
-# retail's. §13 needs the gamesrv corpus and §13b the live one; each
+# retail's. MOVECODE-1z-ct +5 (133): the displacement gate, known-bad arm
+# first. §13 needs the gamesrv corpus and §13b the live one; each
 # declares a skip by name without it.
-LEDGER = checks.Ledger("player swing windup", floor=128)
+LEDGER = checks.Ledger("player swing windup", floor=133)
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -1961,6 +1962,77 @@ def main():
           f"The attacker slot is MEASURED: 0x00A0 is [prop, attacker, target], "
           f"876 to 28 -- reading it victim-first turns 92.7 % into 0.8 %, and "
           f"that was 1z-cs's first cut")
+
+    print("\n14. a report that moved NOTHING does not cancel the chain "
+          "(MOVECODE-1z-ct)")
+    # 1z-ct: `cancel_on_move`'s own docstring justified firing on every
+    # 0x003D with "every one of 7,988 corpus records carries movementType
+    # 1..8, so any 0x003D is movement" -- which proves the FIELD IS SET, not
+    # that the body moved. The KNOWN-BAD ARM runs first.
+    import agents
+    import authsrv
+
+    def _swinging():
+        st = _state()
+        st["attacking"] = 10
+        st["player_health"] = 100.0
+        st["player_dead"] = False
+        now = _tt.time()
+        st["player_swing"] = {"target": 10, "armed_at": now,
+                              "lands_at": now + 10.0}
+        st["last_report"] = (0.0, 0.0, False, now)
+        return st
+
+    def _run(moved, needs=True):
+        sent = []
+        saved = authsrv.MOVE_CANCEL_NEEDS_DISPLACEMENT
+        st = _swinging()
+        try:
+            authsrv.MOVE_CANCEL_NEEDS_DISPLACEMENT = needs
+            authsrv.cancel_on_move(
+                lambda op, vals, label="", quiet=False:
+                    sent.append((op, vals, label)),
+                st, 0, moved=moved)
+        finally:
+            authsrv.MOVE_CANCEL_NEEDS_DISPLACEMENT = saved
+        stopped = [v for op, v, _l in sent
+                   if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
+                   and v[0] == agents.GV_ATTACK_STOPPED]
+        return st, stopped
+
+    st, stopped = _run(0.0, needs=False)
+    check(bool(stopped) and st.get("player_swing_cancel") == "movement",
+          "KNOWN-BAD ARM: a report that moved 0.00 u still cancels the chain",
+          f"stopped={len(stopped)}, cancel={st.get('player_swing_cancel')!r} "
+          f"-- 50 of our 104 chain cancels over 68 captures fired on a windup "
+          f"whose report never moved, 36 with a 0x003D nearest the stop")
+
+    st, stopped = _run(0.0)
+    check(not stopped and st.get("player_swing_cancel") is None,
+          "SHIPPED: a report that moved 0.00 u leaves the swing alone",
+          f"stopped={len(stopped)}, cancel={st.get('player_swing_cancel')!r}")
+
+    st, stopped = _run(0.5)
+    check(not stopped and st.get("player_swing_cancel") is None,
+          "and so does one inside the measured gap (0.5 u)",
+          "16,711 consecutive accepted reports: 11.8 % repeat to the DECIMAL "
+          "and only 0.1 % land in (0.001, 1) u, so the epsilon sits in an "
+          "EMPTY gap and cannot bite whatever value in it is chosen")
+
+    st, stopped = _run(60.0)
+    check(bool(stopped) and st.get("player_swing_cancel") == "movement",
+          "a REAL move (60 u, near the p50 of 55.9) still cancels -- the rule "
+          "is retail's and is not being weakened",
+          f"stopped={len(stopped)} -- retail's player cancels 63.6 % of the "
+          f"swings it moves during (7 of 11) against 1.0 % of the ones it "
+          f"stands through (9 of 892)")
+
+    st, stopped = _run(None)
+    check(bool(stopped),
+          "CONTROL: the CLICK arm passes moved=None and is untouched",
+          f"stopped={len(stopped)} -- a 0x003E is an explicit move ORDER, not "
+          f"a report, and the cast half of cancel_on_move is untouched on "
+          f"both arms (castmech's evidence, not measured here)")
 
     return LEDGER.verdict()
 
