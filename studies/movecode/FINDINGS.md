@@ -19424,3 +19424,84 @@ restated point against the previous grant (identical?); the second point's lengt
 ends the sequence (the `0x0047`, a heading change, a clip to zero). Then ship it under its own
 flag with the straight-walk signature as the test, and state the wall composition as the run
 question it is.
+
+---
+
+## 1z-di. THE ARRIVAL RE-GRANT — **when the copy reaches the end of a keyboard lead and the client has said nothing, the next chord goes out along the held heading, from the arrival point, unprompted.** Retail's rule, measured on the 50 and pinned by its falsifier (0 of 323 before arrival); the chain's second branch, under its own flag
+
+**2026-09-10.** Ident `MOVECODE-1z-di`. Asked by the owner after 1z-dh. OBSERVED unless marked.
+
+### 1z-di.1 The measurement §1z-dh registered, done first
+
+Over every true silence after a short grant (the client sent nothing but `0x0009`/`0x00C1` for
+> 1 s; the 1z-dh instrument), 61 connections:
+
+| | |
+|---|---|
+| first re-grants inside the silence | **50** |
+| second re-grant in the same silence | **0** — the next chord (765 u, 2.65 s) outlasts the 1.79 s cadence |
+| same-instant PAIRS (restated point + next chord) | 17: restated point = the previous grant to **0.0 u** (max 0.1); the chord **765 u along the heading** (min 0.3, max 768), **0.0 u across** (max 2.4) |
+| SINGLES | 33: **765 u along** the heading from the previous grant (min 19, max 768), 0.0 u across (max 126), **0 restatements**, 31 next-chords |
+| instant minus the copy's arrival (`t_grant + Lg / 288`) | **p50 +0.04 s** (p10 −0.27, p90 +0.14) |
+| plane words on re-grants | `(p, p)` 88, other 10, `(p, 0)` 6 — the equal pair, where answered grants are `(p, p)` 2,994 / `(p, 0)` 333 / other 250 |
+| **CONTROL** — full-chord first grants (≥ 700 u) followed by a true silence > 1 s | **323, with 0 grants inside and 0 before arrival** |
+
+The control is the falsifier: a server that re-granted on a clock would have shown grants inside
+the full-chord silences; none appear, because the copy on a 767 u chord has not arrived when the
+1.79 s report comes. **The trigger is arrival.** The re-grant's shape is the lead's own — the
+heading's chord from the point the copy stands on — and the restatement, where it appears, is
+the previous grant to the unit and a no-op for a client already there.
+
+### 1z-di.2 ★★★ Shipped — the chain's second branch
+
+`kbd_lead_chain_tick` (MOVECODE-1z-cl) already fires at the mirror's arrival and re-runs a
+**corridor** leg from the report's ray so the next vertex goes out; every other lead answered
+`not-a-door-leg` and parked. Under `KBD_LEAD_ARRIVAL_REGRANT`:
+
+* a non-door leg is due at the same arrival (`parked` / `arriving`, the mirror's own clock, the
+  same `KBD_LEAD_CHAIN_MARGIN`);
+* the re-grant's origin is the **arrival point** (the leg's dest) and its ray is one
+  `KBD_SYNC_LEAD` along the leg's own heading (`ray − (x0, y0)`), capped like every lead (§1z-ab);
+  it runs the same `a2_clip_lead` and `_fence_gate_lead` the arm runs, so the seam-origin door,
+  the plane clip, the wall-slide arm, the disc door and the fence all apply unchanged;
+* no progress (the clip returns the point it stands on) stops the chain with a `regrant-stop`
+  row; a send is `KBD LEAD RE-GRANT n (x,y) from (ax,ay) … the copy parked/arriving at the lead's
+  end, the client silent`, with a `kbd_leg` row `act=regrant` carrying the origin;
+* **the leg's origin moves to the arrival point and `t0` to now**, so `a2_leg_position` walks the
+  new chord from where the copy stands in whatever direction the clip gave it, and **the
+  integrator's `dest` follows** — `state["pos"]`, the follow's and the reach's operand
+  (§1z-dd.5), walks on with the copy instead of parking. (The corridor branch keeps 1z-cl's rule:
+  origin and `t0` untouched, only the vertex advances.)
+* bounded by `KBD_LEAD_CHAIN_MAX` (12) as the corridor is; `--no-arrival-regrant` reverts this
+  branch alone, `--no-kbd-lead-chain` both. The stop (`stopped-body`), the fence (`fence-shut`),
+  a press or click (the leg is killed) and a newer report (a fresh leg) all end it.
+
+`test_kbdsync` §24h–24n: the shipped re-grant at (920 + 520, 1000) from a parked clear lead, the
+origin moved and the integrator's dest following; a second re-grant at the next arrival; the
+**known-bad arm** parking (`not-a-door-leg`, dest untouched — RUN-1zDB leg 4's arm); the copy
+still walking (`walking`); a stopped body (`stopped-body`); a re-grant into a wall stopping as
+`regrant-stop`; ships ON with its revert on the capture's flags row.
+
+### 1z-di.3 What it changes, where, and what it does not
+
+* **Straight walks:** a clipped or short lead no longer strands the copy — it walks on along the
+  heading until the client's next report re-aims it, which is retail's copy (§1z-da.2's "ahead
+  27 to 18"). §1z-cw.6's parked episodes (255 over six sessions, p50 0.25 s, 172 on the granted
+  point) are the exposure; §1z-cy's under-50 u lead share (31.8 %) no longer parks the copy for a
+  report interval.
+* **The corner (RUN-1zDB leg 4):** the re-grant from the wall point along the heading into the
+  wall clips to nothing — **unless** the clip's own wall-slide arm gives the next vertex, in which
+  case the copy crawls vertex to vertex toward where the body slid. That composition is a
+  **RECONSTRUCTION** (two observed rules, no witness: 0 slide-then-silence windows on retail,
+  §1z-dh.2) and its risk is stated: a slide rule that turns the second wall's way would walk the
+  copy past the corner the body stopped in, and the client's own separation gate would then snap
+  the body onto it. Bounded by the chain's 12 and by no-progress; measured by the next corner
+  session, whose `kbd_leg regrant` rows and tape will say which.
+* Not changed: the first grant's clip and cap; the corridor chain; the refuted refresh (off);
+  the swept-disc clip (§1z-dd.6), next.
+
+**Prediction for the next hand-driven session:** `KBD LEAD RE-GRANT` lines on straight walks
+whose lead was clipped or short, ~0.9–1.8 s after the report; `sessionscore`'s parked-copy
+signature (the copy standing while the body moves) down from 1z-cw.6's p50 0.25 s per episode;
+and in the corner, either `regrant-stop` rows (the wall, no slide) or a run of `regrant` rows
+with `wall-slide` clips (the crawl) — the tape then says whether the crawl reached the body.

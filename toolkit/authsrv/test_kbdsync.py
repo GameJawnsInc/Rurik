@@ -62,7 +62,7 @@ from test_position_trust import receive_arm, Sent, FakeRec   # noqa: E402
 # the word-against-point check and the known-bad arm that reddens all three --
 # the cross-plane guard NPCTRACK proposed is refuted at 0 of 488 and ships as
 # nothing).
-LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=224)   # 1z-cw: +4, from the green run
+LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=231)   # 1z-di: +7 (24h-24n), from the green run
 check = checks.adopt(LEDGER)
 
 SRC = open(authsrv.__file__, encoding="utf-8").read()
@@ -2081,11 +2081,23 @@ def main():
     check(not authsrv.kbd_lead_chain_tick(w24c, st24c, 0, FakeRec()) and not w24c.of(MOVE)
           and authsrv.kbd_lead_chain_due(st24c, st24c["kbd_leg"], _t.time())[1] == "fence-shut",
           "24c. the fence shut (ours or the client's, 1z-cj): no chain into it", "")
+    # RE-AIMED 2026-09-10 (MOVECODE-1z-di), not deleted: this used to assert
+    # that a lead the doors did not move is never chained, which is now the
+    # KNOWN-BAD arm's claim (24j pins it there). What stays true on this
+    # fixture is the DISTINCTION: a clear leg's chain is the arrival re-grant
+    # -- along the leg's own heading from the arrival point, origin moved --
+    # never a corridor vertex from the report's ray.
     st24d = _chain_state((190.0, 1060.0), clip_why="clear")
-    w24d = Sent(st24d)
-    check(not authsrv.kbd_lead_chain_tick(w24d, st24d, 0, FakeRec()) and not w24d.of(MOVE)
-          and authsrv.kbd_lead_chain_due(st24d, st24d["kbd_leg"], _t.time())[1] == "not-a-door-leg",
-          "24d. a lead the doors did not move has no corridor: nothing to chain", "")
+    w24d, r24d = Sent(st24d), FakeRec()
+    sent24d = authsrv.kbd_lead_chain_tick(w24d, st24d, 0, r24d)
+    mv24d = w24d.of(MOVE)
+    check(sent24d and mv24d and "RE-GRANT 1" in mv24d[0][2] and "CHAIN" not in mv24d[0][2]
+          and st24d["kbd_leg"]["x0"] == 190.0 and st24d["kbd_leg"]["y0"] == 1060.0
+          and r24d.of("kbd_leg") and r24d.of("kbd_leg")[-1]["act"] == "regrant",
+          "24d. a lead the doors did not move has no corridor: its chain is the "
+          "ARRIVAL RE-GRANT (1z-di), along its own heading from where the copy "
+          "stands, never a vertex from the report's ray",
+          f"sent {sent24d} wire {mv24d} leg {st24d['kbd_leg']}")
     st24e = _chain_state((150.0, 1000.0))          # parked (t_arrive 0) but never moved
     w24e, r24e = Sent(st24e), FakeRec()
     check(not authsrv.kbd_lead_chain_tick(w24e, st24e, 0, r24e) and not w24e.of(MOVE)
@@ -2113,6 +2125,110 @@ def main():
           > SRC.index("kbd_lead_refresh_tick(send, state, conn_id, rec)"),
           "24g. ships ON with its revert, in the header; polled at all three "
           "tick sites, after the refresh", "")
+
+    # MOVECODE-1z-di: THE ARRIVAL RE-GRANT, the chain's second branch. Retail's
+    # server, when its copy reaches the end of a grant and the client has said
+    # nothing since, sends the next chord along the held heading unprompted --
+    # 50 first re-grants in the live corpus's true silences, p50 +0.04 s after
+    # arrival (Lg / 288), 765 u along the heading and 0.0 u across; 0 of 323
+    # full-chord silences carried one before arrival (the trigger is arrival).
+    # Ours parked on the lead's end until the next report (1z-cw.6: 255
+    # episodes; RUN-1zDB leg 4: 14.6 s, the Hatcher hitting from 161 u).
+    def _regrant_state(w0, x0, dest, ray, clip_why="clear", t_arrive=0,
+                       moving=True, fence=None):
+        g = _Guard(w0)
+        g.mirror.sync.t_arrive = t_arrive
+        now = _t.time()
+        st = {"pos": x0, "plane": 0, "pathmap": _Hole(), "agtrack_guard": g,
+              "kbd_moving_at": (now - 0.3) if moving else None,
+              "fence_shut_at": fence, "dest": dest,
+              "kbd_leg": authsrv.a2_leg_note(x0, dest, 0, 1, now, ray=ray,
+                                             clip_why=clip_why)}
+        return st
+
+    L = authsrv.KBD_SYNC_LEAD
+    st24h = _regrant_state((920.0, 1000.0), (400.0, 1000.0), (920.0, 1000.0),
+                           (1167.0, 1000.0))
+    w24h, r24h = Sent(st24h), FakeRec()
+    sent24h = authsrv.kbd_lead_chain_tick(w24h, st24h, 0, r24h)
+    mv = w24h.of(MOVE)
+    lg = st24h["kbd_leg"]
+    check(sent24h and mv and "KBD LEAD RE-GRANT 1" in mv[0][2]
+          and abs(mv[0][1][1][0] - (920.0 + L)) < 1e-6 and abs(mv[0][1][1][1] - 1000.0) < 1e-6
+          and lg["chained"] == 1 and lg["x0"] == 920.0 and lg["y0"] == 1000.0
+          and tuple(lg["dest"]) == (920.0 + L, 1000.0)
+          and tuple(st24h["dest"]) == (920.0 + L, 1000.0)
+          and r24h.of("kbd_leg") and r24h.of("kbd_leg")[-1]["act"] == "regrant"
+          and r24h.of("kbd_leg")[-1]["origin"] == [920.0, 1000.0],
+          "24h. THE ARRIVAL RE-GRANT: world-0 parked on a CLEAR lead's end -> the "
+          "next chord goes out from the arrival point along the leg's own heading, "
+          "capped like every lead; the leg's origin moves to the arrival point and "
+          "the integrator's dest follows",
+          f"sent {sent24h} wire {mv} leg {lg} dest {st24h.get('dest')}")
+
+    st24h["agtrack_guard"] = _Guard((920.0 + L, 1000.0))
+    st24h["agtrack_guard"].mirror.sync.t_arrive = 0
+    w24i = Sent(st24h)
+    sent24i = authsrv.kbd_lead_chain_tick(w24i, st24h, 0, FakeRec())
+    mv = w24i.of(MOVE)
+    check(sent24i and mv and "KBD LEAD RE-GRANT 2" in mv[0][2]
+          and abs(mv[0][1][1][0] - (920.0 + 2 * L)) < 1e-6
+          and st24h["kbd_leg"]["chained"] == 2 and st24h["kbd_leg"]["x0"] == 920.0 + L,
+          "24i. and again at the next arrival, chord by chord, while the client stays "
+          "silent -- retail's corpus could not show a second one only because its "
+          "1.79 s cadence reports first",
+          f"sent {sent24i} wire {mv} leg {st24h['kbd_leg']}")
+
+    st24j = _regrant_state((920.0, 1000.0), (400.0, 1000.0), (920.0, 1000.0),
+                           (1167.0, 1000.0))
+    w24j = Sent(st24j)
+    _saved_ar = authsrv.KBD_LEAD_ARRIVAL_REGRANT
+    try:
+        authsrv.KBD_LEAD_ARRIVAL_REGRANT = False
+        sent24j = authsrv.kbd_lead_chain_tick(w24j, st24j, 0, FakeRec())
+        why24j = authsrv.kbd_lead_chain_due(st24j, st24j["kbd_leg"], _t.time())[1]
+    finally:
+        authsrv.KBD_LEAD_ARRIVAL_REGRANT = _saved_ar
+    check(not sent24j and not w24j.of(MOVE) and why24j == "not-a-door-leg"
+          and tuple(st24j["dest"]) == (920.0, 1000.0),
+          "24j. KNOWN-BAD ARM (--no-arrival-regrant): the copy parks on the lead's "
+          "end until the next report -- RUN-1zDB leg 4, where that report never came",
+          f"sent {sent24j} why {why24j}")
+
+    st24k = _regrant_state((700.0, 1000.0), (400.0, 1000.0), (920.0, 1000.0),
+                           (1167.0, 1000.0), t_arrive=5000)
+    w24k = Sent(st24k)
+    check(not authsrv.kbd_lead_chain_tick(w24k, st24k, 0, FakeRec()) and not w24k.of(MOVE)
+          and authsrv.kbd_lead_chain_due(st24k, st24k["kbd_leg"], _t.time())[1] == "walking",
+          "24k. the copy still walking the lead: nothing -- the trigger is ARRIVAL, "
+          "which retail's 323 full-chord silences with 0 early grants pin", "")
+    st24k2 = _regrant_state((920.0, 1000.0), (400.0, 1000.0), (920.0, 1000.0),
+                            (1167.0, 1000.0), moving=False)
+    w24k2 = Sent(st24k2)
+    check(not authsrv.kbd_lead_chain_tick(w24k2, st24k2, 0, FakeRec()) and not w24k2.of(MOVE)
+          and authsrv.kbd_lead_chain_due(st24k2, st24k2["kbd_leg"], _t.time())[1] == "stopped-body",
+          "24k2. a 0x0047 cleared the latch: the client spoke, nothing is re-granted", "")
+
+    # A lead whose end sits at a wall, the heading INTO it: the re-grant clips
+    # to nothing and the chain stops, saying so.
+    st24l = _regrant_state((198.0, 1000.0), (100.0, 1000.0), (198.0, 1000.0),
+                           (867.0, 1000.0), clip_why="clipped")
+    w24l, r24l = Sent(st24l), FakeRec()
+    sent24l = authsrv.kbd_lead_chain_tick(w24l, st24l, 0, r24l)
+    rows24l = r24l.of("kbd_leg")
+    check(not sent24l and not w24l.of(MOVE) and st24l["kbd_leg"].get("chain_stopped") is True
+          and rows24l and rows24l[-1]["act"] == "regrant-stop"
+          and rows24l[-1]["why"] == "no-progress",
+          "24l. into a wall: the re-grant clips to the point it stands on, makes no "
+          "progress, and the chain stops with a row -- a slide to the wall's next "
+          "vertex is the clip's own arm's to give, and the corner is a run question",
+          f"sent {sent24l} rows {rows24l}")
+
+    check(authsrv.KBD_LEAD_ARRIVAL_REGRANT is True and "--no-arrival-regrant" in SRC
+          and authsrv.capture_flags().get("KBD_LEAD_ARRIVAL_REGRANT") is True
+          and "KBD LEAD RE-GRANT" in SRC and "MOVECODE-1z-di" in SRC,
+          "24n. ships ON with its revert, on the capture's flags row, through the "
+          "chain tick's own poll sites", "")
 
     # MOVECODE-1z-cu. The world tick's integrator walked state["pos"] toward
     # state["dest"] at a flat 14.4 u per tick whatever the 0x003D's movementType

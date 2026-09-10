@@ -6198,7 +6198,10 @@ def kbd_lead_chain_due(state, leg, now):
     if not leg or leg.get("ray") is None:
         return False, "no-leg"
     why = leg.get("clip_why") or ""
-    if "w0-route" not in why and "w0-clip" not in why:
+    door = ("w0-route" in why) or ("w0-clip" in why)
+    if not door and not KBD_LEAD_ARRIVAL_REGRANT:
+        # A lead the doors did not move has no corridor to chain; without
+        # 1z-di's branch the copy parks on it until the next report.
         return False, "not-a-door-leg"
     if leg.get("chain_stopped"):
         return False, "stopped"
@@ -6241,8 +6244,25 @@ def kbd_lead_chain_tick(send, state, conn_id, rec=None, now=None):
         return False
     if state.get("action_hold") and not GRANT_DURING_HOLD:
         return False
-    reported = (leg["x0"], leg["y0"])
-    dest, clipped, clip_why = a2_clip_lead(state, reported, list(leg["ray"]))
+    prev_why = leg.get("clip_why") or ""
+    door = ("w0-route" in prev_why) or ("w0-clip" in prev_why)
+    if door:
+        # 1z-cl: the corridor -- re-run from the leg's own report and ray so
+        # the doors name the NEXT vertex.
+        reported = (leg["x0"], leg["y0"])
+        ray = list(leg["ray"])
+    else:
+        # 1z-di: retail's rule -- from the ARRIVAL point, one more chord
+        # along the leg's own heading, capped like every lead (1z-ab).
+        origin = (float(leg["dest"][0]), float(leg["dest"][1]))
+        hx, hy = leg["ray"][0] - leg["x0"], leg["ray"][1] - leg["y0"]
+        hm = math.hypot(hx, hy)
+        if hm < 1.0:
+            return False
+        reported = origin
+        ray = [origin[0] + hx / hm * KBD_SYNC_LEAD,
+               origin[1] + hy / hm * KBD_SYNC_LEAD]
+    dest, clipped, clip_why = a2_clip_lead(state, reported, ray)
     dest, src, clip_why = _fence_gate_lead(state, reported, dest, "kbd",
                                            clip_why)
     if src != "kbd":
@@ -6251,27 +6271,51 @@ def kbd_lead_chain_tick(send, state, conn_id, rec=None, now=None):
     if moved <= A2_LEAD_W0_TOL:
         leg["chain_stopped"] = True
         if rec is not None:
-            rec.event("kbd_leg", act="chain-stop", why="no-progress",
-                      clip_why=clip_why, n=leg.get("chained", 0),
+            rec.event("kbd_leg", act=("chain-stop" if door else "regrant-stop"),
+                      why="no-progress", clip_why=clip_why,
+                      n=leg.get("chained", 0),
                       dest=[round(dest[0], 1), round(dest[1], 1)])
         return False
     f3, f4 = a2_lead_words(state, dest, leg.get("report_plane") or leg["plane"])
     n = leg.get("chained", 0) + 1
+    if door:
+        label = (f"KBD LEAD CHAIN {n} ({dest[0]:.0f},{dest[1]:.0f}) from "
+                 f"({reported[0]:.0f},{reported[1]:.0f}) plane {f3}"
+                 + (f" carry {f4}" if f4 != f3 else "")
+                 + f" [{clip_why}] world-0 {why} at the vertex [MOVECODE-1z-cl]")
+    else:
+        label = (f"KBD LEAD RE-GRANT {n} ({dest[0]:.0f},{dest[1]:.0f}) from "
+                 f"({reported[0]:.0f},{reported[1]:.0f}) plane {f3}"
+                 + (f" carry {f4}" if f4 != f3 else "")
+                 + f" [{clip_why}] the copy {why} at the lead's end, the "
+                 f"client silent [MOVECODE-1z-di]")
     send(GAME_SMSG_AGENT_MOVE_TO_POINT,
-         [PLAYER_AGENT_ID, [float(dest[0]), float(dest[1])], f3, f4],
-         f"KBD LEAD CHAIN {n} ({dest[0]:.0f},{dest[1]:.0f}) from "
-         f"({reported[0]:.0f},{reported[1]:.0f}) plane {f3}"
-         + (f" carry {f4}" if f4 != f3 else "")
-         + f" [{clip_why}] world-0 {why} at the vertex [MOVECODE-1z-cl]")
+         [PLAYER_AGENT_ID, [float(dest[0]), float(dest[1])], f3, f4], label)
     state["zl_last_grant_plane"] = f3
-    # ORIGIN AND t0 UNTOUCHED (the refresh's rule): the position model stays
-    # continuous and the ray keeps its report; only the vertex advances.
-    state["kbd_leg"] = dict(leg, dest=(float(dest[0]), float(dest[1])),
-                            plane=f3, clip_why=clip_why, chained=n)
+    if door:
+        # ORIGIN AND t0 UNTOUCHED (the refresh's rule): the position model
+        # stays continuous and the ray keeps its report; only the vertex
+        # advances.
+        state["kbd_leg"] = dict(leg, dest=(float(dest[0]), float(dest[1])),
+                                plane=f3, clip_why=clip_why, chained=n)
+    else:
+        # THE ORIGIN MOVES TO THE ARRIVAL POINT and t0 to now: the model walks
+        # the new chord from where the copy stands, in whatever direction the
+        # clip gave it (a slide turns; a straight walk does not), and the ray
+        # keeps the heading for the next arrival. The integrator's `dest`
+        # follows, so state["pos"] -- the follow's and the reach's operand --
+        # walks on with the copy instead of parking (1z-dd.5, 1z-dd.8).
+        state["kbd_leg"] = dict(leg, x0=origin[0], y0=origin[1], t0=now,
+                                dest=(float(dest[0]), float(dest[1])),
+                                ray=(float(ray[0]), float(ray[1])),
+                                plane=f3, clip_why=clip_why, chained=n)
+        state["dest"] = (float(dest[0]), float(dest[1]))
     if rec is not None:
-        rec.event("kbd_leg", act="chain", n=n, why=why, clip_why=clip_why,
-                  moved=round(moved, 1), dest=[round(dest[0], 1), round(dest[1], 1)],
-                  plane=f3, plane_cur=f4)
+        rec.event("kbd_leg", act=("chain" if door else "regrant"), n=n, why=why,
+                  clip_why=clip_why, moved=round(moved, 1),
+                  dest=[round(dest[0], 1), round(dest[1], 1)],
+                  plane=f3, plane_cur=f4,
+                  **({} if door else {"origin": [round(origin[0], 1), round(origin[1], 1)]}))
     return True
 
 
@@ -6693,6 +6737,28 @@ A2_LEAD_PLANE_WORDS = True
 KBD_LEAD_CHAIN = True
 KBD_LEAD_CHAIN_MAX = 12          # sends per leg
 KBD_LEAD_CHAIN_MARGIN = 0.10     # s before the copy's arrival at the vertex
+# THE ARRIVAL RE-GRANT (MOVECODE-1z-di) -- the chain's second branch, for the
+# legs the doors did NOT move. Retail's server, when its copy reaches the end
+# of a grant and the client has said nothing since, sends the NEXT chord along
+# the held heading unprompted: measured on the live corpus (studies/movecode
+# 1z-dh, review/parkedcopy.py --silences and the 1z-di census), 61 connections,
+# 50 first re-grants inside true silences after short grants, at p50 +0.04 s
+# after the copy's arrival (Lg / 288 u/s; p10 -0.27, p90 +0.14); 33 a single
+# point 765 u along the heading from the previous grant (0.0 u across), 17 a
+# same-instant pair of the previous point restated (0.0 u) and that chord;
+# and the falsifier held -- 323 full-chord grants followed by a true silence,
+# 0 grants inside, 0 before arrival: the trigger is ARRIVAL, not time. Ours
+# parked (1z-cw.6: 255 episodes, 172 ON the granted point), and in the corner
+# the report that would have re-aimed it never came (RUN-1zDB leg 4: 14.6 s,
+# the Hatcher hitting from 161 u). The re-grant runs the same clip and doors
+# the arm runs, from the ARRIVAL point, along the leg's own heading, capped at
+# KBD_SYNC_LEAD like every lead (1z-ab); the leg's origin moves to the arrival
+# point so the position model walks on with the copy; the integrator's `dest`
+# follows. A re-grant into a wall clips to nothing and stops the chain, or
+# slides to the wall's next vertex where the clip's own slide arm says so --
+# that composition (the corner) has no retail witness and is the run question.
+# --no-arrival-regrant reverts this branch alone; --no-kbd-lead-chain both.
+KBD_LEAD_ARRIVAL_REGRANT = True
 # THE RATE/DESTINATION PAIR MAY NOT BE SPLIT BY A TICK (MOVECODE-1z-cm). 0x002B's
 # setter SETS the client's INTERNAL_FLAG_MOVEMENT_STALE (0x00602A22), the destination
 # setter CLEARS it (0x00602A65), and the movement tick -- an ARRIVAL record fired by
@@ -26281,7 +26347,18 @@ def main():
                     help="MOVECODE-1z-cl REVERT: a door-B lead names one corridor "
                          "vertex and world-0 idles there until the next 0.5 s "
                          "heading tick (11.6 s idle over session 4's 39 door "
-                         "leads; six gate-1 snaps). Known-bad arm.")
+                         "leads; six gate-1 snaps). Known-bad arm. Also turns "
+                         "off 1z-di's arrival re-grant, which is this chain's "
+                         "second branch.")
+    ap.add_argument("--no-arrival-regrant", action="store_true",
+                    help="MOVECODE-1z-di REVERT: when the copy reaches the end of "
+                         "a keyboard lead and the client has said nothing, the "
+                         "copy PARKS there until the next report instead of "
+                         "being sent the next chord along the held heading -- "
+                         "retail re-grants at arrival unprompted (50 of 50 first "
+                         "re-grants at p50 +0.04 s after arrival; 0 of 323 "
+                         "full-chord silences before it). RUN-1zDB leg 4's "
+                         "parked copy is this arm.")
     ap.add_argument("--no-bound-clear-leads", action="store_true",
                     help="MOVECODE-1z-ct REVERT: the model leg is bounded by the order "
                          "ONLY when our own mesh cut the grant short, so on a clear lead "
@@ -28161,6 +28238,7 @@ def main():
     global A2_LEAD_WALL_SLIDE
     global A2_LEAD_DISC_CLEAR
     global A2_LEAD_W0_ORIGIN, A2_LEAD_PLANE_WORDS, KBD_LEAD_CHAIN, STALE_PAIR_GATE
+    global KBD_LEAD_ARRIVAL_REGRANT
     global NPC_LEG_DISC_CLIP, MODEL_BOUND_CLEAR_LEAD, MODEL_FAMILY_RATE, KBD_GRANT_FLOOR
     if a.legacy_kbd_sync:
         KBD_SYNC = False
@@ -28205,6 +28283,7 @@ def main():
         A2_LEAD_W0_ORIGIN = not a.no_lead_w0_origin
         A2_LEAD_PLANE_WORDS = not a.no_lead_plane_words
         KBD_LEAD_CHAIN = not a.no_kbd_lead_chain
+        KBD_LEAD_ARRIVAL_REGRANT = not a.no_arrival_regrant
         STALE_PAIR_GATE = not a.no_stale_pair_gate
         MODEL_BOUND_CLEAR_LEAD = not a.no_bound_clear_leads
         if not MODEL_BOUND_CLEAR_LEAD:
@@ -28245,6 +28324,10 @@ def main():
         if not KBD_LEAD_CHAIN:
             print("[map] --no-kbd-lead-chain: a door-B vertex waits for the "
                   "next heading tick (1z-cl's revert).", flush=True)
+        if not KBD_LEAD_ARRIVAL_REGRANT:
+            print("[map] --no-arrival-regrant: the copy parks at a keyboard "
+                  "lead's end until the next report (1z-di's revert; retail "
+                  "re-grants the next chord at arrival).", flush=True)
         if not A2_LEAD_DISC_CLEAR:
             print("[map] --no-lead-disc-clear: a keyboard lead may end inside a "
                   "hostile's disc, where the client halts world-0 (1z-cg's "
