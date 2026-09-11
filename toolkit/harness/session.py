@@ -97,9 +97,14 @@ from runargs import (  # noqa: F401,E402
 
 # The port-ownership pre-flight moved to `portclaim.py`. Re-exported here BY
 # NAME -- never behind a module prefix -- because `main` calls `preflight` and
-# `Stack.start` calls `listeners_on` as bare Names, and `test_preflight_owner.py`
-# reads seven of the eight off this module as `session.<name>` (its AST lock
-# requires main()'s `preflight(specs, ...)` to stay exactly that shape).
+# `Stack.start` calls `listeners_on` as bare Names, and TWO tests read these off
+# this module as `session.<name>`. `test_preflight_owner.py` takes seven --
+# cmdline, argv_of, this_tree, tree_of, replace_verdict, listeners_on, preflight
+# -- and its AST lock also requires main()'s `preflight(specs, ...)` to stay
+# exactly that shape; `test_harness.py:177-192` takes listeners_on, preflight and
+# the EIGHTH, `image_name`, which no other reader has. So every one of the eight
+# is read by name from this module and none is here merely for completeness: a
+# future "unused import" cleanup that drops any of them reddens a test.
 from portclaim import (  # noqa: F401,E402
     listeners_on, image_name, cmdline, argv_of, tree_of, this_tree,
     replace_verdict, preflight)
