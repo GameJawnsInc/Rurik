@@ -286,7 +286,7 @@ import resyncscore                                             # noqa: E402
 # raise, and an uncaught `SystemExit` exits the test process with no banner.
 # Re-exported HERE, at the site it was cut from, because this file raises it by
 # the bare name at eleven sites below and `test_grantsim.py` catches
-# `GS.Refused` (§B, §C0).
+# `GS.Refused` twice, both in its section 2 ("the refusals").
 from grantinputs import Refused                                 # noqa: F401,E402
 
 
@@ -592,9 +592,12 @@ SUBSTRATE_WARNING = (
 # is the one in this file that lands INSIDE a banner: the stamps above and
 # `_TRACK_CACHE`/`track_of` below are still this file's, only the resolvers they
 # feed moved. Re-exported HERE, at the site they were cut from, because
-# `track_of()` below calls `capture_path()` by the bare name, as do eight
-# further sites in this file, and `test_grantsim.py` reads all three off the
-# module (`GS.capture_path`, `GS.movetap_path`, `GS.require_ours`).
+# `track_of()` below calls `capture_path()` by the bare name, as do seven
+# further sites in this file (`movetap_path` has two call sites here and
+# `require_ours` three). `test_grantsim.py` reads TWO of the three off the
+# module -- `GS.capture_path` in its sections 6 and 9, `GS.require_ours` in
+# section 2. `movetap_path` is named by no test: its re-export exists for this
+# file's own two bare-name call sites, and from G2 on for `field4screen.py`.
 from grantinputs import (                                       # noqa: F401,E402
     capture_path, movetap_path, require_ours)
 
@@ -683,7 +686,8 @@ def c2s_moves(path):
 
 # `_AUTHSRV` and `_authsrv()` live in `grantinputs.py` now. Re-exported HERE,
 # at the site they were cut from, because this file calls `_authsrv()` by the
-# bare name below and `test_grantsim.py` reads `GS._authsrv()` (§C3, §10).
+# bare name at six sites below and `test_grantsim.py` reads `GS._authsrv()` at
+# four, in its sections 2 (twice), 6b (REALFIX-C3, heading arm) and 10.
 # `_AUTHSRV` itself is NOT re-exported and must not be: it is a mutable memo, so
 # a `from grantinputs import _AUTHSRV` would bind the `None` it holds at import
 # time and never see it fill -- a second, permanently-stale copy.
