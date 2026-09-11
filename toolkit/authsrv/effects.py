@@ -61,7 +61,7 @@ condition row's. Same rule, different join, and this server has no model of
 
 WHAT THE DURATION SLOT HOLDS WHEN THE BIT IS CLEAR, which is the trap this
 module exists to not fall into. `skill_arguments` bit 1 enables the duration
-set, and `authsrv.skill_scale_value` REFUSES to read a disabled set -- correctly,
+set, and `skillread.skill_scale_value` REFUSES to read a disabled set -- correctly,
 for the scale, where Rush's slot holds a constant 25 that is not a progression.
 But retail sent duration 30.0 for skills 984 and 998, whose duration bit is
 CLEAR. So the bit means "this duration SCALES with rank", not "this slot is
@@ -387,7 +387,7 @@ def interp(lo, hi, rank):
     Divisor a literal double 15.0 (a stdlib read of 0x0094B930 confirms the
     bytes), no upper clamp so ranks above 15 extrapolate, floor at zero from
     ArenaNet's own assert ConstSkill:3769. Half-UP rather than Python's
-    half-even, matching `authsrv.skill_scale_value` -- the client's CRT helper
+    half-even, matching `skillread.skill_scale_value` -- the client's CRT helper
     adjusts by +/-1.0 rather than +/-0.5 and the tie-break was never settled,
     so the two callers at least agree with each other and the choice is
     written down in both.

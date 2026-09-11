@@ -2687,81 +2687,14 @@ def _resolves_at_cast(skill_id):
 ENEMY_SKILL_RANK = 12
 
 
-def skill_scale_value(skill_id, rank, which="scale"):
-    """A skill's attribute-scaled value at `rank`, by the CLIENT's own formula.
-
-    MEASURED, at 0x005A8920 -- one general-purpose interpolator the client uses
-    for the scale, bonus-scale and duration sets alike (studies/combat 8c):
-
-        value(rank) = max(0, round(lo + (hi - lo) * rank / 15.0))
-
-    with the divisor a literal double 15.0 (verified by a stdlib read of
-    0x0094B930: bytes 0000000000002e40) and NO upper clamp on rank, so ranks
-    above 15 extrapolate rather than saturating. The floor at zero is
-    ArenaNet's own assert, ConstSkill:3769 `(int)result >= 0`.
-
-    THE BITFIELD IS HONOURED, and it is not optional. `skill_arguments` (+0x58)
-    enables each set -- 1 duration, 2 scale, 4 bonus -- and a disabled set's
-    slot can still hold a meaningful CONSTANT: Rush's scale slot holds 25, the
-    "move 25% faster" in its description, with the bit clear. Reading endpoints
-    without the bit invents a progression the game never draws, so a disabled
-    set raises here rather than returning a plausible number.
-
-    THE ROUNDING TIE-BREAK IS UNRESOLVED (studies/combat 8c): the client's CRT
-    helper adjusts by +/-1.0 rather than the textbook +/-0.5 before truncating,
-    and half-up vs half-even was not settled. Python's round() is half-EVEN, so
-    this uses explicit half-up -- a choice, recorded here, and one that cannot
-    currently bite: no skill this server resolves lands on a .5, which
-    test_skilldamage asserts rather than leaves to luck.
-    """
-    import math
-    row = agents.WORLD.get("skills", str(skill_id))
-    bit = {"scale": 2, "bonus_scale": 4, "duration": 1}[which]
-    if not int(row["skill_arguments"]) & bit:
-        raise ValueError(
-            f"skill {skill_id} has its {which} set DISABLED "
-            f"(skill_arguments = {row['skill_arguments']}), so its "
-            f"{which}0/{which}15 slots are not a progression. Rush's scale "
-            f"slot holds 25 with this bit clear and the wiki lists no scale "
-            f"progression for it; reading the endpoints anyway would invent "
-            f"one. Refusing rather than returning a plausible number.")
-    lo, hi = int(row[f"{which}0"]), int(row[f"{which}15"])
-    exact = lo + (hi - lo) * rank / 15.0
-    return max(0, int(math.floor(exact + 0.5)))
-
-
-def skill_flat_constant(skill_id, which="scale"):
-    """A skill's bit-clear FLAT constant, or a refusal. The other half of
-    `skill_scale_value`'s rule.
-
-    That function refuses any disabled set, which is right for a PROGRESSION --
-    but a disabled slot with EQUAL endpoints is a different shape with real
-    witnesses: Rush's scale holds 25/25 ("move 25% faster"), Frenzy's 33/33
-    ("attack 33% faster"), Faintheartedness's 50/50 ("attack 50% slower"), the
-    glyph's bonus 2/2 ("your next 2 spells") -- each a flat number from the
-    skill's own description, sitting in a slot the bitfield does not enable
-    because there is nothing to interpolate. `effects.resolve_duration` already
-    honours the same shape for the duration slot, forced by retail (984/998).
-
-    Refused: a bit-SET slot (that is a progression -- use skill_scale_value at
-    a rank, not this) and bit-clear with DIFFERING endpoints (zero witnesses
-    anywhere; the glyph's 10..18 scale is the canonical case and its amount
-    enters through an explicit content field instead).
-    """
-    row = agents.WORLD.get("skills", str(skill_id))
-    bit = {"scale": 2, "bonus_scale": 4, "duration": 1}[which]
-    if int(row["skill_arguments"]) & bit:
-        raise ValueError(
-            f"skill {skill_id}'s {which} set is ENABLED -- it is a "
-            f"progression, not a flat constant. skill_scale_value is the "
-            f"reader for it.")
-    lo, hi = int(row[f"{which}0"]), int(row[f"{which}15"])
-    if lo != hi:
-        raise ValueError(
-            f"skill {skill_id}'s {which} slots differ ({lo} vs {hi}) with the "
-            f"bit clear -- not a constant, not an enabled progression, and no "
-            f"corpus witness says what such a pair means. Refusing.")
-    return lo
+# Both scale readers now live in `skillread.py` -- a skill row in, a number or a
+# refusal out. This re-export keeps them bound in THIS module, which is what the
+# bare-name callers below (`skill_damage`, `skill_heal`, `glyph_energy_amount`,
+# `skill_condition`) and the `authsrv.skill_scale_value` /
+# `authsrv.skill_flat_constant` reads in `test_skilldamage.py` and
+# `test_mechanics.py` resolve through. `episodemods.py` imports them from the
+# leaf directly.
+from skillread import skill_scale_value, skill_flat_constant  # noqa: F401,E402
 
 
 def skill_damage(skill_id, rank):
@@ -16056,62 +15989,27 @@ def degen_tick(send, state, conn_id):
 # the sends. The split exists for the same reason `energy_cost_for` is split
 # from the debit -- the caller has to know the outcome before choosing what to
 # put on the wire, and a conversion resolved twice would heal twice.
+#
+# POINTER, added rather than reworded (REFACTOR-A8): "which is the order
+# below", in the `prevents_damage` bullet above, is a claim about
+# `taker_damage`'s two loops -- the multiplier group, then the conversion
+# group -- and `taker_damage` moved to `episodemods.py`. What is still below
+# this banner is `resolve_taker_conversion`, the wire half it also documents.
+# Every line above stands exactly as it was written.
+
+# `allies_of`, `skill_target_kind` and `cast_recipient` now live in
+# `skillread.py` -- who a cast lands on. The re-exports keep the bare-name call
+# sites in this module bound (`resolve_heal` at the cast, `enemy_attack_tick`'s
+# other-ally gate) along with the `authsrv.cast_recipient` / `authsrv.allies_of`
+# / `authsrv.skill_target_kind` reads in `test_mechanics.py`.
+import skillread  # noqa: E402
+from skillread import skill_target_kind, cast_recipient  # noqa: F401,E402
+
 
 def allies_of(state, caster_id):
-    """Living agents allied with the caster, by id. A pure read.
-
-    The player has none today -- no heroes, no henchmen, no party -- so the
-    set is empty and every "other ally" spell the player casts has no legal
-    recipient, which is what the client itself refuses. A hostile's allies are
-    the other living agents carrying the same allegiance word (the spawn's own
-    FourCC, `agents.ALLEGIANCE_HOSTILE`), which `--enemies N` produces.
-    """
-    if caster_id == PLAYER_AGENT_ID:
-        return set()
-    table = state.get("agents", {})
-    me = table.get(caster_id)
-    if not me:
-        return set()
-    return {aid for aid, a in table.items()
-            if aid != caster_id and not a.get("dead")
-            and a.get("allegiance") == me.get("allegiance")}
-
-
-def skill_target_kind(skill_id):
-    """'self' | 'ally' | 'other_ally' | 'foe' | None, from the client's byte.
-
-    None for an unresolved code (1, 6, 14, 16) and for a skill with no content
-    row -- the bare-machine case -- and both fall through to the caster's own
-    choice, as `effects.effect_recipient` always has.
-    """
-    try:
-        row = agents.WORLD.get("skills", str(skill_id))
-    except Exception:                                          # noqa: BLE001
-        return None
-    return effects.TARGET_KINDS.get(int(row["target"]))
-
-
-def cast_recipient(skill_id, caster_id, target_id, allies):
-    """Who a cast lands on, or None when the client's target byte forbids it.
-
-    self       -> the caster, whatever was selected (Healing Signet mid-fight).
-    ally       -> the selected ally, else the caster: an ally spell aimed at a
-                  foe lands on yourself, which is what the client does with the
-                  press (RECONSTRUCTION of the client's auto-self; the wiki
-                  rule is only that the caster IS a legal target).
-    other_ally -> the selected ally and never the caster: no ally, no cast.
-    foe / None -> the selected target, else the caster (the old fall-through).
-    """
-    kind = skill_target_kind(skill_id)
-    if kind == "self":
-        return caster_id
-    if kind == "ally":
-        return target_id if target_id in allies else caster_id
-    if kind == "other_ally":
-        if target_id in allies and target_id != caster_id:
-            return target_id
-        return None
-    return target_id or caster_id
+    # PLAYER_AGENT_ID (3022) stays in this file; read it at the CALL, never as a
+    # default -- a default is evaluated at `def` time and would freeze it.
+    return skillread.allies_of(state, caster_id, PLAYER_AGENT_ID)
 
 
 def remove_conditions(send, state, agent_id, conn_id, why, count=None):
@@ -16234,13 +16132,15 @@ def resolve_heal(send, state, skill_id, rank, caster_id, target_id, conn_id):
     return out
 
 
-def blinded(state, agent_id):
-    """True if a live Blind (479) episode sits on the agent. Pure read."""
-    table = state.get("effects")
-    if not table:
-        return False
-    blind = effects.CONDITION_BY_NAME["Blind"]
-    return any(ep["skill"] == blind for ep in table.on_agent(agent_id))
+# `blinded` and the taker-side and swing-side modifiers below it now live in
+# `episodemods.py` -- what the wearer's open episodes do to a number. The
+# `taker-side damage modifiers` banner further up still documents both halves;
+# the wire half it names, `resolve_taker_conversion`, stays in this file.
+# `blinded` is a plain re-export (it reads nothing but `effects`); the module
+# object is imported for the two wrappers below -- `blind_miss` and
+# `swing_preparation_bonus` -- which forward flags that stay here.
+import episodemods  # noqa: E402
+from episodemods import blinded  # noqa: F401,E402
 
 
 def attack_fails(send, state, attacker_id, target_id, reason, conn_id, why):
@@ -16257,54 +16157,16 @@ def attack_fails(send, state, attacker_id, target_id, reason, conn_id, why):
 
 
 def blind_miss(state, agent_id):
-    """One roll: does THIS swing by a blinded agent miss? False when not blind."""
-    if not BLIND or not blinded(state, agent_id):
-        return False
-    return random.random() < BLIND_MISS_CHANCE
+    # BLIND (3423) and BLIND_MISS_CHANCE (3424) stay here -- BLIND is rebound by
+    # `global BLIND` in main(), so read both at the CALL, never as a default.
+    return episodemods.blind_miss(state, agent_id, BLIND, BLIND_MISS_CHANCE)
 
 
-def taker_damage(state, agent_id, dealt):
-    """(final_damage, conversion) after the taker's open episodes have spoken.
-
-    `conversion` is None or {"episode", "heal", "reduced", "cap"} -- decided
-    but NOT performed. Only the FIRST prevention episode fires (one packet,
-    one conversion; a second RoF would need its own packet), and it fires on
-    the post-multiplier number -- Frenzy's doubling is what RoF sees.
-    """
-    table = state.get("effects")
-    if not table or dealt <= 0:
-        return dealt, None
-    conversion = None
-    for ep in table.on_agent(agent_id):
-        try:
-            row = agents.WORLD.get("skill_effect", str(ep["skill"]))
-        except Exception:                                      # noqa: BLE001
-            continue
-        mult = row.get("damage_taken_multiplier")
-        if mult is not None:
-            dealt *= float(mult)
-    for ep in table.on_agent(agent_id):
-        try:
-            row = agents.WORLD.get("skill_effect", str(ep["skill"]))
-        except Exception:                                      # noqa: BLE001
-            continue
-        if not row.get("prevents_damage"):
-            continue
-        try:
-            cap = float(skill_scale_value(ep["skill"], ep.get("rank", 0),
-                                          "scale"))
-        except ValueError as ex:
-            # An unreadable cap converts NOTHING -- the glyph's rule from the
-            # other side: refusing is the direction that cannot invent.
-            print(f"[effects] {ep['skill']} prevents damage but its cap is "
-                  f"UNREADABLE, so the hit lands whole: {ex}", flush=True)
-            continue
-        reduced = min(dealt, cap)
-        conversion = {"episode": ep, "heal": min(dealt, cap),
-                      "reduced": reduced, "cap": cap}
-        dealt = max(0.0, dealt - reduced)
-        break
-    return dealt, conversion
+# `taker_damage` moved to `episodemods.py`; it is pure, reads no flag, and the
+# re-export keeps it bound for `land_swing`, `land_skill` and the
+# `authsrv.taker_damage` reads in test_mechanics.py. `resolve_taker_conversion`,
+# which performs what it decides, stays below.
+from episodemods import taker_damage  # noqa: F401,E402
 
 
 def resolve_taker_conversion(send, state, conversion, conn_id):
@@ -16328,124 +16190,22 @@ def resolve_taker_conversion(send, state, conversion, conn_id):
           f"healed (cap {conversion['cap']:.0f}), enchantment ends", flush=True)
 
 
-def attack_interval_factor(state, agent_id):
-    """What the agent's open episodes do to its attack DURATION. 1.0 = nothing.
-
-    THE PERCENT CUTS THE DURATION; IT DOES NOT DIVIDE THE RATE. GWW's "Attack
-    speed" article (rev. 2026-07-03) publishes the exact values the game uses:
-    a hammer's 1.75 becomes 1.1725 under +33% -- that is 1.75 x (1 - 0.33),
-    where the rate reading (1.75 / 1.33 = 1.3158) misses by 0.14 s a swing.
-    Increases multiply by (1 - p/100), decreases by (1 + p/100), and the same
-    table's -50% row (1.75 -> 2.625) pins the decrease side.
-
-    The percent itself comes from the skill's own flat scale slot
-    (`skill_flat_constant`), or from the progression at the episode's rank if
-    the slot's bit is set -- no skill today scales its IAS, but the reader
-    should not decide that. Unreadable percents modify nothing and say so.
-    """
-    table = state.get("effects")
-    if not table:
-        return 1.0
-    factor = 1.0
-    for ep in table.on_agent(agent_id):
-        try:
-            row = agents.WORLD.get("skill_effect", str(ep["skill"]))
-        except Exception:                                      # noqa: BLE001
-            continue
-        means = row.get("scale_means")
-        if means not in ("Attack speed increase", "Attack speed decrease"):
-            continue
-        try:
-            pct = skill_flat_constant(ep["skill"])
-        except ValueError:
-            try:
-                pct = skill_scale_value(ep["skill"], ep.get("rank", 0))
-            except ValueError as ex:
-                print(f"[effects] {ep['skill']} names an attack-speed change "
-                      f"but its percent is UNREADABLE, so the swing keeps its "
-                      f"base interval: {ex}", flush=True)
-                continue
-        if means == "Attack speed increase":
-            factor *= 1.0 - pct / 100.0
-        else:
-            factor *= 1.0 + pct / 100.0
-    return factor
+# `attack_interval_factor` and `move_speed_percent` moved to `episodemods.py`
+# and read no flag, so the re-export is the shim: it keeps the bare-name callers
+# here (attack_tick, handle_skill_press, cast_tick, enemy_attack_tick,
+# speed_tick) and the `authsrv.attack_interval_factor` /
+# `authsrv.move_speed_percent` reads in test_castcycle.py and test_mechanics.py
+# bound in this module.
+from episodemods import attack_interval_factor, move_speed_percent  # noqa: F401,E402
 
 
 def swing_preparation_bonus(state, weapon_row, agent_id):
-    """(bonus damage, preparation skill id) an open PREPARATION adds to one
-    swing, or (0.0, None).
-
-    WIKI (GWW, "Preparation", rev. 2020-06-18): "preparations generally alter
-    bow attacks, allowing the fired arrows to cause additional effects" --
-    which is why Ignite Arrows' `Fire damage` 3..18 shares Flare's label and
-    does not mean the same thing (SCALE_MEANS_DAMAGE's own comment). The
-    bonus therefore rides a swing, and ONLY a swing the equipped weapon fires
-    as an arrow: the gate is the weapon row's `fires_arrows` field, declared
-    per item in content rather than through a bow type-code enum this repo has
-    no witnessed value for. Today's starter hammer does not carry it, so this
-    is live-but-inert against current content -- the glyph's old shape, and
-    like it, the refusing direction invents nothing.
-
-    KNOWN GAP, named: Ignite Arrows' damage is "to target and all adjacent
-    foes" -- the adjacency splash is not modelled, only the on-target bonus.
-    """
-    if not weapon_row or not weapon_row.get("fires_arrows"):
-        return 0.0, None
-    table = state.get("effects")
-    if not table:
-        return 0.0, None
-    for ep in table.on_agent(agent_id):
-        # 19 = preparation, effects.EFFECT_TYPES' own vocabulary.
-        if effects.EFFECT_TYPES.get(int(ep.get("type_code", 0))) != "preparation":
-            continue
-        try:
-            row = agents.WORLD.get("skill_effect", str(ep["skill"]))
-        except Exception:                                      # noqa: BLE001
-            continue
-        if row.get("scale_means") not in SCALE_MEANS_DAMAGE:
-            continue
-        try:
-            return (float(skill_scale_value(ep["skill"], ep.get("rank", 0))),
-                    ep["skill"])
-        except ValueError as ex:
-            print(f"[effects] preparation {ep['skill']}'s bonus is "
-                  f"UNREADABLE, so the arrow flies plain: {ex}", flush=True)
-    return 0.0, None
-
-
-def move_speed_percent(state, agent_id):
-    """The LARGEST open movement-speed boost on this agent, in percent.
-
-    Largest rather than a product: GW speed boosts famously do not stack (the
-    strongest applies), and stances -- today's only carriers -- are exclusive
-    per type anyway, so the max and the product cannot differ against current
-    content. Recorded as max so the day two sources coexist, the modelled rule
-    is the game's rather than an accident of arithmetic.
-    """
-    table = state.get("effects")
-    if not table:
-        return 0.0
-    best = 0.0
-    for ep in table.on_agent(agent_id):
-        try:
-            row = agents.WORLD.get("skill_effect", str(ep["skill"]))
-        except Exception:                                      # noqa: BLE001
-            continue
-        if row.get("scale_means") != "Movement speed increase":
-            continue
-        try:
-            pct = skill_flat_constant(ep["skill"])
-        except ValueError:
-            try:
-                pct = skill_scale_value(ep["skill"], ep.get("rank", 0))
-            except ValueError as ex:
-                print(f"[effects] {ep['skill']} names a speed boost with an "
-                      f"UNREADABLE percent, so the base stays: {ex}",
-                      flush=True)
-                continue
-        best = max(best, float(pct))
-    return best
+    # SCALE_MEANS_DAMAGE (2679) stays here -- three readers in three
+    # destinations, so it is passed, and read at the CALL rather than frozen as
+    # a default. `hit_enemy` is the one caller; test_mechanics.py reads
+    # `authsrv.swing_preparation_bonus`.
+    return episodemods.swing_preparation_bonus(state, weapon_row, agent_id,
+                                               SCALE_MEANS_DAMAGE)
 
 
 def speed_tick(send, state, conn_id):
