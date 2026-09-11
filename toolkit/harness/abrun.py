@@ -61,9 +61,10 @@ WHAT IS COUNTED IS ANCHORED, BECAUSE THE LINES ARE FREE TEXT. The gamesrv's
 combat and navmesh prints are f-strings with no delimiter guarantee -- `[c3]
 agent 41 (Skale) casts skill 1234 (slot 2 of 8)` -- so every counter here is a
 whole-line regex and never a split. The two that already have a home,
-`deploy.NAVMESH_RE` and `deploy.PLACED_RE`, are IMPORTED rather than copied:
-they are the log-line contract with `authsrv.py:2222` and `authsrv.py:6106`, and
-a second copy would be a second thing to keep in agreement with the first.
+`harnesslog.NAVMESH_RE` and `harnesslog.PLACED_RE`, are IMPORTED rather than
+copied: they are the log-line contract with `authsrv.py:2222` and
+`authsrv.py:6106`, and a second copy would be a second thing to keep in
+agreement with the first.
 
 THERE ARE NO TIMESTAMPS IN THAT LOG. Not one gamesrv print carries a clock, so
 every time in a verdict is OUR OWN observation clock -- the poll that first saw a
@@ -123,10 +124,11 @@ sys.path.insert(0, os.path.join(TOOLKIT, "mapdata"))
 import datcheck                                               # noqa: E402
 import datwrite                                               # noqa: E402
 # The two regexes below are the LOG-LINE CONTRACT with `toolkit/authsrv/`, and
-# `deploy.py` already owns them. Importing is not a convenience here: a copy
-# would go on matching a format the server had stopped printing, and nothing
-# would go red.
-import deploy                                                 # noqa: E402
+# `harnesslog.py` owns them -- it is the 102 lines they left `deploy.py` in, and
+# `deploy.py` re-exports them. Importing is not a convenience here: a copy would
+# go on matching a format the server had stopped printing, and nothing would go
+# red.
+import harnesslog                                             # noqa: E402
 import overlay                                                # noqa: E402
 import vaultpath                                              # noqa: E402
 
@@ -179,8 +181,8 @@ class Counter:
 
 
 #: EVERY PATTERN HERE IS WHOLE-LINE ANCHORED except the two imported ones, which
-#: `deploy.py` uses unanchored against whole-file text and are left exactly as
-#: that module wrote them. The agent-name group is non-greedy and the suffix
+#: `harnesslog.py` uses unanchored against whole-file text and are left exactly
+#: as that module wrote them. The agent-name group is non-greedy and the suffix
 #: after it is required, so a name containing a bracket cannot swallow the rest
 #: of the line.
 COUNTERS = (
@@ -203,10 +205,10 @@ COUNTERS = (
             re.compile(r"^\[c(\d+)\] agent (\d+) \((.+?)\) attacks the "
                        r"player$"),
             "an NPC started swinging at the player (authsrv.py:5022)"),
-    Counter("navmesh", deploy.NAVMESH_RE,
+    Counter("navmesh", harnesslog.NAVMESH_RE,
             "the server loaded a map's pathing mesh (authsrv.py:2222)",
             fields=("map_file_id", "planes", "trapezoids")),
-    Counter("area_placed", deploy.PLACED_RE,
+    Counter("area_placed", harnesslog.PLACED_RE,
             "the server placed an area's spawn rows (authsrv.py:6106)",
             fields=("area", "placed", "total")),
 )
@@ -333,7 +335,7 @@ def capture_names(root=None):
 def newest_capture(after, root=None, known=()):
     """(gamesrv.log, its capture dir) for the newest harness run after `after`.
 
-    `deploy.newest_harness_log` is the same scan and the precedent; this returns
+    `harnesslog.newest_harness_log` is the same scan and the precedent; this returns
     the DIRECTORY as well, because `crash-dialog.txt` is written beside the log
     and is the only machine-readable assert a client leaves. It also takes the
     root explicitly so a test can point it at a fixture without a vault.
