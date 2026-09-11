@@ -565,7 +565,7 @@ and the description slot of `s2c 0x004C [80, …]` at `t=28.241` — 0.5 s later
 
 **OVERSTATED, and all three verifiers flagged it: lane C's "the compass needs no separate work" is a prediction contradicted by the repo's own screen measurement.** `studies/minimap/FINDINGS.md:721` records that firing `0x0049` at a real client registers the quest — a `?` icon appears under the level bar, 23.8% of that icon slot differing from a control run — and **the compass starburst does not draw; the disc is byte-static across the whole run.** `:727` records the cause as NOT FOUND. Subscribing is not drawing.
 
-**And nobody checked the obvious thing.** `probes.py:2467` sends `Step(8.0, 0x0049, [1, _SPAWN_WORLD, 148, 148, 0, "", "", "", 0], …)`. Measured over every live `0x0049` (n=10) and `0x0050` (n=12):
+**And nobody checked the obvious thing.** `probequest.py`'s `_compass_quest_steps` sends `Step(8.0, 0x0049, [1, _SPAWN_WORLD, 148, 148, 0, "", "", "", 0], …)`. Measured over every live `0x0049` (n=10) and `0x0050` (n=12):
 
 | field | ArenaNet's observed values | the probe sent |
 |---|---|---|
@@ -804,9 +804,9 @@ Lanes C/D/E read the wire. Lane F read GWW. Neither consulted the other. **Five 
 
 ### 7.1 Does the client accept a coded string WE authored? — unblocks all quest text
 
-Everything in §3 is decode-side. Nobody has sent a non-empty encoded string on `0x0049` (`probes.py` deliberately sent `"", "", ""`) or a literal on `0x004C`.
+Everything in §3 is decode-side. Nobody has sent a non-empty encoded string on `0x0049` (`probequest.py` deliberately sent `"", "", ""`) or a literal on `0x004C`.
 
-**Cheapest decisive test:** change one literal in `toolkit/authsrv/probes.py`'s `_compass_quest_steps` — `enc_name = [0x3D64]` — and look at the quest log. If it reads **Ascalon**, the whole chain from wire code unit to rendered glyph is ours. One probe run, elevated, no new code.
+**Cheapest decisive test:** change one literal in `toolkit/authsrv/probequest.py`'s `_compass_quest_steps` — `enc_name = [0x3D64]` — and look at the quest log. If it reads **Ascalon**, the whole chain from wire code unit to rendered glyph is ours. One probe run, elevated, no new code.
 
 **Second half, same run:** ArenaNet's literals are never bare — the observed framing is `0x0BA9 0x0107 <UTF-16> 0x0001` (template `%str1%`, a marker, the text, a terminator), and `codec.py:352` adds none of it. Send one `0x004C` with that framing built by hand and one without.
 
@@ -1075,7 +1075,7 @@ All three ids are `needs_key = True` — ArenaNet's own generic strings, encrypt
 
 #### 8.6 The marker, per NPC, over the whole lifecycle
 
-**OBSERVED. `0x009F` property 11 takes THREE values, not two.** Census `{3: 2, 4: 6, 5: 40}` n=48 in `143055` and `{3: 2, 4: 6, 5: 33}` n=41 in `235916`. Value 0 never occurs, 0 of 89. **§0's Candidate 2 block and `probes.py:2701-2718` both say "exactly two values"** — that is true of the scope they measured (`:60935` + `:62994` gives `{5: 37, 4: 6}`) and false of the corpus. All four value-3 sends are on the outpost connections: agent 7 at `t=214.656` / `t=218.512` (`:64102`) and agent 8 at `t=262.549` / `t=266.312` (`:49160`) — the same agents that carry kind 21.
+**OBSERVED. `0x009F` property 11 takes THREE values, not two.** Census `{3: 2, 4: 6, 5: 40}` n=48 in `143055` and `{3: 2, 4: 6, 5: 33}` n=41 in `235916`. Value 0 never occurs, 0 of 89. **§0's Candidate 2 block and `probequest.py`'s `PROP_QUEST_MARKER` banner both say "exactly two values"** — that is true of the scope they measured (`:60935` + `:62994` gives `{5: 37, 4: 6}`) and false of the corpus. All four value-3 sends are on the outpost connections: agent 7 at `t=214.656` / `t=218.512` (`:64102`) and agent 8 at `t=262.549` / `t=266.312` (`:49160`) — the same agents that carry kind 21.
 
 **RECONSTRUCTION, and it is the message the arc was missing: `0x009F` property 12 = 0 is the marker CLEAR.** Without it the model is incoherent — NPCs appear to hold a stale `!` for 18 s. With it, 18 of 18 quest-concluding clicks across both sessions are explained with zero counterexamples. It is 0 in **22 of 22** sends in `143055` and **16 of 16** in `235916`, so the property's own value range is never exercised and the reading rests entirely on consequence.
 
@@ -1128,8 +1128,8 @@ There is **no** property-11 value that clears a marker. Sending `[11, agent, 0]`
 10. **Add a reward-run builder** to `questdefs.py`: append `0002 2AE8 E7D4 E5CC 3672 0002 2AEA 8C3F B519 6611 0101 <0x100+A> 0002 2AEC DAC7 81AE 3482 0101 <0x100+B>` to both the `0x0080` line and the `0x004C` description slot (byte-identical there in 17 of 17), with A and B our own numbers bounded to `0..0xFEFF`. Three ArenaNet ids cited, zero ArenaNet text held. Run the 122-unit length check **after** the append.
 11. **Split `content/quests.toml`'s prose columns** into offer and turn-in, and build the two paragraph heads separately (`0002 0107` + trailing for the offer line; `0002 0102 0002 0102` and no trailing for the log entry and the turn-in line). Drop `turn_in_label` as a per-quest column.
 12. **Decide what to do about kind 15.** `decode_service_select` rejects its tag (`0x800000` clear → `None`) and `encode_service_select` cannot build it. Either never emit it, or give `0x003B` a non-quest arm first.
-13. **Fix the two numbers this section corrects** — `field4` 41 of 41 (`questdefs.py:170` and §0), and property 11's three values (§0 and `probes.py:2701-2718`, which is the comment a future session will read *before* writing the marker code).
-14. **Run two probes before any of this ships.** (a) Send `0x009F [11, agent, 5]`, screenshot, then `[12, agent, 0]`, screenshot — that moves the clear from RECONSTRUCTION to OBSERVED and shows in the same run whether 3 and 4 draw different glyphs. `_quest_giver_mark_steps` in `probes.py:2724` is two `Step`s from being it. (b) Send `0x004C` citing 10728/10730/10732 with distinguishable numbers (111, 222) and read which line shows which — the only way to learn which reward slot is experience and which is gold.
+13. **Fix the two numbers this section corrects** — `field4` 41 of 41 (`questdefs.py:170` and §0), and property 11's three values (§0 and `probequest.py`'s `PROP_QUEST_MARKER` banner, which is the comment a future session will read *before* writing the marker code).
+14. **Run two probes before any of this ships.** (a) Send `0x009F [11, agent, 5]`, screenshot, then `[12, agent, 0]`, screenshot — that moves the clear from RECONSTRUCTION to OBSERVED and shows in the same run whether 3 and 4 draw different glyphs. `_quest_giver_mark_steps` in `probequest.py` is two `Step`s from being it. (b) Send `0x004C` citing 10728/10730/10732 with distinguishable numbers (111, 222) and read which line shows which — the only way to learn which reward slot is experience and which is gold.
 
 ---
 

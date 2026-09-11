@@ -472,7 +472,7 @@ map, the durations on the wire, the `+0x04` discriminant and the buffId allocati
   and mechanic-does-not-exist hypotheses. Corroborating: 28 `0x009F` property-42 messages
   in the whole corpus, **22 at t ≤ 1.0 s**, and the single late one repeats a value already
   set — the live corpus contains **zero observations of a player's max health changing
-  mid-session**. **`toolkit/authsrv/probes.py:1962` (`_buff_type_steps`) already sends
+  mid-session**. **`_buff_type_steps` (`toolkit/authsrv/probeskills.py`) already sends
   `0x0042 [agent, skill, field3, buffId, f32(duration)]`.** Substitute skill 478/480/482,
   watch our own client, and the live session stops asking three questions it cannot answer.
 - **The Blind block is procedurally impossible as written.** It needs ≥40 blinded swings;
@@ -958,7 +958,7 @@ survives past ~30 s.
 > remains real and is the archive-family issue `studies/character/RUNS.md` documents.
 > The harness defect itself is FIXED on main as of 2026-08-17 (`5255c6c`): `--hold`
 > implies `--keep-open`, and `test_harness.py` pins the interaction.
-The `0x0042` condition render via `probes.py:1962` with skills 478/480/482; the lone
+The `0x0042` condition render via `probeskills.py`'s `_buff_type_steps` with skills 478/480/482; the lone
 property-17 render (now a presentation question only — B6 settled the ledger half:
 17 replaces 16); the coded-string round-trip + role-binding probe (B8: send a known
 template sid + two known value-word args on `0x5D`/`0x5F`, predict render with no

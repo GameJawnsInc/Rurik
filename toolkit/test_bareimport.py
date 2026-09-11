@@ -28,7 +28,8 @@ machine where a repo-side row would be read there is no client to run the probe
 against. It would have bought an import, not a capability -- and the vault row
 overrides the repo row by key on every machine where the probe CAN run, so the
 committed copy would be dead weight free to drift from `npcdefs.py`'s output.
-The bind moved to call time instead (`probes.py`, `_vault_npc`).
+The bind moved to call time instead (`probequest.py`, `_vault_npc` -- it was
+`probes.py` until the 2026-09-11 split of that file).
 
 WHAT THIS CHECKS, and section 2 is the one that survives the next mistake:
 section 0 imports the server in a subprocess with `RURIK_VAULT` aimed at a
@@ -161,7 +162,8 @@ def main():
           "every one of them resolves from content/*.toml alone",
           f"{missing} -- a module-level bind on a vault row makes the vault a "
           f"hard IMPORT dependency of everything downstream. Bind it at call "
-          f"time instead (probes.py `_vault_npc` is the worked example); do not "
+          f"time instead (probequest.py `_vault_npc` is the worked example, "
+          f"probes.py before the 2026-09-11 split); do not "
           f"copy the row into content/ to make this green, because a machine "
           f"with no vault has no client either and could not use it")
 
