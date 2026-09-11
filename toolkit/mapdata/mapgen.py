@@ -18,7 +18,8 @@ would leave two files each of which is wrong on its own.
 
 POINTERS OUT, because several things named below did not move:
 
-  * `deploy.main` is the only consumer. It reads `GENERATORS` and
+  * `deploy.main` is the only consumer INSIDE `deploy.py` -- the readers from
+    outside it are the last bullet. It reads `GENERATORS` and
     `heights_from_blend` as BARE names through the re-export at the site this
     code left, and `inspect.signature(gen_fn).parameters` there is what lets
     `gen_ramp_uniform` take `area=` while the other five do not.
@@ -26,10 +27,11 @@ POINTERS OUT, because several things named below did not move:
     module's docstring gives: `test_deploy.py` §10(e2) asserts TYPE identity,
     so every refusal below must raise that class and not a new one.
   * The SNAP the comments keep referring to is `strippedterrain.snap_field` /
-    `snap_block`, applied by `deploy.assemble` AFTER a generator returns. None
-    of it happens here; a generator emits the authored field and the codec's
-    lattice is allowed to move it, which is the difference these maps exist to
-    print.
+    `snap_block`, applied by `deploy.main` on the line after the generator
+    returns -- `assemble` is handed a field that is already snapped and never
+    snaps one itself. None of it happens here; a generator emits the authored
+    field and the codec's lattice is allowed to move it, which is the
+    difference these maps exist to print.
   * `HERE` is recomputed below rather than imported, and resolves identically:
     this module sits in `toolkit/mapdata/` beside `deploy.py`, so
     `heights_from_blend`'s `dirname(dirname(HERE))/tools/blender` is the same
