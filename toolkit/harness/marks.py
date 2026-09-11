@@ -68,7 +68,7 @@ belongs -- but it is a review, not a construction, and the header now says which
 
 THE OUTPUT FILE IS NOT `marks.jsonl`, AND THAT IS A CORRECTION TO THE SPEC. §10.5.1 says
 "marks.jsonl, beside wire.jsonl in the same capture directory", and that name is ALREADY
-TAKEN: `livesession.py:735` opens `<outdir>/marks.jsonl` in "w" mode and holds the handle
+TAKEN: `livesession.py:596-597` opens `<outdir>/marks.jsonl` in "w" mode and holds the handle
 for the whole session, writing the driver's own `{n, label, wall, perf, wire_t}` records
 through `wirecapture.write_mark`, and `behaviourrun.py:385` reads them back. Two writers on
 one file, one of them holding a stale offset, is silent data loss: our appends land at end

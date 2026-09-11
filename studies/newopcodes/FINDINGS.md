@@ -1317,7 +1317,7 @@ pairing does not exist: `0x00E1` drains both lists, which makes upstream's
 appenders at all — `0x0084` and `0x00D7` share handler `0x0091E820` (§ above), so the
 client cannot see which opcode staged the row and no experiment can either; only the
 declared wire lengths differ (array32(16) vs array32(8)). Item 7 is REPLACED by the
-`accum_drains` probe (`toolkit/authsrv/probes.py`): one appender, all four drain events
+`accum_drains` probe (`toolkit/authsrv/probemerchant.py`): one appender, all four drain events
 with three declared, distinctly named item ids staged, column 1 fed `[1,1,1]` on every
 multi-list arm, the assert-carrying drain last. Prediction on record there; a null result
 refutes nothing (subscribers may need an open window — the `0x00C5` flow is the only

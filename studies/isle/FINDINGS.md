@@ -322,7 +322,7 @@ recorded weapon.
 
 **2026-08-16/17, operator watching throughout.** The detour first, because its lesson
 is a harness fact every future session needs: **`--hold` without `--keep-open` is
-silently inert** — `session.py:1272` runs `hold_open` only under `a.keep_open`, so a
+silently inert** — `session.py:846-847` runs `hold_open` only under `a.keep_open`, so a
 `--hold`-only session tears down at the verdict, ~4 s after spawn, closing a healthy
 client whose orderly exit (game `0x0008`, auth `0x0009 UPDATE_CHARACTER_SETTINGS`,
 status→Offline) reads exactly like a client-side death. (**FIXED on main

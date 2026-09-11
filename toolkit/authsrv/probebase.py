@@ -22,10 +22,11 @@ pointer instead. `PROBE_PLAYER_NUMBER`'s comment says "this module is only ever
 handed an agent id (`probes.get(name, PLAYER_AGENT_ID, ...)`)": `get` is still
 in `probes.py` and the sentence is about the probe family, not about this file.
 `PROBE_BAR_SLOT`/`PROBE_BAR_SKILL`'s "the skill probes below say so" means the
-skill probes, which are in `probes.py` and headed for `probeskills.py`. `Step`'s
-docstring names `smsgsweep_steps`, which is `probes._smsgsweep_steps`. The
-armour-slot arm and the accum-drain probe that the item-id banner is about are
-likewise still in `probes.py`.
+skill probes, which are in `probeskills.py`. `Step`'s docstring names
+`smsgsweep_steps`, which is `probes._smsgsweep_steps` and stayed there. The
+armour-slot arm the item-id banner is about is `probeunitsetup._armor_slots_steps`
+and the accum-drain probe is `probemerchant.PROBES["accum_drains"]`; both left
+`probes.py` later the same day, which is why this paragraph said they had not.
 
 `_ENEMY_ROW` still binds a content row AT IMPORT, exactly as it did in
 `probes.py`: the same row, `content/world.toml`'s `[spawn.test_enemy]`, which

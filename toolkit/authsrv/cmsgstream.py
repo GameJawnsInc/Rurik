@@ -12,7 +12,7 @@ not one message. With it, both live captures decode to their exact byte count.
 This is also where `studies/divergence` D4's mysterious client reply `0x8009`
 came from: it is GAME_CMSG 0x0009 with the bit.
 
-SECOND, THE ASSEMBLED CAPTURE HAS NO TIMES. `livesession.assemble` writes one
+SECOND, THE ASSEMBLED CAPTURE HAS NO TIMES. `wiresplit.assemble` writes one
 c2s blob per connection, so message ORDER survives and timing does not. Timing is
 what lets a narrated session be used as a labelled run -- the operator writes
 down what they did, the server's own messages date the map transfers and the

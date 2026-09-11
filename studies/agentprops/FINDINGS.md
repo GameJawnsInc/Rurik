@@ -523,7 +523,7 @@ full bar, and property 55 at `-1.0` gave exactly 100.
 because the value reaches the pool unscaled. "A fraction the client does not scale" was a
 conclusion drawn one frame too early.
 
-**And the prediction stated in `probes.py` before the run was refuted.** It said FRACTION,
+**And the prediction stated in `probeskills.py` before the run was refuted.** It said FRACTION,
 meaning "the bar drops to about half". The argument *is* a fraction, so the label was
 right and the behaviour it predicted was wrong — which is the failure mode a probe with a
 written prediction exists to catch, and it is left in the file rather than tidied away.

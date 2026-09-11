@@ -10946,7 +10946,7 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   so on the one machine where a committed copy would be read there is no client
   to run the probe against. It would buy an import, not a capability, while the
   vault row overrode it by key everywhere the probe can actually run. The bind
-  moved to call time instead (`probes.py` `_vault_npc`). Sabotage run and it
+  moved to call time instead (`probequest.py` `_vault_npc`). Sabotage run and it
   reddens 3 of 6 with the file and line named.
   **§3, added 2026-08-31, is the same defect one layer down: IMPORTING IS NOT
   RUNNING.** §2 rules on module scope only, and its scanner docstring used to

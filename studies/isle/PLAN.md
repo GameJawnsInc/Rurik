@@ -19,7 +19,7 @@ measurement.
 survey or skeptic agents, and the command is quoted where the number is used. The author
 of this file re-ran only a spot-check set: `content.py:75/104/125/138/145`,
 `authsrv.py:110/119/145-147/1770/2273/3704`, `agents.py:75/117/628/789/805/808`,
-`npcdefs.py:40-42/397`, `livesession.py:1741`, `test_content.py:130`, and
+`npcdefs.py:40-42/397`, `livesession.py:998`, `test_content.py:130`, and
 `RUNBOOK.md:1205-1208`. All held except one: **`content.py`'s `"capture"` source is line
 75, not 76** (`grep -n '"capture":' toolkit/content.py` → `75:    "capture":`). Numbers
 neither re-run nor first-hand here are marked as such at the call site. **No Isle capture
@@ -289,7 +289,7 @@ report separately whether D = 40 *given* those labels.
 | Death penalty −15%/death, cap −60%, moves max health — the denominator of every fraction | no deaths in this session; deliberate deaths go LAST, in a different one | UPSTREAM, `:389-390`, `:400-402` |
 | **The Suits DIE** (added by skeptic) | budget in **swings**, not wall-clock; the 60 AR block dies fastest and it is the denominator of both ratios; aggregate on (definition slot, spawn coordinate), not agent id | UPSTREAM, `:192`, `:319-320` (GWW "Practice target", edited **2014-02-07**) |
 | **Two Suits of 60** (added by skeptic) | name which body in the plan; the pair is a *better* control than the design realised — it bounds body-to-body variance directly | UPSTREAM, `:89-90` |
-| **`--minutes` defaults to 10** (added by skeptic) | pass `--minutes 45`; the protocol is ~25 min | OBSERVED, `livesession.py:1741` |
+| **`--minutes` defaults to 10** (added by skeptic) | pass `--minutes 45`; the protocol is ~25 min | OBSERVED, `livesession.py:998` |
 | **The player's agent id is not `player_id`** (added by skeptic) | `tape.client_version`'s `player_id` is a per-connection 32-bit handle (3426761088, 669793701, …) while the in-instance agent id is 31; identify the player from the `0x009F` property-42 `1`-then-`100` pair at t < 1 s | OBSERVED |
 | **A single unknown opcode discards the rest of the capture** (added by skeptic) | decode with `strict=False` and assert on the receipt; a new map brings new opcodes, and `tape.decode_all(strict=True)` raises on the first `Undecodable` (`codec.py:134`, `tape.py:53-59`) | OBSERVED |
 
@@ -355,7 +355,7 @@ The alternative oracle is not good enough on its own: OBSERVED (`<scratchpad>/v_
   permits it.
 - **The step billed as measuring the SERVER's range test measures the CLIENT's.**
   Auto-walk-into-range is a client decision, and the driver by design emits no input
-  (`livesession.py:1161-1167`), so no passive live capture can produce an out-of-range
+  (`livesession.py:447-453`), so no passive live capture can produce an out-of-range
   attack. Relabel it.
 - **Provenance trap.** A `[range.*]` row with `source = "capture"` whose gwinch value came
   from dividing a measured wire distance by a wiki-derived `k` is a wiki number wearing a
@@ -784,7 +784,7 @@ Ordered by what unblocks the most.
    into the vault turns `test_npcdefs.py` **RED on six pinned counts** (`:76-79`, and the
    assertions at `:98-158`). That is the test doing its job, but it must be planned for in
    the same change.
-5. **`--mode` propagation.** `livesession.py:1460` writes `game_mode` into the capture
+5. **`--mode` propagation.** `livesession.py:746` writes `game_mode` into the capture
    manifest as an operator declaration; `tape.load_tape`'s info dict does not surface it
    (`tape.py:232-247`); `npcdefs.py:397-401` takes `--mode` from its own CLI and **defaults
    to `"unrecorded"`**. A capture correctly taken with `--mode base` still emits
@@ -947,7 +947,7 @@ survives past ~30 s.
 >
 > **RESOLVED 2026-08-17, and both diagnoses above were wrong in an instructive way:
 > nothing was dying.** `session.py --hold` without `--keep-open` is silently inert
-> (`session.py:1272` gates `hold_open` on `a.keep_open` alone), so every "death" was
+> (`session.py:846-847` gates `hold_open` on `a.keep_open` alone), so every "death" was
 > the harness's own teardown at the verdict closing a healthy client — whose orderly
 > exit telemetry reads exactly like a client-side failure. The 17:53 "survivor"
 > survived because its 66-second action schedule kept the session up, and the char-data
@@ -1246,7 +1246,7 @@ plan at `vault/plans/isle_rung7_damage.txt` is unblocked and ready to seal at la
   never sends them (`studies/combat/PLAN.md:246-250`). Record it as OURS permanently, or
   infer it by fitting a known NPC's observed damage against its published skill and level.
 - **The SERVER's skill range check.** The driver sends no input by design
-  (`livesession.py:1161-1167`), so a passive live capture cannot emit an out-of-range
+  (`livesession.py:447-453`), so a passive live capture cannot emit an out-of-range
   attack. Only a loopback probe separates client-side auto-walk from a server test, and even
   that measures *our* client.
 - **Attribute ranks, `0x003A` column 3, `0x0037` points, the point budget.** These need a
