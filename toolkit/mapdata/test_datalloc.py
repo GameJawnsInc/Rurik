@@ -112,6 +112,21 @@ import checks  # noqa: E402
 #                                                                    then a
 #                                                                    hard stop
 #
+# CORRECTION, 2026-09-11 -- THE FIRST RECIPE ABOVE NO LONGER REPRODUCES ITS
+# COUNT FROM ONE REBIND. `looks_compressed` and `declaration_fault` moved out of
+# `datwrite.py` into `toolkit/mapdata/datdecl.py`, and `datwrite.py` re-exports
+# both, so `datwrite.looks_compressed` is still the same object and stubbing it
+# still reaches `datalloc.py`'s two calls and `Writer.replace`'s. What it no
+# longer reaches is `declaration_fault`'s OWN internal call to
+# `looks_compressed`, which now resolves in `datdecl`'s globals -- so the gate
+# keeps gating from inside the other gate and the 11 red measured above is not
+# what a single `datwrite.looks_compressed` stub produces today. Rebind
+# `datdecl.looks_compressed` as well before trusting the count. The
+# `declaration_fault` row in the 2026-08-20 block below is NOT affected: it has
+# one effective binding, `datwrite.declaration_fault`, which every caller in the
+# tree (`datalloc`, `datmove`, `overlay`, and `datwrite`'s own bare-name call
+# sites) still goes through.
+#
 # The splitter one is the reading worth keeping. Restored, it hands `_read` the
 # path with `:1` still glued to the end and dies on FileNotFoundError, so the
 # checks BEHIND that line never run -- which is why section 12 now checks

@@ -436,6 +436,19 @@ def section_sabotage(tmp, art):
       BOTH stubbed                                      4 red, and the corrupted
                                                         stream reaches disk
 
+    CORRECTION, 2026-09-11 -- THE TABLE ABOVE NOW TAKES THREE REBINDS, NOT TWO.
+    `looks_compressed` and `declaration_fault` moved out of `datwrite.py` into
+    `toolkit/mapdata/datdecl.py`, which re-exports both back, so
+    `datwrite.looks_compressed` is still the same object and stubbing it still
+    reaches `datalloc`'s calls and `Writer.replace`'s. It does NOT reach
+    `declaration_fault`'s own internal call to `looks_compressed`, which
+    resolves in `datdecl`'s globals -- so the "`looks_compressed` alone" row
+    above is measuring a HALF stub today: one of the two bindings is still live
+    inside the other gate. Stub `datdecl.looks_compressed` alongside it to
+    reproduce the measured counts. `declaration_fault` keeps its single
+    binding: every caller in the tree reaches it as
+    `datwrite.declaration_fault`.
+
     The three shapes below are why it takes both. A flip inside the Huffman table
     breaks the FRAMING and `looks_compressed` catches it; a corrupted TRAILER does
     not break the framing at all -- the stream decodes happily, one byte short,
