@@ -741,8 +741,14 @@ def main():
           "the gated match",
           src.index("ps = _router_sync_plane(state, pm, plane_second, now)")
           < src.index("if D1_LEAD:\n            ps, _m = a2_matched_field4("))
+    # REFACTOR-A11 moved `_click_leg_start` to `leadgeom.py`, so this pin
+    # reads THAT file now. Same expression and same reason -- the model must
+    # measure from the leg's own grant instant (a chain leg's re-arm) and not
+    # from the click's stamp, which stays the leg's identity -- one file over.
+    leadgeom_src = open(os.path.join(HERE, "leadgeom.py"),
+                        encoding="utf-8").read()
     check("the leg model lerps from the leg's own start",
-          'leg.get("start", leg["t0"])' in src)
+          'leg.get("start", leg["t0"])' in leadgeom_src)
 
     print("== 6: MOVECODE-1z-w -- the origin's plane word, and a cast ends the route ==")
     check("the origin word ships, reverted by (b)'s own flag",

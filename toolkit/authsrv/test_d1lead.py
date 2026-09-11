@@ -813,9 +813,9 @@ def main():
           "coordinates on our mesh to <=3u only at a fine step -- at "
           "16u the landing quantizes ~9u short of the edge retail names "
           "exactly (p05 went 14.6u -> 2.0u when the step dropped)")
-    check(src.count("a2_matched_field4(") == 11,
-          "the matched-words helper has exactly its def and TEN call "
-          "sites -- the heading arm's D1 branch, the stop-repin, the ETA "
+    check(src.count("a2_matched_field4(") == 10,
+          "the matched-words helper has exactly TEN call sites in this "
+          "file -- the heading arm's D1 branch, the stop-repin, the ETA "
           "watchdog's repin, the two click-answer sites (immediate + "
           "deferred), ROUTER-B2's four (chain tick, clip-fallback, one-leg "
           "verbatim, first leg of a chain), and since 2026-09-03 night "
@@ -825,7 +825,9 @@ def main():
           "flag whose charter does not cover it; a missing caller leaves "
           "one send path carrying the stale word the lock needs. The "
           "router's four were added deliberately (ROUTER.md sec.4 item 4: "
-          "matched pairs everywhere, sec.0.11's own protection)")
+          "matched pairs everywhere, sec.0.11's own protection). The count "
+          "read ELEVEN until REFACTOR-A11 moved the helper's own def to "
+          "`leadgeom.py`; this censuses the call sites, which all stayed")
     check(src.count('state["a2_family_sent"] = None') == 7,
           "the family edge re-arms at all SEVEN [1.0]-overwriting sends: "
           "A2's stop arm, the watchdog, both click-answer sites, "
