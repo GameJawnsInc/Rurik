@@ -235,12 +235,12 @@ CMSG_DIRECTION_BIT = 0x8000
 MAX_CATALOG_OPCODE = 0x01E6
 
 
-class LiveError(SystemExit):
-    """A live run was refused. The whole point is that it stops before the account is used."""
-
-
-class SplitError(Exception):
-    """A captured stream did not begin with the handshake we require. Never guessed past."""
+# Both refusal classes moved to `liveerror.py` -- a module that imports nothing, so a leaf
+# which only has to say "refused" does not drag the packet-capture backend in with it. The
+# re-export sits HERE, at the site they were defined, because they are read as
+# `ls.LiveError` / `ls.SplitError` by toolkit/harness/test_livesession.py and
+# toolkit/harness/dryrun_keycapture.py, and as bare globals throughout this file.
+from liveerror import LiveError, SplitError  # noqa: F401,E402
 
 
 # ------------------------------------------------------- the offline assembly --
