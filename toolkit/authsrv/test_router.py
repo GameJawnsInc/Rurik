@@ -494,13 +494,21 @@ def main():
     check("chain grants ride DEFAULT_RUN_SPEED, no second constant",
           src.count("/ DEFAULT_RUN_SPEED") >= 1
           and "ROUTER_SPEED" not in src)
+    # RE-AIMED 2026-09-11 (REFACTOR-A13): the composition matrix -- the nine
+    # `if router and ...` gates these checks read -- moved out of authsrv.py
+    # into zeroleadcompose.py, so the source they are asserted against moves
+    # with them. Nothing else in this section did: every other lock above and
+    # below still reads authsrv.py. The checks are unchanged in count and in
+    # what they claim; a gate deleted from the matrix still reddens them.
+    comp_src = open(os.path.join(HERE, "zeroleadcompose.py"),
+                    encoding="utf-8").read()
     for pair in ("click_sweep", "arrival_carry", "cancel_answer",
                  "stop_answer", "family_rate_probe", "checksum_probe",
                  "interact_walk", "move_speed_effects"):
         check(f"composition refuses --router with {pair.replace('_', '-')}",
-              f"if router and {pair}" in src)
+              f"if router and {pair}" in comp_src)
     check("composition refuses --router with pc-spoof",
-          "if router and pc_spoof is not None" in src)
+          "if router and pc_spoof is not None" in comp_src)
     check("the pre-send re-clip exists at the fine step, once",
           src.count("step=A2_LEAD_CLIP_STEP) == (b[0], b[1])") == 1)
     check("the clip-fallback samples at the fine step too",
