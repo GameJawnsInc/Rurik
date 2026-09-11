@@ -947,7 +947,7 @@ survives past ~30 s.
 >
 > **RESOLVED 2026-08-17, and both diagnoses above were wrong in an instructive way:
 > nothing was dying.** `session.py --hold` without `--keep-open` is silently inert
-> (`session.py:846-847` gates `hold_open` on `a.keep_open` alone), so every "death" was
+> (`session.py:849-850` gates `hold_open` on `a.keep_open` alone), so every "death" was
 > the harness's own teardown at the verdict closing a healthy client — whose orderly
 > exit telemetry reads exactly like a client-side failure. The 17:53 "survivor"
 > survived because its 66-second action schedule kept the session up, and the char-data
