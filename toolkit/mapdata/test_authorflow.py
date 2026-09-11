@@ -155,6 +155,22 @@ import test_gwenc as tge  # noqa: E402
 # produces, and it is the reason the sabotage above is `bool(data)` rather than
 # `True`.
 #
+# CORRECTION, 2026-09-11 -- THE FIRST THREE ROWS AND THE FOURTH READING NOW TAKE
+# A SECOND REBIND, and the FOURTH READING does not reproduce at all without it.
+# `looks_compressed` and `declaration_fault` moved out of `datwrite.py` into
+# `toolkit/mapdata/datdecl.py`, which re-exports both, so
+# `datwrite.looks_compressed` is still the same object and stubbing it still
+# reaches `datalloc`'s calls and `Writer.replace`'s -- but NOT the call inside
+# `declaration_fault`, which now resolves in `datdecl`'s globals. The FOURTH
+# READING is the row that rests on exactly that call: the hard stop it describes
+# comes from `declaration_fault`'s C-6 stored-lookalike arm consulting
+# `looks_compressed`, so a lone `datwrite.looks_compressed` rebind no longer
+# produces it. Stub `datdecl.looks_compressed` alongside it before trusting any
+# of these counts. The `declaration_fault` rows are NOT affected: that name keeps
+# one effective binding, `datwrite.declaration_fault`, which every caller in the
+# tree goes through. The same correction, stated per-row, sits on the
+# `section_sabotage` table below; nothing above is deleted.
+#
 # Every later step still passes under any of them, because an archive faithfully
 # hands back whatever the last write put in it -- that is the shape of a flow
 # test that proves nothing, measured rather than feared.
@@ -435,6 +451,19 @@ def section_sabotage(tmp, art):
                                                         by looks_compressed
       BOTH stubbed                                      4 red, and the corrupted
                                                         stream reaches disk
+
+    CORRECTION, 2026-09-11 -- THE TABLE ABOVE NOW TAKES THREE REBINDS, NOT TWO.
+    `looks_compressed` and `declaration_fault` moved out of `datwrite.py` into
+    `toolkit/mapdata/datdecl.py`, which re-exports both back, so
+    `datwrite.looks_compressed` is still the same object and stubbing it still
+    reaches `datalloc`'s calls and `Writer.replace`'s. It does NOT reach
+    `declaration_fault`'s own internal call to `looks_compressed`, which
+    resolves in `datdecl`'s globals -- so the "`looks_compressed` alone" row
+    above is measuring a HALF stub today: one of the two bindings is still live
+    inside the other gate. Stub `datdecl.looks_compressed` alongside it to
+    reproduce the measured counts. `declaration_fault` keeps its single
+    binding: every caller in the tree reaches it as
+    `datwrite.declaration_fault`.
 
     The three shapes below are why it takes both. A flip inside the Huffman table
     breaks the FRAMING and `looks_compressed` catches it; a corrupted TRAILER does
