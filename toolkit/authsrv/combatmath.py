@@ -35,6 +35,15 @@ banner and `ARMOUR_TERM`/`SPELL_ARMOUR` themselves; `HIT_FRACTION`, the fallback
 a missing weapon word falls back to; and the two import-time binds that call into
 this module from over there, `ENEMY_ARMOR_RATING` and `PLAYER_SWING_DAMAGE`.
 
+AND TWO OF THEM POINT WITH A DIRECTION, which is what this paragraph is for: R7
+says a moved comment travels verbatim and the fix for a referent left behind is
+a pointer added HERE, never a reword of the line. The WEAPON DAMAGE banner opens
+"The paragraph above says ..." -- that paragraph is the `---- the combat loop`
+banner over `HIT_FRACTION` in `authsrv.py`, and nothing above it in this file --
+and it closes "the same shape as `_build_of_tag` below", which is `authsrv.py`'s
+build-tag reader, also still over there. Both lines are the lines that were
+there; only their addresses moved, and these are the addresses.
+
 Standard library only, and no import of `authsrv`: the server runs as
 `__main__`, so importing it back would load a second copy whose flags `main()`
 never set.

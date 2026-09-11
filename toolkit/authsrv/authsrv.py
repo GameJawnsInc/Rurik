@@ -10563,8 +10563,15 @@ ENEMY_ARMOR_RATING = creature_armor_rating(agents.HATCHER,
 # THE PLAYER'S OWN ARMOUR moved to combatmath.py (REFACTOR-A12) -- the wiki
 # banner, HIT_LOCATION_ODDS, ARMOR_BASELINE, BONUS_ARMOUR_CAP and the seven
 # functions that read them. Re-exported and wrapped HERE, at the site they were
-# cut from: `test_agentlife.py` and `test_skilldamage.py` read every name below
-# as `authsrv.<name>`, and land_swing and land_skill call them by bare name.
+# cut from. WHO READS WHICH, measured rather than waved at, because R3's whole
+# reason for this comment is that a later "unused import" sweep must be able to
+# see it: `test_agentlife.py` reads HIT_LOCATION_ODDS, bonus_armour and
+# roll_hit_location as `authsrv.<name>` and `test_skilldamage.py` reads
+# HIT_LOCATION_ODDS; land_swing calls roll_hit_location, player_armour_at and
+# armour_multiplier by bare name and land_skill calls spell_armour_for and
+# armour_multiplier. ARMOR_BASELINE and BONUS_ARMOUR_CAP have no reader outside
+# the leaf today and are re-exported anyway, so the banner that explains them
+# still answers at the name it explains -- do not delete them for being unused.
 #
 # THE WRAPPERS READ THEIR FLAGS AT CALL TIME out of this module's globals and
 # hand them down. `main()` rebinds EQUIP_ARMOUR, SPELL_ARMOUR and ARMOUR_TERM
