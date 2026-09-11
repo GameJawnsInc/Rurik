@@ -651,7 +651,7 @@ def reencoded_size(ar, row):
     PROVES AGREEMENT WITH OUR ENCODER, NOT WITH ARENANET'S. `gwenc.encode`
     verifies its own output through `gwdat.decompress`; that both of ours agree
     is not evidence that the retail client would accept the stream. A8 is the
-    only oracle (`datwrite.py`'s declaration_fault carries the same caveat).
+    only oracle (`datdecl.declaration_fault` carries the same caveat).
 
     `declared_agrees` is worth reading and is not decoration. `gwdat.decompress`
     takes its output length from the stream's own trailer, so a stream that

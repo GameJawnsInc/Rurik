@@ -56,7 +56,8 @@ from archive import (ENTRY_SIZE, MFT_MAGIC, MFT_ROW_OF_ENTRIES_0,  # noqa: E402
 # and a second expression of "the table with row 3's own 24 bytes skipped" is how
 # two readers of one field drift apart. Importing the writer opens nothing:
 # `datwrite` only ever opens a file inside `Writer`, and its module chain
-# (`archive`, `gwdat`) is the one this file already has. There is no cycle --
+# (`archive`, `datdecl`, `datjournal`, `gwdat`) is the one this file already
+# has plus two leaves `datwrite` itself owns. There is no cycle --
 # `datwrite.py` names this module in prose only.
 import datwrite  # noqa: E402
 

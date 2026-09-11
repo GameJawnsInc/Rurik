@@ -187,7 +187,9 @@ from archive import (Archive, FILE_ID_TABLE_ROW,           # noqa: E402
                      COMPRESSION_STORED, COMPRESSION_HUFFMAN)
 import datcheck                                            # noqa: E402
 # The write path, the two path refusals and the reservation arithmetic are all
-# IMPORTED. `datwrite` owns the journal, the grow gate and `declaration_fault`;
+# IMPORTED. `datwrite` owns the grow gate; the 2026-09-11 split moved the other
+# two out to `datjournal.Journal` and `datdecl.declaration_fault`, both of which
+# `datwrite` still re-exports, so the name you reach here is unchanged;
 # a second copy of any of them here is a second thing to keep in agreement with
 # the first, and this module's whole argument is that ten copies did not stay
 # in agreement.

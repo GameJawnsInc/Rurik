@@ -545,7 +545,8 @@ def _verify_overlay_record(doc, source):
     `None` when the document does not declare itself an overlay record, which is
     the a10stage document and the bare mapping a caller hands in.
 
-    WHY THIS IS HERE AT ALL. `overlay.load_fingerprints` (overlay.py:670-737)
+    WHY THIS IS HERE AT ALL. `overlay.load_fingerprints` (defined in
+    `overlaystate.py` since 2026-09-11; `overlay` re-exports the name)
     refuses a record three ways before it reads a row out of it: its own digest,
     the manifest sha, and the RETAIL stamp. MEASURED 2026-08-20: this gate
     honoured none of them, and `--assert-safe --fingerprints F` CLEARED using a
@@ -753,7 +754,8 @@ def _fingerprint_file_ids(doc, where):
     THE ADDRESSING UNIT, and the reason the identity tier has one. A row number
     is a position in ONE archive's table; `overlay.deployed_state` re-resolves
     every file id before it compares a single fingerprint and says why in its own
-    docstring (overlay.py:1399-1403): "the client relocates rows during ordinary
+    docstring, in the paragraph headed THE FILE IDS ARE RE-RESOLVED FIRST:
+    "the client relocates rows during ordinary
     play, so a fingerprint compared by row number alone can be comparing two
     different files." MEASURED 2026-08-20 on one archive with its two file-id
     records swapped and every row still carrying its own bytes: `overlay.py
