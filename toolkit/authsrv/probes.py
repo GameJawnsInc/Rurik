@@ -26,126 +26,35 @@ one did.
 """
 
 import os
-import struct
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import questdefs                                            # noqa: E402
-from agents import (                                        # noqa: E402
-    AGENT_KIND_NPC, AGENT_KIND_PLAYER, AGENT_TYPE_LIVING, APPEARANCE_WARRIOR,
-    CHAR_CLASS_MONSTER_BASE, CHAR_CLASS_PLAYER_BASE, DEFAULT_RUN_SPEED,
-    ALLEGIANCE_HOSTILE, EFFECT_DEAD, EFFECT_TRANSITION, HATCHER, INF, WORLD,
-    agent_set_profession, agent_set_secondary_bits, agent_set_tabard_visible,
-    create_agent, item_template, named_item, npc_model,
-    npc_properties, npc_template)
-
-# The hostile the normal map load spawns. Read from content, the same row
-# authsrv.py reads, so the removal probe cannot drift from what is in the world.
-_ENEMY_ROW = WORLD.get("spawn", "test_enemy")
-ENEMY_AGENT_ID = _ENEMY_ROW["agent_id"]
-ENEMY_DEFINITION = _ENEMY_ROW["definition"]
-# Clear of the probe agents (2..7) and the standing enemy, so the control body
-# cannot collide with either -- the same reasoning authsrv.py:776 gives for the
-# enemy id itself. An id reused for a second body leaves the client with one
-# agent's state under another's name.
-FRESH_AGENT_ID = 12
-
-# How far from the player a probe puts a body it wants LOOKED AT.
-#
-# Owner's instruction, 2026-08-10, given twice: 150, not 550 and not 300. A probe
-# body is evidence only if the operator can see it without turning the camera or
-# walking -- a spawn far enough to need hunting for reads as "nothing appeared",
-# which is the exact failure this probe family is trying to distinguish from a
-# real negative. Probes that place several bodies should step by this, not scatter
-# them further apart to keep them separate.
-PROBE_SPAWN_NEAR = 150.0
-
-# GAME_SMSG 0x003C's first field is a PLAYER NUMBER, not an agent id -- and this
-# module is only ever handed an agent id (`probes.get(name, PLAYER_AGENT_ID, ...)`).
-# On this server both are 1, which is exactly the conflation the party dive flagged
-# as making every possible mis-join invisible, so the constant is named for what the
-# FIELD is rather than reused from `a`. If PLAYER_AGENT_ID is ever changed to differ
-# from PLAYER_NUMBER -- which is the recommendation -- this must NOT follow it.
-PROBE_PLAYER_NUMBER = 1
-
-# Agent int-property ids (GmAgentProperties.h via studies/character/FINDINGS.md).
-PROP_LEVEL = 36
-# Property 60. SOURCED three ways: GWLP-R (2013) and GWCA both name it
-# CastSkill/skill_activated, and on build 38797 the client's own generic-value
-# dispatcher gives 4, 50 and 60 -- and only those three -- one shared case body
-# that reaches AvApi and queues an AgentView event carrying the skill id.
-# studies/skillcast/FINDINGS.md section 6.
-PROP_CAST_SKILL = 60
-
-# Property 61 is a FLOAT property, so it rides 0x00A2/0x00A3 and NOT 0x009F.
-# MEASURED (studies/skillcast section 15.1): the two dispatchers' main switches
-# are disjoint, and a property sent on the wrong message type is discarded in
-# silence -- no error, no log line. Sending 61 on 0x009F would look exactly like
-# the probe's hypothesis being wrong.
-PROP_CAST_TIME = 61
-
-# Properties 65 and 66 write two BYTES of the same per-agent appearance record,
-# at +5 and +7 (studies/skillcast section 16.4). 65 is OpenTyria's `PvPTeam`;
-# 66 is past the end of its enum and unnamed in every source we hold. 65's
-# setter compares before writing and then calls a refresh; 66's writes
-# unconditionally and calls nothing, which is why the sweep below borrows 65 to
-# force a redraw.
-PROP_APPEARANCE_65 = 65
-PROP_APPEARANCE_66 = 66
-
-# The skill ids authsrv.py puts on the bar. Kept in step with authsrv's
-# TEST_SKILLBAR rather than imported, because a probe has to keep working when
-# the bar is rebound from --skills and the probe's own point is the slot, not
-# the id. If they drift, the skill probes below say so instead of silently
-# addressing a slot that holds something else.
-PROBE_BAR_SLOT = 0
-PROBE_BAR_SKILL = 316
-
-# The five Prophecies warrior armour pieces: file_id and model_id, corroborated
-# across two independent sources in the character study.
-WARRIOR_ARMOR = [
-    ("body",  0x5B,  823),
-    ("legs",  0x5E, 2440),
-    ("head",  0x5A,  355),
-    ("hands", 0x5C, 1598),
-    ("feet",  0x5D, 6136),
-]
+# The `agents` surface and the probe constants above moved WHOLE to
+# `probebase.py`, the leaf every module in this family imports: this block was
+# the one thing all seven of `probes.py`'s subjects referenced, so nothing else
+# could move until it had a home. Re-exported here because the step builders
+# below read every one of them by bare name. `_ENEMY_ROW`, `WORLD` and
+# `PROBE_BAR_SLOT` have no reader left in this file and are carried anyway, so
+# `vars(probes)` still answers for exactly what it did before the split.
+from probebase import (                                     # noqa: F401,E402
+    AGENT_KIND_NPC, AGENT_KIND_PLAYER, AGENT_TYPE_LIVING,
+    ALLEGIANCE_HOSTILE, APPEARANCE_WARRIOR,
+    CHAR_CLASS_MONSTER_BASE, CHAR_CLASS_PLAYER_BASE,
+    DEFAULT_RUN_SPEED, EFFECT_DEAD, EFFECT_TRANSITION, HATCHER, INF, WORLD,
+    agent_set_profession, agent_set_secondary_bits,
+    agent_set_tabard_visible, create_agent, item_template, named_item,
+    npc_model, npc_properties, npc_template,
+    ENEMY_AGENT_ID, ENEMY_DEFINITION, FRESH_AGENT_ID,
+    PROBE_BAR_SKILL, PROBE_BAR_SLOT, PROBE_PLAYER_NUMBER, PROBE_SPAWN_NEAR,
+    PROP_APPEARANCE_65, PROP_APPEARANCE_66, PROP_CAST_SKILL, PROP_CAST_TIME,
+    PROP_LEVEL, WARRIOR_ARMOR, _ENEMY_ROW)
 
 
-class Step:
-    """One packet, plus what a human should look at after it lands.
-
-    `sends` is False for a REFUSAL step -- one whose whole purpose is to carry a
-    message to the operator and send nothing. `smsgsweep_steps` returns one when the
-    plan is empty, deliberately, because a probe that sends nothing and prints
-    "complete" is the shape of a green run that measured nothing.
-
-    It is a DECLARED flag rather than a shape test, and that distinction cost a red
-    suite on 2026-08-13. The refusal was built as `Step(0.0, 0x0000, [], ...)` and
-    `check_encodable` encoded it like any other step: 0x0000 is a real opcode wanting
-    one value, so the refusal reported itself as a BROKEN PROBE. Nothing was broken --
-    the all-zero sweep had simply finished, `remaining` went to 0, and the plan emptied
-    for the best possible reason. Inferring "this is a refusal" from an empty `values`
-    list would be worse than the bug it fixes: a genuinely malformed step with no
-    values is precisely what that check exists to catch, and the two are
-    indistinguishable by shape.
-    """
-
-    def __init__(self, delay, opcode, values, label, watch, sends=True):
-        self.delay = delay
-        self.opcode = opcode
-        self.values = values
-        self.label = label
-        self.watch = watch
-        self.sends = sends
-
-
-class Probe:
-    def __init__(self, question, predicts, steps, note=""):
-        self.question = question
-        self.predicts = predicts
-        self.steps = steps
-        self.note = note
+# `Step` and `Probe` moved to `probebase.py`. Re-exported here because every
+# step builder below constructs them by bare name, and because `authsrv.py`
+# (the probe runner) and `test_agentlife.py` both read `probes.Step`.
+from probebase import Probe, Step                           # noqa: F401,E402
 
 
 def _agent_removal_steps(agent_id, origin):
@@ -413,37 +322,14 @@ def _health_shrink_steps(agent_id):
     ]
 
 
-# Item ids for the armor-slot arm, declared by the probe itself via 0x0161.
-#
-# THESE WERE 2 AND 3 UNTIL 2026-08-27 AND BOTH COLLIDED WITH LIVE SERVER ITEMS.
-# 2 is `authsrv.BACKPACK_ITEM_ID` and 3 is STARTER_ARMOUR's `warrior_body`, so
-# this arm re-declared the player's backpack and chest onto the same client, on
-# every run. Nothing failed: a second `0x0161` for an id the server already
-# declared does not error, it overwrites the client's record, so any reading
-# taken through this arm was measuring two writers at one slot.
-#
-# 43/44 AND NOT 10/11, which is the free pair immediately after the server's
-# block. Probe items live in the 40s here already -- `_DRAIN_ITEM_A/B/C` are
-# 40/41/42 -- and keeping the band means a probe id is visibly a probe id
-# instead of sitting flush against ids the server mints. The server's own
-# range is 1..9 plus purchases from `PURCHASED_ITEM_ID_BASE` (5000).
-#
-# `test_armour.py` §2 now scores every `_*_ITEM*` constant in this module
-# against the server's minted set and reddens on any overlap. It did not read
-# this module at all before, which is why the collision survived: the reserved
-# check existed and was pointed one way only.
-#
-# CORRECTION 2026-09-11, appended rather than written over the sentence above,
-# which records what the check WAS on the day the collision was found: "in this
-# module" is no longer the scope. `probes.py` is being split into
-# `probebase.py` and its siblings, all five `_*_ITEM` ids move to
-# `probebase.py` together under this banner, and `probes.py` re-exports them.
-# `test_armour.py` §2 now walks `probes` AND every `probe*.py` beside it,
-# discovered on disk -- because a scan of `probes` alone would have gone on
-# passing on five re-exported ids while a sixth minted in a sibling was
-# invisible, which is the same one-way guard this banner is already about.
-_ARMOR_LEGS_ITEM = 43
-_ARMOR_BOOTS_ITEM = 44
+# The armour-slot item ids moved to `probebase.py`, taking the 2026-08-27
+# collision banner with them -- all five `_*_ITEM` ids together, because that
+# banner is what names the 40s band and it cross-references the drain three by
+# name. Re-exported here because `_armor_slots_steps` below reads them, and
+# `test_armour.py` section 2 scores every `_*_ITEM*` name in `probes` AND in
+# every `probe*.py` beside it.
+from probebase import (                                     # noqa: F401,E402
+    _ARMOR_BOOTS_ITEM, _ARMOR_LEGS_ITEM)
 
 
 def _armor_slots_steps(agent_id):
@@ -615,11 +501,13 @@ def _allegiance_split_steps(agent_id, origin):
     return steps
 
 
-# Item ids for the accum-drain probe, clear of the armor probe's 2/3 and the
-# hammer. The declarations create them; the ids only need to be unclaimed.
-_DRAIN_ITEM_A = 40
-_DRAIN_ITEM_B = 41
-_DRAIN_ITEM_C = 42
+# The three accum-drain item ids moved to `probebase.py`, with the two comment
+# lines that are about them, so all five `_*_ITEM` ids sit under the one
+# collision banner that already cross-references "`_DRAIN_ITEM_A/B/C` are
+# 40/41/42". Re-exported here because the merchant and drain probes below read
+# them, and `test_armour.py` section 2 scores them.
+from probebase import (                                     # noqa: F401,E402
+    _DRAIN_ITEM_A, _DRAIN_ITEM_B, _DRAIN_ITEM_C)
 
 
 # THE ONE VARIABLE OF THE 2026-08-18 test. Our content rows carry
@@ -2382,17 +2270,10 @@ def _title_track_steps(agent_id):
     ]
 
 
-def _f32(x):
-    """A float, as the dword our schema says this field is.
-
-    Not a workaround. The client's own message table types this field as
-    "unsigned int, 4 wire bytes widened to a 4-byte slot" (studies/msgtable
-    FINDINGS.md §2.2 type 4), i.e. a straight copy -- the generic deserializer
-    never interprets it, and the per-opcode HANDLER is what reads the bits as a
-    float. So the schema is right that it is four opaque bytes, and the caller is
-    responsible for what those bytes mean.
-    """
-    return struct.unpack("<I", struct.pack("<f", x))[0]
+# `_f32` moved to `probebase.py`, and took `import struct` with it -- it is the
+# only user of that import in this file. Re-exported here because 53 step
+# builders below call it by bare name.
+from probebase import _f32                                  # noqa: F401,E402
 
 
 def _damage_steps(agent_id):
@@ -2595,21 +2476,10 @@ def _allegiance_steps(agent_id, origin):
     return out
 
 
-
-# One real NPC definition, transcribed from gw-preservation's agent table as a
-# PROBE INPUT and nothing else. That repo carries no license, so these numbers
-# are a lead to be tested rather than data to import -- if the NPC renders, the
-# id gets re-derived and recorded as our own observation, and if it does not,
-# nothing was adopted. See studies/enemy/PLAN.md section 5 on the licensing.
-#
-# `hatcher_collector`, an Ascalon collector. Its file id 116228 is the strongest
-# id available anywhere: GWLP-R's mock NPC used the same number in 2013, which is
-# two lineages thirteen years apart agreeing on one value.
-# Our handle for the Hatcher type within a probe run. Deliberately 2, which is
-# clear of the server's standing enemy at definition 3 -- the definition index
-# is a raw array index on the client and reusing one would put two types in
-# one slot.
-PROBE_DEFINITION = 2
+# `PROBE_DEFINITION`, and the note above it, moved to `probebase.py` with the
+# other reserved ids. Re-exported here because the NPC, allegiance and burrow
+# probes below read it.
+from probebase import PROBE_DEFINITION                      # noqa: F401,E402
 
 
 def _npc_agent_steps(agent_id, origin):
