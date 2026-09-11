@@ -3490,6 +3490,22 @@ DEEP_WOUND_HEAL_FACTOR = 0.8     # WIKI: "20% less benefit from healing"
 BLIND = True           # False (--no-blind): Blind (479) never makes a swing miss.
 BLIND_MISS_CHANCE = 0.90         # WIKI: "90% chance to miss"
 #
+# THE CONDITION-HEAL RULE (SKILLS-RC, studies/skills 45). Restore Condition
+# (276) sat on the enemy's bar as a flat 58-point self-heal every time the
+# pool could pay, which made the fight unwinnable and was filed as an AI
+# problem (PLAN.md 8 old item 4). It was a MECHANIC error: WIKI (GWW,
+# "Restore Condition") -- "Remove all conditions from target other ally. For
+# each condition removed, that ally is healed for 10...58...70" -- and it
+# "cannot self-target". So a skill_effect row may say `removes_conditions =
+# "all"` and `heal_per_condition_removed = true`, the recipient is read off
+# the client's own target byte (effects.TARGET_KINDS: 4 = other ally,
+# CORROBORATED on eleven skills), and a cast with no legal recipient
+# resolves nothing. Retail's corpus carries NO cast of 276 (cast276 census:
+# 0 of 1,364 announcements), so the batch order -- removals, then the heal
+# -- is RECONSTRUCTION from the description's own sentence order.
+# `--no-condition-heal-rule` is the known-bad arm: the flat self-heal.
+CONDITION_HEAL_RULE = True   # False (--no-condition-heal-rule): flat heal, any target.
+#
 # THE HEAL NUMBER (SKILLS-HN, studies/skills 42). Retail sends property 55
 # carrying the skill's own amount whether or not the pool has room for it:
 # 46 heals in the live corpus land on pools that are full by construction
@@ -15575,13 +15591,10 @@ def cast_tick(send, state, conn_id):
                     apply_condition(send, state, target, inflicted[0],
                                     inflicted[1], rank, conn_id,
                                     cast["skill_id"])
-            healed = skill_heal(cast["skill_id"], rank)
-            if healed:
-                row = agents.WORLD.get("skills", str(cast["skill_id"]))
-                heal_agent(send, state,
-                           effects.effect_recipient(row, PLAYER_AGENT_ID,
-                                                    target),
-                           PLAYER_AGENT_ID, healed, conn_id)
+            # SKILLS-RC: the heal, the cure and the recipient's legality in
+            # one place, shared with the enemy's cast (resolve_heal).
+            resolve_heal(send, state, cast["skill_id"], rank,
+                         PLAYER_AGENT_ID, target, conn_id)
             # THE HOLD PULSE CLOSES THE E5 INSTANT for a non-attack cast:
             # [8 -> 0] then [8 -> 1] at the batch's end, after the
             # target-facing properties, 4 of 4 spell E5s -- the cast
@@ -16289,6 +16302,152 @@ def degen_tick(send, state, conn_id):
 # the sends. The split exists for the same reason `energy_cost_for` is split
 # from the debit -- the caller has to know the outcome before choosing what to
 # put on the wire, and a conversion resolved twice would heal twice.
+
+def allies_of(state, caster_id):
+    """Living agents allied with the caster, by id. A pure read.
+
+    The player has none today -- no heroes, no henchmen, no party -- so the
+    set is empty and every "other ally" spell the player casts has no legal
+    recipient, which is what the client itself refuses. A hostile's allies are
+    the other living agents carrying the same allegiance word (the spawn's own
+    FourCC, `agents.ALLEGIANCE_HOSTILE`), which `--enemies N` produces.
+    """
+    if caster_id == PLAYER_AGENT_ID:
+        return set()
+    table = state.get("agents", {})
+    me = table.get(caster_id)
+    if not me:
+        return set()
+    return {aid for aid, a in table.items()
+            if aid != caster_id and not a.get("dead")
+            and a.get("allegiance") == me.get("allegiance")}
+
+
+def skill_target_kind(skill_id):
+    """'self' | 'ally' | 'other_ally' | 'foe' | None, from the client's byte.
+
+    None for an unresolved code (1, 6, 14, 16) and for a skill with no content
+    row -- the bare-machine case -- and both fall through to the caster's own
+    choice, as `effects.effect_recipient` always has.
+    """
+    try:
+        row = agents.WORLD.get("skills", str(skill_id))
+    except Exception:                                          # noqa: BLE001
+        return None
+    return effects.TARGET_KINDS.get(int(row["target"]))
+
+
+def cast_recipient(skill_id, caster_id, target_id, allies):
+    """Who a cast lands on, or None when the client's target byte forbids it.
+
+    self       -> the caster, whatever was selected (Healing Signet mid-fight).
+    ally       -> the selected ally, else the caster: an ally spell aimed at a
+                  foe lands on yourself, which is what the client does with the
+                  press (RECONSTRUCTION of the client's auto-self; the wiki
+                  rule is only that the caster IS a legal target).
+    other_ally -> the selected ally and never the caster: no ally, no cast.
+    foe / None -> the selected target, else the caster (the old fall-through).
+    """
+    kind = skill_target_kind(skill_id)
+    if kind == "self":
+        return caster_id
+    if kind == "ally":
+        return target_id if target_id in allies else caster_id
+    if kind == "other_ally":
+        if target_id in allies and target_id != caster_id:
+            return target_id
+        return None
+    return target_id or caster_id
+
+
+def remove_conditions(send, state, agent_id, conn_id, why):
+    """Close every CONDITION episode on one agent, the cure's way.
+
+    A cure is a strip (bufflog's word for a removal that lands early) scoped to
+    conditions: hexes, enchantments and stances stay. The wire per episode is
+    the same 0x0044 a death strip sends; behind them the status word drops the
+    conditions' bits, a Deep Wound gives the maximum back (deep_wound_close),
+    and the regen rate is re-announced without the pips. Returns the closed
+    episodes, lowest buff id first.
+    """
+    if not EFFECTS:
+        return []
+    table = effect_table(state)
+    gone = [ep for ep in table.on_agent(agent_id)
+            if ep["skill"] in effects.CONDITION_SKILLS]
+    for ep in gone:
+        table.close(ep["buff"])
+        send(GAME_SMSG_EFFECT_REMOVE, [ep["agent"], ep["buff"]],
+             f"EFFECT_REMOVE(buff {ep['buff']}, "
+             f"{effects.CONDITION_SKILLS[ep['skill']]}, REMOVED: {why})")
+    for ep in gone:
+        if ep["skill"] == effects.CONDITION_BY_NAME["Deep Wound"]:
+            deep_wound_close(send, state, agent_id, conn_id)
+    if gone:
+        push_status(send, state, agent_id, conn_id)
+        push_regen(send, state, agent_id, conn_id)
+        print(f"[c{conn_id}] removed {len(gone)} condition(s) from agent "
+              f"{agent_id}: {why}", flush=True)
+    return gone
+
+
+def resolve_heal(send, state, skill_id, rank, caster_id, target_id, conn_id):
+    """The heal / cure half of a cast, for BOTH cast paths (SKILLS-RC).
+
+    Returns {"recipient", "removed", "healed"} when the skill has a heal or a
+    removal to resolve, else None. The recipient is the client's target byte's
+    verdict (`cast_recipient`); a skill whose row says `removes_conditions`
+    strips the recipient's conditions first; one that says
+    `heal_per_condition_removed` heals its scale ONCE PER CONDITION REMOVED and
+    nothing when none was -- GWW's own sentence, and the whole of why the
+    enemy's Restore Condition no longer heals it to full every three seconds.
+    Under `--no-condition-heal-rule` this is the pre-2026-09-10 flat heal on
+    `effects.effect_recipient`'s recipient, and no removal.
+    """
+    healed = skill_heal(skill_id, rank)
+    try:
+        erow = agents.WORLD.get("skill_effect", str(skill_id))
+    except Exception:                                          # noqa: BLE001
+        erow = {}
+    removes = erow.get("removes_conditions") if CONDITION_HEAL_RULE else None
+    per_removed = (bool(erow.get("heal_per_condition_removed"))
+                   if CONDITION_HEAL_RULE else False)
+    if not healed and not removes:
+        return None
+    if CONDITION_HEAL_RULE:
+        recipient = cast_recipient(skill_id, caster_id, target_id,
+                                   allies_of(state, caster_id))
+        if recipient is None:
+            print(f"[c{conn_id}] skill {skill_id} by agent {caster_id} has no "
+                  f"legal recipient (target other ally; aimed at {target_id})"
+                  f" -- nothing resolves", flush=True)
+            return None
+    else:
+        try:
+            srow = agents.WORLD.get("skills", str(skill_id))
+        except Exception:                                      # noqa: BLE001
+            srow = None
+        recipient = (effects.effect_recipient(srow, caster_id, target_id)
+                     if srow is not None else (target_id or caster_id))
+    gone = []
+    if removes == "all":
+        gone = remove_conditions(send, state, recipient, conn_id,
+                                 f"skill {skill_id} by agent {caster_id}")
+    out = {"recipient": recipient, "removed": len(gone), "healed": 0.0}
+    if not healed:
+        return out
+    amount = float(healed)
+    if per_removed:
+        if not gone:
+            print(f"[c{conn_id}] skill {skill_id} removed no condition from "
+                  f"agent {recipient} and heals per condition removed -- "
+                  f"nothing healed", flush=True)
+            return out
+        amount *= len(gone)
+    out["healed"] = heal_agent(send, state, recipient, caster_id, amount,
+                               conn_id)
+    return out
+
 
 def blinded(state, agent_id):
     """True if a live Blind (479) episode sits on the agent. Pure read."""
@@ -17142,8 +17301,34 @@ def enemy_attack_tick(send, state, conn_id):
                     agent["cast_refused_at"] = now
                     print(f"[c{conn_id}] agent {agent_id} cannot cast skill "
                           f"{_sid}: needs {_short}", flush=True)
+        # ---- AND THE TARGET GATE, which is the same class as the resource
+        # gate above (SKILLS-RC): not "which slot" -- that stays the
+        # fixture's -- but "can this agent legally cast the slot it picked".
+        # The client's own target byte says a code-4 skill lands on an OTHER
+        # ally and never on the caster (effects.OTHER_ALLY_TARGET, eleven
+        # skills corroborated on the wiki), so a lone hostile cannot cast
+        # Restore Condition at all: the slot is skipped and stays ready, as
+        # an unpayable one is. Among several legal allies the LOWEST id is
+        # taken -- a fixture choice in the round-robin's own spirit, said
+        # here so nobody reads it as a monster's preference. Everything not
+        # an ally spell aims at the player, as it always has.
+        cast_target = PLAYER_AGENT_ID
+        if slot is not None and CONDITION_HEAL_RULE:
+            _sid = agent["skills"][slot][0]
+            if skill_target_kind(_sid) == "other_ally":
+                _allies = sorted(allies_of(state, agent_id))
+                if _allies:
+                    cast_target = _allies[0]
+                else:
+                    slot = None
+                    if now - agent.get("cast_refused_at", 0.0) >= 5.0:
+                        agent["cast_refused_at"] = now
+                        print(f"[c{conn_id}] agent {agent_id} cannot cast "
+                              f"skill {_sid}: target other ally, and it has "
+                              f"none", flush=True)
         if slot is not None:
             skill_id, activation, recharge = agent["skills"][slot]
+            agent["cast_target"] = cast_target
             # THE ENEMY PAYS, AND NOTHING GOES ON THE WIRE FOR IT. Property 62
             # is the observing player's OWN agent's and nobody else's: across
             # the live corpus, 722 casts by other agents -- 579 of them paid --
@@ -17165,7 +17350,7 @@ def enemy_attack_tick(send, state, conn_id):
             # 0x009F shape it used to take matched the corpus's one NPC
             # activation, but that one was a cast that names nobody.
             _op, _vals = cast_anim_msg(agents.GV_SKILL_ACTIVATED, agent_id,
-                                       PLAYER_AGENT_ID, skill_id)
+                                       cast_target, skill_id)
             send(_op, _vals, f"agent {agent_id} casts skill {skill_id}")
             agent["cast_lands_at"] = now + activation
             print(f"[c{conn_id}] agent {agent_id} ({agent['name']}) casts skill "
@@ -18881,8 +19066,8 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # player's -- behind the 58, ahead of the effect and the damage
     # (ANIMREF-R8). An NPC skill aims at the player, so this is the channel's
     # other half: property 20 naming the player as the recipient.
-    send_skill_visual(send, state, agent_id, skill_id, PLAYER_AGENT_ID,
-                      conn_id)
+    send_skill_visual(send, state, agent_id, skill_id,
+                      agent.get("cast_target") or PLAYER_AGENT_ID, conn_id)
     # THE EFFECT NEXT, and the order is load-bearing rather than stylistic.
     # The one skill on this bar that opens an episode is Scourge Sacrifice
     # (253, a Hex), and it is one of the three the damage exit below turns
@@ -18907,12 +19092,13 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # The enemy heals too, and its own bar has one: Restore Condition (276),
     # whose GWW variable is `Healing` 10..70. It has been on that bar since the
     # bar existed and has resolved to nothing every session.
-    healed = skill_heal(skill_id, ENEMY_SKILL_RANK)
-    if healed:
-        row = agents.WORLD.get("skills", str(skill_id))
-        heal_agent(send, state,
-                   effects.effect_recipient(row, agent_id, agent_id),
-                   agent_id, healed, conn_id)
+    # SKILLS-RC: the heal is the shared resolver's -- the recipient is the
+    # client's target byte's verdict on what the cast site aimed at
+    # (`cast_target`: an ally for an ally spell, the player otherwise), a
+    # cure strips conditions first, and Restore Condition heals per
+    # condition removed. Until 2026-09-10 this was a flat self-heal.
+    healed = resolve_heal(send, state, skill_id, ENEMY_SKILL_RANK, agent_id,
+                          agent.get("cast_target"), conn_id)
 
     # The damage and its fraction were computed BEFORE the 58 went out (the
     # guard block at the top); from here on this is emission and bookkeeping
@@ -26976,6 +27162,14 @@ def main():
                          "health delta, full healing. Retail moves the "
                          "maximum by exactly 20%% in the apply's own batch "
                          "(2 of 2, isle 8.2 / deepwoundjoin.py).")
+    ap.add_argument("--no-condition-heal-rule", action="store_true",
+                    help="SKILLS-RC REVERT: Restore Condition is a flat "
+                         "self-heal again -- no condition removal, no "
+                         "per-condition amount, no target legality -- the "
+                         "pre-2026-09-10 wire that healed the enemy to full "
+                         "every three seconds. GWW: 'Remove all conditions "
+                         "from target other ally. For each condition "
+                         "removed, that ally is healed'.")
     ap.add_argument("--no-blind", action="store_true",
                     help="SKILLS-BL REVERT: Blind (479) is an icon and every "
                          "swing under it lands -- the pre-2026-09-10 wire. "
@@ -29193,6 +29387,12 @@ def main():
         DEEP_WOUND = False
         print("NO DEEP WOUND: 482 is an icon -- the maximum never moves, heals "
               "are not cut (--no-deep-wound, the known-bad arm).", flush=True)
+    if a.no_condition_heal_rule:
+        global CONDITION_HEAL_RULE
+        CONDITION_HEAL_RULE = False
+        print("NO CONDITION-HEAL RULE: Restore Condition is a flat self-heal "
+              "again (--no-condition-heal-rule, the known-bad arm).",
+              flush=True)
     if a.no_blind:
         global BLIND
         BLIND = False

@@ -278,10 +278,18 @@ verified = "Client scale 10->40, args = 2 (scale). Wiki var1 `+ Damage` 10->40."
 # citation rather than a silent default. The server models none of these.
 [skill_effect.276]
 scale_means = "Healing"
+removes_conditions = "all"
+heal_per_condition_removed = true
 [skill_effect.276.provenance]
 source = "wiki"
 page = 'GWW, "Restore Condition", {{Skill progression}}, rev. 2024-05-16'
-verified = "Client scale 10->70, args = 2. Wiki var1 `Healing` 10->70."
+verified = """Client scale 10->70, args = 2. Wiki var1 `Healing` 10->70. The
+MECHANIC (SKILLS-RC, 2026-09-10, studies/skills 45): GWW's description --
+"Remove all conditions from target other ally. For each condition removed, that
+ally is healed for 10...58...70 Health" -- and "cannot self-target". Text taken
+2026-09-10 through the wiki's search index (the page itself refused the
+fetcher); revision date of the description not retrieved. The client's target
+byte for 276 is 4 = other ally (effects.OTHER_ALLY_TARGET)."""
 
 [skill_effect.253]
 scale_means = "Duration"

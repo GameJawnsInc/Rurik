@@ -1781,7 +1781,11 @@ caster, so **0 = self and 5 = the cast's target** is read off the type column
 rather than asserted about any one skill. The one Stance at 5 and the three
 Hexes at 0 are not explained here and are not needed.
 
-**Codes 1, 3, 4, 6, 14 and 16 are UNRESOLVED.** 3 is plainly ally-shaped (52
+**Codes 1, 3, 4, 6, 14 and 16 are UNRESOLVED.** ~~3 is plainly ally-shaped~~
+**RESOLVED 2026-09-10 (SKILLS-RC, §45.3): 3 = ally (the caster is legal), 4 =
+other ally (the caster is not), CORROBORATED on eleven skills against GWW's
+targeting words; 1, 6, 14 and 16 stay unresolved.** The paragraph below stands
+as written on 2026-08-20: 3 is plainly ally-shaped (52
 Enchantments and Reversal of Fortune 307 carry it) and 4 is *also* ally-shaped
 (Restore Condition 276), which is one distinction too many to guess at — so
 `effects.effect_recipient` reads only 0 and lets everything else fall through to
@@ -5953,3 +5957,143 @@ one check that would replace it is a captured blinded swing (§44.6).
   §22), Deep Wound (§41) and Blind (this) — **6 of 10 conditions do what they
   say**; Crippled, Dazed, Weakness and Cracked Armor do not, and the last three
   wait on the attack/armour fields §41 named.
+
+---
+
+## 45. SKILLS-RC — the "AI heals itself" item was a MECHANIC error: Restore Condition heals per condition removed, targets an OTHER ally, and the client's target byte 4 now resolves (2026-09-10)
+
+**Desk and corpus, pinned build 38797. No client run.** Asked as SKILLS-DW's
+item (1), "the AI-heals-itself item (`pick_skill` is a fixture, R4c's design
+question)". It is not an AI question. `PLAN.md` §8's old item 4 read *"The enemy
+AI now heals itself to full every few seconds, because Restore Condition finally
+resolves … It is an AI rule"*, and the 08-20 pools entry said the energy pool
+had "closed" it by pacing. Both missed the skill's own text. Shipped:
+`CONDITION_HEAL_RULE`, `allies_of`, `skill_target_kind`, `cast_recipient`,
+`remove_conditions`, `resolve_heal` and the cast site's target gate in
+`toolkit/authsrv/authsrv.py`; `effects.ALLY_TARGET` / `OTHER_ALLY_TARGET` /
+`TARGET_KINDS`; the `skill_effect.276` row; `--no-condition-heal-rule` reverts;
+`test_mechanics` §24–§26, floor 129 → 153; `test_agentlife` and `test_pools`
+fixtures given the ally the rule requires.
+
+### 45.1 What the skill actually says
+
+WIKI (GWW, "Restore Condition", text taken 2026-09-10 through the wiki's search
+index — the page itself refused the fetcher, so the description's revision
+date is not retrieved): *"Remove all conditions from target other ally. For each
+condition removed, that ally is healed for 10...58...70 Health."* Elite spell,
+Protection Prayers, 5 energy, ¾ s, 2 s recharge (the client's own row agrees:
+`energy = 5`, `activation = 0.75`, `recharge = 2`, `scale 10→70`), and it
+**cannot self-target**. Three facts, none of them modelled: the heal is *per
+condition removed* (so a target with none is healed nothing), the spell
+*removes* those conditions, and the caster is never a legal recipient.
+
+What our server did: `land_skill` resolved the heal on `effect_recipient(row,
+agent_id, agent_id)` — caster and target both the caster — for the flat scale
+value, 58 at rank 12, whenever the pool could pay 5 energy. With 5 pips over 30
+energy that is one full-strength self-heal every ~3 s, ~19 health a second,
+against a hammer that lands ~5 per 1.75 s. Unwinnable, as the item said — and
+the cause was the mechanic, not the selector.
+
+### 45.2 The corpus cannot referee this one — and says so
+
+`cast276` census over every cast announcement in the live corpus (`0x00A0`
+properties 60/50, `0x009F` 60, `0x00E3`): **1,364 announcements across 53
+skill ids, and skill 276 is not among them.** Nobody in six Pre-Searing sessions
+and one arena capture cast Restore Condition. A secondary read — finish batches
+carrying both a `0x0044` removal and a 55 heal — found five, all coincidences of
+an ally heal (313, 184, 180) with an unrelated expiry, none a cure. So the wire
+shape of a cure-and-heal is **RECONSTRUCTION**: removals first, then the heal,
+in the description's own sentence order, and the test says so.
+
+### 45.3 The client's target byte, resolved from an independent column — CORROBORATED
+
+§14 read codes 0 (self) and 5 (foe) off the type column and refused to guess 3
+against 4: *"3 is plainly ally-shaped … and 4 is also ally-shaped (Restore
+Condition 276), which is one distinction too many to guess at."* The distinction
+is the wiki's targeting sentence, and the wiki shares no author with the byte.
+Names resolved through `skilltable.py` → `textrec.py` against the owner's own
+archive, targeting words from GWW:
+
+| byte | skill | GWW says |
+|---|---|---|
+| 4 | Heal Other 286 | target other ally, cannot self-target |
+| 4 | Infuse Health 292 | target other ally, cannot self-target |
+| 4 | Restore Condition 276 | target other ally, cannot self-target |
+| 4 | Dwayna's Kiss 283 | (oc) — other ally |
+| 4 | Draw Conditions 311 | (oc) — other ally |
+| 4 | Convert Hexes 303 | (oc) — other ally |
+| 3 | Mend Ailment 277 | target ally |
+| 3 | Purge Conditions 278 | target ally |
+| 3 | Word of Healing 282 | target ally |
+| 3 | Remove Hex 301 | target ally |
+| 3 | Reversal of Fortune 307 | target ally |
+
+Eleven skills, zero disagreements: **3 = ally (the caster is legal), 4 = other
+ally (the caster is not).** The table has 124 threes and 41 fours; eleven is a
+sample, and `test_mechanics` §25 pins exactly these eleven bytes so the claim
+stays checkable. Codes 1, 6, 14 and 16 remain UNRESOLVED and still fall through
+to the caster's aim.
+
+### 45.4 Shipped, and where the line between mechanic and AI sits
+
+* **`skill_effect.276`** carries `removes_conditions = "all"` and
+  `heal_per_condition_removed = true`, provenance in the row.
+* **`resolve_heal`** serves BOTH cast paths (the player's `cast_tick` and the
+  enemy's `land_skill`, which used to compute the recipient differently — the
+  enemy's forced caster = target). The recipient is `cast_recipient`'s verdict
+  from the client's byte: self → caster; ally → the selected ally, else the
+  caster (an ally spell aimed at a foe lands on yourself — RECONSTRUCTION of the
+  client's auto-self; the rule the wiki gives is only that the caster IS legal);
+  other ally → the selected ally and never the caster, **None if there is
+  none**; foe / unresolved → the old fall-through. A row with
+  `removes_conditions` strips the recipient's condition episodes
+  (`remove_conditions`: `0x0044` each, the Deep Wound's maximum back, the status
+  word without the bits, the regen re-announced), and one with
+  `heal_per_condition_removed` heals the scale **once per condition removed and
+  nothing when none was**.
+* **The cast site's target gate**, beside the resource gate and in its class:
+  not *which* slot (that stays the round-robin fixture, owner's ruling) but
+  *can this agent legally cast the slot it picked*. A code-4 skill with no other
+  living ally is skipped and stays ready, exactly as an unpayable one is; among
+  several legal allies the lowest id is taken — a fixture choice, said at the
+  site so nobody reads it as a monster's preference. The cast announcement and
+  the on-body visual name that ally (`cast_target`); everything not an ally
+  spell aims at the player as before.
+* **Consequences on the shipped default bar:** a lone Hatcher never casts 276
+  (it swings, and cycles 253/312/289); with `--enemies N` each hostile casts it
+  at the lowest-id other hostile, where it does nothing unless that body carries
+  a condition — Sever Artery's Bleeding, say — in which case it cures it and
+  heals 58 per condition. That is retail's own counterplay shape.
+* **`--no-condition-heal-rule`**: the flat self-heal on any target, the
+  pre-2026-09-10 wire.
+* Tests: `test_mechanics` §24 (no condition → nothing; one → removal then 58;
+  two incl. Deep Wound → both removed, the 20 back to the pool first, then 116
+  sent and 70 landing; the revert), §25 (the eleven bytes; `cast_recipient` on
+  every kind; `allies_of` excludes self, corpses and other allegiances; the
+  player's 276 at a foe resolves nothing), §26 (the tick: alone → no cast, slot
+  still ready, a swing instead; with an ally → `[60, 10, 11, 276]`, the landing
+  58-led with no heal on an unconditioned ally, and a cure + 58 on a bleeding
+  one; the revert). `test_agentlife`'s enemy-skill section and `test_pools`'
+  enemy gate now stand an idle ally beside the caster, because a lone hostile
+  cannot cast slot 1 any more; the two checks that described the flat
+  self-overheal now assert its absence. Floor 129 → 153; agentlife 380, pools
+  127, skilldamage 57, effects 74, guards 41, castcycle 35, killwindow 21,
+  burrow 31, playerswing 173 green.
+
+### 45.5 What it does NOT settle
+
+* **The wire shape of a cure** — removal-then-heal — has no retail witness
+  (§45.2). A live capture with any condition-removal heal (Mend Ailment, Mend
+  Condition, Dismiss Condition are all common) would referee it; not scheduled.
+* **Mend Ailment's own rule** ("for each REMAINING condition") is a different
+  formula and is not modelled; the row shape here (`removes_conditions`,
+  `heal_per_condition_removed`) does not express it.
+* **Skill 276 is elite** (monsterai §5.1's error 1) and sits on a bar that
+  claims "non-elite"; untouched here — the bar is a fixture.
+* **The AI question is still open and still R4c's:** *when* a monster casts a
+  cure is per-skill data (heroes §5.6, GWW's per-skill usage sections). What
+  this section removes from that question is the part that was never AI — the
+  skill's arithmetic and its legal targets.
+* The old §8 item 4 is struck; the 08-20 "closed by a resource rule" sentence
+  in the pools entry was a pacing, not a closure, and is annotated rather than
+  rewritten.

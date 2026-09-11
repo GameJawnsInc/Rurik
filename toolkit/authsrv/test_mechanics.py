@@ -26,8 +26,8 @@ import authsrv      # noqa: E402
 import agents       # noqa: E402
 import effects      # noqa: E402
 
-# Floor set from a real green run (39 checks, 2026-08-22; 99 checks, 2026-09-09 SKILLS-DW; 129 checks, 2026-09-10 SKILLS-BL).
-LEDGER = checks.Ledger("effect mechanics", floor=129)
+# Floor set from a real green run (39 checks, 2026-08-22; 99 checks, 2026-09-09 SKILLS-DW; 129 checks, 2026-09-10 SKILLS-BL; 153 checks, 2026-09-10 SKILLS-RC).
+LEDGER = checks.Ledger("effect mechanics", floor=153)
 check = checks.adopt(LEDGER)
 
 FRENZY, RUSH, ROF, GLYPH, IGNITE, FAINT = 346, 319, 307, 200, 431, 135
@@ -820,5 +820,264 @@ try:
           f"reasons={ms['fail_reasons']} blind={ms['fail_blind']}")
 except Exception as exc:                                     # noqa: BLE001
     LEDGER.skip("section 23 (corpus)", f"{type(exc).__name__}: {exc}")
+
+# ---------------------------------------------------------------------------
+# 24-26: SKILLS-RC, Restore Condition (studies/skills/FINDINGS.md 45). The
+#        "AI heals itself" item was a MECHANIC error: WIKI (GWW "Restore
+#        Condition") removes all conditions from target OTHER ally and heals
+#        per condition removed. No retail cast of 276 exists to copy.
+print("== 24. SKILLS-RC: Restore Condition removes the recipient's conditions "
+      "and heals ONCE PER CONDITION REMOVED -- nothing removed, nothing "
+      "healed ==")
+RC, BLEED, DW = 276, 478, 482
+EFFECT_REMOVE = authsrv.GAME_SMSG_EFFECT_REMOVE
+INT_NT = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
+
+
+def two_hostiles(h11=60.0):
+    state = fresh_state()
+    for aid, hp in ((10, 100.0), (11, h11)):
+        state["agents"][aid] = {
+            "name": "t", "dead": False, "died_at": 0.0, "health": hp,
+            "max_health": 100.0, "last_hit": 0.0, "armor_rating": 60,
+            "pos": (0.0, 0.0), "allegiance": agents.ALLEGIANCE_HOSTILE,
+            "attacks_back": True}
+    return state
+
+
+def heals(sent):
+    return [v for op, v, _l in sent if op == FLOAT_T
+            and v[0] == agents.GV_HEALTH_GAIN]
+
+
+def removes(sent):
+    return [v for op, v, _l in sent if op == EFFECT_REMOVE]
+
+
+saved = (authsrv.CONDITION_HEAL_RULE, authsrv.ENERGY, authsrv.STATUS_WORD)
+try:
+    authsrv.CONDITION_HEAL_RULE = True
+    authsrv.ENERGY = False
+    check(authsrv.skill_heal(RC, 12) == 58,
+          "the client's own scale at rank 12: 10 + 60 x 12/15 = 58 (GWW's "
+          "10...58...70)", f"{authsrv.skill_heal(RC, 12)}")
+
+    sent, send = collector()
+    state = two_hostiles()
+    out = authsrv.resolve_heal(send, state, RC, 12, 10, 11, 0)
+    check(out is not None and out["removed"] == 0 and out["healed"] == 0.0
+          and not heals(sent) and not removes(sent)
+          and state["agents"][11]["health"] == 60.0,
+          "no condition on the ally: nothing removed, NOTHING healed, nothing "
+          "on the wire -- the old flat 58 is gone", f"out={out} sent={sent}")
+
+    sent, send = collector()
+    state = two_hostiles()
+    authsrv.apply_condition(send, state, 11, BLEED, 9.0, 12, 0, 382)
+    check(len(state["effects"].on_agent(11)) == 1, "setup: Bleeding on 11")
+    sent, send = collector()
+    out = authsrv.resolve_heal(send, state, RC, 12, 10, 11, 0)
+    ops = [op for op, _v, _l in sent]
+    check(out["removed"] == 1 and out["healed"] == 40.0
+          and state["agents"][11]["health"] == 100.0
+          and not state["effects"].on_agent(11),
+          "ONE condition: it is removed and the ally is healed 58 (40 lands "
+          "on a 60/100 pool)", f"out={out} health={state['agents'][11]['health']}")
+    check(len(removes(sent)) == 1 and len(heals(sent)) == 1
+          and ops.index(EFFECT_REMOVE) < ops.index(FLOAT_T),
+          "the wire: the 0x0044 removal BEFORE the 55 heal (the sentence's "
+          "own order -- RECONSTRUCTION, no retail 276 cast exists)",
+          f"ops={[hex(o) for o in ops]}")
+    check(heals(sent)[0][1] == 11 and heals(sent)[0][2] == 10,
+          "the heal names the ally as taker and the caster as cause")
+
+    sent, send = collector()
+    state = two_hostiles(h11=30.0)
+    authsrv.apply_condition(send, state, 11, BLEED, 9.0, 12, 0, 382)
+    authsrv.apply_condition(send, state, 11, DW, 9.0, 12, 0, 382)
+    check(state["agents"][11]["max_health"] == 80.0
+          and state["agents"][11]["health"] == 10.0,
+          "setup: Bleeding + Deep Wound (maximum 80, the 20 taken off the "
+          "pool, 30 -> 10)", f"{state['agents'][11]}")
+    sent, send = collector()
+    out = authsrv.resolve_heal(send, state, RC, 12, 10, 11, 0)
+    check(out["removed"] == 2 and abs(out["healed"] - 70.0) < 1e-9
+          and state["agents"][11]["max_health"] == 100.0
+          and state["agents"][11]["health"] == 100.0,
+          "TWO conditions: both removed, the Deep Wound's close gives the 20 "
+          "back to the pool FIRST (10 -> 30, SKILLS-DW's signed delta), then "
+          "116 is healed (2 x 58) and 70 lands on the 30/100 pool",
+          f"out={out} agent={state['agents'][11]}")
+    maxes = [v for op, v, _l in sent if op == INT_NT
+             and v[0] == agents.PROP_HEALTH_MAX]
+    check(len(removes(sent)) == 2 and len(maxes) == 1 and maxes[0][2] == 100
+          and ops.index(EFFECT_REMOVE) < ops.index(FLOAT_T),
+          "the wire: two 0x0044s, one 0x009F 42 = 100 restoring the maximum, "
+          "then the heal", f"sent={sent}")
+
+    authsrv.CONDITION_HEAL_RULE = False
+    sent, send = collector()
+    state = two_hostiles()
+    authsrv.apply_condition(send, state, 11, BLEED, 9.0, 12, 0, 382)
+    sent, send = collector()
+    out = authsrv.resolve_heal(send, state, RC, 12, 10, 10, 0)
+    check(out["healed"] == 0.0 and not removes(sent) and len(heals(sent)) == 1
+          and heals(sent)[0][1] == 10
+          and len(state["effects"].on_agent(11)) == 1,
+          "--no-condition-heal-rule (the known-bad arm): the caster heals "
+          "ITSELF the flat 58 on a full pool, and the ally keeps its Bleeding",
+          f"out={out} sent={sent}")
+    authsrv.CONDITION_HEAL_RULE = True
+finally:
+    authsrv.CONDITION_HEAL_RULE, authsrv.ENERGY, authsrv.STATUS_WORD = saved
+
+print("== 25. SKILLS-RC: the recipient is the client's target byte's verdict -- "
+      "4 = other ally never the caster, 3 = ally else the caster ==")
+try:
+    HEAL_OTHER, INFUSE, KISS, DRAW, CONVERT = 286, 292, 283, 311, 303
+    MEND_AIL, PURGE, WOH, REMOVE_HEX = 277, 278, 282, 301
+    bytes4 = {s: int(agents.WORLD.get("skills", str(s))["target"])
+              for s in (RC, HEAL_OTHER, INFUSE, KISS, DRAW, CONVERT)}
+    bytes3 = {s: int(agents.WORLD.get("skills", str(s))["target"])
+              for s in (MEND_AIL, PURGE, WOH, REMOVE_HEX, ROF)}
+    check(all(v == effects.OTHER_ALLY_TARGET for v in bytes4.values()),
+          "six 'target other ally' skills on GWW (Heal Other, Infuse Health, "
+          "Restore Condition, Dwayna's Kiss, Draw Conditions, Convert Hexes) "
+          "ALL carry byte 4 in the client's table", f"{bytes4}")
+    check(all(v == effects.ALLY_TARGET for v in bytes3.values()),
+          "five 'target ally' skills on GWW (Mend Ailment, Purge Conditions, "
+          "Word of Healing, Remove Hex, Reversal of Fortune) ALL carry byte 3",
+          f"{bytes3}")
+    check(int(agents.WORLD.get("skills", "1")["target"]) == effects.SELF_TARGET
+          and int(agents.WORLD.get("skills", "253")["target"])
+          == effects.FOE_TARGET,
+          "controls: Healing Signet is 0 (self), Scourge Sacrifice 5 (foe)")
+    allies = {11, 12}
+    check(authsrv.cast_recipient(RC, 10, 11, allies) == 11
+          and authsrv.cast_recipient(RC, 10, 10, allies) is None
+          and authsrv.cast_recipient(RC, 10, PLAYER, allies) is None
+          and authsrv.cast_recipient(RC, 10, None, allies) is None
+          and authsrv.cast_recipient(RC, 10, 11, set()) is None,
+          "other ally: the selected ally, NEVER the caster, never a foe, "
+          "never nobody -- and no allies means no recipient at all")
+    check(authsrv.cast_recipient(MEND_AIL, 10, 11, allies) == 11
+          and authsrv.cast_recipient(MEND_AIL, 10, PLAYER, allies) == 10
+          and authsrv.cast_recipient(MEND_AIL, 10, None, allies) == 10,
+          "ally: the selected ally, else the caster (an ally spell aimed at a "
+          "foe lands on yourself)")
+    check(authsrv.cast_recipient(1, PLAYER, 10, set()) == PLAYER
+          and authsrv.cast_recipient(253, 10, PLAYER, allies) == PLAYER,
+          "self lands on the caster whatever is selected; a foe skill on the "
+          "selected target")
+    check(authsrv.allies_of(PLAYER, {"agents": {}}) == set()
+          if False else authsrv.allies_of({"agents": {}}, PLAYER) == set(),
+          "the player has no allies today -- no heroes, no party")
+    st = two_hostiles()
+    st["agents"][12] = dict(st["agents"][11], dead=True)
+    st["agents"][13] = dict(st["agents"][11], allegiance=0)
+    check(authsrv.allies_of(st, 10) == {11},
+          "a hostile's allies are the OTHER LIVING hostiles: not itself, not "
+          "a corpse, not a body of another allegiance",
+          f"{authsrv.allies_of(st, 10)}")
+    sent, send = collector()
+    st = two_hostiles()
+    out = authsrv.resolve_heal(send, st, RC, 12, PLAYER, 10, 0)
+    check(out is None and not sent and st["agents"][10]["health"] == 100.0,
+          "the PLAYER casting Restore Condition at a foe resolves NOTHING -- "
+          "no heal on the enemy (the old fall-through would have healed it)")
+except agents.content.ContentError as exc:
+    LEDGER.skip("section 25 (needs the vault's skill rows)", str(exc))
+
+print("== 26. SKILLS-RC: the cast site -- a LONE hostile cannot cast Restore "
+      "Condition and swings instead; with an ally it casts AT the ally, and "
+      "the landing heals only what it cured ==")
+
+
+def world(n_hostiles, bar=((RC, 0.75, 2.0),)):
+    state = {"agents": {}, "pos": (0.0, 0.0), "player_health": 100.0,
+             "player_dead": False}
+    authsrv.effect_table(state)
+    for k in range(n_hostiles):
+        state["agents"][10 + k] = {
+            "name": "hatcher", "dead": False, "died_at": 0.0,
+            "health": 100.0, "max_health": 100.0, "last_hit": 0.0,
+            "pos": (85.0, 10.0 * k), "plane": 0,
+            "allegiance": agents.ALLEGIANCE_HOSTILE,
+            "attack_speed": authsrv.ENEMY_ATTACK_SPEED,
+            "effects": 0, "attacks_back": True,
+            "skills": bar, "skill_ready": [0.0] * len(bar),
+            "last_swing": time.time() - 100.0}
+    return state
+
+
+def tick(state, n=1):
+    sent = []
+    for _ in range(n):
+        authsrv.enemy_attack_tick(
+            lambda op, vals, label="", quiet=False: sent.append(
+                (op, list(vals), label)), state, 0)
+    return sent
+
+
+def casts(sent):
+    return [v for op, v, _l in sent
+            if (op == INT_T and v[0] == agents.GV_SKILL_ACTIVATED)
+            or (op == INT and v[0] == agents.GV_SKILL_ACTIVATED)]
+
+
+saved = (authsrv.ENERGY, authsrv.NPC_FOLLOW, authsrv.CONDITION_HEAL_RULE)
+try:
+    authsrv.ENERGY = False
+    authsrv.NPC_FOLLOW = False
+    authsrv.CONDITION_HEAL_RULE = True
+    st = world(1)
+    sent = tick(st)
+    started = [v for op, v, _l in sent if op == INT_T
+               and v[0] == agents.GV_ATTACK_STARTED]
+    check(not casts(sent) and len(started) == 1 and st["agents"][10].get(
+              "skill_ready") == [0.0],
+          "alone: no cast of 276 goes out, the slot STAYS ready (not "
+          "consumed), and the hostile swings instead",
+          f"casts={casts(sent)} started={started} ready="
+          f"{st['agents'][10]['skill_ready']}")
+
+    st = world(2)
+    sent = tick(st)
+    c = [v for v in casts(sent) if v[1] == 10]
+    check(len(c) == 1 and c[0] == [agents.GV_SKILL_ACTIVATED, 10, 11, RC]
+          and st["agents"][10]["cast_target"] == 11,
+          "with an ally: the cast goes out NAMING THE ALLY -- 0x00A0 [60, 10, "
+          "11, 276] -- not the player (and the ally casts back at 10, the "
+          "same rule from the other side)", f"casts={casts(sent)}")
+    st["agents"][10]["cast_lands_at"] = time.time() - 1.0
+    sent = tick(st)
+    check([v for op, v, _l in sent if op == INT
+           and v[0] == agents.GV_SKILL_FINISHED] == [[58, 10, 0]]
+          and not heals(sent) and st["agents"][11]["health"] == 100.0,
+          "the landing: property 58 closes the cast, and with no condition on "
+          "the ally NOTHING is healed", f"sent={sent}")
+
+    st = world(2)
+    st["agents"][11]["health"] = 50.0
+    s0, send0 = collector()
+    authsrv.apply_condition(send0, st, 11, BLEED, 9.0, 12, 0, 382)
+    sent = tick(st)
+    st["agents"][10]["cast_lands_at"] = time.time() - 1.0
+    sent = tick(st)
+    check(len(removes(sent)) == 1 and len(heals(sent)) == 1
+          and heals(sent)[0][1] == 11 and st["agents"][11]["health"] == 100.0
+          and not st["effects"].on_agent(11),
+          "a bleeding ally: the cast lands as one removal and one 58 heal on "
+          "the ALLY (50 -> 100), and the ally is cured", f"sent={sent}")
+
+    authsrv.CONDITION_HEAL_RULE = False
+    st = world(1)
+    sent = tick(st)
+    c = casts(sent)
+    check(len(c) == 1 and c[0][-1] == RC,
+          "--no-condition-heal-rule: the lone hostile casts 276 again (the "
+          "known-bad arm)", f"casts={c}")
+finally:
+    authsrv.ENERGY, authsrv.NPC_FOLLOW, authsrv.CONDITION_HEAL_RULE = saved
 
 sys.exit(LEDGER.verdict())

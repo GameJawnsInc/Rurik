@@ -571,6 +571,19 @@ def _world(dist=85.0, **over):
     return {"agents": {10: entry}, "pos": (0.0, 0.0)}
 
 
+def _world_ally(dist=85.0, **over):
+    """`_world` plus an IDLE ally standing by (agent 11, same allegiance,
+    attacks_back False so it never swings or casts). SKILLS-RC (2026-09-10):
+    the default bar's slot 1 is Restore Condition, a target-OTHER-ally spell
+    by the client's own byte, and a LONE hostile cannot cast it -- so the
+    sections that exercise the bar's cycle need somebody for it to aim at.
+    The cast names the ally, not the player."""
+    state = _world(dist, **over)
+    state["agents"][11] = dict(state["agents"][10], attacks_back=False,
+                               pos=(120.0, 40.0), skills=(), skill_ready=[])
+    return state
+
+
 def _swings(state, n=1, gap=0.0):
     """Run enemy_attack_tick n times and return everything it sent."""
     import authsrv
@@ -2201,15 +2214,20 @@ def section_enemy_skill():
                 if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET
                 and v[0] in props]
 
-    # 1. the opening cast
-    state = _world()
+    # 1. the opening cast. SKILLS-RC (2026-09-10): slot 1 is Restore
+    #    Condition, a target-OTHER-ally spell by the client's own byte, so a
+    #    LONE hostile can no longer cast it (test_mechanics 26 pins that); the
+    #    bar's cycle is exercised here with an idle ally standing by, and the
+    #    opening cast names THAT ally rather than the player.
+    state = _world_ally()
     sent = _swings(state)
     casts = cast_msgs(sent)
     LEDGER.ok(len(casts) == 1 and casts[0][1][1] == 10
-              and casts[0][1][2] == authsrv.PLAYER_AGENT_ID
+              and casts[0][1][2] == 11
               and casts[0][1][-1] == authsrv.ENEMY_SKILL_BAR[0][0],
               "a hostile opens with its SKILL, named on the TARGETED channel "
-              "at the player (the form follows the target, ANIMREF-R1 sec.2)",
+              "at its ALLY (the form follows the target, ANIMREF-R1 sec.2; "
+              "276 is target-other-ally, SKILLS-RC)",
               f"{casts} -- [GV_SKILL_ACTIVATED, agent, target, skill]")
     ops = [op for op, _v, _l in sent]
     LEDGER.ok(authsrv.GAME_SMSG_SKILL_ACTIVATED not in ops,
@@ -2264,11 +2282,11 @@ def section_enemy_skill():
                   f"fraction made a heal hurt the player; dealing its magnitude AS "
                   f"damage would have been worse, not better")
         heals = dmg_floats(land, props=(agents.GV_HEALTH_GAIN,))
-        LEDGER.ok(len(heals) == 1 and heals[0] > 0,
-                  "and what it DOES send is one positive 55 on its own full pool",
-                  f"{heals} -- the overheal is on retail's wire (healjoin.py P4: "
-                  f"46 heals onto full pools) and the client draws the blue "
-                  f"number for it; the old rule sent nothing here")
+        LEDGER.ok(not heals,
+                  "and it sends NO 55 either: the ally carries no condition, "
+                  "and Restore Condition heals per condition REMOVED "
+                  "(SKILLS-RC; the pre-2026-09-10 flat self-overheal is gone)",
+                  f"{heals} -- test_mechanics 24 drives the cured case")
         # The damage skill on the same bar, to prove the path is not simply dead.
         LEDGER.ok(holy[1] == "standalone" and holy[0] == 46,
                   "while 312 Holy Strike on the same bar DOES damage, at 46",
@@ -2327,7 +2345,7 @@ def section_enemy_skill():
               f"{started}")
 
     # and only when the WHOLE bar is down does it swing
-    busy = _world()
+    busy = _world_ally()
     busy["agents"][10]["skill_ready"] = [time.time() + 999.0] * len(
         busy["agents"][10]["skills"])
     busy["agents"][10]["last_swing"] = time.time() - 100.0
@@ -2340,7 +2358,7 @@ def section_enemy_skill():
               "broken one")
 
     # 5. skill 0 turns it off, and the agent is on plain swings
-    plain = _world()
+    plain = _world_ally()
     plain["agents"][10]["skills"] = ()
     p_sent = _swings(plain)
     LEDGER.ok(not cast_msgs(p_sent),
@@ -2356,7 +2374,7 @@ def section_enemy_skill():
     for why, kill in (("dies", lambda a: a.update(dead=True)),
                       ("leaves range",
                        lambda a: a.update(pos=(authsrv.AGGRO_RANGE + 9.0, 0.0)))):
-        mid = _world()
+        mid = _world_ally()
         _swings(mid)
         assert mid["agents"][10]["cast_lands_at"] is not None
         kill(mid["agents"][10])
@@ -2386,7 +2404,7 @@ def section_enemy_skill():
                     "(run skilltable.py --emit-content). The rest of this "
                     "section does not need it and runs below.")
         return _section_enemy_skill_bar_order()
-    kill_state = _world()
+    kill_state = _world_ally()
     sent = []
     keep = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))
     holy_slot = next(i for i, s in enumerate(authsrv.ENEMY_SKILLS)
@@ -2423,7 +2441,7 @@ def _section_enemy_skill_bar_order():
     # 7b. THE BAR IS A BAR: it works down the slots rather than repeating slot 1.
     #     Every recharge is rolled back except the one under test, so what is
     #     being measured is the ORDER and not the clock.
-    bar = _world()
+    bar = _world_ally()
     a = bar["agents"][10]
     picked = []
     for _ in range(len(a["skills"])):
@@ -2444,7 +2462,7 @@ def _section_enemy_skill_bar_order():
     # 7b-ii. ROUND ROBIN, and this is the check that separates it from the
     #        first-ready-in-order version it replaced. With EVERY slot ready, a
     #        first-ready selector returns slot 0 forever; round robin advances.
-    rr = _world()
+    rr = _world_ally()
     r = rr["agents"][10]
     n = len(r["skills"])
     r["skill_ready"] = [0.0] * n
@@ -2463,7 +2481,7 @@ def _section_enemy_skill_bar_order():
     # satisfied by a selector that sweeps from the cursor to the end of the bar
     # and gives up, which would strand a ready slot 1 whenever the cursor is
     # past it and everything after is recharging.
-    wr = _world()
+    wr = _world_ally()
     w = wr["agents"][10]
     later = time.time() + 999.0
     w["skill_ready"] = [0.0] + [later] * (len(w["skills"]) - 1)
@@ -2478,7 +2496,7 @@ def _section_enemy_skill_bar_order():
     #         slot 4 NEVER fired: recharges of 2, 5, 8, 2 mean a priority list
     #         never walks past slot 3, because slot 1 is back every 2.0 s. Drive
     #         the real bar against a clock and require every slot to get a turn.
-    sim = _world()
+    sim = _world_ally()
     sm = sim["agents"][10]
     sm["skill_ready"] = [0.0] * len(sm["skills"])
     clock, fired = 0.0, set()
@@ -2499,7 +2517,7 @@ def _section_enemy_skill_bar_order():
     # 7c. RECHARGE IS PER SLOT, not per agent and not per skill id. A bar may
     #     legitimately carry the same skill twice and the second copy must not
     #     inherit the first's cooldown.
-    dup = _world()
+    dup = _world_ally()
     d = dup["agents"][10]
     d["skills"] = (authsrv.ENEMY_SKILL_BAR[0], authsrv.ENEMY_SKILL_BAR[0])
     d["skill_ready"] = [0.0, 0.0]

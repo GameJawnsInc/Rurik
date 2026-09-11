@@ -1364,6 +1364,15 @@ def section_enemy_gate():
             "skill_ready": [0.0], "last_slot": -1,
         }
         state["agents"][9] = agent
+        # SKILLS-RC (2026-09-10): Restore Condition targets an OTHER ally and a
+        # lone caster cannot cast it at all, so the gate under test gets an
+        # idle ally to aim at; the energy question is unchanged.
+        state["agents"][8] = {
+            "name": "an ally", "dead": False, "attacks_back": False,
+            "allegiance": agents.ALLEGIANCE_HOSTILE, "effects": 0,
+            "pos": (40.0, 0.0), "health": 100.0, "max_health": 100.0,
+            "armor_rating": 60, "attack_speed": 1.75, "last_swing": 0.0,
+            "skills": (), "skill_ready": [], "last_slot": -1}
         pool = authsrv.agent_energy(agent)
         pool.current = energy
         return agent

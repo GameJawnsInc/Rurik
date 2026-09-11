@@ -163,13 +163,25 @@ def sentinel_name(value):
         return "energy upkeep (maintained enchantment)"
     return "no fixed duration"
 
-# The `target` byte at +0x31. Only these two codes are resolved, and the type
-# column is what resolves them rather than a guess: all 199 Attacks are 5, 75
-# of 76 Stances are 0, and every Glyph, Preparation and type-16 skill is 0.
-# Codes 1, 3, 4, 6, 14 and 16 exist and are UNRESOLVED -- nothing here reads
-# them, and a skill carrying one falls through to the caster's chosen target.
+# The `target` byte at +0x31. Two codes are resolved by the TYPE column
+# (studies/skills 14): all 199 Attacks are 5, 75 of 76 Stances are 0, and
+# every Glyph, Preparation and type-16 skill is 0. TWO MORE ARE RESOLVED BY
+# THE WIKI'S OWN TARGETING WORDS, 2026-09-10 (SKILLS-RC, studies/skills 45):
+# of the 41 skills carrying 4, every one checked says "target other ally"
+# and "cannot self-target" -- Heal Other 286, Infuse Health 292, Restore
+# Condition 276, Dwayna's Kiss 283, Draw Conditions 311, Convert Hexes 303;
+# of the 124 carrying 3, every one checked says "target ally" -- Mend
+# Ailment 277, Purge Conditions 278, Word of Healing 282, Remove Hex 301,
+# Reversal of Fortune 307. Eleven skills, two columns that share no author
+# (a byte in ArenaNet's table, a sentence on GWW), zero disagreements:
+# CORROBORATED. Codes 1, 6, 14 and 16 stay UNRESOLVED and fall through to
+# the caster's chosen target.
 SELF_TARGET = 0
+ALLY_TARGET = 3          # "target ally" -- the caster is a legal target
+OTHER_ALLY_TARGET = 4    # "target other ally" -- the caster is NOT
 FOE_TARGET = 5
+TARGET_KINDS = {SELF_TARGET: "self", ALLY_TARGET: "ally",
+                OTHER_ALLY_TARGET: "other_ally", FOE_TARGET: "foe"}
 
 # The four `type_code` families whose GWW definition IS "a timed effect on the
 # target". WIKI (GWW, rev. 2026): a Stance "lasts for a set amount of time";
