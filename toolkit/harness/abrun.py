@@ -124,7 +124,7 @@ sys.path.insert(0, os.path.join(TOOLKIT, "mapdata"))
 import datcheck                                               # noqa: E402
 import datwrite                                               # noqa: E402
 # The two regexes below are the LOG-LINE CONTRACT with `toolkit/authsrv/`, and
-# `harnesslog.py` owns them -- it is the 102 lines they left `deploy.py` in, and
+# `harnesslog.py` owns them -- it is the 90 lines they left `deploy.py` in, and
 # `deploy.py` re-exports them. Importing is not a convenience here: a copy would
 # go on matching a format the server had stopped printing, and nothing would go
 # red.

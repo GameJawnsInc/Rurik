@@ -1831,9 +1831,9 @@ def harness_source_dir():
 # and the three words a serve run's verdict comes in. `harness_source_dir`
 # above STAYS: it derives its answer from THIS file's `__file__` and its
 # docstring says so. Re-exported here, at the site they used to be defined,
-# because `serve_run` and `main` below read six of them as BARE NAMES, because
-# `test_deploy.py` reads all eight as `deploy.*` (§10g, §13, §21) and stubs
-# `deploy.newest_harness_log` through this module's globals, and because
+# because `serve_run` and `main` below read seven of them as BARE NAMES,
+# because `test_deploy.py` reads all eight as `deploy.*` (§10g, §13, §21) and
+# stubs `deploy.newest_harness_log` through this module's globals, and because
 # `toolkit/harness/abrun.py` takes the two regexes from `harnesslog` directly.
 from harnesslog import (log_source, newest_harness_log,  # noqa: F401,E402
                         NAVMESH_RE, PLACED_RE, UNPOPULATED_RE,
