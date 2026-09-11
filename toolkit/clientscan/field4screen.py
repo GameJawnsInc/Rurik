@@ -32,7 +32,7 @@ TWO POINTERS, because two of the moved comments name a referent that STAYED in
 THE REFUSAL MESSAGES SAY `grantsim:` AND THAT IS DELIBERATE, not a rename this
 move forgot. They travelled verbatim, and they are still correct: this module
 has no CLI, and the command whose output a reader is holding is
-`python toolkit/clientscan/grantsim.py --field4`.
+`python toolkit/clientscan/grantsim.py --planecarry`.
 
 READS ONLY, like its origin: opens vault captures through `grantinputs`, writes
 nothing, sends nothing, launches nothing, and nothing here runs at import time.
