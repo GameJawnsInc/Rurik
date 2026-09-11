@@ -117,11 +117,14 @@ CONTROLS = [
      "2026-09-07, and this control MUST move with the document, because it names "
      "the citation text and a stale one has zero hits. The check that proves the "
      "symbol tier fires at all"),
-    (PILOT, "movesync.py:2759", "ok-symbol", "SELFTEST_FLOOR",
+    (PILOT, "movesync.py:1097", "ok-symbol", "SELFTEST_FLOOR",
      "the SECOND citation in `(`SELFTEST_FLOOR` at `movetap.py:1481` and "
-     "`movesync.py:2759`)`. It only resolves because `pair_symbol` erases an "
+     "`movesync.py:1097`)`. It only resolves because `pair_symbol` erases an "
      "intervening citation instead of refusing the pairing, so this control is "
-     "what stops that rule from being quietly removed"),
+     "what stops that rule from being quietly removed. Was `:2759` until the "
+     "fence section left `movesync.py` for `movefence.py` on 2026-09-11 and "
+     "took 1,662 lines out from above it; like CONTROLS[0] this names the "
+     "citation TEXT, so a stale one has zero hits and section 5 goes red"),
     (PILOT, "test_movesync.py:125", "ok-line", None,
      "no symbol is adjacent -- the nearest backticked span is a 500-character table "
      "cell away -- so the only claim is that the line exists, and that is all this "

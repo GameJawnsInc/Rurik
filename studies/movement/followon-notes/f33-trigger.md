@@ -187,7 +187,7 @@ effective **299.332591 u**. Both **SOURCED**, `FINDINGS.md:3668`.
 
 ### 1.3 THE LOAD-BEARING FINDING — `PROBE-GATEFIRE.md` §(3) is REFUTED
 
-`PROBE-GATEFIRE.md:1520-1526` argues:
+`PROBE-GATEFIRE.md:1523-1529` argues:
 
 > "the arm zeroes `hist_head` (`0x00605F4F`); the open-fence NO SNAP path returns
 > at `0x00606023` without appending, and the SNAP path calls `Clear` first. So
@@ -389,7 +389,7 @@ given `poly ≥ R` it is 7/359 = 1.95 %. A **factor of two**, in the predicted
 direction, on nine events. In the earlier corpus 0.18 % vs 0.53 %, factor three.
 That is a nudge, not a decision rule, and I will not dress it as one.
 
-**The (iii) fence table must not be read as a share.** `PROBE-GATEFIRE.md:1070`
+**The (iii) fence table must not be read as a share.** `PROBE-GATEFIRE.md:1073`
 already measured that the fence changes at or above movetap's own sample rate
 ("76 transitions over 623 usable pairs at 10.4 Hz is 1.02 of what INDEPENDENT
 samples would give"), so per-sample shares are aliased. My 5-open / 11-shut
@@ -553,7 +553,7 @@ blocker is structural, not effort:
 
 - The desync test is **event-driven**. It runs when a dispatch happens into an
   open fence. Neither "a dispatch happened" nor "the fence was open at that
-  instant" is observable by polling; `PROBE-GATEFIRE.md:1070` already measured
+  instant" is observable by polling; `PROBE-GATEFIRE.md:1073` already measured
   the fence changing at or above movetap's sample rate, and the same is true of
   `hist_head`, which steps on almost every sample in an open stretch.
 - So every cross-tab in §2.3 is a sample of a state, correlated with an event it
