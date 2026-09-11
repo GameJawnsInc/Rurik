@@ -244,14 +244,16 @@ def section_7():
 # ------------------------------------------------------------------ §8
 def section_8():
     src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
-    tree = ast.parse(src)
+    ARGS_SRC = open(os.path.join(HERE, "serverargs.py"),
+                    encoding="utf-8").read()
     names = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Call) and getattr(
-                node.func, "attr", None) == "add_argument":
-            for arg in node.args:
-                if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
-                    names.add(arg.value)
+    for _src in (src, ARGS_SRC):
+        for node in ast.walk(ast.parse(_src)):
+            if isinstance(node, ast.Call) and getattr(
+                    node.func, "attr", None) == "add_argument":
+                for arg in node.args:
+                    if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                        names.add(arg.value)
     check("--keepalive-grant" in names, "8. the flag is registered in argparse")
     check("--keepalive-separation" in names,
           "8. and so is the negative-control override")

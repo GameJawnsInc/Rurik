@@ -925,6 +925,8 @@ def section_cast_stop():
     # global.
     here = os.path.dirname(os.path.abspath(authsrv.__file__))
     src = open(os.path.join(here, "authsrv.py"), encoding="utf-8").read()
+    ARGS_SRC = open(os.path.join(here, "serverargs.py"),
+                    encoding="utf-8").read()
     check(src.count("if CAST_STOP and not is_attack:") == 1
           and src.count("cancelwalk R8 cast-stop") == 1
           and src.count("CAST-STOP PIN 0x002C") == 1
@@ -950,7 +952,7 @@ def section_cast_stop():
           "and the send site consults it before EITHER arm, printing the "
           "click-walk label the capture scores")
     check(src.count("_cs_mode, _cs_why, _cs_refusal = resolve_cast_stop_default(") == 1
-          and '"--no-cast-stop", action="store_true"' in src
+          and '"--no-cast-stop", action="store_true"' in ARGS_SRC
           and 'if _cs_why == "default":' in src
           and "ON by default -- owner's ruling" in src,
           "the shipped default is wired through the PURE resolver -- "

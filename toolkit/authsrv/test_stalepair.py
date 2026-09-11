@@ -251,9 +251,11 @@ def section_retail():
 def section_pins():
     print("\n[5] source pins on authsrv.py")
     src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
+    ARGS_SRC = open(os.path.join(HERE, "serverargs.py"),
+                    encoding="utf-8").read()
     check("import stalepair" in src, "authsrv imports stalepair")
     check("STALE_PAIR_GATE = True" in src, "the gate ships ON")
-    check('"--no-stale-pair-gate"' in src and "STALE_PAIR_GATE = not a.no_stale_pair_gate" in src,
+    check('"--no-stale-pair-gate"' in ARGS_SRC and "STALE_PAIR_GATE = not a.no_stale_pair_gate" in src,
           "--no-stale-pair-gate is the revert arm and resolves the global")
     check("send_cond = threading.Condition(send_lock)" in src and "stale_gate = stalepair.StalePairGate()" in src,
           "the condition shares the send lock, one gate per connection")

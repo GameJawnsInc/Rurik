@@ -472,6 +472,8 @@ def main():
 
     print("== 4: source locks on the wiring ==")
     src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
+    ARGS_SRC = open(os.path.join(HERE, "serverargs.py"),
+                    encoding="utf-8").read()
     check("the click handler branches to the router exactly once",
           src.count("if ROUTER and router_answer_click(") == 1)
     check("the router branch sits BEFORE the freshness gate",
@@ -569,11 +571,12 @@ def main():
           authsrv.ROUTER is True and authsrv.ROUTER_LEG_REARM is True
           and authsrv.ROUTER_SYNC_PLANE is True)
     check("--no-router is the revert, --router still parses as a no-op",
-          '"--no-router"' in src and '"--router"' in src
+          '"--no-router"' in ARGS_SRC and '"--router"' in ARGS_SRC
           and "ROUTER = not a.no_router" in src
           and "router=not a.no_router," in src)
     check("each condition has its own revert flag",
-          '"--router-raw-leg"' in src and '"--router-report-plane"' in src
+          '"--router-raw-leg"' in ARGS_SRC
+          and '"--router-report-plane"' in ARGS_SRC
           and "ROUTER_LEG_REARM = ROUTER and not a.router_raw_leg" in src
           and "ROUTER_SYNC_PLANE = ROUTER and not a.router_report_plane" in src)
     check("the pairwise refusals carry the default-flip hint",
@@ -900,7 +903,7 @@ def main():
         authsrv.ROUTER_SEAM_CLIP = True
     check("one flag, both rays: the revert arm exists and sets pathmap's own "
           "switch, so route()'s pull and gate cannot disagree with the fallback",
-          '"--router-blind-clip"' in src
+          '"--router-blind-clip"' in ARGS_SRC
           and "ROUTER_SEAM_CLIP = ROUTER and not a.router_blind_clip" in src
           and "_pathmap_mod.SEAM_AWARE_ROUTE = ROUTER_SEAM_CLIP" in src)
     return LEDGER.verdict()

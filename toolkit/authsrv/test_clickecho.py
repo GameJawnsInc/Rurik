@@ -44,6 +44,7 @@ LEDGER = checks.Ledger("clickecho", floor=19)
 check = checks.adopt(LEDGER)
 
 SRC = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
+ARGS_SRC = open(os.path.join(HERE, "serverargs.py"), encoding="utf-8").read()
 
 
 def refusal_block():
@@ -64,12 +65,13 @@ def section_1():
           "a seventh candidate that shipped ON would put an unmeasured answer on "
           "the wire for every session")
     names = set()
-    for node in ast.walk(ast.parse(SRC)):
-        if isinstance(node, ast.Call) and getattr(
-                node.func, "attr", None) == "add_argument":
-            for arg in node.args:
-                if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
-                    names.add(arg.value)
+    for _src in (SRC, ARGS_SRC):
+        for node in ast.walk(ast.parse(_src)):
+            if isinstance(node, ast.Call) and getattr(
+                    node.func, "attr", None) == "add_argument":
+                for arg in node.args:
+                    if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                        names.add(arg.value)
     check("--click-echo" in names, "1. --click-echo is registered in argparse")
     check("MOVECODE-K2" in SRC and "sec.1m" in SRC,
           "1. and it names its arc and its registered prediction",

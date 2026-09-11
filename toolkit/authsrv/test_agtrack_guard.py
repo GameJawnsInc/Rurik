@@ -27,6 +27,7 @@ import agtrack_guard as ag       # noqa: E402
 import authsrv                   # noqa: E402
 
 AS_SRC = open(authsrv.__file__, encoding="utf-8").read()
+ARGS_SRC = open(os.path.join(HERE, "serverargs.py"), encoding="utf-8").read()
 
 # Floor from the 2026-08-30 green run: 49 checks, all unconditional;
 # +25 at MOVECODE-1z-ah, +20 at 1z-bn, +2 at 1z-bq, +17 at 1z-bs -- the
@@ -258,7 +259,7 @@ def main():
           authsrv.AGTRACK_REPIN is False)
     _src = inspect.getsource(authsrv)
     check("1z-cy: --agtrack-repin is the revert arm and both spellings are refused together",
-          '"--agtrack-repin"' in _src and '"--no-agtrack-repin"' in _src
+          '"--agtrack-repin"' in ARGS_SRC and '"--no-agtrack-repin"' in ARGS_SRC
           and "a.agtrack_repin and a.no_agtrack_repin" in _src)
     _default_repin = authsrv.AGTRACK_REPIN
     authsrv.AGTRACK_REPIN = True                  # the revert arm, for the mechanism checks

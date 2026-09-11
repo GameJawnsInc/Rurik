@@ -445,8 +445,9 @@ def main():
         authsrv.A2_LEAD_PLANE_CLIP = _was_plane_clip
 
     _psrc = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
+    ARGS_SRC = open(os.path.join(HERE, "serverargs.py"), encoding="utf-8").read()
     check(authsrv.A2_LEAD_PLANE_CLIP is True
-          and '"--no-lead-plane-clip"' in _psrc
+          and '"--no-lead-plane-clip"' in ARGS_SRC
           and "A2_LEAD_PLANE_CLIP = not a.no_lead_plane_clip" in _psrc,
           "it ships ON with --no-lead-plane-clip as the one revert, and the "
           "flag is bound from argv rather than left at its default",
@@ -524,7 +525,7 @@ def main():
         authsrv.A2_LEAD_SEAM_CLIP = _was_seam_clip
         authsrv.A2_LEAD_PLANE_CLIP = _was_plane_clip
     check(authsrv.A2_LEAD_SEAM_CLIP is False
-          and '"--lead-seam-clip"' in _psrc
+          and '"--lead-seam-clip"' in ARGS_SRC
           and "A2_LEAD_SEAM_CLIP = bool(a.lead_seam_clip)" in _psrc
           and _psrc.count("pm.seam_clip(") == 2
           and "return pm.seam_clip(x0, y0, x1, y1, plane, step=step)" in _psrc
@@ -624,7 +625,7 @@ def main():
         authsrv.A2_LEAD_ORIGIN_SEAM = _was_origin
         authsrv.A2_LEAD_PLANE_CLIP = _was_plane
     check(authsrv.A2_LEAD_ORIGIN_SEAM is True
-          and '"--lead-origin-exact"' in _psrc
+          and '"--lead-origin-exact"' in ARGS_SRC
           and "A2_LEAD_ORIGIN_SEAM = not a.lead_origin_exact" in _psrc
           and '"origin-ambiguous"' in _psrc
           and "pm.plane_near(rx, ry, prefer=state.get(\"plane\"))" in _psrc,

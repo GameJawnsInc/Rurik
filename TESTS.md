@@ -3403,7 +3403,7 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   1.0 (the registry row is OBSERVED now — 6 of 6 retail chasers) and the halt
   waits for the follow's half-second clock; §chase pins the arrived-not-halted
   state (no `0x0028`, no swing), the halt once the clock is aged, and the
-  `--halt-on-arrival` revert arm),
+  `--halt-on-arrival` revert arm. **REFACTOR-SERVERARGS (2026-09-11):** the `--unlocks` default's syntax-tree walk now parses `serverargs.py` beside `authsrv.py` (`ARGS_SRC`), because `build_parser()` moved there and all 195 `add_argument` nodes with it; floor unchanged at 380.),
   `toolkit/authsrv/test_interact.py` (the interact path — the walk order and the
   interact that is HELD rather than dropped. **Nothing exercised
   `_handle_interact` at all before 2026-08-19**; `test_dispatch.py` named it once
@@ -3746,7 +3746,7 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   test_position_trust's AST lock on `zl_point`'s permitted values went red
   the moment the A2 edit landed (the lock working) and now admits exactly
   the audited IfExp whose else-branch is still `list(reported)`. No vault,
-  no client. ~1 s),
+  no client. ~1 s. **REFACTOR-SERVERARGS (2026-09-11):** the three flag-literal conjuncts `"--no-lead-plane-clip"`, `"--lead-seam-clip"` and `"--lead-origin-exact"` now read `serverargs.py` via `ARGS_SRC`, while every `a.<dest>` rebind conjunct beside them keeps reading `authsrv.py`; floor unchanged at 118.),
   `toolkit/authsrv/test_kbdsync.py` (**MOVECODE-1z-dj (2026-09-10) added §24o–24s, floor 231 → 236**: the position model parks where the AgTrack mirror's avoidance pass halts the player's copy. The swept-disc clip this was registered as is REFUTED as a server rule (retail's grants pass through 243 of 291 standing-NPC discs reached within the cone; the client sidesteps and only halts when its waypoint fails the mesh — which the mirror's pass already decides, 14 of 14 halts on the NPCTRACK tapes, and, replayed with the mesh on RUN-1zDB leg A, at the corner hold's four reports exactly). 24o the park (the model to the mirror's point, dest cleared, the keyboard leg consumed, a row, nothing sent), 24p idempotent per halt, 24q the **known-bad arm** (`--no-model-avoid-halt`: the model walks on — leg A's 520 u ghost), 24r the no-halt control, 24s ships ON with its revert, read once per shadow tick before the 2 Hz sampler's early return. **MOVECODE-1z-di (2026-09-10) added §24h–24n, floor 224 → 231, and RE-AIMED 24d**: the arrival re-grant — retail's server, when its copy reaches the end of a grant and the client has said nothing, sends the next chord along the held heading unprompted (50 first re-grants in the live corpus's true silences at p50 +0.04 s after arrival, 765 u along and 0.0 u across; the falsifier: 0 of 323 full-chord silences carry one before arrival). The chain tick's second branch, for the legs the doors did not move: 24h the shipped re-grant from a parked clear lead, capped like every lead, the leg's origin moved to the arrival point and the integrator's `dest` following; 24i a second re-grant at the next arrival; 24j the **known-bad arm** (`--no-arrival-regrant`) parking, RUN-1zDB leg 4's arm; 24k the copy still walking and 24k2 a stopped body refusing; 24l a re-grant into a wall stopping as `regrant-stop`; 24n ships ON with its revert on the flags row. 24d used to assert that a non-door leg is never chained — that is now the known-bad arm's claim (24j) — so it was re-aimed to the DISTINCTION on the same fixture: a clear leg's chain is a RE-GRANT along its own heading, never a CHAIN vertex from the report's ray. **MOVECODE-1z-t, the keyboard world-0
   sync — the behaviour that ships by default from 2026-09-03.** The defect it
   answers was measured in the client's own memory, not inferred:
@@ -3928,7 +3928,7 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   the door; a world-0 already off the mesh is left alone; the known-bad arm
   (`--no-lead-w0-origin`) sends the clear-from-the-report lead; no route gives the leg's last
   on-mesh point (`clear+w0-clip`); header. Floor 162 → 176 from the green run. **MOVECODE-1z-ci (2026-09-07), four checks in the fence-gate section:** a moving report ON the pin point keeps the latch (the harness's held key, whose fence stays shut ~3 s), the same report 100 u OFF the pin re-arms it (`by=walked-off-pin`) and the report's own lead fires, the known-bad arm (`--no-fence-rearm-moved`) keeps the latch, and the constant/flag/header pin; the source lock on the clear count now reads TWO (both in the `0x003D` arm, none in the stop arm). Floor 176 → 180 from the green run. **MOVECODE-1z-cj (2026-09-07):** 21h, a corridor vertex inside a hostile's disc is skipped (F14 halts world-0 there) for the leg's last on-mesh point; §22, the client's OWN reseed read off the report — a report 400 u off the model landing on the mirror's world-0 stamps the latch with itself as the pin (`by=client-reseed`) and its lead degrades; the same jump NOT onto world-0 is a walk (no stamp); no jump, no stamp; the known-bad arm (`--no-client-reseed-latch`) leads into the window; thresholds/flag/header. The `_Guard` stub answers the guard's hooks with no-ops so the report path cannot disable it mid-check. Floor 180 → 187 from the green run. **MOVECODE-1z-cl (2026-09-07):** 21i, door B never names the vertex world-0 already stands on (a 0 u lead that cost a whole heading floor in RUN-1zCG session 4); §23 `a2_lead_words`, the lead's two plane words are the mesh's at the two points — a ground vertex named by a report on the stairs with world-0 on the ground → (0, 0), a stairs destination with world-0 on the ground → (29, 0) (retail's crossing pair), both on the stairs → (29, 29), no mesh / no mirror → the caller's words (the raw-carry arm stays measurable), the known-bad arm (`--no-lead-plane-words`) → (29, 29), and the flag/header/four-caller census; §24 `kbd_lead_chain_tick`, a door-B lead chains to the next vertex at the copy's arrival — the send, the leg advanced with its origin kept; refused while the copy walks, under a shut fence, on a lead the doors did not move; no progress stops the chain once (`chain-stop`); the known-bad arm (`--no-kbd-lead-chain`); polled at all three tick sites after the refresh. The `_Hole` stub gained `containing()` because the chain's send runs through the real choke. Floor 187 → 201 from the green run. No vault, no
-  client. ~2 s),
+  client. ~2 s. **REFACTOR-SERVERARGS (2026-09-11):** exactly one conjunct moved -- `"--no-kbd-lead-refresh"`, the only kbd flag with no occurrence outside the argparse block -- now reads `serverargs.py` via `ARGS_SRC`; `SRC` itself was deliberately NOT widened, because this file's twelve `.index()` ordering and bounded-window checks are offsets into one text; floor unchanged at 236.),
   `toolkit/authsrv/test_stalepair.py` (**MOVECODE-1z-cm (2026-09-08), the stale-pair
   gate.** RUN-1zCG session 5 ended in the client's own assert `!(m_flags &
   INTERNAL_FLAG_MOVEMENT_STALE)` AgAgent.cpp:1198: our receive thread sent the click's
@@ -3944,7 +3944,7 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   packet); source pins on `send()` (hold, write, note under one lock; a close
   notifies; the flag and `--no-stale-pair-gate`). The capture and retail sections skip
   loudly without the vault. Floor 40 from the green run. ~60 s, most of it the retail
-  decode),
+  decode. **REFACTOR-SERVERARGS (2026-09-11):** the `"--no-stale-pair-gate"` conjunct now reads `serverargs.py` via `ARGS_SRC`, while its sibling `STALE_PAIR_GATE = not a.no_stale_pair_gate` and the `i_hold`/`i_send`/`i_note` offset chain keep reading `authsrv.py` alone; floor unchanged at 44.),
   **MOVECODE-1z-co (2026-09-08) adds a section to two files rather than a file of its
   own.** `toolkit/mapdata/test_pathmap.py` §17 (floor 117 → 129): route()'s gate re-clips
   the pulled candidate at 2 u and every other at 16 u, so a 2-point "the line is clear" path
@@ -4053,7 +4053,7 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   reconciled `RESYNC_SEPARATION` to rather than a second constant for the same
   quantity. §8 requires `--keepalive-separation` to REFUSE on its own, because a
   run launched with only the override would look configured and change nothing.
-  Every section is process-free, so floor 32 is the whole run),
+  Every section is process-free, so floor 32 is the whole run. **REFACTOR-SERVERARGS (2026-09-11):** §8's `add_argument` walk now unions two separate parses, `authsrv.py` and `serverargs.py` (`ARGS_SRC`); the `--keepalive-separation needs --keepalive-grant` refusal lock three lines below it stays on `authsrv.py`, where main() raises it; floor unchanged at 32.),
   `toolkit/authsrv/test_clickecho.py` (**MOVECODE-K2, and it is a STRUCTURAL test on
   purpose.** The change lives inside the `0x003E` handler in `handle()`, which needs a
   socket, a key exchange and a live client to reach, so there is no pure function to
@@ -4097,7 +4097,7 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   `if not D1_LEAD:` and the refusal message is untouched — and the echo's own log line
   must read differently, because two decisions printing the same line is how a run gets
   scored as the wrong arm. Floor 19 against a green run of 25, and every section is
-  process-free so the floor is the whole run),
+  process-free so the floor is the whole run. **REFACTOR-SERVERARGS (2026-09-11):** §1's `add_argument` walk now unions two separate parses, `authsrv.py` and `serverargs.py` (`ARGS_SRC`), since the registrations moved; the `guard` walk below it stays on `authsrv.py` alone, because `len(guard) == 1` can only break on a second source; floor unchanged at 19.),
   `toolkit/authsrv/test_planerepair.py` (**the plane-lock repair and the
   plane-echo tripwire, MOVECODE §1z-d** — built from r5stuck, the first
   captured client-side movement LOCK: a client that crossed a plane boundary
@@ -10543,7 +10543,7 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   RED with the exact locks predicted: a fourth site naming the player,
   the npc site re-aimed at the player, a hand-built npc payload, the
   `NPC_FOLLOW` gate removed, and the R6 send deleted under a standing
-  gate. Floor 124),
+  gate. Floor 124. **REFACTOR-SERVERARGS (2026-09-11):** the `'"--no-cast-stop", action="store_true"'` conjunct now reads `serverargs.py` via `ARGS_SRC`; the resolver-call count, the `_cs_why` branch and the four banners in the same check stay on `authsrv.py`, and the floor is unchanged at 124.),
   `toolkit/authsrv/test_killwindow.py` (the kill window, checked against
   ArenaNet's own kills. Our server sent one message when an agent died —
   `0x00F1` with the death bit — where the real service sends three: status,
@@ -11410,7 +11410,7 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   census can filter it, with the module global restored and re-asserted after.
   Floor 126 from the green run (51 at the B2 landing, 57 after the review
   round, 64 after B4, 68 after B5, 73 after 2026-08-30, 103 after 1z-v, 114
-  after 1z-w, 121 after 1z-bb). ~1 s).
+  after 1z-w, 121 after 1z-bb). ~1 s. **REFACTOR-SERVERARGS (2026-09-11):** five flag-literal conjuncts across three checks (`"--no-router"`, `"--router"`, `"--router-raw-leg"`, `"--router-report-plane"`, `"--router-blind-clip"`) now read `serverargs.py` via `ARGS_SRC`, while the `ROUTER = not a.no_router` rebinds and the `pass --no-router to run this arm` refusal message keep reading `authsrv.py`; floor unchanged at 126.).
 
 `toolkit/authsrv/test_agtrack_mirror.py` (**the AgTrack mirror's transcription,
   rule by rule -- MOVECODE-1z-q step 1's guard.** `agtrack_mirror.py` is a
@@ -11470,7 +11470,7 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   choke, no second fire, staleness/flag-off/bad-plane refusals. Synthetic,
   bare machine. The corpus retrodiction lives in `agtrack_replay.py
   --policy` (217/251 corpus warps pre-empted, 10/10 in the current regime
-  -- FINDINGS 1z-s). Floor 49 from the 2026-08-30 green run. ~2 s **§13 (MOVECODE-1z-bf, 2026-09-04): the gate-2 tolerance is a recorded, revertable switch** — `AGTRACK_GATE2_SEAM` ON by default and swept by `capture_flags()`, `--agtrack-gate2-exact` present and zeroing the mirror's constant (source lock), and the mirror's gate 2 reading `on_mesh` under the tolerance and `walkable()` without it (source lock). Floor 74 → 77), **§14 is now MOVECODE-1z-bv (2026-09-05): the gate-2 branch driven THROUGH the guard.** Every other fixture in this file passes `mesh=None`, so `gate2-offmesh` had never been executed by a test — it was covered one layer down in `test_agtrack_mirror` §10b. §14 pins: the branch is reachable and is genuinely gate 2 (gate 1 PASSES at 100 u separation, so a gate-1 fixture cannot masquerade as coverage); a **vacuity guard** — the identical geometry on a walkable mesh is not a gate-2 veto, so the mesh is what drives it; and the three re-pin arms over a gate-2 want — fresh MATURES (the corpus's 17, every one fresh), stale is BLOCKED with `repin_block_reason` naming it, and **stale + coincident + newest-a-STOP is still blocked**, which is the deleted waiver's own licence shape and reads `("due", "gate2-offmesh")` on `5bdd933`. That last one was WRONG on its first draft — written with two walk-starts it passed on the old build too, because 1z-bs's own clause refused that pair; the known-bad arm caught it and it was re-aimed. Floor 74 → 81. **The old §14 and §15 (the waiver's walk-start and newest-must-be-stop clauses) were deleted with the waiver at MOVECODE-1z-bt** — their history is FINDINGS §1z-bn and §1z-bs, and §9 above is what replaced them),
+  -- FINDINGS 1z-s). Floor 49 from the 2026-08-30 green run. ~2 s **§13 (MOVECODE-1z-bf, 2026-09-04): the gate-2 tolerance is a recorded, revertable switch** — `AGTRACK_GATE2_SEAM` ON by default and swept by `capture_flags()`, `--agtrack-gate2-exact` present and zeroing the mirror's constant (source lock), and the mirror's gate 2 reading `on_mesh` under the tolerance and `walkable()` without it (source lock). Floor 74 → 77), **§14 is now MOVECODE-1z-bv (2026-09-05): the gate-2 branch driven THROUGH the guard.** Every other fixture in this file passes `mesh=None`, so `gate2-offmesh` had never been executed by a test — it was covered one layer down in `test_agtrack_mirror` §10b. §14 pins: the branch is reachable and is genuinely gate 2 (gate 1 PASSES at 100 u separation, so a gate-1 fixture cannot masquerade as coverage); a **vacuity guard** — the identical geometry on a walkable mesh is not a gate-2 veto, so the mesh is what drives it; and the three re-pin arms over a gate-2 want — fresh MATURES (the corpus's 17, every one fresh), stale is BLOCKED with `repin_block_reason` naming it, and **stale + coincident + newest-a-STOP is still blocked**, which is the deleted waiver's own licence shape and reads `("due", "gate2-offmesh")` on `5bdd933`. That last one was WRONG on its first draft — written with two walk-starts it passed on the old build too, because 1z-bs's own clause refused that pair; the known-bad arm caught it and it was re-aimed. Floor 74 → 81. **The old §14 and §15 (the waiver's walk-start and newest-must-be-stop clauses) were deleted with the waiver at MOVECODE-1z-bt** — their history is FINDINGS §1z-bn and §1z-bs, and §9 above is what replaced them. **REFACTOR-SERVERARGS (2026-09-11):** the two quoted `"--agtrack-repin"` / `"--no-agtrack-repin"` conjuncts now read `serverargs.py` via `ARGS_SRC`, while the both-arms refusal conjunct beside them still reads `authsrv.py`, where main() raises it; floor unchanged at 91.),
 
 `toolkit/test_precommit.py` (**THE COMMIT GATE — the audit's §9 item 2, and the
 first rule in this repository that runs without being remembered.**

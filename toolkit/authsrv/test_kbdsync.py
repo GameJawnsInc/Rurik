@@ -66,6 +66,8 @@ LEDGER = checks.Ledger("MOVECODE-1z-t, the keyboard world-0 sync", floor=236)   
 check = checks.adopt(LEDGER)
 
 SRC = open(authsrv.__file__, encoding="utf-8").read()
+ARGS_SRC = open(os.path.join(os.path.dirname(os.path.abspath(authsrv.__file__)),
+                             "serverargs.py"), encoding="utf-8").read()
 
 
 def drive_heading(values, *, kbd_sync=True, lead=True, speed=True,
@@ -818,7 +820,7 @@ def main():
     authsrv.KBD_SYNC_LEAD_ON = True
 
     check(authsrv.KBD_LEAD_REFRESH is False
-          and "--kbd-lead-refresh" in SRC and "--no-kbd-lead-refresh" in SRC
+          and "--kbd-lead-refresh" in SRC and "--no-kbd-lead-refresh" in ARGS_SRC
           and "KBD_LEAD_REFRESH = bool(a.kbd_lead_refresh)" in SRC
           and SRC.count("global KBD_LEAD_REFRESH") == 1,
           "the refresh ships OFF and OPT-IN -- 1z-af convicted it on two runs "
