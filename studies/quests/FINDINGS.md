@@ -804,9 +804,9 @@ Lanes C/D/E read the wire. Lane F read GWW. Neither consulted the other. **Five 
 
 ### 7.1 Does the client accept a coded string WE authored? — unblocks all quest text
 
-Everything in §3 is decode-side. Nobody has sent a non-empty encoded string on `0x0049` (`probes.py` deliberately sent `"", "", ""`) or a literal on `0x004C`.
+Everything in §3 is decode-side. Nobody has sent a non-empty encoded string on `0x0049` (`probequest.py` deliberately sent `"", "", ""`) or a literal on `0x004C`.
 
-**Cheapest decisive test:** change one literal in `toolkit/authsrv/probes.py`'s `_compass_quest_steps` — `enc_name = [0x3D64]` — and look at the quest log. If it reads **Ascalon**, the whole chain from wire code unit to rendered glyph is ours. One probe run, elevated, no new code.
+**Cheapest decisive test:** change one literal in `toolkit/authsrv/probequest.py`'s `_compass_quest_steps` — `enc_name = [0x3D64]` — and look at the quest log. If it reads **Ascalon**, the whole chain from wire code unit to rendered glyph is ours. One probe run, elevated, no new code.
 
 **Second half, same run:** ArenaNet's literals are never bare — the observed framing is `0x0BA9 0x0107 <UTF-16> 0x0001` (template `%str1%`, a marker, the text, a terminator), and `codec.py:352` adds none of it. Send one `0x004C` with that framing built by hand and one without.
 
