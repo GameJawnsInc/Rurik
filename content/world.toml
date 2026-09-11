@@ -291,6 +291,20 @@ ally is healed for 10...58...70 Health" -- and "cannot self-target". Text taken
 fetcher); revision date of the description not retrieved. The client's target
 byte for 276 is 4 = other ally (effects.OTHER_ALLY_TARGET)."""
 
+[skill_effect.277]
+scale_means = "Healing"
+removes_conditions = 1
+heal_per_condition_remaining = true
+[skill_effect.277.provenance]
+source = "wiki"
+page = 'GWW, "Mend Ailment", text taken 2026-09-10 through the wiki search index'
+verified = """Client scale 5->70, args = 2, target byte 3 (= ally, the caster
+legal -- effects.ALLY_TARGET). GWW: "Removes one condition ... from target
+ally. For each remaining Condition, that ally is healed for 5...57...70
+Health." Which one: GWW "Effect"/"Cover" -- "the most recently applied effect
+is always the first one to be removed". SKILLS-MA, studies/skills 46. Revision
+dates not retrieved (the pages refused the fetcher)."""
+
 [skill_effect.253]
 scale_means = "Duration"
 [skill_effect.253.provenance]

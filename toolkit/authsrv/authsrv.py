@@ -16360,21 +16360,32 @@ def cast_recipient(skill_id, caster_id, target_id, allies):
     return target_id or caster_id
 
 
-def remove_conditions(send, state, agent_id, conn_id, why):
-    """Close every CONDITION episode on one agent, the cure's way.
+def remove_conditions(send, state, agent_id, conn_id, why, count=None):
+    """Close CONDITION episodes on one agent, the cure's way: all, or `count`.
 
     A cure is a strip (bufflog's word for a removal that lands early) scoped to
     conditions: hexes, enchantments and stances stay. The wire per episode is
     the same 0x0044 a death strip sends; behind them the status word drops the
     conditions' bits, a Deep Wound gives the maximum back (deep_wound_close),
     and the regen rate is re-announced without the pips. Returns the closed
-    episodes, lowest buff id first.
+    episodes in the order they were closed.
+
+    WHICH ONES, when `count` is fewer than the agent carries: WIKI (GWW,
+    "Effect" / "Cover", text taken 2026-09-10 through the wiki's search
+    index): "when a skill removes one or multiple effects of a particular
+    type ... the most recently applied effect is always the first one to be
+    removed, followed by the second most recently applied effect and so
+    forth" -- the rule that makes a cover condition work. So the candidates
+    are ordered by `applied_at`, newest first, and `count` takes the head.
     """
     if not EFFECTS:
         return []
     table = effect_table(state)
-    gone = [ep for ep in table.on_agent(agent_id)
-            if ep["skill"] in effects.CONDITION_SKILLS]
+    gone = sorted((ep for ep in table.on_agent(agent_id)
+                   if ep["skill"] in effects.CONDITION_SKILLS),
+                  key=lambda ep: (-ep["applied_at"], -ep["buff"]))
+    if count is not None:
+        gone = gone[:max(0, int(count))]
     for ep in gone:
         table.close(ep["buff"])
         send(GAME_SMSG_EFFECT_REMOVE, [ep["agent"], ep["buff"]],
@@ -16412,6 +16423,11 @@ def resolve_heal(send, state, skill_id, rank, caster_id, target_id, conn_id):
     removes = erow.get("removes_conditions") if CONDITION_HEAL_RULE else None
     per_removed = (bool(erow.get("heal_per_condition_removed"))
                    if CONDITION_HEAL_RULE else False)
+    # SKILLS-MA: Mend Ailment's shape -- remove ONE and heal per condition
+    # REMAINING. `removes_conditions` is "all" (Restore Condition) or a count
+    # (1 for Mend Ailment: the most recently applied goes, GWW "Cover").
+    per_remaining = (bool(erow.get("heal_per_condition_remaining"))
+                     if CONDITION_HEAL_RULE else False)
     if not healed and not removes:
         return None
     if CONDITION_HEAL_RULE:
@@ -16433,7 +16449,15 @@ def resolve_heal(send, state, skill_id, rank, caster_id, target_id, conn_id):
     if removes == "all":
         gone = remove_conditions(send, state, recipient, conn_id,
                                  f"skill {skill_id} by agent {caster_id}")
-    out = {"recipient": recipient, "removed": len(gone), "healed": 0.0}
+    elif isinstance(removes, int) and not isinstance(removes, bool) \
+            and removes > 0:
+        gone = remove_conditions(send, state, recipient, conn_id,
+                                 f"skill {skill_id} by agent {caster_id}",
+                                 count=removes)
+    remaining = sum(1 for ep in effect_table(state).on_agent(recipient)
+                    if ep["skill"] in effects.CONDITION_SKILLS)
+    out = {"recipient": recipient, "removed": len(gone),
+           "remaining": remaining, "healed": 0.0}
     if not healed:
         return out
     amount = float(healed)
@@ -16444,6 +16468,13 @@ def resolve_heal(send, state, skill_id, rank, caster_id, target_id, conn_id):
                   f"nothing healed", flush=True)
             return out
         amount *= len(gone)
+    elif per_remaining:
+        if not remaining:
+            print(f"[c{conn_id}] skill {skill_id} leaves no condition on "
+                  f"agent {recipient} and heals per condition remaining -- "
+                  f"nothing healed", flush=True)
+            return out
+        amount *= remaining
     out["healed"] = heal_agent(send, state, recipient, caster_id, amount,
                                conn_id)
     return out

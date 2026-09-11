@@ -6097,3 +6097,68 @@ to the caster's aim.
 * The old §8 item 4 is struck; the 08-20 "closed by a resource rule" sentence
   in the pools entry was a pacing, not a closure, and is annotated rather than
   rewritten.
+
+---
+
+## 46. SKILLS-MA — Mend Ailment: remove ONE condition (the most recently applied) and heal per condition REMAINING (2026-09-10)
+
+**Desk, no run, no corpus witness.** Asked as §45.5's second item. The row
+shape §45 introduced (`removes_conditions`, `heal_per_condition_removed`) could
+not express this skill; it can now, with two generalisations and no new
+machinery: `removes_conditions` is `"all"` or a **count**, and a second flag
+`heal_per_condition_remaining` scales the heal by what is LEFT. Shipped in
+`resolve_heal` / `remove_conditions` (`toolkit/authsrv/authsrv.py`), the
+`skill_effect.277` row, `test_mechanics` §27 (floor 153 → 162); the
+same `--no-condition-heal-rule` reverts it.
+
+### 46.1 The rule
+
+WIKI (GWW, "Mend Ailment", text taken 2026-09-10 through the wiki's search
+index; the page refused the fetcher, revision date not retrieved): *"Removes
+one condition ... from target ally. For each remaining Condition, that ally is
+healed for 5...57...70 Health"* — and the wiki's own note that, despite the
+concise text's "removal effect" wording, *"its healing effect only triggers for
+each remaining condition"*. The client's row agrees on everything it can:
+`scale 5→70` (57 at rank 12), `energy 5`, `activation 0.75`, `recharge 5`,
+`target = 3` — ally, the caster legal (§45.3).
+
+**Which condition goes** when the target carries several: WIKI (GWW, "Effect" /
+"Cover"): *"when a skill removes one or multiple effects of a particular type
+... the most recently applied effect is always the first one to be removed,
+followed by the second most recently applied effect and so forth."* That is the
+mechanic cover conditions exist to exploit, and it is a rule about ORDER that
+our episode table can honour exactly: every episode carries `applied_at`
+(§16's table, unchanged), so `remove_conditions(count=1)` sorts the agent's
+conditions newest-first and takes the head.
+
+### 46.2 Shipped
+
+* `remove_conditions(..., count=None)`: candidates ordered by `applied_at`
+  descending (buff id as the tie-break), `count` takes the head; `None` is the
+  old "all". The wire per episode is unchanged.
+* `resolve_heal`: `removes_conditions` may be `"all"` or a positive int (a
+  bool is refused as a count); `heal_per_condition_remaining` multiplies the
+  scale by the conditions still on the recipient after the removal, and heals
+  nothing at zero. The return row carries `remaining` beside `removed`.
+* `skill_effect.277`: `removes_conditions = 1`,
+  `heal_per_condition_remaining = true`, provenance in the row.
+* §27: no condition → nothing; ONE → removed and **nothing healed** (the whole
+  difference from Restore Condition, which heals 58 here); Bleeding then Poison
+  → the Poison goes, the Bleeding stays, one remaining heals 57 (40 landing);
+  Bleeding, Poison, then Deep Wound → the Deep Wound goes (its open took the
+  pool 10 → −10 signed, its close gives the 20 back), two remain, 114 sent, 90
+  landing; the PLAYER casting it at a FOE lands on the player (target byte 3's
+  caster fall-back) and cures the player's newest condition; the revert is a
+  flat 57 with no cure.
+
+### 46.3 What it does NOT settle
+
+* **No retail witness for any cure's wire** (§45.2 stands): removal-then-heal
+  is RECONSTRUCTION, and the newest-first rule is WIKI. One live capture with a
+  Mend Ailment or Mend Condition cast onto a body carrying two conditions would
+  referee both at once.
+* **Mend Condition (275)** — "removes one condition; if a condition was
+  removed, heals" — is a third shape (heal on removal, flat) and is not
+  modelled; the row would need a `heal_if_removed` flag. Not on any bar here.
+* **Nothing casts 277** on this server today: it is on neither bar. The row is
+  live the day it is.

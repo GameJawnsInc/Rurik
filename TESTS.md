@@ -6374,7 +6374,15 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   ready, and it swings; with an ally the cast is `0x00A0 [60, 10, 11, 276]` naming
   the ally (and the ally casts back), the landing is 58-led with no heal on an
   unconditioned ally, and a bleeding ally is cured and healed 58 (50 → 100); the
-  revert lets the lone hostile cast again. Floor 129 → 153),
+  revert lets the lone hostile cast again. Floor 129 → 153. **§27 is SKILLS-MA
+  (2026-09-10): Mend Ailment** — `removes_conditions = 1` takes the NEWEST
+  condition by `applied_at` (GWW "Cover") and `heal_per_condition_remaining`
+  scales by what is left: no condition → nothing; one → removed and NOTHING
+  healed; Bleeding then Poison → the Poison goes, the Bleeding stays, 57 for the
+  one left (40 landing); three with Deep Wound newest → the Deep Wound goes (pool
+  −10 → 10 on its close), two remain, 114 sent, 90 landing; the player casting it
+  at a foe lands on the player and cures the player's newest; the revert is a
+  flat 57 and no cure. Floor 153 → 162),
   `toolkit/authsrv/test_pools.py` (**what a skill COSTS** — SKILLS-RC 2026-09-10:
   §10's enemy gate stands an idle ally beside the caster, because a lone hostile
   cannot cast Restore Condition at all; the energy question it asks is unchanged.

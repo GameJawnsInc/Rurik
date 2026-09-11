@@ -26,8 +26,8 @@ import authsrv      # noqa: E402
 import agents       # noqa: E402
 import effects      # noqa: E402
 
-# Floor set from a real green run (39 checks, 2026-08-22; 99 checks, 2026-09-09 SKILLS-DW; 129 checks, 2026-09-10 SKILLS-BL; 153 checks, 2026-09-10 SKILLS-RC).
-LEDGER = checks.Ledger("effect mechanics", floor=153)
+# Floor set from a real green run (39 checks, 2026-08-22; 99 checks, 2026-09-09 SKILLS-DW; 129 checks, 2026-09-10 SKILLS-BL; 153 checks, 2026-09-10 SKILLS-RC; 162 checks, 2026-09-10 SKILLS-MA).
+LEDGER = checks.Ledger("effect mechanics", floor=162)
 check = checks.adopt(LEDGER)
 
 FRENZY, RUSH, ROF, GLYPH, IGNITE, FAINT = 346, 319, 307, 200, 431, 135
@@ -1079,5 +1079,116 @@ try:
           "known-bad arm)", f"casts={c}")
 finally:
     authsrv.ENERGY, authsrv.NPC_FOLLOW, authsrv.CONDITION_HEAL_RULE = saved
+
+# ---------------------------------------------------------------------------
+# 27: SKILLS-MA, Mend Ailment (studies/skills/FINDINGS.md 46): remove ONE
+#     condition -- the most recently applied (GWW "Cover") -- and heal per
+#     condition REMAINING. Target byte 3: an ally spell, the caster legal.
+print("== 27. SKILLS-MA: Mend Ailment removes the NEWEST condition and heals "
+      "once per condition that REMAINS -- one condition cured heals nothing ==")
+MA, POISON = 277, 484
+saved = (authsrv.CONDITION_HEAL_RULE, authsrv.ENERGY)
+try:
+    authsrv.CONDITION_HEAL_RULE = True
+    authsrv.ENERGY = False
+    check(authsrv.skill_heal(MA, 12) == 57,
+          "the client's scale at rank 12: 5 + 65 x 12/15 = 57 (GWW's 5...57...70)",
+          f"{authsrv.skill_heal(MA, 12)}")
+    row = agents.WORLD.get("skill_effect", str(MA))
+    check(row.get("removes_conditions") == 1
+          and row.get("heal_per_condition_remaining") is True
+          and not row.get("heal_per_condition_removed"),
+          "the row: remove ONE, heal per REMAINING (and not per removed)")
+
+    sent, send = collector()
+    state = two_hostiles()
+    out = authsrv.resolve_heal(send, state, MA, 12, 10, 11, 0)
+    check(out["removed"] == 0 and out["remaining"] == 0
+          and out["healed"] == 0.0 and not sent,
+          "no condition: nothing removed, nothing healed, nothing sent")
+
+    sent, send = collector()
+    state = two_hostiles()
+    authsrv.apply_condition(send, state, 11, BLEED, 9.0, 12, 0, 382)
+    sent, send = collector()
+    out = authsrv.resolve_heal(send, state, MA, 12, 10, 11, 0)
+    check(out["removed"] == 1 and out["remaining"] == 0
+          and out["healed"] == 0.0 and len(removes(sent)) == 1
+          and not heals(sent) and not state["effects"].on_agent(11)
+          and state["agents"][11]["health"] == 60.0,
+          "ONE condition: it is removed and NOTHING is healed -- none remains "
+          "(the difference from Restore Condition, which would heal 58 here)",
+          f"out={out} sent={sent}")
+
+    sent, send = collector()
+    state = two_hostiles()
+    authsrv.apply_condition(send, state, 11, BLEED, 9.0, 12, 0, 382)
+    time.sleep(0.01)
+    authsrv.apply_condition(send, state, 11, POISON, 9.0, 12, 0, 382)
+    sent, send = collector()
+    out = authsrv.resolve_heal(send, state, MA, 12, 10, 11, 0)
+    left = [ep["skill"] for ep in state["effects"].on_agent(11)]
+    check(out["removed"] == 1 and out["remaining"] == 1
+          and left == [BLEED] and out["healed"] == 40.0
+          and state["agents"][11]["health"] == 100.0,
+          "TWO conditions, Bleeding then Poison: the NEWEST (Poison) goes, the "
+          "Bleeding stays, and the one remaining heals 57 (40 lands on 60/100)",
+          f"out={out} left={left}")
+    ops = [op for op, _v, _l in sent]
+    check(len(removes(sent)) == 1 and len(heals(sent)) == 1
+          and ops.index(EFFECT_REMOVE) < ops.index(FLOAT_T),
+          "the wire: one 0x0044 (the Poison's buff) before the 55",
+          f"ops={[hex(o) for o in ops]}")
+
+    sent, send = collector()
+    state = two_hostiles(h11=10.0)
+    for cond in (BLEED, POISON, DW):
+        authsrv.apply_condition(send, state, 11, cond, 9.0, 12, 0, 382)
+        time.sleep(0.01)
+    sent, send = collector()
+    out = authsrv.resolve_heal(send, state, MA, 12, 10, 11, 0)
+    left = sorted(ep["skill"] for ep in state["effects"].on_agent(11))
+    check(out["removed"] == 1 and out["remaining"] == 2
+          and left == [BLEED, POISON]
+          and state["agents"][11]["max_health"] == 100.0
+          and abs(out["healed"] - 90.0) < 1e-9,
+          "THREE, Deep Wound newest: the Deep Wound goes (its open took the "
+          "pool 10 -> -10 SIGNED, SKILLS-DW; its close gives the 20 back, -10 "
+          "-> 10), two remain, 114 is healed and 90 lands on the 10/100 pool",
+          f"out={out} left={left} agent={state['agents'][11]}")
+
+    # The ally rule with a real ally spell: the PLAYER casts Mend Ailment
+    # with a FOE selected -- it lands on the player (ALLY_TARGET: else the
+    # caster), curing the player's newest condition.
+    sent, send = collector()
+    state = two_hostiles()
+    state["player_health"] = 50.0
+    authsrv.player_pools(state)
+    authsrv.apply_condition(send, state, PLAYER, BLEED, 9.0, 12, 0, 382)
+    time.sleep(0.01)
+    authsrv.apply_condition(send, state, PLAYER, POISON, 9.0, 12, 0, 382)
+    sent, send = collector()
+    out = authsrv.resolve_heal(send, state, MA, 12, PLAYER, 10, 0)
+    left = [ep["skill"] for ep in state["effects"].on_agent(PLAYER)]
+    check(out["recipient"] == PLAYER and left == [BLEED]
+          and out["remaining"] == 1 and out["healed"] > 0
+          and state["agents"][10]["health"] == 100.0,
+          "the PLAYER casting Mend Ailment at a FOE: it lands on the player "
+          "(target byte 3, the caster is the legal fall-back), cures the "
+          "player's newest condition and heals per the one left; the foe is "
+          "untouched", f"out={out} left={left}")
+
+    authsrv.CONDITION_HEAL_RULE = False
+    sent, send = collector()
+    state = two_hostiles()
+    authsrv.apply_condition(send, state, 11, BLEED, 9.0, 12, 0, 382)
+    sent, send = collector()
+    out = authsrv.resolve_heal(send, state, MA, 12, 10, 11, 0)
+    check(not removes(sent) and len(heals(sent)) == 1
+          and len(state["effects"].on_agent(11)) == 1,
+          "--no-condition-heal-rule: a flat 57 and no cure (the known-bad arm)")
+    authsrv.CONDITION_HEAL_RULE = True
+finally:
+    authsrv.CONDITION_HEAL_RULE, authsrv.ENERGY = saved
 
 sys.exit(LEDGER.verdict())
