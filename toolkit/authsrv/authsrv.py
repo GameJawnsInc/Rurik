@@ -3725,8 +3725,12 @@ from skillunlock import (                                      # noqa: F401,E402
 
 
 def build_unlock_bitmap(spec):
-    # SKILLBAR is read HERE, at call time, and passed in: test_pools.py rebinds
-    # authsrv.SKILLBAR six times and the 'bar' arm has to see the rebind.
+    # SKILLBAR is read HERE, at call time, and passed in, because main() rebinds
+    # the global from --skills BEFORE it calls this -- a bar frozen at def time
+    # would send TEST_SKILLBAR while the session played the --skills one. NO TEST
+    # COVERS IT: test_pools.py rebinds authsrv.SKILLBAR six times but never
+    # reaches this arm, and test_agentlife's 'bar' check runs the default bar,
+    # which a frozen default would reproduce. The witness is main(), not a test.
     return skillunlock.build_unlock_bitmap(spec, SKILLBAR)
 
 # Eight real Warrior skills (profession byte 1 at row+0x28), read from this
