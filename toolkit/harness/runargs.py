@@ -28,9 +28,17 @@ THE REFERENTS THAT STAYED BEHIND, measured on the tree rather than guessed.
 `main()` reads `hold_implies_keep_open`, `split_args`,
 `warn_probe_without_enemy`, `resolve_enemy`, `chain_specs`, `chain_hold`,
 `server_specs`, `is_labelling` and `prompts_operator`; `run_client()` reads
-`served_maps`, `split_args` and `prompts_operator`; nothing outside this file
+`served_maps`, `split_args` and `prompts_operator`; nothing ELSE IN `session.py`
 reads `is_probing`, `spawn_profession_args`, `persist_args`, `hop_aliases` or
-`_TRAVELLING_FLAGS`. `Stack`, `_play` and `steer` are still in `session.py`, which re-exports
+`_TRAVELLING_FLAGS`. That is not the same as having no reader, and the
+difference is what the re-export is for: `test_harness.py` reaches eleven of the
+fourteen off `session.py` as an attribute, and two of them are on that list --
+`_sess.spawn_profession_args` at :658-665 and `_sess.is_probing` at :713/:719 --
+so dropping either from the shim reddens a test whose floor of 159 has ZERO
+headroom. Only `persist_args` and `hop_aliases` have no reader anywhere outside
+this file; `_TRAVELLING_FLAGS` is private and `served_maps` is its only reader
+in the tree, which is why it is not re-exported at all.
+`Stack`, `_play` and `steer` are still in `session.py`, which re-exports
 every public name here. Two of those call sites are pinned as BARE NAMES by
 `test_harness.py`, which parses `session.py`'s own syntax tree and requires
 `prompts_operator` inside both `main` and `run_client` and
