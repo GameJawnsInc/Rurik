@@ -1337,10 +1337,13 @@ def walk_legs(proc, legs, outdir, warn=3.0, settle=1.5, shot_every=0.0):
 
 
 # The four watchers moved to `runwatch.py`. They are re-exported here BY NAME --
-# never behind a module prefix -- because `walk_legs`'s camera thread, `run_client`
-# (its action shots, its final shot, the hold and the `finally`) and `main` all call
-# them as bare names, and `test_harness.py` reaches `session.hold_open`,
-# `session.verdict_after_hold` and `session.capture_error_dialog` through this module.
+# never behind a module prefix -- because `walk_legs` (its camera thread and its
+# per-leg shot) and `run_client` (its action shots, its final shot, the hold and
+# the `finally`) call them as bare names, and `test_harness.py` reaches
+# `session.hold_open`, `session.verdict_after_hold` and
+# `session.capture_error_dialog` through this module. `main` is NOT a caller: it
+# only routes `--keep-open`, which is what the moved docstrings in `runwatch.py`
+# mean when they name main()'s `finally`.
 from runwatch import (  # noqa: F401,E402
     shot_if_foreground, hold_open, verdict_after_hold, capture_error_dialog)
 
