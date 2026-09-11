@@ -5774,3 +5774,182 @@ resolved — the caster's rank and the target's rating are both off the wire.)
 answer. The shape: **CORROBORATED** single elemental rating (§43.4's caveat is
 the residual). OUTGOING (`hit_enemy(exact=…)`) is unchanged and still blocked on a
 creature armour value that no channel carries.
+
+---
+
+## 44. SKILLS-BL — Blind: the miss is the client's own attack-fail word, the rate is the wiki's, and the corpus holds no blinded swing to measure it on (2026-09-10)
+
+**Desk, corpus and a static read of the pinned build 38797. No client run.**
+Asked as SKILLS-DW's item (2) — "Blind, the cheapest remaining condition
+mechanic (a labelled miss-roll on `land_swing`'s existing roll)". It was cheap;
+what it was not was *known*: this server had never sent a swing that missed,
+so before a roll could ship the question was **what a miss looks like on the
+wire**, and the answer came from the client's own drain rather than from the
+corpus, which turned out to carry exactly one attack that did not land.
+Shipped: `BLIND`, `BLIND_MISS_CHANCE`, `blinded`, `blind_miss`, `attack_fails`
+and the roll at both swing sites (`land_swing`, `hit_enemy`) in
+`toolkit/authsrv/authsrv.py`; `agents.GV_ATTACK_FAIL` + `ATTACK_FAIL_REASONS`;
+`--no-blind` reverts; `toolkit/authsrv/missjoin.py` is the instrument;
+`test_mechanics` §21–§23, floor 106 → 129.
+
+### 44.1 The rule, and the two questions it did not answer
+
+WIKI (GWW, "Blind", rev. 2020-10-23): *"Your melee and missile attacks have a
+90% chance to miss. Your projectile spells also have a greater chance to stray
+from their intended target."* WIKI (GWW, "Miss", rev. 2019-12-30): *"After each
+miss, the game displays a yellow 'miss' message beside the target"*, and
+blocking, failing, straying, obstruction and dodging *"are not the same as
+missing"*. So the rate is a published number, but a yellow word on the screen
+needs a word on the wire, and nothing in `agents.py` named one. Two questions,
+both answerable without inventing: (a) does retail's corpus carry a miss, and
+(b) if it does not, what does the client draw the word FROM.
+
+### 44.2 The corpus, predictions first — a miss is NOT in it
+
+`missjoin.py` (docstring P1–P5) joins every retail swing close — `0x009F`
+property 1, `GV_MELEE_ATTACK_FINISHED` — to its 50 ms batch, and every close to
+whether the swinger sat inside a live 479 episode (`bufflog.episodes`):
+
+| | closes | no damage in the batch |
+|---|---|---|
+| swinger not blind | 1,042 | **7** (0.67 %) |
+| swinger under a live 479 | **0** | — |
+
+**P1 holds** (floor 25 %, measured 0.67 %), and every one of the seven is a
+dead or unreachable target rather than a miss: four are two swingers (29 and
+58) closing on targets 137 and 194 in the same instants, two carry a
+`0x009F 45` or a re-`4` beside them, one is a swinger yielding to a cast. **P2
+has NO WITNESS**: not one of the 1,042 closes was swung blind, so the 90 % is
+WIKI and stays WIKI until a blinded swing is captured (§44.6). The player's own
+399 swings all carried damage (P4 cannot be scored).
+
+**P3 — the miss word by histogram — named nothing**, and that was the useful
+null. So the swing was censused from the other end: for all **1,332** attack
+starts (`0x00A0` property 4), the first message naming the attacker afterwards.
+Property 1 closes 936; the damage comes first 133 times; property **8** closes
+98 (the swing yielding to a cast — `[8, 3, 62, 60, 8]` in one batch); property
+**3** closes 79 (a stop, 58 of them still followed by damage inside 4 s);
+property **2** closes ONE (`[2, 30, 0]` + damage, an alternate close the
+client's AvApi names `MeleeAttack`, action kind 0x01 — not a miss). **No
+unnamed property ever closes a swing**, and the seven zero-valued property-16s
+(agent 58's 0.0 hits on 137/144/194/217) are hits for zero, still on the damage
+channel. A miss simply is not in this corpus, which is what a Pre-Searing
+warrior's six sessions and one arena capture should look like.
+
+### 44.3 The client's own word: property 38, and its reason table — OBSERVED
+
+`avevents.py` lists the property ids that queue an AgentView event. Property
+**38** queues **effect kind 0x07**, and the only lineage that names it calls it
+`AttackFail` (OpenTyria `GmAgentProperties.h:42`; GWLP-R's enum agrees; GWCA
+does not name it) — UPSTREAM for the name, and the name turned out to be right
+for the wrong reason: it is not *the* miss, it is every way an attack fails.
+
+Read out of the pinned build, `codescan.py --dis`:
+
+* **The handler** `0x007DFE40` takes `(agent, a, b)`, resolves the AgentView of
+  the FIRST agent (`0x00802160`) and queues kind 7 on it (`0x007F7230`) with
+  `+0x1C = a` and `+0x20 = b`. So the wire is `0x00A0 [38, TARGET, attacker,
+  reason]` — the word is drawn beside the first slot, which is where GWW puts
+  the yellow 'miss'.
+* **The drain** `0x007F9F70` (`cmp eax, 0x13` / `jmp [eax*4 + 0x007FA514]`, one
+  entry per effect kind 0x00–0x13, calling the effect free at `0x007F5230`
+  from `0x007FA4FA` — the free that asserts `effect->effectLink.IsLinked()`,
+  AvChar.cpp:2433). **Kind 7's case is `0x007FA159`**: it looks the attacker
+  up, plays one of eight sounds (`rand & 7` into `0x00A93EF0`), draws a
+  formatted float over the target (`0x007EDC50`, coded template `3E45 0104` =
+  string 15685 + a parameter — file 15 record 325, which `textrec.py` cannot
+  resolve, its file lying outside the 11 × 99 language tables the tool walks;
+  the reason is one of the template's parameters), and **when the attacker is
+  the local player, switches on the reason** (`cmp eax, 5`, table
+  `0x007FA574`) to a string id and posts it in colour `0xFFFFFF00` — yellow:
+
+  | reason | string id | `textrec.py` (owner's archive, file 0) |
+  |---|---|---|
+  | 0 | 471 | block |
+  | 1 | 473 | dodge |
+  | 2 | 475 | fail |
+  | **3** | **476** | **miss** |
+  | 4 | 478 | obstructed |
+  | 5 / default | 480 | stray |
+
+  (474 'evade', 477 'miss' and 472/479 'block' sit in the same run of records
+  and are not in this table — the float template may use them; not read.)
+
+That is the enum, OBSERVED from the client's code and the owner's own archive,
+and it is exactly GWW "Miss"'s list of things that are not a miss plus the
+miss. **A Blind miss is reason 3.** `agents.py` carries it as
+`GV_ATTACK_FAIL = 38`, `ATTACK_FAIL_REASONS`, `ATTACK_FAIL_MISS = 3`.
+
+### 44.4 The one wire witness, and what it settles
+
+`missjoin.py --fails` (P5): property 38 rides retail's wire **once** in the
+whole live corpus — `20260819T132414`, `[38, 217, 27, 2]`: the player (27)
+attacking a hostile (217), reason 2 'fail', in the same batch as the player's
+own `0x009F 46` (attack_skill_finished, the close of attack skill 780 activated
+0.17 s earlier) and **no damage from 27 onto 217** — the next thing 27 lands is
+skill 858's hit 1.2 s later. So on retail the close goes out AND the word goes
+out, in that order, and the damage does not; the attacker had no 479 on it
+(an enchantment, 814), so this is a failed attack skill, not a Blind miss.
+
+What it settles: the slot order (target first — the client's handler said the
+same), that the word shares the batch with the attack's own close, and that the
+word and the number are exclusive (P5, 1 of 1). What it does NOT settle: the
+shape of a *plain swing's* miss. Retail's witness is an attack skill, whose
+close is property 46; a plain swing's is property 1. That `[1, 38]` is the
+shape is **RECONSTRUCTION by analogy**, said in the test's own words, and the
+one check that would replace it is a captured blinded swing (§44.6).
+
+### 44.5 Shipped
+
+* `BLIND = True`, `BLIND_MISS_CHANCE = 0.90` (WIKI), beside the Deep Wound
+  constants. `blinded(state, agent)` reads the live table for a 479;
+  `blind_miss` rolls once per swing (`random.random() < 0.90`, strict, so 0.90
+  itself lands); `attack_fails` sends `[38, target, attacker, reason]` with the
+  client's slot order and names the reason in the log.
+* `land_swing` (the hostile's swing): rolled after the corpse guard and before
+  any arithmetic. On a miss: `melee_attack_finished`, then the word, then
+  nothing — no gain, no damage, no pool movement, no location roll.
+* `hit_enemy` (the player's swing and an attack skill's strike, `swing=True`
+  and `exact is None`): rolled after the interval gate consumed the timer. On a
+  miss the bracket the landing path would send still goes out (`attack_started`
+  unless `armed`/`skill_strike`, `melee_attack_finished` unless `skill_strike`),
+  then the word, then return: no adrenaline strike (WIKI "Adrenaline": per
+  *successful* hit), no damage, no critical, no preparation bonus. A spell
+  (`exact`, `swing=False`) never consults the roll — GWW says attacks. An attack
+  skill's miss sends the word alone, its own 46 being the caller's: the `[46,
+  38]` batch the witness carries.
+* `--no-blind`: the known-bad arm, 479 an icon.
+* `test_mechanics` §21 (hostile: control, miss, the one in ten, the 0.90
+  boundary, a closed episode, the revert), §22 (player: wire shape, the timer
+  spent, the one in ten, a spell landing blind, an attack skill's word-only
+  batch, control), §23 (the corpus pinned as floors — ≥ 1,000 closes, no-damage
+  under 2 %, **0 blinded closes** as the check that goes red the day the rate
+  can be measured, ≥ 1 property 38 with reason 2, P5 exclusive, no reason-3
+  witness). Floor 106 → 129. `test_agentlife` 380, `test_guards` 41,
+  `test_skilldamage` 57, `test_effects` 74, `test_killwindow` 21,
+  `test_playerswing` 173 green.
+
+### 44.6 What it does NOT settle, and the one run that would
+
+* **The rate is unmeasured.** P2 NO WITNESS. The cheapest OBSERVED route is an
+  R0b runsheet line, not scheduled: the secondary account's character swinging
+  at the Isle's *Student of Blind* (isle §7.2 puts 479 on the player there)
+  for twenty swings — twenty closes under a live 479 against a 90 % binomial
+  band is enough to refute 50 % or 100 %. §23's `blind == 0` check is the alarm.
+* **A plain swing's batch** is `[1, 38]` by analogy with `[46, 38]`. Same run.
+* **What our client draws** on `[38, target, player, 3]` — the yellow word, the
+  sound — is the one thing a loopback probe *can* answer about this item
+  (the client's rendering of a shape it has never been sent by us), and it is
+  the same class as `--probe heal_number` (§42.7): registered here as
+  `--probe blind_miss` material, not built, because nothing shipped depends on
+  it and the wire shape is the client's own.
+* **Nothing inflicts Blind yet.** `skill_condition` reads the inflicting skill's
+  `bonus_scale_means` (GWW's progression variable) and no content row says
+  "Blind"; which Pre-Searing skills do was not checked. The mechanic is live
+  the day a row does.
+* **Ranged.** "Missile attacks" and the projectile stray are the same rule
+  with no bow in content (§16's preparation gate, the same gap).
+* **The condition tally:** Bleeding, Burning, Disease, Poison (degeneration,
+  §22), Deep Wound (§41) and Blind (this) — **6 of 10 conditions do what they
+  say**; Crippled, Dazed, Weakness and Cracked Armor do not, and the last three
+  wait on the attack/armour fields §41 named.

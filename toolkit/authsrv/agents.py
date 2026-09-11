@@ -1328,6 +1328,30 @@ GV_CRITICAL = 17
 # failure belongs to the unmet-requirement term rather than to this one: rank 8
 # admits c in [1.20530, 1.36600), disjoint from the nine met blocks, and no
 # rounding rule reconciles them. OPEN, and named in that study 9.
+# THE ATTACK THAT DID NOT LAND (SKILLS-BL, 2026-09-10). 0x00A0 [38, TARGET,
+# attacker, reason]. Retail's wire carries it ONCE in the whole live corpus
+# (missjoin.py --fails): capture 20260819T132414, [38, 217, 27, 2], in the
+# same batch as the attacker's attack_skill_finished (prop 46) and NO damage
+# from 27 onto 217 -- an attack skill that failed. The slot order is the
+# client's own: the handler at 0x007DFE40 resolves the AgentView of the FIRST
+# agent and queues effect kind 0x07 on it with the second agent at +0x1C and
+# the reason at +0x20 (avevents.py --id 38), so the word is drawn beside the
+# TARGET, which is where GWW "Miss" says the yellow 'miss' appears.
+#
+# THE REASON ENUM IS READ OUT OF THE CLIENT, not out of a catalogue. The
+# effect drain (0x007F9F70, `cmp eax, 0x13` + jump table at 0x007FA514) has
+# its kind-7 case at 0x007FA159; when the attacker is the local player it
+# switches on the reason (table 0x007FA574, `cmp eax, 5`) to a string id and
+# posts it in yellow (0xFFFFFF00): 0 -> 471, 1 -> 473, 2 -> 475, 3 -> 476,
+# 4 -> 478, default -> 480, and textrec.py resolves those against the owner's
+# own archive as block / dodge / fail / miss / obstructed / stray. OBSERVED
+# (client static + one wire witness for reason 2); the names below are the
+# archive's words. Upstream names the PROPERTY only: OpenTyria
+# `AgentProperty_AttackFail = 38`, GWLP-R `AttackFail`; neither names a reason.
+GV_ATTACK_FAIL = 38
+ATTACK_FAIL_REASONS = {0: "block", 1: "dodge", 2: "fail", 3: "miss",
+                       4: "obstructed", 5: "stray"}
+ATTACK_FAIL_MISS = 3
 GV_EFFECT_ON_TARGET = 20
 GV_EFFECT_ON_AGENT = 21
 GV_ANIMATION = 22

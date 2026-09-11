@@ -3473,6 +3473,23 @@ DEEP_WOUND_FRACTION = 0.2        # WIKI: "reduced by 20%"
 DEEP_WOUND_CAP = 100             # WIKI: "never ... by more than 100 health"
 DEEP_WOUND_HEAL_FACTOR = 0.8     # WIKI: "20% less benefit from healing"
 #
+# BLIND (SKILLS-BL, studies/skills 44). WIKI (GWW, "Blind", rev. 2020-10-23):
+# "Your melee and missile attacks have a 90% chance to miss." The RATE is the
+# wiki's and nothing on our wire can witness it -- 0 of 1,042 retail swing
+# closes were swung under a live 479 (missjoin.py), so the roll is WIKI, not
+# OBSERVED. The SHAPE of the miss is the client's: a swing that closes and
+# then `0x00A0 [38, target, attacker, 3]` -- property 38 is the attack-fail
+# word, reason 3 is 'miss' by the client's own string table
+# (agents.GV_ATTACK_FAIL), and the one retail witness rides beside the
+# attacker's close with no damage in the batch. That a plain swing's close
+# (prop 1) accompanies it the way the witness's prop 46 did is RECONSTRUCTION
+# by analogy, said plainly. A missed swing deals nothing and grants nothing
+# (GWW "Adrenaline": a strike per SUCCESSFUL hit); the swing timer is spent,
+# because the swing happened. `--no-blind` is the known-bad arm: 479 is an
+# icon and every swing under it lands.
+BLIND = True           # False (--no-blind): Blind (479) never makes a swing miss.
+BLIND_MISS_CHANCE = 0.90         # WIKI: "90% chance to miss"
+#
 # THE HEAL NUMBER (SKILLS-HN, studies/skills 42). Retail sends property 55
 # carrying the skill's own amount whether or not the pool has room for it:
 # 46 heals in the live corpus land on pools that are full by construction
@@ -13712,6 +13729,29 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
                             + (f" +{bonus_damage:.0f}" if bonus_damage else ""))
     agent["last_hit"] = now
 
+    # THE PLAYER SWINGS BLIND (SKILLS-BL): an attack -- a plain swing or an
+    # attack skill's strike, never a spell (`exact`/`swing=False`) -- misses
+    # nine times in ten under 479. The bracket the landing path would send
+    # still goes out (the body swung), then the attack-fail word, then
+    # nothing: no adrenaline strike (GWW: per SUCCESSFUL hit), no damage. The
+    # timer above is already spent, which is what paces the next swing.
+    if swing and exact is None and blind_miss(state, PLAYER_AGENT_ID):
+        if not armed and not skill_strike:
+            send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+                 [agents.GV_ATTACK_STARTED, PLAYER_AGENT_ID, target_id, 0],
+                 f"attack_started: player swings at {target_id}")
+            if SWING_HOLDS_WALK_GATE:
+                action_hold(send, state, 1, f"the swing at {target_id}")
+        if not skill_strike:
+            send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                 [agents.GV_MELEE_ATTACK_FINISHED, PLAYER_AGENT_ID, 0],
+                 "melee_attack_finished")
+        attack_fails(send, state, PLAYER_AGENT_ID, target_id,
+                     agents.ATTACK_FAIL_MISS, conn_id, "Blind")
+        print(f"[c{conn_id}] the player swung BLIND at agent {target_id} "
+              f"and missed ({label})", flush=True)
+        return
+
     # A swing is two events, and sending only the second is why the first
     # attempt produced damage with no animation: 1 is melee_attack_FINISHED,
     # the end of a swing. 4 is attack_started.
@@ -16250,6 +16290,35 @@ def degen_tick(send, state, conn_id):
 # from the debit -- the caller has to know the outcome before choosing what to
 # put on the wire, and a conversion resolved twice would heal twice.
 
+def blinded(state, agent_id):
+    """True if a live Blind (479) episode sits on the agent. Pure read."""
+    table = state.get("effects")
+    if not table:
+        return False
+    blind = effects.CONDITION_BY_NAME["Blind"]
+    return any(ep["skill"] == blind for ep in table.on_agent(agent_id))
+
+
+def attack_fails(send, state, attacker_id, target_id, reason, conn_id, why):
+    """The attack-fail word: 0x00A0 [38, TARGET, attacker, reason].
+
+    Slot order is the client's (agents.GV_ATTACK_FAIL): the first agent is
+    the one the word is drawn beside. Sent AFTER the swing's own close, where
+    retail's one witness puts it.
+    """
+    name = agents.ATTACK_FAIL_REASONS.get(reason, str(reason))
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+         [agents.GV_ATTACK_FAIL, target_id, attacker_id, reason],
+         f"attack_fail: {attacker_id} -> {target_id} {name} ({why})")
+
+
+def blind_miss(state, agent_id):
+    """One roll: does THIS swing by a blinded agent miss? False when not blind."""
+    if not BLIND or not blinded(state, agent_id):
+        return False
+    return random.random() < BLIND_MISS_CHANCE
+
+
 def taker_damage(state, agent_id, dealt):
     """(final_damage, conversion) after the taker's open episodes have spoken.
 
@@ -18561,6 +18630,20 @@ def land_swing(send, state, agent_id, agent, conn_id):
     # already there and already right; what changed was that the damage stopped
     # dividing evenly into the pool.
     if state.get("player_dead"):
+        return
+    # A BLINDED SWINGER MISSES NINE TIMES IN TEN (SKILLS-BL). The swing still
+    # closes -- the body finished the motion -- and then the client is told
+    # the attack failed and why; nothing else goes out: no gain, no damage,
+    # no pool movement. Rolled before the arithmetic so a miss cannot leave a
+    # half-computed swing anywhere.
+    if blind_miss(state, agent_id):
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.GV_MELEE_ATTACK_FINISHED, agent_id, 0],
+             "melee_attack_finished")
+        attack_fails(send, state, agent_id, PLAYER_AGENT_ID,
+                     agents.ATTACK_FAIL_MISS, conn_id, "Blind")
+        print(f"[c{conn_id}] agent {agent_id} swung BLIND and missed the "
+              f"player", flush=True)
         return
     # Guard before effect: validate the fraction before the FIRST send, so a
     # refusal leaves no half-swing on the wire (test_guards section 3). The
@@ -26893,6 +26976,12 @@ def main():
                          "health delta, full healing. Retail moves the "
                          "maximum by exactly 20%% in the apply's own batch "
                          "(2 of 2, isle 8.2 / deepwoundjoin.py).")
+    ap.add_argument("--no-blind", action="store_true",
+                    help="SKILLS-BL REVERT: Blind (479) is an icon and every "
+                         "swing under it lands -- the pre-2026-09-10 wire. "
+                         "WIKI (GWW 'Blind'): melee and missile attacks miss "
+                         "90%%; the miss is the client's own attack-fail word "
+                         "0x00A0 [38, target, attacker, 3].")
     ap.add_argument("--no-overheal-number", action="store_true",
                     help="SKILLS-HN REVERT: a heal on a full pool sends "
                          "nothing, and a partial one sends only what landed "
@@ -29104,6 +29193,11 @@ def main():
         DEEP_WOUND = False
         print("NO DEEP WOUND: 482 is an icon -- the maximum never moves, heals "
               "are not cut (--no-deep-wound, the known-bad arm).", flush=True)
+    if a.no_blind:
+        global BLIND
+        BLIND = False
+        print("NO BLIND: 479 is an icon -- every swing under it lands "
+              "(--no-blind, the known-bad arm).", flush=True)
     if a.no_status_word:
         global STATUS_WORD
         STATUS_WORD = False

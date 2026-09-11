@@ -26,8 +26,8 @@ import authsrv      # noqa: E402
 import agents       # noqa: E402
 import effects      # noqa: E402
 
-# Floor set from a real green run (39 checks, 2026-08-22; 99 checks, 2026-09-09 SKILLS-DW).
-LEDGER = checks.Ledger("effect mechanics", floor=106)
+# Floor set from a real green run (39 checks, 2026-08-22; 99 checks, 2026-09-09 SKILLS-DW; 129 checks, 2026-09-10 SKILLS-BL).
+LEDGER = checks.Ledger("effect mechanics", floor=129)
 check = checks.adopt(LEDGER)
 
 FRENZY, RUSH, ROF, GLYPH, IGNITE, FAINT = 346, 319, 307, 200, 431, 135
@@ -600,5 +600,225 @@ try:
 except Exception as exc:                                     # noqa: BLE001
     LEDGER.skip("section 20 (corpus)", f"{type(exc).__name__}: {exc}")
 
+
+# ---------------------------------------------------------------------------
+# 21-23: SKILLS-BL, Blind (studies/skills/FINDINGS.md 44; missjoin.py is the
+#        corpus read). The RATE is WIKI (GWW "Blind": 90%), the SHAPE is the
+#        client's own attack-fail word read out of its drain (agents.py).
+print("== 21. SKILLS-BL: a blinded hostile's swing misses nine in ten, and the "
+      "miss is [close, 0x00A0 [38, PLAYER, agent, 3]] ==")
+INT, INT_T = (authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+              authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET)
+FLOAT_T = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET
+BLIND_ID = effects.CONDITION_BY_NAME["Blind"]
+ENEMY = 10
+
+
+def damage_props(sent):
+    return [v[0] for op, v, _l in sent if op == FLOAT_T
+            and v[0] in (agents.PROP_DAMAGE, agents.GV_CRITICAL)]
+
+
+def fail_words(sent):
+    return [v for op, v, _l in sent if op == INT_T
+            and v[0] == agents.GV_ATTACK_FAIL]
+
+
+check(BLIND_ID == 479 and agents.GV_ATTACK_FAIL == 38
+      and agents.ATTACK_FAIL_REASONS[agents.ATTACK_FAIL_MISS] == "miss",
+      "479 is Blind (isle R4-2), 38 is the attack-fail word and reason 3 is "
+      "the archive's 'miss' (string id 476 via the drain's table at 0x007FA574)")
+check(abs(authsrv.BLIND_MISS_CHANCE - 0.90) < 1e-12,
+      "the rate is the wiki's 90%, WIKI and not measured -- 0 of 1,042 "
+      "retail closes were swung blind (missjoin P2 NO WITNESS)")
+
+saved = (authsrv.ARMOUR_TERM, authsrv.ENERGY, authsrv.BLIND,
+         authsrv.random.random)
+try:
+    authsrv.ARMOUR_TERM = False
+    authsrv.ENERGY = False
+    enemy = {"name": "hatcher", "dead": False, "pos": (0.0, 0.0)}
+
+    authsrv.random.random = lambda: 0.0        # a roll that WOULD miss
+    sent, send = collector()
+    state = fresh_state()
+    authsrv.land_swing(send, state, ENEMY, enemy, 0)
+    check(state["player_health"] < 100.0 and not fail_words(sent),
+          "control: no Blind on the swinger, the roll is never consulted and "
+          "the swing lands", f"health={state['player_health']} sent={sent}")
+
+    authsrv.random.random = lambda: 0.5        # < 0.9: a miss
+    sent, send = collector()
+    state = fresh_state()
+    open_ep(state, BLIND_ID, duration=9.0, type_code=8, agent=ENEMY)
+    authsrv.land_swing(send, state, ENEMY, enemy, 0)
+    check(state["player_health"] == 100.0,
+          "under Blind a 0.5 roll misses: the player's pool is untouched",
+          f"health={state['player_health']}")
+    check(len(sent) == 2
+          and sent[0][0] == INT
+          and sent[0][1] == [agents.GV_MELEE_ATTACK_FINISHED, ENEMY, 0]
+          and sent[1][0] == INT_T
+          and sent[1][1] == [agents.GV_ATTACK_FAIL, PLAYER, ENEMY,
+                             agents.ATTACK_FAIL_MISS],
+          "the wire is exactly [melee_attack_finished, 0x00A0 [38, PLAYER, "
+          "agent, 3]] -- the close first, the word beside the TARGET, nothing "
+          "else", f"sent={sent}")
+    check(not damage_props(sent), "and no damage message at all")
+
+    authsrv.random.random = lambda: 0.95       # >= 0.9: the one in ten
+    sent, send = collector()
+    state = fresh_state()
+    open_ep(state, BLIND_ID, duration=9.0, type_code=8, agent=ENEMY)
+    authsrv.land_swing(send, state, ENEMY, enemy, 0)
+    check(state["player_health"] < 100.0 and not fail_words(sent)
+          and damage_props(sent) == [agents.PROP_DAMAGE],
+          "the one in ten lands whole: damage, no fail word",
+          f"health={state['player_health']} sent={sent}")
+
+    authsrv.random.random = lambda: 0.9        # the boundary is exclusive
+    sent, send = collector()
+    state = fresh_state()
+    open_ep(state, BLIND_ID, duration=9.0, type_code=8, agent=ENEMY)
+    authsrv.land_swing(send, state, ENEMY, enemy, 0)
+    check(state["player_health"] < 100.0 and not fail_words(sent),
+          "a roll of exactly 0.90 lands (strict less-than, so the miss "
+          "fraction is 0.90 and not 0.90 + epsilon)")
+
+    authsrv.random.random = lambda: 0.5
+    sent, send = collector()
+    state = fresh_state()
+    ep = open_ep(state, BLIND_ID, duration=9.0, type_code=8, agent=ENEMY)
+    state["effects"].close(ep["buff"])
+    authsrv.land_swing(send, state, ENEMY, enemy, 0)
+    check(state["player_health"] < 100.0 and not fail_words(sent),
+          "a CLOSED Blind episode no longer makes the swing miss")
+
+    authsrv.BLIND = False
+    sent, send = collector()
+    state = fresh_state()
+    open_ep(state, BLIND_ID, duration=9.0, type_code=8, agent=ENEMY)
+    authsrv.land_swing(send, state, ENEMY, enemy, 0)
+    check(state["player_health"] < 100.0 and not fail_words(sent),
+          "--no-blind (the known-bad arm): the same blinded swing lands")
+    authsrv.BLIND = True
+finally:
+    (authsrv.ARMOUR_TERM, authsrv.ENERGY, authsrv.BLIND,
+     authsrv.random.random) = saved
+
+print("== 22. SKILLS-BL: the PLAYER swings blind -- the bracket goes out, then "
+      "the word beside the TARGET, no damage and no strike; a spell never "
+      "misses ==")
+saved = (authsrv.ARMOUR_TERM, authsrv.ENERGY, authsrv.BLIND,
+         authsrv.random.random, authsrv.SWING_HOLDS_WALK_GATE)
+
+
+def enemy_state():
+    state = fresh_state()
+    state["agents"] = {ENEMY: {"name": "t", "dead": False, "died_at": 0.0,
+                               "health": 5000.0, "max_health": 5000.0,
+                               "last_hit": 0.0, "armor_rating": 60,
+                               "pos": (0.0, 0.0)}}
+    return state
+
+
+try:
+    authsrv.ARMOUR_TERM = False
+    authsrv.ENERGY = False
+    authsrv.SWING_HOLDS_WALK_GATE = False
+
+    authsrv.random.random = lambda: 0.5
+    sent, send = collector()
+    state = enemy_state()
+    open_ep(state, BLIND_ID, duration=9.0, type_code=8, agent=PLAYER)
+    authsrv.hit_enemy(send, state, ENEMY, 0)
+    check(state["agents"][ENEMY]["health"] == 5000.0,
+          "the blinded player's swing deals nothing",
+          f"health={state['agents'][ENEMY]['health']}")
+    check([(op, v) for op, v, _l in sent] == [
+              (INT_T, [agents.GV_ATTACK_STARTED, PLAYER, ENEMY, 0]),
+              (INT, [agents.GV_MELEE_ATTACK_FINISHED, PLAYER, 0]),
+              (INT_T, [agents.GV_ATTACK_FAIL, ENEMY, PLAYER,
+                       agents.ATTACK_FAIL_MISS])],
+          "the wire is [attack_started, melee_attack_finished, 0x00A0 [38, "
+          "ENEMY, PLAYER, 3]] and nothing else", f"sent={sent}")
+    before = len(sent)
+    authsrv.hit_enemy(send, state, ENEMY, 0)
+    check(len(sent) == before,
+          "the miss SPENT the swing timer: an immediate second call sends "
+          "nothing (the swing happened, it just did not land)")
+
+    authsrv.random.random = lambda: 0.95
+    sent, send = collector()
+    state = enemy_state()
+    open_ep(state, BLIND_ID, duration=9.0, type_code=8, agent=PLAYER)
+    authsrv.hit_enemy(send, state, ENEMY, 0)
+    check(state["agents"][ENEMY]["health"] < 5000.0 and not fail_words(sent),
+          "the one in ten lands: damage, no fail word", f"sent={sent}")
+
+    authsrv.random.random = lambda: 0.0
+    sent, send = collector()
+    state = enemy_state()
+    open_ep(state, BLIND_ID, duration=9.0, type_code=8, agent=PLAYER)
+    authsrv.hit_enemy(send, state, ENEMY, 0, exact=20.0, swing=False,
+                      label="Flare")
+    check(state["agents"][ENEMY]["health"] == 4980.0 and not fail_words(sent),
+          "a SPELL cast blind lands its 20 whatever the roll -- GWW: 'melee "
+          "and missile attacks', a spell is neither", f"sent={sent}")
+
+    authsrv.random.random = lambda: 0.5
+    sent, send = collector()
+    state = enemy_state()
+    open_ep(state, BLIND_ID, duration=9.0, type_code=8, agent=PLAYER)
+    authsrv.hit_enemy(send, state, ENEMY, 0, bonus_damage=10.0,
+                      skill_strike=True, label="an attack skill")
+    check(state["agents"][ENEMY]["health"] == 5000.0
+          and [(op, v) for op, v, _l in sent] == [
+              (INT_T, [agents.GV_ATTACK_FAIL, ENEMY, PLAYER,
+                       agents.ATTACK_FAIL_MISS])],
+          "an ATTACK SKILL's strike misses too, and its wire is the word "
+          "alone -- the skill's own prop 46 close is the caller's, exactly "
+          "the [46, 38] batch retail's one witness carries", f"sent={sent}")
+
+    sent, send = collector()
+    state = enemy_state()
+    authsrv.hit_enemy(send, state, ENEMY, 0)
+    check(state["agents"][ENEMY]["health"] < 5000.0 and not fail_words(sent),
+          "control: unblinded, the 0.5 roll is never consulted")
+finally:
+    (authsrv.ARMOUR_TERM, authsrv.ENERGY, authsrv.BLIND,
+     authsrv.random.random, authsrv.SWING_HOLDS_WALK_GATE) = saved
+
+print("== 23. the corpus: retail's swings close WITH damage, no swing was ever "
+      "swung blind, and property 38 rides with none (missjoin) ==")
+try:
+    import missjoin
+    ms = missjoin.score(missjoin.census())
+    check(ms["closes"] >= 1000,
+          "at least 1,000 retail swing closes framed (measured 1,042)",
+          f"closes={ms['closes']}")
+    check(ms["p1"] and ms["p1_rate"] < 0.02,
+          "P1: an unblinded close carries its damage -- no-damage closes under "
+          "2% (measured 7 of 1,042 = 0.67%, and every one of the seven is a "
+          "dead or unreachable target, not a miss)",
+          f"rate={ms['p1_rate']}")
+    check(ms["blind"] == 0,
+          "P2 NO WITNESS, pinned: no retail swing close under a live 479. THE "
+          "DAY THIS GOES RED THE 90% CAN BE MEASURED -- move the rate from "
+          "WIKI to OBSERVED and retire this check",
+          f"blind closes={ms['blind']}")
+    check(ms["fails"] >= 1 and ms["fail_reasons"].get(2, 0) >= 1,
+          "property 38 is on retail's wire, reason 2 'fail' at least once "
+          "(20260819T132414 [38, 217, 27, 2])", f"reasons={ms['fail_reasons']}")
+    check(ms["p5"] is True,
+          "P5: no property 38 shares its batch with damage from that attacker "
+          "onto that target -- the word and the number are exclusive",
+          f"with damage={ms['fail_with_damage']}")
+    check(ms["fail_blind"] == 0 and 3 not in ms["fail_reasons"],
+          "and no witnessed 38 is a Blind miss (reason 3) -- so the miss's "
+          "own batch shape is RECONSTRUCTION by analogy with reason 2's",
+          f"reasons={ms['fail_reasons']} blind={ms['fail_blind']}")
+except Exception as exc:                                     # noqa: BLE001
+    LEDGER.skip("section 23 (corpus)", f"{type(exc).__name__}: {exc}")
 
 sys.exit(LEDGER.verdict())

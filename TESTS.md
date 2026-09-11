@@ -6336,7 +6336,23 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   batches, the world tick in every heal AND damage batch, ≥ 40 heals onto pools
   that are full by construction with non-zero values, and ≥ 500 exceeding the
   loss still owed — the overheal is on the wire. Skips by name without a vault;
-  floor 99 → 106),
+  floor 99 → 106. **§§21–23 are SKILLS-BL (2026-09-10): Blind's miss.** The rate is
+  the wiki's 90 % and the test says so; the shape is the client's own attack-fail
+  word `0x00A0 [38, target, attacker, 3]` (`agents.GV_ATTACK_FAIL`, reason 3 =
+  'miss' by the drain's string table). §21 drives `land_swing` under a monkeypatched
+  roll: control (no 479, a 0.0 roll never consulted), a 0.5 roll misses with the
+  wire exactly `[melee_attack_finished, [38, PLAYER, agent, 3]]` and the pool
+  untouched, 0.95 lands, **0.90 exactly lands** (strict less-than), a CLOSED episode
+  lands, `--no-blind` lands; §22 drives `hit_enemy`: the player's miss is
+  `[attack_started, melee_attack_finished, [38, ENEMY, PLAYER, 3]]` and nothing
+  else, the timer is SPENT (an immediate second call sends nothing), a spell cast
+  blind lands its 20 whatever the roll, an attack skill's miss is the word alone
+  (the `[46, 38]` batch retail's one witness carries); §23 reads the LIVE CORPUS
+  through `missjoin.py` as floors — ≥ 1,000 closes, no-damage closes under 2 %,
+  **0 closes under a live 479 pinned as the alarm that goes red the day the rate
+  can be measured**, ≥ 1 property 38 with reason 2, P5 exclusive (no 38 shares a
+  batch with damage from its attacker onto its target), no reason-3 witness.
+  Floor 106 → 129),
   `toolkit/authsrv/test_pools.py` (**what a skill COSTS** — R4b's other half, where
   `effects.py` models what a cast puts ON somebody and `pools.py` models what it
   takes. Until 2026-08-20 this server took nothing: two harness runs that day pressed
