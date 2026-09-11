@@ -230,7 +230,8 @@ NETWORK_STAT = "NOT_CLEANED_network_endpoint"
 # sample. The three names that looked worst were the three the read defused:
 #   `key`       is a KEYBOARD KEY NAME (`session.py`:823, the action script)
 #   `key_from`  is a LABEL naming which keyring entry decrypted a channel
-#               (`livesession.py`:432) -- not the key
+#               (`wiresplit.py`'s `assemble_live`, split out of `livesession.py`
+#               on 2026-09-11) -- not the key
 #   `user_agent` is one fixed 18-character string, identical in all 862 occurrences
 # What is NOT here is the point of the list. See `values` at the bottom.
 KNOWN_BENIGN = (
