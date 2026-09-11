@@ -62,6 +62,12 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
 from archive import Archive, ENTRY_SIZE  # noqa: E402
 import datwrite  # noqa: E402
+# Section 12d's sabotage swaps `json.loads` on the module that OWNS
+# `read_journal`, and since 2026-09-11 that is `datjournal`, not `datwrite` --
+# `datwrite` no longer imports `json` at all, so `datwrite.json` is an
+# AttributeError and the `finally:` that restores it would take the section down
+# whatever the check's verdict.
+import datjournal  # noqa: E402
 import datcheck  # noqa: E402
 import datmove  # noqa: E402
 # `datplan` is imported for section 11h's sabotage and nothing else. `datwrite`
@@ -2099,10 +2105,10 @@ def section_journal(tmp):
 
     real_loads, once = drop_intact_branch()
     try:
-        datwrite.json.loads = once
+        datjournal.json.loads = once
         code, out = run_cli("--revert", old)
     finally:
-        datwrite.json.loads = real_loads
+        datjournal.json.loads = real_loads
     check(code != 0 and "REFUSED" in out,
           "SABOTAGE: with that branch removed the old-format journal is "
           "unreadable -- so 12d is the check keeping 59 vault journals alive")
@@ -2119,10 +2125,10 @@ def section_journal(tmp):
                 spill(tmp, "newfmt.bin", payload))
     real_loads, once = drop_intact_branch()
     try:
-        datwrite.json.loads = once
+        datjournal.json.loads = once
         code, out = run_cli("--revert", j6)
     finally:
-        datwrite.json.loads = real_loads
+        datjournal.json.loads = real_loads
     check(code == 0 and blob(dat6) == original6,
           "CONTROL: the same sabotage over a NEW-format journal reverts byte "
           "for byte from the line parser alone -- which is the whole of what "
