@@ -819,7 +819,7 @@ in `vault/research/worldmaps/WORLDMAPS-W18-RUN.md` §RESULTS.
 character arrives.** The arrival point comes from the MAP row:
 `content.map_static_config()` builds `id -> (file_id, (spawn_x, spawn_y), plane,
 explorable)` from `rows("map")` only, and `seed_x` has exactly three consumers
-in `toolkit/` — `deploy.py:374` (passed to `stripbuild.build` as the flood
+in `toolkit/` — `deploy.py:697` (passed to `stripbuild.build` as the flood
 seed), `deploy.py:1763` (the readback assert) and `mapscale.py`. None is the
 player. `authsrv` has no `--spawn` override.
 
