@@ -2927,12 +2927,12 @@ def section_opcode_pins():
 
 
 def section_opcode_catalog():
-    """Every send site in authsrv.py, against the catalog's field count.
+    """Every send site in the authsrv family, against the catalog's field count.
 
     THE PINS ABOVE PROTECT FIFTEEN OPCODES. authsrv.py declares SIXTY-TWO, and
     the other forty-seven have no pin anywhere in the suite. This is the cheap
     control that reaches them, and it is deliberately not a second table of
-    literals: it walks authsrv.py's own `send(GAME_SMSG_X, [...])` sites, counts
+    literals: it walks the family's own `send(GAME_SMSG_X, [...])` sites, counts
     the payload, and requires that count to equal the number of fields
     `schema/messages.json` declares at that opcode. Nothing is written down, so
     nothing has to be maintained, and the comparison is between two artifacts
@@ -2965,11 +2965,31 @@ def section_opcode_catalog():
     fixture-glob failure written down.
     """
     import ast
+    import glob
     import json
     import authsrv
 
-    with open(authsrv.__file__, encoding="utf-8") as f:
-        src = f.read()
+    # THE FAMILY, NOT THE FILE. This read authsrv.py alone until 2026-09-11,
+    # when the modularisation arc moved send sites out into leaves beside it
+    # (connreport.py, merchant.py, probemerchant.py on that date, carrying six
+    # opcodes between them). A walk still reading one file loses those without
+    # a word -- the silent shrink toward zero the two floors below exist to
+    # catch. The family is DISCOVERED, not written down: any sibling module
+    # that contains a `send(GAME_SMSG_` call joins the walk, so a leaf that
+    # gains one later is covered with no edit here. Tests are excluded: this
+    # file and three others contain such calls as fixtures.
+    _home = os.path.dirname(os.path.abspath(authsrv.__file__))
+    family = [os.path.abspath(authsrv.__file__)]
+    for path in sorted(glob.glob(os.path.join(_home, "*.py"))):
+        if os.path.basename(path).startswith("test_") or path in family:
+            continue
+        with open(path, encoding="utf-8") as f:
+            if "send(GAME_SMSG_" in f.read():
+                family.append(path)
+    srcs = []
+    for path in family:
+        with open(path, encoding="utf-8") as f:
+            srcs.append(f.read())
     with open(os.path.join(os.path.dirname(os.path.dirname(HERE)),
                            "schema", "messages.json"), encoding="utf-8") as f:
         catalog = json.load(f)["channels"]["GAME_SMSG"]["messages"]
@@ -2980,13 +3000,15 @@ def section_opcode_catalog():
 
     # every `send(GAME_SMSG_*, [ ... ])` whose payload is a literal list
     arity = {}
-    for node in ast.walk(ast.parse(src)):
-        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-                and node.func.id == "send" and len(node.args) >= 2
-                and isinstance(node.args[0], ast.Name)
-                and node.args[0].id.startswith("GAME_SMSG_")
-                and isinstance(node.args[1], ast.List)):
-            arity.setdefault(node.args[0].id, set()).add(len(node.args[1].elts))
+    for src in srcs:
+        for node in ast.walk(ast.parse(src)):
+            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                    and node.func.id == "send" and len(node.args) >= 2
+                    and isinstance(node.args[0], ast.Name)
+                    and node.args[0].id.startswith("GAME_SMSG_")
+                    and isinstance(node.args[1], ast.List)):
+                arity.setdefault(node.args[0].id, set()).add(
+                    len(node.args[1].elts))
     # a symbol sent with two different payload lengths cannot be measured this
     # way; it is dropped rather than guessed at, and it counts as a blind spot.
     sites = {k: v.pop() for k, v in
