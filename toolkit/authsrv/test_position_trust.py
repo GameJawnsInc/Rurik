@@ -1615,11 +1615,11 @@ def main():
                   f"check above is its control: the identical state returns "
                   f"'locally-moving' with the flag off")
             # The reason string is deliberately "grant" and not a new value:
-            # grantsim.py:2000 filters `w[2] == "grant"` and policyreplay.py
-            # switches on "locally-moving", so a new enum would silently shrink
-            # those scorers rather than error. The turnaround stays countable
-            # because keyboard_age is on the row and GRANTED-with-age-in-window
-            # is unreachable without the flag.
+            # field4screen.field4_arrival_check filters `w[2] == "grant"` and
+            # policyreplay.py switches on "locally-moving", so a new enum would
+            # silently shrink those scorers rather than error. The turnaround
+            # stays countable because keyboard_age is on the row and
+            # GRANTED-with-age-in-window is unreachable without the flag.
             check(age is not None and age <= authsrv.GRANT_LOCAL_WINDOW,
                   "and it still REPORTS the keyboard age, so the turnaround "
                   "set stays countable offline",

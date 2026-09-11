@@ -4450,12 +4450,13 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   flag that removed both rules would pass every other check in the block. A
   final check restores the global and re-asserts the refusal, since a module
   global left set by one section leaks into every section below it. **The reason
-  string stays `grant` on purpose**: `grantsim.py:2000` filters `w[2] ==
-  "grant"` and `policyreplay.py:267` switches on `locally-moving`, so a new enum
-  value would have silently shrunk two scorers rather than erroring — the
-  greppability was traded for that, and `keyboard_age` carries the information
-  instead. **§14 IS `--zero-lead` (REALFIX-P2), AND IT IS THE FIRST SECTION
-  HERE THAT EXECUTES A RECEIVE ARM** rather than only matching its syntax tree.
+  string stays `grant` on purpose**: `field4_arrival_check` in `field4screen.py`
+  filters `w[2] == "grant"` and `policyreplay.py:267` switches on
+  `locally-moving`, so a new enum value would have silently shrunk two scorers
+  rather than erroring — the greppability was traded for that, and
+  `keyboard_age` carries the information instead. **§14 IS `--zero-lead`
+  (REALFIX-P2), AND IT IS THE FIRST SECTION HERE THAT EXECUTES A RECEIVE ARM**
+  rather than only matching its syntax tree.
   Two of that flag's claims are behavioural and no AST matcher can reach them --
   a moving report the shipped `turned or not walking` gate would SKIP is still
   granted under the flag, and the very same report sends **nothing** with the
