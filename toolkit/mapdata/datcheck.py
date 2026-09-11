@@ -74,25 +74,8 @@ FINDINGS 18.4/18.8/18.11 against build 38797; the addresses are that document's.
                              handed to an unrelated new file at the next launch,
                              extent and all.
 
-WHAT THE SNAPSHOT HOLDS (FINDINGS 18.5):
-
-  Tier 0, 48 bytes           `header[0x10:0x20]` (mftOffset u64, mftSize u32,
-                             flags u32) and the MFT descriptor's u32 at +0x04.
-                             **Read the header FIRST** -- the MFT itself moves,
-                             so a snapshot that seeks to a remembered offset
-                             reads the wrong table. That counter is the part
-                             carrying the signal; `mftOffset` alone is not a
-                             change signal (it was byte-identical across 159
-                             flushes in one diffed pair).
-
-  Tier 1                     All 24 bytes of every MFT row. Stored whole, zlib'd
-                             and base64'd, because the classification in
-                             `diff()` needs the bytes and not a digest.
-
-  Tier 2                     The directory invariant's result, plus a digest of
-                             the file-id table -- the only check that catches a
-                             reconcile-triggered delete, and the one thing the
-                             client ENFORCES rather than repairs past.
+WHAT THE SNAPSHOT HOLDS: that paragraph moved to `datsnapshot.py`'s docstring,
+with the three tiers themselves -- `snapshot`, `diff` and the page they print.
 
     python toolkit/mapdata/datcheck.py --dat DAT --preflight
     python toolkit/mapdata/datcheck.py --dat DAT --snapshot before.json
@@ -122,21 +105,12 @@ checks -- its digest, its manifest sha and its retail stamp -- are run first, by
 `overlay.py`'s own code, so a record `overlay.py --status` will not open cannot
 clear this gate either.
 
-ROW NUMBERS, AND WHY EVERY ONE PRINTED HERE CARRIES ITS FILE ID. This tool and
-`archive.py` use ONE convention -- the raw MFT index, row 0 the descriptor, 16
-the client's `INDEX_FIRST_FILE` -- and they agree on every row of the archive a
-run is pointed at (`test_archive.py` §1c, measured over the whole table, both
-readings). MEASURED 2026-08-14 on all TEN copies in the vault by hand; §1c
-re-measures one per run, which is the copy whose answer matters. That is
-worth saying out loud because `studies/crossbuild/FINDINGS.md` §4b.1 concluded
-the opposite: `--diff` said "row 71496 changed from 0 B to 6,012 B", `deploy.py`
-had said "head 71496, partner 71497", and the pair was read as the client having
-eaten an authored map. Both tools were right. 71496 is that map's Bloated HEAD,
-which `deploy` arms to zero so the client MUST recompile it; 6,012 B is the
-recompile succeeding; the authored bytes are in 71497 and never moved. What
-failed was two bare integers being the whole of the evidence. So `row_identity`
-gives every row named here the file id and the role that tell it apart from its
-neighbour, and both verbs print `ROW_CONVENTION` above their numbers.
+ROW NUMBERS, AND WHY EVERY ONE PRINTED HERE CARRIES ITS FILE ID: that paragraph
+moved to `datread.py`'s docstring, with `row_identity` and `ROW_CONVENTION`
+themselves and with the 71496/71497 afternoon it was written about. The
+convention is the raw MFT index -- row 0 the descriptor, 16 the client's
+`INDEX_FIRST_FILE` -- both verbs below print `ROW_CONVENTION` above their
+numbers, and the numbers in the paragraph after this one are in it.
 
 ONE CONSEQUENCE WORTH KNOWING BEFORE YOU DIFF TWO OUTPUTS. The `--diff` layout
 CHANGED on 2026-08-13: one line per changed row became two (the label, then the
@@ -172,67 +146,39 @@ from archive import (Archive, ENTRY_SIZE, MFT_MAGIC, FILE_MAGIC,  # noqa: E402
                      MFT_ROW_OF_ENTRIES_0, row_label,
                      FILE_HEADER_ROW, FILE_ID_TABLE_ROW, MFT_SELF_ROW,
                      FIRST_CLAIMABLE_ROW)
-# THE MFT SELF-CRC FORMULA LIVES IN `datwrite.py` AND IS NOT COPIED HERE.
-# `assert_archive_safe` needs it -- the pre-flight has never checked it, which is
-# exactly the hole `datwrite.py:1462-1501` documents (a stale self-crc leaves
-# `--preflight` reporting 10 of 10 while the archive fails its own checksum) --
-# and a second expression of "the table with row 3's own 24 bytes skipped" is how
-# two readers of one field drift apart. Importing the writer opens nothing:
-# `datwrite` only ever opens a file inside `Writer`, and its module chain
-# (`archive`, `gwdat`) is the one this file already has. There is no cycle --
-# `datwrite.py` names this module in prose only.
-import datwrite  # noqa: E402
+# THE CONSTANTS THAT DESCRIBE AN ARCHIVE'S BYTES MOVED TO `datread.py`, with the
+# readers that use them: ROW_CONVENTION, the header offsets, the MFT
+# descriptor's two counters, the generation scan chunk, the structural CRC rows,
+# the two `alloc.flags` bits and the file-id record struct. `import datwrite` and
+# its ten-line comment went with them -- its one code site in this file was
+# `self_crc_state`. Re-exported rather than re-declared, because `preflight`,
+# `scan` and `assert_archive_safe` below read FLAG_ENTRY_USED,
+# DESCRIPTOR_COUNT_OFF and FILE_HEADER_SIZE by bare name, `format_diff` and
+# `_main` print ROW_CONVENTION, and `test_datcheck.py` reads
+# `datcheck.CRC_STRUCTURAL_ROWS` off this module.
+# THAT READER LIST WAS C1'S, AND C2 MOVED TWO OF THE NAMES OUT FROM UNDER
+# IT: `scan` and `format_diff` are in `datsnapshot.py` now and import these
+# names from `datread.py` themselves. The sentence above is left standing
+# rather than reworded. MEASURED off this file's syntax tree after C2: the
+# three constants named are read by bare name in `preflight` only, and
+# ROW_CONVENTION is printed by `_main` only. DESCRIPTOR_COUNTER_OFF has no
+# bare-name reader left in this file at all -- it stays on the list below
+# because dropping a re-export drops an attribute from this module, which
+# is a behaviour change and not a tidy-up.
+from datread import (ROW_CONVENTION, HDR_CRC_SPAN, HDR_CRC_OFF,  # noqa: F401,E402
+                     HDR_TIER0_OFF, HDR_TIER0_LEN, HDR_MOD_OFF,
+                     DESCRIPTOR_COUNTER_OFF, DESCRIPTOR_COUNT_OFF,
+                     GENERATION_SCAN_CHUNK, CRC_STRUCTURAL_ROWS,
+                     FLAG_ENTRY_USED, FLAG_FIRST_STREAM, FILE_HEADER_SIZE,
+                     FILE_ID_RECORD)
 
-SNAPSHOT_VERSION = 1
-
-# Printed above any list of row numbers this tool produces. It is three lines of
-# output against the afternoon it cost: `studies/crossbuild/FINDINGS.md` §4b.1
-# is a written-up conclusion that this tool and `archive.py` number rows
-# differently, drawn from a `deploy.py` line and a `--diff` line that were in
-# fact naming the SAME row correctly. They agree -- `test_archive.py` §1c
-# measures it over every row of the copy it is pointed at -- and the number
-# that differs is `len(archive.entries)`, which is a list length rather than a
-# row count. Naming the convention costs nothing and removes the question.
-ROW_CONVENTION = (
-    "rows are RAW MFT indices: 0 is the Mft descriptor, %d is entries[0], "
-    "16 is INDEX_FIRST_FILE. archive.Archive.row(n) resolves the same n; "
-    "archive.Archive.entries is POSITIONAL and entries[n] is a DIFFERENT row."
-    % MFT_ROW_OF_ENTRIES_0)
-
-HDR_CRC_SPAN = 0x0C          # the header CRC covers exactly bytes 0x00..0x0C
-HDR_CRC_OFF = 0x0C
-HDR_TIER0_OFF = 0x10         # mftOffset u64, mftSize u32, flags u32
-HDR_TIER0_LEN = 0x10
-HDR_MOD_OFF = 0x1C
+# `SNAPSHOT_VERSION` moved to `datsnapshot.py`, with the three tiers it stamps
+# and the loader that refuses a snapshot some other version of them wrote. It is
+# re-exported below, at the site the snapshot verbs were cut from.
 
 # Contested between our own documents. See the docstring.
 MOD_BIT_FINDINGS_18 = 0x1    # FINDINGS 18.8 / 18.11
 MOD_BIT_DISASSEMBLY = 0x2    # FINDINGS 18.4's `test byte [esi+0x1c],2`
-
-DESCRIPTOR_COUNTER_OFF = 0x04    # the u32 the flush increments
-DESCRIPTOR_COUNT_OFF = 0x0C
-
-# ScanMft reads the file in 1 MiB blocks (the buffer alloc at 0x0047B818, with
-# its own `!(bufferSize % blockSize)` assert, ExeArchive:2592). We match the
-# size because it is the client's, not because anything depends on it.
-GENERATION_SCAN_CHUNK = 1 << 20
-
-# Rows whose stored CRC is not a CRC over a payload: row 1 is the file header's
-# own row, row 3 describes the MFT. `build_archive` writes 0 for both, and the
-# real archive's are structural too. Excluded BY NAME so the count of exceptions
-# is itself assertable -- an unnamed skip is how a sweep quietly measures less
-# than it claims.
-CRC_STRUCTURAL_ROWS = (1, 3)
-
-# FILE_HEADER_ROW, FILE_ID_TABLE_ROW, MFT_SELF_ROW and FIRST_CLAIMABLE_ROW are
-# imported from `archive.py` above rather than restated here. They used to be
-# declared in three modules, and `datplan.py`'s copy was then used with the wrong
-# arithmetic for months -- see the MFT ROW NUMBERS block in archive.py.
-FLAG_ENTRY_USED = 0x01
-FLAG_FIRST_STREAM = 0x02
-FILE_HEADER_SIZE = 0x20
-
-FILE_ID_RECORD = struct.Struct("<II")
 
 
 # ---------------------------------------------------------------- results --
@@ -258,224 +204,22 @@ class Check:
         return "<Check %s %s>" % (self.name, "ok" if self.ok else "FAILED")
 
 
-# ------------------------------------------------------------------ reading --
-
-def read_header(path):
-    """The 32-byte file header, read fresh. Always the first thing read."""
-    with open(path, "rb") as fh:
-        head = fh.read(32)
-    if len(head) < 32:
-        raise ValueError("%s is %d bytes; not an archive" % (path, len(head)))
-    mft_offset, = struct.unpack_from("<Q", head, 0x10)
-    mft_size, = struct.unpack_from("<I", head, 0x18)
-    return {
-        "raw": head,
-        "header_size": struct.unpack_from("<I", head, 0x04)[0],
-        "block_size": struct.unpack_from("<I", head, 0x08)[0],
-        "crc_stored": struct.unpack_from("<I", head, HDR_CRC_OFF)[0],
-        "crc_computed": binascii.crc32(head[:HDR_CRC_SPAN]) & 0xFFFFFFFF,
-        "mft_offset": mft_offset,
-        "mft_size": mft_size,
-        "mod_flags": struct.unpack_from("<I", head, HDR_MOD_OFF)[0],
-        "tier0": head[HDR_TIER0_OFF:HDR_TIER0_OFF + HDR_TIER0_LEN],
-    }
-
-
-def read_mft(path, header=None):
-    """The whole master file table, located from a header read in this call.
-
-    The MFT moves. Nothing here may seek to a remembered offset.
-    """
-    header = header or read_header(path)
-    with open(path, "rb") as fh:
-        fh.seek(header["mft_offset"])
-        mft = fh.read(header["mft_size"])
-    if len(mft) != header["mft_size"]:
-        raise ValueError("MFT at 0x%X is short: %d of %d bytes"
-                         % (header["mft_offset"], len(mft), header["mft_size"]))
-    if mft[:4] != MFT_MAGIC:
-        raise ValueError("no MFT at 0x%X: magic %r"
-                         % (header["mft_offset"], mft[:4]))
-    return mft
-
-
-def row_bytes(mft, index):
-    return mft[index * ENTRY_SIZE:(index + 1) * ENTRY_SIZE]
-
-
-def row_fields(row):
-    """(offset, size, extra_bytes, alloc_flags, alloc_stream, next_stream, crc)."""
-    offset, size, extra, flags16, nxt, crc = struct.unpack("<QIHHII", row)
-    return {"offset": offset, "size": size, "extra_bytes": extra,
-            "alloc_flags": flags16 & 0xFF, "alloc_stream": (flags16 >> 8) & 0xFF,
-            "next_stream": nxt, "crc": crc}
-
-
-def row_count(mft):
-    return len(mft) // ENTRY_SIZE
-
-
-def file_id_records(path, mft, header):
-    """The (file_id, row) pairs of MFT row 2, read straight off the disk.
-
-    Deliberately not `archive.file_id_table()`: that registers a bit-31 id under
-    both its raw and its masked form, which is right for lookup and wrong for an
-    invariant about what the table STORES.
-    """
-    rec = row_fields(row_bytes(mft, FILE_ID_TABLE_ROW))
-    if rec["extra_bytes"] != 0:
-        raise ValueError("the file-id table declares extraBytes %d; the client "
-                         "requires 0" % rec["extra_bytes"])
-    with open(path, "rb") as fh:
-        fh.seek(rec["offset"])
-        blob = fh.read(rec["size"])
-    if len(blob) != rec["size"]:
-        raise ValueError("file-id table is short: %d of %d bytes"
-                         % (len(blob), rec["size"]))
-    out = []
-    for i in range(len(blob) // FILE_ID_RECORD.size):
-        out.append(FILE_ID_RECORD.unpack_from(blob, i * FILE_ID_RECORD.size))
-    return out, blob
-
-
-def directory_invariant(mft, records):
-    """Both directions of FINDINGS 18.5's Tier 2. Returns a dict of counts.
-
-    A record of `(0, 0)` is a RELEASED slot, not a violation -- MEASURED, 3 of
-    171,025 on this machine's copies -- and is counted rather than dropped, so
-    the number is visible instead of being hidden inside an exclusion.
-    """
-    n = row_count(mft)
-    used = bytearray(n)
-    first = bytearray(n)
-    for i in range(n):
-        flags = mft[i * ENTRY_SIZE + 0x0E]
-        used[i] = flags & FLAG_ENTRY_USED
-        first[i] = (flags & (FLAG_ENTRY_USED | FLAG_FIRST_STREAM)) == \
-            (FLAG_ENTRY_USED | FLAG_FIRST_STREAM)
-    named = set()
-    released = 0
-    dangling = []          # records naming a row that is missing or not USED
-    for file_id, row in records:
-        if file_id == 0 and row == 0:
-            released += 1
-            continue
-        if row >= n or not used[row]:
-            dangling.append((file_id, row))
-        else:
-            named.add(row)
-    orphans = [i for i in range(FIRST_CLAIMABLE_ROW, n)
-               if first[i] and i not in named]
-    # Every row a LIVE row points at through alloc.nextStream. A map is two rows and
-    # the archive says so only here -- no partner is ever named by the file-id table
-    # (test_mapchunks: 349 partners, 0 named) -- so without this set a partner is
-    # indistinguishable from a row nothing references at all, and that difference is
-    # the whole of the spare-row rule below.
-    chained = set()
-    for i in range(n):
-        if used[i]:
-            nxt = struct.unpack_from("<I", mft, i * ENTRY_SIZE + 0x10)[0]
-            if nxt:
-                chained.add(nxt)
-    unused_high = [i for i in range(FIRST_CLAIMABLE_ROW, n) if not used[i]]
-    return {
-        "records": len(records),
-        "released_records": released,
-        "first_stream_rows": sum(1 for i in range(FIRST_CLAIMABLE_ROW, n)
-                                 if first[i]),
-        "rows_named": len(named),
-        "orphan_rows": orphans,
-        "dangling_records": dangling,
-        # USED clear AND something still points here: a partner or a record lost its
-        # row. That is corruption. USED clear and nothing points here is a SPARE.
-        "unused_referenced": [i for i in unused_high
-                              if i in chained or i in named],
-        "unused_spares": [i for i in unused_high
-                          if i not in chained and i not in named],
-    }
-
-
-def row_identity(mft, records):
-    """row -> {"file_ids": [...], "role": str}, for every row worth naming.
-
-    WHY A DIFF LINE NEEDS MORE THAN A NUMBER. On 2026-08-13 `--diff` reported
-    "row 71496 changed from 0 B to 6,012 B" while `deploy.py` had printed
-    "installing ... head 71496, partner 71497", and the pair was read as the
-    client having overwritten an authored map. It had not: 71496 is the map's
-    Bloated HEAD, which `deploy` arms to zero length precisely so the client is
-    forced to recompile it, and 6,012 B is that recompile working. The authored
-    bytes are in the partner, 71497, which does not appear in the diff at all
-    because nothing touched it. Both tools were right and the reader had two
-    bare integers to tell them apart with.
-
-    So each row this tool names now carries the two things that disambiguate it:
-    the FILE ID, which survives a patch where a row index does not
-    (`toolkit/contentids.py`, `studies/maprows/FINDINGS.md` §8) and which
-    `deploy.py` prints on its own first line, and the ROLE, which says which
-    half of a two-row map you are looking at.
-
-    A row may carry SEVERAL file ids: `archive.file_id_table` registers a bit-31
-    id under both forms for lookup, but this reads the table's raw records, so
-    what comes back is what the archive actually stores -- both ids where the
-    archive really stores both, and never a masked form we invented.
-
-    Roles below index 16 are the client's own structural assignment
-    (`INDEX_FIRST_FILE`); above it they are read from the flags and from
-    `alloc.nextStream`, which is the only thing that names a partner -- no
-    partner is ever named by the file-id table (test_mapchunks: 349 of 349).
-    """
-    n = row_count(mft)
-    ids = {}
-    for file_id, row in records:
-        if file_id == 0 and row == 0:
-            continue                      # a RELEASED slot, not a name
-        ids.setdefault(row, []).append(file_id)
-
-    used = bytearray(n)
-    first = bytearray(n)
-    for i in range(n):
-        flags = mft[i * ENTRY_SIZE + 0x0E]
-        used[i] = flags & FLAG_ENTRY_USED
-        first[i] = (flags & (FLAG_ENTRY_USED | FLAG_FIRST_STREAM)) == \
-            (FLAG_ENTRY_USED | FLAG_FIRST_STREAM)
-    points_at = {}                        # partner row -> the row pointing at it
-    for i in range(n):
-        if used[i]:
-            nxt = struct.unpack_from("<I", mft, i * ENTRY_SIZE + 0x10)[0]
-            if nxt:
-                points_at.setdefault(nxt, i)
-
-    fixed = {0: "MFT descriptor", FILE_HEADER_ROW: "file header",
-             FILE_ID_TABLE_ROW: "file-id table", MFT_SELF_ROW: "the MFT itself"}
-    out = {}
-    for i in range(n):
-        if i in fixed:
-            role = fixed[i]
-        elif i < FIRST_CLAIMABLE_ROW:
-            role = "reserved spare"
-        elif not used[i]:
-            role = ("USED CLEAR but row %d points here" % points_at[i]
-                    if i in points_at else "free spare")
-        elif first[i]:
-            role = "stream head" if i in ids else "stream head, UNNAMED"
-        elif i in points_at:
-            role = "stream partner of row %d" % points_at[i]
-        else:
-            role = "used, no first-stream flag and nothing points here"
-        out[i] = {"file_ids": ids.get(i, []), "role": role}
-    return out
-
-
-def label_row(identity, row):
-    """`row_label` over a `row_identity` map, tolerant of not having one.
-
-    Returns a bare `row N` when identity is unavailable rather than inventing
-    one, because `diff()` can be handed two snapshots with no archive behind
-    them and a confident label there would be a guess.
-    """
-    if not identity or row not in identity:
-        return row_label(row)
-    return row_label(row, identity[row]["file_ids"], identity[row]["role"])
+# THE READERS ARE `datread.py` NOW -- everything that opens the archive and
+# returns a fact, plus the payload CRC sweep and the generation census.
+# Re-exported because `preflight`, `generation_checks`, `assert_archive_safe`,
+# `scan`, `snapshot`, `diff`, `format_diff` and `_main` below all call them by
+# bare name, and because `overlay.py`, `abrun.py`, `datalloc.py`,
+# `test_archive.py` and `test_datcheck.py` read them off this module as
+# `datcheck.<name>`.
+# SAME CORRECTION AS THE SHIM ABOVE, for the same reason: of the callers
+# that sentence names, `scan`, `snapshot`, `diff` and `format_diff` left for
+# `datsnapshot.py` in C2 and take these readers from `datread.py` directly.
+# MEASURED after C2, the callers still reading them by bare name here are
+# `preflight`, `generation_checks`, `assert_archive_safe` and `_main`.
+from datread import (read_header, read_mft, row_bytes,  # noqa: F401,E402
+                     row_fields, row_count, file_id_records,
+                     directory_invariant, row_identity, label_row,
+                     generations, crc_sweep, self_crc_state)
 
 
 # --------------------------------------------------------------- pre-flight --
@@ -656,65 +400,7 @@ def preflight(path, baseline=None):
                     "size_on_disk": size_on_disk}
 
 
-# -------------------------------------------------------------- generations --
-
-def generations(path, block=None):
-    """Every surviving MFT generation in the file, newest first.
-
-    WHY THIS EXISTS, and it is the one pre-flight question nothing else asks.
-    The client's repair (ExeArchive ScanMft) does NOT rebuild an MFT. It reads
-    the whole file at `blockSize` stride hunting the descriptor magic, hands
-    each hit to LoadMft, and adopts the candidate whose +0x04 flush counter is
-    strictly highest. **If no candidate validates it returns 0, and that zero
-    funnels into ArchiveCreate, which writes a fresh empty archive over yours.**
-    So "is a botched write recoverable" is a countable fact about the file: how
-    many older generations are there to fall back to? Before 2026-08-17 nothing
-    in this repo could answer it, and the answer for `dat_study` turned out to
-    be six. studies/archivewrite/FINDINGS.md 5.4.
-
-    THIS IS AN UPPER BOUND, and saying so is the whole honesty of the check.
-    It applies ScanMft's *shape* gate -- magic, +0x08 == 0, count >= 16, extent
-    inside EOF -- and NOT LoadMft's full validation (self-CRC, every offset
-    aligned and in range, every nextStream in [16,count) and acyclic). A
-    candidate counted here may still be rejected by the client. A count of 1 is
-    therefore a hard finding; a count of 6 is an encouraging one.
-
-    The rows a generation declares are also the reason `datplan`/`datalloc` may
-    not allocate into the tail: a writer that overwrites the shadow rotation
-    region destroys the client's own recovery material.
-    """
-    size = os.path.getsize(path)
-    header = read_header(path)
-    block = block or header["block_size"] or 512
-    live = header["mft_offset"]
-    found = []
-    with open(path, "rb") as fh:
-        pos = 0
-        while True:
-            buf = fh.read(GENERATION_SCAN_CHUNK)
-            if not buf:
-                break
-            for off in range(0, len(buf) - ENTRY_SIZE + 1, block):
-                if buf[off:off + 4] != MFT_MAGIC:
-                    continue
-                counter, zero, count = struct.unpack_from(
-                    "<III", buf, off + DESCRIPTOR_COUNTER_OFF)
-                at = pos + off
-                found.append({
-                    "offset": at,
-                    "counter": counter,
-                    "rows": count,
-                    "live": at == live,
-                    # ScanMft's own acceptance shape, and nothing more.
-                    "shape_ok": (zero == 0 and count >= 16
-                                 and at + count * ENTRY_SIZE <= size),
-                    "reserved_bytes": count * ENTRY_SIZE,
-                })
-            pos += len(buf)
-    found.sort(key=lambda g: -g["counter"])
-    return found
-
-
+# `generations()` itself is in `datread.py`; this Check wrapper stays with `Check`.
 def generation_checks(path):
     """`generations()` as pass/fail items, for the pre-flight."""
     gens = generations(path)
@@ -738,59 +424,7 @@ def generation_checks(path):
     return checks, gens
 
 
-# --------------------------------------------------------------- crc sweep --
-
-def crc_sweep(path, limit=None):
-    """Every USED row's payload CRC, recomputed from the bytes on disk.
-
-    WHAT THIS CATCHES THAT THE PRE-FLIGHT CANNOT, and it is why it is worth a
-    whole-file read. The client's repair phase 2 (ScanFiles) CRCs every payload
-    and, on a mismatch, walks the nextStream chain back to its FLAG_FIRST_STREAM
-    head and DELETES THE WHOLE CHAIN -- extents freed, MFT rows memset, file-id
-    record dropped. So one stale CRC costs an entire file, and it costs it the
-    moment repair fires **for an unrelated reason**. A stale CRC is silent until
-    then: all ten open-time rules pass, because none of them reads a payload.
-
-    It is also the only check that can see studies/archivewrite's C-6. Relocate
-    a compression-8 row with `datmove` and the row is marked stored while its
-    bytes are still compressed; the CRC is over the stored bytes and does not
-    move, so every checksum rule and every open-time rule still passes and the
-    file is simply unreadable. This sweep does not catch that by CRC either --
-    it catches it by reporting the compression code beside the row, which is the
-    only place in this module that has ever looked at one.
-
-    Cost is a full read. Measured 2,487 MB/s on this machine, so ~3 s for 4.2 GB.
-    """
-    header = read_header(path)
-    mft = read_mft(path, header)
-    n = row_count(mft)
-    size = os.path.getsize(path)
-    bad, checked, skipped = [], 0, []
-    with open(path, "rb") as fh:
-        for i in range(n):
-            if limit is not None and checked >= limit:
-                break
-            r = row_fields(row_bytes(mft, i))
-            if not (r["alloc_flags"] & FLAG_ENTRY_USED) or not r["size"]:
-                continue
-            if i in CRC_STRUCTURAL_ROWS:
-                # Row 1 is the file header's own row and row 3 describes the
-                # MFT; their stored CRCs are not payload CRCs and comparing
-                # them would make this check permanently red. Named, not
-                # silently skipped -- a skip nobody prints is a check nobody has.
-                skipped.append(i)
-                continue
-            if r["offset"] + r["size"] > size:
-                bad.append((i, r, None, "extent past EOF"))
-                continue
-            fh.seek(r["offset"])
-            got = binascii.crc32(fh.read(r["size"])) & 0xFFFFFFFF
-            checked += 1
-            if got != r["crc"]:
-                bad.append((i, r, got, "stored 0x%08X computed 0x%08X"
-                            % (r["crc"], got)))
-    return {"rows": n, "checked": checked, "skipped": skipped,
-            "bad": bad, "size_on_disk": size}
+# `crc_sweep()` is in `datread.py` too -- it returns findings, not refusals.
 
 
 # -------------------------------------------------------------- launch gate --
@@ -1205,25 +839,7 @@ def _fingerprint_rows(fingerprints, side=None):
     return _Fingerprints(out, where, _fingerprint_file_ids(doc, where), record)
 
 
-def self_crc_state(path, header=None, mft=None):
-    """(stored, computed) for row 3's own crc -- the MFT's self-checksum.
-
-    THE ONE CHECK `preflight()` DOES NOT MAKE, and the one whose absence is
-    written up as a real defect shape rather than a theoretical one: a `Writer`
-    that grows a row without `resync()` computes the self-crc over the stale
-    pre-growth extent, prints a confident `fixed` line, and leaves an archive
-    that fails its own checksum while `--preflight` still answers 10 of 10
-    (`datwrite.py:755-781`). Only `datwrite --verify` has ever looked, and
-    `--verify` is not a thing anyone runs before a launch.
-
-    The formula is `datwrite.mft_self_crc`, imported. See the import comment.
-    """
-    header = header or read_header(path)
-    mft = read_mft(path, header) if mft is None else mft
-    n = row_count(mft)
-    stored = struct.unpack_from(
-        "<I", mft, MFT_SELF_ROW * ENTRY_SIZE + datwrite.ENTRY_CRC)[0]
-    return stored, datwrite.mft_self_crc(mft, n)
+# `self_crc_state()` is in `datread.py`, with the `datwrite` import it needs.
 
 
 UNREADABLE_REMEDY = ("The archive could not be read far enough to have findings, "
@@ -1556,330 +1172,17 @@ def assert_archive_safe(dat, fingerprints=None, deep=False, why="launch",
     return cleared
 
 
-# ----------------------------------------------------------------- snapshot --
-
-def scan(path):
-    """(header, mft, records, id_blob) -- every raw structure, read ONCE.
-
-    Extracted 2026-08-14 because `diff()` needs the file-id RECORDS to label its
-    rows and `snapshot()` had already parsed them in the same call.
-
-    WHAT LABELLING COSTS, MEASURED on `vault/dat_study/Gw.dat` (4.2 GB, 177,342
-    rows), best of two runs each, `tracemalloc` peak:
-
-        1.51 s /  36.9 MB   no labels at all (the pre-2026-08-13 diff)
-        3.77 s / 117.3 MB   labels, re-reading and re-parsing the id table
-        3.06 s / 121.4 MB   labels, sharing this one scan
-
-    So the duplicate read was ~0.7 s of the 2.3 s and this removes it. The rest
-    is `row_identity` itself, and the memory is nearly all of it: a dict of
-    177,342 dicts. Both are RECORDED rather than optimised away, because `--diff`
-    is the verb run around a timed client session and the next person to wonder
-    should find a number instead of a shrug. Making the identity map lazy would
-    buy the memory back and is not worth doing until something needs it.
-    """
-    header = read_header(path)
-    mft = read_mft(path, header)
-    records, id_blob = file_id_records(path, mft, header)
-    return header, mft, records, id_blob
-
-
-def snapshot(path, scanned=None):
-    """Tier 0 + Tier 1 + Tier 2, with the header read before the MFT.
-
-    `scanned` is a `scan()` result a caller already paid for. It is never a
-    DIFFERENT archive's -- `diff()` is the only caller that passes one and it
-    passes the one it just took from `path`.
-    """
-    header, mft, records, id_blob = scanned if scanned else scan(path)
-    inv = directory_invariant(mft, records)
-    desc = row_bytes(mft, 0)
-    return {
-        "snapshot_version": SNAPSHOT_VERSION,
-        "dat": os.path.abspath(path),
-        "size_on_disk": os.path.getsize(path),
-        "tier0": {
-            "header_0x10_0x20": header["tier0"].hex(),
-            "mft_offset": header["mft_offset"],
-            "mft_size": header["mft_size"],
-            "header_flags_0x1C": header["mod_flags"],
-            "descriptor_counter": struct.unpack_from(
-                "<I", desc, DESCRIPTOR_COUNTER_OFF)[0],
-            "descriptor_count": struct.unpack_from(
-                "<I", desc, DESCRIPTOR_COUNT_OFF)[0],
-        },
-        "tier1": {
-            "rows": row_count(mft),
-            "encoding": "zlib+base64",
-            "mft": base64.b64encode(zlib.compress(mft, 6)).decode("ascii"),
-            "mft_sha256": hashlib.sha256(mft).hexdigest(),
-        },
-        "tier2": {
-            "records": inv["records"],
-            "released_records": inv["released_records"],
-            "first_stream_rows": inv["first_stream_rows"],
-            "rows_named": inv["rows_named"],
-            "orphan_rows": inv["orphan_rows"][:64],
-            "orphan_count": len(inv["orphan_rows"]),
-            "dangling_count": len(inv["dangling_records"]),
-            "file_id_sha256": hashlib.sha256(id_blob).hexdigest(),
-        },
-    }
-
-
-def write_snapshot(path, out_path):
-    snap = snapshot(path)
-    with open(out_path, "w", encoding="utf-8") as fh:
-        json.dump(snap, fh, indent=1)
-    return snap
-
-
-def load_snapshot(out_path):
-    with open(out_path, "r", encoding="utf-8") as fh:
-        snap = json.load(fh)
-    if snap.get("snapshot_version") != SNAPSHOT_VERSION:
-        raise ValueError("snapshot version %r; this tool writes %d"
-                         % (snap.get("snapshot_version"), SNAPSHOT_VERSION))
-    return snap
-
-
-def _snapshot_mft(snap):
-    mft = zlib.decompress(base64.b64decode(snap["tier1"]["mft"]))
-    if hashlib.sha256(mft).hexdigest() != snap["tier1"]["mft_sha256"]:
-        raise ValueError("snapshot MFT does not match its own digest")
-    return mft
-
-
-# --------------------------------------------------------------------- diff --
-
-RELOCATED = "new extent (silent relocation)"
-RECYCLED = "row recycled"
-DELETED = "deleted"
-RELINKED = "sibling relinked"
-UNCLASSIFIED = "changed, unclassified"
-ADDED = "row added"
-REMOVED = "row removed"
-
-_ZERO_ROW = b"\x00" * ENTRY_SIZE
-CORROBORATION_ROWS = (0, FILE_ID_TABLE_ROW, MFT_SELF_ROW)
-
-
-def classify_row(before, after):
-    """FINDINGS 18.5's Tier 1 table, in the order the shapes exclude each other.
-
-    Never returns None for a changed row. A shape the table does not name is
-    `UNCLASSIFIED` and is reported -- dropping it is how a relocation gets
-    called a no-op.
-    """
-    if before == after:
-        return None
-    if after == _ZERO_ROW:
-        return DELETED
-    identity_changed = before[0x0E:0x10] != after[0x0E:0x10]
-    if identity_changed:
-        return RECYCLED
-    link_changed = before[0x10:0x14] != after[0x10:0x14]
-    extent_changed = (before[0x00:0x0E] != after[0x00:0x0E]
-                      or before[0x14:0x18] != after[0x14:0x18])
-    if link_changed and not extent_changed:
-        return RELINKED
-    if extent_changed and not link_changed:
-        return RELOCATED
-    return UNCLASSIFIED
-
-
-def diff(before, path=None, after=None):
-    """Compare a live archive (or a second snapshot) against a snapshot.
-
-    Returns a dict. `changes` is one record per changed row, classified; rows 0,
-    2 and 3 change on any flush and are separated out as corroboration rather
-    than counted as findings.
-
-    Every changed row is labelled by `row_identity` when `path` is given -- read
-    from the LIVE archive rather than from the snapshot, because a snapshot
-    carries only a digest of the file-id table and not its pairs. Comparing two
-    snapshots is still allowed and still works; it reports `identified: False`
-    and the formatter says so, rather than printing a row number that looks
-    identified and is not.
-
-    AND THE LABELS ARE GATED ON THE ARCHIVE BEING THE ONE `after` DESCRIBES.
-    The sentence above was false for one parameter combination when it was
-    written: `diff(before, path=X, after=<snapshot of Y>)` took its ROWS from Y
-    and its IDENTITY from X and reported `identified: True`. MEASURED 2026-08-14
-    with X = `vault/dat_study` and Y = `vault/client/2026-04-30_b174de1f2d8d`:
-    **308 of 315 changed rows carried a label naming a file the after-image does
-    not hold** -- row 3721 labelled `file id 0x5EE9A, 0x2D459` where the
-    after-image's own table says `0x2D451, 0x5E503`. Guarded, the same call now
-    reports `identified: False` and 0 labels carry a file id at all.
-    No shipped caller reaches it -- `_main` never passes `after` -- which
-    is exactly why it survived review: it is a latent trap in a public function,
-    and it is the precise failure `row_label`'s own docstring exists to prevent.
-    The gate is the MFT ITSELF, byte for byte, not a comparison of path strings:
-    a stale snapshot of the very same path is the same defect wearing the right
-    name, and the archive is the only thing that can refute it.
-    """
-    scanned = None
-    if after is None:
-        scanned = scan(path)
-        after = snapshot(path, scanned)
-    b_mft = _snapshot_mft(before)
-    a_mft = _snapshot_mft(after)
-    nb, na = row_count(b_mft), row_count(a_mft)
-
-    identity = None
-    identity_note = None
-    if path is not None:
-        if scanned is None:
-            scanned = scan(path)
-        _hdr, live_mft, records, _blob = scanned
-        if bytes(live_mft) == bytes(a_mft):
-            identity = row_identity(live_mft, records)
-        else:
-            identity_note = (
-                "the archive at %s is NOT the one `after` describes -- its MFT "
-                "differs (%d rows on disk, %d in the snapshot) -- so no row "
-                "below carries a file id or a role. Labelling from the wrong "
-                "archive is worse than a bare number: it reads as "
-                "identification." % (path, row_count(live_mft), na))
-
-    tier0 = {}
-    for key in ("mft_offset", "mft_size", "header_flags_0x1C",
-                "descriptor_counter", "descriptor_count"):
-        bv, av = before["tier0"][key], after["tier0"][key]
-        if bv != av:
-            tier0[key] = {"before": bv, "after": av}
-
-    changes, corroboration = [], []
-    for i in range(min(nb, na)):
-        rb, ra = row_bytes(b_mft, i), row_bytes(a_mft, i)
-        kind = classify_row(rb, ra)
-        if kind is None:
-            continue
-        rec = {"row": i, "kind": kind, "label": label_row(identity, i),
-               "before": row_fields(rb), "after": row_fields(ra),
-               "before_hex": rb.hex(), "after_hex": ra.hex()}
-        (corroboration if i in CORROBORATION_ROWS else changes).append(rec)
-    for i in range(na, nb):
-        # A REMOVED row is gone from the after-image, so it has no identity
-        # there. Labelling it from the before-image would be the one place this
-        # could print a file id that no longer resolves.
-        changes.append({"row": i, "kind": REMOVED, "label": row_label(i),
-                        "before": row_fields(row_bytes(b_mft, i)), "after": None,
-                        "before_hex": row_bytes(b_mft, i).hex(), "after_hex": None})
-    for i in range(nb, na):
-        changes.append({"row": i, "kind": ADDED, "label": label_row(identity, i),
-                        "before": None,
-                        "after": row_fields(row_bytes(a_mft, i)),
-                        "before_hex": None, "after_hex": row_bytes(a_mft, i).hex()})
-
-    counts = {}
-    for rec in changes:
-        counts[rec["kind"]] = counts.get(rec["kind"], 0) + 1
-
-    tier2 = {}
-    for key in ("records", "released_records", "first_stream_rows", "rows_named",
-                "orphan_count", "dangling_count", "file_id_sha256"):
-        bv, av = before["tier2"][key], after["tier2"][key]
-        if bv != av:
-            tier2[key] = {"before": bv, "after": av}
-
-    # THE FILE'S OWN LENGTH, which no other tier carries. `snapshot()` has
-    # recorded `size_on_disk` since it was written and nothing ever compared it,
-    # so an archive that GREW read as unchanged -- and growth is precisely the
-    # signal studies/archivewrite Route B is about, precisely what the client
-    # did NOT do in the caged session (studies/datwrite measured both copies at
-    # 4,198,489,600 B), and the one change a 24-byte MFT diff cannot see because
-    # appended bytes past every extent touch no row at all.
-    size_before = before.get("size_on_disk")
-    size_after = after.get("size_on_disk")
-    growth = None
-    if size_before is not None and size_after is not None \
-            and size_before != size_after:
-        growth = {"before": size_before, "after": size_after,
-                  "delta": size_after - size_before}
-
-    return {
-        "before": before.get("dat"), "after": after.get("dat"),
-        "rows_before": nb, "rows_after": na,
-        "identified": identity is not None,
-        "identity_note": identity_note,
-        "tier0": tier0, "tier2": tier2, "growth": growth,
-        "changes": changes, "counts": counts,
-        "corroboration": corroboration,
-        # `unchanged` means the table is byte for byte what it was, and rows 0,
-        # 2 and 3 count towards that. They are separated out of `changes`
-        # because they move on ANY flush and a post-flight that reported them as
-        # findings would report three every time -- but "the client flushed" is
-        # itself a fact about the run, so it may not be rounded down to nothing.
-        "unchanged": not (tier0 or tier2 or changes or corroboration
-                          or growth),
-    }
-
-
-def format_diff(d):
-    out = []
-    out.append("rows %d -> %d" % (d["rows_before"], d["rows_after"]))
-    out.append("(%s)" % ROW_CONVENTION)
-    if not d.get("identified"):
-        out.append("NOT IDENTIFIED: %s Match these numbers against another "
-                   "tool's with care."
-                   % (d.get("identity_note")
-                      or "two snapshots were compared with no archive behind "
-                         "them, so no row below carries its file id or role."))
-    if d.get("growth"):
-        g = d["growth"]
-        out.append("THE FILE'S LENGTH CHANGED: %d -> %d (%+d bytes)"
-                   % (g["before"], g["after"], g["delta"]))
-        out.append("   No row records this. The client did NOT grow the archive "
-                   "in the one caged session measured (studies/datwrite),")
-        out.append("   so growth is either ours or something nobody has seen "
-                   "before -- either way it is not routine.")
-    if d["tier0"]:
-        out.append("TIER 0 changed:")
-        for k, v in sorted(d["tier0"].items()):
-            out.append("   %-20s %r -> %r" % (k, v["before"], v["after"]))
-    else:
-        out.append("TIER 0 unchanged (mftOffset alone is not a change signal; "
-                   "the descriptor counter is)")
-    if not d["changes"]:
-        out.append("TIER 1: no row outside 0/2/3 changed")
-    else:
-        out.append("TIER 1: %d changed row(s) %s"
-                   % (len(d["changes"]), d["counts"]))
-        for rec in d["changes"][:40]:
-            out.append("   %s" % rec.get("label", row_label(rec["row"])))
-            out.append("      %s" % rec["kind"])
-            if rec["before"] and rec["after"]:
-                out.append("      before 0x%X %dB extra=%d flags=%d/%d next=%d "
-                           "crc=0x%08X"
-                           % (rec["before"]["offset"], rec["before"]["size"],
-                              rec["before"]["extra_bytes"],
-                              rec["before"]["alloc_flags"],
-                              rec["before"]["alloc_stream"],
-                              rec["before"]["next_stream"], rec["before"]["crc"]))
-                out.append("      after  0x%X %dB extra=%d flags=%d/%d next=%d "
-                           "crc=0x%08X"
-                           % (rec["after"]["offset"], rec["after"]["size"],
-                              rec["after"]["extra_bytes"],
-                              rec["after"]["alloc_flags"],
-                              rec["after"]["alloc_stream"],
-                              rec["after"]["next_stream"], rec["after"]["crc"]))
-        if len(d["changes"]) > 40:
-            out.append("   ... %d more" % (len(d["changes"]) - 40))
-    if d["corroboration"]:
-        out.append("corroboration only (rows 0/2/3 change on any flush):")
-        for r in d["corroboration"]:
-            out.append("   %s" % r.get("label", row_label(r["row"])))
-    if d["tier2"]:
-        out.append("TIER 2 changed:")
-        for k, v in sorted(d["tier2"].items()):
-            out.append("   %-20s %r -> %r" % (k, v["before"], v["after"]))
-    else:
-        out.append("TIER 2 unchanged (the directory invariant, both ways)")
-    out.append("")
-    out.append("REMINDER: the entry CRC, the MFT self-CRC and the header CRC "
-               "all still verify across a relocation. They are not detectors.")
-    return "\n".join(out)
+# THE POST-FLIGHT HALF IS `datsnapshot.py` NOW -- take a snapshot, diff two of
+# them, and say what changed in the client's own terms. Re-exported because
+# `preflight` above reads `_snapshot_mft` and `CORROBORATION_ROWS` by bare name,
+# `_main` below calls `write_snapshot`, `load_snapshot`, `diff` and
+# `format_diff`, and because `overlay.py`, `test_overlay.py` and
+# `test_datcheck.py` read them off this module as `datcheck.<name>`.
+from datsnapshot import (SNAPSHOT_VERSION, RELOCATED, RECYCLED,  # noqa: F401,E402
+                         DELETED, RELINKED, UNCLASSIFIED, ADDED, REMOVED,
+                         CORROBORATION_ROWS, scan, snapshot, write_snapshot,
+                         load_snapshot, _snapshot_mft, classify_row, diff,
+                         format_diff)
 
 
 # ---------------------------------------------------------------------- CLI --
