@@ -84,7 +84,6 @@ def area_reserve(area):
     return raw
 
 
-
 def install_bytes(blob, stored=False):
     """The bytes that will actually OCCUPY the row. -> (stream, code, note).
 
@@ -129,7 +128,6 @@ def install_bytes(blob, stored=False):
         f"{len(blob) - len(stream)} B saved)")
 
 
-
 def spill_stream(here, tag, stream, compression):
     """Write the exact bytes the ROW will hold, beside the archive. -> path|None
 
@@ -156,8 +154,6 @@ def spill_stream(here, tag, stream, compression):
         fh.write(stream)
     print(f"  wrote {path}")
     return path
-
-
 
 
 def budget_note(size, reservation, reserve, created=False):

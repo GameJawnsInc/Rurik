@@ -405,7 +405,7 @@ difference in either direction being arm A's ENV pair, 41,432 − 40,712 = 720
 exactly. **The fallback hypothesis dies at the output side too**: arm B's
 COMPILED head carries no `0x20000009` either, so no donor, global or cached
 environment was available — and `deploy.readback` could not have caught that,
-because `deploy.py:1731-1746` SKIPS the environment assertion when the staged
+because `deploy.py:1599-1614` SKIPS the environment assertion when the staged
 map has none, a check that cannot fire. (**CLOSED 2026-08-21.** That loop
 INVERTS now rather than skipping: an optional chunk the staged map omits gets a
 row asserting the compiled map carries none either, printed in the same verdict
@@ -820,7 +820,7 @@ character arrives.** The arrival point comes from the MAP row:
 `content.map_static_config()` builds `id -> (file_id, (spawn_x, spawn_y), plane,
 explorable)` from `rows("map")` only, and `seed_x` has exactly three consumers
 in `toolkit/` — `deploy.py:697` (passed to `stripbuild.build` as the flood
-seed), `deploy.py:1763` (the readback assert) and `mapscale.py`. None is the
+seed), `deploy.py:1631` (the readback assert) and `mapscale.py`. None is the
 player. `authsrv` has no `--spawn` override.
 
 So `sculpt_deep0` and `sculpt_deep1` moved the **flood seed** to (528, 528);
