@@ -25797,15 +25797,13 @@ def load_keys(path):
     return d
 
 
-def main():
-    # Declared up front because argparse reads these as its defaults below, and a
-    # `global` after any use of the name is a SyntaxError. Single-process server,
-    # so rebinding the module constants is enough and keeps
-    # handle_request_game_instance free of plumbing it would only ever use once.
-    global GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING, SKILLBAR
-    global UNLOCKED, UNLOCK_LABEL, SPAWN_PROFESSION, SECONDARY_BITS, PERSIST
-    global DEATH_PENALTY_FORCED, ENEMY_HIT_FRACTION
-
+# THE COMMAND LINE. Lifted out of main() verbatim 2026-09-11 (REFACTOR-A1): every
+# add_argument line below is byte-for-byte what main() carried, in the same order,
+# and main()'s `ap = build_parser()` sits exactly where the constructor call stood.
+# It is a function and not module-level code because these defaults READ module
+# globals -- GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING, TEST_SKILLBAR and
+# the rest -- and must keep reading them when main() runs, not at import time.
+def build_parser():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--port", type=int, default=6112)
@@ -27589,6 +27587,24 @@ def main():
                     help="Accept a login with no matching session record. A debugging "
                          "escape hatch so a stale sessions.json cannot be mistaken for a "
                          "wire bug. Never the default: the rejection path has to stay exercised.")
+    return ap
+
+
+def main():
+    # Declared up front because argparse reads these as its defaults below, and a
+    # `global` after any use of the name is a SyntaxError. Single-process server,
+    # so rebinding the module constants is enough and keeps
+    # handle_request_game_instance free of plumbing it would only ever use once.
+    global GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING, SKILLBAR
+    global UNLOCKED, UNLOCK_LABEL, SPAWN_PROFESSION, SECONDARY_BITS, PERSIST
+    global DEATH_PENALTY_FORCED, ENEMY_HIT_FRACTION
+
+    # THE ARGPARSE BLOCK IS `build_parser()`, directly above: 1,783 lines lifted out
+    # of main() verbatim, no other change. The `global` lines stay HERE because
+    # main() still REBINDS all of them from `a` further down; build_parser() only
+    # READS the three host defaults, and it reads them at the instant this call
+    # used to construct the parser.
+    ap = build_parser()
     a = ap.parse_args()
 
     # WHERE THIS SERVER MAY WRITE ITS CAPTURES (the audit's sec 9 item 3: an output path from the command line used to be written wherever it pointed).
