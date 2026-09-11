@@ -16235,6 +16235,13 @@ def degen_tick(send, state, conn_id):
 # the sends. The split exists for the same reason `energy_cost_for` is split
 # from the debit -- the caller has to know the outcome before choosing what to
 # put on the wire, and a conversion resolved twice would heal twice.
+#
+# POINTER, added rather than reworded (REFACTOR-A8): "which is the order
+# below", in the `prevents_damage` bullet above, is a claim about
+# `taker_damage`'s two loops -- the multiplier group, then the conversion
+# group -- and `taker_damage` moved to `episodemods.py`. What is still below
+# this banner is `resolve_taker_conversion`, the wire half it also documents.
+# Every line above stands exactly as it was written.
 
 # `allies_of`, `skill_target_kind` and `cast_recipient` now live in
 # `skillread.py` -- who a cast lands on. The re-exports keep the bare-name call
