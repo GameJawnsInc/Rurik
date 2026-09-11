@@ -353,8 +353,12 @@ def section3():
 
     # NEGATIVE CONTROL: make them siblings rather than alternatives, which is
     # the shape of the bug, and require the check to notice.
-    broken = src.replace("                        elif SPAWN_ENEMY:",
-                         "                        if SPAWN_ENEMY:")
+    # The indentation is part of the pattern, so this literal is pinned to
+    # where the branch lives: it moved from inside handle()'s 0x0090 arm (24
+    # columns) to module scope inside _handle_request_players() (4) when that
+    # arm's body was hoisted, and the replace stopped matching until re-aimed.
+    broken = src.replace("    elif SPAWN_ENEMY:",
+                         "    if SPAWN_ENEMY:")
     ok = False
     if broken != src:
         for node in ast.walk(ast.parse(broken)):
