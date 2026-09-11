@@ -20808,6 +20808,926 @@ def bind_key_to_build(keys, build, conn_id, rec):
     return keys, True
 
 
+def _handle_request_players(send, state, conn_id, stop, rec):
+    """0x0090's burst: the instance's players, agents, party and roster.
+
+    The BODY of `handle()`'s GAME_CMSG_INSTANCE_LOAD_REQUEST_PLAYERS arm,
+    hoisted to module scope verbatim -- every line below is the line that
+    stood in the chain, de-indented and not otherwise touched. The arm HEAD
+    stays where it was: `test_dispatch.py` walks that chain by AST, and it
+    credits an arm that delegates its whole body to a module-level helper
+    taking `state` -- which is what this is, and why the 0x0090 arm still
+    counts as one that stores what arrived.
+
+    The five parameters are `handle()`'s own locals, passed rather than
+    closed over: `send` is this connection's encrypting door, `state` its
+    per-connection dict, `conn_id` the console tag, `stop` the shutdown
+    Event a `--probe` thread is handed, and `rec` the capture recorder.
+    They are the ONLY names this body took from that frame (audited over
+    the whole 895 lines, not sampled); everything else it reads is module
+    scope, which resolves identically from here.
+
+    Nothing it binds escapes, either -- `cfg` and `pos` are the only two
+    read again further down `handle()`, and the REQUEST_SPAWN arm that
+    reads them assigns both from scratch first.
+    """
+    # A balanced empty block: no other players in the
+    # instance, but the client still needs the brackets.
+    send(GAME_SMSG_INSTANCE_PLAYER_DATA_START, [],
+         "PLAYER_DATA_START(players)")
+    send(GAME_SMSG_INSTANCE_PLAYER_DATA_DONE, [],
+         "PLAYER_DATA_DONE(players)")
+
+    cfg = MAP_STATIC_CONFIG.get(
+        state["map_id"], MAP_STATIC_CONFIG[FALLBACK_MAP_ID])
+    pos = cfg[1]
+
+    send(GAME_SMSG_INSTANCE_LOADED, [PLAYER_TEAM_TOKEN],
+         "INSTANCE_LOADED")
+    send(GAME_SMSG_WORLD_UPDATE_LOAD_TIME, [0],
+         "WORLD_UPDATE_LOAD_TIME")
+    send(GAME_SMSG_PLAYER_INFO,
+         [PLAYER_NUMBER, PLAYER_AGENT_ID, appearance_for(SPAWN_PROFESSION),
+          0, 0, 0, TEST_CHAR_NAME], "PLAYER_CREATE")
+    # The party of one. Both write the per-PLAYER array at
+    # ChCliApi ctx+0x80C (stride 0x50) that PLAYER_CREATE
+    # just made, and touch no agent -- so they belong here
+    # rather than after the agent create.
+    #
+    # SIZE THEN LEADER, and the order is the measured part:
+    # 0x00B0 fires no event for a fresh entry while 0x00B1
+    # fires only on a LEADER CHANGE, so leader-first makes
+    # the change a no-op against the default and nothing is
+    # notified.
+    _party_size = 1 if HENCHMAN is None else 2
+    send(GAME_SMSG_PLAYER_PARTY_SIZE,
+         agents.player_party_size(PLAYER_NUMBER,
+                                  _party_size),
+         f"PLAYER_PARTY_SIZE({_party_size})")
+    send(GAME_SMSG_PLAYER_SET_PARTY,
+         agents.player_set_party(PLAYER_NUMBER, PLAYER_NUMBER),
+         "PLAYER_SET_PARTY(self is leader)")
+    # ...and the party the WINDOW needs, which is a
+    # different structure entirely. RESKIN.md 17: the
+    # window's gate is PyCliGetMyPartyId (0x00856250)
+    # reading the party manager's own vector, not the
+    # per-player array above -- so P was discarded by the
+    # key router before its arm ever ran. Retail's own
+    # four-message sequence, in retail's own position,
+    # 8 of 8 live connections.
+    # The roster row rides INSIDE that window when
+    # --henchman is set (studies/heroes/FINDINGS.md 7.1).
+    # No world body: this deliberately isolates the roster
+    # question from the agent question, because if the row
+    # draws with no agent behind it then PtRoster:602's
+    # frame lookup by agentId is not a precondition, and if
+    # it does not, adding the body is the next arm rather
+    # than a confound already baked in.
+    # COLLECTED, not sent, so the whole roster sequence can
+    # be flushed here (the default) or held for
+    # --hero-late N. studies/heroes/FINDINGS.md 34.4: the
+    # commander event is raised into an empty subscriber
+    # slot, and eight events were measured CHANGING
+    # subscriber state mid-session, so "our 0x01C2 arrives
+    # before the commander UI subscribes" is a live
+    # hypothesis. The precedent is in this same handler --
+    # UI_OVERLAY_FLAGS is sent after the load for exactly
+    # this reason, "a byte that arrives before the UI exists
+    # sets a bit nothing is left to read".
+    _seq = []
+    _inside = ()
+    if HENCHMAN is not None:
+        _hench = agents.npc_template(HENCHMAN)
+        # THE DISCRIMINATOR. With the defaults, 0x01BF and
+        # the body's 0x0056 carry the SAME name/prof/level,
+        # so a rendered row cannot say which one it read --
+        # a confound, not a result. These three override
+        # the WIRE side only, leaving the body alone, so
+        # the row's own text names its source field by
+        # field. studies/heroes/FINDINGS.md §7.1.
+        _wname = (agents.npc_template(HENCHMAN_WIRE_NAME)
+                  ["enc_name"] if HENCHMAN_WIRE_NAME
+                  else _hench["enc_name"])
+        _inside = (agents.party_henchman_add(
+            1, HENCHMAN_AGENT_ID, _wname,
+            _hench["profession"] if HENCHMAN_WIRE_PROF
+            is None else HENCHMAN_WIRE_PROF,
+            _hench["level"] if HENCHMAN_WIRE_LEVEL
+            is None else HENCHMAN_WIRE_LEVEL),)
+    if HERO is not None:
+        # 0x0074 goes BEFORE the build window, by analogy
+        # with 0x0056-before-0x0020: its worker looks up OR
+        # CREATES the per-hero record in the local player's
+        # context (+0x584), so it is the only candidate we
+        # have for the thing 0x0072's gate wants to exist.
+        # An ordering hypothesis, stated as one.
+        _hb = HERO_BYTES or (0, 0, 0)
+        _iname = (agents.npc_template(HERO_INFO_NAME)
+                  ["enc_name"] if HERO_INFO_NAME else "")
+        for _hid, _haid, _hdef in hero_slots():
+            if HERO_INFO:
+                # BACK IN THE DEFERRED UNIT. 35.6b tried it
+                # inline and the assert survived, so the
+                # 0x0074-vs-0x0072 inversion was real and was
+                # not the cause. What --hero-late must move is
+                # the WHOLE hero pipeline as one unit --
+                # 0x0074, the party build, the body, the
+                # attribute pair, the skill bar and 0x0072 --
+                # preserving their relative order and changing
+                # only the absolute time. Splitting the
+                # pipeline across the load boundary is what
+                # kept asserting, in both directions.
+                _hap = HERO_APPEARANCE or (0, 0)
+                _seq.append(agents.mercenary_info(
+                    _hid, b1=_hb[0], b2=_hb[1], b3=_hb[2],
+                    d1=_hap[0], d2=_hap[1],
+                    d3=HERO_FLAG, chunk=HERO_CHUNK,
+                    enc_name=_iname))
+        # What 0x01C2's identity words mean, four rounds
+        # of arms later (studies/heroes/FINDINGS.md 11.1
+        # -> 17.3 -> 18 -> 21; 19 for msg+0x10):
+        #   msg+8    -> entry+0x4 : the OWNER PLAYER
+        #               NUMBER -- OBSERVED (21): with
+        #               --player-number 2 splitting the
+        #               candidates, the roster row renders
+        #               exactly when this equals the
+        #               declared player number. Nuance
+        #               (21.2): the commander scan compares
+        #               the same field against a DIFFERENT
+        #               "my id" (ctx[0x44][0x2ac]) -- the
+        #               arm that renders the row loses the
+        #               commander binding.
+        #   msg+0xc  -> entry+0x0 : the AGENT ID -- solid,
+        #               the one word H1/H2 actually settled
+        #               (200 rendered only here).
+        #   msg+0x10 -> entry+0x8 : read by the commander
+        #               scan as its key (SOURCED) but inert
+        #               on everything observable (19.2);
+        #               0x01C2 carries NO hero identity
+        #               (19) -- we send the hero id as the
+        #               best guess.
+        # --hero-swap still exchanges the two words; it was
+        # the arm that (with player number == hero id == 1)
+        # could not tell owner from hero index apart.
+            # The experiment flags below apply to the
+            # FIRST hero only; with several in the party the
+            # rest carry the corrected values, so a probe arm
+            # never silently rewrites the whole roster.
+            _first = _haid == HERO_AGENT_ID
+            _wa = (PLAYER_NUMBER
+                   if HERO_OWNER is None or not _first
+                   else HERO_OWNER)
+            _wb = _haid
+            if HERO_SWAP and _first:
+                _wa, _wb = _wb, _wa
+            _inside = _inside + (agents.party_hero_add(
+                1, _wa, _wb,
+                HERO_ROSTER_ID if (HERO_ROSTER_ID
+                                   is not None and _first)
+                else _hid,
+                HERO_MSG14),)
+    _after = ()
+    if HERO_BUST_CACHE and _inside:
+        # Warm the cache with party 2, then let the hero-add
+        # to party 1 miss it. Party 1's build is committed by
+        # then, so PyCliParty:1228 (a second begin with a
+        # build OPEN) is not in play.
+        _after = ((0x01D2, [2], "PARTY_BUILD_BEGIN(2) "
+                   "[cache-buster]"),) + _inside
+        _inside = ()
+    elif HERO_POST_COMMIT:
+        _after, _inside = _inside, ()
+    # THE ORDERING ARM. HeroActivate normally goes LAST;
+    # here it goes ahead of the party build, because case
+    # 93 -- which 0x01C2 raises synchronously -- asks the
+    # agent-keyed activation array who this hero is, and
+    # that array's only writer is 0x0072. See
+    # HERO_ACTIVATE_FIRST's comment for the refuted
+    # prediction that opened this.
+    if HERO_ACTIVATE and HERO_ACTIVATE_FIRST:
+        for _hid, _haid, _hdef in hero_slots():
+            _seq.append(agents.hero_activate(
+                HERO_ACTIVATE_ID
+                if (HERO_ACTIVATE_ID is not None
+                    and _haid == HERO_AGENT_ID) else _hid,
+                _haid, HERO_INVENTORY, HERO_AI_MODE))
+    # THE PARTY BUILD, and under HERO_PIPELINE_FIRST it is
+    # DEFERRED past the pipeline below instead of leading
+    # it -- constraint (3) of the squeeze recorded at
+    # HERO_PIPELINE_FIRST. Held as a tuple and emitted
+    # through `hsend` so BOTH rigs stay correct: inline it
+    # sends after the pipeline's own inline sends, and
+    # under --hero-late it appends after the pipeline's
+    # appends. Same order either way, which is the whole
+    # point of routing it through the same door.
+    _party = tuple(agents.party_build(
+        1, PLAYER_NUMBER, inside_window=_inside)) + _after
+    _party_deferred = ()
+    if HERO_PIPELINE_FIRST:
+        _party_deferred = _party
+    else:
+        _seq.extend(_party)
+    # THE ROUTER for everything downstream. `hsend` is the
+    # hero pipeline's `send`: inline normally, appended to the
+    # held sequence under --hero-late. It exists so the body,
+    # attributes, skill bar and HeroActivate below travel WITH
+    # the roster binding instead of being split from it.
+    def hsend(op, vals, label=None, _q=_seq):
+        if HERO_LATE is None:
+            send(op, vals, label)
+        else:
+            _q.append((op, vals, label))
+    if HERO_LATE is None:
+        for op, vals, label in _seq:
+            send(op, vals, label)
+    else:
+        # Held for the world tick. The DUE time is stamped
+        # at INSTANCE_LOAD_FINISH rather than here, so the
+        # delay is measured from the load completing and not
+        # from the middle of it.
+        state["hero_late_seq"] = _seq
+        print(f"[c{conn_id}] HERO-LATE: holding "
+              f"{len(_seq)} roster message(s) until "
+              f"{HERO_LATE:.1f}s after INSTANCE_LOAD_FINISH",
+              flush=True)
+    # ...and the player-record flag word, in retail's own
+    # position: BEFORE the agent create, 423 sends over 12 of
+    # 12 live connections, all inside the instance load. OFF by
+    # default because it is being measured -- the control arm is
+    # this server's behaviour up to now, so a default-on flag
+    # would leave nothing to diff against. RESKIN.md 18.8 sent
+    # it LATE and measured a clean null; the open question this
+    # answers is whether bits read once at BUILD time differ.
+    if PLAYER_FLAGS is not None:
+        send(GAME_SMSG_PLAYER_FLAGS,
+             agents.player_flags(PLAYER_NUMBER, PLAYER_FLAGS),
+             f"PLAYER_FLAGS(value {PLAYER_FLAGS}, mask 7)")
+    # The create's preamble, retail's kind-5 idiom
+    # (createburst census, 344/366 in the two dominant
+    # templates): the per-AGENT level rides prop 36 before
+    # the body exists, then 0x00F0, then the create. The
+    # level was never sent per-agent at all until
+    # 2026-08-17 -- the roster's W0 was its absence
+    # rendered (RESKIN 18.4), while 0x00E9 field 9 below
+    # only feeds the per-PLAYER top-left bar; the two
+    # channels are confirmed distinct in the same frame.
+    # Retail also sends 009F:30 (ApplyGuild1) here; we
+    # have no guild id and do not invent one.
+    # --persist: the character sheet comes from the store,
+    # found by the uuid the client's version frame named
+    # (§6 item 3). Row absent is loud-but-not-fatal: this
+    # burst then serves the defaults it always served. A
+    # store that fails VALIDATION propagates instead --
+    # a broken file must not quietly cost its characters.
+    _ps_row, _ps_acct = None, None
+    if PERSIST:
+        _ps_store, _ps_row = charstore.find_character(
+            state.get("char_uuid", ""))
+        if _ps_row is None:
+            print(f"[c{conn_id}] PERSIST: no store row "
+                  f"for character "
+                  f"{state.get('char_uuid', '?')}; "
+                  f"sheet stays default", flush=True)
+        else:
+            _ps_acct = _ps_store.account()
+            # Cached for the kill path: accrual must not
+            # re-scan the store directory every swing.
+            state["charstore_game"] = _ps_store
+            print(f"[c{conn_id}] PERSIST: sheet from "
+                  f"{_ps_store.path}", flush=True)
+    _ps_level = (_ps_row or {}).get("level", START_LEVEL)
+    # ...and in the state, because morale needs it: the
+    # penalty scales BASE health, which is 100 + 20 per
+    # level and nothing else. It used to live only in this
+    # local, so a death path four thousand lines away had
+    # no way to ask how big the character was.
+    state["level"] = _ps_level
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+         [agents.PROP_LEVEL, PLAYER_AGENT_ID, _ps_level],
+         f"level {_ps_level} on the player's AGENT")
+    # 0x00F0 precedes every kind-5 create, 130/130 in the
+    # smsg corpus -- "immediately" ONLY once the clock
+    # stamp is removed, and that qualifier is load-bearing:
+    # measured over all five keyed captures 2026-08-17,
+    # 1131/1131 kind-5/9 creates have their own 0x00F0
+    # either directly before (567) or one
+    # WORLD_SIMULATION_TICK before (564), never further and
+    # never absent. Sending it directly before, as here, is
+    # what retail does half the time and is inside the
+    # measured envelope. The player burst sent
+    # NOTHING here until 2026-08-17 (divergence D2's
+    # player-side 0/N, connected in unitsetup 6d). Payload
+    # 0 is the measured kind-5 majority -- 342/366 in the
+    # createburst census; the 24 non-zero (0x2000 and the
+    # high-word combat values) are a payload MODEL nobody
+    # has yet, not a default.
+    send(GAME_SMSG_AGENT_INITIAL_STATUS,
+         [PLAYER_AGENT_ID, 0],
+         "AGENT_INITIAL_EFFECTS(player, 0x0000)")
+    # Field names carrying hex offsets (h000B, h001E, h0023,
+    # h0027, h003B, h004B, h0059) let the 23 schema fields be
+    # aligned to the struct by offset rather than by counting:
+    # each named constant below lands exactly on its offset,
+    # and the total closes at 0x63 = the declared 99 bytes.
+    send(GAME_SMSG_WORLD_CREATE_AGENT,
+         [PLAYER_AGENT_ID,   # agent_id
+          CHAR_CLASS_PLAYER_BASE | PLAYER_NUMBER,
+          AGENT_TYPE_LIVING,
+          5,                 # h000B
+          pos,               # position
+          cfg[2],            # plane
+          (1.0, 0.0),        # direction
+          1,                 # h001E
+          DEFAULT_RUN_SPEED, # speed_base
+          1.0,               # h0023
+          0x41400000,        # h0027
+          PLAYER_TEAM_TOKEN,
+          0, 0, 0, 0, 0,     # h003B and neighbours
+          (0.0, 0.0),
+          (INF, INF),        # h004B
+          0, 0,
+          (INF, INF),        # h0059
+          0],
+         "WORLD_CREATE_AGENT")
+    # Attribute state must exist BEFORE the profession
+    # update lands. Sending profession alone killed the
+    # client on
+    #   Assertion: attribState
+    #   P:\\Code\\Gw\\Char\\Cli\\ChCliAttrib.cpp(435)
+    # with 0xb7 -- this message -- named in the stack trace.
+    # Upstream's SendSkillsAndAttributes sends the points
+    # first and the profession second, in that order.
+    # (available, total) -- NOT one constant twice. The
+    # two fields were CONTESTED until 2026-08-19; 0x0037's
+    # creator writes field 3 to attribState+0x434
+    # (attribPointsAvail) and field 4 to +0x438, the
+    # lifetime total (studies/pvpui 32.5). Sending the same
+    # number for both told the client every point was
+    # unspent while handing it ranks that had cost some.
+    _attrst = attribute_state(state)
+    send(GAME_SMSG_AGENT_UPDATE_ATTRIBUTE_POINTS,
+         [PLAYER_AGENT_ID, _attrst.available,
+          _attrst.points_total],
+         f"AGENT_ATTRIBUTE_POINTS({_attrst.available} "
+         f"of {_attrst.points_total})")
+    send(GAME_SMSG_AGENT_PROFESSIONS,
+         spawn_profession_values(),
+         f"AGENT_PROFESSIONS(prof {SPAWN_PROFESSION})")
+    # ...and the AGENT-side pair, which we had never sent
+    # for the player's own agent -- only for NPCs.
+    #
+    # 0x00B7 writes the per-PLAYER record the Skills panel
+    # displays from; 0x00A6's setter 0x007F7330 is the SOLE
+    # write path to the AGENT's own profession bytes at
+    # +0x10E/+0x10F (one caller, reached only from this
+    # opcode). The party/roster label builder reads the
+    # agent, not the player record, so without this the
+    # profession ABBREVIATION has nothing to draw from --
+    # which is why it has never appeared in any session.
+    # studies/profession/RESKIN.md s14.
+    send(GAME_SMSG_AGENT_SET_PROFESSION,
+         agents.agent_set_profession(
+             PLAYER_AGENT_ID, SPAWN_PROFESSION, 0,
+             custom=SPAWN_PROFESSION
+             > agents.CHAR_PROFESSIONS - 1),
+         f"AGENT_SET_PROFESSION(player, {SPAWN_PROFESSION})")
+    # STRICTLY AFTER the 0x00B7 above, which CREATES the
+    # per-agent record 0x00B6 writes into. Reversed, the
+    # client drops it with no error (RUNS.md §13).
+    if SECONDARY_BITS:
+        send(GAME_SMSG_AGENT_PROFESSION_BITS,
+             agents.agent_set_secondary_bits(
+                 PLAYER_AGENT_ID, SECONDARY_BITS),
+             f"AGENT_PROFESSION_BITS"
+             f"(0x{SECONDARY_BITS:04X})")
+    # The skill block. Upstream's SendSkillsAndAttributes
+    # sends the bar (218) BEFORE the unlock list (219); we
+    # send the unlocks first, deliberately. Upstream never
+    # puts a real id on a bar -- it sends eight zeros -- so
+    # its ordering is not evidence about a POPULATED bar,
+    # and if the client gates drawing on unlock state then
+    # having that state already in hand is the ordering that
+    # can work. If the bar draws, try upstream's order too:
+    # a difference there is a real finding either way.
+    send(GAME_SMSG_PVP_UPDATE_UNLOCKED_SKILLS, [UNLOCKED],
+         f"PVP_UPDATE_UNLOCKED_SKILLS({UNLOCK_LABEL})")
+    send(GAME_SMSG_UPDATE_UNLOCKED_SKILLS, [UNLOCKED],
+         f"UPDATE_UNLOCKED_SKILLS({UNLOCK_LABEL})")
+    skills = list(SKILLBAR)[:SKILLBAR_SLOTS]
+    skills += [0] * (SKILLBAR_SLOTS - len(skills))
+    send(GAME_SMSG_SKILLBAR_UPDATE,
+         [PLAYER_AGENT_ID, skills, SKILLBAR_PVP_MASKS,
+          SKILLBAR_TRAILER],
+         f"SKILLBAR_UPDATE{skills}")
+    # Why the character used to read Level 0: we never sent
+    # this at all. Every other field stays zero -- only
+    # field 9's effect has actually been observed, and
+    # filling the rest with plausible numbers would be
+    # exactly the invention this project keeps having to
+    # walk back.
+    player_attrs = [0] * PLAYER_ATTR_COUNT
+    player_attrs[PLAYER_ATTR_LEVEL] = _ps_level
+    # ...and field 10 stopped being one of the zeros on
+    # 2026-08-20. Retail carries 100 here in 43 of 43
+    # sightings across the whole live corpus, on level-1
+    # and level-20 characters alike, and 0 is not a legal
+    # morale at all -- the range is 40 to 110. Sending a
+    # zero was not the cautious choice it looked like; it
+    # was a value the game never sends, in a field whose
+    # own probe once read the illegal "-100%" back.
+    player_attrs[PLAYER_ATTR_MORALE] = player_morale(state)
+    if _ps_row is not None:
+        player_attrs[PLAYER_ATTR_XP] = _ps_row["xp"]
+        player_attrs[13] = _ps_row["skill_points"]
+    if _ps_acct is not None:
+        # Field indices measured by attr_legend and the
+        # faction_max run: 1/3/5/11 are the four currents.
+        _fxr = _ps_acct["factions"]
+        for _fac, _cur_f, _tot_f in (
+                ("kurzick", 1, 2), ("luxon", 3, 4),
+                ("imperial", 5, 6), ("balthazar", 11, 12)):
+            if _fac in _fxr:
+                player_attrs[_cur_f] = \
+                    _fxr[_fac]["current"]
+                # Fields 2/4/6/12 are total-earned --
+                # the pair that moves with current in
+                # every retail sighting (STORAGE.md §2).
+                player_attrs[_tot_f] = \
+                    _fxr[_fac].get("total", 0)
+    send(GAME_SMSG_CHARACTER_UPDATE_FACTIONS, player_attrs,
+         f"CHARACTER_UPDATE_FACTIONS(level {_ps_level})")
+    if _ps_acct is not None and _ps_acct["factions"]:
+        # The caps have their own messages -- OBSERVED
+        # end to end 2026-08-18 (RUNS.md §Run 1): filled
+        # denominators, mapping as named, updatable
+        # mid-session.
+        _fx = _ps_acct["factions"]
+        for _op, _fac in (
+            (GAME_SMSG_CHARACTER_FACTION_MAX_KURZICK,
+             "kurzick"),
+            (GAME_SMSG_CHARACTER_FACTION_MAX_LUXON,
+             "luxon"),
+            (GAME_SMSG_CHARACTER_FACTION_MAX_BALTHAZAR,
+             "balthazar"),
+            (GAME_SMSG_CHARACTER_FACTION_MAX_IMPERIAL,
+             "imperial"),
+        ):
+            if _fac in _fx:
+                send(_op, [_fx[_fac]["max"]],
+                     f"FACTION_MAX({_fac} "
+                     f"{_fx[_fac]['max']})")
+    if _ps_acct is not None and _ps_acct["titles"]:
+        # Ranks strictly before the tracks that reference
+        # them -- the render-time Array.h(587) rule the
+        # store also enforces at load. Strings ride
+        # template framing within the field's admissible
+        # 7 units (charstore.MAX_NAME_CHARS).
+        _rk = _ps_acct["title_ranks"]
+        for _rid in sorted(_rk, key=int):
+            send(GAME_SMSG_TITLE_RANK_DATA,
+                 [int(_rid), _rk[_rid].get("flags", 1),
+                  _rk[_rid]["value"],
+                  questdefs.coded_literal(
+                      _rk[_rid]["name"], limit=7)],
+                 f"TITLE_RANK_DATA({_rid} "
+                 f"{_rk[_rid]['name']!r})")
+        for _tid in sorted(_ps_acct["titles"], key=int):
+            _t = _ps_acct["titles"][_tid]
+            _cr = _rk[str(_t["current_rank"])]
+            _nr = _rk[str(_t["next_rank"])]
+            send(GAME_SMSG_TITLE_TRACK_INFO,
+                 [int(_tid), _t.get("flags", 0),
+                  _t["points"],
+                  _t["current_rank"], _cr["value"], 0,
+                  _t["next_rank"], _nr["value"],
+                  _t.get("rank_count", len(_rk)),
+                  _t["max_rank"],
+                  questdefs.coded_literal("Pts", limit=7),
+                  questdefs.coded_literal(_cr["name"],
+                                          limit=7)],
+                 f"TITLE_TRACK_INFO(title {_tid}, "
+                 f"{_t['points']} pts)")
+    # REAL RANKS since 2026-08-15. This was
+    # `[0] * ATTRIBUTE_COUNT` -- fourteen writes of rank 0
+    # to attribute 0, which the client accepted in silence
+    # because every value was 0 and the layout could not
+    # show. COLUMN-MAJOR since 2026-08-15 as well, and the
+    # day between the two cost every session a modal
+    # assert box: see attribute_columns.
+    # From the LIVE state, not the content row: a spend
+    # this connection already made must survive a map
+    # change, and attribute_state() seeds itself from the
+    # same content row on first use anyway.
+    # ONE source: attribute_state already resolved the
+    # store-over-content question when it was built.
+    _ranks = sorted(attribute_state(state).ranks.items())
+    columns = attribute_columns(
+        _ranks, attribute_state(state).bonuses)
+    send(GAME_SMSG_AGENT_UPDATE_ATTRIBUTES,
+         [PLAYER_AGENT_ID, columns],
+         f"AGENT_UPDATE_ATTRIBUTES"
+         f"({len(columns) // 3} attributes: "
+         + ", ".join(f"{a}={r}" for a, r in _ranks)
+         + ")")
+    # The player's own pools, which we had never sent. See
+    # agents.py: the enemy got a health pool the day it was
+    # spawned and the player never got one, so every skill
+    # on the bar was unaffordable. Order and values follow
+    # gw-preservation's sendPlayerAttributes, which is a
+    # server the real client accepts.
+    # MORALE FIRST, because the two pools below are computed
+    # from it. Retail sends this at login too -- `0x009C
+    # [player, 100]` at t=0.897 of the death capture, before
+    # its own pool burst -- and we never did, which is what
+    # "we set morale to 100" used to mean: nothing on the
+    # wire and a zero in the attribute set.
+    player_pools(state)
+    send(GAME_SMSG_AGENT_MORALE,
+         [PLAYER_AGENT_ID, player_morale(state)],
+         f"morale {morale.display(player_morale(state))} "
+         f"on the player")
+    _energy_max = player_max_energy(state)
+    _health_max = int(player_max_health(state))
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+         [agents.PROP_ENERGY_MAX, PLAYER_AGENT_ID,
+          _energy_max],
+         f"PLAYER energy = {_energy_max}")
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+         [agents.PROP_HEALTH_MAX, PLAYER_AGENT_ID,
+          _health_max],
+         f"PLAYER health = {_health_max}")
+    # The value field is a dword carrying IEEE float bits,
+    # same as the damage path above. The purpose is no
+    # longer unknown -- energy regeneration as a fraction
+    # of the pool per second (agents.PROP_ENERGY_REGEN),
+    # rescaled if morale has moved the pool. AND THE
+    # CHANNEL IS MEASURED: all 52 corpus property-43s ride
+    # 0x00A2, the NO-TARGET float twin -- zero ride 0x00A3
+    # (studies/skills section 23) -- so this send is off
+    # the WITH-target form both arcs inherited from
+    # gw-preservation's sendPlayerAttributes. The constant
+    # decomposes as f32(0.33) * 3 pips / 25 max, the
+    # ranger armour row (merge of the energy and morale
+    # arcs, 2026-08-20 -- each had one half).
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
+         [agents.PROP_ENERGY_REGEN, PLAYER_AGENT_ID,
+          _f32(morale.regen_fraction(
+              agents.PLAYER_FLOAT_43,
+              agents.PLAYER_ENERGY, _energy_max))],
+         f"PLAYER energy regeneration "
+         f"({agents.PLAYER_FLOAT_43 * agents.PLAYER_ENERGY:.2f}"
+         f"/s over a {_energy_max} pool)")
+    # Putting the weapon on the BODY is a different question
+    # from putting it in the weapon-set UI, and we had only
+    # done the latter. Upstream sources this message from the
+    # equipped-items bag, not from the weapon set
+    # (GmAgent.c:200-218), and slot 0 of that bag is the
+    # weapon -- so position 0 here is the weapon item id.
+    #
+    # Sending 0x006E with NO bag behind it is deliberate: it
+    # is exactly the experiment studies/character/FINDINGS.md
+    # left open ("Try 353 + 110 with no bag, then add 319 and
+    # 318, and see which is the minimum that draws"), and it
+    # is the smallest change that can answer it.
+    #
+    # Position order is MEASURED as of 2026-08-17, and the
+    # "2 lineages against 1" this comment used to cite was
+    # backing the WRONG one. Retail's own wire settles it:
+    # seven 0x006F per-slot writes in the Shing Jea capture,
+    # each preceded by the 0x015E declaring its item, give
+    #   2 Body, 3 BOOTS, 4 LEGS, 5 GLOVES, 6 HEAD
+    # -- GWLP-R's permuted reading, refuting the bag order
+    # ldufr and GWCA share (they agree because they make the
+    # same assumption: one witness counted twice).
+    # studies/newopcodes/FINDINGS.md 0x006F.
+    # Positions 1..8 are all zero here, so this send never
+    # depended on the dispute; anything that DRESSES a body
+    # must use the measured order above.
+    if (EQUIP_WEAPON or EQUIP_ARMOUR or EQUIP_COSTUME
+            or EQUIP_COSTUME_HEAD):
+        worn = [0] * VISUAL_EQUIPMENT_SLOTS
+        if EQUIP_WEAPON:
+            worn[0] = WEAPON_ITEM_ID
+        if EQUIP_ARMOUR:
+            for item_id, _key, slot in STARTER_ARMOUR:
+                worn[slot] = item_id
+        if EQUIP_COSTUME_HEAD:
+            worn[COSTUME_HEAD_SLOT] = COSTUME_HEAD_ITEM_ID
+        if EQUIP_COSTUME:
+            # Slot 7, the costume BODY cell. The whole
+            # point is that this slot is not additive:
+            # studies/playercomposite 9.2 read an override
+            # array at CpsBase+0xD8 that REPLACES the
+            # armour slots' cached rows at build time, so
+            # wearing this should change what the ARMOUR
+            # components draw rather than adding a piece.
+            worn[COSTUME_SLOT] = COSTUME_ITEM_ID
+        send(GAME_SMSG_UPDATE_AGENT_VISUAL_EQUIPMENT,
+             [PLAYER_AGENT_ID] + worn,
+             "UPDATE_AGENT_VISUAL_EQUIPMENT("
+             + ("weapon" if EQUIP_WEAPON else "")
+             + ("+armour" if EQUIP_ARMOUR else "") + ")")
+        # ArenaNet sends this after EVERY 0x006E, 366 of
+        # 366 across both live captures. Zero because we
+        # have never populated a guild id, and 0 is what
+        # makes the client skip the lookup rather than
+        # resolve one that does not exist.
+        send(GAME_SMSG_AGENT_SET_TABARD_VISIBLE,
+             agents.agent_set_tabard_visible(
+                 PLAYER_AGENT_ID, False),
+             "AGENT_SET_TABARD_VISIBLE(player, 0)")
+        # And separately, what the agent WIELDS.
+        #
+        # These are ITEM IDS, not weapon types, and the
+        # client said so itself. Sending weapon type 3 here
+        # -- on the theory that this message sets
+        # AgentLiving::weapon_type at +h01B2 -- took the
+        # client down on
+        #     Assertion: ptr
+        #     P:\Code\Gw\Item\Cli\ItCliApi.cpp(400)
+        # with `baseItem` in the strings beside it. It
+        # looked 3 up in the item table, got null and died.
+        # OBSERVED, 2026-08-06. The client presumably
+        # derives weapon_type from the item's own
+        # ItemType, the same way it derives the mesh from
+        # file_id.
+        send(GAME_SMSG_NPC_UPDATE_WEAPONS,
+             [PLAYER_AGENT_ID, WEAPON_ITEM_ID, 0],
+             "NPC_UPDATE_WEAPONS(leadhand = item "
+             f"{WEAPON_ITEM_ID})")
+        # And how fast that weapon swings, which the client
+        # does NOT work out from any of the four messages
+        # above. Its AvChar is constructed with an attack
+        # speed of 0.0 and exactly one thing in the image
+        # ever changes it: this message. Until it arrives,
+        # telling the client to start a swing asserts
+        # m_attackInterval and takes it down -- which is
+        # what every session before this one did.
+        send_attack_speed(send, PLAYER_AGENT_ID,
+                          WEAPON_ATTACK_SPEED, "player")
+    # unk0 is a literal 3 upstream (GmAgent.c:246).
+    send(GAME_SMSG_WORLD_UPDATE_CONTROLLED_AGENT,
+         [PLAYER_AGENT_ID, 3], "UPDATE_CONTROLLED_AGENT")
+    # Upstream sends this at the END of REQUEST_PLAYERS, not
+    # after spawn where we had it.
+    send(GAME_SMSG_INSTANCE_LOAD_FINISH, [],
+         "INSTANCE_LOAD_FINISH")
+    if state.get("hero_late_seq"):
+        state["hero_late_due"] = (time.perf_counter()
+                                  + HERO_LATE)
+    if PARTY_MINE_LATE is not None:
+        state["party_mine_late_due"] = (time.perf_counter()
+                                        + PARTY_MINE_LATE)
+    if NETGRAPH_FLAGS is not None:
+        # AFTER the load, not before: the widget this
+        # unlocks is built by a routine that reads the flag
+        # at construction time, so a byte that arrives
+        # before the UI exists sets a bit nothing is left
+        # to read. Sent once -- the handler is idempotent
+        # and re-sending would only re-clear the two bits
+        # we do not understand.
+        send(GAME_SMSG_UI_OVERLAY_FLAGS, [NETGRAPH_FLAGS],
+             f"UI_OVERLAY_FLAGS(0x{NETGRAPH_FLAGS:02x}"
+             + (", netgraph latency"
+                if NETGRAPH_FLAGS
+                & UI_OVERLAY_FLAG_NETGRAPH_LATENCY
+                else "") + ")")
+    # An AREA brings its own population and replaces the
+    # single global enemy outright. Both would be wrong:
+    # the global one is placed by offset from the player,
+    # so it would appear in the middle of an authored zone
+    # that has its own idea of what stands where.
+    if AREA_NAME:
+        spawn_population(send, state,
+                         (pos[0], pos[1], cfg[2]), conn_id)
+    elif SPAWN_ENEMY:
+        spawn_enemy(send, state,
+                    (pos[0], pos[1], cfg[2]), conn_id)
+    # The henchman's BODY, at the id its roster row names.
+    # Arm two of the staged demo: arm one sent 0x01BF with
+    # no body and MEASURED that the row draws anyway --
+    # standalone, so PtRoster:602's frame lookup is not a
+    # precondition for the row existing -- but the row came
+    # up "Lvl 255 ..." with no name. This arm asks whether
+    # the CONTENT is what needs the agent. ~150 units out,
+    # because a body at the spawn point reads as "nothing
+    # appeared" (studies/enemy/PLAN.md's probe distance).
+    if HENCHMAN is not None and HENCHMAN_BODY:
+        _hn = agents.npc_template(HENCHMAN)
+        _hx, _hy = pos[0] + 150.0, pos[1]
+        create_agent_world(
+            send, state, HENCHMAN_AGENT_ID,
+            {"pos": (_hx, _hy), "plane": cfg[2],
+             "health": 100.0, "max_health": 100.0,
+             "dead": False, "name": _hn["name"],
+             "npc": _hn,
+             "definition": HENCHMAN_DEFINITION,
+             "allegiance": agents.ALLEGIANCE_PLAYER,
+             "effects": 0,
+             # create_agent_world reads these; leaving one
+             # out killed the WORLD TICK THREAD, and the
+             # client's Code=007 named it "connection
+             # lost" -- our crash, not its refusal.
+             "attack_speed": ENEMY_ATTACK_SPEED,
+             "resend_definition": True,
+             "attacks_back": False,
+             "skills": [], "skill_ready": []},
+            "henchman body", conn_id=conn_id)
+    # The hero AGENT's displayed level, prop 36 on 0x009F.
+    # Retail's kind-5 idiom rides it BEFORE the create when
+    # there is one (createburst, 344/366), and the channel
+    # is a per-agent store that needs no create at all --
+    # the henchman_level probe moves it on a bodiless
+    # agent. The panel title's "Lvl 255" is this message's
+    # ABSENCE rendered, not a missing body (pvpui 28.3).
+    for _hid, _haid, _hdef in (hero_slots()
+                               if HERO_LEVEL is not None
+                               else ()):
+        hsend(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+              [agents.PROP_LEVEL, _haid, HERO_LEVEL],
+              f"level {HERO_LEVEL} on hero agent {_haid}")
+    for _hid, _haid, _hdef in (hero_slots()
+                               if HERO_VITALS is not None
+                               else ()):
+        hsend(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+              [agents.PROP_HEALTH_MAX, _haid,
+               HERO_VITALS[0]],
+              f"health max {HERO_VITALS[0]} on hero "
+              f"agent {_haid}")
+        hsend(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+              [agents.PROP_ENERGY_MAX, _haid,
+               HERO_VITALS[1]],
+              f"energy max {HERO_VITALS[1]} on hero "
+              f"agent {_haid}")
+    # The hero's body, at HERO_AGENT_ID. MANDATORY for the
+    # commander binding rather than optional like the
+    # henchman's: GmHeroCommander:120/121 assert a
+    # resolvable heroData AND a non-zero heroData->agentId
+    # before a slot binds. The henchman arm also measured
+    # that the roster row reads the AGENT for its name,
+    # profession and level, so a bodiless hero row would be
+    # expected to render as empty as the henchman's did.
+    for _i, (_hid, _haid, _hdef) in (
+            enumerate(hero_slots()) if HERO_BODY else ()):
+        _hro = agents.npc_template(HERO_BODY_NPC)
+        # Fan them out rather than stacking: bodies sharing a
+        # spot read as one body, and "nothing appeared" is the
+        # failure this repo already paid for once.
+        _rx = pos[0] + HERO_BODY_OFFSET[0]
+        _ry = pos[1] + HERO_BODY_OFFSET[1] * _i
+        create_agent_world(
+            hsend, state, _haid,
+            {"pos": (_rx, _ry), "plane": cfg[2],
+             "health": 100.0, "max_health": 100.0,
+             "dead": False, "name": _hro["name"],
+             "npc": _hro,
+             "definition": _hdef,
+             "allegiance": agents.ALLEGIANCE_PLAYER,
+             "effects": 0,
+             "attack_speed": ENEMY_ATTACK_SPEED,
+             "resend_definition": True,
+             "attacks_back": False,
+             "skills": [], "skill_ready": []},
+            f"hero body (hero {_hid})", conn_id=conn_id)
+    # THE HERO'S ATTRIBUTE STATE, and it is not a new
+    # mechanism -- it is the pair the PLAYER's own agent
+    # already gets, addressed to the hero's agent instead.
+    # 0x0037 is what CREATES the attribState record
+    # (handler 0x0091D8C0 -> 0x0080EAA0 -> the ChCliAttrib
+    # creator 0x008199C0, whose own guard is ChCliAttrib:313
+    # `!attribState`); 0x003A then fills attrib[] through
+    # the per-attribute setter. Both are keyed by AGENT id,
+    # which is why a hero can have one at all.
+    # This is the message the arc spent two refuted
+    # hypotheses looking for, and we already had it.
+    for _hid, _haid, _hdef in (hero_slots()
+                               if HERO_ATTRIBS else ()):
+        # 0x00B7 FIRST, and read the reason before moving
+        # it. THERE ARE TWO PROFESSION STORES and this arc
+        # conflated them for a day:
+        #   0x00A6 writes the AGENT's profession bytes --
+        #     what the roster label builder reads, which is
+        #     why the hero row already said "Mo1".
+        #   0x00B7 writes the array at ctx[0x2c]+0x6BC --
+        #     what the ATTRIBUTE code reads.
+        # The attribute function 0x00819EF0 takes the
+        # attribState record, reads its agent id, looks the
+        # agent's primary and secondary up in +0x6BC, and
+        # hands each to s_profChapter (0x005AB800, bound
+        # 11) guarded ONLY against 0. An agent absent from
+        # +0x6BC yields an out-of-range profession and
+        # asserts ConstChar:1296 -- exactly what a hero
+        # got, because we had only ever sent 0x00B7 for
+        # the player. studies/heroes/FINDINGS.md 14.
+        # ORDER IS LOAD-BEARING, and this server already
+        # knew it: the player's own pair is sent points
+        # FIRST, profession SECOND, and the comment above
+        # that pair names the exact cost of the other
+        # order -- `Assertion: attribState
+        # ChCliAttrib.cpp(435)` with 0xb7 in the stack.
+        # Sending 0x00B7 first for the hero reproduced
+        # that assert on 2026-08-16, which is the repo's
+        # own recorded knowledge re-earning itself.
+        _hprof = (agents.npc_template(HERO_BODY_NPC)
+                  ["profession"] if HERO_BODY else 1)
+        # The hero gets the same budget as the player,
+        # because it is sent the player's own default
+        # ranks two lines below (attribute_columns() with
+        # no argument) -- and (available, total) must
+        # AGREE with the ranks that follow or the panel
+        # shows a build nobody paid for. Its own state is
+        # not modelled: nothing lets us spend a hero's
+        # points, so there is no mutable state to hold.
+        _hattr = attribute_state(state)
+        hsend(GAME_SMSG_AGENT_UPDATE_ATTRIBUTE_POINTS,
+             [_haid, _hattr.available, _hattr.points_total],
+             f"AGENT_ATTRIBUTE_POINTS(hero agent "
+             f"{_haid}: {_hattr.available} of "
+             f"{_hattr.points_total})")
+        hsend(GAME_SMSG_AGENT_PROFESSIONS,
+             spawn_profession_values(_hprof, _haid),
+             f"AGENT_PROFESSIONS(hero agent "
+             f"{_haid}, prof {_hprof})")
+        _hcols = attribute_columns()
+        hsend(GAME_SMSG_AGENT_UPDATE_ATTRIBUTES,
+             [_haid, _hcols],
+             f"AGENT_UPDATE_ATTRIBUTES(hero agent "
+             f"{_haid}, {len(_hcols) // 3} attrs)")
+    # THE HERO'S SKILL BAR, and it is the same message the
+    # player's bar rides -- 0x00DA is
+    # [agent_id, array32[8], array32[8], u8], AGENT-KEYED
+    # with an eight-slot array. studies/heroes/FINDINGS.md
+    # 4 recorded "no skill-bar-shaped field anywhere" and
+    # that was a SCOPING error, not an absence: the search
+    # covered the party messages and the SEND-direction
+    # shapes, and this is a RECV message this server has
+    # been sending for the player all along. Fourth time
+    # this arc that the mechanism was already in the tree.
+    for _hid, _haid, _hdef in (hero_slots()
+                               if HERO_SKILLBAR else ()):
+        _hskills = list(SKILLBAR)[:SKILLBAR_SLOTS]
+        _hskills += [0] * (SKILLBAR_SLOTS - len(_hskills))
+        hsend(GAME_SMSG_SKILLBAR_UPDATE,
+             [_haid, _hskills,
+              SKILLBAR_PVP_MASKS, SKILLBAR_TRAILER],
+             f"SKILLBAR_UPDATE(hero agent "
+             f"{_haid}){_hskills}")
+    # The char-by-id registration, BEFORE activate so the
+    # table covers the id by the time any click can open
+    # the commander panel. One message per hero slot; the
+    # value is retail's modal 100<<24 and lands at
+    # record+0x30, whatever that field turns out to mean.
+    for _hid, _haid, _hdef in (hero_slots()
+                               if HERO_CHAR else ()):
+        hsend(GAME_SMSG_CHAR_TABLE_VALUE,
+              [_haid, 100 << 24],
+              f"CHAR_TABLE_VALUE(hero agent {_haid})")
+    # LAST, and it is a question rather than payload. It
+    # asserted all-zero on 2026-08-12 under this same
+    # client state minus our messages; if it now completes
+    # silently, something we sent created the record the
+    # charHeroData gate wants. Both outcomes are readouts,
+    # and an EARLY assert (before this line) would itself
+    # name the commander-binding trigger.
+    for _hid, _haid, _hdef in (
+            hero_slots()
+            if (HERO_ACTIVATE and not HERO_ACTIVATE_FIRST)
+            else ()):
+        hsend(*agents.hero_activate(
+            HERO_ACTIVATE_ID
+            if (HERO_ACTIVATE_ID is not None
+                and _haid == HERO_AGENT_ID) else _hid,
+            _haid, HERO_INVENTORY, HERO_AI_MODE))
+    # THE DEFERRED PARTY BUILD. Last, so every message the
+    # commander path reads -- the activation record above
+    # most of all -- already exists when 0x01C2's worker
+    # raises case 93 into it.
+    for _op, _vals, _lbl in _party_deferred:
+        hsend(_op, _vals, _lbl)
+    if PROBE_NAME:
+        run_probe(PROBE_NAME, send, conn_id, stop,
+                  origin=(pos[0], pos[1], cfg[2]))
+    if LABEL_RUN:
+        # The no-tape path: label against our OWN world, which
+        # answers. That is a different experiment from labelling
+        # after a tape -- here a completed action is visible, but
+        # the world is one player and at most one enemy, so most
+        # of the script has nothing to point at. Both are worth
+        # having; neither substitutes for the other.
+        threading.Thread(
+            target=labelrun.run,
+            args=(rec, conn_id, stop),
+            kwargs={"steps": LABEL_RUN},
+            daemon=True).start()
+    # Rung Q6's tail, and it is placed here rather than in
+    # the REQUEST_ITEMS burst for a reason: property-11 head
+    # glyphs are PER AGENT, and the agents do not exist until
+    # this arm has created them. Sent earlier they would name
+    # agents the client has never heard of.
+    _restore_active_marker(send, state)
+    _send_markers(send, state, " (instance load)")
+
+
 def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
     rec = Recorder(vault, conn_id)
     print(f"[c{conn_id}] connect from {addr[0]}:{addr[1]}", flush=True)
@@ -24505,901 +25425,12 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             send(GAME_SMSG_ACCOUNT_FEATURE, [fid, p1, p2],
                                  f"ACCOUNT_FEATURE[{fid}]")
                     elif opcode == GAME_CMSG_INSTANCE_LOAD_REQUEST_PLAYERS:
-                        # A balanced empty block: no other players in the
-                        # instance, but the client still needs the brackets.
-                        send(GAME_SMSG_INSTANCE_PLAYER_DATA_START, [],
-                             "PLAYER_DATA_START(players)")
-                        send(GAME_SMSG_INSTANCE_PLAYER_DATA_DONE, [],
-                             "PLAYER_DATA_DONE(players)")
-
-                        cfg = MAP_STATIC_CONFIG.get(
-                            state["map_id"], MAP_STATIC_CONFIG[FALLBACK_MAP_ID])
-                        pos = cfg[1]
-
-                        send(GAME_SMSG_INSTANCE_LOADED, [PLAYER_TEAM_TOKEN],
-                             "INSTANCE_LOADED")
-                        send(GAME_SMSG_WORLD_UPDATE_LOAD_TIME, [0],
-                             "WORLD_UPDATE_LOAD_TIME")
-                        send(GAME_SMSG_PLAYER_INFO,
-                             [PLAYER_NUMBER, PLAYER_AGENT_ID, appearance_for(SPAWN_PROFESSION),
-                              0, 0, 0, TEST_CHAR_NAME], "PLAYER_CREATE")
-                        # The party of one. Both write the per-PLAYER array at
-                        # ChCliApi ctx+0x80C (stride 0x50) that PLAYER_CREATE
-                        # just made, and touch no agent -- so they belong here
-                        # rather than after the agent create.
-                        #
-                        # SIZE THEN LEADER, and the order is the measured part:
-                        # 0x00B0 fires no event for a fresh entry while 0x00B1
-                        # fires only on a LEADER CHANGE, so leader-first makes
-                        # the change a no-op against the default and nothing is
-                        # notified.
-                        _party_size = 1 if HENCHMAN is None else 2
-                        send(GAME_SMSG_PLAYER_PARTY_SIZE,
-                             agents.player_party_size(PLAYER_NUMBER,
-                                                      _party_size),
-                             f"PLAYER_PARTY_SIZE({_party_size})")
-                        send(GAME_SMSG_PLAYER_SET_PARTY,
-                             agents.player_set_party(PLAYER_NUMBER, PLAYER_NUMBER),
-                             "PLAYER_SET_PARTY(self is leader)")
-                        # ...and the party the WINDOW needs, which is a
-                        # different structure entirely. RESKIN.md 17: the
-                        # window's gate is PyCliGetMyPartyId (0x00856250)
-                        # reading the party manager's own vector, not the
-                        # per-player array above -- so P was discarded by the
-                        # key router before its arm ever ran. Retail's own
-                        # four-message sequence, in retail's own position,
-                        # 8 of 8 live connections.
-                        # The roster row rides INSIDE that window when
-                        # --henchman is set (studies/heroes/FINDINGS.md 7.1).
-                        # No world body: this deliberately isolates the roster
-                        # question from the agent question, because if the row
-                        # draws with no agent behind it then PtRoster:602's
-                        # frame lookup by agentId is not a precondition, and if
-                        # it does not, adding the body is the next arm rather
-                        # than a confound already baked in.
-                        # COLLECTED, not sent, so the whole roster sequence can
-                        # be flushed here (the default) or held for
-                        # --hero-late N. studies/heroes/FINDINGS.md 34.4: the
-                        # commander event is raised into an empty subscriber
-                        # slot, and eight events were measured CHANGING
-                        # subscriber state mid-session, so "our 0x01C2 arrives
-                        # before the commander UI subscribes" is a live
-                        # hypothesis. The precedent is in this same handler --
-                        # UI_OVERLAY_FLAGS is sent after the load for exactly
-                        # this reason, "a byte that arrives before the UI exists
-                        # sets a bit nothing is left to read".
-                        _seq = []
-                        _inside = ()
-                        if HENCHMAN is not None:
-                            _hench = agents.npc_template(HENCHMAN)
-                            # THE DISCRIMINATOR. With the defaults, 0x01BF and
-                            # the body's 0x0056 carry the SAME name/prof/level,
-                            # so a rendered row cannot say which one it read --
-                            # a confound, not a result. These three override
-                            # the WIRE side only, leaving the body alone, so
-                            # the row's own text names its source field by
-                            # field. studies/heroes/FINDINGS.md §7.1.
-                            _wname = (agents.npc_template(HENCHMAN_WIRE_NAME)
-                                      ["enc_name"] if HENCHMAN_WIRE_NAME
-                                      else _hench["enc_name"])
-                            _inside = (agents.party_henchman_add(
-                                1, HENCHMAN_AGENT_ID, _wname,
-                                _hench["profession"] if HENCHMAN_WIRE_PROF
-                                is None else HENCHMAN_WIRE_PROF,
-                                _hench["level"] if HENCHMAN_WIRE_LEVEL
-                                is None else HENCHMAN_WIRE_LEVEL),)
-                        if HERO is not None:
-                            # 0x0074 goes BEFORE the build window, by analogy
-                            # with 0x0056-before-0x0020: its worker looks up OR
-                            # CREATES the per-hero record in the local player's
-                            # context (+0x584), so it is the only candidate we
-                            # have for the thing 0x0072's gate wants to exist.
-                            # An ordering hypothesis, stated as one.
-                            _hb = HERO_BYTES or (0, 0, 0)
-                            _iname = (agents.npc_template(HERO_INFO_NAME)
-                                      ["enc_name"] if HERO_INFO_NAME else "")
-                            for _hid, _haid, _hdef in hero_slots():
-                                if HERO_INFO:
-                                    # BACK IN THE DEFERRED UNIT. 35.6b tried it
-                                    # inline and the assert survived, so the
-                                    # 0x0074-vs-0x0072 inversion was real and was
-                                    # not the cause. What --hero-late must move is
-                                    # the WHOLE hero pipeline as one unit --
-                                    # 0x0074, the party build, the body, the
-                                    # attribute pair, the skill bar and 0x0072 --
-                                    # preserving their relative order and changing
-                                    # only the absolute time. Splitting the
-                                    # pipeline across the load boundary is what
-                                    # kept asserting, in both directions.
-                                    _hap = HERO_APPEARANCE or (0, 0)
-                                    _seq.append(agents.mercenary_info(
-                                        _hid, b1=_hb[0], b2=_hb[1], b3=_hb[2],
-                                        d1=_hap[0], d2=_hap[1],
-                                        d3=HERO_FLAG, chunk=HERO_CHUNK,
-                                        enc_name=_iname))
-                            # What 0x01C2's identity words mean, four rounds
-                            # of arms later (studies/heroes/FINDINGS.md 11.1
-                            # -> 17.3 -> 18 -> 21; 19 for msg+0x10):
-                            #   msg+8    -> entry+0x4 : the OWNER PLAYER
-                            #               NUMBER -- OBSERVED (21): with
-                            #               --player-number 2 splitting the
-                            #               candidates, the roster row renders
-                            #               exactly when this equals the
-                            #               declared player number. Nuance
-                            #               (21.2): the commander scan compares
-                            #               the same field against a DIFFERENT
-                            #               "my id" (ctx[0x44][0x2ac]) -- the
-                            #               arm that renders the row loses the
-                            #               commander binding.
-                            #   msg+0xc  -> entry+0x0 : the AGENT ID -- solid,
-                            #               the one word H1/H2 actually settled
-                            #               (200 rendered only here).
-                            #   msg+0x10 -> entry+0x8 : read by the commander
-                            #               scan as its key (SOURCED) but inert
-                            #               on everything observable (19.2);
-                            #               0x01C2 carries NO hero identity
-                            #               (19) -- we send the hero id as the
-                            #               best guess.
-                            # --hero-swap still exchanges the two words; it was
-                            # the arm that (with player number == hero id == 1)
-                            # could not tell owner from hero index apart.
-                                # The experiment flags below apply to the
-                                # FIRST hero only; with several in the party the
-                                # rest carry the corrected values, so a probe arm
-                                # never silently rewrites the whole roster.
-                                _first = _haid == HERO_AGENT_ID
-                                _wa = (PLAYER_NUMBER
-                                       if HERO_OWNER is None or not _first
-                                       else HERO_OWNER)
-                                _wb = _haid
-                                if HERO_SWAP and _first:
-                                    _wa, _wb = _wb, _wa
-                                _inside = _inside + (agents.party_hero_add(
-                                    1, _wa, _wb,
-                                    HERO_ROSTER_ID if (HERO_ROSTER_ID
-                                                       is not None and _first)
-                                    else _hid,
-                                    HERO_MSG14),)
-                        _after = ()
-                        if HERO_BUST_CACHE and _inside:
-                            # Warm the cache with party 2, then let the hero-add
-                            # to party 1 miss it. Party 1's build is committed by
-                            # then, so PyCliParty:1228 (a second begin with a
-                            # build OPEN) is not in play.
-                            _after = ((0x01D2, [2], "PARTY_BUILD_BEGIN(2) "
-                                       "[cache-buster]"),) + _inside
-                            _inside = ()
-                        elif HERO_POST_COMMIT:
-                            _after, _inside = _inside, ()
-                        # THE ORDERING ARM. HeroActivate normally goes LAST;
-                        # here it goes ahead of the party build, because case
-                        # 93 -- which 0x01C2 raises synchronously -- asks the
-                        # agent-keyed activation array who this hero is, and
-                        # that array's only writer is 0x0072. See
-                        # HERO_ACTIVATE_FIRST's comment for the refuted
-                        # prediction that opened this.
-                        if HERO_ACTIVATE and HERO_ACTIVATE_FIRST:
-                            for _hid, _haid, _hdef in hero_slots():
-                                _seq.append(agents.hero_activate(
-                                    HERO_ACTIVATE_ID
-                                    if (HERO_ACTIVATE_ID is not None
-                                        and _haid == HERO_AGENT_ID) else _hid,
-                                    _haid, HERO_INVENTORY, HERO_AI_MODE))
-                        # THE PARTY BUILD, and under HERO_PIPELINE_FIRST it is
-                        # DEFERRED past the pipeline below instead of leading
-                        # it -- constraint (3) of the squeeze recorded at
-                        # HERO_PIPELINE_FIRST. Held as a tuple and emitted
-                        # through `hsend` so BOTH rigs stay correct: inline it
-                        # sends after the pipeline's own inline sends, and
-                        # under --hero-late it appends after the pipeline's
-                        # appends. Same order either way, which is the whole
-                        # point of routing it through the same door.
-                        _party = tuple(agents.party_build(
-                            1, PLAYER_NUMBER, inside_window=_inside)) + _after
-                        _party_deferred = ()
-                        if HERO_PIPELINE_FIRST:
-                            _party_deferred = _party
-                        else:
-                            _seq.extend(_party)
-                        # THE ROUTER for everything downstream. `hsend` is the
-                        # hero pipeline's `send`: inline normally, appended to the
-                        # held sequence under --hero-late. It exists so the body,
-                        # attributes, skill bar and HeroActivate below travel WITH
-                        # the roster binding instead of being split from it.
-                        def hsend(op, vals, label=None, _q=_seq):
-                            if HERO_LATE is None:
-                                send(op, vals, label)
-                            else:
-                                _q.append((op, vals, label))
-                        if HERO_LATE is None:
-                            for op, vals, label in _seq:
-                                send(op, vals, label)
-                        else:
-                            # Held for the world tick. The DUE time is stamped
-                            # at INSTANCE_LOAD_FINISH rather than here, so the
-                            # delay is measured from the load completing and not
-                            # from the middle of it.
-                            state["hero_late_seq"] = _seq
-                            print(f"[c{conn_id}] HERO-LATE: holding "
-                                  f"{len(_seq)} roster message(s) until "
-                                  f"{HERO_LATE:.1f}s after INSTANCE_LOAD_FINISH",
-                                  flush=True)
-                        # ...and the player-record flag word, in retail's own
-                        # position: BEFORE the agent create, 423 sends over 12 of
-                        # 12 live connections, all inside the instance load. OFF by
-                        # default because it is being measured -- the control arm is
-                        # this server's behaviour up to now, so a default-on flag
-                        # would leave nothing to diff against. RESKIN.md 18.8 sent
-                        # it LATE and measured a clean null; the open question this
-                        # answers is whether bits read once at BUILD time differ.
-                        if PLAYER_FLAGS is not None:
-                            send(GAME_SMSG_PLAYER_FLAGS,
-                                 agents.player_flags(PLAYER_NUMBER, PLAYER_FLAGS),
-                                 f"PLAYER_FLAGS(value {PLAYER_FLAGS}, mask 7)")
-                        # The create's preamble, retail's kind-5 idiom
-                        # (createburst census, 344/366 in the two dominant
-                        # templates): the per-AGENT level rides prop 36 before
-                        # the body exists, then 0x00F0, then the create. The
-                        # level was never sent per-agent at all until
-                        # 2026-08-17 -- the roster's W0 was its absence
-                        # rendered (RESKIN 18.4), while 0x00E9 field 9 below
-                        # only feeds the per-PLAYER top-left bar; the two
-                        # channels are confirmed distinct in the same frame.
-                        # Retail also sends 009F:30 (ApplyGuild1) here; we
-                        # have no guild id and do not invent one.
-                        # --persist: the character sheet comes from the store,
-                        # found by the uuid the client's version frame named
-                        # (§6 item 3). Row absent is loud-but-not-fatal: this
-                        # burst then serves the defaults it always served. A
-                        # store that fails VALIDATION propagates instead --
-                        # a broken file must not quietly cost its characters.
-                        _ps_row, _ps_acct = None, None
-                        if PERSIST:
-                            _ps_store, _ps_row = charstore.find_character(
-                                state.get("char_uuid", ""))
-                            if _ps_row is None:
-                                print(f"[c{conn_id}] PERSIST: no store row "
-                                      f"for character "
-                                      f"{state.get('char_uuid', '?')}; "
-                                      f"sheet stays default", flush=True)
-                            else:
-                                _ps_acct = _ps_store.account()
-                                # Cached for the kill path: accrual must not
-                                # re-scan the store directory every swing.
-                                state["charstore_game"] = _ps_store
-                                print(f"[c{conn_id}] PERSIST: sheet from "
-                                      f"{_ps_store.path}", flush=True)
-                        _ps_level = (_ps_row or {}).get("level", START_LEVEL)
-                        # ...and in the state, because morale needs it: the
-                        # penalty scales BASE health, which is 100 + 20 per
-                        # level and nothing else. It used to live only in this
-                        # local, so a death path four thousand lines away had
-                        # no way to ask how big the character was.
-                        state["level"] = _ps_level
-                        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-                             [agents.PROP_LEVEL, PLAYER_AGENT_ID, _ps_level],
-                             f"level {_ps_level} on the player's AGENT")
-                        # 0x00F0 precedes every kind-5 create, 130/130 in the
-                        # smsg corpus -- "immediately" ONLY once the clock
-                        # stamp is removed, and that qualifier is load-bearing:
-                        # measured over all five keyed captures 2026-08-17,
-                        # 1131/1131 kind-5/9 creates have their own 0x00F0
-                        # either directly before (567) or one
-                        # WORLD_SIMULATION_TICK before (564), never further and
-                        # never absent. Sending it directly before, as here, is
-                        # what retail does half the time and is inside the
-                        # measured envelope. The player burst sent
-                        # NOTHING here until 2026-08-17 (divergence D2's
-                        # player-side 0/N, connected in unitsetup 6d). Payload
-                        # 0 is the measured kind-5 majority -- 342/366 in the
-                        # createburst census; the 24 non-zero (0x2000 and the
-                        # high-word combat values) are a payload MODEL nobody
-                        # has yet, not a default.
-                        send(GAME_SMSG_AGENT_INITIAL_STATUS,
-                             [PLAYER_AGENT_ID, 0],
-                             "AGENT_INITIAL_EFFECTS(player, 0x0000)")
-                        # Field names carrying hex offsets (h000B, h001E, h0023,
-                        # h0027, h003B, h004B, h0059) let the 23 schema fields be
-                        # aligned to the struct by offset rather than by counting:
-                        # each named constant below lands exactly on its offset,
-                        # and the total closes at 0x63 = the declared 99 bytes.
-                        send(GAME_SMSG_WORLD_CREATE_AGENT,
-                             [PLAYER_AGENT_ID,   # agent_id
-                              CHAR_CLASS_PLAYER_BASE | PLAYER_NUMBER,
-                              AGENT_TYPE_LIVING,
-                              5,                 # h000B
-                              pos,               # position
-                              cfg[2],            # plane
-                              (1.0, 0.0),        # direction
-                              1,                 # h001E
-                              DEFAULT_RUN_SPEED, # speed_base
-                              1.0,               # h0023
-                              0x41400000,        # h0027
-                              PLAYER_TEAM_TOKEN,
-                              0, 0, 0, 0, 0,     # h003B and neighbours
-                              (0.0, 0.0),
-                              (INF, INF),        # h004B
-                              0, 0,
-                              (INF, INF),        # h0059
-                              0],
-                             "WORLD_CREATE_AGENT")
-                        # Attribute state must exist BEFORE the profession
-                        # update lands. Sending profession alone killed the
-                        # client on
-                        #   Assertion: attribState
-                        #   P:\\Code\\Gw\\Char\\Cli\\ChCliAttrib.cpp(435)
-                        # with 0xb7 -- this message -- named in the stack trace.
-                        # Upstream's SendSkillsAndAttributes sends the points
-                        # first and the profession second, in that order.
-                        # (available, total) -- NOT one constant twice. The
-                        # two fields were CONTESTED until 2026-08-19; 0x0037's
-                        # creator writes field 3 to attribState+0x434
-                        # (attribPointsAvail) and field 4 to +0x438, the
-                        # lifetime total (studies/pvpui 32.5). Sending the same
-                        # number for both told the client every point was
-                        # unspent while handing it ranks that had cost some.
-                        _attrst = attribute_state(state)
-                        send(GAME_SMSG_AGENT_UPDATE_ATTRIBUTE_POINTS,
-                             [PLAYER_AGENT_ID, _attrst.available,
-                              _attrst.points_total],
-                             f"AGENT_ATTRIBUTE_POINTS({_attrst.available} "
-                             f"of {_attrst.points_total})")
-                        send(GAME_SMSG_AGENT_PROFESSIONS,
-                             spawn_profession_values(),
-                             f"AGENT_PROFESSIONS(prof {SPAWN_PROFESSION})")
-                        # ...and the AGENT-side pair, which we had never sent
-                        # for the player's own agent -- only for NPCs.
-                        #
-                        # 0x00B7 writes the per-PLAYER record the Skills panel
-                        # displays from; 0x00A6's setter 0x007F7330 is the SOLE
-                        # write path to the AGENT's own profession bytes at
-                        # +0x10E/+0x10F (one caller, reached only from this
-                        # opcode). The party/roster label builder reads the
-                        # agent, not the player record, so without this the
-                        # profession ABBREVIATION has nothing to draw from --
-                        # which is why it has never appeared in any session.
-                        # studies/profession/RESKIN.md s14.
-                        send(GAME_SMSG_AGENT_SET_PROFESSION,
-                             agents.agent_set_profession(
-                                 PLAYER_AGENT_ID, SPAWN_PROFESSION, 0,
-                                 custom=SPAWN_PROFESSION
-                                 > agents.CHAR_PROFESSIONS - 1),
-                             f"AGENT_SET_PROFESSION(player, {SPAWN_PROFESSION})")
-                        # STRICTLY AFTER the 0x00B7 above, which CREATES the
-                        # per-agent record 0x00B6 writes into. Reversed, the
-                        # client drops it with no error (RUNS.md §13).
-                        if SECONDARY_BITS:
-                            send(GAME_SMSG_AGENT_PROFESSION_BITS,
-                                 agents.agent_set_secondary_bits(
-                                     PLAYER_AGENT_ID, SECONDARY_BITS),
-                                 f"AGENT_PROFESSION_BITS"
-                                 f"(0x{SECONDARY_BITS:04X})")
-                        # The skill block. Upstream's SendSkillsAndAttributes
-                        # sends the bar (218) BEFORE the unlock list (219); we
-                        # send the unlocks first, deliberately. Upstream never
-                        # puts a real id on a bar -- it sends eight zeros -- so
-                        # its ordering is not evidence about a POPULATED bar,
-                        # and if the client gates drawing on unlock state then
-                        # having that state already in hand is the ordering that
-                        # can work. If the bar draws, try upstream's order too:
-                        # a difference there is a real finding either way.
-                        send(GAME_SMSG_PVP_UPDATE_UNLOCKED_SKILLS, [UNLOCKED],
-                             f"PVP_UPDATE_UNLOCKED_SKILLS({UNLOCK_LABEL})")
-                        send(GAME_SMSG_UPDATE_UNLOCKED_SKILLS, [UNLOCKED],
-                             f"UPDATE_UNLOCKED_SKILLS({UNLOCK_LABEL})")
-                        skills = list(SKILLBAR)[:SKILLBAR_SLOTS]
-                        skills += [0] * (SKILLBAR_SLOTS - len(skills))
-                        send(GAME_SMSG_SKILLBAR_UPDATE,
-                             [PLAYER_AGENT_ID, skills, SKILLBAR_PVP_MASKS,
-                              SKILLBAR_TRAILER],
-                             f"SKILLBAR_UPDATE{skills}")
-                        # Why the character used to read Level 0: we never sent
-                        # this at all. Every other field stays zero -- only
-                        # field 9's effect has actually been observed, and
-                        # filling the rest with plausible numbers would be
-                        # exactly the invention this project keeps having to
-                        # walk back.
-                        player_attrs = [0] * PLAYER_ATTR_COUNT
-                        player_attrs[PLAYER_ATTR_LEVEL] = _ps_level
-                        # ...and field 10 stopped being one of the zeros on
-                        # 2026-08-20. Retail carries 100 here in 43 of 43
-                        # sightings across the whole live corpus, on level-1
-                        # and level-20 characters alike, and 0 is not a legal
-                        # morale at all -- the range is 40 to 110. Sending a
-                        # zero was not the cautious choice it looked like; it
-                        # was a value the game never sends, in a field whose
-                        # own probe once read the illegal "-100%" back.
-                        player_attrs[PLAYER_ATTR_MORALE] = player_morale(state)
-                        if _ps_row is not None:
-                            player_attrs[PLAYER_ATTR_XP] = _ps_row["xp"]
-                            player_attrs[13] = _ps_row["skill_points"]
-                        if _ps_acct is not None:
-                            # Field indices measured by attr_legend and the
-                            # faction_max run: 1/3/5/11 are the four currents.
-                            _fxr = _ps_acct["factions"]
-                            for _fac, _cur_f, _tot_f in (
-                                    ("kurzick", 1, 2), ("luxon", 3, 4),
-                                    ("imperial", 5, 6), ("balthazar", 11, 12)):
-                                if _fac in _fxr:
-                                    player_attrs[_cur_f] = \
-                                        _fxr[_fac]["current"]
-                                    # Fields 2/4/6/12 are total-earned --
-                                    # the pair that moves with current in
-                                    # every retail sighting (STORAGE.md §2).
-                                    player_attrs[_tot_f] = \
-                                        _fxr[_fac].get("total", 0)
-                        send(GAME_SMSG_CHARACTER_UPDATE_FACTIONS, player_attrs,
-                             f"CHARACTER_UPDATE_FACTIONS(level {_ps_level})")
-                        if _ps_acct is not None and _ps_acct["factions"]:
-                            # The caps have their own messages -- OBSERVED
-                            # end to end 2026-08-18 (RUNS.md §Run 1): filled
-                            # denominators, mapping as named, updatable
-                            # mid-session.
-                            _fx = _ps_acct["factions"]
-                            for _op, _fac in (
-                                (GAME_SMSG_CHARACTER_FACTION_MAX_KURZICK,
-                                 "kurzick"),
-                                (GAME_SMSG_CHARACTER_FACTION_MAX_LUXON,
-                                 "luxon"),
-                                (GAME_SMSG_CHARACTER_FACTION_MAX_BALTHAZAR,
-                                 "balthazar"),
-                                (GAME_SMSG_CHARACTER_FACTION_MAX_IMPERIAL,
-                                 "imperial"),
-                            ):
-                                if _fac in _fx:
-                                    send(_op, [_fx[_fac]["max"]],
-                                         f"FACTION_MAX({_fac} "
-                                         f"{_fx[_fac]['max']})")
-                        if _ps_acct is not None and _ps_acct["titles"]:
-                            # Ranks strictly before the tracks that reference
-                            # them -- the render-time Array.h(587) rule the
-                            # store also enforces at load. Strings ride
-                            # template framing within the field's admissible
-                            # 7 units (charstore.MAX_NAME_CHARS).
-                            _rk = _ps_acct["title_ranks"]
-                            for _rid in sorted(_rk, key=int):
-                                send(GAME_SMSG_TITLE_RANK_DATA,
-                                     [int(_rid), _rk[_rid].get("flags", 1),
-                                      _rk[_rid]["value"],
-                                      questdefs.coded_literal(
-                                          _rk[_rid]["name"], limit=7)],
-                                     f"TITLE_RANK_DATA({_rid} "
-                                     f"{_rk[_rid]['name']!r})")
-                            for _tid in sorted(_ps_acct["titles"], key=int):
-                                _t = _ps_acct["titles"][_tid]
-                                _cr = _rk[str(_t["current_rank"])]
-                                _nr = _rk[str(_t["next_rank"])]
-                                send(GAME_SMSG_TITLE_TRACK_INFO,
-                                     [int(_tid), _t.get("flags", 0),
-                                      _t["points"],
-                                      _t["current_rank"], _cr["value"], 0,
-                                      _t["next_rank"], _nr["value"],
-                                      _t.get("rank_count", len(_rk)),
-                                      _t["max_rank"],
-                                      questdefs.coded_literal("Pts", limit=7),
-                                      questdefs.coded_literal(_cr["name"],
-                                                              limit=7)],
-                                     f"TITLE_TRACK_INFO(title {_tid}, "
-                                     f"{_t['points']} pts)")
-                        # REAL RANKS since 2026-08-15. This was
-                        # `[0] * ATTRIBUTE_COUNT` -- fourteen writes of rank 0
-                        # to attribute 0, which the client accepted in silence
-                        # because every value was 0 and the layout could not
-                        # show. COLUMN-MAJOR since 2026-08-15 as well, and the
-                        # day between the two cost every session a modal
-                        # assert box: see attribute_columns.
-                        # From the LIVE state, not the content row: a spend
-                        # this connection already made must survive a map
-                        # change, and attribute_state() seeds itself from the
-                        # same content row on first use anyway.
-                        # ONE source: attribute_state already resolved the
-                        # store-over-content question when it was built.
-                        _ranks = sorted(attribute_state(state).ranks.items())
-                        columns = attribute_columns(
-                            _ranks, attribute_state(state).bonuses)
-                        send(GAME_SMSG_AGENT_UPDATE_ATTRIBUTES,
-                             [PLAYER_AGENT_ID, columns],
-                             f"AGENT_UPDATE_ATTRIBUTES"
-                             f"({len(columns) // 3} attributes: "
-                             + ", ".join(f"{a}={r}" for a, r in _ranks)
-                             + ")")
-                        # The player's own pools, which we had never sent. See
-                        # agents.py: the enemy got a health pool the day it was
-                        # spawned and the player never got one, so every skill
-                        # on the bar was unaffordable. Order and values follow
-                        # gw-preservation's sendPlayerAttributes, which is a
-                        # server the real client accepts.
-                        # MORALE FIRST, because the two pools below are computed
-                        # from it. Retail sends this at login too -- `0x009C
-                        # [player, 100]` at t=0.897 of the death capture, before
-                        # its own pool burst -- and we never did, which is what
-                        # "we set morale to 100" used to mean: nothing on the
-                        # wire and a zero in the attribute set.
-                        player_pools(state)
-                        send(GAME_SMSG_AGENT_MORALE,
-                             [PLAYER_AGENT_ID, player_morale(state)],
-                             f"morale {morale.display(player_morale(state))} "
-                             f"on the player")
-                        _energy_max = player_max_energy(state)
-                        _health_max = int(player_max_health(state))
-                        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-                             [agents.PROP_ENERGY_MAX, PLAYER_AGENT_ID,
-                              _energy_max],
-                             f"PLAYER energy = {_energy_max}")
-                        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-                             [agents.PROP_HEALTH_MAX, PLAYER_AGENT_ID,
-                              _health_max],
-                             f"PLAYER health = {_health_max}")
-                        # The value field is a dword carrying IEEE float bits,
-                        # same as the damage path above. The purpose is no
-                        # longer unknown -- energy regeneration as a fraction
-                        # of the pool per second (agents.PROP_ENERGY_REGEN),
-                        # rescaled if morale has moved the pool. AND THE
-                        # CHANNEL IS MEASURED: all 52 corpus property-43s ride
-                        # 0x00A2, the NO-TARGET float twin -- zero ride 0x00A3
-                        # (studies/skills section 23) -- so this send is off
-                        # the WITH-target form both arcs inherited from
-                        # gw-preservation's sendPlayerAttributes. The constant
-                        # decomposes as f32(0.33) * 3 pips / 25 max, the
-                        # ranger armour row (merge of the energy and morale
-                        # arcs, 2026-08-20 -- each had one half).
-                        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
-                             [agents.PROP_ENERGY_REGEN, PLAYER_AGENT_ID,
-                              _f32(morale.regen_fraction(
-                                  agents.PLAYER_FLOAT_43,
-                                  agents.PLAYER_ENERGY, _energy_max))],
-                             f"PLAYER energy regeneration "
-                             f"({agents.PLAYER_FLOAT_43 * agents.PLAYER_ENERGY:.2f}"
-                             f"/s over a {_energy_max} pool)")
-                        # Putting the weapon on the BODY is a different question
-                        # from putting it in the weapon-set UI, and we had only
-                        # done the latter. Upstream sources this message from the
-                        # equipped-items bag, not from the weapon set
-                        # (GmAgent.c:200-218), and slot 0 of that bag is the
-                        # weapon -- so position 0 here is the weapon item id.
-                        #
-                        # Sending 0x006E with NO bag behind it is deliberate: it
-                        # is exactly the experiment studies/character/FINDINGS.md
-                        # left open ("Try 353 + 110 with no bag, then add 319 and
-                        # 318, and see which is the minimum that draws"), and it
-                        # is the smallest change that can answer it.
-                        #
-                        # Position order is MEASURED as of 2026-08-17, and the
-                        # "2 lineages against 1" this comment used to cite was
-                        # backing the WRONG one. Retail's own wire settles it:
-                        # seven 0x006F per-slot writes in the Shing Jea capture,
-                        # each preceded by the 0x015E declaring its item, give
-                        #   2 Body, 3 BOOTS, 4 LEGS, 5 GLOVES, 6 HEAD
-                        # -- GWLP-R's permuted reading, refuting the bag order
-                        # ldufr and GWCA share (they agree because they make the
-                        # same assumption: one witness counted twice).
-                        # studies/newopcodes/FINDINGS.md 0x006F.
-                        # Positions 1..8 are all zero here, so this send never
-                        # depended on the dispute; anything that DRESSES a body
-                        # must use the measured order above.
-                        if (EQUIP_WEAPON or EQUIP_ARMOUR or EQUIP_COSTUME
-                                or EQUIP_COSTUME_HEAD):
-                            worn = [0] * VISUAL_EQUIPMENT_SLOTS
-                            if EQUIP_WEAPON:
-                                worn[0] = WEAPON_ITEM_ID
-                            if EQUIP_ARMOUR:
-                                for item_id, _key, slot in STARTER_ARMOUR:
-                                    worn[slot] = item_id
-                            if EQUIP_COSTUME_HEAD:
-                                worn[COSTUME_HEAD_SLOT] = COSTUME_HEAD_ITEM_ID
-                            if EQUIP_COSTUME:
-                                # Slot 7, the costume BODY cell. The whole
-                                # point is that this slot is not additive:
-                                # studies/playercomposite 9.2 read an override
-                                # array at CpsBase+0xD8 that REPLACES the
-                                # armour slots' cached rows at build time, so
-                                # wearing this should change what the ARMOUR
-                                # components draw rather than adding a piece.
-                                worn[COSTUME_SLOT] = COSTUME_ITEM_ID
-                            send(GAME_SMSG_UPDATE_AGENT_VISUAL_EQUIPMENT,
-                                 [PLAYER_AGENT_ID] + worn,
-                                 "UPDATE_AGENT_VISUAL_EQUIPMENT("
-                                 + ("weapon" if EQUIP_WEAPON else "")
-                                 + ("+armour" if EQUIP_ARMOUR else "") + ")")
-                            # ArenaNet sends this after EVERY 0x006E, 366 of
-                            # 366 across both live captures. Zero because we
-                            # have never populated a guild id, and 0 is what
-                            # makes the client skip the lookup rather than
-                            # resolve one that does not exist.
-                            send(GAME_SMSG_AGENT_SET_TABARD_VISIBLE,
-                                 agents.agent_set_tabard_visible(
-                                     PLAYER_AGENT_ID, False),
-                                 "AGENT_SET_TABARD_VISIBLE(player, 0)")
-                            # And separately, what the agent WIELDS.
-                            #
-                            # These are ITEM IDS, not weapon types, and the
-                            # client said so itself. Sending weapon type 3 here
-                            # -- on the theory that this message sets
-                            # AgentLiving::weapon_type at +h01B2 -- took the
-                            # client down on
-                            #     Assertion: ptr
-                            #     P:\Code\Gw\Item\Cli\ItCliApi.cpp(400)
-                            # with `baseItem` in the strings beside it. It
-                            # looked 3 up in the item table, got null and died.
-                            # OBSERVED, 2026-08-06. The client presumably
-                            # derives weapon_type from the item's own
-                            # ItemType, the same way it derives the mesh from
-                            # file_id.
-                            send(GAME_SMSG_NPC_UPDATE_WEAPONS,
-                                 [PLAYER_AGENT_ID, WEAPON_ITEM_ID, 0],
-                                 "NPC_UPDATE_WEAPONS(leadhand = item "
-                                 f"{WEAPON_ITEM_ID})")
-                            # And how fast that weapon swings, which the client
-                            # does NOT work out from any of the four messages
-                            # above. Its AvChar is constructed with an attack
-                            # speed of 0.0 and exactly one thing in the image
-                            # ever changes it: this message. Until it arrives,
-                            # telling the client to start a swing asserts
-                            # m_attackInterval and takes it down -- which is
-                            # what every session before this one did.
-                            send_attack_speed(send, PLAYER_AGENT_ID,
-                                              WEAPON_ATTACK_SPEED, "player")
-                        # unk0 is a literal 3 upstream (GmAgent.c:246).
-                        send(GAME_SMSG_WORLD_UPDATE_CONTROLLED_AGENT,
-                             [PLAYER_AGENT_ID, 3], "UPDATE_CONTROLLED_AGENT")
-                        # Upstream sends this at the END of REQUEST_PLAYERS, not
-                        # after spawn where we had it.
-                        send(GAME_SMSG_INSTANCE_LOAD_FINISH, [],
-                             "INSTANCE_LOAD_FINISH")
-                        if state.get("hero_late_seq"):
-                            state["hero_late_due"] = (time.perf_counter()
-                                                      + HERO_LATE)
-                        if PARTY_MINE_LATE is not None:
-                            state["party_mine_late_due"] = (time.perf_counter()
-                                                            + PARTY_MINE_LATE)
-                        if NETGRAPH_FLAGS is not None:
-                            # AFTER the load, not before: the widget this
-                            # unlocks is built by a routine that reads the flag
-                            # at construction time, so a byte that arrives
-                            # before the UI exists sets a bit nothing is left
-                            # to read. Sent once -- the handler is idempotent
-                            # and re-sending would only re-clear the two bits
-                            # we do not understand.
-                            send(GAME_SMSG_UI_OVERLAY_FLAGS, [NETGRAPH_FLAGS],
-                                 f"UI_OVERLAY_FLAGS(0x{NETGRAPH_FLAGS:02x}"
-                                 + (", netgraph latency"
-                                    if NETGRAPH_FLAGS
-                                    & UI_OVERLAY_FLAG_NETGRAPH_LATENCY
-                                    else "") + ")")
-                        # An AREA brings its own population and replaces the
-                        # single global enemy outright. Both would be wrong:
-                        # the global one is placed by offset from the player,
-                        # so it would appear in the middle of an authored zone
-                        # that has its own idea of what stands where.
-                        if AREA_NAME:
-                            spawn_population(send, state,
-                                             (pos[0], pos[1], cfg[2]), conn_id)
-                        elif SPAWN_ENEMY:
-                            spawn_enemy(send, state,
-                                        (pos[0], pos[1], cfg[2]), conn_id)
-                        # The henchman's BODY, at the id its roster row names.
-                        # Arm two of the staged demo: arm one sent 0x01BF with
-                        # no body and MEASURED that the row draws anyway --
-                        # standalone, so PtRoster:602's frame lookup is not a
-                        # precondition for the row existing -- but the row came
-                        # up "Lvl 255 ..." with no name. This arm asks whether
-                        # the CONTENT is what needs the agent. ~150 units out,
-                        # because a body at the spawn point reads as "nothing
-                        # appeared" (studies/enemy/PLAN.md's probe distance).
-                        if HENCHMAN is not None and HENCHMAN_BODY:
-                            _hn = agents.npc_template(HENCHMAN)
-                            _hx, _hy = pos[0] + 150.0, pos[1]
-                            create_agent_world(
-                                send, state, HENCHMAN_AGENT_ID,
-                                {"pos": (_hx, _hy), "plane": cfg[2],
-                                 "health": 100.0, "max_health": 100.0,
-                                 "dead": False, "name": _hn["name"],
-                                 "npc": _hn,
-                                 "definition": HENCHMAN_DEFINITION,
-                                 "allegiance": agents.ALLEGIANCE_PLAYER,
-                                 "effects": 0,
-                                 # create_agent_world reads these; leaving one
-                                 # out killed the WORLD TICK THREAD, and the
-                                 # client's Code=007 named it "connection
-                                 # lost" -- our crash, not its refusal.
-                                 "attack_speed": ENEMY_ATTACK_SPEED,
-                                 "resend_definition": True,
-                                 "attacks_back": False,
-                                 "skills": [], "skill_ready": []},
-                                "henchman body", conn_id=conn_id)
-                        # The hero AGENT's displayed level, prop 36 on 0x009F.
-                        # Retail's kind-5 idiom rides it BEFORE the create when
-                        # there is one (createburst, 344/366), and the channel
-                        # is a per-agent store that needs no create at all --
-                        # the henchman_level probe moves it on a bodiless
-                        # agent. The panel title's "Lvl 255" is this message's
-                        # ABSENCE rendered, not a missing body (pvpui 28.3).
-                        for _hid, _haid, _hdef in (hero_slots()
-                                                   if HERO_LEVEL is not None
-                                                   else ()):
-                            hsend(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-                                  [agents.PROP_LEVEL, _haid, HERO_LEVEL],
-                                  f"level {HERO_LEVEL} on hero agent {_haid}")
-                        for _hid, _haid, _hdef in (hero_slots()
-                                                   if HERO_VITALS is not None
-                                                   else ()):
-                            hsend(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-                                  [agents.PROP_HEALTH_MAX, _haid,
-                                   HERO_VITALS[0]],
-                                  f"health max {HERO_VITALS[0]} on hero "
-                                  f"agent {_haid}")
-                            hsend(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-                                  [agents.PROP_ENERGY_MAX, _haid,
-                                   HERO_VITALS[1]],
-                                  f"energy max {HERO_VITALS[1]} on hero "
-                                  f"agent {_haid}")
-                        # The hero's body, at HERO_AGENT_ID. MANDATORY for the
-                        # commander binding rather than optional like the
-                        # henchman's: GmHeroCommander:120/121 assert a
-                        # resolvable heroData AND a non-zero heroData->agentId
-                        # before a slot binds. The henchman arm also measured
-                        # that the roster row reads the AGENT for its name,
-                        # profession and level, so a bodiless hero row would be
-                        # expected to render as empty as the henchman's did.
-                        for _i, (_hid, _haid, _hdef) in (
-                                enumerate(hero_slots()) if HERO_BODY else ()):
-                            _hro = agents.npc_template(HERO_BODY_NPC)
-                            # Fan them out rather than stacking: bodies sharing a
-                            # spot read as one body, and "nothing appeared" is the
-                            # failure this repo already paid for once.
-                            _rx = pos[0] + HERO_BODY_OFFSET[0]
-                            _ry = pos[1] + HERO_BODY_OFFSET[1] * _i
-                            create_agent_world(
-                                hsend, state, _haid,
-                                {"pos": (_rx, _ry), "plane": cfg[2],
-                                 "health": 100.0, "max_health": 100.0,
-                                 "dead": False, "name": _hro["name"],
-                                 "npc": _hro,
-                                 "definition": _hdef,
-                                 "allegiance": agents.ALLEGIANCE_PLAYER,
-                                 "effects": 0,
-                                 "attack_speed": ENEMY_ATTACK_SPEED,
-                                 "resend_definition": True,
-                                 "attacks_back": False,
-                                 "skills": [], "skill_ready": []},
-                                f"hero body (hero {_hid})", conn_id=conn_id)
-                        # THE HERO'S ATTRIBUTE STATE, and it is not a new
-                        # mechanism -- it is the pair the PLAYER's own agent
-                        # already gets, addressed to the hero's agent instead.
-                        # 0x0037 is what CREATES the attribState record
-                        # (handler 0x0091D8C0 -> 0x0080EAA0 -> the ChCliAttrib
-                        # creator 0x008199C0, whose own guard is ChCliAttrib:313
-                        # `!attribState`); 0x003A then fills attrib[] through
-                        # the per-attribute setter. Both are keyed by AGENT id,
-                        # which is why a hero can have one at all.
-                        # This is the message the arc spent two refuted
-                        # hypotheses looking for, and we already had it.
-                        for _hid, _haid, _hdef in (hero_slots()
-                                                   if HERO_ATTRIBS else ()):
-                            # 0x00B7 FIRST, and read the reason before moving
-                            # it. THERE ARE TWO PROFESSION STORES and this arc
-                            # conflated them for a day:
-                            #   0x00A6 writes the AGENT's profession bytes --
-                            #     what the roster label builder reads, which is
-                            #     why the hero row already said "Mo1".
-                            #   0x00B7 writes the array at ctx[0x2c]+0x6BC --
-                            #     what the ATTRIBUTE code reads.
-                            # The attribute function 0x00819EF0 takes the
-                            # attribState record, reads its agent id, looks the
-                            # agent's primary and secondary up in +0x6BC, and
-                            # hands each to s_profChapter (0x005AB800, bound
-                            # 11) guarded ONLY against 0. An agent absent from
-                            # +0x6BC yields an out-of-range profession and
-                            # asserts ConstChar:1296 -- exactly what a hero
-                            # got, because we had only ever sent 0x00B7 for
-                            # the player. studies/heroes/FINDINGS.md 14.
-                            # ORDER IS LOAD-BEARING, and this server already
-                            # knew it: the player's own pair is sent points
-                            # FIRST, profession SECOND, and the comment above
-                            # that pair names the exact cost of the other
-                            # order -- `Assertion: attribState
-                            # ChCliAttrib.cpp(435)` with 0xb7 in the stack.
-                            # Sending 0x00B7 first for the hero reproduced
-                            # that assert on 2026-08-16, which is the repo's
-                            # own recorded knowledge re-earning itself.
-                            _hprof = (agents.npc_template(HERO_BODY_NPC)
-                                      ["profession"] if HERO_BODY else 1)
-                            # The hero gets the same budget as the player,
-                            # because it is sent the player's own default
-                            # ranks two lines below (attribute_columns() with
-                            # no argument) -- and (available, total) must
-                            # AGREE with the ranks that follow or the panel
-                            # shows a build nobody paid for. Its own state is
-                            # not modelled: nothing lets us spend a hero's
-                            # points, so there is no mutable state to hold.
-                            _hattr = attribute_state(state)
-                            hsend(GAME_SMSG_AGENT_UPDATE_ATTRIBUTE_POINTS,
-                                 [_haid, _hattr.available, _hattr.points_total],
-                                 f"AGENT_ATTRIBUTE_POINTS(hero agent "
-                                 f"{_haid}: {_hattr.available} of "
-                                 f"{_hattr.points_total})")
-                            hsend(GAME_SMSG_AGENT_PROFESSIONS,
-                                 spawn_profession_values(_hprof, _haid),
-                                 f"AGENT_PROFESSIONS(hero agent "
-                                 f"{_haid}, prof {_hprof})")
-                            _hcols = attribute_columns()
-                            hsend(GAME_SMSG_AGENT_UPDATE_ATTRIBUTES,
-                                 [_haid, _hcols],
-                                 f"AGENT_UPDATE_ATTRIBUTES(hero agent "
-                                 f"{_haid}, {len(_hcols) // 3} attrs)")
-                        # THE HERO'S SKILL BAR, and it is the same message the
-                        # player's bar rides -- 0x00DA is
-                        # [agent_id, array32[8], array32[8], u8], AGENT-KEYED
-                        # with an eight-slot array. studies/heroes/FINDINGS.md
-                        # 4 recorded "no skill-bar-shaped field anywhere" and
-                        # that was a SCOPING error, not an absence: the search
-                        # covered the party messages and the SEND-direction
-                        # shapes, and this is a RECV message this server has
-                        # been sending for the player all along. Fourth time
-                        # this arc that the mechanism was already in the tree.
-                        for _hid, _haid, _hdef in (hero_slots()
-                                                   if HERO_SKILLBAR else ()):
-                            _hskills = list(SKILLBAR)[:SKILLBAR_SLOTS]
-                            _hskills += [0] * (SKILLBAR_SLOTS - len(_hskills))
-                            hsend(GAME_SMSG_SKILLBAR_UPDATE,
-                                 [_haid, _hskills,
-                                  SKILLBAR_PVP_MASKS, SKILLBAR_TRAILER],
-                                 f"SKILLBAR_UPDATE(hero agent "
-                                 f"{_haid}){_hskills}")
-                        # The char-by-id registration, BEFORE activate so the
-                        # table covers the id by the time any click can open
-                        # the commander panel. One message per hero slot; the
-                        # value is retail's modal 100<<24 and lands at
-                        # record+0x30, whatever that field turns out to mean.
-                        for _hid, _haid, _hdef in (hero_slots()
-                                                   if HERO_CHAR else ()):
-                            hsend(GAME_SMSG_CHAR_TABLE_VALUE,
-                                  [_haid, 100 << 24],
-                                  f"CHAR_TABLE_VALUE(hero agent {_haid})")
-                        # LAST, and it is a question rather than payload. It
-                        # asserted all-zero on 2026-08-12 under this same
-                        # client state minus our messages; if it now completes
-                        # silently, something we sent created the record the
-                        # charHeroData gate wants. Both outcomes are readouts,
-                        # and an EARLY assert (before this line) would itself
-                        # name the commander-binding trigger.
-                        for _hid, _haid, _hdef in (
-                                hero_slots()
-                                if (HERO_ACTIVATE and not HERO_ACTIVATE_FIRST)
-                                else ()):
-                            hsend(*agents.hero_activate(
-                                HERO_ACTIVATE_ID
-                                if (HERO_ACTIVATE_ID is not None
-                                    and _haid == HERO_AGENT_ID) else _hid,
-                                _haid, HERO_INVENTORY, HERO_AI_MODE))
-                        # THE DEFERRED PARTY BUILD. Last, so every message the
-                        # commander path reads -- the activation record above
-                        # most of all -- already exists when 0x01C2's worker
-                        # raises case 93 into it.
-                        for _op, _vals, _lbl in _party_deferred:
-                            hsend(_op, _vals, _lbl)
-                        if PROBE_NAME:
-                            run_probe(PROBE_NAME, send, conn_id, stop,
-                                      origin=(pos[0], pos[1], cfg[2]))
-                        if LABEL_RUN:
-                            # The no-tape path: label against our OWN world, which
-                            # answers. That is a different experiment from labelling
-                            # after a tape -- here a completed action is visible, but
-                            # the world is one player and at most one enemy, so most
-                            # of the script has nothing to point at. Both are worth
-                            # having; neither substitutes for the other.
-                            threading.Thread(
-                                target=labelrun.run,
-                                args=(rec, conn_id, stop),
-                                kwargs={"steps": LABEL_RUN},
-                                daemon=True).start()
-                        # Rung Q6's tail, and it is placed here rather than in
-                        # the REQUEST_ITEMS burst for a reason: property-11 head
-                        # glyphs are PER AGENT, and the agents do not exist until
-                        # this arm has created them. Sent earlier they would name
-                        # agents the client has never heard of.
-                        _restore_active_marker(send, state)
-                        _send_markers(send, state, " (instance load)")
+                        # The ~900-line body now lives at module scope as
+                        # _handle_request_players(), just above handle();
+                        # the head stays here because test_dispatch.py
+                        # walks this chain by AST.
+                        _handle_request_players(send, state, conn_id,
+                                                stop, rec)
 
                     elif opcode == GAME_CMSG_INSTANCE_LOAD_REQUEST_SPAWN:
                         # map_file_id 0 is a placeholder: the real one comes from
