@@ -280,8 +280,14 @@ import pinned                                                  # noqa: E402
 import resyncscore                                             # noqa: E402
 
 
-class Refused(SystemExit):
-    """This file refuses to print a number about nothing. See each raise site."""
+# `class Refused` lives in `grantinputs.py` now -- ONE definition and never a
+# second one, because it subclasses `SystemExit`: a copy defined here as well
+# would make `except GS.Refused` silently stop catching the one the resolvers
+# raise, and an uncaught `SystemExit` exits the test process with no banner.
+# Re-exported HERE, at the site it was cut from, because this file raises it by
+# the bare name at eleven sites below and `test_grantsim.py` catches
+# `GS.Refused` (§B, §C0).
+from grantinputs import Refused                                 # noqa: F401,E402
 
 
 # =========================================================================
@@ -582,36 +588,15 @@ SUBSTRATE_WARNING = (
     "acquittal, and this file cannot price harm a candidate REMOVES.")
 
 
-def capture_path(stamp):
-    root = vaultpath.require_dir(
-        "captures", "gamesrv",
-        why="REALFIX-H1 replays OUR captures' own c2s control stream; with no "
-            "captures there is nothing to replay and no number to print")
-    p = os.path.join(root, "authsrv-%s-c1.jsonl" % stamp)
-    if not os.path.isfile(p):
-        raise Refused(f"grantsim: no capture for {stamp} at {p}")
-    return p
-
-
-def movetap_path(name):
-    root = vaultpath.require_dir(
-        "captures", "movetap",
-        why="REALFIX-C1 checks the forward model against a DIRECT MEMORY READ "
-            "of the SYNC array; without it the model is unvalidated arithmetic")
-    p = os.path.join(root, name)
-    if not os.path.isfile(p):
-        raise Refused(f"grantsim: no movetap trace at {p}")
-    return p
-
-
-def require_ours(paths, what="a grantsim measurement"):
-    """Every path must be OURS, or raise. Pooling is a bug, not a wider sample.
-
-    Delegates to `origin.require_single`, which raises `origin.MixedCorpora`.
-    Retail is not an input to this file at all -- it has no `ours` grant stream
-    to counterfactual against -- so there is no `want=` parameter to get wrong.
-    """
-    return origin.require_single(paths, want=origin.OURS, what=what)
+# The three path-and-origin resolvers live in `grantinputs.py` now, and this cut
+# is the one in this file that lands INSIDE a banner: the stamps above and
+# `_TRACK_CACHE`/`track_of` below are still this file's, only the resolvers they
+# feed moved. Re-exported HERE, at the site they were cut from, because
+# `track_of()` below calls `capture_path()` by the bare name, as do eight
+# further sites in this file, and `test_grantsim.py` reads all three off the
+# module (`GS.capture_path`, `GS.movetap_path`, `GS.require_ours`).
+from grantinputs import (                                       # noqa: F401,E402
+    capture_path, movetap_path, require_ours)
 
 
 _TRACK_CACHE = {}
@@ -696,25 +681,13 @@ def c2s_moves(path):
 # rather than wrongly expressed: gate 2 has n = 0 observed firings and is
 # structurally invisible offline either way.
 
-_AUTHSRV = None
-
-
-def _authsrv():
-    """The REAL server module, imported on FIRST USE and never at import time.
-
-    See deviation (1) in the module docstring. `test_bareimport.py` proves
-    `import authsrv` succeeds with no vault, so this is safe wherever it is
-    reached -- but it is still deferred, because a scanner that only wants
-    `derive_match_radius()` should not pay for the server's import chain.
-    """
-    global _AUTHSRV
-    if _AUTHSRV is None:
-        srv = os.path.join(os.path.dirname(HERE), "authsrv")
-        if srv not in sys.path:
-            sys.path.insert(0, srv)
-        import authsrv as A                                    # noqa: PLC0415
-        _AUTHSRV = A
-    return _AUTHSRV
+# `_AUTHSRV` and `_authsrv()` live in `grantinputs.py` now. Re-exported HERE,
+# at the site they were cut from, because this file calls `_authsrv()` by the
+# bare name below and `test_grantsim.py` reads `GS._authsrv()` (§C3, §10).
+# `_AUTHSRV` itself is NOT re-exported and must not be: it is a mutable memo, so
+# a `from grantinputs import _AUTHSRV` would bind the `None` it holds at import
+# time and never see it fill -- a second, permanently-stale copy.
+from grantinputs import _authsrv                                # noqa: F401,E402
 
 
 @contextlib.contextmanager
