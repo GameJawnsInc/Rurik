@@ -121,17 +121,17 @@ import checks                                                # noqa: E402
 #   the post-flight's before-image is the BUILD record                 3 red   *
 #   --deploy stops requiring --yes                                     3 red
 #   deployed_state answers the overlay name whenever it is not retail  3 red
-#   the fingerprints self-digest is not checked on load                3 red
+#   the fingerprints self-digest is not checked on load                3 red   +
 #   an accept_unread declaration is accepted without matching the count 2 red
 #   the index/archive row cross-check is dropped                       2 red
-#   the gate stops normalising through refindex.canonical_id           2 red
+#   the gate stops normalising through refindex.canonical_id           2 red   +
 #   the two halves of the before-image are not tied together           1 red
 #   the "no record of this row" note is dropped                        1 red
 #   the "this row is itself unreadable" note is dropped                1 red
 #   grow_to is invented from the payload instead of the donor          1 red
 #   looks_like_retail always returns False                             1 red
 #   an ambiguous file id resolves to the first row rather than refusing 1 red
-#   an unknown [overlay] key is accepted instead of refused            1 red
+#   an unknown [overlay] key is accepted instead of refused            1 red   +
 #
 #   * 3 with the pre-fix shape reproduced exactly -- the build record read in
 #     and the pair check made vacuous rather than removed; 6 if the pair check
@@ -140,6 +140,30 @@ import checks                                                # noqa: E402
 #     the post-flight blaming the client for --retail's own bytes is the
 #     before-image being deleted, and reading the right record is what stops it
 #     answering about the wrong moment.
+#
+#   + PATCH THE LEAF, NOT `overlay`. These three sabotages patch a name that is
+#     read from INSIDE a unit the refactor moved out, so `overlay.<name> = fake`
+#     now patches a re-exported alias that nothing reads: the sabotage goes
+#     GREEN and a counted refutation silently stops refuting. Re-run them
+#     against the module that owns the read -- `_self_sha` (read by
+#     load_fingerprints) and `MANIFEST_KEYS` (read by load_manifest) in
+#     overlaystate.py, `canonical_id` (read bare inside gate_edit) in
+#     overlayrefgate.py -- and `canonical_id` in `overlay` TOO, because it is
+#     the one name of the three read on BOTH sides of the split: four reads
+#     inside gate_edit, which moved, and four more inside plan, which STAYED
+#     (overlay.py's co_readers/co_wearers normalisation, which is what the
+#     "the plan still records who the co-readers are" check is scored off).
+#     Patch overlayrefgate alone and plan goes on normalising: the row still
+#     reds, but it is no longer the 2 reds that were measured. The rule, once,
+#     for the whole ledger: a name read from inside a moved unit loses its
+#     `overlay.<name>` patch handle, a name read from both sides keeps only
+#     half of one, and a name overlay.py still CALLS keeps it -- fit_of,
+#     gate_edit, index_faults, index_row_fault, looks_like_retail, id_records,
+#     rows_named_by and load_fingerprints stay patchable through `overlay`,
+#     which is why every call site in overlay.py stayed byte-identical.
+#     `overlay._self_sha` is the sharp one: it stays a LIVE re-export because
+#     datcheck.py calls it, so the alias has two meanings now -- real for that
+#     caller, dead for this patcher.
 #
 # Three readings worth keeping rather than tidying away.
 #

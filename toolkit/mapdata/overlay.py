@@ -198,20 +198,17 @@ import refindex                                            # noqa: E402
 from refindex import canonical_id                          # noqa: E402
 import vaultpath                                           # noqa: E402
 
-FORMAT = "rurik-overlay-fingerprints"
-FORMAT_VERSION = 1
-
-#: `[a-z0-9-]+`. The name becomes a directory and four filenames, so it is
-#: constrained at the door rather than sanitised at every use.
-NAME_RE = re.compile(r"^[a-z0-9-]+$")
-
-#: Where staged archives live, under the vault and nowhere else.
-EXPORT_PARTS = ("exports", "overlays")
-
-MANIFEST_KEYS = frozenset({"name", "active", "retail", "refindex",
-                           "accept_unread"})
-EDIT_KEYS = frozenset({"file_id", "compression", "plain", "stored",
-                       "acknowledge_shared_with"})
+# FORMAT, FORMAT_VERSION, NAME_RE, EXPORT_PARTS, MANIFEST_KEYS and EDIT_KEYS are
+# now toolkit/mapdata/overlaystate.py, verbatim, with the manifest and record
+# code that is the only thing that reads the last three. The re-export sits
+# HERE, where they were cut from, and not in the import block at the top of the
+# file. FORMAT and FORMAT_VERSION are read below by build() and deploy(), and
+# from outside by datcheck.py (936/938/942), test_abrun.py (391/392) and
+# test_datcheck.py (1224/1225). NAME_RE has no reader at all -- it is named in
+# COMMENTS at abrun.py:622 and test_abrun.py:1057 as `overlay.NAME_RE`, and the
+# re-export is what keeps those two sentences true.
+from overlaystate import (FORMAT, FORMAT_VERSION,          # noqa: F401,E402
+                          NAME_RE)
 
 IN_RESERVATION = "in-reservation"
 GROW_BACK = "grow-back"
@@ -220,521 +217,59 @@ TOO_BIG = "does-not-fit"
 STATE_RETAIL = "retail"
 STATE_OTHER = "OTHER"
 
-#: Fields of the retail stamp a fingerprints record is matched on. `archive` is
-#: recorded and deliberately not compared -- `datledger.STAMP_FIELDS` reasons it
-#: out: censusing a byte-identical copy under another name is legitimate, and a
-#: guard that refuses it is a guard people route around.
-STAMP_FIELDS = ("size_on_disk", "mft_offset", "mft_size", "row_count",
-                "mft_sha256")
-
-INDEX_COST = ("a full pass reads and decompresses every flags-515 container "
-              "-- about 15.5 minutes and ~10 MB of JSON on a retail archive")
-
-
-# ---------------------------------------------------------------------------
-# Paths, and what may never be one
-# ---------------------------------------------------------------------------
-
-def _inside(path, root):
-    """True if `path` is `root` or below it. Case-folded, and REALPATH'd.
-
-    The realpath is not decoration: a junction pointing out of the vault
-    defeats a plain `abspath` compare, and this guard's job is to keep
-    ArenaNet's bytes where the gitignore can see them (`datdelta._inside`).
-    """
-    path = os.path.normcase(os.path.realpath(path))
-    root = os.path.normcase(os.path.realpath(root))
-    return path == root or path.startswith(root + os.sep)
-
-
-def guard_archive(path, role):
-    """Neither archive a manifest names may be the install or the snapshot.
-
-    `datwrite.guard` and `guard_source` carry the wording and the reasoning, so
-    they are called rather than restated; what is added is WHY a read-only role
-    is guarded too. `--retail --yes` copies RETAIL over ACTIVE and `--build`
-    copies it into the vault, so a manifest naming `C:\\gw\\Gw.dat` as its
-    baseline has put the owner's install inside a deploy loop, one flag away
-    from being the destination. `vault/dat_study` is the copy every other
-    archive is cut from and nothing in this repo can put it back.
-    """
-    try:
-        datwrite.guard(path)
-        datwrite.guard_source(path)
-    except SystemExit as exc:
-        raise SystemExit(
-            f"refusing to use {os.path.abspath(path)} as this overlay's "
-            f"{role} archive\n"
-            f"{exc}\n"
-            f"  Both archives a manifest names take part in whole-file copies, "
-            f"so naming either of those two here puts them inside a deploy "
-            f"loop -- one flag away from being the destination.\n"
-            f"  Point {role} at a copy under vault/run/ or vault/dat_*/ that "
-            f"you can throw away.") from None
-    return os.path.abspath(path)
-
-
-def export_root(create=False):
-    """`vault/exports/overlays`, and a refusal if the vault is not there."""
-    vault = vaultpath.require_dir(
-        why="a staged overlay is a retail archive with a few rows changed -- "
-            "ArenaNet's bytes verbatim, nearly all of it -- so it lives in the "
-            "gitignored vault or it does not get written")
-    root = os.path.join(vault, *EXPORT_PARTS)
-    if create:
-        os.makedirs(root, exist_ok=True)
-    return root
-
-
-def staged_dir(manifest, create=False):
-    return os.path.join(export_root(create=create), manifest.name)
-
-
-def staged_path(manifest, create=False):
-    d = staged_dir(manifest, create=create)
-    if create:
-        os.makedirs(d, exist_ok=True)
-    return os.path.join(d, f"Gw.{manifest.name}.dat")
-
-
-def fingerprints_path(manifest):
-    return os.path.join(staged_dir(manifest), f"{manifest.name}.fingerprints.json")
-
-
-def journal_path(manifest):
-    return os.path.join(staged_dir(manifest), f"{manifest.name}.journal.json")
-
-
-def prelaunch_snapshot_path(manifest):
-    return os.path.join(staged_dir(manifest),
-                        f"{manifest.name}.prelaunch.snapshot.json")
-
-
-def prelaunch_fingerprints_path(manifest):
-    return os.path.join(staged_dir(manifest),
-                        f"{manifest.name}.prelaunch.fingerprints.json")
-
-
-# ---------------------------------------------------------------------------
-# The manifest
-# ---------------------------------------------------------------------------
-
-class Edit:
-    """One row this profile owns, as the manifest declares it.
-
-    `plain` is the payload a READER must get back and is the whole point of the
-    field: for a compression-8 edit it is what `datwrite.declaration_fault`
-    decodes the stored stream against before a byte is written, which is the
-    only refutation that exists -- the entry crc is over the STORED bytes, so a
-    compressed row holding the wrong payload passes all three checksum rules and
-    all ten of `datcheck --preflight`'s.
-    """
-
-    __slots__ = ("file_id", "compression", "plain_path", "stored_path",
-                 "acknowledge", "plain", "_data")
-
-    def __init__(self, file_id, compression, plain_path, stored_path,
-                 acknowledge, plain):
-        self.file_id = file_id
-        self.compression = compression
-        self.plain_path = plain_path
-        self.stored_path = stored_path
-        self.acknowledge = list(acknowledge)
-        self.plain = plain          # the bytes a reader must get back
-        self._data = None           # the bytes that go on disk
-
-    @property
-    def data(self):
-        """The stored form, computed once and only when something needs it.
-
-        Lazy because `--status` and `--verify-after` do not write anything and
-        must not pay for a `gwenc` encode of every compressed edit to answer a
-        question about the ACTIVE archive's current bytes.
-        """
-        if self._data is None:
-            if self.compression != COMPRESSION_HUFFMAN:
-                self._data = self.plain
-            elif self.stored_path:
-                self._data = _read_bytes(self.stored_path,
-                                         f"{self.label} stored stream")
-            else:
-                self._data = gwenc.encode(self.plain)
-        return self._data
-
-    @property
-    def label(self):
-        return f"0x{self.file_id:X} ({self.file_id})"
-
-
-class Manifest:
-    __slots__ = ("path", "dir", "name", "active", "retail", "refindex_path",
-                 "accept_unread", "edits", "sha256")
-
-    def __init__(self, path, name, active, retail, refindex_path, edits,
-                 sha256, accept_unread=None):
-        self.path = os.path.abspath(path)
-        self.dir = os.path.dirname(self.path)
-        self.name = name
-        self.active = active
-        self.retail = retail
-        self.refindex_path = refindex_path
-        #: The number of unreadable containers/lists in the gating index this
-        #: manifest has LOOKED AT. `None` means "not declared", which is a
-        #: different state from "declared zero" and is refused when the index
-        #: has any -- see `index_faults`.
-        self.accept_unread = accept_unread
-        self.edits = edits
-        self.sha256 = sha256
-
-
-def _refuse_manifest(path, why):
-    raise SystemExit(
-        f"REFUSED: {os.path.abspath(path)} is not a usable overlay manifest\n"
-        f"  {why}\n"
-        f"  An overlay manifest is:\n"
-        f"    [overlay]\n"
-        f"    name = \"slowmo\"\n"
-        f"    active = \"../run/<build>/Gw.dat\"\n"
-        f"    retail = \"../run/<build>/Gw.dat.retail\"\n"
-        f"    [[edit]]\n"
-        f"    file_id = 0x3AAA\n"
-        f"    compression = 0\n"
-        f"    plain = \"payloads/x.bin\"\n"
-        f"    acknowledge_shared_with = []")
-
-
-def _rel(manifest_dir, value):
-    """A manifest path, resolved against the manifest's OWN directory.
-
-    Never against the working directory: the manifest lives in the vault beside
-    its payloads, and a relative path that moved with the shell would name a
-    different file from a different terminal.
-    """
-    return value if os.path.isabs(value) else os.path.join(manifest_dir, value)
-
-
-def _read_bytes(path, what):
-    try:
-        with open(path, "rb") as fh:
-            return fh.read()
-    except OSError as exc:
-        raise SystemExit(f"REFUSED: cannot read the {what} at "
-                         f"{os.path.abspath(path)}: {exc}") from None
-
-
-def load_manifest(path, echo=False):
-    """Parse and validate a manifest. Nothing is read off any archive here."""
-    raw = _read_bytes(path, "manifest")
-    try:
-        doc = tomllib.loads(raw.decode("utf-8"))
-    except (UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
-        _refuse_manifest(path, f"it is not readable TOML: {exc}")
-
-    head = doc.get("overlay")
-    if not isinstance(head, dict):
-        _refuse_manifest(path, "there is no [overlay] table in it")
-    unknown = sorted(set(head) - MANIFEST_KEYS)
-    if unknown:
-        # A TYPO IS SILENT IN THE DANGEROUS DIRECTION. `refindx = "..."` would
-        # leave the manifest naming no index and this tool would go and build
-        # one for fifteen minutes; a misspelled key is refused rather than
-        # ignored.
-        _refuse_manifest(path, f"[overlay] carries unknown key(s) {unknown}; "
-                               f"known keys are {sorted(MANIFEST_KEYS)}")
-    name = head.get("name")
-    if not isinstance(name, str) or not NAME_RE.match(name):
-        _refuse_manifest(path, f"overlay.name is {name!r}; it must match "
-                               f"[a-z0-9-]+ (it becomes a directory name and "
-                               f"four filenames)")
-    for key in ("active", "retail"):
-        if not isinstance(head.get(key), str) or not head[key].strip():
-            _refuse_manifest(path, f"overlay.{key} is missing. Both archives "
-                                   f"are named EXPLICITLY and neither is ever "
-                                   f"inferred from the other.")
-    mdir = os.path.dirname(os.path.abspath(path))
-    active = guard_archive(_rel(mdir, head["active"]), "active")
-    retail = guard_archive(_rel(mdir, head["retail"]), "retail")
-    if os.path.normcase(active) == os.path.normcase(retail):
-        _refuse_manifest(
-            path, f"overlay.active and overlay.retail name the SAME file "
-                  f"({active}). The baseline is what a deploy is measured "
-                  f"against and what --retail restores from; if it is also the "
-                  f"deploy target then the first deploy destroys it.")
-    ridx = head.get("refindex")
-    if ridx is not None and (not isinstance(ridx, str) or not ridx.strip()):
-        _refuse_manifest(path, f"overlay.refindex is {ridx!r}; it names a "
-                               f"saved refindex JSON or is absent")
-    ridx = _rel(mdir, ridx) if ridx else None
-    unread = head.get("accept_unread")
-    if unread is not None and (not isinstance(unread, int)
-                               or isinstance(unread, bool) or unread < 0):
-        _refuse_manifest(
-            path, f"overlay.accept_unread is {unread!r}; it is a COUNT -- the "
-                  f"number of containers or reference lists the gating index "
-                  f"could not read, which you have looked at. A flag would go "
-                  f"on covering a blind spot as it grew; a count moves when "
-                  f"the blind spot does.")
-
-    rows = doc.get("edit")
-    if not isinstance(rows, list) or not rows:
-        _refuse_manifest(path, "there is not one [[edit]] in it. An overlay "
-                               "that edits nothing has nothing to deploy.")
-    edits, seen = [], {}
-    for i, row in enumerate(rows):
-        if not isinstance(row, dict):
-            _refuse_manifest(path, f"[[edit]] {i} is a {type(row).__name__}")
-        unknown = sorted(set(row) - EDIT_KEYS)
-        if unknown:
-            _refuse_manifest(path, f"[[edit]] {i} carries unknown key(s) "
-                                   f"{unknown}; known keys are "
-                                   f"{sorted(EDIT_KEYS)}")
-        fid = row.get("file_id")
-        if not isinstance(fid, int) or isinstance(fid, bool) or fid <= 0:
-            _refuse_manifest(path, f"[[edit]] {i} has file_id {fid!r}; it must "
-                                   f"be a positive integer (0x hex is fine)")
-        if fid in seen:
-            _refuse_manifest(
-                path, f"file id 0x{fid:X} is named by [[edit]] {seen[fid]} AND "
-                      f"[[edit]] {i}. Two edits of one row cannot both be the "
-                      f"payload a reader gets back, and which one won would "
-                      f"depend on the order they happen to sit in.")
-        seen[fid] = i
-        comp = row.get("compression")
-        if comp not in (COMPRESSION_STORED, COMPRESSION_HUFFMAN):
-            _refuse_manifest(path, f"[[edit]] {i} has compression {comp!r}; the "
-                                   f"archive knows {COMPRESSION_STORED} "
-                                   f"(stored) and {COMPRESSION_HUFFMAN} "
-                                   f"(huffman) and nothing else")
-        plain_rel = row.get("plain")
-        if not isinstance(plain_rel, str) or not plain_rel.strip():
-            _refuse_manifest(path, f"[[edit]] {i} has no `plain`. It is the "
-                                   f"payload a reader must get back and it is "
-                                   f"mandatory for both compression codes.")
-        stored_rel = row.get("stored")
-        if stored_rel is not None and (not isinstance(stored_rel, str)
-                                       or not stored_rel.strip()):
-            _refuse_manifest(path, f"[[edit]] {i} has stored {stored_rel!r}")
-        if stored_rel and comp == COMPRESSION_STORED:
-            _refuse_manifest(
-                path, f"[[edit]] {i} is compression 0 and also names a "
-                      f"`stored` stream. For a stored row the payload IS the "
-                      f"bytes on disk; naming two files invites them to differ "
-                      f"and only one of them can be written.")
-        ack = row.get("acknowledge_shared_with", [])
-        if not isinstance(ack, list) or any(
-                not isinstance(a, int) or isinstance(a, bool) for a in ack):
-            _refuse_manifest(path, f"[[edit]] {i}'s acknowledge_shared_with is "
-                                   f"{ack!r}; it is a list of file ids")
-
-        plain_path = _rel(mdir, plain_rel)
-        plain = _read_bytes(plain_path, f"[[edit]] {i} payload")
-        if not plain:
-            _refuse_manifest(path, f"[[edit]] {i}'s payload {plain_path} is "
-                                   f"empty; an empty declaration cannot be "
-                                   f"checked against anything")
-        stored_path = _rel(mdir, stored_rel) if stored_rel else None
-        if stored_path and not os.path.isfile(stored_path):
-            _refuse_manifest(path, f"[[edit]] {i} names a stored stream at "
-                                   f"{stored_path} and there is no file there")
-        if echo and comp == COMPRESSION_HUFFMAN and not stored_path:
-            print(f"  [[edit]] {i} 0x{fid:X}: {len(plain)} B will be encoded to "
-                  f"compression 8 by gwenc when a verb needs the bytes")
-        edits.append(Edit(fid, comp, plain_path, stored_path, ack, plain))
-
-    return Manifest(path, name, active, retail, ridx, edits,
-                    hashlib.sha256(raw).hexdigest(), accept_unread=unread)
-
-
-# ---------------------------------------------------------------------------
-# Identity and fingerprints
-# ---------------------------------------------------------------------------
-
-def mft_sha256(ar):
-    ar.fh.seek(ar.mft_offset)
-    blob = ar.fh.read(ar.mft_size)
-    if len(blob) != ar.mft_size:
-        raise SystemExit(
-            f"REFUSED: {ar.path} declares {ar.mft_size} B of MFT at "
-            f"0x{ar.mft_offset:X} and only {len(blob)} could be read.\n"
-            f"  An identity taken over a short read compares equal to nothing "
-            f"and unequal to everything.\n"
-            f"  python toolkit/mapdata/datcheck.py --dat {ar.path} --preflight")
-    return hashlib.sha256(blob).hexdigest()
-
-
-def archive_identity(ar):
-    """What this archive IS, in `datledger.identity`'s shape."""
-    return {"archive": os.path.abspath(ar.path),
-            "size_on_disk": os.path.getsize(ar.path),
-            "mft_offset": ar.mft_offset,
-            "mft_size": ar.mft_size,
-            "row_count": ar.row_count,
-            "mft_sha256": mft_sha256(ar)}
-
-
-def id_records(ar):
-    """Every (file_id, row) pair in MFT row 2, in table order.
-
-    Deliberately NOT `file_id_table`: that helper takes the first record per id
-    (`setdefault`), so two records naming one id would silently resolve to one
-    of them. This module refuses that state and therefore has to be able to see
-    it -- `bit31.census` walks the table with its own loop for the same reason.
-    """
-    blob = ar.read(ar.row(FILE_ID_TABLE_ROW))
-    return [struct.unpack_from("<II", blob, i * 8)
-            for i in range(len(blob) // 8)]
-
-
-def rows_named_by(records, file_id):
-    """Every DISTINCT row a file id names, sorted. Exact 32-bit compare.
-
-    No masking: `archive.file_id_table(raw=True)`'s rule, because this answers
-    what the CLIENT can address and the client's lookup is an exact compare
-    with no retry (0x0047AA20).
-    """
-    return sorted({row for fid, row in records if fid == file_id})
-
-
-def fingerprint_block(path, rows):
-    """{row: [size, crc32(stored bytes) hex, compression]} for `rows`.
-
-    THE CRC IS RECOMPUTED FROM DISK, not read out of the entry's crc field, and
-    that is the difference between a check and a tautology. A payload edited in
-    place without its crc updated is a state `datcheck --preflight` cannot see
-    -- it does not re-read payloads and has no notion of a compression code --
-    and it is exactly what a half-finished write leaves behind. Comparing the
-    MFT's own field with itself could not fail.
-    """
-    out = {}
-    with Archive(path) as ar:
-        for row in rows:
-            e = ar.row(row)
-            data = ar.raw(e)
-            if len(data) != e.size:
-                raise SystemExit(
-                    f"REFUSED: row {row} of {path} declares {e.size} B at "
-                    f"0x{e.offset:X} and only {len(data)} could be read.\n"
-                    f"  A fingerprint over a short read would compare unequal "
-                    f"to everything, including to itself.")
-            out[str(row)] = [e.size, f"{binascii.crc32(data) & 0xFFFFFFFF:08x}",
-                             e.compression]
-    return out
-
-
-def looks_like_retail(staged, retail):
-    """True iff every touched row still carries retail's bytes.
-
-    `a10stage.looks_like_retail`'s guard, and its sentence: a build that
-    changed nothing looks exactly like a successful build, right up until the
-    experiment produces a null nobody can explain.
-    """
-    return all(staged.get(k) == v for k, v in retail.items())
-
-
-def _body(doc):
-    return {k: v for k, v in doc.items() if k != "self_sha256"}
-
-
-def _self_sha(doc):
-    blob = json.dumps(_body(doc), sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
-
-
-def write_fingerprints(path, doc):
-    doc = dict(doc)
-    doc["self_sha256"] = _self_sha(doc)
-    with open(path, "w", encoding="utf-8") as fh:
-        json.dump(doc, fh, indent=1, sort_keys=True)
-    return path
-
-
-def _file_sha256(path):
-    h = hashlib.sha256()
-    with open(path, "rb") as fh:
-        for chunk in iter(lambda: fh.read(1 << 20), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-
-#: The two records this module writes, and the verb that writes each. Both go
-#: through `load_fingerprints`, because both are read as the truth about what
-#: some archive was at some moment and both can be stale, doctored, or about a
-#: different manifest.
-RECORD_KINDS = {
-    "build": (fingerprints_path, "build record", "--build {path}"),
-    "prelaunch": (prelaunch_fingerprints_path, "pre-launch record",
-                  "--deploy {path} --yes"),
-}
-
-
-def load_fingerprints(manifest, why="read", kind="build"):
-    """A written record, refused unless it describes THIS manifest and baseline.
-
-    Three separate things can be wrong with it and each has its own sentence:
-    it can be a record of a DIFFERENT manifest (the manifest sha), a record
-    taken against a DIFFERENT retail baseline (the stamp), or hand-edited (the
-    self sha). The last one is an accident tripwire and is named as one -- a
-    doctored file whose author also recomputed the digest passes, and there is
-    no cryptography here to say otherwise.
-
-    `kind` selects which of the two records is being read. They carry the same
-    fields and mean different things: the BUILD record says what was staged,
-    the PRE-LAUNCH record says what the ACTIVE archive was at the moment of a
-    deploy. Only the second one is a before-image, and `--verify-after` reads
-    only the second one -- see the module docstring.
-    """
-    where, what, remedy = RECORD_KINDS[kind]
-    path = where(manifest)
-    remedy = "python toolkit/mapdata/overlay.py " + remedy.format(
-        path=manifest.path)
-    try:
-        with open(path, encoding="utf-8") as fh:
-            doc = json.load(fh)
-    except (OSError, ValueError) as exc:
-        raise SystemExit(
-            f"REFUSED: cannot {why} overlay {manifest.name!r}: its {what} "
-            f"at {path} is not readable ({type(exc).__name__}: {exc}).\n"
-            f"  Write it first:  {remedy}") from None
-    got = doc.get("format") if isinstance(doc, dict) else type(doc).__name__
-    if not isinstance(doc, dict) or got != FORMAT:
-        raise SystemExit(f"REFUSED: {path} is not an overlay {what}: "
-                         f"its format is {got!r}, not {FORMAT!r}")
-    if doc.get("format_version") != FORMAT_VERSION:
-        raise SystemExit(
-            f"REFUSED: {path} is format_version "
-            f"{doc.get('format_version')!r}; this tool writes "
-            f"{FORMAT_VERSION}. Re-build rather than read across formats.")
-    if doc.get("self_sha256") != _self_sha(doc):
-        raise SystemExit(
-            f"REFUSED: {path} does not match its own digest.\n"
-            f"  Something edited this record after it was written, and the "
-            f"rows in it are what --status, --deploy and --verify-after read "
-            f"an archive's identity out of. A {what} that can be hand-"
-            f"adjusted to say a deploy is what it is not is worse than none.\n"
-            f"  Write it again:  {remedy}")
-    if doc.get("manifest_sha256") != manifest.sha256:
-        raise SystemExit(
-            f"REFUSED: {path} was built from a DIFFERENT manifest\n"
-            f"  record: {doc.get('manifest_sha256')}\n"
-            f"  on disk: {manifest.sha256}\n"
-            f"  The manifest has changed since this profile was staged, so the "
-            f"rows it owns and the payloads it declares may both have moved.\n"
-            f"  Write it again:  {remedy}")
-    with Archive(manifest.retail) as ar:
-        now = archive_identity(ar)
-    have = doc.get("retail", {})
-    for field in STAMP_FIELDS:
-        if have.get(field) != now[field]:
-            raise SystemExit(
-                f"REFUSED: {path} was built against a different RETAIL "
-                f"archive\n"
-                f"  {field}: the record says {have.get(field)!r}, "
-                f"{manifest.retail} says {now[field]!r}\n"
-                f"  Every fingerprint in this record is relative to that "
-                f"baseline, so 'retail on all touched rows' would be answered "
-                f"about an archive nobody is holding.\n"
-                f"  Write it again:  {remedy}")
-    return doc
+# STAMP_FIELDS moved with the record half to toolkit/mapdata/overlaystate.py,
+# verbatim with its comment. Nothing in this file reads it any more -- the one
+# reader is datcheck.py:999, which walks it to compare a record's retail stamp
+# against the archive on disk -- and the re-export at the site it was cut from
+# is what keeps `overlay.STAMP_FIELDS` resolving for that caller.
+from overlaystate import STAMP_FIELDS                      # noqa: F401,E402
+
+
+# The manifest, the paths and the records are now
+# toolkit/mapdata/overlaystate.py, verbatim: _inside, guard_archive, the six
+# path builders, Edit, Manifest, _refuse_manifest, _rel, _read_bytes,
+# load_manifest, mft_sha256, archive_identity, id_records, rows_named_by,
+# fingerprint_block, looks_like_retail, _body, _self_sha, write_fingerprints,
+# _file_sha256, RECORD_KINDS and load_fingerprints. The re-export sits HERE,
+# where they were cut from, and not in the import block at the top of the file,
+# because what reads these names is (a) plan(), build(), deployed_state(),
+# deploy(), restore_retail(), verify_after() and main() below, all by bare name
+# at sites that therefore stayed byte-identical; (b) test_overlay.py's sabotage
+# ledger, which patches `overlay.looks_like_retail`, `overlay.id_records`,
+# `overlay.rows_named_by` and `overlay.load_fingerprints` and needs those
+# callers to resolve through THIS module's globals for the patch to land; and
+# (c) datcheck.py (945 `_self_sha`, 968 `load_manifest`, 988
+# `archive_identity`), abrun.py (586 `load_manifest`, 683 `fingerprints_path`,
+# 691 `load_fingerprints`, 837 `fingerprint_block`), test_abrun.py (11
+# `load_manifest` sites, `staged_path`, `journal_path`, `write_fingerprints`,
+# `fingerprints_path`, `archive_identity`, `fingerprint_block`),
+# test_datcheck.py and test_overlay.py (`_inside`, `journal_path`,
+# `fingerprints_path`, `staged_path`, the two `prelaunch_*` paths).
+#
+# `_inside` has NO caller in this file and never had one -- its only reader is
+# test_overlay.py:1164, which asserts the staged archive really is under the
+# vault. It is re-exported for that test alone; do not go hunting for a
+# production call site.
+#
+# NOT re-exported, because nothing outside overlaystate.py reads them
+# (grepped, whole tree, .py and .md): guard_archive, export_root, staged_dir,
+# Edit, Manifest, _refuse_manifest, _rel, _read_bytes, mft_sha256, _body,
+# EXPORT_PARTS, MANIFEST_KEYS, EDIT_KEYS, RECORD_KINDS.
+#
+# The four docstring sections that argue this code stayed in this file's
+# docstring -- WHAT THIS WRITES AND WHERE, A FINGERPRINT IS COMPUTED FROM THE
+# STORED BYTES, A POST-FLIGHT IS MEASURED AGAINST THE BEFORE-IMAGE THE DEPLOY
+# TOOK, THE V1 SCOPE IS EDIT-IN-PLACE -- because they are also the verbs'
+# refusal reasoning and main()'s --help, and overlaystate.py's header names all
+# four by title and by file.
+from overlaystate import (_inside, staged_path,            # noqa: F401,E402
+                          fingerprints_path, journal_path,
+                          prelaunch_snapshot_path,
+                          prelaunch_fingerprints_path,
+                          load_manifest, archive_identity, id_records,
+                          rows_named_by, fingerprint_block,
+                          looks_like_retail, _self_sha, write_fingerprints,
+                          _file_sha256, load_fingerprints)
 
 
 # ---------------------------------------------------------------------------
@@ -798,241 +333,20 @@ def fit_of(cur_size, donor_size, new_len, block):
     return Fit(TOO_BIG, cur_res, want_res, ceiling, None)
 
 
-# ---------------------------------------------------------------------------
-# The refindex gate
-# ---------------------------------------------------------------------------
-
-def resolve_index(manifest, ar, index=None, echo=True):
-    """The reference index this plan is gated on: handed in, named, or built.
-
-    `refindex.load(path, ar)` is ALWAYS called with the archive. An index
-    loaded without one answers confidently for rows that have since moved, and
-    "nobody else reads this row" is the single wrong answer the gate exists to
-    prevent -- the same shape `vaultpath.require_dir` refuses from the other
-    side.
-    """
-    if index is not None:
-        refindex.check_stamp(index, ar, why="gate an overlay against")
-        return index
-    if manifest.refindex_path:
-        if echo:
-            print(f"  refindex <- {manifest.refindex_path}")
-        return refindex.load(manifest.refindex_path, ar)
-    if echo:
-        # THE COST IS PRINTED BEFORE THE WAIT, not discovered during it.
-        print(f"  the manifest names no refindex, so one is being BUILT from "
-              f"{manifest.retail}.\n"
-              f"  {INDEX_COST}. Build it once and name it:\n"
-              f"    python toolkit/mapdata/refindex.py --dat {manifest.retail} "
-              f"--build-json <vault path>\n"
-              f"    refindex = \"<that path>\"      # in [overlay]")
-    t0 = time.time()
-    index = refindex.build(ar, progress=refindex.PROGRESS_EVERY if echo else 0)
-    if echo:
-        print(f"  refindex built in {time.time() - t0:.0f}s")
-    return index
-
-
-def _problem_lines(index, limit=6):
-    out = []
-    for rec in index.problems[:limit]:
-        fid = rec.get("file_id")
-        name = f"0x{fid:X}" if isinstance(fid, int) else "(no file id)"
-        out.append(f"    row {rec.get('row')} {name}: {rec.get('why')}")
-    if len(index.problems) > limit:
-        out.append(f"    ... and {len(index.problems) - limit} more "
-                   f"(index.problems carries all of them)")
-    return out
-
-
-def index_faults(index, manifest):
-    """Refuse an index that could not SEE what this gate is about to trust.
-
-    THE STAMP IS NOT THIS CHECK. `refindex.check_stamp` answers "is this index
-    about this archive?"; these two fields answer "did it read the archive?",
-    and an index can pass the first while failing the second. A head whose
-    container would not decode is WALKED and not INDEXED -- `index.walked` and
-    `len(index.heads)` differ for exactly that reason -- so its FA8 list is not
-    in the graph, and a row that list names comes back with no referrers. That
-    is the confident empty answer, arrived at with every other guard green.
-
-    MEASURED, on this module's own fixture: two heads carrying real FA8 lists
-    naming an edited row, with their container magic damaged to `ffnX`. The
-    archive is healthy (`preflight` clean, `crc_sweep` clean), the index builds,
-    `problems` names both rows, and `who_reads` on the edited row answers `[]`.
-    Before this function the plan cleared the gate and the build ran.
-
-    `partial` is refused outright and `problems` is refused unless the manifest
-    declares the count. The asymmetry is the same one the skeleton tier rests
-    on: a partial index has no honest reading, while an unreadable container is
-    a real and bounded thing an operator can go and look at.
-    """
-    if index.partial:
-        raise SystemExit(
-            f"REFUSED: the reference index gating overlay {manifest.name!r} is "
-            f"PARTIAL.\n"
-            f"  It walked {index.walked} named head row(s), not the archive, so "
-            f"every count off it is a floor of a floor: any head it did not "
-            f"walk could be reading the row this manifest edits, and the index "
-            f"has no way to say so.\n"
-            f"  There is no acknowledgement for this one -- a subset was a spot "
-            f"check and a gate is not.\n"
-            f"  Build a whole one, once:\n"
-            f"    python toolkit/mapdata/refindex.py --dat {manifest.retail} "
-            f"--build-json <vault path>\n"
-            f"    refindex = \"<that path>\"      # in [overlay]")
-    n = len(index.problems)
-    declared = manifest.accept_unread
-    if n and declared is None:
-        raise SystemExit(
-            "\n".join([
-                f"REFUSED: the reference index gating overlay "
-                f"{manifest.name!r} could not read {n} container(s) or "
-                f"list(s), and this manifest does not say so.",
-                *_problem_lines(index),
-                f"  Every one of those is a reference list this index did NOT "
-                f"read. A head among them can name the row this manifest edits "
-                f"and the answer still comes back empty -- an index that could "
-                f"not see it is not an index that saw nothing, and this gate's "
-                f"whole job is to tell those two apart.",
-                f"  Look at them, then declare the number you looked at, in "
-                f"[overlay]:",
-                f"    accept_unread = {n}",
-                f"  A count and not a flag: a new unreadable head moves the "
-                f"number and this refusal comes back, where a `true` would go "
-                f"on covering a blind spot as it grew.",
-                f"  python toolkit/mapdata/refindex.py --dat {manifest.retail} "
-                f"--build-json <vault path>   prints them under BLIND SPOT."]))
-    if declared is not None and declared != n:
-        raise SystemExit(
-            "\n".join([
-                f"REFUSED: overlay {manifest.name!r} declares accept_unread = "
-                f"{declared} and this index could not read {n}.",
-                *_problem_lines(index),
-                f"  The number moved, which means the set of things this gate "
-                f"cannot see is not the set that was looked at. Look again, "
-                f"then write the new number:",
-                f"    accept_unread = {n}      # in [overlay]"]))
-    return n
-
-
-def index_row_fault(index, edit, row):
-    """Does the index agree with the ARCHIVE about which row this id names?
-
-    -> a reason string, or None.
-
-    `refindex.who_reads` resolves its argument to a row through the index's own
-    spelling map and answers about THAT row. This caller has already resolved
-    the same id against RETAIL's raw table, so the two resolutions can be
-    compared -- and they are the one pair of facts that can catch a file-id
-    table edited in place without its row's crc being updated, which is a state
-    the MFT stamp cannot see (`refindex`'s own "THE STAMP AND WHAT IT DOES NOT
-    CATCH"). An index answering about a different row than the one being
-    written would answer "nobody" perfectly confidently.
-    """
-    seen = index.row_of(edit.file_id)
-    if seen is not None and seen != row:
-        return (f"the index resolves {edit.label} to row {seen}; the archive's "
-                f"own file-id table resolves it to row {row}. Every answer "
-                f"about this edit would be an answer about the wrong row.")
-    if seen is None and (row in index.heads or row in index.targets):
-        return (f"the index holds row {row}, but under none of {edit.label}'s "
-                f"spellings, so a query with this id resolves to no row at all "
-                f"and answers empty for a reason that is not 'nobody reads it'.")
-    return None
-
-
-def gate_edit(index, edit, row=None):
-    """Who else consumes this file id, and is every one of them acknowledged?
-
-    -> (unacknowledged, notes, answers). `unacknowledged` is the list of
-    `(canonical_id, why)` pairs a refusal must name; empty means this edit
-    clears the gate.
-
-    `row` is the row the ARCHIVE resolved this id to. When it is given and the
-    index holds no record of that row at all, the empty answer is annotated
-    with what it is empty OF -- "no indexed reference list named row N", which
-    is a fact, rather than a bare list a reader can take for a census.
-
-    BOTH SIDES ARE NORMALISED THROUGH `canonical_id`, always. A row carries
-    several file ids and an operator who wrote one spelling while the index
-    reports another has made a COMPLETE declaration -- refusing it would send
-    them off to add an id that is already there, and a gate that refuses
-    correct declarations is a gate that gets a `--force` bolted on.
-
-    THE TIER: co-readers always count; co-wearers count unless the shared key
-    is contentless. See the module docstring -- 572 heads in one all-zero group
-    on retail, and an acknowledgement of 571 unrelated models is a rubber
-    stamp.
-    """
-    own = canonical_id(index, edit.file_id)
-    ack = {canonical_id(index, a) for a in edit.acknowledge}
-
-    reads = refindex.who_reads(index, edit.file_id)
-    shares = refindex.who_shares_skeleton(index, edit.file_id)
-
-    kinds = {}
-    for referrer, kind in reads:
-        kinds.setdefault(canonical_id(index, referrer), set()).add(kind)
-    co_readers = sorted(k for k in kinds if k != own)
-    co_wearers = sorted({canonical_id(index, f) for f in shares} - {own})
-
-    contentless = shares.facts.get("contentless") is True
-
-    notes, unack = [], []
-    for fid in co_readers:
-        if fid not in ack:
-            unack.append((fid, "reads it via "
-                               + "/".join(sorted(kinds[fid]))))
-    if contentless and co_wearers:
-        # A NOTE, NOT A REFUSAL. The group is real and the criterion did not
-        # move; what the answer says is that the key carries no pose, so these
-        # heads group because none of them has one.
-        notes.append(str(shares))
-        notes.append(
-            f"  the {len(co_wearers)} co-wearer(s) above are NOT required in "
-            f"acknowledge_shared_with: the shared key is contentless "
-            f"(node_count {shares.facts.get('node_count')}), so it groups "
-            f"heads that carry no pose rather than heads that share one.")
-    else:
-        for fid in co_wearers:
-            if fid not in ack:
-                unack.append((fid, "wears the same blk2C base array "
-                                   f"({shares.facts.get('node_count')} node(s))"))
-
-    blind = [p for p in index.problems if p.get("row") == row]
-    if row is not None and blind:
-        # THE SHARPEST CASE OF THE SAME THING. `accept_unread` counts this row;
-        # this names it. An unreadable head carries no skeleton hash, so it
-        # joins no sharing group, so the co-wearer answer below is empty for a
-        # reason that is not "nobody else wears it" -- which is what
-        # `refindex.who_shares_skeleton` says from its own side.
-        notes.append(
-            f"  row {row} is ITSELF one of the {len(index.problems)} thing(s) "
-            f"this index could not read ({blind[0].get('why')}). It carries no "
-            f"skeleton hash here and joins no sharing group, so an empty "
-            f"co-wearer answer for it means 'not indexed', never 'nobody else "
-            f"wears it'")
-    if row is not None and reads.facts.get("resolved") is not True:
-        # THE EMPTY ANSWER, NAMED. `refindex` cannot tell "an id this archive
-        # does not hold" from "a row nothing here references" -- it says so --
-        # but this caller resolved the id against the archive first, so it can,
-        # and an unqualified empty list is the shape that reads as a census.
-        notes.append(
-            f"  this index holds no record of row {row}: it is not among the "
-            f"heads it indexed and no reference list it read names it. The "
-            f"empty answer above is therefore 'no list this index read names "
-            f"row {row}', not 'this id is unknown' -- and what it could not "
-            f"read is accounted for separately, by accept_unread")
-
-    stale = sorted(a for a in ack
-                   if a not in set(co_readers) | set(co_wearers))
-    if stale:
-        notes.append(
-            "  acknowledged but not a co-consumer this index can see: "
-            + ", ".join(f"0x{a:X}" for a in stale)
-            + " -- harmless, and worth checking the id was not mistyped")
-    return unack, notes, (reads, shares)
+# The refindex gate is now toolkit/mapdata/overlayrefgate.py, verbatim:
+# INDEX_COST, resolve_index, _problem_lines, index_faults, index_row_fault and
+# gate_edit. The re-export sits HERE, where they were cut from, and not in the
+# import block at the top of the file, because what reads these names is (a)
+# `plan()` below, by bare name at four sites that therefore stayed
+# byte-identical, and (b) test_overlay.py's sabotage ledger, which patches
+# `overlay.gate_edit` / `overlay.index_faults` / `overlay.index_row_fault` and
+# needs `plan()` to resolve through THIS module's globals for the patch to
+# land. No other file in the tree reads any of these four names. The five
+# docstring sections that argue this gate stayed in this file's docstring --
+# they are also `plan()`'s refusal reasoning and `main()`'s --help -- and
+# overlayrefgate.py's header names all five by title.
+from overlayrefgate import (resolve_index, index_faults,   # noqa: F401,E402
+                            index_row_fault, gate_edit)
 
 
 # ---------------------------------------------------------------------------
