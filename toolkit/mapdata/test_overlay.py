@@ -148,14 +148,22 @@ import checks                                                # noqa: E402
 #     against the module that owns the read -- `_self_sha` (read by
 #     load_fingerprints) and `MANIFEST_KEYS` (read by load_manifest) in
 #     overlaystate.py, `canonical_id` (read bare inside gate_edit) in
-#     overlayrefgate.py. The rule, once, for the whole ledger: a name read from
-#     inside a moved unit loses its `overlay.<name>` patch handle; a name
-#     overlay.py still CALLS keeps it -- fit_of, gate_edit, index_faults,
-#     index_row_fault, looks_like_retail, id_records, rows_named_by and
-#     load_fingerprints stay patchable through `overlay`, which is why every
-#     call site in overlay.py stayed byte-identical. `overlay._self_sha` is the
-#     sharp one: it stays a LIVE re-export because datcheck.py calls it, so the
-#     alias has two meanings now -- real for that caller, dead for this patcher.
+#     overlayrefgate.py -- and `canonical_id` in `overlay` TOO, because it is
+#     the one name of the three read on BOTH sides of the split: four reads
+#     inside gate_edit, which moved, and four more inside plan, which STAYED
+#     (overlay.py's co_readers/co_wearers normalisation, which is what the
+#     "the plan still records who the co-readers are" check is scored off).
+#     Patch overlayrefgate alone and plan goes on normalising: the row still
+#     reds, but it is no longer the 2 reds that were measured. The rule, once,
+#     for the whole ledger: a name read from inside a moved unit loses its
+#     `overlay.<name>` patch handle, a name read from both sides keeps only
+#     half of one, and a name overlay.py still CALLS keeps it -- fit_of,
+#     gate_edit, index_faults, index_row_fault, looks_like_retail, id_records,
+#     rows_named_by and load_fingerprints stay patchable through `overlay`,
+#     which is why every call site in overlay.py stayed byte-identical.
+#     `overlay._self_sha` is the sharp one: it stays a LIVE re-export because
+#     datcheck.py calls it, so the alias has two meanings now -- real for that
+#     caller, dead for this patcher.
 #
 # Three readings worth keeping rather than tidying away.
 #
