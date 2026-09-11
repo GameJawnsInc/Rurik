@@ -26,7 +26,14 @@ merely a path fixture: `marks_instructions` spells the marker command as
 `python "<HERE>/marks.py"`, and because this file sits in the same directory as
 `livesession.py` that string is byte-identical to the one the driver printed before the
 split. The toolkit root, `clientpatch`, `authsrv`, `schema` and `mapdata` are the driver's
-and are not copied. This module does not import its origin (R4): the live driver runs as
+and this file copies none of them -- though MEASURED 2026-09-11, and stated because the
+first draft of this paragraph implied otherwise: `marks.py` does its own
+`sys.path.insert(0, os.path.dirname(HERE))` at import time (`marks.py:215`), so after
+`import planseal` the toolkit ROOT is on the path anyway. The claim this module can make
+is the one that was measured on the modules rather than on the path -- importing it loads
+none of `livesession`, `wirecapture`, `accounts`, `origin`, `vaultpath`, `codec`,
+`gwcrypto` or `wiresplit` -- and `clientpatch`, `authsrv`, `schema` and `mapdata` stay off
+the path entirely. This module does not import its origin (R4): the live driver runs as
 `python livesession.py`, so importing it back would load a second copy whose flags `main()`
 never set.
 

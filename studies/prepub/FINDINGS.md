@@ -150,8 +150,14 @@ recording the redaction and pointing at the rule.
 of the account address in F1, so it published a second identifier beside the commit
 identity. All four are dead scratchpad paths whose contents were never retained.
 
-**Fixed** — replaced with `<user>`, the placeholder `toolkit/harness/livesession.py:667`
+**Fixed** — replaced with `<user>`, the placeholder `toolkit/harness/planseal.py:197`
 already uses for the same shape. Complete set; confirmed by `git log -S`.
+(Repointed 2026-09-11: the citation read `toolkit/harness/livesession.py:667` and was
+correct until the REFACTOR arc moved `plan_manifest`'s docstring — with that
+`C:\Users\<a real name>\Documents\gw plan.txt` line in it — out to `planseal.py`. It is
+recorded here because no automated sweep would have found it: `livesession.py` still has
+a line 667, no symbol pairs with the citation, and `citelint.py` therefore scores it
+`ok-line` — green — while pointing a reader at unrelated code inside `run()`.)
 
 ---
 
