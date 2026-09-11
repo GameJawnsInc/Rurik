@@ -109,8 +109,13 @@ PROPS_CHUNK = 0x10000004
 SUN_RATIO = 127.0 / 32.0
 
 
-class Refused(Exception):
-    """A stage refused. The message says which and why."""
+# `Refused` now lives in deployrefuse.py, named for THIS module on purpose --
+# `test_deploy.py` §10(e2) asserts `type(exc) is deploy.Refused`, so the class
+# must stay deploy's own and not become a package-wide one. Re-exported here,
+# at the site it used to be defined, because it is read as `deploy.Refused` by
+# `test_deploy.py` (14 sites) and by TESTS.md's account of `__main__`, and
+# raised by bare name 51 times below.
+from deployrefuse import (Refused)  # noqa: F401,E402
 
 
 # ------------------------------------------------------------- geometry
