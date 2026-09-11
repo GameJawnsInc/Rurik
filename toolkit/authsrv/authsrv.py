@@ -19553,7 +19553,7 @@ ENEMY_COUNT_MAX = 8
 
 # enemy_spots moved to population.py (REFACTOR-A5). `enemy_spot` just above is the
 # natural shim for it and stays. This same-signature wrapper reads ENEMY_OFFSET
-# (10790) at call time -- test_agentlife.py:4309-4354 reads `authsrv.ENEMY_OFFSET`
+# (10663) at call time -- test_agentlife.py:4309-4354 reads `authsrv.ENEMY_OFFSET`
 # around calls to it, and spawn_enemy below calls this by bare name.
 def enemy_spots(state, ox, oy, n):
     return population.enemy_spots(state, ox, oy, n, ENEMY_OFFSET=ENEMY_OFFSET)

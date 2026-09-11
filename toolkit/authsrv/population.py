@@ -16,15 +16,15 @@ the body end up" would not think to look.
 
 WHAT STAYED BEHIND, because the referents of several comments here are there:
 
-  * `ENEMY_OFFSET` (`authsrv.py:10790`) and `PROF_WARRIOR` (`:2594`) -- both are
+  * `ENEMY_OFFSET` (`authsrv.py:10663`) and `PROF_WARRIOR` (`:2594`) -- both are
     read from `content/world.toml` at import time and both are read as
     `authsrv.<NAME>` by tests, so they stay at module scope in `authsrv.py` and
     arrive here as keyword arguments AT CALL TIME. They are threaded with no
     default value on purpose: a default is evaluated at `def` time and would
     freeze the value a test had rebound, which is the exact failure the
     forwarding wrappers exist to prevent.
-  * `ENEMY_COUNT` / `ENEMY_COUNT_MAX` (`authsrv.py:19647-19657`) and `AREA_NAME`
-    (`:19673`) -- `--enemies N` and `--area` are `main()`-plumbed flags.
+  * `ENEMY_COUNT` / `ENEMY_COUNT_MAX` (`authsrv.py:19550-19551`) and `AREA_NAME`
+    (`:19567`) -- `--enemies N` and `--area` are `main()`-plumbed flags.
   * `area_population`, `PopulationError` and `spawn_population` -- the set checks
     over an area's spawn rows stay in `authsrv.py`. `toolkit/mapdata/deploy.py`'s
     `spawn_row_count` is a deliberate SECOND reader of `area_population`'s two
