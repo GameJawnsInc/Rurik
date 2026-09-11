@@ -5250,8 +5250,9 @@ if set(PROBES) & set(probequest.PROBES):
 PROBES.update(probequest.PROBES)
 
 
-# And the six merchant entries, cut from the two sites above, merged the same
-# way and for the same reasons. The check runs AFTER the quest merge, so it
+# And the six merchant entries, cut from the ONE site above -- they stood
+# contiguously, where the quest entries came from two -- merged the same way
+# and for the same reasons. The check runs AFTER the quest merge, so it
 # also rules on a name defined in BOTH siblings rather than only on a clash
 # with what is left in this file.
 import probemerchant                                        # noqa: E402
