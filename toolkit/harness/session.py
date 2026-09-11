@@ -88,6 +88,15 @@ import datcheck  # noqa: E402  -- toolkit/mapdata, the archive half of the gate
 # have no reader anywhere outside the leaf and are exported anyway, to keep this
 # module's public surface what it was; `_TRAVELLING_FLAGS` is private and stays
 # unexported -- `served_maps` is its only reader.
+# AND `test_harness.py` IS NOT THE ONLY READER, which the sentence above reads
+# as if it were. `test_preflight_owner.py` is the second: it takes
+# `session.server_specs` as an attribute at :287 and :296, and at :318-324 it
+# pins a THIRD bare Name -- main()'s `specs` must be assigned from a Call whose
+# func is the Name `server_specs`. That lock lives in a different file from the
+# other two, so a cleanup that reads only the sentence above can qualify
+# `server_specs` believing `prompts_operator` and `hold_implies_keep_open` are
+# the whole pinned set, and redden a test with one check of headroom (floor 29,
+# measure 30) on a message about parsing.
 from runargs import (  # noqa: F401,E402
     split_args, is_labelling, is_probing, prompts_operator,
     hold_implies_keep_open, resolve_enemy, warn_probe_without_enemy,

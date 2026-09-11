@@ -43,7 +43,13 @@ every public name here. Two of those call sites are pinned as BARE NAMES by
 `test_harness.py`, which parses `session.py`'s own syntax tree and requires
 `prompts_operator` inside both `main` and `run_client` and
 `hold_implies_keep_open` inside `main` -- so the re-export is by name and never
-behind a module prefix. `contentids.preflight` (named by `served_maps`) and
+behind a module prefix. THERE IS A THIRD SUCH PIN AND IT IS IN ANOTHER FILE:
+`test_preflight_owner.py`:318-324 requires main()'s `specs` to be assigned from
+a Call whose func is the Name `server_specs`, and the same file reads
+`session.server_specs` as an attribute at :287 and :296 -- so `test_harness.py`
+is not the only reader of these names, and the bare-Name set is three, not two.
+Its floor is 29 against a measure of 30, one check of headroom.
+`contentids.preflight` (named by `served_maps`) and
 `drive_client.assert_safe` (which points AT `session.served_maps` for when
 narrowing is legitimate) live elsewhere and are untouched.
 
