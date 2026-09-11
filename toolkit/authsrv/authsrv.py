@@ -2944,146 +2944,24 @@ def player_rank_for_skill(skill_id):
     return dict(agents.PLAYER_ATTRIBUTE_RANKS).get(attribute, 0)
 
 
-def attribute_columns(ranks=None, bonuses=None):
-    """0x003A's payload: THREE CONTIGUOUS COLUMNS, ids | ranks | ranks.
+# attribute_columns moved to attribcolumns.py (REFACTOR-A15), with the three
+# bounds it enforces. A plain re-export, not a wrapper: it reads nothing this
+# file still owns. Read by bare name from handle() (24836, 25163) and as
+# `authsrv.attribute_columns` by test_spawn_burst.py:243/323 and
+# test_attribspend.py:38; probes.py:1429 imports it from here lazily.
+from attribcolumns import attribute_columns  # noqa: F401,E402
 
-    NOT interleaved triples. This function was `attribute_triples` and emitted
-    `[id0, rank0, rank0, id1, rank1, rank1, ...]` for one day, 2026-08-15, and
-    it killed the client every session it ran in:
 
-        Assertion: level < arrsize(s_attribPoints)
-        P:\\Code\\Gw\\Char\\CharData.cpp(202)
-
-    The docstring it carried was RIGHT -- it said "three parallel arrays", and
-    so did studies/combat/PLAN.md 8a, which had named the wire arrays
-    `payload+0xc`, `+0xc+4n` and `+0xc+8n` a day earlier. The code did not do
-    what either said. See studies/combat/PLAN.md 14 for the whole trace.
-
-    THE SHAPE IS MEASURED, from the handler's own arithmetic. 0x003A's handler
-    (0x0091D920 on build 38833) takes the wire count, divides it by three, and
-    builds three pointers into ONE flat array before forwarding:
-
-        n = count / 3                    mov eax,0xAAAAAAAB; mul [ecx+8]; shr edx,1
-        arr1 = payload + 0x0C            lea eax,[ecx+0xc]
-        arr2 = payload + 0x0C + n*4      lea eax,[eax+edx*4]
-        arr3 = payload + 0x0C + n*8      lea eax,[eax+edx*8]
-
-    so element i of each column is n*4 bytes from the last, NOT 4. The loop
-    (0x00819C00) walks them with MSVC's induction-variable form -- it holds
-    `arr2 - arr1` and `arr3 - arr2` as deltas and adds them to the arr1 cursor
-    -- and hands `(record, arr1[i], arr2[i], arr3[i])` to the writer 0x00819270.
-
-    WHY INTERLEAVING IS FATAL RATHER THAN MERELY WRONG. Column 2 lands on
-    whatever the flat array holds from index n on, which for interleaved input
-    is a mix of ids and ranks. Attribute ids run to 50; the rank the client
-    reads out of column 2 goes straight into `s_attribPoints[rank]`, whose
-    `arrsize` is 13 (toolkit/clientscan/attribpoints.py, read out of the
-    client's own `cmp esi, 0Dh`). Any id of 13 or more is a modal assert box.
-    With the five content ranks the interleaved form put 19 in column 2 at
-    i=1 and the client stopped there.
-
-    Slot 1 is `attrib`, the id, bound-checked against 51; slot 2 is
-    `baseValue`, the rank, and the assert that names it reads
-    `[record + attrib*20 + 8]`, which is what ties the name to that slot
-    rather than to its neighbour (studies/combat/PLAN.md 8a).
-
-    SLOT 3 IS RECONSTRUCTION AND IS THE ONE THING HERE TO DISTRUST. No assert
-    names it. What is measured is that the client's own pending-change apply
-    adds the IDENTICAL delta to it and to `baseValue` (0x0081877C and
-    0x00818789-0x0081878C read the same `[edx+8]`), so from a common zero the
-    two stay equal -- and sending the rank in both reproduces that invariant
-    rather than inventing a second number. The reading that fits everything
-    seen is base-rank vs effective-rank-including-bonuses, which are equal for
-    a character wearing no runes; ours wears none. If a capture ever shows the
-    two differing, THIS is the line that was wrong.
-
-    **A CAPTURE DID, AND THE READING WAS RIGHT (2026-08-20).** The corpus holds
-    34 of these messages, and in 26 -- every sighting of one character --
-    column 3 is column 2 PLUS ONE on attribute 20 alone, while 17, 21, 29 and
-    30 stay equal. The gap is 0 or +1 and nothing else across 94 (attribute,
-    sighting) pairs. So SLOT 3 is CONFIRMED as effective-including-bonuses
-    rather than refuted, and the half of that sentence which changed is the
-    other one: ours can wear something now. `bonuses` is how, it defaults to
-    empty, and a caller passing nothing still sends the equal-columns
-    invariant this docstring describes.
-
-    Refuses rather than clamping, the same rule `_fraction` follows: every
-    bound below is the client's own, and a value outside one is a bug in the
-    caller that a clamp would hide.
-    """
-    ranks = agents.PLAYER_ATTRIBUTE_RANKS if ranks is None else ranks
-    if len(ranks) > ATTRIBUTE_COLUMN_MAX:
-        raise ValueError(
-            f"refusing to send {len(ranks)} attributes in one 0x003A: "
-            f"the array32 is declared at 48 elements = {ATTRIBUTE_COLUMN_MAX} "
-            f"per column, and AcctTemplate:423 bounds a build template at 16 "
-            f"too. More than that needs ceil(N/16) messages, which no real "
-            f"character reaches -- primary plus secondary is at most ten.")
-    seen, ids, values, effective = set(), [], [], []
-    for attrib_id, rank in ranks:
-        if not 0 <= attrib_id < CHAR_ATTRIBS:
-            raise ValueError(
-                f"refusing attribute id {attrib_id}: the client's s_attrib "
-                f"table has {CHAR_ATTRIBS} rows and its writer asserts "
-                f"`attrib < arrsize(attribState->attrib)` (ChCliAttrib:249). "
-                f"Ids are contiguous 0..{CHAR_ATTRIBS - 1}; there are no gaps "
-                f"in the index space (studies/combat/PLAN.md 10).")
-        if not 0 <= rank <= ATTRIBUTE_RANK_MAX:
-            raise ValueError(
-                f"refusing rank {rank} for attribute {attrib_id}: ArenaNet's "
-                f"own cap is {ATTRIBUTE_RANK_MAX} (AcctTemplate:441 "
-                f"`data.attribValue[index] <= 12`), and CharData:202 bounds "
-                f"the s_attribPoints lookup at 0..12.")
-        if attrib_id in seen:
-            raise ValueError(
-                f"attribute {attrib_id} appears twice. Each triple WRITES its "
-                f"slot, so a duplicate silently means 'the last one wins' -- "
-                f"refused because that is a caller bug wearing a valid shape.")
-        seen.add(attrib_id)
-        ids.append(attrib_id)
-        values.append(rank)
-        # Effective is deliberately NOT bound-checked against
-        # ATTRIBUTE_RANK_MAX: retail sent effective 13 against a spend cap of
-        # 12 in 26 of 26 sightings, so the cap belongs to the base rank alone.
-        effective.append(rank + int((bonuses or {}).get(attrib_id, 0)))
-    # The one line the crash was in. Column-major: every id, then every rank,
-    # then the third column -- because the client slices ONE flat array at n
-    # and 2n, and `+ [a, r, r]` per attribute is the reading that does not
-    # survive contact with that.
-    return ids + values + effective
+# spawn_probe_warning moved to population.py (REFACTOR-A5). Same signature, so
+# main()'s bare-name call site is unchanged and test_agentlife.py:3779-3804 keeps
+# reading it as `authsrv.spawn_probe_warning`. PROF_WARRIOR (2594) stays here and
+# is read AT CALL TIME -- a forwarded default would freeze it at def time.
+import population  # noqa: E402
 
 
 def spawn_probe_warning(probe, spawn_set, spawn_out_of_band=False):
-    """profession_spawn without --spawn-profession measures the wrong thing.
-
-    The probe's question is what the skills panel does when a custom
-    profession arrived IN the burst; without the flag the session spawns at
-    the default (profession 1), which run 2 already measured. A warning, not
-    a refusal -- and it must NOT fire when the flag is given, because a
-    warning that fires either way is noise (same rule as the enemy warning).
-    """
-    if probe == "profession_spawn" and not spawn_set:
-        return ("WARNING: --probe profession_spawn without --spawn-profession: "
-                f"this session spawns at the default profession {PROF_WARRIOR}, "
-                "which run 2 already measured. The probe's question needs "
-                "--spawn-profession 12, with a control session at "
-                "--spawn-profession 3 first (studies/profession/RUNS.md s8).")
-    # profession_panel exists BECAUSE 0x00B7 cannot carry a custom id. Pairing
-    # it with an out-of-band --spawn-profession puts exactly that message in
-    # the burst, so the client dies at map load ~3.4 s in and the probe's own
-    # steps never run -- a whole session spent re-measuring a result we have
-    # twice. Refused rather than warned: there is no reading of that pair that
-    # answers the probe's question.
-    if probe == "profession_panel" and spawn_out_of_band:
-        raise SystemExit(
-            "--probe profession_panel with an out-of-band --spawn-profession "
-            "is refused. The burst's 0x00B7 would carry the custom id and the "
-            "client asserts `profession < arrsize(s_profChapter)` "
-            "(ConstChar.cpp:1296) ON ARRIVAL -- MEASURED twice, at +3.42 s and "
-            "+3.39 s, both dead before any UI action. This probe delivers the "
-            "custom id on 0x00A6 itself, which lands silently; run it with no "
-            "--spawn-profession at all (studies/profession/RUNS.md s10.5).")
-    return None
+    return population.spawn_probe_warning(
+        probe, spawn_set, spawn_out_of_band, PROF_WARRIOR=PROF_WARRIOR)
 
 
 PLAYER_AGENT_ID = 1        # what INSTANCE_LOAD_INFO already claims
@@ -3362,21 +3240,16 @@ GAME_SMSG_AGENT_UPDATE_ATTRIBUTE = 0x003B   # [agent, attr, base, effective]
 # toolkit/clientscan/attribtable.py. The old CONTESTED registry row wanted one
 # of those two numbers to be wrong; neither is (studies/combat/PLAN.md 10).
 REAL_PROFESSION_ATTRIBUTE_COUNT = 42
-# The client's own s_attrib bound: the first slot of every triple must be
-# below this, and the writer asserts it (ChCliAttrib:249).
-CHAR_ATTRIBS = 51
-# ArenaNet's own rank cap, asserted twice: AcctTemplate:441
-# `data.attribValue[index] <= 12`, and CharData:202's `cmp esi, 0xd` guarding
-# the s_attribPoints lookup at 0..12.
-ATTRIBUTE_RANK_MAX = 12
-# The wire's own ceiling: 0x003A's array32 is declared at 48 elements, which is
-# exactly 16 attributes across THREE COLUMNS (see attribute_columns -- the
-# payload is column-major, not interleaved) -- and AcctTemplate:423 bounds a
-# build template at `attribCount < 16`. The two agree, which is why ONE message
-# always suffices for a real character: primary plus secondary profession is at
-# most ten attributes. The ceil(N/16) batching ATTRIBUTES.md 6 describes is the
-# RESKIN arc's problem (custom tables above 16), not combat's.
-ATTRIBUTE_COLUMN_MAX = 16
+# The three bounds moved to attribcolumns.py (REFACTOR-A15) with the encoder
+# that enforces them. Read back here because attribute_state below reads
+# ATTRIBUTE_COLUMN_MAX by bare name, and test_spawn_burst.py:256-308 reads all
+# three as `authsrv.<NAME>`. REAL_PROFESSION_ATTRIBUTE_COUNT above is a
+# different number about a different set and deliberately stays.
+from attribcolumns import (  # noqa: F401,E402
+    ATTRIBUTE_COLUMN_MAX,
+    ATTRIBUTE_RANK_MAX,
+    CHAR_ATTRIBS,
+)
 # SUPERSEDED 2026-08-20, and the old reading is kept because it was right about
 # its own evidence and wrong about the world. It said: "every 0x0037 ArenaNet
 # sent carries [0, 0] -- 8 of 8 connections", and that the two bytes' meaning
@@ -19624,23 +19497,12 @@ ENEMY_COUNT = 1               # --enemies N, 1..8.
 ENEMY_COUNT_MAX = 8
 
 
+# enemy_spots moved to population.py (REFACTOR-A5). `enemy_spot` just above is the
+# natural shim for it and stays. This same-signature wrapper reads ENEMY_OFFSET
+# (10663) at call time -- test_agentlife.py:4309-4354 reads `authsrv.ENEMY_OFFSET`
+# around calls to it, and spawn_enemy below calls this by bare name.
 def enemy_spots(state, ox, oy, n):
-    """`n` distinct spots near the player, walkable ones first -- the eight
-    compass points at ENEMY_OFFSET's distance, then the same eight at one and
-    a half times it. The plain offset when there is no navmesh (a normal
-    outcome: the archive is the player's own install). Never fewer than `n`
-    points: a spot the mesh refuses is still returned, last, and the spawn
-    line says so."""
-    d = ENEMY_OFFSET[0]
-    ring = [(d, 0), (0, d), (-d, 0), (0, -d), (d, d), (-d, d), (d, -d), (-d, -d)]
-    cands = [(ox + dx, oy + dy) for dx, dy in ring] + \
-            [(ox + 1.5 * dx, oy + 1.5 * dy) for dx, dy in ring]
-    pm = state.get("pathmap")
-    if pm is None:
-        return cands[:n]
-    good = [c for c in cands if pm.walkable(c[0], c[1])]
-    bad = [c for c in cands if not pm.walkable(c[0], c[1])]
-    return (good + bad)[:n]
+    return population.enemy_spots(state, ox, oy, n, ENEMY_OFFSET=ENEMY_OFFSET)
 
 
 # ------------------------------------------------------- the area population
@@ -19650,12 +19512,13 @@ def enemy_spots(state, ox, oy, n):
 # expects.
 AREA_NAME = None
 
-# How far from its declared spot a body may be nudged to find ground, and how
-# fine the search is. A NUDGE IS REPORTED, NEVER SILENT: an author who wrote a
-# coordinate deserves to know it was not usable, and "it appeared 400 units
-# from where I put it" is otherwise indistinguishable from a placement bug.
-PLACE_SEARCH_RADIUS = 480.0
-PLACE_SEARCH_STEP = 48.0
+# The two search bounds moved to population.py (REFACTOR-A5) with place_on_mesh,
+# their only reader. Read back here because test_population.py:251-254 asserts
+# them as `authsrv.PLACE_SEARCH_RADIUS` / `authsrv.PLACE_SEARCH_STEP`.
+from population import (  # noqa: F401,E402
+    PLACE_SEARCH_RADIUS,
+    PLACE_SEARCH_STEP,
+)
 
 
 class PopulationError(Exception):
@@ -19756,36 +19619,11 @@ def area_population(area):
     return rows
 
 
-def place_on_mesh(pm, x, y, what):
-    """The nearest spot the navmesh calls ground, or None, and how far it moved.
-
-    Returns `(x, y, moved)`. This exists because of rung (I): until 2026-08-13
-    the server on an authored map held either ArenaNet's geometry for the same
-    map id or no mesh at all, so a placement check here would have been
-    measuring the wrong map or nothing. With the mesh actually loaded, an
-    authored area can be sparse -- the sculpt map is 1.2% walkable by area --
-    and a coordinate an author picked off a Blender screenshot very often is
-    not standable.
-
-    None means REFUSE. A body placed off-mesh stands somewhere the server's own
-    collision says does not exist, and everything downstream reasons about it
-    wrongly; a missing NPC is a smaller lie than a present one nobody can reach.
-    """
-    if pm is None:
-        return x, y, 0.0                       # no mesh: nothing to check against
-    if pm.walkable(x, y):
-        return x, y, 0.0
-    step = PLACE_SEARCH_STEP
-    r = step
-    while r <= PLACE_SEARCH_RADIUS:
-        n = max(8, int(2 * math.pi * r / step))
-        for i in range(n):
-            a = 2.0 * math.pi * i / n
-            cx, cy = x + r * math.cos(a), y + r * math.sin(a)
-            if pm.walkable(cx, cy):
-                return cx, cy, r
-        r += step
-    return None
+# place_on_mesh moved to population.py (REFACTOR-A5). A plain re-export, not a
+# wrapper: it reads nothing but the two bounds above, which moved with it. Called
+# by bare name from spawn_population below, and read as `authsrv.place_on_mesh`
+# by test_population.py:223-260.
+from population import place_on_mesh  # noqa: F401,E402
 
 
 def spawn_population(send, state, origin, conn_id, area=None):
