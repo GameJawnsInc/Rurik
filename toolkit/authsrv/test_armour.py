@@ -34,6 +34,7 @@ rather than passing on no data.
 """
 import ast
 import collections
+import importlib
 import os
 import sys
 
@@ -139,17 +140,40 @@ def main():
     # it missed `_DRAIN_ITEM_A/B/C` entirely. The "still mints ids to check"
     # guard below is what caught that, on its first run, which is the whole
     # argument for having a vacuity check next to a filtered search.
-    probe_ids = {v for n, v in vars(probes).items()
+    #
+    # AND ACROSS THE WHOLE PROBE FAMILY, 2026-09-11. `probes.py` is being split
+    # into `probebase.py` and its siblings, and all five ids move out of it
+    # under the collision banner that cross-references them. A scan of
+    # `vars(probes)` alone would keep passing on the five ids `probes.py`
+    # re-exports while a SIXTH `_FOO_ITEM` minted in a sibling stayed invisible
+    # -- a guard pointed one way only, which is exactly the defect the
+    # paragraph above records, one file split later. The modules are discovered
+    # on DISK for the reason that paragraph gives: a list written here goes
+    # stale the first time somebody adds one. Nothing is caught if a sibling
+    # fails to import -- it raises, loudly, the way `import probes` at the top
+    # of this file already does.
+    probe_dir = os.path.dirname(os.path.abspath(probes.__file__))
+    probe_mods = {"probes": probes}
+    for fn in sorted(os.listdir(probe_dir)):
+        if fn.startswith("probe") and fn.endswith(".py") and fn != "probes.py":
+            probe_mods[fn[:-3]] = importlib.import_module(fn[:-3])
+    probe_ids = {v for m in probe_mods.values() for n, v in vars(m).items()
                  if n.startswith("_") and "_ITEM" in n and isinstance(v, int)}
     minted = ({authsrv.WEAPON_ITEM_ID, authsrv.BACKPACK_ITEM_ID,
                authsrv.COSTUME_ITEM_ID, authsrv.COSTUME_HEAD_ITEM_ID}
               | set(ids))
     clash = probe_ids & minted
+    # The floor is the REAL COUNT, measured 2026-09-11 across the family and
+    # not guessed: five names, five distinct values, {40, 41, 42, 43, 44}. It
+    # was already 5 before the split widened the scan, so this is a re-measure
+    # rather than a raise -- and the module list is printed beside it because
+    # the new way for this scan to go vacuous is a disk walk that finds only
+    # `probes.py` after the ids have moved out of it.
     LEDGER.ok(len(probe_ids) >= 5,
-              "the probe module still mints item ids to check",
-              f"{sorted(probe_ids)} -- a name-shaped scan that found none would "
-              f"make the next check vacuously true, which is the failure mode "
-              f"this whole section exists to refuse")
+              "the probe family still mints item ids to check",
+              f"{sorted(probe_ids)} over {sorted(probe_mods)} -- a name-shaped "
+              f"scan that found none would make the next check vacuously true, "
+              f"which is the failure mode this whole section exists to refuse")
     LEDGER.ok(not clash,
               "and NO probe item id collides with one the server mints",
               f"probe {sorted(probe_ids)} against server {sorted(minted)}; "

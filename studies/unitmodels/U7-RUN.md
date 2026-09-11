@@ -116,7 +116,7 @@ of the first three failures was in the decode/encode chain.
 
 3. **Three things animating the target at once.** Run 3 used
    `--probe burrow`, whose step 4 deliberately re-creates the body at a
-   **fresh agent id** (`probes.py:2515`) — that is the second hatcher, and
+   **fresh agent id** (`_burrow_steps`' `FRESH_AGENT_ID` control step) — that is the second hatcher, and
    it is the probe doing its job in a test that had no business calling
    it. Add the combat arc making hostiles fight, and the creature was
    being driven by a burrow cycle, an AI and a probe while we tried to

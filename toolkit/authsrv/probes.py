@@ -432,6 +432,16 @@ def _health_shrink_steps(agent_id):
 # against the server's minted set and reddens on any overlap. It did not read
 # this module at all before, which is why the collision survived: the reserved
 # check existed and was pointed one way only.
+#
+# CORRECTION 2026-09-11, appended rather than written over the sentence above,
+# which records what the check WAS on the day the collision was found: "in this
+# module" is no longer the scope. `probes.py` is being split into
+# `probebase.py` and its siblings, all five `_*_ITEM` ids move to
+# `probebase.py` together under this banner, and `probes.py` re-exports them.
+# `test_armour.py` §2 now walks `probes` AND every `probe*.py` beside it,
+# discovered on disk -- because a scan of `probes` alone would have gone on
+# passing on five re-exported ids while a sixth minted in a sibling was
+# invisible, which is the same one-way guard this banner is already about.
 _ARMOR_LEGS_ITEM = 43
 _ARMOR_BOOTS_ITEM = 44
 

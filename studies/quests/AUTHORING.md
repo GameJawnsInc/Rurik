@@ -12,7 +12,7 @@ This is a decision document, not a study. It answers one question — *is a sess
 
 ## 1. The verdict
 
-**YES, and it has already happened.** On 2026-08-15 a probe sent one hand-built `GAME_SMSG 0x0049` QUEST_ADD at a real, unmodified retail client on our own server and a quest-log entry appeared — a `?` icon under the level bar, 23.8% of that icon slot differing from a run without the message (`studies/minimap/FINDINGS.md:721`, `toolkit/authsrv/probes.py:2467`). It rendered `?` rather than a name for exactly one reason: **the probe deliberately sent three empty strings**, because the marker was what was under test and "an authored string is a separate question" (probes.py's own comment).
+**YES, and it has already happened.** On 2026-08-15 a probe sent one hand-built `GAME_SMSG 0x0049` QUEST_ADD at a real, unmodified retail client on our own server and a quest-log entry appeared — a `?` icon under the level bar, 23.8% of that icon slot differing from a run without the message (`studies/minimap/FINDINGS.md:721`, `_compass_quest_steps` in `toolkit/authsrv/probequest.py`). It rendered `?` rather than a name for exactly one reason: **the probe deliberately sent three empty strings**, because the marker was what was under test and "an authored string is a separate question" (probes.py's own comment).
 
 So the brief's literal question is settled OBSERVED. The question that decides whether a session is worth spending is the next one: **can a quest carry OUR words, and can a player accept and finish it.** That splits into one cheap experiment and one short chain, and the cheap experiment goes first.
 
@@ -67,7 +67,7 @@ So the brief's literal question is settled OBSERVED. The question that decides w
 
 ### The one test that decides the naming half
 
-**Change one literal in `toolkit/authsrv/probes.py:2467` and run the existing probe once.**
+**Change one literal in `_compass_quest_steps` (`toolkit/authsrv/probequest.py`) and run the existing probe once.**
 
 ```
   before: Step(8.0, 0x0049, [1, _SPAWN_WORLD, 148, 148, 0, "", "", "", 0], ...)
@@ -265,7 +265,7 @@ Ordered cheapest-first. Every rung names what can go **red**. Costs use this rep
 
 | Rung | What it is | Acceptance criterion (can go red) | Depends on | Cost |
 |---|---|---|---|---|
-| **Q0** | The naming probe of §1: `probes.py:2467` with `enc_* = [0x3D64]` and the three out-of-distribution fields corrected. | The quest log renders **`Ascalon`**, not `?`. Red if it renders `?`, blank, or the client asserts. Free rider: whether a compass starburst draws. | nothing | **1 line + 1 caged loopback run, ~40 s.** **NEEDS OWNER GO-AHEAD.** |
+| **Q0** | The naming probe of §1: `probequest.py`'s `_compass_quest_steps` with `enc_* = [0x3D64]` and the three out-of-distribution fields corrected. | The quest log renders **`Ascalon`**, not `?`. Red if it renders `?`, blank, or the client asserts. Free rider: whether a compass starburst draws. | nothing | **1 line + 1 caged loopback run, ~40 s.** **NEEDS OWNER GO-AHEAD.** |
 
 **Do this before anything else and before writing a line of the server.** Everything from Q2 down assumes the client accepts a string id we chose; Q0 is the only thing that tests it, and it costs less than reading this paragraph.
 
@@ -444,6 +444,6 @@ The recon produced seven lanes and three adversarial passes. These are the answe
 
 ## 8. The recommendation
 
-**Next session: run Q0 — one line in `probes.py:2467`, one caged loopback run — and if it is green, spend the session on Q1 + Q1b + Q4, because the INTERACT reply is `0x0080` + `0x0081`, it is half a day, and it is the gate under R4c-1's entire quest bar.**
+**Next session: run Q0 — one line in `probequest.py`'s `_compass_quest_steps`, one caged loopback run — and if it is green, spend the session on Q1 + Q1b + Q4, because the INTERACT reply is `0x0080` + `0x0081`, it is half a day, and it is the gate under R4c-1's entire quest bar.**
 
 **What NOT to do:** do not chase the RC4 key (it is the expensive route to content we are forbidden to commit); do not disassemble `CompassQuestEffect.cpp` before Q0 corrects the probe's two out-of-distribution fields; do not budget a live capture campaign to recover the `0x003B` code semantics, which are already on disk; do not write a `quest_type` column, which no wire message can set; and do not use a line of Fournux's naming until its `PLAN.md` §6.1 row lands.
