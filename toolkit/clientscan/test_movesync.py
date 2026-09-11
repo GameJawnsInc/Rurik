@@ -107,6 +107,7 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
 
 import checks     # noqa: E402
+import movefence  # noqa: E402
 import movesync   # noqa: E402
 import movetap    # noqa: E402
 import vaultpath  # noqa: E402
@@ -1539,7 +1540,7 @@ def main():
           "headline -- on the real 20260819T171436 that printed \"0 of 13 "
           "snap(s) began with the test REACHABLE\" over 13 rows that were "
           "nothing but missing fields")
-    _control(movesync, "classify_reach", lambda v: "fenced",
+    _control(movefence, "classify_reach", lambda v: "fenced",
              "_selftest_jump_tally",
              "a classifier that calls every cell `fenced` is caught",
              "that IS the pre-C4 defect -- the hole and the real state are "
@@ -1551,7 +1552,7 @@ def main():
           "\"0 witnessed\" on a movetap that carries no `state_record` reads "
           "as \"the appender never ran\", which is a finding minted from a "
           "missing key")
-    _control(movesync, "state_fields", lambda s: (None, None),
+    _control(movefence, "state_fields", lambda s: (None, None),
              "_selftest_appender_witness",
              "a `state_fields` that reads nothing is caught",
              "the witness's positive arms are the only observation in this "
@@ -1564,7 +1565,7 @@ def main():
           "every movetap already on disk carries the old spelling; a consumer "
           "that silently mismatched would drop a real fenced sample into the "
           "hole bucket and then refuse on its own drop")
-    _control(movesync, "REACH_ALIASES", {}, "_selftest_spellings",
+    _control(movefence, "REACH_ALIASES", {}, "_selftest_spellings",
              "a reader that knows only the new spelling is caught",
              "this is the pre-C9 state, and it is the one that fails quietly "
              "-- the row is not an error, it is just not counted")
@@ -1578,7 +1579,7 @@ def main():
           "`print_appender_witness` call from print_fence, the only path "
           "`main()` takes, was green at 49/49 and 147/147 with the whole of C5 "
           "gone from the output")
-    _control(movesync, "print_appender_witness", lambda *a, **k: 0,
+    _control(movefence, "print_appender_witness", lambda *a, **k: 0,
              "_selftest_print_fence",
              "a print_fence whose witness prints NOTHING is caught",
              "that is the mutation the previous review landed green: the "
@@ -1599,29 +1600,42 @@ def main():
     # a section whose call site is deleted while its table row stays is caught.
     # The table is checked against the same set for the mirror -- a stale row
     # is a floor nothing enforces.
-    for mod, table in ((movetap, MOVETAP_SECTIONS),
-                       (movesync, MOVESYNC_SECTIONS)):
-        on_disk = {n for n in dir(mod) if n.startswith("_selftest_")}
-        wrapped = {n for m, n in WRAPPED if m == mod.__name__}
+    #
+    # A ROW IS A TUPLE OF SOURCE MODULES, NOT ONE MODULE, and that is what keeps
+    # this check from going blind the day a file is split. movesync's four
+    # sections live in `movefence.py` since 2026-09-11 and appear on `movesync`
+    # only because a hand-typed re-export puts them there -- so a FIFTH section
+    # written into `movefence.py` and never added to that list would be invisible
+    # to `dir(movesync)`, and planting one was verified to leave this file
+    # printing ALL CHECKS PASSED. `on_disk` is the union over the row; `_wrap`,
+    # the `_FLOOR` key and `WRAPPED` all stay on the FIRST module, which is the
+    # one the sections are reached through.
+    for mods, table in (((movetap,), MOVETAP_SECTIONS),
+                        ((movesync, movefence), MOVESYNC_SECTIONS)):
+        owner = mods[0]
+        on_disk = {n for m in mods for n in dir(m) if n.startswith("_selftest_")}
+        wrapped = {n for m, n in WRAPPED if m == owner.__name__}
         tabled = {n for n, _f in table}
         check(bool(on_disk) and on_disk == wrapped and tabled == on_disk,
-              f"{mod.__name__} defines {len(on_disk)} `_selftest_*` section(s) "
+              f"{owner.__name__} defines {len(on_disk)} `_selftest_*` section(s) "
               f"and this run wrapped all of them",
               f"never wrapped: {sorted(on_disk - wrapped)}; wrapped but gone "
               f"from the module: {sorted(wrapped - on_disk)}; floor rows for "
               f"nothing: {sorted(tabled - on_disk)} -- the set is asserted "
               f"non-empty first, because 'all zero of them are wrapped' is "
               f"this repo's own recorded trap")
-        # CONTROL: plant one and require the same computation to name it.
-        setattr(mod, "_selftest_planted_control", lambda: (0, 1))
+        # CONTROL: plant one and require the same computation to name it. It is
+        # planted on the LAST module of the row -- `movefence` for movesync --
+        # because that is the half a single-module `dir()` could not see.
+        setattr(mods[-1], "_selftest_planted_control", lambda: (0, 1))
         try:
-            planted = sorted({n for n in dir(mod)
+            planted = sorted({n for m in mods for n in dir(m)
                               if n.startswith("_selftest_")} - wrapped)
         finally:
-            delattr(mod, "_selftest_planted_control")
+            delattr(mods[-1], "_selftest_planted_control")
         check(planted == ["_selftest_planted_control"],
-              f"CONTROL: a section added to {mod.__name__} and not wrapped is "
-              f"named ({planted})",
+              f"CONTROL: a section added to {mods[-1].__name__} and not wrapped "
+              f"is named ({planted})",
               "a coverage check that cannot see a new section is a coverage "
               "check that will pass forever")
 
@@ -1977,7 +1991,7 @@ def main():
     # because both packages happen to be installed here. movetap guards itself
     # in its own section 3; this is the same guard for movesync, and a second
     # witness for movetap so the guard cannot be deleted from one place quietly.
-    for mod in ("movetap.py", "movesync.py"):
+    for mod in ("movetap.py", "movesync.py", "movefence.py"):
         tree_m = ast.parse(open(os.path.join(HERE, mod), encoding="utf-8").read())
         got = set()
         for nd in ast.walk(tree_m):

@@ -76,9 +76,13 @@ import movesync   # noqa: E402
 REPO = os.path.dirname(os.path.dirname(HERE))
 DOC = os.path.join(REPO, "studies", "movement", "PROBE-GATEFIRE.md")
 
-# The two files §6 pins by sha256. Named here so the test does not re-derive
-# the list from prose.
-PINNED_SOURCES = ("movetap.py", "movesync.py")
+# The files §6 pins by sha256. Named here so the test does not re-derive
+# the list from prose. `movefence.py` joined on 2026-09-11, when the fence
+# section was cut out of `movesync.py`: the three printers §6 quotes live there
+# now, so a two-name list would have kept the staleness pin on a file that no
+# longer contains them and would have dropped the printers out of §4's
+# `white`-literal scan while it stayed green over the remainder.
+PINNED_SOURCES = ("movetap.py", "movesync.py", "movefence.py")
 
 HZ_DEFAULT = 10.4
 DROPS = (movetap.REACH_DROPPED, movetap.REACH_UNRESOLVED)
