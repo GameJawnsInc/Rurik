@@ -421,141 +421,18 @@ def preflight(account_label, exe, live_host, want_windivert=True):
     return {"account": acct["label"], "exe": exe, "host": live_host, "dh": kind["dh"]}
 
 
-def slot_rva(exe):
-    """Where the key-tap cave stashes master_secret in this binary. Raises if untapped."""
-    import keytap_patch          # toolkit/clientpatch, already on sys.path above
-    from gwpe import PE          # toolkit/gwpe.py
-    pe = PE(exe)
-    try:
-        rva, _ = keytap_patch.locate_slot(pe.data, pe)
-    except keytap_patch.KeyTapError as exc:
-        # preflight already refuses an untapped build, so reaching here means the binary
-        # changed under us. Re-raise as a LiveError rather than a bare traceback.
-        raise LiveError(f"cannot locate the key-tap slot in {exe}: {exc}\n"
-                        f"  Rebuild: make_custom_client.py --no-dh-patch --key-tap, then "
-                        f"make_run_dir.py --live") from exc
-    return rva
-
-
-class KeyRing(threading.Thread):
-    """Poll the tap slot and keep EVERY distinct value it holds, in order, with timestamps.
-
-    Not "read the key once". Each DH-keyed channel derives its own master_secret through the
-    same code, so the one slot is overwritten at every handshake: a session that reaches the
-    world has replaced the auth channel's secret with the game channel's before it ends.
-    Reading once yields whichever handshake happened last and silently loses the other, and
-    an off-wire capture of a channel whose key we threw away is unrecoverable -- there is no
-    second chance at a live session.
-
-    Read-only throughout (keytap holds PROCESS_VM_READ and nothing else), and a failed read
-    is a retry, never a crash: the slot is legitimately all-zero until the first handshake.
-    """
-
-    def __init__(self, pid, rva, module="Gw.exe", interval=0.25, path=None):
-        super().__init__(daemon=True)
-        self.pid, self.rva, self.module, self.interval = pid, rva, module, interval
-        self.values = []          # [(t, master_secret_bytes)] -- distinct, in order
-        self.errors = 0
-        self.path = path          # persist here the INSTANT a key appears -- see _persist
-        self._seen = set()
-        self._stop = threading.Event()
-        self.t0 = time.monotonic()
-        if self.path:
-            with open(self.path, "w", encoding="utf-8") as fh:
-                fh.write(json.dumps(origin.record("toolkit/harness/livesession.py",
-                                                  origin.LIVE,
-                                                  note="tapped session keys, one per "
-                                                       "DH-keyed channel")) + "\n")
-
-    def _persist(self, t, master, key):
-        """Append one key to disk and FLUSH, the moment it is read.
-
-        This exists because the first live run lost six of seven keys. The keyring was held
-        in memory and only the keys that survived assembly reached disk, so six connections
-        of real ArenaNet ciphertext -- already captured, gap-free -- became permanently
-        undecryptable the moment the process exited. There is no recovering them: the key
-        derives from ArenaNet's private exponent.
-
-        So: written per key, not per run, and flushed rather than buffered. A crash, a
-        Ctrl-C, a power cut or an exception anywhere downstream now costs at most the key
-        being read at that instant, and never a key already seen. Recorded under the field
-        names scrub_captures.py treats as secret.
-        """
-        if not self.path:
-            return
-        try:
-            with open(self.path, "a", encoding="utf-8") as fh:
-                fh.write(json.dumps({"kind": "session_key", "t": t,
-                                     "master_secret": master.hex(),
-                                     "arc4_key": key.hex()}) + "\n")
-                fh.flush()
-        except OSError:
-            # Never let a disk problem kill the poller: an in-memory key is still better
-            # than no key, and the caller's report says how many were persisted.
-            self.errors += 1
-
-    def run(self):
-        import keytap
-        # Resolve the base and open the handle ONCE. keytap.read_rva re-snapshots the
-        # toolhelp module list and re-opens the process on every call, which is right for
-        # a one-shot read and wrong four times a second for twenty minutes -- that is
-        # ~4800 OpenProcess calls against the one client we are trying not to perturb.
-        # ASLR rebases per LAUNCH, not during a process's life, so caching inside a thread
-        # that is bound to one pid keeps the property keytap's docstring is protecting.
-        handle = base = None
-        while not self._stop.is_set():
-            got = None
-            try:
-                if handle is None:
-                    base = keytap.module_base(self.pid, self.module)
-                    handle = keytap.open_read(self.pid)
-                got = keytap.read_handle(handle, base + self.rva, 20)
-            except keytap.TapError:
-                # The process is gone, or the module is not mapped yet. Both are
-                # transient-or-terminal and the caller decides which by watching the
-                # client, not by us guessing. Drop the handle so the next tick re-resolves.
-                self.errors += 1
-                handle = base = None
-            if got and any(got) and got not in self._seen:
-                from gwcrypto import arc4_hash
-                self._seen.add(got)
-                t = round(time.monotonic() - self.t0, 2)
-                self.values.append((t, got))
-                self._persist(t, got, arc4_hash(got))
-            self._stop.wait(self.interval)
-        if handle is not None:
-            keytap.kernel32.CloseHandle(handle)
-
-    def stop(self):
-        self._stop.set()
-
-    def keyring(self):
-        """[(label, arc4_key)] -- the ARC4 keys, derived from each tapped master_secret.
-
-        The cave taps master_secret BEFORE the key schedule, so the ARC4 key is
-        arc4_hash(master_secret). Proven on loopback by dryrun_keycapture.py, which required
-        the tapped value to equal the master_secret our own server independently derived.
-        """
-        from gwcrypto import arc4_hash
-        return [(f"tap@{t}s", arc4_hash(v)) for t, v in self.values]
-
-
-def load_keyring(path):
-    """[(label, arc4_key)] read back from a persisted keyring.jsonl.
-
-    This is what makes a capture re-assemblable from disk without a second live session --
-    the property R0b's criterion asks for and the first run did not have.
-    """
-    out = []
-    with open(path, encoding="utf-8", errors="replace") as fh:
-        for line in fh:
-            try:
-                r = json.loads(line)
-            except (json.JSONDecodeError, ValueError):
-                continue
-            if isinstance(r, dict) and r.get("kind") == "session_key" and r.get("arc4_key"):
-                out.append((f"tap@{r.get('t', '?')}s", bytes.fromhex(r["arc4_key"])))
-    return out
+# The key tap's three names -- `slot_rva` (where the cave stashed master_secret in this
+# binary), `KeyRing` (the poller that keeps EVERY distinct value the slot held, written to
+# disk as each one appears) and `load_keyring` (the reader that gets them back) -- moved to
+# `keytapring.py`, a module that reads one 20-byte slot and one file and nothing else, so
+# the key half of a live capture no longer has to be reached through a driver that loads
+# the packet-capture backend, the codec, ARC4, `accounts`, `marks` and `vaultpath`. The
+# re-export sits HERE, at the site they were defined, because these names are read off THIS
+# module: `ls.KeyRing` and `ls.load_keyring` in toolkit/harness/test_livesession.py section
+# 3c, and `mod.slot_rva` patched onto this module object by its section 5g -- and because
+# `run()` below calls `slot_rva` and constructs `KeyRing` as BARE GLOBALS, and
+# `reassemble()` calls `load_keyring` as one, which is what lets that stub land.
+from keytapring import slot_rva, KeyRing, load_keyring  # noqa: F401,E402
 
 
 GAME_MODES = ("base", "reforged")
