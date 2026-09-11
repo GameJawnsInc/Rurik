@@ -28,6 +28,22 @@ check requires {0x0039, 0x0092, 0x00C1, 0x0040} -- so the census narrows without
 reddening. Do not paper over it by putting a cosmetic `state[...] =` into the
 forwarding wrapper.
 
+WHAT THE SEND CENSUS ACTUALLY LOST, corrected on review the same day. The lane's
+own note said "seven `send(GAME_SMSG_*, [...])` sites over six opcodes" and put
+that against `test_agentlife`'s floors "at 244/106", which pairs two different
+quantities and overstates the loss. That walk (test_agentlife.py, the send-site
+section) keys on SYMBOLS whose payload is a LITERAL LIST and whose arity is
+unambiguous, and its floors -- `len(sites) >= 40`, `len(detected) >= 35` -- count
+that symbol set. Seven `send(...)` calls did come here, but one of them,
+`send(GAME_SMSG_CREATE_NAMED_ITEM, minted, ...)`, passes a computed name rather
+than a list literal and was never in the walk at all; and both
+`GAME_SMSG_CREATE_NAMED_ITEM` and `GAME_SMSG_ITEM_MOVED_TO_LOCATION` still have
+literal-list send sites back in `authsrv.py`. FOUR symbols left the walk --
+GOLD_DEBIT, GOLD_CREDIT, ITEM_REMOVED, TRANSACTION_DONE -- and its measurable set
+went 91 -> 87 against a floor of 40. The 244 sites / 106 opcodes in the
+refactor's source-lock census is a looser filter over call sites; it is not the
+number those floors read.
+
 Standard library only, and nothing is imported at all: the two handlers take
 `send` and `rec` as arguments and reach no module. That is deliberate -- it is
 what lets `test_purchase.py` exercise the whole buy/sell recipe with no vault,
