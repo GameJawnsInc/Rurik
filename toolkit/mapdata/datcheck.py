@@ -156,6 +156,15 @@ from archive import (Archive, ENTRY_SIZE, MFT_MAGIC, FILE_MAGIC,  # noqa: E402
 # DESCRIPTOR_COUNT_OFF and FILE_HEADER_SIZE by bare name, `format_diff` and
 # `_main` print ROW_CONVENTION, and `test_datcheck.py` reads
 # `datcheck.CRC_STRUCTURAL_ROWS` off this module.
+# THAT READER LIST WAS C1'S, AND C2 MOVED TWO OF THE NAMES OUT FROM UNDER
+# IT: `scan` and `format_diff` are in `datsnapshot.py` now and import these
+# names from `datread.py` themselves. The sentence above is left standing
+# rather than reworded. MEASURED off this file's syntax tree after C2: the
+# three constants named are read by bare name in `preflight` only, and
+# ROW_CONVENTION is printed by `_main` only. DESCRIPTOR_COUNTER_OFF has no
+# bare-name reader left in this file at all -- it stays on the list below
+# because dropping a re-export drops an attribute from this module, which
+# is a behaviour change and not a tidy-up.
 from datread import (ROW_CONVENTION, HDR_CRC_SPAN, HDR_CRC_OFF,  # noqa: F401,E402
                      HDR_TIER0_OFF, HDR_TIER0_LEN, HDR_MOD_OFF,
                      DESCRIPTOR_COUNTER_OFF, DESCRIPTOR_COUNT_OFF,
@@ -202,6 +211,11 @@ class Check:
 # bare name, and because `overlay.py`, `abrun.py`, `datalloc.py`,
 # `test_archive.py` and `test_datcheck.py` read them off this module as
 # `datcheck.<name>`.
+# SAME CORRECTION AS THE SHIM ABOVE, for the same reason: of the callers
+# that sentence names, `scan`, `snapshot`, `diff` and `format_diff` left for
+# `datsnapshot.py` in C2 and take these readers from `datread.py` directly.
+# MEASURED after C2, the callers still reading them by bare name here are
+# `preflight`, `generation_checks`, `assert_archive_safe` and `_main`.
 from datread import (read_header, read_mft, row_bytes,  # noqa: F401,E402
                      row_fields, row_count, file_id_records,
                      directory_invariant, row_identity, label_row,
