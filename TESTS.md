@@ -5472,7 +5472,7 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   the client on the first breakpoint hit (it dispatches on
   `EXCEPTION_SINGLE_STEP` where a 64-bit debugger attached to a WOW64 target
   receives `STATUS_WX86_SINGLE_STEP` 0x4000001E -- a constant
-  `commandertrap.py` in the same directory already defines, with a header
+  `hwtrap.py` in the same directory already defines, with a header
   explaining this exact failure). The refusal names both the blocker and the
   poll that replaces it, because a docstring warning above a `main()` that
   still runs is a file that gets run. Floor **35**, the BARE-MACHINE number; a

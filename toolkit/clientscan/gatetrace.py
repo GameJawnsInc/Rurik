@@ -12,7 +12,7 @@ operator's session rather than merely wrong:
      DBG_EXCEPTION_NOT_HANDLED, and the client -- which has no handler --
      is TERMINATED on the first breakpoint hit, i.e. on the first
      PeekMessageW, within one frame of arming, having measured nothing.
-     `commandertrap.py` IN THIS DIRECTORY already defines both WX86
+     `hwtrap.py` IN THIS DIRECTORY already defines both WX86
      constants and its header already explains this exact failure. This
      file was modelled on `trnhook/debugread.py`, which carries the same
      latent defect. Grepping the directory first would have prevented it.
@@ -45,7 +45,7 @@ at ~11 Hz cannot see a bit that is SET and CLEARED inside one frame. If the
 movetap read comes back with the gates clear at a frozen press, that residual
 is the remaining question and a trap is the only way to close it. Reviving
 this file means fixing all five blockers -- and the right way is to delete the
-hand-rolled debugger loop below and drive `commandertrap.py`'s `HwTrap`, which
+hand-rolled debugger loop below and drive `hwtrap.py`'s `HwTrap`, which
 already has the WX86 codes, EFLAGS.RF, a runaway guard, disarm-all and a
 tested detach. The pure half (`gate_verdict`, `reconcile`, `run_verdict`) and
 its guard are sound and survive as-is; it is only the process half that is
@@ -395,7 +395,7 @@ UNSAFE_TO_RUN = (
     "whose rows now carry ctrl_status / ctrl_flagbyte / gate_a / gate_b / "
     "gate_c / walk_suppressed, the same operands this file was built to trap. "
     "Only revive this file if the poll shows the gates CLEAR at a frozen "
-    "press, and revive it on commandertrap.py's HwTrap rather than on the "
+    "press, and revive it on hwtrap.py's HwTrap rather than on the "
     "loop below.")
 
 

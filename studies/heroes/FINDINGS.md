@@ -3274,7 +3274,7 @@ Measured: a watch armed from `on_hit` verified live on 51 threads and was found
 cleared at 50 of 50 later checks, `DR7` back to `0x15`.
 
 This arc arms nothing from inside a handler. Its deferred sites re-arm through
-`_arm_all()` at [`commandertrap.py:942`](../../toolkit/clientscan/commandertrap.py:942),
+`_arm_all()` at [`hwtrap.py:520`](../../toolkit/clientscan/hwtrap.py:520),
 which runs **after** the resume write and therefore wins. Verified by reading
 the order, not assumed. §33's deferred `lookup` site — whose entire job is to
 report "no subscriber", the most dangerous null in the arc — is on that path.

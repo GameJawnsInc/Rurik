@@ -308,7 +308,8 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "harness"))
 
-import commandertrap as ct                                   # noqa: E402
+# the alias predates the 2026-09-11 split; `ct.` here is hwtrap.py.
+import hwtrap as ct                                          # noqa: E402
 
 IMAGE_BASE = ct.IMAGE_BASE
 
