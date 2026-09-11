@@ -64,9 +64,18 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "harness"))
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "schema"))
-import livesession  # noqa: E402
 import vaultpath  # noqa: E402
 import wirecapture  # noqa: E402
+# `wiresplit`, not `livesession`. All three names used below -- split_c2s, split_s2c,
+# decrypt_stream -- are pure bytes-in/bytes-out, and this module is imported by nine
+# analysis modules; importing the live driver to reach them loaded `accounts`, `marks`
+# and the whole orchestration onto every one of them, and pushed `clientpatch` and
+# `mapdata` onto `sys.path` behind them. MEASURED after this line changed: `import
+# cmsgstream` loads none of those four and neither directory is on `sys.path`.
+# `livesession` re-exports the same three, so either spelling works and this one is
+# cheaper. `SplitError` identity is not load-bearing here: both call sites below are
+# wrapped in `except Exception`.
+import wiresplit  # noqa: E402
 from codec import Codec  # noqa: E402
 
 CMSG_MASK = 0x8000
@@ -189,15 +198,15 @@ def _streams(cap_dir, want_dir, channel):
             continue
         try:
             if want_dir == "c2s":
-                _a, cipher = livesession.split_c2s(stream)
+                _a, cipher = wiresplit.split_c2s(stream)
             else:
-                _seed, cipher = livesession.split_s2c(stream)
+                _seed, cipher = wiresplit.split_s2c(stream)
         except Exception:
             continue
         key = _key_for(cap_dir, conn)
         if not key:
             continue
-        plain = livesession.decrypt_stream(cipher, key)
+        plain = wiresplit.decrypt_stream(cipher, key)
         handshake = len(stream) - len(cipher)
         origin = min(q for q, _t, _p in rows)
         marks = sorted(((q - origin) & 0xFFFFFFFF, t) for q, t, p in rows if p)
