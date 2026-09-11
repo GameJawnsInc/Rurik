@@ -25,9 +25,13 @@ depends on it: `declaration_fault` calls `looks_compressed` as a bare name, so
 that call now resolves in THIS module's globals. Rebinding
 `datwrite.looks_compressed` still reaches `datwrite.py`'s own call site in
 `Writer.replace`, but no longer reaches the one inside `declaration_fault`.
-Reproducing the measured red-counts at `test_datalloc.py:108` and
-`test_authorflow.py:432-436` takes rebinding `datdecl.looks_compressed` as
-well; dated corrections sit at both recipe sites.
+Reproducing the measured red-counts at `test_datalloc.py:108`,
+`test_authorflow.py:130-136` and `test_authorflow.py:448-453` takes rebinding
+`datdecl.looks_compressed` as well; dated corrections sit at all three recipe
+sites. There are THREE, not two: `test_authorflow.py`'s file-header block is a
+second recipe and its FOURTH READING -- a hard stop with 0 red, reached through
+`declaration_fault`'s C-6 arm -- does not reproduce from a `datwrite` rebind at
+all.
 """
 
 import os
@@ -143,7 +147,9 @@ def looks_compressed(data):
     APPENDED 2026-09-11, ON THE MOVE OUT OF `datwrite.py`, because the
     paragraph above cites a constraint that belongs to a file this one no longer
     is. The docstring it names is `datwrite.reservation_for`'s
-    (`datwrite.py:185-192`): it refuses to import `datmove` because `datmove`
+    (`datwrite.py:179-186`, measured AFTER this move's own cut; 185-192 was its
+    address before it and is what this line said until 2026-09-11): it refuses
+    to import `datmove` because `datmove`
     imports `datplan` which imports more, and `datwrite` is the module that must
     keep working when the rest of the tree does not. `datdecl` does not escape
     that constraint, it INHERITS it -- `datwrite` imports this module, so

@@ -223,8 +223,10 @@ def claimants(ar, lo, hi, exclude):
 # FOR THE SABOTAGE RECIPES: rebinding `datwrite.looks_compressed` reaches the
 # call in `Writer.replace` below but NOT the one inside `declaration_fault`,
 # which now resolves in `datdecl`'s globals. Reproducing the measured red-counts
-# takes rebinding `datdecl.looks_compressed` too -- dated corrections sit at
-# test_datalloc.py:108 and test_authorflow.py:432-436.
+# takes rebinding `datdecl.looks_compressed` too -- dated corrections sit at all
+# THREE recipe sites: test_datalloc.py:108, test_authorflow.py:130-136 (whose
+# FOURTH READING does not reproduce from a `datwrite` rebind at all) and
+# test_authorflow.py:448-453.
 from datdecl import (declaration_fault, HUFFMAN_PROLOGUE_BYTE,  # noqa: F401,E402
                      looks_compressed)
 
