@@ -1825,6 +1825,8 @@ scope; nothing in `toolkit/` changed, because nothing ever enforced this in code
 
 ## 8. Immediate next actions
 
+### ✅ SUITE 2026-09-11 (evening) — **204 of 204 green, 0 red, 0 suspect, 12,149 checks, 1,287 s wall** (5,146 s serial, 4 jobs), on `main` at `f565ffc6` — REFACTOR-TABLESQRT landed: the REALFIX-C0 table-sqrt block out of `grantsim.py` into `tablesqrt.py` (2,027 → 1,871 lines); its one class-(a) pin, `LUT_VA`, changed file and nothing else — proven by an `updatecheck --after` against a baseline taken before the move (exactly PIN GONE + PIN NEW), and the vault baseline was re-taken in the same commit.
+
 ### ✅ SUITE 2026-09-11 (later) — **204 of 204 green, 0 red, 0 suspect, 12,149 checks, 1,424 s wall** (5,695 s serial, 4 jobs), on `main` at `223d997f` — REFACTOR-SERVERARGS landed: `build_parser()` out of `authsrv.py` into `serverargs.py` (27,345 → 25,569 lines) with the eighteen test locks that pinned the argparse block re-aimed in the same commit; the census that made it a nine-file, 23-line migration rather than a guess is recorded in that commit.
 
 ### ✅ SUITE 2026-09-11 — **204 of 204 green, 0 red, 0 suspect, 12,149 checks, 1,880 s wall** (7,519 s serial, 4 jobs), on `refactor-modularize` at `317e2524` — the merged modularization arc, every lane and the final sweep included; the 59 extra checks over the 2026-09-10 run are the re-aimed and widened locks (test_agentlife's family-wide send walk, test_armour's sibling item-id scan).
