@@ -7254,13 +7254,13 @@ def _grant_verdict(state, now):
     # actually states.
     #
     # THE REASON STRING STAYS "grant", deliberately. A distinct value would be
-    # more greppable and would also be dropped on the floor: `grantsim.py:2000`
-    # filters `w[2] == "grant"`, `policyreplay.py:267` and `grantsim.py:827`
-    # switch on "locally-moving", and `test_grantsim.py:822` asserts over a
-    # fixed reason set -- so a new enum value would silently shrink several
-    # scorers rather than error. Nothing is lost: `keyboard_age` is already on
-    # every grant_verdict row, and GRANTED with `keyboard_age <= 3.0` is
-    # unreachable without this flag, so the turnaround set is exactly
+    # more greppable and would also be dropped on the floor:
+    # `field4_arrival_check` filters `w[2] == "grant"`, `policyreplay.py:267`
+    # and `_click_arm` switch on "locally-moving", and `test_grantsim.py:822`
+    # asserts over a fixed reason set -- so a new enum value would silently
+    # shrink several scorers rather than error. Nothing is lost: `keyboard_age`
+    # is already on every grant_verdict row, and GRANTED with `keyboard_age <=
+    # 3.0` is unreachable without this flag, so the turnaround set is exactly
     # recoverable and that pair IS the registered exposure floor.
     if age is not None and age <= GRANT_LOCAL_WINDOW:
         if not ANSWER_KBD_CLICK:

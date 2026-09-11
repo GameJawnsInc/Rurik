@@ -2661,13 +2661,13 @@ on the answered mid-keyboard clicks than the current build's dropped ones show.
 
 **AS BUILT.** `_grant_verdict`'s rule 1 stops refusing and the click falls through to **rule 2**,
 which still holds-and-coalesces — that is the pair contract §0.15 actually states and it deliberately
-stays. The reason string stays `"grant"` rather than gaining a value: `grantsim.py:2000` filters
-`w[2] == "grant"` and `policyreplay.py:267` switches on `"locally-moving"`, so a new enum would have
-silently shrunk two scorers instead of erroring. The turnaround is still exactly countable, because
-**GRANTED with a non-null `keyboard_age` inside the window is unreachable with the flag off** — and
-that pair is the registered exposure floor (≥ 3 such rows). Checks live beside rule 1's own in
-`test_position_trust.py`; the mutation that deletes rule 2 as well was run and reddens exactly the
-one check written for it.
+stays. The reason string stays `"grant"` rather than gaining a value: `field4_arrival_check` in
+`field4screen.py` filters `w[2] == "grant"` and `policyreplay.py:267` switches on `"locally-moving"`,
+so a new enum would have silently shrunk two scorers instead of erroring. The turnaround is still
+exactly countable, because **GRANTED with a non-null `keyboard_age` inside the window is unreachable
+with the flag off** — and that pair is the registered exposure floor (≥ 3 such rows). Checks live
+beside rule 1's own in `test_position_trust.py`; the mutation that deletes rule 2 as well was run and
+reddens exactly the one check written for it.
 
 **2. Delete the 1.0 s freshness gate on the echo path. — BUILT 2026-08-28 as
 `--echo-any-refusal` (MOVECODE-R1-B2), OFF by default, UNRUN.**
