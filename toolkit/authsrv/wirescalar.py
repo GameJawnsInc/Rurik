@@ -23,7 +23,13 @@ caller, because `_damage_fraction` (the one function that both calls `_fraction`
 and is called by the damage path) deliberately STAYED in `authsrv.py` at the
 line this unit's first half stops one line short of. Nothing in this file calls
 `_fraction`. If that ever changes, six sections of `test_guards` go quietly
-green while testing a copy of the function nobody patched.
+green while testing a copy of the function nobody patched, and they are 3
+(`section_land_swing`), 4 (`section_land_skill`), 5 (`section_revive_due`), 6
+(`section_player_revive_due`), 7 (`section_agent_refill_due`) and 8
+(`section_player_refill_due`) -- re-derived from the tree, because the lane
+brief and this commit's own predecessor message both named "3, 4, 5 and 9" and
+9 (`section_overkill`) is the one section here that rebinds NOTHING: it calls
+`authsrv._damage_fraction` against a pinned literal instead.
 
 Standard library only, and no import of the server: `authsrv.py` imports these
 names back through a re-export at the site they were cut from, and a leaf that

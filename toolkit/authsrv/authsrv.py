@@ -696,7 +696,11 @@ def _send_markers(send, state, why=""):
 # test_dispatch.py and test_effects.py and test_pools.py and test_skilldamage.py
 # read `_f32_of`, test_agentlife.py and test_guards.py read `_fraction` -- and
 # test_guards.py REBINDS `authsrv._fraction` at six paired sites, which works only
-# because `_damage_fraction` just below did not move with it.
+# because `_damage_fraction` just below did not move with it. The other two names
+# complete the R3 census a later "unused import" sweep would have to read:
+# test_agentlife.py, test_guards.py and test_mechanics.py read `_f32`, and `_u32`
+# has NO reader outside this file -- it stays on the list because authsrv.py's own
+# morale send still calls it, which is the only thing keeping the name honest.
 from wirescalar import (  # noqa: F401,E402
     _u32, _f32, _f32_of, _fraction,
 )
