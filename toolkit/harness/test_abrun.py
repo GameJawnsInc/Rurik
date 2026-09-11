@@ -90,7 +90,7 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, TOOLKIT)
 sys.path.insert(0, os.path.join(TOOLKIT, "mapdata"))
 import abrun                                                   # noqa: E402
-import deploy                                                  # noqa: E402
+import harnesslog                                              # noqa: E402
 import overlay                                                 # noqa: E402
 import vaultpath                                               # noqa: E402
 import checks                                                  # noqa: E402
@@ -495,11 +495,11 @@ def section0():
           "an agent whose NAME carries brackets is still one cast: the name "
           "group is non-greedy and the slot clause after it is required")
 
-    check(abrun.COUNTERS[5].pattern is deploy.NAVMESH_RE
-          and abrun.COUNTERS[6].pattern is deploy.PLACED_RE,
-          "the two regexes that already had a home are IMPORTED from deploy.py, "
-          "not copied: they are the contract with authsrv and a second copy "
-          "would drift silently")
+    check(abrun.COUNTERS[5].pattern is harnesslog.NAVMESH_RE
+          and abrun.COUNTERS[6].pattern is harnesslog.PLACED_RE,
+          "the two regexes that already had a home are IMPORTED from "
+          "harnesslog.py, not copied: they are the contract with authsrv and a "
+          "second copy would drift silently")
 
     counts, samples = abrun.new_counts(), {}
     for line, _key, _f in LINES:
