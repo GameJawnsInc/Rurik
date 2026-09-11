@@ -20624,10 +20624,14 @@ def handle_portal_login(values, send, store, conn_id, allow_any, rec,
 # `report_unhandled` keep same-name wrappers because AUTH_CMSG_MASK stays in THIS
 # file (`test_cmsgnames.py` reads it as a literal `NAME = value` line), and both are
 # read as `authsrv.<name>` by `test_dispatch.py`. `report_ping` reads no constant, so
-# the re-export IS its shim; `test_ping.py` reads `authsrv.report_ping`, and the
-# `finally` at the bottom of this file calls all three by BARE NAME -- do not rewrite
-# those call sites to `connreport.<name>(...)`, `test_ping.py` and `test_dispatch.py`
-# both walk this file's syntax tree for a Call whose func is a plain Name.
+# the re-export IS its shim; `test_ping.py` reads `authsrv.report_ping`. All three
+# are called by BARE NAME and the sites are in two places, not one: the `finally` at
+# the bottom of this file calls `report_unhandled` and `report_ping` (25611-25612),
+# and `note_unhandled`'s sites are the two dispatch catch-all `else` blocks inside
+# `handle()` (25374, 25545) -- do not rewrite any of them to `connreport.<name>(...)`.
+# `test_ping.py` walks every `ast.Try` in this file for a `report_ping` Call in a
+# `finalbody`, and `test_dispatch.py` walks the else-blocks for a `note_unhandled`
+# Call; both require a func that is a plain Name, so a qualified call reddens them.
 import connreport  # noqa: E402
 from connreport import (  # noqa: F401,E402
     report_ping,
