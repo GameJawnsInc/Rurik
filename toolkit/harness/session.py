@@ -43,15 +43,12 @@ wired into it.
 """
 
 import argparse
-import ctypes
 import json
 import os
-import shlex
 import subprocess
 import sys
 import threading
 import time
-from ctypes import wintypes
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TOOLKIT = os.path.dirname(HERE)
@@ -63,7 +60,6 @@ sys.path.insert(0, TOOLKIT)
 # module inserts -- an ordering accident that breaks the day the two swap.
 sys.path.insert(0, os.path.join(TOOLKIT, "clientpatch"))
 sys.path.insert(0, os.path.join(TOOLKIT, "mapdata"))
-from tcptable import connections  # noqa: E402
 from vaultpath import vault_path, vault_why  # noqa: E402
 from livecapture import CaptureTail, by  # noqa: E402
 import drive_client as dc  # noqa: E402
@@ -76,6 +72,14 @@ import datcheck  # noqa: E402  -- toolkit/mapdata, the archive half of the gate
 # UNICODE_STRING -- moved to `portclaim.py` with `image_name`, `cmdline` and
 # `argv_of`, the three functions that use them. Nothing else in this file ever
 # read those seven names, so none of them is re-exported here.
+# AND THE IMPORTS THAT SERVED ONLY THE MOVED CODE WENT WITH IT, 2026-09-11:
+# `ctypes`, `from ctypes import wintypes` (the bindings above), `shlex`
+# (`split_args` is `runargs`'s) and `from tcptable import connections`
+# (`listeners_on` is `portclaim`'s). Each was checked to have no remaining
+# reader in this file and no reader anywhere as `session.<name>` -- the four
+# names appeared exactly once each, on their own import line. `tcptable` still
+# reaches this file's import path through `drive_client`, so nothing about the
+# bare-machine picture changed -- only this file's own surface.
 
 
 # Reading the run's arguments, and the argv each process in the stack gets,
