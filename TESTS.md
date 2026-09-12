@@ -4005,6 +4005,17 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   spawn key raises, because a kill objective that can never fire is indistinguishable from a
   player who has not killed the right thing.
 
+  **SLICE-B3 (2026-09-12).** `toolkit/authsrv/test_agentlife.py` gains `section_hostile_heal_target`
+  (floor 384 → 397): a hostile's heal aims at the HURT body -- the hurt ally drawn and healed,
+  a healthy squad SKIPPED with the round-robin cursor advanced and Holy Strike out on the
+  same tick, the skipped recharge uncharged, a hurt monk self-healing under Orison and never
+  under Restore Condition, the run's own two-heals-and-a-recharging-Banish bar as the KNOWN-BAD
+  arm (the first loop fell out by exhaustion with a heal aimed at the player -- harness
+  20260912T122339's self-heal at full health), Healing Signet held at full health and cast at
+  60/200, Vital Blessing (an enchantment) NOT gated, and `HERO_SKILLS` defaulting to a bar of
+  heals from the repo alone. The `_world_ally` fixture's idle ally is HURT now (50/100), and so
+  are `test_mechanics`' SKILLS-RC hostiles, because a full-health squad draws no cast; what
+  those sections measure is unchanged and their counts did not move.
   **SLICE-B6 (2026-09-12), floor 69 → 73:** §6 gains the BOSS AURA -- a row with `glow = 5`
   sends int property 29 `[agent, 5]` for that body and none for the plain row beside it,
   AFTER the create (the setter looks the agent up), and `glow = 11` is refused at load

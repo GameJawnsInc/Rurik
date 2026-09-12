@@ -73,7 +73,7 @@ from codec import Codec  # noqa: E402
 # known-bad control; and the chase section's wall pin split by arm, 1).
 # Floor from a real green run of 331. +1 at NPCTRACK-F8 (the hold rule
 # replaces the fresh-follow pin: three checks for two), green 333.
-LEDGER = checks.Ledger("agent lifetime", floor=384)   # SLICE-B7b +4 (the party follow and its two arms); from the green run
+LEDGER = checks.Ledger("agent lifetime", floor=397)   # SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
 
 
 def section_weapon_damage():
@@ -525,6 +525,7 @@ def main():
     section_named_builders(codec)
     section_pool_fraction()
     section_swing_back()
+    section_hostile_heal_target()
     section_chase()
     section_follow_router()
     section_npc_plane()
@@ -580,7 +581,14 @@ def _world_ally(dist=85.0, **over):
     The cast names the ally, not the player."""
     state = _world(dist, **over)
     state["agents"][11] = dict(state["agents"][10], attacks_back=False,
-                               pos=(120.0, 40.0), skills=(), skill_ready=[])
+                               pos=(120.0, 40.0), skills=(), skill_ready=[],
+                               # SLICE-B3: a hostile's heal aims at whoever is
+                               # HURT (hostile_heal_target), so an ally at full
+                               # health draws no cast at all. Half health keeps
+                               # every section below measuring what it did --
+                               # the targeted form, the bar's cycle -- and 276
+                               # still heals nothing here: no condition to cure.
+                               health=50.0, max_health=100.0)
     return state
 
 
@@ -595,6 +603,156 @@ def _swings(state, n=1, gap=0.0):
             lambda op, vals, label="", quiet=False: sent.append((op, vals, label)),
             state, 1)
     return sent
+
+
+
+def section_hostile_heal_target():
+    """SLICE-B3: a hostile's heal aims at whoever is HURT, and steps past itself.
+
+    The policy is `ally_heal_target`'s (SLICE-F10), reused for a hostile
+    monk and extended to the caster's own body for an `ally`-kind skill.
+    Three arms: a hurt ally is healed, a healthy squad skips the slot AND
+    advances the round-robin cursor (the trap: a skipped slot that held the
+    cursor would be picked again every tick), and a hurt monk with a healthy
+    ally heals itself under Orison but never under Restore Condition -- the
+    client's target byte, not ours.
+    """
+    import authsrv
+    print("\n== SLICE-B3: a hostile's heal aims at the hurt body ==")
+
+    kind = authsrv.skill_target_kind(281)
+    if kind is None:
+        LEDGER.skip("SLICE-B3: hostile heal targeting",
+                    "no 'skills' rows -- the vault overlay is absent, so the "
+                    "target byte that drives the policy cannot be read")
+        return
+    LEDGER.ok(kind == "ally" and authsrv.skill_target_kind(276) == "other_ally",
+              "Orison of Healing 281 is target ALLY (the caster legal) and "
+              "Restore Condition 276 is target OTHER ally, by the client's "
+              "own bytes", f"{kind}, {authsrv.skill_target_kind(276)}")
+    LEDGER.ok(authsrv.skill_heal(281, authsrv.ENEMY_SKILL_RANK)
+              and not authsrv.skill_damage(281, authsrv.ENEMY_SKILL_RANK),
+              "and 281 resolves as a HEAL with no damage half -- the "
+              "unconditional heal SLICE-F10 said the slice needed",
+              authsrv.skill_heal(281, authsrv.ENEMY_SKILL_RANK))
+
+    def squad(monk_hp, ally_hp, bar):
+        st = _world_ally()
+        m = st["agents"][10]
+        m["skills"] = tuple(bar)
+        m["skill_ready"] = [0.0] * len(bar)
+        m["last_slot"] = -1
+        m["max_health"] = 200.0
+        m["health"] = float(monk_hp)
+        a = st["agents"][11]
+        a["max_health"] = 200.0
+        a["health"] = float(ally_hp)
+        return st
+
+    # (1) a hurt ally: the heal aims at it.
+    st = squad(200, 80, [(281, 1.0, 2.0)])
+    _swings(st)
+    LEDGER.ok(st["agents"][10].get("casting") == 0
+              and st["agents"][10].get("cast_target") == 11,
+              "a hurt ally (80/200) draws the monk's Orison: cast_target is "
+              "the ally, not the player",
+              f"target {st['agents'][10].get('cast_target')}")
+    st["agents"][10]["cast_lands_at"] = time.time() - 0.001
+    _swings(st)
+    LEDGER.ok(st["agents"][11]["health"] > 80.0,
+              "and when it lands the ally's health rises -- resolved through "
+              "cast_recipient's `ally` rule",
+              f"{st['agents'][11]['health']:.0f}/200")
+
+    # (2) a healthy squad: the slot is stepped past, cursor advanced, and
+    # the attack behind it is reached on the same bar.
+    st = squad(200, 200, [(281, 1.0, 2.0), (312, 0.75, 8.0)])
+    _swings(st)
+    m = st["agents"][10]
+    LEDGER.ok(m.get("last_slot") == 1 and m.get("casting") == 1
+              and m.get("cast_target") == authsrv.PLAYER_AGENT_ID,
+              "a healthy squad SKIPS the heal, the cursor moves past it, and "
+              "Holy Strike in slot 2 goes out at the player on the same tick",
+              f"last_slot {m.get('last_slot')} casting {m.get('casting')} "
+              f"target {m.get('cast_target')}")
+    LEDGER.ok(m["skill_ready"][0] == 0.0,
+              "and the skipped heal's recharge was NOT charged -- nothing "
+              "was cast", m["skill_ready"])
+
+    # (3) the monk itself is the hurt one.
+    st = squad(60, 200, [(281, 1.0, 2.0)])
+    _swings(st)
+    LEDGER.ok(st["agents"][10].get("cast_target") == 10,
+              "a hurt monk with a healthy ally heals ITSELF under Orison -- "
+              "target byte 3 lets the caster be the recipient",
+              f"target {st['agents'][10].get('cast_target')}")
+    st = squad(60, 200, [(276, 0.75, 2.0)])
+    _swings(st)
+    LEDGER.ok(st["agents"][10].get("casting") is None
+              and st["agents"][10].get("last_slot") == 0,
+              "but never under Restore Condition: target OTHER ally, the "
+              "healthy ally does not need it, and the slot is stepped past",
+              f"casting {st['agents'][10].get('casting')}")
+
+    # (3b) THE RUN'S OWN SHAPE, the known-bad arm: two heals and a recharging
+    # attack on a healthy squad. Harness 20260912T122339 saw the monk cast
+    # Orison at itself at full health, because the first re-pick loop ended
+    # by exhaustion with a heal slot in hand and the player as its target.
+    st = squad(200, 200, [(281, 1.0, 2.0), (252, 1.0, 10.0), (276, 0.75, 2.0)])
+    st["agents"][10]["skill_ready"][1] = time.time() + 9.0      # Banish recharging
+    st["agents"][10]["last_slot"] = 1                            # just cast it
+    sent = _swings(st)
+    m = st["agents"][10]
+    cast = [v for op, v, _l in sent
+            if op in (authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+                      authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT)
+            and v and v[0] == agents.GV_SKILL_ACTIVATED]
+    LEDGER.ok(m.get("casting") is None and not cast,
+              "two heals and a RECHARGING attack on a healthy squad: nothing "
+              "is cast -- the search ends when it re-picks a slot it already "
+              "held, and never falls out with a heal aimed at the player "
+              "(the run's self-heal at full health)",
+              f"casting {m.get('casting')} casts {cast} held both heals")
+
+    # (3c) a SELF heal is gated the same way, and a NON-heal ally skill is not.
+    st = squad(200, 200, [(1, 2.0, 4.0)])
+    _swings(st)
+    LEDGER.ok(st["agents"][10].get("casting") is None,
+              "Healing Signet (self) at full health is HELD -- harness "
+              "20260912T123033's raider cast it at 200/200 every 4 s",
+              f"casting {st['agents'][10].get('casting')}")
+    st = squad(60, 200, [(1, 2.0, 4.0)])
+    _swings(st)
+    LEDGER.ok(st["agents"][10].get("casting") == 0
+              and st["agents"][10].get("cast_target") == 10,
+              "and at 60/200 it goes out, at the caster",
+              f"target {st['agents'][10].get('cast_target')}")
+    vb = authsrv.skill_target_kind(289)
+    st = squad(200, 200, [(289, 0.75, 2.0)])
+    _swings(st)
+    LEDGER.ok(vb == "ally"
+              and authsrv.skill_heal(289, authsrv.ENEMY_SKILL_RANK) is None
+              and st["agents"][10].get("casting") == 0
+              and st["agents"][10].get("cast_target") == authsrv.PLAYER_AGENT_ID,
+              "Vital Blessing (target ally, NOT a heal) on a healthy squad "
+              "still GOES OUT, aimed as before B3 -- at the player, which "
+              "cast_recipient's `ally` rule resolves to the caster -- the "
+              "gate is on heals, and an enchantment keeps the old rule",
+              f"kind {vb}, target {st['agents'][10].get('cast_target')}")
+
+    # (4) the hero's default bar is what a monk hero needs, offline.
+    bar = [sk[0] for sk in authsrv.HERO_SKILLS]
+    rows = {}
+    for sid in bar:
+        try:
+            rows[sid] = agents.WORLD.get("skill_effect", str(sid)).get("scale_means")
+        except Exception:                                      # noqa: BLE001
+            rows[sid] = None
+    LEDGER.ok(281 in bar
+              and all(v in authsrv.SCALE_MEANS_HEAL for v in rows.values()),
+              "HERO_SKILLS defaults to a bar of HEALS led by Orison -- every "
+              "slot's skill_effect row is a heal label, from the repo alone",
+              f"{bar} -> {rows}")
 
 
 def section_swing_back():
