@@ -1,0 +1,51 @@
+# Archive compositions: ONE Gw.dat carrying every authored thing a run needs.
+#
+# WHAT A ROW IS. A run directory under vault/run/<key>, assembled by
+# `toolkit/mapdata/compose.py --name <key> --build` from a PRISTINE client
+# snapshot plus the authored content listed here -- strings written by
+# textwrite.py into our text file 98, areas installed by deploy.py under their
+# own created file ids. The row is the recipe; the vault holds the result.
+#
+# WHY. Six run directories, each a separate archive with different authored
+# content in it, and no single one holding a corridor, a quest string and a
+# creature name together (studies/slice/PLAN.md section 5). This table is the
+# assembly written down, so the next archive is a row and not an afternoon.
+#
+# THE RECORD A STRING GOES IN IS NOT A FIELD HERE. `[[strings]]` names the
+# CONSUMER -- the quest or npc row whose `enc_name` the server puts on the wire
+# -- and compose.py derives the record from those words (codedstr.decode_id).
+# A manifest that typed `record = 200` beside `enc_name = [0x8103, 0x0CC8]`
+# would be two numbers for one fact, and they would drift.
+#
+# THE STRINGS ARE OURS. textwrite.py's own words. CLAUDE.md's "commit the id,
+# resolve the string at run time" is about ArenaNet's authored text, which we
+# cannot hold; a name we wrote is committed here so the archive it lives in can
+# be rebuilt from this repo and the owner's install, which is the whole point.
+
+[compose.slice]
+name = "The slice archive -- SLICE-B9"
+# The pristine build-38833 client snapshot, byte-identical to what
+# `vault/dat_study` was resynced from (RUNBOOK.md, 2026-08-27). Named so the
+# assembly starts from an unchanging file, never from the canonical run
+# directory, whose archive the client writes to on every run.
+dat_source = "client/2026-08-13_64fae3b1369b/Gw.dat"
+# Areas installed under their OWN created file ids (maps.toml `created = true`).
+# `frontier` stands in for the corridor until SLICE-B6 authors one; it is the
+# WORLDMAPS-W3/W4 chain, the created-map mechanism's first client-proven case.
+areas = ["frontier"]
+
+[compose.slice.provenance]
+source = "invented"
+verified = """OURS: a recipe, not an observation. What was CHECKED when it was \
+written (2026-09-12): the three created ids 0x5F0B0/1/2 bind nothing in the \
+38833 snapshot and neither do their bit-31 siblings -- the highest plain id there \
+is 0x5F0AF, three above the 38797 answer maps.toml records, so the ids chosen \
+against 38797 are still one clear of the newer table (`datalloc.next_free_file_id` \
+answered 0x5F0B0 for 0x5F0B0). Text file 98 resolves to id 0x5C0C8 -> row 8295 in \
+that snapshot through the 38797 client's own pointer table, stored as a 56 B \
+compression-8 stream of 1,024 empty records, so the first string write is a \
+datmove relocation rather than an in-place replace and textwrite says so."""
+
+[[compose.slice.strings]]
+quest = "rurik_first_errand"
+text  = "A First Errand"

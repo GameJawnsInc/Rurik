@@ -410,6 +410,68 @@ sent only heartbeats, so `state["pos"]` never came within range (harness
 talk to is bad content), and the held-interact path is left as a thing to look at, not as a
 thing that was fixed.
 
+## SLICE-F12 — **SLICE-B9: ONE archive, and the assembly is a manifest row**
+
+**PRE-REGISTERED 2026-09-12 14:55, before the run.** `compose.py --name slice --build`
+assembled `vault/run/slice/` from the pristine 38833 snapshot plus the canonical 38797
+client, wrote record 200 ("A First Errand") through `textwrite` (a `datmove` relocation:
+the pristine row held 56 B of compression-8 empty records in a 512 B reservation), and
+created `frontier`'s chain through `deploy --install` at rows 177753/177754 under
+0x5F0B0. Offline verify: 6 of 6, through the client's own resolvers.
+
+**Question.** Does ONE archive carry a created map AND an authored string onto one
+screen — the thing §5 says no run directory has ever done?
+
+**Prediction.** One run, `--map 166 --area frontier --probe quest_name_authored`, on
+the slice client with `RURIK_DAT` at its archive: (a) `compose.py --readback` reports
+the head re-bloated — the client compiled our 64×64 frontier from the created chain,
+terrain matching what we authored — and (b) the tracker frames read **"A First
+Errand"** after the treatment arm, as harness `20260819T085654` did against
+`reskin-roster`. Either half failing alone localises the seam: (a) red with (b) green
+means the created chain did not survive the composition; (b) red with (a) green means
+the text relocation did not.
+
+**Exposure floor.** The harness reaches "body is in the map" and at least one hold
+frame exists after the probe's treatment push. Short of that the run is an ABORT, not a
+refutation of either half.
+
+**RESULT SO FAR — the run did not start; the cage refused it, correctly.** Launch
+`20260912T1457` was refused at `cage.assert_launch_safe`: `vault/run/slice/Gw.exe` is a
+NEW binary path and no firewall rule names it — the exact rule the isolate script's own
+header says it exists for, since the day a second run directory went uncaged. The cage
+needs an elevated shell, the UAC prompt was cancelled, and no client process started. Under
+the exposure floor above this is an **ABORT** of the client half, not a null on either
+prediction. Nothing about the archive changed: `--verify` still reads 6 of 6 after the
+refused launch (the MFT never moved, because nothing opened it). Resume with, elevated:
+`& toolkit\clientpatch\isolate_client.ps1 -Exe "C:\gd\Rurik\vault\run\slice\Gw.exe"`,
+then the recipe `compose.py --name slice --verify` prints, then `--readback`.
+
+**What the offline half settled, and is OBSERVED against the bytes:**
+
+- **The assembly is a row, not an afternoon.** `content/compose.toml` names a pristine
+  snapshot (`client/2026-08-13_64fae3b1369b/Gw.dat`), the areas and the strings; the tool
+  copies the pinned build's client by BUILD and name (`drive_client.select_run_exe`, never
+  by mtime) and drives the two existing writers. It writes nothing itself, so every guard
+  they carry ran unchanged — and one of them fired usefully: on the pristine archive text
+  file 98 is a **56 B compression-8 stream of 1,024 empty records in a 512 B reservation**,
+  so the first string write is a `datmove` relocation (→ 0x37B3400, 6,656 B), which
+  `textwrite` planned and said before doing. `reskin-roster` never showed this because its
+  row had already been rewritten stored.
+- **The record is derived from the consumer, never typed.** `[[strings]]` names
+  `quest = "rurik_first_errand"` and the record comes from that row's `enc_name` through
+  `codedstr.decode_id` — 200, id 100552. The test refuses every other shape: a retail name
+  (four ids), an id in ArenaNet's own file (0x3D64 → file 15), the identity tier, a consumer
+  nothing defines, two consumers disagreeing. So a second quest name is one manifest line
+  plus the quest row it belongs to, which is what B4's kill verb was waiting on.
+- **The created ids are still clear on 38833, by one.** The highest plain file id in the
+  pristine snapshot is 0x5F0AF — three above the 38797 answer `maps.toml` records — so
+  0x5F0B0/1/2, chosen against 38797, sit exactly one above the newer table and their bit-31
+  siblings bind nothing. `next_free_file_id(ar, 0x5F0B0)` answered 0x5F0B0. A fourth
+  ArenaNet build could close that gap; the manifest's provenance records the number.
+- **`frontier` allocated cleanly on the newer generation**: rows 177753/177754, 2,032 B
+  compression-8 in an 8,192 B reservation from the area's declared budget, id on the head
+  only, journal beside the archive, `created_evidence` binding by bytes.
+
 ## SLICE-F6 — what the desk cannot settle
 
 Carried so the next session does not re-read the same bytes hoping for more:

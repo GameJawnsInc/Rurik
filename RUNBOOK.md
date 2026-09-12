@@ -1117,6 +1117,38 @@ Steps that show nothing are a result, not a failure: the action was client-side,
 needs a server reply to send its second message. The tool cannot tell those apart and
 says so rather than guessing.
 
+## Composing ONE archive from a manifest (SLICE-B9)
+
+Six run directories each hold a different piece of authored content, and a run that needs
+two pieces at once (a created map AND an authored quest name) had no archive to run
+against. `content/compose.toml` writes the assembly down and `compose.py` performs it:
+
+```bash
+python toolkit/mapdata/compose.py --name slice --plan
+```
+
+```bash
+python toolkit/mapdata/compose.py --name slice --build
+```
+
+`--build` copies the pinned build's client (by BUILD and name) and the PRISTINE snapshot
+the row names into `vault/run/<name>/` (4.2 GB, about a minute cold), writes every
+`[[strings]]` record through `textwrite.py` -- the record is DERIVED from the consumer's
+`enc_name`, so the manifest names a quest or npc key and never a number -- installs every
+area through `deploy.py --install`, then verifies through the client's own resolvers and
+prints the launch recipe. Re-running is idempotent; `--fresh` re-copies the archive and
+removes the build products beside it, by name.
+
+**A new run directory is an UNCAGED binary path.** The first launch is refused at
+`cage.assert_launch_safe` until, in an elevated PowerShell:
+
+```powershell
+& toolkit\clientpatch\isolate_client.ps1 -Exe "C:\gd\Rurik\vault\run\slice\Gw.exe"
+```
+
+The recipe `--verify` prints says so first. After a client run, `--readback` asks whether
+the client compiled each area's map (deploy's own readback, per area).
+
 ## The two run directories drift apart, and the loopback one loses
 
 **Symptom.** The client dies on `Map.cpp(1762)` with `Map file '0x...' failed to
