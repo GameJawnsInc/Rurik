@@ -3449,6 +3449,20 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   `interact_route` returns False, sends nothing, and the out-of-range interact is held
   alone with no 0x002B. `test_quests` §? pins the reward's TWO paragraph breaks (a blank
   line, the owner's reading of stock).
+  `toolkit/authsrv/test_transfer.py` (SLICE-B8, the TRANSFER SENT BY US -- everything a
+  zoning run would otherwise measure for the first time. A `[portal.*]` row fires only for a
+  player who LEFT it (armed outside radius x 1.25, so an arrival point inside the circle
+  cannot bounce and the return portal at the same spot cannot fire on the way in), and never
+  twice on one connection; the three messages are `0x0028 -> 0x01A5 -> 0x0099` in SLICE-F8's
+  order, the halt in `agents.agent_stop_moving`'s own shape; 0x01A5's blob is a 24-byte
+  sockaddr_in in `tape.rewrite_transfer`'s byte layout (AF_INET LE, port BE, 16 zero bytes)
+  advertising the alias the client is NOT on, with this connection's world_id/player_id, the
+  destination map and its row's explorable byte -- and the whole message ENCODES through the
+  real codec to the 39 bytes overrides.json corrected the catalog to; a one-listener server
+  falls back to the same alias and says so (tape T9's NOT FOUND); a VERSION frame repeating
+  our ids is a re-entry and any other is not; `--area corridor` places nothing on an instance
+  serving map 148; `--no-portals` arms and fires nothing. Floor 22, MEASURED 2026-09-12. No
+  vault, no client; ~2 s),
   `toolkit/authsrv/test_interact.py` (the interact path — the walk order and the
   interact that is HELD rather than dropped. **Nothing exercised
   `_handle_interact` at all before 2026-08-19**; `test_dispatch.py` named it once

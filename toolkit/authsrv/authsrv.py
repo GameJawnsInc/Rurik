@@ -1347,6 +1347,128 @@ INTERACT_WALK = False
 # the player to them".
 INTERACT_ROUTE = True
 
+# ------------------------------------------------------------- SLICE-B8: zoning
+#
+# THE TRANSFER, SENT BY US. `0x0028 -> 0x01A5 -> 0x0099` and a graceful close
+# is what ArenaNet's server does on its own initiative in 34 of the corpus's
+# 41 transfers (SLICE-F8) -- the client asks for nothing; it is handed on. The
+# TRIGGER here is a `[portal.*]` content row: a circle on the served map that
+# a player who was outside it walks into. The circle and its place are OURS.
+#
+# WHAT IS MEASURED (studies/tape T8/T9, overrides.json 421): 0x01A5 carries a
+# 24-byte sockaddr_in (family u16 LE, port u16 BE, IPv4, zero tail), then
+# world_id, a byte, map_id, a byte that read 1/0/1 against explorable
+# destinations 146/164/146 (UNVERIFIED at n=3; sent as the row's own
+# `explorable`), player_id, a byte; and on a CLEAN close the client re-dials
+# the address and repeats those ids in its VERSION frame, 12 of 12 fields
+# across three recorded hops. `handle()` reads that frame already.
+#
+# WHAT IS NOT: whether the client re-dials an endpoint it was just
+# disconnected FROM (T9, NOT FOUND -- every recorded hop changed host). So
+# the gamesrv listens on a SECOND loopback alias when --transfer-alt names
+# one, and a transfer advertises whichever alias the client is not on.
+PORTALS = True                    # --no-portals: nothing fires, nothing zones
+GAME_SMSG_GAME_SERVER_TRANSFER = 0x01A5
+TRANSFER_ALT = None               # --transfer-alt HOST: the second listener
+TRANSFER_HOSTS = []               # filled by main(): every alias we listen on
+TRANSFER_PORT = 6112              # filled by main(): the port we listen on
+TRANSFERS_ISSUED = {}             # (world_id, player_id) -> map we handed out
+PORTAL_REARM = 1.25               # outside radius*this re-arms the portal
+
+
+def portal_rows(map_id):
+    """[(key, row)] of the enabled portal rows on `map_id`."""
+    out = []
+    for key, row in sorted(agents.WORLD.rows("portal").items()):
+        if not row.get("enabled", True):
+            continue
+        if int(row.get("map", -1)) != int(map_id):
+            continue
+        out.append((key, row))
+    return out
+
+
+def transfer_host_for(local_host):
+    """(host, changed) -- the alias to advertise, preferring one the client
+    is not connected to (T9's NOT FOUND, avoided rather than tested)."""
+    others = [h for h in TRANSFER_HOSTS if h != local_host]
+    if others:
+        return others[0], True
+    return (TRANSFER_HOSTS[0] if TRANSFER_HOSTS else local_host), False
+
+
+def transfer_sockaddr(host, port):
+    """The 24-byte sockaddr_in 0x01A5 carries -- `tape.rewrite_transfer`'s
+    own construction, byte for byte."""
+    return (struct.pack("<H", socket.AF_INET) + struct.pack(">H", int(port))
+            + socket.inet_aton(host) + b"\x00" * 16)
+
+
+def send_transfer(send, state, conn_id, dest_map, local_host):
+    """Hand the client to `dest_map` on this server: the three messages.
+
+    Returns the host advertised. The caller closes the socket GRACEFULLY
+    afterwards (`graceful_close`) -- the client releases the deferred
+    transfer only on the reason code a clean shutdown produces.
+    """
+    host, changed = transfer_host_for(local_host)
+    row = agents.WORLD.rows("map").get(str(int(dest_map)), {})
+    explorable = 1 if row.get("explorable") else 0
+    world_id = int(state.get("world_id", 0) or 0)
+    player_id = int(state.get("player_id", 0) or 0)
+    send(GAME_SMSG_AGENT_STOP_MOVING, agents.agent_stop_moving(PLAYER_AGENT_ID),
+         "transfer 1/3: AGENT_STOP_MOVING [player]")
+    send(GAME_SMSG_GAME_SERVER_TRANSFER,
+         [transfer_sockaddr(host, TRANSFER_PORT), world_id, 0, int(dest_map),
+          explorable, player_id, 0],
+         f"transfer 2/3: GAME_SERVER_TRANSFER -> {host}:{TRANSFER_PORT}, "
+         f"map {dest_map}")
+    send(GAME_SMSG_MAP_UPDATE_CURRENT, [int(dest_map), 0],
+         f"transfer 3/3: MAP_UPDATE_CURRENT {dest_map}")
+    TRANSFERS_ISSUED[(world_id, player_id)] = int(dest_map)
+    state["transfer_sent"] = int(dest_map)
+    print(f"[c{conn_id}] TRANSFER to map {dest_map} via {host}:{TRANSFER_PORT}"
+          + ("" if changed else " -- SAME alias the client is on: whether it "
+                                "re-dials one it was just cut from is NOT "
+                                "FOUND (tape T9); pass --transfer-alt")
+          + f"; world {world_id} player {player_id}; the close is next",
+          flush=True)
+    return host
+
+
+def portal_tick(send, state, conn_id, local_host):
+    """Fire a portal the player has walked INTO. -> True when a transfer went out.
+
+    ARMED BY LEAVING: a portal fires only for a player who was outside
+    radius * PORTAL_REARM since the instance loaded, so an arrival point
+    inside a circle cannot bounce, and the return portal at the same spot
+    cannot fire on the way in.
+    """
+    if not PORTALS or state.get("transfer_sent") is not None:
+        return False
+    pos, map_id = state.get("pos"), state.get("map_id")
+    if pos is None or map_id is None:
+        return False
+    armed = state.setdefault("portal_armed", {})
+    for key, row in portal_rows(map_id):
+        r = float(row["radius"])
+        d = math.hypot(float(pos[0]) - float(row["x"]),
+                       float(pos[1]) - float(row["y"]))
+        if d > r * PORTAL_REARM:
+            armed[key] = True
+        elif d <= r and armed.get(key):
+            print(f"[c{conn_id}] PORTAL {key!r}: the player is {d:.0f} u in "
+                  f"(radius {r:.0f}) -- transferring to map {row['to_map']}",
+                  flush=True)
+            send_transfer(send, state, conn_id, int(row["to_map"]), local_host)
+            return True
+    return False
+
+
+def transfer_reentry(world_id, player_id, map_id):
+    """Is this VERSION frame the client coming back from a transfer WE sent?"""
+    return TRANSFERS_ISSUED.get((int(world_id), int(player_id))) == int(map_id)
+
 # Print every client position report with our own belief beside it, plus the
 # origin each click's collision ray is cast from. OFF by default -- it is a
 # per-packet trace, not a thing to leave on. `--trace-move`.
@@ -18280,6 +18402,21 @@ def spawn_population(send, state, origin, conn_id, area=None):
     """
     area = area or AREA_NAME
     ox, oy, plane = origin
+    # SLICE-B8: --area names ONE map's population. A transfer serves another
+    # map on the same process, and the corridor's five bodies do not belong
+    # in Ascalon City. An area row with a map_id that is not this instance's
+    # places nothing and says so; an area with no row (a bare spawn grouping
+    # like "errand") is unchanged.
+    try:
+        _arow = agents.WORLD.get("area", area) if area else None
+    except Exception:                                          # noqa: BLE001
+        _arow = None
+    if _arow is not None and state.get("map_id") is not None \
+            and int(_arow.get("map_id", -1)) != int(state["map_id"]):
+        print(f"[c{conn_id}] area {area!r} is map {_arow.get('map_id')}'s "
+              f"population and this instance serves map {state['map_id']}: "
+              f"nothing placed here (SLICE-B8)", flush=True)
+        return 0
     rows = area_population(area)
     if not rows:
         print(f"[c{conn_id}] area {area!r}: no population rows; the world is "
@@ -18497,7 +18634,8 @@ def _spawn_one_enemy(send, state, agent_id, x, y, plane, conn_id, n_of=(1, 1)):
 # never set -- so both are READ HERE AT CALL TIME and passed in.
 import scriptrun                                                # noqa: E402
 from scriptrun import (                                         # noqa: F401,E402
-    GRACEFUL_CLOSE_SECONDS, close_after_transfer, tape_transfer_present)
+    GRACEFUL_CLOSE_SECONDS, close_after_transfer, tape_transfer_present,
+    graceful_close)
 
 
 def play_tape(send_raw, conn_id, stop, events, info, speed=1.0):
@@ -19965,6 +20103,14 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                     print(f"[c{conn_id}] client asked for map {map_id}; --map "
                           f"{MAP_OVERRIDE} is INERT under a tape (the tape's own "
                           f"0x0195 decides what loads)", flush=True)
+                elif transfer_reentry(world_id, player_id, map_id):
+                    # SLICE-B8: the client is back from OUR 0x01A5, repeating
+                    # the ids we gave it. --map pins the FIRST entry; a map we
+                    # handed the client to is served as asked.
+                    print(f"[c{conn_id}] client asked for map {map_id} -- a "
+                          f"RE-ENTRY after our own transfer (world {world_id}, "
+                          f"player {player_id}); --map {MAP_OVERRIDE} stands "
+                          f"down", flush=True)
                 else:
                     print(f"[c{conn_id}] client asked for map {map_id}; "
                           f"sending it to {MAP_OVERRIDE} instead", flush=True)
@@ -20619,6 +20765,10 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                 threading.Thread(target=world_tick, daemon=True).start()
 
         sock.settimeout(1.0)
+        try:
+            _local_host = sock.getsockname()[0]
+        except OSError:
+            _local_host = None
         total = 0
         pending = b""          # decrypted bytes not yet framed into whole messages
         desynced = False       # set when an unframeable opcode ends the connection
@@ -20657,6 +20807,10 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                 # ticks (recv-thread-only sending, same as the flush).
                 if ROUTER and kind == "game":
                     router_chain_tick(send, state, conn_id, rec)
+                if (PORTALS and kind == "game"
+                        and portal_tick(send, state, conn_id, _local_host)):
+                    graceful_close(sock, conn_id, "transfer")
+                    return
                 continue
             if not chunk:
                 break
@@ -20691,6 +20845,13 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
             # a leg whose ETA passed before that input arrived was owed.
             if ROUTER and kind == "game" and msgs:
                 router_chain_tick(send, state, conn_id, rec)
+            # SLICE-B8: a batch may carry the report that puts the player
+            # inside a portal; check before the batch is acted on, so the
+            # transfer's three messages go out ahead of anything else.
+            if (PORTALS and kind == "game" and msgs
+                    and portal_tick(send, state, conn_id, _local_host)):
+                graceful_close(sock, conn_id, "transfer")
+                return
 
             for opcode, values in msgs:
                 # No semantic names exist for GAME_CMSG in this repo yet; the
@@ -24927,6 +25088,14 @@ def main():
         print(f"HERO BAR: {len(HERO_SKILLS)} skill(s) "
               f"{[s[0] for s in HERO_SKILLS]} -- the party body casts "
               f"(SLICE-B7c). Heals only; see --hero-skills.", flush=True)
+    if a.no_portals:
+        global PORTALS
+        PORTALS = False
+        print("[map] --no-portals: no portal fires and nothing zones. Every "
+              "run before 2026-09-12.", flush=True)
+    if a.transfer_alt:
+        global TRANSFER_ALT
+        TRANSFER_ALT = a.transfer_alt
     if a.no_interact_route:
         global INTERACT_ROUTE
         INTERACT_ROUTE = False
@@ -26319,16 +26488,52 @@ def main():
             f"and stop it before starting this one.")
     srv.listen(8)
     print(f"Rurik AuthSrv on {a.bind}:{a.port}  (loopback only)")
+    # SLICE-B8: the aliases a transfer may advertise. The second listener is
+    # the same handler on another 127/8 address, so a client cut from one
+    # can be handed to the other (tape T9's NOT FOUND, avoided).
+    global TRANSFER_PORT
+    TRANSFER_PORT = a.port
+    TRANSFER_HOSTS[:] = [a.bind]
+    alt = None
+    if TRANSFER_ALT and TRANSFER_ALT != a.bind:
+        try:
+            alt = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+                alt.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+            alt.bind((TRANSFER_ALT, a.port))
+            alt.listen(8)
+            TRANSFER_HOSTS.append(TRANSFER_ALT)
+            print(f"transfer listener on {TRANSFER_ALT}:{a.port} -- a zoning "
+                  f"hop advertises the alias the client is not on")
+        except OSError as ex:
+            print(f"[map] --transfer-alt {TRANSFER_ALT}:{a.port} could not "
+                  f"bind ({ex.strerror}); transfers will advertise {a.bind} "
+                  f"and re-dial to the same alias is NOT FOUND (tape T9)")
+            alt = None
     print("the client MUST be the patched copy — an unpatched one keys to "
           "ArenaNet's public value and we cannot read it\n")
 
     store = SessionStore(a.sessions) if a.sessions else SessionStore()
     stop = threading.Event()
-    n = 0
+    conn_ids = itertools.count(1)
+
+    def _serve_alt():
+        while not stop.is_set():
+            try:
+                s2, addr2 = alt.accept()
+            except OSError:
+                return
+            threading.Thread(target=handle,
+                             args=(s2, addr2, keys, a.vault, next(conn_ids),
+                                   stop, store, a.allow_any_session),
+                             daemon=True).start()
+
+    if alt is not None:
+        threading.Thread(target=_serve_alt, daemon=True).start()
     try:
         while True:
             sock, addr = srv.accept()
-            n += 1
+            n = next(conn_ids)
             t = threading.Thread(target=handle,
                                  args=(sock, addr, keys, a.vault, n, stop, store, a.allow_any_session),
                                  daemon=True)

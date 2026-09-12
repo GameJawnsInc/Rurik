@@ -371,7 +371,11 @@ def server_specs(portal_port=6601, auth_port=6112, game_port=6112,
          py + [os.path.join(TOOLKIT, "authsrv", "authsrv.py"),
                "--port", str(game_port), "--bind", game_host,
                "--vault", cap("gamesrv"),
-               "--game-host", game_host, "--game-port", str(game_port)]
+               "--game-host", game_host, "--game-port", str(game_port),
+               # SLICE-B8: the alias a zoning hop advertises. Only the main
+               # gamesrv: a tape chain's hops are separate processes and
+               # hand the client on by tape, not by portal.
+               "--transfer-alt", transfer_alias(game_host)]
          + list(game_args)),
     ] + [
         # R1.5 chaining (PLAN §8.0 item 0b): one gamesrv per further hop, each on its
@@ -408,6 +412,22 @@ def chain_hold(capture_dir, order, per_hop=15.0, slack=30.0):
     import tape as tapemod
     total = sum(tapemod.load_tape(capture_dir, c)[0]["seconds"] for c in order)
     return total + per_hop * len(order) + slack, total
+
+
+def transfer_alias(game_host, offset=30):
+    """The SECOND alias the gamesrv listens on for SLICE-B8's transfers.
+
+    `game_host` + 30 in the last octet: past any tape chain's hops (which
+    count up from the game host, `hop_aliases`) and still 127/8, so it needs
+    no new safety plumbing. A transfer advertises whichever alias the client
+    is not connected to, because whether the client re-dials the SAME
+    endpoint it was just cut from is NOT FOUND (studies/tape T9).
+    """
+    head, last = game_host.rsplit(".", 1)
+    n = int(last) + offset
+    if n > 254:
+        raise ValueError(f"{game_host} + {offset} runs past the octet")
+    return f"{head}.{n}"
 
 
 def hop_aliases(n, first="127.0.0.3"):

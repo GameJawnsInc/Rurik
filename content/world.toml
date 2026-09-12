@@ -1236,3 +1236,50 @@ floor's centre line. `level = 8` feeds the armour formula only (the nameplate's 
 level comes from the template's definition, which is ArenaNet's 2); the glow is \
 what marks it. Wiring this row to a kill objective needs the second quest name \
 (SLICE-B4's note) -- one [[strings]] line in content/compose.toml and a quest row."""
+
+# ------------------------------------------------------------------ portals
+#
+# SLICE-B8: WHERE A MAP HANDS THE PLAYER TO ANOTHER. A portal is a circle on
+# one map; a player who was outside it and walks in is transferred to
+# `to_map` -- `0x0028 -> 0x01A5 -> 0x0099` and a graceful close, which is what
+# ArenaNet's server does unprompted in 34 of the corpus's 41 transfers
+# (studies/slice/FINDINGS.md SLICE-F8). The trigger, the circle and its place
+# are OURS: retail's portal geometry is not in any capture this repo holds.
+#
+# THE FIRST PAIR IS THE CHEAP MILESTONE PLAN.md section 5 names: Ascalon City
+# (148, outpost) and Lakeside County (146, explorable) carry the SAME file id
+# and the SAME arrival point, so the hop is one byte of is_explorable and
+# nothing to look at -- a feature for the first run, a trap for a demo. Both
+# circles sit at the same spot, 500 u WEST of the arrival point, on ground
+# `pathmap` measures walkable (9326, 8077: True; 500 u east is not), so a
+# player arriving at (9826, 8077) is outside either circle and has to walk in.
+
+[portal.ascalon_to_lakeside]
+map = 148
+x = 9326.0
+y = 8077.0
+radius = 200.0
+to_map = 146
+enabled = true
+
+[portal.ascalon_to_lakeside.provenance]
+source = "invented"
+note = """Ours. The circle's centre is 500 u west of [map.148]'s arrival point \
+and MEASURED walkable on 0x1B97D's navmesh (2026-09-12); 500 u east is not. \
+The destination is the map the retail capture's own first transfer named \
+(studies/tape/FINDINGS.md T8: Ascalon City -> 146)."""
+
+[portal.lakeside_to_ascalon]
+map = 146
+x = 9326.0
+y = 8077.0
+radius = 200.0
+to_map = 148
+enabled = true
+
+[portal.lakeside_to_ascalon.provenance]
+source = "invented"
+note = """Ours. The way back, at the same spot on the same terrain: a player \
+arriving in 146 at (9826, 8077) is 500 u outside it and must walk in, so the \
+pair cannot bounce. Retail's Lakeside exit is elsewhere; this is the milestone's \
+geometry, not the game's."""
