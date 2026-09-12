@@ -809,19 +809,6 @@ def section_cast_stop():
               "the debits legitimately precede it; 'first in the burst' "
               "was the review-corrected overstatement)",
               f"stop={stops(on)}, anim={anim}, hold={hold}")
-        atk, _ = burst("pin", True,
-                       seed={"client_pos": (0.0, 0.0), "client_pos_at": 0.0,
-                             "client_plane": 0, "kbd_moving_at": 0.0,
-                             "heading": (766.0, 0.0), "heading_mt": 1,
-                             "pathmap": _FakePM()})
-        atk_anim = [i for i, (op, vals, _) in enumerate(atk)
-                    if op in (authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT, authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET)
-                    and vals[0] == agents.GV_ATTACK_SKILL_ACTIVATED]
-        check(stops(atk) == [] and pins(atk) == [] and len(atk_anim) == 1,
-              "ATTACK skill under pin, even with a moving belief seeded: "
-              "the burst goes out (its own animation proves the press was "
-              "not refused) and carries neither message -- both arms are "
-              "scoped to NON-ATTACK casts", f"{atk}")
         # Pin, moving belief: 0x002C at the reckoned point, then the
         # 0x0028, in that order, and the pin note lands in state.
         import time as _time
@@ -831,6 +818,20 @@ def section_cast_stop():
                 "heading": (766.0, 0.0), "heading_mt": 1,
                 "pathmap": _FakePM(), "pos": (700.0, -500.0),
                 "dest": (9999.0, -500.0)}
+        atk, _ = burst("pin", True, seed=dict(seed))
+        atk_anim = [i for i, (op, vals, _) in enumerate(atk)
+                    if op in (authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT, authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET)
+                    and vals[0] == agents.GV_ATTACK_SKILL_ACTIVATED]
+        check(len(pins(atk)) == 1 and len(stops(atk)) == 1
+              and len(atk_anim) == 1 and stops(atk)[0] < atk_anim[0],
+              "ATTACK skill under pin with a moving belief: SINCE 2026-09-12 "
+              "the burst carries the pin and the halt too (SLICE-F20: an "
+              "in-reach attack-skill press on a running body is answered "
+              "with a bare 0x0028, 2 of 2 on retail -- the one cast-stop "
+              "retail has been captured sending; the chase this arm was "
+              "scoped away from moved to SLICE-C2's follow). Slot: the "
+              "spell's, before the animation (retail's is behind the hold; "
+              "same batch, named residual)", f"{atk}")
         pon, pst = burst("pin", False, seed=dict(seed))
         check(len(pins(pon)) == 1 and len(stops(pon)) == 1
               and pins(pon)[0] < stops(pon)[0],
@@ -932,12 +933,16 @@ def section_cast_stop():
     src = open(os.path.join(here, "authsrv.py"), encoding="utf-8").read()
     ARGS_SRC = open(os.path.join(here, "serverargs.py"),
                     encoding="utf-8").read()
-    check(src.count("if CAST_STOP and not is_attack:") == 1
+    check(src.count("\n        if CAST_STOP:\n") == 1
+          and src.count("if CAST_STOP and not is_attack:") == 0
           and src.count("cancelwalk R8 cast-stop") == 1
           and src.count("CAST-STOP PIN 0x002C") == 1
           and src.count("cancelwalk R10") >= 1,
-          "ONE gate carrying the non-attack scoping, ONE R8-labelled "
-          "0x0028 site, ONE R10 0x002C site")
+          "ONE gate, and since 2026-09-12 it carries BOTH families (the "
+          "`not is_attack` scoping is gone: SLICE-F20, an in-reach "
+          "attack-skill press on a running body is retail's one captured "
+          "cast-stop, 2 of 2), ONE R8-labelled 0x0028 site, ONE R10 0x002C "
+          "site")
     check(src.count("if _cs_send_stop:") == 1
           and src.count("_cs_send_stop = False") == 1
           and src.count("_cs_send_stop = True") == 1,

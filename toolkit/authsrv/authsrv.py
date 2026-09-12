@@ -2312,10 +2312,14 @@ STOP_ANSWER = None     # None | "ack"
 # one s2c 0x0028 AGENT_STOP_MOVING [player] first in the cast-begin TAIL
 # -- before the animation and the prop-8 hold. NOT first in the burst: the
 # E4 press-ack and the debits precede it, and a capture reviewer expecting
-# the halt at the burst head would mis-score valid exposure. NON-ATTACK
-# CASTS ONLY (`not is_attack`): the float-forward was measured on spell
-# casts, and an attack skill's start drives chase movement a halt would
-# fight. Three NAMED residuals, each zero-exposure in R8's spell-only
+# the halt at the burst head would mis-score valid exposure. BOTH
+# FAMILIES since 2026-09-12: this was NON-ATTACK ONLY (`not is_attack`)
+# because an attack skill's start drove chase movement a halt would fight;
+# SLICE-C2 moved the chase to a follow that begins the strike parked, and
+# the in-reach attack-skill press on a running body is the ONE case of
+# this halt retail has been captured sending -- a bare 0x0028 [me] in the
+# press batch behind the [8 -> 1], 2 of 2 (studies/slice F20). Three NAMED
+# residuals, each zero-exposure in R8's spell-only
 # protocol and each a ship-time term (§8.1), found by the adversarial
 # review pass rather than smoothed over:
 #   (1) instant non-attack skills -- shouts, stances, signets -- also take
@@ -13834,17 +13838,27 @@ def handle_skill_press(values, send, state, conn_id, opcode, rec=None):
         # -- retail never captured a cast-while-running start -- and chosen:
         # the movement family closes before the action family opens, the
         # adjacency retail's cancel bursts use in the other direction
-        # ([8->0] before the movement tail, F1). NON-ATTACK ONLY (spells
-        # are the measured family; the flag block names the instant-skill
-        # and adrenal-adjacency residuals): an attack skill's start drives
-        # chase movement a halt would fight. The
+        # ([8->0] before the movement tail, F1). BOTH FAMILIES since
+        # 2026-09-12 (SLICE-F20, the owner's fourth run: "still able to
+        # cast it while moving and slide"): this used to be NON-ATTACK
+        # ONLY because "an attack skill's start drives chase movement a
+        # halt would fight" -- and since SLICE-C2 an out-of-reach press
+        # never reaches this block (it walks in and begins parked), so the
+        # in-reach press is the only attack case here, and for THAT case
+        # the halt is now MEASURED where the spell's never was: an
+        # in-reach attack-skill press on a running body is answered with
+        # a bare 0x0028 [me] in the press batch, 2 of 2 (20260810T235916
+        # t=284.607, 20260817T231139 t=645.377 -- the latter 0.12 s after
+        # a lead the server had just granted). Retail's SLOT is after the
+        # [8 -> 1] hold; ours keeps the spell's chosen slot, before the
+        # animation -- same batch, same instant, named as a residual. The
         # handler no-ops on a parked body (schema GAME_SMSG "40") ONLY
         # when the SYNC COPY is parked too (F34, sec.8.3d: a converging
         # copy warped a parked body 167.6 u) -- which is why the pin arm
         # below never sends it bare, and why the halt arm's snaps
         # include parked-body warps. Not a grant, no grant clock.
         # Predictions: the flag's comment block and CANCELWALK.md 8.
-        if CAST_STOP and not is_attack:
+        if CAST_STOP:
             # B1 (review 2026-08-25), and it gates BOTH arms: a cast
             # during a CLICK-walk suppresses the whole cast-stop. The
             # client paths a click itself and reports NO position while
@@ -14436,6 +14450,27 @@ def cast_tick(send, state, conn_id):
             if ANIMREF_E3_RELEASE and not queued_next:
                 action_hold(send, state, 0,
                             f"E3 frees the caster (skill {cast['skill_id']})")
+            elif (cast["attack"] and cast.get("moves_refused")
+                  and ATTACK_SKILL_ROOT and not queued_next):
+                # SLICE-F20: THE STRIKE FREES A KEY HELD THROUGH THE WINDUP.
+                # Retail's attack-skill E3 carries [8 -> 0] exactly when a
+                # movement report was withheld during the windup (3 of 3:
+                # 717.315, 693.029, 765.092 -- the E3 batch then answers
+                # that report) and NOT otherwise (0 of 3: 284.607,
+                # 617.247, 645.377 release on the next input instead). The
+                # owner's fourth run: "holding W enables the cast to go
+                # through but doesn't move me after the swing connects" --
+                # the client's walk gate stayed set and a held key has no
+                # new edge to report. The release clears the gate, which
+                # arms the client's own 250 ms resume poll (ANIMREF 28)
+                # for the held key. Retail also answers the withheld
+                # report in this batch; ours leaves that to the client's
+                # next report -- the residual F20 names.
+                action_hold(send, state, 0,
+                            f"the strike of skill {cast['skill_id']} frees "
+                            f"the key held through its windup "
+                            f"({cast['moves_refused']} report(s) withheld) "
+                            f"[SLICE-F20]")
         if cast["e3_sent"] and now >= cast["e6_at"]:
             send(GAME_SMSG_SKILL_RECHARGED,
                  [PLAYER_AGENT_ID, cast["skill_id"], cast["copy"]],

@@ -1014,6 +1014,41 @@ milliseconds against the held gate. One change per run: if the owner reports a h
 between the hit and moving again, the attack-family E3 release is the next single-flag
 A/B, and it is measured (3 of 3 attack-skill E3s carry `[8, me, 0]`).
 
+**The owner's fourth run (harness `20260912T192442`): the root refuses the report — and
+two things it could not touch.** *"Still able to cast it while moving and slide, and
+holding W enables the cast to go through but doesn't move me after the swing connects."*
+The log shows the root working (`ROOTED: keyboard report refused during skill 322's strike
+windup`) and the two mechanisms behind the sentence, one at each end of the windup:
+
+1. **The press while running.** An in-reach attack-skill press with a keyboard lead in
+   flight: the burst goes out with `[8 → 1]`, but nothing we send stops the leg already
+   executing — CANCELWALK-F28's glide, whose fix (the R8/R10 cast-stop, `--cast-stop=pin`
+   by default) was scoped NON-ATTACK because "an attack skill's start drives chase movement
+   a halt would fight". SLICE-C2 moved that chase to a follow that begins the strike parked,
+   so the in-reach press is the only attack case left — and for it the halt is **measured
+   where the spell's never was: 2 of 2 in-reach attack-skill presses on a running body are
+   answered with a bare `0x0028 [me]` in the press batch** (`20260810T235916` t=284.607;
+   `20260817T231139` t=645.377, 0.12 s after a lead the server had just granted), behind the
+   `[8 → 1]`. Shipped: the `not is_attack` scoping is gone; the pin-or-nothing machinery runs
+   for both families. Slot residual: retail's halt follows the hold, ours keeps the spell's
+   chosen slot before the animation — same batch. `--no-cast-stop` reverts (both families).
+2. **The held key after the strike.** With W held through the windup, the client's walk gate
+   stays set and a held key has no new edge to report — so after the strike nothing arrives
+   and nothing releases. Retail's attack-skill E3 carries `[8 → 0]` **exactly when a report
+   was withheld during the windup (3 of 3: 717.315, 693.029, 765.092 — and that batch then
+   answers the withheld report) and not otherwise (0 of 3: 284.607, 617.247, 645.377, where
+   the hold releases on the next input)**. Shipped: the strike releases the hold when
+   `moves_refused` is set on the cast, which clears the client's gate and arms its own 250 ms
+   resume poll for the held key (ANIMREF §28's decode). Retail also answers the withheld
+   report itself in that batch; ours still leaves the grant to the client's next report —
+   the residual stands, one step smaller. Same flag as the root, `--no-attack-skill-root`.
+
+`test_cancelwalk` §7 (the attack arm now carries the pin and the halt) and `test_castcancel`
+§3b (the release rides the E3 only with a withheld report) pin both. Two changes for one run,
+against §29.1's rule, because they are two symptoms with two revert flags: the run can
+convict either alone — *press while running: does the body stop?* / *hold W through the
+windup: does it move after the hit?*
+
 **Refuted if** the owner's press from range still strikes without walking, or the walk
 ends and nothing begins (the arrival predicate — `approach_tick`'s eta-or-stop-radius —
 disagreeing with the client's own resolver, which C1's gate would then show as a released
