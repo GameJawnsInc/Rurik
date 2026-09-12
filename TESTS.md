@@ -3954,6 +3954,17 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   lands in, with the arithmetic control proving the coarse samples straddle it and the fine
   ones do not, the known-bad arm (`ROUTE_GATE_FINE` False) returning the 2-point path, and the
   fix returning a 4-point corridor whose every segment holds at 2 u.
+  **SLICE-B7b (2026-09-12) adds a section rather than a file.**
+  `toolkit/authsrv/test_agentlife.py` (floor 380 → 384): a PARTY body -- anything carrying
+  `ALLEGIANCE_PLAYER` -- walks to the player through the hostile follow with two numbers
+  changed. Four checks, and three of them are arms rather than observations, because a party
+  body walking proves nothing on its own: it walks outside the 200 u formation distance and
+  STANDS inside it (so the bound is real and not decoration); it stands under
+  `--no-hero-follow`, which is every hero run before 2026-09-12 and the known-bad arm; and at
+  1,700 u -- past the 1,200 u hostile leash -- the ALLY walks while a HOSTILE at the SAME
+  distance in the same tick has given up. That last one is the only check that pins the leash,
+  and it compares two measurements rather than a remembered literal.
+
   `toolkit/authsrv/test_agentlife.py` `section_disc_clip` (floor 348 → 379): an in-disc
   corridor is clipped to one margin outside the player's disc and stays ON the corridor's own
   segment, with each of the three None branches (origin already inside the disc, a leg shorter

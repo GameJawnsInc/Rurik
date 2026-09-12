@@ -774,6 +774,19 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "client's own report trigger. Corpus residual behind "
                          "the plane term: 2 events of 783, <= 1.4 u. Known-bad "
                          "arm.")
+    ap.add_argument("--no-hero-follow", action="store_true",
+                    help="SLICE-B7b REVERT: a party body (hero or henchman, "
+                         "anything carrying ALLEGIANCE_PLAYER) stands where it "
+                         "spawned instead of walking to the player. That is the "
+                         "behaviour every hero run before 2026-09-12 had, and "
+                         "it is the known-bad arm for anything about the "
+                         "follow: studies/heroes' own summary was 'the movement "
+                         "messages exist and the hero stands still because "
+                         "nothing drives it'. The follow itself is the HOSTILE "
+                         "follow with two numbers changed -- an infinite leash "
+                         "and a 200 u formation stop -- so this flag also "
+                         "isolates the party arm from any hostile-follow "
+                         "regression.")
     ap.add_argument("--no-npc-corridor", action="store_true",
                     help="NPCTRACK-Q9 REVERT: a hostile's follow is a bare "
                          "0x002A naming the player across any geometry, which "

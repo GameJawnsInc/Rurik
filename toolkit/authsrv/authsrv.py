@@ -8825,6 +8825,30 @@ HERO_BODY_NPC = "hatcher"
 # 28.8's open question). Sending it far does NOT move the panel or the row's
 # existence, only what the client can see.
 HERO_BODY_OFFSET = (-150.0, 120.0)
+# SLICE-B7b: the party body FOLLOWS. Until 2026-09-12 nothing drove a hero at
+# all -- studies/heroes' own summary was "the movement messages exist and the
+# hero stands still because nothing drives it. Unbuilt work with no unknown in
+# it" -- and that is exactly what this is: the existing hostile follow, reached
+# through a second gate.
+#
+# TWO NUMBERS, BOTH OURS, NEITHER MEASURED. Retail's hero formation is
+# client-side behaviour this project has never captured, so there is no figure
+# to be faithful to and these are chosen rather than derived. That is a weaker
+# footing than the hostile radii beside them (follow_stop_radius is the client's
+# own (rA+rB+56); enemy_reach was corrected against a capture) and the asymmetry
+# is stated because the code cannot show it.
+#
+# STOP is a FORMATION distance, not a reach: an ally has no swing to reach with,
+# so the "park here" and "start walking again" radii that differ for a hostile
+# are one number here. 200 u sits outside the 80 u avoidance disc the client
+# parks bodies at, so the hero does not shove the player around.
+HERO_FOLLOW = True          # False (--no-hero-follow): the body stands where it spawned.
+HERO_FOLLOW_STOP = 200.0    # units, centre to centre.
+# math.inf, and deliberately not a number: a hero that leashed would be left
+# behind by a player crossing a map, and "my hero stopped following me" is not a
+# thing anyone should have to diagnose. The hostile leash (AGGRO_RANGE) exists
+# so a fight is escapable; nothing about a party member wants that.
+HERO_FOLLOW_LEASH = math.inf
 # Swap 0x01C2's two u16s. This flag used to BE the experiment -- one word is
 # an agent id and one is something else, and the client's own code does not
 # say which is which. Four rounds of arms settled both (2026-08-16): msg+0xc
@@ -15363,11 +15387,18 @@ def enemy_move_tick(send, state, conn_id, rec=None):
     for agent_id, agent in list(state.get("agents", {}).items()):
         if agent_id not in state.get("agents", {}):
             continue
-        if agent["dead"] or not agent.get("attacks_back"):
+        # SLICE-B7b: a PARTY body reaches the follow through its own gate, and
+        # it has to, because `attacks_back` carries TWO facts for a hostile --
+        # "is animate" and "will fight" -- that come apart for an ally. A hero
+        # walks and does not swing, so testing `attacks_back` alone would leave
+        # it standing exactly as it has since the hero arm landed a body.
+        _ally = (HERO_FOLLOW
+                 and agent.get("allegiance") == agents.ALLEGIANCE_PLAYER)
+        if agent["dead"] or not (agent.get("attacks_back") or _ally):
             agent["moving"] = False
             agent["follow"] = None
             continue
-        if agent.get("allegiance") != agents.ALLEGIANCE_HOSTILE:
+        if not _ally and agent.get("allegiance") != agents.ALLEGIANCE_HOSTILE:
             continue
         if agent.get("effects", 0) & agents.EFFECT_TRANSITION:
             continue
@@ -15375,7 +15406,16 @@ def enemy_move_tick(send, state, conn_id, rec=None):
         dist = math.hypot(px - ax, py - ay)
         if NPC_FOLLOW:
             _npc_follow_tick(send, state, conn_id, agent_id, agent,
-                             (px, py), dist, now, pm, rec)
+                             (px, py), dist, now, pm, rec,
+                             leash=HERO_FOLLOW_LEASH if _ally else None,
+                             stop_at=HERO_FOLLOW_STOP if _ally else None)
+            continue
+        if _ally:
+            # The legacy chase below is the hostile's pre-NPC_FOLLOW arm and
+            # reads ENEMY_MELEE_RANGE/AGGRO_RANGE directly. An ally has no
+            # business in it; under --legacy-npc-chase the party simply does
+            # not follow, which is the honest answer rather than a second
+            # untested path.
             continue
         chasing = (not state["player_dead"]
                    and ENEMY_MELEE_RANGE < dist <= AGGRO_RANGE)
@@ -16345,8 +16385,35 @@ def _npc_model_advance(state, agent, now, elapsed=0.0, rec=None, agent_id=None):
 
 
 def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, pm,
-                     rec=None):
+                     rec=None, leash=None, stop_at=None):
     """One hostile's chase, in retail's shape (ANIMREF-RE 40; NPC_FOLLOW).
+
+    SLICE-B7b MADE TWO NUMBERS ARGUMENTS, and nothing else about this function
+    moved. A PARTY body walks to the player through exactly this machinery --
+    the routed corridor (NPCTRACK-Q9), the plane words (1z-bz), the halt on the
+    half-second clock (sec.40.9) -- because forking a second follow would mean
+    a second copy of all of it, drifting. What an ally needs differently is only
+    where it gives up and where it parks:
+
+      `leash`    how far the target may get before the chase ends. None is the
+                 hostile default, AGGRO_RANGE. `math.inf` never gives up, which
+                 is the party's: a hero that leashed would be left behind by a
+                 player crossing a zone, and "my hero stopped following me" is
+                 not a bug anyone should have to diagnose.
+      `stop_at`  where the body parks AND, when given, the distance inside which
+                 a standing body does not start a walk at all. For a hostile
+                 those are two different numbers on purpose -- it parks at
+                 follow_stop_radius() = 80 u and re-chases beyond enemy_reach()
+                 -- because a swing's reach and a body's standing distance are
+                 different facts. For an ally they are one number: there is no
+                 swing to reach with, so a single formation distance is the
+                 whole rule.
+
+    BOTH PARTY VALUES ARE OURS AND NEITHER IS MEASURED. Retail's hero formation
+    is client-side behaviour this project has never captured, so HERO_FOLLOW_STOP
+    is a number chosen to look right and nothing more. Said here because the
+    hostile radii around it ARE measured, and a reader has no way to tell them
+    apart from the code.
 
     A follow STARTS when the player is noticed (inside AGGRO_RANGE -- ours,
     unchanged) and stands beyond the swing reach. It is one 0x002A naming the
@@ -16501,15 +16568,18 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
         # regresses a chase the player did not escape).
         leash_d = min(leash_d, math.hypot(px - fol["solve_from"][0],
                                           py - fol["solve_from"][1]))
-    if state["player_dead"] or leash_d > AGGRO_RANGE:
+    _leash = AGGRO_RANGE if leash is None else leash
+    if state["player_dead"] or leash_d > _leash:
         if fol is not None:
             _halt("the player is dead" if state["player_dead"]
-                  else f"{leash_d:.0f} u is past the {AGGRO_RANGE:.0f} u leash")
+                  else f"{leash_d:.0f} u is past the {_leash:.0f} u leash")
         agent["moved_at"] = now
         return
-    stop = follow_stop_radius(agent)
+    # SLICE-B7b: one number for an ally, two for a hostile -- see the docstring.
+    stop = follow_stop_radius(agent) if stop_at is None else stop_at
+    _reach = enemy_reach() if stop_at is None else stop_at
     if fol is None:
-        if dist <= enemy_reach():
+        if dist <= _reach:
             # In reach and standing: the attack tick's business, not a walk --
             # but GROUNDZ-Q5's correction still goes out, because THIS is the
             # branch RUN-1zCA's sunken Hatcher sat in for 22 s. A parked hostile
@@ -16571,7 +16641,7 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
         # and cannot resume by itself -- it halts on the clock wherever that
         # is, and a copy halted out of reach gets a fresh follow on the next
         # tick (retail's chase 3: halt, fresh follow 0.23 s later).
-        if not NPC_CLIENT_MODEL and dist > enemy_reach():
+        if not NPC_CLIENT_MODEL and dist > _reach:
             fol.pop("arrived_at", None)
         else:
             if now - fol["sent_at"] >= FOLLOW_REPATH_INTERVAL:
@@ -24232,6 +24302,12 @@ def main():
         print("[map] --no-model-leg-bound: the server's own model leg may "
               "out-walk a lead our mesh cut short (MOVECODE-1z-cc's revert).",
               flush=True)
+    if a.no_hero_follow:
+        global HERO_FOLLOW
+        HERO_FOLLOW = False
+        print("[map] --no-hero-follow: a party body stands where it spawned. "
+              "That is every hero run before 2026-09-12 and it is SLICE-B7b's "
+              "known-bad arm.", flush=True)
     if a.no_npc_corridor:
         global NPC_FOLLOW_CORRIDOR
         NPC_FOLLOW_CORRIDOR = False
