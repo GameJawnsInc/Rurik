@@ -679,6 +679,36 @@ to it. Run 2 dropped the keyboard leg and used the approach alone (3,073 u).
 the log). If it never does — reach, aggro pulling 90 away, a dead player — the heal half
 is an ABORT, not a null; (a) and (c) still score.
 
+## SLICE-F16 — **SLICE-B5: the reward is granted at turn-in, and it is ours**
+
+OFFLINE, 2026-09-12 (`test_quests` §23, 9 checks, floor 94 → 103). `grant_quest_reward`
+pays a turned-in quest's `reward_experience` through **`0x00EE [0, delta]`** — the kill
+template's own message, `[0, 26]` on 3 of 3 clean kills, which the client applies `+=` to
+the sheet — with a kill's three consequences through the same functions: the wire delta,
+the death-penalty credit (`morale_experience`), and the persisted sheet under `--persist`.
+The turn-in branch calls it after the two removes and records the quest in a new
+`quests_completed` set on the progress carrier, so a turned-in quest is **not offered
+again** and its giver's `!` does not come back — the fourth state `_quest_markers`' table
+did not have.
+
+**The label.** The completion family (`0x004E`, `0x006C`, `0x0096`, `0x0097`, `0x00FB`) is
+0 of 22,524 in the corpus: nobody turned a quest in on a live capture. So what ArenaNet
+sends at that moment is NOT FOUND and this is authorship — the number the offer screen
+already promised (`Reward: / 100 Experience`, in the description string, SLOT A IS
+EXPERIENCE 2026-08-16), paid by the only experience message we have measured. The order
+(after the removes) is ours too, and says so.
+
+**Gold is not granted.** No gold message is identified; a row carrying `reward_gold`
+draws a line the server prints a loud `NOT GRANTED` for and pays nothing. The content
+row keeps the key commented out, and its comment no longer says "nothing is granted".
+
+**Not observed on a client, and why.** The turn-in is a click on the giver, a click on
+the option, twice — aiming, which is the owner's half of a run
+(`feedback-owner-drives-client-runs`). The wire half is the kill's message, already
+proven to move the sheet; what a run would add is the sheet moving by 100 on the turn-in
+click. One hand-driven run with `--map 146 --area errand`, reading the XP bar before and
+after, closes it.
+
 ## SLICE-F6 — what the desk cannot settle
 
 Carried so the next session does not re-read the same bytes hoping for more:

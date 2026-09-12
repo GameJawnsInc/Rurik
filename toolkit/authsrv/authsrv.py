@@ -270,6 +270,7 @@ def _quest_lines(state):
     """
     held = state.setdefault("quests", set())
     done = state.setdefault("objectives_done", set())
+    completed = state.setdefault("quests_completed", set())
     agent = state.get("interacting")
     out = []
     for qid in sorted(quest_rows()):
@@ -277,6 +278,11 @@ def _quest_lines(state):
         if not row.get("giver_dialogue"):
             continue
         if quest_agent(row, "giver") not in (None, agent):
+            continue
+        if qid in completed:
+            # SLICE-B5: turned in. Not offered, not in progress, not a turn-in
+            # -- the row is done with this character. Repeatable quests are a
+            # content property nothing here declares yet.
             continue
         if qid not in held:
             code = questdefs.SERVICE_SHOW
@@ -324,6 +330,62 @@ def complete_objective(send, state, qid, row, conn_id, why):
     # quest: the objective NPC's arrow comes down and the giver's goes
     # up. That is one visible event and must not arrive as two.
     _send_markers(send, state, " (objective met)")
+
+
+def grant_quest_reward(send, state, qid, row, conn_id):
+    """Pay a turned-in quest's reward -- SLICE-B5, and OURS.
+
+    THE LABEL FIRST. The completion family (0x004E, 0x006C, 0x0096, 0x0097,
+    0x00FB) is 0 of 22,524 messages in the corpus: no live session ever
+    turned a quest in, so what ArenaNet sends at that moment is NOT FOUND, and
+    this is authorship rather than archaeology. What it is built from is
+    measured: the experience delta rides `0x00EE [0, delta]`, the message the
+    kill template carries as `[0, 26]` on 3 of 3 clean kills and the client
+    applies `+=` to the sheet (accrue_kill_rewards), and the offer screen has
+    already PROMISED this number -- `Reward: / 100 Experience` is in the
+    description string the client rendered (SLOT A IS EXPERIENCE, 2026-08-16).
+    Until today that line was a promise the server could not honour, and
+    content/quests.toml said so.
+
+    ORDER, and it is ours: after the two removes, so the client has already
+    taken the quest out of its log when the sheet moves. Nothing measured
+    says otherwise, and nothing measured says this.
+
+    GOLD IS NOT GRANTED. No gold message has been identified in the corpus,
+    so a row carrying `reward_gold` draws a line the server cannot pay --
+    the print names it loudly rather than paying it with an invented opcode,
+    and content/quests.toml keeps the key commented out for the same reason.
+
+    The same three consequences a kill's experience has: the wire delta, the
+    death-penalty credit (WIKI: 75 XP buys back 1%), and the persisted sheet
+    under --persist -- through the same functions, so the two paths cannot
+    drift.
+    """
+    xp = row.get("reward_experience")
+    gold = row.get("reward_gold")
+    if gold is not None:
+        print(f"[c{conn_id}] quest {qid}: reward_gold = {gold} is NOT GRANTED "
+              f"-- no gold message is identified in the corpus, and the offer "
+              f"screen drew a line this server cannot pay. Omit the key.",
+              flush=True)
+    if xp is None:
+        print(f"[c{conn_id}] quest {qid} turned in: no reward_experience, "
+              f"nothing granted", flush=True)
+        return 0
+    xp = int(xp)
+    send(GAME_SMSG_AGENT_KILL_REWARD, [KILL_REWARD_ATTR, xp],
+         f"quest {qid} reward: experience +{xp} (SLICE-B5, ours)")
+    morale_experience(send, state, conn_id, xp)
+    store = state.get("charstore_game")
+    if PERSIST and store is not None:
+        srow = store.character_by_uuid(state.get("char_uuid", ""))
+        if srow is not None:
+            srow["xp"] += xp
+            store.save()
+            print(f"[c{conn_id}] PERSIST: quest {qid} reward accrued -- xp "
+                  f"{srow['xp']}", flush=True)
+    print(f"[c{conn_id}] quest {qid} turned in: +{xp} experience", flush=True)
+    return xp
 
 
 def kill_completes_objective(send, state, dead_id, conn_id):
@@ -727,6 +789,7 @@ def _quest_markers(state):
     """
     held = state.setdefault("quests", set())
     done = state.setdefault("objectives_done", set())
+    completed = state.setdefault("quests_completed", set())
     marks = {}
 
     def want(agent, value):
@@ -740,6 +803,13 @@ def _quest_markers(state):
         row = quest_rows()[qid]
         giver = quest_agent(row, "giver")
         objective = quest_agent(row, "objective")
+        if qid in completed:
+            # SLICE-B5: both agents named, both clear -- the '!' does not
+            # come back after the turn-in, which is the fourth state the
+            # table above did not have.
+            want(giver, None)
+            want(objective, None)
+            continue
         if qid not in held:
             want(giver, QUEST_MARKER_OFFER)
             want(objective, None)
@@ -770,7 +840,12 @@ def _quest_markers(state):
 # The character store is its own arc and authsrv.py already defers to it (see
 # the UPDATE_CHARACTER_SETTINGS arm). Keying this by character is that arc's
 # job, and doing it here would invent a key nothing reads.
-QUEST_PROGRESS = {"quests": set(), "objectives_done": set()}
+# `quests_completed` since SLICE-B5: a turned-in quest leaves `quests` and lands
+# here, so the giver stops offering it and its marker stays clear. Before this a
+# completed quest was simply un-held, which made every quest repeatable and put
+# the '!' straight back on the giver the moment the reward window closed.
+QUEST_PROGRESS = {"quests": set(), "objectives_done": set(),
+                  "quests_completed": set()}
 
 
 def bind_progress(state):
@@ -20896,15 +20971,22 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                 # discriminator: if the quest leaves the log,
                                 # the second was never for us.
                                 #
-                                # NO REWARD IS GRANTED HERE and the acceptance
-                                # criterion must not claim one -- the whole
-                                # completion family (0x004E, 0x006C, 0x0096,
-                                # 0x0097, 0x00FB) is 0 of 22,524 in the corpus.
+                                # THE REWARD IS GRANTED AFTER THE REMOVES
+                                # (SLICE-B5), and it is OURS: the completion
+                                # family (0x004E, 0x006C, 0x0096, 0x0097,
+                                # 0x00FB) is 0 of 22,524 in the corpus, so the
+                                # grant is the kill's own 0x00EE delta, which
+                                # the client is proven to apply. See
+                                # grant_quest_reward.
                                 send(GAME_SMSG_QUEST_REMOVE, [qid],
                                      f"QUEST_REMOVE[{qid}] (turn-in, 1 of 1)")
                                 send(GAME_SMSG_QUEST_REMOVE_AND_UNLIST, [qid],
                                      f"QUEST_REMOVE_AND_UNLIST[{qid}]")
                                 state.setdefault("quests", set()).discard(qid)
+                                state.setdefault("quests_completed",
+                                                 set()).add(qid)
+                                grant_quest_reward(send, state, qid, row,
+                                                   conn_id)
                                 _send_markers(send, state, " (turned in)")
                                 _close_dialog(send, state["interacting"],
                                               "turned in")

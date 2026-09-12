@@ -3992,6 +3992,14 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   lands in, with the arithmetic control proving the coarse samples straddle it and the fine
   ones do not, the known-bad arm (`ROUTE_GATE_FINE` False) returning the 2-point path, and the
   fix returning a 4-point corridor whose every segment holds at 2 u.
+  **SLICE-B5 (2026-09-12).** `toolkit/test_quests.py` §23 (floor 94 → 103): the reward is
+  GRANTED at turn-in and it is OURS -- `reward_experience = 100` goes out as ONE `0x00EE
+  [0, 100]`, the kill's own delta, with nothing from the completion family (0 of 22,524 in
+  the corpus) invented beside it; a row with no reward sends nothing; `reward_gold` is NOT
+  granted and the experience still is; the store is untouched without `--persist` and
+  accrues the same 100 with it, saved once; a COMPLETED quest is not offered again and both
+  its agents are in the marker pass, named and clear; and `quests_completed` rides the
+  process-wide progress carrier.
   **SLICE-B1 and B4 (2026-09-12).** `toolkit/test_quests.py` §21 (floor 73 → 89) and §22
   (→ 94). §21: a quest binds to a SPAWN ROW rather than a bare agent id -- the shipped row
   resolves through its keys, the surviving NUMBERS agree with them (the migration invariant,
