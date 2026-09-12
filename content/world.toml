@@ -1011,3 +1011,70 @@ source = "client-table"
 extractor = "toolkit/clientscan/skilltable.py"
 build = 38797
 verified = "s_skill row 346, +0x78 = 601; extracted 2026-08-31, corroborated against the live corpus's property 20/21 events (99.7% over n=658)."
+
+# ---------------------------------------------------------------------------
+# THE ERRAND: the quest's own two NPCs, as CONTENT. SLICE-B1, 2026-09-12.
+#
+# content/quests.toml has said since it was written that its `giver_agent = 99`
+# and `objective_agent = 98` "bind to the probe world rather than to characters
+# in a place", and the recon that opened this arc reported the consequence as
+# "no code spawns a quest giver in ordinary play". Both are true and neither
+# needed a server change: `_quest_lines` and `_objective_quests` bind by AGENT
+# ID, and `area_population` lets a spawn row choose any id. A row IS the giver.
+#
+# THE IDS ARE DELIBERATELY THE PROBE'S OWN, 99 and 98. The quest row keeps its
+# numeric columns alongside the new `giver_spawn`/`objective_spawn` keys and the
+# two agree by construction, so `probequest.py`'s hand-built world and this
+# authored one address the same bodies and neither had to be changed to suit the
+# other.
+#
+# POSITIONS: both MEASURED walkable on map 146/148's own navmesh (they share
+# file 113021). The scout sits 950 u out so "follow the arrow to my companion"
+# is an actual walk rather than a turn on the spot; the giver is 300 u from the
+# arrival point, close enough to find without being on top of the player.
+
+[spawn.errand_giver]
+area = "errand"
+npc = "lieutenant_fisk"
+agent_id = 99
+definition = 50
+# 200 u, INSIDE the 250 u INTERACT_RANGE, and that is a content decision rather
+# than a convenience. At 300 u the first run put the giver beyond range, so the
+# server correctly ordered a walk and HELD the interact -- and the hold never
+# released, because the player's position never came within range (harness
+# 20260912T093924: the walk order went out, the client sent only heartbeats).
+# That is a real open question about the held-interact path and it is recorded
+# in studies/slice/FINDINGS.md rather than tuned away; what it is NOT is a good
+# reason to ship a quest giver you cannot talk to.
+x = 10026.0
+y = 8077.0
+allegiance = "noncombatant"
+attacks_back = false
+max_health = 100
+enabled = true
+
+[spawn.errand_giver.provenance]
+source = "invented"
+note = """Ours: a standing spot 300 u east of the arrival point, MEASURED \
+walkable against the compiled navmesh before it was written down. The agent id \
+is the one content/quests.toml already named, so the authored world and the \
+probe world bind to the same body. The TEMPLATE carries its own provenance."""
+
+[spawn.errand_scout]
+area = "errand"
+npc = "ascalonian_townsfolk"
+agent_id = 98
+definition = 51
+x = 8933.0
+y = 7752.0
+allegiance = "noncombatant"
+attacks_back = false
+max_health = 100
+enabled = true
+
+[spawn.errand_scout.provenance]
+source = "invented"
+note = """Ours, as errand_giver's note says. 950 u from the arrival point: far \
+enough that the quest's own words ("follow the green arrow to my companion") \
+describe something the player actually does, and inside the same trapezoid \
+tiling, MEASURED walkable."""

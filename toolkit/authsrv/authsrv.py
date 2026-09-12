@@ -208,6 +208,45 @@ def _close_dialog(send, agent_id, why):
     send(GAME_SMSG_NPC_DIALOG_SHOW, [agent_id], f"DIALOG_CLOSE({why})")
 
 
+def quest_agent(row, which):
+    """Which agent id a quest's `which` NPC is -- 'giver' or 'objective'.
+
+    A quest row may name its NPC two ways, and the difference is what SLICE-B1
+    is. `{which}_agent` is a BARE NUMBER, per-connection and per-spawn;
+    content/quests.toml's own comment calls it "a probe-world binding, not a
+    content one" and the recon that opened this arc reported the consequence as
+    "no code spawns a quest giver in ordinary play". `{which}_spawn` names a
+    SPAWN ROW KEY instead, and the id is read from that row -- so the quest
+    points at a body somebody authored rather than at an integer that happens
+    to match one.
+
+    BOTH ARE SUPPORTED AND THE KEY WINS, because carrying both is the state
+    this arc is in rather than an indecision: `quests.toml` keeps its numbers so
+    `probequest.py`'s hand-built world still binds, and gains the keys so the
+    authored world does. The two are the SAME id by construction -- the spawn
+    rows were given 99 and 98 on purpose -- so nothing had to change on either
+    side to suit the other.
+
+    A KEY NAMING NO SPAWN ROW RAISES, and does not fall back to the number.
+    That fallback is the one failure mode worth refusing: the quest would keep
+    working in the probe and do nothing in the authored world, which is
+    invisible from either side on its own.
+    """
+    key = row.get(f"{which}_spawn")
+    if key:
+        try:
+            spawn = agents.WORLD.get("spawn", str(key))
+        except Exception as exc:                              # noqa: BLE001
+            raise ValueError(
+                f"quest row names {which}_spawn = {key!r}, which is not a spawn "
+                f"row. Not falling back to {which}_agent: a typo that quietly "
+                f"reverted to the probe binding would leave the quest working "
+                f"in the probe and dead in the world ({exc})")
+        return int(spawn["agent_id"])
+    v = row.get(f"{which}_agent")
+    return None if v is None else int(v)
+
+
 def _quest_lines(state):
     """[(quest_id, code, row)] this NPC can act on, given what the player holds.
 
@@ -222,10 +261,12 @@ def _quest_lines(state):
     this function returned SERVICE_TURN_IN the moment a quest was held, so kind
     22 was unreachable and a quest went straight from '!' to the turn-in bag.
 
-    Bound to the agent being talked to, via the row's `giver_agent`. That is a
-    real binding where the old one was "every quest speaks at every NPC" -- but
-    it binds to an AGENT ID, which is per-connection and per-spawn, so it is a
-    probe-world binding rather than a content one. Said here and in the row.
+    Bound to the agent being talked to, through `quest_agent`. That paragraph
+    used to end "it binds to an AGENT ID, which is per-connection and per-spawn,
+    so it is a probe-world binding rather than a content one" -- SLICE-B1 is
+    what fixed it: a row may now name a SPAWN ROW KEY and the id comes from the
+    authored world. The bare number still works and is still what the probe
+    uses.
     """
     held = state.setdefault("quests", set())
     done = state.setdefault("objectives_done", set())
@@ -235,7 +276,7 @@ def _quest_lines(state):
         row = quest_rows()[qid]
         if not row.get("giver_dialogue"):
             continue
-        if row.get("giver_agent") not in (None, agent):
+        if quest_agent(row, "giver") not in (None, agent):
             continue
         if qid not in held:
             code = questdefs.SERVICE_SHOW
@@ -245,6 +286,91 @@ def _quest_lines(state):
             code = questdefs.SERVICE_IN_PROGRESS
         out.append((qid, code, row))
     return out
+
+
+def complete_objective(send, state, qid, row, conn_id, why):
+    """Mark one quest's objective met, and tell the client. ONE place.
+
+    SLICE-B4 extracted this from `_handle_interact` unchanged. It had exactly
+    one caller -- talking to the objective NPC -- and a kill is a second way to
+    meet an objective that has to do all of the same things: the state write,
+    the description guard, the 0x0054, and the marker batch. Two copies of that
+    sequence would drift, and the description guard is the half that would drift
+    silently.
+
+    `why` is log text only, and exists so the two callers are distinguishable in
+    a gamesrv log without reading the code.
+    """
+    state.setdefault("objectives_done", set()).add(qid)
+    print(f"[c{conn_id}] objective for quest {qid} met {why}")
+    # 0x0054 IS A SILENT NO-OP unless 0x004C has been
+    # sent for this quest: flag bit 0 (DESC_FILLED) is
+    # set by 0x004C's body and gates 0x0054's entirely
+    # at 0x0080F9CD. The client asks for the
+    # description on accept in 4 of 4, so it normally
+    # has been -- but "normally" is not a guarantee, so
+    # send it if we have not, rather than emit an
+    # update that vanishes and looks like the client
+    # ignoring us.
+    if qid not in state.setdefault("desc_sent", set()):
+        _send_description(send, state, qid, row)
+    ofr = row.get("wire_framing", "template")
+    send(GAME_SMSG_QUEST_OBJECTIVES_UPDATE,
+         [qid, questdefs.coded_literal(
+             row.get("objectives_done")
+             or row.get("objectives", ""), ofr)],
+         f"QUEST_OBJECTIVES_UPDATE[{qid}]")
+    # The mark moves in the SAME batch as the message that moved the
+    # quest: the objective NPC's arrow comes down and the giver's goes
+    # up. That is one visible event and must not arrive as two.
+    _send_markers(send, state, " (objective met)")
+
+
+def kill_completes_objective(send, state, dead_id, conn_id):
+    """A KILL meets an objective -- SLICE-B4, the manifest's `kill-count` verb.
+
+    studies/presearing's six-verb census says every Pre-Searing quest reduces to
+    six server behaviours, and that the slice needs exactly two of them:
+    `dialogue`, which has worked since the quest arc, and `kill-count`, which
+    had no implementation at all. `kill_agent` is a single choke point -- one
+    place puts an agent down, whatever killed it -- so this is one call from
+    there rather than a hook per damage path.
+
+    THE BINDING IS A SPAWN KEY, never a bare agent id, because SLICE-B1 already
+    paid for that lesson on the giver: `objective_kill = "errand_boss"` names a
+    row in content/world.toml and `quest_agent`-style resolution turns it into
+    the id this instance actually used.
+
+    COUNTS ARE NOT MODELLED and that is deliberate rather than deferred. Every
+    kill objective in the slice is one named body, `objective_kill_count` does
+    not exist, and inventing a counter with no content asking for one would be a
+    mechanism nothing exercises -- which is how the reward grant got a number it
+    could not honour. When a quest needs "kill 5 skale", the row grows a count
+    and this grows a tally.
+    """
+    held = state.setdefault("quests", set())
+    done = state.setdefault("objectives_done", set())
+    for qid in sorted(held):
+        if qid in done:
+            continue
+        row = quest_rows().get(qid)
+        if not row:
+            continue
+        key = row.get("objective_kill")
+        if not key:
+            continue
+        try:
+            spawn = agents.WORLD.get("spawn", str(key))
+        except Exception as exc:                              # noqa: BLE001
+            raise ValueError(
+                f"quest {qid} names objective_kill = {key!r}, which is not a "
+                f"spawn row. Refusing rather than silently never completing: a "
+                f"kill objective that can never fire looks exactly like a "
+                f"player who has not killed the right thing ({exc})")
+        if int(spawn["agent_id"]) != int(dead_id):
+            continue
+        complete_objective(send, state, qid, row, conn_id,
+                           f"by killing agent {dead_id}")
 
 
 def _objective_quests(state, agent):
@@ -257,7 +383,7 @@ def _objective_quests(state, agent):
     done = state.setdefault("objectives_done", set())
     return [(qid, quest_rows()[qid]) for qid in sorted(held)
             if qid not in done
-            and quest_rows().get(qid, {}).get("objective_agent") == agent]
+            and quest_agent(quest_rows()[qid], "objective") == agent]
 
 
 # How close you must stand to talk. OURS -- the same status as ATTACK_RANGE and
@@ -415,30 +541,8 @@ def _handle_interact(send, state, conn_id, agent_id, interact_byte=0):
     # interaction late.
     spoke_objective = False
     for oqid, orow in _objective_quests(state, agent_id):
-        state.setdefault("objectives_done", set()).add(oqid)
-        print(f"[c{conn_id}] objective for quest {oqid} met "
-              f"at agent {agent_id}")
-        # 0x0054 IS A SILENT NO-OP unless 0x004C has been
-        # sent for this quest: flag bit 0 (DESC_FILLED) is
-        # set by 0x004C's body and gates 0x0054's entirely
-        # at 0x0080F9CD. The client asks for the
-        # description on accept in 4 of 4, so it normally
-        # has been -- but "normally" is not a guarantee, so
-        # send it if we have not, rather than emit an
-        # update that vanishes and looks like the client
-        # ignoring us.
-        if oqid not in state.setdefault("desc_sent", set()):
-            _send_description(send, state, oqid, orow)
-        ofr = orow.get("wire_framing", "template")
-        send(GAME_SMSG_QUEST_OBJECTIVES_UPDATE,
-             [oqid, questdefs.coded_literal(
-                 orow.get("objectives_done")
-                 or orow.get("objectives", ""), ofr)],
-             f"QUEST_OBJECTIVES_UPDATE[{oqid}]")
-        # The mark moves in the SAME batch as the message that moved the
-        # quest: the objective NPC's arrow comes down and the giver's goes
-        # up. That is one visible event and must not arrive as two.
-        _send_markers(send, state, " (objective met)")
+        complete_objective(send, state, oqid, orow, conn_id,
+                           f"at agent {agent_id}")
         # AND IT SPEAKS. The objective NPC had no voice: talking to it ticked a
         # flag and opened no window, so half the quest happened in silence and
         # the NPC read as scenery with a trigger attached. One line, no options
@@ -634,7 +738,8 @@ def _quest_markers(state):
 
     for qid in sorted(quest_rows()):
         row = quest_rows()[qid]
-        giver, objective = row.get("giver_agent"), row.get("objective_agent")
+        giver = quest_agent(row, "giver")
+        objective = quest_agent(row, "objective")
         if qid not in held:
             want(giver, QUEST_MARKER_OFFER)
             want(objective, None)
@@ -11861,6 +11966,10 @@ def kill_agent(send, state, target_id, agent, conn_id, now):
     # status/reward/flags order is ArenaNet's own tick shape, and the
     # accrual only appends to it (and only under --persist).
     accrue_kill_rewards(send, state, conn_id)
+    # SLICE-B4: and a kill can meet a quest objective. Same rule about where it
+    # sits -- the three-message template is ArenaNet's shape and nothing of ours
+    # goes inside it.
+    kill_completes_objective(send, state, target_id, conn_id)
     # ...and so does the other half of the death penalty. WIKI (GWW, "Death
     # Penalty", Counters): in PvE "gaining 75 experience will remove 1% DP",
     # so the kill reward that just went out is also the way back up. Sends
@@ -17945,6 +18054,34 @@ def spawn_population(send, state, origin, conn_id, area=None):
         # is OURS and is the npc row's own key: commit the id, resolve the
         # string at run time. It reaches logs only, never the wire.
         label = npc.get("name") or str(row["npc"])
+        # SLICE-B2: the STAT BLOCK is per row now, and it was not. Until
+        # 2026-09-12 every area-spawned body took the module-level
+        # ENEMY_SKILLS and ENEMY_ATTACK_SPEED and carried NO `armor_rating` at
+        # all -- so "two monster archetypes" could not mean anything mechanical
+        # (every spawn was a clone with one shared bar), and the player's swing
+        # against any of them silently ran with no armour term, because
+        # `taker_damage` reads `agent.get("armor_rating")` and the key was
+        # absent. The legacy single-enemy path (`_spawn_one_enemy`) had all
+        # four of these; only the area path did not.
+        #
+        # EVERY DEFAULT IS TODAY'S BEHAVIOUR, so a row that says nothing spawns
+        # exactly what it spawned before this change. `--enemy-skills` still
+        # reaches a row that declares no bar of its own, which is what keeps
+        # the existing flag arms meaningful.
+        #
+        # ARMOUR IS DERIVED, NOT DEFAULTED. `creature_armor_rating` is the
+        # WIKI formula over level and profession (combatmath.py), the same
+        # call the legacy path makes, and a row may override it outright. A
+        # flat constant here would be an invented number wearing a content
+        # row's authority.
+        bar = row.get("skills")
+        if bar is None:
+            bar = ENEMY_SKILLS
+        else:
+            # A content row gives [[id, activation, recharge], ...]; an EMPTY
+            # list is a real answer (this body swings and casts nothing) and
+            # must not fall through to the global.
+            bar = tuple(tuple(sk) for sk in bar)
         entry = {
             "pos": (x, y), "plane": plane,
             "health": hp, "max_health": hp,
@@ -17953,12 +18090,15 @@ def spawn_population(send, state, origin, conn_id, area=None):
             "npc": npc,
             "definition": int(row["definition"]),
             "allegiance": allegiance,
-            "attack_speed": ENEMY_ATTACK_SPEED,
+            "attack_speed": float(row.get("attack_speed", ENEMY_ATTACK_SPEED)),
+            "armor_rating": creature_armor_rating(
+                dict(npc, level=row.get("level", npc.get("level", 0))),
+                row.get("armor_rating")),
             "effects": 0,
             "resend_definition": bool(row.get("resend_definition", False)),
             "attacks_back": bool(row.get("attacks_back", False)),
-            "skills": ENEMY_SKILLS,
-            "skill_ready": [0.0] * len(ENEMY_SKILLS),
+            "skills": bar,
+            "skill_ready": [0.0] * len(bar),
         }
         create_agent_world(send, state, int(row["agent_id"]), entry, key,
                            conn_id=conn_id)

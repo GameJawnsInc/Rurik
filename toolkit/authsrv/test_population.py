@@ -51,7 +51,7 @@ import pathmap  # noqa: E402
 # party-reserved ids, studies/unitsetup/FINDINGS.md 8 Q9). Every section is
 # synthetic -- no vault, no socket, no client -- so there is nothing here that
 # may skip.
-LEDGER = checks.Ledger("test_population", floor=51)
+LEDGER = checks.Ledger("test_population", floor=69)   # SLICE-B2 +7 (section 6); from the green run
 check = checks.adopt(LEDGER)
 
 AREA = "sculpt"
@@ -323,6 +323,116 @@ def section2b():
           "codec, so this section can tell the fix from the defect")
 
 
+class StatWorld:
+    """Synthetic spawn rows over the REAL npc table.
+
+    `spawn_population` needs both halves -- the rows it places, and
+    `npc_template`'s lookup for each row's template. Faking the npc half too
+    would mean faking `enc_name`, which is the thing section 2b exists to keep
+    honest, so this delegates everything that is not a spawn row.
+    """
+
+    def __init__(self, spawn, real):
+        self._spawn, self._real = spawn, real
+
+    def rows(self, kind):
+        return dict(self._spawn) if kind == "spawn" else self._real.rows(kind)
+
+    def get(self, kind, key):
+        if kind == "spawn":
+            return self._spawn[key]
+        return self._real.get(kind, key)
+
+
+def place(spawn):
+    """Run `spawn_population` over a synthetic table; return state['agents']."""
+    saved = authsrv.agents.WORLD
+    sent, state = [], {"agents": {}, "pos": (0.0, 0.0), "pathmap": None}
+    try:
+        authsrv.agents.WORLD = StatWorld(spawn, saved)
+        authsrv.spawn_population(
+            lambda op, vals, label="", **kw: sent.append((op, vals, label)),
+            state, (0.0, 0.0, 0), 0, area=AREA)
+    finally:
+        authsrv.agents.WORLD = saved
+    return state["agents"]
+
+
+def section6():
+    """SLICE-B2: the stat block is PER ROW, and the defaults are today's.
+
+    Every check here is paired with the thing it has to differ from. A row that
+    sets a bar proving it carries that bar says nothing on its own -- the global
+    might simply happen to match -- so each positive is read against a row in
+    the SAME table that did not set it.
+    """
+    print("\n6. SLICE-B2: skills, attack speed and armour come from the ROW")
+
+    # The no-regression half FIRST: a row that says nothing must spawn exactly
+    # what it spawned before B2 existed.
+    bare = place({"a": row(agent_id=20, definition=5)})[20]
+    check(tuple(bare["skills"]) == tuple(authsrv.ENEMY_SKILLS)
+          and bare["attack_speed"] == authsrv.ENEMY_ATTACK_SPEED,
+          "a row declaring no stats still takes the module defaults -- so "
+          "--enemy-skills keeps reaching every row that does not override it",
+          f"{[s[0] for s in bare['skills']]} @ {bare['attack_speed']}")
+
+    # ARMOUR: absent entirely before B2, which is the defect. `taker_damage`
+    # reads agent.get("armor_rating"), so a missing key meant the player's
+    # swing ran with no armour term and nothing said so.
+    check(bare.get("armor_rating") is not None,
+          "and it now carries an armor_rating at all -- the key was ABSENT on "
+          "this path, so every swing against an area body ran with no armour "
+          "term", f"{bare.get('armor_rating')}")
+
+    # DERIVED, not defaulted: level and profession drive it, and a row may
+    # override. Two levels in one table, so the formula is what differs.
+    two = place({"lo": row(agent_id=20, definition=5, level=1),
+                 "hi": row(agent_id=21, definition=5, level=10)})
+    check(two[21]["armor_rating"] > two[20]["armor_rating"],
+          "armour is DERIVED from the row's level, not a constant: a level-10 "
+          "body out-armours a level-1 one in the same table",
+          f"lvl1={two[20]['armor_rating']} lvl10={two[21]['armor_rating']}")
+    over = place({"a": row(agent_id=20, definition=5, level=1,
+                           armor_rating=99)})[20]
+    check(over["armor_rating"] == 99.0,
+          "and an explicit armor_rating overrides the formula, because the "
+          "wiki's own page says many PvE creatures do not follow it")
+
+    # THE ARCHETYPE CASE: two rows, one table, different bars and speeds. This
+    # is the whole point of B2 -- before it, both would have been clones.
+    pair = place({
+        "warrior": row(agent_id=20, definition=5, attack_speed=1.5,
+                       skills=[[322, 0.0, 4.0]]),
+        "monk": row(agent_id=21, definition=5, attack_speed=2.5,
+                    skills=[[276, 0.75, 2.0]]),
+    })
+    check([s[0] for s in pair[20]["skills"]] == [322]
+          and [s[0] for s in pair[21]["skills"]] == [276]
+          and pair[20]["attack_speed"] == 1.5
+          and pair[21]["attack_speed"] == 2.5,
+          "TWO ARCHETYPES IN ONE AREA: different bars and different swing "
+          "speeds, which is what B2 is for -- before it both rows took the "
+          "one global bar and were clones",
+          f"{[s[0] for s in pair[20]['skills']]}@{pair[20]['attack_speed']} vs "
+          f"{[s[0] for s in pair[21]['skills']]}@{pair[21]['attack_speed']}")
+    check(len(pair[20]["skill_ready"]) == 1
+          and len(pair[21]["skill_ready"]) == 1,
+          "and each gets its OWN recharge vector, sized to its own bar -- "
+          "per SLOT, never per id, so a bar carrying one skill twice does not "
+          "share a cooldown")
+
+    # An EMPTY bar is a real answer and must not fall through to the global.
+    # This is the check the `is None` test exists for; `if not bar` would fail.
+    quiet = place({"a": row(agent_id=20, definition=5, skills=[])})[20]
+    check(tuple(quiet["skills"]) == ()
+          and tuple(authsrv.ENEMY_SKILLS) != (),
+          "an EMPTY skills list means this body casts nothing -- it does NOT "
+          "fall through to the global, and the second conjunct proves the "
+          "global was non-empty so the check could have failed",
+          f"{quiet['skills']} vs global {len(authsrv.ENEMY_SKILLS)}")
+
+
 def section3():
     print("\n3. an area REPLACES the global enemy; the wiring is not optional")
     src = open(authsrv.__file__, encoding="utf-8").read()
@@ -508,6 +618,7 @@ def main():
     section3()
     section4()
     section5()
+    section6()
     return LEDGER.verdict()
 
 

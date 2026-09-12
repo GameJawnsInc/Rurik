@@ -80,6 +80,22 @@ objective_dialogue = "You're the one the guard sent? Tell him the road is clear.
 # to the probe world rather than to characters in a place. R5's job.
 giver_agent     = 99
 objective_agent = 98
+# SLICE-B1, 2026-09-12: THE BINDING IS NOW A SPAWN KEY, and the two numbers
+# above are kept rather than replaced. `giver_spawn` names a row in
+# content/world.toml, and `quest_agent()` reads that row's `agent_id` -- so the
+# quest points at a body somebody AUTHORED instead of at an integer that
+# happens to match one. The paragraph above ("this binds to the probe world
+# rather than to characters in a place. R5's job") is what that fixes.
+#
+# BOTH COLUMNS, ON PURPOSE. The spawn rows were given 99 and 98 deliberately, so
+# the key and the number resolve to the SAME body: probequest.py's hand-built
+# world still binds by number and the authored world binds by key, and neither
+# had to change to suit the other. The key WINS where they disagree, and a key
+# naming no spawn row RAISES rather than falling back -- a typo that quietly
+# reverted to the probe binding would leave the quest working in the probe and
+# dead in the world, which is invisible from either side alone.
+giver_spawn     = "errand_giver"
+objective_spawn = "errand_scout"
 
 # THE REWARD. Ours, and small on purpose. ArenaNet renders a reward as `Reward:`
 # followed by one line per slot, INSIDE the description string -- there is no

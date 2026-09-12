@@ -54,7 +54,7 @@ import authsrv                                              # noqa: E402
 #
 # Adding quest rows only raises the count, so the floor stays valid; an
 # EMPTY table is caught by section 0 before the count matters.
-LEDGER = checks.Ledger("the quest table and its coded strings", floor=73)
+LEDGER = checks.Ledger("the quest table and its coded strings", floor=94)   # SLICE-B1 +6 (sec 21), B4 +5 (sec 22); from the green run
 check = checks.adopt(LEDGER)
 
 # MEASURED, build 38797: UiCtlWebLink.cpp:576 asserts `challengeId < CHALLENGES`
@@ -788,6 +788,104 @@ def main():
               f"~90 days older and everything moved; the frame-bus scan finds "
               f"nothing in any quest body there. Without this, 'byte-identical' "
               f"above could be true of a reader that never opened a file")
+
+    print("\n21. SLICE-B1: the quest binds to a SPAWN ROW, not to a bare number")
+    _row = authsrv.quest_rows()[1463]
+    check(authsrv.quest_agent(_row, "giver") == 99
+          and authsrv.quest_agent(_row, "objective") == 98,
+          "the shipped row resolves its giver and objective through its spawn "
+          "keys", f"{authsrv.quest_agent(_row, 'giver')}/"
+                  f"{authsrv.quest_agent(_row, 'objective')}")
+    # THE MIGRATION INVARIANT, and it is the check worth having: the row carries
+    # BOTH a key and a number, and they must name the same body or the probe
+    # world and the authored world are quietly testing different things.
+    check(authsrv.quest_agent(_row, "giver") == _row.get("giver_agent")
+          and authsrv.quest_agent(_row, "objective")
+          == _row.get("objective_agent"),
+          "and the key and the surviving NUMBER agree, so probequest.py's "
+          "hand-built world and the authored one bind the same bodies",
+          f"key {authsrv.quest_agent(_row, 'giver')} vs number "
+          f"{_row.get('giver_agent')}")
+    check(authsrv.quest_agent(dict(_row, giver_spawn="errand_scout"), "giver")
+          == 98,
+          "the KEY wins over the number where they disagree -- the number is "
+          "the legacy column, not the authority")
+    check(authsrv.quest_agent({"giver_agent": 7}, "giver") == 7
+          and authsrv.quest_agent({}, "giver") is None,
+          "a row with only a number still resolves (the probe path), and a row "
+          "with neither is None rather than an error")
+    try:
+        authsrv.quest_agent(dict(_row, giver_spawn="no_such_row"), "giver")
+        _raised = False
+    except ValueError:
+        _raised = True
+    check(_raised,
+          "and a key naming NO spawn row RAISES rather than falling back to "
+          "the number -- the fallback would leave the quest working in the "
+          "probe and dead in the world, invisible from either side alone")
+    # The two NPC templates the spawn rows name have to be in TRACKED content,
+    # not the vault overlay, or the rows above load here and fail on a bare
+    # machine. That is the defect class, checked rather than trusted.
+    _repo = content.load(vault_dir="")
+    check("errand_giver" in _repo.rows("spawn")
+          and _repo.rows("npc").get("lieutenant_fisk") is not None
+          and _repo.rows("npc").get("ascalonian_townsfolk") is not None,
+          "the errand's spawn rows AND the templates they name are in tracked "
+          "content -- loaded here with the vault overlay switched off, which "
+          "is the bare machine the suite never otherwise exercises",
+          f"npcs={sorted(_repo.rows('npc'))}")
+
+    print("\n22. SLICE-B4: a KILL meets an objective (the manifest's kill-count verb)")
+    # A SYNTHETIC quest row, not a shipped one. Wiring this to real content
+    # needs a second quest NAME, which needs a record in our own archive --
+    # SLICE-B9's job. What is testable now is the verb itself.
+    _kq = {"objectives": "Kill it.", "objectives_done": "Killed.",
+           "wire_framing": "template", "objective_kill": "errand_scout"}
+    _saved_rows = authsrv.quest_rows
+
+    def _fake_rows(_cache={7001: _kq}):
+        return _cache
+
+    def _fire(dead, held=(7001,), done=()):
+        sent = []
+        st = {"quests": set(held), "objectives_done": set(done),
+              "desc_sent": {7001}, "agent_pos": {}, "agents": {}}
+        authsrv.kill_completes_objective(
+            lambda op, vals, label="", **kw: sent.append((op, vals, label)),
+            st, dead, 0)
+        return st, sent
+
+    try:
+        authsrv.quest_rows = _fake_rows
+        st, sent = _fire(98)
+        check(7001 in st["objectives_done"] and sent,
+              "killing the agent the row names meets the objective, and an "
+              "0x0054 goes out", f"done={st['objectives_done']} sent={len(sent)}")
+        st, sent = _fire(99)
+        check(7001 not in st["objectives_done"] and not sent,
+              "killing a DIFFERENT agent does not -- the binding is to one "
+              "body, not to any death")
+        st, sent = _fire(98, held=())
+        check(7001 not in st["objectives_done"] and not sent,
+              "and a quest the player does not HOLD is untouched, so a kill "
+              "cannot complete an objective for a quest never accepted")
+        st, sent = _fire(98, done=(7001,))
+        check(not sent,
+              "an objective already met is not met again -- no second 0x0054 "
+              "and no second marker batch for the same kill")
+        _kq["objective_kill"] = "no_such_spawn"
+        try:
+            _fire(98)
+            _raised = False
+        except ValueError:
+            _raised = True
+        check(_raised,
+              "and a key naming NO spawn row RAISES: a kill objective that can "
+              "never fire looks exactly like a player who has not killed the "
+              "right thing, which is indistinguishable from the outside")
+        _kq["objective_kill"] = "errand_scout"
+    finally:
+        authsrv.quest_rows = _saved_rows
 
     return LEDGER.verdict()
 

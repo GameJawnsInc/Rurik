@@ -3954,6 +3954,32 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   lands in, with the arithmetic control proving the coarse samples straddle it and the fine
   ones do not, the known-bad arm (`ROUTE_GATE_FINE` False) returning the 2-point path, and the
   fix returning a 4-point corridor whose every segment holds at 2 u.
+  **SLICE-B1 and B4 (2026-09-12).** `toolkit/test_quests.py` §21 (floor 73 → 89) and §22
+  (→ 94). §21: a quest binds to a SPAWN ROW rather than a bare agent id -- the shipped row
+  resolves through its keys, the surviving NUMBERS agree with them (the migration invariant,
+  so probequest.py's hand-built world and the authored one bind the same bodies), the key
+  wins where they disagree, a number-only row still works, and a key naming no spawn row
+  RAISES rather than falling back. Its last check loads the content store with the VAULT
+  OVERLAY SWITCHED OFF -- the bare machine the suite never otherwise exercises -- to prove
+  the errand's rows and the two NPC templates they name are all in tracked content. §22: the
+  kill-count verb. Killing the named body meets the objective; killing a different one does
+  not; a quest not HELD is untouched; an objective already met is not met twice; and a bad
+  spawn key raises, because a kill objective that can never fire is indistinguishable from a
+  player who has not killed the right thing.
+
+  **SLICE-B2 (2026-09-12).** `toolkit/authsrv/test_population.py` §6 (floor 51 → 69):
+  the stat block is PER ROW. Seven checks, each paired with what it has to differ from --
+  a row proving it carries a bar says nothing unless read against a row in the SAME table
+  that did not set one. It checks the no-regression half FIRST (a row declaring nothing
+  still takes the module defaults, so `--enemy-skills` keeps reaching it), that
+  `armor_rating` is PRESENT at all (it was absent on this path, so every swing against an
+  area body ran with no armour term and nothing said so), that armour is DERIVED from the
+  row's level rather than defaulted and that an explicit value overrides it, that two rows
+  in one area can carry different bars and different swing speeds (the whole point -- before
+  this they were clones of one global bar), and that an EMPTY skills list means silence
+  rather than falling through to the global, with the second conjunct proving the global
+  was non-empty so the check could have failed.
+
   **SLICE-B7c (2026-09-12).** `toolkit/authsrv/test_mechanics.py` §28 (floor 162 → 174,
   with B7a's four): a PARTY body casts a heal at the player. Eight checks, four of them
   arms: the policy picks the hurt player (who is not a row in `agents`, which is B7a's

@@ -113,3 +113,78 @@ wiki pass months earlier that had no connection to this definition slot.
 rather than corrected: the field name is ours, and a worm whose level reads 0 is at least
 as likely to mean the field is not a level as it is to mean the worm has none.
 """
+
+# ---------------------------------------------------------------------------
+# THE PARADE'S OUTPUT, PROMOTED. SLICE-B1, 2026-09-12.
+#
+# Both rows were emitted into the gitignored vault overlay by npcdefs.py months
+# ago and neither had a NAME, because npcdefs deliberately does not write one:
+# "a name comes from a rendered nameplate or it does not exist". The model
+# parade (studies/slice/RUN-PARADE.md) is where they got one -- each of these
+# two stood ALONE in an empty world, so the nameplate on screen belongs to this
+# definition and to nothing else, with no projection or elimination involved.
+#
+# WHY THEY ARE TRACKED NOW AND THE OTHER FIFTY-FOUR ARE NOT. A spawn row in the
+# tracked content/world.toml that names a vault-only template loads here and
+# fails on a bare machine (project-rurik-bare-machine-defect-class). The quest
+# giver and its objective NPC are the first content rows that need to be in git,
+# so they are the first templates that have to come with them. The rest stay in
+# the overlay until something tracked needs them.
+#
+# The `name` is ours to the extent that we chose to write down what the client
+# drew; every other field is ArenaNet's, measured, and unchanged from the
+# overlay row it was copied from.
+
+[npc.lieutenant_fisk]
+name = "Lieutenant Fisk"
+definition = 1458
+file_id = 116228
+model_id = 116671
+scale = 1677721600
+flags = 524
+profession = 1
+level = 2
+move_speed = 250.0
+enc_name = [3914, 61387, 52282, 21632]
+
+[npc.lieutenant_fisk.provenance]
+source = "capture"
+capture = "20260807T143055"
+origin = "live"
+extractor = "toolkit/authsrv/npcdefs.py"
+verified = """OBSERVED on ArenaNet's own wire: definition 1458 declared by \
+GAME_SMSG 0x0056 in 2 connections across 2 captures, payloads byte-identical, \
+2 creates carried it. Every numeric field is read from that declaration and is \
+unchanged from the vault overlay row npcdefs.py emitted.
+
+THE NAME IS OURS ONLY IN THE SENSE THAT WE WROTE DOWN WHAT THE CLIENT DREW. \
+Harness 20260911T233252 (build 38797, loopback): this definition stood ALONE in \
+Lakeside County -- two creates in the whole run, the player and this body -- and \
+its nameplate read "Lieutenant Fisk". One body in the world means one nameplate, \
+so no projection, compass reading or elimination stands between the definition \
+and the name. studies/slice/RUN-PARADE.md 4b."""
+
+[npc.ascalonian_townsfolk]
+name = "Ascalonian Townsfolk"
+definition = 1490
+file_id = 116225
+model_id = 116754
+scale = 1677721600
+flags = 524
+profession = 1
+level = 1
+move_speed = 200.0
+enc_name = [3948, 39255, 51957, 11013]
+
+[npc.ascalonian_townsfolk.provenance]
+source = "capture"
+capture = "20260807T143055"
+origin = "live"
+extractor = "toolkit/authsrv/npcdefs.py"
+verified = """OBSERVED on ArenaNet's own wire: definition 1490 declared by \
+GAME_SMSG 0x0056 in 6 connections across 2 captures, payloads byte-identical, \
+36 creates carried it. Every numeric field is read from that declaration and is \
+unchanged from the vault overlay row npcdefs.py emitted.
+
+Harness 20260911T233623, same method as lieutenant_fisk above: alone in the \
+world, nameplate "Ascalonian Townsfolk". studies/slice/RUN-PARADE.md 4b."""
