@@ -426,7 +426,8 @@ def launch_recipe(world, name, row, recs):
     # until an ELEVATED shell has run the isolate script for it. Said here
     # rather than discovered at the refusal, which is where it was discovered.
     lines = [f"# once, in an ELEVATED PowerShell (a new run directory is uncaged):",
-             f"#   & toolkit\clientpatch\isolate_client.ps1 -Exe \"{exe}\"",
+             "#   & toolkit" + r"\clientpatch\isolate_client.ps1 -Exe " + f'"{exe}"',
+
              f'$env:RURIK_DAT = "{dat}"']
     for a in row.get("areas") or []:
         area = world.get("area", a)
