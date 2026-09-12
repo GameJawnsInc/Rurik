@@ -702,12 +702,41 @@ EXPERIENCE 2026-08-16), paid by the only experience message we have measured. Th
 draws a line the server prints a loud `NOT GRANTED` for and pays nothing. The content
 row keeps the key commented out, and its comment no longer says "nothing is granted".
 
-**Not observed on a client, and why.** The turn-in is a click on the giver, a click on
+**OBSERVED on a client, by the owner, 2026-09-12 — harness `20260912T141042`.** The owner
+drove the whole quest by hand: accept, walk, talk, walk back, turn in. The log reads
+`quest 1463 turned in: +100 experience`, then both markers clear and the window closes.
+"Mechanically it all functioned." **And three things felt wrong against stock, all three
+real, all three fixed the same afternoon:**
+
+1. *"The interact fires off without having to walk into close range."* `INTERACT_RANGE`
+   was 250 u; the owner read it as "probably 2x" stock. WIKI (GWW, "Range", "Touch range
+   and melee range", read 2026-09-12): 144 gwinches is "the shortest unit of distance
+   used in the game". It is 144 now — the ladder's shortest rung as the best-supported
+   number, 250/144 = 1.7 being what "probably 2x" looks like.
+2. *"It doesn't automatically path the player to them ... I had to manually move to the
+   scout."* The hold had no walk: the bare `0x002A` was measured on 2026-08-19 to drag
+   the character through a staircase and was shipped off, and the log line still said
+   "walking the player over" while nothing walked. The router (MOVECODE-1z-v) did not
+   exist then. `interact_route` now answers an out-of-range interact as a CLICK at a point
+   100 u short of the NPC, through the same `router_answer_click` the `0x003E` arm uses —
+   the client walks routed legs with its own collision, the integrator advances the model,
+   and the existing hold serves on arrival. OURS, on our mesh, `--no-interact-route`
+   reverts. The log says which of the three (routed / 0x002A / nothing) actually went out.
+3. *"There should be 2 line breaks between the quest dialogue and the reward."* One
+   `0x0002 0x0102` run drew a line end; stock draws a blank line. Two runs now.
+
+Also seen in that log and worth the note: **space re-sends `INTERACT`** (`0x0039`, no
+movement message) — it is the client's "interact with target" key — so with the routed
+walk in place, space walks the player over exactly as it does on stock.
+
+**Not yet observed:** the three fixes on a client. Same hand-driven run, same map.
+
+~~**Not observed on a client, and why.** The turn-in is a click on the giver, a click on
 the option, twice — aiming, which is the owner's half of a run
 (`feedback-owner-drives-client-runs`). The wire half is the kill's message, already
 proven to move the sheet; what a run would add is the sheet moving by 100 on the turn-in
 click. One hand-driven run with `--map 146 --area errand`, reading the XP bar before and
-after, closes it.
+after, closes it.~~
 
 ## SLICE-F6 — what the desk cannot settle
 

@@ -788,6 +788,12 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "those parameterised first. Try `--hero-skills 276` "
                          "(Restore Condition, target OTHER ally) or `277` "
                          "(Mend Ailment, target ally, so it can self-heal).")
+    ap.add_argument("--no-interact-route", action="store_true",
+                    help="REVERT: an out-of-range INTERACT is held and the "
+                         "player is NOT walked over. The routed interact-walk "
+                         "(a click at the approach point through the router, "
+                         "2026-09-12) is the default; this is every run "
+                         "before it and the known-bad arm.")
     ap.add_argument("--no-hero-follow", action="store_true",
                     help="SLICE-B7b REVERT: a party body (hero or henchman, "
                          "anything carrying ALLEGIANCE_PLAYER) stands where it "

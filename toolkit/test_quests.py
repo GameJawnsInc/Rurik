@@ -320,8 +320,11 @@ def main():
     joined = questdefs.with_reward("Hello.", 1, 2, "template")
     body = questdefs.coded_literal("Hello.", "template")
     check(joined[:len(body)] == body, "the description is carried verbatim")
-    check([ord(c) for c in joined[len(body):len(body) + 2]] == [0x0002, 0x0102],
-          "and a 0x0002 0x0102 paragraph break separates it from the reward",
+    check([ord(c) for c in joined[len(body):len(body) + 4]]
+          == [0x0002, 0x0102, 0x0002, 0x0102],
+          "and TWO 0x0002 0x0102 paragraph breaks -- a blank line, the owner's "
+          "reading of stock (2026-09-12) -- separate it from the reward, each "
+          "its own run so the codec never sees two ids in one",
           "without it the pane renders '...return to me.Reward:' welded "
           "together -- MEASURED, and the reason this check exists")
     over = False

@@ -3442,6 +3442,13 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   waits for the follow's half-second clock; §chase pins the arrived-not-halted
   state (no `0x0028`, no swing), the halt once the clock is aged, and the
   `--halt-on-arrival` revert arm. **REFACTOR-SERVERARGS (2026-09-11):** the `--unlocks` default's syntax-tree walk now parses `serverargs.py` beside `authsrv.py` (`ARGS_SRC`), because `build_parser()` moved there and all 195 `add_argument` nodes with it; floor unchanged at 380.),
+  **2026-09-12, the ROUTED interact-walk:** `test_interact.py` §5 (floor 19 → 29) pins
+  `interact_approach_point` -- INTERACT_STOP (100 u) short of the NPC on the player's side,
+  inside INTERACT_RANGE (now 144, the wiki's touch range), the NPC's own spot when the
+  player is already inside it so nothing divides by zero -- and that with NO mesh
+  `interact_route` returns False, sends nothing, and the out-of-range interact is held
+  alone with no 0x002B. `test_quests` §? pins the reward's TWO paragraph breaks (a blank
+  line, the owner's reading of stock).
   `toolkit/authsrv/test_interact.py` (the interact path — the walk order and the
   interact that is HELD rather than dropped. **Nothing exercised
   `_handle_interact` at all before 2026-08-19**; `test_dispatch.py` named it once
