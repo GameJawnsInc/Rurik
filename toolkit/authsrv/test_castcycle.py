@@ -58,7 +58,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
 import checks  # noqa: E402
 
-LEDGER = checks.Ledger("cast cycle", floor=33)
+LEDGER = checks.Ledger("cast cycle", floor=39)   # section 2d (reach at the strike, 2026-09-12) +6; from the green run
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -469,6 +469,69 @@ def section_attack_finish_batch():
         authsrv.PLAYER_SWING_DAMAGE = saved_dmg
 
 
+def section_strike_reach():
+    """An attack skill strikes only in reach; out of reach it is a cancel.
+
+    The owner's Power Attack glitch (2026-09-12): press at range, keep
+    running, the strike lands anyway. Two arms one number apart.
+    """
+    import authsrv
+    print("\n2d. an attack skill's strike needs the target IN REACH")
+    saved = (authsrv.skill_timing, authsrv._is_attack_skill,
+             authsrv.PLAYER_SWING_DAMAGE)
+    authsrv.skill_timing = lambda sid: (1.0, 0.0, 3.0)
+    authsrv._is_attack_skill = lambda sid: True
+    authsrv.PLAYER_SWING_DAMAGE = (5, 5)
+    try:
+        def run_arm(target_pos):
+            sent = []
+            send = lambda op, vals, label="", quiet=False: \
+                sent.append((op, vals, label))
+            agent = {"name": "target", "dead": False, "last_hit": 0.0,
+                     "max_health": 100.0, "health": 100.0, "pos": target_pos}
+            state = {"agents": {40: agent}, "pos": (0.0, 0.0)}
+            _press(authsrv, send, state, skill=394, target=40)
+            sent.clear()
+            _rewind(state, 1.0)
+            authsrv.cast_tick(send, state, 0)   # the E5 instant: the gate
+            authsrv.cast_tick(send, state, 0)   # the release branch, if marked
+            return sent, agent, state
+
+        reach = authsrv.attack_reach()
+        sent, agent, state = run_arm((reach + 100.0, 0.0))
+        ops = [op for op, _, _ in sent]
+        dmg = [v for op, v, _ in sent if op ==
+               authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET
+               and v[0] in (authsrv.agents.PROP_DAMAGE,
+                            authsrv.agents.GV_CRITICAL)]
+        stopped = [v for op, v, _ in sent if op == 0x009F
+                   and v[0] == authsrv.agents.GV_SKILL_STOPPED]
+        check(agent["health"] == 100.0 and not dmg,
+              f"a target {reach + 100:.0f} u out at the strike takes NOTHING "
+              f"-- the run's 170 u Power Attacks land no more",
+              f"health {agent['health']}, dmg {dmg}")
+        check(authsrv.GAME_SMSG_SKILL_RECHARGE not in ops
+              and authsrv.GAME_SMSG_SKILL_REFUSED in ops
+              and stopped == [[authsrv.agents.GV_SKILL_STOPPED, PLAYER, 0]],
+              "and it is released as a CANCEL: E2 and skill_stopped, no "
+              "recharge -- GWW's cancel contract, the measured burst",
+              f"ops={[hex(o) for o in ops]}")
+        check(not state.get("pending_casts"),
+              "and the cast is gone from the queue")
+        sent, agent, state = run_arm((reach - 10.0, 0.0))
+        dmg = [v for op, v, _ in sent if op ==
+               authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET
+               and v[0] in (authsrv.agents.PROP_DAMAGE,
+                            authsrv.agents.GV_CRITICAL)]
+        check(agent["health"] == 95.0 and len(dmg) == 1,
+              f"CONTROL: {reach - 10:.0f} u out, the same press strikes for the "
+              f"pinned 5 -- the gate is the distance and nothing else",
+              f"health {agent['health']}")
+    finally:
+        (authsrv.skill_timing, authsrv._is_attack_skill,
+         authsrv.PLAYER_SWING_DAMAGE) = saved
+
+
 def section_skill_visual():
     """ANIMREF-R8: the on-body effect visual, and the channel rule.
 
@@ -673,6 +736,7 @@ def main():
     section_tick_order()
     section_attack_family()
     section_attack_finish_batch()
+    section_strike_reach()
     section_skill_visual()
     section_order_pinned_when_inverted()
     section_queue_law()
