@@ -18102,6 +18102,21 @@ def spawn_population(send, state, origin, conn_id, area=None):
         }
         create_agent_world(send, state, int(row["agent_id"]), entry, key,
                            conn_id=conn_id)
+        # SLICE-B6: THE BOSS AURA is one int property on the body, sent after
+        # its create (the setter looks the agent up by id and returns silently
+        # if it is not there yet -- SLICE-F1's `0x007DFD70`). The range is
+        # checked HERE because the client's answer to 11 is an assert at
+        # ConstGlow.cpp(42), and a refusal at load names the row.
+        if row.get("glow") is not None:
+            glow = int(row["glow"])
+            if not 0 <= glow < agents.GLOW_ROWS:
+                raise PopulationError(
+                    f"spawn row {key!r} in area {area!r} asks for glow {glow}; "
+                    f"the client's s_glow has {agents.GLOW_ROWS} rows (0.."
+                    f"{agents.GLOW_ROWS - 1}) and asserts past them")
+            send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                 [agents.GV_GLOW, int(row["agent_id"]), glow],
+                 f"glow {glow} on {key!r} (s_glow row; SLICE-F1)")
         placed += 1
         note = (f" (MOVED {moved:.0f} units to reach ground)" if moved else "")
         print(f"[c{conn_id}] {key!r}: {label} at ({x:.0f}, {y:.0f}) "

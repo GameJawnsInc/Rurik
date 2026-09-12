@@ -51,7 +51,7 @@ import pathmap  # noqa: E402
 # party-reserved ids, studies/unitsetup/FINDINGS.md 8 Q9). Every section is
 # synthetic -- no vault, no socket, no client -- so there is nothing here that
 # may skip.
-LEDGER = checks.Ledger("test_population", floor=69)   # SLICE-B2 +7 (section 6); from the green run
+LEDGER = checks.Ledger("test_population", floor=73)   # SLICE-B2 +7, SLICE-B6 glow +4 (section 6); from the green run
 check = checks.adopt(LEDGER)
 
 AREA = "sculpt"
@@ -344,10 +344,15 @@ class StatWorld:
         return self._real.get(kind, key)
 
 
-def place(spawn):
-    """Run `spawn_population` over a synthetic table; return state['agents']."""
+def place(spawn, sent=None):
+    """Run `spawn_population` over a synthetic table; return state['agents'].
+
+    `sent`, when given, collects every (opcode, values, label) the placement
+    put on the wire -- the glow arm reads it.
+    """
     saved = authsrv.agents.WORLD
-    sent, state = [], {"agents": {}, "pos": (0.0, 0.0), "pathmap": None}
+    state = {"agents": {}, "pos": (0.0, 0.0), "pathmap": None}
+    sent = [] if sent is None else sent
     try:
         authsrv.agents.WORLD = StatWorld(spawn, saved)
         authsrv.spawn_population(
@@ -431,6 +436,36 @@ def section6():
           "fall through to the global, and the second conjunct proves the "
           "global was non-empty so the check could have failed",
           f"{quiet['skills']} vs global {len(authsrv.ENEMY_SKILLS)}")
+
+    # THE BOSS AURA (SLICE-B6 / SLICE-F1): one int property 29 after the
+    # create, and never for a row that does not ask.
+    sent = []
+    place({"boss": row(agent_id=20, definition=5, glow=5),
+           "mook": row(agent_id=21, definition=5)}, sent=sent)
+    glows = [(v[1], v[2]) for op, v, _l in sent
+             if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
+             and v[0] == authsrv.agents.GV_GLOW]
+    check(glows == [(20, 5)],
+          "a row with glow = 5 sends int property 29 [agent, 5] for THAT body "
+          "and the plain row beside it sends none",
+          f"{glows} of {len(sent)} messages")
+    creates = [i for i, (op, v, _l) in enumerate(sent)
+               if op == authsrv.GAME_SMSG_WORLD_CREATE_AGENT and v[0] == 20]
+    props = [i for i, (op, v, _l) in enumerate(sent)
+             if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
+             and v[0] == authsrv.agents.GV_GLOW]
+    check(creates and props and creates[0] < props[0],
+          "and the property goes out AFTER the body's create -- the setter "
+          "looks the agent up and returns silently if it is not there yet",
+          f"create at {creates[:1]}, glow at {props[:1]}")
+    try:
+        place({"boss": row(agent_id=20, definition=5, glow=11)})
+        refused = False
+    except authsrv.PopulationError as exc:
+        refused = "s_glow" in str(exc)
+    check(refused,
+          "glow = 11 is REFUSED at load, naming s_glow's 11 rows -- the "
+          "client's own answer would be an assert at ConstGlow.cpp(42)")
 
 
 def section3():

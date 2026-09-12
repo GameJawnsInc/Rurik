@@ -166,7 +166,7 @@ PRESEARING_ZONES = 7208        # what the first run wrongly pulled in
 # serve-verdict checks, 84 before section 8's dry-run and spill checks, 56
 # before section 8 and the create branch, 35 before section 7 and the
 # compression checks, 25 before section 6.
-LEDGER = checks.Ledger("test_deploy", floor=248)
+LEDGER = checks.Ledger("test_deploy", floor=250)
 check = checks.adopt(LEDGER)
 
 
@@ -3140,6 +3140,27 @@ def section14():
           and "only fills a square" in src,
           "and a rectangular row over a square-only generator is REFUSED "
           "rather than built square under the row's name")
+
+    # THE LOG FINDER, behind a banner the size of today's. serve_run scored the
+    # corridor's populated run FAILED because `log_source` read 8 KiB and the
+    # gamesrv's start-up banner put `source:` at byte 9,350.
+    import harnesslog
+    tmp = tempfile.mkdtemp()
+    try:
+        p = os.path.join(tmp, "gamesrv.log")
+        banner = ("      + a pre-registration paragraph " * 40 + "\n") * 12
+        with open(p, "w", encoding="utf-8") as fh:
+            fh.write(banner)
+            fh.write("source:    " + deploy.harness_source_dir() + "\n")
+        at = len(banner.encode("utf-8"))
+        check(at > 8192 and harnesslog.log_source(p) == deploy.harness_source_dir(),
+              "log_source finds a `source:` line behind a banner longer than the "
+              "8 KiB it used to read", f"line at byte {at}")
+        check(harnesslog.log_source(p, probe=8192) is None,
+              "and the old probe misses it -- the control that makes the line "
+              "above a measurement of the fix rather than of the regex")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 def main():

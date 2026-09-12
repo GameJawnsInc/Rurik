@@ -188,3 +188,71 @@ unchanged from the vault overlay row npcdefs.py emitted.
 
 Harness 20260911T233623, same method as lieutenant_fisk above: alone in the \
 world, nameplate "Ascalonian Townsfolk". studies/slice/RUN-PARADE.md 4b."""
+
+# THE SLICE'S TWO MONSTER ARCHETYPES, promoted from the vault overlay exactly as
+# lieutenant_fisk and ascalonian_townsfolk were: every numeric field is the
+# overlay row npcdefs.py emitted from ArenaNet's own 0x0056, and the NAME is
+# what the client drew when the definition stood alone in an empty world
+# (studies/slice/RUN-PARADE.md 4b). They are tracked because content/world.toml's
+# corridor rows name them, and a tracked spawn row naming a vault-only template
+# dies on a bare machine (test_quests section 21).
+
+[npc.bandit_raider]
+name = "Bandit Raider"
+definition = 1421
+file_id = 141267
+model_id = 116647
+scale = 1677721600
+flags = 12
+profession = 1
+level = 2
+move_speed = 288.0
+attack_interval = 1.75
+attack_modifier = 1.0
+enc_name = [3884, 43762, 40100, 4764]
+
+[npc.bandit_raider.provenance]
+source = "capture"
+capture = "20260807T143055"
+origin = "live"
+extractor = "toolkit/authsrv/npcdefs.py"
+verified = """OBSERVED on ArenaNet's own wire: definition 1421 declared by \
+GAME_SMSG 0x0056 in 4 connections across 2 captures, payloads byte-identical, \
+26 creates carried it -- a real Pre-Searing hostile, allegiance `band` in the \
+captures. Every numeric field is read from that declaration and is unchanged \
+from the vault overlay row npcdefs.py emitted.
+
+Harness 20260911T234311 (build 38797, loopback), same method as \
+lieutenant_fisk: this definition stood ALONE in Lakeside County -- two creates \
+in the whole run, the player and this body -- and its nameplate read "Bandit \
+Raider". studies/slice/RUN-PARADE.md 4b. It is the slice's WARRIOR archetype \
+(profession 1)."""
+
+[npc.academy_monk]
+name = "Academy Monk"
+definition = 1486
+file_id = 116225
+model_id = 116741
+scale = 1677721600
+flags = 524
+profession = 3
+level = 5
+move_speed = 250.0
+enc_name = [3944, 45501, 61520, 25395]
+
+[npc.academy_monk.provenance]
+source = "capture"
+capture = "20260807T143055"
+origin = "live"
+extractor = "toolkit/authsrv/npcdefs.py"
+verified = """OBSERVED on ArenaNet's own wire: definition 1486 declared by \
+GAME_SMSG 0x0056 in 2 connections across 2 captures, payloads byte-identical, \
+3 creates carried it. Every numeric field is read from that declaration and is \
+unchanged from the vault overlay row npcdefs.py emitted.
+
+Harness 20260911T233513, same method: alone in the world, nameplate "Academy \
+Monk". It is the slice's MONK archetype (profession 3) -- and note the parade's \
+finding that name-matches-profession is REFUTED as a join key: def_1470, the \
+first guess for "the monk", drew "Outfitter". studies/slice/RUN-PARADE.md 4b. \
+Spawned HOSTILE by the corridor rows; the template carries no allegiance."""
+

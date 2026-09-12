@@ -562,6 +562,50 @@ rectangle), or the compiled heights differ from ours (the tile order is not what
 **Exposure floor.** "body is in the map" and a non-zero head after the run. Short of that,
 ABORT.
 
+## SLICE-F14 — **the corridor populated, and the SERVER serving it**
+
+**PRE-REGISTERED 2026-09-12 15:40, before the run.** Five spawn rows in
+`content/world.toml` bind to `area = "corridor"`: two groups of a Bandit Raider
+(`def_1421`, tracked now as `npc.bandit_raider`) and an Academy Monk (`def_1486`,
+`npc.academy_monk`) 3,000 u apart along the floor, and a boss raider at the north end
+carrying `glow = 5` — int property 29 on its agent, SLICE-F2's registered bit. The slice
+archive already holds the corridor's COMPILED head from harness `20260912T111229`, so a
+second, unarmed run is the first in which the server can read it before the client locks
+the archive (`deploy.serve_run`'s reasoning).
+
+**Question.** Does the server path the rectangular corridor it did not compile, and place
+the population on it?
+
+**Prediction.** `deploy.serve_run` returns **SERVE_PASS**: the gamesrv's own line
+`[map] navmesh 0x5F0B3: 1 planes, 2 trapezoids` names the count `pathmap` reads from the
+archive (2), and `area 'corridor': 5 of 5 placed`, none MOVED — every row sits on the
+floor by construction. The boss's `0x009F [29, 94, 5]` goes out after its create; whether
+the client DRAWS a red aura is not measurable in this run (the boss is 8,900 u from the
+camera) and stays F2's open bit.
+
+**RESULT — SERVE_PASS, twice, and a log-finder defect on the way.** Harness
+`20260912T115507`: `[map] navmesh 0x5F0B3: 1 planes, 2 trapezoids`, `AREA: corridor -- 5
+spawn row(s)`, every body created at its row's coordinates with no MOVED note,
+`area 'corridor': 5 of 5 placed`, and `s2c glow 5 on 'corridor_boss' (0x009f, 14B)` after
+the boss's create. `deploy.serve_run` nonetheless returned FAILED: "no gamesrv log from
+THIS tree" — `harnesslog.log_source` probed the first 8 KiB for the `source:` line and the
+gamesrv's start-up banner had put it at **byte 9,350**. Fixed (`SOURCE_PROBE = 65536`,
+`test_deploy` §14 plants a line behind a 17 KiB banner and proves the old probe misses
+it), and re-run: harness `20260912T115836`, **`SERVE VERDICT: PASS`** in the tool's own
+words — "server loaded 0x5F0B3 with 1 plane(s), 2 trapezoids (MATCHES the 2 in the
+archive); area 'corridor': 5 of 5 bodies placed".
+
+So the server paths the rectangle it did not compile, and the slice's population — two
+groups of a Bandit Raider and an Academy Monk, and a glowing boss raider — stands on it.
+**Still open, by design:** whether the client draws the aura (F2's bit; the boss is
+8,900 u up the corridor and no frame reaches it), and the skill bars (every body takes the
+module default until SLICE-B3).
+
+**Refuted if** the navmesh line names another count (the server's loader reads the
+rectangle differently from `pathmap`), or a row is REFUSED as off-mesh (the floor is not
+where the rows think it is), or `spawn_population` throws (the gamesrv prints neither
+population line — the failure `PLACED_RE`'s comment was written for).
+
 ## SLICE-F6 — what the desk cannot settle
 
 Carried so the next session does not re-read the same bytes hoping for more:
