@@ -435,7 +435,29 @@ the text relocation did not.
 frame exists after the probe's treatment push. Short of that the run is an ABORT, not a
 refutation of either half.
 
-**RESULT SO FAR — the run did not start; the cage refused it, correctly.** Launch
+**RESULT — BOTH HALVES OBSERVED, one run, one archive.** Harness `20260912T105759`
+(the owner caged the binary; map 166, `--area frontier`, `--probe quest_name_authored`,
+`RURIK_DAT` at the slice archive), RUN VERDICT PASS, body in the map at t+24.4 s:
+
+- **(a) the created chain compiled.** `Gw.log`: `Map file '0x05f0b0' failed to load.
+  Attempting to re-bloat.` — the documented trigger, from a chain that did not exist in any
+  archive before `--build`. `compose.py --readback`, 6 of 6: the client re-compiled the map
+  (11,004 B path chunk, **98 trapezoids** built from our terrain), **the compiled height
+  field equals the one we authored 4096/4096**, environment and sound payloads carried
+  verbatim, 8 props present, the flood seed in exactly one trapezoid.
+- **(b) the authored string rendered.** Frame `hold014`: the quest tracker reads
+  **"A First Errand: Speak with the scout, then return."** in green beside the quest icon,
+  standing on the plaza-generator cobbles of (a). `hold002`, before the treatment push,
+  shows the tracker empty — the same before/after as `20260819T085654`, now on an archive
+  that also holds a created map. The client's `0x8012` for 1463 was answered with the
+  template `0x004C` mid-run, as before.
+
+So §5's sentence — "that assembly has never been done" — is closed by measurement, and the
+run also answered the question a copy cannot: the string relocation and the chain creation
+**coexist** in one MFT the client then moved (the re-bloat rewrites the head), with nothing
+lost on either side.
+
+**THE FIRST ATTEMPT did not start; the cage refused it, correctly.** Launch
 `20260912T1457` was refused at `cage.assert_launch_safe`: `vault/run/slice/Gw.exe` is a
 NEW binary path and no firewall rule names it — the exact rule the isolate script's own
 header says it exists for, since the day a second run directory went uncaged. The cage
