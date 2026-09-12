@@ -22,6 +22,77 @@ What this does NOT do yet: answer anything after the handshake. The client will
 ask to log in with its portal token and expect a character list. Those replies are
 the next piece of work; until then it will connect, key up, talk, and time out —
 and we will have its words written down, which is the prerequisite for answering.
+
+SECTION MAP, added 2026-09-11. Everything above dates from the handshake milestone and
+is kept as history: it describes this file when it stopped at the key exchange, and what
+the file is today is the map. No line numbers, on purpose -- this file's went stale within
+hours all day during the modularization arc. Grep the quoted banner or first def; "flags"
+is a section's UPPER_CASE families, "moved out" a leaf that took part of it. File order.
+
+- "quest dialog", from def quest_rows: NPC interaction and the quest log; flags _QUEST_ROWS,
+  INTERACT_RANGE, QUEST_PROGRESS; e.g. _handle_interact, _send_markers; moved out: wirescalar
+- AUTH_CMSG_VERSION_HEADER, then "R2: the handoff to the game server": the handshake headers, the
+  second connection, the instance-load stream, the bag set. IT REACHES "skills ----", so the next
+  five entries are its sub-subjects; flags AUTH_*, GAME_SMSG_INSTANCE_*, BAG_*, GAME_SMSG_AGENT_*
+- TRACE_MOVE: the refuted move-answer graveyard, each candidate with its run and its epitaph; flags
+  INTERACT_WALK, STOP_ECHO, HEADING_GRANT, CLIENT_ENDPOINT, CLICK_ECHO, ANSWER_KBD_CLICK
+- ZERO_LEAD: the move answers that shipped, and the cast stop; flags PLANE_CARRY, ARRIVAL_CARRY,
+  CANCEL_*, STOP_ANSWER, CAST_STOP; e.g. cast_stop_reckon; moved out: castpolicy
+- WEAPON_ITEM_ID: the starting kit, the manifest tail, the player's own row -- party, professions,
+  factions, titles; flags EQUIP_*, COSTUME_*, PLAYER_ATTR_*; e.g. armour_row, appearance_for
+- SCALE_MEANS_DAMAGE: what a skill's scale means, and the simulation's own constants; flags
+  SCALE_MEANS_*, TICK_SECONDS, COLLISION_STEP; e.g. skill_damage, skill_heal; moved out: skillread
+- GAME_SMSG_NPC_UPDATE_PROPERTIES: agent properties, kill rewards, the attribute opcodes; flags
+  GAME_SMSG_AGENT_PROPERTY_*, KILL_REWARD_*; e.g. accrue_kill_rewards; moved out: attribcolumns
+- "skills ----" and its three sub-banners: effects, the status word, what a skill costs, the
+  adrenaline family, the skill bar, the unlocks; flags EFFECTS, DEEP_WOUND_*, AGENT_ADRENALINE_*,
+  SKILLBAR_*; e.g. build_unlock_bitmap; moved out: skillunlock
+- MAP_ID_COUNT: which map this is, its fog, its pathmap, and whether to believe a reported position;
+  flags MAP_STATIC_CONFIG, FOG_*, CLIENT_POSITION_*; e.g. map_explorable, _position_verdict
+- "THE RESYNC SENDER" and "GRANT SUPPRESSION": 0x002C, the resend, the agtrack shadow helpers, the
+  suppression switch; flags RESYNC_*, AGTRACK_*, GRANT_*; e.g. _sync_position, _agtrack_guard_seed
+- "KBD_SYNC (MOVECODE-1z-t)" and "TWO DOORS ON THE LEAD": the lead that keeps the client's world-0
+  copy near the body under keyboard movement, and the two doors on it; flags KBD_*, A2_*, STALE_*;
+  e.g. kbd_lead_chain_tick, a2_clip_lead, _a2_watchdog
+- "THE ROUTER", then "REALFIX-F1b -- `--arrival-carry`": the pathfinder's answer to a click; that
+  second banner titles three functions and the untitled span after it is the zero-lead and grant
+  machinery, then our leg model; flags ROUTER_*, KEEPALIVE_*, MODEL_*; e.g. router_answer_click,
+  zero_lead_composition, clip_to_walkable; moved out: zeroleadcompose
+- GAME_SMSG_ACCOUNT_FEATURE: the rest of the opcode tables -- account and PvP, hero and party flags,
+  quest text and markers, skills, movement, chat -- then what this server calls itself and what a
+  run is made of; flags GAME_CMSG_*, GAME_SMSG_QUEST_*, TEST_CHAR_*, TAPE_*, HENCHMAN
+- "the hero arm", then "THE ARMOUR TERM AND THE CRITICAL": heroes and their armour, the spell-armour
+  term, the armour divisor, the critical, the swing's damage; flags HERO_*, ARMOUR_TERM, CRITICAL_*;
+  e.g. hero_slots, player_armour_at, critical_rate, swing_damage; moved out: combatmath
+- ATTACK_INTERVAL: the swing's reach, interval and windup, the chain and latch switches, the enemy's
+  own rates; flags ATTACK_*, SWING_*, CHAIN_*, ENEMY_*; e.g. swing_windup; moved out: pressverdict
+- def action_hold: what holds an action, cancel-on-move, the ping and the perf report, the approach
+  and attack ticks, then what a skill costs and what the pools do; flags MOVE_CANCEL_*,
+  _GLYPH_UNREADABLE; e.g. begin_attack, attack_tick, skill_cost, energy_tick; moved out: connreport
+- "buying from a merchant" and "attribute spending": the purchase and sale opcodes, the attribute
+  row and its replies; flags GAME_CMSG_ITEM_PURCHASE, GAME_CMSG_ITEM_SELL; e.g.
+  handle_attribute_spend, handle_item_purchase; moved out: merchant
+- def refuse_press: the skill press and the cast -- the refusal, the animation, the cast window;
+  flags CAST_FORM; e.g. handle_skill_press, begin_cast, cast_tick
+- def effect_table, then "morale, and DP": effects, conditions, pools and the status word, what the
+  taker does to a number, then morale, the death penalty and the enemy's own ticks; e.g.
+  apply_effect, resolve_heal, blind_miss, player_max_health; moved out: episodemods
+- "MOVECODE-1z-bz" and "NPCTRACK-Q9": the plane words an NPC is given, and the routed corridor on
+  the wire; flags NPC_PLANE_*, NPC_FOLLOW_*, NPC_LEG_*; e.g. _npc_plane, _follow_leg
+- "NPCTRACK-Q1": the server's copy of a hostile IS the client's own -- the client model, the follow
+  tick, its swings and skills, and every agent's lifetime; flags NPC_CLIENT_MODEL, MIRROR_AVOID,
+  BURROW_*; e.g. _npc_model, _npc_follow_tick, land_skill, create_agent_world
+- "the area population": who is in the area and how they spawn, the tape and probe entry points.
+  THAT BANNER NOMINALLY COVERS THE REST OF THE FILE and the three entries below are its subjects;
+  flags AREA_NAME; e.g. area_population, capture_flags; moved out: population, scriptrun
+- class Recorder: the capture writer and the connection plumbing -- the portal login, the
+  game-instance reply, the unhandled census, the key bind; e.g. handle_portal_login, recv_exact
+- def handle: ~4,000 lines, the dispatch chain, one of the two that dominate this file.
+  test_dispatch pins it by AST, and both its else-arm check and its state-writing census read
+  authsrv's own module-level defs -- a handler moved to a leaf leaves that census. It stays inline.
+- KEYS_BY_BUILD, then def main: the key store, and ~2,300 lines of post-parse flag plumbing,
+  refusals and banners -- every flag rebound from `a` and printed back; flags KEYS_LOADED_TAG; e.g.
+  load_keys, main; moved out: serverargs (the argparse block, 1,785 lines)
 """
 
 import binascii
