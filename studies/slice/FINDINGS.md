@@ -840,13 +840,47 @@ re-entered 168 and placed the corridor on its own mesh.
 
 So the slice's shape is assembled: **outpost → corridor on our portal, one process serving
 two maps with each map's own population, the kill quest on shipped content** (offline:
-kill 94 → objective met → Fisk offers TURN_IN beside the errand). What remains is the
-OWNER's hand-driven pass — accept, zone, fight, kill the boss, zone back, turn in — which
-is the whole slice as the plan's six steps describe it, and the reason the slice exists.
+kill 94 → objective met → Fisk offers TURN_IN beside the errand). **THE OWNER RAN IT, 2026-09-12, harness `20260912T151631`** — accept, zone, fight, kill
+the boss, zone back, turn in — and reported: **"quest survived both hops, boss aura was
+red."** Two measurements in one sentence: the quest carrier across two transfers, which
+was design and is now OBSERVED; and SLICE-F2's registered bit — index 5 rendered RED, so
+`s_glow`'s byte at `+4` is the red channel. That bit is closed. What the owner reported
+next is SLICE-F19.
 
 **Refuted if** c2 never comes (the client will not load a created map on a re-entry: the
 first time a transfer names one — F13's compile was a first entry), or c2 loads without the
 corridor's mesh, or a body is placed on the wrong map. **ABORT** if the portal never fires.
+
+## SLICE-F19 — **combat on the first full run: an attack skill that strikes from anywhere, and what kiting shows**
+
+OBSERVED by the owner, 2026-09-12, harness `20260912T151631`: *"combat still bad though, I
+get by with a glitch on Power Attack that allows me to cast it without stopping to complete
+the attack animation. Enemies don't attack you if you just constantly kite them, so I was
+able to aggro all 5 enemies and slowly whittle the boss down."* The log agrees on every
+count: **20 strikes of 322 landed against ONE ordinary swing**, presses from 170 u out with
+`action released: the player moves` inside the windup; hostiles **followed 93 times, swung
+4 times, hit 0**.
+
+**The attack skill.** WIKI (castmech §4, GWW "Quarterstepping"): "attack skills can not be
+accidentally cancelled by moving prematurely" — so this is NOT a missing cancel. On retail
+the *client* holds the body through the swing; ours does not (property 8 is view plumbing,
+castmech 3c), so a player presses at range, keeps running, and the strike lands wherever
+they are. The server's guard is now **reach at the strike**: an attack skill executes on a
+target within `attack_reach()` (144 u) at its E5 instant and nowhere else; out of reach it
+is released as a cancel — the measured burst, no recharge, costs paid (GWW "Cancel") — and
+the log says how far (`strike_out_of_reach`, `test_castcycle` §2d, both arms one number
+apart). A press from out of range still activates; on retail that press begins an APPROACH
+(the player walks in and strikes on arrival), which the server has for ordinary attacks
+(`begin_attack`) and not yet for attack skills. **Named as the follow-up, not done.**
+
+**The kiting.** ANIMREF-RE 40 is measured retail: a hostile mid-follow does not swing (0 of
+4 multi-follow chases open an attack), it swings after the halt. At equal speed a follower
+never halts behind a player who keeps moving — so a player who never stops is never hit,
+on retail's own rule, and the four swings that did open landed nothing because the body
+had moved by the strike. What made it a *glitch* was the strike from range: with reach
+enforced, kiting deals no damage either, and the fight is stand-and-swing on both sides.
+Whether retail's melee hit lands on a target that moved out during the windup is NOT
+MEASURED here and is the other half of this question.
 
 ## SLICE-F6 — what the desk cannot settle
 

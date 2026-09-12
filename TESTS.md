@@ -10170,6 +10170,14 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   ~320-file gap between them is the durable part.) A vault-less
   run scores 23 against a floor of 23, measured with `RURIK_VAULT` pointed at an
   empty directory rather than derived by subtraction; a vault run scores 30),
+  **SLICE-C1 (2026-09-12).** `test_castcycle.py` §2d (floor 33 → 39): an attack skill's
+  strike needs the target IN REACH at its E5 instant -- a target 100 u past `attack_reach()`
+  takes nothing and the cast is released as a CANCEL (E2, skill_stopped, no recharge -- the
+  measured burst), the queue emptied; the CONTROL 10 u inside reach strikes for the pinned 5.
+  The owner's Power Attack glitch: press at range, keep running, the strike landed anyway.
+  Same day, `test_agentlife.py`'s send-site walk reads `overrides.json`'s field lists beside
+  `messages.json`, as the codec does -- SLICE-B8's 0x01A5 send site (7 fields, the client's
+  own 39-byte table) had been scored `catalog wants 6` since it landed.
   `toolkit/authsrv/test_castcycle.py` (the four-opcode cast cycle against
   ArenaNet's own template — six complete cycles, two live captures, same order
   every time: E4 at the press, E5 at cast end carrying the recharge in whole

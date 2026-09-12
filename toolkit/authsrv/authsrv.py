@@ -11139,6 +11139,45 @@ def _mark_cancelled(state, reason, now, spare_mid_attack):
     return dropped
 
 
+def strike_out_of_reach(state, target_id):
+    """Why an attack skill's strike cannot execute now, or None if it can.
+
+    THE OWNER'S REPORT, 2026-09-12, after the first full run of the slice:
+    "I get by with a glitch on Power Attack that allows me to cast it
+    without stopping to complete the attack animation ... I was able to
+    aggro all 5 enemies and slowly whittle the boss down" while kiting. The
+    log agrees: 20 strikes of 322 landed, ONE ordinary swing, presses from
+    170 u out with the body moving through the windup.
+
+    WHAT RETAIL DOES, and it is not a cancel: WIKI (GWW "Quarterstepping",
+    castmech 4) -- "attack skills can not be accidentally cancelled by
+    moving prematurely". The retail CLIENT holds the body through the
+    swing; ours does not (property 8 is view plumbing, castmech 3c), so a
+    player can press at range, keep running, and have the strike land
+    wherever they are. The server's honest guard is REACH AT THE STRIKE:
+    a weapon strike executes on a target within `attack_reach()` (144 u,
+    WIKI touch range, bracketed OBSERVED) and nowhere else. Out of reach,
+    the cast is released as a cancel -- the measured burst, no recharge,
+    the costs already paid (GWW "Cancel": initial costs incurred) -- and
+    the log says how far. A press from out of range still goes out as an
+    activation, which is where retail's APPROACH would begin; walking the
+    player in for an attack skill is the follow-up, named in SLICE-F19.
+    """
+    agent = state.get("agents", {}).get(target_id)
+    if agent is None or agent.get("dead") or agent.get("pos") is None:
+        # Nothing to measure a distance to: the cycle runs as before and
+        # `hit_enemy` lands nothing on a body that is not there.
+        return None
+    px, py = state.get("pos", (0.0, 0.0))
+    ax, ay = agent["pos"]
+    d = math.hypot(ax - px, ay - py)
+    reach = attack_reach()
+    if d <= reach:
+        return None
+    return (f"the strike finds agent {target_id} {d:.0f} u away, past reach "
+            f"{reach:.0f} u -- the body moved (or pressed) out of range")
+
+
 def cancel_action(send, state, conn_id):
     """0x0028: the client asks to cancel its current action. Grant it.
 
@@ -13976,6 +14015,17 @@ def cast_tick(send, state, conn_id):
                 finished.append(cast)
                 continue
         if not cast["e5_sent"] and now >= cast["e5_at"]:
+            # AN ATTACK SKILL STRIKES ONLY IN REACH (strike_out_of_reach).
+            # Marked as a cancel and handed to the branch above on the next
+            # pass: the measured release burst, no recharge, nothing lands.
+            if cast["attack"] and cast.get("target"):
+                _why = strike_out_of_reach(state, cast["target"])
+                if _why:
+                    cast["cancelled"] = _why
+                    state["cast_busy_until"] = now
+                    print(f"[c{conn_id}] skill {cast['skill_id']}: {_why}; "
+                          f"released as a cancel", flush=True)
+                    continue
             send(GAME_SMSG_SKILL_RECHARGE,
                  [PLAYER_AGENT_ID, cast["skill_id"], cast["copy"],
                   cast["recharge"]],

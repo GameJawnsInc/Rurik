@@ -3031,9 +3031,18 @@ def section_opcode_pins():
     # AXIS 2: the catalog's own field list, read from the file rather than from
     # authsrv. A literal that agrees only with the constant it guards is one
     # belief written twice.
-    with open(os.path.join(os.path.dirname(os.path.dirname(HERE)),
-                           "schema", "messages.json"), encoding="utf-8") as f:
+    schema_dir = os.path.join(os.path.dirname(os.path.dirname(HERE)), "schema")
+    with open(os.path.join(schema_dir, "messages.json"), encoding="utf-8") as f:
         catalog = json.load(f)["channels"]["GAME_SMSG"]["messages"]
+    # THE OVERRIDES ARE PART OF THE CATALOG, as they are for the codec: three
+    # GAME_SMSG field lists are corrected there (140, 146, 421), and since
+    # SLICE-B8 this server SENDS 421 -- the 39-byte GAME_SERVER_TRANSFER the
+    # client's own tables gave -- so a walk over messages.json alone scored a
+    # correct send site as "sends 7, catalog wants 6" (2026-09-12).
+    with open(os.path.join(schema_dir, "overrides.json"), encoding="utf-8") as f:
+        for k, e in json.load(f)["channels"]["GAME_SMSG"].items():
+            if "fields" in e:
+                catalog.setdefault(k, dict(e))["fields"] = e["fields"]
     wrong_shape = []
     for name, opcode, shape, _why in PINNED:
         entry = catalog.get(str(opcode))
@@ -3148,9 +3157,18 @@ def section_opcode_catalog():
     for path in family:
         with open(path, encoding="utf-8") as f:
             srcs.append(f.read())
-    with open(os.path.join(os.path.dirname(os.path.dirname(HERE)),
-                           "schema", "messages.json"), encoding="utf-8") as f:
+    schema_dir = os.path.join(os.path.dirname(os.path.dirname(HERE)), "schema")
+    with open(os.path.join(schema_dir, "messages.json"), encoding="utf-8") as f:
         catalog = json.load(f)["channels"]["GAME_SMSG"]["messages"]
+    # THE OVERRIDES ARE PART OF THE CATALOG, as they are for the codec: three
+    # GAME_SMSG field lists are corrected there (140, 146, 421), and since
+    # SLICE-B8 this server SENDS 421 -- the 39-byte GAME_SERVER_TRANSFER the
+    # client's own tables gave -- so a walk over messages.json alone scored a
+    # correct send site as "sends 7, catalog wants 6" (2026-09-12).
+    with open(os.path.join(schema_dir, "overrides.json"), encoding="utf-8") as f:
+        for k, e in json.load(f)["channels"]["GAME_SMSG"].items():
+            if "fields" in e:
+                catalog.setdefault(k, dict(e))["fields"] = e["fields"]
 
     def fields_at(opcode):
         entry = catalog.get(str(opcode))
