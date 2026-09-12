@@ -19045,7 +19045,16 @@ def _handle_request_players(send, state, conn_id, stop, rec):
             send, state, HENCHMAN_AGENT_ID,
             {"pos": (_hx, _hy), "plane": cfg[2],
              "health": 100.0, "max_health": 100.0,
-             "dead": False, "name": _hn["name"],
+             # SLICE-B7b: `.get`, for the reason spawn_population's own label
+             # line already carries -- a vault-emitted def_NNNN row deliberately
+             # has NO name ("a name comes from a rendered nameplate or it does
+             # not exist", npcdefs.py), so indexing it bare raises INSIDE
+             # instance bring-up. That failure is invisible: the world tick dies,
+             # the harness still prints RUN VERDICT PASS, and the only evidence
+             # is a KeyError in the gamesrv log nobody reads. Measured here
+             # 2026-09-12 with --henchman-body's sibling flag --hero-body-npc
+             # def_1486. The fallback is the content KEY, which is ours.
+             "dead": False, "name": _hn.get("name") or str(HENCHMAN),
              "npc": _hn,
              "definition": HENCHMAN_DEFINITION,
              "allegiance": agents.ALLEGIANCE_PLAYER,
@@ -19105,7 +19114,12 @@ def _handle_request_players(send, state, conn_id, stop, rec):
             hsend, state, _haid,
             {"pos": (_rx, _ry), "plane": cfg[2],
              "health": 100.0, "max_health": 100.0,
-             "dead": False, "name": _hro["name"],
+             # SLICE-B7b: `.get` -- see the henchman body above. This is the
+             # site that actually raised: --hero-body-npc def_1486 (the parade's
+             # Academy Monk) killed instance bring-up with KeyError: 'name' while
+             # the run reported PASS, and the hero follow it was launched to test
+             # measured nothing because no body ever existed.
+             "dead": False, "name": _hro.get("name") or str(HERO_BODY_NPC),
              "npc": _hro,
              "definition": _hdef,
              "allegiance": agents.ALLEGIANCE_PLAYER,

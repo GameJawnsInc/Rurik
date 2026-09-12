@@ -287,6 +287,44 @@ is the OPCODE, since the codec puts it there. Every one of the 41 rows reported 
 finding**, and it was caught by the answer being implausible rather than by any check.
 The fixed read takes the destination off `0x01A5`'s own field[4] and needs no join.
 
+## SLICE-F9 — **the hero follows, on a real client — and the first run measured nothing, which is the more useful half**
+
+OBSERVED, 2026-09-12. Two arms, both registered before either ran.
+
+**The first attempt was an ABORT, not a null, and the harness said PASS.**
+`--hero-body-npc def_1486` killed instance bring-up with `KeyError: 'name'`; the hero
+body was never created; the run reported **RUN VERDICT: PASS** and produced a full set of
+screenshots of a world with no hero in it. Had the prediction been "the hero follows" with
+no exposure floor, this run would have been written up as a refutation of the follow.
+
+The cause is a defect class this repo has already paid for once and fixed **in one place
+only**. A vault-emitted `def_NNNN` row deliberately carries no name — *"a name comes from a
+rendered nameplate or it does not exist"* (`npcdefs.py`) — and `spawn_population` says so
+at its own label line, which reads `npc.get("name") or str(row["npc"])` precisely because
+indexing it bare "threw inside instance bring-up, where the harness still reported PASS and
+the map readback stayed green". **The hero and henchman body sites still indexed it bare.**
+Both are now `.get(...) or` the content key. The bug was reachable the moment anybody used
+a parade-named template as a hero body, which is exactly what the slice wants to do.
+
+**With that fixed, both arms landed as predicted.**
+
+| arm | creates | `KeyError` | follows by agent 200 |
+|---|---|---|---|
+| treatment | 2 | 0 | **7**, each "halts at 200 u" |
+| `--no-hero-follow` | 2 | 0 | **0** |
+
+Same body created in both, so the arm isolates the follow and not the spawn. The seven
+follows report 208 → 252 → 210 u out, which is the hero repeatedly falling behind and
+catching up — **that is also the exposure floor being met**, since a player who never moved
+produces no follows at all and would have made the null meaningless.
+
+**And the body is the slice's own monk.** The run used `def_1486`, the Academy Monk the
+parade picked, so the screenshot is the vertical slice's hero walking behind the player
+with a green party arrow and an ally health bar over her.
+
+What this does NOT show: the hero doing anything in a fight. It walks. SLICE-B7c is the
+rest.
+
 ## SLICE-F6 — what the desk cannot settle
 
 Carried so the next session does not re-read the same bytes hoping for more:
