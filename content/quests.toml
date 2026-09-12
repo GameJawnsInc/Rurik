@@ -103,10 +103,13 @@ objective_spawn = "errand_scout"
 # zero draws a line reading zero; omitting the key omits the line, exactly as
 # the stock "A Personal Vault" screen does with its lone `500 Experience`.
 #
-# NOTHING IS GRANTED. The reward GRANT protocol is 0 of 23,495 messages in the
-# corpus -- the operator never completed a quest on a live capture -- so this
-# draws a promise the server cannot yet honour. Named in FINDINGS rather than
-# hidden behind a plausible-looking number.
+# THE EXPERIENCE IS GRANTED, since SLICE-B5 (2026-09-12), and the grant is
+# OURS: the reward protocol is 0 of 23,495 messages in the corpus -- the
+# operator never completed a quest on a live capture -- so `grant_quest_reward`
+# pays this number through the kill's own 0x00EE [0, delta], the one message
+# the client is proven to apply to the sheet. Gold is NOT granted: no gold
+# message is identified, so `reward_gold` stays commented out -- a row that
+# set it would draw a line the server prints a loud NOT GRANTED for.
 reward_experience = 100
 # reward_gold = 10
 

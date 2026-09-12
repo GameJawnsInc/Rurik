@@ -54,7 +54,7 @@ import authsrv                                              # noqa: E402
 #
 # Adding quest rows only raises the count, so the floor stays valid; an
 # EMPTY table is caught by section 0 before the count matters.
-LEDGER = checks.Ledger("the quest table and its coded strings", floor=94)   # SLICE-B1 +6 (sec 21), B4 +5 (sec 22); from the green run
+LEDGER = checks.Ledger("the quest table and its coded strings", floor=103)   # SLICE-B1 +6 (sec 21), B4 +5 (sec 22), B5 +9 (sec 23); from the green run
 check = checks.adopt(LEDGER)
 
 # MEASURED, build 38797: UiCtlWebLink.cpp:576 asserts `challengeId < CHALLENGES`
@@ -886,6 +886,93 @@ def main():
         _kq["objective_kill"] = "errand_scout"
     finally:
         authsrv.quest_rows = _saved_rows
+
+    print("\n23. SLICE-B5: the reward is GRANTED at turn-in, and it is ours")
+    # The completion family is 0 of 22,524 in the corpus, so this section
+    # checks OUR mechanism: the kill's own 0x00EE delta carrying the row's
+    # promised number, the same consequences a kill has, and the state that
+    # stops a turned-in quest coming back.
+    _OP_XP = authsrv.GAME_SMSG_AGENT_KILL_REWARD
+    _saved_persist = authsrv.PERSIST
+
+    def _grant(row, persist=False, store=None):
+        sent = []
+        st = {"quests": set(), "objectives_done": set(),
+              "quests_completed": set(), "agents": {},
+              "char_uuid": "u1"}
+        if store is not None:
+            st["charstore_game"] = store
+        authsrv.PERSIST = persist
+        try:
+            paid = authsrv.grant_quest_reward(
+                lambda op, vals, label="", **kw: sent.append((op, list(vals), label)),
+                st, 1463, row, 0)
+        finally:
+            authsrv.PERSIST = _saved_persist
+        return paid, sent, st
+
+    paid, sent, _st = _grant({"reward_experience": 100})
+    xp = [v for op, v, _l in sent if op == _OP_XP]
+    check(paid == 100 and xp == [[authsrv.KILL_REWARD_ATTR, 100]],
+          "reward_experience = 100 goes out as ONE 0x00EE [0, 100] -- the "
+          "kill's own delta, which the client is proven to apply +=",
+          f"{xp} of {len(sent)} message(s)")
+    check(all(op in (_OP_XP, authsrv.GAME_SMSG_PLAYER_ATTR_UPDATE,
+                     authsrv.GAME_SMSG_AGENT_MORALE) for op, _v, _l in sent),
+          "and nothing from the completion family is sent -- 0x004E and its "
+          "kin are 0 of 22,524 in the corpus and are not invented here",
+          f"{[hex(op) for op, _v, _l in sent]}")
+
+    paid, sent, _st = _grant({"objectives": "x"})
+    check(paid == 0 and not sent,
+          "a row with no reward_experience grants nothing and sends nothing")
+
+    paid, sent, _st = _grant({"reward_experience": 100, "reward_gold": 10})
+    check(paid == 100 and [v for op, v, _l in sent if op == _OP_XP]
+          == [[authsrv.KILL_REWARD_ATTR, 100]] and len(sent) == 1,
+          "reward_gold is NOT GRANTED -- no gold message is identified -- and "
+          "the experience still is: one message, not two",
+          f"{[hex(op) for op, _v, _l in sent]}")
+
+    class _Store:
+        def __init__(self):
+            self.rows = {"u1": {"xp": 5}}
+            self.saved = 0
+
+        def character_by_uuid(self, u):
+            return self.rows.get(u)
+
+        def save(self):
+            self.saved += 1
+
+    store = _Store()
+    _grant({"reward_experience": 100}, persist=False, store=store)
+    check(store.rows["u1"]["xp"] == 5 and store.saved == 0,
+          "without --persist the store is untouched -- the wire delta is the "
+          "whole grant, exactly as a kill's is", f"{store.rows} saved {store.saved}")
+    _grant({"reward_experience": 100}, persist=True, store=store)
+    check(store.rows["u1"]["xp"] == 105 and store.saved == 1,
+          "under --persist the sheet accrues the same 100 and is saved once",
+          f"{store.rows} saved {store.saved}")
+
+    # THE FOURTH STATE: turned in. The giver stops offering; both marks clear.
+    st = {"quests": set(), "objectives_done": {1463}, "quests_completed": {1463},
+          "interacting": authsrv.quest_agent(questdefs.load()[1463], "giver")}
+    check(authsrv._quest_lines(st) == [],
+          "a COMPLETED quest is not offered again by its giver -- before B5 the "
+          "'!' came straight back the moment the reward window closed")
+    m = authsrv._quest_markers({"quests": set(), "objectives_done": set(),
+                                "quests_completed": {1463}})
+    giver = authsrv.quest_agent(questdefs.load()[1463], "giver")
+    objective = authsrv.quest_agent(questdefs.load()[1463], "objective")
+    check(giver in m and objective in m and m[giver] is None
+          and m[objective] is None,
+          "and both of its agents are in the marker pass with NO mark -- named, "
+          "so the clear is sent, and clear")
+    check("quests_completed" in authsrv.QUEST_PROGRESS
+          and isinstance(authsrv.QUEST_PROGRESS["quests_completed"], set),
+          "the completed set rides the process-wide progress carrier, so it "
+          "survives a reconnect the way held quests do")
 
     return LEDGER.verdict()
 
