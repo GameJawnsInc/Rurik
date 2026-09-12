@@ -50,3 +50,7 @@ datmove relocation rather than an in-place replace and textwrite says so."""
 [[compose.slice.strings]]
 quest = "rurik_first_errand"
 text  = "A First Errand"
+
+[[compose.slice.strings]]
+quest = "rurik_bandits"
+text  = "Bandits on the Road"

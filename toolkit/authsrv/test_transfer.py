@@ -24,7 +24,7 @@ import authsrv                                                   # noqa: E402
 import agents                                                    # noqa: E402
 
 # MEASURED from a green run, 2026-09-12.
-LEDGER = checks.Ledger("the transfer, sent by us", floor=22)
+LEDGER = checks.Ledger("the transfer, sent by us", floor=28)
 check = checks.adopt(LEDGER)
 
 OP_STOP = authsrv.GAME_SMSG_AGENT_STOP_MOVING
@@ -33,14 +33,22 @@ OP_MAP = authsrv.GAME_SMSG_MAP_UPDATE_CURRENT
 
 
 class FakeWorld:
-    def __init__(self, tables):
-        self._t = tables
+    """Synthetic tables over the REAL store: a kind not given here (npc, the
+    templates spawn_population has to resolve) is read from the shipped
+    content, so the placement path runs its real code on a real template."""
+
+    def __init__(self, tables, real):
+        self._t, self._real = tables, real
 
     def rows(self, kind):
-        return dict(self._t.get(kind, {}))
+        if kind in self._t:
+            return dict(self._t[kind])
+        return self._real.rows(kind)
 
     def get(self, kind, key):
-        return self._t[kind][key]
+        if kind in self._t:
+            return self._t[kind][key]
+        return self._real.get(kind, key)
 
 
 def fresh(pos, map_id=148, world_id=777, player_id=4242):
@@ -64,8 +72,17 @@ def main():
         "map": {"146": {"explorable": True, "file_id": 1},
                 "148": {"explorable": False, "file_id": 1}},
         "area": {"corridor": {"map_id": 168}},
-        "spawn": {},
-    })
+        "spawn": {
+            "c_body": {"area": "corridor", "npc": "hatcher", "agent_id": 90,
+                       "definition": 60, "x": 1.0, "y": 1.0},
+            "fisk": {"area": "errand", "npc": "hatcher", "agent_id": 99,
+                     "definition": 50, "x": 1.0, "y": 1.0, "map": 148},
+            "ghost": {"area": "errand", "npc": "hatcher", "agent_id": 98,
+                      "definition": 51, "x": 1.0, "y": 1.0, "map": 168},
+            "anywhere": {"area": "loose", "npc": "hatcher", "agent_id": 97,
+                         "definition": 52, "x": 1.0, "y": 1.0},
+        },
+    }, saved[0])
     try:
         authsrv.agents.WORLD = world
         authsrv.TRANSFER_HOSTS[:] = ["127.0.0.3", "127.0.0.33"]
@@ -158,18 +175,50 @@ def main():
               and authsrv.transfer_reentry(1, 2, 146) is False,
               "another map, or another session's ids, is not")
 
-        print("\n6. an area is its MAP's population")
-        recorded = []
-        st = {"agents": {}, "pos": (0.0, 0.0), "pathmap": None, "map_id": 148}
-        n = authsrv.spawn_population(
-            lambda op, vals, label="", **kw: recorded.append(op),
-            st, (0.0, 0.0, 0), 1, area="corridor")
-        check(n == 0 and not recorded,
-              "--area corridor (map 168) places NOTHING on an instance serving "
-              "map 148 -- the transfer serves other maps on one process",
-              f"placed {n}, sent {len(recorded)}")
+        print("\n6. a spawn row is placed only on the map it is FOR")
+        on = authsrv.spawn_row_on_map
+        check(on({"area": "corridor"}, 168) and not on({"area": "corridor"}, 148),
+              "a row with no `map` takes its AREA row's map_id: the corridor's "
+              "bodies are map 168's")
+        check(on({"area": "errand", "map": 148}, 148)
+              and not on({"area": "errand", "map": 148}, 168),
+              "a row's own `map` decides when it has one -- Fisk is map 148's, "
+              "whatever his area says")
+        check(on({"area": "loose"}, 148) and on({"area": "loose"}, 168),
+              "and a row with neither (an area with no row) is placed wherever "
+              "it is served -- the pre-B8 behaviour, unchanged")
+        got = {k for k, _r in authsrv.area_population("errand,corridor")}
+        check(got == {"c_body", "fisk", "ghost"},
+              "--area takes a comma list, and the set checks run over the union",
+              sorted(got))
+        placed = {}
+        for served in (148, 168):
+            st = {"agents": {}, "pos": (0.0, 0.0), "pathmap": None,
+                  "map_id": served}
+            authsrv.spawn_population(lambda op, vals, label="", **kw: None,
+                                     st, (0.0, 0.0, 0), 1,
+                                     area="errand,corridor,loose")
+            placed[served] = sorted(st["agents"])
+        check(placed[148] == [97, 99] and placed[168] == [90, 97, 98],
+              "one process, two maps: 148 gets Fisk and the loose row, 168 gets "
+              "the corridor body, the ghost and the loose row -- and never each "
+              "other's", placed)
 
-        print("\n7. --no-portals is a revert")
+        print("\n7. every portal destination is known at startup")
+        world._t["portal"]["gate2"] = dict(portal, to_map=168)
+        world._t["portal"]["far"] = dict(portal, map=168, to_map=200)
+        check(authsrv.portal_reachable(148) == [146, 168, 200],
+              "the reachable set follows chains (148 -> 168 -> 200) and skips "
+              "the disabled row's 999 -- the maps a pinned server may be asked "
+              "to serve, pre-warmed before a client can lock the archive "
+              "(20260912T144803's NO NAVMESH on the corridor)",
+              authsrv.portal_reachable(148))
+        check(authsrv.portal_reachable(146) == [148, 168, 200],
+              "and from 146 the start is excluded and the rest is reached "
+              "through 148", authsrv.portal_reachable(146))
+        del world._t["portal"]["gate2"], world._t["portal"]["far"]
+
+        print("\n8. --no-portals is a revert")
         authsrv.PORTALS = False
         send, state, sent = fresh((1300.0, 0.0))
         authsrv.portal_tick(send, state, 1, "127.0.0.3")

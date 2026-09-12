@@ -801,6 +801,53 @@ measured on the AUTH channel only); or `[c2]` asks for 148 (the ids did not carr
 the client asserts on the load. **ABORT** if the portal never fires (the leg did not
 reach the circle — a walk-direction or arming fault, scored on the c1 position reports).
 
+## SLICE-F18 — **the slice assembled: outpost → corridor on our portal, one process, two maps, and the kill quest on shipped content**
+
+**PRE-REGISTERED 2026-09-12 18:50, before the run.** Content: `[portal.ascalon_to_corridor]`
+(148 → 168, the spot SLICE-F17 proved) and `[portal.corridor_to_ascalon]` (168 → 148 at the
+corridor's south end); the 146 pair moved 500 u north as the control. `[quest.rurik_bandits]`
+(1464, "Bandits on the Road", record 201 — now in the slice archive, 11 of 11 verified),
+`objective_kill = "corridor_boss"`, given by Fisk. The server serves several maps on one
+process, so `--area` takes a comma list and a spawn row is placed only on the map it is FOR
+(`map = N` on the row, else its area's `map_id`, else anywhere): Fisk is 148's, the five
+corridor bodies are 168's. Offline: `test_quests` §24 drives B4's verb on the shipped row
+(kill agent 94 → objective met → the giver offers TURN_IN beside the errand's SHOW),
+`test_transfer` §6 drives two maps on one process.
+
+**Question.** On the slice archive, does walking into the outpost's west portal load the
+CORRIDOR, populated, with Fisk left behind in the outpost?
+
+**Prediction.** `RURIK_DAT` at the slice archive, `--map 148 --area errand,corridor --walk
+"S:2 wait:25 shot:1"`. The gamesrv log: c1 places `errand_giver` and `errand_scout` on 148
+and says the five corridor rows "belong to another map"; `PORTAL 'ascalon_to_corridor'` →
+`TRANSFER to map 168`; `[c2]` asks for 168 → RE-ENTRY; c2's pre-warm loads `navmesh 0x5F0B3:
+1 planes, 2 trapezoids`; c2 places `5 of 5` corridor bodies and says the two errand rows
+belong to another map; the boss's glow goes out. The frame after the wait shows the
+corridor's cobbled trench.
+
+**RESULT — OBSERVED, and the prediction's one miss was a real defect.** Harness
+`20260912T144803`: c1 placed `2 of 2` (Fisk and the scout) and held the five corridor rows
+back — "belong to another map than 148"; `PORTAL 'ascalon_to_corridor'` → `TRANSFER to map
+168`; `[c2]` asked for 168, RE-ENTRY, `--map 148` stood down; c2 held the two errand rows
+back and placed `5 of 5` with `glow 5 on 'corridor_boss'`. The frame after the wait is the
+corridor's trench with two hostiles on the compass. **But c2 said `NO NAVMESH`**: startup
+pre-warms the pinned map only, and by c2's bring-up the client held the archive, so the
+corridor's mesh was never read and its bodies were placed on trust. Fixed the same hour —
+`portal_reachable` walks the portal graph and every destination is pre-warmed at startup
+(`test_transfer` §7) — and re-run as `20260912T145253`: `[map] pre-warming map 168 ...
+navmesh 0x5F0B3: 1 planes, 2 trapezoids` at startup, the portal fired at 148 u, c2
+re-entered 168 and placed the corridor on its own mesh.
+
+So the slice's shape is assembled: **outpost → corridor on our portal, one process serving
+two maps with each map's own population, the kill quest on shipped content** (offline:
+kill 94 → objective met → Fisk offers TURN_IN beside the errand). What remains is the
+OWNER's hand-driven pass — accept, zone, fight, kill the boss, zone back, turn in — which
+is the whole slice as the plan's six steps describe it, and the reason the slice exists.
+
+**Refuted if** c2 never comes (the client will not load a created map on a re-entry: the
+first time a transfer names one — F13's compile was a first entry), or c2 loads without the
+corridor's mesh, or a body is placed on the wrong map. **ABORT** if the portal never fires.
+
 ## SLICE-F6 — what the desk cannot settle
 
 Carried so the next session does not re-read the same bytes hoping for more:

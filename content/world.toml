@@ -1074,6 +1074,9 @@ verified = "s_skill row 346, +0x78 = 601; extracted 2026-08-31, corroborated aga
 
 [spawn.errand_giver]
 area = "errand"
+map = 148                 # the outpost. A spawn row may say which map it is FOR
+                          # (SLICE-B8): one process serves several maps now, and
+                          # "errand" has no [area.*] row to carry a map_id.
 npc = "lieutenant_fisk"
 agent_id = 99
 definition = 50
@@ -1101,6 +1104,7 @@ probe world bind to the same body. The TEMPLATE carries its own provenance."""
 
 [spawn.errand_scout]
 area = "errand"
+map = 148
 npc = "ascalonian_townsfolk"
 agent_id = 98
 definition = 51
@@ -1140,6 +1144,7 @@ tiling, MEASURED walkable."""
 
 [spawn.corridor_raider_a]
 area = "corridor"
+map = 168
 skills = [[382, 0.0, 6.0], [322, 0.0, 3.0], [1, 2.0, 4.0]]
 npc = "bandit_raider"
 agent_id = 90
@@ -1158,6 +1163,7 @@ west half; its monk is 470 u east and 100 u further on."""
 
 [spawn.corridor_monk_a]
 area = "corridor"
+map = 168
 skills = [[281, 1.0, 2.0], [252, 1.0, 10.0], [276, 0.75, 2.0]]
 npc = "academy_monk"
 agent_id = 91
@@ -1177,6 +1183,7 @@ choice (studies/slice/PLAN.md, the owner's decisions)."""
 
 [spawn.corridor_raider_b]
 area = "corridor"
+map = 168
 skills = [[382, 0.0, 6.0], [322, 0.0, 3.0], [1, 2.0, 4.0]]
 npc = "bandit_raider"
 agent_id = 92
@@ -1194,6 +1201,7 @@ note = """Ours. Group B, 3,000 u past group A."""
 
 [spawn.corridor_monk_b]
 area = "corridor"
+map = 168
 skills = [[281, 1.0, 2.0], [252, 1.0, 10.0], [276, 0.75, 2.0]]
 npc = "academy_monk"
 agent_id = 93
@@ -1211,6 +1219,7 @@ note = """Ours. Group B's monk."""
 
 [spawn.corridor_boss]
 area = "corridor"
+map = 168
 skills = [[382, 0.0, 6.0], [322, 0.0, 3.0], [1, 2.0, 4.0], [323, 0.0, 6.0]]
 npc = "bandit_raider"
 agent_id = 94
@@ -1246,33 +1255,68 @@ what marks it. Wiring this row to a kill objective needs the second quest name \
 # (studies/slice/FINDINGS.md SLICE-F8). The trigger, the circle and its place
 # are OURS: retail's portal geometry is not in any capture this repo holds.
 #
-# THE FIRST PAIR IS THE CHEAP MILESTONE PLAN.md section 5 names: Ascalon City
-# (148, outpost) and Lakeside County (146, explorable) carry the SAME file id
-# and the SAME arrival point, so the hop is one byte of is_explorable and
-# nothing to look at -- a feature for the first run, a trap for a demo. Both
-# circles sit at the same spot, 500 u WEST of the arrival point, on ground
-# `pathmap` measures walkable (9326, 8077: True; 500 u east is not), so a
-# player arriving at (9826, 8077) is outside either circle and has to walk in.
+# THE SLICE'S EXIT: Ascalon City (148) -> the corridor (168), 500 u WEST of
+# the arrival point on ground `pathmap` measures walkable (9326, 8077: True;
+# 500 u east is not), so a player arriving at (9826, 8077) is outside the
+# circle and has to walk in. The way back sits at the corridor's south end,
+# 736 u short of its arrival point, so it too must be walked into.
+#
+# THE MILESTONE PAIR PLAN.md section 5 names -- 148 <-> Lakeside County (146),
+# the same file id and the same arrival point, one byte of is_explorable apart
+# -- is kept 500 u NORTH of the arrival point (also measured walkable): it is
+# the hop SLICE-F17 proved on a client, and it stays runnable as the control.
 
-[portal.ascalon_to_lakeside]
+[portal.ascalon_to_corridor]
 map = 148
 x = 9326.0
 y = 8077.0
+radius = 200.0
+to_map = 168
+enabled = true
+
+[portal.ascalon_to_corridor.provenance]
+source = "invented"
+note = """Ours. 500 u west of [map.148]'s arrival point, MEASURED walkable on \
+0x1B97D's navmesh (2026-09-12). The destination is the slice's explorable, \
+[map.168], which exists only in the slice archive (content/compose.toml) -- a \
+run that walks in here must serve that archive (RURIK_DAT) or the client will \
+be handed a map it cannot load."""
+
+[portal.corridor_to_ascalon]
+map = 168
+x = 1536.0
+y = 800.0
+radius = 200.0
+to_map = 148
+enabled = true
+
+[portal.corridor_to_ascalon.provenance]
+source = "invented"
+note = """Ours. The corridor's south end, on the floor's centre line, 736 u \
+south of the arrival point (1536, 1536) -- MEASURED walkable on 0x5F0B3's \
+compiled mesh (2026-09-12) -- so arriving does not fire it and leaving means \
+walking back to where the player came in."""
+
+[portal.ascalon_to_lakeside]
+map = 148
+x = 9826.0
+y = 8577.0
 radius = 200.0
 to_map = 146
 enabled = true
 
 [portal.ascalon_to_lakeside.provenance]
 source = "invented"
-note = """Ours. The circle's centre is 500 u west of [map.148]'s arrival point \
-and MEASURED walkable on 0x1B97D's navmesh (2026-09-12); 500 u east is not. \
-The destination is the map the retail capture's own first transfer named \
-(studies/tape/FINDINGS.md T8: Ascalon City -> 146)."""
+note = """Ours. 500 u NORTH of [map.148]'s arrival point, MEASURED walkable on \
+0x1B97D's navmesh (2026-09-12). The destination is the map the retail capture's \
+own first transfer named (studies/tape/FINDINGS.md T8: Ascalon City -> 146). \
+This is the hop SLICE-F17 proved (it stood 500 u west then; the slice's exit \
+took that spot) and it stays as the control."""
 
 [portal.lakeside_to_ascalon]
 map = 146
-x = 9326.0
-y = 8077.0
+x = 9826.0
+y = 8577.0
 radius = 200.0
 to_map = 148
 enabled = true

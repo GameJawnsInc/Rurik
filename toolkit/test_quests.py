@@ -54,7 +54,7 @@ import authsrv                                              # noqa: E402
 #
 # Adding quest rows only raises the count, so the floor stays valid; an
 # EMPTY table is caught by section 0 before the count matters.
-LEDGER = checks.Ledger("the quest table and its coded strings", floor=103)   # SLICE-B1 +6 (sec 21), B4 +5 (sec 22), B5 +9 (sec 23); from the green run
+LEDGER = checks.Ledger("the quest table and its coded strings", floor=117)   # SLICE-B1 +6 (sec 21), B4 +5 (sec 22), B5 +9 (sec 23), the kill quest +8 (sec 24); from the green run
 check = checks.adopt(LEDGER)
 
 # MEASURED, build 38797: UiCtlWebLink.cpp:576 asserts `challengeId < CHALLENGES`
@@ -378,13 +378,16 @@ def main():
 
     st = {"interacting": giver}
     lines = authsrv._quest_lines(st)
-    check([c for _q, c, _r in lines] == [questdefs.SERVICE_SHOW],
+    # Filtered on 1463 since the kill quest (1464) joined the same giver: these
+    # checks are about the ERRAND's three states, and section 24 is where the
+    # two-quest menu is measured.
+    check([c for q, c, _r in lines if q == 1463] == [questdefs.SERVICE_SHOW],
           "before accepting, the giver offers SHOW (code 0x03, kind 18, '!')",
           str(lines))
 
     st["quests"] = {1463}
     lines = authsrv._quest_lines(st)
-    check([c for _q, c, _r in lines] == [questdefs.SERVICE_IN_PROGRESS],
+    check([c for q, c, _r in lines if q == 1463] == [questdefs.SERVICE_IN_PROGRESS],
           "once held and the objective unmet, it offers IN_PROGRESS "
           "(0x05, kind 22, the gold '?')",
           "THE STATE THAT DID NOT EXIST: before this, a held quest returned "
@@ -404,7 +407,7 @@ def main():
 
     st["objectives_done"] = {1463}
     lines = authsrv._quest_lines(st)
-    check([c for _q, c, _r in lines] == [questdefs.SERVICE_TURN_IN],
+    check([c for q, c, _r in lines if q == 1463] == [questdefs.SERVICE_TURN_IN],
           "with the objective met, the giver offers TURN_IN (0x07, kind 23)",
           str(lines))
     check(authsrv._objective_quests(st, guard) == [],
@@ -438,17 +441,28 @@ def main():
     check(m.get(giver) == authsrv.QUEST_MARKER_OFFER
           and m.get(objective) is None,
           "unheld: the giver offers, the objective is bare")
+    # BOTH quests held from here: the kill quest (1464) shares this giver, and
+    # an unheld second quest keeps its '!' on him -- the highest-wins rule
+    # `_quest_markers` documents, OURS and measured by nothing, and checked
+    # below so it is a stated rule rather than a surprise. These three checks
+    # are about the ERRAND's states, so the other quest is taken out of play
+    # by holding it.
     m = marks(held=[1463])
+    check(m.get(giver) == authsrv.QUEST_MARKER_OFFER,
+          "the errand held ALONE leaves '!' on the giver: the bandits quest is "
+          "still on offer from the same body (highest wins -- ours)", dict(m))
+    m = marks(held=[1463, 1464])
     check(m.get(giver) is None
           and m.get(objective) == authsrv.QUEST_MARKER_TURN_IN,
-          "ACCEPTED: the giver's mark clears AND the arrow moves to the objective",
+          "ACCEPTED (both held): the giver's mark clears AND the arrow moves "
+          "to the objective",
           "both halves -- a test that only checked the new arrow would pass "
           "with the giver still marked, which is exactly the bug")
-    m = marks(held=[1463], done=[1463])
+    m = marks(held=[1463, 1464], done=[1463])
     check(m.get(objective) is None
           and m.get(giver) == authsrv.QUEST_MARKER_TURN_IN,
           "objective met: the arrow comes back to the giver")
-    check(marks(held=[1463]).get(giver) is None,
+    check(marks(held=[1463, 1464]).get(giver) is None,
           "a cleared mark is None, never 0",
           "no property-11 value removes a marker -- the clear is property 12, "
           "and [11, agent, 0] would invent a value that never occurs")
@@ -961,10 +975,13 @@ def main():
     # THE FOURTH STATE: turned in. The giver stops offering; both marks clear.
     st = {"quests": set(), "objectives_done": {1463}, "quests_completed": {1463},
           "interacting": authsrv.quest_agent(questdefs.load()[1463], "giver")}
-    check(authsrv._quest_lines(st) == [],
+    check(1463 not in [q for q, _c, _r in authsrv._quest_lines(st)],
           "a COMPLETED quest is not offered again by its giver -- before B5 the "
-          "'!' came straight back the moment the reward window closed")
-    m = authsrv._quest_markers({"quests": set(), "objectives_done": set(),
+          "'!' came straight back the moment the reward window closed (the "
+          "same giver's OTHER quest, 1464, is still on the menu)")
+    # 1464 held-and-undone here so the giver's only possible mark is the
+    # errand's: a kill quest in progress marks nobody (section 24).
+    m = authsrv._quest_markers({"quests": {1464}, "objectives_done": set(),
                                 "quests_completed": {1463}})
     giver = authsrv.quest_agent(questdefs.load()[1463], "giver")
     objective = authsrv.quest_agent(questdefs.load()[1463], "objective")
@@ -976,6 +993,55 @@ def main():
           and isinstance(authsrv.QUEST_PROGRESS["quests_completed"], set),
           "the completed set rides the process-wide progress carrier, so it "
           "survives a reconnect the way held quests do")
+
+    print("\n24. the SHIPPED kill quest: Bandits on the Road (1464) reaches B4's verb")
+    rows = questdefs.load()
+    check(1464 in rows and rows[1464].get("objective_kill") == "corridor_boss"
+          and rows[1464].get("giver_spawn") == "errand_giver",
+          "quest 1464 is a kill quest bound by SPAWN KEY to the corridor's boss "
+          "and given by the errand's giver", str({k: rows[1464].get(k) for k in
+                                                   ("objective_kill", "giver_spawn")}))
+    boss = authsrv.agents.WORLD.get("spawn", "corridor_boss")
+    check(int(boss["agent_id"]) == 94 and boss.get("glow") == 5,
+          "the boss row is the glowing raider, agent 94", dict(boss))
+    from questdefs import codedstr                          # noqa: E402
+    sid, used = codedstr.decode_id(list(rows[1464]["enc_name"]))
+    check(sid == 100553 and used == 2,
+          "its name is record 201 of our text file 98 -- the record after the "
+          "errand's -- so compose.toml derives it and the slice archive carries it",
+          sid)
+    st = {"quests": {1464}, "objectives_done": set(), "desc_sent": {1464},
+          "quests_completed": set(), "agents": {}, "agent_pos": {}}
+    sent = []
+    authsrv.kill_completes_objective(
+        lambda op, vals, label="", **kw: sent.append((op, list(vals), label)),
+        st, 94, 0)
+    check(1464 in st["objectives_done"] and sent,
+          "killing agent 94 with 1464 held meets the objective -- B4's verb on "
+          "SHIPPED content, which the archive's second name unblocked",
+          f"done {st['objectives_done']}, {len(sent)} message(s)")
+    st["interacting"] = authsrv.quest_agent(rows[1464], "giver")
+    lines = {q: c for q, c, _r in authsrv._quest_lines(st)}
+    check(lines.get(1464) == questdefs.SERVICE_TURN_IN
+          and lines.get(1463) == questdefs.SERVICE_SHOW,
+          "back at Fisk: 1464 is offered as TURN_IN and the unheld errand as "
+          "SHOW -- one giver, two quests, two screens", lines)
+    st2 = {"quests": set(), "objectives_done": set(), "quests_completed": set(),
+           "interacting": st["interacting"]}
+    check(sorted(q for q, _c, _r in authsrv._quest_lines(st2)) == [1463, 1464],
+          "with neither held the giver offers BOTH")
+    # Both quests held, so the errand cannot put its own '!' on the shared
+    # giver (section 15's highest-wins note); what is left is the kill quest's.
+    m = authsrv._quest_markers({"quests": {1463, 1464}, "objectives_done": set(),
+                                "quests_completed": set()})
+    giver = authsrv.quest_agent(rows[1464], "giver")
+    check(m.get(giver) is None and 94 not in m,
+          "held and undone, a kill quest marks NOBODY: no objective NPC, and the "
+          "boss is not an arrow", dict(m))
+    m = authsrv._quest_markers({"quests": {1463, 1464}, "objectives_done": {1464},
+                                "quests_completed": set()})
+    check(m.get(giver) == authsrv.QUEST_MARKER_TURN_IN,
+          "and once the boss is dead the giver's arrow comes back")
 
     return LEDGER.verdict()
 
