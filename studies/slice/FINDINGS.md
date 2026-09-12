@@ -968,6 +968,24 @@ until the owner's next pass; the hand-run question is one sentence — *press Po
 on the boss from across the room: does the character walk in and strike on arrival, and
 does W on the way cancel it cleanly?*
 
+**The owner's second run, same day, and what it corrected.** *"It does get cancelled by W,
+but I don't think in stock the cancel animation plays over the player's head unless they
+actually start the cast. Here we do it even if they cancel a chase-cast."* Right, and the
+tapes above already said so: the walk-in IS retail's own follow (the `0x002A` the ordinary
+attack uses — the E4 at the press is retail's too, 11 of 11), but our release burst sent
+property 59 for every cancelled cast, and 59 is the one that reaches `InterruptSkill` — the
+body plays a stop for a cast that never began. The pre-begin drops in the table carry
+**property 45 and the bare E2, no 59 and no hold release** — and with this scan the count is
+**4 of 4 pre-begin drops with 45** (castmech §3's terminated cast, 276.699, 525.104,
+710.693) against **0 of 6 begun cancels**, which is castmech §3e's "queued-drop" candidate
+confirmed rather than a one-sample guess. The begun cancels split by family: **59 for a
+spell (4 of 4, castmech 3f), 49 for an attack skill (2 of 2: 657.289, 248.991 — the attack
+trio's own stop, 50/46/49)**. Shipped as `release_cancelled_cast`'s three-way choice
+(`agents.GV_CAST_DROPPED = 45`): never began → `[45]`, E2; begun spell → `[8→0]`, `[59]`, E2;
+begun attack skill → `[8→0]`, `[49]`, E2. `test_castcycle` §2d/§2e and `test_castcancel` §3
+pin all three. The 49 arm also corrects C1's out-of-reach strike release, which had borrowed
+the spell's 59.
+
 **Refuted if** the owner's press from range still strikes without walking, or the walk
 ends and nothing begins (the arrival predicate — `approach_tick`'s eta-or-stop-radius —
 disagreeing with the client's own resolver, which C1's gate would then show as a released

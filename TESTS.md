@@ -10198,6 +10198,15 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   0x0028-before-0x01A5 pair since B8), and `test_pools.py` §10b's hostile-heal fixture
   (its ally is HURT now -- since B3 a hostile's heal is held while nobody is hurt, and
   §10 is about the pool's pacing, not the heal gate).
+  **The release's three stops (2026-09-12, the owner's second run).** The cancel played over
+  the head of a chase cut short by W, because every cancelled cast sent 59. Now
+  `release_cancelled_cast` picks by what the cast had done: never began -> `[45, me, 0]`
+  then the bare E2 (`agents.GV_CAST_DROPPED`, 4 of 4 pre-begin drops on the wire, 0 of 6
+  begun cancels); a begun spell -> `[8 -> 0]`, `[59]`, E2 (4 of 4); a begun attack skill ->
+  `[8 -> 0]`, `[49]`, E2 (2 of 2, the attack trio's stop). `test_castcycle.py` §2d pins the
+  49 on C1's out-of-reach strike release and §2e pins the 45 on both of C2's unpaid drops
+  (exact op lists now); `test_castcancel.py` §3 (floor 31 -> 32) pins the 59-then-45 pair
+  when movement drops a begun spell and the attack skill queued behind it.
   `toolkit/authsrv/test_castcycle.py` (the four-opcode cast cycle against
   ArenaNet's own template — six complete cycles, two live captures, same order
   every time: E4 at the press, E5 at cast end carrying the recharge in whole

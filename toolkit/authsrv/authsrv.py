@@ -11102,17 +11102,43 @@ def release_cancelled_cast(send, state, cast, reason, conn_id):
     ownership of REMOVAL -- `released` tells it the burst is already out --
     so the single-writer rule that F10 closed is untouched.
     """
-    action_hold(send, state, 0, f"{reason} cancels the cast")
-    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-         [agents.GV_SKILL_STOPPED, PLAYER_AGENT_ID, 0],
-         f"skill_stopped: {reason} cancels skill {cast['skill_id']}")
+    # WHICH STOP, BY WHAT THE CAST HAD DONE (SLICE-F20, the owner's second
+    # run: "I don't think in stock the cancel animation plays over the
+    # player's head unless they actually start the cast" -- it did here,
+    # because 59 went out for a chase cut short by W). The tapes split three
+    # ways and each way is measured:
+    #   * a cast that NEVER BEGAN (queued behind a clock, or walking in)
+    #     releases with [45, agent, 0] then the bare E2 -- no hold release,
+    #     no 59: 4 of 4 pre-begin drops (agents.GV_CAST_DROPPED). 45 does
+    #     not reach InterruptSkill, so nothing plays on the body -- there is
+    #     no cast on the body to stop;
+    #   * a BEGUN spell: [8 -> 0], [59, agent, 0], E2 -- 4 of 4 (castmech 3f);
+    #   * a BEGUN attack skill: [8 -> 0], [49, agent, 0], E2 -- the attack
+    #     trio's own stop (50/46/49), 2 of 2 (20260817T231139 t=657.289,
+    #     20260819T132414 t=248.991). Until 2026-09-12 every one of the three
+    #     sent 59.
+    if not cast.get("begun", True):
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.GV_CAST_DROPPED, PLAYER_AGENT_ID, 0],
+             f"cast_dropped: {reason} drops skill {cast['skill_id']} before "
+             f"it began")
+        stop_name = "cast_dropped (45, never began)"
+    else:
+        action_hold(send, state, 0, f"{reason} cancels the cast")
+        _stop = (agents.GV_ATTACK_SKILL_STOPPED if cast.get("attack")
+                 else agents.GV_SKILL_STOPPED)
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [_stop, PLAYER_AGENT_ID, 0],
+             f"{'attack_skill' if cast.get('attack') else 'skill'}_stopped: "
+             f"{reason} cancels skill {cast['skill_id']}")
+        stop_name = f"hold released, {'attack_skill' if cast.get('attack') else 'skill'}_stopped ({_stop})"
     send(GAME_SMSG_SKILL_REFUSED,
          [PLAYER_AGENT_ID, cast["skill_id"], cast["copy"]],
          f"cast cancelled by {reason}: E2 releases skill "
          f"{cast['skill_id']}, no recharge")
     cast["released"] = True
     print(f"[c{conn_id}] {reason} cancels skill {cast['skill_id']}: "
-          f"hold released, skill_stopped, E2 -- no recharge", flush=True)
+          f"{stop_name}, E2 -- no recharge", flush=True)
 
 
 def _mark_cancelled(state, reason, now, spare_mid_attack):

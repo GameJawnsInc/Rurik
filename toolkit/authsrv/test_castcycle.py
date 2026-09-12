@@ -512,16 +512,21 @@ def section_strike_reach():
                and v[0] in (authsrv.agents.PROP_DAMAGE,
                             authsrv.agents.GV_CRITICAL)]
         stopped = [v for op, v, _ in sent if op == 0x009F
-                   and v[0] == authsrv.agents.GV_SKILL_STOPPED]
+                   and v[0] in (authsrv.agents.GV_SKILL_STOPPED,
+                                authsrv.agents.GV_ATTACK_SKILL_STOPPED,
+                                authsrv.agents.GV_CAST_DROPPED)]
         check(agent["health"] == 100.0 and not dmg,
               f"a target {reach + 100:.0f} u out at the strike takes NOTHING "
               f"-- the run's 170 u Power Attacks land no more",
               f"health {agent['health']}, dmg {dmg}")
         check(authsrv.GAME_SMSG_SKILL_RECHARGE not in ops
               and authsrv.GAME_SMSG_SKILL_REFUSED in ops
-              and stopped == [[authsrv.agents.GV_SKILL_STOPPED, PLAYER, 0]],
-              "and it is released as a CANCEL: E2 and skill_stopped, no "
-              "recharge -- GWW's cancel contract, the measured burst",
+              and stopped == [[authsrv.agents.GV_ATTACK_SKILL_STOPPED, PLAYER,
+                               0]],
+              "and it is released as a CANCEL: E2 and the ATTACK trio's own "
+              "stop (49, 2 of 2 begun attack-skill cancels on the wire -- not "
+              "the spell family's 59), no recharge -- GWW's cancel contract, "
+              "the measured burst",
               f"ops={[hex(o) for o in ops]}")
         check(not state.get("pending_casts"),
               "and the cast is gone from the queue")
@@ -663,13 +668,15 @@ def section_strike_approach():
         sent.clear()
         authsrv.cast_tick(send, state, 0)
         authsrv.cast_tick(send, state, 0)
-        check(authsrv.GAME_SMSG_SKILL_REFUSED in ops_of(sent)
-              and A2 not in ops_of(sent) and A0 not in ops_of(sent)
+        dropped = [(op, v) for op, v, _ in sent if op == P9F]
+        check(ops_of(sent) == [P9F, authsrv.GAME_SMSG_SKILL_REFUSED]
+              and dropped == [(P9F, [authsrv.agents.GV_CAST_DROPPED, PLAYER, 0])]
               and not state.get("pending_casts")
               and state.get("approach") is None,
-              "a target that dies on the way: the entry is released (E2), "
+              "a target that dies on the way: [45, me, 0] then the bare E2 -- "
+              "no hold release, no 59 (nothing is on the body to stop), "
               "nothing was ever paid or animated, the follow is forgotten "
-              "(525.104's shape)",
+              "(525.104's batch, 4 of 4 pre-begin drops)",
               f"{[(hex(op), v) for op, v, _ in sent]}")
 
         # the player moves on the way: cancelled unpaid (276.699)
@@ -678,13 +685,16 @@ def section_strike_approach():
         sent.clear()
         authsrv.cancel_on_move(send, state, 0)
         authsrv.cast_tick(send, state, 0)
-        check(authsrv.GAME_SMSG_SKILL_REFUSED in ops_of(sent)
-              and A2 not in ops_of(sent) and A0 not in ops_of(sent)
+        dropped = [(op, v) for op, v, _ in sent if op == P9F]
+        check(ops_of(sent) == [P9F, authsrv.GAME_SMSG_SKILL_REFUSED]
+              and dropped == [(P9F, [authsrv.agents.GV_CAST_DROPPED, PLAYER, 0])]
               and not state.get("pending_casts")
               and state.get("approach") is None,
-              "the player's own movement on the way cancels it: E2, nothing "
-              "paid, the follow abandoned -- the ranger's 276.699 (WASD at "
-              "+0.885 s, E2 at +0.919, no debit ever)",
+              "the player's own movement on the way drops it: [45, me, 0] "
+              "then E2, no 59 -- the ranger's 276.699 (WASD at +0.885 s, "
+              "[45, 31, 0] + E2 at +0.919, no debit ever). The owner's "
+              "second run: the cancel played over the head of a chase cut "
+              "short by W; on stock it does not, because the cast never began",
               f"{[(hex(op), v) for op, v, _ in sent]}")
 
         # --no-attack-approach: the revert arm keeps the old press
