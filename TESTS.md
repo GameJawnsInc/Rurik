@@ -3461,8 +3461,12 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   real codec to the 39 bytes overrides.json corrected the catalog to; a one-listener server
   falls back to the same alias and says so (tape T9's NOT FOUND); a VERSION frame repeating
   our ids is a re-entry and any other is not; `--area corridor` places nothing on an instance
-  serving map 148; `--no-portals` arms and fires nothing. Floor 22, MEASURED 2026-09-12. No
-  vault, no client; ~2 s),
+  serving map 148; **§6 (same day) is the per-row map gate over the REAL npc store**: a row's own
+  `map`, else its area's `map_id`, else anywhere; `--area` as a comma list with the set checks over
+  the union; one process placing 148's and 168's rows and never each other's. **§7: every portal
+  destination is reachable at startup** (`portal_reachable` follows chains and skips disabled rows)
+  -- the corridor loaded with NO NAVMESH on a re-entry before it. `--no-portals` arms and fires
+  nothing. Floor 28, MEASURED 2026-09-12 (22 before §6/§7). No vault, no client; ~2 s),
   `toolkit/authsrv/test_interact.py` (the interact path — the walk order and the
   interact that is HELD rather than dropped. **Nothing exercised
   `_handle_interact` at all before 2026-08-19**; `test_dispatch.py` named it once
@@ -4013,6 +4017,13 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   lands in, with the arithmetic control proving the coarse samples straddle it and the fine
   ones do not, the known-bad arm (`ROUTE_GATE_FINE` False) returning the 2-point path, and the
   fix returning a 4-point corridor whose every segment holds at 2 u.
+  **The kill quest (2026-09-12).** `toolkit/test_quests.py` §24 (floor 103 → 117): the SHIPPED
+  `[quest.rurik_bandits]` (1464) is bound by spawn key to the corridor's glowing boss (agent 94) and
+  given by the errand's giver; its name decodes to record 201 of file 98; killing 94 with it held
+  meets the objective through B4's verb; Fisk then offers it as TURN_IN beside the errand's SHOW,
+  offers BOTH when neither is held, and a kill quest in progress marks NOBODY until the boss is
+  dead. §14 and §23 now filter on the errand's id and §15 holds both quests, because a second
+  quest on one giver keeps its '!' -- the highest-wins rule, OURS, now checked as a stated rule.
   **SLICE-B5 (2026-09-12).** `toolkit/test_quests.py` §23 (floor 94 → 103): the reward is
   GRANTED at turn-in and it is OURS -- `reward_experience = 100` goes out as ONE `0x00EE
   [0, 100]`, the kill's own delta, with nothing from the completion family (0 of 22,524 in

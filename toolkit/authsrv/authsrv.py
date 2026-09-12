@@ -1465,6 +1465,28 @@ def portal_tick(send, state, conn_id, local_host):
     return False
 
 
+def portal_reachable(start_map):
+    """Every map a chain of enabled portals can reach from `start_map`,
+    the start excluded. -> sorted list
+
+    The set a server pinned to `start_map` may be asked to SERVE: on
+    2026-09-12 (harness 20260912T144803) the corridor loaded on the second
+    connection with NO NAVMESH, because startup had pre-warmed the pinned
+    map only and by instance bring-up the client held the archive. Every
+    destination is pre-warmed at startup now, through this walk.
+    """
+    seen, todo = {int(start_map)}, [int(start_map)]
+    while todo:
+        here = todo.pop()
+        for _key, row in portal_rows(here):
+            nxt = int(row["to_map"])
+            if nxt not in seen:
+                seen.add(nxt)
+                todo.append(nxt)
+    seen.discard(int(start_map))
+    return sorted(seen)
+
+
 def transfer_reentry(world_id, player_id, map_id):
     """Is this VERSION frame the client coming back from a transfer WE sent?"""
     return TRANSFERS_ISSUED.get((int(world_id), int(player_id))) == int(map_id)
@@ -18286,6 +18308,20 @@ class PopulationError(Exception):
     """An area's declared population cannot be placed as written."""
 
 
+def spawn_row_on_map(row, map_id):
+    """Is this spawn row FOR `map_id`? Its own `map`, else its area's map_id,
+    else yes -- see spawn_population's comment."""
+    if row.get("map") is not None:
+        return int(row["map"]) == int(map_id)
+    try:
+        arow = agents.WORLD.get("area", str(row.get("area")))
+    except Exception:                                          # noqa: BLE001
+        return True
+    if arow.get("map_id") is None:
+        return True
+    return int(arow["map_id"]) == int(map_id)
+
+
 def area_population(area):
     """The spawn rows bound to one area, checked AS A SET rather than one by one.
 
@@ -18299,9 +18335,14 @@ def area_population(area):
 
     Rows with no `area` are the legacy global spawn and are never returned here.
     """
+    # SLICE-B8: `--area errand,corridor` names the populations of SEVERAL
+    # maps served by one process. The set checks below run over the union,
+    # which is what one process needs -- two areas on one map sharing an
+    # agent id is the same collision as two rows in one area.
+    wanted = {a.strip() for a in str(area).split(",") if a.strip()}
     rows = []
     for key, row in sorted(agents.WORLD.rows("spawn").items()):
-        if row.get("area") != area:
+        if row.get("area") not in wanted:
             continue
         if not row.get("enabled", True):
             continue
@@ -18402,22 +18443,23 @@ def spawn_population(send, state, origin, conn_id, area=None):
     """
     area = area or AREA_NAME
     ox, oy, plane = origin
-    # SLICE-B8: --area names ONE map's population. A transfer serves another
-    # map on the same process, and the corridor's five bodies do not belong
-    # in Ascalon City. An area row with a map_id that is not this instance's
-    # places nothing and says so; an area with no row (a bare spawn grouping
-    # like "errand") is unchanged.
-    try:
-        _arow = agents.WORLD.get("area", area) if area else None
-    except Exception:                                          # noqa: BLE001
-        _arow = None
-    if _arow is not None and state.get("map_id") is not None \
-            and int(_arow.get("map_id", -1)) != int(state["map_id"]):
-        print(f"[c{conn_id}] area {area!r} is map {_arow.get('map_id')}'s "
-              f"population and this instance serves map {state['map_id']}: "
-              f"nothing placed here (SLICE-B8)", flush=True)
-        return 0
-    rows = area_population(area)
+    # SLICE-B8: ONE PROCESS SERVES SEVERAL MAPS, so a row is placed only on
+    # the map it is FOR. A spawn row says so with `map = N`; failing that,
+    # its area's [area.*] row says so with `map_id`; a row with neither (a
+    # bare grouping on a run's pinned map) is placed wherever it is served.
+    # The corridor's five bodies do not belong in Ascalon City, and Fisk does
+    # not belong in the corridor.
+    served = state.get("map_id")
+    rows, elsewhere = [], []
+    for key, row in area_population(area):
+        if served is not None and not spawn_row_on_map(row, served):
+            elsewhere.append(key)
+            continue
+        rows.append((key, row))
+    if elsewhere:
+        print(f"[c{conn_id}] area {area!r}: {len(elsewhere)} row(s) belong to "
+              f"another map than {served} and are not placed here: "
+              f"{', '.join(elsewhere)} (SLICE-B8)", flush=True)
     if not rows:
         print(f"[c{conn_id}] area {area!r}: no population rows; the world is "
               f"the player and the geometry", flush=True)
@@ -24149,6 +24191,7 @@ def main():
     global GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING, SKILLBAR
     global UNLOCKED, UNLOCK_LABEL, SPAWN_PROFESSION, SECONDARY_BITS, PERSIST
     global DEATH_PENALTY_FORCED, ENEMY_HIT_FRACTION
+    global PORTALS, TRANSFER_ALT        # read by the pre-warm before the flags
 
     # THE ARGPARSE BLOCK IS `build_parser()`, now in `serverargs.py`: 1,785 lines
     # lifted out of main() verbatim, no other change. The `global` lines stay HERE
@@ -24304,6 +24347,13 @@ def main():
         # serve, and nothing has opened the archive yet -- both halves are only
         # true at startup. See prewarm_pathmap() for what reading it late cost.
         prewarm_pathmap(a.map if known else FALLBACK_MAP_ID)
+        # SLICE-B8: and every map a portal can hand the client to, for the
+        # same reason and at the same moment -- once a client is up the
+        # archive is locked and a re-entry's map would load with no mesh.
+        if PORTALS:
+            for _dest in portal_reachable(a.map if known else FALLBACK_MAP_ID):
+                print(f"[map] pre-warming map {_dest}: a portal destination")
+                prewarm_pathmap(_dest)
 
     if a.area:
         global AREA_NAME
@@ -25089,12 +25139,10 @@ def main():
               f"{[s[0] for s in HERO_SKILLS]} -- the party body casts "
               f"(SLICE-B7c). Heals only; see --hero-skills.", flush=True)
     if a.no_portals:
-        global PORTALS
         PORTALS = False
         print("[map] --no-portals: no portal fires and nothing zones. Every "
               "run before 2026-09-12.", flush=True)
     if a.transfer_alt:
-        global TRANSFER_ALT
         TRANSFER_ALT = a.transfer_alt
     if a.no_interact_route:
         global INTERACT_ROUTE

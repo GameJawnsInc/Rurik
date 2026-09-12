@@ -146,3 +146,36 @@ quest_id 1463 sits under the client's own bound -- UiCtlWebLink.cpp:576 asserts
 high band to author into: the corpus maximum is 1462, so 1463 and 1464 are the
 only free ids beneath the bound.
 """
+
+# THE KILL QUEST -- the slice's second quest, and the first with a kill
+# objective (SLICE-B4's verb reaching shipped content). Given by the same
+# giver as the errand; completed by killing the corridor's boss raider;
+# turned in back at the outpost. Its NAME is record 201 of our text file 98
+# (content/compose.toml derives the record from this row's enc_name), so a
+# run that shows it must serve the slice archive.
+
+[quest.rurik_bandits]
+quest_id     = 1464
+enc_name     = [0x8103, 0x0CC9]
+description  = "Bandits hold the road north. Their leader wears a glow. End him and come back."
+objectives   = "Kill the bandit leader, then return."
+wire_framing = "template"
+giver_dialogue = "The road north is held by bandits. Their leader is marked. Deal with him."
+turn_in_dialogue = "The road is open. Ascalon owes you."
+in_progress_dialogue = "The bandit leader still holds the road. Go north."
+objectives_done = "Return to Lieutenant Fisk. [bandit leader slain]"
+giver_spawn    = "errand_giver"
+objective_kill = "corridor_boss"
+reward_experience = 250
+
+[quest.rurik_bandits.provenance]
+source = "invented"
+note = """
+Ours: the quest, its words, its id (1464 -- the last free id under
+CHALLENGES = 1465; 1463 is the errand). The objective is a KILL, bound by
+spawn key to the corridor's boss row, so `kill_completes_objective` fires
+when THAT body dies and never for another. There is no objective NPC, so
+no marker moves off the giver while it is held; the giver's arrow comes
+back once the boss is dead. The reward is paid as the errand's is.
+"""
+
