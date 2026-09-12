@@ -374,7 +374,12 @@ def with_reward(text, slot_a, slot_b=None, framing="template",
     # line; 0x0102 is archive id 2, `\n[b]`, and is what actually breaks one.
     # MEASURED 2026-08-16, vault/captures/harness/20260816T103824.
     body = coded_literal(text, framing, limit=limit)
-    out = body + PARAGRAPH_BREAK + reward_run(slot_a, slot_b)
+    # TWO BREAKS, not one. The owner, after the first hand-driven turn-in
+    # (2026-09-12): "there should be 2 line breaks between the quest dialogue
+    # and the reward" -- stock draws a BLANK LINE before `Reward:`, and one
+    # 0x0102 draws a line end. Each break is its own run (separator + id 2),
+    # never two ids in one run, which the codec would read as an argument.
+    out = body + PARAGRAPH_BREAK + PARAGRAPH_BREAK + reward_run(slot_a, slot_b)
     if len(out) > limit:
         raise ValueError(
             f"{len(body)} units of text plus a 19-unit reward block is "

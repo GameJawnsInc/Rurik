@@ -52,7 +52,7 @@ import authsrv   # noqa: E402
 # as 18 from a count in my head and corrected against the run, which is the
 # whole of why CLAUDE.md says to set a floor from a green run and not a guess.
 LEDGER = checks.Ledger("the interact path: walk order and held interact",
-                       floor=19)
+                       floor=29)   # section 5 (the routed walk, 2026-09-12) +7; from the green run
 check = checks.adopt(LEDGER)
 
 NPC = 99
@@ -215,6 +215,39 @@ def main():
           "and a hold whose agent left the world is dropped, not carried",
           "a despawn, a kill or a map change all land here; carrying the id "
           "would leave a reference to a body the world no longer has")
+
+    print("\n5. the ROUTED interact-walk (2026-09-12): the approach point, and "
+          "the hold alone where there is no mesh")
+    ap = authsrv.interact_approach_point
+    p = ap(FAR, (0.0, 0.0))
+    check(abs(p[0] - (FAR[0] - authsrv.INTERACT_STOP)) < 1e-6 and abs(p[1]) < 1e-6,
+          f"the approach point is INTERACT_STOP ({authsrv.INTERACT_STOP:.0f} u) "
+          f"short of the NPC on the player's side", f"{p}")
+    check(authsrv.INTERACT_STOP < authsrv.INTERACT_RANGE,
+          "and it lies INSIDE the interact range, so arriving there serves the "
+          "hold", f"stop {authsrv.INTERACT_STOP} < range {authsrv.INTERACT_RANGE}")
+    check(ap(FAR, FAR) == FAR and ap(FAR, (FAR[0] - 50.0, FAR[1])) == FAR,
+          "a player already inside the stop distance -- or on the NPC -- gets "
+          "the NPC's own spot, and the arithmetic never divides by zero")
+    check(authsrv.INTERACT_RANGE == 144.0,
+          "INTERACT_RANGE is the wiki's touch range, 144 -- the owner read the "
+          "old 250 as 'probably 2x' stock, and 250/144 is 1.7",
+          f"{authsrv.INTERACT_RANGE}")
+    check(authsrv.INTERACT_ROUTE is True,
+          "the routed walk ships ON (--no-interact-route reverts)")
+    send, state, sent = fresh()
+    check(authsrv.interact_route(send, state, 1, NPC, FAR) is False
+          and not sent,
+          "with NO mesh the router has nothing to route over: no walk, "
+          "nothing sent, and the caller holds the interact alone",
+          f"{[hex(o) for o, _v in sent]}")
+    send, state, sent = fresh()
+    authsrv._handle_interact(send, state, 1, NPC)
+    check(state.get("pending_interact") == (NPC, 0)
+          and authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT
+          not in [op for op, _v in sent],
+          "and the out-of-range interact is still HELD, with no 0x002B either "
+          "-- the two halves stay independent, as section 0 says of 0x002A")
 
     return LEDGER.verdict()
 

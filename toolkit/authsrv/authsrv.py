@@ -479,7 +479,22 @@ def _objective_quests(state, agent):
 # TIGHTENABLE, because the walk exists: with an out-of-range interact held and
 # served on arrival, a smaller range costs the player nothing but a moment's
 # walking, which is what it costs in the real game.
-INTERACT_RANGE = 250.0
+#
+# TIGHTENED 2026-09-12, from 250 to 144. Two witnesses that share nothing:
+# the OWNER, after a hand-driven turn-in, said the dialog opened at "probably
+# 2x" stock's distance; and WIKI (GWW, "Range", "Touch range and melee
+# range", raw wikitext read 2026-09-12): "At 144 gwinches, this is the
+# shortest unit of distance used in the game ... the farthest distance at
+# which a touch or melee attack can be successfully initiated." Whether an
+# NPC conversation uses exactly touch range is not on that page -- so this is
+# the ladder's shortest rung as the best-supported number, not a measured
+# dialog range, and 250/144 = 1.7 is what "probably 2x" looks like.
+INTERACT_RANGE = 144.0
+
+# Where the routed interact-walk stops: this far from the NPC, on the
+# player's side, inside INTERACT_RANGE with room for the model and the
+# client's report to disagree by a body's width.
+INTERACT_STOP = 100.0
 
 
 def _order_walk(send, state, conn_id, agent_id, spot):
@@ -504,6 +519,73 @@ def _order_walk(send, state, conn_id, agent_id, spot):
          [PLAYER_AGENT_ID, (float(spot[0]), float(spot[1])), plane, plane,
           agent_id],
          f"AGENT_UPDATE_DESTINATION player -> agent {agent_id}")
+
+
+def interact_approach_point(spot, pos, stop=None):
+    """The point INTERACT_STOP short of the NPC, on the player's side. -> (x, y)
+
+    A player already inside `stop` gets the NPC's own spot back -- there is
+    nothing to walk -- and a player at exactly the NPC's position too, so the
+    division below never sees zero.
+    """
+    stop = INTERACT_STOP if stop is None else float(stop)
+    dx, dy = float(pos[0]) - float(spot[0]), float(pos[1]) - float(spot[1])
+    gap = math.hypot(dx, dy)
+    if gap <= stop:
+        return (float(spot[0]), float(spot[1]))
+    return (float(spot[0]) + dx / gap * stop, float(spot[1]) + dy / gap * stop)
+
+
+def interact_route(send, state, conn_id, agent_id, spot):
+    """Walk the player to an out-of-range NPC over OUR mesh. -> bool (routed)
+
+    THE OWNER'S OBSERVATION, 2026-09-12, after the first hand-driven turn-in:
+    "it doesn't automatically path the player to them ... I had to manually
+    move to the scout." Stock walks you over on the click. What this server
+    had was a HOLD with no walk: `_order_walk`'s bare 0x002A was measured on
+    2026-08-19 to drag the character through a staircase with no position
+    report, and was shipped off. The ROUTER did not exist then (MOVECODE-1z-v,
+    2026-09-03): a click is now answered by `pathmap.route()` over our own
+    mesh, granted leg by leg as 0x002B, and the client WALKS those legs with
+    its own collision (ROUTER.md P-1/P-3). So the interact-walk is a click at
+    the approach point, through the same call the 0x003E arm makes -- not a
+    second pathing mechanism -- and the hold serves on arrival exactly as it
+    does for a keyboard walk, because the integrator advances `state["pos"]`
+    along a granted leg.
+
+    What this is NOT: retail's message. What ArenaNet's server sends to walk
+    the player in is the 0x002A plus something unmeasured (the `_order_walk`
+    comment); this is OUR walk, on OUR mesh, and it says so. Returns False --
+    hold only, no walk -- where the router has nothing to route over (no mesh,
+    no position belief) or the arm is off.
+    """
+    if not INTERACT_ROUTE or not ROUTER:
+        return False
+    pm, pos = state.get("pathmap"), state.get("pos")
+    if pm is None or pos is None:
+        return False
+    dest = interact_approach_point(spot, pos)
+    dest_plane = int((state.get("agents", {}).get(agent_id) or {})
+                     .get("plane", state.get("plane", 0)))
+    cur_plane = int(state.get("plane", 0))
+    now = time.time()
+    # The 0x003E arm's own preparation, in its order: a click supersedes a
+    # keyboard walk, an approach, a heading hold and an in-flight lead.
+    state["walking"], state["heading"] = False, None
+    _approach_abandon(state)
+    _kbd_lead_kill(send, state, conn_id, None, "interact")
+    state["heading_hold"] = None
+    prev = state.get("click_moving_at")
+    state["click_moving_at"] = now
+    _click_leg_arm(state, dest, now, silent=prev is not None)
+    routed = router_answer_click(send, state, conn_id, None, dest, dest_plane,
+                                 cur_plane, dest_plane, cur_plane)
+    if routed:
+        print(f"[c{conn_id}] INTERACT-WALK: routed the player to "
+              f"({dest[0]:.0f}, {dest[1]:.0f}), {INTERACT_STOP:.0f} u short of "
+              f"agent {agent_id}, over our mesh (OURS; --no-interact-route "
+              f"reverts to the hold alone)", flush=True)
+    return bool(routed)
 
 
 def interact_pending_tick(send, state, conn_id):
@@ -572,9 +654,16 @@ def _handle_interact(send, state, conn_id, agent_id, interact_byte=0):
             if INTERACT_WALK:
                 _order_walk(send, state, conn_id, agent_id, spot)
             state["pending_interact"] = (agent_id, interact_byte)
+            routed = interact_route(send, state, conn_id, agent_id, spot)
+            # This line used to say "walking the player over" whatever the
+            # flags said, with INTERACT_WALK off -- the owner read a walk that
+            # never came. It names what actually went out now.
+            how = ("routed over our mesh" if routed
+                   else ("0x002A walk order (--interact-walk)" if INTERACT_WALK
+                         else "NO walk -- the player walks over themselves"))
             print(f"[c{conn_id}] INTERACT with agent {agent_id} at {gap:.0f}u "
                   f"is beyond INTERACT_RANGE ({INTERACT_RANGE:.0f}u) -- "
-                  f"walking the player over and HOLDING the interact "
+                  f"HOLDING the interact; {how} "
                   f"(~{max(0.0, gap - INTERACT_RANGE) / DEFAULT_RUN_SPEED:.1f} s "
                   f"at run speed)", flush=True)
             return
@@ -1248,6 +1337,15 @@ GAME_SMSG_AGENT_UPDATE_DESTINATION = 0x002A
 # dropping it) and it works today for a player who walks over on the KEYBOARD,
 # because that path does report position.
 INTERACT_WALK = False
+
+# The ROUTED interact-walk (SLICE-B5's follow-up, 2026-09-12): an
+# out-of-range interact is answered as a click at the approach point through
+# the router, and the hold serves on arrival. ON by default -- the router is
+# the shipped click path and this is one more click -- and
+# `--no-interact-route` is the revert: the hold alone, which is every run
+# before today and the arm the owner described as "doesn't automatically path
+# the player to them".
+INTERACT_ROUTE = True
 
 # Print every client position report with our own belief beside it, plus the
 # origin each click's collision ray is cast from. OFF by default -- it is a
@@ -24829,6 +24927,12 @@ def main():
         print(f"HERO BAR: {len(HERO_SKILLS)} skill(s) "
               f"{[s[0] for s in HERO_SKILLS]} -- the party body casts "
               f"(SLICE-B7c). Heals only; see --hero-skills.", flush=True)
+    if a.no_interact_route:
+        global INTERACT_ROUTE
+        INTERACT_ROUTE = False
+        print("[map] --no-interact-route: an out-of-range interact is HELD "
+              "and nobody walks the player over. Every run before 2026-09-12, "
+              "and the known-bad arm.", flush=True)
     if a.no_hero_follow:
         global HERO_FOLLOW
         HERO_FOLLOW = False
