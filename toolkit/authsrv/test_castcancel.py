@@ -43,7 +43,7 @@ import checks  # noqa: E402
 # two-regime rule. 24 earlier that day, 21 before it, 15 when the file
 # carried the movement door alone. Measured both ways: 30 with a vault, 30
 # without -- §7 stubs nothing it does not already stub.
-LEDGER = checks.Ledger("cast cancel", floor=31)
+LEDGER = checks.Ledger("cast cancel", floor=32)   # +1 2026-09-12: the queued drop's stop property (SLICE-F20); from the green run
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -196,6 +196,18 @@ def section_attack_skills():
               and not state["pending_casts"],
               "two releases, no recharge for either",
               f"e2s={e2s}, pending={state['pending_casts']}")
+        stops = [v for op, v, _ in sent2 if op == 0x009F
+                 and v[0] in (authsrv.agents.GV_SKILL_STOPPED,
+                              authsrv.agents.GV_CAST_DROPPED,
+                              authsrv.agents.GV_ATTACK_SKILL_STOPPED)]
+        check(stops == [[authsrv.agents.GV_SKILL_STOPPED, PLAYER, 0],
+                        [authsrv.agents.GV_CAST_DROPPED, PLAYER, 0]],
+              "and each is stopped by what it had DONE: the begun spell with "
+              "59 (the body is mid-cast), the queued attack skill with 45 -- "
+              "the never-began marker, 4 of 4 pre-begin drops on the wire "
+              "(SLICE-F20) and 0 of 6 begun cancels; castmech 3e's rival "
+              "candidate, confirmed",
+              f"stops={stops}")
     finally:
         authsrv.skill_timing = saved_t
         authsrv._is_attack_skill = saved_a

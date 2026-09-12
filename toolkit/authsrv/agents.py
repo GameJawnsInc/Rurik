@@ -1104,6 +1104,14 @@ GV_INSTANT_SKILL_ACTIVATED = 48
 # so there may be no un-set on this path (SLICE-F1's last item).
 GV_GLOW = 29
 GLOW_ROWS = 11
+# SLICE-F20: the release marker of a cast that NEVER BEGAN -- [45, agent, 0]
+# immediately before the bare E2, 4 of 4 pre-begin drops on the live wire
+# (castmech 3's terminated cast, and the three approaches cut short: the
+# player's own move at 20260810T235916 t=276.699, the target's death at
+# 20260817T231139 t=525.104, a 0x0026 press at t=710.693) and 0 of 6 cancels
+# of a cast that had begun (those carry 59 for a spell, 4 of 4, and 49 for an
+# attack skill, 2 of 2). castmech 3e's "queued-drop" candidate, confirmed.
+GV_CAST_DROPPED = 45
 GV_ATTACK_SKILL_STOPPED = 49
 GV_ATTACK_SKILL_ACTIVATED = 50
 GV_SKILL_FINISHED = 58
