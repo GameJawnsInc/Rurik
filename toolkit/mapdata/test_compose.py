@@ -40,7 +40,7 @@ import codedstr                                                  # noqa: E402
 import textwrite                                                 # noqa: E402
 
 # MEASURED from a green run, 2026-09-12. No optional section, so one number.
-LEDGER = checks.Ledger("archive composer", floor=24)
+LEDGER = checks.Ledger("archive composer", floor=26)
 check = checks.adopt(LEDGER)
 
 
@@ -204,6 +204,13 @@ def section4():
     check("Gw.exe" not in names and "Gw.dat" not in names,
           "the client and the archive are NOT products -- --fresh re-copies "
           "the archive on its own line and never touches the exe")
+    import inspect
+    src = inspect.getsource(compose.assemble)
+    check('if n == "Gw.dat" and os.path.exists(dst):' in src
+          and src.index('if n == "Gw.dat"') < src.index("os.path.getsize(dst) == size"),
+          "and a plain --build KEEPS a present archive before any size test -- "
+          "every write changes its size, and on 2026-09-12 the size test "
+          "copied the pristine snapshot over a composed archive")
     why = refused(compose.manifest, FakeWorld({"compose": {
         "a/b": {"dat_source": "x", "areas": []}}}), "a/b")
     check(why and "directory name" in why,

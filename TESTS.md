@@ -891,7 +891,11 @@ Every one of these, in the order they were written:
   the exe BESIDE the archive, the two facts `deploy.launch`'s comment says a
   run cannot do without. Section 4 pins `--fresh`'s product list to NAMES --
   an area's four build files and this tool's own journals, never the client or
-  the archive. Floor 24, MEASURED 2026-09-12. No vault, no archive, no client;
+  the archive -- and, since the second build of the day, that a plain `--build`
+  KEEPS a present archive before any size test: every archive write changes its
+  size, and the size test copied the pristine snapshot over a composed archive.
+  Floor 26, MEASURED 2026-09-12 (24 before the corridor joined the manifest and
+  the keep rule was pinned). No vault, no archive, no client;
   ~2 s),
   `toolkit/mapdata/test_skillnames.py` (the 188 authored skill names a custom
   profession needs -- the text sibling of `glyphs.py`, and like it the file is
@@ -2551,6 +2555,15 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   compiled chunk existing. They are a different question -- nothing declares
   those optional, so the fix there is an unconditional assertion, and it needs
   its own evidence about what the compiler always emits.
+  **Section 14 (SLICE-B6, 2026-09-12): the RECTANGULAR footprint.** `area_dims`
+  reads `dims = 64` or `dims = [32, 128]`; `gen_corridor` fills the long axis on
+  the lattice with worst moved 0 (every edge on a multiple of 4 -- the first
+  draft's column-10 edge cost one snapped sample); the encoded terrain decodes
+  back as 32x128 and NOT 128x32, tag 0's y,x order that no square map could
+  refute; the floor measures 0.0 and the banks 51.3 degrees; and main() hands
+  `dim_y` to the snap and to `assemble` on its own source, refusing a
+  rectangular row over a square-only generator. 15 checks; floor 233 -> 248,
+  MEASURED on the green run. The client half is FINDINGS SLICE-F13.
   Sections 0-1 and 3-13 need no vault and score 226 against a floor of 230 (both
   MEASURED 2026-08-21, the vault-less one with `RURIK_VAULT` pointed at an empty
   directory, which exits 1 naming the 4-check shortfall), so the floor still

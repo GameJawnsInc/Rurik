@@ -1091,3 +1091,40 @@ NOT verified is the CLIENT: no compile, no readback and no walk had happened \
 when this row was written, and the tree-placement y-flip fix in deploy.py \
 (grid row 0 renders at world maxY) is a RECONSTRUCTION from FINDINGS 4 plus \
 W23's flipped apron trapezoid, confirmed by no client run yet."""
+
+# SLICE-B6: THE CORRIDOR. The slice's explorable: a straight walkable floor
+# between two banks the client will not mesh, along the LONG axis of the first
+# RECTANGULAR map this toolkit has authored (SLICE-U4 -- `terrain._gate_dims`
+# forbids nothing about the aspect ratio; nothing had tried one on a client).
+# `dims = [x, y]`, x then y, the order `stripbuild.default_rect` takes:
+# 32 cells (3,072 u) across, 128 cells (12,288 u) long. The rect is
+# (0, 0, 3072, 12288); grid row 0 is world maxY.
+[area.corridor]
+name = "The Corridor"
+map_id = 168
+dims = [32, 128]
+heights = "corridor"
+# The floor's south end: x = 1536 is the floor's centre column (gx 16), y = 1536
+# is grid row 111 -- 16 rows in from the south wall, on dead-flat floor. The
+# seed and the map row's spawn are the same point on purpose.
+seed_x = 1536.0
+seed_y = 1536.0
+donor_file_id = 0x1B97D
+donor_row = 7982          # the 38797 answer; a cross-check, not the lookup
+constants_file_id = 0x22E2C
+constants_row = 46196     # the 38797 answer; a cross-check, not the lookup
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 0                 # no props: the walls are terrain, and a prop on the
+                          # floor would be a second thing to explain in the mesh
+reserve_bytes = 8192      # frontier's budget; the same 4,096 cells, so the same
+                          # order of compressed size (frontier installs 2,032 B)
+map_flags = 1             # WORLDMAPS-W11: bit 0 ungates the water rule, as
+                          # frontier; top byte 0 keeps the 15/35/30 slope set,
+                          # under which the 51.3-degree banks are class-2
+
+[area.corridor.provenance]
+source = "invented"
+verified = """Ours, chosen rather than observed, like every area row. What this one is FOR: the first non-square footprint (SLICE-U4), and the slice's explorable (studies/slice/PLAN.md SLICE-B6). The walls are SLOPE, not props: WORLDMAPS-W20 and W23 measured that ground past the slope cut is class-2, does not mesh, and cannot be climbed out of flat ground -- so a 120-per-cell bank (51.3 degrees, past 45 in both threshold sets) is a wall the flood fill stops at and the plateau above it is pruned by connectivity. Verified offline 2026-09-12 (`test_deploy` section 14): the 32x128 field round-trips 4,096/4,096 samples exactly after the lattice snap (every rise a multiple of 4 on 4x4-aligned columns, W20's instrument), the 16-cell floor measures 0.0 degrees and the four-cell banks 51.3 under `quad_slope_deg` (every edge on a multiple of 4 -- the first draft's column-10 edge cost one snapped sample), and the encoded Stripped terrain decodes back as 32x128 and NOT 128x32 -- tag 0 stores dimY before dimX, and a square map cannot tell the two readings apart (strippedterrain.py's header), so this row is the first that can. What is NOT verified offline is the CLIENT: whether it compiles a rectangle at all, and whether the banks it meshes are the ones authored. That is the run."""

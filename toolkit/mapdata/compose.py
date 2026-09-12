@@ -288,6 +288,21 @@ def assemble(name, row, fresh=False):
         if not os.path.exists(src):
             raise Refused(f"{n} missing at {src}")
         size = os.path.getsize(src)
+        # THE ARCHIVE IS NEVER RE-COPIED BY A PLAIN --build. It is the thing
+        # being built: every write into it changes its size (a datalloc
+        # creation grows the MFT by two rows), so "present at the source's
+        # size" is exactly the test that FAILS once the build has done its
+        # job. MEASURED 2026-09-12: the second --build of `slice` saw a
+        # 48-byte difference, copied the pristine snapshot over a composed
+        # archive, re-relocated the string into it, and was then refused by
+        # frontier's own allocation journal describing a chain the copy no
+        # longer held -- the guard downstream caught what this line caused.
+        # Only --fresh replaces it, and --fresh removes the journals with it.
+        if n == "Gw.dat" and os.path.exists(dst):
+            print(f"  {n:18s}present ({os.path.getsize(dst) / 1e6:.1f} MB); "
+                  f"kept -- the archive is what --build writes into, and "
+                  f"only --fresh re-copies it")
+            continue
         if os.path.exists(dst) and os.path.getsize(dst) == size:
             print(f"  {n:18s}present ({size / 1e6:.1f} MB)")
             continue

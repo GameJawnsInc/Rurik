@@ -166,7 +166,7 @@ PRESEARING_ZONES = 7208        # what the first run wrongly pulled in
 # serve-verdict checks, 84 before section 8's dry-run and spill checks, 56
 # before section 8 and the create branch, 35 before section 7 and the
 # compression checks, 25 before section 6.
-LEDGER = checks.Ledger("test_deploy", floor=233)
+LEDGER = checks.Ledger("test_deploy", floor=248)
 check = checks.adopt(LEDGER)
 
 
@@ -3054,6 +3054,94 @@ def section2(area):
           f"{len(ids)} chunks")
 
 
+
+def section14():
+    """SLICE-B6: a RECTANGULAR footprint, offline, and what only a run can say.
+
+    Every layer under `deploy` took two axes all along; `deploy.main` was the
+    one place spelling `dim, dim`. So the checks here are about the seam --
+    the row's `dims` reaching both axes, the generator filling the long one,
+    and the one codec fact a square map can never test: tag 0 stores dimY
+    before dimX, and 32x128 is the first field that can tell the readings
+    apart. The CLIENT's answer (SLICE-U4) is a run, and is not claimed here.
+    """
+    print("\n14. SLICE-B6: a rectangular footprint -- the corridor")
+    import mapgen
+    from stripbuild import quad_slope_deg, default_rect, check_seed
+
+    check(deploy.area_dims({"dims": 64}) == (64, 64)
+          and deploy.area_dims({"dims": [32, 128]}) == (32, 128),
+          "area_dims reads a square from an int and a rectangle from [x, y]")
+    try:
+        deploy.area_dims({"dims": [32]})
+        bad = False
+    except deploy.Refused:
+        bad = True
+    check(bad, "and refuses a one-element list rather than guessing the other axis")
+
+    dx, dy = 32, 128
+    raw = mapgen.gen_corridor(dx, dim_y=dy)
+    check(len(raw) == dx * dy,
+          "gen_corridor fills the whole rectangle", f"{len(raw)} = {dx}x{dy}")
+    snapped, worst = stx.snap_field(raw, dx, dy)
+    check(worst == 0 and snapped == raw,
+          "the corridor is ON the lattice: every rise a multiple of 4 on "
+          "4x4-aligned columns, so the snap moves nothing", f"worst {worst}")
+    trn = stx.StrippedTerrain.build(dx, dy, snapped)
+    back = stx.StrippedTerrain.decode(trn.encode())
+    check((back.dim_x, back.dim_y) == (dx, dy),
+          "the encoded terrain decodes back as 32x128 and NOT 128x32 -- the "
+          "y,x order of tag 0, which no square map could ever have refuted",
+          (back.dim_x, back.dim_y))
+    same = sum(1 for a, b in zip(back.heights, snapped) if a == b)
+    check(same == dx * dy,
+          "and the height field round-trips exactly", f"{same}/{dx * dy}")
+
+    rect = default_rect(dx, dy)
+    check(rect == (0.0, 0.0, 3072.0, 12288.0),
+          "the rect the converter accepts is 3072 x 12288 -- long on y",
+          rect)
+    seed = (1536.0, 1536.0)
+    slope = check_seed(snapped, dx, dy, rect, seed)
+    check(slope == 0.0,
+          "the seed (the map row's spawn) is on dead-flat floor", f"{slope}")
+    floor = [quad_slope_deg(snapped, dx, dy, gx, 64) for gx in range(9, 23)]
+    bank = [quad_slope_deg(snapped, dx, dy, gx, 64) for gx in (5, 6, 25, 26)]
+    check(all(v == 0.0 for v in floor) and all(v > 45.0 for v in bank),
+          "mid-corridor: the floor measures 0.0 and the banks past 45 "
+          "degrees -- class-2 under BOTH slope sets (W20), so the flood "
+          "fill stops at them", f"floor {set(floor)} bank {set(bank)}")
+    ends = [quad_slope_deg(snapped, dx, dy, 16, gy) for gy in (1, 2, 125, 126)]
+    check(all(v > 45.0 for v in ends),
+          "and both ENDS of the long axis are banked the same way, so the "
+          "floor is closed rather than running off the rect", set(ends))
+    # The plateau above the bank is flat, so a naive "flat = walkable" reading
+    # would call it floor. It is unreachable by W23 -- but that is the
+    # client's verdict, and the readback's trapezoid count is where it shows.
+    top = quad_slope_deg(snapped, dx, dy, 2, 64)
+    check(top == 0.0 and snapped[deploy.trn_mod.Terrain.index(2, 64, dx)]
+          == mapgen.CORRIDOR_BASE - mapgen.CORRIDOR_WALL_DZ * mapgen.CORRIDOR_WALL_CELLS,
+          "the plateau beyond the bank is flat and 480 u up -- flat ground "
+          "the mesh must NOT reach, which only the compiled mesh can say",
+          f"{top} at {snapped[deploy.trn_mod.Terrain.index(2, 64, dx)]}")
+    sq = mapgen.gen_corridor(64)
+    check(len(sq) == 64 * 64,
+          "called with one argument, like every generator in section 1, it "
+          "fills a square", len(sq))
+
+    # THE SEAM, on the syntax tree: main() snaps and assembles with BOTH axes.
+    import inspect
+    src = inspect.getsource(deploy.main)
+    check("stx.snap_field(heights, dim, dim_y)" in src
+          and "assemble(area, heights, donor, dim, dim_y=dim_y)" in src,
+          "main() hands the second axis to the snap and to assemble -- the "
+          "two lines that used to say `dim, dim`")
+    check("gkw[\"dim_y\"] = dim_y" in src
+          and "only fills a square" in src,
+          "and a rectangular row over a square-only generator is REFUSED "
+          "rather than built square under the row's name")
+
+
 def main():
     area = section0()
     section1(area)
@@ -3068,6 +3156,7 @@ def main():
     section11()
     section12()
     section13()
+    section14()
     section2(area)
     return LEDGER.verdict()
 

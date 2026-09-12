@@ -30,9 +30,10 @@ name = "The slice archive -- SLICE-B9"
 # directory, whose archive the client writes to on every run.
 dat_source = "client/2026-08-13_64fae3b1369b/Gw.dat"
 # Areas installed under their OWN created file ids (maps.toml `created = true`).
-# `frontier` stands in for the corridor until SLICE-B6 authors one; it is the
-# WORLDMAPS-W3/W4 chain, the created-map mechanism's first client-proven case.
-areas = ["frontier"]
+# `frontier` is the WORLDMAPS-W3/W4 chain, the created-map mechanism's first
+# client-proven case and SLICE-B9's witness; `corridor` is the slice's
+# explorable (SLICE-B6), the first rectangular footprint.
+areas = ["frontier", "corridor"]
 
 [compose.slice.provenance]
 source = "invented"

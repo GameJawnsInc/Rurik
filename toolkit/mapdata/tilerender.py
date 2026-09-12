@@ -178,7 +178,11 @@ def authored_heights(area_row):
     """
     import deploy
     import terrain as trn_mod
-    dim = int(area_row["dims"])
+    dim, dim_y = deploy.area_dims(area_row)
+    if dim_y != dim:
+        raise SystemExit(f"tilerender draws a SQUARE footprint; this area is "
+                         f"{dim}x{dim_y} (SLICE-B6's corridor is the first "
+                         f"rectangle, and its atlas tile is unbuilt)")
     tiled = deploy.GENERATORS[area_row.get("heights", "flat")](dim)
     return [tiled[trn_mod.Terrain.index(gx, gy, dim)]
             for gy in range(dim) for gx in range(dim)], dim

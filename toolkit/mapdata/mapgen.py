@@ -382,7 +382,54 @@ def gen_caldera(dim, base=None):
     return out
 
 
+# SLICE-B6: the corridor. A straight walkable floor between two walls the
+# client will not mesh, running the LONG axis of a rectangular map -- the
+# first non-square footprint this toolkit has authored (SLICE-U4).
+#
+# THE WALLS ARE SLOPE, NOT PROPS. WORLDMAPS-W20/W23: ground steeper than the
+# slope set's cut is class-2 and does not mesh, and class-2 ground cannot be
+# climbed out of flat ground -- so a bank of CORRIDOR_WALL_DZ per 96-unit cell
+# (atan(120/96) = 51.3 degrees, past 45 in BOTH threshold sets of FINDINGS 34)
+# is a wall the flood fill stops at, and the plateau above it is pruned by
+# connectivity. Every rise is a multiple of 4 on 4x4-ALIGNED columns and rows
+# so the lattice snap moves nothing (W20's instrument, `gen_ramp_fine`) -- the
+# first draft put the floor's edge at column 10 and the snap moved one sample,
+# because `snap_block` projects each 4x4 sub-block on its own and a boundary
+# inside one quantises the whole block. 16 floor cells from a 32-wide map
+# leaves banks at 4..7 and 24..27: every edge on a multiple of 4.
+CORRIDOR_BASE = -13         # the floor, negated elevation like every field here
+CORRIDOR_FLOOR = 16         # cells of flat floor across the short axis (1536 u)
+CORRIDOR_WALL_CELLS = 4     # cells of bank on each side before the plateau
+CORRIDOR_WALL_DZ = 120      # per cell; 51.3 degrees, class-2 under both sets
+CORRIDOR_END_CELLS = 4      # the same bank closes both ends of the long axis
+
+
+def gen_corridor(dim, dim_y=None, area=None):
+    """A flat corridor along the long axis, walled by class-2 banks.
+
+    `dim` is the SHORT axis (x) and `dim_y` the long one; called with one
+    argument -- the way every other generator is, and the way `test_deploy`
+    section 1 and `tilerender` call all of them -- it is a square corridor.
+    """
+    dim_y = dim if dim_y is None else dim_y
+    out = [0] * (dim * dim_y)
+    half = CORRIDOR_FLOOR // 2
+    lo, hi = dim // 2 - half, dim // 2 + half - 1        # floor columns
+    for gy in range(dim_y):
+        for gx in range(dim):
+            # distance in cells from the floor, on each axis
+            dx = lo - gx if gx < lo else (gx - hi if gx > hi else 0)
+            dy = (CORRIDOR_END_CELLS - gy if gy < CORRIDOR_END_CELLS
+                  else (gy - (dim_y - 1 - CORRIDOR_END_CELLS)
+                        if gy > dim_y - 1 - CORRIDOR_END_CELLS else 0))
+            d = min(max(dx, dy), CORRIDOR_WALL_CELLS)
+            out[trn_mod.Terrain.index(gx, gy, dim)] = (
+                CORRIDOR_BASE - CORRIDOR_WALL_DZ * d)
+    return out
+
+
 GENERATORS = {"flat": gen_flat, "plaza": gen_plaza, "ramp": gen_ramp,
+              "corridor": gen_corridor,
               "ramp_fine": gen_ramp_fine,
               "ramp_uniform": gen_ramp_uniform,
               "caldera": gen_caldera}
