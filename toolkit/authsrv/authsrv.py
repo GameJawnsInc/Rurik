@@ -17987,6 +17987,34 @@ def spawn_population(send, state, origin, conn_id, area=None):
         # is OURS and is the npc row's own key: commit the id, resolve the
         # string at run time. It reaches logs only, never the wire.
         label = npc.get("name") or str(row["npc"])
+        # SLICE-B2: the STAT BLOCK is per row now, and it was not. Until
+        # 2026-09-12 every area-spawned body took the module-level
+        # ENEMY_SKILLS and ENEMY_ATTACK_SPEED and carried NO `armor_rating` at
+        # all -- so "two monster archetypes" could not mean anything mechanical
+        # (every spawn was a clone with one shared bar), and the player's swing
+        # against any of them silently ran with no armour term, because
+        # `taker_damage` reads `agent.get("armor_rating")` and the key was
+        # absent. The legacy single-enemy path (`_spawn_one_enemy`) had all
+        # four of these; only the area path did not.
+        #
+        # EVERY DEFAULT IS TODAY'S BEHAVIOUR, so a row that says nothing spawns
+        # exactly what it spawned before this change. `--enemy-skills` still
+        # reaches a row that declares no bar of its own, which is what keeps
+        # the existing flag arms meaningful.
+        #
+        # ARMOUR IS DERIVED, NOT DEFAULTED. `creature_armor_rating` is the
+        # WIKI formula over level and profession (combatmath.py), the same
+        # call the legacy path makes, and a row may override it outright. A
+        # flat constant here would be an invented number wearing a content
+        # row's authority.
+        bar = row.get("skills")
+        if bar is None:
+            bar = ENEMY_SKILLS
+        else:
+            # A content row gives [[id, activation, recharge], ...]; an EMPTY
+            # list is a real answer (this body swings and casts nothing) and
+            # must not fall through to the global.
+            bar = tuple(tuple(sk) for sk in bar)
         entry = {
             "pos": (x, y), "plane": plane,
             "health": hp, "max_health": hp,
@@ -17995,12 +18023,15 @@ def spawn_population(send, state, origin, conn_id, area=None):
             "npc": npc,
             "definition": int(row["definition"]),
             "allegiance": allegiance,
-            "attack_speed": ENEMY_ATTACK_SPEED,
+            "attack_speed": float(row.get("attack_speed", ENEMY_ATTACK_SPEED)),
+            "armor_rating": creature_armor_rating(
+                dict(npc, level=row.get("level", npc.get("level", 0))),
+                row.get("armor_rating")),
             "effects": 0,
             "resend_definition": bool(row.get("resend_definition", False)),
             "attacks_back": bool(row.get("attacks_back", False)),
-            "skills": ENEMY_SKILLS,
-            "skill_ready": [0.0] * len(ENEMY_SKILLS),
+            "skills": bar,
+            "skill_ready": [0.0] * len(bar),
         }
         create_agent_world(send, state, int(row["agent_id"]), entry, key,
                            conn_id=conn_id)
