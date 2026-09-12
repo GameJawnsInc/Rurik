@@ -97,6 +97,53 @@ bodies produce a legible frame** and **the control draws its white box**. Below 
 verdict is ABORT — fix the harness and re-run — and specifically NOT "the shells do not
 render".
 
+## 4a. RESULT — ran 2026-09-11, `vault/captures/harness/20260911T231549`, **SCORES**
+
+`--map 146 --area parade`, build 38797, loopback, agent-driven, RUN VERDICT PASS.
+The gamesrv log carries all fifteen placements and **exactly eleven
+`MONSTER_COMPOSITE` sends** — the eleven rows that carry a body, with the control
+correctly getting none. The arm was armed on the wire before anything was judged by eye.
+
+**The floor is met and the control passed: 15 of 15 bodies legible (floor 12 of 14), and
+the control drew its white box.** Scoring proceeds.
+
+| # | question | answer |
+|---|---|---|
+| 1 | render, box, or nothing? | **14 creatures + 1 white box. Nothing missing, nothing blank.** |
+| 2 | nameplates? | **All fifteen drew one.** Wolf · Bandit Raider · Bandit Firestarter · Plague Worm · River Skale · River Skale Tad · Lord Darrin · Mesmer Trainer · Ascalonian Townsfolk · Academy Monk · Necromancer · Outfitter · Lieutenant Fisk · Harner · Harner |
+| 3 | best warrior / monk pair? | See below — and the answer is not the one the roster expected |
+| 4 | `def_1420`'s 5-file closure | **REFUTED as a suspicion.** It rendered a normal humanoid ("Bandit Firestarter") with no visible defect. The small closure means a shell that reuses its neighbours' files, not a broken one |
+| 5 | the three `82023` levels | **Different bodies AND different names**: level 1 and level 0 came back "River Skale" and "River Skale Tad". The shell is a species, the level is the life stage |
+
+**The join, and how much of it is earned.** Ten of fifteen are DETERMINED by a property
+no screenshot was needed for; five are CONSTRAINED and not determined.
+
+- **By construction:** `def_1465` and `parade_control` are the two "Harner"s, one drawn
+  and one boxed — the A/B the control was built as.
+- **By allegiance:** only `def_1421` and `def_1420` carry `band`, and only two names are
+  Bandit-anything. Within the pair, profession decides: Warrior → Raider,
+  Elementalist → **Firestarter**, which is a fire name on a fire profession.
+- **By the level pairing:** shell `82023` is the only one present at two levels, and
+  "Tad" is a juvenile — so level 0 is the Tad.
+- **By elimination inside Tier A:** the remaining two Tier A rows take the remaining two
+  non-human names, `def_1346` (speed 360, the only Ranger, the only quadruped in frame)
+  → Wolf, `def_1442` → **Plague Worm**.
+- **Uniquely by profession:** exactly one Mesmer (`def_1510` → Mesmer Trainer) and exactly
+  one Necromancer (`def_1473` → Necromancer).
+- **NOT determined (5):** `def_1458`, `def_1470`, `def_1486`, `def_1490`, `def_2133` ↔
+  Lord Darrin, Ascalonian Townsfolk, Academy Monk, Outfitter, Lieutenant Fisk. Two of
+  them are Monks, so even "Academy Monk" narrows to a pair rather than landing. **The
+  cheap finisher is a second parade of just these five**, which cannot be ambiguous
+  because five bodies leave five names.
+
+**Question 3's answer, and it corrects the roster's own guess.** The roster expected a
+warrior/monk pair out of Tier A; Tier A has no monk in it — the two bandits are Warrior
+and Elementalist. The better pair uses the fact `npcdefs.py` already states in its header:
+**hostility is a property of a SPAWN, not of a type.** So the slice's warrior is
+**Bandit Raider** (`def_1421`, a real Pre-Searing hostile) and its monk is the **Academy
+Monk** body spawned hostile — a Tier B human template with `allegiance = "hostile"`. That
+costs nothing the engine does not already do.
+
 ## 5. What the run does not settle
 
 - **Species identity beyond the nameplate.** If a nameplate reads as a generic label, the

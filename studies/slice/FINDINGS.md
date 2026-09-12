@@ -158,6 +158,53 @@ still borrowed. What we measured is a three-argument call taking an on/off flag.
 not to. If a boss needs to stop glowing — on death, say — property 7 is the lead and
 property 29 is not.
 
+## SLICE-F7 — **SLICE-U2: the parade RAN and the client named fifteen creatures for us**
+
+OBSERVED, 2026-09-11, harness `20260911T231549`, build 38797, loopback, agent-driven,
+RUN VERDICT PASS. Full run sheet and scoring: [RUN-PARADE.md](RUN-PARADE.md) §4a.
+
+**The control passed, and it is why the rest of the run means anything.** One body was
+spawned deliberately without its `0x0057`; it drew the solid white untextured box. The
+gamesrv log shows exactly **eleven** `MONSTER_COMPOSITE` sends against fifteen creates —
+the eleven rows that carry a body — so the arm was armed on the wire before anything was
+judged by eye. Fifteen of fifteen bodies were legible against a floor of twelve of
+fourteen.
+
+**Fifteen nameplates, drawn by the client from its own string table:** Wolf, Bandit
+Raider, Bandit Firestarter, Plague Worm, River Skale, River Skale Tad, Lord Darrin,
+Mesmer Trainer, Ascalonian Townsfolk, Academy Monk, Necromancer, Outfitter, Lieutenant
+Fisk, Harner, Harner.
+
+**Ten of the fifteen join to a template on evidence; five do not, and the doc says which.**
+The joins rest on allegiance (`band` is carried by exactly two rows), a level pairing
+(shell `82023` at levels 1 and 0 → "River Skale" and its "Tad"), uniqueness of a
+profession (one Mesmer, one Necromancer), and construction (the two Harners are the
+control and its pair). The five unjoined are five human templates against five human
+names, and the finisher is a second parade of just those five, which cannot be ambiguous.
+
+**Two results that were not among the questions.**
+
+1. **`content/npcs.toml`'s `lakeside_worm` is named, and the promotion is decisive rather
+   than inferred.** That row's note said "Do not promote it to a real name until a client
+   renders it." One has: the nameplate read **Plague Worm**. The reason this does not
+   depend on picking the right body out of a fifteen-body frame is that a nameplate is the
+   client resolving `enc_name`, and the spawned row carries that row's four words
+   byte-identically — same words, same string, same plate. `studies/presearing`'s manifest
+   independently lists "Plague Worm" among Pre-Searing's quest-only creature types, from a
+   wiki pass with no connection to this definition slot; that corroborates and was not
+   used to reach it.
+2. **The roster's own expectation was wrong, and the run corrected it.** RUN-PARADE
+   assumed the warrior/monk pair would come out of Tier A. **Tier A contains no monk** —
+   the two bandits are a Warrior and an Elementalist. The pair the slice should use is
+   **Bandit Raider** (`def_1421`) plus the **Academy Monk** body spawned HOSTILE, which
+   costs nothing because `npcdefs.py`'s own header already states that hostility is a
+   property of a spawn and not of a type.
+
+**One registered suspicion refuted.** `def_1420` closes to five files, by far the smallest
+in the set, and question 4 asked whether that would show. It did not — it rendered a
+normal humanoid. A small closure means a shell reusing its neighbours' files, not a broken
+one.
+
 ## SLICE-F6 — what the desk cannot settle
 
 Carried so the next session does not re-read the same bytes hoping for more:
