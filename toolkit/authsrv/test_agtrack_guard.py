@@ -378,8 +378,11 @@ def main():
     check("and from authsrv's CLI: none of the three revert flags is an "
           "argument any more (a comment may still tell the history)",
           '"--no-repin-stationary-waiver"' not in AS_SRC
+          and '"--no-repin-stationary-waiver"' not in ARGS_SRC
           and '"--waiver-walkstart-stands"' not in AS_SRC
+          and '"--waiver-walkstart-stands"' not in ARGS_SRC
           and '"--waiver-walkstart-pair-stands"' not in AS_SRC
+          and '"--waiver-walkstart-pair-stands"' not in ARGS_SRC
           and "_ag_flag.STATIONARY_WAIVER" not in AS_SRC)
     flags = authsrv.capture_flags()
     check("and from the capture header, which no longer names them -- a run "
