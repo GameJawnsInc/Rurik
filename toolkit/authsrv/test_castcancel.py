@@ -43,7 +43,7 @@ import checks  # noqa: E402
 # two-regime rule. 24 earlier that day, 21 before it, 15 when the file
 # carried the movement door alone. Measured both ways: 30 with a vault, 30
 # without -- §7 stubs nothing it does not already stub.
-LEDGER = checks.Ledger("cast cancel", floor=39)   # 2026-09-12: +1 the queued drop's stop property, +7 section 3b the attack-skill root (SLICE-F20); from the green run
+LEDGER = checks.Ledger("cast cancel", floor=40)   # 2026-09-12: +1 the queued drop's stop property, +8 section 3b the attack-skill root and the strike release (SLICE-F20); from the green run
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -258,15 +258,37 @@ def section_attack_skill_roots():
         check(cast.get("moves_refused") == 2,
               "each refused report is counted on the cast (printed once)",
               f"{cast.get('moves_refused')}")
-        # after the strike (E3 sent) the body is free
+        # after the strike (E3 sent) the body is free -- and the strike
+        # FREES THE HELD KEY: [8 -> 0] rides the E3 because a report was
+        # withheld (retail 3 of 3 with a withheld report)
         sent.clear()
         _rewind(state, 1.0)
         authsrv.cast_tick(send, state, 0)
-        check(cast["e3_sent"] and authsrv.attack_skill_roots(state) is None,
+        rel = [i for i, (op, v, _) in enumerate(sent)
+               if op == 0x009F and v == [authsrv.agents.GV_DISABLED, PLAYER, 0]]
+        e3 = [i for i, (op, _, _) in enumerate(sent) if op == 0x00E3]
+        check(cast["e3_sent"] and authsrv.attack_skill_roots(state) is None
+              and len(rel) == 1 and e3 and rel[0] > e3[0],
               "once the strike lands (E5 and E3 in the same instant for an "
-              "attack skill) nothing roots: the player moves before the "
-              "animation plays out -- the quarterstep",
-              f"e3_sent {cast['e3_sent']}")
+              "attack skill) nothing roots, and the E3 batch carries "
+              "[8 -> 0] behind the E3 -- the key held through the windup is "
+              "freed (the owner's fourth run: 'holding W ... doesn't move "
+              "me after the swing connects'); retail's attack-skill E3 "
+              "carries it exactly when a report was withheld, 3 of 3",
+              f"e3_sent {cast['e3_sent']}, release at {rel}, e3 at {e3}")
+        # ... and NOT when nothing was withheld (retail 0 of 3: the hold
+        # releases on the next input instead)
+        state = {"agents": {}}
+        _press(authsrv, send, state, skill=394)
+        sent.clear()
+        _rewind(state, 1.0)
+        authsrv.cast_tick(send, state, 0)
+        rel = [v for op, v, _ in sent
+               if op == 0x009F and v == [authsrv.agents.GV_DISABLED, PLAYER, 0]]
+        check(rel == [],
+              "with no report withheld the strike releases nothing -- the "
+              "hold goes on the next input, as retail's does (284.607, "
+              "617.247, 645.377)", f"{rel}")
         # an attack skill still walking in (SLICE-C2) does not root
         state = {"agents": {40: {"name": "t", "dead": False, "last_hit": 0.0,
                                  "max_health": 100.0, "health": 100.0,

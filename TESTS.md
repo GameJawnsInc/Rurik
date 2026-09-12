@@ -10214,6 +10214,14 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   lock pins ONE guard arm in `handle()` ahead of BOTH movement arms, so a moving 0x003D or
   a 0x003E during the windup gets no answer at all -- retail's own silence until the
   strike, 2 of 2 (studies/slice F20).
+  **The halt and the strike release (2026-09-12, the owner's fourth run).** `test_cancelwalk.py`
+  §7's attack arm flips: under pin with a moving belief the attack-skill burst now carries
+  the 0x002C pin and the 0x0028 halt (the `not is_attack` scoping is gone -- retail halts an
+  in-reach attack-skill press on a running body, 2 of 2, the one cast-stop it has been
+  captured sending), and the gate lock counts the unscoped `if CAST_STOP:` instead.
+  `test_castcancel.py` §3b (floor 39 -> 40): the E3 batch carries `[8 -> 0]` behind the E3
+  when a report was withheld during the windup (retail 3 of 3) and nothing when none was
+  (retail 0 of 3 -- the hold goes on the next input).
   `toolkit/authsrv/test_castcycle.py` (the four-opcode cast cycle against
   ArenaNet's own template — six complete cycles, two live captures, same order
   every time: E4 at the press, E5 at cast end carrying the recharge in whole

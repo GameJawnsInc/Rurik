@@ -1614,9 +1614,14 @@ prop-8 hold; the E4 press-ack and the debits precede it, so do not score
 "not first in the burst" as a misfire when reading the capture. Details
 that are choices, named as such: the tail SLOT is unwitnessed (retail
 never captured a cast-while-running start) and chosen so the movement
-family closes before the action family opens; the scoping is NON-ATTACK
+family closes before the action family opens; the scoping WAS NON-ATTACK
 (`not is_attack` — spells are the measured family, and an attack skill's
-start drives chase movement a halt would fight). Refused without
+start drives chase movement a halt would fight) **until 2026-09-12**: SLICE-C2
+moved the chase to a follow that begins the strike parked, and the in-reach
+attack-skill press on a running body turned out to be the one cast-while-running
+start retail HAS been captured answering — a bare `0x0028 [me]` in the press
+batch, 2 of 2, behind the `[8 → 1]` (`studies/slice/FINDINGS.md` F20). Both
+families take the halt now; the slot stays this arm's chosen one. Refused without
 `--zero-lead` and with `--cancel-answer`, `--stop-answer` (same opcode,
 two triggers — its own cell) or `--arrival-carry` (the halt cuts short a
 leg the F1b queue modelled as arriving); all three pairwise cells sit
