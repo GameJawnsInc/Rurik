@@ -1220,16 +1220,21 @@ def section_reach_and_approach():
     n_arms = src.count("_approach_abandon(state)   # ANIMREF-RE 38")
     n_all = (src.count("_approach_abandon(state)")
              - src.count("def _approach_abandon(state)"))   # the def is not a call
-    check(n_arms == 3 and n_all == 8,
+    check(n_arms == 3 and n_all == 10,
           "the 0x003D, 0x0047 and 0x003E arms each abandon the follow (3 "
           "tagged sites), attack_tick's two target-loss branches do (2), "
-          "approach_tick's retarget branch (1), and since ANIMREF-RE 39 a "
+          "approach_tick's retarget branch (1), since ANIMREF-RE 39 a "
           "move command (cancel_on_move) and the press that ends a click leg "
-          "(_press_supersedes) -- 8 call sites, no more",
+          "(_press_supersedes), and since the SLICE arc the interact-walk "
+          "(interact_route: a click supersedes a follow, SLICE-B5) and the "
+          "attack skill whose target dies on the approach (cast_tick's "
+          "approach arm, SLICE-C2) -- 10 call sites, no more",
           f"arms {n_arms}, all {n_all}")
-    check(src.count('state["click_moving_at"] = now') == 1,
+    check(src.count('state["click_moving_at"] = now') == 2,
           "the follow stamps the latch once, with the tick's `now` -- not "
-          "time.time(), which test_cancelwalk pins to the click arm alone",
+          "time.time(), which test_cancelwalk pins to the click arm alone -- "
+          "and interact_route stamps it once more as the click it is (SLICE-"
+          "B5: the 0x003E arm's own preparation, `now` read once above it)",
           "source pin")
 
 

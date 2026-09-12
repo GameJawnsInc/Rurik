@@ -871,7 +871,7 @@ is released as a cancel — the measured burst, no recharge, costs paid (GWW "Ca
 the log says how far (`strike_out_of_reach`, `test_castcycle` §2d, both arms one number
 apart). A press from out of range still activates; on retail that press begins an APPROACH
 (the player walks in and strikes on arrival), which the server has for ordinary attacks
-(`begin_attack`) and not yet for attack skills. **Named as the follow-up, not done.**
+(`begin_attack`) and not yet for attack skills. **Named as the follow-up; done the same day as SLICE-C2, SLICE-F20, with retail's contract for it measured.**
 
 **The kiting.** ANIMREF-RE 40 is measured retail: a hostile mid-follow does not swing (0 of
 4 multi-follow chases open an attack), it swings after the halt. At equal speed a follower
@@ -881,6 +881,98 @@ had moved by the strike. What made it a *glitch* was the strike from range: with
 enforced, kiting deals no damage either, and the fight is stand-and-swing on both sides.
 Whether retail's melee hit lands on a target that moved out during the windup is NOT
 MEASURED here and is the other half of this question.
+
+## SLICE-F20 — **SLICE-C2: an attack skill pressed from out of reach walks in, and retail's contract for it, read off the tapes**
+
+**The question** (SLICE-F19's follow-up): a press of an attack skill with the target past
+reach — what does retail's server send, when does it pay and animate, and what cancels it?
+Until 2026-09-12 ours activated at the press, paid and animated at once, and then (since
+C1) found nothing in reach at the strike and released it. The owner's Power Attack from
+170 u was exactly that press.
+
+**Measured, 2026-09-12**, over the 20 live captures (`livewire.decode_conn`, both
+directions on one clock, the observer by the self-scoped property 41): **94 c2s `0x0027`
+attack-skill presses, 80 accepted, 14 refused** (the §19 charge gate). Of the accepted,
+**51 are FREE presses** (E4 within 0.1 s of the press); **11 of those carry a `0x002A`
+follow to the target in the same instant** — the out-of-reach cell — and 40 do not.
+20260817T231139 t=717.315 (skill 385 → agent 9, a live chain) is the clean instance,
+and every other one has the same shape where it is not cut short:
+
+| instant | what retail sends | n |
+|---|---|---|
+| **the press** (+0.024–0.050 s, ONE batch) | `E4 [me, skill, copy]`, then `[8, me, 0]` and `GV_ATTACK_STOPPED [3, me, 0]` when a chain was live, then **`0x002A [me, target's own point, plane, plane, target]`** — **no debit, no animation** | 11 of 11 |
+| **while walking** | the follow re-issued every 0.5 s while the target moves (717.315: +0.552, +1.049) — ANIMREF-RE 38's contract, shared with the ordinary press | — |
+| **arrival** (0.23–1.9 s after the press) | **the cost** (`0x00D2 [me, skill, copy]` for adrenal skills, property 62 for energy — 248.991 skill 780 carries `[62, 27, frac]`), then **`0x00A0 [50, me, target, skill]`**, then **`[8, me, 1]`** | 3 of 3 uncut (717.315, 371.949, 657.289); 248.991 the energy one |
+| **the strike**, one windup after arrival | `[46, me, 0]`, the adrenaline gain, the damage `0x00A3 [17/16, target, me, f]`, `0x00D0`, `E3` — the R6 execution batch | 717.315: 0.566 s after arrival; 371.949: 0.565 s; `swing_windup(1.33)` = 0.565 |
+
+So an out-of-reach attack-skill press is **a queued cast whose begin instant is
+ARRIVAL**, not a clock: E4 at the press, the burst tail at the begin — the same rule
+castmech 3b/3c measured for a clock-queued cast (skill 105's debit and animation riding
+153's E3) — and the walk in between is the follow the ordinary attack already uses. The
+windup law lands the strike where retail lands it.
+
+**What cancels it, also measured:**
+
+- **The player's own movement before arrival** — 20260810T235916 t=276.699 (the ranger's
+  Power Shot → 276): follow at +0.034, a `0x003D` at +0.885, then `[45, 31, 0]` + `E2` at
+  +0.919 and **no debit ever**. The queued-not-begun cast dropped by movement — our
+  existing rule (`_mark_cancelled`, `spare_mid_attack`: an entry with no begin yet is
+  droppable whatever its family) reaches it because the approaching entry's `begin_at`
+  is +inf. n=1.
+- **The target dies on the way** — 525.104 (skill 384 → 12): follow at +0.038, the
+  target's death batch at +0.496 carries `[45, 13, 0]` + `E2`. Ours releases the entry
+  unpaid from cast_tick's approach arm. n=1.
+- **A `0x0026` attack press on the same target during the approach** — 710.693: follow at
+  +0.033, c2s `0x0026 [9, 0]` at +0.267, `[45, 11, 0]` + `E2` at +0.300, the follow
+  re-issued and the chain's own swing opening at +0.588. **NOT shipped**: n=1, and on ours
+  `begin_attack` on the same target simply cooperates with the entry (attack_tick pauses
+  its swing while the entry is short of its E3). Recorded for the next reader.
+- **Cancelled AFTER arrival** — 657.289 (arrival +0.232, then `[49, 11, 0]` + `E2` at
+  +0.796 with the chain's `attack_started` in the same batch) and 248.991 (arrival +0.542,
+  `[49, 27, 0]` + `E2` at +0.699, `attack_started` in the batch). Property 49 rides a
+  cancel after the begin, property 45 a cancel before it; neither is named in our
+  catalog and neither is sent (C1's rule: the release burst stays the measured
+  `[8→0], 59, E2`). What cancelled 657.289 is not readable off the wire — the target
+  took a hit from another agent 0.1 s earlier — and it is SLICE-C3's question in another
+  form (a strike that does not land on a target that moved). NOT MEASURED here.
+- **The press engages the chain**: 248.991 — after the skill's release the server opened
+  `attack_started [4, 27, 144, 0]` on the target in the SAME batch with no `0x0026` between
+  the press and it. n=1. Shipped for the approach case only (`state["attacking"] =
+  target` at the press; it is also what keeps attack_tick's own approach arm walking to
+  this target rather than a previous one); an in-reach attack-skill press engaging the
+  chain is the same n=1 and is left as it was — **ASSUMPTION, both ways, until a second
+  witness.**
+
+**Two things this cell does NOT settle.** (1) A press while the caster is BUSY (a cast
+short of its E3) with the target out of reach: no corpus press is both queued and out of
+reach; ours keeps the clock queue for it and C1's reach gate covers the strike. (2) Whether
+retail's in-reach attack-skill press with a swing in flight waits for that swing: the
+in-reach free cell's property-50 delay is p50 0.307 s (n=38) against the 0.024–0.05 s
+press-burst delay castmech 3b measured on the necromancer and ranger — a warrior with a
+live sword chain, so probably the swing in flight completing first. Not this item's
+question; recorded because the number was in the way.
+
+**Shipped:** `handle_skill_press` decides `approaching` (attack family, `ATTACK_APPROACH`,
+a live target past `attack_reach()` in the client's frame, caster free); the press sends
+E4 and the chain stop as before and then `_approach_send` in the same batch, pays and
+animates nothing, and appends the entry with `approach = target` and every instant +inf;
+`cast_tick`'s approach arm drives `approach_tick` (the ordinary attack's leg, re-paths and
+all), releases the entry unpaid if the target is gone, and on arrival
+`attack_skill_arrives` writes the clock (E5 = arrival + the windup for the table-0.0 case,
+else the listed activation), the begin branch pays and animates, and `[8 → 1]` closes the
+arrival burst. `--no-attack-approach` keeps the old press (no follow, strike from
+anywhere). `test_castcycle` §2e drives the whole cycle: the press batch, a walking tick
+that begins nothing, the arrival burst, the strike from the stop point through C1's gate,
+the in-reach control, the two unpaid cancels, the revert arm. **Unobserved on a client**
+until the owner's next pass; the hand-run question is one sentence — *press Power Attack
+on the boss from across the room: does the character walk in and strike on arrival, and
+does W on the way cancel it cleanly?*
+
+**Refuted if** the owner's press from range still strikes without walking, or the walk
+ends and nothing begins (the arrival predicate — `approach_tick`'s eta-or-stop-radius —
+disagreeing with the client's own resolver, which C1's gate would then show as a released
+strike at 80–144 u), or a queued clock-cast behind an approaching entry begins before the
+arrival.
 
 ## SLICE-F6 — what the desk cannot settle
 

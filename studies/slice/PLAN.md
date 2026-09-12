@@ -170,12 +170,14 @@ The six steps of §0 ran end to end by the owner's hand (SLICE-F18): quest from 
 west portal into the corridor, the fight, the boss, the portal back, the turn-in. **Two
 things measured on that run** that no scripted run could: the quest carrier survives two
 transfers, and the boss aura is red (SLICE-F2's bit, closed). **Two things reported
-against stock** (SLICE-F19), one fixed and one named:
+against stock** (SLICE-F19): the attack skill, fixed in two halves (C1 the reach at the
+strike, C2 the approach — SLICE-F20 measured retail's contract for the second), and the
+kiting, which is retail's own rule with one open question (C3):
 
 | Item | What | Status |
 |---|---|---|
 | **SLICE-C1** | **An attack skill strikes only in reach.** The Power Attack "glitch": press at range, keep running, the strike lands anyway — because retail's client holds the body through the swing and ours does not. `strike_out_of_reach` releases an out-of-reach strike as the measured cancel; `test_castcycle` §2d | **DONE 2026-09-12**, unobserved on a client |
-| **SLICE-C2** | **An attack skill from out of range should APPROACH**, as `begin_attack` already does for the ordinary swing — retail walks the player in and strikes on arrival; ours activates and then finds nothing in reach | a session |
+| **SLICE-C2** | **An attack skill from out of range APPROACHES**, as `begin_attack` already does for the ordinary swing. Retail's contract measured on 11 free out-of-reach attack-skill presses (SLICE-F20): E4 + the `0x002A` follow in the press batch, nothing paid; the debit, the property-50 animation and `[8→1]` at ARRIVAL; the strike a windup later. Ours: an approaching entry is a queued cast whose begin instant is arrival (`approaching` in `handle_skill_press`, `attack_skill_arrives`, cast_tick's approach arm); movement or the target's death on the way releases it unpaid. `test_castcycle` §2e | **DONE 2026-09-12**, unobserved on a client |
 | **SLICE-C3** | **Does retail's melee hit land on a target that left during the windup?** Ours drops it (both sides). One narrated live capture with a swing-then-step would settle it | a capture |
 
 ## 6. What this document does not claim

@@ -10178,6 +10178,26 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   Same day, `test_agentlife.py`'s send-site walk reads `overrides.json`'s field lists beside
   `messages.json`, as the codec does -- SLICE-B8's 0x01A5 send site (7 fields, the client's
   own 39-byte table) had been scored `catalog wants 6` since it landed.
+  **SLICE-C2 (2026-09-12).** `test_castcycle.py` §2e (floor 39 → 49 bare, 51 with the vault;
+  §2d re-aimed to press IN reach and move the target before the strike, since a press from
+  out of reach now walks): an attack skill pressed past `attack_reach()` sends E4 and the
+  `0x002A` follow to the target's own point in ONE batch and nothing else (no debit, no
+  animation, no hold); the entry names the target and has no clock; a tick while walking
+  begins nothing; at ARRIVAL (the follow's stop point, its eta passed) the debit, the
+  property-50 animation and `[8 → 1]` go out and the entry gets its clock from that instant;
+  the strike lands from the stop point through C1's gate. Controls and arms: in reach the
+  press is the old immediate burst and the chain is NOT engaged (F20's unshipped n=1); a
+  target that dies on the way and the player's own movement each release the entry with E2
+  and nothing paid; `--no-attack-approach` restores the press from anywhere. Retail's
+  contract behind every line is `studies/slice/FINDINGS.md` F20 (11 free out-of-reach
+  attack-skill presses across the live corpus). Three locks the slice arc had reddened
+  without running them were re-aimed the same day: `test_playerswing.py` §9k
+  (`_approach_abandon` call sites 8 → 10: `interact_route` since B5, cast_tick's approach
+  arm since C2; the latch stamp 1 → 2, `interact_route`'s click), `test_cancelwalk.py`'s
+  0x0028 site census (3 → 4, the player-named 2 → 3: `send_transfer`'s measured
+  0x0028-before-0x01A5 pair since B8), and `test_pools.py` §10b's hostile-heal fixture
+  (its ally is HURT now -- since B3 a hostile's heal is held while nobody is hurt, and
+  §10 is about the pool's pacing, not the heal gate).
   `toolkit/authsrv/test_castcycle.py` (the four-opcode cast cycle against
   ArenaNet's own template — six complete cycles, two live captures, same order
   every time: E4 at the press, E5 at cast end carrying the recharge in whole
