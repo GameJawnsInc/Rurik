@@ -144,6 +144,50 @@ and Elementalist. The better pair uses the fact `npcdefs.py` already states in i
 Monk** body spawned hostile — a Tier B human template with `allegiance = "hostile"`. That
 costs nothing the engine does not already do.
 
+## 4b. THE FINISHER — ten one-body runs, 2026-09-11, and §4a's own finisher plan was wrong
+
+**§4a said the finisher "cannot be ambiguous because five bodies leave five names". That
+is false and was caught before it cost anything:** five bodies in one frame is exactly the
+per-body join the first parade could not close. Five names against five bodies constrains
+the SET, not the pairing. So the finisher became **one body per area, one area per run** —
+a world containing exactly one creature has exactly one nameplate, and no projection,
+compass reading or elimination is involved.
+
+Ten runs, all PASS, each gamesrv log showing **two creates** (the player and one body):
+`20260911T233252`, `233403`, `233513`, `233623`, `233733`, `234024`, `234123`, `234311`,
+`234411`, `234510`.
+
+| template | shell | body | **nameplate** | how |
+|---|---|---|---|---|
+| `def_1421` | 141267 | 116647 | **Bandit Raider** | one-body run |
+| `def_1420` | 116226 | 116642 | **Bandit Firestarter** | one-body run |
+| `def_1442` | 116366 | — | **Plague Worm** | one-body run |
+| `def_1458` | 116228 | 116671 | **Lieutenant Fisk** | one-body run |
+| `def_1470` | 116227 | 116698 | **Outfitter** | one-body run |
+| `def_1473` | 116227 | 116709 | **Necromancer** | one-body run |
+| `def_1486` | 116225 | 116741 | **Academy Monk** | one-body run |
+| `def_1490` | 116225 | 116754 | **Ascalonian Townsfolk** | one-body run |
+| `def_1510` | 116225 | 116781 | **Mesmer Trainer** | one-body run |
+| `def_2133` | 116227 | 142142 | **Lord Darrin** | one-body run |
+| `def_1465` | 116228 | 116685 | **Harner** | by construction (the control's pair) |
+| `parade_control` | 116228 | withheld | **Harner**, drawn as a white box | by construction |
+| `def_1431` | 82023 | — | River Skale | shell pairing, NOT run |
+| `def_1434` | 82023 | — | River Skale Tad | shell pairing, NOT run |
+| `def_1346` | 128483 | 129929 | Wolf | the only one left, NOT run |
+
+**The correction, and it is the reason the extra runs were worth it.** §4a inferred
+`def_1470` (profession 3, Monk) was the "Academy Monk". **It is the Outfitter**, and the
+Academy Monk is `def_1486`. **Name-matches-profession is refuted as a join key** — which
+is a second, independent witness to what `studies/monsterai` already measured from the
+other direction (a "Ranger" on a melee model, a "Warrior" on a legless worm). Every
+profession-based pairing in §4a's join was re-run rather than kept, and the three rows
+still resting on inference are the three where the argument is structural instead:
+`82023` is the only shell present twice, and "River Skale" / "River Skale Tad" are the
+only two names sharing a stem.
+
+**What this changes for the slice:** the monk body is `def_1486`, not `def_1470`. The
+warrior is confirmed `def_1421`. Both were checked alone in an empty world.
+
 ## 5. What the run does not settle
 
 - **Species identity beyond the nameplate.** If a nameplate reads as a generic label, the

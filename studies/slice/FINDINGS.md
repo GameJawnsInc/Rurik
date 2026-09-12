@@ -205,6 +205,27 @@ in the set, and question 4 asked whether that would show. It did not — it rend
 normal humanoid. A small closure means a shell reusing its neighbours' files, not a broken
 one.
 
+**FINISHED 2026-09-11 by ten ONE-BODY runs, and the finisher corrected the finding above.**
+[RUN-PARADE.md](RUN-PARADE.md) §4b carries the table. Two things came out of it:
+
+- **`def_1470` is the Outfitter, not the Academy Monk.** This finding's first pass inferred
+  it from the profession byte (`def_1470` is profession 3). That was wrong, and
+  **name-matches-profession is refuted as a join key** — a second, independent witness to
+  what `studies/monsterai` measured from the other side. The Academy Monk is `def_1486`,
+  so **the slice's monk body changed**. The warrior, `def_1421` "Bandit Raider", was
+  re-checked alone in an empty world and holds.
+- **The method that fixed it is the finding worth keeping.** §4a's own plan said five
+  bodies would be unambiguous "because five bodies leave five names"; five bodies in one
+  frame is exactly the per-body join that failed the first time, and five names against
+  five bodies constrains the set, not the pairing. **One body per world has exactly one
+  nameplate** and needs no projection, compass or elimination at all — at eighty seconds a
+  run, certainty was cheaper than the argument for doing without it.
+
+Twelve of fifteen are now OBSERVED directly (ten runs plus the two Harners, which are the
+control and its pair by construction). The three left rest on a structural argument rather
+than a profession one: `82023` is the only shell present twice and "River Skale" / "River
+Skale Tad" are the only two names sharing a stem, which leaves Wolf.
+
 ## SLICE-F6 — what the desk cannot settle
 
 Carried so the next session does not re-read the same bytes hoping for more:
