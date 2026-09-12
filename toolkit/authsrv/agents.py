@@ -1097,6 +1097,13 @@ GV_MAX_HP_REACHED = 32
 GV_INTERRUPTED = 35
 GV_ATTACK_SKILL_FINISHED = 46
 GV_INSTANT_SKILL_ACTIVATED = 48
+# SLICE-F1: int property 29 [agent, index] selects a row of the client's own
+# s_glow (11 rows, asserted `index < arrsize(s_glow)` at ConstGlow.cpp(42)) --
+# the boss aura. 0 of 22,524 in the corpus; what the CLIENT does when told, not
+# a claim about retail's traffic. The forwarder never clears the bit it sets,
+# so there may be no un-set on this path (SLICE-F1's last item).
+GV_GLOW = 29
+GLOW_ROWS = 11
 GV_ATTACK_SKILL_STOPPED = 49
 GV_ATTACK_SKILL_ACTIVATED = 50
 GV_SKILL_FINISHED = 58

@@ -2563,7 +2563,11 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   refute; the floor measures 0.0 and the banks 51.3 degrees; and main() hands
   `dim_y` to the snap and to `assemble` on its own source, refusing a
   rectangular row over a square-only generator. 15 checks; floor 233 -> 248,
-  MEASURED on the green run. The client half is FINDINGS SLICE-F13.
+  MEASURED on the green run. The client half is FINDINGS SLICE-F13. **Plus
+  the log finder (same day, floor 248 -> 250):** `harnesslog.log_source` behind a
+  17 KiB banner, with the old 8 KiB probe as the control that misses it --
+  the gamesrv's banner had put `source:` at byte 9,350 and `serve_run` scored
+  a 5-of-5 run FAILED for want of a log.
   Sections 0-1 and 3-13 need no vault and score 226 against a floor of 230 (both
   MEASURED 2026-08-21, the vault-less one with `RURIK_VAULT` pointed at an empty
   directory, which exits 1 naming the 4-check shortfall), so the floor still
@@ -4001,6 +4005,10 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   spawn key raises, because a kill objective that can never fire is indistinguishable from a
   player who has not killed the right thing.
 
+  **SLICE-B6 (2026-09-12), floor 69 → 73:** §6 gains the BOSS AURA -- a row with `glow = 5`
+  sends int property 29 `[agent, 5]` for that body and none for the plain row beside it,
+  AFTER the create (the setter looks the agent up), and `glow = 11` is refused at load
+  naming s_glow's 11 rows rather than left for ConstGlow.cpp(42).
   **SLICE-B2 (2026-09-12).** `toolkit/authsrv/test_population.py` §6 (floor 51 → 69):
   the stat block is PER ROW. Seven checks, each paired with what it has to differ from --
   a row proving it carries a bar says nothing unless read against a row in the SAME table

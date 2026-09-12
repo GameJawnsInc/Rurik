@@ -1078,3 +1078,111 @@ note = """Ours, as errand_giver's note says. 950 u from the arrival point: far \
 enough that the quest's own words ("follow the green arrow to my companion") \
 describe something the player actually does, and inside the same trapezoid \
 tiling, MEASURED walkable."""
+
+# THE CORRIDOR'S POPULATION -- SLICE-B6, the slice's "fight 2 groups of 2, then
+# the quest boss". Map 168 is the corridor (content/areas.toml [area.corridor]):
+# floor x 768..2304, y 384..11904, the player arriving at (1536, 1536) at the
+# south end. The two groups sit 3,000 u apart along the long axis, each 3,000 u
+# from the last, so no group is inside another's aggro when the player reaches
+# it; the boss holds the north end. Ids: agents 90..94, definitions 60..62 --
+# one definition per TEMPLATE, because the definition is a raw array index on
+# the client and two rows sharing one must name the same npc (area_population).
+# The boss wears its own index so a later template variant costs no renumber.
+#
+# SKILL BARS ARE NOT SET HERE YET: that is SLICE-B3 (skill_effect rows and an
+# unconditional heal). Until then every body takes the module default bar,
+# which is what every hostile before B2 took.
+
+[spawn.corridor_raider_a]
+area = "corridor"
+npc = "bandit_raider"
+agent_id = 90
+definition = 60
+x = 1300.0
+y = 4600.0
+allegiance = "hostile"
+attacks_back = true
+max_health = 200
+enabled = true
+
+[spawn.corridor_raider_a.provenance]
+source = "invented"
+note = """Ours. Group A, 3,064 u north of the arrival point, on the floor's \
+west half; its monk is 470 u east and 100 u further on."""
+
+[spawn.corridor_monk_a]
+area = "corridor"
+npc = "academy_monk"
+agent_id = 91
+definition = 61
+x = 1770.0
+y = 4700.0
+allegiance = "hostile"
+attacks_back = true
+max_health = 160
+enabled = true
+
+[spawn.corridor_monk_a.provenance]
+source = "invented"
+note = """Ours. Group A's monk. Spawned HOSTILE -- the template is a retail \
+noncombatant, and the corridor makes it a monster, which is the slice's own \
+choice (studies/slice/PLAN.md, the owner's decisions)."""
+
+[spawn.corridor_raider_b]
+area = "corridor"
+npc = "bandit_raider"
+agent_id = 92
+definition = 60
+x = 1300.0
+y = 7600.0
+allegiance = "hostile"
+attacks_back = true
+max_health = 200
+enabled = true
+
+[spawn.corridor_raider_b.provenance]
+source = "invented"
+note = """Ours. Group B, 3,000 u past group A."""
+
+[spawn.corridor_monk_b]
+area = "corridor"
+npc = "academy_monk"
+agent_id = 93
+definition = 61
+x = 1770.0
+y = 7700.0
+allegiance = "hostile"
+attacks_back = true
+max_health = 160
+enabled = true
+
+[spawn.corridor_monk_b.provenance]
+source = "invented"
+note = """Ours. Group B's monk."""
+
+[spawn.corridor_boss]
+area = "corridor"
+npc = "bandit_raider"
+agent_id = 94
+definition = 62
+x = 1536.0
+y = 10400.0
+allegiance = "hostile"
+attacks_back = true
+max_health = 480
+level = 8
+# THE AURA. One int property 29 on the boss's agent, an index into the client's
+# own s_glow (studies/slice/FINDINGS.md SLICE-F1). Index 5 is SLICE-F2's
+# registered bit: it renders RED if byte +4 is the red channel, and ids 3 and 4
+# are palindromic and would prove nothing. 0..10; the client asserts past that
+# (ConstGlow.cpp(42)) and the server refuses first.
+glow = 5
+enabled = true
+
+[spawn.corridor_boss.provenance]
+source = "invented"
+note = """Ours. The quest boss, at the north end, 2,800 u past group B, on the \
+floor's centre line. `level = 8` feeds the armour formula only (the nameplate's \
+level comes from the template's definition, which is ArenaNet's 2); the glow is \
+what marks it. Wiring this row to a kill objective needs the second quest name \
+(SLICE-B4's note) -- one [[strings]] line in content/compose.toml and a quest row."""

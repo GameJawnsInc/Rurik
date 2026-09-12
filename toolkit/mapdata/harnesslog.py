@@ -35,7 +35,17 @@ sys.path.insert(0, os.path.dirname(HERE))
 import vaultpath  # noqa: E402
 
 
-def log_source(log, probe=8192):
+# How far into a gamesrv log the `source:` line can sit. MEASURED 2026-09-12
+# on harness 20260912T115507: byte 9,350 -- the start-up banner (the movement
+# arms' pre-registration paragraphs) had grown past the 8,192 this used to
+# read, so `newest_harness_log` found NO log from this tree and `serve_run`
+# scored a 2-of-2 navmesh, 5-of-5 placement run as FAILED. 64 KiB is seven
+# times the measured offset; a banner that outgrows it moves this number, and
+# test_deploy section 14 plants a source line behind a 12 KiB banner.
+SOURCE_PROBE = 65536
+
+
+def log_source(log, probe=SOURCE_PROBE):
     """The directory named by a gamesrv log's `source:` line, or None.
 
     Read from the HEAD of the file: the line is printed at start-up, and these
