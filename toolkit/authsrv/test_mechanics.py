@@ -969,9 +969,35 @@ try:
           and authsrv.cast_recipient(253, 10, PLAYER, allies) == PLAYER,
           "self lands on the caster whatever is selected; a foe skill on the "
           "selected target")
-    check(authsrv.allies_of(PLAYER, {"agents": {}}) == set()
-          if False else authsrv.allies_of({"agents": {}}, PLAYER) == set(),
-          "the player has no allies today -- no heroes, no party")
+    # SLICE-B7a re-aimed this lock. It read "the player has no allies today --
+    # no heroes, no party" and pinned a HARDCODED empty set; the hero arm has
+    # landed a body since, so the same call now answers from the world. The
+    # empty-world case is kept as the first conjunct, because "no party members
+    # means no allies" must still hold and is the half that could regress into
+    # inventing one.
+    check(authsrv.allies_of({"agents": {}}, PLAYER) == set(),
+          "an empty world still gives the player no allies")
+    _hero = {"name": "h", "dead": False, "died_at": 0.0, "health": 100.0,
+             "max_health": 100.0, "last_hit": 0.0, "armor_rating": 60,
+             "pos": (0.0, 0.0), "allegiance": agents.ALLEGIANCE_PLAYER,
+             "attacks_back": False}
+    _st = {"agents": {200: dict(_hero), 201: dict(_hero)}}
+    check(authsrv.allies_of(_st, PLAYER) == {200, 201},
+          "the player's allies are the party BODIES, which carry "
+          "ALLEGIANCE_PLAYER -- this is what SLICE-B7a unblocked",
+          f"{authsrv.allies_of(_st, PLAYER)}")
+    check(authsrv.allies_of(_st, 200) == {201, PLAYER},
+          "and a hero's allies are the rest of the party PLUS the player, who "
+          "is not a row in `agents` at all -- the asymmetry is the finding",
+          f"{authsrv.allies_of(_st, 200)}")
+    _dead_hero = {"agents": {200: dict(_hero), 201: dict(_hero, dead=True)}}
+    check(authsrv.allies_of(_dead_hero, PLAYER) == {200}
+          and authsrv.allies_of(_dead_hero, 200) == {PLAYER},
+          "a dead party member is not an ally, from either side")
+    check(authsrv.allies_of(dict(_st, player_dead=True), 200) == {201},
+          "and a DEAD PLAYER is not an ally either -- without this a hero "
+          "heals a corpse and resolve_heal moves a number nobody can see",
+          f"{authsrv.allies_of(dict(_st, player_dead=True), 200)}")
     st = two_hostiles()
     st["agents"][12] = dict(st["agents"][11], dead=True)
     st["agents"][13] = dict(st["agents"][11], allegiance=0)
