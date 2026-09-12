@@ -1,0 +1,173 @@
+# SLICE — findings
+
+Arc plan and gates: [PLAN.md](PLAN.md). Status authority stays
+[the project PLAN](../../PLAN.md) §3.
+
+**Identifiers.** `SLICE-F<n>` = a finding. The arc's other series (`SLICE-G<n>` gates,
+`SLICE-B<n>` build items, `SLICE-U<n>` unknowns) are declared in [PLAN.md](PLAN.md).
+Convention: [studies/idents/CONVENTION.md](../idents/CONVENTION.md).
+
+**Everything below was read out of the pinned pristine client, build 38797**
+(`vault/client/2026-07-29_221c13772c7a/Gw.exe`, verified PRISTINE) by tools in this
+repo: `toolkit/clientscan/consttable.py`, `toolkit/clientscan/codescan.py`,
+`toolkit/clientscan/genericvalue.py` and `toolkit/clientscan/asserts.py`. Addresses are
+VAs on that build and are build-coupled; re-derive them rather than carrying them
+forward.
+
+---
+
+## SLICE-F1 — **SLICE-U1 is CLOSED at the desk: the boss glow's whole path is decoded, and it needed no run**
+
+OBSERVED, 2026-09-11. The plan registered SLICE-U1 as "whether the boss aura is
+reachable from the server", predicted that property 29 would be a plain int property on
+the agent selecting a row of the client's own `s_glow`, and queued a decode pass. The
+prediction holds, and the chain closes end to end in four hops:
+
+```
+GAME_SMSG int property 29 [agent, value]
+  -> case body            0x00812CBC   push ebx / push edi / call 0x7DFD70
+  -> setter               0x007DFD70   obj = 0x00802160(arg0); if (!obj) return;
+                                       call 0x007FC160(this=obj, arg1)
+  -> forwarder            0x007FC160   this->[+0x15C] |= 0xC00
+                                       row = 0x008EDE70(index)
+                                       r = row[+4]/255.0
+                                       g = row[+5]/255.0
+                                       b = row[+6]/255.0
+  -> s_glow accessor      0x008EDE70   assert index < 11      ConstGlow.cpp(42)
+```
+
+Four things make this stronger than a plausible chain of names:
+
+- **The case body is two pushes and a call.** `0x00812CBC` does nothing but forward the
+  property's two operands. There is no interpretation between the wire and the setter.
+- **The bound is ArenaNet's own number, not our division.** The accessor opens
+  `cmp esi, 0xb` at `0x008EDE77` and asserts `index < arrsize(s_glow)` — so 11 is the
+  client's arrsize, and `consttable.py`'s closure to 11 × 8 has a second, independent
+  witness. Same shape for `s_aura` in SLICE-F4.
+- **The divisor is 255.0.** `0x009495A8` reads as the double `255.0`, so the three bytes
+  at `+4/+5/+6` are 0..255 colour components normalised to floats. That is what a colour
+  is, and it is why the row cannot be anything else.
+- **The middle frame is a forwarder.** `0x007DFD70` passes its `arg1` through untouched,
+  which is the shape that says the index is the *server's* value and not something the
+  client derives. (`feedback-a-forwarder-names-the-messenger`: the answer was one frame
+  out, twice, and both were followed.)
+
+**What this buys the slice.** A boss glow is one int property on the boss's agent —
+`[agent_id, glow_index]`, `glow_index` in 0..10. No new opcode, no composite work, no
+archive edit. That is a far cheaper boss than the plan costed.
+
+**What it does NOT establish**, and none of these blocks SLICE-B-anything:
+
+- **Whether ArenaNet ever sends property 29.** It is 0 of 22,524 in our corpus. This is a
+  fact about what the CLIENT will do when told, which is the right question for a server
+  we are writing and is not a claim about retail's own traffic.
+- **How a glow is turned OFF.** Index 0 is a populated row, not an "off" sentinel, and
+  the forwarder only ever ORs `0xC00` into `+0x15C` — it never clears it. There may be no
+  un-set on this path.
+- **The channel order.** See SLICE-F2.
+
+## SLICE-F2 — `s_glow` is eleven (id, colour) rows, and the channel order is the one bit left
+
+OBSERVED. `s_glow` at file `0x7A2B58..0x7A2BB0`, 11 × 8 B, index column at `+0x00`. Byte
+`+7` is zero in all eleven rows. Read as the client reads it — `+4`, `+5`, `+6`, each
+÷ 255.0:
+
+| id | +4 | +5 | +6 | if (R,G,B) | if (B,G,R) |
+|---|---|---|---|---|---|
+| 0 | 148 | 94 | 0 | `#945E00` | `#005E94` |
+| 1 | 0 | 148 | 64 | `#009440` | `#409400` |
+| 2 | 0 | 0 | 192 | `#0000C0` | `#C00000` |
+| 3 | 0 | 128 | 0 | `#008000` | `#008000` |
+| 4 | 128 | 0 | 128 | `#800080` | `#800080` |
+| 5 | 192 | 0 | 0 | `#C00000` | `#0000C0` |
+| 6 | 167 | 135 | 233 | `#A787E9` | `#E987A7` |
+| 7 | 0 | 200 | 200 | `#00C8C8` | `#C8C800` |
+| 8 | 181 | 142 | 132 | `#B58E84` | `#848EB5` |
+| 9 | 247 | 247 | 140 | `#F7F78C` | `#8CF7F7` |
+| 10 | 0 | 96 | 96 | `#006060` | `#606000` |
+
+**The remaining bit is settled by one probe, and it is a good one** — a single value with
+an unmistakable readout, which is what `feedback-make-the-signal-unmistakable` asks for.
+Send property 29 with **index 5**. Ids 3 and 4 are palindromic and prove nothing; id 5 is
+`#C00000` under one reading and `#0000C0` under the other. **Prediction, registered
+before the run: the aura renders RED, i.e. `+4` is the red channel.** A blue aura refutes
+it and settles the order the other way; anything else says the three floats are not going
+where this reading assumes.
+
+## SLICE-F3 — the "s_glow is profession-indexed" reading is NOT supported, and the count that suggested it is a coincidence
+
+The row count is 11, and `CHAR_PROFESSIONS = 11` at `agents.py:255` is "the CLIENT's own
+compiled bound: ids 0..10". That coincidence is what made a profession-coloured glow the
+obvious first reading, and the published lore agrees that GW1 boss auras are
+profession-coloured. **The colours do not support it under either channel order.** Taking
+0 = none and 1..10 as the canonical profession order, id 1 (Warrior) reads green in both
+readings, and neither id 2 nor id 3 lands on the hue its profession uses in the game's own
+UI.
+
+So: **the mapping from a glow id to a meaning is UNKNOWN**, and this finding exists to
+stop the next session re-deriving the appealing wrong answer from the same coincidence.
+The honest options are that the index is something other than a profession, that the
+profession order is not the one assumed, or that the table is not what its neighbours
+suggest. Settling it needs the colours seen on screen, which is the same run SLICE-F2
+registers.
+
+## SLICE-F4 — `s_aura` is 44 rows of (id, **client file id**, tint/scale), and the file-id reading is MEASURED with controls
+
+OBSERVED. `s_aura` at file `0x7AAEB8..0x7AB0C8`, 44 × 12 B, index column at `+0x00`.
+The accessor at `0x008EDF10` opens `cmp esi, 0x2c` — 44 is ArenaNet's own arrsize, and
+`lea eax, [esi+esi*2]` / `lea eax, [eax*4 + 0xBABEB8]` gives stride 12 and base
+`0xBABEB8` from the client's own arithmetic rather than from our closure.
+
+**Column 3 is `0x64000000` in all 44 rows** — bit-identical to the `scale` word
+`content/npcs.toml` carries on both its NPC templates, where it is commented "hue 0,
+saturation 0, lightness 0, scale 100%". Two unrelated parts of this project arriving at
+the same constant is the kind of cross-check `CLAUDE.md` asks for.
+
+**Column 2 binds as a file id the CLIENT can address — 44 of 44, against two controls
+that do not.** Reproduce with `python studies/slice/review/aurabind.py`, which reads
+`binds_plainly` at `archive.py:600` against `vault/run/2026-08-20_21511009c460/Gw.dat`:
+
+| set | binds |
+|---|---|
+| `s_aura` column 2 | **44 of 44** |
+| control: the same ids + 1 | 26 of 44 |
+| control: 44 random draws from the same range | 22 of 44 |
+
+The controls matter and were the point of the design: the archive is dense in that band,
+so ~half of *anything* binds, and 44/44 against a ~55% background is the discrimination.
+(`feedback-a-negative-needs-a-positive-control`, applied in the positive direction: a
+check that could not have failed would have proved nothing.)
+
+## SLICE-F5 — properties 6 and 7 are apply/remove of ONE function, and that CORROBORATES an upstream name from structure
+
+OBSERVED. The two case bodies are byte-identical but for one immediate:
+
+```
+property 6   0x00812AF5   push 1 / push ebx / push edi / call 0x7DFAB0
+property 7   0x00812B08   push 0 / push ebx / push edi / call 0x7DFAB0
+```
+
+OpenTyria's `GmAgentProperties.h` names them `ApplyAura` and `RemoveAura` — the
+`OPENTYRIA` table at `genericvalue.py:183`, UPSTREAM; GWCA independently names them `add_effect` and
+`remove_effect`. **The structure agrees with the names without having been told them** —
+one function, one boolean, two ids — so this is CORROBORATED rather than UPSTREAM, which
+is a stronger label than the table alone could earn. Note what it is not: the *name* is
+still borrowed. What we measured is a three-argument call taking an on/off flag.
+
+**Consequence for the slice:** an aura HAS an off switch where the glow (SLICE-F1) appears
+not to. If a boss needs to stop glowing — on death, say — property 7 is the lead and
+property 29 is not.
+
+## SLICE-F6 — what the desk cannot settle
+
+Carried so the next session does not re-read the same bytes hoping for more:
+
+1. **The channel order** (SLICE-F2) — one probe, prediction registered.
+2. **What a glow id MEANS** (SLICE-F3) — the same probe, if the colours are legible.
+3. **Whether the glow can be cleared** (SLICE-F1) — the forwarder only ORs. A probe that
+   sets a glow and then tries every plausible clear is a second run, not a desk pass.
+4. **Whether retail sends any of this.** Zero occurrences in a 22,524-message corpus over
+   twelve connections. A loopback probe measures OUR server driving a retail client, which
+   is the right instrument for "does the client draw it" and no instrument at all for "is
+   this what ArenaNet sends". Do not let a green loopback run get written up as the
+   latter — that is `studies/method`'s standing weakness and this arc is not exempt.

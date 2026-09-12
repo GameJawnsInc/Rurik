@@ -54,7 +54,7 @@ stated until it is taken.
 | **SLICE-G2** one Monk hero | Hero creation, the roster row, the commander panel, the 8-slot bar, the `Mo` profession — all rendered on a real client behind the `--hero*` flags. `hero_slots` at `authsrv.py:8792`, `mercenary_info` at `agents.py:760`, `hero_activate` at `agents.py:861` | **Hero follow and hero casting, both absent outright.** `begin_cast` at `authsrv.py:13356` reads player-only pools; `land_skill` at `authsrv.py:16886` lands on the player; `enemy_attack_tick` at `authsrv.py:15058` runs only for hostiles; `allies_of` at `skillread.py:120` hardcodes the player to zero allies | Whether a hero can wear a real human/Monk body rather than the monster-composite path that has been used for every hero rendered so far |
 | **SLICE-G3** zone to the explorable | `0x01A5` is decoded end to end, including the trap that the SECOND transfer of a session defers its dial and is released only by a graceful half-close — `close_after_transfer` at `scriptrun.py:233`, `TRANSFER_OPCODES` at `tape.py:429` | The server never sends `0x01A5` outside tape playback; `state["map_id"]` is written only at connection setup | **What the client SENDS to ask for a transfer.** No named `GAME_CMSG` covers it |
 | **SLICE-G4** two monster types, two bars | Content row → agent, with set-level safety checks (`area_population` at `authsrv.py:17561`); autonomous aggro, chase and swing; **NPC skill casting including an ALLY-TARGETED HEAL already ships** (`resolve_heal` at `authsrv.py:14416`, reached from `land_skill`); the client's whole 1,333-row skill table | Per-row skill bar, armour, attack speed and level — `spawn_population` at `authsrv.py:17662` hands every row the global `ENEMY_SKILLS` at `authsrv.py:10197` and sets no `armor_rating` at all. Only 22 of 1,333 skills have a resolvable effect | Which creature each loadable shell actually DRAWS |
-| **SLICE-G5** corridor, 2+2, boss | `build_flat` at `mapbuild.py:826` is client-verified for load AND for collision against authored geometry; `GENERATORS` at `mapgen.py:385` makes a new height profile a small addition | A corridor generator; group/pull/patrol/leash semantics (each monster aggros independently) | A non-square footprint has never been live-verified. **The boss aura is NOT FOUND as a feature** — but see §4 |
+| **SLICE-G5** corridor, 2+2, boss | `build_flat` at `mapbuild.py:826` is client-verified for load AND for collision against authored geometry; `GENERATORS` at `mapgen.py:385` makes a new height profile a small addition | A corridor generator; group/pull/patrol/leash semantics (each monster aggros independently) | A non-square footprint has never been live-verified. ~~The boss aura is NOT FOUND as a feature~~ — **the glow is DECODED, [FINDINGS.md](FINDINGS.md) SLICE-F1: one int property on the boss's agent** |
 | **SLICE-G6** return, complete | The turn-in path, proven on retail | **Nothing connects a kill to quest state**; **no reward is ever granted** | — |
 
 ---
@@ -87,7 +87,7 @@ exercises it, and naming it here is cheaper than building it now.
 
 | Item | The unknown | How it is settled | Prediction, stated first |
 |---|---|---|---|
-| **SLICE-U1** | Whether the boss aura is reachable from the server | Decode pass — see §4 | Property 29 is applied by the server as a plain int property on the boss's agent, and the value selects a row of the client's own `s_glow` table |
+| **SLICE-U1** | Whether the boss aura is reachable from the server | ~~Decode pass — see §4~~ **CLOSED 2026-09-11 at the desk, prediction held: [FINDINGS.md](FINDINGS.md) SLICE-F1.** A boss glow is ONE int property on the boss's agent, `[agent_id, index]`, index 0..10 | Property 29 is applied by the server as a plain int property on the boss's agent, and the value selects a row of the client's own `s_glow` table |
 | **SLICE-U2** | What each loadable creature shell DRAWS | **The model parade.** Spawn a dozen candidate shells side by side in one map, screenshot, name them permanently in `content/npcs.toml` | Most render a recognisable creature; a minority draw the white untextured box that a withheld composite produces, and that failure is self-announcing |
 | **SLICE-U3** | What the client sends to request a transfer | **Desk study first, no run.** The live corpus holds six transfers with recoverable c2s timing (`cmsgstream.py`); read what the client sent in the seconds before each `0x01A5` | There is a c2s immediately before the tail, and it is one of the seven opcodes the live client sends that our labelled loopback runs never produced |
 | **SLICE-U4** | Whether the client accepts an elongated map footprint | One live run under SLICE-B6 | It does; `_gate_dims` forbids nothing about the aspect ratio and the square case is closed |
@@ -102,33 +102,40 @@ from a per-session guess into a table.
 
 ---
 
-## 4. The boss aura: two leads, and one of them is live
+## 4. The boss aura — the decode RAN, and it went further than the pass was scoped for
 
-**NOT FOUND as a feature** — no aura, no glow, no boss flag, no boss-scaled stats anywhere
-in this tree. But the search turned up two structurally real leads, and the first was
-confirmed against the pinned client while this document was being written.
+**Superseded by [FINDINGS.md](FINDINGS.md) SLICE-F1..F6, 2026-09-11.** This section is
+kept as the question it started as; the answers are there.
 
-**OBSERVED, 2026-09-11, build 38797 (`genericvalue.py --id 29`, pinned pristine client):**
-property 29 has a real case body in the client's int-main property switch at
-`0x00812cbc`. Property 6 has one at `0x00812af5`. The NAMES are UPSTREAM — `BossGlow` and
-`ApplyAura` come from ldufr/OpenTyria's `GmAgentProperties.h`, carried in the `OPENTYRIA`
-table at `genericvalue.py:183`, and GWCA independently names 6 `add_effect`. So: **the
-dispatch cases are measured, the names are borrowed, and nothing in our corpus has ever
-carried either property.** The neighbourhood is suggestive on its own — 6 `ApplyAura`,
-7 `RemoveAura`, 23 `DivineAura`, 29 `BossGlow` — but a name is not a mechanism.
+What it started as: **NOT FOUND as a feature** — no aura, no glow, no boss flag, no
+boss-scaled stats anywhere in this tree — with two structurally real leads, the client's
+int-property case for 29 and the located-but-undecoded `s_aura` / `s_glow` tables.
 
-**The second lead is undecoded.** `consttable.py:550` pins the client's own `s_aura` table
-(anchored on `ConstAura.cpp`, stride 12) and `consttable.py:562` pins `s_glow` (anchored
-on `ConstGlow.cpp`, stride 8, id/colour pairs). Both are LOCATED — address, count and
-stride — and neither has had a field read out of it. Which id is the boss green, and what
-colour it carries, is a decode away.
+**What the decode pass actually returned, in one line each:**
 
-**The decode pass, in order:** read `s_glow`'s pairs, read `s_aura`'s rows, then send
-property 29 at a hostile from a loopback probe and watch. The last step is a probe and
-takes a stated prediction (above) before it runs. Note what the loopback step can and
-cannot prove: it measures OUR server driving a retail client, which is exactly the right
-instrument for "does the client draw a glow when told to", and no instrument at all for
-"is this what ArenaNet sends".
+- **The whole path closes with no run** (SLICE-F1). Wire property 29 → `0x00812CBC`, which
+  is two pushes and a call → the setter at `0x007DFD70` → a forwarder → `s_glow[index]`,
+  bound `< 11` by the client's own `cmp esi, 0xb`, three bytes ÷ 255.0. **A boss glow is
+  ONE int property on the boss's agent.** That is a far cheaper boss than this plan
+  costed, and SLICE-G5's "if time permits" is no longer the right framing.
+- **`s_aura`'s middle column is a client file id**, 44 of 44 binding against controls at
+  26/44 and 22/44 (SLICE-F4), and its third column is `0x64000000` — the same tint/scale
+  word `content/npcs.toml` already carries.
+- **Properties 6 and 7 are apply/remove of one function**, differing by a single pushed
+  immediate (SLICE-F5), which CORROBORATES OpenTyria's names from structure rather than
+  taking them on trust.
+- **The appealing wrong answer is named and refused** (SLICE-F3): 11 rows matches
+  `CHAR_PROFESSIONS = 11`, the lore says boss auras are profession-coloured, and the
+  colours do not support it under either channel order.
+
+**One bit is left and it has a registered prediction** (SLICE-F2): send property 29 with
+index 5 and the aura renders RED if `+4` is the red channel. Ids 3 and 4 are palindromic
+and would have proven nothing, which is why the probe names 5.
+
+The standing caveat travels with all of it: a loopback probe measures OUR server driving a
+retail client. That is exactly the right instrument for "does the client draw a glow when
+told to", and no instrument at all for "is this what ArenaNet sends" — which remains 0 of
+22,524.
 
 ---
 
