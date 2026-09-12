@@ -403,22 +403,27 @@ def section_stop_answer():
           "ONE R6 gate and ONE R6-labelled send -- a gate whose send was "
           "deleted, or a second site borrowing R6's label, reddens this")
     sites = stop_moving_sites()
-    check(len(sites) == 3
+    check(len(sites) == 4
           and all(b == "agents.agent_stop_moving" for _, _, b, _ in sites),
-          "THREE 0x0028 send sites, every payload from the builder the "
+          "FOUR 0x0028 send sites, every payload from the builder the "
           "wire-shape check above drives -- never a hand-built [agent] "
           "literal, which would skip that builder's agent-id-0 refusal and "
           "put a silent no-op on the wire", f"{sites}")
     player = [s for s in sites if s[3] == "PLAYER_AGENT_ID"]
-    check(len(player) == 2
+    check(len(player) == 3
           and sorted(s[1][-1] for s in player) == ["handle",
-                                                   "handle_skill_press"],
-          "and exactly TWO of them name the PLAYER: R6's stop-ack in the "
+                                                   "handle_skill_press",
+                                                   "send_transfer"],
+          "and exactly THREE of them name the PLAYER: R6's stop-ack in the "
           "0x0047 handler and R8/R10's cast-stop in handle_skill_press, "
-          "each behind its own gate. THIS is the count carrying the safety "
+          "each behind its own gate -- and since SLICE-B8 the transfer's "
+          "own halt in send_transfer, which is retail's measured pair "
+          "(0x0028 immediately before 0x01A5 GAME_SERVER_TRANSFER, "
+          "studies/slice F17) and closes the connection behind it, so it "
+          "is not a stop-window send. THIS is the count carrying the safety "
           "argument -- studies/movement/FINDINGS.md's stop census is scoped "
           "to the player's own stop window (0x0028 in 7 of 114 stops, "
-          "'a server author must not send 0x0028 on a stop'), and a third "
+          "'a server author must not send 0x0028 on a stop'), and a fourth "
           "player-directed site is a new warp channel into both copies",
           f"{player}")
     npc = [s for s in sites if s[3] != "PLAYER_AGENT_ID"]

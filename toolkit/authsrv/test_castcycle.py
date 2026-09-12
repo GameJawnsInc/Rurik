@@ -39,7 +39,8 @@ file's alone:
      were ever reached. A skip path nothing has run is not a skip path.
 
 MEASURED, both ways, from green runs (re-measured 2026-09-01 after the
-ANIMREF-RE checks landed and again after the same-day revert): 35 checks
+ANIMREF-RE checks landed, again after the same-day revert, and again on
+2026-09-12 after SLICE-C1/C2: 51 with the vault, 49 without; the older figures: 35 checks
 with the vault, 33 without
 plus one declared skip. The floor is the BARE-MACHINE number -- the shape
 test_armour.py and test_position_trust.py both use, so that a machine with
@@ -58,7 +59,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
 import checks  # noqa: E402
 
-LEDGER = checks.Ledger("cast cycle", floor=39)   # section 2d (reach at the strike, 2026-09-12) +6; from the green run
+LEDGER = checks.Ledger("cast cycle", floor=49)   # the BARE-MACHINE number: 49 without the vault (section 5 skips), 51 with it; 2d (reach at the strike) +6, 2e (the approach, SLICE-C2) +12, 2026-09-12; from green runs of both
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -487,10 +488,16 @@ def section_strike_reach():
             sent = []
             send = lambda op, vals, label="", quiet=False: \
                 sent.append((op, vals, label))
+            # Pressed IN reach (SLICE-C2 would otherwise walk the body in
+            # rather than activate), then the target is where `target_pos`
+            # puts it by the strike -- the case C1 is about: the distance
+            # at the E5 instant, whoever moved.
             agent = {"name": "target", "dead": False, "last_hit": 0.0,
-                     "max_health": 100.0, "health": 100.0, "pos": target_pos}
+                     "max_health": 100.0, "health": 100.0,
+                     "pos": (authsrv.attack_reach() - 10.0, 0.0)}
             state = {"agents": {40: agent}, "pos": (0.0, 0.0)}
             _press(authsrv, send, state, skill=394, target=40)
+            agent["pos"] = target_pos
             sent.clear()
             _rewind(state, 1.0)
             authsrv.cast_tick(send, state, 0)   # the E5 instant: the gate
@@ -530,6 +537,172 @@ def section_strike_reach():
     finally:
         (authsrv.skill_timing, authsrv._is_attack_skill,
          authsrv.PLAYER_SWING_DAMAGE) = saved
+
+
+def section_strike_approach():
+    """SLICE-C2: an attack skill pressed from out of reach WALKS IN and
+    strikes on arrival -- retail's contract on 11 free out-of-reach
+    attack-skill presses (studies/slice F20, 20260817T231139 t=717.315 the
+    clean one): E4 + the 0x002A follow in the press batch, nothing paid or
+    animated; the debit, the property-50 animation and [8 -> 1] at arrival;
+    the strike a windup later. Cancelled unpaid when the target dies on the
+    way or the player moves.
+    """
+    import time as _t
+    import authsrv
+    print("\n2e. an attack skill from OUT OF REACH approaches, and strikes on "
+          "arrival")
+    saved = (authsrv.skill_timing, authsrv._is_attack_skill,
+             authsrv.PLAYER_SWING_DAMAGE, authsrv.skill_cost)
+    authsrv.skill_timing = lambda sid: (1.0, 0.0, 3.0)
+    authsrv._is_attack_skill = lambda sid: True
+    authsrv.PLAYER_SWING_DAMAGE = (5, 5)
+    authsrv.skill_cost = lambda sid: (10, 0)
+    A2, A0, P9F = 0x00A2, 0x00A0, 0x009F
+    try:
+        def fresh(target_pos):
+            sent = []
+            send = lambda op, vals, label="", quiet=False: \
+                sent.append((op, vals, label))
+            agent = {"name": "target", "dead": False, "last_hit": 0.0,
+                     "max_health": 100.0, "health": 100.0, "pos": target_pos}
+            state = {"agents": {40: agent}, "pos": (0.0, 0.0),
+                     "client_pos": (0.0, 0.0), "plane": 0}
+            return sent, send, agent, state
+
+        def ops_of(sent):
+            return [op for op, _, _ in sent]
+
+        reach = authsrv.attack_reach()
+        far = (reach + 256.0, 0.0)
+        sent, send, agent, state = fresh(far)
+        t0 = _t.time()
+        _press(authsrv, send, state, skill=394, target=40)
+        follows = [v for op, v, _ in sent
+                   if op == authsrv.GAME_SMSG_AGENT_UPDATE_DESTINATION]
+        check(ops_of(sent) == [0x00E4, authsrv.GAME_SMSG_AGENT_UPDATE_DESTINATION]
+              and follows == [[PLAYER, far, 0, 0, 40]],
+              f"a press at {far[0]:.0f} u sends E4 and the 0x002A follow to "
+              f"the target's OWN point naming it, and NOTHING else -- no "
+              f"debit, no animation, no hold (717.315's batch)",
+              f"{[(hex(op), v) for op, v, _ in sent]}")
+        cast = state["pending_casts"][0]
+        check(cast["approach"] == 40 and cast["begun"] is False
+              and cast["begin_at"] == float("inf")
+              and cast["e5_at"] == float("inf"),
+              "the entry names the target it walks to and has NO clock yet",
+              {k: cast[k] for k in ("approach", "begun", "begin_at", "e5_at")})
+        check(state.get("attacking") == 40 and state.get("dest") is not None
+              and abs(state["dest"][0] - (far[0] - authsrv.follow_stop_radius()))
+              < 1e-6 and state.get("approach", {}).get("target") == 40,
+              "the press engages the chain on the target and the copy walks "
+              "to the stop point (the follow record attack_tick would drive)",
+              f"attacking {state.get('attacking')}, dest {state.get('dest')}")
+        check(state["cast_busy_until"] > t0 + 1.0,
+              "the busy window is estimated past the walk and the activation",
+              f"{state['cast_busy_until'] - t0:.2f}s")
+
+        # walking: a tick in flight begins nothing
+        sent.clear()
+        authsrv.cast_tick(send, state, 0)
+        check(sent == [] and cast["begun"] is False,
+              "a tick while the body walks sends nothing and begins nothing "
+              "(a standing target gets no re-path either)",
+              f"{[(hex(op), v) for op, v, _ in sent]}")
+
+        # ARRIVAL: the integrator parked the copy, the leg's eta passed
+        state["pos"] = state["dest"]
+        state["dest"] = None
+        state["click_leg"]["eta"] = _t.time() - 0.01
+        state["approach"]["eta"] = state["click_leg"]["eta"]
+        sent.clear()
+        t_arr = _t.time()
+        authsrv.cast_tick(send, state, 0)
+        check(ops_of(sent) == [A2, A0, P9F]
+              and sent[1][1] == [authsrv.agents.GV_ATTACK_SKILL_ACTIVATED,
+                                 PLAYER, 40, 394]
+              and sent[2][1] == [authsrv.agents.GV_DISABLED, PLAYER, 1],
+              "ARRIVAL: the debit, the property-50 animation, then [8 -> 1] "
+              "-- the live arrival burst, 3 of 3 (717.315, 371.949, 657.289)",
+              f"{[(hex(op), v) for op, v, _ in sent]}")
+        check(cast["begun"] is True and cast["approach"] is None
+              and state.get("approach") is None
+              and abs(cast["e5_at"] - (t_arr + 1.0)) < 0.2
+              and abs(cast["e3_at"] - cast["e5_at"]) < 1e-9
+              and abs(cast["e6_at"] - (cast["e5_at"] + 3.0)) < 1e-9,
+              "and the entry now has its clock from the arrival: E5 an "
+              "activation on, E3 an aftercast after, E6 a recharge after",
+              {k: round(cast[k] - t_arr, 3) for k in ("e5_at", "e3_at", "e6_at")})
+
+        # the strike, a windup later, on a body 80 u out -- C1's gate passes
+        sent.clear()
+        _rewind(state, 1.0)
+        authsrv.cast_tick(send, state, 0)
+        check(ops_of(sent)[0] == authsrv.GAME_SMSG_SKILL_RECHARGE
+              and agent["health"] == 95.0,
+              "the strike lands from the stop point: E5 then the pinned 5 "
+              "(the C1 reach gate reads 80 u, inside 144)",
+              f"health {agent['health']}, ops {[hex(o) for o in ops_of(sent)]}")
+
+        # CONTROL: in reach, the press is the old immediate burst
+        sent, send, agent, state = fresh((reach - 10.0, 0.0))
+        _press(authsrv, send, state, skill=394, target=40)
+        check(ops_of(sent) == [0x00E4, A2, A0, P9F]
+              and state["pending_casts"][0]["approach"] is None
+              and state["pending_casts"][0]["begun"] is True
+              and state.get("attacking") is None,
+              f"CONTROL: {reach - 10:.0f} u out the press pays and animates "
+              f"at once, no follow, no clock deferred -- and the chain is NOT "
+              f"engaged (the in-reach engage is F20's unshipped n=1)",
+              f"{[(hex(op), v) for op, v, _ in sent]}")
+
+        # the target dies on the way: released unpaid
+        sent, send, agent, state = fresh(far)
+        _press(authsrv, send, state, skill=394, target=40)
+        agent["dead"] = True
+        sent.clear()
+        authsrv.cast_tick(send, state, 0)
+        authsrv.cast_tick(send, state, 0)
+        check(authsrv.GAME_SMSG_SKILL_REFUSED in ops_of(sent)
+              and A2 not in ops_of(sent) and A0 not in ops_of(sent)
+              and not state.get("pending_casts")
+              and state.get("approach") is None,
+              "a target that dies on the way: the entry is released (E2), "
+              "nothing was ever paid or animated, the follow is forgotten "
+              "(525.104's shape)",
+              f"{[(hex(op), v) for op, v, _ in sent]}")
+
+        # the player moves on the way: cancelled unpaid (276.699)
+        sent, send, agent, state = fresh(far)
+        _press(authsrv, send, state, skill=394, target=40)
+        sent.clear()
+        authsrv.cancel_on_move(send, state, 0)
+        authsrv.cast_tick(send, state, 0)
+        check(authsrv.GAME_SMSG_SKILL_REFUSED in ops_of(sent)
+              and A2 not in ops_of(sent) and A0 not in ops_of(sent)
+              and not state.get("pending_casts")
+              and state.get("approach") is None,
+              "the player's own movement on the way cancels it: E2, nothing "
+              "paid, the follow abandoned -- the ranger's 276.699 (WASD at "
+              "+0.885 s, E2 at +0.919, no debit ever)",
+              f"{[(hex(op), v) for op, v, _ in sent]}")
+
+        # --no-attack-approach: the revert arm keeps the old press
+        saved_ap = authsrv.ATTACK_APPROACH
+        authsrv.ATTACK_APPROACH = False
+        try:
+            sent, send, agent, state = fresh(far)
+            _press(authsrv, send, state, skill=394, target=40)
+            check(ops_of(sent) == [0x00E4, A2, A0, P9F]
+                  and state["pending_casts"][0]["approach"] is None,
+                  "REVERT ARM (--no-attack-approach): no follow, the press "
+                  "pays and animates from anywhere as before",
+                  f"{[(hex(op), v) for op, v, _ in sent]}")
+        finally:
+            authsrv.ATTACK_APPROACH = saved_ap
+    finally:
+        (authsrv.skill_timing, authsrv._is_attack_skill,
+         authsrv.PLAYER_SWING_DAMAGE, authsrv.skill_cost) = saved
 
 
 def section_skill_visual():
@@ -737,6 +910,7 @@ def main():
     section_attack_family()
     section_attack_finish_batch()
     section_strike_reach()
+    section_strike_approach()
     section_skill_visual()
     section_order_pinned_when_inverted()
     section_queue_law()

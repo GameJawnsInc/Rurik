@@ -1370,7 +1370,10 @@ def section_enemy_gate():
         state["agents"][8] = {
             "name": "an ally", "dead": False, "attacks_back": False,
             "allegiance": agents.ALLEGIANCE_HOSTILE, "effects": 0,
-            "pos": (40.0, 0.0), "health": 100.0, "max_health": 100.0,
+            # HURT, since SLICE-B3: a hostile's heal is held while nobody
+            # on its side is hurt (hostile_heal_target), and this section's
+            # question is the POOL's pacing, not the heal gate's.
+            "pos": (40.0, 0.0), "health": 50.0, "max_health": 100.0,
             "armor_rating": 60, "attack_speed": 1.75, "last_swing": 0.0,
             "skills": (), "skill_ready": [], "last_slot": -1}
         pool = authsrv.agent_energy(agent)

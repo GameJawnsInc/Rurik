@@ -11178,6 +11178,35 @@ def strike_out_of_reach(state, target_id):
             f"{reach:.0f} u -- the body moved (or pressed) out of range")
 
 
+def attack_skill_arrives(state, cast, now):
+    """The approaching attack skill's body is in reach: give the entry its
+    clock, from `now`. SLICE-C2.
+
+    The strike's E5 is `now` + the skill's activation -- or, for the
+    measured table-0.0 case, the weapon's windup (ATTACK_E5_WINDUP: the
+    attack skill's E5 IS the skill-swing's hit instant). The live arrivals
+    agree with the windup law: begin -> [46] is 0.566 s at 717.315 and
+    0.565 s at 371.949 against swing_windup(1.33) = 0.565 (studies/slice
+    F20). E3 an aftercast later, E6 a recharge later, as at the press.
+    The busy window is written from the tick here, as C1's gate already
+    does; the press's estimate is replaced by the instant that happened.
+    """
+    act = float(cast.get("activation", 0.0))
+    if cast["attack"] and act == 0.0 and ATTACK_E5_WINDUP:
+        e5_at = now + swing_windup(
+            ATTACK_INTERVAL * attack_interval_factor(state, PLAYER_AGENT_ID))
+    else:
+        e5_at = now + act
+    after = float(cast.get("aftercast", 0.0))
+    cast["approach"] = None
+    cast["begin_at"] = now
+    cast["e5_at"] = e5_at
+    cast["e3_at"] = e5_at + after
+    cast["e6_at"] = e5_at + float(cast.get("recharge_s", cast["recharge"]))
+    state["cast_busy_until"] = e5_at + after
+    return e5_at
+
+
 def cancel_action(send, state, conn_id):
     """0x0028: the client asks to cancel its current action. Grant it.
 
@@ -13508,6 +13537,41 @@ def handle_skill_press(values, send, state, conn_id, opcode, rec=None):
     # is judged now and paid later, and cast_tick's begin branch owns the
     # paying (the payment fields ride the pending entry below).
     queued = begin > now
+    # ---- SLICE-C2: AN ATTACK SKILL FROM OUT OF REACH WALKS IN FIRST -------
+    #
+    # OBSERVED on the live corpus, 11 free out-of-reach attack-skill presses
+    # (20260817T231139 t=717.315 is the clean one, studies/slice F20): the
+    # press is answered in ONE batch by E4, the hold release, the chain's
+    # GV_ATTACK_STOPPED when a chain was live, and the 0x002A follow to the
+    # target's own position naming the target -- and NOTHING is paid or
+    # animated. The follow re-paths every 0.5 s while the target moves
+    # (ANIMREF-RE 38's contract, shared with the ordinary attack). At
+    # ARRIVAL the begin burst goes out -- the 0x00D2 / property 62 debit,
+    # then the property-50 animation, then [8 -> 1] -- and the strike lands
+    # a windup later (46, damage, E3). So an out-of-reach press is a QUEUED
+    # cast whose begin instant is arrival rather than a clock: `approaching`
+    # skips the press-time debit and animation below, the entry carries the
+    # target it walks to, and cast_tick's approach arm (attack_skill_arrives)
+    # begins it when approach_tick reports the body in reach. A queued press
+    # (caster busy) keeps the clock queue: no corpus press is both, and C1's
+    # reach-at-the-strike gate still covers it.
+    approaching = None
+    if is_attack and ATTACK_APPROACH and target and not queued:
+        _ag = state.get("agents", {}).get(target)
+        if _ag is not None and not _ag.get("dead"):
+            _fx, _fy = _reach_frame(state, now)
+            _d = math.hypot(float(_ag["pos"][0]) - _fx,
+                            float(_ag["pos"][1]) - _fy)
+            if _d > attack_reach():
+                approaching = _d
+                # The busy window is an ESTIMATE until the arrival writes it
+                # (attack_skill_arrives): the leg at the declared speed, then
+                # the windup and the aftercast the entry would have had.
+                _run = max(_d - follow_stop_radius(_ag), 0.0)
+                _spd = float(state.get("declared_speed_base")
+                             or DEFAULT_RUN_SPEED)
+                state["cast_busy_until"] = (now + _run / _spd
+                                            + (e5_at - begin) + aftercast)
 
     send(GAME_SMSG_SKILL_ACTIVATED_BROADCAST,
          [PLAYER_AGENT_ID, skill_id, copy],
@@ -13595,7 +13659,7 @@ def handle_skill_press(values, send, state, conn_id, opcode, rec=None):
         # cast cancelled before its begin has consumed a charge for a spell
         # that never began. Unmeasured either way; revisit on a capture.)
         spend_glyph_charge(send, state, glyph_ep, conn_id, skill_id)
-    if ENERGY and not queued:
+    if ENERGY and not queued and approaching is None:
         if units > 0:
             player_adrenaline(state).use(skill_id)
             # ---- AND 0x00D2 GOES OUT HERE, WHICH IS MEASURED --------------
@@ -13675,7 +13739,7 @@ def handle_skill_press(values, send, state, conn_id, opcode, rec=None):
     # begin_cast at the instant the caster frees. (This sent at the press
     # always until 2026-08-22 -- early, for a queued cast, by the rest of
     # the previous cast's aftercast.)
-    if not queued:
+    if not queued and approaching is None:
         # MOVECODE-1z-w: a cast that BEGINS ends the ROUTE. The body stops
         # to cast (an attack skill's chase re-orders it instead); a live
         # router chain would keep granting its remaining 0x0029 legs at
@@ -13800,6 +13864,31 @@ def handle_skill_press(values, send, state, conn_id, opcode, rec=None):
         # the batch, 3 of 3 live bursts (castmech 3b/3c).
         action_hold(send, state, 1, f"the cast of skill {skill_id}")
 
+    if approaching is not None:
+        # SLICE-C2: the follow closes the press batch, after the E4 and the
+        # chain stop (717.315: E4, [8 -> 0], [3], 0x002A, one instant). The
+        # same two things the 0x0026 arm does before ITS follow (ANIMREF-RE
+        # 39, MOVECODE-1z-y): a keyboard lead in flight is ended, a click
+        # leg in flight is superseded at the modelled body. Both no-ops
+        # when the body is parked.
+        _ag = state["agents"][target]
+        _kbd_lead_kill(send, state, conn_id, rec, "press")
+        _press_supersedes(send, state, conn_id, target, rec=rec)
+        if state.get("attacking") != target:
+            # THE PRESS ENGAGES THE CHAIN on its target. n=1 on the wire
+            # (20260819T132414 t=248.991: the skill released, and the
+            # server opened attack_started on the target in the SAME batch
+            # with no 0x0026 between) -- and it is what keeps attack_tick's
+            # own approach arm walking to THIS target rather than fighting
+            # this entry over a previous one. attack_tick pauses its swing
+            # while the entry is short of its E3 and resumes one windup
+            # after the strike (CHAIN_RESTART_PACED). Set here for the
+            # approach case only; an in-reach press engaging the chain is
+            # the same n=1 and is left as it was (studies/slice F20).
+            state["attacking"] = target
+            _ag["last_hit"] = 0.0
+            state["player_last_swing"] = 0.0
+        _approach_send(send, state, conn_id, target, _ag, now, rec=rec)
 
     state.setdefault("pending_casts", []).append({
         "skill_id": skill_id, "copy": copy,
@@ -13808,7 +13897,8 @@ def handle_skill_press(values, send, state, conn_id, opcode, rec=None):
         # begin branch fires it and flips this. `cost` (glyph discount
         # already priced in) and `units` are what that branch pays with;
         # both inert for a cast that began at the press.
-        "begun": not queued, "cost": cost, "units": units,
+        "begun": not queued and approaching is None, "cost": cost,
+        "units": units,
         # The target rides the pending entry so the DAMAGE can land at cast
         # end rather than at the press -- see cast_tick's E5 branch. Storing
         # the id rather than the agent is deliberate: the agent may be dead,
@@ -13821,16 +13911,34 @@ def handle_skill_press(values, send, state, conn_id, opcode, rec=None):
         # reached -- is droppable whatever its type. `attack` serves that
         # same asymmetry AND the cast end, where the finished property is
         # the non-attack family's alone (cast_tick's E5 branch).
-        "begin_at": begin, "attack": is_attack,
-        "e5_at": e5_at, "e3_at": e5_at + aftercast,
-        "e6_at": e5_at + recharge, "recharge": int(recharge),
+        "begin_at": (math.inf if approaching is not None else begin),
+        "attack": is_attack,
+        # SLICE-C2: an APPROACHING entry has no clock -- every instant is
+        # +inf until attack_skill_arrives writes them from the arrival.
+        # `approach` names the target it walks to; the three timing
+        # columns ride along so the arrival can schedule the cycle.
+        "e5_at": (math.inf if approaching is not None else e5_at),
+        "e3_at": (math.inf if approaching is not None
+                  else e5_at + aftercast),
+        "e6_at": (math.inf if approaching is not None
+                  else e5_at + recharge),
+        "recharge": int(recharge),
         "e5_sent": False, "e3_sent": False,
+        "approach": (target if approaching is not None else None),
+        "activation": activation, "aftercast": aftercast,
+        "recharge_s": recharge,
     })
-    print(f"[c{conn_id}] skill {skill_id} (copy {copy}) at "
-          f"agent {target or 'nothing'}: E5 in {e5_at - now:.2f}s, "
-          f"recharge {recharge:.0f}s"
-          + (f" -- QUEUED, begins (and pays) in {begin - now:.2f}s"
-             if queued else ""), flush=True)
+    if approaching is not None:
+        print(f"[c{conn_id}] skill {skill_id} (copy {copy}) at agent "
+              f"{target}: {approaching:.0f} u out, past reach "
+              f"{attack_reach():.0f} u -- APPROACHING; the strike begins on "
+              f"arrival [SLICE-C2]", flush=True)
+    else:
+        print(f"[c{conn_id}] skill {skill_id} (copy {copy}) at "
+              f"agent {target or 'nothing'}: E5 in {e5_at - now:.2f}s, "
+              f"recharge {recharge:.0f}s"
+              + (f" -- QUEUED, begins (and pays) in {begin - now:.2f}s"
+                 if queued else ""), flush=True)
 
     # NO DAMAGE HERE. It lands at cast end, in cast_tick's E5 branch.
     #
@@ -14008,12 +14116,47 @@ def cast_tick(send, state, conn_id):
         # world-tick residents already (energy_tick regenerates, the hit
         # paths grant adrenaline), so paying from this thread joins an
         # existing pattern rather than opening a new one.
+        # SLICE-C2: AN APPROACHING ATTACK SKILL BEGINS ON ARRIVAL. The
+        # follow is the same leg attack_tick drives for an ordinary press
+        # (approach_tick: re-path every 0.5 s while the target moves, the
+        # latch and the leg record, arrival at the stop point or the eta);
+        # this arm owns the transition into the cast cycle. A target that
+        # died on the way releases the entry unpaid -- the corpus's own
+        # shape (525.104: the target's death batch carries the bare E2).
+        _arrived = False
+        if cast.get("approach") is not None and not cast.get("begun", True):
+            _tid = cast["approach"]
+            _ag = state.get("agents", {}).get(_tid)
+            if _ag is None or _ag.get("dead"):
+                cast["cancelled"] = (f"agent {_tid} is gone before the "
+                                     f"strike could begin")
+                state["cast_busy_until"] = now
+                _approach_abandon(state)
+                print(f"[c{conn_id}] skill {cast['skill_id']}: "
+                      f"{cast['cancelled']}; released as a cancel "
+                      f"[SLICE-C2]", flush=True)
+                continue
+            if approach_tick(send, state, conn_id, _tid, _ag, now):
+                continue                        # still walking in
+            _e5 = attack_skill_arrives(state, cast, now)
+            _arrived = True
+            print(f"[c{conn_id}] skill {cast['skill_id']} ARRIVES at agent "
+                  f"{_tid}: the strike begins, E5 in {_e5 - now:.2f}s "
+                  f"[SLICE-C2]", flush=True)
         if not cast.get("begun", True) and now >= cast["begin_at"]:
             if not begin_cast(send, state, cast, conn_id):
                 # The begin-time recheck refused it (see begin_cast). The
                 # entry releases and dies; nothing was ever paid or shown.
                 finished.append(cast)
                 continue
+            if _arrived:
+                # [8 -> 1] closes the arrival burst, behind the animation:
+                # 3 of 3 live arrivals (717.315, 371.949, 657.289). A
+                # clock-queued cast hands the hold over with no toggle;
+                # an approach released it at the press, so it re-takes it.
+                action_hold(send, state, 1,
+                            f"the strike of skill {cast['skill_id']} "
+                            f"begins on arrival")
         if not cast["e5_sent"] and now >= cast["e5_at"]:
             # AN ATTACK SKILL STRIKES ONLY IN REACH (strike_out_of_reach).
             # Marked as a cancel and handed to the branch above on the next
