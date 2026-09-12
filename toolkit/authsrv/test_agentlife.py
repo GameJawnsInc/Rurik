@@ -73,7 +73,7 @@ from codec import Codec  # noqa: E402
 # known-bad control; and the chase section's wall pin split by arm, 1).
 # Floor from a real green run of 331. +1 at NPCTRACK-F8 (the hold rule
 # replaces the fresh-follow pin: three checks for two), green 333.
-LEDGER = checks.Ledger("agent lifetime", floor=380)   # SKILLS-HN +1 (the enemy's overheal goes out); from the green run
+LEDGER = checks.Ledger("agent lifetime", floor=384)   # SLICE-B7b +4 (the party follow and its two arms); from the green run
 
 
 def section_weapon_damage():
@@ -4422,6 +4422,67 @@ def section_hold_plane():
                   f"sends {[hex(op) for op, _v, _l in sent]}")
     finally:
         authsrv.NPC_CLIENT_MODEL = saved
+
+    # ---- SLICE-B7b: the PARTY body follows ------------------------------------
+    #
+    # Every check here is paired with the arm that makes it mean something. A
+    # party body walking proves nothing on its own -- it has to walk WHERE a
+    # hostile would not, and stand still when the flag is off, or the section is
+    # just watching `_npc_follow_tick` work, which four sections above already do.
+    print("\nSLICE-B7b: a party body walks to the player, with --no-hero-follow "
+          "and a hostile at the same distance as its two known-bad arms")
+    FOLLOW = authsrv.GAME_SMSG_AGENT_UPDATE_DESTINATION
+    SPEED = authsrv.GAME_SMSG_AGENT_UPDATE_SPEED
+    _saved_hf = authsrv.HERO_FOLLOW
+    try:
+        def _party(dist):
+            """`_world`'s hostile turned into a hero body: the allegiance and
+            `attacks_back` the two creation sites actually set."""
+            st = _world(dist=dist)
+            st["agents"][10].update(allegiance=agents.ALLEGIANCE_PLAYER,
+                                    attacks_back=False, skills=(),
+                                    skill_ready=[])
+            return st
+
+        near = authsrv.HERO_FOLLOW_STOP - 40.0
+        out = authsrv.HERO_FOLLOW_STOP + 160.0
+        past = authsrv.AGGRO_RANGE + 500.0
+
+        ops = [op for op, _v, _l in _walk(_party(out))]
+        LEDGER.ok(ops == [SPEED, FOLLOW],
+                  "a party body outside the formation distance announces a rate "
+                  "and ONE follow -- the hostile follow's own shape",
+                  f"{[hex(o) for o in ops]}")
+
+        ops = [op for op, _v, _l in _walk(_party(near))]
+        LEDGER.ok(ops == [],
+                  f"and inside {authsrv.HERO_FOLLOW_STOP:.0f} u it stands, so the "
+                  "formation distance is a real bound and not decoration",
+                  f"{[hex(o) for o in ops]}")
+
+        # ARM 1: the flag. Without this the section cannot tell "the follow moved
+        # it" from "something else in the tick moved it".
+        authsrv.HERO_FOLLOW = False
+        ops = [op for op, _v, _l in _walk(_party(out))]
+        LEDGER.ok(ops == [],
+                  "--no-hero-follow: the body stands where it spawned, which is "
+                  "every hero run before 2026-09-12 (the known-bad arm)",
+                  f"{[hex(o) for o in ops]}")
+        authsrv.HERO_FOLLOW = True
+
+        # ARM 2: the leash, which is the one number an ally really changes. The
+        # comparison is against a HOSTILE at the same distance, not against a
+        # remembered figure -- two measurements, never a literal.
+        ally_far = [op for op, _v, _l in _walk(_party(past))]
+        host_far = [op for op, _v, _l in _walk(_world(dist=past))]
+        LEDGER.ok(ally_far == [SPEED, FOLLOW] and host_far == [],
+                  f"at {past:.0f} u -- past the {authsrv.AGGRO_RANGE:.0f} u "
+                  "hostile leash -- the ALLY still walks and the HOSTILE has "
+                  "given up. Same tick, same distance, opposite answers",
+                  f"ally {[hex(o) for o in ally_far]}, "
+                  f"hostile {[hex(o) for o in host_far]}")
+    finally:
+        authsrv.HERO_FOLLOW = _saved_hf
 
 
 if __name__ == "__main__":

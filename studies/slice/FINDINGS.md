@@ -287,6 +287,93 @@ is the OPCODE, since the codec puts it there. Every one of the 41 rows reported 
 finding**, and it was caught by the answer being implausible rather than by any check.
 The fixed read takes the destination off `0x01A5`'s own field[4] and needs no join.
 
+## SLICE-F9 — **the hero follows, on a real client — and the first run measured nothing, which is the more useful half**
+
+OBSERVED, 2026-09-12. Two arms, both registered before either ran.
+
+**The first attempt was an ABORT, not a null, and the harness said PASS.**
+`--hero-body-npc def_1486` killed instance bring-up with `KeyError: 'name'`; the hero
+body was never created; the run reported **RUN VERDICT: PASS** and produced a full set of
+screenshots of a world with no hero in it. Had the prediction been "the hero follows" with
+no exposure floor, this run would have been written up as a refutation of the follow.
+
+The cause is a defect class this repo has already paid for once and fixed **in one place
+only**. A vault-emitted `def_NNNN` row deliberately carries no name — *"a name comes from a
+rendered nameplate or it does not exist"* (`npcdefs.py`) — and `spawn_population` says so
+at its own label line, which reads `npc.get("name") or str(row["npc"])` precisely because
+indexing it bare "threw inside instance bring-up, where the harness still reported PASS and
+the map readback stayed green". **The hero and henchman body sites still indexed it bare.**
+Both are now `.get(...) or` the content key. The bug was reachable the moment anybody used
+a parade-named template as a hero body, which is exactly what the slice wants to do.
+
+**With that fixed, both arms landed as predicted.**
+
+| arm | creates | `KeyError` | follows by agent 200 |
+|---|---|---|---|
+| treatment | 2 | 0 | **7**, each "halts at 200 u" |
+| `--no-hero-follow` | 2 | 0 | **0** |
+
+Same body created in both, so the arm isolates the follow and not the spawn. The seven
+follows report 208 → 252 → 210 u out, which is the hero repeatedly falling behind and
+catching up — **that is also the exposure floor being met**, since a player who never moved
+produces no follows at all and would have made the null meaningless.
+
+**And the body is the slice's own monk.** The run used `def_1486`, the Academy Monk the
+parade picked, so the screenshot is the vertical slice's hero walking behind the player
+with a green party arrow and an ally health bar over her.
+
+What this does NOT show: the hero doing anything in a fight. It walks. SLICE-B7c is the
+rest.
+
+## SLICE-F10 — **SLICE-B7c: the monk hero heals the player in a fight, and the defect that mattered was invisible to the unit test**
+
+OBSERVED, 2026-09-12, harness `20260912T092508` (treatment) and `20260912T092833` (arm).
+
+**B7c was far smaller than the plan costed, for a reason worth writing down.** `land_skill`
+names `PLAYER_AGENT_ID` at six sites, which is what made B7 look like an arc — but
+`resolve_heal` was **already** caster- and recipient-parameterised, and `land_skill`
+already lands a heal on `cast_target`. All six hardcodings are on the DAMAGE path, and for
+a heal every one is inert: `skill_damage` is None, and a heal Spell opens no episode. So a
+monk hero needed a tick, a bar and a target policy — not a rewrite.
+
+**What was built.** `ally_cast_tick`, deliberately not a branch inside `enemy_attack_tick`:
+that function's shape is the SWING's — melee-reach gate, weapon interval, swing open and
+land — and a monk uses none of it. `ally_heal_target` holds the whole policy in one place
+and is labelled OURS, because `studies/monsterai` established that ArenaNet's decision
+logic is recoverable from nothing. `pick_skill` is reused rather than replaced; its
+docstring's "a fixture, not a decision about AI" boundary is as true for an ally.
+
+**THE DEFECT ONLY A RUN COULD FIND.** The first treatment run put **28 party casts on the
+wire and resolved ZERO of them.** `enemy_attack_tick` runs before `ally_cast_tick`, and its
+`not attacks_back` branch clears `cast_lands_at` **before** the allegiance gate — and a
+party body has `attacks_back` False. So every tick armed a cast and the next tick wiped it.
+The unit test drove `ally_cast_tick` alone and could not have seen it: *offline agreement
+between two of our own components proves nothing*, in the most literal available form. The
+regression check now drives both ticks in the world tick's own order, and was **verified to
+go red with the fix reverted** (`after=None`).
+
+**Both arms, with the floor met.**
+
+| arm | creates | Bleeding on the player | party casts | heals by 200 |
+|---|---|---|---|---|
+| treatment | 3 | 12 | 19 | **cured + healed 55 and 58** |
+| no `--hero-skills` | 3 | 10 | 0 | 0 |
+
+The floor is the Bleeding count, and it earned its place twice. A run before this one
+scored 0 on everything **including the floor** — the harness appends `--no-enemy` unless
+its own `--enemy` is passed, so no hostile ever spawned. Registered as an ABORT rather than
+read as a refutation of the heal.
+
+**One constraint confirmed from the inside.** The landing check initially failed, correctly:
+Restore Condition heals PER CONDITION REMOVED, so against a clean target it cures nothing
+and heals nothing. That is SLICE-B3's registered trap arriving as a test failure, and it
+means the slice still needs an **unconditional heal** wired before a monk hero looks like a
+monk in ordinary play.
+
+**What a hero still cannot do:** damage, enchant, swing, or be commanded. The first two
+need `land_skill`'s four remaining sites parameterised; the commander UI's flags and
+stances are decoded but wired to nothing.
+
 ## SLICE-F6 — what the desk cannot settle
 
 Carried so the next session does not re-read the same bytes hoping for more:

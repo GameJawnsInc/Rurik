@@ -120,18 +120,49 @@ def skill_flat_constant(skill_id, which="scale"):
 def allies_of(state, caster_id, PLAYER_AGENT_ID):
     """Living agents allied with the caster, by id. A pure read.
 
-    The player has none today -- no heroes, no henchmen, no party -- so the
-    set is empty and every "other ally" spell the player casts has no legal
-    recipient, which is what the client itself refuses. A hostile's allies are
-    the other living agents carrying the same allegiance word (the spawn's own
-    FourCC, `agents.ALLEGIANCE_HOSTILE`), which `--enemies N` produces.
+    THE PARTY HAS TWO HALVES AND THEY LIVE IN DIFFERENT PLACES. That is the
+    whole reason this is not one comprehension. Hero and henchman BODIES are
+    rows in `state["agents"]` carrying `agents.ALLEGIANCE_PLAYER` -- both
+    creation sites set it. The PLAYER is not a row at all: its position, pools
+    and death live on `state` directly, so an ally set computed from the table
+    alone can never contain it, and a hero's heal would have no legal recipient
+    for the one target that matters.
+
+    UNTIL 2026-09-12 THIS RETURNED AN EMPTY SET FOR THE PLAYER unconditionally,
+    over a docstring reading "the player has none today -- no heroes, no
+    henchmen, no party". That was true when it was written and stopped being
+    true when the hero arm landed a body; nothing re-read it until SLICE-B7
+    needed it. The hardcoded refusal is the thing that changed here.
+
+    A DEAD ALLY IS NOT AN ALLY, on both sides of the asymmetry: rows are
+    filtered on `dead`, and the player is admitted only when `player_dead` is
+    falsey. Without that second half a hero would cast its heal at a corpse and
+    `resolve_heal` would move a number nobody can see.
+
+    ALLEGIANCE IS THE PARTY MARKER, not a hero flag, so a content spawn row
+    written `allegiance = "player"` joins the party too. That is deliberate --
+    an allied NPC is a real thing to want and the wire cannot tell it from a
+    hero -- and it is the reason this reads the allegiance word rather than the
+    reserved id range.
+
+    A hostile's allies are UNCHANGED: the other living agents carrying the same
+    allegiance word (the spawn's own FourCC, `agents.ALLEGIANCE_HOSTILE`),
+    which `--enemies N` produces.
     """
-    if caster_id == PLAYER_AGENT_ID:
-        return set()
     table = state.get("agents", {})
+    party = {aid for aid, a in table.items()
+             if not a.get("dead")
+             and a.get("allegiance") == agents.ALLEGIANCE_PLAYER}
+    if caster_id == PLAYER_AGENT_ID:
+        return party
     me = table.get(caster_id)
     if not me:
         return set()
+    if me.get("allegiance") == agents.ALLEGIANCE_PLAYER:
+        out = party - {caster_id}
+        if not state.get("player_dead"):
+            out.add(PLAYER_AGENT_ID)
+        return out
     return {aid for aid, a in table.items()
             if aid != caster_id and not a.get("dead")
             and a.get("allegiance") == me.get("allegiance")}

@@ -8825,6 +8825,42 @@ HERO_BODY_NPC = "hatcher"
 # 28.8's open question). Sending it far does NOT move the panel or the row's
 # existence, only what the client can see.
 HERO_BODY_OFFSET = (-150.0, 120.0)
+# SLICE-B7b: the party body FOLLOWS. Until 2026-09-12 nothing drove a hero at
+# all -- studies/heroes' own summary was "the movement messages exist and the
+# hero stands still because nothing drives it. Unbuilt work with no unknown in
+# it" -- and that is exactly what this is: the existing hostile follow, reached
+# through a second gate.
+#
+# TWO NUMBERS, BOTH OURS, NEITHER MEASURED. Retail's hero formation is
+# client-side behaviour this project has never captured, so there is no figure
+# to be faithful to and these are chosen rather than derived. That is a weaker
+# footing than the hostile radii beside them (follow_stop_radius is the client's
+# own (rA+rB+56); enemy_reach was corrected against a capture) and the asymmetry
+# is stated because the code cannot show it.
+#
+# STOP is a FORMATION distance, not a reach: an ally has no swing to reach with,
+# so the "park here" and "start walking again" radii that differ for a hostile
+# are one number here. 200 u sits outside the 80 u avoidance disc the client
+# parks bodies at, so the hero does not shove the player around.
+HERO_FOLLOW = True          # False (--no-hero-follow): the body stands where it spawned.
+HERO_FOLLOW_STOP = 200.0    # units, centre to centre.
+# math.inf, and deliberately not a number: a hero that leashed would be left
+# behind by a player crossing a map, and "my hero stopped following me" is not a
+# thing anyone should have to diagnose. The hostile leash (AGGRO_RANGE) exists
+# so a fight is escapable; nothing about a party member wants that.
+HERO_FOLLOW_LEASH = math.inf
+# SLICE-B7c: the party body CASTS. Empty by default -- a hero with no bar is
+# every hero run before 2026-09-12, and `--hero-skills` is what fills it. The
+# ids come from the command line; every NUMBER behind them (activation,
+# recharge) is read from the client's own table, exactly as --enemy-skills does.
+HERO_SKILLS = ()
+# The health fraction at or below which a party caster will heal. OURS, and it
+# is AI rather than protocol -- studies/monsterai established that ArenaNet's
+# decision logic is not recoverable from anything, so this is authored or it
+# does not exist. 0.9 rather than 1.0 because a monk that tops up a full party
+# burns its pool on nothing and reads as broken; rather than 0.5 because a heal
+# that only fires at death's door cannot be seen working in a short run.
+HERO_HEAL_AT = 0.9
 # Swap 0x01C2's two u16s. This flag used to BE the experiment -- one word is
 # an agent id and one is something else, and the client's own code does not
 # say which is which. Four rounds of arms settled both (2026-08-16): msg+0xc
@@ -15074,7 +15110,16 @@ def enemy_attack_tick(send, state, conn_id):
     for agent_id, agent in list(state.get("agents", {}).items()):
         if agent_id not in state.get("agents", {}):
             continue
-        if agent["dead"] or not agent.get("attacks_back"):
+        # SLICE-B7c: a PARTY body leaves by the allegiance gate below and NOT
+        # through this branch, because this branch CLEARS `cast_lands_at` --
+        # and a party body has `attacks_back` False, so it landed here every
+        # tick. `enemy_attack_tick` runs before `ally_cast_tick`, so the order
+        # was: the party arms a cast, this wipes it, the party arms it again.
+        # MEASURED, and only a run could show it: 28 party casts on the wire and
+        # ZERO landings (harness 20260912T092107). The offline test drove
+        # `ally_cast_tick` alone and could not have seen it.
+        if (agent.get("allegiance") != agents.ALLEGIANCE_PLAYER
+                and (agent["dead"] or not agent.get("attacks_back"))):
             # A corpse does not land the swing it was mid-way through. ArenaNet's
             # own 7th swing in the Lakeside tape was truncated exactly this way,
             # 0.24 s in, when the player killed the worm.
@@ -15284,6 +15329,142 @@ def enemy_attack_tick(send, state, conn_id):
         agent["swing_lands_at"] = now + swing_windup(interval)
 
 
+def ally_heal_target(state, caster_id):
+    """The party member most in need of a heal, or None when nobody is.
+
+    OURS, AND IT IS AI RATHER THAN PROTOCOL -- said first because everything
+    else in this neighbourhood is measured and this is not. studies/monsterai
+    established that ArenaNet's own AI is not recoverable from the client, the
+    wire or any capture, so a hero's decision to heal is authored by us or it
+    does not exist. What is NOT invented is everything it feeds: the target byte
+    that says who a skill may land on is the client's, the heal's magnitude is
+    the client's own interpolator, and the ally set is `allies_of`.
+
+    THE RULE, in full: the ally furthest below HERO_HEAL_AT by health fraction,
+    and None when nobody is under it. Two things that buys, neither subtle --
+    a monk that heals a full-health party burns its pool on nothing and looks
+    broken, and a monk that always heals the LOWEST ID would ignore a dying
+    henchman to top up an unhurt player.
+
+    The player's health is read from `state` and an ally's from its row, for
+    the reason `allies_of` carries: the player is not a row.
+    """
+    worst, worst_frac = None, HERO_HEAL_AT
+    for aid in allies_of(state, caster_id):
+        if aid == PLAYER_AGENT_ID:
+            cur, mx = state.get("player_health", 0.0), player_max_health(state)
+        else:
+            row = state.get("agents", {}).get(aid)
+            if not row:
+                continue
+            cur, mx = row.get("health", 0.0), row.get("max_health", 0.0)
+        if not mx or mx <= 0:
+            continue
+        frac = float(cur) / float(mx)
+        if frac < worst_frac:
+            worst, worst_frac = aid, frac
+    return worst
+
+
+def ally_cast_tick(send, state, conn_id):
+    """The PARTY's own casting -- SLICE-B7c.
+
+    WHY THIS IS NOT A BRANCH INSIDE `enemy_attack_tick`, which was the first
+    design. That function's shape is the SWING's: it gates on melee reach, it
+    runs a weapon interval, it opens and lands swings, and a cast rides along
+    inside all of it. A monk hero uses none of that -- it has no swing, and a
+    heal's range is nothing like a sword's -- so threading an ally through
+    would have meant making four hostile-specific gates conditional and leaving
+    a reader unable to tell which arm any line served. The landing is here for
+    the same reason: `land_skill` is called from inside that reach gate, so an
+    ally's cast would otherwise never resolve.
+
+    WHAT IT DELIBERATELY DOES NOT DO, and the boundary is the honest part:
+
+      * NO DAMAGE. `land_skill` still names `PLAYER_AGENT_ID` at its damage,
+        effect and condition sites, so a party body casting anything that hurts
+        or enchants would aim at the player. For a heal every one of those sites
+        is inert -- `skill_damage` is None for a heal, and a heal Spell opens no
+        episode -- which is why this is reachable now and a damage-dealing hero
+        is not. Parameterising those four sites is the next rung, not this one.
+      * NO SWING. A party body never attacks; `attacks_back` stays False.
+      * NO TARGETING BY THE PLAYER. The hero heals who it likes, and the
+        commander UI's flags and stances (0x0015/0x001A, decoded in pvpui) are
+        not wired to anything here.
+
+    `pick_skill` is reused rather than replaced: its docstring declares it a
+    testing fixture and not a decision about AI, and that boundary is exactly
+    as true for an ally. The policy -- who to heal, and whether to heal at all
+    -- lives in `ally_heal_target`, where it can be read in one place.
+    """
+    now = time.time()
+    for agent_id, agent in list(state.get("agents", {}).items()):
+        if agent_id not in state.get("agents", {}):
+            continue
+        if agent.get("allegiance") != agents.ALLEGIANCE_PLAYER:
+            continue
+        # A corpse and a body mid-transition drop the cast they were part way
+        # through, for the reason enemy_attack_tick's own two branches do: the
+        # entry survives a re-create, so a landing armed before would fire
+        # against a stale clock on the first tick after.
+        if agent.get("dead") or (agent.get("effects", 0)
+                                 & agents.EFFECT_TRANSITION):
+            agent["cast_lands_at"] = None
+            agent["casting"] = None
+            continue
+        due = agent.get("cast_lands_at")
+        if due is not None:
+            if now >= due:
+                agent["cast_lands_at"] = None
+                land_skill(send, state, agent_id, agent, conn_id)
+            continue
+        skills = agent.get("skills") or ()
+        if not skills:
+            continue
+        target = ally_heal_target(state, agent_id)
+        if target is None:
+            continue
+        slot = pick_skill(agent, now)
+        if slot is None:
+            continue
+        skill_id, activation, recharge = skills[slot]
+        # The client's own target byte decides whether this slot may land on
+        # the ally we picked -- the same gate the hostile cast site applies,
+        # and the same reason: a code-4 skill lands on an OTHER ally and never
+        # on the caster, so a hero cannot use one on itself.
+        kind = skill_target_kind(skill_id)
+        if kind == "other_ally" and target == agent_id:
+            continue
+        if ENERGY:
+            cost, units = skill_cost(skill_id)
+            pool = agent_energy(agent)
+            pool.tick(now)
+            if units > 0:
+                # No adrenaline model for a party body: it never swings, so it
+                # can never charge one. Skipped rather than faked.
+                continue
+            if cost > 0 and not pool.can_pay(cost):
+                if now - agent.get("cast_refused_at", 0.0) >= 5.0:
+                    agent["cast_refused_at"] = now
+                    print(f"[c{conn_id}] party agent {agent_id} cannot cast "
+                          f"{skill_id}: needs {cost} energy, has "
+                          f"{pool.current:.2f}", flush=True)
+                continue
+            pool.spend(cost)
+        agent["cast_target"] = target
+        agent["skill_ready"][slot] = now + recharge
+        agent["last_slot"] = slot
+        agent["casting"] = slot
+        agent["cast_lands_at"] = now + activation
+        face_player(send, state, agent_id, agent, conn_id)
+        _op, _vals = cast_anim_msg(agents.GV_SKILL_ACTIVATED, agent_id,
+                                   target, skill_id)
+        send(_op, _vals, f"party agent {agent_id} casts skill {skill_id}")
+        print(f"[c{conn_id}] party agent {agent_id} ({agent['name']}) casts "
+              f"skill {skill_id} at {target} (slot {slot + 1} of "
+              f"{len(skills)})", flush=True)
+
+
 def face_player(send, state, agent_id, agent, conn_id, force=False):
     """Turn an agent to look at the player, if it is not looking there already.
 
@@ -15363,11 +15544,18 @@ def enemy_move_tick(send, state, conn_id, rec=None):
     for agent_id, agent in list(state.get("agents", {}).items()):
         if agent_id not in state.get("agents", {}):
             continue
-        if agent["dead"] or not agent.get("attacks_back"):
+        # SLICE-B7b: a PARTY body reaches the follow through its own gate, and
+        # it has to, because `attacks_back` carries TWO facts for a hostile --
+        # "is animate" and "will fight" -- that come apart for an ally. A hero
+        # walks and does not swing, so testing `attacks_back` alone would leave
+        # it standing exactly as it has since the hero arm landed a body.
+        _ally = (HERO_FOLLOW
+                 and agent.get("allegiance") == agents.ALLEGIANCE_PLAYER)
+        if agent["dead"] or not (agent.get("attacks_back") or _ally):
             agent["moving"] = False
             agent["follow"] = None
             continue
-        if agent.get("allegiance") != agents.ALLEGIANCE_HOSTILE:
+        if not _ally and agent.get("allegiance") != agents.ALLEGIANCE_HOSTILE:
             continue
         if agent.get("effects", 0) & agents.EFFECT_TRANSITION:
             continue
@@ -15375,7 +15563,16 @@ def enemy_move_tick(send, state, conn_id, rec=None):
         dist = math.hypot(px - ax, py - ay)
         if NPC_FOLLOW:
             _npc_follow_tick(send, state, conn_id, agent_id, agent,
-                             (px, py), dist, now, pm, rec)
+                             (px, py), dist, now, pm, rec,
+                             leash=HERO_FOLLOW_LEASH if _ally else None,
+                             stop_at=HERO_FOLLOW_STOP if _ally else None)
+            continue
+        if _ally:
+            # The legacy chase below is the hostile's pre-NPC_FOLLOW arm and
+            # reads ENEMY_MELEE_RANGE/AGGRO_RANGE directly. An ally has no
+            # business in it; under --legacy-npc-chase the party simply does
+            # not follow, which is the honest answer rather than a second
+            # untested path.
             continue
         chasing = (not state["player_dead"]
                    and ENEMY_MELEE_RANGE < dist <= AGGRO_RANGE)
@@ -16345,8 +16542,35 @@ def _npc_model_advance(state, agent, now, elapsed=0.0, rec=None, agent_id=None):
 
 
 def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, pm,
-                     rec=None):
+                     rec=None, leash=None, stop_at=None):
     """One hostile's chase, in retail's shape (ANIMREF-RE 40; NPC_FOLLOW).
+
+    SLICE-B7b MADE TWO NUMBERS ARGUMENTS, and nothing else about this function
+    moved. A PARTY body walks to the player through exactly this machinery --
+    the routed corridor (NPCTRACK-Q9), the plane words (1z-bz), the halt on the
+    half-second clock (sec.40.9) -- because forking a second follow would mean
+    a second copy of all of it, drifting. What an ally needs differently is only
+    where it gives up and where it parks:
+
+      `leash`    how far the target may get before the chase ends. None is the
+                 hostile default, AGGRO_RANGE. `math.inf` never gives up, which
+                 is the party's: a hero that leashed would be left behind by a
+                 player crossing a zone, and "my hero stopped following me" is
+                 not a bug anyone should have to diagnose.
+      `stop_at`  where the body parks AND, when given, the distance inside which
+                 a standing body does not start a walk at all. For a hostile
+                 those are two different numbers on purpose -- it parks at
+                 follow_stop_radius() = 80 u and re-chases beyond enemy_reach()
+                 -- because a swing's reach and a body's standing distance are
+                 different facts. For an ally they are one number: there is no
+                 swing to reach with, so a single formation distance is the
+                 whole rule.
+
+    BOTH PARTY VALUES ARE OURS AND NEITHER IS MEASURED. Retail's hero formation
+    is client-side behaviour this project has never captured, so HERO_FOLLOW_STOP
+    is a number chosen to look right and nothing more. Said here because the
+    hostile radii around it ARE measured, and a reader has no way to tell them
+    apart from the code.
 
     A follow STARTS when the player is noticed (inside AGGRO_RANGE -- ours,
     unchanged) and stands beyond the swing reach. It is one 0x002A naming the
@@ -16501,15 +16725,18 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
         # regresses a chase the player did not escape).
         leash_d = min(leash_d, math.hypot(px - fol["solve_from"][0],
                                           py - fol["solve_from"][1]))
-    if state["player_dead"] or leash_d > AGGRO_RANGE:
+    _leash = AGGRO_RANGE if leash is None else leash
+    if state["player_dead"] or leash_d > _leash:
         if fol is not None:
             _halt("the player is dead" if state["player_dead"]
-                  else f"{leash_d:.0f} u is past the {AGGRO_RANGE:.0f} u leash")
+                  else f"{leash_d:.0f} u is past the {_leash:.0f} u leash")
         agent["moved_at"] = now
         return
-    stop = follow_stop_radius(agent)
+    # SLICE-B7b: one number for an ally, two for a hostile -- see the docstring.
+    stop = follow_stop_radius(agent) if stop_at is None else stop_at
+    _reach = enemy_reach() if stop_at is None else stop_at
     if fol is None:
-        if dist <= enemy_reach():
+        if dist <= _reach:
             # In reach and standing: the attack tick's business, not a walk --
             # but GROUNDZ-Q5's correction still goes out, because THIS is the
             # branch RUN-1zCA's sunken Hatcher sat in for 22 s. A parked hostile
@@ -16571,7 +16798,7 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
         # and cannot resume by itself -- it halts on the clock wherever that
         # is, and a copy halted out of reach gets a fresh follow on the next
         # tick (retail's chase 3: halt, fresh follow 0.23 s later).
-        if not NPC_CLIENT_MODEL and dist > enemy_reach():
+        if not NPC_CLIENT_MODEL and dist > _reach:
             fol.pop("arrived_at", None)
         else:
             if now - fol["sent_at"] >= FOLLOW_REPATH_INTERVAL:
@@ -18975,7 +19202,16 @@ def _handle_request_players(send, state, conn_id, stop, rec):
             send, state, HENCHMAN_AGENT_ID,
             {"pos": (_hx, _hy), "plane": cfg[2],
              "health": 100.0, "max_health": 100.0,
-             "dead": False, "name": _hn["name"],
+             # SLICE-B7b: `.get`, for the reason spawn_population's own label
+             # line already carries -- a vault-emitted def_NNNN row deliberately
+             # has NO name ("a name comes from a rendered nameplate or it does
+             # not exist", npcdefs.py), so indexing it bare raises INSIDE
+             # instance bring-up. That failure is invisible: the world tick dies,
+             # the harness still prints RUN VERDICT PASS, and the only evidence
+             # is a KeyError in the gamesrv log nobody reads. Measured here
+             # 2026-09-12 with --henchman-body's sibling flag --hero-body-npc
+             # def_1486. The fallback is the content KEY, which is ours.
+             "dead": False, "name": _hn.get("name") or str(HENCHMAN),
              "npc": _hn,
              "definition": HENCHMAN_DEFINITION,
              "allegiance": agents.ALLEGIANCE_PLAYER,
@@ -19035,7 +19271,12 @@ def _handle_request_players(send, state, conn_id, stop, rec):
             hsend, state, _haid,
             {"pos": (_rx, _ry), "plane": cfg[2],
              "health": 100.0, "max_health": 100.0,
-             "dead": False, "name": _hro["name"],
+             # SLICE-B7b: `.get` -- see the henchman body above. This is the
+             # site that actually raised: --hero-body-npc def_1486 (the parade's
+             # Academy Monk) killed instance bring-up with KeyError: 'name' while
+             # the run reported PASS, and the hero follow it was launched to test
+             # measured nothing because no body ever existed.
+             "dead": False, "name": _hro.get("name") or str(HERO_BODY_NPC),
              "npc": _hro,
              "definition": _hdef,
              "allegiance": agents.ALLEGIANCE_PLAYER,
@@ -19043,7 +19284,13 @@ def _handle_request_players(send, state, conn_id, stop, rec):
              "attack_speed": ENEMY_ATTACK_SPEED,
              "resend_definition": True,
              "attacks_back": False,
-             "skills": [], "skill_ready": []},
+             # SLICE-B7c: the party body's bar, empty until --hero-skills.
+             # `skill_ready` is per SLOT, never per id -- a bar may legitimately
+             # carry the same skill twice and keying recharge by id would make
+             # the second copy share the first's cooldown (spawn_enemy's own
+             # comment, same reason).
+             "skills": HERO_SKILLS,
+             "skill_ready": [0.0] * len(HERO_SKILLS)},
             f"hero body (hero {_hid})", conn_id=conn_id)
     # THE HERO'S ATTRIBUTE STATE, and it is not a new
     # mechanism -- it is the pair the PLAYER's own agent
@@ -19817,6 +20064,11 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # standing in reach for one interval doing nothing.
                         enemy_move_tick(send, state, conn_id, rec)
                         enemy_attack_tick(send, state, conn_id)
+                        # SLICE-B7c, and AFTER the hostiles on purpose: a
+                        # party body decides whether to heal from health the
+                        # hostiles have just finished changing, so healing on
+                        # the same tick as the damage is what a player sees.
+                        ally_cast_tick(send, state, conn_id)
                         # The third sweep, and the first that mutates state["agents"]
                         # on a schedule rather than only when the player acts. Last,
                         # so a body that died this tick is seen dead by burrow_tick
@@ -24232,6 +24484,23 @@ def main():
         print("[map] --no-model-leg-bound: the server's own model leg may "
               "out-walk a lead our mesh cut short (MOVECODE-1z-cc's revert).",
               flush=True)
+    if a.hero_skills:
+        global HERO_SKILLS
+        _hbar = []
+        for _tok in a.hero_skills.split(","):
+            _sid = int(_tok.strip(), 0)
+            _act, _after, _rech = skill_timing(_sid)
+            _hbar.append((_sid, _act, float(_rech)))
+        HERO_SKILLS = tuple(_hbar)
+        print(f"HERO BAR: {len(HERO_SKILLS)} skill(s) "
+              f"{[s[0] for s in HERO_SKILLS]} -- the party body casts "
+              f"(SLICE-B7c). Heals only; see --hero-skills.", flush=True)
+    if a.no_hero_follow:
+        global HERO_FOLLOW
+        HERO_FOLLOW = False
+        print("[map] --no-hero-follow: a party body stands where it spawned. "
+              "That is every hero run before 2026-09-12 and it is SLICE-B7b's "
+              "known-bad arm.", flush=True)
     if a.no_npc_corridor:
         global NPC_FOLLOW_CORRIDOR
         NPC_FOLLOW_CORRIDOR = False
