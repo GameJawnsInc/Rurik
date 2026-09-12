@@ -1,0 +1,302 @@
+# SLICE — findings
+
+Arc plan and gates: [PLAN.md](PLAN.md). Status authority stays
+[the project PLAN](../../PLAN.md) §3.
+
+**Identifiers.** `SLICE-F<n>` = a finding. The arc's other series (`SLICE-G<n>` gates,
+`SLICE-B<n>` build items, `SLICE-U<n>` unknowns) are declared in [PLAN.md](PLAN.md).
+Convention: [studies/idents/CONVENTION.md](../idents/CONVENTION.md).
+
+**Everything below was read out of the pinned pristine client, build 38797**
+(`vault/client/2026-07-29_221c13772c7a/Gw.exe`, verified PRISTINE) by tools in this
+repo: `toolkit/clientscan/consttable.py`, `toolkit/clientscan/codescan.py`,
+`toolkit/clientscan/genericvalue.py` and `toolkit/clientscan/asserts.py`. Addresses are
+VAs on that build and are build-coupled; re-derive them rather than carrying them
+forward.
+
+---
+
+## SLICE-F1 — **SLICE-U1 is CLOSED at the desk: the boss glow's whole path is decoded, and it needed no run**
+
+OBSERVED, 2026-09-11. The plan registered SLICE-U1 as "whether the boss aura is
+reachable from the server", predicted that property 29 would be a plain int property on
+the agent selecting a row of the client's own `s_glow`, and queued a decode pass. The
+prediction holds, and the chain closes end to end in four hops:
+
+```
+GAME_SMSG int property 29 [agent, value]
+  -> case body            0x00812CBC   push ebx / push edi / call 0x7DFD70
+  -> setter               0x007DFD70   obj = 0x00802160(arg0); if (!obj) return;
+                                       call 0x007FC160(this=obj, arg1)
+  -> forwarder            0x007FC160   this->[+0x15C] |= 0xC00
+                                       row = 0x008EDE70(index)
+                                       r = row[+4]/255.0
+                                       g = row[+5]/255.0
+                                       b = row[+6]/255.0
+  -> s_glow accessor      0x008EDE70   assert index < 11      ConstGlow.cpp(42)
+```
+
+Four things make this stronger than a plausible chain of names:
+
+- **The case body is two pushes and a call.** `0x00812CBC` does nothing but forward the
+  property's two operands. There is no interpretation between the wire and the setter.
+- **The bound is ArenaNet's own number, not our division.** The accessor opens
+  `cmp esi, 0xb` at `0x008EDE77` and asserts `index < arrsize(s_glow)` — so 11 is the
+  client's arrsize, and `consttable.py`'s closure to 11 × 8 has a second, independent
+  witness. Same shape for `s_aura` in SLICE-F4.
+- **The divisor is 255.0.** `0x009495A8` reads as the double `255.0`, so the three bytes
+  at `+4/+5/+6` are 0..255 colour components normalised to floats. That is what a colour
+  is, and it is why the row cannot be anything else.
+- **The middle frame is a forwarder.** `0x007DFD70` passes its `arg1` through untouched,
+  which is the shape that says the index is the *server's* value and not something the
+  client derives. (`feedback-a-forwarder-names-the-messenger`: the answer was one frame
+  out, twice, and both were followed.)
+
+**What this buys the slice.** A boss glow is one int property on the boss's agent —
+`[agent_id, glow_index]`, `glow_index` in 0..10. No new opcode, no composite work, no
+archive edit. That is a far cheaper boss than the plan costed.
+
+**What it does NOT establish**, and none of these blocks SLICE-B-anything:
+
+- **Whether ArenaNet ever sends property 29.** It is 0 of 22,524 in our corpus. This is a
+  fact about what the CLIENT will do when told, which is the right question for a server
+  we are writing and is not a claim about retail's own traffic.
+- **How a glow is turned OFF.** Index 0 is a populated row, not an "off" sentinel, and
+  the forwarder only ever ORs `0xC00` into `+0x15C` — it never clears it. There may be no
+  un-set on this path.
+- **The channel order.** See SLICE-F2.
+
+## SLICE-F2 — `s_glow` is eleven (id, colour) rows, and the channel order is the one bit left
+
+OBSERVED. `s_glow` at file `0x7A2B58..0x7A2BB0`, 11 × 8 B, index column at `+0x00`. Byte
+`+7` is zero in all eleven rows. Read as the client reads it — `+4`, `+5`, `+6`, each
+÷ 255.0:
+
+| id | +4 | +5 | +6 | if (R,G,B) | if (B,G,R) |
+|---|---|---|---|---|---|
+| 0 | 148 | 94 | 0 | `#945E00` | `#005E94` |
+| 1 | 0 | 148 | 64 | `#009440` | `#409400` |
+| 2 | 0 | 0 | 192 | `#0000C0` | `#C00000` |
+| 3 | 0 | 128 | 0 | `#008000` | `#008000` |
+| 4 | 128 | 0 | 128 | `#800080` | `#800080` |
+| 5 | 192 | 0 | 0 | `#C00000` | `#0000C0` |
+| 6 | 167 | 135 | 233 | `#A787E9` | `#E987A7` |
+| 7 | 0 | 200 | 200 | `#00C8C8` | `#C8C800` |
+| 8 | 181 | 142 | 132 | `#B58E84` | `#848EB5` |
+| 9 | 247 | 247 | 140 | `#F7F78C` | `#8CF7F7` |
+| 10 | 0 | 96 | 96 | `#006060` | `#606000` |
+
+**The remaining bit is settled by one probe, and it is a good one** — a single value with
+an unmistakable readout, which is what `feedback-make-the-signal-unmistakable` asks for.
+Send property 29 with **index 5**. Ids 3 and 4 are palindromic and prove nothing; id 5 is
+`#C00000` under one reading and `#0000C0` under the other. **Prediction, registered
+before the run: the aura renders RED, i.e. `+4` is the red channel.** A blue aura refutes
+it and settles the order the other way; anything else says the three floats are not going
+where this reading assumes.
+
+## SLICE-F3 — the "s_glow is profession-indexed" reading is NOT supported, and the count that suggested it is a coincidence
+
+The row count is 11, and `CHAR_PROFESSIONS = 11` at `agents.py:255` is "the CLIENT's own
+compiled bound: ids 0..10". That coincidence is what made a profession-coloured glow the
+obvious first reading, and the published lore agrees that GW1 boss auras are
+profession-coloured. **The colours do not support it under either channel order.** Taking
+0 = none and 1..10 as the canonical profession order, id 1 (Warrior) reads green in both
+readings, and neither id 2 nor id 3 lands on the hue its profession uses in the game's own
+UI.
+
+So: **the mapping from a glow id to a meaning is UNKNOWN**, and this finding exists to
+stop the next session re-deriving the appealing wrong answer from the same coincidence.
+The honest options are that the index is something other than a profession, that the
+profession order is not the one assumed, or that the table is not what its neighbours
+suggest. Settling it needs the colours seen on screen, which is the same run SLICE-F2
+registers.
+
+## SLICE-F4 — `s_aura` is 44 rows of (id, **client file id**, tint/scale), and the file-id reading is MEASURED with controls
+
+OBSERVED. `s_aura` at file `0x7AAEB8..0x7AB0C8`, 44 × 12 B, index column at `+0x00`.
+The accessor at `0x008EDF10` opens `cmp esi, 0x2c` — 44 is ArenaNet's own arrsize, and
+`lea eax, [esi+esi*2]` / `lea eax, [eax*4 + 0xBABEB8]` gives stride 12 and base
+`0xBABEB8` from the client's own arithmetic rather than from our closure.
+
+**Column 3 is `0x64000000` in all 44 rows** — bit-identical to the `scale` word
+`content/npcs.toml` carries on both its NPC templates, where it is commented "hue 0,
+saturation 0, lightness 0, scale 100%". Two unrelated parts of this project arriving at
+the same constant is the kind of cross-check `CLAUDE.md` asks for.
+
+**Column 2 binds as a file id the CLIENT can address — 44 of 44, against two controls
+that do not.** Reproduce with `python studies/slice/review/aurabind.py`, which reads
+`binds_plainly` at `archive.py:600` against `vault/run/2026-08-20_21511009c460/Gw.dat`:
+
+| set | binds |
+|---|---|
+| `s_aura` column 2 | **44 of 44** |
+| control: the same ids + 1 | 26 of 44 |
+| control: 44 random draws from the same range | 22 of 44 |
+
+The controls matter and were the point of the design: the archive is dense in that band,
+so ~half of *anything* binds, and 44/44 against a ~55% background is the discrimination.
+(`feedback-a-negative-needs-a-positive-control`, applied in the positive direction: a
+check that could not have failed would have proved nothing.)
+
+## SLICE-F5 — properties 6 and 7 are apply/remove of ONE function, and that CORROBORATES an upstream name from structure
+
+OBSERVED. The two case bodies are byte-identical but for one immediate:
+
+```
+property 6   0x00812AF5   push 1 / push ebx / push edi / call 0x7DFAB0
+property 7   0x00812B08   push 0 / push ebx / push edi / call 0x7DFAB0
+```
+
+OpenTyria's `GmAgentProperties.h` names them `ApplyAura` and `RemoveAura` — the
+`OPENTYRIA` table at `genericvalue.py:183`, UPSTREAM; GWCA independently names them `add_effect` and
+`remove_effect`. **The structure agrees with the names without having been told them** —
+one function, one boolean, two ids — so this is CORROBORATED rather than UPSTREAM, which
+is a stronger label than the table alone could earn. Note what it is not: the *name* is
+still borrowed. What we measured is a three-argument call taking an on/off flag.
+
+**Consequence for the slice:** an aura HAS an off switch where the glow (SLICE-F1) appears
+not to. If a boss needs to stop glowing — on death, say — property 7 is the lead and
+property 29 is not.
+
+## SLICE-F7 — **SLICE-U2: the parade RAN and the client named fifteen creatures for us**
+
+OBSERVED, 2026-09-11, harness `20260911T231549`, build 38797, loopback, agent-driven,
+RUN VERDICT PASS. Full run sheet and scoring: [RUN-PARADE.md](RUN-PARADE.md) §4a.
+
+**The control passed, and it is why the rest of the run means anything.** One body was
+spawned deliberately without its `0x0057`; it drew the solid white untextured box. The
+gamesrv log shows exactly **eleven** `MONSTER_COMPOSITE` sends against fifteen creates —
+the eleven rows that carry a body — so the arm was armed on the wire before anything was
+judged by eye. Fifteen of fifteen bodies were legible against a floor of twelve of
+fourteen.
+
+**Fifteen nameplates, drawn by the client from its own string table:** Wolf, Bandit
+Raider, Bandit Firestarter, Plague Worm, River Skale, River Skale Tad, Lord Darrin,
+Mesmer Trainer, Ascalonian Townsfolk, Academy Monk, Necromancer, Outfitter, Lieutenant
+Fisk, Harner, Harner.
+
+**Ten of the fifteen join to a template on evidence; five do not, and the doc says which.**
+The joins rest on allegiance (`band` is carried by exactly two rows), a level pairing
+(shell `82023` at levels 1 and 0 → "River Skale" and its "Tad"), uniqueness of a
+profession (one Mesmer, one Necromancer), and construction (the two Harners are the
+control and its pair). The five unjoined are five human templates against five human
+names, and the finisher is a second parade of just those five, which cannot be ambiguous.
+
+**Two results that were not among the questions.**
+
+1. **`content/npcs.toml`'s `lakeside_worm` is named, and the promotion is decisive rather
+   than inferred.** That row's note said "Do not promote it to a real name until a client
+   renders it." One has: the nameplate read **Plague Worm**. The reason this does not
+   depend on picking the right body out of a fifteen-body frame is that a nameplate is the
+   client resolving `enc_name`, and the spawned row carries that row's four words
+   byte-identically — same words, same string, same plate. `studies/presearing`'s manifest
+   independently lists "Plague Worm" among Pre-Searing's quest-only creature types, from a
+   wiki pass with no connection to this definition slot; that corroborates and was not
+   used to reach it.
+2. **The roster's own expectation was wrong, and the run corrected it.** RUN-PARADE
+   assumed the warrior/monk pair would come out of Tier A. **Tier A contains no monk** —
+   the two bandits are a Warrior and an Elementalist. The pair the slice should use is
+   **Bandit Raider** (`def_1421`) plus the **Academy Monk** body spawned HOSTILE, which
+   costs nothing because `npcdefs.py`'s own header already states that hostility is a
+   property of a spawn and not of a type.
+
+**One registered suspicion refuted.** `def_1420` closes to five files, by far the smallest
+in the set, and question 4 asked whether that would show. It did not — it rendered a
+normal humanoid. A small closure means a shell reusing its neighbours' files, not a broken
+one.
+
+**FINISHED 2026-09-11 by ten ONE-BODY runs, and the finisher corrected the finding above.**
+[RUN-PARADE.md](RUN-PARADE.md) §4b carries the table. Two things came out of it:
+
+- **`def_1470` is the Outfitter, not the Academy Monk.** This finding's first pass inferred
+  it from the profession byte (`def_1470` is profession 3). That was wrong, and
+  **name-matches-profession is refuted as a join key** — a second, independent witness to
+  what `studies/monsterai` measured from the other side. The Academy Monk is `def_1486`,
+  so **the slice's monk body changed**. The warrior, `def_1421` "Bandit Raider", was
+  re-checked alone in an empty world and holds.
+- **The method that fixed it is the finding worth keeping.** §4a's own plan said five
+  bodies would be unambiguous "because five bodies leave five names"; five bodies in one
+  frame is exactly the per-body join that failed the first time, and five names against
+  five bodies constrains the set, not the pairing. **One body per world has exactly one
+  nameplate** and needs no projection, compass or elimination at all — at eighty seconds a
+  run, certainty was cheaper than the argument for doing without it.
+
+Twelve of fifteen are now OBSERVED directly (ten runs plus the two Harners, which are the
+control and its pair by construction). The three left rest on a structural argument rather
+than a profession one: `82023` is the only shell present twice and "River Skale" / "River
+Skale Tad" are the only two names sharing a stem, which leaves Wolf.
+
+## SLICE-F8 — **SLICE-U3: `0x00B1` is the client's travel REQUEST, and 34 of 41 transfers do not have one**
+
+OBSERVED, 2026-09-11, desk pass over the whole live corpus, no client launched.
+Reproduce with `python studies/slice/review/transferc2s.py`. 20 captures scanned
+(one skipped — no `wire.jsonl`), **41 game-channel `0x01A5` transfers**.
+
+**The signal, and the controls that make it one.** Every c2s opcode was scored as
+`in-window / total` precisely because the client sends `0x003D MOVE_SET_HEADING`
+constantly, so "it appeared just before the transfer" is true of almost everything and
+means nothing:
+
+| opcode | pre | post | total | pre/total | was LAST before |
+|---|---|---|---|---|---|
+| `0x003D` | 399 | 0 | 3079 | 13.0% | 24 |
+| `0x0009` | 79 | 0 | 1390 | 5.7% | 4 |
+| `0x0092` | 61 | 0 | 150 | 40.7% | 0 |
+| `0x00C1` | 60 | 0 | 844 | 7.1% | 3 |
+| **`0x00B1`** | **7** | **0** | **7** | **100.0%** | **7** |
+
+`0x00B1` occurs **seven times in the entire corpus and all seven are inside a
+pre-transfer window**, always as the last thing the client says, at **47–85 ms** before
+the handoff. Nothing else comes close: the two other 100% rows are `0x005C` (total 2) and
+`0x0041` (total 1), and neither was ever last.
+
+**And then the decisive test, which is not a correlation at all.** `0x00B1`'s field[1] is
+a word, and it **equals the destination map the following `0x01A5` names, 7 of 7**:
+
+```
+[32945, 281, 0, 0, 0, 1] -> map 281  (+84 ms)
+[32945, 248, 0, 0, 0, 1] -> map 248  (+70, +63, +55, +56, +47 ms)
+[32945, 242, 0, 0, 0, 1] -> map 242  (+85 ms)
+```
+
+(32945 is `0x80B1` — the opcode carrying the c2s bit.) The imported shape agrees:
+`GAME_CMSG` 177 is `[msg_header, word, byte, word, byte, byte]`, 9 bytes, and the word is
+where the map id sits. **Candidate name `MAP_TRAVEL_REQUEST`, confidence MEDIUM** — this
+is wire evidence only, with no disassembly behind it, which is a weaker footing than the
+`TARGET_SELECT` entry beside it in `schema/overrides.json`. Naming it there is a small
+follow-up with its own discipline, not part of this finding.
+
+**THE RESULT THAT ACTUALLY MOVES SLICE-B8, and it is the one nobody expected: 34 of the
+41 transfers have no client request at all.** The seven with `0x00B1` all go to
+outpost-type maps (248 ×5, 281, 242); the other thirty-four are the server handing the
+client onward unprompted — 20 of them into explorables (280 ×16, 146 ×4). So **the
+server initiates a transfer whenever it likes, and that is retail's majority case.** The
+slice's zoning therefore does **not** depend on decoding this opcode: SLICE-B8 can send
+`0x0028 → 0x01A5 → 0x0099` on its own trigger — a player entering a portal region — and be
+doing exactly what ArenaNet's server does 83% of the time.
+
+**A second observation, free from the same pass:** `0x0008` appears **41 times in the
+post-transfer window and 0 times in any pre-window** (total 49). Every transfer is
+followed by the client saying `0x0008` on the dying connection. Unnamed; recorded rather
+than chased.
+
+**A method note, because the first version of this pass was wrong in a quiet way.** It
+read the destination by joining to the following `0x0099` and taking `values[0]` — which
+is the OPCODE, since the codec puts it there. Every one of the 41 rows reported "map 153"
+(= `0x0099`). **A constant answer across every row is the shape of a field error, not a
+finding**, and it was caught by the answer being implausible rather than by any check.
+The fixed read takes the destination off `0x01A5`'s own field[4] and needs no join.
+
+## SLICE-F6 — what the desk cannot settle
+
+Carried so the next session does not re-read the same bytes hoping for more:
+
+1. **The channel order** (SLICE-F2) — one probe, prediction registered.
+2. **What a glow id MEANS** (SLICE-F3) — the same probe, if the colours are legible.
+3. **Whether the glow can be cleared** (SLICE-F1) — the forwarder only ORs. A probe that
+   sets a glow and then tries every plausible clear is a second run, not a desk pass.
+4. **Whether retail sends any of this.** Zero occurrences in a 22,524-message corpus over
+   twelve connections. A loopback probe measures OUR server driving a retail client, which
+   is the right instrument for "does the client draw it" and no instrument at all for "is
+   this what ArenaNet sends". Do not let a green loopback run get written up as the
+   latter — that is `studies/method`'s standing weakness and this arc is not exempt.

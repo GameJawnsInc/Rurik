@@ -59,7 +59,9 @@ enemy and nothing about it has been checked against what actually spawns there.
 # whatever language it runs. We cannot read them and did not need to.
 
 [npc.lakeside_worm]
-name = "burrowing worm (Lakeside County)"
+# NAME PROMOTED 2026-09-11 by the model parade -- see the note below, which
+# asked for exactly this evidence and has been rewritten rather than deleted.
+name = "Plague Worm"
 file_id = 116366
 profession = 1
 level = 0
@@ -88,12 +90,24 @@ five-message create burst and the two 2.00 s +/-0.06 s transition windows, 148/1
 wire, not a reconstruction: [definition, file_id, 0, scale, 0, flags, profession, \
 level, enc_name] lines up field for field."""
 note = """
-THE NAME IS OURS AND IS UNVERIFIED. "burrowing worm" is a label for a creature we have
-only ever seen as an agent id and a definition slot; unlike the hatcher, this one has
-never been rendered by a client we control, so nothing has resolved its EncString into
-readable text. Do not promote it to a real name until a client renders it -- the hatcher
-row is named the way it is because its four words came back as "Hatcher [Collector]" in
-English, which is a thing that was watched happen.
+THE NAME WAS OURS AND UNVERIFIED UNTIL 2026-09-11; IT IS NOW OBSERVED. This
+paragraph used to read "burrowing worm is a label for a creature we have only ever
+seen as an agent id and a definition slot... Do not promote it to a real name until
+a client renders it." A client rendered it: the model parade
+(studies/slice/RUN-PARADE.md, harness 20260911T231549) stood this definition in
+Lakeside County and its nameplate read **Plague Worm** in English.
+
+WHY THIS DOES NOT REST ON PICKING THE RIGHT BODY OUT OF A SCREENSHOT. The parade
+stood fifteen bodies at once, so "which nameplate belongs to which row" is a real
+question for most of them -- and it is not a question here. A nameplate is the
+client resolving `enc_name` against its own string table, and the row the parade
+spawned carries the four words below BYTE-IDENTICALLY (vault def_1442; checked
+field by field, enc_name included). Same four words, same string, same plate. The
+elimination argument that also points here is redundant.
+
+CORROBORATION, and it was not used to reach the answer: studies/presearing's own
+manifest lists "Plague Worm" among Pre-Searing's quest-only creature types, from a
+wiki pass months earlier that had no connection to this definition slot.
 
 `level = 0` is what the wire carries in the slot our sender calls level. That is recorded
 rather than corrected: the field name is ours, and a worm whose level reads 0 is at least
