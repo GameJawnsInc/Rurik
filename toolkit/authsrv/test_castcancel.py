@@ -43,7 +43,7 @@ import checks  # noqa: E402
 # two-regime rule. 24 earlier that day, 21 before it, 15 when the file
 # carried the movement door alone. Measured both ways: 30 with a vault, 30
 # without -- §7 stubs nothing it does not already stub.
-LEDGER = checks.Ledger("cast cancel", floor=32)   # +1 2026-09-12: the queued drop's stop property (SLICE-F20); from the green run
+LEDGER = checks.Ledger("cast cancel", floor=39)   # 2026-09-12: +1 the queued drop's stop property, +7 section 3b the attack-skill root (SLICE-F20); from the green run
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -211,6 +211,96 @@ def section_attack_skills():
     finally:
         authsrv.skill_timing = saved_t
         authsrv._is_attack_skill = saved_a
+
+
+def section_attack_skill_roots():
+    """SLICE-F20: a BEGUN attack skill roots the body through its windup.
+
+    The owner's third run: "still sliding during the Power Attack animation
+    -- stock is needing to stand still during the cast animation, then able
+    to move again once the attack swing completes". Retail withholds every
+    answer to a movement report inside the windup until the strike (2 of 2,
+    20260817T231139 t=693.029 / 765.092). The helper names the cast that
+    roots; the guard arm ahead of both movement arms refuses the report.
+    """
+    import os
+    import authsrv
+    print("\n3b. a begun attack skill ROOTS the body until its strike")
+    saved_t = authsrv.skill_timing
+    saved_a = authsrv._is_attack_skill
+    saved_r = authsrv.ATTACK_SKILL_ROOT
+    authsrv.skill_timing = lambda sid: (1.0, 0.0, 3.0)
+    try:
+        sent = []
+        send = lambda op, vals, label="", quiet=False: \
+            sent.append((op, vals, label))
+        # a spell never roots
+        authsrv._is_attack_skill = lambda sid: False
+        state = {"agents": {}}
+        _press(authsrv, send, state, skill=105)
+        check(authsrv.attack_skill_roots(state) is None,
+              "a begun SPELL does not root -- movement cancels it (castmech "
+              "3f), the guard arm must not swallow that report")
+        # a begun attack skill roots through its windup
+        authsrv._is_attack_skill = lambda sid: True
+        state = {"agents": {}}
+        _press(authsrv, send, state, skill=394)
+        cast = authsrv.attack_skill_roots(state)
+        check(cast is not None and cast["skill_id"] == 394,
+              "a begun attack skill short of its strike is the cast that "
+              "roots the body", f"{cast and cast['skill_id']}")
+        # the refusal is counted on the cast and printed once
+        authsrv.refuse_move_while_rooted(state, 0,
+                                         authsrv.GAME_CMSG_TURN_TO_DIRECTION,
+                                         cast)
+        authsrv.refuse_move_while_rooted(state, 0,
+                                         authsrv.GAME_CMSG_MOVE_TO_COORD, cast)
+        check(cast.get("moves_refused") == 2,
+              "each refused report is counted on the cast (printed once)",
+              f"{cast.get('moves_refused')}")
+        # after the strike (E3 sent) the body is free
+        sent.clear()
+        _rewind(state, 1.0)
+        authsrv.cast_tick(send, state, 0)
+        check(cast["e3_sent"] and authsrv.attack_skill_roots(state) is None,
+              "once the strike lands (E5 and E3 in the same instant for an "
+              "attack skill) nothing roots: the player moves before the "
+              "animation plays out -- the quarterstep",
+              f"e3_sent {cast['e3_sent']}")
+        # an attack skill still walking in (SLICE-C2) does not root
+        state = {"agents": {40: {"name": "t", "dead": False, "last_hit": 0.0,
+                                 "max_health": 100.0, "health": 100.0,
+                                 "pos": (400.0, 0.0)}},
+                 "pos": (0.0, 0.0), "client_pos": (0.0, 0.0), "plane": 0}
+        _press(authsrv, send, state, skill=394, target=40)
+        check(state["pending_casts"][0]["begun"] is False
+              and authsrv.attack_skill_roots(state) is None,
+              "an attack skill still APPROACHING has not begun and does not "
+              "root -- movement drops it instead (45 + E2)")
+        # the revert arm
+        authsrv.ATTACK_SKILL_ROOT = False
+        state = {"agents": {}}
+        _press(authsrv, send, state, skill=394)
+        check(authsrv.attack_skill_roots(state) is None,
+              "--no-attack-skill-root: nothing roots, the report is answered "
+              "at once (the pre-run arm)")
+        authsrv.ATTACK_SKILL_ROOT = saved_r
+        # source lock: ONE guard arm, ahead of BOTH movement arms
+        src = open(os.path.join(os.path.dirname(authsrv.__file__),
+                                "authsrv.py"), encoding="utf-8").read()
+        guard = src.index("and attack_skill_roots(state) is not None):")
+        kbd = src.index("elif opcode == GAME_CMSG_TURN_TO_DIRECTION:")
+        click = src.index("elif opcode == GAME_CMSG_MOVE_TO_COORD:")
+        check(src.count("and attack_skill_roots(state) is not None):") == 1
+              and guard < kbd and guard < click,
+              "one guard arm in handle(), ahead of the keyboard arm AND the "
+              "click arm, so neither runs -- no hold release, no chain "
+              "stop, no lead, no position take -- while an attack skill "
+              "roots the body", f"guard {guard}, kbd {kbd}, click {click}")
+    finally:
+        authsrv.skill_timing = saved_t
+        authsrv._is_attack_skill = saved_a
+        authsrv.ATTACK_SKILL_ROOT = saved_r
 
 
 def section_clean_restart():
@@ -624,6 +714,7 @@ def main():
     section_move_cancels()
     section_aftercast_uncancellable()
     section_attack_skills()
+    section_attack_skill_roots()
     section_clean_restart()
     section_chain_half()
     section_landing_split()

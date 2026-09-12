@@ -645,6 +645,13 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                     help="No-op since ANIMREF-RE 39: the approach is the "
                          "default. Kept so the CASE 7 command line still "
                          "parses.")
+    ap.add_argument("--no-attack-skill-root", action="store_true",
+                    help="THE REVERT ARM for SLICE-F20's root: answer a "
+                         "movement report during a begun attack skill's "
+                         "windup at once (hold released, lead granted), so "
+                         "the body slides through the strike as before "
+                         "2026-09-12. The default refuses the report until "
+                         "the strike, which is what retail does (2 of 2).")
     ap.add_argument("--no-attack-approach", action="store_true",
                     help="THE REVERT ARM for ANIMREF-RE 38: the press-time "
                          "reach back to the unmeasured 1500 u and no "

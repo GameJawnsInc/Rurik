@@ -986,6 +986,34 @@ begun attack skill → `[8→0]`, `[49]`, E2. `test_castcycle` §2d/§2e and `te
 pin all three. The 49 arm also corrects C1's out-of-reach strike release, which had borrowed
 the spell's 59.
 
+**The owner's third run (harness `20260912T170924`): the 45 release is right, the body
+still slides.** *"No cancel over the head this time, icon just released. Still sliding
+during the Power Attack animation. Stock behavior is needing to stand still during the
+cast animation, then able to move again once the attack swing completes (but before the
+animation completely plays out, like quarterstepping)."* The log has the mechanism in
+four lines: the strike begins on arrival with `[8 → 1]`; a `0x003D` keyboard report
+arrives inside the windup; our server answers it — `action released: the player moves`
+(`[8 → 0]`) and a KBD LEAD `0x0029` — and the body walks through the strike. **Retail
+defers that report, 2 of 2** (`c3_midskill` scan, the same corpus): a `0x003D` at +0.378
+and +0.439 s into a 0.565 s attack-skill windup (`20260817T231139` t=693.029, 765.092)
+gets **no answer at all** until the strike, where `[46]`, the adrenaline gain, `E3`,
+`[8 → 0]` and only then the movement answer (`0x0025`, `0x002B`, `0x0029`) go out in ONE
+batch. A spell's mid-cast report is answered at once (59, E2, the grant — 2 of 2 on the
+cancel-family capture), so the deferral is the attack family's. Shipped: a guard arm ahead
+of both movement arms refuses a moving `0x003D` or a `0x003E` while `attack_skill_roots`
+names a begun, unstruck attack skill — no hold release, no chain stop, no lead, no position
+take, printed once per cast (`ROOTED: keyboard report refused …`). After the strike (E3 =
+E5 for an attack skill) nothing roots, so the next report is answered as before: the
+quarterstep. `--no-attack-skill-root` is the revert. `test_castcancel` §3b.
+
+**Residual, named.** Retail answers the *withheld* report itself at the strike, in the E3
+batch, behind an `[8 → 0]` that is the E3 release ANIMREF §29 reverted to opt-in
+(`--e3-release`, Suspect B unmeasured). Ours releases nothing at the strike and waits for
+the client's next report, which the run shows the client re-sending every few hundred
+milliseconds against the held gate. One change per run: if the owner reports a hitch
+between the hit and moving again, the attack-family E3 release is the next single-flag
+A/B, and it is measured (3 of 3 attack-skill E3s carry `[8, me, 0]`).
+
 **Refuted if** the owner's press from range still strikes without walking, or the walk
 ends and nothing begins (the arrival predicate — `approach_tick`'s eta-or-stop-radius —
 disagreeing with the client's own resolver, which C1's gate would then show as a released

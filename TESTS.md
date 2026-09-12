@@ -10207,6 +10207,13 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   49 on C1's out-of-reach strike release and §2e pins the 45 on both of C2's unpaid drops
   (exact op lists now); `test_castcancel.py` §3 (floor 31 -> 32) pins the 59-then-45 pair
   when movement drops a begun spell and the attack skill queued behind it.
+  **The attack-skill root (2026-09-12, the owner's third run: "still sliding during the
+  Power Attack animation").** `test_castcancel.py` §3b (floor 32 -> 39): `attack_skill_roots`
+  names a begun, unstruck attack skill and nothing else (a spell no, an approaching one no,
+  a struck one no, the revert flag no); the refusal is counted on the cast; and a source
+  lock pins ONE guard arm in `handle()` ahead of BOTH movement arms, so a moving 0x003D or
+  a 0x003E during the windup gets no answer at all -- retail's own silence until the
+  strike, 2 of 2 (studies/slice F20).
   `toolkit/authsrv/test_castcycle.py` (the four-opcode cast cycle against
   ArenaNet's own template — six complete cycles, two live captures, same order
   every time: E4 at the press, E5 at cast end carrying the recharge in whole
