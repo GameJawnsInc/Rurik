@@ -226,6 +226,67 @@ control and its pair by construction). The three left rest on a structural argum
 than a profession one: `82023` is the only shell present twice and "River Skale" / "River
 Skale Tad" are the only two names sharing a stem, which leaves Wolf.
 
+## SLICE-F8 — **SLICE-U3: `0x00B1` is the client's travel REQUEST, and 34 of 41 transfers do not have one**
+
+OBSERVED, 2026-09-11, desk pass over the whole live corpus, no client launched.
+Reproduce with `python studies/slice/review/transferc2s.py`. 20 captures scanned
+(one skipped — no `wire.jsonl`), **41 game-channel `0x01A5` transfers**.
+
+**The signal, and the controls that make it one.** Every c2s opcode was scored as
+`in-window / total` precisely because the client sends `0x003D MOVE_SET_HEADING`
+constantly, so "it appeared just before the transfer" is true of almost everything and
+means nothing:
+
+| opcode | pre | post | total | pre/total | was LAST before |
+|---|---|---|---|---|---|
+| `0x003D` | 399 | 0 | 3079 | 13.0% | 24 |
+| `0x0009` | 79 | 0 | 1390 | 5.7% | 4 |
+| `0x0092` | 61 | 0 | 150 | 40.7% | 0 |
+| `0x00C1` | 60 | 0 | 844 | 7.1% | 3 |
+| **`0x00B1`** | **7** | **0** | **7** | **100.0%** | **7** |
+
+`0x00B1` occurs **seven times in the entire corpus and all seven are inside a
+pre-transfer window**, always as the last thing the client says, at **47–85 ms** before
+the handoff. Nothing else comes close: the two other 100% rows are `0x005C` (total 2) and
+`0x0041` (total 1), and neither was ever last.
+
+**And then the decisive test, which is not a correlation at all.** `0x00B1`'s field[1] is
+a word, and it **equals the destination map the following `0x01A5` names, 7 of 7**:
+
+```
+[32945, 281, 0, 0, 0, 1] -> map 281  (+84 ms)
+[32945, 248, 0, 0, 0, 1] -> map 248  (+70, +63, +55, +56, +47 ms)
+[32945, 242, 0, 0, 0, 1] -> map 242  (+85 ms)
+```
+
+(32945 is `0x80B1` — the opcode carrying the c2s bit.) The imported shape agrees:
+`GAME_CMSG` 177 is `[msg_header, word, byte, word, byte, byte]`, 9 bytes, and the word is
+where the map id sits. **Candidate name `MAP_TRAVEL_REQUEST`, confidence MEDIUM** — this
+is wire evidence only, with no disassembly behind it, which is a weaker footing than the
+`TARGET_SELECT` entry beside it in `schema/overrides.json`. Naming it there is a small
+follow-up with its own discipline, not part of this finding.
+
+**THE RESULT THAT ACTUALLY MOVES SLICE-B8, and it is the one nobody expected: 34 of the
+41 transfers have no client request at all.** The seven with `0x00B1` all go to
+outpost-type maps (248 ×5, 281, 242); the other thirty-four are the server handing the
+client onward unprompted — 20 of them into explorables (280 ×16, 146 ×4). So **the
+server initiates a transfer whenever it likes, and that is retail's majority case.** The
+slice's zoning therefore does **not** depend on decoding this opcode: SLICE-B8 can send
+`0x0028 → 0x01A5 → 0x0099` on its own trigger — a player entering a portal region — and be
+doing exactly what ArenaNet's server does 83% of the time.
+
+**A second observation, free from the same pass:** `0x0008` appears **41 times in the
+post-transfer window and 0 times in any pre-window** (total 49). Every transfer is
+followed by the client saying `0x0008` on the dying connection. Unnamed; recorded rather
+than chased.
+
+**A method note, because the first version of this pass was wrong in a quiet way.** It
+read the destination by joining to the following `0x0099` and taking `values[0]` — which
+is the OPCODE, since the codec puts it there. Every one of the 41 rows reported "map 153"
+(= `0x0099`). **A constant answer across every row is the shape of a field error, not a
+finding**, and it was caught by the answer being implausible rather than by any check.
+The fixed read takes the destination off `0x01A5`'s own field[4] and needs no join.
+
 ## SLICE-F6 — what the desk cannot settle
 
 Carried so the next session does not re-read the same bytes hoping for more:
