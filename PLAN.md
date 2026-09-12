@@ -1825,6 +1825,8 @@ scope; nothing in `toolkit/` changed, because nothing ever enforced this in code
 
 ## 8. Immediate next actions
 
+### ✅ SUITE 2026-09-11 (night) — **204 of 204 green, 0 red, 0 suspect, 12,149 checks, 1,749 s wall** (6,994 s serial, 4 jobs), on `main` at `513cf3b3` — the modularization arc's closing commits: `test_agtrack_guard`'s three deleted-flag absence locks watch `serverargs.py` too, CLAUDE.md carries the leaf-module convention, and `authsrv.py`'s module docstring ends in a 25-entry SECTION MAP (banner text to grep, flag families, functions, the leaves that took code out; no line numbers) that is also the top of `--help`. The arc is closed: further splits of `authsrv.py` cost a lock census each for a few hundred lines.
+
 ### ✅ SUITE 2026-09-11 (evening) — **204 of 204 green, 0 red, 0 suspect, 12,149 checks, 1,287 s wall** (5,146 s serial, 4 jobs), on `main` at `f565ffc6` — REFACTOR-TABLESQRT landed: the REALFIX-C0 table-sqrt block out of `grantsim.py` into `tablesqrt.py` (2,027 → 1,871 lines); its one class-(a) pin, `LUT_VA`, changed file and nothing else — proven by an `updatecheck --after` against a baseline taken before the move (exactly PIN GONE + PIN NEW), and the vault baseline was re-taken in the same commit.
 
 ### ✅ SUITE 2026-09-11 (later) — **204 of 204 green, 0 red, 0 suspect, 12,149 checks, 1,424 s wall** (5,695 s serial, 4 jobs), on `main` at `223d997f` — REFACTOR-SERVERARGS landed: `build_parser()` out of `authsrv.py` into `serverargs.py` (27,345 → 25,569 lines) with the eighteen test locks that pinned the argparse block re-aimed in the same commit; the census that made it a nine-file, 23-line migration rather than a guess is recorded in that commit.
