@@ -1049,6 +1049,27 @@ against §29.1's rule, because they are two symptoms with two revert flags: the 
 convict either alone — *press while running: does the body stop?* / *hold W through the
 windup: does it move after the hit?*
 
+**The owner's fifth run (harness `20260912T194350`): the halt is convicted, the release
+alone is not.** *"Yes, the body stops. No, it doesn't move after the hit lands."* The log: the
+strike batch carried the `[8 → 0]` release as shipped, and the client's answer to it was a
+**`0x0047` stop report** — not a walk. A held key has no new edge to report, and the client's
+own resume poll (ANIMREF §28's decode) does not produce one either: it reported a stop. So the
+residual named twice above was the whole mechanism: **retail's strike batch answers the
+withheld report itself** — `[8 → 0]`, then `0x0025`, `0x002B`, `0x0029` for the LAST report
+withheld (692.825: two withheld, mt 8 then 3; the answer is mt 3) — and the client walks on
+that answer with no report of its own (0 c2s between the withheld reports and the strike
+answer, 2 of 2). Shipped: the refusal keeps the latest report (`state["withheld_report"]`);
+the recv loop's socket timeout is shrunk to the rooting cast's E3 instant (`withheld_wake`,
+floor 0.02 s over the tick's 50 ms cadence); once nothing roots, `withheld_replay_take`
+sends the release and hands the report back, and the loop dispatches it through the very
+movement arm it was refused from — as a batch of one on the quiet wake, or FIRST in a
+received batch, ahead of any `0x0047` the client sent against the still-held gate. The tick
+no longer releases at E3: a player grant is recv-thread-only (REV-2), so the release and the
+answer go out together as retail's do; the split from the E3 itself is the recv wake's
+latency, 20–50 ms. `test_castcancel` §3b (floor 40 → 44) pins the keep, the refuse-while-
+rooting, the release-and-hand-back, the one-answer-per-report, the nothing-withheld null,
+and a source lock on the wake shrink and both replay branches.
+
 **Refuted if** the owner's press from range still strikes without walking, or the walk
 ends and nothing begins (the arrival predicate — `approach_tick`'s eta-or-stop-radius —
 disagreeing with the client's own resolver, which C1's gate would then show as a released

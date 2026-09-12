@@ -10222,6 +10222,16 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   `test_castcancel.py` §3b (floor 39 -> 40): the E3 batch carries `[8 -> 0]` behind the E3
   when a report was withheld during the windup (retail 3 of 3) and nothing when none was
   (retail 0 of 3 -- the hold goes on the next input).
+  **The replay (2026-09-12, the owner's fifth run: the release alone drew a stop report).**
+  `test_castcancel.py` §3b (floor 40 -> 44): the refusal KEEPS the latest report;
+  `withheld_replay_take` refuses while the cast roots and `withheld_wake` names the E3
+  instant; after the strike the TICK releases nothing, the take sends `[8 -> 0]` and hands
+  the report back (retail's strike batch answers the withheld 0x003D itself, 2 of 2, and the
+  client walks on that answer), the store clears, a second take finds nothing; with nothing
+  withheld the strike releases nothing and the loop has nothing to wake for. Source lock: one
+  timeout shrink in `handle()` and the take in BOTH recv branches -- the quiet wake as a
+  batch of one with no bytes behind it (`chunk` None), and a received batch with the replay
+  FIRST.
   `toolkit/authsrv/test_castcycle.py` (the four-opcode cast cycle against
   ArenaNet's own template — six complete cycles, two live captures, same order
   every time: E4 at the press, E5 at cast end carrying the recharge in whole
