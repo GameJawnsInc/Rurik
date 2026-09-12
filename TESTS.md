@@ -872,6 +872,27 @@ Every one of these, in the order they were written:
   JOIN -- every skill's recipe string id resolving to its own generated name,
   188 of 188, read back through reskin's own recipe loader rather than compared
   in memory, with a one-id shift collapsing it to 0 of 188. ~2 s),
+  `toolkit/mapdata/test_compose.py` (the archive COMPOSER, SLICE-B9's ONE
+  archive: `compose.py` drives the two client-proven writers -- `textwrite.py`
+  for strings, `deploy.py --install` for areas -- into a run directory assembled
+  from a PRISTINE client snapshot, and reads the result back through the
+  client's own resolvers. It writes nothing itself, so this file re-checks
+  neither writer; it checks what is only true of the composition. **The claim
+  that earns the file: the record a string goes in is DERIVED from its
+  consumer's `enc_name`** -- the quest or npc row's own wire words through
+  `codedstr.decode_id` -- and never typed, so a manifest cannot author a string
+  no message sends, and section 1 requires the derivation to REFUSE every
+  shape that is not one authored record in our file 98: a retail name (four
+  opaque ids), an id in ArenaNet's own file (0x3D64 -> file 15), the identity
+  tier, a consumer nothing defines, two consumers disagreeing about one record.
+  Section 2 loads `content/compose.toml` with the vault overlay OFF and derives
+  its records, the bare-machine check `test_quests` section 21 makes of the
+  giver's template. Section 3 reads the launch recipe for `RURIK_DAT` and for
+  the exe BESIDE the archive, the two facts `deploy.launch`'s comment says a
+  run cannot do without. Section 4 pins `--fresh`'s product list to NAMES --
+  an area's four build files and this tool's own journals, never the client or
+  the archive. Floor 24, MEASURED 2026-09-12. No vault, no archive, no client;
+  ~2 s),
   `toolkit/mapdata/test_skillnames.py` (the 188 authored skill names a custom
   profession needs -- the text sibling of `glyphs.py`, and like it the file is
   mostly about the INDEX ARITHMETIC, because "188 names came out and they are

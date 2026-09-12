@@ -1449,11 +1449,13 @@ PROBES = {
                  "their renderer. Blank or '?' on the treatment alone indicts "
                  "the archive/encoding seam, with the control proving the rig.",
         steps=_quest_name_authored_steps(o),
-        note="RUN WITH --map 449 AND --exe pointing at the reskin-roster "
-             "client -- vault/run/reskin-roster/Gw.exe -- because only ITS "
-             "archive holds record 200; the default run archive resolves "
-             "100552 to an empty record and the treatment arm would measure "
-             "the wrong thing. Agent-pilotable (fixed-position tracker, no "
+        note="RUN WITH --exe pointing at a client whose ARCHIVE holds record "
+             "200: vault/run/reskin-roster/Gw.exe (the original, --map 449) "
+             "or, since SLICE-B9, vault/run/slice/Gw.exe with RURIK_DAT at "
+             "its Gw.dat (`compose.py --name slice --verify` prints the "
+             "recipe). The default run archive resolves 100552 to an empty "
+             "record and the treatment arm would measure the wrong thing. "
+             "Agent-pilotable (fixed-position tracker, no "
              "clicks): actions '0:play', cadence shots, hold ~60 s. "
              "ANSWERED 2026-08-19, agent-piloted (harness 20260819T085654): "
              "control tracker 'Ascalon:' + toast 'Quest Added: Ascalon'; "
