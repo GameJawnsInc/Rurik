@@ -788,6 +788,16 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "those parameterised first. Try `--hero-skills 276` "
                          "(Restore Condition, target OTHER ally) or `277` "
                          "(Mend Ailment, target ally, so it can self-heal).")
+    ap.add_argument("--no-portals", action="store_true",
+                    help="SLICE-B8 REVERT: no [portal.*] row fires, so the "
+                         "player is never handed to another map. Every run "
+                         "before 2026-09-12.")
+    ap.add_argument("--transfer-alt", default=None, metavar="HOST",
+                    help="SLICE-B8: a SECOND 127/8 alias this gamesrv listens "
+                         "on, advertised by a transfer so the client re-dials "
+                         "an address it is not connected to (whether it would "
+                         "re-dial the same one is NOT FOUND, studies/tape T9). "
+                         "The harness passes its game host + 30.")
     ap.add_argument("--no-interact-route", action="store_true",
                     help="REVERT: an out-of-range INTERACT is held and the "
                          "player is NOT walked over. The routed interact-walk "

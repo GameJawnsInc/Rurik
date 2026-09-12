@@ -738,6 +738,69 @@ proven to move the sheet; what a run would add is the sheet moving by 100 on the
 click. One hand-driven run with `--map 146 --area errand`, reading the XP bar before and
 after, closes it.~~
 
+## SLICE-F17 — **SLICE-B8: the transfer, sent by us — 148 → 146 on our own trigger**
+
+**PRE-REGISTERED 2026-09-12 17:40, before the run.** Two `[portal.*]` rows: a 200 u
+circle 500 u west of the shared arrival point on 148 and on 146, each pointing at the
+other (the point is MEASURED walkable on `0x1B97D`'s mesh; 500 u east is not). A player
+who was outside a circle and walks in gets `0x0028 → 0x01A5 → 0x0099` — the sequence
+retail's server sends unprompted in 34 of 41 corpus transfers (SLICE-F8) — with a
+sockaddr for the alias the client is NOT on (the harness gives the gamesrv a second
+listener, game host + 30), this connection's `world_id`/`player_id`, the destination and
+its `explorable` byte; then the tape's own graceful close (`graceful_close`, extracted
+from `close_after_transfer`). On re-entry the VERSION frame's ids match what we issued and
+`--map` stands down (`test_transfer`, 22 checks).
+
+**Question.** Does a retail client, handed `0x01A5` by OUR server, re-dial OUR other
+alias and load the map we named — and does our server serve it there, on one process,
+with the quest carrier intact?
+
+**Prediction.** Harness `--map 148 --walk "S:2 wait:25 shot:1"` (S walks −x from the
++x-facing spawn: 576 u west, into the circle). The gamesrv log shows, in order:
+`PORTAL 'ascalon_to_lakeside'`, `TRANSFER to map 146 via 127.0.0.33:6112`, `closed
+(transfer)`; then a NEW connection `[c2] GAME version ... map_id=146` with the SAME
+world_id/player_id as c1's, `RE-ENTRY after our own transfer ... --map 148 stands down`,
+and c2's instance load reaching `INSTANCE_LOAD_FINISH` on 146 with the player at
+(9826, 8077). `Gw.log` shows a map load, no assert. The two maps share a file id, so the
+screen will look the same — §5 calls that a feature for the first run.
+
+**RESULT — OBSERVED, every predicted line, in order. Harness `20260912T143555`.**
+
+```
+[c1] GAME version: build=38797 world_id=1546700710 map_id=148 player_id=327600940
+[c1] PORTAL 'ascalon_to_lakeside': the player is 158 u in (radius 200) -- transferring to map 146
+[c1] s2c transfer 1/3: AGENT_STOP_MOVING [player] (0x0028, 6B)
+[c1] s2c transfer 2/3: GAME_SERVER_TRANSFER -> 127.0.0.33:6112, map 146 (0x01a5, 39B)
+[c1] s2c transfer 3/3: MAP_UPDATE_CURRENT 146 (0x0099, 5B)
+[c1] closed (transfer) after draining 0 B
+[c2] GAME version: build=38797 world_id=1546700710 map_id=146 player_id=327600940
+[c2] client asked for map 146 -- a RE-ENTRY after our own transfer ... --map 148 stands down
+[c2] s2c MAP_UPDATE_CURRENT ... READY_FOR_MAP_SPAWN ... INSTANCE_LOAD_FINISH ... PARTY_ADD_MEMBER
+[c2] s2c KBD STOP-ECHO (9826,8077) plane 0
+```
+
+The client re-dialled **our other alias** with the ids we gave it, our server served the
+map we named on the same process, and the instance load ran to the end — 148 `[c2]`
+lines, 30 of them the client's own. The frame after the wait shows the character at the
+arrival plaza, which is what §5 predicted a 148 → 146 hop would look like: nothing, on
+purpose, because the two maps share a file. **SLICE-U3's route — the real one, no shim —
+is closed.** Note the harness's own limits: its RUN VERDICT and its hold screenshots
+belong to c1, so the c2 evidence is the gamesrv log, and `--shots` stopped at the
+transfer; a chained verdict is a harness follow-up, not a zoning one.
+
+**What the run does NOT say.** The quest carrier across a hop (nothing was accepted
+before walking in — `QUEST_PROGRESS` is process-global and `bind_progress` re-points c2
+at it, which is the design, not a measurement); the corridor as a destination (map 168 is
+in the slice archive only, so that hop is a run on `vault/run/slice` with a portal row
+148 → 168 and `RURIK_DAT` at its archive); and T9's same-endpoint re-dial, which stays
+NOT FOUND because the alias changed by design.
+
+**Refuted if** no `[c2]` ever appears (the client did not re-dial: the close's reason
+code, or the alias, or the port trap — T9's "the client ignores the advertised port" was
+measured on the AUTH channel only); or `[c2]` asks for 148 (the ids did not carry); or
+the client asserts on the load. **ABORT** if the portal never fires (the leg did not
+reach the circle — a walk-direction or arming fault, scored on the c1 position reports).
+
 ## SLICE-F6 — what the desk cannot settle
 
 Carried so the next session does not re-read the same bytes hoping for more:

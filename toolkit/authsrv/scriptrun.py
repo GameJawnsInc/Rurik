@@ -243,6 +243,17 @@ def close_after_transfer(sock, events, codec_obj, conn_id):
     print(f"[c{conn_id}] tape ended in a handoff -- closing the connection GRACEFULLY, "
           f"which is what the recorded server did (0.14s before the client re-dialled).",
           flush=True)
+    graceful_close(sock, conn_id, "tape handoff")
+    return True
+
+
+def graceful_close(sock, conn_id, why):
+    """Half-close, drain, close -- the shutdown the client re-dials after.
+
+    SLICE-B8 extracted this from `close_after_transfer` unchanged, so a
+    transfer WE send (a portal) and a tape's recorded one hang up the same
+    way. The mechanism and its history are in the comment below.
+    """
     # HOW we close decides whether the client reconnects, and the first version of this
     # got it wrong. The client's disconnect path branches on a reason code at [esi+0xc]:
     # reason 0 falls through to `call 0x850df0` at 0x008515b7 and RE-DIALS the stashed
@@ -276,10 +287,9 @@ def close_after_transfer(sock, events, codec_obj, conn_id):
         sock.close()
     except OSError:
         pass
-    print(f"[c{conn_id}] closed after draining {drained} B -- an unread receive buffer "
-          f"turns close() into an RST, and the client only re-dials on the reason code "
-          f"a clean shutdown produces.", flush=True)
-    return True
+    print(f"[c{conn_id}] closed ({why}) after draining {drained} B -- an unread "
+          f"receive buffer turns close() into an RST, and the client only re-dials "
+          f"on the reason code a clean shutdown produces.", flush=True)
 
 
 def tape_transfer_present(events, codec_obj):
