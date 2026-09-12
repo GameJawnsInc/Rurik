@@ -288,6 +288,91 @@ def _quest_lines(state):
     return out
 
 
+def complete_objective(send, state, qid, row, conn_id, why):
+    """Mark one quest's objective met, and tell the client. ONE place.
+
+    SLICE-B4 extracted this from `_handle_interact` unchanged. It had exactly
+    one caller -- talking to the objective NPC -- and a kill is a second way to
+    meet an objective that has to do all of the same things: the state write,
+    the description guard, the 0x0054, and the marker batch. Two copies of that
+    sequence would drift, and the description guard is the half that would drift
+    silently.
+
+    `why` is log text only, and exists so the two callers are distinguishable in
+    a gamesrv log without reading the code.
+    """
+    state.setdefault("objectives_done", set()).add(qid)
+    print(f"[c{conn_id}] objective for quest {qid} met {why}")
+    # 0x0054 IS A SILENT NO-OP unless 0x004C has been
+    # sent for this quest: flag bit 0 (DESC_FILLED) is
+    # set by 0x004C's body and gates 0x0054's entirely
+    # at 0x0080F9CD. The client asks for the
+    # description on accept in 4 of 4, so it normally
+    # has been -- but "normally" is not a guarantee, so
+    # send it if we have not, rather than emit an
+    # update that vanishes and looks like the client
+    # ignoring us.
+    if qid not in state.setdefault("desc_sent", set()):
+        _send_description(send, state, qid, row)
+    ofr = row.get("wire_framing", "template")
+    send(GAME_SMSG_QUEST_OBJECTIVES_UPDATE,
+         [qid, questdefs.coded_literal(
+             row.get("objectives_done")
+             or row.get("objectives", ""), ofr)],
+         f"QUEST_OBJECTIVES_UPDATE[{qid}]")
+    # The mark moves in the SAME batch as the message that moved the
+    # quest: the objective NPC's arrow comes down and the giver's goes
+    # up. That is one visible event and must not arrive as two.
+    _send_markers(send, state, " (objective met)")
+
+
+def kill_completes_objective(send, state, dead_id, conn_id):
+    """A KILL meets an objective -- SLICE-B4, the manifest's `kill-count` verb.
+
+    studies/presearing's six-verb census says every Pre-Searing quest reduces to
+    six server behaviours, and that the slice needs exactly two of them:
+    `dialogue`, which has worked since the quest arc, and `kill-count`, which
+    had no implementation at all. `kill_agent` is a single choke point -- one
+    place puts an agent down, whatever killed it -- so this is one call from
+    there rather than a hook per damage path.
+
+    THE BINDING IS A SPAWN KEY, never a bare agent id, because SLICE-B1 already
+    paid for that lesson on the giver: `objective_kill = "errand_boss"` names a
+    row in content/world.toml and `quest_agent`-style resolution turns it into
+    the id this instance actually used.
+
+    COUNTS ARE NOT MODELLED and that is deliberate rather than deferred. Every
+    kill objective in the slice is one named body, `objective_kill_count` does
+    not exist, and inventing a counter with no content asking for one would be a
+    mechanism nothing exercises -- which is how the reward grant got a number it
+    could not honour. When a quest needs "kill 5 skale", the row grows a count
+    and this grows a tally.
+    """
+    held = state.setdefault("quests", set())
+    done = state.setdefault("objectives_done", set())
+    for qid in sorted(held):
+        if qid in done:
+            continue
+        row = quest_rows().get(qid)
+        if not row:
+            continue
+        key = row.get("objective_kill")
+        if not key:
+            continue
+        try:
+            spawn = agents.WORLD.get("spawn", str(key))
+        except Exception as exc:                              # noqa: BLE001
+            raise ValueError(
+                f"quest {qid} names objective_kill = {key!r}, which is not a "
+                f"spawn row. Refusing rather than silently never completing: a "
+                f"kill objective that can never fire looks exactly like a "
+                f"player who has not killed the right thing ({exc})")
+        if int(spawn["agent_id"]) != int(dead_id):
+            continue
+        complete_objective(send, state, qid, row, conn_id,
+                           f"by killing agent {dead_id}")
+
+
 def _objective_quests(state, agent):
     """[(quest_id, row)] this agent COMPLETES, and that the player is mid-way in.
 
@@ -456,30 +541,8 @@ def _handle_interact(send, state, conn_id, agent_id, interact_byte=0):
     # interaction late.
     spoke_objective = False
     for oqid, orow in _objective_quests(state, agent_id):
-        state.setdefault("objectives_done", set()).add(oqid)
-        print(f"[c{conn_id}] objective for quest {oqid} met "
-              f"at agent {agent_id}")
-        # 0x0054 IS A SILENT NO-OP unless 0x004C has been
-        # sent for this quest: flag bit 0 (DESC_FILLED) is
-        # set by 0x004C's body and gates 0x0054's entirely
-        # at 0x0080F9CD. The client asks for the
-        # description on accept in 4 of 4, so it normally
-        # has been -- but "normally" is not a guarantee, so
-        # send it if we have not, rather than emit an
-        # update that vanishes and looks like the client
-        # ignoring us.
-        if oqid not in state.setdefault("desc_sent", set()):
-            _send_description(send, state, oqid, orow)
-        ofr = orow.get("wire_framing", "template")
-        send(GAME_SMSG_QUEST_OBJECTIVES_UPDATE,
-             [oqid, questdefs.coded_literal(
-                 orow.get("objectives_done")
-                 or orow.get("objectives", ""), ofr)],
-             f"QUEST_OBJECTIVES_UPDATE[{oqid}]")
-        # The mark moves in the SAME batch as the message that moved the
-        # quest: the objective NPC's arrow comes down and the giver's goes
-        # up. That is one visible event and must not arrive as two.
-        _send_markers(send, state, " (objective met)")
+        complete_objective(send, state, oqid, orow, conn_id,
+                           f"at agent {agent_id}")
         # AND IT SPEAKS. The objective NPC had no voice: talking to it ticked a
         # flag and opened no window, so half the quest happened in silence and
         # the NPC read as scenery with a trigger attached. One line, no options
@@ -11903,6 +11966,10 @@ def kill_agent(send, state, target_id, agent, conn_id, now):
     # status/reward/flags order is ArenaNet's own tick shape, and the
     # accrual only appends to it (and only under --persist).
     accrue_kill_rewards(send, state, conn_id)
+    # SLICE-B4: and a kill can meet a quest objective. Same rule about where it
+    # sits -- the three-message template is ArenaNet's shape and nothing of ours
+    # goes inside it.
+    kill_completes_objective(send, state, target_id, conn_id)
     # ...and so does the other half of the death penalty. WIKI (GWW, "Death
     # Penalty", Counters): in PvE "gaining 75 experience will remove 1% DP",
     # so the kill reward that just went out is also the way back up. Sends
