@@ -8849,6 +8849,18 @@ HERO_FOLLOW_STOP = 200.0    # units, centre to centre.
 # thing anyone should have to diagnose. The hostile leash (AGGRO_RANGE) exists
 # so a fight is escapable; nothing about a party member wants that.
 HERO_FOLLOW_LEASH = math.inf
+# SLICE-B7c: the party body CASTS. Empty by default -- a hero with no bar is
+# every hero run before 2026-09-12, and `--hero-skills` is what fills it. The
+# ids come from the command line; every NUMBER behind them (activation,
+# recharge) is read from the client's own table, exactly as --enemy-skills does.
+HERO_SKILLS = ()
+# The health fraction at or below which a party caster will heal. OURS, and it
+# is AI rather than protocol -- studies/monsterai established that ArenaNet's
+# decision logic is not recoverable from anything, so this is authored or it
+# does not exist. 0.9 rather than 1.0 because a monk that tops up a full party
+# burns its pool on nothing and reads as broken; rather than 0.5 because a heal
+# that only fires at death's door cannot be seen working in a short run.
+HERO_HEAL_AT = 0.9
 # Swap 0x01C2's two u16s. This flag used to BE the experiment -- one word is
 # an agent id and one is something else, and the client's own code does not
 # say which is which. Four rounds of arms settled both (2026-08-16): msg+0xc
@@ -15098,7 +15110,16 @@ def enemy_attack_tick(send, state, conn_id):
     for agent_id, agent in list(state.get("agents", {}).items()):
         if agent_id not in state.get("agents", {}):
             continue
-        if agent["dead"] or not agent.get("attacks_back"):
+        # SLICE-B7c: a PARTY body leaves by the allegiance gate below and NOT
+        # through this branch, because this branch CLEARS `cast_lands_at` --
+        # and a party body has `attacks_back` False, so it landed here every
+        # tick. `enemy_attack_tick` runs before `ally_cast_tick`, so the order
+        # was: the party arms a cast, this wipes it, the party arms it again.
+        # MEASURED, and only a run could show it: 28 party casts on the wire and
+        # ZERO landings (harness 20260912T092107). The offline test drove
+        # `ally_cast_tick` alone and could not have seen it.
+        if (agent.get("allegiance") != agents.ALLEGIANCE_PLAYER
+                and (agent["dead"] or not agent.get("attacks_back"))):
             # A corpse does not land the swing it was mid-way through. ArenaNet's
             # own 7th swing in the Lakeside tape was truncated exactly this way,
             # 0.24 s in, when the player killed the worm.
@@ -15306,6 +15327,142 @@ def enemy_attack_tick(send, state, conn_id):
         # was told to the client in 0x0035. The windup is a fraction OF THAT, not a
         # constant, so an agent that declares a slower weapon also winds up longer.
         agent["swing_lands_at"] = now + swing_windup(interval)
+
+
+def ally_heal_target(state, caster_id):
+    """The party member most in need of a heal, or None when nobody is.
+
+    OURS, AND IT IS AI RATHER THAN PROTOCOL -- said first because everything
+    else in this neighbourhood is measured and this is not. studies/monsterai
+    established that ArenaNet's own AI is not recoverable from the client, the
+    wire or any capture, so a hero's decision to heal is authored by us or it
+    does not exist. What is NOT invented is everything it feeds: the target byte
+    that says who a skill may land on is the client's, the heal's magnitude is
+    the client's own interpolator, and the ally set is `allies_of`.
+
+    THE RULE, in full: the ally furthest below HERO_HEAL_AT by health fraction,
+    and None when nobody is under it. Two things that buys, neither subtle --
+    a monk that heals a full-health party burns its pool on nothing and looks
+    broken, and a monk that always heals the LOWEST ID would ignore a dying
+    henchman to top up an unhurt player.
+
+    The player's health is read from `state` and an ally's from its row, for
+    the reason `allies_of` carries: the player is not a row.
+    """
+    worst, worst_frac = None, HERO_HEAL_AT
+    for aid in allies_of(state, caster_id):
+        if aid == PLAYER_AGENT_ID:
+            cur, mx = state.get("player_health", 0.0), player_max_health(state)
+        else:
+            row = state.get("agents", {}).get(aid)
+            if not row:
+                continue
+            cur, mx = row.get("health", 0.0), row.get("max_health", 0.0)
+        if not mx or mx <= 0:
+            continue
+        frac = float(cur) / float(mx)
+        if frac < worst_frac:
+            worst, worst_frac = aid, frac
+    return worst
+
+
+def ally_cast_tick(send, state, conn_id):
+    """The PARTY's own casting -- SLICE-B7c.
+
+    WHY THIS IS NOT A BRANCH INSIDE `enemy_attack_tick`, which was the first
+    design. That function's shape is the SWING's: it gates on melee reach, it
+    runs a weapon interval, it opens and lands swings, and a cast rides along
+    inside all of it. A monk hero uses none of that -- it has no swing, and a
+    heal's range is nothing like a sword's -- so threading an ally through
+    would have meant making four hostile-specific gates conditional and leaving
+    a reader unable to tell which arm any line served. The landing is here for
+    the same reason: `land_skill` is called from inside that reach gate, so an
+    ally's cast would otherwise never resolve.
+
+    WHAT IT DELIBERATELY DOES NOT DO, and the boundary is the honest part:
+
+      * NO DAMAGE. `land_skill` still names `PLAYER_AGENT_ID` at its damage,
+        effect and condition sites, so a party body casting anything that hurts
+        or enchants would aim at the player. For a heal every one of those sites
+        is inert -- `skill_damage` is None for a heal, and a heal Spell opens no
+        episode -- which is why this is reachable now and a damage-dealing hero
+        is not. Parameterising those four sites is the next rung, not this one.
+      * NO SWING. A party body never attacks; `attacks_back` stays False.
+      * NO TARGETING BY THE PLAYER. The hero heals who it likes, and the
+        commander UI's flags and stances (0x0015/0x001A, decoded in pvpui) are
+        not wired to anything here.
+
+    `pick_skill` is reused rather than replaced: its docstring declares it a
+    testing fixture and not a decision about AI, and that boundary is exactly
+    as true for an ally. The policy -- who to heal, and whether to heal at all
+    -- lives in `ally_heal_target`, where it can be read in one place.
+    """
+    now = time.time()
+    for agent_id, agent in list(state.get("agents", {}).items()):
+        if agent_id not in state.get("agents", {}):
+            continue
+        if agent.get("allegiance") != agents.ALLEGIANCE_PLAYER:
+            continue
+        # A corpse and a body mid-transition drop the cast they were part way
+        # through, for the reason enemy_attack_tick's own two branches do: the
+        # entry survives a re-create, so a landing armed before would fire
+        # against a stale clock on the first tick after.
+        if agent.get("dead") or (agent.get("effects", 0)
+                                 & agents.EFFECT_TRANSITION):
+            agent["cast_lands_at"] = None
+            agent["casting"] = None
+            continue
+        due = agent.get("cast_lands_at")
+        if due is not None:
+            if now >= due:
+                agent["cast_lands_at"] = None
+                land_skill(send, state, agent_id, agent, conn_id)
+            continue
+        skills = agent.get("skills") or ()
+        if not skills:
+            continue
+        target = ally_heal_target(state, agent_id)
+        if target is None:
+            continue
+        slot = pick_skill(agent, now)
+        if slot is None:
+            continue
+        skill_id, activation, recharge = skills[slot]
+        # The client's own target byte decides whether this slot may land on
+        # the ally we picked -- the same gate the hostile cast site applies,
+        # and the same reason: a code-4 skill lands on an OTHER ally and never
+        # on the caster, so a hero cannot use one on itself.
+        kind = skill_target_kind(skill_id)
+        if kind == "other_ally" and target == agent_id:
+            continue
+        if ENERGY:
+            cost, units = skill_cost(skill_id)
+            pool = agent_energy(agent)
+            pool.tick(now)
+            if units > 0:
+                # No adrenaline model for a party body: it never swings, so it
+                # can never charge one. Skipped rather than faked.
+                continue
+            if cost > 0 and not pool.can_pay(cost):
+                if now - agent.get("cast_refused_at", 0.0) >= 5.0:
+                    agent["cast_refused_at"] = now
+                    print(f"[c{conn_id}] party agent {agent_id} cannot cast "
+                          f"{skill_id}: needs {cost} energy, has "
+                          f"{pool.current:.2f}", flush=True)
+                continue
+            pool.spend(cost)
+        agent["cast_target"] = target
+        agent["skill_ready"][slot] = now + recharge
+        agent["last_slot"] = slot
+        agent["casting"] = slot
+        agent["cast_lands_at"] = now + activation
+        face_player(send, state, agent_id, agent, conn_id)
+        _op, _vals = cast_anim_msg(agents.GV_SKILL_ACTIVATED, agent_id,
+                                   target, skill_id)
+        send(_op, _vals, f"party agent {agent_id} casts skill {skill_id}")
+        print(f"[c{conn_id}] party agent {agent_id} ({agent['name']}) casts "
+              f"skill {skill_id} at {target} (slot {slot + 1} of "
+              f"{len(skills)})", flush=True)
 
 
 def face_player(send, state, agent_id, agent, conn_id, force=False):
@@ -19127,7 +19284,13 @@ def _handle_request_players(send, state, conn_id, stop, rec):
              "attack_speed": ENEMY_ATTACK_SPEED,
              "resend_definition": True,
              "attacks_back": False,
-             "skills": [], "skill_ready": []},
+             # SLICE-B7c: the party body's bar, empty until --hero-skills.
+             # `skill_ready` is per SLOT, never per id -- a bar may legitimately
+             # carry the same skill twice and keying recharge by id would make
+             # the second copy share the first's cooldown (spawn_enemy's own
+             # comment, same reason).
+             "skills": HERO_SKILLS,
+             "skill_ready": [0.0] * len(HERO_SKILLS)},
             f"hero body (hero {_hid})", conn_id=conn_id)
     # THE HERO'S ATTRIBUTE STATE, and it is not a new
     # mechanism -- it is the pair the PLAYER's own agent
@@ -19901,6 +20064,11 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # standing in reach for one interval doing nothing.
                         enemy_move_tick(send, state, conn_id, rec)
                         enemy_attack_tick(send, state, conn_id)
+                        # SLICE-B7c, and AFTER the hostiles on purpose: a
+                        # party body decides whether to heal from health the
+                        # hostiles have just finished changing, so healing on
+                        # the same tick as the damage is what a player sees.
+                        ally_cast_tick(send, state, conn_id)
                         # The third sweep, and the first that mutates state["agents"]
                         # on a schedule rather than only when the player acts. Last,
                         # so a body that died this tick is seen dead by burrow_tick
@@ -24316,6 +24484,17 @@ def main():
         print("[map] --no-model-leg-bound: the server's own model leg may "
               "out-walk a lead our mesh cut short (MOVECODE-1z-cc's revert).",
               flush=True)
+    if a.hero_skills:
+        global HERO_SKILLS
+        _hbar = []
+        for _tok in a.hero_skills.split(","):
+            _sid = int(_tok.strip(), 0)
+            _act, _after, _rech = skill_timing(_sid)
+            _hbar.append((_sid, _act, float(_rech)))
+        HERO_SKILLS = tuple(_hbar)
+        print(f"HERO BAR: {len(HERO_SKILLS)} skill(s) "
+              f"{[s[0] for s in HERO_SKILLS]} -- the party body casts "
+              f"(SLICE-B7c). Heals only; see --hero-skills.", flush=True)
     if a.no_hero_follow:
         global HERO_FOLLOW
         HERO_FOLLOW = False

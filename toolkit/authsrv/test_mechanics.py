@@ -27,7 +27,7 @@ import agents       # noqa: E402
 import effects      # noqa: E402
 
 # Floor set from a real green run (39 checks, 2026-08-22; 99 checks, 2026-09-09 SKILLS-DW; 129 checks, 2026-09-10 SKILLS-BL; 153 checks, 2026-09-10 SKILLS-RC; 162 checks, 2026-09-10 SKILLS-MA).
-LEDGER = checks.Ledger("effect mechanics", floor=162)
+LEDGER = checks.Ledger("effect mechanics", floor=174)   # SLICE-B7a +4, B7c +8; from the green run
 check = checks.adopt(LEDGER)
 
 FRENZY, RUSH, ROF, GLYPH, IGNITE, FAINT = 346, 319, 307, 200, 431, 135
@@ -1216,5 +1216,135 @@ try:
     authsrv.CONDITION_HEAL_RULE = True
 finally:
     authsrv.CONDITION_HEAL_RULE, authsrv.ENERGY = saved
+
+print("== 28. SLICE-B7c: a PARTY body casts a heal at the player, and the two "
+      "arms that say the cast is what did it ==")
+_b7c = (authsrv.HERO_SKILLS, authsrv.HERO_HEAL_AT)
+try:
+    def _party_world(bar, player_health=40.0, **over):
+        """One party body (agent 200) and a player at `player_health`.
+
+        The body carries ALLEGIANCE_PLAYER and `attacks_back` False -- the two
+        values BOTH creation sites actually set -- so this is the hero the
+        run gets, not a hostile relabelled."""
+        row = {"name": "Academy Monk", "dead": False, "died_at": 0.0,
+               "health": 100.0, "max_health": 100.0, "last_hit": 0.0,
+               "pos": (50.0, 0.0), "plane": 0,
+               "allegiance": agents.ALLEGIANCE_PLAYER, "attack_speed": 1.0,
+               "effects": 0, "attacks_back": False,
+               "skills": bar, "skill_ready": [0.0] * len(bar)}
+        row.update(over)
+        st = fresh_state(health=player_health)
+        st["player_dead"] = False
+        st["agents"][200] = row
+        return st
+
+    # -- the policy, on its own. Three checks and one of them is the refusal.
+    st = _party_world(())
+    check(authsrv.ally_heal_target(st, 200) == PLAYER,
+          "a party caster's heal target is the hurt PLAYER -- who is not a row "
+          "in `agents`, which is the whole B7a asymmetry arriving here",
+          f"{authsrv.ally_heal_target(st, 200)}")
+    check(authsrv.ally_heal_target(_party_world((), player_health=100.0), 200)
+          is None,
+          "and at full health there is NO target, so a monk does not burn its "
+          "pool topping up a party that needs nothing")
+    st = _party_world(())
+    st["agents"][201] = dict(st["agents"][200], health=10.0, skills=(),
+                             skill_ready=[])
+    check(authsrv.ally_heal_target(st, 200) == 201,
+          "among several it takes the WORST by fraction, not the lowest id -- "
+          "a 10/100 henchman outranks a 40/100 player",
+          f"{authsrv.ally_heal_target(st, 200)}")
+
+    RC = 276                      # Restore Condition, target OTHER ally
+    bar = ((RC, 0.75, 2.0),)
+    authsrv.HERO_SKILLS = bar
+
+    sent, send = collector()
+    st = _party_world(bar)
+    authsrv.ally_cast_tick(send, st, 0)
+    check(st["agents"][200].get("cast_lands_at") is not None
+          and st["agents"][200].get("cast_target") == PLAYER and sent,
+          "a party body with a bar and a hurt player CASTS: an activation goes "
+          "out and the landing is armed at the player",
+          f"sent={[hex(o) for o, _v, _l in sent]} "
+          f"target={st['agents'][200].get('cast_target')}")
+
+    # ARM 1: nobody hurt. Same bar, same body -- only the health differs.
+    sent, send = collector()
+    st = _party_world(bar, player_health=100.0)
+    authsrv.ally_cast_tick(send, st, 0)
+    check(not sent and st["agents"][200].get("cast_lands_at") is None,
+          "ARM: a full-health party gets no cast at all, so the heal is driven "
+          "by the health and not by the tick merely running",
+          f"sent={[hex(o) for o, _v, _l in sent]}")
+
+    # ARM 2: no bar. This is every hero run before 2026-09-12.
+    sent, send = collector()
+    st = _party_world(())
+    authsrv.ally_cast_tick(send, st, 0)
+    check(not sent and st["agents"][200].get("cast_lands_at") is None,
+          "ARM: an EMPTY bar casts nothing -- the state every hero body was in "
+          "before --hero-skills existed",
+          f"sent={[hex(o) for o, _v, _l in sent]}")
+
+    # ARM 3: a HOSTILE body is not swept by this tick, so the two paths cannot
+    # be confused for one another.
+    sent, send = collector()
+    st = _party_world(bar)
+    st["agents"][200]["allegiance"] = agents.ALLEGIANCE_HOSTILE
+    authsrv.ally_cast_tick(send, st, 0)
+    check(not sent,
+          "ARM: the same body under ALLEGIANCE_HOSTILE is untouched here -- "
+          "this tick owns the party and nothing else")
+
+    # ARM 4, and it is a REGRESSION rather than a control: the two ticks in the
+    # order the world tick runs them. `enemy_attack_tick` goes first and its
+    # `not attacks_back` branch used to CLEAR `cast_lands_at` before the
+    # allegiance gate -- and a party body has `attacks_back` False, so it landed
+    # there every tick. The live result was 28 party casts on the wire and ZERO
+    # landings. This check exists because the section above could not see it:
+    # driving `ally_cast_tick` alone is exactly the offline agreement that
+    # proves nothing.
+    sent, send = collector()
+    st = _party_world(bar)
+    authsrv.ally_cast_tick(send, st, 0)
+    _armed = st["agents"][200].get("cast_lands_at")
+    authsrv.enemy_attack_tick(send, st, 0)
+    check(_armed is not None
+          and st["agents"][200].get("cast_lands_at") == _armed,
+          "ARM: the hostile tick running first does NOT wipe a party body's "
+          "armed cast -- the defect that made 28 casts land nothing",
+          f"armed={_armed} after={st['agents'][200].get('cast_lands_at')}")
+
+    # -- and the LANDING resolves a real heal on the player.
+    #
+    # THE PLAYER HAS TO BE CONDITIONED FIRST, and that is not a test fixture
+    # detail -- it is the constraint studies/slice/PLAN.md registered as
+    # SLICE-B3's trap before any of this was built. Restore Condition heals
+    # PER CONDITION REMOVED (SKILLS-RC, 2026-09-10), so against a clean target
+    # it cures nothing and therefore heals nothing. Written without the
+    # condition this check failed, correctly, and the failure is the evidence
+    # that the slice needs an UNCONDITIONAL heal wired before a monk hero looks
+    # like a monk. Both heals that work today are condition-gated.
+    sent, send = collector()
+    st = _party_world(bar)
+    authsrv.apply_condition(send, st, PLAYER, BLEED, 9.0, 12, 0, 382)
+    sent, send = collector()
+    authsrv.ally_cast_tick(send, st, 0)
+    st["agents"][200]["cast_lands_at"] = 0.0        # due
+    sent, send = collector()
+    authsrv.ally_cast_tick(send, st, 0)
+    check(heals(sent) and removes(sent)
+          and st["agents"][200].get("cast_lands_at") is None,
+          "and when the landing falls due the same tick resolves it into a "
+          "real heal on the player -- a cure AND a heal, through `land_skill` "
+          "and the shared `resolve_heal`",
+          f"heals={heals(sent)} removes={removes(sent)}")
+except agents.content.ContentError as exc:
+    LEDGER.skip("section 28 (needs the vault's skill rows)", str(exc))
+finally:
+    authsrv.HERO_SKILLS, authsrv.HERO_HEAL_AT = _b7c
 
 sys.exit(LEDGER.verdict())

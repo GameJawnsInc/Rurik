@@ -774,6 +774,20 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "client's own report trigger. Corpus residual behind "
                          "the plane term: 2 events of 783, <= 1.4 u. Known-bad "
                          "arm.")
+    ap.add_argument("--hero-skills", default=None, metavar="IDS",
+                    help="SLICE-B7c: give the party body a skill bar, so a "
+                         "hero CASTS. Comma-separated skill ids; activation "
+                         "and recharge come from the client's own table, so "
+                         "what is ours is the selection and every number is "
+                         "ArenaNet's (the rule --enemy-skills sets out). Empty "
+                         "by default, which is every hero run before "
+                         "2026-09-12. Today this reaches HEALS only: "
+                         "`land_skill` still names the player at its damage, "
+                         "effect and condition sites, all three of which are "
+                         "inert for a heal, so a damage-dealing hero needs "
+                         "those parameterised first. Try `--hero-skills 276` "
+                         "(Restore Condition, target OTHER ally) or `277` "
+                         "(Mend Ailment, target ally, so it can self-heal).")
     ap.add_argument("--no-hero-follow", action="store_true",
                     help="SLICE-B7b REVERT: a party body (hero or henchman, "
                          "anything carrying ALLEGIANCE_PLAYER) stands where it "
