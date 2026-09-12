@@ -8958,7 +8958,16 @@ HERO_FOLLOW_LEASH = math.inf
 # every hero run before 2026-09-12, and `--hero-skills` is what fills it. The
 # ids come from the command line; every NUMBER behind them (activation,
 # recharge) is read from the client's own table, exactly as --enemy-skills does.
-HERO_SKILLS = ()
+# SLICE-B3: the default hero bar. It was `()` -- a hero cast nothing unless
+# --hero-skills said so -- and SLICE-F10 recorded why that could not stay: both
+# ally-heals the server resolved were CONDITION-GATED (Restore Condition heals
+# per condition removed, Mend Ailment per condition remaining), so a monk hero
+# against a clean, hurt player did nothing and looked broken. Orison of Healing
+# (281) is the unconditional one -- GWW: "Heal target ally for ... Health",
+# target byte 3, the caster legal -- and Restore Condition stays beside it for
+# the cured case SLICE-F10 proved. Activation and recharge are the client's
+# own row (1.0 s / 2 s; 0.75 s / 2 s). `--hero-skills` still overrides.
+HERO_SKILLS = ((281, 1.0, 2.0), (276, 0.75, 2.0))
 # The health fraction at or below which a party caster will heal. OURS, and it
 # is AI rather than protocol -- studies/monsterai established that ArenaNet's
 # decision logic is not recoverable from anything, so this is authored or it
@@ -15371,19 +15380,71 @@ def enemy_attack_tick(send, state, conn_id):
         # here so nobody reads it as a monster's preference. Everything not
         # an ally spell aims at the player, as it always has.
         cast_target = PLAYER_AGENT_ID
-        if slot is not None and CONDITION_HEAL_RULE:
+        # SLICE-B3: A HOSTILE'S HEAL AIMS AT WHOEVER IS HURT -- the same
+        # `ally_heal_target` policy the party's monk uses (SLICE-F10), extended
+        # to the caster's own body for an `ally` skill: Orison of Healing may
+        # land on the caster, Restore Condition may not, and that is the
+        # client's target byte and not ours. Before this the rule was "the
+        # first ally by id, hurt or not", which is how the enemy monk's Restore
+        # Condition went out every cycle at a full-health ally and resolved
+        # nothing.
+        #
+        # NOBODY NEEDS IT: STEP PAST THE SLOT AND RE-PICK ON THE SAME TICK.
+        # `pick_skill` scans from `last_slot + 1`, so a skipped slot that did
+        # not advance the cursor would be picked again every tick and a bar
+        # with one heal and three attacks would never reach the attacks while
+        # the squad was healthy. The skipped slot's recharge is NOT charged --
+        # nothing was cast.
+        #
+        # BOUNDED BY WHAT WAS HELD, NOT BY A COUNT. The first version ran
+        # `for _ in range(len(skills))` and left the loop BY EXHAUSTION with
+        # whatever the last re-pick returned -- on a bar of two heals and a
+        # recharging Banish the third pass re-picked Orison and fell out with
+        # it un-targeted, `cast_target` still the player, and the monk cast
+        # Orison "at the player", which the target byte resolves to ITSELF:
+        # harness 20260912T122339, `agent 91 healed 0 of 60 sent: 160/160
+        # (self)` at full health. A slot re-picked after being held this tick
+        # ends the search with nothing to cast.
+        #
+        # THE GATE IS ON HEALS, NOT ON TARGET KINDS. `skill_heal` says whether
+        # the row is a heal; Vital Blessing (289, target ally, `+ Maximum
+        # health`) is not one, and it keeps the pre-B3 rule -- the first ally
+        # by id -- because "does anybody need it" is not a question this
+        # server can answer for an enchantment. A SELF heal is gated the same
+        # way: the raider's Healing Signet went out at 200/200 every 4 s on
+        # harness 20260912T123033, "healed 0 of 154 sent", which is the wart
+        # SLICE-F10 named from the other side.
+        _held = set()
+        while slot is not None and CONDITION_HEAL_RULE:
             _sid = agent["skills"][slot][0]
-            if skill_target_kind(_sid) == "other_ally":
-                _allies = sorted(allies_of(state, agent_id))
-                if _allies:
-                    cast_target = _allies[0]
-                else:
-                    slot = None
-                    if now - agent.get("cast_refused_at", 0.0) >= 5.0:
-                        agent["cast_refused_at"] = now
-                        print(f"[c{conn_id}] agent {agent_id} cannot cast "
-                              f"skill {_sid}: target other ally, and it has "
-                              f"none", flush=True)
+            _kind = skill_target_kind(_sid)
+            if _kind not in ("ally", "other_ally", "self"):
+                break
+            if skill_heal(_sid, ENEMY_SKILL_RANK) is None:
+                if _kind == "other_ally":
+                    _allies = sorted(allies_of(state, agent_id))
+                    cast_target = _allies[0] if _allies else None
+                    if cast_target is None:
+                        slot = None
+                        if now - agent.get("cast_refused_at", 0.0) >= 5.0:
+                            agent["cast_refused_at"] = now
+                            print(f"[c{conn_id}] agent {agent_id} cannot cast "
+                                  f"skill {_sid}: target other ally, and it "
+                                  f"has none", flush=True)
+                break
+            cast_target = hostile_heal_target(state, agent_id, _kind)
+            if cast_target is not None:
+                break
+            _held.add(slot)
+            agent["last_slot"] = slot
+            if now - agent.get("cast_refused_at", 0.0) >= 5.0:
+                agent["cast_refused_at"] = now
+                print(f"[c{conn_id}] agent {agent_id} holds skill {_sid}: "
+                      f"target {_kind.replace('_', ' ')}, and nobody is under "
+                      f"{HERO_HEAL_AT:.0%}", flush=True)
+            _next = pick_skill(agent, now)
+            slot = None if (_next is None or _next in _held) else _next
+            cast_target = PLAYER_AGENT_ID
         if slot is not None:
             skill_id, activation, recharge = agent["skills"][slot]
             agent["cast_target"] = cast_target
@@ -15473,6 +15534,42 @@ def ally_heal_target(state, caster_id):
         if frac < worst_frac:
             worst, worst_frac = aid, frac
     return worst
+
+
+def hostile_heal_target(state, caster_id, kind):
+    """Who a HOSTILE's heal should aim at, or None when nobody is hurt.
+
+    SLICE-B3. `ally_heal_target` already answers for the caster's allies --
+    `allies_of` gives a hostile its same-allegiance neighbours -- and it
+    excludes the caster, because the party's monk is not in its own ally
+    set either. An `ally`-kind skill (Orison of Healing, target byte 3) may
+    land on the caster, so the caster's own health is read beside the
+    allies' and the worse of the two is chosen; an `other_ally` skill
+    (Restore Condition, byte 4) never self-targets, and that is
+    `cast_recipient`'s rule, not this function's. A `self` heal (Healing
+    Signet, byte 0) is the caster when the caster is hurt and None otherwise.
+    """
+    target = None if kind == "self" else ally_heal_target(state, caster_id)
+    if kind == "other_ally":
+        return target
+    me = state.get("agents", {}).get(caster_id) or {}
+    mx = float(me.get("max_health", 0.0) or 0.0)
+    if mx <= 0:
+        return target
+    my_frac = float(me.get("health", 0.0)) / mx
+    if my_frac >= HERO_HEAL_AT:
+        return target
+    if target is None:
+        return caster_id
+    row = state.get("agents", {}).get(target)
+    if target == PLAYER_AGENT_ID:
+        t_frac = float(state.get("player_health", 0.0)) / float(
+            player_max_health(state) or 1.0)
+    elif row and row.get("max_health"):
+        t_frac = float(row.get("health", 0.0)) / float(row["max_health"])
+    else:
+        return caster_id
+    return caster_id if my_frac < t_frac else target
 
 
 def ally_cast_tick(send, state, conn_id):

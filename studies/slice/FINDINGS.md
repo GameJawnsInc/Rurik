@@ -606,6 +606,79 @@ rectangle differently from `pathmap`), or a row is REFUSED as off-mesh (the floo
 where the rows think it is), or `spawn_population` throws (the gamesrv prints neither
 population line — the failure `PLACED_RE`'s comment was written for).
 
+## SLICE-F15 — **SLICE-B3: the bars, the unconditional heal, and a hostile monk that heals whoever is hurt**
+
+**PRE-REGISTERED 2026-09-12 16:20, before the run.** Offline this item is done and
+tested: `skill_effect` rows for Orison of Healing 281 (`Heal`, target byte 3) and Banish
+252 (`Holy damage`); the corridor's five rows carry bars (raiders 382/322/1, monks
+281/252/276, the boss adds 323); `HERO_SKILLS` defaults to (281, 276); and a hostile's
+heal now aims at the HURT body via `hostile_heal_target` — `ally_heal_target`'s policy
+plus the caster's own health for an `ally` skill — and steps past itself, re-picking on
+the same tick, when nobody is under `HERO_HEAL_AT` (`test_agentlife` SLICE-B3, 9 checks:
+the hurt ally drawn, the healthy squad skipped with the cursor advanced and Holy Strike
+out the same tick, the recharge uncharged, the hurt monk self-healing under Orison and
+never under Restore Condition).
+
+**The wiki disagreement, recorded rather than resolved away.** Every `skill_effect` row
+before today agreed with the client endpoint for endpoint. Orison is 20→70 in build 38797
+and 30→80 on GWW; Banish 20→56 against 20→65. Both pages' histories carry one edit,
+**26 August 2026, "+skill balance update Feedback:Game updates/20260826"** — after every
+build this repo pins. The rows take the wiki's NAME and the client's NUMBERS, say why, and
+a build past 2026-08-26 will move them.
+
+**Question.** In a fight on the corridor, does the hostile monk heal the raider the player
+hurt, and does the raider's bar reach the player?
+
+**Prediction.** Harness: `--walk "W:11 attack:90 wait:30 shot:1"`, `--enemy-hit 0.02` so
+the player survives the exposure. The gamesrv log shows (a) raider 90 casting 382 / 322 / 1
+and monk 91 casting 252 at the player — the bars, not the module default; (b) after the
+player's swing lands on 90, **`agent 91 ... casts skill 281`** with `cast_target 90` and a
+line `agent 90 healed N ... by 91`; (c) while 90 is unhurt, `agent 91 holds skill 281`
+and Banish goes out instead. The frame shows the fight.
+
+**RESULT — two runs, two defects found by running, one half unexposed.**
+
+*Run 1, harness `20260912T122339`.* (a) OBSERVED: raider 90 cast 382, 322 and 1; monk 91
+cast 252 (Banish, 49 to the player) and 276 — the bars, not the default. (c) OBSERVED:
+`agent 91 holds skill 281: target ally, and nobody is under 90%`, Banish out instead.
+**Then the line that should not exist:** `agent 91 casts skill 281 … healed 0 of 60 sent:
+160/160 (self)` — a full-health monk healing itself. The re-pick loop was bounded by the
+bar's LENGTH and left by exhaustion with whatever the last re-pick returned: two heals and
+a recharging Banish is three passes, the third re-picks Orison, and the loop fell out with
+it un-targeted and `cast_target` still the player, which the target byte resolves to the
+caster. My offline fixture never cycled that far. Fixed — a slot re-picked after being
+held this tick ends the search — and the run's own bar is now the known-bad arm in
+`test_agentlife` (red with the old loop, green with the fix). (b) NOT EXPOSED: the
+player's swings took 90 to 188/200, 94%, and Healing Signet took it back; the floor as
+registered ("a swing lands") was met but the threshold was not, which is a floor written
+against the wrong quantity (`feedback-floors-must-count-the-arm-not-the-message`).
+
+*Run 2, harness `20260912T123033`, no keyboard leg, 60 s window.* Orison was **held for
+the whole fight** — zero `casts skill 281`, the fix observed on a client. Still (b)
+unexposed: 196 → 190 → 184/200 (92%) and back to 200 on Healing Signet. **And the raider
+cast Healing Signet at 200/200 every 4 s** — `healed 0 of 154 sent` six times — the same
+wart from the `self` side, which the need-gate had not covered. Gated now, and narrowed
+at the same time: the gate is on skills whose row is a HEAL (`skill_heal`), so Vital
+Blessing (target ally, an enchantment) keeps the pre-B3 rule rather than being held for
+a need this server cannot judge. Both arms in the test.
+
+**The exposure gap, named.** A level-1 player's swing does 4–6 against a 200-hp raider
+with a 4 s self-heal; 90% is 20 damage in one recharge window. The heal-on-hurt half is
+proven offline (the hurt ally drawn, healed, the healthy squad skipped) and stays
+UNOBSERVED on a client until a run with a harder-hitting player or a lighter raider — a
+probe arm, not a content change.
+
+**What the owner saw, both explained by the log.** The character ran EAST: `W` is
+camera-forward and the spawn faces +x; the corridor runs +y, and no content field carries a
+spawn facing (a small follow-up). The "server ghost" is the harness `attack:` step's own
+mechanism — `approach: player walks to agent 90, 2428 u out` — the server walks ITS model
+of the player to the target, the hostiles aggro on that model, and the client is brought
+to it. Run 2 dropped the keyboard leg and used the approach alone (3,073 u).
+
+**Exposure floor.** The player's swing lands on 90 at least once (90's health drops in
+the log). If it never does — reach, aggro pulling 90 away, a dead player — the heal half
+is an ABORT, not a null; (a) and (c) still score.
+
 ## SLICE-F6 — what the desk cannot settle
 
 Carried so the next session does not re-read the same bytes hoping for more:

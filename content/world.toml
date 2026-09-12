@@ -305,6 +305,45 @@ Health." Which one: GWW "Effect"/"Cover" -- "the most recently applied effect
 is always the first one to be removed". SKILLS-MA, studies/skills 46. Revision
 dates not retrieved (the pages refused the fetcher)."""
 
+# SLICE-B3 (2026-09-12): the slice's monk bar. Both rows below carry a
+# DISAGREEMENT this file had not met before: the client's endpoints and the
+# wiki's differ, where every earlier row agreed endpoint for endpoint. GWW's
+# page histories explain it -- both pages were edited 26 August 2026,
+# "+skill balance update Feedback:Game updates/20260826" -- and every build
+# this repo pins (38797 of 2026-07-29 through 38849 of 2026-08-20) predates
+# that update. So the NAME is the wiki's, the NUMBERS are the pinned client's
+# (which is what `skill_heal`/`skill_damage` read), and a build past
+# 2026-08-26 will move them. Labelled CONTESTED-by-generation, resolved in the
+# client's favour because it is the client we drive.
+[skill_effect.281]
+scale_means = "Heal"
+[skill_effect.281.provenance]
+source = "wiki"
+page = 'GWW, "Orison of Healing", {{Skill progression}}, rev. 2026-08-26 (raw wikitext read 2026-09-12)'
+verified = """Client scale 20->70, args = 2 (scale), target byte 3 (ally, the
+caster legal), attribute 13 Healing Prayers, 5 energy, 1 s, 2 s recharge --
+matching the wiki's cost, cast and recharge. Wiki var1 `Healing` 30->80: the
+ENDPOINTS DIFFER by the 2026-08-26 balance update (page history, "+skill
+balance update"), which postdates every pinned build; the client's 20->70 is
+what build 38797 shows and is what this server heals for. UNCONDITIONAL:
+"Heal target ally for ... Health" -- no condition, no contingency ("the most
+basic of healing spells", GWW Notes) -- which is the property SLICE-F10 said
+the slice needed. Label `Heal` rather than the wiki's `Healing` on purpose:
+SCALE_MEANS_HEAL holds both, and `Heal` is what Healing Signet's row uses for
+the same bare-heal semantics."""
+
+[skill_effect.252]
+scale_means = "Holy damage"
+[skill_effect.252.provenance]
+source = "wiki"
+page = 'GWW, "Banish", {{Skill progression}}, rev. 2026-08-26 (raw wikitext read 2026-09-12)'
+verified = """Client scale 20->56, args = 2 (scale), target byte 5 (foe),
+attribute 14 Smiting Prayers, 5 energy, 1 s, 10 s recharge -- matching the
+wiki's cost, cast and recharge. Wiki var1 `Holy damage` 20->65: the upper
+endpoint differs by the same 2026-08-26 balance update as Orison's, and the
+client's 56 is what this server deals. The doubling against summoned
+creatures is not modelled; nothing in the slice is summoned."""
+
 [skill_effect.253]
 scale_means = "Duration"
 [skill_effect.253.provenance]
@@ -1089,12 +1128,19 @@ tiling, MEASURED walkable."""
 # the client and two rows sharing one must name the same npc (area_population).
 # The boss wears its own index so a later template variant costs no renumber.
 #
-# SKILL BARS ARE NOT SET HERE YET: that is SLICE-B3 (skill_effect rows and an
-# unconditional heal). Until then every body takes the module default bar,
-# which is what every hostile before B2 took.
+# THE BARS (SLICE-B3, 2026-09-12). [[id, activation, recharge]] per slot,
+# the client's own row values. Raiders: Sever Artery 382 (Bleeding),
+# Power Attack 322 (+ Damage), Healing Signet 1 (self-heal) -- warrior skills
+# the Pre-Searing manifest lists and skill_effect already resolves. Monks:
+# Orison of Healing 281 (the UNCONDITIONAL heal, aimed at whoever is hurt --
+# hostile_heal_target), Banish 252 (holy damage at the player), Restore
+# Condition 276 (the cured case). The boss adds Desperation Blow 323.
+# Sever Artery's 6 s recharge is the client's; its activation is 0 because
+# it is an attack skill, which this server lands as a cast (SKILLS-A1).
 
 [spawn.corridor_raider_a]
 area = "corridor"
+skills = [[382, 0.0, 6.0], [322, 0.0, 3.0], [1, 2.0, 4.0]]
 npc = "bandit_raider"
 agent_id = 90
 definition = 60
@@ -1112,6 +1158,7 @@ west half; its monk is 470 u east and 100 u further on."""
 
 [spawn.corridor_monk_a]
 area = "corridor"
+skills = [[281, 1.0, 2.0], [252, 1.0, 10.0], [276, 0.75, 2.0]]
 npc = "academy_monk"
 agent_id = 91
 definition = 61
@@ -1130,6 +1177,7 @@ choice (studies/slice/PLAN.md, the owner's decisions)."""
 
 [spawn.corridor_raider_b]
 area = "corridor"
+skills = [[382, 0.0, 6.0], [322, 0.0, 3.0], [1, 2.0, 4.0]]
 npc = "bandit_raider"
 agent_id = 92
 definition = 60
@@ -1146,6 +1194,7 @@ note = """Ours. Group B, 3,000 u past group A."""
 
 [spawn.corridor_monk_b]
 area = "corridor"
+skills = [[281, 1.0, 2.0], [252, 1.0, 10.0], [276, 0.75, 2.0]]
 npc = "academy_monk"
 agent_id = 93
 definition = 61
@@ -1162,6 +1211,7 @@ note = """Ours. Group B's monk."""
 
 [spawn.corridor_boss]
 area = "corridor"
+skills = [[382, 0.0, 6.0], [322, 0.0, 3.0], [1, 2.0, 4.0], [323, 0.0, 6.0]]
 npc = "bandit_raider"
 agent_id = 94
 definition = 62

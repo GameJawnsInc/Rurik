@@ -1024,9 +1024,13 @@ def world(n_hostiles, bar=((RC, 0.75, 2.0),)):
              "player_dead": False}
     authsrv.effect_table(state)
     for k in range(n_hostiles):
+        # SLICE-B3: every hostile HURT (50/100), because a hostile's heal now
+        # aims at whoever is under HERO_HEAL_AT and a full-health squad draws
+        # no cast at all. What these sections measure -- the targeted form,
+        # the removal, the per-condition heal -- is unchanged by it.
         state["agents"][10 + k] = {
             "name": "hatcher", "dead": False, "died_at": 0.0,
-            "health": 100.0, "max_health": 100.0, "last_hit": 0.0,
+            "health": 50.0, "max_health": 100.0, "last_hit": 0.0,
             "pos": (85.0, 10.0 * k), "plane": 0,
             "allegiance": agents.ALLEGIANCE_HOSTILE,
             "attack_speed": authsrv.ENEMY_ATTACK_SPEED,
@@ -1079,9 +1083,10 @@ try:
     sent = tick(st)
     check([v for op, v, _l in sent if op == INT
            and v[0] == agents.GV_SKILL_FINISHED] == [[58, 10, 0]]
-          and not heals(sent) and st["agents"][11]["health"] == 100.0,
+          and not heals(sent) and st["agents"][11]["health"] == 50.0,
           "the landing: property 58 closes the cast, and with no condition on "
-          "the ally NOTHING is healed", f"sent={sent}")
+          "the ally NOTHING is healed -- the ally stays at the 50/100 the "
+          "fixture gave it", f"sent={sent}")
 
     st = world(2)
     st["agents"][11]["health"] = 50.0
