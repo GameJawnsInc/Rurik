@@ -10452,6 +10452,24 @@ CLICK_LATCH_LEG_ETA = True
 # the A/B this needs.
 ANIMREF_E3_RELEASE = False    # True (--e3-release): free the hold at E3, see ^
 
+# SLICE-F20 (the owner's third run, 2026-09-12): "still sliding during the
+# Power Attack animation. Stock behavior is needing to stand still during the
+# cast animation, then able to move again once the attack swing completes."
+# The run's log: [8 -> 1] at the strike's begin, a 0x003D 0.3 s later, and
+# our answer -- `action released: the player moves` plus a KBD LEAD -- walked
+# the body through the windup. RETAIL DEFERS THAT REPORT, 2 of 2: a 0x003D
+# at +0.378 / +0.439 s into a 0.565 s attack-skill windup (20260817T231139
+# t=693.029, 765.092) gets NOTHING until the strike, where 46, the gain, E3,
+# [8 -> 0] and only then the movement answer (0x0025/0x002B/0x0029) ride one
+# batch. So a movement report during a BEGUN attack skill's windup is
+# refused here: no hold release, no chain stop, no lead, no cancel -- the
+# body stays rooted until the strike (attack_skill_roots). Retail answers
+# the withheld report itself at the strike; ours waits for the client's
+# next report after it (the client re-sends a held key every few hundred
+# ms, seen in the run), which is the residual this leaves. False =
+# --no-attack-skill-root: the report is answered at once, the pre-run arm.
+ATTACK_SKILL_ROOT = True
+
 # ANIMREF-R8: the on-body effect visual (properties 20/21). R4 decoded the
 # channel and refused to wire it because the VALUE space was unread; FINDINGS
 # 16 reads it out of the client's own s_skill record (+0x78 caster, +0x7c
@@ -11202,6 +11220,38 @@ def strike_out_of_reach(state, target_id):
         return None
     return (f"the strike finds agent {target_id} {d:.0f} u away, past reach "
             f"{reach:.0f} u -- the body moved (or pressed) out of range")
+
+
+def attack_skill_roots(state, now=None):
+    """The BEGUN attack skill whose strike has not landed -- the cast that
+    roots the body (SLICE-F20) -- or None. A spell is not this (movement
+    cancels it, castmech 3f); an attack skill still walking in or clock-
+    queued is not this either (movement drops it, 45 + E2); a struck one
+    (E3 sent) is free -- "able to move again once the attack swing
+    completes, before the animation completely plays out".
+    """
+    if not ATTACK_SKILL_ROOT:
+        return None
+    for cast in state.get("pending_casts") or ():
+        if (cast.get("attack") and cast.get("begun", True)
+                and not cast.get("cancelled") and not cast.get("e3_sent")):
+            return cast
+    return None
+
+
+def refuse_move_while_rooted(state, conn_id, opcode, cast):
+    """A movement report during the windup: refused, printed once per cast."""
+    now = time.time()
+    n = cast.get("moves_refused", 0) + 1
+    cast["moves_refused"] = n
+    if n == 1:
+        which = ("keyboard" if opcode == GAME_CMSG_TURN_TO_DIRECTION
+                 else "click")
+        e3 = cast.get("e3_at", now)
+        print(f"[c{conn_id}] ROOTED: {which} report refused during skill "
+              f"{cast['skill_id']}'s strike windup, E3 in "
+              f"{max(e3 - now, 0.0):.2f}s -- retail defers it to the strike "
+              f"(2 of 2) [SLICE-F20]", flush=True)
 
 
 def attack_skill_arrives(state, cast, now):
@@ -21703,6 +21753,21 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # there is nothing to read; the request is the
                         # message.
                         cancel_action(send, state, conn_id)
+                    elif (opcode in (GAME_CMSG_TURN_TO_DIRECTION,
+                                     GAME_CMSG_MOVE_TO_COORD)
+                          and (opcode == GAME_CMSG_MOVE_TO_COORD
+                               or (len(values) > 4 and values[4]))
+                          and attack_skill_roots(state) is not None):
+                        # SLICE-F20: THE BODY IS ROOTED THROUGH AN ATTACK
+                        # SKILL'S WINDUP. A movement report here gets no
+                        # answer at all -- retail sends nothing until the
+                        # strike (2 of 2), and every arm below (the hold
+                        # release, the chain stop, the lead, the position
+                        # take) is an answer. Ahead of both arms so neither
+                        # runs; a pure turn (movementType 0, never seen)
+                        # falls through to the keyboard arm as before.
+                        refuse_move_while_rooted(state, conn_id, opcode,
+                                                 attack_skill_roots(state))
                     elif opcode == GAME_CMSG_TURN_TO_DIRECTION:
                         # Keyboard movement comes through here, not through
                         # MOVE_TO_COORD: WASD sends a HEADING from where you
@@ -25254,6 +25319,13 @@ def main():
         print("[map] --attack-approach: no-op, the approach is the default "
               "since ANIMREF-RE 39 (--no-attack-approach reverts it).",
               flush=True)
+    if a.no_attack_skill_root:
+        global ATTACK_SKILL_ROOT
+        ATTACK_SKILL_ROOT = False
+        print("[map] --no-attack-skill-root: a movement report during an "
+              "attack skill's windup is answered at once (the hold released, "
+              "a lead granted) -- the body slides through the strike, the "
+              "owner's third-run arm (SLICE-F20's revert).", flush=True)
     if a.no_attack_approach:
         global ATTACK_APPROACH
         ATTACK_APPROACH = False
