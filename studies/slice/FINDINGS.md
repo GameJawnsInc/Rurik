@@ -494,6 +494,74 @@ then the recipe `compose.py --name slice --verify` prints, then `--readback`.
   compression-8 in an 8,192 B reservation from the area's declared budget, id on the head
   only, journal beside the archive, `created_evidence` binding by bytes.
 
+## SLICE-F13 — **SLICE-B6: the corridor, the first rectangular footprint (SLICE-U4)**
+
+**PRE-REGISTERED 2026-09-12 15:15, before the run.** `[area.corridor]` is 32×128 cells
+(3,072 × 12,288 u), a 16-cell flat floor along the long axis between four-cell banks of
+120 per cell (51.3°, class-2 under both slope sets), closed at both ends, plateau 480 u up
+beyond the banks. Offline (`test_deploy` §14): the field is on the lattice (worst moved 0
+after the edge was moved onto a multiple of 4 — the first draft's column-10 edge cost one
+sample), the encoded terrain decodes back as **32×128 and not 128×32** (tag 0 stores dimY
+before dimX; no square map could ever have refuted the reading), the seed measures 0.0°,
+the banks 51.3°. Installed into the slice archive under `0x5F0B3` (map 168,
+`explorable = true`).
+
+**Question.** Does a retail client compile a non-square authored map, and does it mesh
+the floor and NOT the banks or the plateau?
+
+**Prediction.** (a) `Gw.log` shows `Map file '0x05f0b3' failed to load. Attempting to
+re-bloat.` and `compose.py --readback` reports the compiled height field equal to the
+authored one 4096/4096 — the rectangle compiled with our axes, not transposed (a
+transposition fails the client's own `dims.x * XY_DIST == mapRect` assert at
+TrnDataBloat:191, so it would show as a crash, not a wrong picture). (b) The mesh's
+trapezoids cover the FLOOR only: the spawn (1536, 1536) lands in exactly one trapezoid,
+and the compiled mesh's bounding x-extent is within the floor's 768..2304 u (16 cells
+from column 8), never reaching the plateau's x < 384 or > 2688. (c) The screenshot shows
+the character in a trench with banks on both sides.
+
+**RESULT — ALL THREE HALVES OBSERVED. SLICE-U4 is CLOSED: a retail client compiles a
+rectangular authored map, with our axes, and meshes exactly the floor.** Harness
+`20260912T111229` (map 168, `--area corridor`, `RURIK_DAT` at the slice archive), RUN
+VERDICT PASS, body in the map at t+22.1 s.
+
+- **(a)** `Gw.log`: `Map file '0x05f0b3' failed to load.  Attempting to re-bloat.` Readback
+  6 of 6 for the corridor: **the compiled height field equals ours 4096/4096**, environment
+  and sound verbatim, the seed in exactly one trapezoid. No assert — so the y,x reading of
+  tag 0 and `Terrain.index`'s tile order both hold for a rectangle, which no square map could
+  have refuted. (`frontier`'s readback line is FAIL in the same report because this run
+  loaded map 168 only; its head is armed, as `--build --fresh` left it.)
+- **(b)** The compiled mesh is **2 trapezoids**: x **768..2208**, y **480..11904**. The
+  floor is 768..2304 × 384..11904, the plateau begins at x < 384 / x > 2688. So the flood
+  filled the floor, stopped at the banks, and never reached the flat plateau above them —
+  W20/W23 transfer to a rectangle. The mesh sits one cell inside the floor on its right and
+  south edges (the trapezoid excludes the cell whose quad touches the bank), which is the
+  walkable-set rule rather than a lost cell.
+- **(c)** Frame `hold006`: the character on cobbled floor with a bank of the same texture
+  rising to the frame's top edge; the minimap draws a narrow strip.
+
+**What this closes and what it does not.** SLICE-U4 (the client accepts an elongated
+footprint) is closed by measurement. What the run does NOT say: whether the SERVER paths
+the corridor (`prewarm_pathmap` ran before the head was compiled, so this run served no
+collision — the second, unarmed run `deploy --serve` describes), and nothing about a
+population, because `[area.corridor]` has no spawn rows yet. Both are the next item, not
+this one.
+
+**A defect found on the way, and its guard.** The second `compose.py --build` of the day
+re-copied the pristine snapshot over the composed archive: `assemble` took "Gw.dat present
+at the source's size" as "already staged", and every archive write changes the size (two
+MFT rows, 48 bytes). It then rewrote the string and was **refused by frontier's own
+allocation journal** — `datalloc`'s clobber guard, describing a chain the copy no longer
+held. Fixed: a plain `--build` never re-copies a present archive; only `--fresh` does, and
+`--fresh` removes the journals with it. `test_compose` §4 pins the order of the two tests.
+
+**Refuted if** the client asserts on load (the rectangle itself), or the mesh's x-extent
+reaches the plateau (the banks did not stop the flood — W20/W23 do not transfer to a
+rectangle), or the compiled heights differ from ours (the tile order is not what
+`Terrain.index` says for a rectangle).
+
+**Exposure floor.** "body is in the map" and a non-zero head after the run. Short of that,
+ABORT.
+
 ## SLICE-F6 — what the desk cannot settle
 
 Carried so the next session does not re-read the same bytes hoping for more:

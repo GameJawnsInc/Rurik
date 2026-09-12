@@ -297,14 +297,32 @@ class Donor:
 
 # ---------------------------------------------------------------- build
 
-def pick_tree_cells(heights, dim, n, seed_cell, pitch=96.0):
+def area_dims(area):
+    """(dim_x, dim_y) from an area row's `dims`. -> tuple
+
+    SLICE-B6: `dims = 64` is a square, as every area before the corridor was;
+    `dims = [32, 128]` is a rectangle, x then y, the order `stripbuild.build`
+    and `default_rect` take. The codec layers below took two axes all along
+    (`terrain._gate_dims` forbids nothing about the aspect ratio); this
+    orchestrator was the one place still spelling `dim, dim`.
+    """
+    d = area["dims"]
+    if isinstance(d, (list, tuple)):
+        if len(d) != 2:
+            raise Refused(f"dims {d!r}: a rectangle is [x, y], two numbers")
+        return int(d[0]), int(d[1])
+    return int(d), int(d)
+
+
+def pick_tree_cells(heights, dim, n, seed_cell, pitch=96.0, dim_y=None):
     """Deterministic farthest-point pick over FLAT cells, away from the seed.
 
     Flat matters: a prop on a corner-spread cell sits visibly off the ground,
     and the (e10-next) driver refused its own hard-coded list for exactly that.
     """
+    dim_y = dim if dim_y is None else dim_y
     flat = []
-    for gy in range(1, dim - 1):
+    for gy in range(1, dim_y - 1):
         for gx in range(1, dim - 1):
             hs = [heights[trn_mod.Terrain.index(gx + dx, gy + dy, dim)]
                   for dx in (0, 1) for dy in (0, 1)]
@@ -327,8 +345,13 @@ def pick_tree_cells(heights, dim, n, seed_cell, pitch=96.0):
     return picked[:n]
 
 
-def assemble(area, heights, donor, dim, verbose=True):
-    """Everything the area declares, into one Stripped map."""
+def assemble(area, heights, donor, dim, verbose=True, dim_y=None):
+    """Everything the area declares, into one Stripped map.
+
+    `dim_y` defaults to `dim` -- the square every caller before SLICE-B6
+    passed, unchanged -- and `main` passes the rectangle's second axis.
+    """
+    dim_y = dim if dim_y is None else dim_y
     seed = (float(area["seed_x"]), float(area["seed_y"]))
     kw = dict(constants=donor.constants, dep_ids=donor.terrain_dep_ids)
 
@@ -364,7 +387,7 @@ def assemble(area, heights, donor, dim, verbose=True):
         if not donor.prop_model_ids:
             raise Refused("area asks for trees, donor lists no prop models")
         seed_cell = (int(seed[0] // 96.0), int(seed[1] // 96.0))
-        cells = pick_tree_cells(heights, dim, n_trees, seed_cell)
+        cells = pick_tree_cells(heights, dim, n_trees, seed_cell, dim_y=dim_y)
         if len(cells) < n_trees:
             raise Refused(f"only {len(cells)} flat cells for {n_trees} trees")
         # An area may give its props a FOOTPRINT. `outline` is prop-LOCAL
@@ -434,7 +457,7 @@ def assemble(area, heights, donor, dim, verbose=True):
             # Flat and y-symmetric maps masked it, which is every treed map
             # before the caldera. The prop's world x/y must name the cell
             # the CLIENT renders this grid cell at.
-            wy = (dim - 1 - gy) * 96.0 + 48.0
+            wy = (dim_y - 1 - gy) * 96.0 + 48.0
             props.append(Prop(model=len(props) % len(want),
                               x=gx * 96.0 + 48.0, y=wy,
                               z=z, rot=(0, 0, 0), scale=0x7F, flags=0,
@@ -462,7 +485,7 @@ def assemble(area, heights, donor, dim, verbose=True):
     # top byte selects the slope set, so a row setting one must not disturb the
     # other.
     kw["map_flags"] = int(area.get("map_flags", 0) or 0)
-    return sb.build(dim, dim, heights, seed, **kw)
+    return sb.build(dim, dim_y, heights, seed, **kw)
 
 
 # --------------------------------------------------------------- verify
@@ -1555,7 +1578,7 @@ def main(argv=None):
     world = (content_mod.load(vault_dir="") if args.repo_content_only
              else content_mod.load())
     area = world.get("area", args.area)
-    dim = int(area["dims"])
+    dim, dim_y = area_dims(area)
     map_id = int(area["map_id"])
     map_row = world.get("map", str(map_id))
     file_id = int(map_row["file_id"])
@@ -1572,12 +1595,15 @@ def main(argv=None):
     # read together and threaded together.
     reserve = area_reserve(area)
     print(f"area {args.area!r}: {area['name']} -- map {map_id}, "
-          f"{dim}x{dim}, file id {file_id:#x}"
+          f"{dim}x{dim_y}, file id {file_id:#x}"
           + ("  (created: this area owns its file)" if created_row else "")
           + (f"  (reserve {reserve} B)" if reserve else ""))
 
     # 1. geometry
     if args.blend:
+        if dim_y != dim:
+            raise Refused(f"--blend authors a square field; area {args.area!r} "
+                          f"is {dim}x{dim_y}")
         heights, exe, why, wr, frac = heights_from_blend(
             args.blend, dim, args.blender)
         print(f"  geometry: {args.blend} via Blender ({why})")
@@ -1590,15 +1616,25 @@ def main(argv=None):
                           f"known: {', '.join(sorted(GENERATORS))}")
         gen_fn = GENERATORS[gen]
         # A generator may declare an `area` parameter when its shape is
-        # parameterised by the row (gen_ramp_uniform reads `ramp_dz`).
-        # Passed only when accepted, so the other generators keep their
-        # one-argument signature and nothing has to know which is which.
-        if "area" in inspect.signature(gen_fn).parameters:
-            heights = gen_fn(dim, area=area)
-        else:
-            heights = gen_fn(dim)
+        # parameterised by the row (gen_ramp_uniform reads `ramp_dz`), and a
+        # `dim_y` parameter when it can fill a RECTANGLE (gen_corridor).
+        # Each is passed only when accepted, so the other generators keep
+        # their one-argument signature and nothing has to know which is
+        # which -- and a rectangular row over a square-only generator is a
+        # refusal, not a square map with the wrong name on it.
+        params = inspect.signature(gen_fn).parameters
+        gkw = {}
+        if "area" in params:
+            gkw["area"] = area
+        if dim_y != dim:
+            if "dim_y" not in params:
+                raise Refused(f"area {args.area!r} is {dim}x{dim_y} but "
+                              f"generator {gen!r} only fills a square; the "
+                              f"rectangular ones take a `dim_y` parameter")
+            gkw["dim_y"] = dim_y
+        heights = gen_fn(dim, **gkw)
         print(f"  geometry: generator {gen!r}")
-    heights, worst = stx.snap_field(heights, dim, dim)
+    heights, worst = stx.snap_field(heights, dim, dim_y)
     print(f"  lattice snap: worst sample moved {worst}")
 
     # 2. borrow
@@ -1639,7 +1675,7 @@ def main(argv=None):
                                                here=here, tag=args.area))
 
     # 3. assemble
-    report = assemble(area, heights, donor, dim)
+    report = assemble(area, heights, donor, dim, dim_y=dim_y)
 
     # 3b. compress. Run on EVERY invocation, install or not: the ratio is a
     # measurement of the map that was just authored, it costs 0.04 s on the

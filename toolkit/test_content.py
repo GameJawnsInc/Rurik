@@ -130,10 +130,10 @@ def main():
               world_err or f"census {world.census()}")
 
     # --- it loads, and it loaded the tables we expect ------------------------
-    LEDGER.ok(world.census().get("map", 0) == 18,
-              "eighteen maps load (maps 242, 248 and 310, the three the live "
-              "click corpus visits, landed 2026-08-28 -- see the note beside "
-              "ADDED)",
+    LEDGER.ok(world.census().get("map", 0) == 19,
+              "nineteen maps load (map 168, the corridor, SLICE-B6 2026-09-12; "
+              "maps 242, 248 and 310, the three the live click corpus visits, "
+              "landed 2026-08-28 -- see the note beside ADDED)",
               f"{world.census().get('map')}")
     LEDGER.ok(all(world.census().get(k) for k in
                   ("npc", "item", "spawn", "player", "attack_speed")),
@@ -239,7 +239,9 @@ def main():
     # weaker than 280's: 242 and 248 have no fixed arrival (5 loads, 5 positions;
     # 17 loads, 17 positions), so each row commits ONE observed retail arrival
     # and its note says so.
-    ADDED = {143, 144, 280, 27, 166, 165, 167, 242, 248, 310}
+    # 168 is SLICE-B6's corridor: the first RECTANGULAR created row (32x128),
+    # and the first created row that is `explorable = true`.
+    ADDED = {143, 144, 280, 27, 166, 165, 167, 242, 248, 310, 168}
     LEDGER.ok(set(msc) == MIGRATED | ADDED,
               "and the only additions are the ones this test names",
               f"unnamed: {sorted(set(msc) - MIGRATED - ADDED)}")
@@ -262,6 +264,14 @@ def main():
               "165's, spawned at the centre of the 64x64 rect it authors, and "
               "`created = true` for the same reason 166 carries it",
               str(msc.get(167)))
+    LEDGER.ok(msc.get(168) == (0x5F0B3, (1536.0, 1536.0), 0, True)
+              and world.get("map", "168").get("created") is True,
+              "map 168 is SLICE-B6's CREATED row (the corridor): the id after "
+              "167's, spawned on the floor of the 32x128 rect it authors -- NOT "
+              "the centre, which is the first rectangle's own geometry -- "
+              "`created = true` like its siblings and, unlike them, "
+              "`explorable = true`, because it is the slice's explorable",
+              str(msc.get(168)))
     LEDGER.ok(msc.get(143) == (0x287D3, (1536.0, 1536.0), 0, False),
               "map 143 is C2's target row, spawned at the centre of the "
               "DELIVERED map's rect", str(msc.get(143)))
