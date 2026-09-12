@@ -208,6 +208,45 @@ def _close_dialog(send, agent_id, why):
     send(GAME_SMSG_NPC_DIALOG_SHOW, [agent_id], f"DIALOG_CLOSE({why})")
 
 
+def quest_agent(row, which):
+    """Which agent id a quest's `which` NPC is -- 'giver' or 'objective'.
+
+    A quest row may name its NPC two ways, and the difference is what SLICE-B1
+    is. `{which}_agent` is a BARE NUMBER, per-connection and per-spawn;
+    content/quests.toml's own comment calls it "a probe-world binding, not a
+    content one" and the recon that opened this arc reported the consequence as
+    "no code spawns a quest giver in ordinary play". `{which}_spawn` names a
+    SPAWN ROW KEY instead, and the id is read from that row -- so the quest
+    points at a body somebody authored rather than at an integer that happens
+    to match one.
+
+    BOTH ARE SUPPORTED AND THE KEY WINS, because carrying both is the state
+    this arc is in rather than an indecision: `quests.toml` keeps its numbers so
+    `probequest.py`'s hand-built world still binds, and gains the keys so the
+    authored world does. The two are the SAME id by construction -- the spawn
+    rows were given 99 and 98 on purpose -- so nothing had to change on either
+    side to suit the other.
+
+    A KEY NAMING NO SPAWN ROW RAISES, and does not fall back to the number.
+    That fallback is the one failure mode worth refusing: the quest would keep
+    working in the probe and do nothing in the authored world, which is
+    invisible from either side on its own.
+    """
+    key = row.get(f"{which}_spawn")
+    if key:
+        try:
+            spawn = agents.WORLD.get("spawn", str(key))
+        except Exception as exc:                              # noqa: BLE001
+            raise ValueError(
+                f"quest row names {which}_spawn = {key!r}, which is not a spawn "
+                f"row. Not falling back to {which}_agent: a typo that quietly "
+                f"reverted to the probe binding would leave the quest working "
+                f"in the probe and dead in the world ({exc})")
+        return int(spawn["agent_id"])
+    v = row.get(f"{which}_agent")
+    return None if v is None else int(v)
+
+
 def _quest_lines(state):
     """[(quest_id, code, row)] this NPC can act on, given what the player holds.
 
@@ -222,10 +261,12 @@ def _quest_lines(state):
     this function returned SERVICE_TURN_IN the moment a quest was held, so kind
     22 was unreachable and a quest went straight from '!' to the turn-in bag.
 
-    Bound to the agent being talked to, via the row's `giver_agent`. That is a
-    real binding where the old one was "every quest speaks at every NPC" -- but
-    it binds to an AGENT ID, which is per-connection and per-spawn, so it is a
-    probe-world binding rather than a content one. Said here and in the row.
+    Bound to the agent being talked to, through `quest_agent`. That paragraph
+    used to end "it binds to an AGENT ID, which is per-connection and per-spawn,
+    so it is a probe-world binding rather than a content one" -- SLICE-B1 is
+    what fixed it: a row may now name a SPAWN ROW KEY and the id comes from the
+    authored world. The bare number still works and is still what the probe
+    uses.
     """
     held = state.setdefault("quests", set())
     done = state.setdefault("objectives_done", set())
@@ -235,7 +276,7 @@ def _quest_lines(state):
         row = quest_rows()[qid]
         if not row.get("giver_dialogue"):
             continue
-        if row.get("giver_agent") not in (None, agent):
+        if quest_agent(row, "giver") not in (None, agent):
             continue
         if qid not in held:
             code = questdefs.SERVICE_SHOW
@@ -257,7 +298,7 @@ def _objective_quests(state, agent):
     done = state.setdefault("objectives_done", set())
     return [(qid, quest_rows()[qid]) for qid in sorted(held)
             if qid not in done
-            and quest_rows().get(qid, {}).get("objective_agent") == agent]
+            and quest_agent(quest_rows()[qid], "objective") == agent]
 
 
 # How close you must stand to talk. OURS -- the same status as ATTACK_RANGE and
@@ -634,7 +675,8 @@ def _quest_markers(state):
 
     for qid in sorted(quest_rows()):
         row = quest_rows()[qid]
-        giver, objective = row.get("giver_agent"), row.get("objective_agent")
+        giver = quest_agent(row, "giver")
+        objective = quest_agent(row, "objective")
         if qid not in held:
             want(giver, QUEST_MARKER_OFFER)
             want(objective, None)

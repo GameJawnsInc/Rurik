@@ -374,6 +374,42 @@ monk in ordinary play.
 need `land_skill`'s four remaining sites parameterised; the commander UI's flags and
 stances are decoded but wired to nothing.
 
+## SLICE-F11 — **SLICE-B1: the quest giver is CONTENT now, and the parade's names became tracked rows**
+
+OBSERVED, 2026-09-12, harness `20260912T094236`. The offer screen, on a real client, from
+an authored spawn row: **"Lieutenant Fisk / Well met. My companion waits nearby with word
+I need. Bring it to me. / Reward: 100 Experience / Accept / Decline"**, with the quest's
+`!` marker over the giver at instance load.
+
+**The recon's framing was right and its cost was wrong**, which the plan already flagged:
+"no code spawns a quest giver in ordinary play" is true, and needed no server change to
+fix. `_quest_lines` and `_objective_quests` bind by agent id, and `area_population` lets a
+spawn row choose any id — so a row IS the giver.
+
+**What was genuinely owed, and is now done.**
+
+- **Two parade templates promoted into tracked `content/npcs.toml`** with the names the
+  client drew: `lieutenant_fisk` (def 1458) and `ascalonian_townsfolk` (def 1490). Each was
+  alone in an empty world when its nameplate was read, so the name belongs to that
+  definition and nothing else. They are the first templates that HAD to be tracked, because
+  a tracked spawn row naming a vault-only template fails on a bare machine — and
+  `test_quests` §21 now loads the store with the overlay **switched off** to check exactly
+  that, which the suite otherwise never exercises.
+- **`quest_agent(row, which)`** — a quest may name its NPC by SPAWN KEY instead of a bare
+  number. Both are supported and the key wins; the numbers survive so `probequest.py`'s
+  hand-built world still binds, and the spawn rows were given 99 and 98 deliberately so the
+  two agree. A key naming no spawn row **raises** rather than falling back, because that
+  fallback would leave the quest working in the probe and dead in the world — invisible
+  from either side alone.
+
+**One open question, recorded rather than tuned away.** The first run placed the giver at
+300 u, beyond `INTERACT_RANGE` (250 u). The server did the right thing — ordered a walk and
+HELD the interact — and **the hold never released**: the walk order went out and the client
+sent only heartbeats, so `state["pos"]` never came within range (harness
+`20260912T093924`). The giver moved to 200 u for a content reason (a quest giver you cannot
+talk to is bad content), and the held-interact path is left as a thing to look at, not as a
+thing that was fixed.
+
 ## SLICE-F6 — what the desk cannot settle
 
 Carried so the next session does not re-read the same bytes hoping for more:
