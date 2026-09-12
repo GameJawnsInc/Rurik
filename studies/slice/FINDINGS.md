@@ -1070,6 +1070,14 @@ latency, 20–50 ms. `test_castcancel` §3b (floor 40 → 44) pins the keep, the
 rooting, the release-and-hand-back, the one-answer-per-report, the nothing-withheld null,
 and a source lock on the wake shrink and both replay branches.
 
+**The owner's sixth run: OBSERVED.** *"Body walks after the hit now."* The attack skill's
+feel now matches the owner's description of stock at every step measured here: the press from
+range walks in and strikes on arrival, W on the way cancels it with nothing over the head, the
+press while running stops the body for the windup, the body is rooted through the windup, and
+a key held through it walks the moment the hit lands. Left open from this thread: SLICE-C3
+(does retail's melee hit land on a target that stepped out during the windup), and the slot
+residual (retail's running-press halt follows the hold; ours precedes the animation).
+
 **Refuted if** the owner's press from range still strikes without walking, or the walk
 ends and nothing begins (the arrival predicate — `approach_tick`'s eta-or-stop-radius —
 disagreeing with the client's own resolver, which C1's gate would then show as a released
