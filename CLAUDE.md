@@ -289,6 +289,12 @@ tool produced, later cited as if the client had said it.
   worktree has no vault of its own, so a relative walk lands on nothing — and a
   fixture that resolves to nothing turns every assertion behind it into a no-op.
   `require_dir()` raises instead. Override with `RURIK_VAULT` if the vault moves.
+- **Leaf modules** (2026-09-11, the modularization arc, 47 leaves): a stdlib-only leaf carries no
+  `sys.path` header; one importing a repo-local sibling inserts its own directory, plus the parent
+  one level up, guarded — `if HERE not in sys.path:`, per `grantinputs`/`field4screen`/`tablesqrt`.
+  **A leaf never imports its origin**: `python authsrv.py` makes the origin `__main__`, so an import
+  loads a second copy whose flags `main()` never set. Re-exports sit at the site the code left, one
+  parenthesised `from leaf import (...)` commented with which files read those names, never `import *`.
 - The daily three-terminal loop, the one-time client patching, and the failure table
   are in [RUNBOOK.md](RUNBOOK.md). The DH parameters rotate with every client build,
   so an ArenaNet update means redoing that setup in full.
