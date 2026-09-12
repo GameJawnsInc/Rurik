@@ -36,6 +36,7 @@ import time
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
 import checks  # noqa: E402
+import time as _time  # noqa: E402
 
 # FLOOR 30, from the green runs of 2026-09-01 that added §7, the LANDING
 # SPLIT -- the day LAW A went to the default, came back on the operator's
@@ -43,7 +44,7 @@ import checks  # noqa: E402
 # two-regime rule. 24 earlier that day, 21 before it, 15 when the file
 # carried the movement door alone. Measured both ways: 30 with a vault, 30
 # without -- §7 stubs nothing it does not already stub.
-LEDGER = checks.Ledger("cast cancel", floor=40)   # 2026-09-12: +1 the queued drop's stop property, +8 section 3b the attack-skill root and the strike release (SLICE-F20); from the green run
+LEDGER = checks.Ledger("cast cancel", floor=44)   # 2026-09-12: +1 the queued drop, +12 section 3b the attack-skill root, the withheld report and its replay (SLICE-F20); from the green run   # 2026-09-12: +1 the queued drop's stop property, +8 section 3b the attack-skill root and the strike release (SLICE-F20); from the green run
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -252,32 +253,57 @@ def section_attack_skill_roots():
         # the refusal is counted on the cast and printed once
         authsrv.refuse_move_while_rooted(state, 0,
                                          authsrv.GAME_CMSG_TURN_TO_DIRECTION,
-                                         cast)
+                                         cast, [0, (1.0, 2.0), 0, (7.0, 7.0), 1])
         authsrv.refuse_move_while_rooted(state, 0,
-                                         authsrv.GAME_CMSG_MOVE_TO_COORD, cast)
+                                         authsrv.GAME_CMSG_MOVE_TO_COORD, cast,
+                                         [0, 0, 0])
         check(cast.get("moves_refused") == 2,
               "each refused report is counted on the cast (printed once)",
               f"{cast.get('moves_refused')}")
-        # after the strike (E3 sent) the body is free -- and the strike
-        # FREES THE HELD KEY: [8 -> 0] rides the E3 because a report was
-        # withheld (retail 3 of 3 with a withheld report)
+        # the refusals KEEP the latest report, to be answered at the strike
+        check(state.get("withheld_report") == (authsrv.GAME_CMSG_MOVE_TO_COORD,
+                                               [0, 0, 0])
+              and authsrv.withheld_replay_take(send, state, 0) is None
+              and abs(authsrv.withheld_wake(state) - cast["e3_at"]) < 1e-9,
+              "the latest withheld report is kept (retail answers the LAST "
+              "one, 692.825: mt 8 then 3, answered mt 3), the replay refuses "
+              "while the cast roots, and the recv loop's wake is the E3 "
+              "instant", f"{state.get('withheld_report')}")
+        # after the strike (E3 sent) the body is free, the tick sends NO
+        # release of its own, and the recv thread's take releases the hold
+        # and hands the report back -- retail's strike batch: E3, [8 -> 0],
+        # then the movement answer (3 of 3 with a withheld report)
         sent.clear()
         _rewind(state, 1.0)
         authsrv.cast_tick(send, state, 0)
-        rel = [i for i, (op, v, _) in enumerate(sent)
+        rel = [v for op, v, _ in sent
                if op == 0x009F and v == [authsrv.agents.GV_DISABLED, PLAYER, 0]]
-        e3 = [i for i, (op, _, _) in enumerate(sent) if op == 0x00E3]
         check(cast["e3_sent"] and authsrv.attack_skill_roots(state) is None
-              and len(rel) == 1 and e3 and rel[0] > e3[0],
+              and rel == [],
               "once the strike lands (E5 and E3 in the same instant for an "
-              "attack skill) nothing roots, and the E3 batch carries "
-              "[8 -> 0] behind the E3 -- the key held through the windup is "
-              "freed (the owner's fourth run: 'holding W ... doesn't move "
-              "me after the swing connects'); retail's attack-skill E3 "
-              "carries it exactly when a report was withheld, 3 of 3",
-              f"e3_sent {cast['e3_sent']}, release at {rel}, e3 at {e3}")
-        # ... and NOT when nothing was withheld (retail 0 of 3: the hold
-        # releases on the next input instead)
+              "attack skill) nothing roots -- and the TICK releases nothing: "
+              "the release rides the replay on the recv thread (REV-2: a "
+              "player grant is recv-thread-only), so the two go out together "
+              "as retail's do", f"e3_sent {cast['e3_sent']}, rel {rel}")
+        sent.clear()
+        wake = authsrv.withheld_wake(state)
+        got = authsrv.withheld_replay_take(send, state, 0)
+        check(wake is not None and wake <= _time.time() + 1e-3
+              and got == (authsrv.GAME_CMSG_MOVE_TO_COORD, [0, 0, 0])
+              and [(op, v) for op, v, _ in sent]
+              == [(0x009F, [authsrv.agents.GV_DISABLED, PLAYER, 0])]
+              and state.get("withheld_report") is None,
+              "struck: the wake is NOW, the take sends [8 -> 0] and hands "
+              "back the withheld report for the movement arm (the owner's "
+              "fifth run: the release alone drew a 0x0047 stop report, a "
+              "held key having no edge to re-report; retail answers the "
+              "report itself), and the store is cleared",
+              f"wake {wake}, got {got}, sent {[(hex(op), v) for op, v, _ in sent]}")
+        check(authsrv.withheld_replay_take(send, state, 0) is None
+              and authsrv.withheld_wake(state) is None,
+              "and a second take finds nothing -- one answer per report")
+        # with nothing withheld the strike releases nothing (retail 0 of 3:
+        # the hold goes on the next input instead)
         state = {"agents": {}}
         _press(authsrv, send, state, skill=394)
         sent.clear()
@@ -285,10 +311,12 @@ def section_attack_skill_roots():
         authsrv.cast_tick(send, state, 0)
         rel = [v for op, v, _ in sent
                if op == 0x009F and v == [authsrv.agents.GV_DISABLED, PLAYER, 0]]
-        check(rel == [],
-              "with no report withheld the strike releases nothing -- the "
-              "hold goes on the next input, as retail's does (284.607, "
-              "617.247, 645.377)", f"{rel}")
+        check(rel == [] and authsrv.withheld_wake(state) is None
+              and authsrv.withheld_replay_take(send, state, 0) is None,
+              "with no report withheld the strike releases nothing and the "
+              "recv loop has nothing to wake for -- the hold goes on the "
+              "next input, as retail's does (284.607, 617.247, 645.377)",
+              f"{rel}")
         # an attack skill still walking in (SLICE-C2) does not root
         state = {"agents": {40: {"name": "t", "dead": False, "last_hit": 0.0,
                                  "max_health": 100.0, "health": 100.0,
@@ -313,6 +341,15 @@ def section_attack_skill_roots():
         guard = src.index("and attack_skill_roots(state) is not None):")
         kbd = src.index("elif opcode == GAME_CMSG_TURN_TO_DIRECTION:")
         click = src.index("elif opcode == GAME_CMSG_MOVE_TO_COORD:")
+        check(src.count("withheld_wake(state) if kind == \"game\" else None") == 1
+              and src.count("(withheld_replay_take(send, state, conn_id)") == 2
+              and src.count("chunk, msgs, desync_err = None, [_wr], None") == 1
+              and src.count("msgs = [_wr] + list(msgs)") == 1,
+              "the recv loop wakes for a withheld report (one timeout shrink) "
+              "and replays it in BOTH branches -- the quiet wake as a batch "
+              "of one with no bytes behind it, and a received batch with the "
+              "replay FIRST, ahead of a 0x0047 the client may have sent "
+              "against the still-held gate")
         check(src.count("and attack_skill_roots(state) is not None):") == 1
               and guard < kbd and guard < click,
               "one guard arm in handle(), ahead of the keyboard arm AND the "

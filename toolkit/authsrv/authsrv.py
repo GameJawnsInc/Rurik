@@ -11243,11 +11243,57 @@ def attack_skill_roots(state, now=None):
     return None
 
 
-def refuse_move_while_rooted(state, conn_id, opcode, cast):
+def withheld_wake(state):
+    """When the recv loop must wake to answer a withheld report: the rooting
+    cast's E3 instant while it roots, now once it is over. None when nothing
+    is withheld. SLICE-F20."""
+    if state.get("withheld_report") is None:
+        return None
+    cast = attack_skill_roots(state)
+    return float(cast["e3_at"]) if cast is not None else time.time()
+
+
+def withheld_replay_take(send, state, conn_id):
+    """The withheld movement report, once nothing roots the body -- with the
+    hold released first, in the same batch. -> (opcode, values) or None.
+
+    RECV THREAD ONLY: the report is dispatched through the movement arm it
+    was refused from, and every player-grant sender is serialized on that
+    thread (REV-2). Retail's shape (3 of 3 strikes with a withheld report):
+    46, the gain, E3, [8 -> 0], then the movement answer, one batch; ours
+    sends the E3 from the tick and this pair from the recv thread's next
+    wake (the timeout is shrunk to the E3 instant by withheld_wake), so the
+    split is the recv wake's latency, 20-50 ms. A cast that ended by a
+    cancel instead of a strike releases the same way: the report was the
+    player's input either way.
+    """
+    wr = state.get("withheld_report")
+    if wr is None or attack_skill_roots(state) is not None:
+        return None
+    state["withheld_report"] = None
+    action_hold(send, state, 0,
+                "the strike frees the key held through its windup "
+                "[SLICE-F20]")
+    print(f"[c{conn_id}] REPLAY: the movement report withheld through the "
+          f"strike windup ({'keyboard' if wr[0] == GAME_CMSG_TURN_TO_DIRECTION else 'click'}) "
+          f"is answered now -- retail's strike batch answers it itself "
+          f"[SLICE-F20]", flush=True)
+    return wr
+
+
+def refuse_move_while_rooted(state, conn_id, opcode, cast, values=()):
     """A movement report during the windup: refused, printed once per cast."""
     now = time.time()
     n = cast.get("moves_refused", 0) + 1
     cast["moves_refused"] = n
+    # THE LATEST REPORT IS KEPT, to be answered at the strike (SLICE-F20,
+    # the owner's fifth run): retail's strike batch answers the withheld
+    # 0x003D itself -- [8 -> 0], then 0x0025/0x002B/0x0029 for the LAST one
+    # sent (692.825: two reports withheld, mt 8 then 3; the answer is mt 3)
+    # -- and the client walks on that answer with no report of its own
+    # (0 c2s between). Ours released the hold alone and the client answered
+    # with a 0x0047 stop report: a held key has no edge to re-report.
+    state["withheld_report"] = (opcode, list(values))
     if n == 1:
         which = ("keyboard" if opcode == GAME_CMSG_TURN_TO_DIRECTION
                  else "click")
@@ -14450,27 +14496,17 @@ def cast_tick(send, state, conn_id):
             if ANIMREF_E3_RELEASE and not queued_next:
                 action_hold(send, state, 0,
                             f"E3 frees the caster (skill {cast['skill_id']})")
-            elif (cast["attack"] and cast.get("moves_refused")
-                  and ATTACK_SKILL_ROOT and not queued_next):
-                # SLICE-F20: THE STRIKE FREES A KEY HELD THROUGH THE WINDUP.
-                # Retail's attack-skill E3 carries [8 -> 0] exactly when a
-                # movement report was withheld during the windup (3 of 3:
-                # 717.315, 693.029, 765.092 -- the E3 batch then answers
-                # that report) and NOT otherwise (0 of 3: 284.607,
-                # 617.247, 645.377 release on the next input instead). The
-                # owner's fourth run: "holding W enables the cast to go
-                # through but doesn't move me after the swing connects" --
-                # the client's walk gate stayed set and a held key has no
-                # new edge to report. The release clears the gate, which
-                # arms the client's own 250 ms resume poll (ANIMREF 28)
-                # for the held key. Retail also answers the withheld
-                # report in this batch; ours leaves that to the client's
-                # next report -- the residual F20 names.
-                action_hold(send, state, 0,
-                            f"the strike of skill {cast['skill_id']} frees "
-                            f"the key held through its windup "
-                            f"({cast['moves_refused']} report(s) withheld) "
-                            f"[SLICE-F20]")
+            # SLICE-F20: a key HELD through an attack skill's windup is freed
+            # at the strike -- retail's attack-skill E3 carries [8 -> 0]
+            # exactly when a movement report was withheld (3 of 3: 717.315,
+            # 693.029, 765.092) and not otherwise (0 of 3) -- but NOT from
+            # here. The owner's fifth run showed the release alone is not
+            # enough (the client answered it with a 0x0047 stop report, a
+            # held key having no edge to re-report): retail's batch also
+            # ANSWERS the withheld report, and the answer is a player grant,
+            # which only the recv thread sends (REV-2). So the recv loop
+            # wakes at this instant (withheld_wake) and sends the release
+            # and the replayed report together (withheld_replay_take).
         if cast["e3_sent"] and now >= cast["e6_at"]:
             send(GAME_SMSG_SKILL_RECHARGED,
                  [PLAYER_AGENT_ID, cast["skill_id"], cast["copy"]],
@@ -21132,6 +21168,17 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                 sock.settimeout(1.0 if _rt_due is None else
                                 max(0.05, min(1.0,
                                               _rt_due - time.time())))
+            # SLICE-F20: a movement report withheld through an attack
+            # skill's windup is answered at the strike, so the loop wakes
+            # THEN rather than up to 1 s later (the floor 0.02 s covers the
+            # tick's own 50 ms cadence for the E3). Restored to the 1 s
+            # policy when nothing is withheld and no chain set it.
+            _wr_wake = (withheld_wake(state) if kind == "game" else None)
+            if _wr_wake is not None:
+                sock.settimeout(max(0.02, min(sock.gettimeout() or 1.0,
+                                              _wr_wake - time.time())))
+            elif not (ROUTER and kind == "game"):
+                sock.settimeout(1.0)
             try:
                 chunk = sock.recv(65536)
             except socket.timeout:
@@ -21157,24 +21204,41 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         and portal_tick(send, state, conn_id, _local_host)):
                     graceful_close(sock, conn_id, "transfer")
                     return
-                continue
-            if not chunk:
-                break
-            last = time.time()
-            plain = c2s.crypt(chunk)
-            total += len(chunk)
-            rec.frame("c2s", chunk, plain)
+                # SLICE-F20: the strike's wake -- the withheld report is
+                # dispatched through its own arm below as a batch of one,
+                # with no bytes behind it (chunk None, nothing to frame).
+                _wr = (withheld_replay_take(send, state, conn_id)
+                       if kind == "game" else None)
+                if _wr is None:
+                    continue
+                chunk, msgs, desync_err = None, [_wr], None
+            if chunk is not None:
+                if not chunk:
+                    break
+                last = time.time()
+                plain = c2s.crypt(chunk)
+                total += len(chunk)
+                rec.frame("c2s", chunk, plain)
 
-            # A TCP read is not a message boundary: a read may carry several
-            # messages, or half of one. Carry the remainder forward rather than
-            # decoding per-read, which would drop the tail of every split message.
-            pending += plain
-            # The client declares its own channel in the version header, so the
-            # catalog self-selects: run a second instance on 6113 and it decodes
-            # the game channel with no extra flag. GAME_CMSG_MASK is also 0x8000,
-            # so the framing is identical -- only the catalog differs.
-            msgs, pending, desync_err = frame_pending(
-                codec, cmsg, pending, AUTH_CMSG_MASK)
+                # A TCP read is not a message boundary: a read may carry
+                # several messages, or half of one. Carry the remainder
+                # forward rather than decoding per-read, which would drop
+                # the tail of every split message.
+                pending += plain
+                # The client declares its own channel in the version header,
+                # so the catalog self-selects: run a second instance on 6113
+                # and it decodes the game channel with no extra flag.
+                # GAME_CMSG_MASK is also 0x8000, so the framing is identical
+                # -- only the catalog differs.
+                msgs, pending, desync_err = frame_pending(
+                    codec, cmsg, pending, AUTH_CMSG_MASK)
+                # SLICE-F20: a batch that arrives after the strike carries
+                # the replay FIRST -- ahead of a 0x0047 the client may have
+                # sent against the still-held gate.
+                _wr = (withheld_replay_take(send, state, conn_id)
+                       if kind == "game" else None)
+                if _wr is not None:
+                    msgs = [_wr] + list(msgs)
 
             # REV-2/REV-3 (the F-B review): under the bundle the deferred
             # click flush runs HERE, on the recv thread, BEFORE the batch --
@@ -21802,7 +21866,8 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # runs; a pure turn (movementType 0, never seen)
                         # falls through to the keyboard arm as before.
                         refuse_move_while_rooted(state, conn_id, opcode,
-                                                 attack_skill_roots(state))
+                                                 attack_skill_roots(state),
+                                                 values)
                     elif opcode == GAME_CMSG_TURN_TO_DIRECTION:
                         # Keyboard movement comes through here, not through
                         # MOVE_TO_COORD: WASD sends a HEADING from where you
