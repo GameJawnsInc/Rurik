@@ -17997,7 +17997,23 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
                 return
             if fol.get("arrived_at") is None:
                 fol["arrived_at"] = now
-                fol["in_reach_at_arrival"] = dist <= _reach   # SLICE-F22
+                # SLICE-F27: THE ARRIVAL ITSELF OWES THE SWING. F22 tested the
+                # LIVE distance here, and a circling player was never inside
+                # it at the instant the copy parked at the point it had been
+                # chasing (the owner: "I'm able to run around him in circles
+                # and he never quite stops to attack" -- 34 halts, 6 swings).
+                # Retail's server halts when ITS copy of the hostile parks at
+                # the disc of ITS copy of the player -- a copy that lags the
+                # reports by up to 0.5 s (sec.40.2) -- so at a retail halt the
+                # target is in reach BY CONSTRUCTION, and the swing follows:
+                # 5 of the 6 halts that ended a chase on the observer were
+                # followed by a swing within 0.8 s, the sixth by a re-follow;
+                # the one halt at which the player was still moving swung
+                # (20260817T183756 t=330.686). A park is an arrival at the
+                # point the hostile chased; the swing it owes lands wherever
+                # the body went (F21). The flag stays a flag so a stale-point
+                # rule can clear it the day one is measured.
+                fol["in_reach_at_arrival"] = True
             if now - fol["sent_at"] >= FOLLOW_REPATH_INTERVAL:
                 _halt(f"parked, {dist:.0f} u from the player; the "
                       "half-second clock had already fired")
@@ -18039,7 +18055,7 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
             _halt(f"arrived, {dist:.0f} u from the player")
             return
         fol["arrived_at"] = now
-        fol["in_reach_at_arrival"] = dist <= _reach           # SLICE-F22
+        fol["in_reach_at_arrival"] = True                     # SLICE-F27, as above
         if now - fol["sent_at"] >= FOLLOW_REPATH_INTERVAL:
             _halt(f"arrived, {dist:.0f} u from the player; the half-second "
                   "clock had already fired")

@@ -10290,6 +10290,12 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   lead's end (where the owner's client reported itself after the revive, to the unit) and
   not the last report. `test_kbdsync.py` §11: five kill callers, one rule (the death is the
   fifth).
+  **SLICE-F27 / C9 (2026-09-12): the arrival owes the swing.** `test_agentlife.py` 11b (floor
+  414 -> 417): a follow sent at the player at the origin, the player 300 u off by the time the
+  copy parks at the point it chased -- the park is an arrival in reach (retail's halt is at
+  its lagging copy's disc, in reach by construction; 5 of 6 halts swung), the halt stamps the
+  debt, the circler is swung at on the next tick. The cleared-flag control is now named as the
+  flag's own arm, kept for a measured stale-point rule (retail re-followed after 1 of 6).
   `toolkit/authsrv/test_castcycle.py` (the four-opcode cast cycle against
   ArenaNet's own template — six complete cycles, two live captures, same order
   every time: E4 at the press, E5 at cast end carrying the recharge in whole
