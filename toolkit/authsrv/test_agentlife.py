@@ -5106,13 +5106,26 @@ def section_hold_plane():
                   "revert arm")
     finally:
         authsrv.PARTY_BODY_IN_OUTPOST = _saved_bio
-    LEDGER.ok(_src.count("party_bodies_here(state)") == 4     # the def + 3 sites
+    LEDGER.ok(_src.count("party_bodies_here(state)") == 5     # the def + 4 sites
               and _src.count("if HERO_BODY and party_bodies_here(state) else ()") == 1
               and "HENCHMAN_BODY and party_bodies_here(state)" in _src,
               "both party body sites in the load path -- the hero loop and the "
               "henchman's -- are gated on party_bodies_here; the roster/"
               "activation/level/vitals sends are not (the panel opens bodiless, "
               "pvpui 28.3)", f"{_src.count('party_bodies_here(state)')} sites")
+    # SLICE-H2c: the bodiless row's profession. 0x00A6's handler writes the
+    # per-agent summary record when the agent has no view (0x7dffc0's
+    # no-body arm -> 0x7f73a0), which is the record the roster label reads
+    # bodiless -- so a town sends the pair for the hero agent, BEFORE its
+    # level (retail: 0x00A6 -> 0x009F, 130 of 130).
+    _pro = _src.index("AGENT_SET_PROFESSION(hero agent")
+    LEDGER.ok(_src.count("AGENT_SET_PROFESSION(hero agent") == 1
+              and _src.index("if HERO_BODY and not party_bodies_here(state)",
+                             _pro - 800) < _pro
+              and _pro < _src.index("level {HERO_LEVEL} on hero agent"),
+              "a town sends 0x00A6 for the bodiless hero agent, gated on "
+              "party_bodies_here being False, ahead of its prop-36 level "
+              "(the pair's retail order)", "site order in the load path")
 
 
 if __name__ == "__main__":

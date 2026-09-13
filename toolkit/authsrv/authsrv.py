@@ -20613,6 +20613,28 @@ def _handle_request_players(send, state, conn_id, stop, rec):
     # the henchman_level probe moves it on a bodiless
     # agent. The panel title's "Lvl 255" is this message's
     # ABSENCE rendered, not a missing body (pvpui 28.3).
+    # SLICE-H2c: THE BODILESS ROW'S PROFESSION. The owner, on the H2b run:
+    # "stock does show the profession in outposts though." The roster label
+    # builder (0x538e40 -> 0x7df810) reads the pair off the AvChar when the
+    # agent has a body and off a per-agent SUMMARY record (table 0xbf95f8,
+    # bytes +2/+3; +4 is the level the "Lvl 255" sentinel reads) when it has
+    # none -- and 0x00A6's handler (0x7dffc0) has the same two arms: through
+    # the view when one exists, else 0x7f73a0(agent, primary, secondary)
+    # into that record. So the message the create burst sends for a body is
+    # simply sent for the bodiless hero agent too, and the row reads "Mo5"
+    # in a town. Read out of the client (codescan --dis / --xrefs); the
+    # 0x0074 leading bytes were the rival and a run refuted them (F28).
+    # Before the level, as retail orders the pair (smsg: 0x00A6 -> 0x009F,
+    # 130 of 130).
+    for _hid, _haid, _hdef in (hero_slots()
+                               if HERO_BODY and not party_bodies_here(state)
+                               else ()):
+        _hp = agents.npc_template(HERO_BODY_NPC).get("profession")
+        if _hp:
+            hsend(GAME_SMSG_AGENT_SET_PROFESSION,
+                  agents.agent_set_profession(_haid, int(_hp)),
+                  f"AGENT_SET_PROFESSION(hero agent {_haid}, {_hp}) -- no "
+                  f"body in a town; the summary record the roster reads")
     for _hid, _haid, _hdef in (hero_slots()
                                if HERO_LEVEL is not None
                                else ()):

@@ -10313,6 +10313,10 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   flag; `--party-body-in-outpost` (every hero rig before it) says yes everywhere; and a source
   lock holds both party body sites in the load path -- the hero loop and the henchman's -- behind
   it while the roster/activation/level/vitals sends stay ungated (the panel opens bodiless).
+  **SLICE-H2c (2026-09-13, floor 427 -> 428):** a town sends 0x00A6 for the bodiless hero agent
+  (the client's no-body arm writes the summary record the roster reads), gated on
+  `party_bodies_here` being False and placed AHEAD of the prop-36 level -- one source lock on the
+  site and its order.
   `test_router.py`'s cast-abandon ordering lock was re-aimed from `if CAST_STOP and not
   is_attack:` (gone since SLICE-C2) to the bare `if CAST_STOP:`, and its recv-loop attach-point
   census from 2+1 to the three qualified sites (C5 gated one on the player being alive, C2's

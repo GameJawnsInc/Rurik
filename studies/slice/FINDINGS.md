@@ -1440,6 +1440,32 @@ Residual, cosmetic: a bodiless roster row has no profession segment ("Lvl 5 Tahl
 "Mo5 Tahlkora", heroes §28.8's rule that the row reads the AGENT) — whether `0x00A6` can carry
 the bytes for an agent never created is UNTESTED.
 
+**SLICE-H2c, the same day: the owner** — *"she's hidden in the outpost now. stock does show the
+profession in outposts though."* Read out of the client rather than guessed (codescan `--dis`
+/ `--xrefs`, build 38797): the roster label builder `0x538e40` takes the level from `0x7df7c0`
+and the profession pair from `0x7df810`, and **each has two arms** — through the AvChar
+(`0x802160`, the agent view: level at `+0x110`, pair at `+0x10e/+0x10f`) when the agent has a
+body, else through a **per-agent SUMMARY record** (`[0xbf95f8][agent_id]`, a `0x34`-byte
+AvChar.cpp object: `+2/+3` the pair, `+4` the level, `0xff` when absent — the "Lvl 255"
+sentinel, closed). **And `0x00A6`'s handler `0x7dffc0` has the same two arms**: the view's
+setter `0x7f7330` when a view exists, else `0x7f73a0(agent, primary, secondary)` into the
+summary record (its only caller). So the town simply sends the pair for the bodiless hero agent,
+ahead of its level (retail's order, `0x00A6 → 0x009F` 130 of 130), and the row reads **"Mo5
+Tahlkora"** — OBSERVED, harness `20260913T094444`, the party window that is always open in an
+outpost. The rival — `0x0074`'s three leading bytes as level/primary/secondary (upstream's
+guess, `--hero-bytes 5,3,0`) — was run first and **refuted**: "Lvl 5 Tahlkora", harness
+`20260913T093649`.
+
+**A residual the runs found, and it is not H2c's.** Pressing **P** in an outpost opens Party
+Search, and its Heroes tab asserts `heroFrame` (`PtSearchHeroList.cpp:160`, a child-frame lookup
+by id in `0x6176c0` returning NULL) the moment a party hero row carries a profession — bodiless
+with the pair sent (`094444`) AND with the body standing in town (`094740`, the
+`--party-body-in-outpost` arm), while the profession-less row of `093649` opened it cleanly. So
+the tab wants something about the account's heroes that our rig never sends (the list it marks
+the party's heroes in — NOT FOUND), and any professioned party hero trips it; H2c only made the
+hero look like one. The owner's note: *"you don't need to press it in outposts — the Party
+Window is always open there."* Recorded as SLICE-H2d, not fixed.
+
 
 ## SLICE-F6 — what the desk cannot settle
 
