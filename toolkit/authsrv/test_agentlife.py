@@ -73,7 +73,7 @@ from codec import Codec  # noqa: E402
 # known-bad control; and the chase section's wall pin split by arm, 1).
 # Floor from a real green run of 331. +1 at NPCTRACK-F8 (the hold rule
 # replaces the fresh-follow pin: three checks for two), green 333.
-LEDGER = checks.Ledger("agent lifetime", floor=417)   # SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
+LEDGER = checks.Ledger("agent lifetime", floor=457)   # SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
 
 
 def section_weapon_damage():
@@ -5318,6 +5318,253 @@ def section_hold_plane():
                   f"starts {started}")
     finally:
         authsrv.HOSTILE_TARGETS_PARTY = _saved_htp
+
+    # ---- SLICE-H4: the party fights ---------------------------------------------
+    # F30: 77 of 89 retail party opening starts followed the leader's own start
+    # or press on the target inside 6 s (80 of 89 on the leader's selected
+    # target); the Monk swung from 378 u p50, the Warrior chased by a 0x002A
+    # naming its foe; a plain swing landed 0.038 of the target's maximum
+    # (level-20 Monk); the bout ended in the target's death 60 of 89.
+    print("\nSLICE-H4: a party body fights the leader's target when the leader "
+          "starts or presses, a caster from range and a melee body by a chase; "
+          "its swing lands PARTY_HIT_FRACTION at the foe's armour, its kill pays "
+          "the reward, a foe skill goes at the foe, and the fight ends at the "
+          "foe's death")
+    _saved_pf = authsrv.PARTY_FIGHTS
+    try:
+        def _pbody(name, pos, prof, slot=0, **over):
+            row = {"name": name, "dead": False, "died_at": 0.0, "health": 100.0,
+                   "max_health": 100.0, "last_hit": 0.0, "pos": pos, "plane": 0,
+                   "allegiance": agents.ALLEGIANCE_PLAYER, "effects": 0,
+                   "attack_speed": authsrv.party_attack_speed({"profession": prof}),
+                   "attacks_back": False, "skills": (), "skill_ready": [],
+                   "npc": {"profession": prof, "level": 5}, "party_slot": slot}
+            row.update(over)
+            return row
+
+        def _fight_world(hostile_pos, monk_pos, **hostile_over):
+            st = _world(dist=0.0)
+            st["agents"][10].update(pos=hostile_pos, skills=(), skill_ready=[],
+                                    max_health=200.0, health=200.0,
+                                    npc={"profession": 1, "level": 5},
+                                    **hostile_over)
+            st["agents"][200] = _pbody("monk", monk_pos, 3)
+            st["player_dead"] = False
+            return st
+
+        def _attacks(state, n=1):
+            sent = []
+            for _ in range(n):
+                authsrv.ally_attack_tick(
+                    lambda op, vals, label="", quiet=False: sent.append((op, vals, label)),
+                    state, 1)
+            return sent
+
+        now = time.time()
+        # 1. nobody engaged: the body stands down -- no target, no swing.
+        st = _fight_world((300.0, 0.0), (0.0, 110.0))
+        t0 = authsrv.party_fight_target(st, 200, st["agents"][200], now)
+        sent = _attacks(st)
+        LEDGER.ok(t0 is None and sent == [],
+                  "with no leader engagement and no hostile on the party, a "
+                  "party body fights NOBODY (F30's 12 unexplained retail opens "
+                  "are not modelled)", f"target {t0}, sent {sent}")
+        # 2. the leader's swing stamps the engagement; the caster opens on the
+        # leader's target from its slot: [4, 200, 10, 0], facing first.
+        authsrv.leader_engaged(st, 10, now, "swing")
+        t1 = authsrv.party_fight_target(st, 200, st["agents"][200], now)
+        sent = _attacks(st)
+        started = [v for op, v, _l in sent if op == INT_T and v[0] == 4]
+        ops = [op for op, _v, _l in sent]
+        LEDGER.ok(t1 == 10 and started == [[4, 200, 10, 0]]
+                  and ops.index(authsrv.GAME_SMSG_AGENT_UPDATE_ROTATION)
+                  < ops.index(INT_T),
+                  "the leader's start engages the party on its target: the Monk "
+                  "opens [4, body, foe, 0] from 320 u (retail: 77 of 89 followed "
+                  "the leader inside 6 s, the Monk from 378 u p50), turning first",
+                  f"target {t1}, starts {started}, ops {[hex(o) for o in ops]}")
+        # 3. the landing: [1, body, 0] then [16, foe, body, frac]; the foe's
+        # health drops by PARTY_HIT_FRACTION at its armour; no last_hit on it.
+        st["agents"][200]["swing_lands_at"] = time.time() - 0.01
+        sent = _attacks(st)
+        ops = [op for op, _v, _l in sent]
+        fin = [v for op, v, _l in sent if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
+               and v[0] == agents.GV_MELEE_ATTACK_FINISHED]
+        dmg = [v for op, v, _l in sent if op == FLOAT_T and v[0] == 16]
+        _hp = st["agents"][10]["health"]
+        # the foe's own armour: a level-5 Warrior creature, 3*5+20 = 35
+        _want = 200.0 * authsrv.PARTY_HIT_FRACTION * authsrv.armour_multiplier(35.0)
+        LEDGER.ok(fin == [[1, 200, 0]] and len(dmg) == 1 and dmg[0][1] == 10
+                  and dmg[0][2] == 200 and abs((200.0 - _hp) - _want) < 1e-6
+                  and st["agents"][10]["last_hit"] == 0.0,
+                  "and it LANDS in retail's other-agent order -- finished, then "
+                  "[16, FOE, body, fraction] -- for PARTY_HIT_FRACTION of the "
+                  "foe's maximum at its armour, without touching the foe's "
+                  "`last_hit` (the player's own swing timer)",
+                  f"finished {fin}, damage {dmg}, health {_hp:.1f} (want "
+                  f"{_want:.1f} off at AR 35)")
+        # 4. a killing swing pays the REWARD -- the party's kill is the party's.
+        st["agents"][10]["health"] = 0.5
+        st["agents"][200]["last_swing"] = 0.0
+        st["agents"][200]["swing_lands_at"] = time.time() - 0.01
+        sent = _attacks(st)
+        ops = [op for op, _v, _l in sent]
+        LEDGER.ok(st["agents"][10]["dead"]
+                  and authsrv.GAME_SMSG_AGENT_KILL_REWARD in ops
+                  and [v for op, v, _l in sent if op == STATUS] == [[10, agents.EFFECT_DEAD]],
+                  "a killing swing by the party puts the foe down WITH the kill "
+                  "reward (status, reward, flags) -- a hostile's swing on a party "
+                  "body pays nobody (H3), the party's on a hostile pays the player",
+                  f"dead {st['agents'][10]['dead']}, ops {[hex(o) for o in ops]}")
+        # 5. the foe's death ends the fight: the body stands down.
+        t5 = authsrv.party_fight_target(st, 200, st["agents"][200], time.time())
+        sent = _attacks(st)
+        LEDGER.ok(t5 is None and sent == [] and st["agents"][200].get("fight") is None,
+                  "the foe's death ends the bout (retail: 60 of 89 bouts ended in "
+                  "the target's death) -- no target, no swing",
+                  f"target {t5}, sent {sent}")
+        # 6. out of casting range: engaged, but no swing from 1500 u.
+        st = _fight_world((1500.0, 0.0), (0.0, 0.0))
+        authsrv.leader_engaged(st, 10, time.time(), "swing")
+        sent = _attacks(st)
+        LEDGER.ok(st["agents"][200].get("fight") == 10
+                  and [v for op, v, _l in sent if op == INT_T] == [],
+                  "a caster 1500 u from its foe is ENGAGED but does not swing: "
+                  "PARTY_RANGED_REACH is casting range, 1248 u (WIKI, GWW "
+                  "\"Range\": also the range of all caster weapons)",
+                  f"fight {st['agents'][200].get('fight')}, sent {sent}")
+        # 7. the engagement expires: 7 s after the leader's last start, with
+        # the foe not fighting the party and never the body's own foe, the
+        # body stands down; but a body ALREADY on that foe keeps it.
+        st = _fight_world((300.0, 0.0), (0.0, 110.0))
+        authsrv.leader_engaged(st, 10, time.time() - 7.0, "swing")
+        t7 = authsrv.party_fight_target(st, 200, st["agents"][200], time.time())
+        st2 = _fight_world((300.0, 0.0), (0.0, 110.0))
+        authsrv.leader_engaged(st2, 10, time.time(), "swing")
+        authsrv.party_fight_target(st2, 200, st2["agents"][200], time.time())
+        st2["leader_engaged"]["at"] = time.time() - 7.0
+        t7b = authsrv.party_fight_target(st2, 200, st2["agents"][200], time.time())
+        LEDGER.ok(t7 is None and t7b == 10,
+                  "the leader's engagement is a 6 s window for OPENING a bout; "
+                  "a body already on that foe keeps it while it lives and the "
+                  "leader's last engagement is still on it",
+                  f"fresh body {t7}, engaged body {t7b}")
+        # 8. a hostile that opened on the party engages the body without the
+        # leader (retail: 5 of 89): its H3 pick locked on a party member.
+        st = _fight_world((300.0, 0.0), (0.0, 110.0))
+        st["agents"][10]["target"], st["agents"][10]["target_locked"] = 200, True
+        t8 = authsrv.party_fight_target(st, 200, st["agents"][200], time.time())
+        st["agents"][10]["target_locked"] = False
+        st["agents"][200]["fight"] = None
+        t8b = authsrv.party_fight_target(st, 200, st["agents"][200], time.time())
+        LEDGER.ok(t8 == 10 and t8b is None,
+                  "a hostile whose pick is LOCKED on a party member engages the "
+                  "body with no leader start (retail: 5 of 89 followed a "
+                  "hostile's start on the party); a provisional pick does not",
+                  f"locked {t8}, provisional {t8b}")
+        # 9. a MELEE body chases: the move tick issues a 0x002A naming the foe
+        # (not a slot lead), no swing mid-follow; parked in reach, it swings.
+        st = _fight_world((500.0, 0.0), (0.0, 110.0))
+        st["agents"][200]["npc"]["profession"] = 1
+        authsrv.leader_engaged(st, 10, time.time(), "swing")
+        sent = _walk(st)
+        fol = [v for op, v, _l in sent if op == FOLLOW and v[0] == 200]
+        leads = [v for op, v, _l in sent
+                 if op == authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT and v[0] == 200]
+        mid = _attacks(st)
+        LEDGER.ok(len(fol) == 1 and fol[0][0] == 200 and fol[0][-1] == 10
+                  and leads == [] and [v for op, v, _l in mid if op == INT_T] == [],
+                  "a MELEE party body (Warrior) chases its foe by a 0x002A naming "
+                  "it, not a slot lead (retail's Warrior: 17 of 27 opening starts "
+                  "behind one), and does not swing mid-follow",
+                  f"follows {fol}, leads {leads}, mid-follow starts "
+                  f"{[v for op, v, _l in mid if op == INT_T]}")
+        st["agents"][200]["follow"] = None
+        st["agents"][200]["pos"] = (420.0, 0.0)          # parked in reach
+        sent = _attacks(st)
+        started = [v for op, v, _l in sent if op == INT_T and v[0] == 4]
+        LEDGER.ok(started == [[4, 200, 10, 0]],
+                  "parked inside enemy_reach() the melee body opens its swing "
+                  "(retail's Warrior opened at 100-134 u p50)",
+                  f"starts {started}")
+        # 10. a cast in flight beats the swing; the swing interval is the
+        # body's own weapon (a Monk's staff, 1.75).
+        st = _fight_world((300.0, 0.0), (0.0, 110.0))
+        authsrv.leader_engaged(st, 10, time.time(), "swing")
+        st["agents"][200]["cast_lands_at"] = time.time() + 1.0
+        sent = _attacks(st)
+        LEDGER.ok([v for op, v, _l in sent if op == INT_T] == []
+                  and st["agents"][200]["attack_speed"] == agents.ATTACK_SPEED["staff"],
+                  "a cast in flight beats the swing (the monk heals between "
+                  "swings, not through them), and the body swings at its own "
+                  "weapon's interval -- a staff, 1.75 (retail's Monk: 1.91 s p50)",
+                  f"sent {sent}, interval {st['agents'][200]['attack_speed']}")
+        # 11. a FOE skill on the bar goes at the fight target, not an ally;
+        # with no foe the slot is held and the heal goes out instead.
+        st = _fight_world((300.0, 0.0), (0.0, 110.0))
+        st["agents"][200].update(skills=((252, 1.0, 10.0), (281, 1.0, 2.0)),
+                                 skill_ready=[0.0, 0.0])
+        st["player_health"] = 50.0
+        authsrv.leader_engaged(st, 10, time.time(), "swing")
+        sent = []
+        authsrv.ally_cast_tick(lambda op, vals, label="", quiet=False: sent.append((op, vals)),
+                               st, 1)
+        casts = [v for op, v in sent if op == INT_T and v[0] == 60]
+        st3 = _fight_world((300.0, 0.0), (0.0, 110.0))
+        st3["agents"][200].update(skills=((252, 1.0, 10.0), (281, 1.0, 2.0)),
+                                  skill_ready=[0.0, 0.0])
+        st3["player_health"] = 50.0
+        sent3 = []
+        authsrv.ally_cast_tick(lambda op, vals, label="", quiet=False: sent3.append((op, vals)),
+                               st3, 1)
+        casts3 = [v for op, v in sent3 if op == INT_T and v[0] == 60]
+        LEDGER.ok(casts == [[60, 200, 10, 252]] and casts3 == [[60, 200, PLAYER, 281]],
+                  "Banish (target byte 5, foe) on a party bar is cast at the FOE "
+                  "the body fights, never at an ally; with no foe the slot is held "
+                  "and Orison goes to the hurt player",
+                  f"engaged {casts}, unengaged {casts3}")
+        # 12. and its landing hurts the hostile and a kill pays the reward --
+        # land_skill's damage site routed by the row's allegiance (H3
+        # parameterised it; H4 makes the hostile case the paid one).
+        st["agents"][10]["health"] = 0.5
+        st["agents"][200]["cast_lands_at"] = time.time() - 0.01
+        sent = []
+        authsrv.ally_cast_tick(lambda op, vals, label="", quiet=False: sent.append((op, vals)),
+                               st, 1)
+        ops = [op for op, _v in sent]
+        dmg = [v for op, v in sent if op == FLOAT_T and v[0] == 16]
+        LEDGER.ok(st["agents"][10]["dead"] and authsrv.GAME_SMSG_AGENT_KILL_REWARD in ops
+                  and len(dmg) == 1 and dmg[0][1] == 10 and dmg[0][2] == 200,
+                  "the party's spell lands on the hostile ([16, foe, body, frac]) "
+                  "and its kill pays the reward -- land_skill's damage site by the "
+                  "row's allegiance", f"dead {st['agents'][10]['dead']}, ops "
+                  f"{[hex(o) for o in ops]}, damage {dmg}")
+        # 13. the revert arm: --party-no-fight -- engaged, in reach, nothing.
+        authsrv.PARTY_FIGHTS = False
+        st = _fight_world((300.0, 0.0), (0.0, 110.0))
+        authsrv.leader_engaged(st, 10, time.time(), "swing")
+        t13 = authsrv.party_fight_target(st, 200, st["agents"][200], time.time())
+        sent = _attacks(st)
+        LEDGER.ok(t13 is None and sent == [],
+                  "--party-no-fight: the leader's start engages nobody and the "
+                  "body never swings -- every run before H4, the known-bad arm",
+                  f"target {t13}, sent {sent}")
+        authsrv.PARTY_FIGHTS = _saved_pf
+        # 14. source locks: the three leader-engagement stamps (the player's
+        # armed swing start, hit_enemy's one-instant swing, the accepted press)
+        # and the tick order (ally_attack_tick after ally_cast_tick).
+        _src = inspect.getsource(authsrv)
+        _stamps = _src.count("leader_engaged(state, target_id, now, \"swing\")") \
+            + _src.count("leader_engaged(state, target, now, \"press\")")
+        _order = _src.find("ally_cast_tick(send, state, conn_id)\n")
+        _order2 = _src.find("ally_attack_tick(send, state, conn_id)\n", _order)
+        LEDGER.ok(_stamps == 3 and 0 < _order < _order2 < _order + 400,
+                  "source: the leader's engagement is stamped at the player's "
+                  "swing start, hit_enemy's swing and the accepted press (three "
+                  "sites), and the world tick runs ally_attack_tick right after "
+                  "ally_cast_tick", f"stamps {_stamps}, order {_order} < {_order2}")
+    finally:
+        authsrv.PARTY_FIGHTS = _saved_pf
 
 
 if __name__ == "__main__":

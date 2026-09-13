@@ -10331,6 +10331,21 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   raised through `revive_player`. `--hostile-target-player` (the known-bad arm) opens the swing on
   the player whatever the party looks like. The hostile fixture carries an EMPTY bar -- a ready
   skill goes first and would cast at the body instead of swinging.
+  **SLICE-H4 (2026-09-13, floor 442 -> 457): the party fights.** With no leader engagement and no
+  hostile locked on the party a body fights nobody; the leader's swing start (`leader_engaged`)
+  engages the Monk body on the leader's target and it opens [4, body, foe, 0] from 320 u turning
+  first; the landing is [1, body, 0] then [16, FOE, body, fraction] for PARTY_HIT_FRACTION of the
+  foe's maximum at the foe's armour (a level-5 Warrior creature, AR 35) and leaves the foe's
+  `last_hit` alone (the player's own swing timer); a killing swing pays the KILL REWARD; the foe's
+  death ends the bout; a caster 1500 u off is engaged but does not swing (casting range 1248); a
+  7 s old engagement opens nothing for a fresh body but a body already on that foe keeps it; a
+  hostile whose H3 pick is LOCKED on a party member engages the body with no leader start, a
+  provisional pick does not; a Warrior body chases by a 0x002A naming the foe (no slot lead), does
+  not swing mid-follow, and opens parked in reach; a cast in flight beats the swing and the body's
+  interval is its weapon's (a staff, 1.75); Banish on a party bar goes at the foe and, with no foe,
+  is held while Orison goes to the hurt player; the party's spell landing on a hostile pays the
+  reward; `--party-no-fight` (the known-bad arm) engages nobody; and a source lock counts the three
+  `leader_engaged` stamps and the tick order (`ally_attack_tick` right after `ally_cast_tick`).
   `test_router.py`'s cast-abandon ordering lock was re-aimed from `if CAST_STOP and not
   is_attack:` (gone since SLICE-C2) to the bare `if CAST_STOP:`, and its recv-loop attach-point
   census from 2+1 to the three qualified sites (C5 gated one on the player being alive, C2's

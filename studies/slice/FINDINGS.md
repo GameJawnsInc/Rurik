@@ -1528,6 +1528,71 @@ raider's Healing Signet against a level-1 bar; a knob, not a mechanism.
 morale-only recharge (the client table's 0 recharge is what runs, so it is ready every fight);
 a hostile's spell at a party body gets no armour term but the body's flat rating.
 
+## SLICE-F30 — **the party fights: it opens on the leader's target half a second after the leader, a caster from where it stands, a melee body by a chase, and lands 4% of the foe a swing**
+
+OBSERVED, 2026-09-13, `henchjoin.py --fight` over the seven henchman connections (F28's tapes),
+**89 opening starts by a party body** (no start by it in the previous 3 s):
+
+| what | number |
+|---|---|
+| a start or press by the observer ON THE SAME TARGET inside 6 s before it | **77 of 89** — p10/p50/p90 **0.09 / 0.50 / 1.55 s** behind it |
+| T was the observer's `0x00C1` selection at that instant | **80 of 89** |
+| the body's last movement order before it: a `0x0029` point lead / a `0x002A` naming T | 62 / 25 (the Warrior: 9 / **17 of 27**; the Assassin 7 of 7; the Monk 17 / 0; the Elementalist 31 / 0) |
+| distance body → T at the start (sample-and-held): Warrior plain swing / attack skill | 134 / 100 u p50 |
+| Monk plain swing | **378 u p50** (p10 146, p90 761, max ~1237) |
+| Elementalist plain swing | 547 u p50 (p90 1212) |
+| plain-swing cadence, one body: Warrior / Monk / Elementalist | 1.48 / **1.91** / 1.89 s p50 (sword-axe 1.33, staff-wand 1.75 by the client's rates) |
+| damage fraction of T's MAXIMUM per plain swing (the `0x00A3` dword is the f32 bits): level-20 Monk | **0.038 p50** (p10 0.022, p90 0.049, n=35) |
+| level-20 Warrior / Elementalist; level-3 Warrior / Ranger / Assassin | 0.043 / 0.039; 0.043 / 0.125 / 0.043 |
+| the bout ended in T's death (0x00F1 dead bit inside 6 s of the body's last start) | **60 of 89** |
+
+So a party body fights when the leader fights, on the leader's target, half a second later; a
+**melee** body walks to its foe by a `0x002A` naming it — the hostile's own chase shape — and opens
+at melee reach; a **caster** swings from wherever the formation put it, and the Monk's 378 u p50
+sits inside GWW's casting range, **1248 u**, which *"is also the range of all caster weapons (i.e.
+staffs and wands)"* (WIKI, GWW *Range*, raw wikitext read 2026-09-13; melee/touch 144). The Monk
+cast heals between swings (F28). Where a body's damage comes from is not on the wire — its weapon
+is never sent — so the *fraction* is what is measured, and it is the number this server sends.
+
+**What shipped (SLICE-H4).** `leader_engaged` is stamped at the player's swing start
+(`attack_tick`), at `hit_enemy`'s one-instant swing and at an accepted skill press aimed at a live
+hostile; `party_fight_target` picks (1) the leader's target while the stamp is inside
+`PARTY_ENGAGE_WINDOW` = 6 s and it lives, (2) else the body's current foe while it lives and the
+leader's last engagement is still on it or it has opened on the party, (3) else the nearest hostile
+whose H3 pick is LOCKED on a party member (retail's 5 of 89 "party-hit-first"), (4) else nobody —
+retail's 12 unexplained opens are not modelled. `ally_attack_tick` (after `ally_cast_tick`; a cast
+in flight beats it) opens `[4, body, foe, 0]` and lands a windup later through `land_swing` →
+`land_swing_on_body` with **`PARTY_HIT_FRACTION` = 0.038** of the foe's maximum at the foe's own
+armour, retail's [finished, damage] order, blind misses as everyone else's; a caster swings from
+`PARTY_RANGED_REACH` = 1248 (its slot walk arrived), a melee body (`PARTY_MELEE_PROFESSIONS`
+Warrior/Assassin/Dervish) is handed to `_npc_follow_tick` as a chase — a `0x002A` naming the foe,
+the hostile's radii and leash — and swings parked at `enemy_reach()`. `hurt_agent_row` (H3's
+`hurt_party_body`, generalised) pays the kill reward when the row is hostile and never writes a
+hostile's `last_hit` (the player's own swing timer). `ally_cast_tick` casts a **foe** skill (target
+byte 5) at the fight target inside casting range and holds the slot otherwise, so Banish on a
+party bar goes at the foe and never at an ally; a party attack skill waits for the swing clock
+(F24). The body swings at its own weapon's interval — `[party.slice].weapon = "staff"` / `--hero-weapon`,
+else `PARTY_WEAPON_BY_PROFESSION` — so Tahlkora swings every 1.75 s. Revert: `--party-no-fight`.
+`test_agentlife` §H4 (floor 442 → 457).
+
+**Run on the harness the same day** (`20260913T113735`, `--walk "attack:90"`, the server approach
+walking the player 3,073 u up the corridor with the hero in its slot): the raider re-picked the Monk
+hero at 1,171 u (H3's softest-class rule, provisional until its first start); the player's swing
+opened at 80 u and **the hero fought the raider on the SAME tick** (`fights agent 90 (the leader's
+target)`), opened its swing **105 u out**, turning first, and landed **14 on the raider** (200 × 0.038
+× the armour term at its rating) — then took 22 (the raider), 49 (the corridor monk's Banish), 22 and
+22 and died with a second swing armed, which the corpse dropped; both hostiles re-picked the player,
+who died three times in the hold. Retail's shape, the slice's balance (H3's owner's note stands:
+the raider's Healing Signet against a level-1 bar, and now a 100-health hero under two hostiles).
+
+**Not modelled, said here:** the 0.5 s p50 the body lags the leader (ours opens on the same tick in
+reach); the in-bout retarget; retail's 12 party-first opens; a caster's walk toward a foe beyond
+casting range (it stays in formation until the leader closes); the Ranger/Paragon projectile
+reaches (one and zero opening swings in the corpus); and **a party caster never heals ITSELF** —
+`ally_heal_target` excludes the caster (SLICE-B7c), retail's Monk cast at itself 0 times in 13
+(F28), so the hero at 78/100 cast nothing — the same sample says "never" on thirteen casts, which is
+a weak never.
+
 ## SLICE-F6 — what the desk cannot settle
 
 Carried so the next session does not re-read the same bytes hoping for more:
