@@ -43,7 +43,7 @@ import checks  # noqa: E402
 import effects  # noqa: E402
 from codec import Codec  # noqa: E402
 
-LEDGER = checks.Ledger("the effect channel", floor=80)   # SLICE-F23 +6 (the degen clock across quiet ticks; a corpse does not walk); from the green run
+LEDGER = checks.Ledger("the effect channel", floor=81)   # SLICE-F24 +1 (the death hold); SLICE-F23 +6 (the degen clock across quiet ticks; a corpse does not walk); from the green run
 
 
 
@@ -875,6 +875,11 @@ def section_deaths():
               and authsrv.GAME_SMSG_AGENT_UPDATE_DESTINATION not in corpse,
               "and sends no movement message of its own -- the KILL status is "
               "what the client acts on", f"{[hex(o) for o in corpse]}")
+    LEDGER.ok(st.get("action_hold") == 1,
+              "SLICE-F24: and the corpse is HELD -- [8, me, 1] rides the death "
+              "batch behind the STATUS, retail 2 of 2 (the client's walk gate; "
+              "the owner's corpse 'warped slightly' on its converging copies)",
+              f"hold {st.get('action_hold')}")
     src = open(os.path.join(os.path.dirname(authsrv.__file__), "authsrv.py"),
                encoding="utf-8").read()
     LEDGER.ok(src.count('and not state.get("player_dead")') >= 4

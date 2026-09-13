@@ -73,7 +73,7 @@ from codec import Codec  # noqa: E402
 # known-bad control; and the chase section's wall pin split by arm, 1).
 # Floor from a real green run of 331. +1 at NPCTRACK-F8 (the hold rule
 # replaces the fresh-follow pin: three checks for two), green 333.
-LEDGER = checks.Ledger("agent lifetime", floor=406)   # SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
+LEDGER = checks.Ledger("agent lifetime", floor=412)   # SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
 
 
 def section_weapon_damage():
@@ -537,6 +537,7 @@ def main():
     section_enemy_count()
     section_hold_plane()
     section_owed_swing()
+    section_npc_attack_skill()
     section_facing()
     section_enemy_skill()
     section_constants()
@@ -2310,6 +2311,107 @@ def section_owed_swing():
                   "4 swings)", f"starts {starts(sent)}")
     finally:
         authsrv.SWING_OWED_AT_HALT = saved
+
+
+def section_npc_attack_skill():
+    """SLICE-F24: an NPC's attack skill is a swing -- 50, a windup, 46 with
+    weapon damage plus the bonus, one per interval.
+
+    The owner's run 20260912T210558: Sever Artery and Power Attack fired ten
+    log lines apart, each landing in the instant it was announced (the bar's
+    0.0 activation), both announced as spells -- "a bunch of damage on his
+    initial hits", the bleed looking like Power Attack's. Retail's 177 NPC
+    attack-skill activations: [50] every time, [46] p50 0.564 s later, the
+    next start p50 1.5 s after, two inside 1 s once.
+    """
+    import authsrv
+    print("\n11c. SLICE-F24: an NPC's attack skill is a swing")
+    INT_T = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
+    INT = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
+    DMG = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET
+    saved = (authsrv._is_attack_skill, authsrv.skill_damage, authsrv.skill_cost,
+             authsrv.skill_condition, authsrv.NPC_ATTACK_SKILL_SWINGS)
+    # stubbed, as test_castcycle stubs them: a bare machine has no skill rows
+    authsrv._is_attack_skill = lambda sid: sid in (382, 322)
+    authsrv.skill_damage = lambda sid, r: (30.0, "additive") if sid == 322 else None
+    authsrv.skill_cost = lambda sid: (0, 0)
+    authsrv.skill_condition = lambda sid, r: None
+    try:
+        def bar_world():
+            st = _world(dist=85.0, skills=((382, 0.0, 6.0), (322, 0.0, 3.0)),
+                        skill_ready=[0.0, 0.0], last_slot=-1)
+            st["player_health"] = 100.0
+            st["player_dead"] = False
+            return st
+
+        def anims(sent):
+            return [v for op, v, _l in sent if op == INT_T and v[0] in (50, 60)]
+
+        def closes(sent):
+            return [v for op, v, _l in sent if op == INT and v[0] in (46, 58, 1)]
+
+        st = bar_world()
+        ag = st["agents"][10]
+        interval = ag["attack_speed"]
+        t0 = time.time()
+        sent = _swings(st)
+        LEDGER.ok(anims(sent) == [[50, 10, 1, 382]]
+                  and ag.get("cast_lands_at") is not None
+                  and abs((ag["cast_lands_at"] - t0)
+                          - authsrv.swing_windup(interval)) < 0.1,
+                  "the first ready attack skill is announced as the ATTACK "
+                  "family's [50, npc, player, skill] and lands a WINDUP away "
+                  "(retail [50] -> [46] p50 0.564 s), not on the next tick",
+                  f"anims {anims(sent)}, lands in "
+                  f"{ag.get('cast_lands_at', 0) - t0:.3f} s vs windup "
+                  f"{authsrv.swing_windup(interval):.3f}")
+        # the landing: 46 then weapon damage (+0 for a skill with no bonus)
+        ag["cast_lands_at"] = time.time() - 0.01
+        before = st["player_health"]
+        sent = _swings(st)
+        LEDGER.ok(closes(sent) == [[46, 10, 0]]
+                  and any(op == DMG for op, _v, _l in sent)
+                  and st["player_health"] < before,
+                  "it strikes: [46, npc, 0] then the weapon's damage on the "
+                  "same channel a swing uses -- not a spell's [58]",
+                  f"closes {closes(sent)}, health {before} -> "
+                  f"{st['player_health']}")
+        # the second ready attack skill WAITS for the swing clock
+        sent = _swings(st, n=3)
+        LEDGER.ok(anims(sent) == [] and closes(sent) == [],
+                  "Power Attack, ready too, does NOT fire on the next ticks: "
+                  "an attack skill waits for the swing interval like the "
+                  "plain swing (retail: two [50]s by one NPC inside 1 s, "
+                  "once in 177) -- the owner's burst was both in one instant",
+                  f"anims {anims(sent)}, closes {closes(sent)}")
+        ag["last_swing"] -= interval + 0.1
+        sent = _swings(st)
+        LEDGER.ok(anims(sent) == [[50, 10, 1, 322]],
+                  "and once the interval has passed it is the next swing",
+                  f"anims {anims(sent)}")
+        ag["cast_lands_at"] = time.time() - 0.01
+        before = st["player_health"]
+        sent = _swings(st)
+        lost = before - st["player_health"]
+        LEDGER.ok(closes(sent) == [[46, 10, 0]] and lost > 25.0,
+                  "Power Attack's strike is the weapon hit PLUS its +30 bonus "
+                  "(added after armour, hit_enemy's order for the player's)",
+                  f"lost {lost:.1f} (weapon ~3 + 30)")
+        # THE REVERT ARM: instant, back to back, spell-shaped
+        authsrv.NPC_ATTACK_SKILL_SWINGS = False
+        st = bar_world()
+        ag = st["agents"][10]
+        sent = _swings(st)
+        ag["cast_lands_at"] = time.time() - 0.01
+        sent += _swings(st, n=2)
+        LEDGER.ok([v[0] for v in anims(sent)] == [60, 60]
+                  and closes(sent) and closes(sent)[0] == [58, 10, 0],
+                  "--npc-skill-instant: both announce as spells, the first "
+                  "closes as one, the second follows on the next tick -- the "
+                  "pre-F24 burst", f"anims {anims(sent)}, closes {closes(sent)}")
+    finally:
+        (authsrv._is_attack_skill, authsrv.skill_damage, authsrv.skill_cost,
+         authsrv.skill_condition, authsrv.NPC_ATTACK_SKILL_SWINGS) = saved
 
 
 def section_facing():
