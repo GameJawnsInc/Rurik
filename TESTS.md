@@ -10272,6 +10272,17 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   passed it is the next swing, and Power Attack's strike is the weapon hit plus its +30;
   `--npc-skill-instant` restores the burst (60, 58, back to back). `test_effects.py` §6a
   (floor 80 -> 81): the death batch sets the hold [8, me, 1] retail sets (2 of 2).
+  **SLICE-F25 / C7 (2026-09-12): a cast in flight lands; the death stops the copy and the
+  mirror.** `test_agentlife.py` (floor 412 -> 414): §11c -- an attack skill announced in reach
+  lands after the player ran 500 u past it ([46] and the hit), and `--no-late-hit` drops it;
+  the cast section's "leaves range" arm flips to the landing (the bar's Restore Condition
+  finishes rather than being dropped; its heal is zero by the skill's own rule, the ally has
+  no condition) while "dies" still drops. `test_effects.py` §6a (floor 81 -> 83): 0x002D [me]
+  rides the death batch behind the hold (`GAME_SMSG_AGENT_MOVE_CANCEL`, retail 3 of 3), and
+  the wire hook `_note_wire_move`, driven with that message, freezes the server's mirror of
+  the sync copy where it stands (three seconds later it has not walked to the lead's end).
+  `test_kbdsync.py` §11's lead-kill caller count re-aimed: four callers (the two arms, the
+  attack skill's approach, the interact-walk), one rule.
   `toolkit/authsrv/test_castcycle.py` (the four-opcode cast cycle against
   ArenaNet's own template — six complete cycles, two live captures, same order
   every time: E4 at the press, E5 at cast end carrying the recharge in whole

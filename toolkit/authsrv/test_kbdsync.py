@@ -545,10 +545,15 @@ def main():
           "False. The reprieve test MATCHES a grant on the body's own trail")
 
     print("\n11. 1z-y source locks")
-    check(SRC.count('_kbd_lead_kill(send, state, conn_id, rec, "press")') == 1
-          and SRC.count('_kbd_lead_kill(send, state, conn_id, rec, "click")') == 1,
-          "the press arm and the click arm each kill once",
-          "a third caller is a third opinion about when a lead ends")
+    check(SRC.count('_kbd_lead_kill(send, state, conn_id, rec, "press")') == 2
+          and SRC.count('_kbd_lead_kill(send, state, conn_id, rec, "click")') == 1
+          and SRC.count('_kbd_lead_kill(send, state, conn_id, None, "interact")') == 1,
+          "the press arm and the click arm each kill once -- and since the "
+          "SLICE arc two more presses do, by the same rule (a press ends the "
+          "lead before the follow it starts): the attack skill from out of "
+          "reach in handle_skill_press (SLICE-C2) and the interact-walk "
+          "(interact_route, SLICE-B5). Four callers, one opinion",
+          "a fifth caller is a new opinion about when a lead ends")
     check(SRC.count("heading_hold_tick(send, state, conn_id, rec)") == 3
           and SRC.count("grant_flush_tick(send, state, conn_id, rec)") == 3,
           "the held heading is polled at the three sites the held click is",

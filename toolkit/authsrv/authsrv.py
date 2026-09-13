@@ -1331,6 +1331,18 @@ GAME_SMSG_AGENT_UPDATE_ATTACK_SPEED = 0x0035
 # opt-in (`--interact-walk`) and OFF, because a player dragged through a
 # staircase is worse than a player who does not move.
 GAME_SMSG_AGENT_UPDATE_DESTINATION = 0x002A
+# SLICE-F25: 0x002D [agent] -- ldufr's AGENT_PLAYER_DIE, a name studies/enemy
+# PLAN 6h/6i REFUTED by reading the handler (0x005FDB70 -> 0x006025F0): behind
+# a flags test (bit 0x20000, set on a moving agent) it zeroes a float pair at
+# +0xC8/+0xCC and clears +0x4C -- a velocity, not a corpse -- and the probe
+# `moving_die` saw a running character stop when it landed. It sits in the
+# movement family's recv table beside 0x0028 (studies/movement 2436), on the
+# arm the client-controlled gate reduces to the SYNC copy once the player has
+# moved locally. Retail sends it in the observing player's death batch, 3 of
+# 3 (studies/morale 1's t=78.813; 20260817T183756 t=353.299; 20260821T152147
+# t=550.319), behind STATUS [me, 16] and [8, me, 1]: the sync copy's walk is
+# cancelled where the body died. Sent by kill_player since 2026-09-12.
+GAME_SMSG_AGENT_MOVE_CANCEL = 0x002D
 
 # OFF, and the paragraph above is why. The HOLD half below is independent and
 # stays on: it is measured (ArenaNet answers a distant interact late rather than
@@ -4588,6 +4600,22 @@ def _note_wire_move(state, opcode, values, now, rec=None):
     (0x0025 and 0x002B do not name a point), so this is the whole surface.
     """
     if not values or values[0] != PLAYER_AGENT_ID:
+        return
+    if opcode in (GAME_SMSG_AGENT_MOVE_CANCEL, GAME_SMSG_AGENT_STOP_MOVING):
+        # SLICE-F25: THE MIRROR STOPS WHERE THE CLIENT'S COPY STOPS. These
+        # two name no point, so until 2026-09-12 they fell through the
+        # point check below and the sync model walked on to the last
+        # lead's end after the death that stopped the client's copy -- the
+        # owner: "when I respawned after warping, the enemy was able to hit
+        # me from far away" (_npc_frame reads this model for a moving
+        # player, so the raider's reach was judged against a copy up to a
+        # lead's length past the corpse). The client's 0x002D handler
+        # zeroes the copy's velocity where it is (studies/enemy PLAN 6h);
+        # 0x0028 halts both copies where the sync copy stands (schema 40).
+        # Either way the copy is where the model puts it NOW, and it stays.
+        state["sync_from"] = _sync_position(state, now)
+        state["sync_to"] = None
+        state["sync_at"] = now
         return
     point = values[1] if len(values) > 1 else None
     if not (isinstance(point, (list, tuple)) and len(point) == 2):
@@ -14990,6 +15018,18 @@ def kill_player(send, state, conn_id, why="took a killing blow"):
     # catalog) and the flags value 4 (ours sends 8, the four NPC deaths')
     # are recorded, not sent.
     action_hold(send, state, 1, f"the player died ({why})")
+    # SLICE-F25: and the SYNC copy's walk is cancelled (0x002D, retail 3 of
+    # 3 in this batch, behind the hold). The owner's corpse still "warped
+    # slightly" with the hold alone: the hold gates the client's INPUT, but
+    # the sync copy was already walking our last lead, and the rendered
+    # corpse converged onto it as it arrived. The client's handler zeroes
+    # that copy's velocity (studies/enemy PLAN 6h) -- both copies stay where
+    # the body fell. No 0x0028: retail sends none here, and a 0x0028 would
+    # halt the body onto the copy (CANCELWALK-F34's warp) rather than the
+    # copy onto the body.
+    send(GAME_SMSG_AGENT_MOVE_CANCEL, [PLAYER_AGENT_ID],
+         f"MOVE_CANCEL 0x002D: the corpse's sync copy stops where the body "
+         f"died [SLICE-F25]")
     # AND THE BILL, in ArenaNet's own order: the death bit first, the morale
     # tick behind it, same tick. Silent in every map this server ships, because
     # pre-Searing charges nothing -- `map_death_penalty` is where that is
@@ -16077,6 +16117,23 @@ def enemy_attack_tick(send, state, conn_id):
                 if now >= _armed:
                     agent["swing_lands_at"] = None
                     land_swing(send, state, agent_id, agent, conn_id)
+                continue
+            # SLICE-F25: AND A CAST IN FLIGHT LANDS TOO. The owner, after F24:
+            # "sometimes the enemy Power Attack or Sever Artery shows up on
+            # his skill monitor but doesn't actually hit me ... could be
+            # when I'm moving." It was: F21 hoisted the SWING above the
+            # reach gate and left `cast_lands_at` below it, so an attack
+            # skill announced at the halt (the owed swing, F22) was dropped
+            # by the gate on the next tick as the runner left 92 u. Retail:
+            # attack-skill strikes on a moving target 37 hit / 3 stopped
+            # (latehitjoin, NPC-vs-NPC; the stops are retargets), and spell
+            # casts at a moving observer complete 9 of 9 with no 59. A cast
+            # is announced in reach and lands where its windup ends.
+            _cast_due = agent.get("cast_lands_at")
+            if _cast_due is not None:
+                if now >= _cast_due:
+                    agent["cast_lands_at"] = None
+                    land_skill(send, state, agent_id, agent, conn_id)
                 continue
         ax, ay = agent["pos"]
         # REACH, not notice. This read AGGRO_RANGE until the chase existed, which

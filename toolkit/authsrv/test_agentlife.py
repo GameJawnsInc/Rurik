@@ -73,7 +73,7 @@ from codec import Codec  # noqa: E402
 # known-bad control; and the chase section's wall pin split by arm, 1).
 # Floor from a real green run of 331. +1 at NPCTRACK-F8 (the hold rule
 # replaces the fresh-follow pin: three checks for two), green 333.
-LEDGER = checks.Ledger("agent lifetime", floor=412)   # SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
+LEDGER = checks.Ledger("agent lifetime", floor=414)   # SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
 
 
 def section_weapon_damage():
@@ -2397,6 +2397,43 @@ def section_npc_attack_skill():
                   "Power Attack's strike is the weapon hit PLUS its +30 bonus "
                   "(added after armour, hit_enemy's order for the player's)",
                   f"lost {lost:.1f} (weapon ~3 + 30)")
+        # SLICE-F25: A CAST IN FLIGHT LANDS WHEREVER THE TARGET WENT -- the
+        # owner's "shows up on his skill monitor but doesn't actually hit
+        # me ... could be when I'm moving": F21 hoisted the swing above the
+        # reach gate and left the cast below it. Retail: 37 hit / 3 stopped
+        # attack-skill strikes on a moving target, 9 of 9 spells complete.
+        st = bar_world()
+        ag = st["agents"][10]
+        _swings(st)                                    # announces 382
+        assert ag.get("cast_lands_at") is not None
+        st["pos"] = (600.0, 0.0)                       # the runner left reach
+        ag["cast_lands_at"] = time.time() - 0.01
+        before = st["player_health"]
+        sent = _swings(st)
+        LEDGER.ok(closes(sent) == [[46, 10, 0]] and st["player_health"] < before
+                  and ag.get("cast_lands_at") is None,
+                  "an attack skill announced in reach LANDS after the player "
+                  "ran 500 u past it -- [46] and the hit, the cast resolved "
+                  "before the reach gate like the swing (SLICE-F25)",
+                  f"closes {closes(sent)}, health {before} -> "
+                  f"{st['player_health']}")
+        saved_lh = authsrv.LATE_HIT
+        authsrv.LATE_HIT = False
+        try:
+            st = bar_world()
+            ag = st["agents"][10]
+            _swings(st)
+            st["pos"] = (600.0, 0.0)
+            ag["cast_lands_at"] = time.time() - 0.01
+            before = st["player_health"]
+            sent = _swings(st)
+            LEDGER.ok(closes(sent) == [] and st["player_health"] == before
+                      and ag.get("cast_lands_at") is None,
+                      "--no-late-hit: the gate drops the cast in flight -- the "
+                      "'announced but never hit me' of the owner's run",
+                      f"closes {closes(sent)}, health {st['player_health']}")
+        finally:
+            authsrv.LATE_HIT = saved_lh
         # THE REVERT ARM: instant, back to back, spell-shaped
         authsrv.NPC_ATTACK_SKILL_SWINGS = False
         st = bar_world()
@@ -2786,19 +2823,39 @@ def section_enemy_skill():
               "and it still swings",
               "turning the skill off must not turn the agent off")
 
-    # 6. a cast in flight does not survive its caster, the same as a swing
-    for why, kill in (("dies", lambda a: a.update(dead=True)),
-                      ("leaves range",
-                       lambda a: a.update(pos=(authsrv.AGGRO_RANGE + 9.0, 0.0)))):
-        mid = _world_ally()
-        _swings(mid)
-        assert mid["agents"][10]["cast_lands_at"] is not None
-        kill(mid["agents"][10])
-        mid["agents"][10]["cast_lands_at"] = time.time() - 1.0
-        before = mid["player_health"]
-        LEDGER.ok(not _swings(mid, n=3) and mid["player_health"] == before,
-                  f"a cast in flight does not land if the caster {why}",
-                  "an overdue cast plus three ticks and no damage")
+    # 6. a cast in flight does not survive its caster's DEATH, the same as a
+    #    swing -- but since SLICE-F25 it survives the pair leaving range: a
+    #    cast is announced in reach and lands where its windup ends (retail:
+    #    attack-skill strikes on a moving target 37 hit / 3 stopped, spell
+    #    casts at a moving observer complete 9 of 9). "leaves range" was
+    #    pinned beside "dies" as retail's rule until 2026-09-12; it was ours.
+    mid = _world_ally()
+    _swings(mid)
+    assert mid["agents"][10]["cast_lands_at"] is not None
+    mid["agents"][10].update(dead=True)
+    mid["agents"][10]["cast_lands_at"] = time.time() - 1.0
+    before = mid["player_health"]
+    LEDGER.ok(not _swings(mid, n=3) and mid["player_health"] == before,
+              "a cast in flight does not land if the caster dies",
+              "an overdue cast plus three ticks and no damage")
+    mid = _world_ally()
+    _swings(mid)
+    assert mid["agents"][10]["cast_lands_at"] is not None
+    mid["agents"][10].update(pos=(authsrv.AGGRO_RANGE + 9.0, 0.0))
+    mid["agents"][10]["cast_lands_at"] = time.time() - 1.0
+    ally_before = mid["agents"][11]["health"]
+    landed = _swings(mid, n=1)
+    fin = [v for op, v, _l in landed
+           if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
+           and v == [agents.GV_SKILL_FINISHED, 10, 0]]
+    LEDGER.ok(len(fin) == 1 and mid["agents"][10].get("cast_lands_at") is None,
+              "a cast in flight LANDS when the pair is out of range at the "
+              "landing -- the bar's Restore Condition finishes ([58]) rather "
+              "than being dropped -- SLICE-F25 (the owner's 'shows up on his "
+              "skill monitor but doesn't actually hit me'); its heal is zero "
+              "here by the skill's own rule, the ally carries no condition",
+              f"finished {fin}, ally {ally_before} -> "
+              f"{mid['agents'][11]['health']}")
 
     # 7. the skill can kill, and the kill is still the effects bit.
     #     Driven by the bar's DAMAGE skill (312 Holy Strike) rather than by

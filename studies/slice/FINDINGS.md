@@ -1245,6 +1245,53 @@ the catalog) and the flags value 4 (ours sends 8, the four NPC deaths') are reco
 questions: *does a raider's Sever Artery land as one hit with the bleed behind it and Power
 Attack a swing later, and does the corpse stay exactly where it fell?*
 
+## SLICE-F25 — **a cast in flight lands too; the death cancels the sync copy's walk (0x002D), and the server's mirror of it stops with it**
+
+**The owner** (after C6): *"corpse still warping. Sometimes the enemy Power Attack or Sever
+Artery shows up on his skill monitor but doesn't actually hit me. Could be when I'm moving.
+He missed the very first Sever Artery and missed some Power Attacks and Sever Artery casts
+throughout the session."* And the hint: *"when I respawned after warping, the enemy was able to
+hit me from far away — points to a server/client mismatch."* Three findings, one mechanism
+each.
+
+**The announced-but-missing strikes.** F21 hoisted the armed SWING above the enemy loop's
+reach gate and left `cast_lands_at` below it. Since C6 an attack skill is a cast with a
+windup, and since C4 the halt owes a swing that is often that skill — so the raider announced
+Sever Artery at the halt, the runner left 92 u during the windup, and the gate dropped the
+cast on the next tick: the skill monitor showed it, nothing landed. *"Could be when I'm
+moving"* is exactly right. Retail: attack-skill strikes on a moving target 37 hit / 3 stopped
+(NPC on NPC, `latehitjoin`), and **spell casts at a moving observer complete 9 of 9** with
+no 59 (`c7_spell` scan) — a cast is announced in reach and lands where its windup ends.
+Shipped: the cast landing sits beside the swing landing above the gate (`LATE_HIT`; the
+revert arm drops it). `test_agentlife` §11c and its cast section (floor 412 → 414).
+
+**The corpse's copy.** F24's hold gates the client's input, but the client's sync copy was
+already walking our last lead when the body died, and the rendered corpse converged onto it
+as it arrived — the warp. Retail's death batch carries **`0x002D [me]`** behind the hold, 3 of
+3 (§F24's two plus studies/morale §1's t=78.813). ldufr calls it `AGENT_PLAYER_DIE`;
+studies/enemy PLAN §6h read the handler and refuted the name: behind a flags test (bit
+`0x20000`, set on a moving agent) it zeroes a float pair at `+0xC8/+0xCC` and clears `+0x4C`
+— a velocity — and §6i's `moving_die` probe saw a running character stop when it landed. It
+sits in the movement family's recv table beside `0x0028`, on the arm the client-controlled
+gate reduces to the SYNC copy once the player has moved locally (studies/movement 2436). So
+it is the message that stops the corpse's copy where the body fell, and `kill_player` sends
+it now (`GAME_SMSG_AGENT_MOVE_CANCEL = 0x002D`, catalog `GAME_SMSG_0045`, one agent field).
+`test_effects` §6a.
+
+**The mirror.** The owner's hint. `_npc_frame` judges a hostile's reach against the server's
+model of the client's sync copy while the player moves — and only one site ever stopped
+that model, the `0x002C` hard-set (`_note_wire_move`): `0x0028` and `0x002D` name no point
+and fell through its point check, so after a death the model walked on to the last lead's
+end, up to 520 u past the corpse, and the raider's reach was judged there through the
+respawn. `_note_wire_move` now stops the model where it stands on either message. The
+death batch and the mirror stop are one fix from the two sides of the wire. `test_effects`
+§6a (floor 81 → 83) drives the hook with the 0x002D kill_player sends.
+
+Also re-aimed: `test_kbdsync` §11's lead-kill caller count (the approach and the interact-walk
+each added a caller; four callers, one rule). All unobserved on a client; the run questions are
+the same three sentences: *does every announced strike land, does the corpse stay put, and
+does the raider reach you only where you are after a respawn?*
+
 ## SLICE-F6 — what the desk cannot settle
 
 Carried so the next session does not re-read the same bytes hoping for more:
