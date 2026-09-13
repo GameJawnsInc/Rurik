@@ -1366,6 +1366,68 @@ all recorded rather than guessed: the halt-slot residual (F20), the 1-of-6 re-fo
 the in-reach press engaging the chain (F20, n=1), and 0x002D's flags gate on our player agent
 (F26).
 
+## SLICE-F28 — **the party body's contract, read off retail's own henchmen: the formation, the engagement rule, who the hostiles hit, and what a monk casts**
+
+OBSERVED, 2026-09-12, `toolkit/authsrv/henchjoin.py` over the live corpus. **The owner asked whether
+a live capture of a hero was needed and offered to set one up.** The answer the corpus gave first:
+`studies/heroes/FINDINGS.md` §0's *"zero live occurrences of the party-add family in 22,524
+messages"* was true on 2026-08-12 and is not true now — two later captures carry `0x01BF`
+PARTY_HENCHMAN_ADD three times each, **20260817T231139** (three level-20 henchmen, map 167730,
+four connections with the bodies created) and **20260819T132414** (three level-3 henchmen, map
+157087, one connection with bodies; two more with roster rows only). GWW (*Henchman*, See also)
+says heroes and henchmen share one AI, so the party body's behaviour is observable today, on
+eleven bodies across five connections, and the hero was authored blind for no reason but that
+nobody had re-run the count. (`0x01BF`'s two trailing bytes, "purpose NOT FOUND" in heroes §10.2,
+are **profession and level**: the body with byte 3 cast Orison of Healing, Word of Healing, Heal
+Other, Healing Breeze and Resurrection Signet; byte 1 used Hamstring, Power Attack, Griffon's
+Sweep and Galrath Slash; byte 6 cast Incendiary Bonds, Mind Burn, Fireball and Fire Storm — Monk,
+Warrior, Elementalist by the profession enum, at level 20; the second capture's bytes read 2/1/7 at
+level 3. Names resolved through the owner's archive, `textrec.py`, for these eighteen ids only.)
+
+**The formation.** A party body walks by **`0x0029` point leads, never by a `0x002A` naming the
+leader** — 750 of 750 leads while the observer moved — **one every 0.51 s (p50; p10 0.28, p90
+1.49)**, and **no `0x0028` closes the walk** (2–11 halts against 46–192 leads per body; the halts
+sit in fights). The lead's END against the observer's latest report: observer moving, **126 u
+p50** (p10 69, p90 299); observer standing, **100 u p50** (p10 44, p90 141), **along 0 and
+|across| 99 u p50** — the bodies stand ABEAM of the leader; at the observer's stop the last lead
+within 3 s ended **141 u p50** from the stop point. Per body the moving medians spread over
+along −73…+66 and across −62…+97: no body held one bearing, so the slot TABLE is ours
+(RECONSTRUCTION); the radius and the shape are the tape's. Our `HERO_FOLLOW_STOP = 200` was
+"a number chosen to look right" and was ~60% too far; the follow was the hostile's `0x002A`
+parked by a halt, a shape retail never sends for a party body.
+
+**The engagement rule.** Of 89 opening starts by a party body (no start by it in the previous
+3 s): **72 followed the observer's own start or skill press inside 6 s, 58 of those on the
+observer's own target**; 5 followed a hostile's start on the party; 12 had neither inside 6 s
+(fights the party opened, or ones opened by a hostile's cast, which the join does not count).
+So a party body fights when the leader fights, on the leader's target by preference, and also
+when hit — GWW's *Hero behavior* in numbers.
+
+**Who the hostiles hit.** Hostile starts named a **henchman 162 times, the observer 13, and
+another body 26** — the party bodies walk in front and take the aggro. Ours never look at the
+party at all (`enemy_attack_tick` swings at the player only); that is SLICE-H3.
+
+**What a monk casts, and at whom.** The level-20 Monk cast Orison (281), Word of Healing (282),
+Heal Other (286) and Healing Breeze (288) at HENCHMEN 12 times and at the observer once —
+never at itself (the target byte, SLICE-B3) — with damage on the target inside the previous 5 s
+in 8 of 13; it also **auto-attacked** (32 `[4, monk, T]` starts in the long connection: a monk
+with a weapon swings between casts). The Warrior used attack skills (kind 50), the Elementalist
+spells (kind 60), all at hostiles. **Deaths and resurrection:** the Monk died **5 times** in one
+connection (rising edges of the `0x00F1` dead bit) and was raised each time by a party member's
+**Resurrection Signet (skill 2, kind 60, 3.0 s to `[id, 0]`)**; the OBSERVER was raised by a
+henchman twice (t=651.5, 660.8). A party wipe is not what ends a retail fight; a signet is.
+
+**What this settles for the hero arc (`PLAN.md` §7, SLICE-H1…H6).** The formation and the
+follow shape ship now (H2). The engagement rule, hostile targeting, party damage, death and the
+signet are the next three rungs, each with its number above to be measured against. **Whether a
+hero-specific live capture is still worth taking:** yes, but for different things than the
+behaviour — retail's hero pipeline order (`0x0074`/`0x0072`/`0x01C2`, which we author ourselves;
+retail sends `0x0072` zero times in the corpus), the hero's skill-bar delivery on the wire (heroes
+§4, NOT FOUND), and the commander echoes on retail (`0x0062`/`0x0063`/`0x0066` after a stance
+click, a lock, a flag in an explorable). None of those blocks the arc; all would be one short
+session on an account that owns a hero, with a marks plan that adds the hero in an outpost,
+zones, fights, flags it, sets each stance and locks a target.
+
 ## SLICE-F6 — what the desk cannot settle
 
 Carried so the next session does not re-read the same bytes hoping for more:

@@ -837,6 +837,29 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "(a click at the approach point through the router, "
                          "2026-09-12) is the default; this is every run "
                          "before it and the known-bad arm.")
+    ap.add_argument("--party", default=None, metavar="KEY",
+                    help="SLICE-H2: the party as CONTENT. A [party.KEY] row "
+                         "in content/world.toml names the hero "
+                         "(s_heroClientData index), the body row, the bar and "
+                         "the level; this sets every --hero* flag from it: the "
+                         "rig heroes 38 and pvpui 28.3 proved (0x0072 "
+                         "activate, 0x009A char, bags, the appearance pair "
+                         "from the body row's file_id/model_id, "
+                         "pipeline-first) plus the body and the bar SLICE-B7 "
+                         "proved. One flag, so the slice launch is "
+                         "`--party slice`.")
+    ap.add_argument("--party-no-commander", action="store_true",
+                    help="With --party, omit the commander rig (0x0072, "
+                         "0x009A, bags, appearance, pipeline-first): the "
+                         "SLICE-B7 shape, follow and heal only, no panel. The "
+                         "revert arm if the full rig asserts on a client.")
+    ap.add_argument("--party-follow-agent", action="store_true",
+                    help="SLICE-H2 REVERT: a party body follows by a 0x002A "
+                         "naming the player and parks at HERO_FOLLOW_STOP "
+                         "(200 u) -- the B7b shape -- instead of walking by "
+                         "0x0029 leads to a slot beside the leader (F28: "
+                         "retail's henchmen, a lead every 0.51 s while the "
+                         "leader moves, ~110 u abeam, no 0x0028 at the end).")
     ap.add_argument("--no-hero-follow", action="store_true",
                     help="SLICE-B7b REVERT: a party body (hero or henchman, "
                          "anything carrying ALLEGIANCE_PLAYER) stands where it "
