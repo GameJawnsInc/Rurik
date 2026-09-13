@@ -27,7 +27,7 @@ import agents       # noqa: E402
 import effects      # noqa: E402
 
 # Floor set from a real green run (39 checks, 2026-08-22; 99 checks, 2026-09-09 SKILLS-DW; 129 checks, 2026-09-10 SKILLS-BL; 153 checks, 2026-09-10 SKILLS-RC; 162 checks, 2026-09-10 SKILLS-MA).
-LEDGER = checks.Ledger("effect mechanics", floor=174)   # SLICE-B7a +4, B7c +8; from the green run
+LEDGER = checks.Ledger("effect mechanics", floor=181)   # SLICE-H13 +6 (section 7b), from the green run; SLICE-B7a +4, B7c +8; from the green run
 check = checks.adopt(LEDGER)
 
 FRENZY, RUSH, ROF, GLYPH, IGNITE, FAINT = 346, 319, 307, 200, 431, 135
@@ -177,6 +177,53 @@ check(bonus == 0.0,
       "the starter hammer fires no arrows: the preparation stays inert")
 bonus, _sid = authsrv.swing_preparation_bonus(fresh_state(), bow, PLAYER)
 check(bonus == 0.0, "a bow with no preparation open: nothing")
+
+print("== 7b. SLICE-H13: the attack-speed pair follows the stance ==")
+# The server paced Frenzy's swings since 2026-08-22; the CLIENT animates to
+# the 0x0035 pair it holds (base x modifier, 0x007F837E). One resend per
+# change of the factor: open -> 0.67, close -> 1.0, nothing in between.
+state = fresh_state()
+state["agents"] = {10: {"name": "bandit", "dead": False, "attack_speed": 1.33}}
+sent, send = collector()
+saved_sync = authsrv.ATTACK_SPEED_SYNC
+try:
+    authsrv.ATTACK_SPEED_SYNC = True
+    authsrv.attack_speed_tick(send, state, 0)
+    check(not sent, "nothing open, nothing sent -- the load's declaration stands")
+    ep = open_ep(state, 346, rank=9, duration=8.0)                 # Frenzy
+    authsrv.attack_speed_tick(send, state, 0)
+    ws = authsrv.WEAPON_ATTACK_SPEED
+    check(len(sent) == 1
+          and sent[0][0] == authsrv.GAME_SMSG_AGENT_UPDATE_ATTACK_SPEED
+          and sent[0][1] == [PLAYER, authsrv._f32(ws), authsrv._f32(0.67)],
+          "Frenzy opens: ONE 0x0035 [player, base, 0.67] -- the client's "
+          "modifier field (studies/enemy PLAN 6q: 0.67 = +33% IAS), the "
+          "base unchanged", f"sent={sent}")
+    authsrv.attack_speed_tick(send, state, 0)
+    check(len(sent) == 1, "a second tick with the stance still open sends nothing")
+    state["effects"].close(ep["buff"])
+    authsrv.attack_speed_tick(send, state, 0)
+    check(len(sent) == 2
+          and sent[1][1] == [PLAYER, authsrv._f32(ws), authsrv._f32(1.0)],
+          "the stance closes: ONE 0x0035 restoring modifier 1.0",
+          f"sent={sent[1:]}")
+    # a BODY under a stance: its own base, its own modifier
+    sent.clear()
+    bep = open_ep(state, 346, rank=0, duration=8.0, agent=10)
+    authsrv.attack_speed_tick(send, state, 0)
+    check([(op, v) for op, v, _l in sent]
+          == [(authsrv.GAME_SMSG_AGENT_UPDATE_ATTACK_SPEED,
+               [10, authsrv._f32(1.33), authsrv._f32(0.67)])],
+          "a body under Frenzy: [body, its 1.33, 0.67]; the player, unchanged "
+          "at 1.0, is not re-declared", f"sent={sent}")
+    state["effects"].close(bep["buff"])
+    sent.clear()
+    authsrv.ATTACK_SPEED_SYNC = False
+    authsrv.attack_speed_tick(send, state, 0)
+    check(not sent, "REVERT ARM (--no-attack-speed-sync): the close is never "
+          "declared; the pre-H13 shape")
+finally:
+    authsrv.ATTACK_SPEED_SYNC = saved_sync
 
 print("== 8. the movement lever: off by default, exact when on ==")
 state = fresh_state()

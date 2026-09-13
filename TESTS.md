@@ -4078,6 +4078,13 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   carries no `weapon_item`; both messages encode through the real codec. Retail gives every
   body its weapons this way (3,016 non-party 0x006D across the live corpus, SLICE-F35).
 
+  **SLICE-H13 (2026-09-13).** `toolkit/authsrv/test_mechanics.py` §7b (floor 174 -> 181): the
+  attack-speed pair follows the stance -- nothing open sends nothing; Frenzy opening on the player
+  sends exactly ONE 0x0035 [player, base, 0.67] (the client's modifier field, the base unchanged);
+  a second tick with it still open sends nothing; its close sends ONE [player, base, 1.0]; a body
+  under Frenzy gets its own [body, 1.33, 0.67] with the player not re-declared; the revert arm
+  (`--no-attack-speed-sync`) declares nothing. Section 7b sits between the preparation section
+  and the movement lever's, whose shape it copies.
   **SLICE-B7c (2026-09-12).** `toolkit/authsrv/test_mechanics.py` §28 (floor 162 → 174,
   with B7a's four): a PARTY body casts a heal at the player. Eight checks, four of them
   arms: the policy picks the hurt player (who is not a row in `agents`, which is B7a's
