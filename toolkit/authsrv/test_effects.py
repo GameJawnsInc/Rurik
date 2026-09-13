@@ -43,7 +43,7 @@ import checks  # noqa: E402
 import effects  # noqa: E402
 from codec import Codec  # noqa: E402
 
-LEDGER = checks.Ledger("the effect channel", floor=83)   # SLICE-F25 +2 (0x002D in the death batch; the mirror stops); SLICE-F24 +1 (the death hold); SLICE-F23 +6 (the degen clock across quiet ticks; a corpse does not walk); from the green run
+LEDGER = checks.Ledger("the effect channel", floor=84)   # SLICE-F26 +1 (the death kills the lead in flight); SLICE-F25 +2 (0x002D in the death batch; the mirror stops); SLICE-F24 +1 (the death hold); SLICE-F23 +6 (the degen clock across quiet ticks; a corpse does not walk); from the green run
 
 
 
@@ -851,8 +851,15 @@ def section_deaths():
     # re-granted leads to the corpse ("KBD LEAD RE-GRANT 1 ... the client
     # silent" right after the KILL). kill_player drops every movement order.
     import os
+    import time as _t3
     st = {"player_health": 0.0, "player_dead": False, "agents": {},
-          "kbd_leg": {"t0": 1.0}, "dest": (500.0, 0.0), "walking": True,
+          # a keyboard lead in flight, half a second old: 520 u to (520, 0)
+          # at the base speed -- the owner's death (capture -c4: the lead to
+          # (1732,1133) granted 0.10 s before the kill, the first report
+          # after the revive AT its end, 520 u from the corpse)
+          "kbd_leg": {"x0": 0.0, "y0": 0.0, "t0": _t3.time() - 0.5,
+                      "dest": (520.0, 0.0), "speed": 288.0, "plane": 0},
+          "dest": (500.0, 0.0), "walking": True,
           "heading": (766.0, 0.0), "heading_hold": {"x": 1},
           "click_leg": {"t0": 1.0}, "click_moving_at": 1.0,
           "kbd_moving_at": 1.0, "attacking": 10,
@@ -866,9 +873,17 @@ def section_deaths():
     st["sync_at"] = _t2.time() - 0.5
     st["declared_speed_base"] = 288.0
     walking = authsrv._sync_position(st, _t2.time())
-    corpse = []
-    authsrv.kill_player(lambda op, v, why="", quiet=False: corpse.append(op),
+    corpse, corpse_vals = [], []
+    authsrv.kill_player(lambda op, v, why="", quiet=False: (corpse.append(op),
+                                                             corpse_vals.append(v)),
                         st, 0, "test")
+    _kills = [v for op, v in zip(corpse, corpse_vals)
+              if op == authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT]
+    LEDGER.ok(len(_kills) == 1 and 100.0 < _kills[0][1][0] < 200.0
+              and abs(_kills[0][1][1]) < 1e-6 and _kills[0][0] == authsrv.PLAYER_AGENT_ID,
+              "the kill's point is the MODELLED body -- ~144 u along the lead "
+              "after half a second at 288 u/s -- not the lead's end and not "
+              "the last report", f"{_kills}")
     # the real send() runs _note_wire_move on every message; this fake one
     # does not, so the hook is driven here with the 0x002D kill_player sent
     authsrv._note_wire_move(st, authsrv.GAME_SMSG_AGENT_MOVE_CANCEL,
@@ -892,10 +907,14 @@ def section_deaths():
               "the arms that own them (their writer counts are locked)",
               f"{ {k: st.get(k) for k in ('dest', 'approach', 'attacking', 'click_moving_at', 'kbd_moving_at')} }, "
               f"kbd_leg {'kbd_leg' in st}, chain {'router_chain' in st}")
-    LEDGER.ok(authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT not in corpse
-              and authsrv.GAME_SMSG_AGENT_UPDATE_DESTINATION not in corpse,
-              "and sends no movement message of its own -- the KILL status is "
-              "what the client acts on", f"{[hex(o) for o in corpse]}")
+    LEDGER.ok(authsrv.GAME_SMSG_AGENT_UPDATE_DESTINATION not in corpse
+              and corpse.count(authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT) == 1,
+              "and the ONE movement message it sends is the lead's KILL -- a "
+              "zero-lead 0x0029 at the modelled body (SLICE-F26): the client "
+              "walked our outstanding lead to its end after the death, to the "
+              "unit, and the raider was then sent to a phantom 520 u from the "
+              "body; the kill parks the copy where the corpse is",
+              f"{[hex(o) for o in corpse]}")
     LEDGER.ok(st.get("action_hold") == 1,
               "SLICE-F24: and the corpse is HELD -- [8, me, 1] rides the death "
               "batch behind the STATUS, retail 2 of 2 (the client's walk gate; "

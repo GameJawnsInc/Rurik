@@ -15001,8 +15001,9 @@ def kill_player(send, state, conn_id, why="took a killing blow"):
     # and the two movement arms are gated on player_dead, so a stale latch
     # can grant nothing until revive_player clears the flag and the next
     # report re-stamps it. No send: the KILL status is what the client acts
-    # on, and a grant to a corpse is the defect.
-    state.pop("kbd_leg", None)
+    # on, and a grant to a corpse is the defect -- except the one grant
+    # that ENDS a lead (SLICE-F26, above): the kill's zero-lead 0x0029 at
+    # the body, which is the opposite of a walk.
     state["dest"] = None
     _approach_abandon(state)
     router_abandon(state, None, "death", time.time())
@@ -15030,6 +15031,24 @@ def kill_player(send, state, conn_id, why="took a killing blow"):
     send(GAME_SMSG_AGENT_MOVE_CANCEL, [PLAYER_AGENT_ID],
          f"MOVE_CANCEL 0x002D: the corpse's sync copy stops where the body "
          f"died [SLICE-F25]")
+    # SLICE-F26: AND THE OUTSTANDING LEAD IS KILLED, because the 0x002D did
+    # NOT stop our client's copy. Measured on the owner's run (capture
+    # authsrv-20260912T223203-c4): the last report before the death at
+    # (1347,1483); a KBD LEAD to (1732,1133) granted 0.10 s before it; the
+    # first report after the revive at (1731.8,1132.7) -- the lead's END,
+    # to the unit, 520 u from where the body fell. So the client walked our
+    # lead out after the death (the 0x002D's velocity cancel is gated on a
+    # flags bit our player agent evidently does not carry -- studies/enemy
+    # PLAN 6h's null, seen again), the corpse followed its copy (the warp),
+    # and the raider was then sent to the death spot, halted "0 u from the
+    # player" on a phantom and swung there while the body stood 520 u away
+    # -- "attacked from out of normal range". The lead in flight is ended
+    # the way a press ends one (MOVECODE-1z-y): a zero-lead grant at the
+    # modelled body, so the copy parks where the corpse is and every belief
+    # on both sides agrees on where the body fell. Retail never leaves this
+    # lead shape outstanding, so the repair is ours and says so.
+    if not _kbd_lead_kill(send, state, conn_id, None, "death"):
+        state.pop("kbd_leg", None)
     # AND THE BILL, in ArenaNet's own order: the death bit first, the morale
     # tick behind it, same tick. Silent in every map this server ships, because
     # pre-Searing charges nothing -- `map_death_penalty` is where that is
