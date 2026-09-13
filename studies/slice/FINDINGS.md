@@ -1711,8 +1711,21 @@ knocked-down foe and Heavy Blow's knock-down (no knock-down here), Irresistible 
 a block (no block), Healing Signet's −40 armour. `test_agentlife` §H7 (floor 467 → 472);
 `test_skilldamage`'s two rank locks re-aimed to the shipped ranks.
 
-**Still open, the owner's other line:** *"the monk still outheals our damage"* — the corridor's
-hostile Academy Monk (bar 281/252/276) on the raider is content balance, untouched here.
+**The owner's other line, the same day:** *"the monk still outheals our damage ... tone down the
+monk's healing so the bandit is killable."* SLICE-H7b, content only: both corridor monk rows'
+Orison recharge went from the client table's 2 s to **8 s** (`[spawn.corridor_monk_a/b]`, the note
+says why). Sized off harness `20260913T130707`: at rank 12 one Orison is 60 health and the 2 s row
+let the energy pool pace it to one every ~3 s (that run: two Orisons, 41 and 28 landed, and eleven
+Banishes), more than a level-1 hammer bar and the hero land together; 8 s is ~7 health a second.
+The raider's own Healing Signet row is untouched (it cast it 0 times in that run). **Harness
+`20260913T134221` after the change** (the player ordered onto the raider, the bar's energy attacks
+pressed on their recharges): the monk cast Orison **once** in the opening bout (40 of 60 landed) and
+then Banish and Restore Condition, while the raider went 200 → 160 under the player's 7-a-swing and
+the hero's 14s — and the harness player, 100 health at AR 45 under the raider and the monk
+together, died in ~15 s and every 10 s after, so the run cannot show the kill: the harness presses
+no signet, kites nothing and lands Power Attack twice on 25 energy. The heal is toned; whether the
+raider now dies is the owner's own hands. The next knobs, if not: the monk's Banish (49 a cast on
+the hero, 36 on the player, every 10 s) and the raider's 200 health.
 
 ## SLICE-F6 — what the desk cannot settle
 

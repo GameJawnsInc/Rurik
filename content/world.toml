@@ -1228,7 +1228,7 @@ west half; its monk is 470 u east and 100 u further on."""
 [spawn.corridor_monk_a]
 area = "corridor"
 map = 168
-skills = [[281, 1.0, 2.0], [252, 1.0, 10.0], [276, 0.75, 2.0]]
+skills = [[281, 1.0, 8.0], [252, 1.0, 10.0], [276, 0.75, 2.0]]
 npc = "academy_monk"
 agent_id = 91
 definition = 61
@@ -1243,7 +1243,7 @@ enabled = true
 source = "invented"
 note = """Ours. Group A's monk. Spawned HOSTILE -- the template is a retail \
 noncombatant, and the corridor makes it a monster, which is the slice's own \
-choice (studies/slice/PLAN.md, the owner's decisions)."""
+choice (studies/slice/PLAN.md, the owner's decisions). Orison's recharge is 8 s here against the client table's 2 s (SLICE-H7b, \n2026-09-13, the owner: "the monk still outheals our damage ... tone down the \nmonk's healing so the bandit is killable"): at rank 12 one Orison is 60 health \nand the 2 s row let the energy pool pace it to one every ~3 s, above what a \nlevel-1 hammer bar and the hero land together; 8 s is ~7 health a second, under \nit. Both monk rows carry it. A balance knob, not a mechanism."""
 
 [spawn.corridor_raider_b]
 area = "corridor"
@@ -1266,7 +1266,7 @@ note = """Ours. Group B, 3,000 u past group A."""
 [spawn.corridor_monk_b]
 area = "corridor"
 map = 168
-skills = [[281, 1.0, 2.0], [252, 1.0, 10.0], [276, 0.75, 2.0]]
+skills = [[281, 1.0, 8.0], [252, 1.0, 10.0], [276, 0.75, 2.0]]
 npc = "academy_monk"
 agent_id = 93
 definition = 61
