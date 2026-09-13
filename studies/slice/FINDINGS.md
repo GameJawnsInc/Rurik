@@ -1593,6 +1593,46 @@ reaches (one and zero opening swings in the corpus); and **a party caster never 
 (F28), so the hero at 78/100 cast nothing — the same sample says "never" on thirteen casts, which is
 a weak never.
 
+## SLICE-F31 — **the commander's orders: stance, lock and flag, echoed since pvpui 28 and obeyed since today**
+
+WIKI, 2026-09-13 (GWW *Hero* §Combat modes, *Hero behavior* §Targeting, *Hero flag*, raw wikitext
+read through the browser), because **the live corpus carries no retail commander click at all** —
+0 of 61 connections send `0x0015`/`0x0016`/`0x001A`/`0x001B` or receive `0x0062`/`0x0063`/`0x0066`;
+the one thing it does carry is **`0x0067` PARTY_FLAG_SET's CLEAR form `[(+inf, +inf), 0]` in the
+instance-load batch beside `0x0103`, 3 of 3 connections that carry a `0x0103` at all** (OBSERVED;
+none of the three has a party). The wire shapes are pvpui 28.5–28.7's, captured on our own client.
+
+| order | what the wiki says the hero does |
+|---|---|
+| **Fight** (aiMode 0) | attacks, in priority: called targets, the SELECTED target within spirit range of the hero, foes actively engaged with the party, foes within the hero's aggro range; prefers the lowest armour rating; "will separate from the flag or the controlling player, if necessary" |
+| **Guard** (1) | guards the area near the flag or the player, "refraining from combat until actively engaged": the selected foe engaging the party, a foe entering the party's aggro circle; "will not move beyond the guarded area" |
+| **Avoid Combat** (2) | "Heroes never attack", not a selected or called target either; kites when attacked |
+| **Lock** | "lock your hero unto it until the target gets killed" — the top of the targeting hierarchy (1. locked, 2. called, 3. attacked — F30's rule is the third) |
+| **Flag** | the hero moves to the flag "and stay[s] there as long as the flag is active"; the party flag moves "all heroes and henchmen as a single group"; removing a flag sends them "back to the player" |
+
+**What shipped (SLICE-H5).** The four dispatch arms became one `handle_hero_command`: the echo
+first, unchanged (the client draws from it, pvpui 28.6), then the order into `hero_command(state,
+agent)` — `{ai_mode, lock, flag}` kept on `state` because the body row does not exist in a town —
+and `state["party_flag"]`; a flag whose coordinates are `(+inf, +inf)` is the clear (the s2c clear
+idiom, applied to the c2s: no retail c2s clear was ever captured). `party_fight_target` reads the
+stance and the lock: **Avoid** picks nobody; the **lock** tops the hierarchy while it lives (a dead
+lock falls through, "until the target gets killed"); **Guard** keeps only "a hostile that opened on
+the party" (and the current foe while it does); **Fight** keeps H4's leader rule and adds the
+leader's `0x00C1` selection within `SPIRIT_RANGE` = 2512 and, last, any live hostile inside the
+hero's own `AGGRO_RANGE`, lowest armour class first — which makes a Fight-mode hero open on a foe
+the moment it comes within 1200 u, as the wiki says and as F30's 12 leader-less retail opens allow.
+`enemy_move_tick`'s party branch walks a flagged body to its flag (`party_flag_point`: its own
+flag, else the party flag at its slot offset about the flag, "as a single group") by the slot
+walk's own `0x0029` shape and holds it there; under Fight the melee chase still separates it from
+the flag, under Guard a melee body does not chase. `--party-ignore-commands` reverts (echoes only,
+every run before today). `test_agentlife` §H5 (floor 457 → 467); four H4 checks moved their idle
+foe out to 1500 u because Fight now attacks on sight.
+
+**Not modelled, said here:** "called" targets (Ctrl-click; no c2s for it is known here); Avoid's
+kiting; Guard's "guarded area" as a radius (a Guard body simply does not chase); the flag as a
+pathed destination (the lead is the straight point, the corridor legs the follow's own); Fight's
+"lowest health under 50%" tie-break; `0x0017` (not the unlock, pvpui 28.11).
+
 ## SLICE-F6 — what the desk cannot settle
 
 Carried so the next session does not re-read the same bytes hoping for more:
