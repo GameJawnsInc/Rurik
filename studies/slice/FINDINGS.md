@@ -1084,6 +1084,59 @@ disagreeing with the client's own resolver, which C1's gate would then show as a
 strike at 80–144 u), or a queued clock-cast behind an approaching entry begins before the
 arrival.
 
+## SLICE-F21 — **SLICE-C3: retail's melee hit lands on a target that moved during the windup — reach is judged at the start, never at the landing**
+
+**The question** (SLICE-F19, SLICE-F20): kiting cost the kiter nothing here, and one reason
+was ours to check — an armed swing was dropped the moment its target left reach, at three
+sites: the enemy loop (`swing_lands_at` cleared past `enemy_reach()` or when the chase
+re-issued), `attack_tick` (the player's swing in flight dropped past `attack_reach()`), and
+SLICE-C1's release of an attack skill's strike past reach. Whether retail's landing has a
+reach term at all had never been measured. The plan costed a narrated live capture; the
+corpus already held the answer.
+
+**Measured, 2026-09-12**, over the 20 live captures (`toolkit/authsrv/latehitjoin.py`): every
+`attack_started [4, A, T]` and every attack-skill animation `[50, A, T, skill]`, its outcome,
+and whether the target moved inside the windup (the observer's own `0x003D`/`0x003E` reports;
+an NPC's `0x0029`/`0x002A`/`0x0025`):
+
+| swing | target moved during the windup | hit | stopped | other |
+|---|---|---|---|---|
+| a hostile's, at the observing player | 7 | **7** | 0 | 0 |
+| the player's own, on an NPC | 34 | **33** | 1 (a retarget) | 0 |
+| an attack skill's, on an NPC | 11 | **11** | 0 | 0 |
+| NPC on NPC | 78 | 51 | 21 (the chases' retargets) | 6 |
+
+The seven swings at the player are the cleanest, because the player's reports are the
+truth: four have a report within 0.5 s before the start and reports inside the windup, and
+the displacement at the last report inside is **81, 137, 202 and 288 u** — with another
+0.3–0.5 s of running between that report and the hit, so the hit landed with the player
+roughly 200–400 u from where the swing opened, against a halt reach of 80 u. The corpus
+holds ONE attack-fail word in 1,332 starts (SKILLS-BL), so nothing on retail whiffs for
+distance. **Rule, OBSERVED:** reach is judged when a swing OPENS — the halt disc for a hostile
+(ANIMREF-RE 40), the press-time reach for the player (ANIMREF-RE 38) — and an armed swing
+lands wherever the target went. The "stopped" outcomes are retargets and aggro changes, not
+misses.
+
+**Shipped** (`LATE_HIT`, `--no-late-hit` reverts all three): the enemy loop resolves an armed
+landing BEFORE its reach/follow gate, so the gate is for the next START only; `attack_tick`'s
+out-of-reach branch lands a swing in flight when due (`_land_player_swing`, one site for the
+in-reach and out-of-reach landings) and refuses only the next start; SLICE-C1's strike gate is
+the revert arm's — an attack-skill strike on a target that stepped out lands (11 of 11), and
+the press C1 answered (a strike from 170 u while running) cannot happen since C2's approach,
+the root and the running-press halt. The corpse and burrow truncations keep their measured
+drops. `test_playerswing` §3 and its reach-telemetry section, `test_agentlife`'s "leaves
+range" arm and `test_castcycle` §2d flip to the landing and pin the revert arm.
+
+**What this changes for the owner's kiting report.** A hostile still cannot OPEN a swing on a
+body that keeps moving (RE 40, retail's own rule), but every swing it does open — at the
+halt, or when the kiter turns, stops or is caught — now lands even if the kiter is 300 u away
+by the hit. That is retail's cost of kiting, and it is the only one the tapes show.
+
+**Refuted if** a swing the owner sees connect on the client does no damage, or a swing on a
+target that plainly stepped out does damage on retail's client but not here in the same
+shape — either would mean the landing has a term the seven swings did not exercise (e.g. a
+plane change, or a distance past ~400 u).
+
 ## SLICE-F6 — what the desk cannot settle
 
 Carried so the next session does not re-read the same bytes hoping for more:

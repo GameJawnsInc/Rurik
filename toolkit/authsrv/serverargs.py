@@ -645,6 +645,14 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                     help="No-op since ANIMREF-RE 39: the approach is the "
                          "default. Kept so the CASE 7 command line still "
                          "parses.")
+    ap.add_argument("--no-late-hit", action="store_true",
+                    help="THE REVERT ARM for SLICE-F21: drop an armed swing "
+                         "when its target leaves reach (both the enemy loop "
+                         "and the player's), and release an attack skill's "
+                         "strike past reach (SLICE-C1) -- the arm under which "
+                         "kiting cost the kiter nothing. The default lands the "
+                         "armed swing wherever the target went, as retail does "
+                         "(7 of 7, 33 of 34, 11 of 11 on the live corpus).")
     ap.add_argument("--no-attack-skill-root", action="store_true",
                     help="THE REVERT ARM for SLICE-F20's root: answer a "
                          "movement report during a begun attack skill's "

@@ -10474,6 +10474,28 @@ ANIMREF_E3_RELEASE = False    # True (--e3-release): free the hold at E3, see ^
 # --no-attack-skill-root: the report is answered at once, the pre-run arm.
 ATTACK_SKILL_ROOT = True
 
+# SLICE-F21 (SLICE-C3, 2026-09-12): AN ARMED MELEE SWING LANDS WHEREVER THE
+# TARGET WENT. Asked of the live corpus (toolkit/authsrv/latehitjoin.py):
+# every swing at the observing player during which the player MOVED landed
+# -- 7 of 7, four of them with a report anchored inside the windup showing
+# the player 81-288 u displaced at the last report before the landing (a
+# further 0.3-0.5 s of running to the hit itself); the player's own swings
+# on a target that moved landed 33 of 34 (the one "stopped" is a retarget);
+# attack-skill strikes on a moving target 11 of 11; NPC-on-NPC 51 hit against
+# 21 stopped, the stops being the chases' own retargets. The corpus carries
+# ONE attack-fail word in 1,332 starts (SKILLS-BL), so nothing on retail
+# whiffs for distance: reach is judged at the START (the halt disc for a
+# hostile, the press-time reach for the player -- ANIMREF-RE 38/40) and
+# never at the landing. Ours judged it twice -- the enemy loop dropped an
+# armed swing the moment the player left enemy_reach() or the chase re-
+# issued, attack_tick dropped the player's swing in flight past
+# attack_reach(), and SLICE-C1 released an attack skill's strike past reach
+# -- which is exactly why kiting cost the kiter nothing here ("enemies
+# don't attack you if you just constantly kite them", the owner's first
+# combat report). The three sites keep the START gates and lose the landing
+# gates. False = --no-late-hit: all three drops back, the pre-F21 arm.
+LATE_HIT = True
+
 # ANIMREF-R8: the on-body effect visual (properties 20/21). R4 decoded the
 # channel and refused to wire it because the VALUE space was unread; FINDINGS
 # 16 reads it out of the client's own s_skill record (+0x78 caster, +0x7c
@@ -12076,6 +12098,19 @@ def _chain_pause_flush(state, rec, conn_id):
                                            float(ATTACK_INTERVAL))
 
 
+def _land_player_swing(send, state, conn_id, swing):
+    """The player's armed swing lands on the target it OPENED on -- hit_enemy
+    re-reads it and refuses a corpse -- and the hold ends at the landing
+    (ANIMREF-RE 33 / F1). One site since SLICE-F21: the in-reach landing and
+    the out-of-reach one are the same event, because retail judges reach at
+    the start and not at the hit (7 of 7, 33 of 34)."""
+    state["player_swing"] = None
+    hit_enemy(send, state, swing["target"], conn_id, armed=True)
+    if LANDING_HOLD_RELEASE:
+        action_hold(send, state, 0,
+                    "the swing landed -- movement is legal now")
+
+
 def attack_tick(send, state, conn_id, rec=None):
     """Keep swinging at whatever the player last clicked -- in TWO phases.
 
@@ -12235,6 +12270,19 @@ def attack_tick(send, state, conn_id, rec=None):
         # decided by this row.
         if _moving_now:
             _chain_pause_note(state, "reach")
+        # SLICE-F21: THE SWING IN FLIGHT LANDS. Retail's player swings on a
+        # target that moved during the windup landed 33 of 34 and the swings
+        # at a player who ran 7 of 7 (latehitjoin); the reach gate here is
+        # for the NEXT start only. The two comment blocks above describe the
+        # drop this branch made until 2026-09-12; --no-late-hit restores it.
+        _swing = state.get("player_swing")
+        if LATE_HIT and _swing is not None:
+            if time.time() >= _swing["lands_at"]:
+                _land_player_swing(send, state, conn_id, _swing)
+            _press_refused(state, rec, conn_id, "reach",
+                           dist=round(math.hypot(ax - px, ay - py), 1),
+                           reach=attack_reach(), swing_in_flight=True)
+            return
         _swing_dropped(state, rec, conn_id, "reach",
                        dist=round(math.hypot(ax - px, ay - py), 1),
                        reach=attack_reach())
@@ -12280,8 +12328,7 @@ def attack_tick(send, state, conn_id, rec=None):
         # start twice and land once. The landing goes to the target the swing
         # OPENED on -- hit_enemy re-reads it from state and refuses a corpse.
         if now >= swing["lands_at"]:
-            state["player_swing"] = None
-            hit_enemy(send, state, swing["target"], conn_id, armed=True)
+            _land_player_swing(send, state, conn_id, swing)
             # ---- ANIMREF-RE §33 / F1: THE HOLD ENDS AT THE LANDING --------
             #
             # PROPERTY 8 IS THE MOVEMENT HALF OF THE LATCH §32 ALREADY SPLIT,
@@ -12320,9 +12367,8 @@ def attack_tick(send, state, conn_id, rec=None):
             # where a client-side characteristic duration would live. That
             # branch is pre-registered here so a surviving stall is a result
             # rather than a surprise.
-            if LANDING_HOLD_RELEASE:
-                action_hold(send, state, 0,
-                            "the swing landed -- movement is legal now")
+            # (The landing and this release live in _land_player_swing,
+            # shared with the out-of-reach branch since SLICE-F21.)
         return
     # NO NEW SWING WHILE A CAST IS SHORT OF ITS E3. Retail pauses the auto
     # attack for the cast plus its aftercast and resumes it the instant the
@@ -14297,7 +14343,13 @@ def cast_tick(send, state, conn_id):
             # AN ATTACK SKILL STRIKES ONLY IN REACH (strike_out_of_reach).
             # Marked as a cancel and handed to the branch above on the next
             # pass: the measured release burst, no recharge, nothing lands.
-            if cast["attack"] and cast.get("target"):
+            # SLICE-F21: RETIRED as a default -- an attack-skill strike on a
+            # target that moved out during the windup lands on retail, 11 of
+            # 11 (latehitjoin), and the press that C1 was written against (a
+            # strike from 170 u while running) cannot happen since C2's
+            # approach, the root and the running-press halt. --no-late-hit
+            # brings the gate back with the other two landing drops.
+            if cast["attack"] and cast.get("target") and not LATE_HIT:
                 _why = strike_out_of_reach(state, cast["target"])
                 if _why:
                     cast["cancelled"] = _why
@@ -15922,6 +15974,18 @@ def enemy_attack_tick(send, state, conn_id):
             agent["cast_lands_at"] = None
             agent["casting"] = None
             continue
+        # SLICE-F21: AN ARMED SWING LANDS FIRST, wherever the player went and
+        # whether or not the chase re-issued -- retail 7 of 7 swings at a
+        # moving player, up to ~400 u away by the hit. Only the START below
+        # needs reach and a parked body (ANIMREF-RE 40). The corpse and
+        # transition drops above keep their measured truncations.
+        if LATE_HIT:
+            _armed = agent.get("swing_lands_at")
+            if _armed is not None:
+                if now >= _armed:
+                    agent["swing_lands_at"] = None
+                    land_swing(send, state, agent_id, agent, conn_id)
+                continue
         ax, ay = agent["pos"]
         # REACH, not notice. This read AGGRO_RANGE until the chase existed, which
         # let a rooted agent hit the player from 1200 units away.
@@ -25419,6 +25483,13 @@ def main():
         print("[map] --attack-approach: no-op, the approach is the default "
               "since ANIMREF-RE 39 (--no-attack-approach reverts it).",
               flush=True)
+    if a.no_late_hit:
+        global LATE_HIT
+        LATE_HIT = False
+        print("[map] --no-late-hit: an armed swing is dropped when its target "
+              "leaves reach (the enemy loop, attack_tick) and an attack skill's "
+              "strike is released past reach (SLICE-C1) -- the pre-F21 arm; "
+              "retail lands them all.", flush=True)
     if a.no_attack_skill_root:
         global ATTACK_SKILL_ROOT
         ATTACK_SKILL_ROOT = False
