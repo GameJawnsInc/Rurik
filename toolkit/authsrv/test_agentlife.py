@@ -73,7 +73,7 @@ from codec import Codec  # noqa: E402
 # known-bad control; and the chase section's wall pin split by arm, 1).
 # Floor from a real green run of 331. +1 at NPCTRACK-F8 (the hold rule
 # replaces the fresh-follow pin: three checks for two), green 333.
-LEDGER = checks.Ledger("agent lifetime", floor=472)   # SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
+LEDGER = checks.Ledger("agent lifetime", floor=478)   # SLICE-H8 +6 (low levels); SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
 
 
 def section_weapon_damage():
@@ -5803,6 +5803,108 @@ def section_hold_plane():
               "Blow +24, Crushing Blow +16, Irresistible Blow +17 -- the client's "
               "own interpolator over the wiki-verified endpoints",
               f"{[authsrv.skill_damage(s, 12) for s in (351, 359, 352, 356)]}")
+
+    # ---- SLICE-H8: low levels -----------------------------------------------------
+    # The owner: "tahlkora doesn't self heal", "make the player/hero lvl 3 (10
+    # attribute points) and the enemies lvl 2 (5 attribute points)", "did we
+    # research low level weapon damage at all?". F34: a body's own ranks,
+    # level and weapon range; the slice character over the base fixture.
+    print("\nSLICE-H8: a body casts at its OWN ranks and swings its OWN weapon "
+          "range through the wiki's formula; a party caster heals itself; the "
+          "slice's level-3 character is [party.slice]'s, over the base fixture")
+    _saved_pl = (agents.PLAYER_LEVEL, agents.PLAYER_HEALTH,
+                 agents.PLAYER_ATTRIBUTE_RANKS, agents.PLAYER_ATTRIBUTE_POINTS)
+    try:
+        raider = {"npc": {"profession": 1, "level": 2},
+                  "attributes": {17: 2, 20: 1, 21: 1}, "damage": [6, 10],
+                  "weapon_attribute": 20}
+        monk = {"npc": {"profession": 3, "level": 2},
+                "attributes": [[13, 2], [14, 1], [15, 1]], "damage": [3, 5],
+                "weapon_attribute": 14}
+        bare = {"npc": {"profession": 1}}
+        LEDGER.ok(authsrv.agent_skill_rank(monk, 281) == 2
+                  and authsrv.agent_skill_rank(monk, 252) == 1
+                  and authsrv.agent_skill_rank(raider, 322) == 2
+                  and authsrv.agent_skill_rank(bare, 281) == authsrv.ENEMY_SKILL_RANK,
+                  "a body with `attributes` casts at ITS rank in the skill's "
+                  "attribute (the monk's Orison at Healing 2, Banish at Smiting "
+                  "1, the raider's Power Attack at Strength 2); a row without "
+                  "keeps ENEMY_SKILL_RANK",
+                  f"monk {authsrv.agent_skill_rank(monk, 281)}/"
+                  f"{authsrv.agent_skill_rank(monk, 252)}, raider "
+                  f"{authsrv.agent_skill_rank(raider, 322)}, bare "
+                  f"{authsrv.agent_skill_rank(bare, 281)}")
+        hits = sorted(authsrv.body_swing_damage(raider, 45.0) for _ in range(40))
+        LEDGER.ok(3 <= hits[0] and hits[-1] <= 5
+                  and authsrv.body_swing_damage(bare, 45.0) is None,
+                  "a body with a `damage` range swings it through the wiki's "
+                  "formula (2^((5 x rank - armour) / 40)) at its own rank and "
+                  "level: the level-2 raider's 6-10 lands 3-5 on the player's "
+                  "armour 45 -- retail's Pre-Searing hostiles landed 3/4/5 on the "
+                  "level-3 observer (F34); a row without keeps the fraction",
+                  f"40 swings span {hits[0]:.0f}..{hits[-1]:.0f}")
+        LEDGER.ok(authsrv.agent_strike_level(monk) == 6.0
+                  and authsrv.agent_strike_level(bare) == 60.0
+                  and abs(authsrv.strike_multiplier(60.0, 40.0)
+                          - authsrv.armour_multiplier(40.0)) < 1e-9,
+                  "a body's SKILL strike level is 3 x its level (6 at level 2; "
+                  "the baseline 60 without a level), and at 60 the multiplier "
+                  "is the old armour_multiplier exactly",
+                  f"monk {authsrv.agent_strike_level(monk)}, bare "
+                  f"{authsrv.agent_strike_level(bare)}")
+        # the landed spell: a level-2 monk's Banish on the player at its rank
+        # and strike level, through land_skill's own path
+        # Banish is filed armour-ignoring (holy, SKILLS-FA), so the strike
+        # level shows on an armour-RESPECTING spell: Flare's 20 at rank 0 by a
+        # level-2 caster is 20 x 2^((6 - 25) / 40) ~ 14.4 on the player's
+        # elemental 25, where test_skilldamage's level-20 baseline lands 36.68.
+        st = _world(dist=85.0)
+        st["agents"][10].update(npc={"profession": 3, "level": 2},
+                                attributes={13: 2, 14: 1, 15: 1},
+                                skills=((194, 1.0, 5.0),), skill_ready=[0.0],
+                                casting=0, cast_target=1)
+        st["player_health"] = 100.0
+        sent = []
+        authsrv.land_skill(lambda op, vals, label="", quiet=False: sent.append((op, vals)),
+                           st, 10, st["agents"][10], 1)
+        dealt = 100.0 - st["player_health"]
+        LEDGER.ok(12.0 < dealt < 16.0
+                  and authsrv.skill_damage(252, authsrv.agent_skill_rank(st["agents"][10], 252))[0] == 22,
+                  "a level-2 caster's Flare lands 20 x 2^((6 - 25)/40) ~ 14 on the "
+                  "player's elemental armour 25 (the level-20 baseline: 36.7), and "
+                  "its Banish resolves to the rank-1 22 (rank 12: 56)",
+                  f"Flare dealt {dealt:.1f}")
+        # the party caster heals ITSELF under an ally-kind heal
+        st = _fight_world((1500.0, 0.0), (0.0, 110.0))
+        st["agents"][200].update(skills=((281, 1.0, 2.0),), skill_ready=[0.0],
+                                 health=40.0, max_health=100.0)
+        st["player_health"] = 100.0
+        sent = []
+        authsrv.ally_cast_tick(lambda op, vals, label="", quiet=False: sent.append((op, vals)),
+                               st, 1)
+        casts = [v for op, v in sent if op == INT_T and v[0] == 60]
+        LEDGER.ok(casts == [[60, 200, 200, 281]],
+                  "a hurt party caster with a healthy party casts Orison at "
+                  "ITSELF (the client's target byte 3 allows the caster) -- "
+                  "the owner: 'tahlkora doesn't self heal'", f"casts {casts}")
+        # the slice character over the base fixture
+        base = (agents.PLAYER_LEVEL, agents.PLAYER_HEALTH,
+                agents.PLAYER_ATTRIBUTE_POINTS)
+        changed = authsrv.apply_party_character(agents.WORLD.get("party", "slice"))
+        st = authsrv.attribute_state({})
+        LEDGER.ok(base == (1, 100, 200) and agents.PLAYER_LEVEL == 3
+                  and agents.PLAYER_HEALTH == 140 and st.points_total == 10
+                  and st.spent == 10 and authsrv.player_rank_for_skill(351) == 3
+                  and authsrv.player_full_max_health({"level": 3}) == 140.0,
+                  "--party slice rebinds the character: level 3, health 140 "
+                  "(WIKI: 100/120/140), Hammer 3 / Strength 2 / Tactics 1 = all "
+                  "10 of level 3's points -- over the base row's level-1, 100, "
+                  "200-point fixture the offline locks price",
+                  f"base {base}, changed {changed}, spent {st.spent} of "
+                  f"{st.points_total}")
+    finally:
+        (agents.PLAYER_LEVEL, agents.PLAYER_HEALTH,
+         agents.PLAYER_ATTRIBUTE_RANKS, agents.PLAYER_ATTRIBUTE_POINTS) = _saved_pl
 
 
 if __name__ == "__main__":

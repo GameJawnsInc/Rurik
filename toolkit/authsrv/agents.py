@@ -1172,6 +1172,12 @@ PROP_ENERGY_GAIN_CALLOUT = 54
 _PLAYER = WORLD.get("player", "defaults")
 PLAYER_ENERGY = _PLAYER["energy"]
 PLAYER_HEALTH = _PLAYER["health"]
+# SLICE-H8: the character's starting level when no store row carries one --
+# content/world.toml [player.defaults].level (default 1). A [party.KEY] row's
+# player_level / player_health / player_attributes / player_points rebind
+# these four at launch (authsrv.apply_party_character), which is how the
+# slice plays a level-3 character over the base world's level-1 fixture.
+PLAYER_LEVEL = int(_PLAYER.get("level", 1))
 PLAYER_FLOAT_43 = _PLAYER["float_43"]
 
 # The player's attribute ranks, as (attribute_id, rank) pairs. The IDS are the
@@ -1180,6 +1186,7 @@ PLAYER_FLOAT_43 = _PLAYER["float_43"]
 # 0x003A never appears in a live capture and no c2s spend opcode was found.
 # Tuples rather than the TOML's lists so a caller cannot mutate the module's
 # copy, which is the same reason ENEMY_SKILLS is a tuple of tuples.
+PLAYER_ATTRIBUTE_POINTS = int(WORLD.get("player", "attributes")["points_total"])
 PLAYER_ATTRIBUTE_RANKS = tuple(
     (int(a), int(r)) for a, r in WORLD.get("player", "attributes")["ranks"])
 

@@ -9415,6 +9415,27 @@ PARTY_WEAPON_BY_PROFESSION = {1: "sword", 2: "shortbow", 3: "staff", 4: "staff",
                               5: "staff", 6: "staff", 7: "daggers", 8: "staff",
                               9: "spear", 10: "scythe"}
 HERO_WEAPON = None             # --hero-weapon KEY / [party.KEY].weapon
+# ---- SLICE-H8: LOW LEVELS -- a body's own ranks, level and weapon ---------
+#
+# The owner (2026-09-13): "make the player/hero lvl 3 (10 attribute points)
+# and the enemies lvl 2 (5 attribute points)" and "did we research low level
+# weapon damage at all?". Until today every NPC cast at ENEMY_SKILL_RANK (12)
+# and every NPC swing was a FRACTION of the taker's maximum health -- a model
+# no level can move. Now a content row may carry `attributes` ([[id, rank],
+# ...]: the rank its skills scale at, `agent_skill_rank`), `level` (its
+# armour by the creature formula, and the strike level of its skills, 3 x
+# level -- WIKI, GWW "Damage calculation"), and `damage` [lo, hi] with
+# `weapon_attribute` (its swing through the same `swing_damage` the player's
+# hammer runs: base x 2^((5 x rank - armour) / 40), WIKI). Rows that say
+# nothing keep every fallback: rank 12, the fraction, baseline 60.
+# MEASURED, so the numbers are sized to something (F34): retail's level-3
+# henchman session (20260819T132414, the observer at 140 health) -- hostile
+# plain swings landed 3/4/5 on the observer (n=3), a level-3 henchman's plain
+# swing 5-15 on hostiles (p50 6, n=22), the level-3 observer's own 1-3 (n=12).
+HERO_ATTRIBUTES = None         # {attribute: rank} from [party.KEY].attributes
+HERO_ARMOR = None              # [party.KEY].armor, else the creature formula
+HERO_DAMAGE = None             # [party.KEY].damage [lo, hi], else the held item's
+HERO_WEAPON_ATTRIBUTE = None   # [party.KEY].weapon_attribute
 # SLICE-H7: the ITEM a party body holds, by weapon class -- retail follows
 # every henchman body's create with a CREATE_NAMED_ITEM per weapon and a
 # 0x006D naming them (12 of 12 bodies), and the client draws the attack the
@@ -13535,11 +13556,13 @@ def attribute_state(state):
     # Persisting a spend is exactly what would have pulled them apart, so the
     # second source is gone: everything now asks this object.
     stored = persisted_attribute_row(state)
+    # SLICE-H8: the ranks and the budget are the agents globals -- the content
+    # row's at import, a [party.KEY] row's after apply_party_character.
     st = attribspend.AttributeState(
         rules,
-        attribspend.seed_ranks(row["ranks"],
+        attribspend.seed_ranks([list(p) for p in agents.PLAYER_ATTRIBUTE_RANKS],
                                (stored or {}).get("attributes")),
-        int(row["points_total"]),
+        int(agents.PLAYER_ATTRIBUTE_POINTS),
         bonuses=equipped_attribute_bonuses(),
         primary=SPAWN_PROFESSION,
         # This server spawns with NO secondary (agent_set_profession's own
@@ -16489,7 +16512,7 @@ def enemy_attack_tick(send, state, conn_id):
             _kind = skill_target_kind(_sid)
             if _kind not in ("ally", "other_ally", "self"):
                 break
-            if skill_heal(_sid, ENEMY_SKILL_RANK) is None:
+            if skill_heal(_sid, agent_skill_rank(agent, _sid)) is None:
                 if _kind == "other_ally":
                     _allies = sorted(allies_of(state, agent_id))
                     cast_target = _allies[0] if _allies else None
@@ -16760,6 +16783,12 @@ def ally_cast_tick(send, state, conn_id):
                     target = None                  # nobody is dead: held
                 elif _kind == "foe":
                     target = _foe_t
+                elif _kind in ("ally", "self"):
+                    # SLICE-H8 (the owner: "tahlkora doesn't self heal"): an
+                    # ALLY skill may land on the caster (the client's byte 3)
+                    # -- the hurt-most of the caster and its allies, the same
+                    # rule the hostile monk has had since SLICE-B3.
+                    target = hostile_heal_target(state, agent_id, _kind)
                 else:
                     target = _heal_t
                     if _kind == "other_ally" and target == agent_id:
@@ -17020,6 +17049,11 @@ def land_swing_on_body(send, state, agent_id, agent, tid, conn_id, bonus=0.0,
         armour = creature_armor_rating(row.get("npc") or {})
     if ARMOUR_TERM and armour is not None:
         dealt *= armour_multiplier(float(armour))
+    # SLICE-H8: the attacker's own weapon range, when it has one.
+    _ws = body_swing_damage(agent, armour if (ARMOUR_TERM and armour is not None)
+                            else combatmath.ARMOR_BASELINE)
+    if _ws is not None:
+        dealt = _ws
     dealt += float(bonus)
     what = (("a party swing" if party else "an enemy swing") if skill_id is None
             else f"skill {skill_id}")
@@ -17229,6 +17263,109 @@ def party_attack_speed(npc):
     key = HERO_WEAPON or PARTY_WEAPON_BY_PROFESSION.get(
         (npc or {}).get("profession"))
     return float(agents.ATTACK_SPEED.get(key, ENEMY_ATTACK_SPEED))
+
+
+def apply_party_character(prow):
+    """SLICE-H8: a [party.KEY] row's `player_level`, `player_health`,
+    `player_attributes` and `player_points` rebind the character the session
+    spawns -- the agents globals every consumer reads at call time -- so the
+    slice plays a level-3 character over the base world's level-1 fixture.
+    Returns what changed, for the launch banner."""
+    changed = []
+    if prow.get("player_level") is not None:
+        agents.PLAYER_LEVEL = int(prow["player_level"])
+        changed.append(f"level {agents.PLAYER_LEVEL}")
+    if prow.get("player_health") is not None:
+        agents.PLAYER_HEALTH = int(prow["player_health"])
+        changed.append(f"health {agents.PLAYER_HEALTH}")
+    if prow.get("player_attributes"):
+        agents.PLAYER_ATTRIBUTE_RANKS = tuple(
+            (int(a), int(r)) for a, r in prow["player_attributes"])
+        changed.append(f"ranks {list(agents.PLAYER_ATTRIBUTE_RANKS)}")
+    if prow.get("player_points") is not None:
+        agents.PLAYER_ATTRIBUTE_POINTS = int(prow["player_points"])
+        changed.append(f"points {agents.PLAYER_ATTRIBUTE_POINTS}")
+    return changed
+
+
+def agent_attributes(agent):
+    """{attribute_id: rank} a body carries, or {} (SLICE-H8)."""
+    ranks = agent.get("attributes")
+    if ranks is None:
+        ranks = (agent.get("npc") or {}).get("attributes")
+    if not ranks:
+        return {}
+    return {int(a): int(r) for a, r in (ranks.items() if isinstance(ranks, dict)
+                                        else ranks)}
+
+
+def agent_skill_rank(agent, skill_id):
+    """The rank a body's skill scales at: its own rank in the skill's
+    attribute when the row carries `attributes`, else ENEMY_SKILL_RANK."""
+    ranks = agent_attributes(agent)
+    if not ranks:
+        return ENEMY_SKILL_RANK
+    try:
+        row = agents.WORLD.get("skills", str(skill_id))
+    except Exception:                                          # noqa: BLE001
+        return ENEMY_SKILL_RANK
+    return ranks.get(int(row.get("attribute", -1)), 0)
+
+
+def agent_level(agent):
+    lvl = (agent.get("npc") or {}).get("level")
+    return int(lvl) if lvl else None
+
+
+def agent_strike_level(agent):
+    """A body's SKILL strike level: 3 x its level (WIKI, GWW "Damage
+    calculation"), or the level-20 baseline 60 when the row has no level."""
+    lvl = agent_level(agent)
+    return 3.0 * lvl if lvl else combatmath.ARMOR_BASELINE
+
+
+def strike_multiplier(strike_level, armour):
+    """base x 2^((SL - AR) / 40) -- the wiki's formula with the attacker's
+    own strike level (armour_multiplier is this at SL 60)."""
+    return 2.0 ** ((float(strike_level) - float(armour)) / ARMOUR_DIVISOR)
+
+
+def agent_weapon_range(agent):
+    """(lo, hi) a body swings for, or None: the row's `damage`, else the
+    held item's own range word (the hero's staff), else nothing -- and
+    nothing means the fraction model, as before SLICE-H8."""
+    dmg = agent.get("damage")
+    if dmg:
+        return (int(dmg[0]), int(dmg[1]))
+    key = agent.get("weapon_item")
+    if key:
+        try:
+            rng = weapon_damage_range(agents.item_template(key))
+        except Exception:                                      # noqa: BLE001
+            rng = None
+        if rng:
+            return (int(rng[0]), int(rng[1]))
+    return None
+
+
+def agent_swing_rank(agent):
+    """The weapon-attribute rank a body swings at: its `weapon_attribute`'s
+    rank, else its highest rank, else 0."""
+    ranks = agent_attributes(agent)
+    wa = agent.get("weapon_attribute")
+    if wa is not None:
+        return ranks.get(int(wa), 0)
+    return max(ranks.values()) if ranks else 0
+
+
+def body_swing_damage(agent, armour):
+    """A body's swing in health points through the player's own formula, or
+    None when it has no weapon range (the fraction model then)."""
+    rng = agent_weapon_range(agent)
+    if rng is None or armour is None:
+        return None
+    return swing_damage(agent_swing_rank(agent), float(armour), rng,
+                        level=agent_level(agent) or 20)
 
 
 def party_weapon_item(npc):
@@ -19030,11 +19167,19 @@ def land_swing(send, state, agent_id, agent, conn_id, bonus=0.0,
     # capture to overturn.
     dealt = player_full_max_health(state) * ENEMY_HIT_FRACTION
     location = None
+    armour = None
     if ARMOUR_TERM:
         location = roll_hit_location()
         armour = player_armour_at(location, physical=True)
         if armour is not None:
             dealt *= armour_multiplier(armour)
+    # SLICE-H8: a body with a WEAPON RANGE swings it through the player's
+    # own formula at its own rank and level, against the location's armour;
+    # a row without one keeps the fraction above.
+    _ws = body_swing_damage(agent, armour if ARMOUR_TERM else
+                            combatmath.ARMOR_BASELINE)
+    if _ws is not None:
+        dealt = _ws
     # THE TAKER'S OWN EPISODES SPEAK LAST -- Frenzy's doubling, then a
     # conversion (Reversal of Fortune), per GWW's modifier order. Decided
     # here, before the first send, so the guard below sees the number that
@@ -19212,6 +19357,10 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # SLICE-H3: the cast's target may be a party body (a hostile's pick).
     _tid = agent.get("cast_target") or PLAYER_AGENT_ID
     _tbody = _tid != PLAYER_AGENT_ID and _tid in state.get("agents", {})
+    # SLICE-H8: the caster's OWN rank in this skill's attribute when its row
+    # carries `attributes`, else _rank -- and its own strike level
+    # (3 x level) against the taker's spell armour below.
+    _rank = agent_skill_rank(agent, skill_id)
     # Tidiness, and NOTHING TODAY CAN OBSERVE IT -- said here rather than left to
     # look load-bearing. `casting` is read only from this function, which runs only
     # when `cast_lands_at` fires, which is only ever set alongside a fresh
@@ -19221,7 +19370,7 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # THE DAMAGE IS THE CLIENT'S OWN NUMBER SINCE 2026-08-15. It was
     # `PLAYER_HEALTH * ENEMY_SKILL_FRACTION` -- a flat quarter of the player's
     # maximum for every skill on the bar, admitted invention. Now it is the
-    # skill's scale endpoints interpolated at ENEMY_SKILL_RANK by the client's
+    # skill's scale endpoints interpolated at _rank by the client's
     # own formula (studies/combat 12).
     #
     # MOST OF THIS BAR NO LONGER DAMAGES, and that is the correct answer rather
@@ -19240,7 +19389,7 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # and 58 still leads the emitted batch. (taker_damage runs before
     # apply_effect as a consequence; no skill on this bar both hexes and
     # damages, so nothing today can observe the reordering.)
-    damage = skill_damage(skill_id, ENEMY_SKILL_RANK)
+    damage = skill_damage(skill_id, _rank)
     if NPC_ATTACK_SKILL_SWINGS and _is_attack_skill(skill_id):
         # SLICE-F24: THE STRIKE IS A WEAPON SWING PLUS THE SKILL'S BONUS --
         # [46, npc, 0] then the damage (retail's close for the family, 124
@@ -19252,13 +19401,13 @@ def land_skill(send, state, agent_id, agent, conn_id):
         land_swing(send, state, agent_id, agent, conn_id, bonus=bonus,
                    skill_id=skill_id, target_id=_tid)
         send_skill_visual(send, state, agent_id, skill_id, _tid, conn_id)
-        apply_effect(send, state, agent_id, skill_id, ENEMY_SKILL_RANK,
+        apply_effect(send, state, agent_id, skill_id, _rank,
                      _tid, conn_id)
-        inflicted = skill_condition(skill_id, ENEMY_SKILL_RANK)
+        inflicted = skill_condition(skill_id, _rank)
         if inflicted and not target_dead(state, _tid):
             apply_condition(send, state, _tid, inflicted[0],
-                            inflicted[1], ENEMY_SKILL_RANK, conn_id, skill_id)
-        resolve_heal(send, state, skill_id, ENEMY_SKILL_RANK, agent_id,
+                            inflicted[1], _rank, conn_id, skill_id)
+        resolve_heal(send, state, skill_id, _rank, agent_id,
                      agent.get("cast_target"), conn_id)
         return
     dealt, conversion, frac = 0.0, None, None
@@ -19273,7 +19422,7 @@ def land_skill(send, state, agent_id, agent, conn_id):
     if damage is not None:
         base = float(damage[0])
         if spell_ar is not None:
-            base *= armour_multiplier(spell_ar)
+            base *= strike_multiplier(agent_strike_level(agent), spell_ar)
         dealt, conversion = taker_damage(state, _tid, base)
         if dealt > 0:
             frac = _damage_fraction(
@@ -19306,17 +19455,17 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # effect on a monster is a small icon over a body across the field.
     # (Retail's finish batches carry their effect/heal properties BEHIND the
     # 58, which is the order these lines now produce.)
-    episode = apply_effect(send, state, agent_id, skill_id, ENEMY_SKILL_RANK,
+    episode = apply_effect(send, state, agent_id, skill_id, _rank,
                            _tid, conn_id)
 
     # A CONDITION FROM THE ENEMY, symmetric with the player's cast. Without
     # this the only way to see degeneration is on a monster's nameplate, where
     # the pips are three pixels; with it the player's own HUD shows the arrows,
     # which is what closes `studies/isle` B4's one UNVERIFIED clause.
-    inflicted = skill_condition(skill_id, ENEMY_SKILL_RANK)
+    inflicted = skill_condition(skill_id, _rank)
     if inflicted and not target_dead(state, _tid):
         apply_condition(send, state, _tid, inflicted[0],
-                        inflicted[1], ENEMY_SKILL_RANK, conn_id, skill_id)
+                        inflicted[1], _rank, conn_id, skill_id)
 
     # The enemy heals too, and its own bar has one: Restore Condition (276),
     # whose GWW variable is `Healing` 10..70. It has been on that bar since the
@@ -19326,7 +19475,7 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # (`cast_target`: an ally for an ally spell, the player otherwise), a
     # cure strips conditions first, and Restore Condition heals per
     # condition removed. Until 2026-09-10 this was a flat self-heal.
-    healed = resolve_heal(send, state, skill_id, ENEMY_SKILL_RANK, agent_id,
+    healed = resolve_heal(send, state, skill_id, _rank, agent_id,
                           agent.get("cast_target"), conn_id)
 
     # The damage and its fraction were computed BEFORE the 58 went out (the
@@ -20131,7 +20280,9 @@ def spawn_population(send, state, origin, conn_id, area=None):
             "health": hp, "max_health": hp,
             "dead": False,
             "name": label,
-            "npc": npc,
+            # SLICE-H8: the row's level rides the npc dict the armour and the
+            # strike level read; its ranks and weapon ride the entry.
+            "npc": dict(npc, level=row.get("level", npc.get("level", 0))),
             "definition": int(row["definition"]),
             "allegiance": allegiance,
             "attack_speed": float(row.get("attack_speed", ENEMY_ATTACK_SPEED)),
@@ -20143,6 +20294,10 @@ def spawn_population(send, state, origin, conn_id, area=None):
             "attacks_back": bool(row.get("attacks_back", False)),
             "skills": bar,
             "skill_ready": [0.0] * len(bar),
+            "attributes": {int(a_): int(r_) for a_, r_ in
+                           (row.get("attributes") or npc.get("attributes") or ())},
+            "damage": (list(row["damage"]) if row.get("damage") else None),
+            "weapon_attribute": row.get("weapon_attribute"),
         }
         create_agent_world(send, state, int(row["agent_id"]), entry, key,
                            conn_id=conn_id)
@@ -20978,7 +21133,10 @@ def _handle_request_players(send, state, conn_id, stop, rec):
             state["charstore_game"] = _ps_store
             print(f"[c{conn_id}] PERSIST: sheet from "
                   f"{_ps_store.path}", flush=True)
-    _ps_level = (_ps_row or {}).get("level", START_LEVEL)
+    # SLICE-H8: the content row's level when the store carries none
+    # ([player.defaults].level, 3 in the slice); START_LEVEL stays the
+    # fixture default every offline state without a "level" key reads.
+    _ps_level = (_ps_row or {}).get("level", agents.PLAYER_LEVEL)
     # ...and in the state, because morale needs it: the
     # penalty scales BASE health, which is 100 + 20 per
     # level and nothing else. It used to live only in this
@@ -21490,6 +21648,8 @@ def _handle_request_players(send, state, conn_id, stop, rec):
             enumerate(hero_slots())
             if HERO_BODY and party_bodies_here(state) else ()):
         _hro = agents.npc_template(HERO_BODY_NPC)
+        _wkey = party_weapon_item(_hro)               # SLICE-H7
+        _hhp = float(HERO_VITALS[0]) if HERO_VITALS else 100.0
         # Fan them out rather than stacking: bodies sharing a
         # spot read as one body, and "nothing appeared" is the
         # failure this repo already paid for once.
@@ -21498,14 +21658,21 @@ def _handle_request_players(send, state, conn_id, stop, rec):
         create_agent_world(
             hsend, state, _haid,
             {"pos": (_rx, _ry), "plane": cfg[2],
-             "health": 100.0, "max_health": 100.0,
+             # SLICE-H8: the party row's health (HERO_VITALS), level, ranks,
+             # armour and weapon range -- see the constants' comment.
+             "health": _hhp, "max_health": _hhp,
+             "attributes": dict(HERO_ATTRIBUTES or {}),
+             "armor_rating": HERO_ARMOR,
+             "damage": (list(HERO_DAMAGE) if HERO_DAMAGE else None),
+             "weapon_attribute": HERO_WEAPON_ATTRIBUTE,
+             "weapon_item": _wkey,
              # SLICE-B7b: `.get` -- see the henchman body above. This is the
              # site that actually raised: --hero-body-npc def_1486 (the parade's
              # Academy Monk) killed instance bring-up with KeyError: 'name' while
              # the run reported PASS, and the hero follow it was launched to test
              # measured nothing because no body ever existed.
              "dead": False, "name": _hro.get("name") or str(HERO_BODY_NPC),
-             "npc": _hro,
+             "npc": dict(_hro, level=int(HERO_LEVEL or _hro.get("level") or 0)),
              "definition": _hdef,
              "party_slot": _i,                  # SLICE-H2: its formation slot
              "allegiance": agents.ALLEGIANCE_PLAYER,
@@ -21527,7 +21694,6 @@ def _handle_request_players(send, state, conn_id, stop, rec):
         # henchman body is 0x0020, then 0x0161 per weapon, then 0x006D
         # [agent, leadhand, offhand] (12 of 12 retail bodies). Without it
         # the client draws the caster's ranged swing as a punch.
-        _wkey = party_weapon_item(_hro)
         if _wkey is not None:
             _wid = HERO_WEAPON_ITEM_ID + _i
             hsend(GAME_SMSG_CREATE_NAMED_ITEM,
@@ -21586,16 +21752,23 @@ def _handle_request_players(send, state, conn_id, stop, rec):
         # not modelled: nothing lets us spend a hero's
         # points, so there is no mutable state to hold.
         _hattr = attribute_state(state)
+        if HERO_ATTRIBUTES:
+            # SLICE-H8: the hero's OWN ranks and budget -- every point of
+            # its level's allowance spent on the party row's ranks.
+            _hspent = _hattr.rules.total_spent(HERO_ATTRIBUTES)
+            _havail, _htotal = 0, _hspent
+        else:
+            _havail, _htotal = _hattr.available, _hattr.points_total
         hsend(GAME_SMSG_AGENT_UPDATE_ATTRIBUTE_POINTS,
-             [_haid, _hattr.available, _hattr.points_total],
+             [_haid, _havail, _htotal],
              f"AGENT_ATTRIBUTE_POINTS(hero agent "
-             f"{_haid}: {_hattr.available} of "
-             f"{_hattr.points_total})")
+             f"{_haid}: {_havail} of {_htotal})")
         hsend(GAME_SMSG_AGENT_PROFESSIONS,
              spawn_profession_values(_hprof, _haid),
              f"AGENT_PROFESSIONS(hero agent "
              f"{_haid}, prof {_hprof})")
-        _hcols = attribute_columns()
+        _hcols = attribute_columns(
+            ranks=sorted(HERO_ATTRIBUTES.items()) if HERO_ATTRIBUTES else None)
         hsend(GAME_SMSG_AGENT_UPDATE_ATTRIBUTES,
              [_haid, _hcols],
              f"AGENT_UPDATE_ATTRIBUTES(hero agent "
@@ -25875,6 +26048,20 @@ def main():
                          f"{int(_prow.get('energy', 30))}")
         if _prow.get("weapon") and not a.hero_weapon:
             a.hero_weapon = str(_prow["weapon"])       # SLICE-H4
+        # SLICE-H8: the row's ranks, armour and weapon range.
+        global HERO_ATTRIBUTES, HERO_ARMOR, HERO_DAMAGE, HERO_WEAPON_ATTRIBUTE
+        if _prow.get("attributes"):
+            HERO_ATTRIBUTES = {int(_a): int(_r) for _a, _r in _prow["attributes"]}
+        if _prow.get("armor") is not None:
+            HERO_ARMOR = float(_prow["armor"])
+        if _prow.get("damage"):
+            HERO_DAMAGE = (float(_prow["damage"][0]), float(_prow["damage"][1]))
+        if _prow.get("weapon_attribute") is not None:
+            HERO_WEAPON_ATTRIBUTE = int(_prow["weapon_attribute"])
+        _pc = apply_party_character(_prow)
+        if _pc:
+            print(f"PARTY {a.party!r}: the player's character -- "
+                  f"{', '.join(_pc)} [SLICE-H8]", flush=True)
         if not a.party_no_commander:
             a.hero_activate = True
             a.hero_char = True
