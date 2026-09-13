@@ -73,7 +73,7 @@ from codec import Codec  # noqa: E402
 # known-bad control; and the chase section's wall pin split by arm, 1).
 # Floor from a real green run of 331. +1 at NPCTRACK-F8 (the hold rule
 # replaces the fresh-follow pin: three checks for two), green 333.
-LEDGER = checks.Ledger("agent lifetime", floor=397)   # SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
+LEDGER = checks.Ledger("agent lifetime", floor=398)   # SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
 
 
 def section_weapon_damage():
@@ -884,19 +884,44 @@ def section_swing_back():
     # AND A PENDING LANDING DOES NOT SURVIVE ITS SWINGER. ArenaNet's own seventh
     # swing in the Lakeside tape was truncated exactly this way -- the player
     # killed the worm 0.24 s into a 0.899 s windup and no damage followed.
-    for why, kill in (("dies", lambda a: a.update(dead=True)),
-                      ("leaves range",
-                       lambda a: a.update(pos=(authsrv.AGGRO_RANGE + 9.0, 0.0)))):
+    mid = _sworld()
+    _swings(mid)                                        # opens a swing
+    assert mid["agents"][10]["swing_lands_at"] is not None
+    mid["agents"][10].update(dead=True)
+    mid["agents"][10]["swing_lands_at"] = time.time() - 1.0   # long overdue
+    before = mid["player_health"]
+    LEDGER.ok(not _swings(mid, n=3) and mid["player_health"] == before,
+              "a swing in flight does not land if the swinger dies",
+              "an overdue landing plus three ticks, and no damage -- the "
+              "pending swing has to be dropped, not merely postponed")
+    # SLICE-F21: BUT A SWINGER (OR TARGET) THAT LEAVES REACH STILL LANDS.
+    # Retail's swings at a player who ran during the windup landed 7 of 7,
+    # 81-288 u displaced at the last report inside it; reach is judged at
+    # the start, never at the hit. Until 2026-09-12 this arm pinned the drop
+    # as retail's ("leaves range" beside "dies"); the kiter paid nothing.
+    mid = _sworld()
+    _swings(mid)
+    assert mid["agents"][10]["swing_lands_at"] is not None
+    mid["agents"][10].update(pos=(authsrv.AGGRO_RANGE + 9.0, 0.0))
+    mid["agents"][10]["swing_lands_at"] = time.time() - 1.0
+    before = mid["player_health"]
+    LEDGER.ok(mid["player_health"] < before if _swings(mid, n=1) else False,
+              "a swing in flight LANDS when the pair is out of reach at the "
+              "hit -- retail 7 of 7 (SLICE-F21); only a NEW start needs reach",
+              f"health {before} -> {mid['player_health']}")
+    saved_lh = authsrv.LATE_HIT
+    authsrv.LATE_HIT = False
+    try:
         mid = _sworld()
-        _swings(mid)                                    # opens a swing
-        assert mid["agents"][10]["swing_lands_at"] is not None
-        kill(mid["agents"][10])
-        mid["agents"][10]["swing_lands_at"] = time.time() - 1.0   # long overdue
+        _swings(mid)
+        mid["agents"][10].update(pos=(authsrv.AGGRO_RANGE + 9.0, 0.0))
+        mid["agents"][10]["swing_lands_at"] = time.time() - 1.0
         before = mid["player_health"]
         LEDGER.ok(not _swings(mid, n=3) and mid["player_health"] == before,
-                  f"a swing in flight does not land if the swinger {why}",
-                  "an overdue landing plus three ticks, and no damage -- the "
-                  "pending swing has to be dropped, not merely postponed")
+                  "REVERT ARM (--no-late-hit): the out-of-reach landing is "
+                  "dropped as before", f"{mid['player_health']}")
+    finally:
+        authsrv.LATE_HIT = saved_lh
 
     # 3. enough swings kill the player -- and the KILL is the effects bit, because
     #    property 16 floors at 1 and cannot do it. Drive it with the interval

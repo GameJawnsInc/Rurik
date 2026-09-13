@@ -614,18 +614,29 @@ def section_concurrency():
     # true: this walks the module's own source and fails if a third caller
     # appears anywhere else.
     src = inspect.getsource(authsrv).splitlines()
-    callers = set()
-    for i, line in enumerate(src):
-        if "hit_enemy(" in line and not line.lstrip().startswith("def "):
-            for j in range(i, -1, -1):
-                if src[j].startswith("def "):
-                    callers.add(src[j].split("(")[0][4:])
-                    break
-    check(callers == {"attack_tick", "cast_tick"},
+
+    def callers_of(name):
+        found = set()
+        for i, line in enumerate(src):
+            if f"{name}(" in line and not line.lstrip().startswith("def "):
+                for j in range(i, -1, -1):
+                    if src[j].startswith("def "):
+                        found.add(src[j].split("(")[0][4:])
+                        break
+        return found
+
+    callers = callers_of("hit_enemy")
+    # SLICE-F21 (2026-09-12): the player's landing moved into
+    # _land_player_swing so the in-reach and out-of-reach landings are one
+    # site; it is attack_tick's helper and nothing else's, so the walk goes
+    # one level up for it and the guarantee is unchanged.
+    check(callers == {"_land_player_swing", "cast_tick"}
+          and callers_of("_land_player_swing") == {"attack_tick"},
           "hit_enemy is reached from the WORLD TICK ONLY",
-          f"callers={sorted(callers)} -- both are world-tick functions, so "
-          f"F10's race cannot occur. A new caller on the connection thread "
-          f"reopens it and reddens this line")
+          f"callers={sorted(callers)}, _land_player_swing's="
+          f"{sorted(callers_of('_land_player_swing'))} -- all world-tick "
+          f"functions, so F10's race cannot occur. A new caller on the "
+          f"connection thread reopens it and reddens this line")
 
     print("\n10. concurrent entry: two threads, one agent, nothing raises")
     sent = []

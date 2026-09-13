@@ -471,15 +471,17 @@ def section_attack_finish_batch():
 
 
 def section_strike_reach():
-    """An attack skill strikes only in reach; out of reach it is a cancel.
-
-    The owner's Power Attack glitch (2026-09-12): press at range, keep
-    running, the strike lands anyway. Two arms one number apart.
+    """SLICE-F21: an attack skill's strike LANDS on a target that stepped out
+    during the windup -- retail 11 of 11 (latehitjoin). SLICE-C1's reach-at-
+    the-strike gate (the owner's 170 u Power Attack, 2026-09-12) is the
+    --no-late-hit arm's now: the press it answered cannot happen since C2's
+    approach, the root and the running-press halt.
     """
     import authsrv
-    print("\n2d. an attack skill's strike needs the target IN REACH")
+    print("\n2d. an attack skill's strike lands on a target that stepped out; "
+          "the C1 gate is the revert arm's")
     saved = (authsrv.skill_timing, authsrv._is_attack_skill,
-             authsrv.PLAYER_SWING_DAMAGE)
+             authsrv.PLAYER_SWING_DAMAGE, authsrv.LATE_HIT)
     authsrv.skill_timing = lambda sid: (1.0, 0.0, 3.0)
     authsrv._is_attack_skill = lambda sid: True
     authsrv.PLAYER_SWING_DAMAGE = (5, 5)
@@ -488,10 +490,9 @@ def section_strike_reach():
             sent = []
             send = lambda op, vals, label="", quiet=False: \
                 sent.append((op, vals, label))
-            # Pressed IN reach (SLICE-C2 would otherwise walk the body in
-            # rather than activate), then the target is where `target_pos`
-            # puts it by the strike -- the case C1 is about: the distance
-            # at the E5 instant, whoever moved.
+            # Pressed IN reach, then the target is where `target_pos` puts
+            # it by the strike -- the distance at the E5 instant, whoever
+            # moved.
             agent = {"name": "target", "dead": False, "last_hit": 0.0,
                      "max_health": 100.0, "health": 100.0,
                      "pos": (authsrv.attack_reach() - 10.0, 0.0)}
@@ -500,48 +501,56 @@ def section_strike_reach():
             agent["pos"] = target_pos
             sent.clear()
             _rewind(state, 1.0)
-            authsrv.cast_tick(send, state, 0)   # the E5 instant: the gate
+            authsrv.cast_tick(send, state, 0)   # the E5 instant
             authsrv.cast_tick(send, state, 0)   # the release branch, if marked
             return sent, agent, state
+
+        def dmg_of(sent):
+            return [v for op, v, _ in sent if op ==
+                    authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET
+                    and v[0] in (authsrv.agents.PROP_DAMAGE,
+                                 authsrv.agents.GV_CRITICAL)]
 
         reach = authsrv.attack_reach()
         sent, agent, state = run_arm((reach + 100.0, 0.0))
         ops = [op for op, _, _ in sent]
-        dmg = [v for op, v, _ in sent if op ==
-               authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET
-               and v[0] in (authsrv.agents.PROP_DAMAGE,
-                            authsrv.agents.GV_CRITICAL)]
+        check(agent["health"] == 95.0 and len(dmg_of(sent)) == 1
+              and authsrv.GAME_SMSG_SKILL_RECHARGE in ops
+              and authsrv.GAME_SMSG_SKILL_REFUSED not in ops,
+              f"a target {reach + 100:.0f} u out at the strike is HIT for the "
+              f"pinned 5, E5 and all -- retail's attack-skill strikes on a "
+              f"target that moved during the windup landed 11 of 11 (SLICE-F21)",
+              f"health {agent['health']}, ops={[hex(o) for o in ops]}")
+        sent, agent, state = run_arm((reach - 10.0, 0.0))
+        check(agent["health"] == 95.0 and len(dmg_of(sent)) == 1,
+              f"CONTROL: {reach - 10:.0f} u out, the same strike for the same 5",
+              f"health {agent['health']}")
+        # THE REVERT ARM: SLICE-C1's gate, as it shipped on 2026-09-12
+        authsrv.LATE_HIT = False
+        sent, agent, state = run_arm((reach + 100.0, 0.0))
+        ops = [op for op, _, _ in sent]
         stopped = [v for op, v, _ in sent if op == 0x009F
                    and v[0] in (authsrv.agents.GV_SKILL_STOPPED,
                                 authsrv.agents.GV_ATTACK_SKILL_STOPPED,
                                 authsrv.agents.GV_CAST_DROPPED)]
-        check(agent["health"] == 100.0 and not dmg,
-              f"a target {reach + 100:.0f} u out at the strike takes NOTHING "
-              f"-- the run's 170 u Power Attacks land no more",
-              f"health {agent['health']}, dmg {dmg}")
-        check(authsrv.GAME_SMSG_SKILL_RECHARGE not in ops
+        check(agent["health"] == 100.0 and not dmg_of(sent)
+              and authsrv.GAME_SMSG_SKILL_RECHARGE not in ops
               and authsrv.GAME_SMSG_SKILL_REFUSED in ops
               and stopped == [[authsrv.agents.GV_ATTACK_SKILL_STOPPED, PLAYER,
-                               0]],
-              "and it is released as a CANCEL: E2 and the ATTACK trio's own "
-              "stop (49, 2 of 2 begun attack-skill cancels on the wire -- not "
-              "the spell family's 59), no recharge -- GWW's cancel contract, "
-              "the measured burst",
-              f"ops={[hex(o) for o in ops]}")
-        check(not state.get("pending_casts"),
-              "and the cast is gone from the queue")
+                               0]]
+              and not state.get("pending_casts"),
+              "REVERT ARM (--no-late-hit): C1's gate -- the target 100 u past "
+              "reach at the strike takes NOTHING and the cast is released as a "
+              "cancel (E2 and the attack trio's 49, no recharge), the queue "
+              "emptied", f"health {agent['health']}, ops={[hex(o) for o in ops]}")
+        authsrv.LATE_HIT = saved[3]
         sent, agent, state = run_arm((reach - 10.0, 0.0))
-        dmg = [v for op, v, _ in sent if op ==
-               authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET
-               and v[0] in (authsrv.agents.PROP_DAMAGE,
-                            authsrv.agents.GV_CRITICAL)]
-        check(agent["health"] == 95.0 and len(dmg) == 1,
-              f"CONTROL: {reach - 10:.0f} u out, the same press strikes for the "
-              f"pinned 5 -- the gate is the distance and nothing else",
+        check(agent["health"] == 95.0,
+              "and the revert arm's control in reach still strikes",
               f"health {agent['health']}")
     finally:
         (authsrv.skill_timing, authsrv._is_attack_skill,
-         authsrv.PLAYER_SWING_DAMAGE) = saved
+         authsrv.PLAYER_SWING_DAMAGE, authsrv.LATE_HIT) = saved
 
 
 def section_strike_approach():

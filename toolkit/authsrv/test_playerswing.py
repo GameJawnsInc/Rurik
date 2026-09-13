@@ -49,7 +49,7 @@ import checks  # noqa: E402
 # retail's. MOVECODE-1z-db +5 (133): the displacement gate, known-bad arm
 # first. MOVECODE-1z-dc +4 (137): the chain-pause row. §13 needs the
 # gamesrv corpus and §13b the live one; each declares a skip by name.
-LEDGER = checks.Ledger("player swing windup", floor=173)
+LEDGER = checks.Ledger("player swing windup", floor=176)   # SLICE-F21 +3 (the armed swing lands past reach; the revert arm); from the green run
 check = LEDGER.ok
 
 PLAYER = 1   # authsrv.PLAYER_AGENT_ID, restated so a drift reddens something
@@ -167,18 +167,21 @@ def section_start_to_start():
 def section_lost_target():
     import authsrv
 
-    print("\n3. an armed swing whose target is gone is dropped, silently")
+    print("\n3. an armed swing whose target DIED is dropped silently; one "
+          "whose target WALKED OUT lands anyway (SLICE-F21)")
     # ANIMREF-RE 39: with the approach the DEFAULT, a target that walks out
     # of reach is answered by retail's auto-chase (a 0x002A with no press,
     # 16/24 chains on the live tapes) -- section 9 owns that. This section
-    # is about the swing's silent truncation, so it runs the no-approach arm.
+    # is about the armed swing, so it runs the no-approach arm.
     saved_ap = authsrv.ATTACK_APPROACH
     authsrv.ATTACK_APPROACH = False
-    for name, wreck in (
-            ("dies", lambda st: st["agents"][10].__setitem__("dead", True)),
+    dmg_op = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET
+    for name, wreck, lands in (
+            ("dies", lambda st: st["agents"][10].__setitem__("dead", True),
+             False),
             ("walks out of reach",
              lambda st: st["agents"][10].__setitem__(
-                 "pos", (authsrv.ATTACK_RANGE * 2, 0.0)))):
+                 "pos", (authsrv.ATTACK_RANGE * 2, 0.0)), True)):
         sent = []
         send = lambda op, vals, label="", quiet=False: \
             sent.append((op, vals, label))
@@ -189,20 +192,50 @@ def section_lost_target():
         wreck(state)
         _rewind(state, 10.0)                              # long past due
         authsrv.attack_tick(send, state, 0)
-        # The SWING drops silently either way (retail's truncation). The
-        # dead-target arm used to also carry [8, 31, 0] -- the one live
-        # target-death close, t=20.1637, n=1, castmech 3c -- but since
-        # ANIMREF-RE 35 an auto swing sets no hold, so `action_hold` is
-        # transition-only and there is nothing to release. The corpus
-        # instant remains true about a body that WAS holding; the door is
-        # unchanged and still fires when a cast is what held.
-        expected = []
-        check(state["player_swing"] is None
-              and [(op, v) for op, v, _ in sent] == expected,
-              f"target {name}: the swing whiffs -- ArenaNet's own "
-              f"truncation (the Lakeside 7th swing, 0.24 s in) -- and only "
-              f"a death releases the hold",
+        hit = [v for op, v, _ in sent if op == dmg_op
+               and v[0] in (authsrv.agents.PROP_DAMAGE, authsrv.agents.GV_CRITICAL)]
+        if lands:
+            check(state["player_swing"] is None and len(hit) == 1
+                  and state["agents"][10]["health"] < 100.0,
+                  f"target {name}: the armed swing LANDS wherever the target "
+                  f"went -- retail judges reach at the START, never at the "
+                  f"hit: 33 of 34 player swings on a moving target and 7 of 7 "
+                  f"swings at a running player landed (SLICE-F21, "
+                  f"latehitjoin)",
+                  f"swing={state['player_swing']}, hit={hit}, "
+                  f"health={state['agents'][10]['health']}")
+        else:
+            # The dead-target arm used to also carry [8, 31, 0] -- the one
+            # live target-death close, t=20.1637, n=1, castmech 3c -- but
+            # since ANIMREF-RE 35 an auto swing sets no hold, so
+            # `action_hold` is transition-only and there is nothing to
+            # release.
+            check(state["player_swing"] is None
+                  and [(op, v) for op, v, _ in sent] == [],
+                  f"target {name}: the swing whiffs -- ArenaNet's own "
+                  f"truncation (the Lakeside 7th swing, 0.24 s in)",
+                  f"swing={state['player_swing']}, sent={sent!r}")
+    # THE REVERT ARM (--no-late-hit): the walk-out drops silently, the
+    # pre-F21 rule this section pinned as retail's until 2026-09-12.
+    saved_lh = authsrv.LATE_HIT
+    authsrv.LATE_HIT = False
+    try:
+        sent = []
+        send = lambda op, vals, label="", quiet=False: \
+            sent.append((op, vals, label))
+        state = _state()
+        authsrv.begin_attack(send, state, 10, 0)
+        authsrv.attack_tick(send, state, 0)
+        sent.clear()
+        state["agents"][10]["pos"] = (authsrv.ATTACK_RANGE * 2, 0.0)
+        _rewind(state, 10.0)
+        authsrv.attack_tick(send, state, 0)
+        check(state["player_swing"] is None and sent == [],
+              "REVERT ARM (--no-late-hit): the walk-out drops the armed swing "
+              "silently -- the rule that let a kiter pay nothing",
               f"swing={state['player_swing']}, sent={sent!r}")
+    finally:
+        authsrv.LATE_HIT = saved_lh
 
     sent = []
     send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))
@@ -2274,6 +2307,30 @@ def main():
                               "lands_at": now + 10.0}   # never lands on its own
         return st
 
+    # SLICE-F21 FIRST: under the default an armed swing 400 u out is NOT
+    # dropped -- it survives the tick, writes no swing_verdict row, and lands
+    # when due (retail 33 of 34 / 7 of 7). The drop, and the row that names
+    # it, are the --no-late-hit arm's below.
+    rec = _Rec()
+    st = _armed_world(400.0)
+    authsrv.attack_tick(lambda *a, **k: None, st, 0, rec=rec)
+    _rows = [kw for kind, kw in rec.rows if kind == "swing_verdict"]
+    check(st["player_swing"] is not None and not _rows,
+          "SLICE-F21: an armed swing past reach SURVIVES the reach gate -- "
+          "no drop, no swing_verdict row (the gate is for the next START)",
+          f"swing={st['player_swing']}, rows={_rows}")
+    st["player_swing"]["lands_at"] = _tt.time() - 0.01
+    _hits = []
+    authsrv.attack_tick(lambda op, v, label="", quiet=False: _hits.append((op, v)),
+                        st, 0, rec=rec)
+    check(st["player_swing"] is None
+          and st["agents"][10]["health"] < 100.0
+          and any(op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET
+                  for op, _v in _hits),
+          "and when due it LANDS from 400 u -- the damage goes out, the swing "
+          "is spent", f"health={st['agents'][10]['health']}, sent={_hits}")
+    saved_lh = authsrv.LATE_HIT
+    authsrv.LATE_HIT = False
     # THE KNOWN-BAD ARM: the old code path, with the drop unlogged.
     saved = authsrv._swing_dropped
     authsrv._swing_dropped = lambda *a, **k: None
@@ -2306,9 +2363,11 @@ def main():
           and rows[0]["branch"] == "reach",
           "the reach drop writes ONE swing_verdict row naming the branch",
           f"rows={rows}")
+    authsrv.LATE_HIT = saved_lh
     check(rows and rows[0].get("dist", 0) > rows[0].get("reach", 1e9) - 1e-9
           and rows[0]["target"] == 10,
-          "and it carries the OPERANDS the branch tested -- dist and reach",
+          "and it carries the OPERANDS the branch tested -- dist and reach "
+          "(both rows are the --no-late-hit arm's since SLICE-F21)",
           f"dist={rows[0].get('dist')} reach={rows[0].get('reach')} -- the "
           f"distance is read from state['pos'], the position MODEL; "
           f"§1z-cp.3 measured that model running 259 u from the drawn body, "

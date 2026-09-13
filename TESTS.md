@@ -10232,6 +10232,20 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   timeout shrink in `handle()` and the take in BOTH recv branches -- the quiet wake as a
   batch of one with no bytes behind it (`chunk` None), and a received batch with the replay
   FIRST.
+  **SLICE-F21 / C3 (2026-09-12): an armed swing lands wherever the target went.** Measured on
+  the live corpus (`latehitjoin.py`: 7 of 7 hostile swings at a running player, 33 of 34
+  player swings and 11 of 11 attack-skill strikes on a moving target landed; reach is judged
+  at the start, never at the landing). `test_playerswing.py` §3 (floor 173 -> 176): the
+  dead-target arm still drops silently, the walk-out arm LANDS (damage sent, health down),
+  and `--no-late-hit` restores the drop; its reach-telemetry section now pins the survival
+  (no drop, no swing_verdict row, the landing from 400 u when due) under the default and
+  keeps the drop rows under the revert arm. `test_agentlife.py` (floor 397 -> 398): the
+  swinger that dies drops its landing, one that leaves range LANDS, the revert arm drops.
+  `test_castcycle.py` §2d rewritten: the attack-skill strike on a target 100 u past reach
+  HITS for the pinned 5 with E5, and C1's gate (E2 + 49, nothing lands) is the revert arm's.
+  `test_guards.py` §9's hit_enemy caller census walks one level up through
+  `_land_player_swing` (attack_tick's helper) so the world-tick-only guarantee is still the
+  thing checked.
   `toolkit/authsrv/test_castcycle.py` (the four-opcode cast cycle against
   ArenaNet's own template — six complete cycles, two live captures, same order
   every time: E4 at the press, E5 at cast end carrying the recharge in whole
