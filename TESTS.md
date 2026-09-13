@@ -10283,6 +10283,13 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   the sync copy where it stands (three seconds later it has not walked to the lead's end).
   `test_kbdsync.py` §11's lead-kill caller count re-aimed: four callers (the two arms, the
   attack skill's approach, the interact-walk), one rule.
+  **SLICE-F26 / C8 (2026-09-12): the death kills the lead in flight.** `test_effects.py` §6a
+  (floor 83 -> 84): the corpse fixture carries a real keyboard lead half a second old (520 u
+  at 288 u/s); `kill_player` sends exactly ONE movement message, the zero-lead 0x0029 of
+  `_kbd_lead_kill`, and its point is the modelled body ~144 u along the lead -- not the
+  lead's end (where the owner's client reported itself after the revive, to the unit) and
+  not the last report. `test_kbdsync.py` §11: five kill callers, one rule (the death is the
+  fifth).
   `toolkit/authsrv/test_castcycle.py` (the four-opcode cast cycle against
   ArenaNet's own template — six complete cycles, two live captures, same order
   every time: E4 at the press, E5 at cast end carrying the recharge in whole

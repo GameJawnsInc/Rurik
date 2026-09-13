@@ -547,13 +547,16 @@ def main():
     print("\n11. 1z-y source locks")
     check(SRC.count('_kbd_lead_kill(send, state, conn_id, rec, "press")') == 2
           and SRC.count('_kbd_lead_kill(send, state, conn_id, rec, "click")') == 1
-          and SRC.count('_kbd_lead_kill(send, state, conn_id, None, "interact")') == 1,
+          and SRC.count('_kbd_lead_kill(send, state, conn_id, None, "interact")') == 1
+          and SRC.count('_kbd_lead_kill(send, state, conn_id, None, "death")') == 1,
           "the press arm and the click arm each kill once -- and since the "
-          "SLICE arc two more presses do, by the same rule (a press ends the "
-          "lead before the follow it starts): the attack skill from out of "
-          "reach in handle_skill_press (SLICE-C2) and the interact-walk "
-          "(interact_route, SLICE-B5). Four callers, one opinion",
-          "a fifth caller is a new opinion about when a lead ends")
+          "SLICE arc three more sites do, by the same rule (an event that "
+          "ends the body's walk ends the lead): the attack skill from out of "
+          "reach in handle_skill_press (SLICE-C2), the interact-walk "
+          "(interact_route, SLICE-B5), and the player's death (kill_player, "
+          "SLICE-F26: the client walked the outstanding lead to its end after "
+          "the kill). Five callers, one opinion",
+          "a sixth caller is a new opinion about when a lead ends")
     check(SRC.count("heading_hold_tick(send, state, conn_id, rec)") == 3
           and SRC.count("grant_flush_tick(send, state, conn_id, rec)") == 3,
           "the held heading is polled at the three sites the held click is",

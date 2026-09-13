@@ -1292,6 +1292,43 @@ each added a caller; four callers, one rule). All unobserved on a client; the ru
 the same three sentences: *does every announced strike land, does the corpse stay put, and
 does the raider reach you only where you are after a respawn?*
 
+## SLICE-F26 — **the corpse walked our lead to its end: the death kills the lead in flight**
+
+**The owner**, after C7: *"still warped on death, he still attacked me from out of normal
+range. The strikes do hit while moving now though."* The strikes are C7's, confirmed. The other
+two are one fact, and this time the wire says it to the unit (capture
+`authsrv-20260912T223203-c4`, the run's corridor connection, one death):
+
+| instant | what |
+|---|---|
+| −0.102 s | we granted `KBD LEAD (1732,1133) from (1347,1483)` — a 520 u keyboard lead |
+| −0.100 s | the last report before the death: **(1347.1, 1482.6)** |
+| 0 | `KILL`, the hold, `0x002D` |
+| revive +1.63 s | the first report after the revive: **(1731.8, 1132.7)** — the lead's END, to the unit, **520 u** from where the body fell |
+| revive +0.00 s | our raider sent to the death spot: `FOLLOW: agent 90 -> player at (1368,1463)` |
+| revive +1.02 s | `agent 90 halts at (1368,1463): parked, 0 u from the player` — a phantom; the body stood 520 u away |
+
+So the client walked our outstanding lead out after the death and its body ended at the
+lead's end — that is the warp — and F25's `0x002D` did nothing to our client's copy (its
+velocity cancel is gated on a flags bit our player agent evidently does not carry: studies/
+enemy PLAN §6h's null, seen a fourth time; §6i's *"appeared to stop"* was the operator's own
+hedge). The server, meanwhile, held the body at the death spot (F25's mirror stop did its
+job), sent the raider there, and had it halt and swing on nobody while the real body stood
+520 u off: *"attacked from out of normal range"* from the client's side of the same fact.
+
+**Shipped.** `kill_player` ends the lead in flight the way a press ends one (MOVECODE-1z-y,
+`_kbd_lead_kill`, its fifth caller): a zero-lead `0x0029` at the modelled body — ~30 u past the
+last report at the instant of death — so the client's copy parks where the corpse is, the
+server's beliefs already agree, and the revive stands the body up where it fell. The `0x002D`
+stays in the batch (retail's, measured) and is now known inert on our client. Retail never
+leaves this lead shape outstanding, so the repair is ours and says so. `test_effects` §6a
+(floor 83 → 84): the corpse fixture carries a real half-second-old lead, the death sends
+exactly one movement message, and its point is the modelled body (~144 u along the lead),
+not the lead's end and not the last report; `test_kbdsync` §11 counts five kill callers.
+
+**Refuted if** the first report after a revive still sits at the last lead's end, or the
+raider still halts "0 u from the player" on a spot the body is not at.
+
 ## SLICE-F6 — what the desk cannot settle
 
 Carried so the next session does not re-read the same bytes hoping for more:
