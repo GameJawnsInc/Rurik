@@ -10296,6 +10296,22 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   its lagging copy's disc, in reach by construction; 5 of 6 halts swung), the halt stamps the
   debt, the circler is swung at on the next tick. The cleared-flag control is now named as the
   flag's own arm, kept for a measured stale-point rule (retail re-followed after 1 of 6).
+  **SLICE-H2 (2026-09-12): the party walks retail's formation.** The B7b section (floor 417 ->
+  424) now checks the SLOT: `party_slot_point` puts slot 0 110 u to the leader's left of a +x
+  heading, turns with the heading, and KEEPS the last moving heading across a stop (a stop
+  clears `state["heading"]`; without this every pause walked the party round to the spawn's
+  facing); a party body away from its slot sends a rate and ONE 0x0029 POINT lead whose end IS
+  the slot (retail: 750 of 750 leads were 0x0029, never a 0x002A naming the leader --
+  `henchjoin.py`, studies/slice F28); within `PARTY_SLOT_STOP` it stands; `--party-follow-agent`
+  is the B7b shape (0x002A, parked at `HERO_FOLLOW_STOP`), kept as the revert arm; the
+  `--no-hero-follow` and leash arms as before, the leash arm now expecting the lead. A
+  new SLICE-H2 section (3 checks) loads `[party.slice]`, builds its 0x01C2/0x0074 through the
+  same validators main() runs, and locks `if a.party:` AHEAD of the `--hero` and `--hero-skills`
+  blocks in main() -- the translation only works if it runs first, and only the text can say so.
+  `test_router.py`'s cast-abandon ordering lock was re-aimed from `if CAST_STOP and not
+  is_attack:` (gone since SLICE-C2) to the bare `if CAST_STOP:`, and its recv-loop attach-point
+  census from 2+1 to the three qualified sites (C5 gated one on the player being alive, C2's
+  replay continued the other's condition) -- both reddened unrun by that arc.
   `toolkit/authsrv/test_castcycle.py` (the four-opcode cast cycle against
   ArenaNet's own template — six complete cycles, two live captures, same order
   every time: E4 at the press, E5 at cast end carrying the recharge in whole

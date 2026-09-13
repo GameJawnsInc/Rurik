@@ -1327,3 +1327,31 @@ note = """Ours. The way back, at the same spot on the same terrain: a player \
 arriving in 146 at (9826, 8077) is 500 u outside it and must walk in, so the \
 pair cannot bounce. Retail's Lakeside exit is elsewhere; this is the milestone's \
 geometry, not the game's."""
+
+# ---- the party (SLICE-H2) ------------------------------------------------
+# One row is the whole party rig: `--party slice` sets every --hero* flag from
+# it (authsrv.py main). `hero` is the s_heroClientData index the client resolves
+# the NAME through (a hero carries no name on the wire, heroes FINDINGS 7.2);
+# `body` is a [npc.*] row, and its file_id/model_id are also the commander
+# panel's appearance pair (pvpui 28.13). `skills` are skill ids, timings from
+# the client's own table; `level` is prop 36 (defaults to the body row's).
+
+[party.slice]
+hero = 3
+body = "academy_monk"
+skills = [281, 276]
+level = 5
+health = 100
+energy = 30
+
+[party.slice.provenance]
+source = "invented"
+note = """Ours. The slice's one Monk hero (studies/slice/PLAN.md section 0, item \
+2). Row 3 of s_heroClientData rendered "Mo1 Tahlkora" on the roster in the \
+three-hero rig (studies/heroes/FINDINGS.md 23, OBSERVED on screen) -- a Monk \
+hero by GWW's own page. The body is the parade's Academy Monk (SLICE-U2); the \
+bar is SLICE-B3's default (Orison of Healing 281, Restore Condition 276) -- a \
+retail level-20 Monk henchman carried Orison, Word of Healing, Heal Other, \
+Healing Breeze and Resurrection Signet (F28, henchjoin.py), and this row \
+should grow toward that as the effect rows exist. Level and vitals are the \
+body row's; the hero body is created with 100 health today."""

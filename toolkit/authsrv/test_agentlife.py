@@ -4952,41 +4952,84 @@ def section_hold_plane():
     # party body walking proves nothing on its own -- it has to walk WHERE a
     # hostile would not, and stand still when the flag is off, or the section is
     # just watching `_npc_follow_tick` work, which four sections above already do.
-    print("\nSLICE-B7b: a party body walks to the player, with --no-hero-follow "
-          "and a hostile at the same distance as its two known-bad arms")
+    print("\nSLICE-B7b / SLICE-H2: a party body walks to its SLOT beside the "
+          "leader by 0x0029 point leads (F28), with --party-follow-agent, "
+          "--no-hero-follow and a hostile at the same distance as its arms")
     FOLLOW = authsrv.GAME_SMSG_AGENT_UPDATE_DESTINATION
+    LEAD = authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT
     SPEED = authsrv.GAME_SMSG_AGENT_UPDATE_SPEED
     _saved_hf = authsrv.HERO_FOLLOW
+    _saved_sl = authsrv.PARTY_SLOT_LEADS
     try:
-        def _party(dist):
-            """`_world`'s hostile turned into a hero body: the allegiance and
-            `attacks_back` the two creation sites actually set."""
-            st = _world(dist=dist)
+        def _party(pos, **over):
+            """`_world`'s hostile turned into a hero body at `pos`: the
+            allegiance, `attacks_back` and the slot the creation site sets."""
+            st = _world(dist=0.0)
             st["agents"][10].update(allegiance=agents.ALLEGIANCE_PLAYER,
                                     attacks_back=False, skills=(),
-                                    skill_ready=[])
+                                    skill_ready=[], pos=pos, party_slot=0)
+            st.update(over)
             return st
 
-        near = authsrv.HERO_FOLLOW_STOP - 40.0
-        out = authsrv.HERO_FOLLOW_STOP + 160.0
         past = authsrv.AGGRO_RANGE + 500.0
 
-        ops = [op for op, _v, _l in _walk(_party(out))]
-        LEDGER.ok(ops == [SPEED, FOLLOW],
-                  "a party body outside the formation distance announces a rate "
-                  "and ONE follow -- the hostile follow's own shape",
+        # SLICE-H2: the slot. Retail's standing party bodies sit ABEAM of the
+        # leader (along 0, |across| 99 u p50 -- henchjoin.py, F28); slot 0
+        # is 110 u to the leader's left, and the spawn faces +x.
+        slot0 = authsrv.party_slot_point({"pos": (0.0, 0.0)}, 0)
+        LEDGER.ok(slot0 == (0.0, 110.0),
+                  "slot 0 stands 110 u to the leader's LEFT of a +x heading "
+                  "(F28: standing bodies sit abeam, |across| 99 u p50)",
+                  f"slot0 {slot0}")
+        turned = authsrv.party_slot_point({"pos": (0.0, 0.0),
+                                           "heading": (0.0, 1.0)}, 0)
+        LEDGER.ok(turned == (-110.0, 0.0),
+                  "and the slot turns with the leader's heading: facing +y, "
+                  "the left is -x", f"turned {turned}")
+        held = {"pos": (0.0, 0.0), "heading": (0.0, 1.0)}
+        authsrv.party_slot_point(held, 0)
+        held["heading"] = None                    # the stop clears the heading
+        kept = authsrv.party_slot_point(held, 0)
+        LEDGER.ok(kept == (-110.0, 0.0),
+                  "a stop clears state['heading'] and the slot KEEPS the last "
+                  "moving heading -- else every pause would walk the party "
+                  "round to the spawn's facing", f"kept {kept}")
+
+        sent = _walk(_party((0.0, -300.0)))        # 410 u from its slot
+        ops = [op for op, _v, _l in sent]
+        end = tuple(sent[1][1][1]) if len(sent) > 1 else None
+        LEDGER.ok(ops == [SPEED, LEAD] and end == slot0,
+                  "a party body away from its slot announces a rate and ONE "
+                  "0x0029 POINT lead whose end IS the slot -- retail's shape "
+                  "(F28: 750 of 750 leads while the leader moved were 0x0029, "
+                  "never a 0x002A naming the leader)",
+                  f"{[hex(o) for o in ops]} end {end}")
+
+        ops = [op for op, _v, _l in _walk(_party((0.0, 100.0)))]   # 10 u off
+        LEDGER.ok(ops == [],
+                  f"and within {authsrv.PARTY_SLOT_STOP:.0f} u of the slot it "
+                  "stands, so the slot is a real bound and not decoration",
                   f"{[hex(o) for o in ops]}")
 
-        ops = [op for op, _v, _l in _walk(_party(near))]
-        LEDGER.ok(ops == [],
-                  f"and inside {authsrv.HERO_FOLLOW_STOP:.0f} u it stands, so the "
-                  "formation distance is a real bound and not decoration",
-                  f"{[hex(o) for o in ops]}")
+        # ARM 0: --party-follow-agent, the SLICE-B7b shape -- a 0x002A naming
+        # the player, parked at HERO_FOLLOW_STOP. The known-bad arm for the
+        # formation: retail sent no such follow for a party body.
+        authsrv.PARTY_SLOT_LEADS = False
+        out = authsrv.HERO_FOLLOW_STOP + 160.0
+        ops = [op for op, _v, _l in _walk(_party((out, 0.0)))]
+        near = [op for op, _v, _l in _walk(_party((authsrv.HERO_FOLLOW_STOP
+                                                     - 40.0, 0.0)))]
+        LEDGER.ok(ops == [SPEED, FOLLOW] and near == [],
+                  "--party-follow-agent: outside HERO_FOLLOW_STOP a rate and "
+                  "ONE 0x002A follow naming the player, inside it nothing -- "
+                  "the B7b shape, kept as the revert arm",
+                  f"out {[hex(o) for o in ops]}, near {[hex(o) for o in near]}")
+        authsrv.PARTY_SLOT_LEADS = True
 
         # ARM 1: the flag. Without this the section cannot tell "the follow moved
         # it" from "something else in the tick moved it".
         authsrv.HERO_FOLLOW = False
-        ops = [op for op, _v, _l in _walk(_party(out))]
+        ops = [op for op, _v, _l in _walk(_party((0.0, -300.0)))]
         LEDGER.ok(ops == [],
                   "--no-hero-follow: the body stands where it spawned, which is "
                   "every hero run before 2026-09-12 (the known-bad arm)",
@@ -4996,9 +5039,9 @@ def section_hold_plane():
         # ARM 2: the leash, which is the one number an ally really changes. The
         # comparison is against a HOSTILE at the same distance, not against a
         # remembered figure -- two measurements, never a literal.
-        ally_far = [op for op, _v, _l in _walk(_party(past))]
+        ally_far = [op for op, _v, _l in _walk(_party((past, 0.0)))]
         host_far = [op for op, _v, _l in _walk(_world(dist=past))]
-        LEDGER.ok(ally_far == [SPEED, FOLLOW] and host_far == [],
+        LEDGER.ok(ally_far == [SPEED, LEAD] and host_far == [],
                   f"at {past:.0f} u -- past the {authsrv.AGGRO_RANGE:.0f} u "
                   "hostile leash -- the ALLY still walks and the HOSTILE has "
                   "given up. Same tick, same distance, opposite answers",
@@ -5006,6 +5049,41 @@ def section_hold_plane():
                   f"hostile {[hex(o) for o in host_far]}")
     finally:
         authsrv.HERO_FOLLOW = _saved_hf
+        authsrv.PARTY_SLOT_LEADS = _saved_sl
+
+    # ---- SLICE-H2: the party as CONTENT ---------------------------------------
+    # `--party KEY` is translated into the --hero* flags at the top of main(),
+    # BEFORE the hero block reads them -- the order is the whole mechanism, and
+    # only the text can lock it (main() binds sockets). The row itself is
+    # validated the way main() validates it: the body row exists, the hero
+    # index passes the client's own bounds (party_hero_add / mercenary_info).
+    print("\nSLICE-H2: [party.slice] loads, its body row exists, its hero index "
+          "passes the client's bounds, and --party is applied before --hero")
+    _prow = agents.WORLD.get("party", "slice")
+    _pbody = agents.npc_template(_prow["body"])
+    LEDGER.ok(int(_prow["hero"]) in range(1, 40) and "file_id" in _pbody
+              and list(_prow["skills"]),
+              "[party.slice]: hero index in 1..39, a body row with a file_id "
+              "(the commander's appearance pair, pvpui 28.13), a non-empty bar",
+              f"hero {_prow['hero']}, body {_prow['body']} file {_pbody['file_id']}"
+              f"/{_pbody.get('model_id')}, bar {list(_prow['skills'])}")
+    try:
+        agents.party_hero_add(1, 1, authsrv.HERO_AGENT_ID, int(_prow["hero"]))
+        agents.mercenary_info(int(_prow["hero"]))
+        _ok = True
+    except Exception as exc:              # the same refusal main() would raise
+        _ok = f"{type(exc).__name__}: {exc}"
+    LEDGER.ok(_ok is True, "and the row's hero index builds 0x01C2 and 0x0074 "
+              "(the validations main() runs at startup)", f"{_ok}")
+    _src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
+    LEDGER.ok(_src.count("    if a.party:\n") == 1
+              and _src.index("    if a.party:\n")
+              < _src.index("    if a.hero is not None:\n")
+              and _src.index("    if a.party:\n") < _src.index("    if a.hero_skills:\n")
+              and "a.hero_pipeline_first = True" in _src,
+              "--party is applied BEFORE the --hero block and the --hero-skills "
+              "block read `a`, and it turns the commander rig on (pipeline-first, "
+              "heroes 38)", "order in main()")
 
 
 if __name__ == "__main__":

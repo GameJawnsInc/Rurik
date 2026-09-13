@@ -479,9 +479,16 @@ def main():
     check("the router branch sits BEFORE the freshness gate",
           src.index("if ROUTER and router_answer_click(")
           < src.index('fresh = (time.time() - state.get("pos_seen"'))
-    check("both recv-loop attach points exist, game-gated",
-          src.count('if ROUTER and kind == "game":') == 2
-          and src.count('if ROUTER and kind == "game" and msgs:') == 1)
+    # Re-aimed 2026-09-12 (reddened unrun): SLICE-C5 gated the second attach
+    # point on the player being alive, and SLICE-C2's withheld-report replay
+    # turned the third's `and msgs:` into a continued condition. Three
+    # attach points, all game-gated, two of them further qualified.
+    check("all three recv-loop attach points exist, game-gated",
+          src.count('if ROUTER and kind == "game"') == 3
+          and src.count('if ROUTER and kind == "game":') == 1
+          and src.count('if ROUTER and kind == "game" and not '
+                        'state.get("player_dead"):') == 1
+          and src.count('if ROUTER and kind == "game" and msgs \\') == 1)
     check("the dynamic timeout clamps to [0.05, 1.0]",
           "max(0.05, min(1.0," in src)
     check("both report handlers abandon the chain",
@@ -837,7 +844,12 @@ def main():
           "cast-stop block",
           src.count('router_abandon(state, rec, "cast", time.time())') == 1
           and src.index('router_abandon(state, rec, "cast", time.time())')
-          < src.index("if CAST_STOP and not is_attack:"))
+          # SLICE-C2 (2026-09-12) dropped the `not is_attack` scoping: a
+          # running attack-skill press halts too (retail 2 of 2), so the
+          # block's head is now the bare `if CAST_STOP:` -- one site.
+          and src.count("if CAST_STOP:") == 1
+          and src.index('router_abandon(state, rec, "cast", time.time())')
+          < src.index("if CAST_STOP:"))
     check("the skill-press arm hands the recorder to handle_skill_press",
           "handle_skill_press(values, send, state, conn_id, opcode,\n"
           + " " * 43 + "rec=rec)" in src)

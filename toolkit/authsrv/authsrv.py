@@ -9303,6 +9303,25 @@ HERO_FOLLOW_STOP = 200.0    # units, centre to centre.
 # thing anyone should have to diagnose. The hostile leash (AGGRO_RANGE) exists
 # so a fight is escapable; nothing about a party member wants that.
 HERO_FOLLOW_LEASH = math.inf
+# SLICE-H2 (studies/slice/FINDINGS.md F28): THE FORMATION IS MEASURED NOW, on
+# retail's own party bodies -- eleven henchmen across seven live connections
+# (toolkit/authsrv/henchjoin.py), and GWW says heroes and henchmen share one
+# AI. A party body walks by 0x0029 POINT leads, one every 0.51 s (p50) while
+# the leader moves, to a point ~100-140 u from the leader and BESIDE it (the
+# leader standing: along 0, |across| 99 u p50; at the leader's stop the last
+# lead ended 141 u p50 from the stop point), and NO 0x0028 closes the walk
+# (2-11 halts against 46-192 leads per body): the lead's end is the stop. So
+# a party body is not a hostile chasing the player with a bigger disc -- it
+# walks to a SLOT in the leader's frame, and the same follow machinery does
+# it aimed at that point. The radius is OBSERVED; the slot TABLE is a
+# RECONSTRUCTION from the medians (no body held one bearing; they spread
+# around the leader, mostly abeam). HERO_FOLLOW_STOP above is now only the
+# revert arm's number.
+PARTY_SLOT_LEADS = True     # False (--party-follow-agent): the B7b shape, a
+                            # 0x002A naming the player parked at HERO_FOLLOW_STOP.
+PARTY_SLOT_STOP = 30.0      # u from its slot within which a party body stands.
+PARTY_SLOTS = ((0.0, 110.0), (0.0, -110.0), (-110.0, 0.0), (-80.0, 110.0),
+               (-80.0, -110.0), (-160.0, 0.0), (-160.0, 110.0))   # (along, across)
 # SLICE-B7c: the party body CASTS. Empty by default -- a hero with no bar is
 # every hero run before 2026-09-12, and `--hero-skills` is what fills it. The
 # ids come from the command line; every NUMBER behind them (activation,
@@ -16638,6 +16657,25 @@ def face_player(send, state, agent_id, agent, conn_id, force=False):
          f"at {ENEMY_TURN_RATE:.3f} rad/s")
 
 
+def party_slot_point(state, slot):
+    """Where party slot `slot` stands: the leader's position plus
+    PARTY_SLOTS[slot] rotated into the leader's frame (+along = the way the
+    leader faces, +across = the leader's LEFT). The heading is the last 0x003D
+    direction the client reported; a stop clears state["heading"], so the last
+    moving heading is kept here, because a slot that snapped back to the
+    spawn's facing at every stop would walk the party around the leader each
+    time they paused (SLICE-H2)."""
+    px, py = state.get("pos", (0.0, 0.0))
+    h = state.get("heading")
+    if h is not None:
+        state["party_heading"] = tuple(h)
+    h = state.get("party_heading") or (1.0, 0.0)      # the spawn faces +x
+    n = math.hypot(h[0], h[1])
+    ux, uy = (h[0] / n, h[1] / n) if n > 1e-9 else (1.0, 0.0)
+    along, across = PARTY_SLOTS[slot % len(PARTY_SLOTS)]
+    return (px + along * ux - across * uy, py + along * uy + across * ux)
+
+
 def enemy_move_tick(send, state, conn_id, rec=None):
     """Hostile agents walk toward the player until they are close enough to swing.
 
@@ -16688,10 +16726,20 @@ def enemy_move_tick(send, state, conn_id, rec=None):
         ax, ay = agent["pos"]
         dist = math.hypot(px - ax, py - ay)
         if NPC_FOLLOW:
+            _tgt = (px, py)
+            _stop = HERO_FOLLOW_STOP if _ally else None
+            _slot = False
+            if _ally and PARTY_SLOT_LEADS:
+                # SLICE-H2: a party body walks to its SLOT in the leader's
+                # frame, not to the leader (F28) -- the same follow machinery
+                # aimed at a different point, parking on the lead's own end.
+                _tgt = party_slot_point(state, agent.get("party_slot", 0))
+                dist = math.hypot(_tgt[0] - ax, _tgt[1] - ay)
+                _stop, _slot = PARTY_SLOT_STOP, True
             _npc_follow_tick(send, state, conn_id, agent_id, agent,
-                             (px, py), dist, now, pm, rec,
+                             _tgt, dist, now, pm, rec,
                              leash=HERO_FOLLOW_LEASH if _ally else None,
-                             stop_at=HERO_FOLLOW_STOP if _ally else None)
+                             stop_at=_stop, slot=_slot)
             continue
         if _ally:
             # The legacy chase below is the hostile's pre-NPC_FOLLOW arm and
@@ -17644,7 +17692,10 @@ def _npc_model_advance(state, agent, now, elapsed=0.0, rec=None, agent_id=None):
     ms = _npc_ms(agent)
     last_ms = agent.get("cmodel_last_ms", ms)
     agent["cmodel_last_ms"] = ms
-    if agent.get("cmodel_moving") and sa.t_arrive != 0:
+    if (agent.get("cmodel_moving") and sa.t_arrive != 0
+            and not agent.get("cmodel_slot")):
+        # SLICE-H2: the resolver's disc parks a FOLLOW at the player; a party
+        # body's slot lead is a point move and walks to its end.
         fx, fy = _npc_frame(state, now)
         hit = _npc_disc_hit_ms(sa, fx, fy, follow_stop_radius(agent),
                                last_ms, min(ms, sa.t_arrive))
@@ -17668,7 +17719,7 @@ def _npc_model_advance(state, agent, now, elapsed=0.0, rec=None, agent_id=None):
 
 
 def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, pm,
-                     rec=None, leash=None, stop_at=None):
+                     rec=None, leash=None, stop_at=None, slot=False):
     """One hostile's chase, in retail's shape (ANIMREF-RE 40; NPC_FOLLOW).
 
     SLICE-B7b MADE TWO NUMBERS ARGUMENTS, and nothing else about this function
@@ -17697,6 +17748,15 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
     is a number chosen to look right and nothing more. Said here because the
     hostile radii around it ARE measured, and a reader has no way to tell them
     apart from the code.
+
+    SLICE-H2 (2026-09-12) MEASURED IT, on retail's henchmen (F28), and the
+    paragraph above is now the revert arm's (--party-follow-agent). With
+    `slot` True this is a party body's walk to its SLOT: `player` is the slot
+    point (party_slot_point), the order is a 0x0029 POINT lead to it rather
+    than a 0x002A naming the player (retail: 0x0029 every 0.51 s while the
+    leader moves), the arrival closes with NO 0x0028 (retail: 2-11 halts per
+    46-192 leads -- the lead's end is the stop), and the client-model disc
+    hold does not apply (a point lead has no disc to park on).
 
     A follow STARTS when the player is noticed (inside AGGRO_RANGE -- ours,
     unchanged) and stands beyond the swing reach. It is one 0x002A naming the
@@ -17730,6 +17790,7 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
     px, py = player
     ax, ay = agent["pos"]
     fol = agent.get("follow")
+    agent["cmodel_slot"] = bool(slot)     # SLICE-H2: _npc_model_advance's disc gate
     # ANIMREF-RE 42.5 (MOVECODE-1z-bz). `plane` was agent.get("plane", 0) --
     # the SPAWN plane, frozen for the session. It is now the mover's own,
     # re-resolved at the copy's point every tick and written back so the
@@ -17756,6 +17817,10 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
         agent.pop("froute", None)       # 1z-by: a new follow re-solves
         agent.pop("froute_at", None)
         agent["moved_at"] = now
+        if slot:
+            # SLICE-H2: retail closes no party walk with a 0x0028 (F28) --
+            # the lead's end IS the stop, and the client parked the body there.
+            return
         _send(GAME_SMSG_AGENT_STOP_MOVING, agents.agent_stop_moving(agent_id),
              f"agent {agent_id} halts at ({agent['pos'][0]:.0f},"
              f"{agent['pos'][1]:.0f}): {why} [ANIMREF-RE 40]")
@@ -17792,6 +17857,20 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
             return
         f.pop("leg", None)
         f.pop("solve_from", None)
+        if slot:
+            # SLICE-H2: a POINT lead to the slot, retail's own shape for a
+            # party body (F28: 0x0029, never 0x002A, 750 of 750 leads while
+            # the leader moved).
+            if rec is not None:
+                rec.event("npc_order", agent=agent_id, act="slot-lead",
+                          tag=tag.strip(), solve_from=[float(cx), float(cy)],
+                          to=[float(px), float(py)], plane=plane,
+                          dest_plane=dest_plane, dist=round(float(dist), 1))
+            _send(GAME_SMSG_AGENT_MOVE_TO_POINT,
+                  [agent_id, (float(px), float(py)), dest_plane, plane],
+                  f"FORMATION{tag}: agent {agent_id} -> slot ({px:.0f},{py:.0f}) "
+                  f"plane {plane}->{dest_plane}, {dist:.0f} u out{why}")
+            return
         # MOVECODE-1z-cn: NAME THE OPERAND. This branch sends an agent-addressed
         # follow, which the client does not path -- it dead-reckons the drawn body
         # in a STRAIGHT LINE to the point (movement/FINDINGS :1147). So when the
@@ -17885,7 +17964,7 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
             _npc_plane_correct(_send, conn_id, agent_id, agent, plane, now)
             agent["moved_at"] = now
             return
-        if NPC_CLIENT_MODEL:
+        if NPC_CLIENT_MODEL and not slot:
             # NPCTRACK-F8: out of reach of the server's player, but inside
             # reach of where the CLIENT believes the player stands -- a fresh
             # follow would park at once in that frame (RUN-R1: 37 halts in
@@ -17919,16 +17998,22 @@ def _npc_follow_tick(send, state, conn_id, agent_id, agent, player, dist, now, p
                   agents.agent_update_speed(agent_id, ENEMY_MOVE_RATE),
                   f"agent {agent_id} speed {ENEMY_MOVE_RATE} "
                   f"({ENEMY_MOVE_RATE * agents.DEFAULT_RUN_SPEED:.0f} u/s)")
-            print(f"[c{conn_id}] agent {agent_id} ({agent['name']}) follows "
-                  f"the player, {dist:.0f} u out, halts at {stop:.0f} u",
-                  flush=True)
+            if slot:
+                print(f"[c{conn_id}] agent {agent_id} ({agent['name']}) walks "
+                      f"to its slot ({px:.0f},{py:.0f}), {dist:.0f} u out "
+                      f"[SLICE-H2]", flush=True)
+            else:
+                print(f"[c{conn_id}] agent {agent_id} ({agent['name']}) follows "
+                      f"the player, {dist:.0f} u out, halts at {stop:.0f} u",
+                      flush=True)
         agent["follow"] = {"told": (px, py), "sent_at": now, "t0": now}
         agent["plane_told"] = plane          # GROUNDZ-Q5
         agent["plane_told_at"] = now
         # The first step is measured from here, not from before the walk
         # was announced -- an agent cannot have travelled before it set off.
         agent["moved_at"] = now
-        _order("", f", halts at {stop:.0f} u [ANIMREF-RE 40]")
+        _order("", " [SLICE-H2, F28]" if slot
+               else f", halts at {stop:.0f} u [ANIMREF-RE 40]")
         return
     # A follow in flight. ARRIVED and waiting for the clock: no re-path, no
     # step; the halt when the follow's half-second next fires -- unless the
@@ -20553,6 +20638,7 @@ def _handle_request_players(send, state, conn_id, stop, rec):
              "dead": False, "name": _hro.get("name") or str(HERO_BODY_NPC),
              "npc": _hro,
              "definition": _hdef,
+             "party_slot": _i,                  # SLICE-H2: its formation slot
              "allegiance": agents.ALLEGIANCE_PLAYER,
              "effects": 0,
              "attack_speed": ENEMY_ATTACK_SPEED,
@@ -24929,6 +25015,38 @@ def main():
                       GRANT_MIN_INTERVAL=GRANT_MIN_INTERVAL,
                       PROF_WARRIOR=PROF_WARRIOR, VAULT_DEFAULT=VAULT_DEFAULT)
     a = ap.parse_args()
+    if a.party:
+        # SLICE-H2: THE PARTY AS CONTENT. The row names what the hero rig's
+        # flags took one by one across studies/heroes and studies/pvpui; this
+        # sets those flags from it and lets every validation below run on the
+        # values exactly as if they had been typed. The commander rig (0x0072,
+        # 0x009A, the bags, the appearance pair from the body row's own
+        # file_id/model_id -- pvpui 28.13 -- and the pipeline order heroes 38
+        # measured) is on unless --party-no-commander.
+        _prow = agents.WORLD.get("party", a.party)
+        _pbody = agents.npc_template(_prow["body"])
+        _ph = _prow["hero"]
+        a.hero = (",".join(str(h) for h in _ph) if isinstance(_ph, list)
+                  else str(_ph))
+        a.hero_body = True
+        a.hero_body_npc = _prow["body"]
+        a.hero_skills = ",".join(str(s) for s in _prow["skills"])
+        a.hero_level = int(_prow.get("level", _pbody.get("level", 1)))
+        a.hero_vitals = (f"{int(_prow.get('health', 100))},"
+                         f"{int(_prow.get('energy', 30))}")
+        if not a.party_no_commander:
+            a.hero_activate = True
+            a.hero_char = True
+            a.hero_inventory = 2
+            a.hero_bags = True
+            a.hero_appearance = (f"{int(_pbody['file_id'])},"
+                                 f"{int(_pbody.get('model_id', 0))}")
+            a.hero_pipeline_first = True
+        print(f"PARTY {a.party!r}: hero {a.hero} in the body of "
+              f"{_prow['body']!r} (level {a.hero_level}, bar "
+              f"{list(_prow['skills'])}), commander rig "
+              f"{'OFF' if a.party_no_commander else 'ON'} [SLICE-H2]",
+              flush=True)
 
     # WHERE THIS SERVER MAY WRITE ITS CAPTURES (the audit's sec 9 item 3: an output path from the command line used to be written wherever it pointed).
     # Every connection thread writes ciphertext and session metadata under
@@ -25903,6 +26021,13 @@ def main():
         print("[map] --no-interact-route: an out-of-range interact is HELD "
               "and nobody walks the player over. Every run before 2026-09-12, "
               "and the known-bad arm.", flush=True)
+    if a.party_follow_agent:
+        global PARTY_SLOT_LEADS
+        PARTY_SLOT_LEADS = False
+        print("[party] --party-follow-agent: a party body follows by a 0x002A "
+              "naming the player and parks at "
+              f"{HERO_FOLLOW_STOP:.0f} u -- the SLICE-B7b shape, the known-bad "
+              "arm for the slot formation (F28).", flush=True)
     if a.no_hero_follow:
         global HERO_FOLLOW
         HERO_FOLLOW = False
