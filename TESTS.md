@@ -10397,6 +10397,25 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   weapon_item, attack_speed 1.75) whose 6-10 still lands 3-6 on armour 45. Costs are stubbed
   for the strikes (test_castcycle's precedent) -- the gate and the double are the claim, not the
   price. The H8 block's finally restores the H9 globals too (the slice row now rebinds them).
+  **SLICE-H12 (2026-09-13, floor 488 -> 502): knock-down and block.** A walking body's knock-down
+  sends the halt then 0x00A2 [63, agent, 2.0] (the corpus's 3 of 3), drops its follow, and a second
+  knock-down while down sends nothing; the attack tick opens no swing and no cast on a down body and
+  acts once its clock runs out; the player's knock-down marks the pending cast cancelled and the tick
+  releases it with the measured burst (a stop word, E2), a press while down gets the bare E2, an
+  armed swing is dropped, and a press after rising is accepted; Hammer Bash (the foe falls for the
+  client's 2/2 slot, the adrenaline wipe), Crushing Blow (no Deep Wound standing, a 17 s one on a
+  downed foe), Heavy Blow (nothing without Weakness; +30 and the fall with it), Desperation Blow
+  (exactly one of four conditions on the foe, the PLAYER falls) -- all through the press -> cast_tick
+  landing; the three readers; Bonetti's on a hostile blocks a forced roll ([38, target, player, 0],
+  no damage, no adrenaline) and lets a forced miss-roll land; Irresistible Blow blocked deals its 17
+  and fells the blocker; the player's Bonetti's blocks a hostile's swing (+5 energy on the pool and
+  property 52) and ends on the next accepted press (a real 0x0044); holds_shield; Weakness's 0.34
+  over 25 swings. The roll is forced by binding `authsrv.random.random`, restored after; costs are
+  stubbed as in H10. The H9 bar check grew Bonetti's (380) in the eighth slot; the H10 NPC-terms
+  check reads the third term. `test_guards`' hit_enemy caller lock admits the one SELF-call the
+  block punishment adds (same thread by construction); `test_cancelwalk`'s 0x0028 census counts
+  FIVE sites, the knock-down's halt in `knock_down` the second non-player one (agent_id, never the
+  player's -- the player's fall is no 0x0028 at all).
   `test_router.py`'s cast-abandon ordering lock was re-aimed from `if CAST_STOP and not
   is_attack:` (gone since SLICE-C2) to the bare `if CAST_STOP:`, and its recv-loop attach-point
   census from 2+1 to the three qualified sites (C5 gated one on the player being alive, C2's

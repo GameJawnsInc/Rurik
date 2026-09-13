@@ -1900,6 +1900,81 @@ sword bar against the hammer raiders, and the balance note that opened H7b/H8b (
 raider) closes with it. **Not modelled, said here:** the sword's slashing type against anything,
 Frenzy on a sword, the eighth bar slot (empty), and — the same list as F34 — knock-down, block.
 
+## SLICE-F36 — **knock-down and block: the corpus's prop 63 at 2.0 s, the client's own "block" word, and five hammer skills that finally do what their pages say**
+
+**The owner (2026-09-13):** *"do knock-down and block next."* Both had been "not modelled, said
+here" since H7 (Crushing Blow's Deep Wound on a knocked-down foe, Heavy Blow's knock-down,
+Irresistible Blow's damage on a block).
+
+**Knock-down, MEASURED.** A scratch census over every live connection (`kd_census.py`): property 63
+occurs **three times in the whole corpus**, all in 20260819T132414 (the level-3 session), every one
+`0x00A2 [63, target, 2.0f]` — the **untargeted float channel carrying the duration** — in the same
+batch as the caster's `[58]` finish and its `[20, target, caster, 937]` visual (t=183.119, 236.790,
+260.791; the caster is agent 30, a party Elementalist, skill 937 an Earth Magic spell; the wiki's
+knock-down list is long and the id is not resolved here). No status word follows it (the one
+`0x00F1` beside the first is the observer's own Bleeding landing in the same instant). That agrees
+with what `studies/animref` §6/D7 had already decoded and parked: prop 63's case body pushes the
+wire's own float into the client's knock-down method `0x007E0490(agent, duration)`, where prop 35's
+pushes a compiled-in 0.4 s stagger. **WIKI** (GWW *Knock down*): a knocked-down character cannot
+move, activate skills with an activation time or aftercast, or switch weapons; 2 seconds unless a
+skill says otherwise; cannot be knocked down again until up. **No retail witness exists for an
+attack skill's knock-down** — the same property after a strike is RECONSTRUCTION, and the row says
+so. Stances do **not** end on a knock-down (GWW *Stance* lists nothing of the kind).
+
+**Block, MEASURED as far as the wire allows.** The attack-fail word `[38, target, attacker, reason]`
+occurs **once** in the corpus (a reason-2 "fail"); no retail block is on any tape. The reason
+vocabulary is the client's own — the effect drain's kind-7 case switches reason 0 to string 471,
+which the owner's archive resolves to "block" (`agents.ATTACK_FAIL_REASONS`, read out of the
+client on the Blind arc). **WIKI** (GWW *Block*): a blocked hit deals no damage and yields no
+adrenaline to either side; the chance comes from skills, **multiplicatively** (two 50% skills block
+75%); no effect on spells.
+
+**What shipped (SLICE-H12).**
+
+- **`knock_down(send, state, agent, …)`**: the corpus's `0x00A2 [63, agent, seconds]` after the
+  body's state is settled — a hostile's or party body's swing and cast in flight dropped, its walk
+  halted with the NPC halt's own `0x0028`, a `knocked_until` clock; the player's pending casts
+  marked cancelled and released by the tick with the measured cancel burst (`_mark_cancelled`), an
+  armed swing dropped, movement reports refused by a new arm beside the dead-player and rooted
+  arms, a skill press answered with the bare E2 release. Every tick (`enemy_attack_tick`,
+  `enemy_move_tick`, `ally_cast_tick`, `ally_attack_tick`, `attack_tick`) steps over a down body.
+  A second knock-down while down sends nothing (WIKI). `--no-knock-down` reverts.
+- **The skills**, WIKI throughout, the client's own numbers: **Hammer Bash (331)** `knocks_down` +
+  `clears_adrenaline`, its 2 s read from the client's bit-clear duration slot (2/2); **Heavy Blow
+  (359)** `requires_condition = "Weakness"` gating its +damage AND its knock-down (`attack_skill_terms`
+  grew a third term); **Crushing Blow (352)** `bonus_scale_means = "Deep Wound"` with
+  `condition_requires = "knocked down"` — the bonus regardless, the 5–20 s wound only on a foe on the
+  ground; **Irresistible Blow (356)** `knocks_down_if_blocked` — on a block the row's damage lands
+  anyway (armour-ignoring, OURS: the page names no type) and the blocker falls; **Desperation Blow
+  (323)** `random_conditions` (Deep Wound 20 / Weakness 20 / Bleeding 25 / Crippled 15, the
+  description's own seconds) drawn at a landed hit and `self_knocks_down` — the user falls, hit or
+  miss, for the client's 2/2. The corridor boss carries it, so the boss now falls after every
+  Desperation Blow and the player can see a knock-down without a hammer bar.
+- **Block**: a taker's live episodes' `block_chance` rows through the product rule
+  (`block_chance`); `requires_shield` rows count only for a wearer holding a type-24 offhand
+  (`holds_shield`). `hit_enemy`, `land_swing` and `land_swing_on_body` roll it right behind the
+  Blind miss, send the swing's close and `[38, blocker, attacker, 0]`, and deal nothing; each now
+  **returns** `"landed"` / `"blocked"` / `"missed"`, which is what lets a strike's knock-down ride
+  a landed hit only. **Bonetti's Defense (380)** is the block skill on the slice bar's eighth slot:
+  `block_chance = 75` and `energy_per_melee_block = 5` (the client's two flat slots, named by the
+  `_means` labels), `ends_on_skill_use` (closed with a real `0x0044` on the wearer's next accepted
+  press), the duration 5–11 s from the client's progression. The energy rides the player's pool and
+  a property-52 gain. `--no-block` reverts.
+- **Weakness (486)** is modelled as far as the two skills need it: the swinger's WEAPON damage
+  × 0.34 (WIKI: "66% less damage with attacks", the bonus untouched); the −1 to attributes is not.
+
+`test_agentlife` §H12 (floor 488 → 502): the body's fall (halt + prop 63, the refused second
+fall, no action while down, action on rising), the player's fall (the cancelled cast's release
+burst, the E2-only press, the dropped swing, the accepted press on rising), Hammer Bash / Crushing
+Blow / Heavy Blow / Desperation Blow through the player's own press → landing, the three readers,
+the hostile's Bonetti's blocking a forced roll (the word, no damage, no adrenaline) and letting a
+forced miss-roll through, Irresistible Blow's punishment, the player's Bonetti's (the block, +5
+energy on the wire, the stance ending on a press), `holds_shield`, Weakness. **Unobserved on a
+client, all of it** — the fall animation on a hostile, on the player, the "block" callout, the
+Bonetti's icon. **Not modelled, said here:** Shield Stance's damage reduction (the row is not
+written), Crippled's slow, Weakness's attribute loss, quarterknocking's re-knock at the rise
+instant (a down body simply refuses until its clock runs out).
+
 ## SLICE-F6 — what the desk cannot settle
 
 Carried so the next session does not re-read the same bytes hoping for more:

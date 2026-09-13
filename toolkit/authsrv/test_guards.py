@@ -630,7 +630,11 @@ def section_concurrency():
     # _land_player_swing so the in-reach and out-of-reach landings are one
     # site; it is attack_tick's helper and nothing else's, so the walk goes
     # one level up for it and the guarantee is unchanged.
-    check(callers == {"_land_player_swing", "cast_tick"}
+    # SLICE-H12 (2026-09-13): hit_enemy calls ITSELF once -- the block
+    # punishment (Irresistible Blow) lands the row's damage as an exact hit
+    # from inside the blocked strike, same thread by construction; a
+    # self-call adds no thread, so it is allowed here by name.
+    check(callers == {"_land_player_swing", "cast_tick", "hit_enemy"}
           and callers_of("_land_player_swing") == {"attack_tick"},
           "hit_enemy is reached from the WORLD TICK ONLY",
           f"callers={sorted(callers)}, _land_player_swing's="

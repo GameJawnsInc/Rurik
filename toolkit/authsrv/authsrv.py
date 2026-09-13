@@ -3003,18 +3003,32 @@ def agent_health_fraction(state, target_id):
 
 
 def attack_skill_terms(state, skill_id, rank, target_id, bonus, conn_id, who):
-    """SLICE-H10: (bonus, inflicted) an attack skill's strike carries at THIS
-    target -- the row's `requires_condition` gate on both the bonus and the
-    skill's own condition, and the health-threshold doubling of the bonus.
-    Judged before the strike lands, on the target as it stands."""
+    """SLICE-H10: (bonus, inflicted, knocks_down) an attack skill's strike
+    carries at THIS target -- the row's `requires_condition` gate on the
+    bonus, the skill's own condition AND its knock-down (Heavy Blow: all
+    three need Weakness), the health-threshold doubling of the bonus, and
+    SLICE-H12's `condition_requires = "knocked down"` (Crushing Blow's Deep
+    Wound needs a foe already on the ground; its bonus does not). Judged
+    before the strike lands, on the target as it stands."""
     inflicted = skill_condition(skill_id, rank)
+    kd = skill_knocks_down(skill_id)
     need = skill_requires_condition(skill_id)
     if need is not None and not agent_has_condition(state, target_id, need):
         print(f"[c{conn_id}] {who}'s skill {skill_id} on agent {target_id}: "
               f"the target is not {effects.CONDITION_SKILLS.get(need, need)} "
-              f"-- a plain swing, no +{bonus:.0f} and no condition (the row's "
+              f"-- a plain swing, no +{bonus:.0f}, no condition"
+              f"{', no knock-down' if kd else ''} (the row's "
               f"requires_condition)", flush=True)
-        return 0.0, None
+        return 0.0, None, False
+    try:
+        _creq = agents.WORLD.get("skill_effect", str(skill_id)).get("condition_requires")
+    except Exception:                                          # noqa: BLE001
+        _creq = None
+    if inflicted and _creq == "knocked down" and not knocked_down(state, target_id):
+        print(f"[c{conn_id}] {who}'s skill {skill_id}: agent {target_id} is "
+              f"on its feet -- no {effects.CONDITION_SKILLS.get(inflicted[0])} "
+              f"(the row's condition_requires)", flush=True)
+        inflicted = None
     thr = skill_health_threshold(skill_id)
     if thr is not None and bonus:
         frac = agent_health_fraction(state, target_id)
@@ -3023,7 +3037,7 @@ def attack_skill_terms(state, skill_id, rank, target_id, bonus, conn_id, who):
                   f"is at {frac:.0%} < {thr:.0%} -- the +{bonus:.0f} doubles",
                   flush=True)
             bonus *= 2.0
-    return bonus, inflicted
+    return bonus, inflicted, kd
 
 
 def skill_damage(skill_id, rank):
@@ -3559,6 +3573,42 @@ DEEP_WOUND_HEAL_FACTOR = 0.8     # WIKI: "20% less benefit from healing"
 # icon and every swing under it lands.
 BLIND = True           # False (--no-blind): Blind (479) never makes a swing miss.
 BLIND_MISS_CHANCE = 0.90         # WIKI: "90% chance to miss"
+# ---- SLICE-H12: KNOCK-DOWN AND BLOCK (studies/slice F36) -------------------
+#
+# KNOCK-DOWN. WIKI (GWW "Knock down"): a knocked-down character cannot move,
+# activate skills with an activation time or aftercast, or switch weapons;
+# 2 seconds unless a skill says otherwise; cannot be knocked down again until
+# up. THE WIRE IS MEASURED: the live corpus holds three knock-downs, every one
+# `0x00A2 [63, target, 2.0f]` -- the untargeted FLOAT channel carrying the
+# duration -- right behind the caster's [58] and its [20, target, caster,
+# skill] visual (20260819T132414, a henchman Elementalist's Earth spell 937 at
+# t=183.1, 236.8, 260.8); animref FINDINGS sec.6/D7 decoded prop 63 as the
+# client's own knock-down (`0x007E0490(agent, duration)`, the wire's float).
+# An ATTACK skill's knock-down (Hammer Bash, Heavy Blow, Irresistible Blow's
+# punishment, Desperation Blow's self) has no retail witness -- the same
+# property after the strike is RECONSTRUCTION. What the down body does not do
+# (swing, cast, walk, press) is ours from the wiki's sentence; what the
+# client draws is prop 63's. Stances do NOT end on a knock-down (GWW
+# "Stance" lists nothing of the kind; the rule is Balanced Stance's).
+KNOCK_DOWN = True             # False (--no-knock-down): prop 63 never goes out, nobody falls.
+KNOCK_DOWN_SECONDS = 2.0      # WIKI, and the corpus's 3 of 3.
+# BLOCK. WIKI (GWW "Block"): a blocked hit deals no damage and yields no
+# adrenaline to either side; the chance comes from skills (a stance, an
+# enchantment), multiplicatively; block chance has no effect on spells. THE
+# WIRE: the attack-fail word [38, target, attacker, reason] with reason 0 --
+# the client's OWN string table posts "block" for 0 (agents.ATTACK_FAIL_REASONS,
+# read out of the effect drain); the corpus holds ONE attack-fail word in all
+# and it is a reason-2 "fail", so no retail block is on any tape -- the shape
+# is the client's table plus SKILLS-BL's miss precedent. A row's `block_chance`
+# (percent; Bonetti's Defense's 75 is the client's flat scale slot) is the
+# taker's; `requires_shield` rows count only for a wearer holding one.
+BLOCK = True                  # False (--no-block): nothing blocks.
+# WEAKNESS (486): "you deal 66% less damage with attacks" -- WIKI (GWW
+# "Weakness", Game mechanics: the equipped WEAPON's base damage, not a
+# skill's bonus). The -1 to every attribute is NOT modelled. Modelled here
+# because Heavy Blow's knock-down and Desperation Blow's random condition
+# name it.
+WEAKNESS_DAMAGE_FACTOR = 0.34
 #
 # THE CONDITION-HEAL RULE (SKILLS-RC, studies/skills 45). Restore Condition
 # (276) sat on the enemy's bar as a flat 58-point self-heal every time the
@@ -12567,6 +12617,13 @@ def attack_tick(send, state, conn_id, rec=None):
         state["player_swing"] = None
         _press_refused(state, rec, conn_id, "dead-player", terminal=True)
         return
+    if knocked_down(state, PLAYER_AGENT_ID):
+        # SLICE-H12: a down body opens no swing and lands none; the chain
+        # (`attacking`) survives, so it resumes on rising.
+        if state.get("player_swing"):
+            _swing_dropped(state, rec, conn_id, "knocked-down")
+            state["player_swing"] = None
+        return
     target_id = state.get("attacking")
     if not target_id:
         if _moving_now:
@@ -12930,7 +12987,7 @@ def kill_agent(send, state, target_id, agent, conn_id, now, reward=True):
 
 def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
               exact=None, swing=True, label="one swing", armed=False,
-              skill_strike=False):
+              skill_strike=False, skill_id=None):
     """Land one swing on a hostile agent, if the swing timer allows it.
 
     `skill_strike` TRUE is an ATTACK SKILL's execution (ANIMREF-R6): a full
@@ -13023,6 +13080,12 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
         dealt = float(random.randint(lo, hi)) + bonus_damage
     else:
         dealt = agent["max_health"] * HIT_FRACTION + bonus_damage
+    # SLICE-H12: WEAKNESS on the swinger cuts the WEAPON's damage, not the
+    # skill's bonus (WIKI) -- the base is everything above but the bonus.
+    if exact is None and swing:
+        _wk = weakness_multiplier(state, PLAYER_AGENT_ID)
+        if _wk != 1.0:
+            dealt = (dealt - bonus_damage) * _wk + bonus_damage
     # A PREPARATION RIDES THE SWING, if the weapon fires arrows -- see
     # swing_preparation_bonus for the gate and the named AoE gap. Folded into
     # the same damage number, not sent as a second one, exactly as an attack
@@ -13060,7 +13123,33 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
                      agents.ATTACK_FAIL_MISS, conn_id, "Blind")
         print(f"[c{conn_id}] the player swung BLIND at agent {target_id} "
               f"and missed ({label})", flush=True)
-        return
+        return "missed"
+    # SLICE-H12: THE TARGET BLOCKS -- an attack, never a spell; the bracket
+    # goes out as for a blind miss, then [38, target, player, 0] (the client's
+    # own word for a block), nothing else: no damage, no adrenaline (WIKI).
+    # Irresistible Blow's punishment rides a block: the row's damage lands
+    # anyway and the blocker falls.
+    if swing and exact is None and blocks(state, target_id):
+        if not armed and not skill_strike:
+            send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+                 [agents.GV_ATTACK_STARTED, PLAYER_AGENT_ID, target_id, 0],
+                 f"attack_started: player swings at {target_id}")
+            if SWING_HOLDS_WALK_GATE:
+                action_hold(send, state, 1, f"the swing at {target_id}")
+        if not skill_strike:
+            send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                 [agents.GV_MELEE_ATTACK_FINISHED, PLAYER_AGENT_ID, 0],
+                 "melee_attack_finished")
+        on_block(send, state, target_id, PLAYER_AGENT_ID, conn_id, label)
+        if skill_id is not None and skill_knocks_down_if_blocked(skill_id):
+            _pun = skill_damage(skill_id, player_rank_for_skill(skill_id))
+            if _pun:
+                hit_enemy(send, state, target_id, conn_id,
+                          exact=float(_pun[0]), swing=False, skill_strike=True,
+                          label=f"skill {skill_id}'s block punishment")
+            knock_down(send, state, target_id, conn_id,
+                       f"skill {skill_id} was blocked (its punishment)")
+        return "blocked"
 
     # A swing is two events, and sending only the second is why the first
     # attempt produced damage with no animation: 1 is melee_attack_FINISHED,
@@ -13160,6 +13249,7 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
 
     if agent["health"] <= 0.0:
         kill_agent(send, state, target_id, agent, conn_id, now)
+    return "landed"
 
 
 _MISSING_SKILL_ROWS = set()
@@ -13982,6 +14072,16 @@ def handle_skill_press(values, send, state, conn_id, opcode, rec=None):
     immediately -- which answered the pending-skill key and started nothing:
     no recharge sweep, no repeat cast, no animation state.
     """
+    if knocked_down(state, PLAYER_AGENT_ID):
+        # SLICE-H12: a down body activates nothing (WIKI). Answered with the
+        # bare release so the client's pending-skill key clears; no chat
+        # line -- retail's own client presses nothing while down, so the
+        # corpus has no sentence to copy.
+        print(f"[c{conn_id}] REFUSED skill {int(values[1])}: the player is "
+              f"knocked down [SLICE-H12]", flush=True)
+        refuse_press(send, int(values[1]), int(values[2]), conn_id)
+        _press_refused(state, rec, conn_id, "knocked-down", terminal=True)
+        return
     which = ("USE_SKILL" if opcode == GAME_CMSG_USE_SKILL
              else "ATTACK_SKILL")
     skill_id, copy, target = values[1], values[2], values[3]
@@ -14068,6 +14168,9 @@ def handle_skill_press(values, send, state, conn_id, opcode, rec=None):
     # begins when the caster frees (the previous cast's aftercast end), E5
     # at begin + activation. `cast_busy_until` is only ever touched on this
     # thread -- the tick reads nothing from it.
+    # SLICE-H12: an accepted press ends a stance that "ends if you use a
+    # skill" (Bonetti's Defense).
+    end_on_skill_use(send, state, PLAYER_AGENT_ID, skill_id, conn_id)
     begin = max(now, state.get("cast_busy_until", 0.0))
     # AN ATTACK SKILL'S TIMING RIDES THE WEAPON, NOT THE ACTIVATION COLUMN.
     # This was the divergence the E-series constants' comment recorded for
@@ -14834,9 +14937,10 @@ def cast_tick(send, state, conn_id):
                     else 0.0
                 # SLICE-H10: Gash's Bleeding gate, Final Thrust's half-health
                 # double -- the bonus and the condition at THIS target.
-                bonus, inflicted = attack_skill_terms(
+                bonus, inflicted, _kd = attack_skill_terms(
                     state, cast["skill_id"], rank, target, bonus, conn_id,
                     "the player")
+                _res = None
                 # ANIMREF-R6: the strike the windup announced, not a second
                 # swing. skill_strike lands weapon damage + adrenaline with
                 # no attack_started, no melee_attack_finished and no interval
@@ -14844,9 +14948,10 @@ def cast_tick(send, state, conn_id):
                 # carries neither swing bracket. The legacy arm keeps the old
                 # call: interval-gated, so a press mid-chain dealt nothing.
                 if ATTACK_FINISH_BATCH:
-                    hit_enemy(send, state, target, conn_id,
-                              bonus_damage=bonus, skill_strike=True,
-                              label=f"skill {cast['skill_id']} strikes")
+                    _res = hit_enemy(send, state, target, conn_id,
+                                     bonus_damage=bonus, skill_strike=True,
+                                     label=f"skill {cast['skill_id']} strikes",
+                                     skill_id=cast["skill_id"])
                     # ANIMREF-R7b: the chain's next START comes one WINDUP
                     # after this execution -- LAW B, the 46->START gap's
                     # 0.749..0.783 cluster (21/38) against
@@ -14862,8 +14967,28 @@ def cast_tick(send, state, conn_id):
                         state["player_last_swing"] = (
                             now + swing_windup(_iv) - _iv)
                 else:
-                    hit_enemy(send, state, target, conn_id,
-                              bonus_damage=bonus)
+                    _res = hit_enemy(send, state, target, conn_id,
+                                     bonus_damage=bonus,
+                                     skill_id=cast["skill_id"])
+                # SLICE-H12: the knock-down the strike carries (Hammer Bash;
+                # Heavy Blow on a weakened foe), on a LANDED hit and a live
+                # foe; then Desperation Blow's random condition; then its
+                # self knock-down, hit or not ("after making a Desperation
+                # Blow, you are knocked down").
+                _victim = state.get("agents", {}).get(target)
+                if _res == "landed" and _victim and not _victim.get("dead"):
+                    if _kd:
+                        knock_down(send, state, target, conn_id,
+                                   f"skill {cast['skill_id']}",
+                                   skill_knock_down_seconds(cast["skill_id"]))
+                    _rc = skill_random_condition(cast["skill_id"])
+                    if _rc is not None:
+                        apply_condition(send, state, target, _rc[0], _rc[1],
+                                        rank, conn_id, cast["skill_id"])
+                if skill_self_knocks_down(cast["skill_id"]):
+                    knock_down(send, state, PLAYER_AGENT_ID, conn_id,
+                               f"skill {cast['skill_id']} (its own price)",
+                               skill_knock_down_seconds(cast["skill_id"]))
             elif target and found and found[1] == "standalone":
                 hit_enemy(send, state, target, conn_id, exact=float(found[0]),
                           swing=False,
@@ -15864,6 +15989,239 @@ def blind_miss(state, agent_id):
     return episodemods.blind_miss(state, agent_id, BLIND, BLIND_MISS_CHANCE)
 
 
+# ---- SLICE-H12: knock-down and block (the constants' comment near BLIND) ----
+
+def _effect_rows_on(state, agent_id):
+    """(episode, skill_effect row) for every live episode on an agent whose
+    skill has a row."""
+    table = state.get("effects")
+    if not table:
+        return []
+    out = []
+    for ep in table.on_agent(agent_id):
+        try:
+            out.append((ep, agents.WORLD.get("skill_effect", str(ep["skill"]))))
+        except Exception:                                      # noqa: BLE001
+            continue
+    return out
+
+
+def holds_shield(state, agent_id):
+    """Does the agent hold a shield (type 24)? The player's offhand row; a
+    body's `offhand_item`; nobody else."""
+    if agent_id == PLAYER_AGENT_ID:
+        return bool(agents.PLAYER_OFFHAND
+                    and int(agents.PLAYER_OFFHAND.get("item_type", 0)) == 24)
+    key = (state.get("agents", {}).get(agent_id) or {}).get("offhand_item")
+    if not key:
+        return False
+    try:
+        return int(agents.item_template(key).get("item_type", 0)) == 24
+    except Exception:                                          # noqa: BLE001
+        return False
+
+
+def block_chance(state, agent_id):
+    """The taker's chance to block one attack, 0.0..1.0 -- the product rule
+    (WIKI: two 50% skills block 75%, never 100%) over its live episodes'
+    `block_chance` rows; a `requires_shield` row counts only with a shield."""
+    if not BLOCK:
+        return 0.0
+    miss = 1.0
+    for ep, row in _effect_rows_on(state, agent_id):
+        pct = row.get("block_chance")
+        if pct is None:
+            continue
+        if row.get("requires_shield") and not holds_shield(state, agent_id):
+            continue
+        miss *= 1.0 - float(pct) / 100.0
+    return 1.0 - miss
+
+
+def blocks(state, agent_id):
+    """One roll: does THIS attack get blocked by the target? False at 0."""
+    chance = block_chance(state, agent_id)
+    return chance > 0.0 and random.random() < chance
+
+
+def on_block(send, state, blocker_id, attacker_id, conn_id, what):
+    """The block on the wire -- [38, blocker, attacker, 0], the client's own
+    word -- and the blocker's `energy_per_melee_block` (Bonetti's Defense:
+    the client's flat bonus slot 5), on the player's pool and wire."""
+    attack_fails(send, state, attacker_id, blocker_id, agents.ATTACK_FAIL_BLOCK,
+                 conn_id, "block")
+    print(f"[c{conn_id}] agent {blocker_id} BLOCKS {what} [SLICE-H12]",
+          flush=True)
+    for ep, row in _effect_rows_on(state, blocker_id):
+        gain = row.get("energy_per_melee_block")
+        if not gain:
+            continue
+        if blocker_id == PLAYER_AGENT_ID and ENERGY:
+            pool = player_energy(state)
+            got = min(float(gain), pool.maximum - pool.current)
+            if got > 0:
+                pool.current += got
+                send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
+                     [agents.GV_ENERGY_GAIN, PLAYER_AGENT_ID,
+                      _fraction(got / pool.maximum, agents.GV_ENERGY_GAIN,
+                                f"skill {ep['skill']}'s energy on a block")],
+                     f"energy +{got:.0f} (skill {ep['skill']}: a melee attack "
+                     f"blocked)")
+        elif blocker_id != PLAYER_AGENT_ID:
+            body = state.get("agents", {}).get(blocker_id)
+            if body is not None:
+                _p = agent_energy(body)
+                _p.current = min(_p.maximum, _p.current + float(gain))
+
+
+def end_on_skill_use(send, state, agent_id, skill_id, conn_id):
+    """A stance whose row says `ends_on_skill_use` (Bonetti's Defense: "ends
+    if you use a skill", WIKI) closes when its wearer presses any skill --
+    a real 0x0044, never a silent retire."""
+    table = state.get("effects")
+    if not table:
+        return
+    for ep, row in _effect_rows_on(state, agent_id):
+        if not row.get("ends_on_skill_use") or ep["skill"] == skill_id:
+            continue
+        table.close(ep["buff"])
+        send(GAME_SMSG_EFFECT_REMOVE, [ep["agent"], ep["buff"]],
+             f"EFFECT_REMOVE(buff {ep['buff']}, skill {ep['skill']}, ENDED by "
+             f"using skill {skill_id})")
+        print(f"[c{conn_id}] skill {ep['skill']} on agent {agent_id} ends: a "
+              f"skill was used ({skill_id}) [SLICE-H12]", flush=True)
+
+
+def weakness_multiplier(state, agent_id):
+    """WEAKNESS_DAMAGE_FACTOR while Weakness (486) is on the attacker, else 1."""
+    return (WEAKNESS_DAMAGE_FACTOR
+            if agent_has_condition(state, agent_id,
+                                   effects.CONDITION_BY_NAME["Weakness"])
+            else 1.0)
+
+
+def knocked_down(state, agent_id, now=None):
+    """Is the agent on the ground right now?"""
+    now = time.time() if now is None else now
+    if agent_id == PLAYER_AGENT_ID:
+        return float(state.get("player_knocked_until", 0.0)) > now
+    row = state.get("agents", {}).get(agent_id) or {}
+    return float(row.get("knocked_until", 0.0)) > now
+
+
+def knock_down(send, state, agent_id, conn_id, why, seconds=None):
+    """Put an agent on the ground for `seconds` (KNOCK_DOWN_SECONDS default).
+
+    THE WIRE IS THE CORPUS'S: `0x00A2 [63, agent, seconds]`, 3 of 3. What
+    the body then does not do is the wiki's sentence: a down body's swing
+    and cast in flight are dropped and its walk halts (a 0x0028, the NPC
+    halt's own shape); the down player's pending casts are released with the
+    measured cancel burst, an armed swing is dropped, and every tick and the
+    movement arms refuse until the clock runs out. Already down: nothing
+    (WIKI: cannot be knocked down again until up). Returns True when it fell."""
+    if not KNOCK_DOWN:
+        return False
+    now = time.time()
+    seconds = float(KNOCK_DOWN_SECONDS if seconds is None else seconds)
+    if agent_id == PLAYER_AGENT_ID:
+        if state.get("player_dead") or knocked_down(state, agent_id, now):
+            return False
+        state["player_knocked_until"] = now + seconds
+        state["kd_reports"] = 0
+        if _mark_cancelled(state, "knocked-down", now, False):
+            print(f"[c{conn_id}] the knock-down cancels the player's pending "
+                  f"cast(s) -- released by the tick with the measured burst",
+                  flush=True)
+        if state.get("player_swing"):
+            state["player_swing_cancel"] = "knocked-down"
+    else:
+        row = state.get("agents", {}).get(agent_id)
+        if row is None or row.get("dead") or knocked_down(state, agent_id, now):
+            return False
+        row["knocked_until"] = now + seconds
+        row["swing_lands_at"] = None
+        row["swinging"] = False
+        row["cast_lands_at"] = None
+        row["casting"] = None
+        if row.get("follow") or row.get("moving"):
+            row["follow"] = None
+            row["moving"] = False
+            row.pop("froute", None)
+            row.pop("froute_at", None)
+            send(GAME_SMSG_AGENT_STOP_MOVING, agents.agent_stop_moving(agent_id),
+                 f"agent {agent_id} halts: knocked down")
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT,
+         [agents.GV_KNOCKED_DOWN, agent_id, _f32(seconds)],
+         f"knocked_down: agent {agent_id} for {seconds:.1f}s ({why})")
+    print(f"[c{conn_id}] agent {agent_id} is KNOCKED DOWN for {seconds:.1f}s: "
+          f"{why} [SLICE-H12]", flush=True)
+    return True
+
+
+def refuse_move_while_down(state, conn_id, opcode):
+    """A movement report from a knocked-down player: refused, printed once."""
+    n = state.get("kd_reports", 0) + 1
+    state["kd_reports"] = n
+    if n == 1:
+        which = ("keyboard" if opcode == GAME_CMSG_TURN_TO_DIRECTION
+                 else "click")
+        print(f"[c{conn_id}] DOWN: {which} report refused -- a knocked-down "
+              f"body does not move (WIKI); further ones counted [SLICE-H12]",
+              flush=True)
+
+
+def skill_knocks_down(skill_id):
+    """`knocks_down = true` on the row (Hammer Bash, Heavy Blow)."""
+    try:
+        return bool(agents.WORLD.get("skill_effect", str(skill_id)).get("knocks_down"))
+    except Exception:                                          # noqa: BLE001
+        return False
+
+
+def skill_knocks_down_if_blocked(skill_id):
+    """`knocks_down_if_blocked = true` (Irresistible Blow's punishment)."""
+    try:
+        return bool(agents.WORLD.get("skill_effect", str(skill_id))
+                    .get("knocks_down_if_blocked"))
+    except Exception:                                          # noqa: BLE001
+        return False
+
+
+def skill_self_knocks_down(skill_id):
+    """`self_knocks_down = true` (Desperation Blow: "you are knocked down")."""
+    try:
+        return bool(agents.WORLD.get("skill_effect", str(skill_id))
+                    .get("self_knocks_down"))
+    except Exception:                                          # noqa: BLE001
+        return False
+
+
+def skill_knock_down_seconds(skill_id):
+    """How long this skill's knock-down lasts: the client's own bit-clear
+    duration slot when it holds one (Hammer Bash and Desperation Blow carry
+    2/2), else KNOCK_DOWN_SECONDS."""
+    try:
+        flat = skill_flat_constant(skill_id, "duration")
+    except (ValueError, agents.content.ContentError):
+        flat = 0
+    return float(flat) if flat and flat > 0 else float(KNOCK_DOWN_SECONDS)
+
+
+def skill_random_condition(skill_id):
+    """A (condition id, seconds) drawn from the row's `random_conditions`
+    (Desperation Blow's four, each with the description's own seconds), or
+    None."""
+    try:
+        rows = agents.WORLD.get("skill_effect", str(skill_id)).get("random_conditions")
+    except Exception:                                          # noqa: BLE001
+        return None
+    if not rows:
+        return None
+    name, seconds = random.choice(list(rows))
+    cid = effects.condition_id(name)
+    return (cid, float(seconds)) if cid is not None else None
+
+
 # `taker_damage` moved to `episodemods.py`; it is pure, reads no flag, and the
 # re-export keeps it bound for `land_swing`, `land_skill` and the
 # `authsrv.taker_damage` reads in test_mechanics.py. `resolve_taker_conversion`,
@@ -16447,6 +16805,8 @@ def enemy_attack_tick(send, state, conn_id):
             agent["cast_lands_at"] = None
             agent["casting"] = None
             continue
+        if knocked_down(state, agent_id, now):          # SLICE-H12
+            continue
         if agent.get("allegiance") != agents.ALLEGIANCE_HOSTILE:
             continue
         # SLICE-H3: THIS hostile's target (enemy_move_tick picks it), and a
@@ -16899,6 +17259,8 @@ def ally_cast_tick(send, state, conn_id):
             agent["cast_lands_at"] = None
             agent["casting"] = None
             continue
+        if knocked_down(state, agent_id, now):          # SLICE-H12
+            continue
         due = agent.get("cast_lands_at")
         if due is not None:
             if now >= due:
@@ -17206,7 +17568,17 @@ def land_swing_on_body(send, state, agent_id, agent, tid, conn_id, bonus=0.0,
                      conn_id, "Blind")
         print(f"[c{conn_id}] agent {agent_id} swung BLIND at agent {tid} and "
               f"missed", flush=True)
-        return
+        return "missed"
+    if blocks(state, tid):                                    # SLICE-H12
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.GV_ATTACK_SKILL_FINISHED if skill_id is not None
+              else agents.GV_MELEE_ATTACK_FINISHED, agent_id, 0],
+             "attack_skill_finished" if skill_id is not None
+             else "melee_attack_finished")
+        on_block(send, state, tid, agent_id, conn_id,
+                 f"agent {agent_id}'s "
+                 + ("swing" if skill_id is None else f"skill {skill_id}"))
+        return "blocked"
     dealt = float(row["max_health"]) * (PARTY_HIT_FRACTION if party
                                         else ENEMY_HIT_FRACTION)
     armour = row.get("armor_rating")
@@ -17219,6 +17591,7 @@ def land_swing_on_body(send, state, agent_id, agent, tid, conn_id, bonus=0.0,
                             else combatmath.ARMOR_BASELINE)
     if _ws is not None:
         dealt = _ws
+    dealt *= weakness_multiplier(state, agent_id)        # SLICE-H12
     dealt += float(bonus)
     what = (("a party swing" if party else "an enemy swing") if skill_id is None
             else f"skill {skill_id}")
@@ -17233,6 +17606,7 @@ def land_swing_on_body(send, state, agent_id, agent, tid, conn_id, bonus=0.0,
              f"attack_skill_finished: agent {agent_id}'s skill {skill_id} "
              f"strikes party agent {tid} (+{bonus:.0f})")
     hurt_agent_row(send, state, agent_id, tid, dealt, frac, conn_id, what)
+    return "landed"
 
 
 def skill_resurrects(skill_id):
@@ -17698,6 +18072,8 @@ def ally_attack_tick(send, state, conn_id):
             agent["swinging"] = False
             agent["swing_lands_at"] = None
             continue
+        if knocked_down(state, agent_id, now):          # SLICE-H12
+            continue
         tid = party_fight_target(state, agent_id, agent, now)
         if tid is None or target_dead(state, tid):
             agent["swinging"] = False
@@ -17799,6 +18175,8 @@ def enemy_move_tick(send, state, conn_id, rec=None):
         if agent["dead"] or not (agent.get("attacks_back") or _ally):
             agent["moving"] = False
             agent["follow"] = None
+            continue
+        if knocked_down(state, agent_id, now):          # SLICE-H12: no walk
             continue
         if not _ally and agent.get("allegiance") != agents.ALLEGIANCE_HOSTILE:
             continue
@@ -19311,9 +19689,8 @@ def land_swing(send, state, agent_id, agent, conn_id, bonus=0.0,
     player_pools(state)
     if target_id != PLAYER_AGENT_ID:
         # SLICE-H3: the swing was at a party body.
-        land_swing_on_body(send, state, agent_id, agent, target_id, conn_id,
-                           bonus=bonus, skill_id=skill_id)
-        return
+        return land_swing_on_body(send, state, agent_id, agent, target_id,
+                                  conn_id, bonus=bonus, skill_id=skill_id)
     # A CORPSE IS NOT SWUNG AT, and this guard was missing until 2026-08-20.
     # The tick-side caller checks, so nothing on the wire was ever wrong -- but
     # `land_swing` called directly re-killed the body and re-sent the effects
@@ -19339,7 +19716,19 @@ def land_swing(send, state, agent_id, agent, conn_id, bonus=0.0,
                      agents.ATTACK_FAIL_MISS, conn_id, "Blind")
         print(f"[c{conn_id}] agent {agent_id} swung BLIND and missed the "
               f"player", flush=True)
-        return
+        return "missed"
+    # SLICE-H12: THE PLAYER BLOCKS (a stance's chance): the swing closes, the
+    # attack-fail word names the block, nothing lands and nothing is gained.
+    if blocks(state, PLAYER_AGENT_ID):
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.GV_ATTACK_SKILL_FINISHED if skill_id is not None
+              else agents.GV_MELEE_ATTACK_FINISHED, agent_id, 0],
+             "attack_skill_finished" if skill_id is not None
+             else "melee_attack_finished")
+        on_block(send, state, PLAYER_AGENT_ID, agent_id, conn_id,
+                 f"agent {agent_id}'s "
+                 + ("swing" if skill_id is None else f"skill {skill_id}"))
+        return "blocked"
     # Guard before effect: validate the fraction before the FIRST send, so a
     # refusal leaves no half-swing on the wire (test_guards section 3). The
     # WIRE ORDER below is untouched -- finished then damage is ArenaNet's own,
@@ -19370,6 +19759,7 @@ def land_swing(send, state, agent_id, agent, conn_id, bonus=0.0,
                             combatmath.ARMOR_BASELINE)
     if _ws is not None:
         dealt = _ws
+    dealt *= weakness_multiplier(state, agent_id)        # SLICE-H12
     # THE TAKER'S OWN EPISODES SPEAK LAST -- Frenzy's doubling, then a
     # conversion (Reversal of Fortune), per GWW's modifier order. Decided
     # here, before the first send, so the guard below sees the number that
@@ -19452,6 +19842,7 @@ def land_swing(send, state, agent_id, agent, conn_id, bonus=0.0,
         kill_player(send, state, conn_id)
         print(f"[c{conn_id}] THE PLAYER IS DEAD -- back up in "
               f"{PLAYER_REVIVE_AFTER:.0f}s", flush=True)
+    return "landed"
 
 
 def pick_skill(agent, now):
@@ -19591,15 +19982,30 @@ def land_skill(send, state, agent_id, agent, conn_id):
         # SLICE-H10: the same terms the player's strike gets -- the gate and
         # the double at this target; an NPC's "lose all adrenaline" is its own
         # pool's (no client holds a copy of it: agent_adrenaline's note).
-        bonus, inflicted = attack_skill_terms(state, skill_id, _rank, _tid,
-                                              bonus, conn_id, f"agent {agent_id}")
+        bonus, inflicted, _kd = attack_skill_terms(
+            state, skill_id, _rank, _tid, bonus, conn_id, f"agent {agent_id}")
         if skill_clears_adrenaline(skill_id):
             agent_adrenaline(agent).clear()
-        land_swing(send, state, agent_id, agent, conn_id, bonus=bonus,
-                   skill_id=skill_id, target_id=_tid)
+        _res = land_swing(send, state, agent_id, agent, conn_id, bonus=bonus,
+                          skill_id=skill_id, target_id=_tid)
         send_skill_visual(send, state, agent_id, skill_id, _tid, conn_id)
         apply_effect(send, state, agent_id, skill_id, _rank,
                      _tid, conn_id)
+        # SLICE-H12: the strike's knock-down and random condition on a landed
+        # hit; the caster's own knock-down whatever happened.
+        if _res == "landed" and not target_dead(state, _tid):
+            if _kd:
+                knock_down(send, state, _tid, conn_id,
+                           f"agent {agent_id}'s skill {skill_id}",
+                           skill_knock_down_seconds(skill_id))
+            _rc = skill_random_condition(skill_id)
+            if _rc is not None:
+                apply_condition(send, state, _tid, _rc[0], _rc[1], _rank,
+                                conn_id, skill_id)
+        if skill_self_knocks_down(skill_id):
+            knock_down(send, state, agent_id, conn_id,
+                       f"its own skill {skill_id}",
+                       skill_knock_down_seconds(skill_id))
         if inflicted and not target_dead(state, _tid):
             apply_condition(send, state, _tid, inflicted[0],
                             inflicted[1], _rank, conn_id, skill_id)
@@ -23529,6 +23935,12 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         refuse_move_while_dead(state, conn_id, opcode)
                     elif (opcode in (GAME_CMSG_TURN_TO_DIRECTION,
                                      GAME_CMSG_MOVE_TO_COORD)
+                          and knocked_down(state, PLAYER_AGENT_ID)):
+                        # SLICE-H12: a knocked-down body does not move
+                        # (WIKI); no arm below answers.
+                        refuse_move_while_down(state, conn_id, opcode)
+                    elif (opcode in (GAME_CMSG_TURN_TO_DIRECTION,
+                                     GAME_CMSG_MOVE_TO_COORD)
                           and (opcode == GAME_CMSG_MOVE_TO_COORD
                                or (len(values) > 4 and values[4]))
                           and attack_skill_roots(state) is not None):
@@ -27165,6 +27577,16 @@ def main():
               "leaves reach (the enemy loop, attack_tick) and an attack skill's "
               "strike is released past reach (SLICE-C1) -- the pre-F21 arm; "
               "retail lands them all.", flush=True)
+    if a.no_knock_down:
+        global KNOCK_DOWN
+        KNOCK_DOWN = False
+        print("[map] --no-knock-down: nobody falls -- no prop 63, no down "
+              "state, the pre-H12 arm.", flush=True)
+    if a.no_block:
+        global BLOCK
+        BLOCK = False
+        print("[map] --no-block: a block_chance row blocks nothing -- the "
+              "pre-H12 arm.", flush=True)
     if a.no_attack_skill_root:
         global ATTACK_SKILL_ROOT
         ATTACK_SKILL_ROOT = False

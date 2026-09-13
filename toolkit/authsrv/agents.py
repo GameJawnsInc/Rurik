@@ -1381,6 +1381,7 @@ GV_ATTACK_FAIL = 38
 ATTACK_FAIL_REASONS = {0: "block", 1: "dodge", 2: "fail", 3: "miss",
                        4: "obstructed", 5: "stray"}
 ATTACK_FAIL_MISS = 3
+ATTACK_FAIL_BLOCK = 0            # SLICE-H12: the client posts "block" for 0
 GV_EFFECT_ON_TARGET = 20
 GV_EFFECT_ON_AGENT = 21
 GV_ANIMATION = 22
