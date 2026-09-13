@@ -4072,6 +4072,11 @@ hold a pathological route all skip-declare); ~125 s, `--routes` shrinks section 
   this they were clones of one global bar), and that an EMPTY skills list means silence
   rather than falling through to the global, with the second conjunct proving the global
   was non-empty so the check could have failed.
+  **SLICE-H11 (2026-09-13).** §7 (floor 73 -> 75): a row's `weapon_item` rides the body's
+  create as ONE 0x0161 (item id = SPAWN_WEAPON_ITEM_ID + the agent id, the item row's file)
+  and ONE 0x006D [agent, that item, 0]; a bare row in the same table sends neither and
+  carries no `weapon_item`; both messages encode through the real codec. Retail gives every
+  body its weapons this way (3,016 non-party 0x006D across the live corpus, SLICE-F35).
 
   **SLICE-B7c (2026-09-12).** `toolkit/authsrv/test_mechanics.py` §28 (floor 162 → 174,
   with B7a's four): a PARTY body casts a heal at the player. Eight checks, four of them
@@ -10379,6 +10384,19 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   **SLICE-H8c (floor 478 -> 480):** an agent whose row says `revives = false` stays down past
   REVIVE_AFTER while `revives = true` and a MISSING key get back up; and content: the practice
   target's row opts in, no corridor row does.
+  **SLICE-H9/H10/H11 (2026-09-13, floor 480 -> 488): the sword and the shield, the gated
+  strikes, the hammer bandit.** The two item rows (a type-27 sword whose 584 word reads 2-3, a
+  type-24 shield whose 572 word reads 3; Swordsmanship for type 27); `apply_party_character`
+  over `[party.slice]` before/after (the swing 3-5 @ 1.75 -> 2-3 @ 1.33, the bar
+  [382, 384, 385, 322, 346, 1, 2], armour 45 -> 48 physical and 25 -> 28 elemental, weapon rank
+  3); Gash through the player's own press -> cast_tick landing on a foe WITHOUT Bleeding (a plain
+  swing, no 482, the maximum untouched) and then WITH it (>= +8 landed, one 8 s Deep Wound, the
+  maximum 100 -> 80); Final Thrust at 30 of 80 (>= 18 landed) and at 70 of 80 (9..17), one
+  0x00D0 [player] per completion; the three row readers; `attack_skill_terms` at the player for
+  an NPC's strike; every raider row a hammer warrior (bar, ranks, weapon_attribute 19,
+  weapon_item, attack_speed 1.75) whose 6-10 still lands 3-6 on armour 45. Costs are stubbed
+  for the strikes (test_castcycle's precedent) -- the gate and the double are the claim, not the
+  price. The H8 block's finally restores the H9 globals too (the slice row now rebinds them).
   `test_router.py`'s cast-abandon ordering lock was re-aimed from `if CAST_STOP and not
   is_attack:` (gone since SLICE-C2) to the bare `if CAST_STOP:`, and its recv-loop attach-point
   census from 2+1 to the three qualified sites (C5 gated one on the player being alive, C2's

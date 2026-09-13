@@ -220,6 +220,46 @@ verified = """args = 4 (bonus only), bonus 5->25, scale 0->0. Wiki gives one
 variable, `Bleeding` 5->25. The bitfield picked the slot before the wiki was
 read. Costs 4 adrenaline, which this server does not model."""
 
+[skill_effect.384]
+scale_means = "+ Damage"
+bonus_scale_means = "Deep Wound"
+requires_condition = "Bleeding"
+[skill_effect.384.provenance]
+source = "wiki"
+page = 'GWW, "Gash", {{Skill infobox}} + {{Skill progression}}, read 2026-09-13'
+verified = """SLICE-H10. Client: args = 6 (scale AND bonus), scale 5->20, bonus
+5->20, attribute 20 Swordsmanship, adrenaline 6 strikes (140 units -- studies/skills
+FINDINGS 191's worked example; the page shows 5). Wiki: var1 `+ Damage` 5->20,
+var2 `Deep Wound duration` 5->20 -- the two slots, the two variables. The
+description gates BOTH on the target: "If this attack hits a Bleeding foe, you
+strike for 5...20 more damage and that foe suffers a Deep Wound, lowering that
+foe's maximum Health by 20% for 5...20 seconds" -- `requires_condition` is that
+gate (attack_skill_terms): on a foe that is not bleeding Gash is a plain sword
+swing, no bonus and no Deep Wound. The Deep Wound itself is the server's existing
+482 model (the maximum falls 20%, DEEP_WOUND_*)."""
+
+[skill_effect.385]
+scale_means = "+ Damage"
+bonus_scale_means = "Health threshold %"
+clears_adrenaline = true
+[skill_effect.385.provenance]
+source = "wiki"
+page = 'GWW, "Final Thrust", {{Skill infobox}} + {{Skill progression factored}}, read 2026-09-13'
+verified = """SLICE-H10. Client: id 385 (the page's own `id = 385`), args = 2 (scale
+only), scale 1->40, bonus 50/50 with the bit CLEAR, attribute 20, adrenaline 10
+strikes, recharge 4. Wiki: var1 `Bonus damage` 5->40 (the client's low endpoint is
+1 -- the client's number swings), varF `Situational bonus damage` factor 2, and the
+description: "Lose all adrenaline. If Final Thrust hits, you deal 5...40 more
+damage. This damage is doubled if your target was below 50% Health." Notes: "The
+conditional only doubles the additional damage this skill adds (it does not double
+base damage or buffs)". `bonus_scale_means = "Health threshold %"` names the
+bit-clear 50 as that 50% (skill_flat_constant, Rush's-25 shape; read by
+skill_health_threshold), so attack_skill_terms doubles the BONUS only when the
+target stands below it; `clears_adrenaline` is the "Lose all adrenaline", paid at
+the cast's completion as the pool's clear plus 0x00D0 (skill_clears_adrenaline).
+The corpus holds no Final Thrust cast to copy; the wire shape is the death's and
+the 25 s wipe's (15 of 15 isolated 0x00D0)."""
+
 [skill_effect.337]
 bonus_scale_means = "Deep Wound"
 [skill_effect.337.provenance]
@@ -1221,7 +1261,7 @@ tiling, MEASURED walkable."""
 [spawn.corridor_raider_a]
 area = "corridor"
 map = 168
-skills = [[382, 0.0, 6.0], [322, 0.0, 3.0]]
+skills = [[322, 0.0, 3.0]]
 npc = "bandit_raider"
 agent_id = 90
 definition = 60
@@ -1231,9 +1271,11 @@ allegiance = "hostile"
 attacks_back = true
 max_health = 120
 level = 2
-attributes = [[17, 2], [20, 1], [21, 1]]
+attributes = [[19, 2], [17, 1], [21, 1]]
 damage = [6, 10]
-weapon_attribute = 20
+weapon_attribute = 19
+weapon_item = "starter_hammer"
+attack_speed = 1.75
 enabled = true
 
 [spawn.corridor_raider_a.provenance]
@@ -1242,13 +1284,21 @@ note = """Ours. Group A, 3,064 u north of the arrival point, on the floor's \
 west half; its monk is 470 u east and 100 u further on. SLICE-H8 (2026-09-13, \
 the owner: "the enemies lvl 2 (5 attribute points)"): level 2 (the npc row's \
 own retail declaration is 2 as well), max_health 120 (WIKI, GWW "Level": NPC \
-base health 120 at level 2), `attributes` Strength (17) 2, Swordsmanship (20) 1, \
-Tactics (21) 1 = 3+1+1 = level 2's 5 points -- its skills scale at those ranks \
-now, not at ENEMY_SKILL_RANK 12 -- and `damage` [6, 10] with `weapon_attribute` \
-20: OURS, sized so that through the wiki's swing formula (strike level 5 x rank \
+base health 120 at level 2), `attributes` (at H8: Strength (17) 2, Swordsmanship \
+(20) 1, Tactics (21) 1 = 3+1+1 = level 2's 5 points; a hammer warrior's since H11, \
+below) -- its skills scale at those ranks now, not at ENEMY_SKILL_RANK 12 -- and \
+`damage` [6, 10] with `weapon_attribute` 19: OURS, sized so that through the wiki's swing formula (strike level 5 x rank \
 against the player's armour 45) a swing lands 3-5, which is what retail's \
 Pre-Searing hostiles landed on the level-3 observer of 20260819T132414 (n=3, \
-3/4/5; F34). The armour is the creature formula's, 3 x 2 + 20 = 26. Healing \nSignet (1) is OFF every raider row (SLICE-H8b, the owner after run \n20260913T163333: "couldn't bring them down, healing signet too strong", then \n"just remove healing signet from the bandit"): it heals 88 at Tactics 1 -- the \nskill's own table, not a rank -- which was 22 health a second on the table's 4 s \nrecharge against a party landing 3-5 a swing (that run: ten casts, nobody died); \na 20 s recharge was tried first and the owner asked for the removal. Retail's \ncounter, the -40 armour while it activates, is not modelled. A balance knob, not \na mechanism; the bar is Sever Artery and Power Attack (the boss adds Desperation \nBlow)."""
+3/4/5; F34). The armour is the creature formula's, 3 x 2 + 20 = 26. SLICE-H11 \
+(2026-09-13, the owner: "the bandit should be a Hammer Warrior that just has \
+Power Attack"): the bar is Power Attack 322 alone (Sever Artery is off every \
+raider row), the ranks Hammer Mastery (19) 2, Strength (17) 1, Tactics (21) 1 = \
+3+1+1 = 5, `weapon_attribute` 19, `weapon_item` the starter hammer (declared and \
+named on the body by 0x0161 + 0x006D at its create -- retail's shape for EVERY \
+body, 3,016 non-party 0x006D across the live corpus, 51 of them a hammer), and \
+`attack_speed` 1.75 (content [attack_speed.rates] hammer; WIKI, GWW "Hammer"). \
+Healing \nSignet (1) is OFF every raider row (SLICE-H8b, the owner after run \n20260913T163333: "couldn't bring them down, healing signet too strong", then \n"just remove healing signet from the bandit"): it heals 88 at Tactics 1 -- the \nskill's own table, not a rank -- which was 22 health a second on the table's 4 s \nrecharge against a party landing 3-5 a swing (that run: ten casts, nobody died); \na 20 s recharge was tried first and the owner asked for the removal. Retail's \ncounter, the -40 armour while it activates, is not modelled. A balance knob, not \na mechanism; the bar is Sever Artery and Power Attack (the boss adds Desperation \nBlow)."""
 
 [spawn.corridor_monk_a]
 area = "corridor"
@@ -1277,7 +1327,7 @@ choice (studies/slice/PLAN.md, the owner's decisions). Orison's recharge is 8 s 
 [spawn.corridor_raider_b]
 area = "corridor"
 map = 168
-skills = [[382, 0.0, 6.0], [322, 0.0, 3.0]]
+skills = [[322, 0.0, 3.0]]
 npc = "bandit_raider"
 agent_id = 92
 definition = 60
@@ -1287,9 +1337,11 @@ allegiance = "hostile"
 attacks_back = true
 max_health = 120
 level = 2
-attributes = [[17, 2], [20, 1], [21, 1]]
+attributes = [[19, 2], [17, 1], [21, 1]]
 damage = [6, 10]
-weapon_attribute = 20
+weapon_attribute = 19
+weapon_item = "starter_hammer"
+attack_speed = 1.75
 enabled = true
 
 [spawn.corridor_raider_b.provenance]
@@ -1323,7 +1375,7 @@ and the reasons are on that row."""
 [spawn.corridor_boss]
 area = "corridor"
 map = 168
-skills = [[382, 0.0, 6.0], [322, 0.0, 3.0], [323, 0.0, 6.0]]
+skills = [[322, 0.0, 3.0], [323, 0.0, 6.0]]
 npc = "bandit_raider"
 agent_id = 94
 definition = 62
@@ -1333,9 +1385,11 @@ allegiance = "hostile"
 attacks_back = true
 max_health = 160
 level = 2
-attributes = [[17, 2], [20, 1], [21, 1]]
+attributes = [[19, 2], [17, 1], [21, 1]]
 damage = [8, 14]
-weapon_attribute = 20
+weapon_attribute = 19
+weapon_item = "starter_hammer"
+attack_speed = 1.75
 # THE AURA. One int property 29 on the boss's agent, an index into the client's
 # own s_glow (studies/slice/FINDINGS.md SLICE-F1). Index 5 is SLICE-F2's
 # registered bit: it renders RED if byte +4 is the red channel, and ids 3 and 4
@@ -1456,8 +1510,11 @@ damage = [3, 5]
 weapon_attribute = 13
 player_level = 3
 player_health = 140
-player_attributes = [[19, 3], [17, 2], [21, 1]]
+player_attributes = [[20, 3], [17, 2], [21, 1]]
 player_points = 10
+player_weapon = "starter_sword"
+player_offhand = "starter_shield"
+player_skills = [382, 384, 385, 322, 346, 1, 2]
 
 [party.slice.provenance]
 source = "invented"
@@ -1489,4 +1546,15 @@ carried 140), ranks Hammer Mastery (19) 3, Strength (17) 2, Tactics (21) 1 = \
 6+3+1 = the 10 points level 3 has (WIKI, GWW "Attribute point": 5 at level 2, \
 10 at 3, 45 at 10, 170 at 20, 200 with the two quests), points 10. Applied by \
 --party slice over [player.defaults]/[player.attributes], which stay the base \
-world's level-1 fixture that the offline locks price."""
+world's level-1 fixture that the offline locks price. SLICE-H9/H10 (2026-09-13, \
+the owner: "the player uses a Sword and Shield. skills: the classic GW sword \
+combo: Sever Artery, Gash, Final Thrust"): `player_weapon` the starter sword and \
+`player_offhand` the starter shield ([item.*] in items.toml, the level-3 Warrior \
+henchman's bytes off 20260819T132414 with the Starter Sword's 2-3 and the Starter \
+Shield's armour 3), so the ranks became Swordsmanship (20) 3, Strength (17) 2, \
+Tactics (21) 1 -- the same 10 points -- and `player_skills` the bar: Sever \
+Artery 382 (Bleeding 5..25 s), Gash 384 (+5..20 and Deep Wound 5..20 s on a \
+BLEEDING foe), Final Thrust 385 (+1..40, doubled below 50% health, loses all \
+adrenaline), Power Attack 322, Frenzy 346, Healing Signet 1, Resurrection Signet \
+2 -- seven; the eighth slot is empty. The sword swings at 1.33 s (content \
+[attack_speed.rates], WIKI) where the hammer swung at 1.75."""

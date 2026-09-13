@@ -1036,6 +1036,13 @@ ITEM_TYPE_HAMMER = 15
 # The name words are pre-encoded GW string ids, not text -- the same class of
 # value as the NPC EncStrings. They can be copied and cannot be invented.
 STARTER_HAMMER = _row("item", "starter_hammer")
+# SLICE-H9: what the PLAYER holds -- the base fixture's starter hammer and an
+# empty offhand, until a [party.KEY] row's `player_weapon` / `player_offhand`
+# rebind them at launch (authsrv.apply_party_character: the slice plays a
+# sword and a shield). Every consumer reads these two at call time;
+# STARTER_HAMMER stays the hammer row the offline locks read.
+PLAYER_WEAPON = STARTER_HAMMER
+PLAYER_OFFHAND = None
 
 
 def item_template(key):

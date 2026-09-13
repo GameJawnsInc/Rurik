@@ -1815,6 +1815,89 @@ and `test_spawn_burst`'s hand-copied `0x003A` row follows the H7 base ranks (bot
 since H7, unrun then). **Not modelled, said here:** knock-down, block, the wiki's level-scaled
 damage multiplier column, an NPC's energy at low level, and the hero's own attribute spend.
 
+## SLICE-F35 — **the sword and the shield, Gash's gate and Final Thrust's double, and a hammer bandit that holds its hammer**
+
+**The owner (2026-09-13):** *"the player uses a Sword and Shield. skills: the classic GW sword
+combo: Sever Artery (which we have working), Gash (need Deep Wound + conditional application),
+Final Thrust (need 50% HP logic). the bandit should be a Hammer Warrior that just has Power
+Attack."*
+
+**The items, OBSERVED on the wire.** F33 had left the Warrior's pair "on the tape, not
+extracted". A scratch census over `livewire` (every live connection, 2026-09-13) settles two things
+at once. First, **every body gets its weapons, not only a henchman's**: `0x006D` NPC_UPDATE_WEAPONS
+goes to **3,016 non-party agents** across the corpus against 21 henchman bodies — a sword (type
+27) in 403 leadhands, a shield (24) in 338 offhands, a staff (26) in 609, a hammer (15) in 51, a
+wand (22) in 57, an axe (2) in 46, a bow (5) in 127 — so a hostile body holding a hammer is retail's
+shape, not an extension of it. Second, the **level-3 Warrior henchman of 20260819T132414** (the
+low-level session F34 was measured on) carried item 99, a sword — file 175958, type 27, flags
+`0x22000100`, model 7937, name id 8582, words `0x24B80200` (587: slashing) and `0xA4880303` (584:
+range 3–3) — and item 100, a shield — file 176078, type 24, flags `0x20000200`, model 7938, one
+word `0xA3C80000` (572: armour 0). Both files **bind in the slice's own archive**
+(`archive.binds_plainly`, rows 76203 and 76325); the owner's own level-20 sword and shield
+(22133/27, 497/24, on every 2026-08-17 connection) do not, and the level-20 Warrior henchman's
+(39791/27 at 15–22 with a requirement word) is the wrong level.
+
+**What shipped (SLICE-H9).** `[item.starter_sword]` and `[item.starter_shield]` in
+`content/items.toml`: the level-3 henchman's bytes, **with two words ours** and said in the rows —
+the sword's range word composed as `0xA4880302` for the Starter Sword's **2–3** (WIKI, GWW *Starter
+Sword* §Stats) in the tape's own layout (only `arg2` differs from the verbatim 3–3), the shield's
+armour word `0xA3C80300` for the Starter Shield's **3** (WIKI, GWW *Starter Shield* §Stats) in the
+layout the level-20 shield's `0xA3C80700` (armour 7) uses; `itemmods.py --decode` reads both back
+(584 arg 3 arg2 2; 572 arg 3). The server swings the word and the client draws it: one fact, one
+place, the hammer row's own discipline. **The character holds them from the party row:**
+`[party.slice].player_weapon` / `player_offhand` rebind `agents.PLAYER_WEAPON` /
+`PLAYER_OFFHAND` (new; `STARTER_HAMMER` stays the base fixture forty locks read),
+`PLAYER_SWING_DAMAGE` (2–3), `WEAPON_ATTACK_SPEED`/`ATTACK_INTERVAL` (a sword's 1.33 s, content
+`[attack_speed.rates]`, against the hammer's 1.75), `WEAPON_TYPE_ATTRIBUTE` grew the sword (27 →
+Swordsmanship 20) and the axe (2 → 18), and `player_skills` the bar `default_skillbar` hands out.
+The load batch declares the offhand, moves it to the equipped bag's cell 1 (UPSTREAM,
+`EquippedItemSlot_OffHand`), names it in the weapon set's **fourth field** — `0x0147 [key, set,
+lead, off]`, non-zero on retail's wire exactly where the character carries a shield (14 of 56 sets
+in 20260817T231139, 0 of 12 in 20260817T180610) — and in `0x006E`'s position 1. **The shield's
+armour rides every location** (`offhand_armour`; WIKI, GWW *Shield*: "a bonus to a character's
+overall armor rating"): 45 → 48 physical, 25 → 28 elemental. The ranks became Swordsmanship 3 /
+Strength 2 / Tactics 1, the same ten points.
+
+**The strikes (SLICE-H10).** Two `skill_effect` rows and three readers, WIKI throughout (GWW *Gash*
+and *Final Thrust*, read today; the client's own endpoints are the numbers):
+
+- **Gash (384)** — client `args = 6`, scale 5→20, bonus 5→20; wiki var1 `+ Damage`, var2 `Deep
+  Wound duration`, and the description gates BOTH on the target: *"If this attack hits a Bleeding
+  foe, you strike for 5…20 more damage and that foe suffers a Deep Wound"*. The row's
+  `requires_condition = "Bleeding"` is that gate: `attack_skill_terms` returns no bonus and no
+  condition unless a live 478 episode sits on the target (`agent_has_condition`, the effect
+  table), else the +damage and a Deep Wound of the bonus slot's seconds through the existing 482
+  model (the maximum falls 20%). At Swordsmanship 3: +8 and 8 s.
+- **Final Thrust (385)** — the page's own `id = 385` (the client row 386 is something else);
+  client `args = 2`, scale 1→40, **bonus 50/50 with the bit clear**, adrenaline 10 strikes,
+  recharge 4; wiki: *"Lose all adrenaline. If Final Thrust hits, you deal 5…40 more damage. This
+  damage is doubled if your target was below 50% Health"*, Notes: *"only doubles the additional
+  damage this skill adds"*. The 50 in the bit-clear slot is the threshold, read through
+  `skill_flat_constant` (Rush's-25 shape) under `bonus_scale_means = "Health threshold %"`; the
+  double is of the BONUS only, judged on the target as it stands before the strike; and
+  `clears_adrenaline = true` pays the loss at the cast's completion — the pool's `clear()` plus
+  one `0x00D0 [player]`, the death's and the 25 s wipe's shape (15 of 15 isolated clears in the
+  corpus; no Final Thrust cast exists in it to copy). At Swordsmanship 3: +9, +18 below half.
+- Both terms serve the NPC arm of `land_skill` unchanged (an NPC's wipe is its own pool's; no
+  client holds a copy of it).
+
+**The bandit (SLICE-H11).** All three raider rows: `skills = [[322, 0.0, 3.0]]` (Power Attack
+alone; the boss keeps Desperation Blow), `attributes` Hammer Mastery 2 / Strength 1 / Tactics 1
+(five points), `weapon_attribute = 19`, `attack_speed = 1.75` (WIKI, GWW *Hammer*), and
+**`weapon_item = "starter_hammer"`**: `spawn_population` sends `0x0161` for the item (id `300 +
+agent`) and `0x006D [agent, item, 0]` after the body's create — the hero body's H7 site for a spawn
+row, and the census above is why. The sized 6–10 still lands 3–5 on armour 45 at Hammer 2.
+
+`test_agentlife` §H9/H10/H11 (floor 480 → 488): the rows, the character (before/after
+`apply_party_character`), Gash through the player's own press → `cast_tick` landing on a foe
+without and then with Bleeding (4 dealt and no 482; then swing +8 and an 8 s Deep Wound, 100 → 80),
+Final Thrust at 30 of 80 and at 70 of 80 (≥ 18 then 9–17, one `0x00D0` each), the three readers,
+the NPC arm's terms at the player, the raider rows; `test_population` §7 (73 → 75): the armed row's
+`0x0161` + `0x006D` and the bare row's silence, both encoding through the codec. **Unobserved by
+the owner's eye**, all of it — the sword swing, the shield on the paper doll, the bandit's hammer,
+the Deep Wound's bar. **Not modelled, said here:** the sword's slashing type against anything,
+Frenzy on a sword, the eighth bar slot (empty), and — the same list as F34 — knock-down, block.
+
 ## SLICE-F6 — what the desk cannot settle
 
 Carried so the next session does not re-read the same bytes hoping for more:
