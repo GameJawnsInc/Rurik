@@ -1633,6 +1633,43 @@ kiting; Guard's "guarded area" as a radius (a Guard body simply does not chase);
 pathed destination (the lead is the straight point, the corridor legs the follow's own); Fight's
 "lowest health under 50%" tie-break; `0x0017` (not the unlock, pvpui 28.11).
 
+## SLICE-F32 — **the hero across the loop: three instances on one process, the roster in the town, the body in the field, the roster again**
+
+**PRE-REGISTERED 2026-09-13, before the run.** `--map 148 --party slice --area errand,corridor`,
+walk `wait:6 S:2 wait:24 E:2.8 wait:10 shot:1 wait:30`: S backs the outpost's character (it faces
+east) west into `[portal.ascalon_to_corridor]`; in the corridor the character also faces east, so
+E strafes it SOUTH into `[portal.corridor_to_ascalon]` 736 u behind the arrival point. Prediction:
+c1 (148, a town) sends the roster with the profession pair and no body; the portal fires;
+c2 (168, RE-ENTRY) creates the hero body, which walks to its slot behind the strafing leader; the
+return portal fires; c3 (148, a second RE-ENTRY) sends the roster again with no body, and the
+party window reads "Mo5 Tahlkora" in the outpost. Refuted if c3 never comes (the SECOND transfer
+of a session is the one whose dial defers, SLICE-G3's trap), if c3 creates a body in the town, or
+if the roster row loses its profession on the third instance.
+
+**RESULT — OBSERVED, harness `20260913T123255`, every prediction met.** c1: `AGENT_SET_PROFESSION(hero
+agent 200, 3)`, the level and vitals, "the hero bodies are withheld", `HERO_ACTIVATE`,
+`PARTY_HERO_ADD`; `PORTAL 'ascalon_to_corridor'` at 129 u in → `TRANSFER to map 168`, the graceful
+close. c2: RE-ENTRY, `created agent 200 (Academy Monk) — hero body`, the activation and the party
+add again, six slot walks trailing the leader south (`walks to its slot (1646,1309)` … `(1647,946)`),
+`PORTAL 'corridor_to_ascalon'` at 136 u in → `TRANSFER to map 148`. c3: RE-ENTRY with `--map 148`
+standing down, the same town sequence as c1 line for line (profession pair, level, vitals,
+withheld, activation, party build, `PARTY_SET_MINE`), and the frame after the strafe shows the
+outpost with **"Party Formation (2/4) — W1 Test Warrior, Mo5 Tahlkora"**, Fisk's marker up. The
+tail of c3 is the perf-counter reply (`0x8009`, GrPerf) until the harness closed the window: no
+assert, no `Code=058`. **The hero's orders do not survive a zone**, by construction — `state` is
+rebuilt per connection, so a flag, a lock and a stance are the instance's — and that matches the
+one retail trace the corpus has: **`0x0067` PARTY_FLAG_SET's clear form `[(+inf,+inf), 0]` in the
+load batch beside `0x0103`, 3 of 3 connections that carry a `0x0103`** (F31). Not shipped: we send
+no `0x0103`, so the batch has no anchor here, and whether the client keeps a compass flag across a
+zone without the clear is untested.
+
+**What this closes and what it leaves.** SLICE-H6's mechanism half: the party rig is per
+instance (`_handle_request_players` re-runs it on every load, town and field alike), and three
+instances on one process carried it through both portals with the client re-dialling twice.
+**The owner's own pass — outpost roster, zone, the corridor fight beside Tahlkora, the return —
+is still the owner's** (this run fought nothing; H4's run fought and did not zone). The
+hero-specific live capture (F28's last paragraph) stays optional.
+
 ## SLICE-F6 — what the desk cannot settle
 
 Carried so the next session does not re-read the same bytes hoping for more:
