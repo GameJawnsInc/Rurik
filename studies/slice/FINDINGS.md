@@ -1893,9 +1893,11 @@ row, and the census above is why. The sized 6–10 still lands 3–5 on armour 4
 without and then with Bleeding (4 dealt and no 482; then swing +8 and an 8 s Deep Wound, 100 → 80),
 Final Thrust at 30 of 80 and at 70 of 80 (≥ 18 then 9–17, one `0x00D0` each), the three readers,
 the NPC arm's terms at the player, the raider rows; `test_population` §7 (73 → 75): the armed row's
-`0x0161` + `0x006D` and the bare row's silence, both encoding through the codec. **Unobserved by
-the owner's eye**, all of it — the sword swing, the shield on the paper doll, the bandit's hammer,
-the Deep Wound's bar. **Not modelled, said here:** the sword's slashing type against anything,
+`0x0161` + `0x006D` and the bare row's silence, both encoding through the codec. **OBSERVED the
+same evening, the owner's own hand pass at level 3:** *"ran it, the skills work as advertised. the
+bandit quest was completable"* — the first time the whole slice has been played through on the
+sword bar against the hammer raiders, and the balance note that opened H7b/H8b (an unkillable
+raider) closes with it. **Not modelled, said here:** the sword's slashing type against anything,
 Frenzy on a sword, the eighth bar slot (empty), and — the same list as F34 — knock-down, block.
 
 ## SLICE-F6 — what the desk cannot settle
