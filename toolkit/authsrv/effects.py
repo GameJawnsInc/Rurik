@@ -180,8 +180,17 @@ SELF_TARGET = 0
 ALLY_TARGET = 3          # "target ally" -- the caster is a legal target
 OTHER_ALLY_TARGET = 4    # "target other ally" -- the caster is NOT
 FOE_TARGET = 5
+# SLICE-H3 (2026-09-13): code 6 is "target dead ally" -- all 11 rows carrying
+# it on build 38797 are resurrections (Resurrection Signet 2, Resurrect 305,
+# Rebirth 306, Restore Life 314, Vengeance 315, Flesh of My Flesh 791,
+# Resurrection Chant 1128, Renew Life 1263, Death Pact Signet 1481, Signet of
+# Return 1778, Sunspear Rebirth Signet 1816; names through the owner's
+# archive). OBSERVED from the table, one column; the wiki says "target party
+# member" of each. Codes 1, 14 and 16 stay unresolved.
+DEAD_ALLY_TARGET = 6
 TARGET_KINDS = {SELF_TARGET: "self", ALLY_TARGET: "ally",
-                OTHER_ALLY_TARGET: "other_ally", FOE_TARGET: "foe"}
+                OTHER_ALLY_TARGET: "other_ally", FOE_TARGET: "foe",
+                DEAD_ALLY_TARGET: "dead_ally"}
 
 # The four `type_code` families whose GWW definition IS "a timed effect on the
 # target". WIKI (GWW, rev. 2026): a Stance "lasts for a set amount of time";

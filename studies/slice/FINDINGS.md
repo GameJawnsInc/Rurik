@@ -1467,6 +1467,67 @@ hero look like one. The owner's note: *"you don't need to press it in outposts �
 Window is always open there."* Recorded as SLICE-H2d, not fixed.
 
 
+## SLICE-F29 — **hostiles fight the party: retail picks the softest class alive, and the signet is what ends a death**
+
+OBSERVED, 2026-09-13, `henchjoin.py --hostile` over the henchman connections (F28's tapes).
+**58 opening starts** by a hostile on a party — the first start by that hostile in 3 s — against
+the live party's positions (sample-and-held from creates, leads, destinations and 0x002C; the
+observer from its own reports) and the profession of each body (`0x01BF`'s byte, `0x00A6` for the
+observer):
+
+| rule | fits |
+|---|---|
+| the NEAREST live party body | 26 of 58 (and the miss is not small: 231 u p50 further) |
+| the last party body to HIT the hostile (10 s) | 11 of 58 |
+| either of those | 33 of 58 |
+| **the LOWEST BASE-ARMOUR class alive** (GWW's per-profession table: Warrior 80, Ranger 70, casters 60) | **51 of 58** |
+| …and the NEAREST within that class | **41 of 58** |
+
+The seven misses are all the observer, a Warrior, at rank 1–2 by distance. The Monk was chosen
+at 380–500 u over a Warrior at 64–185 u; when the Monk was down the Elementalist was next; the
+Warrior henchman was picked only when no caster stood. Inside a bout the hostile switched
+target 12 times in 58 (6 to the nearest, 3 to its last hitter) — **unmodelled**, the pick is kept
+while it lives. The rule as shipped is a RECONSTRUCTION fitted to those 58 and says so at
+`HOSTILE_TARGETS_PARTY`; the class table is WIKI (*Armor rating*).
+
+**And the client's target byte 6 is "dead ally":** all 11 skills carrying it on build 38797 are
+resurrections (Resurrection Signet 2, Resurrect, Rebirth, Restore Life, Vengeance, Flesh of My
+Flesh, Resurrection Chant, Renew Life, Death Pact Signet, Signet of Return, Sunspear Rebirth
+Signet — names through the owner's archive), `effects.DEAD_ALLY_TARGET`.
+
+**What shipped (SLICE-H3).** Every hostile keeps a `target` — the softest class inside
+`AGGRO_RANGE`, nearest within it, kept while it lives, re-picked at its death
+(`hostile_target`) — and the whole fight is aimed at it: the chase (`_npc_follow_tick` takes a
+`target_id`; the 0x002A names it; the frame it parks against is the body's own position), the
+swing (`start_swing` names it, `land_swing` lands on it through `land_swing_on_body` — the same
+ENEMY_HIT_FRACTION at the body's own armour, the skill bonus after armour, retail's
+[finished, damage] order, property 16 `[16, body, hostile, fraction]`), the cast (`land_skill`'s
+damage, effect and condition sites take the cast target), the facing. A party body dies through
+`kill_agent` with **no kill reward** (nobody is paid for a party death) and **`revive_due` leaves
+it down**: retail's henchman was raised by Resurrection Signet five times in one fight and never
+by a timer (F28). The signet is a `skill_effect` row (`scale_means = "Resurrect"`), the monk hero
+carries it (`[party.slice]` bar 281/276/2), `ally_cast_tick` casts it at a dead ally **ahead of
+any heal** and holds the slot when nobody is dead, and `land_skill` raises the body ([finish],
+`[id, 0]`, full health) or the player (`revive_player`, the timer revive's body, callable now).
+A dead player no longer stops the hostiles: the fight goes on against the party. Revert:
+`--hostile-target-player`. `test_agentlife` §H3 (floor 428 → 442).
+
+**Run on the harness the same day** (`20260913T102921`, the owner aggroed the first raider
+by hand): the raider fought the player, re-picked the Monk hero the moment the player died, the
+hero cast Orison seven times at the player and the signet at the corpse, took 56 (Power Attack),
+22 and 22 on her 100 health and died. **And the first pick was wrong by the rule's own letter:**
+the raider noticed the player 600 u out while the hero still stood past `AGGRO_RANGE`, chose the
+only candidate, and kept it. Retail's rule is read off OPENING starts, so the pick is now
+PROVISIONAL until the bout opens — re-made each tick as bodies come into range — and LOCKED from
+the first swing or cast while the target lives (`target_locked`). The owner's note on the same
+run, not H3's but the slice's: *"it's too strong to kill since healing signet is so powerful and
+i have no actual skills other than power attack that do anything"* — content balance, the
+raider's Healing Signet against a level-1 bar; a knob, not a mechanism.
+
+**Not modelled, said here:** the in-bout switch (12 of 58); the signet's 25% energy and its
+morale-only recharge (the client table's 0 recharge is what runs, so it is ready every fight);
+a hostile's spell at a party body gets no armour term but the body's flat rating.
+
 ## SLICE-F6 — what the desk cannot settle
 
 Carried so the next session does not re-read the same bytes hoping for more:

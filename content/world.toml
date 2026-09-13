@@ -315,6 +315,21 @@ dates not retrieved (the pages refused the fetcher)."""
 # (which is what `skill_heal`/`skill_damage` read), and a build past
 # 2026-08-26 will move them. Labelled CONTESTED-by-generation, resolved in the
 # client's favour because it is the client we drive.
+[skill_effect.2]
+scale_means = "Resurrect"
+[skill_effect.2.provenance]
+source = "wiki"
+page = 'GWW, "Resurrection Signet" (the standing description; page not re-read on 2026-09-13)'
+verified = """Client row 2: activation 3.0, recharge 0, energy 0, target byte 6 -- the
+byte every one of the table's 11 resurrection skills carries (effects.py
+DEAD_ALLY_TARGET). Retail's own use: a party member's signet, [60, caster,
+corpse, 2] then [corpse, 0] 3.0 s later, five raises of one henchman in one
+fight and two of the observer (studies/slice F28, henchjoin.py --casts). The
+description's "100% Health and 25% Energy": the server raises with full health;
+the energy fraction is not modelled (the revive path refills). "Only recharges
+when you gain a morale boost" is not modelled either -- the client table's
+recharge (0) is what the server uses, so the signet is ready every fight."""
+
 [skill_effect.281]
 scale_means = "Heal"
 [skill_effect.281.provenance]
@@ -1339,7 +1354,7 @@ geometry, not the game's."""
 [party.slice]
 hero = 3
 body = "academy_monk"
-skills = [281, 276]
+skills = [281, 276, 2]
 level = 5
 health = 100
 energy = 30
