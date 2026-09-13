@@ -1207,6 +1207,44 @@ death, the counter reset at revive). No send: the KILL status is what the client
 `test_effects` §6a. Both unobserved on a client until the next pass; the run question is the
 obvious pair — *does Bleeding tick you down at 6 a second now, and does the corpse stay put?*
 
+## SLICE-F24 — **an NPC's attack skill is a swing (the "Power Attack did bleeding" burst), and the corpse is held**
+
+**The owner** (harness `20260912T210558`): *"Power Attack did bleeding which was weird, I think
+it ticked normally? I took a bunch of damage on his initial hits and idk why. My corpse didn't
+slide, but it did warp slightly."* The bleed ticked normally (C5 held). The rest is two
+things.
+
+**The burst.** Log 620–635: Sever Artery announced and its Bleeding applied in the same
+instant; Power Attack announced and its 34 landed in the same instant; the two casts ten lines
+apart. The raider's bar gives both attack skills a 0.0 activation, `cast_lands_at = now + 0.0`
+landed each on the next tick, the round robin picked the other ready skill on the tick after,
+and both were announced as spells (`[60]`) and closed as spells (`[58]`). So Sever Artery's
+bleed and Power Attack's 34 arrived as one blow, which is what the owner saw and felt.
+
+**Retail's NPC attack skill is a swing** — 177 activations on the live corpus (`c6_npcskill`
+scan): announced `[50, npc, target, skill]` every time; the close `[46]` a windup later, p50
+**0.564 s** (`swing_windup(1.33)` = 0.565); the next start p50 **1.5 s** after, the weapon's
+interval; two `[50]`s by one NPC inside 1 s **once in 177**. Shipped
+(`NPC_ATTACK_SKILL_SWINGS`, `--npc-skill-instant` reverts): an attack skill is picked only when
+the swing clock is ready, announced with 50, lands `swing_windup(interval)` later (a listed
+activation wins, the player's rule) as `[46]` + the weapon hit + its "+ damage" bonus added
+after armour (`land_swing(bonus=, skill_id=)`, hit_enemy's order for the player's), then its
+effect, condition, visual and heal resolve as for any cast; the chain waits its interval.
+Spells keep their table activation, 60 and 58. `test_agentlife` §11c (floor 406 → 412): the
+50, the windup, the 46 with weapon damage, the second ready attack skill waiting for the
+interval, Power Attack's +30 on top of the weapon hit, and the revert arm's burst.
+
+**The corpse is held.** Retail's death batch for the observing player, 2 of 2
+(`20260817T183756` t=353.299, `20260821T152147` t=550.319): `STATUS [me, 16]`, then
+**`[8, me, 1]`**, then the 41/42 maxima, `0x002D [me]` and `0x0026 [me, 4]`; no `0x0028`, no
+`0x002C`. Property 8 is the client's walk gate (ANIMREF §28), so a retail corpse cannot take a
+step; ours sent no hold, and the owner's corpse warped slightly as its copies converged.
+`kill_player` sets the hold behind the STATUS now (`test_effects` §6a). `0x002D` (unnamed in
+the catalog) and the flags value 4 (ours sends 8, the four NPC deaths') are recorded, not sent
+— the next reader with a corpse to explain starts there. Both unobserved on a client. The run
+questions: *does a raider's Sever Artery land as one hit with the bleed behind it and Power
+Attack a swing later, and does the corpse stay exactly where it fell?*
+
 ## SLICE-F6 — what the desk cannot settle
 
 Carried so the next session does not re-read the same bytes hoping for more:

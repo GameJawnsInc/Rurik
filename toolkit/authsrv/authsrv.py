@@ -10607,6 +10607,27 @@ HALT_ON_CLOCK = True   # False (--halt-on-arrival): the 0x0028 at the copy's arr
 # owes nothing. False = --no-owed-swing: the swing tick re-tests the live
 # distance, the pre-F22 arm.
 SWING_OWED_AT_HALT = True
+
+# SLICE-F24 (2026-09-12) -- AN NPC'S ATTACK SKILL IS A SWING. The owner, after
+# C5: "Power Attack did bleeding which was weird ... I took a bunch of damage
+# on his initial hits and idk why." Harness 20260912T210558, lines 620-635:
+# Sever Artery announced and its Bleeding applied in the same instant, then
+# Power Attack announced and its 34 landed in the same instant, the two
+# casts ten lines apart -- because the bar's activation column is 0.0 for
+# an attack skill, `cast_lands_at = now + 0.0` landed it on the next tick,
+# and the round robin picked the next ready skill on the tick after that.
+# Both announced as a SPELL ([60]) and closed as one ([58]). Retail's NPC
+# attack skills (177 activations on the live corpus, latehitjoin's family):
+# announced [50, npc, target, skill] every time; the close [46] a windup
+# later, p50 0.564 s (swing_windup(1.33) = 0.565); the next start p50 1.5 s
+# after -- the weapon's interval; two [50]s by one NPC inside 1 s once in
+# 177. So an attack skill rides the swing clock: it is picked only when the
+# swing interval is ready, announced with 50, lands swing_windup(interval)
+# later as [46] + weapon damage + its "+ damage" bonus (the player's own
+# rule, hit_enemy), then the chain waits its interval. Spells keep their
+# table activation, 60 and 58. False = --npc-skill-instant: the pre-F24
+# arm (instant, back to back, spell-shaped).
+NPC_ATTACK_SKILL_SWINGS = True
 SWING_OWED_WINDOW = 0.5     # s after the halt; retail's halt->swing max 0.379
 
 # AND IT TURNS TO FACE YOU. GAME_SMSG_AGENT_UPDATE_ROTATION (0x002E) has been
@@ -14959,6 +14980,16 @@ def kill_player(send, state, conn_id, why="took a killing blow"):
     router_abandon(state, None, "death", time.time())
     send(GAME_SMSG_AGENT_UPDATE_STATUS,
          [PLAYER_AGENT_ID, agents.EFFECT_DEAD], f"KILL the player ({why})")
+    # SLICE-F24: THE CORPSE IS HELD. Retail's death batch for the observing
+    # player -- 2 of 2 on the live corpus (20260817T183756 t=353.299,
+    # 20260821T152147 t=550.319) -- is STATUS [me, 16], then [8, me, 1],
+    # then the 41/42 maxima, 0x002D [me] and 0x0026 [me, 4]; no 0x0028, no
+    # 0x002C. Property 8 is the client's walk gate (ANIMREF 28), so the
+    # corpse cannot take a step. Ours sent no hold, and the owner's corpse
+    # "warped slightly" on its converging copies. 0x002D (unnamed in the
+    # catalog) and the flags value 4 (ours sends 8, the four NPC deaths')
+    # are recorded, not sent.
+    action_hold(send, state, 1, f"the player died ({why})")
     # AND THE BILL, in ArenaNet's own order: the death bit first, the morale
     # tick behind it, same tick. Silent in every map this server ships, because
     # pre-Searing charges nothing -- `map_death_penalty` is where that is
@@ -16238,6 +16269,14 @@ def enemy_attack_tick(send, state, conn_id):
             _next = pick_skill(agent, now)
             slot = None if (_next is None or _next in _held) else _next
             cast_target = PLAYER_AGENT_ID
+        # SLICE-F24: an ATTACK skill is a swing -- it waits for the swing
+        # clock like the plain swing below does, so a bar with two ready
+        # attack skills fires one per interval (retail: two [50]s by one
+        # NPC inside 1 s once in 177), not both on consecutive ticks.
+        if (slot is not None and NPC_ATTACK_SKILL_SWINGS
+                and _is_attack_skill(agent["skills"][slot][0])
+                and now - agent.get("last_swing", 0.0) < interval):
+            slot = None
         if slot is not None:
             skill_id, activation, recharge = agent["skills"][slot]
             agent["cast_target"] = cast_target
@@ -16261,10 +16300,21 @@ def enemy_attack_tick(send, state, conn_id):
             # flag), so under the form rule this cast names its target -- the
             # 0x009F shape it used to take matched the corpus's one NPC
             # activation, but that one was a cast that names nobody.
-            _op, _vals = cast_anim_msg(agents.GV_SKILL_ACTIVATED, agent_id,
-                                       cast_target, skill_id)
-            send(_op, _vals, f"agent {agent_id} casts skill {skill_id}")
-            agent["cast_lands_at"] = now + activation
+            _atk = NPC_ATTACK_SKILL_SWINGS and _is_attack_skill(skill_id)
+            _op, _vals = cast_anim_msg(
+                agents.GV_ATTACK_SKILL_ACTIVATED if _atk
+                else agents.GV_SKILL_ACTIVATED,
+                agent_id, cast_target, skill_id)
+            send(_op, _vals,
+                 f"agent {agent_id} {'strikes with' if _atk else 'casts'} "
+                 f"skill {skill_id}")
+            # SLICE-F24: an attack skill's strike is a windup away (retail
+            # [50] -> [46] p50 0.564 s), the table activation for a spell.
+            # A LISTED activation on an attack skill wins, the player's rule.
+            if _atk and activation == 0.0:
+                agent["cast_lands_at"] = now + swing_windup(interval)
+            else:
+                agent["cast_lands_at"] = now + activation
             print(f"[c{conn_id}] agent {agent_id} ({agent['name']}) casts skill "
                   f"{skill_id} (slot {slot + 1} of "
                   f"{len(agent['skills'])})", flush=True)
@@ -17935,7 +17985,8 @@ def start_swing(send, agent_id, conn_id):
          f"attack_started: agent {agent_id} swings at the player")
 
 
-def land_swing(send, state, agent_id, agent, conn_id):
+def land_swing(send, state, agent_id, agent, conn_id, bonus=0.0,
+               skill_id=None):
     """The closing half: the swing connects, `swing_windup(interval)` seconds later.
 
     THE ORDER IS ARENANET'S, and it is the opposite of hit_enemy's. OBSERVED in
@@ -18004,14 +18055,25 @@ def land_swing(send, state, agent_id, agent, conn_id):
     # here, before the first send, so the guard below sees the number that
     # actually lands; performed after MELEE_ATTACK_FINISHED so the measured
     # [finished, gain, damage] batch keeps its shape when nothing is open.
+    # SLICE-F24: an attack skill's "+ damage", after armour (hit_enemy's
+    # order for the player), and its close is the attack trio's 46.
+    dealt += float(bonus)
     dealt, conversion = taker_damage(state, PLAYER_AGENT_ID, dealt)
     frac = None
     if dealt > 0:
         frac = _damage_fraction(dealt, player_max_health(state),
-                                agents.PROP_DAMAGE, "an enemy swing")
-    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-         [agents.GV_MELEE_ATTACK_FINISHED, agent_id, 0],
-         "melee_attack_finished")
+                                agents.PROP_DAMAGE,
+                                "an enemy swing" if skill_id is None
+                                else f"skill {skill_id}")
+    if skill_id is None:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.GV_MELEE_ATTACK_FINISHED, agent_id, 0],
+             "melee_attack_finished")
+    else:
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.GV_ATTACK_SKILL_FINISHED, agent_id, 0],
+             f"attack_skill_finished: agent {agent_id}'s skill {skill_id} "
+             f"strikes (+{bonus:.0f})")
     if conversion is not None:
         resolve_taker_conversion(send, state, conversion, conn_id)
 
@@ -18181,6 +18243,27 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # apply_effect as a consequence; no skill on this bar both hexes and
     # damages, so nothing today can observe the reordering.)
     damage = skill_damage(skill_id, ENEMY_SKILL_RANK)
+    if NPC_ATTACK_SKILL_SWINGS and _is_attack_skill(skill_id):
+        # SLICE-F24: THE STRIKE IS A WEAPON SWING PLUS THE SKILL'S BONUS --
+        # [46, npc, 0] then the damage (retail's close for the family, 124
+        # of 124 that closed), the bonus added after armour as hit_enemy
+        # adds the player's. The skill's own effect, condition, visual and
+        # heal resolve as for any cast, after the hit and never on a corpse.
+        agent["casting"] = None
+        bonus = float(damage[0]) if damage and damage[1] == "additive" else 0.0
+        land_swing(send, state, agent_id, agent, conn_id, bonus=bonus,
+                   skill_id=skill_id)
+        send_skill_visual(send, state, agent_id, skill_id,
+                          agent.get("cast_target") or PLAYER_AGENT_ID, conn_id)
+        apply_effect(send, state, agent_id, skill_id, ENEMY_SKILL_RANK,
+                     PLAYER_AGENT_ID, conn_id)
+        inflicted = skill_condition(skill_id, ENEMY_SKILL_RANK)
+        if inflicted and not state.get("player_dead"):
+            apply_condition(send, state, PLAYER_AGENT_ID, inflicted[0],
+                            inflicted[1], ENEMY_SKILL_RANK, conn_id, skill_id)
+        resolve_heal(send, state, skill_id, ENEMY_SKILL_RANK, agent_id,
+                     agent.get("cast_target"), conn_id)
+        return
     dealt, conversion, frac = 0.0, None, None
     # THE PLAYER'S ARMOUR, for the labels that respect it (SKILLS-FA). One
     # elemental rating, no location roll -- `player_spell_armour` says why
@@ -25582,6 +25665,14 @@ def main():
     if a.attack_approach:
         print("[map] --attack-approach: no-op, the approach is the default "
               "since ANIMREF-RE 39 (--no-attack-approach reverts it).",
+              flush=True)
+    if a.npc_skill_instant:
+        global NPC_ATTACK_SKILL_SWINGS
+        NPC_ATTACK_SKILL_SWINGS = False
+        print("[map] --npc-skill-instant: an NPC's attack skill announces as "
+              "a spell, lands on the next tick and the next ready skill "
+              "follows on the tick after -- the pre-F24 burst (Sever Artery "
+              "and Power Attack in one instant on the owner's run).",
               flush=True)
     if a.no_owed_swing:
         global SWING_OWED_AT_HALT

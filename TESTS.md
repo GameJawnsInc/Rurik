@@ -10264,6 +10264,14 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   movement message; a source lock counts the `player_dead` gates on the four grant ticks and
   places the dead-report refusal ahead of both movement arms; refused corpse reports are
   counted. `test_playerswing.py` §9k's abandon-site count 10 -> 11 (kill_player).
+  **SLICE-F24 / C6 (2026-09-12): an NPC's attack skill is a swing.** `test_agentlife.py` §11c
+  (floor 406 -> 412), stubbing `_is_attack_skill`, `skill_damage`, `skill_cost` and
+  `skill_condition` as test_castcycle does: a bar of two ready attack skills announces the
+  first as [50, npc, player, skill] landing a windup away; the landing is [46, npc, 0] then
+  weapon damage; the second ready attack skill waits for the swing interval; once it has
+  passed it is the next swing, and Power Attack's strike is the weapon hit plus its +30;
+  `--npc-skill-instant` restores the burst (60, 58, back to back). `test_effects.py` §6a
+  (floor 80 -> 81): the death batch sets the hold [8, me, 1] retail sets (2 of 2).
   `toolkit/authsrv/test_castcycle.py` (the four-opcode cast cycle against
   ArenaNet's own template — six complete cycles, two live captures, same order
   every time: E4 at the press, E5 at cast end carrying the recharge in whole

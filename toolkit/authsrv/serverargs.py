@@ -645,6 +645,14 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                     help="No-op since ANIMREF-RE 39: the approach is the "
                          "default. Kept so the CASE 7 command line still "
                          "parses.")
+    ap.add_argument("--npc-skill-instant", action="store_true",
+                    help="THE REVERT ARM for SLICE-F24: an NPC's attack skill "
+                         "announces as a spell (60), lands on the next tick "
+                         "(the bar's 0.0 activation) and the next ready "
+                         "skill fires on the tick after -- the burst the "
+                         "owner took. The default rides the swing clock: "
+                         "50, a windup, 46 + weapon damage + the bonus, one "
+                         "per interval (retail 177 activations).")
     ap.add_argument("--no-owed-swing", action="store_true",
                     help="THE REVERT ARM for SLICE-F22: after a hostile's halt "
                          "the swing tick re-tests the live distance, so a "
