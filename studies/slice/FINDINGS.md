@@ -1727,6 +1727,75 @@ no signet, kites nothing and lands Power Attack twice on 25 energy. The heal is 
 raider now dies is the owner's own hands. The next knobs, if not: the monk's Banish (49 a cast on
 the hero, 36 on the player, every 10 s) and the raider's 200 health.
 
+## SLICE-F34 — **low levels: retail's damage at level 3 is single digits, a body casts at its own ranks and swings its own weapon, and the hero heals herself**
+
+**The owner, after H7 (2026-09-13):** *"tahlkora doesn't self heal i think. the monk killed me after
+I killed the bandit with her Banish spell. should reduce attributes here, make the player/hero lvl 3
+(10 attribute points) and the enemies lvl 2 (5 attribute points). did we research low level weapon
+damage at all? idk if we did a range check on their damage."*
+
+**The research, answered.** Yes for the player's own weapon — the starter hammer's 3–5 is the
+item's own damage-range word, tooltip-verified on 2026-08-20, and the swing runs the wiki's
+formula `base × 2^((5 × rank − armour) / 40)` (combatmath, since the armour arc). **No for
+everyone else**: every NPC swing was `ENEMY_HIT_FRACTION` = 10% of the taker's maximum at armour
+60 and every NPC skill cast at `ENEMY_SKILL_RANK` = 12 — a model no level can move. So, measured
+on the one low-level retail session (20260819T132414, three level-3 henchmen, the observer at
+maximum health 140 = level 3 by the wiki's 100/120/140), damage per landed hit, absolute (the
+`0x00A3` fraction × the taker's `0x009F 42` maximum):
+
+| who → whom, plain swing | n | p10 / p50 / p90 |
+|---|---|---|
+| Pre-Searing hostile → the level-3 observer | 3 | 3 / 4 / 5 |
+| level-3 henchman (Warrior/Ranger/Assassin) → hostile | 22 | 5 / 6 / 15 |
+| the level-3 observer → hostile | 12 | 1 / 2 / 3 |
+| henchman attack skill → hostile | 20 | 7 / 19 / 37 |
+
+Single digits everywhere. Our corridor before today: the raider hit the level-1 player for 13, the
+monk's Banish for 36 (49 on the hero), the hero swung for 14 — level-20 numbers in a starter zone.
+
+**What shipped (SLICE-H8).** WIKI throughout (GWW *Level*, *Attribute point*, *Damage
+calculation*, *Starter Holy Rod*, *Health*), the corpus above as the yardstick:
+
+- **A body's own ranks.** A spawn or party row may carry `attributes = [[id, rank], …]`;
+  `agent_skill_rank` resolves a skill's attribute through the client's own skill row to that rank,
+  else `ENEMY_SKILL_RANK`. The corridor's raiders carry Strength 2 / Swordsmanship 1 / Tactics 1
+  and the monks Healing 2 / Smiting 1 / Protection 1 — level 2's five points — so Orison heals 27
+  and Banish deals 22 before armour instead of 60 and 56.
+- **A body's own level.** The row's `level` rides the npc dict (the creature armour formula, 3 ×
+  level + the profession bonus: 26 for a level-2 Warrior) and the **skill strike level 3 × level**
+  (`agent_strike_level`; the level-20 baseline 60 without one), so the level-2 monk's Banish lands
+  22 × 2^((6 − 40)/40) ≈ 12 on the player's spell armour rather than 22 × 1.4. Enemies are level 2,
+  120 health (the wiki's NPC base at level 2), the boss 160.
+- **A body's own weapon.** `damage = [lo, hi]` and `weapon_attribute` on a row (or the held item's
+  own range word — the hero's staff decodes to 11–22) run through the same `swing_damage` the
+  player's hammer does, at the body's rank and level, against the location's armour: the raiders'
+  6–10 (ours, sized) lands **3–5 on the player's armour 45 — retail's 3/4/5**; the hero's Starter
+  Holy Rod 3–5 (WIKI) at Healing 3 lands 2–4 on the raider's 26; the player's hammer at Hammer 3
+  lands 2–4. A row without a range keeps the fraction, so every earlier fixture is unchanged.
+- **The slice's character.** `[party.slice]` carries `player_level = 3`, `player_health = 140`,
+  `player_attributes` Hammer 3 / Strength 2 / Tactics 1, `player_points = 10`;
+  `apply_party_character` rebinds the agents globals at `--party slice`, over the base world's
+  level-1 / 100-health / 200-point rows that forty offline locks price. The hero is level 3 too:
+  140 health, Healing 3 / Divine Favor 2 / Protection 1 (its own `0x0037` reads 0 of 10 and its
+  `0x003A` its own ranks), armour 25 (a starter set's; the creature formula gave a level-3 body 9,
+  which is why she died in four hits).
+- **The self-heal.** `ally_cast_tick` picks an ally-kind heal's target through the hurt-most rule
+  the hostile monk has had since SLICE-B3, caster included — the client's target byte 3 allows it.
+  Retail's Monk cast at itself 0 of 13 (F28) and the owner asked for it anyway; said here.
+
+**One harness attempt (`20260913T162923`) is inconclusive:** the launch banner read `level 3,
+health 140, ranks [(19, 3), (17, 2), (21, 1)], points 10`, the client took the level, the 140, the
+three-attribute `0x003A`, the hero's own `0 of 10`, selected the raider on the attack order — and the
+socket reset ten seconds into the walk with no assert and no crash dialog (a clean exit, the shape
+of a closed window; the owner asked for the harness at that moment). Nothing on the wire before it
+is new since H7's green runs except those level messages, and the client drew them. The fight at
+these numbers is the owner's hands.
+
+`test_agentlife` §H8 (floor 472 → 478); `test_effects`' stance-duration lock reads rank 12 by name
+and `test_spawn_burst`'s hand-copied `0x003A` row follows the H7 base ranks (both were red on main
+since H7, unrun then). **Not modelled, said here:** knock-down, block, the wiki's level-scaled
+damage multiplier column, an NPC's energy at low level, and the hero's own attribute spend.
+
 ## SLICE-F6 — what the desk cannot settle
 
 Carried so the next session does not re-read the same bytes hoping for more:

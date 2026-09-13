@@ -386,12 +386,14 @@ def section_dispatch():
 
     print("\n3c. the durations our two bars actually resolve to")
     got = {}
+    # Rank 12 for all three, by NAME: the two Warrior stances used to read the
+    # player's Strength, which was 12 until SLICE-H7 re-specced the base row
+    # to a hammer warrior's (Strength 9), and the check is about the curve's
+    # top end, not about whatever rank the shipped character happens to hold.
     for sid in (317, 319, 253):
-        rank = (authsrv.player_rank_for_skill(sid) if sid in (317, 319)
-                else authsrv.ENEMY_SKILL_RANK)
-        got[sid] = effects.resolve_duration(row(sid), rank)
+        got[sid] = effects.resolve_duration(row(sid), 12)
     LEDGER.ok(got == {317: 17.0, 319: 18.0, 253: 18.0},
-              "Battle Rage 17 s, Rush 18 s, Scourge Sacrifice 18 s",
+              "Battle Rage 17 s, Rush 18 s, Scourge Sacrifice 18 s (at rank 12)",
               f"{got} -- Strength rank 12 for the player's two, "
               f"ENEMY_SKILL_RANK {authsrv.ENEMY_SKILL_RANK} for the hex. The "
               f"ranks are OURS (content/world.toml says so at length); the "

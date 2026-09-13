@@ -93,7 +93,11 @@ BURST = [
     # base 6 goes out as an effective 7, which is what the client drew on the
     # attribute panel in capture 20260820T113942. Every other gap is 0.
     (0x003A, [PLAYER_AGENT_ID,
-              [17, 18, 19, 20, 21, 12, 9, 6, 3, 1, 12, 9, 7, 3, 1]],
+              # SLICE-H7 (2026-09-13): the base row is a hammer warrior's
+              # now -- Hammer 12 (+1 from the hammer, effective 13 --
+              # ATTRIBUTE_RANK_MAX bounds the SPEND, not the effective),
+              # Strength 9, Tactics 6, Axe 3, Sword 1.
+              [17, 18, 19, 20, 21, 9, 3, 12, 1, 6, 9, 3, 13, 1, 6]],
      "AGENT_UPDATE_ATTRIBUTES"),
     (0x0022, [PLAYER_AGENT_ID, 3], "WORLD_UPDATE_CONTROLLED_AGENT"),
     (0x018E, [], "INSTANCE_LOAD_FINISH"),

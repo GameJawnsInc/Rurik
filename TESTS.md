@@ -10365,6 +10365,17 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   it resolves to a damage number; at Hammer Mastery 12 the four hammer attacks add 34/24/16/17.
   `test_skilldamage`'s two rank locks (Power Attack reads Strength, Desperation Blow reads
   Tactics) re-aimed from 12/1 to the shipped 9/6 (+28 and +22).
+  **SLICE-H8 (2026-09-13, floor 472 -> 478): low levels.** A body with `attributes` casts at its
+  own rank in the skill's attribute (the level-2 monk's Orison at 2, Banish at 1; the raider's
+  Power Attack at 2) and a row without keeps ENEMY_SKILL_RANK; a body with a `damage` range swings
+  it through the wiki's formula at its rank and level (the raider's 6-10 lands 3-5 on armour 45,
+  retail's 3/4/5) and a row without keeps the fraction; the skill strike level is 3 x level (6 at
+  level 2, 60 bare, and at 60 the multiplier is armour_multiplier exactly); a level-2 monk's Banish
+  through land_skill lands under 15 on the player; a hurt party caster with a healthy party casts
+  Orison at ITSELF; `apply_party_character` rebinds level 3 / health 140 / Hammer 3, Strength 2,
+  Tactics 1 = 10 of 10 points over the base row's level-1 / 100 / 200 fixture (restored after).
+  `test_effects`' stance-duration lock now reads rank 12 by name and `test_spawn_burst`'s
+  hand-copied 0x003A row follows the H7 base ranks -- both had been red since H7.
   `test_router.py`'s cast-abandon ordering lock was re-aimed from `if CAST_STOP and not
   is_attack:` (gone since SLICE-C2) to the bare `if CAST_STOP:`, and its recv-loop attach-point
   census from 2+1 to the three qualified sites (C5 gated one on the player being alive, C2's
