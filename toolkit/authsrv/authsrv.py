@@ -3815,6 +3815,26 @@ ENERGY = True
 # value outside its trigger context. The episode itself (icon, duration,
 # replacement) is on regardless -- only the DECLARED SPEED is gated.
 MOVE_SPEED_EFFECTS = False
+# ---- SLICE-H13: THE ATTACK-SPEED MODIFIER ON THE WIRE (studies/slice F37) ----
+#
+# The server's swing cadence has read an open attack-speed episode since
+# 2026-08-22 (attack_interval_factor: Frenzy's hammer 1.75 -> 1.1725, the
+# wiki's exact table). What the CLIENT was never told is the other half:
+# it animates each swing to the pair it holds from GAME_SMSG 0x0035 --
+# `+0xEC` base x `+0xF0` modifier, multiplied at 0x007F837E (studies/enemy
+# PLAN 6q: "1.0 = none, 0.75 = +25% IAS, 0.67 = +33% IAS"; both asserted
+# non-zero at AvChar.cpp:4791/4792) -- and ours declared every agent once,
+# modifier 1.0, so a Frenzied body was PACED 33% faster by the server and
+# DRAWN at its old speed. The corpus cannot show the resend: 62 retail
+# 0x0035s, all modifier 1.0, and NOT ONE attack-speed stance episode on any
+# tape (the one 33/33 skill applied, 364, is a Tactics shout whose swing
+# cadence is unchanged inside it, 10 episodes at ratio ~1.0). So the resend
+# is RECONSTRUCTION on a field whose meaning is READ out of the client; a
+# live capture with Frenzy running is what would witness it (animref's
+# REFUTED-BY-METHOD item on the windup under a modifier is the same gap).
+# The tick below re-declares an agent's pair whenever its factor changes --
+# the stance opening, expiring, being replaced or cured -- and only then.
+ATTACK_SPEED_SYNC = True      # False (--no-attack-speed-sync): the pre-H13 arm, one declaration ever.
 GAME_SMSG_AGENT_UPDATE_SPEED_BASE = 0x0027   # [agent, f32 maxSpeed] -- schema's earned name
 GAME_SMSG_UPDATE_UNLOCKED_SKILLS = 0x00DB       # 219
 
@@ -20574,7 +20594,7 @@ def burrow_tick(send, state, conn_id):
                            send_definition=entry.get("resend_definition", False))
 
 
-def send_attack_speed(send, agent_id, base, what):
+def send_attack_speed(send, agent_id, base, what, modifier=None):
     """Give one agent an attack speed. EVERY living agent needs one.
 
     Not a nicety. The client's AvChar constructor writes 0.0 to both fields
@@ -20590,10 +20610,47 @@ def send_attack_speed(send, agent_id, base, what):
     agent the request was queued on, not necessarily the one you aimed at.
     That is why this goes on every agent rather than only the attacker.
     """
+    if modifier is None:
+        modifier = agents.ATTACK_SPEED_UNMODIFIED
     send(GAME_SMSG_AGENT_UPDATE_ATTACK_SPEED,
-         [agent_id, _f32(base), _f32(agents.ATTACK_SPEED_UNMODIFIED)],
+         [agent_id, _f32(base), _f32(modifier)],
          f"ATTACK_SPEED({what} {agent_id}: base {base}s, modifier "
-         f"{agents.ATTACK_SPEED_UNMODIFIED})")
+         f"{modifier:.4g})")
+
+
+def attack_speed_tick(send, state, conn_id):
+    """SLICE-H13: re-declare an agent's 0x0035 pair when its open episodes
+    change the attack DURATION factor -- the stance opening (0.67 under
+    Frenzy), expiring or being replaced (back to 1.0). One send per change,
+    never per tick; the player and every living body. Behind
+    ATTACK_SPEED_SYNC; the constant's comment carries the evidence and the
+    RECONSTRUCTION label."""
+    if not ATTACK_SPEED_SYNC or not EFFECTS:
+        return
+    table = state.get("effects")
+    sent = state.setdefault("attack_modifier_sent", {})
+    if not table or (not table.live and not sent):
+        return
+    f = attack_interval_factor(state, PLAYER_AGENT_ID)
+    if abs(f - sent.get(PLAYER_AGENT_ID, 1.0)) > 1e-9:
+        send_attack_speed(send, PLAYER_AGENT_ID, WEAPON_ATTACK_SPEED,
+                          "player", modifier=f)
+        sent[PLAYER_AGENT_ID] = f
+        print(f"[c{conn_id}] the player's attack-speed modifier is now "
+              f"{f:.2f} ({WEAPON_ATTACK_SPEED * f:.4g}s a swing)"
+              + ("" if abs(f - 1.0) > 1e-9 else " -- restored") + " [SLICE-H13]",
+              flush=True)
+    for aid, row in list(state.get("agents", {}).items()):
+        if row.get("dead"):
+            continue
+        f = attack_interval_factor(state, aid)
+        if abs(f - sent.get(aid, 1.0)) > 1e-9:
+            base = float(row.get("attack_speed") or ENEMY_ATTACK_SPEED)
+            send_attack_speed(send, aid, base, row.get("name", "npc"),
+                              modifier=f)
+            sent[aid] = f
+            print(f"[c{conn_id}] agent {aid}'s attack-speed modifier is now "
+                  f"{f:.2f} ({base * f:.4g}s a swing) [SLICE-H13]", flush=True)
 
 
 def enemy_spot(state, ox, oy):
@@ -23081,6 +23138,10 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # so a stance ending this tick restores 288 on the
                         # same tick. No-op unless --move-speed-effects.
                         speed_tick(send, state, conn_id)
+                        # SLICE-H13: the attack-speed pair, on the same
+                        # footing -- a stance ending this tick restores the
+                        # client's modifier on the same tick.
+                        attack_speed_tick(send, state, conn_id)
                         # Degeneration AFTER the expiries, so a condition that
                         # ran out on this tick does not also charge for it.
                         degen_tick(send, state, conn_id)
@@ -27577,6 +27638,12 @@ def main():
               "leaves reach (the enemy loop, attack_tick) and an attack skill's "
               "strike is released past reach (SLICE-C1) -- the pre-F21 arm; "
               "retail lands them all.", flush=True)
+    if a.no_attack_speed_sync:
+        global ATTACK_SPEED_SYNC
+        ATTACK_SPEED_SYNC = False
+        print("[map] --no-attack-speed-sync: an attack-speed stance paces the "
+              "server's swings and the client is never told -- the pre-H13 "
+              "arm.", flush=True)
     if a.no_knock_down:
         global KNOCK_DOWN
         KNOCK_DOWN = False

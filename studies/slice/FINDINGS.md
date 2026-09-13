@@ -1977,6 +1977,47 @@ Irresistible Blow stay desk-and-tests. **Not modelled, said here:** Shield Stanc
 written), Crippled's slow, Weakness's attribute loss, quarterknocking's re-knock at the rise
 instant (a down body simply refuses until its clock runs out).
 
+## SLICE-F37 — **attack speed: the server has paced Frenzy since August; the client was never told, and the field that tells it was read out of the client months ago**
+
+**The owner (2026-09-13):** *"attack speed next (Frenzy)."*
+
+**What already existed.** `attack_interval_factor` (episodemods, 2026-08-22) scales every swing's
+duration by an open attack-speed episode — Frenzy's flat 33 cuts the hammer's 1.75 to 1.1725, the
+wiki's exact table (GWW *Attack speed*, read today: "these skills actually modify the duration of
+each attack, not the rate"; hammer +33% = 1.1725, sword 0.8911) — at all seven consumers (the
+player's swing gate and windup, the chain restart, the enemy, party and NPC swing clocks), and
+`damage_taken_multiplier = 2.0` doubles what a Frenzied taker takes. So Frenzy already *was* faster
+on our wire: the STARTs came 33% closer together. **What was missing is the client's half.** The
+client animates each swing to the pair GAME_SMSG `0x0035` gave it — `+0xEC` base × `+0xF0`
+modifier, multiplied at `0x007F837E`, both asserted non-zero at AvChar.cpp:4791/4792
+(`studies/enemy/PLAN.md` 6q, CORROBORATED three ways: "1.0 = none, 0.75 = +25% IAS, 0.67 = +33%
+IAS") — and ours declared every agent once, at load or create, modifier 1.0. A Frenzied body was
+paced 33% faster and drawn at its old speed.
+
+**What the corpus cannot say, measured rather than assumed.** A census over every live connection
+(`ias_census.py`, `ias_cadence.py`): **62 retail `0x0035`s, every modifier 1.0, zero per-agent
+changes**; and **no attack-speed stance episode exists on any tape** — Frenzy 346, Flurry and the
+rest apply 0 times. The one 33/33-slot skill applied to a retail character, 364, is a Tactics
+**shout** (type 15, 5 energy / 20 recharge, 5–13 s) whose swing cadence is unchanged inside its
+episodes (10 episodes on the owner's own Warrior, inside/outside p50 ratio 0.97–1.03 at n=64
+outside); the two episodes at ratio 0.55 are on a different connection with five outside gaps of
+2.4–2.7 s — a walking sample, not a rate. `studies/animref` §8 had already filed the same gap as
+REFUTED-BY-METHOD for the windup under a modifier. So whether retail's server *re-sends* `0x0035`
+when a stance opens is UNWITNESSED; that the client *multiplies the field in* is READ out of it.
+
+**What shipped (SLICE-H13).** `attack_speed_tick`, right behind `speed_tick` in the world tick:
+for the player and every living body, the current `attack_interval_factor` is compared with the
+modifier last declared for that agent (1.0 until told otherwise), and on a change — the stance
+opening (0.67), expiring, being replaced or cured (1.0) — one `0x0035 [agent, its base, factor]`
+goes out; never per tick, never while nothing moved. `send_attack_speed` grew a `modifier`. The
+resend is **RECONSTRUCTION** on a field whose meaning is measured, and the row says so;
+`--no-attack-speed-sync` is the pre-H13 arm. `test_mechanics` §7b (floor 174 → 181): nothing open
+sends nothing; Frenzy opening sends exactly one `[player, base, 0.67]`; a second tick nothing; the
+close one `[player, base, 1.0]`; a body under Frenzy its own `[body, 1.33, 0.67]` with the player
+not re-declared; the revert arm silent. **Unobserved on a client:** whether the swing animation
+visibly quickens under Frenzy on the slice bar is the owner's eye; a live capture with Frenzy
+running on the secondary account would witness retail's own resend, or its absence.
+
 ## SLICE-F6 — what the desk cannot settle
 
 Carried so the next session does not re-read the same bytes hoping for more:

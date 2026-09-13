@@ -666,6 +666,12 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "owe one swing, opened within 0.5 s without the "
                          "re-test -- retail's halt-then-swing (5 of 5) on a "
                          "copy that lags the runner.")
+    ap.add_argument("--no-attack-speed-sync", action="store_true",
+                    help="THE REVERT ARM for SLICE-H13: never re-declare an "
+                         "agent's 0x0035 attack-speed pair when a stance "
+                         "changes its factor -- the server still paces "
+                         "Frenzy's swings 33%% faster, the client draws them "
+                         "at the declared speed (the pre-H13 shape).")
     ap.add_argument("--no-knock-down", action="store_true",
                     help="THE REVERT ARM for SLICE-H12's knock-down: no "
                          "prop 63 ever goes out and nobody is held down -- "
