@@ -73,7 +73,7 @@ from codec import Codec  # noqa: E402
 # known-bad control; and the chase section's wall pin split by arm, 1).
 # Floor from a real green run of 331. +1 at NPCTRACK-F8 (the hold rule
 # replaces the fresh-follow pin: three checks for two), green 333.
-LEDGER = checks.Ledger("agent lifetime", floor=488)   # SLICE-H9/H10/H11 +8 (the sword and the shield, the gated strikes, the hammer bandit); SLICE-H8c +2 (the revive opt-in); SLICE-H8 +6 (low levels); SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
+LEDGER = checks.Ledger("agent lifetime", floor=502)   # SLICE-H12 +14 (knock-down and block); SLICE-H9/H10/H11 +8 (the sword and the shield, the gated strikes, the hammer bandit); SLICE-H8c +2 (the revive opt-in); SLICE-H8 +6 (low levels); SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
 
 
 def section_weapon_damage():
@@ -5978,7 +5978,7 @@ def section_hold_plane():
                  authsrv.player_armour_at("warrior_body"),
                  authsrv.player_spell_armour())
         LEDGER.ok(base == ((3, 5), 1.75, [351, 359, 352], 45.0, 25.0)
-                  and after == ((2, 3), 1.33, [382, 384, 385, 322, 346, 1, 2],
+                  and after == ((2, 3), 1.33, [382, 384, 385, 322, 346, 1, 2, 380],
                                 48.0, 28.0)
                   and agents.PLAYER_WEAPON is not None
                   and agents.PLAYER_WEAPON["item_type"] == 27
@@ -5986,7 +5986,7 @@ def section_hold_plane():
                   "--party slice rebinds what the character holds: the swing "
                   "2-3 at 1.33 s (the hammer's 3-5 at 1.75), the sword bar "
                   "Sever Artery / Gash / Final Thrust / Power Attack / Frenzy / "
-                  "the two signets, the shield's +3 on every location (45 -> "
+                  "the two signets / Bonetti's (H12), the shield's +3 on every location (45 -> "
                   "48 physical, 25 -> 28 elemental; WIKI: 'overall armor "
                   "rating'), and the weapon rank is Swordsmanship 3",
                   f"base {base}, after {after}, changed {changed}")
@@ -6076,10 +6076,11 @@ def section_hold_plane():
                                 478, 9.0, 1, 1, 382)
         yes = authsrv.attack_skill_terms(st2, 384, 1, authsrv.PLAYER_AGENT_ID,
                                          6.0, 1, "agent 10")
-        LEDGER.ok(no == (0.0, None) and yes[0] == 6.0 and yes[1] is not None
-                  and yes[1][0] == 482,
+        LEDGER.ok(no == (0.0, None, False) and yes[0] == 6.0
+                  and yes[1] is not None and yes[1][0] == 482 and yes[2] is False,
                   "the same terms serve an NPC's strike at the player: no "
-                  "bonus and no condition until the player bleeds, then both",
+                  "bonus and no condition until the player bleeds, then both "
+                  "(and Gash knocks nobody down -- the third term, H12)",
                   f"no {no}, yes {yes}")
         # THE BANDIT: a hammer warrior with Power Attack, holding a hammer.
         rows = {k: agents.WORLD.get("spawn", k)
@@ -6113,6 +6114,278 @@ def section_hold_plane():
          authsrv.PARTY_SKILLBAR, agents.PLAYER_LEVEL, agents.PLAYER_HEALTH,
          agents.PLAYER_ATTRIBUTE_RANKS, agents.PLAYER_ATTRIBUTE_POINTS,
          authsrv.skill_cost) = _saved_h9
+
+    # ---- SLICE-H12: knock-down and block ---------------------------------
+    # The owner: "do knock-down and block next". F36: the knock-down's wire
+    # is the corpus's (0x00A2 [63, agent, 2.0], 3 of 3); what a down body
+    # does not do is the wiki's; the block is the client's own reason word.
+    print("\nSLICE-H12: a knocked-down body sends prop 63 and does nothing for "
+          "2 s; a knocked-down player's casts release and presses refuse; "
+          "Hammer Bash, Heavy Blow, Crushing Blow, Irresistible Blow and "
+          "Desperation Blow do what their pages say; a stance's block_chance "
+          "blocks (the attack-fail word 0), pays Bonetti's energy and ends "
+          "on a skill use; Weakness cuts the weapon")
+    _saved_kd = (authsrv.skill_cost, authsrv.random.random, agents.PLAYER_OFFHAND)
+    try:
+        authsrv.skill_cost = lambda sid: (0, 0)
+        FLOAT_U = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT
+        INT = authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
+        # 1. a following body falls: halt + prop 63; down it opens no swing;
+        # a second knock-down while down is refused; up, it swings.
+        st = _world(dist=50.0, armor_rating=26.0)
+        st["agents"][10].update(follow={"tid": 1}, moving=True)
+        st["player_health"] = 140.0
+        sent = []
+        send = lambda op, vals, label="", quiet=False: sent.append((op, vals))
+        fell = authsrv.knock_down(send, st, 10, 1, "the test")
+        again = authsrv.knock_down(send, st, 10, 1, "the test, again")
+        n_after_first = len(sent)
+        LEDGER.ok(fell and not again and len(sent) == 2
+                  and sent[0][0] == authsrv.GAME_SMSG_AGENT_STOP_MOVING
+                  and sent[1] == (FLOAT_U, [63, 10, authsrv._f32(2.0)])
+                  and st["agents"][10]["follow"] is None
+                  and authsrv.knocked_down(st, 10)
+                  and st["agents"][10]["knocked_until"] > time.time() + 1.5,
+                  "a knock-down on a walking body: the halt, then 0x00A2 [63, "
+                  "agent, 2.0] -- the corpus's shape, 3 of 3 -- its follow "
+                  "dropped, its clock 2 s out (WIKI); a second knock-down "
+                  "while down sends NOTHING (WIKI: not again until up)",
+                  f"fell {fell}, again {again}, sent {sent}")
+        swings = _swings(st)
+        st["agents"][10]["knocked_until"] = 0.0
+        swings_up = _swings(st)
+        LEDGER.ok(swings == [] and any(v[0] in (4, 50, 60) for op, v, _l in swings_up),
+                  "the attack tick opens NO swing and NO cast on a down body, and "
+                  "acts the moment its clock has run out",
+                  f"down {len(swings)} sends, up opens "
+                  f"{[v for op, v, _l in swings_up if v[0] in (4, 50, 60)]}")
+        # 2. the player falls: the pending cast releases with the measured
+        # burst, a press while down is answered with the bare release only,
+        # an armed swing is dropped, and a press after rising is accepted.
+        st = _world(dist=50.0, armor_rating=26.0)
+        st["player_health"] = 140.0
+        sent = []
+        authsrv.handle_skill_press([0, 322, 0, 10], send, st, 1,
+                                   authsrv.GAME_CMSG_USE_SKILL)
+        pending = list(st.get("pending_casts") or ())
+        sent = []
+        fell = authsrv.knock_down(send, st, authsrv.PLAYER_AGENT_ID, 1, "the test")
+        authsrv.cast_tick(send, st, 1)
+        ops = [(op, v) for op, v in sent]
+        released = [v for op, v in ops if op == authsrv.GAME_SMSG_SKILL_REFUSED]
+        stopped = [v for op, v in ops if op == INT and v[0] in (49, 59, 45)]
+        LEDGER.ok(fell and len(pending) == 1 and pending[0].get("cancelled") == "knocked-down"
+                  and (FLOAT_U, [63, 1, authsrv._f32(2.0)]) in ops
+                  and released == [[1, 322, 0]] and len(stopped) == 1,
+                  "the player's knock-down: prop 63 on the player, the pending "
+                  "Power Attack marked cancelled and released by the tick with "
+                  "the measured burst (a stop word, E2)",
+                  f"cancelled {[c.get('cancelled') for c in pending]}, stopped "
+                  f"{stopped}, released {released}")
+        sent = []
+        authsrv.handle_skill_press([0, 322, 0, 10], send, st, 1,
+                                   authsrv.GAME_CMSG_USE_SKILL)
+        refused = [op for op, v in sent]
+        st["player_swing"] = {"target": 10}
+        authsrv.attack_tick(send, st, 1)
+        dropped = st.get("player_swing") is None
+        st["player_knocked_until"] = 0.0
+        sent = []
+        authsrv.handle_skill_press([0, 322, 0, 10], send, st, 1,
+                                   authsrv.GAME_CMSG_USE_SKILL)
+        accepted = any(op == 0x00E4 for op, v in sent)
+        LEDGER.ok(refused == [authsrv.GAME_SMSG_SKILL_REFUSED] and dropped and accepted,
+                  "while down a press gets the bare E2 release and nothing "
+                  "else, the armed swing is dropped, and once the clock runs "
+                  "out a press is accepted (E4) again",
+                  f"refused {[hex(o) for o in refused]}, dropped {dropped}, "
+                  f"accepted {accepted}")
+        # 3. the hammer skills through the player's press -> landing.
+        st = _world(dist=50.0, armor_rating=26.0)
+        st["player_health"] = 140.0
+        st["pending_casts"] = []
+
+        def _land(skill, target=10):
+            out = []
+            snd = lambda op, vals, label="", quiet=False: out.append((op, vals))
+            authsrv.handle_skill_press([0, skill, 0, target], snd, st, 1,
+                                       authsrv.GAME_CMSG_USE_SKILL)
+            for cast in st.get("pending_casts", ()):
+                for k in ("begin_at", "e5_at", "e3_at", "e6_at"):
+                    cast[k] -= 30.0
+            for _ in range(3):
+                authsrv.cast_tick(snd, st, 1)
+            return out
+
+        out = _land(331)                                  # Hammer Bash
+        kd = [v for op, v in out if op == FLOAT_U and v[0] == 63]
+        wipe = [v for op, v in out if op == authsrv.AGENT_ADRENALINE_CLEAR]
+        LEDGER.ok(kd == [[63, 10, authsrv._f32(2.0)]] and authsrv.knocked_down(st, 10)
+                  and wipe == [[1]],
+                  "Hammer Bash: the foe falls for the client's own 2 s (its "
+                  "duration slot, 2/2 bit-clear) and the player's adrenaline is "
+                  "wiped (WIKI)", f"kd {kd}, wipe {wipe}")
+        # Crushing Blow: the Deep Wound only while the foe is down.
+        st["agents"][10]["knocked_until"] = 0.0
+        before = st["agents"][10]["health"]
+        out = _land(352)
+        dw_up = [ep for ep in authsrv.effect_table(st).on_agent(10) if ep["skill"] == 482]
+        hurt_up = before - st["agents"][10]["health"]
+        st["agents"][10]["knocked_until"] = time.time() + 2.0
+        out = _land(352)
+        dw_down = [ep for ep in authsrv.effect_table(st).on_agent(10) if ep["skill"] == 482]
+        LEDGER.ok(dw_up == [] and hurt_up >= 16 and len(dw_down) == 1
+                  and abs(dw_down[0]["duration"] - 17.0) < 1e-9,
+                  "Crushing Blow: +16 lands on a standing foe with NO Deep Wound; "
+                  "on a foe already down the 17 s Deep Wound lands too (both at "
+                  "Hammer 12; the row's condition_requires)",
+                  f"standing: dw {len(dw_up)}, hurt {hurt_up:.0f}; down: dw "
+                  f"{[(ep['skill'], ep['duration']) for ep in dw_down]}")
+        # Heavy Blow: nothing without Weakness; bonus and knock-down with it.
+        st["agents"][10]["knocked_until"] = 0.0
+        st["agents"][10]["health"] = 100.0
+        out = _land(359)
+        kd_plain = [v for op, v in out if op == FLOAT_U and v[0] == 63]
+        hurt_plain = 100.0 - st["agents"][10]["health"]
+        authsrv.apply_condition(lambda *a, **k: None, st, 10, 486, 20.0, 6, 1, 323)
+        st["agents"][10]["health"] = 100.0
+        out = _land(359)
+        kd_weak = [v for op, v in out if op == FLOAT_U and v[0] == 63]
+        hurt_weak = 100.0 - st["agents"][10]["health"]
+        LEDGER.ok(kd_plain == [] and hurt_plain < 30 and kd_weak == [[63, 10, authsrv._f32(2.0)]]
+                  and hurt_weak >= 30,
+                  "Heavy Blow: a plain swing on a foe that is not Weakened (no "
+                  "knock-down, no +30); on a Weakened foe the +30 lands and it "
+                  "falls -- requires_condition gates all three (WIKI)",
+                  f"plain: kd {kd_plain}, hurt {hurt_plain:.0f}; weakened: kd "
+                  f"{kd_weak}, hurt {hurt_weak:.0f}")
+        # Desperation Blow: one of four conditions on the foe, the player falls.
+        for ep in list(authsrv.effect_table(st).on_agent(10)):
+            authsrv.effect_table(st).close(ep["buff"])
+        st["agents"][10]["knocked_until"] = 0.0
+        st["agents"][10]["health"] = 100.0
+        out = _land(323)
+        conds = [ep["skill"] for ep in authsrv.effect_table(st).on_agent(10)
+                 if ep["skill"] in (478, 481, 482, 486)]
+        kd_self = [v for op, v in out if op == FLOAT_U and v[0] == 63]
+        LEDGER.ok(len(conds) == 1 and kd_self == [[63, 1, authsrv._f32(2.0)]]
+                  and authsrv.knocked_down(st, authsrv.PLAYER_AGENT_ID),
+                  "Desperation Blow: exactly ONE of Deep Wound / Weakness / "
+                  "Bleeding / Crippled on the foe (the row's random_conditions) "
+                  "and the PLAYER falls for the client's 2 s (self_knocks_down)",
+                  f"conditions {conds}, kd {kd_self}")
+        st["player_knocked_until"] = 0.0
+        LEDGER.ok(authsrv.skill_knock_down_seconds(331) == 2.0
+                  and authsrv.skill_knock_down_seconds(359) == 2.0
+                  and authsrv.skill_knock_down_seconds(323) == 2.0
+                  and authsrv.skill_random_condition(323)[1] in (20.0, 25.0, 15.0)
+                  and authsrv.skill_random_condition(384) is None,
+                  "the readers: 2 s from the client's flat duration slot (331, "
+                  "323) or the wiki default (359); a draw from 323's four with "
+                  "the description's seconds; nothing from a row without",
+                  f"{[authsrv.skill_knock_down_seconds(s_) for s_ in (331, 359, 323)]}")
+        # 4. BLOCK: a hostile under Bonetti's Defense blocks the player's swing
+        # (the roll forced), the block word goes out, no damage, no adrenaline;
+        # forced through, it lands. Irresistible Blow blocked: its damage
+        # lands anyway and the blocker falls.
+        st = _world(dist=50.0, armor_rating=26.0)
+        st["player_health"] = 140.0
+        sent = []
+        authsrv.apply_effect(send, st, 10, 380, 1, 10, 1)
+        chance = authsrv.block_chance(st, 10)
+        authsrv.random.random = lambda: 0.0                 # every roll blocks
+        sent = []
+        res = authsrv.hit_enemy(send, st, 10, 1, skill_strike=True, label="t")
+        words = [v for op, v in sent if v and v[0] == 38]
+        gains = [op for op, v in sent if op == authsrv.AGENT_ADRENALINE_GAIN]
+        hp_blocked = st["agents"][10]["health"]
+        authsrv.random.random = lambda: 0.99                # nothing blocks
+        sent = []
+        res2 = authsrv.hit_enemy(send, st, 10, 1, skill_strike=True, label="t")
+        hp_landed = st["agents"][10]["health"]
+        LEDGER.ok(abs(chance - 0.75) < 1e-9 and res == "blocked"
+                  and words == [[38, 10, 1, 0]] and gains == [] and hp_blocked == 100.0
+                  and res2 == "landed" and hp_landed < 100.0,
+                  "Bonetti's Defense on the hostile is a 75% block (the client's "
+                  "flat scale slot); a blocked swing sends [38, target, player, "
+                  "0] -- the client's own 'block' word -- deals nothing and "
+                  "gains no adrenaline; a swing the roll lets through lands",
+                  f"chance {chance}, blocked: {res} {words} hp {hp_blocked}, "
+                  f"through: {res2} hp {hp_landed}")
+        authsrv.random.random = lambda: 0.0
+        st["agents"][10]["health"] = 100.0
+        st["agents"][10]["knocked_until"] = 0.0
+        sent = []
+        res = authsrv.hit_enemy(send, st, 10, 1, skill_strike=True, label="t",
+                                skill_id=356)
+        kd = [v for op, v in sent if op == FLOAT_U and v[0] == 63]
+        LEDGER.ok(res == "blocked" and abs((100.0 - st["agents"][10]["health"]) - 17.0) < 1e-9
+                  and kd == [[63, 10, authsrv._f32(2.0)]],
+                  "Irresistible Blow BLOCKED: the blocker takes the skill's 17 "
+                  "(Hammer 12) anyway and falls -- the block punishment (WIKI)",
+                  f"{res}, hurt {100.0 - st['agents'][10]['health']:.0f}, kd {kd}")
+        # 5. the PLAYER's Bonetti's: an NPC swing blocked, +5 energy on the
+        # wire, and the stance ends on the player's next press.
+        st = _world(dist=50.0, armor_rating=26.0)
+        st["player_health"] = 140.0
+        authsrv.player_pools(st)
+        sent = []
+        ep = authsrv.apply_effect(send, st, 1, 380, 1, 0, 1)
+        pool = authsrv.player_energy(st)
+        pool.current = 10.0
+        sent = []
+        res = authsrv.land_swing(send, st, 10, st["agents"][10], 1)
+        words = [v for op, v in sent if v and v[0] == 38]
+        egain = [v for op, v in sent if op == FLOAT_U and v[0] == 52]
+        sent = []
+        authsrv.handle_skill_press([0, 322, 0, 10], send, st, 1,
+                                   authsrv.GAME_CMSG_USE_SKILL)
+        removed = [v for op, v in sent if op == authsrv.GAME_SMSG_EFFECT_REMOVE]
+        LEDGER.ok(ep is not None and res == "blocked" and words == [[38, 1, 10, 0]]
+                  and st["player_health"] == 140.0 and abs(pool.current - 15.0) < 0.01
+                  and len(egain) == 1 and removed == [[1, ep["buff"]]]
+                  and authsrv.block_chance(st, 1) == 0.0,
+                  "the player's Bonetti's: a hostile's swing is BLOCKED ([38, "
+                  "player, hostile, 0], no damage), +5 energy on the pool and "
+                  "the wire (property 52), and the stance ENDS on the player's "
+                  "next accepted press (a real 0x0044)",
+                  f"{res} {words}, energy {pool.current}, gain {egain}, "
+                  f"removed {removed}")
+        authsrv.random.random = _saved_kd[1]
+        LEDGER.ok(not authsrv.holds_shield(st, 1)
+                  and (setattr(agents, "PLAYER_OFFHAND",
+                               agents.item_template("starter_shield")) or True)
+                  and authsrv.holds_shield(st, 1),
+                  "holds_shield reads the player's offhand row: false on the "
+                  "base fixture, true with the starter shield -- the gate a "
+                  "`requires_shield` row (Shield Stance) would read",
+                  "base false, shield true")
+        agents.PLAYER_OFFHAND = _saved_kd[2]
+        # 6. WEAKNESS cuts the weapon's damage to a third (WIKI: 66% less).
+        st = _world(dist=50.0, armor_rating=26.0)
+        st["player_health"] = 140.0
+        st["pending_casts"] = []
+        m0 = authsrv.weakness_multiplier(st, 1)
+
+        def _mean(n=25):
+            tot = 0.0
+            for _ in range(n):
+                st["agents"][10]["health"] = 100.0
+                authsrv.hit_enemy(send, st, 10, 1, skill_strike=True, label="t")
+                tot += 100.0 - st["agents"][10]["health"]
+            return tot / n
+
+        plain = _mean()
+        authsrv.apply_condition(lambda *a, **k: None, st, 1, 486, 20.0, 1, 1, 323)
+        m1 = authsrv.weakness_multiplier(st, 1)
+        weak = _mean()
+        LEDGER.ok(m0 == 1.0 and abs(m1 - 0.34) < 1e-9 and weak < plain * 0.6,
+                  "Weakness on the swinger: the multiplier is 0.34 (WIKI: 66% "
+                  "less with attacks) and 25 hammer swings average well under "
+                  "the unweakened 25",
+                  f"plain {plain:.1f}, weakened {weak:.1f}")
+    finally:
+        authsrv.skill_cost, authsrv.random.random, agents.PLAYER_OFFHAND = _saved_kd
 
 
 if __name__ == "__main__":

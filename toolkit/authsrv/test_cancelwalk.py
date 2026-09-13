@@ -403,9 +403,9 @@ def section_stop_answer():
           "ONE R6 gate and ONE R6-labelled send -- a gate whose send was "
           "deleted, or a second site borrowing R6's label, reddens this")
     sites = stop_moving_sites()
-    check(len(sites) == 4
+    check(len(sites) == 5
           and all(b == "agents.agent_stop_moving" for _, _, b, _ in sites),
-          "FOUR 0x0028 send sites, every payload from the builder the "
+          "FIVE 0x0028 send sites, every payload from the builder the "
           "wire-shape check above drives -- never a hand-built [agent] "
           "literal, which would skip that builder's agent-id-0 refusal and "
           "put a silent no-op on the wire", f"{sites}")
@@ -427,11 +427,18 @@ def section_stop_answer():
           "player-directed site is a new warp channel into both copies",
           f"{player}")
     npc = [s for s in sites if s[3] != "PLAYER_AGENT_ID"]
-    check(len(npc) == 1
-          and npc[0][3] == "agent_id"
-          and npc[0][1] == ("_npc_follow_tick", "_halt")
+    chase = [s for s in npc if s[1] == ("_npc_follow_tick", "_halt")]
+    # SLICE-H12 (2026-09-13): the SECOND non-player site is the knock-down's
+    # halt in knock_down -- a walking body that falls stops where it stands
+    # (WIKI: a knocked-down character cannot move); it names the body's own
+    # agent_id and never the player's (the player's fall drops the armed
+    # swing and refuses reports instead, which is no 0x0028 at all).
+    check(len(npc) == 2 and len(chase) == 1
+          and all(s[3] == "agent_id" for s in npc)
+          and sorted(s[1] for s in npc) == [("_npc_follow_tick", "_halt"),
+                                            ("knock_down",)]
           and npc_follow_call_gates() == ["NPC_FOLLOW"],
-          "and the third names a NON-player agent: the chase halt in "
+          "and the two others name a NON-player agent: the chase halt in "
           "_npc_follow_tick._halt, gated on NPC_FOLLOW (revert "
           "--legacy-npc-chase). Retail sends this one -- 5/7 chases "
           "(animref 40.2), and 187 of its 282 corpus-wide 0x0028s name a "

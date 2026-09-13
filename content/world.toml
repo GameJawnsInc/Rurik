@@ -322,29 +322,98 @@ verified = "Client scale 10->40, args = 2 (scale), Hammer Mastery, 7 adrenaline 
 
 [skill_effect.359]
 scale_means = "+ Damage"
+requires_condition = "Weakness"
+knocks_down = true
+clears_adrenaline = true
 [skill_effect.359.provenance]
 source = "wiki"
+note = """SLICE-H12 (2026-09-13). GWW "Heavy Blow" (read today): "Hammer Attack. Lose \
+all adrenaline. If this attack hits a foe suffering from Weakness, that foe is \
+knocked down and you strike for +1..30 damage." So `requires_condition` gates the \
+bonus AND the knock-down (attack_skill_terms), `clears_adrenaline` is the loss at \
+completion, and the knock-down lasts KNOCK_DOWN_SECONDS (the client's duration slot \
+is 0/0 -- the wiki's "2 seconds unless otherwise stated")."""
 page = 'GWW, "Heavy Blow", {{Skill progression}} (raw wikitext read 2026-09-13)'
 verified = "Client scale 1->30, args = 2 (scale), Hammer Mastery, 5 adrenaline (120 units). Wiki var1 `+ Damage` 1->30, adrenaline 5. The knock-down on a weakened foe is NOT modelled (no knock-down here)."
 
 [skill_effect.352]
 scale_means = "+ Damage"
+bonus_scale_means = "Deep Wound"
+condition_requires = "knocked down"
 [skill_effect.352.provenance]
 source = "wiki"
+note = """SLICE-H12 (2026-09-13). GWW "Crushing Blow" (read today): "If this attack \
+hits, you strike for +1..20 damage. If you hit a knocked-down foe you inflict a Deep \
+Wound ... for 5..20 seconds." Client args = 6: scale 1..20 (the bonus, unconditional) \
+and bonus_scale 5..20 (the Deep Wound's seconds, WIKI var2) -- `condition_requires` \
+gates the condition alone on the target being on the ground (knocked_down)."""
 page = 'GWW, "Crushing Blow", {{Skill progression}} (raw wikitext read 2026-09-13)'
 verified = "Client scale 1->20, args = 6 (scale + bonus 5->20), Hammer Mastery, 5 energy, 10 s recharge. Wiki var1 `+ Damage` 1->20, var2 Deep Wound duration 5->20 IF the foe is knocked down -- the bonus is deliberately NOT declared as a Deep Wound row: it is conditional on a knock-down the server does not model, and an unconditional Deep Wound would be invention."
 
 [skill_effect.356]
 scale_means = "+ Damage"
+knocks_down_if_blocked = true
 [skill_effect.356.provenance]
 source = "wiki"
+note = """SLICE-H12 (2026-09-13). GWW "Irresistible Blow" (read today): "If this \
+attack hits, you strike for +5..20 damage. If Irresistible Blow is blocked, your \
+target is knocked down and takes 5..20 damage." The client carries ONE progression \
+(args = 2, scale 5..20) for both of the wiki's variables, so on a block the same \
+amount lands as a plain (armour-ignoring -- OURS, the page names no type) hit and \
+the blocker falls for KNOCK_DOWN_SECONDS (hit_enemy's block arm)."""
 page = 'GWW, "Irresistible Blow", {{Skill progression}} (raw wikitext read 2026-09-13)'
 verified = "Client scale 5->20, args = 2 (scale), Hammer Mastery, 5 energy, 6 s recharge. Wiki var1 `+ Damage` 5->20; the extra damage on a block is NOT modelled (no block here)."
 
+[skill_effect.331]
+knocks_down = true
+clears_adrenaline = true
+[skill_effect.331.provenance]
+source = "wiki"
+page = 'GWW, "Hammer Bash", {{Skill infobox}}, read 2026-09-13'
+verified = """SLICE-H12. "Hammer Attack. Lose all adrenaline. If Hammer Bash hits, \
+your target is knocked down." Client: id 331, args = 0, scale 0/0, duration 2/2 with \
+the bit CLEAR -- the knock-down's own 2 seconds sitting in the duration slot (the \
+wiki's default), read by skill_knock_down_seconds; 6 adrenaline strikes. The \
+knock-down is `knocks_down` on a landed hit; the wire is the corpus's prop 63 shape \
+(3 of 3 retail knock-downs carry 2.0). Not on any bar by default; the hammer bar in \
+[player.skillbar] is the base fixture."""
+
+[skill_effect.380]
+scale_means = "Block chance %"
+bonus_scale_means = "Energy per melee block"
+block_chance = 75
+energy_per_melee_block = 5
+ends_on_skill_use = true
+[skill_effect.380.provenance]
+source = "wiki"
+page = "GWW, Bonetti's Defense, {{Skill infobox}} + {{Skill progression}}, read 2026-09-13"
+verified = """SLICE-H12. "Stance. For 5..11 seconds, you have a 75% chance to block \
+melee and projectile attacks. You gain 5 Energy for each successful melee attack \
+blocked. Bonetti's Defense ends if you use a skill." Client: id 380, type 3 (stance), \
+Tactics, 8 adrenaline strikes, args = 1 (the duration 5..11 scales), scale 75/75 and \
+bonus 5/5 flat -- the 75% and the 5 energy in the two bit-clear slots, which \
+`block_chance` and `energy_per_melee_block` carry as numbers here because the \
+readers want them plain (the two `_means` labels say what the slots are). The block \
+is block_chance's product rule (WIKI "Block"); the energy rides the player's pool \
+and a property-52 gain; `ends_on_skill_use` closes it on the wearer's next accepted \
+press. Projectile attacks do not exist on this server, so "melee" is every attack \
+here. On the slice bar's eighth slot ([party.slice].player_skills)."""
+
 [skill_effect.323]
 scale_means = "+ Damage"
+random_conditions = [["Deep Wound", 20], ["Weakness", 20], ["Bleeding", 25], ["Crippled", 15]]
+self_knocks_down = true
 [skill_effect.323.provenance]
 source = "wiki"
+note = """SLICE-H12 (2026-09-13). GWW "Desperation Blow" (read today): "If this \
+attack hits, you strike for +10..40 damage, and your target suffers from one of the \
+following conditions: Deep Wound (for 20 seconds), Weakness (for 20 seconds), \
+Bleeding (for 25 seconds), or Crippled (for 15 seconds). After making a Desperation \
+Blow, you are knocked down." `random_conditions` are those four with the \
+description's own seconds (no client slot carries them), drawn at a landed hit; \
+`self_knocks_down` is the user's fall, hit or miss, for the client's own duration \
+slot (2/2, bit clear -- skill_knock_down_seconds). Weakness's 66% and Crippled's \
+icon are what this server models of the two; Crippled slows nothing here."""
 page = 'GWW, "Desperation Blow", {{Skill progression}}, rev. 2026-07-05'
 verified = "Client scale 10->40, args = 2 (scale). Wiki var1 `+ Damage` 10->40."
 
@@ -1514,7 +1583,7 @@ player_attributes = [[20, 3], [17, 2], [21, 1]]
 player_points = 10
 player_weapon = "starter_sword"
 player_offhand = "starter_shield"
-player_skills = [382, 384, 385, 322, 346, 1, 2]
+player_skills = [382, 384, 385, 322, 346, 1, 2, 380]
 
 [party.slice.provenance]
 source = "invented"
@@ -1556,5 +1625,6 @@ Tactics (21) 1 -- the same 10 points -- and `player_skills` the bar: Sever \
 Artery 382 (Bleeding 5..25 s), Gash 384 (+5..20 and Deep Wound 5..20 s on a \
 BLEEDING foe), Final Thrust 385 (+1..40, doubled below 50% health, loses all \
 adrenaline), Power Attack 322, Frenzy 346, Healing Signet 1, Resurrection Signet \
-2 -- seven; the eighth slot is empty. The sword swings at 1.33 s (content \
-[attack_speed.rates], WIKI) where the hammer swung at 1.75."""
+2, and (SLICE-H12) Bonetti's Defense 380 in the eighth slot -- a 75% block for \
+5..11 s that ends on a skill use and pays 5 energy a blocked melee attack. The sword \
+swings at 1.33 s (content [attack_speed.rates], WIKI) where the hammer swung at 1.75."""

@@ -666,6 +666,16 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "owe one swing, opened within 0.5 s without the "
                          "re-test -- retail's halt-then-swing (5 of 5) on a "
                          "copy that lags the runner.")
+    ap.add_argument("--no-knock-down", action="store_true",
+                    help="THE REVERT ARM for SLICE-H12's knock-down: no "
+                         "prop 63 ever goes out and nobody is held down -- "
+                         "Hammer Bash, Heavy Blow, Irresistible Blow's "
+                         "punishment and Desperation Blow's own fall are "
+                         "plain strikes.")
+    ap.add_argument("--no-block", action="store_true",
+                    help="THE REVERT ARM for SLICE-H12's block: a stance's "
+                         "block_chance blocks nothing; every attack lands as "
+                         "before.")
     ap.add_argument("--no-late-hit", action="store_true",
                     help="THE REVERT ARM for SLICE-F21: drop an armed swing "
                          "when its target leaves reach (both the enemy loop "
