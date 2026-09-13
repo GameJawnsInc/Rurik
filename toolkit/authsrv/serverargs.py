@@ -853,6 +853,14 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "0x009A, bags, appearance, pipeline-first): the "
                          "SLICE-B7 shape, follow and heal only, no panel. The "
                          "revert arm if the full rig asserts on a client.")
+    ap.add_argument("--party-body-in-outpost", action="store_true",
+                    help="SLICE-H2b REVERT: create the party's world bodies "
+                         "in a town as well. Stock shows a hero's model in a "
+                         "field only (the owner, 2026-09-12: 'in the outpost "
+                         "her model should be hidden'); the roster row, the "
+                         "0x0072 activation, the level and the vitals go out "
+                         "everywhere either way, and the panel opens "
+                         "bodiless (pvpui 28.3).")
     ap.add_argument("--party-follow-agent", action="store_true",
                     help="SLICE-H2 REVERT: a party body follows by a 0x002A "
                          "naming the player and parks at HERO_FOLLOW_STOP "

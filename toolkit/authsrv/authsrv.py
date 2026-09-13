@@ -9317,6 +9317,16 @@ HERO_FOLLOW_LEASH = math.inf
 # RECONSTRUCTION from the medians (no body held one bearing; they spread
 # around the leader, mostly abeam). HERO_FOLLOW_STOP above is now only the
 # revert arm's number.
+# SLICE-H2b (2026-09-12, the owner's run of H2): "tahlkora shows up and walks
+# beside me now. slightly different than stock behavior, since in the outpost
+# she (i.e. her model) should be hidden. only show in explorable areas." Stock
+# renders a party hero's BODY in a field only; in a town the hero is a roster
+# row and a panel (GWW Hero; the owner's instrument). The panel was measured
+# to open BODILESS (pvpui 28.3: agent 200 with no 0x0020, prop 36 for the
+# level), so a town sends the roster, the activation, the level and the
+# vitals and withholds only the 0x0020. True (--party-body-in-outpost) is
+# every hero rig before this, which stood its body in map 280's town.
+PARTY_BODY_IN_OUTPOST = False
 PARTY_SLOT_LEADS = True     # False (--party-follow-agent): the B7b shape, a
                             # 0x002A naming the player parked at HERO_FOLLOW_STOP.
 PARTY_SLOT_STOP = 30.0      # u from its slot within which a party body stands.
@@ -16657,6 +16667,18 @@ def face_player(send, state, agent_id, agent, conn_id, force=False):
          f"at {ENEMY_TURN_RATE:.3f} rad/s")
 
 
+def party_bodies_here(state):
+    """Does this instance get the party's WORLD bodies? A field does; a town
+    gets the roster and the panel only (SLICE-H2b). The same switch the
+    0x0199 is_explorable byte is built from: --explorable forces a field,
+    --outpost forces a town, else content/maps.toml's `explorable`."""
+    if PARTY_BODY_IN_OUTPOST:
+        return True
+    if OUTPOST:
+        return False
+    return bool(EXPLORABLE or map_explorable(state.get("map_id")))
+
+
 def party_slot_point(state, slot):
     """Where party slot `slot` stands: the leader's position plus
     PARTY_SLOTS[slot] rotated into the leader's frame (+along = the way the
@@ -20554,7 +20576,7 @@ def _handle_request_players(send, state, conn_id, stop, rec):
     # the CONTENT is what needs the agent. ~150 units out,
     # because a body at the spawn point reads as "nothing
     # appeared" (studies/enemy/PLAN.md's probe distance).
-    if HENCHMAN is not None and HENCHMAN_BODY:
+    if HENCHMAN is not None and HENCHMAN_BODY and party_bodies_here(state):
         _hn = agents.npc_template(HENCHMAN)
         _hx, _hy = pos[0] + 150.0, pos[1]
         create_agent_world(
@@ -20618,8 +20640,14 @@ def _handle_request_players(send, state, conn_id, stop, rec):
     # that the roster row reads the AGENT for its name,
     # profession and level, so a bodiless hero row would be
     # expected to render as empty as the henchman's did.
+    if HERO_BODY and hero_slots() and not party_bodies_here(state):
+        print(f"[c{conn_id}] PARTY: map {state.get('map_id')} is a town -- "
+              f"the hero bodies are withheld (stock shows a hero's model in "
+              f"a field only); roster, activation, level and vitals still "
+              f"go out [SLICE-H2b]", flush=True)
     for _i, (_hid, _haid, _hdef) in (
-            enumerate(hero_slots()) if HERO_BODY else ()):
+            enumerate(hero_slots())
+            if HERO_BODY and party_bodies_here(state) else ()):
         _hro = agents.npc_template(HERO_BODY_NPC)
         # Fan them out rather than stacking: bodies sharing a
         # spot read as one body, and "nothing appeared" is the
@@ -26021,6 +26049,12 @@ def main():
         print("[map] --no-interact-route: an out-of-range interact is HELD "
               "and nobody walks the player over. Every run before 2026-09-12, "
               "and the known-bad arm.", flush=True)
+    if a.party_body_in_outpost:
+        global PARTY_BODY_IN_OUTPOST
+        PARTY_BODY_IN_OUTPOST = True
+        print("[party] --party-body-in-outpost: the party's bodies stand in a "
+              "town too -- every hero rig before SLICE-H2b; stock hides them "
+              "there.", flush=True)
     if a.party_follow_agent:
         global PARTY_SLOT_LEADS
         PARTY_SLOT_LEADS = False

@@ -10308,6 +10308,11 @@ FOR THE COMMIT MESSAGE (updated by this fix pass where the numbers moved):
   new SLICE-H2 section (3 checks) loads `[party.slice]`, builds its 0x01C2/0x0074 through the
   same validators main() runs, and locks `if a.party:` AHEAD of the `--hero` and `--hero-skills`
   blocks in main() -- the translation only works if it runs first, and only the text can say so.
+  **SLICE-H2b (2026-09-13, floor 424 -> 427): a hero's body is a field thing.** `party_bodies_here`
+  says no for map 148 (the outpost) and yes for 168 (the corridor) off content/maps.toml's own
+  flag; `--party-body-in-outpost` (every hero rig before it) says yes everywhere; and a source
+  lock holds both party body sites in the load path -- the hero loop and the henchman's -- behind
+  it while the roster/activation/level/vitals sends stay ungated (the panel opens bodiless).
   `test_router.py`'s cast-abandon ordering lock was re-aimed from `if CAST_STOP and not
   is_attack:` (gone since SLICE-C2) to the bare `if CAST_STOP:`, and its recv-loop attach-point
   census from 2+1 to the three qualified sites (C5 gated one on the player being alive, C2's
