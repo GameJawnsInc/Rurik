@@ -3718,6 +3718,17 @@ TEST_SKILLBAR = [316, 317, 318, 319, 320, 321, 322, 323]
 # between launches without editing this file -- which matters because the whole
 # point of the exercise is varying them and watching what the client draws.
 SKILLBAR = list(TEST_SKILLBAR)
+
+
+def default_skillbar():
+    """The bar a session gets by not choosing: content/world.toml
+    [player.skillbar] (SLICE-H7 -- eight skills the server models, on the
+    hammer warrior), else TEST_SKILLBAR, the probe bar. --skills overrides."""
+    try:
+        row = agents.WORLD.get("player", "skillbar")
+    except Exception:                                          # noqa: BLE001
+        return list(TEST_SKILLBAR)
+    return [int(s) for s in row.get("skills", ())] or list(TEST_SKILLBAR)
 # Upstream declares 8 pvp_masks and never writes them, so eight zeros go out
 # from its memset. We send the same thing, and what it is for is NOT FOUND.
 SKILLBAR_PVP_MASKS = [0] * SKILLBAR_SLOTS
@@ -9404,6 +9415,13 @@ PARTY_WEAPON_BY_PROFESSION = {1: "sword", 2: "shortbow", 3: "staff", 4: "staff",
                               5: "staff", 6: "staff", 7: "daggers", 8: "staff",
                               9: "spear", 10: "scythe"}
 HERO_WEAPON = None             # --hero-weapon KEY / [party.KEY].weapon
+# SLICE-H7: the ITEM a party body holds, by weapon class -- retail follows
+# every henchman body's create with a CREATE_NAMED_ITEM per weapon and a
+# 0x006D naming them (12 of 12 bodies), and the client draws the attack the
+# item's type says: a staff casts a bolt from range, an empty hand punches.
+# One item today, the retail Monk henchman's staff (content/items.toml).
+PARTY_WEAPON_ITEMS = {"staff": "caster_staff", "wand": "caster_staff"}
+HERO_WEAPON_ITEM_ID = 210      # + the hero's slot; clear of the player's 1-9
 # ---- SLICE-H5: THE COMMANDER'S ORDERS (studies/slice F31) -------------------
 #
 # The three clicks the commander UI sends (pvpui 28.5-28.7, all captured on
@@ -17213,6 +17231,16 @@ def party_attack_speed(npc):
     return float(agents.ATTACK_SPEED.get(key, ENEMY_ATTACK_SPEED))
 
 
+def party_weapon_item(npc):
+    """The content item key a party body holds (PARTY_WEAPON_ITEMS by its
+    weapon class -- HERO_WEAPON, else the profession's), or None when the
+    class has no item row yet (a Warrior's sword and shield are on the tape
+    but not extracted)."""
+    key = HERO_WEAPON or PARTY_WEAPON_BY_PROFESSION.get(
+        (npc or {}).get("profession"))
+    return PARTY_WEAPON_ITEMS.get(key)
+
+
 def live_hostile(state, tid):
     row = state.get("agents", {}).get(tid) if tid is not None else None
     return (row is not None and not row.get("dead")
@@ -21495,6 +21523,19 @@ def _handle_request_players(send, state, conn_id, stop, rec):
              "skills": HERO_SKILLS,
              "skill_ready": [0.0] * len(HERO_SKILLS)},
             f"hero body (hero {_hid})", conn_id=conn_id)
+        # SLICE-H7: WHAT THE BODY HOLDS -- retail's create batch for a
+        # henchman body is 0x0020, then 0x0161 per weapon, then 0x006D
+        # [agent, leadhand, offhand] (12 of 12 retail bodies). Without it
+        # the client draws the caster's ranged swing as a punch.
+        _wkey = party_weapon_item(_hro)
+        if _wkey is not None:
+            _wid = HERO_WEAPON_ITEM_ID + _i
+            hsend(GAME_SMSG_CREATE_NAMED_ITEM,
+                  agents.named_item(_wid, agents.item_template(_wkey)),
+                  f"CREATE_NAMED_ITEM({_wkey}, item {_wid}, hero agent {_haid})")
+            hsend(GAME_SMSG_NPC_UPDATE_WEAPONS, [_haid, _wid, 0],
+                  f"NPC_UPDATE_WEAPONS(hero agent {_haid}: leadhand = item "
+                  f"{_wid}, {_wkey}) [SLICE-H7]")
     # THE HERO'S ATTRIBUTE STATE, and it is not a new
     # mechanism -- it is the pair the PLAYER's own agent
     # already gets, addressed to the hero's agent instead.
@@ -28136,7 +28177,8 @@ def main():
     HOST_FIELD_ENCODING = a.host_encoding
 
     try:
-        SKILLBAR = [int(s, 0) for s in a.skills.split(",") if s.strip() != ""]
+        SKILLBAR = ([int(s, 0) for s in a.skills.split(",") if s.strip() != ""]
+                    if a.skills else default_skillbar())
     except ValueError as ex:
         raise SystemExit(f"--skills must be a comma-separated list of ids: {ex}")
     if len(SKILLBAR) > SKILLBAR_SLOTS:

@@ -267,6 +267,34 @@ source = "wiki"
 page = 'GWW, "Power Attack", {{Skill progression}}, rev. 2026-07-05'
 verified = "Client scale 10->40, args = 2 (scale). Wiki var1 `+ Damage` 10->40."
 
+[skill_effect.351]
+scale_means = "+ Damage"
+[skill_effect.351.provenance]
+source = "wiki"
+page = 'GWW, "Mighty Blow", {{Skill progression}} (raw wikitext read 2026-09-13)'
+verified = "Client scale 10->40, args = 2 (scale), Hammer Mastery, 7 adrenaline (160 units). Wiki var1 `+ Damage` 10->40, adrenaline 7."
+
+[skill_effect.359]
+scale_means = "+ Damage"
+[skill_effect.359.provenance]
+source = "wiki"
+page = 'GWW, "Heavy Blow", {{Skill progression}} (raw wikitext read 2026-09-13)'
+verified = "Client scale 1->30, args = 2 (scale), Hammer Mastery, 5 adrenaline (120 units). Wiki var1 `+ Damage` 1->30, adrenaline 5. The knock-down on a weakened foe is NOT modelled (no knock-down here)."
+
+[skill_effect.352]
+scale_means = "+ Damage"
+[skill_effect.352.provenance]
+source = "wiki"
+page = 'GWW, "Crushing Blow", {{Skill progression}} (raw wikitext read 2026-09-13)'
+verified = "Client scale 1->20, args = 6 (scale + bonus 5->20), Hammer Mastery, 5 energy, 10 s recharge. Wiki var1 `+ Damage` 1->20, var2 Deep Wound duration 5->20 IF the foe is knocked down -- the bonus is deliberately NOT declared as a Deep Wound row: it is conditional on a knock-down the server does not model, and an unconditional Deep Wound would be invention."
+
+[skill_effect.356]
+scale_means = "+ Damage"
+[skill_effect.356.provenance]
+source = "wiki"
+page = 'GWW, "Irresistible Blow", {{Skill progression}} (raw wikitext read 2026-09-13)'
+verified = "Client scale 5->20, args = 2 (scale), Hammer Mastery, 5 energy, 6 s recharge. Wiki var1 `+ Damage` 5->20; the extra damage on a block is NOT modelled (no block here)."
+
 [skill_effect.323]
 scale_means = "+ Damage"
 [skill_effect.323.provenance]
@@ -478,14 +506,17 @@ this skill does not scale."""
 # 200 (97+48+21+6+1), and NOTHING STORES THAT NUMBER -- it is recomputed from
 # the cost curve, so editing a rank moves the balance on its own.
 [player.attributes]
-ranks = [[17, 12], [18, 9], [19, 6], [20, 3], [21, 1]]
+ranks = [[19, 12], [17, 9], [21, 6], [18, 3], [20, 1]]
 points_total = 200
 
 [player.attributes.provenance]
 source = "invented"
 note = """
 Ids measured from the client's s_attrib table (attribtable.py, build 38797);
-ranks chosen. Replace the ranks the day a capture shows a real character's --
+ranks chosen -- since SLICE-H7 (2026-09-13) a HAMMER warrior's: Hammer Mastery
+(19) 12, Strength (17) 9, Tactics (21) 6, Axe 3, Sword 1, the same 173 points,
+because the slice's bar ([player.skillbar]) is hammer attacks and the character
+swings the starter hammer. Replace the ranks the day a capture shows a real character's --
 capture shopping-list item 1, studies/combat/PLAN.md section 3 -- and the ids
 should survive that, because they are the client's own.
 
@@ -500,6 +531,24 @@ is why the whole row stays `invented`. The ranks above already sink 173 of it
 and room to refund; change the ranks and that follows automatically, because
 the server computes spent from the cost table rather than storing it.
 """
+
+[player.skillbar]
+skills = [351, 359, 352, 356, 322, 346, 1, 2]
+
+[player.skillbar.provenance]
+source = "invented"
+note = """Ours -- the slice character's bar when --skills is not given (SLICE-H7, \
+2026-09-13; the owner: "giving the player some actual skills other than power \
+attack"). Eight skills the server MODELS, on a hammer warrior: Mighty Blow 351 \
+(+10..40, 7 adrenaline), Heavy Blow 359 (+1..30, 5 adrenaline), Crushing Blow 352 \
+(+1..20, 5 energy), Irresistible Blow 356 (+5..20, 5 energy), Power Attack 322 \
+(+10..40, Strength), Frenzy 346 (attack speed +33%, double damage taken), Healing \
+Signet 1 (82..172 at Tactics), Resurrection Signet 2 (for the hero). The +damage \
+rides the swing after armour (hit_enemy); the adrenal ones charge at 25 units a hit. \
+NOT modelled, said here: Crushing Blow's Deep Wound on a knocked-down foe and \
+Irresistible Blow's damage on a block (no knock-down, no block model), Healing \
+Signet's -40 armour, Heavy Blow's knock-down on a weakened foe. TEST_SKILLBAR \
+(316-323) stays the probe bar and --skills still overrides."""
 
 [player.defaults]
 energy = 25

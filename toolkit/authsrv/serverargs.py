@@ -50,11 +50,14 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "dials, since ports alone cannot when they collide. "
                          "Refuses anything outside 127/8 -- this server is "
                          "local-only by design.")
-    ap.add_argument("--skills", default=",".join(str(s) for s in TEST_SKILLBAR),
+    ap.add_argument("--skills", default=None,
                     help="Comma-separated skill ids for the bar, 0 for an empty "
                          "slot. Ids are row indices into the client's own skill "
                          "table, so they must exist in the build being launched "
-                         "(0..3442 here). Fewer than 8 are padded with zeros.")
+                         "(0..3442 here). Fewer than 8 are padded with zeros. "
+                         "Default: content/world.toml [player.skillbar] (SLICE-H7, "
+                         "the modelled hammer bar), else the probe bar "
+                         f"{','.join(str(s) for s in TEST_SKILLBAR)}.")
     # DEFAULT CHANGED 2026-08-13, all -> corpus. `all` is MEASURED to crash the
     # client's own Skills panel: it unlocks 2,109 weapon modifiers and other
     # non-player rows that have no skill icon, and the loader asserts `fileId`

@@ -1670,6 +1670,50 @@ instances on one process carried it through both portals with the client re-dial
 is still the owner's** (this run fought nothing; H4's run fought and did not zone). The
 hero-specific live capture (F28's last paragraph) stays optional.
 
+## SLICE-F33 — **what a party body holds: retail's henchman gets an item and a 0x006D at its create, and the punch was an empty hand**
+
+**The owner, after H4's run (2026-09-13):** *"Tahlkora attacks, but from long range with a melee
+punch animation."* The wire was right (a `[4, body, foe]` from casting range, F30) and the body
+was wrong: it held nothing, so the client drew the only unarmed swing it has.
+
+**OBSERVED on retail's own henchmen** (the seven henchman connections, F28's tapes): **every one of
+the 12 bodies is followed, in its create batch, by one `0x0161` CREATE_NAMED_ITEM per weapon and a
+`0x006D` NPC_UPDATE_WEAPONS `[agent, leadhand, offhand]` naming them** — the Monk `[8, 20, 0]`, the
+Warrior `[9, 22, 23]` (a sword and a shield), the Elementalist `[10, 25, 0]`. The Monk's item 20:
+file **112081**, type **26** (a staff, by the ItemType enum whose sword 27 and shield 24 the
+Warrior's pair confirms), flags `0x22200100`, model 6462, name id 8582 and four modifier words; the
+Elementalist carried 94937/26 with the same words but one; another player's own staff was
+112081/26 with a value and a requirement word. Their `0x0035` attack speed came only at their
+first swing (1.75 for the casters, 1.33 for the Warrior — F30's cadences). The slice run's own
+archive binds file 112081 (`archive.binds_plainly`, row 10668).
+
+**What shipped (SLICE-H7).** `[item.caster_staff]` in `content/items.toml`, the Monk henchman's
+item byte for byte (a `capture` row, 20260817T231139); `party_weapon_item` maps a body's weapon
+class (`[party.KEY].weapon` / `--hero-weapon`, else the profession's) to the item through
+`PARTY_WEAPON_ITEMS` — the staff for staff and wand classes, nothing yet for a Warrior's sword and
+shield (on the tape, not extracted); the hero body site sends the item and then `0x006D [hero,
+item, 0]` right after the body's create, in retail's order, item ids from 210 by slot. So Tahlkora
+holds a staff and the client draws a staff's ranged attack. **Unobserved by the owner's own eye**
+(the harness frame is static); the wire is retail's shape.
+
+**And the player's bar, the same commit** (the owner: *"let's move to giving the player some actual
+skills other than power attack"*). `--skills` now defaults to **`[player.skillbar]`** —
+Mighty Blow 351, Heavy Blow 359, Crushing Blow 352, Irresistible Blow 356, Power Attack 322,
+Frenzy 346, Healing Signet 1, Resurrection Signet 2 — eight skills the server MODELS on the
+starter hammer: the four hammer attacks got `+ Damage` rows (WIKI, each page's progression read
+today; the client's endpoints match the wiki's on all four), Frenzy's attack speed and Healing
+Signet's heal were already rows, the signet raises the hero. `[player.attributes]` became a hammer
+warrior's — Hammer Mastery 12, Strength 9, Tactics 6, Axe 3, Sword 1, the same 173 points — so at
+the shipped ranks Mighty Blow adds 34, Heavy Blow 24, Crushing Blow 16, Irresistible Blow 17, Power
+Attack 28 and Healing Signet heals 118. `TEST_SKILLBAR` (316–323) stays the probe bar and
+`--skills` still overrides. **Not modelled, said in the rows:** Crushing Blow's Deep Wound on a
+knocked-down foe and Heavy Blow's knock-down (no knock-down here), Irresistible Blow's damage on
+a block (no block), Healing Signet's −40 armour. `test_agentlife` §H7 (floor 467 → 472);
+`test_skilldamage`'s two rank locks re-aimed to the shipped ranks.
+
+**Still open, the owner's other line:** *"the monk still outheals our damage"* — the corridor's
+hostile Academy Monk (bar 281/252/276) on the raider is content balance, untouched here.
+
 ## SLICE-F6 — what the desk cannot settle
 
 Carried so the next session does not re-read the same bytes hoping for more:
