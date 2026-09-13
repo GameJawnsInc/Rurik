@@ -1797,8 +1797,10 @@ numbers the fight ran for the whole hold and nobody died: Tahlkora healed hersel
 gave it 27 every 8 s — and its own **Healing Signet gave it 88 every 4 s**, ten casts, refilling it
 from 44 to full in one; the owner: *"couldn't bring them down, healing signet too strong."* The
 signet's 88 is the skill's table at Tactics 1 (82…172), not a rank we can lower, so **SLICE-H8b**:
-its recharge on every raider row is 20 s against the table's 4 (4.4 health a second, under the
-party's output; retail's counter, −40 armour while it activates, is not modelled). Rerun
+its recharge on every raider row went to 20 s against the table's 4 — and then, on the owner's
+word (*"just remove healing signet from the bandit"*), **off the raider rows entirely**; the bar
+is Sever Artery and Power Attack, the boss adds Desperation Blow (retail's counter, −40 armour
+while it activates, is not modelled). Rerun
 `20260913T163821`: **the raider died** (`KILL agent 90`, its monk healed it twice, the signet once)
 — *"able to kill now"* — **and got back up eight seconds later**, because every hostile shared the
 test enemy's `REVIVE_AFTER`; the owner: *"that's correct for the training dummies, but not for

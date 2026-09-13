@@ -1221,7 +1221,7 @@ tiling, MEASURED walkable."""
 [spawn.corridor_raider_a]
 area = "corridor"
 map = 168
-skills = [[382, 0.0, 6.0], [322, 0.0, 3.0], [1, 2.0, 20.0]]
+skills = [[382, 0.0, 6.0], [322, 0.0, 3.0]]
 npc = "bandit_raider"
 agent_id = 90
 definition = 60
@@ -1248,7 +1248,7 @@ now, not at ENEMY_SKILL_RANK 12 -- and `damage` [6, 10] with `weapon_attribute` 
 20: OURS, sized so that through the wiki's swing formula (strike level 5 x rank \
 against the player's armour 45) a swing lands 3-5, which is what retail's \
 Pre-Searing hostiles landed on the level-3 observer of 20260819T132414 (n=3, \
-3/4/5; F34). The armour is the creature formula's, 3 x 2 + 20 = 26. Healing \nSignet's recharge is 20 s here against the client table's 4 s (SLICE-H8b, the \nowner after run 20260913T163333: "couldn't bring them down, healing signet too \nstrong"): the signet heals 88 at Tactics 1 -- the skill's own table, not a rank \n-- and at 4 s that is 22 health a second against a party landing 3-5 a swing \n(that run: ten casts, nobody died); at 20 s it is 4.4. Retail's counter, the \n-40 armour while it activates, is not modelled. Every raider row carries it. A \nbalance knob, not a mechanism."""
+3/4/5; F34). The armour is the creature formula's, 3 x 2 + 20 = 26. Healing \nSignet (1) is OFF every raider row (SLICE-H8b, the owner after run \n20260913T163333: "couldn't bring them down, healing signet too strong", then \n"just remove healing signet from the bandit"): it heals 88 at Tactics 1 -- the \nskill's own table, not a rank -- which was 22 health a second on the table's 4 s \nrecharge against a party landing 3-5 a swing (that run: ten casts, nobody died); \na 20 s recharge was tried first and the owner asked for the removal. Retail's \ncounter, the -40 armour while it activates, is not modelled. A balance knob, not \na mechanism; the bar is Sever Artery and Power Attack (the boss adds Desperation \nBlow)."""
 
 [spawn.corridor_monk_a]
 area = "corridor"
@@ -1277,7 +1277,7 @@ choice (studies/slice/PLAN.md, the owner's decisions). Orison's recharge is 8 s 
 [spawn.corridor_raider_b]
 area = "corridor"
 map = 168
-skills = [[382, 0.0, 6.0], [322, 0.0, 3.0], [1, 2.0, 20.0]]
+skills = [[382, 0.0, 6.0], [322, 0.0, 3.0]]
 npc = "bandit_raider"
 agent_id = 92
 definition = 60
@@ -1323,7 +1323,7 @@ and the reasons are on that row."""
 [spawn.corridor_boss]
 area = "corridor"
 map = 168
-skills = [[382, 0.0, 6.0], [322, 0.0, 3.0], [1, 2.0, 20.0], [323, 0.0, 6.0]]
+skills = [[382, 0.0, 6.0], [322, 0.0, 3.0], [323, 0.0, 6.0]]
 npc = "bandit_raider"
 agent_id = 94
 definition = 62
