@@ -73,7 +73,7 @@ from codec import Codec  # noqa: E402
 # known-bad control; and the chase section's wall pin split by arm, 1).
 # Floor from a real green run of 331. +1 at NPCTRACK-F8 (the hold rule
 # replaces the fresh-follow pin: three checks for two), green 333.
-LEDGER = checks.Ledger("agent lifetime", floor=480)   # SLICE-H8c +2 (the revive opt-in); SLICE-H8 +6 (low levels); SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
+LEDGER = checks.Ledger("agent lifetime", floor=488)   # SLICE-H9/H10/H11 +8 (the sword and the shield, the gated strikes, the hammer bandit); SLICE-H8c +2 (the revive opt-in); SLICE-H8 +6 (low levels); SLICE-H7 +5 (the staff, the bar); SLICE-H5 +10 (the commander's orders); SLICE-H4 +15 (the party fights); SLICE-H3 +14; SLICE-H2/H2b/H2c +11; SLICE-F27 +3 (the arrival owes the swing: the circling case); SLICE-F25 +2 (a cast in flight lands out of range; the revert arm); SLICE-F24 +6 (section 11c: an NPC attack skill is a swing); SLICE-F22 +8 (section 11b: the halt owes a swing); SLICE-F21 +1 (an armed swing lands out of reach; the revert arm replaces the old drop); SLICE-B7b +4 (the party follow and its two arms); SLICE-B3 +13 (a hostile heal aims at the hurt body; the known-bad arm; self heals and non-heals); from the green run
 
 
 def section_weapon_damage():
@@ -5814,6 +5814,9 @@ def section_hold_plane():
           "slice's level-3 character is [party.slice]'s, over the base fixture")
     _saved_pl = (agents.PLAYER_LEVEL, agents.PLAYER_HEALTH,
                  agents.PLAYER_ATTRIBUTE_RANKS, agents.PLAYER_ATTRIBUTE_POINTS)
+    _saved_h9 = (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND,
+                 authsrv.PLAYER_SWING_DAMAGE, authsrv.WEAPON_ATTACK_SPEED,
+                 authsrv.ATTACK_INTERVAL, authsrv.PARTY_SKILLBAR)
     try:
         raider = {"npc": {"profession": 1, "level": 2},
                   "attributes": {17: 2, 20: 1, 21: 1}, "damage": [6, 10],
@@ -5894,12 +5897,13 @@ def section_hold_plane():
         st = authsrv.attribute_state({})
         LEDGER.ok(base == (1, 100, 200) and agents.PLAYER_LEVEL == 3
                   and agents.PLAYER_HEALTH == 140 and st.points_total == 10
-                  and st.spent == 10 and authsrv.player_rank_for_skill(351) == 3
+                  and st.spent == 10 and authsrv.player_rank_for_skill(382) == 3
                   and authsrv.player_full_max_health({"level": 3}) == 140.0,
                   "--party slice rebinds the character: level 3, health 140 "
-                  "(WIKI: 100/120/140), Hammer 3 / Strength 2 / Tactics 1 = all "
-                  "10 of level 3's points -- over the base row's level-1, 100, "
-                  "200-point fixture the offline locks price",
+                  "(WIKI: 100/120/140), Swordsmanship 3 / Strength 2 / Tactics 1 "
+                  "= all 10 of level 3's points (H9: the sword's ranks) -- over "
+                  "the base row's level-1, 100, 200-point fixture the offline "
+                  "locks price",
                   f"base {base}, changed {changed}, spent {st.spent} of "
                   f"{st.points_total}")
         # SLICE-H8c: a normal enemy stays dead; the training dummy gets up.
@@ -5930,6 +5934,185 @@ def section_hold_plane():
     finally:
         (agents.PLAYER_LEVEL, agents.PLAYER_HEALTH,
          agents.PLAYER_ATTRIBUTE_RANKS, agents.PLAYER_ATTRIBUTE_POINTS) = _saved_pl
+        (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.PLAYER_SWING_DAMAGE,
+         authsrv.WEAPON_ATTACK_SPEED, authsrv.ATTACK_INTERVAL,
+         authsrv.PARTY_SKILLBAR) = _saved_h9
+
+    # ---- SLICE-H9/H10/H11: the sword and the shield, the gated strikes, the
+    # hammer bandit ----------------------------------------------------------
+    # The owner: "the player uses a Sword and Shield. skills: the classic GW
+    # sword combo: Sever Artery, Gash (need Deep Wound + conditional
+    # application), Final Thrust (need 50% HP logic). the bandit should be a
+    # Hammer Warrior that just has Power Attack." F35.
+    print("\nSLICE-H9/H10/H11: the slice character holds a sword and a shield "
+          "(the level-3 henchman's bytes), Gash lands its bonus and Deep Wound "
+          "on a BLEEDING foe only, Final Thrust doubles its bonus below half "
+          "health and takes all adrenaline, and the bandit is a hammer warrior")
+    _saved_h9 = (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND,
+                 authsrv.PLAYER_SWING_DAMAGE, authsrv.WEAPON_ATTACK_SPEED,
+                 authsrv.ATTACK_INTERVAL, authsrv.PARTY_SKILLBAR,
+                 agents.PLAYER_LEVEL, agents.PLAYER_HEALTH,
+                 agents.PLAYER_ATTRIBUTE_RANKS, agents.PLAYER_ATTRIBUTE_POINTS,
+                 authsrv.skill_cost)
+    try:
+        sword = agents.item_template("starter_sword")
+        shield = agents.item_template("starter_shield")
+        LEDGER.ok(sword["item_type"] == 27 and shield["item_type"] == 24
+                  and authsrv.weapon_damage_range(sword) == (2, 3)
+                  and authsrv.armour_of_piece(shield)[0] == 3
+                  and authsrv.WEAPON_TYPE_ATTRIBUTE[27] == 20,
+                  "the two item rows: a type-27 sword whose own 584 word reads "
+                  "2-3 (the Starter Sword's, WIKI) and a type-24 shield whose "
+                  "572 word reads armour 3 (the Starter Shield's) -- the "
+                  "level-3 Warrior henchman's bytes off 20260819T132414 -- and "
+                  "a sword swings at Swordsmanship (20)",
+                  f"sword {authsrv.weapon_damage_range(sword)}, shield "
+                  f"{authsrv.armour_of_piece(shield)}")
+        base = (authsrv.PLAYER_SWING_DAMAGE, round(authsrv.ATTACK_INTERVAL, 3),
+                authsrv.default_skillbar()[:3],
+                authsrv.player_armour_at("warrior_body"),
+                authsrv.player_spell_armour())
+        changed = authsrv.apply_party_character(agents.WORLD.get("party", "slice"))
+        after = (authsrv.PLAYER_SWING_DAMAGE, round(authsrv.ATTACK_INTERVAL, 3),
+                 authsrv.default_skillbar(),
+                 authsrv.player_armour_at("warrior_body"),
+                 authsrv.player_spell_armour())
+        LEDGER.ok(base == ((3, 5), 1.75, [351, 359, 352], 45.0, 25.0)
+                  and after == ((2, 3), 1.33, [382, 384, 385, 322, 346, 1, 2],
+                                48.0, 28.0)
+                  and agents.PLAYER_WEAPON is not None
+                  and agents.PLAYER_WEAPON["item_type"] == 27
+                  and authsrv.player_weapon_rank({}) == 3,
+                  "--party slice rebinds what the character holds: the swing "
+                  "2-3 at 1.33 s (the hammer's 3-5 at 1.75), the sword bar "
+                  "Sever Artery / Gash / Final Thrust / Power Attack / Frenzy / "
+                  "the two signets, the shield's +3 on every location (45 -> "
+                  "48 physical, 25 -> 28 elemental; WIKI: 'overall armor "
+                  "rating'), and the weapon rank is Swordsmanship 3",
+                  f"base {base}, after {after}, changed {changed}")
+        # THE STRIKES, through the player's own press -> cast_tick landing.
+        # Costs are stubbed (test_castcycle's precedent): what is measured is
+        # the gate and the double, not a strike's price.
+        authsrv.skill_cost = lambda sid: (0, 0)
+        st = _world(dist=50.0, armor_rating=26.0, name="bandit")
+        st["player_health"] = 140.0
+
+        def _land(skill, target=10):
+            sent = []
+            send = lambda op, vals, label="", quiet=False: sent.append((op, vals))
+            authsrv.handle_skill_press([0, skill, 0, target], send, st, 1,
+                                       authsrv.GAME_CMSG_USE_SKILL)
+            for cast in st.get("pending_casts", ()):
+                for k in ("begin_at", "e5_at", "e3_at", "e6_at"):
+                    cast[k] -= 30.0
+            for _ in range(3):
+                authsrv.cast_tick(send, st, 1)
+            return sent
+
+        before = st["agents"][10]["health"]
+        sent = _land(384)
+        plain = before - st["agents"][10]["health"]
+        dw = [ep for ep in authsrv.effect_table(st).on_agent(10)
+              if ep["skill"] == 482]
+        LEDGER.ok(0 < plain <= 4 and dw == []
+                  and st["agents"][10]["max_health"] == 100.0,
+                  "Gash on a foe that is NOT bleeding is a plain sword swing: "
+                  "the 2-3 through armour 26, no +8 (Swordsmanship 3), no Deep "
+                  "Wound, the maximum untouched -- WIKI: 'If this attack hits "
+                  "a Bleeding foe' gates both (requires_condition)",
+                  f"dealt {plain:.1f}, deep wounds {len(dw)}")
+        authsrv.apply_condition(lambda *a, **k: None, st, 10, 478, 9.0, 3, 1, 382)
+        before = st["agents"][10]["health"]
+        sent = _land(384)
+        gashed = before - st["agents"][10]["health"]
+        dw = [ep for ep in authsrv.effect_table(st).on_agent(10)
+              if ep["skill"] == 482]
+        LEDGER.ok(gashed >= 8.0 and len(dw) == 1
+                  and abs(dw[0]["duration"] - 8.0) < 1e-9
+                  and st["agents"][10]["max_health"] == 80.0,
+                  "and on a BLEEDING foe it strikes for the swing +8 and puts an "
+                  "8 s Deep Wound on it (both endpoints at Swordsmanship 3), "
+                  "the foe's maximum falling 20% (100 -> 80, the existing 482 "
+                  "model)", f"dealt {gashed:.1f}, deep wound "
+                  f"{[(ep['skill'], ep['duration']) for ep in dw]}, max "
+                  f"{st['agents'][10]['max_health']}")
+        # Final Thrust: +9 at Swordsmanship 3 (the client's 1..40), doubled
+        # below half, and the adrenaline wipe on the wire.
+        st["agents"][10]["health"] = 30.0            # 30 of 80: below 50%
+        sent = _land(385)
+        low = 30.0 - st["agents"][10]["health"]
+        wipes = [v for op, v in sent if op == authsrv.AGENT_ADRENALINE_CLEAR]
+        st["agents"][10]["health"] = 70.0            # 70 of 80: above
+        sent2 = _land(385)
+        high = 70.0 - st["agents"][10]["health"]
+        wipes2 = [v for op, v in sent2 if op == authsrv.AGENT_ADRENALINE_CLEAR]
+        LEDGER.ok(low >= 18.0 and 9.0 <= high < 18.0
+                  and wipes == [[authsrv.PLAYER_AGENT_ID]]
+                  and wipes2 == [[authsrv.PLAYER_AGENT_ID]],
+                  "Final Thrust's +9 DOUBLES on a foe below half health (>= 18 "
+                  "landed at 30 of 80) and does not above (9..17 at 70 of 80) "
+                  "-- the bonus only, never the swing (WIKI, the page's Notes) "
+                  "-- and each completion wipes the player's adrenaline: ONE "
+                  "0x00D0 [player], the death's and the 25 s clear's shape",
+                  f"below {low:.1f}, above {high:.1f}, wipes {wipes}/{wipes2}")
+        LEDGER.ok(authsrv.skill_health_threshold(385) == 0.5
+                  and authsrv.skill_health_threshold(384) is None
+                  and authsrv.skill_requires_condition(384) == 478
+                  and authsrv.skill_requires_condition(385) is None
+                  and authsrv.skill_clears_adrenaline(385)
+                  and not authsrv.skill_clears_adrenaline(384),
+                  "the three readers: the 50% is the CLIENT's own bit-clear "
+                  "bonus slot (50/50) named by the row, Gash's gate is Bleeding "
+                  "(478), and only Final Thrust's row clears adrenaline",
+                  f"thr {authsrv.skill_health_threshold(385)}, gate "
+                  f"{authsrv.skill_requires_condition(384)}")
+        # THE NPC ARM shares the terms: an attack skill's bonus and condition
+        # at the player, judged by the same function.
+        st2 = _world(dist=50.0)
+        st2["player_health"] = 100.0
+        no = authsrv.attack_skill_terms(st2, 384, 1, authsrv.PLAYER_AGENT_ID,
+                                        6.0, 1, "agent 10")
+        authsrv.apply_condition(lambda *a, **k: None, st2, authsrv.PLAYER_AGENT_ID,
+                                478, 9.0, 1, 1, 382)
+        yes = authsrv.attack_skill_terms(st2, 384, 1, authsrv.PLAYER_AGENT_ID,
+                                         6.0, 1, "agent 10")
+        LEDGER.ok(no == (0.0, None) and yes[0] == 6.0 and yes[1] is not None
+                  and yes[1][0] == 482,
+                  "the same terms serve an NPC's strike at the player: no "
+                  "bonus and no condition until the player bleeds, then both",
+                  f"no {no}, yes {yes}")
+        # THE BANDIT: a hammer warrior with Power Attack, holding a hammer.
+        rows = {k: agents.WORLD.get("spawn", k)
+                for k in ("corridor_raider_a", "corridor_raider_b", "corridor_boss")}
+        bars = {k: [s_[0] for s_ in r["skills"]] for k, r in rows.items()}
+        raider = {"npc": {"profession": 1, "level": 2},
+                  "attributes": dict((int(a_), int(r_)) for a_, r_ in
+                                     rows["corridor_raider_a"]["attributes"]),
+                  "damage": rows["corridor_raider_a"]["damage"],
+                  "weapon_attribute": rows["corridor_raider_a"]["weapon_attribute"]}
+        hits = sorted(authsrv.body_swing_damage(raider, 45.0) for _ in range(60))
+        LEDGER.ok(bars == {"corridor_raider_a": [322], "corridor_raider_b": [322],
+                           "corridor_boss": [322, 323]}
+                  and all(dict((int(a_), int(r_)) for a_, r_ in r["attributes"])
+                          == {19: 2, 17: 1, 21: 1} for r in rows.values())
+                  and all(r["weapon_attribute"] == 19
+                          and r.get("weapon_item") == "starter_hammer"
+                          and abs(float(r.get("attack_speed", 0)) - 1.75) < 1e-9
+                          for r in rows.values())
+                  and 3 <= hits[0] and hits[-1] <= 6
+                  and authsrv.agent_skill_rank(raider, 322) == 1,
+                  "every raider row is a HAMMER warrior: Power Attack alone "
+                  "(the boss adds Desperation Blow), Hammer 2 / Strength 1 / "
+                  "Tactics 1 = level 2's five points, a starter hammer in hand "
+                  "at 1.75 s (WIKI), and its 6-10 still lands single digits on "
+                  "the player's armour 45 (retail's 3/4/5; F34)",
+                  f"bars {bars}, 60 swings span {hits[0]:.0f}..{hits[-1]:.0f}")
+    finally:
+        (agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND, authsrv.PLAYER_SWING_DAMAGE,
+         authsrv.WEAPON_ATTACK_SPEED, authsrv.ATTACK_INTERVAL,
+         authsrv.PARTY_SKILLBAR, agents.PLAYER_LEVEL, agents.PLAYER_HEALTH,
+         agents.PLAYER_ATTRIBUTE_RANKS, agents.PLAYER_ATTRIBUTE_POINTS,
+         authsrv.skill_cost) = _saved_h9
 
 
 if __name__ == "__main__":

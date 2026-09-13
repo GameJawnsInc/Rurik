@@ -1198,6 +1198,10 @@ BAG_TYPE_EQUIPPED = 2
 BAG_MODEL_EQUIPPED = 21
 EQUIPPED_BAG_ID = 1
 EQUIPPED_SLOT_WEAPON = 0
+# SLICE-H9: the offhand's cell in the equipped bag -- UPSTREAM (OpenTyria
+# GmInventory.h EquippedItemSlot_OffHand = 1), and the 0x006E array comment
+# below already had position 1 as the offhand.
+EQUIPPED_SLOT_OFFHAND = 1
 EQUIPPED_SLOT_COUNT = 9
 # THE WHOLE BAG SET, and until 2026-08-19 this server sent one ninth of it.
 # The symptom was not a missing grid, it was a MISSING PURCHASE: with a funded
@@ -2489,6 +2493,9 @@ def cast_stop_reckon(state, now):
 # already seen would do; 1 is the first because the inventory is otherwise
 # empty. It is what goes in the weapon set's leadhand slot.
 WEAPON_ITEM_ID = 1
+# SLICE-H9: the offhand (a shield), when a party row gives the character one.
+# 10 is clear of the player's 1-9 and of the hero bodies' 210+.
+OFFHAND_ITEM_ID = 10
 # Give the character a weapon at all. --no-weapon turns it off so the "naked
 # character cannot attack" reading can be re-tested rather than remembered.
 EQUIP_WEAPON = True
@@ -2930,6 +2937,93 @@ ENEMY_SKILL_RANK = 12
 # `test_mechanics.py` resolve through. `episodemods.py` imports them from the
 # leaf directly.
 from skillread import skill_scale_value, skill_flat_constant  # noqa: F401,E402
+
+
+def skill_requires_condition(skill_id):
+    """SLICE-H10: the condition a skill's target must ALREADY carry for the
+    skill's bonus and its own condition to apply, or None.
+
+    `requires_condition = "Bleeding"` on the skill_effect row -- Gash (WIKI, GWW
+    "Gash"): "If this attack hits a Bleeding foe, you strike for +5..20 more
+    damage and that foe suffers a Deep Wound". Both halves are gated: a Gash
+    on a foe that is not bleeding is a plain sword swing."""
+    try:
+        row = agents.WORLD.get("skill_effect", str(skill_id))
+    except Exception:                                          # noqa: BLE001
+        return None
+    return effects.condition_id(row.get("requires_condition"))
+
+
+def skill_health_threshold(skill_id):
+    """SLICE-H10: the fraction of maximum health BELOW which a skill's bonus
+    damage doubles, or None.
+
+    `bonus_scale_means = "Health threshold %"` names the client's own BIT-CLEAR
+    bonus slot as the percentage -- Final Thrust's holds 50/50 with the bit
+    clear, the "below 50% Health" of its description (WIKI, GWW "Final
+    Thrust"), read through skill_flat_constant like Rush's 25. The doubling is
+    of the BONUS ONLY (the page's Notes: "only doubles the additional damage
+    this skill adds")."""
+    try:
+        row = agents.WORLD.get("skill_effect", str(skill_id))
+    except Exception:                                          # noqa: BLE001
+        return None
+    if row.get("bonus_scale_means") != "Health threshold %":
+        return None
+    try:
+        return skill_flat_constant(skill_id, "bonus_scale") / 100.0
+    except (ValueError, agents.content.ContentError):
+        return None
+
+
+def skill_clears_adrenaline(skill_id):
+    """SLICE-H10: `clears_adrenaline = true` on the row -- Final Thrust's
+    "Lose all adrenaline" (WIKI), paid at the cast's completion."""
+    try:
+        row = agents.WORLD.get("skill_effect", str(skill_id))
+    except Exception:                                          # noqa: BLE001
+        return False
+    return bool(row.get("clears_adrenaline"))
+
+
+def agent_has_condition(state, target_id, condition_id):
+    """Is a live episode of this condition on the target (player or body)?"""
+    return any(ep["skill"] == condition_id
+               for ep in effect_table(state).on_agent(target_id))
+
+
+def agent_health_fraction(state, target_id):
+    """health / maximum for the player or a body; 1.0 when unknown."""
+    if target_id == PLAYER_AGENT_ID:
+        mx = player_max_health(state)
+        return (float(state.get("player_health", mx)) / mx) if mx else 1.0
+    row = state.get("agents", {}).get(target_id) or {}
+    mx = float(row.get("max_health") or 0.0)
+    return (float(row.get("health", mx)) / mx) if mx else 1.0
+
+
+def attack_skill_terms(state, skill_id, rank, target_id, bonus, conn_id, who):
+    """SLICE-H10: (bonus, inflicted) an attack skill's strike carries at THIS
+    target -- the row's `requires_condition` gate on both the bonus and the
+    skill's own condition, and the health-threshold doubling of the bonus.
+    Judged before the strike lands, on the target as it stands."""
+    inflicted = skill_condition(skill_id, rank)
+    need = skill_requires_condition(skill_id)
+    if need is not None and not agent_has_condition(state, target_id, need):
+        print(f"[c{conn_id}] {who}'s skill {skill_id} on agent {target_id}: "
+              f"the target is not {effects.CONDITION_SKILLS.get(need, need)} "
+              f"-- a plain swing, no +{bonus:.0f} and no condition (the row's "
+              f"requires_condition)", flush=True)
+        return 0.0, None
+    thr = skill_health_threshold(skill_id)
+    if thr is not None and bonus:
+        frac = agent_health_fraction(state, target_id)
+        if frac < thr:
+            print(f"[c{conn_id}] {who}'s skill {skill_id}: agent {target_id} "
+                  f"is at {frac:.0%} < {thr:.0%} -- the +{bonus:.0f} doubles",
+                  flush=True)
+            bonus *= 2.0
+    return bonus, inflicted
 
 
 def skill_damage(skill_id, rank):
@@ -3720,10 +3814,18 @@ TEST_SKILLBAR = [316, 317, 318, 319, 320, 321, 322, 323]
 SKILLBAR = list(TEST_SKILLBAR)
 
 
+# SLICE-H9: a [party.KEY] row's `player_skills`, bound by apply_party_character
+# at --party; None means the base row's bar below.
+PARTY_SKILLBAR = None
+
+
 def default_skillbar():
-    """The bar a session gets by not choosing: content/world.toml
-    [player.skillbar] (SLICE-H7 -- eight skills the server models, on the
-    hammer warrior), else TEST_SKILLBAR, the probe bar. --skills overrides."""
+    """The bar a session gets by not choosing: the party row's `player_skills`
+    (SLICE-H9, the sword bar), else content/world.toml [player.skillbar]
+    (SLICE-H7 -- eight skills the server models, on the hammer warrior), else
+    TEST_SKILLBAR, the probe bar. --skills overrides."""
+    if PARTY_SKILLBAR:
+        return list(PARTY_SKILLBAR)
     try:
         row = agents.WORLD.get("player", "skillbar")
     except Exception:                                          # noqa: BLE001
@@ -9442,7 +9544,14 @@ HERO_WEAPON_ATTRIBUTE = None   # [party.KEY].weapon_attribute
 # item's type says: a staff casts a bolt from range, an empty hand punches.
 # One item today, the retail Monk henchman's staff (content/items.toml).
 PARTY_WEAPON_ITEMS = {"staff": "caster_staff", "wand": "caster_staff"}
-HERO_WEAPON_ITEM_ID = 210      # + the hero's slot; clear of the player's 1-9
+HERO_WEAPON_ITEM_ID = 210      # + the hero's slot; clear of the player's 1-10
+# SLICE-H11: a spawn row's `weapon_item` (a content item key) is declared and
+# named on the body at its create, retail's shape for EVERY body and not only
+# a henchman's: across the live corpus 0x006D goes to 3,016 non-party agents
+# (a sword in 403 leadhands, a shield in 338 offhands, a hammer in 51 --
+# scratch census over livewire, 2026-09-13). The item id is this base plus
+# the row's agent id, clear of the player's 1-10 and the party's 210+.
+SPAWN_WEAPON_ITEM_ID = 300
 # ---- SLICE-H5: THE COMMANDER'S ORDERS (studies/slice F31) -------------------
 #
 # The three clicks the commander UI sends (pvpui 28.5-28.7, all captured on
@@ -9884,17 +9993,36 @@ def armour_of_piece(item, physical=True):
                                       ARMOR_VS_TYPE_MODIFIER)
 
 
+def offhand_armour(physical=True):
+    """SLICE-H9: the shield's own rating, from its 572 word, added to EVERY
+    location -- WIKI (GWW "Shield"): "an off-hand weapon that provides a bonus
+    to a character's overall armor rating". 0.0 with no offhand, no weapon, or
+    no rating word on the piece."""
+    if not EQUIP_WEAPON or not agents.PLAYER_OFFHAND:
+        return 0.0
+    got = armour_of_piece(agents.PLAYER_OFFHAND, physical)
+    if got is None:
+        return 0.0
+    rating, bonus = got
+    return float(rating) + float(bonus_armour(bonus))
+
+
 def player_armour_at(location_key, physical=True):
-    """Forwards to combatmath, reading EQUIP_ARMOUR here, at call time."""
-    return combatmath.player_armour_at(location_key, physical, EQUIP_ARMOUR,
-                                       ARMOR_RATING_MODIFIER,
-                                       ARMOR_VS_TYPE_MODIFIER)
+    """Forwards to combatmath, reading EQUIP_ARMOUR here, at call time --
+    plus the shield (SLICE-H9), on top of whatever the location wears."""
+    got = combatmath.player_armour_at(location_key, physical, EQUIP_ARMOUR,
+                                      ARMOR_RATING_MODIFIER,
+                                      ARMOR_VS_TYPE_MODIFIER)
+    return None if got is None else got + offhand_armour(physical)
 
 
 def player_spell_armour():
-    """Forwards to combatmath; the chain below is threaded inside the leaf."""
-    return combatmath.player_spell_armour(EQUIP_ARMOUR, ARMOR_RATING_MODIFIER,
-                                          ARMOR_VS_TYPE_MODIFIER)
+    """Forwards to combatmath; the chain below is threaded inside the leaf.
+    The shield rides here too (SLICE-H9), elemental -- its `+N vs. physical`
+    line, if it ever carries one, does not."""
+    got = combatmath.player_spell_armour(EQUIP_ARMOUR, ARMOR_RATING_MODIFIER,
+                                         ARMOR_VS_TYPE_MODIFIER)
+    return None if got is None else got + offhand_armour(physical=False)
 
 
 def spell_armour_for(skill_id):
@@ -10011,7 +10139,14 @@ ARMOUR_DIVISOR = 40.0
 # one should read it from there. Ours carries no 633, so the type mapping
 # stands in, and it is a table rather than a constant so the next weapon is a
 # row instead of an edit.
-WEAPON_TYPE_ATTRIBUTE = {15: 19}
+# SLICE-H9: the sword (27) and the axe (2) beside the hammer (15). The type
+# numbers are the wire's (OpenTyria's ItemType enum, confirmed by the retail
+# Warrior henchman's own pair, F33: sword 27 in the leadhand, shield 24 in the
+# off); the attribute ids are the client's s_attrib table (18 Axe Mastery,
+# 19 Hammer Mastery, 20 Swordsmanship).
+WEAPON_TYPE_ATTRIBUTE = {15: 19, 27: 20, 2: 18}
+# ...and the attack_speed rates key each swings at (content [attack_speed.rates]).
+WEAPON_TYPE_RATE = {15: "hammer", 27: "sword", 2: "axe"}
 # The two modifier identifiers an armour piece carries. 572's argument is the
 # rating the tooltip prints as `Armor: N`; 527's is the `+N vs. <type>` line,
 # and identifier 4 beside it resolves to `vs. physical damage`. All three were
@@ -10080,7 +10215,7 @@ def player_weapon_rank(state):
     attribute model falls back rather than asserting.
     """
     attribute = WEAPON_TYPE_ATTRIBUTE.get(
-        (agents.STARTER_HAMMER or {}).get("item_type"))
+        (agents.PLAYER_WEAPON or {}).get("item_type"))
     if attribute is None:
         return None
     try:
@@ -12894,7 +13029,7 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
     # skill's "+ Damage" is: one swing, one number on screen.
     if swing and exact is None:
         prep_bonus, prep_skill = swing_preparation_bonus(
-            state, agents.STARTER_HAMMER, PLAYER_AGENT_ID)
+            state, agents.PLAYER_WEAPON, PLAYER_AGENT_ID)
         if prep_bonus:
             dealt += prep_bonus
             label += f" +{prep_bonus:.0f} (preparation {prep_skill})"
@@ -13588,7 +13723,11 @@ def equipped_attribute_bonuses():
     about what the character is WEARING (studies/pvpui 34.6).
     """
     bonuses = {}
-    for equipped in ([agents.STARTER_HAMMER] if EQUIP_WEAPON else []):
+    # SLICE-H9: the weapon and the offhand -- a party row's, else the hammer.
+    for equipped in ([agents.PLAYER_WEAPON, agents.PLAYER_OFFHAND]
+                     if EQUIP_WEAPON else []):
+        if equipped is None:
+            continue
         for attribute, amount in equipped.get("attribute_bonus", []):
             bonuses[int(attribute)] = bonuses.get(int(attribute), 0) + int(amount)
     return bonuses
@@ -14687,9 +14826,17 @@ def cast_tick(send, state, conn_id):
                      [agents.GV_ATTACK_SKILL_FINISHED, PLAYER_AGENT_ID, 0],
                      f"attack_skill_finished: skill {cast['skill_id']} "
                      f"lands")
+            # A CONDITION, if the skill inflicts one and the target lives --
+            # read here; an attack skill's terms below may gate it (SLICE-H10).
+            inflicted = skill_condition(cast["skill_id"], rank)
             if target and _is_attack_skill(cast["skill_id"]):
                 bonus = float(found[0]) if found and found[1] == "additive" \
                     else 0.0
+                # SLICE-H10: Gash's Bleeding gate, Final Thrust's half-health
+                # double -- the bonus and the condition at THIS target.
+                bonus, inflicted = attack_skill_terms(
+                    state, cast["skill_id"], rank, target, bonus, conn_id,
+                    "the player")
                 # ANIMREF-R6: the strike the windup announced, not a second
                 # swing. skill_strike lands weapon damage + adrenaline with
                 # no attack_started, no melee_attack_finished and no interval
@@ -14735,12 +14882,21 @@ def cast_tick(send, state, conn_id):
             # of them. The recipient follows the skill's own target byte, so
             # Healing Signet (target 0) heals the caster even with a foe
             # selected, which is what makes it usable mid-fight.
-            # A CONDITION, if the skill inflicts one and the target lives.
-            # After the damage, because an attack skill's condition rides the
-            # hit landing -- and if the hit killed the target, `apply_condition`
-            # would be putting bleeding on a corpse, which the guard below
-            # refuses the same way `land_swing` refuses to re-kill one.
-            inflicted = skill_condition(cast["skill_id"], rank)
+            # SLICE-H10: "Lose all adrenaline" (Final Thrust) -- at the
+            # completion, hit or miss, on the same wire as the 25 s wipe and
+            # the death: the pool and 0x00D0 together, ONE call's worth.
+            if ENERGY and skill_clears_adrenaline(cast["skill_id"]):
+                player_adrenaline(state).clear()
+                send(AGENT_ADRENALINE_CLEAR, [PLAYER_AGENT_ID],
+                     f"adrenaline cleared: skill {cast['skill_id']} "
+                     f"(the row's clears_adrenaline)")
+                print(f"[c{conn_id}] skill {cast['skill_id']} takes ALL the "
+                      f"player's adrenaline (WIKI)", flush=True)
+            # The condition is applied after the damage, because an attack
+            # skill's condition rides the hit landing -- and if the hit
+            # killed the target, `apply_condition` would be putting bleeding
+            # on a corpse, which the guard below refuses the same way
+            # `land_swing` refuses to re-kill one.
             if inflicted and target:
                 victim = state.get("agents", {}).get(target)
                 if victim and not victim.get("dead"):
@@ -17279,8 +17435,33 @@ def apply_party_character(prow):
     `player_attributes` and `player_points` rebind the character the session
     spawns -- the agents globals every consumer reads at call time -- so the
     slice plays a level-3 character over the base world's level-1 fixture.
-    Returns what changed, for the launch banner."""
+    Returns what changed, for the launch banner.
+
+    SLICE-H9: `player_weapon` / `player_offhand` (content item keys) rebind
+    what the character holds -- agents.PLAYER_WEAPON's own damage-range word
+    becomes PLAYER_SWING_DAMAGE, its type's attack_speed rate becomes
+    WEAPON_ATTACK_SPEED and ATTACK_INTERVAL (a sword's 1.33 against the
+    hammer's 1.75), its type's attribute is what player_weapon_rank reads --
+    and `player_skills` the bar `default_skillbar` hands out (--skills still
+    overrides)."""
+    global PLAYER_SWING_DAMAGE, WEAPON_ATTACK_SPEED, ATTACK_INTERVAL
+    global PARTY_SKILLBAR
     changed = []
+    if prow.get("player_weapon"):
+        agents.PLAYER_WEAPON = agents.item_template(prow["player_weapon"])
+        PLAYER_SWING_DAMAGE = weapon_damage_range(agents.PLAYER_WEAPON)
+        _rate = WEAPON_TYPE_RATE.get(int(agents.PLAYER_WEAPON.get("item_type", -1)))
+        if _rate and _rate in agents.ATTACK_SPEED:
+            WEAPON_ATTACK_SPEED = ATTACK_INTERVAL = float(agents.ATTACK_SPEED[_rate])
+        changed.append(f"weapon {prow['player_weapon']} ({PLAYER_SWING_DAMAGE}, "
+                       f"{WEAPON_ATTACK_SPEED} s)")
+    if prow.get("player_offhand"):
+        agents.PLAYER_OFFHAND = agents.item_template(prow["player_offhand"])
+        changed.append(f"offhand {prow['player_offhand']} "
+                       f"(+{offhand_armour():.0f} armour)")
+    if prow.get("player_skills"):
+        PARTY_SKILLBAR = [int(s) for s in prow["player_skills"]]
+        changed.append(f"bar {PARTY_SKILLBAR}")
     if prow.get("player_level") is not None:
         agents.PLAYER_LEVEL = int(prow["player_level"])
         changed.append(f"level {agents.PLAYER_LEVEL}")
@@ -19407,12 +19588,18 @@ def land_skill(send, state, agent_id, agent, conn_id):
         # heal resolve as for any cast, after the hit and never on a corpse.
         agent["casting"] = None
         bonus = float(damage[0]) if damage and damage[1] == "additive" else 0.0
+        # SLICE-H10: the same terms the player's strike gets -- the gate and
+        # the double at this target; an NPC's "lose all adrenaline" is its own
+        # pool's (no client holds a copy of it: agent_adrenaline's note).
+        bonus, inflicted = attack_skill_terms(state, skill_id, _rank, _tid,
+                                              bonus, conn_id, f"agent {agent_id}")
+        if skill_clears_adrenaline(skill_id):
+            agent_adrenaline(agent).clear()
         land_swing(send, state, agent_id, agent, conn_id, bonus=bonus,
                    skill_id=skill_id, target_id=_tid)
         send_skill_visual(send, state, agent_id, skill_id, _tid, conn_id)
         apply_effect(send, state, agent_id, skill_id, _rank,
                      _tid, conn_id)
-        inflicted = skill_condition(skill_id, _rank)
         if inflicted and not target_dead(state, _tid):
             apply_condition(send, state, _tid, inflicted[0],
                             inflicted[1], _rank, conn_id, skill_id)
@@ -20309,9 +20496,24 @@ def spawn_population(send, state, origin, conn_id, area=None):
             "revives": bool(row.get("revives", False)),
             "damage": (list(row["damage"]) if row.get("damage") else None),
             "weapon_attribute": row.get("weapon_attribute"),
+            # SLICE-H11: what the body holds (the range still comes from
+            # `damage` first, agent_weapon_range's order).
+            "weapon_item": row.get("weapon_item"),
         }
         create_agent_world(send, state, int(row["agent_id"]), entry, key,
                            conn_id=conn_id)
+        if row.get("weapon_item"):
+            # SLICE-H11: 0x0161 for the item, then 0x006D [agent, leadhand,
+            # 0] -- the hero body's site (SLICE-H7) for a spawn row, so a
+            # hammer warrior draws a hammer swing rather than a punch.
+            _wid = SPAWN_WEAPON_ITEM_ID + int(row["agent_id"])
+            send(GAME_SMSG_CREATE_NAMED_ITEM,
+                 agents.named_item(_wid, agents.item_template(row["weapon_item"])),
+                 f"CREATE_NAMED_ITEM({row['weapon_item']}, item {_wid}, "
+                 f"agent {int(row['agent_id'])})")
+            send(GAME_SMSG_NPC_UPDATE_WEAPONS, [int(row["agent_id"]), _wid, 0],
+                 f"NPC_UPDATE_WEAPONS(agent {int(row['agent_id'])}: leadhand = "
+                 f"item {_wid}, {row['weapon_item']}) [SLICE-H11]")
         # SLICE-B6: THE BOSS AURA is one int property on the body, sent after
         # its create (the setter looks the agent up by id and returns silently
         # if it is not there yet -- SLICE-F1's `0x007DFD70`). The range is
@@ -21460,6 +21662,8 @@ def _handle_request_players(send, state, conn_id, stop, rec):
         worn = [0] * VISUAL_EQUIPMENT_SLOTS
         if EQUIP_WEAPON:
             worn[0] = WEAPON_ITEM_ID
+            if agents.PLAYER_OFFHAND:            # SLICE-H9: position 1
+                worn[EQUIPPED_SLOT_OFFHAND] = OFFHAND_ITEM_ID
         if EQUIP_ARMOUR:
             for item_id, _key, slot in STARTER_ARMOUR:
                 worn[slot] = item_id
@@ -22855,10 +23059,11 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # reason. CREATE_NAMED_ITEM only DECLARES the bytes --
                         # it puts nothing in a bag and nothing in a hand.
                         if EQUIP_WEAPON:
+                            # SLICE-H9: the party row's weapon, else the hammer.
                             send(GAME_SMSG_CREATE_NAMED_ITEM,
                                  agents.named_item(WEAPON_ITEM_ID,
-                                                   agents.STARTER_HAMMER),
-                                 "CREATE_NAMED_ITEM(starter hammer)")
+                                                   agents.PLAYER_WEAPON),
+                                 "CREATE_NAMED_ITEM(the player's weapon)")
                             # Rendering a weapon and EQUIPPING one are not the
                             # same thing, and we had only done the first. The
                             # bag was skipped on purpose to answer an open
@@ -22897,7 +23102,20 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             send(GAME_SMSG_ITEM_MOVED_TO_LOCATION,
                                  [1, WEAPON_ITEM_ID, EQUIPPED_BAG_ID,
                                   EQUIPPED_SLOT_WEAPON],
-                                 "ITEM_MOVED_TO_LOCATION(hammer -> equipped 0)")
+                                 "ITEM_MOVED_TO_LOCATION(weapon -> equipped 0)")
+                        if EQUIP_WEAPON and agents.PLAYER_OFFHAND:
+                            # SLICE-H9: the shield -- declared, then the
+                            # offhand cell of the equipped bag (UPSTREAM slot
+                            # 1); the weapon set and the 0x006E array below
+                            # name it in their own offhand fields.
+                            send(GAME_SMSG_CREATE_NAMED_ITEM,
+                                 agents.named_item(OFFHAND_ITEM_ID,
+                                                   agents.PLAYER_OFFHAND),
+                                 "CREATE_NAMED_ITEM(the player's offhand)")
+                            send(GAME_SMSG_ITEM_MOVED_TO_LOCATION,
+                                 [1, OFFHAND_ITEM_ID, EQUIPPED_BAG_ID,
+                                  EQUIPPED_SLOT_OFFHAND],
+                                 "ITEM_MOVED_TO_LOCATION(offhand -> equipped 1)")
                         # THE ARMOUR. Declared and put in the equipped
                         # bag at the slots retail's own 0x006F writes name.
                         # CREATE_NAMED_ITEM only declares the bytes;
@@ -22948,9 +23166,18 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             # hammer is two-handed, so offhand stays empty.
                             lead = (WEAPON_ITEM_ID
                                     if EQUIP_WEAPON and slot == 0 else 0)
-                            send(GAME_SMSG_ITEM_WEAPON_SET, [1, slot, lead, 0],
+                            # SLICE-H9: the fourth field is the OFFHAND --
+                            # UPSTREAM's field order (GmInventory.c), and on
+                            # retail's wire it is non-zero on exactly the
+                            # connections whose character carries a shield
+                            # (the owner's own: 14 of 56 sets in
+                            # 20260817T231139, 0 of 12 in 20260817T180610).
+                            off = (OFFHAND_ITEM_ID if lead and agents.PLAYER_OFFHAND
+                                   else 0)
+                            send(GAME_SMSG_ITEM_WEAPON_SET, [1, slot, lead, off],
                                  f"WEAPON_SET[{slot}]"
-                                 + (f" leadhand={lead}" if lead else ""))
+                                 + (f" leadhand={lead}" if lead else "")
+                                 + (f" offhand={off}" if off else ""))
                         send(GAME_SMSG_UPDATE_GOLD_STORAGE, [1, 0],
                              "UPDATE_GOLD_STORAGE")
                         send(GAME_SMSG_CHARACTER_UPDATE_INFO,

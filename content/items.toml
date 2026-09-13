@@ -250,6 +250,78 @@ Gw.dat). Given to the party's caster bodies (party_weapon_item) so the client \
 draws a STAFF attack from casting range instead of a punch -- the owner, H4's \
 run: "Tahlkora attacks, but from long range with a melee punch animation"."""
 
+[item.starter_sword]
+name = "a starter sword (the level-3 Warrior henchman's, retail wire; the range word ours)"
+file_id = 0x2AF56              # 175958
+item_type = 27                 # ItemType_Sword (the NUMBER is the wire's; F33's Warrior pair)
+dye_tint = 0
+dye_colors = 0
+materials = 0
+unk1 = 0
+flags = 0x22000100
+value = 0
+model_id = 7937
+quantity = 1
+enc_name = [0x2186]            # 8582, the same generic name id every henchman weapon carries
+# Two modifier words. The first is the wire's own damage-TYPE line (587 arg 2,
+# slashing). The second is the damage RANGE word (584): the tape's reads arg 3
+# arg2 3 (a 3-3 sword at level 3); this one is COMPOSED for the Starter Sword's
+# 2-3 (WIKI, GWW "Starter Sword" Stats: "Slashing Dmg: 2-3") by changing arg2
+# 3 -> 2 in the identical layout, and `itemmods.py --decode 0xA4880302` reads
+# it back as 584 arg 3 arg2 2. The server swings this word (weapon_damage_range)
+# and the client draws it on the tooltip -- one fact, one place.
+modifiers = [0x24B80200, 0xA4880302]
+
+[item.starter_sword.provenance]
+source = "capture"
+capture = "20260819T132414"
+origin = "live"
+verified = """OBSERVED on ArenaNet's own wire (SLICE-H9, 2026-09-13): item 99 of \
+20260819T132414 (the low-level session, three level-3 henchmen), the Warrior \
+henchman's leadhand named by its 0x006D [agent, 99, 100] at the body's create -- \
+file 175958, type 27, flags 0x22000100, model 7937, name id 8582, the type word \
+0x24B80200 byte for byte; the range word is OURS (see the field comment), the \
+Starter Sword's 2-3 in place of the tape's 3-3. The owner's own character in the \
+level-20 captures carried a 22133/27 sword whose file the slice archive does NOT \
+bind; this one it does (archive.binds_plainly, row 76203 on the run archive \
+2026-08-20_21511009c460). Given to the slice's character by [party.slice] \
+player_weapon (the owner: "the player uses a Sword and Shield")."""
+
+[item.starter_shield]
+name = "a starter shield (the level-3 Warrior henchman's, retail wire; the armour word ours)"
+file_id = 0x2AFCE              # 176078
+item_type = 24                 # ItemType_Shield (the wire's; F33's Warrior pair)
+dye_tint = 0
+dye_colors = 0
+materials = 0
+unk1 = 0
+flags = 0x20000200
+value = 0
+model_id = 7938
+quantity = 1
+enc_name = [0x2186]
+# One modifier word: the ARMOUR RATING line (572). The tape's reads arg 0 (a
+# level-3 henchman's shield rates 0); this one is COMPOSED for the Starter
+# Shield's 3 (WIKI, GWW "Starter Shield" Stats: "Armor: 3") -- the same layout
+# the level-20 henchman's 0xA3C80700 (rating 7) uses, arg 0 -> 3, and
+# `itemmods.py --decode 0xA3C80300` reads it back as 572 arg 3. The server adds
+# it to every location (offhand_armour) and the client draws it on the tooltip.
+modifiers = [0xA3C80300]
+
+[item.starter_shield.provenance]
+source = "capture"
+capture = "20260819T132414"
+origin = "live"
+verified = """OBSERVED on ArenaNet's own wire (SLICE-H9, 2026-09-13): item 100 of \
+20260819T132414, the level-3 Warrior henchman's OFFHAND named by its 0x006D \
+[agent, 99, 100] -- file 176078, type 24, flags 0x20000200, model 7938, name id \
+8582, byte for byte; the armour word is OURS (see the field comment), the \
+Starter Shield's 3 in place of the tape's 0. The slice archive binds file 176078 \
+(archive.binds_plainly, row 76325). Given to the slice's character by \
+[party.slice] player_offhand; the client's 0x0147 weapon set carries it in the \
+fourth field, non-zero on retail's wire exactly where the character holds a \
+shield (14 of 56 sets in 20260817T231139), and 0x006E's position 1."""
+
 [item.backpack]
 name = "Backpack (the first item container)"
 file_id = 0x8001B536

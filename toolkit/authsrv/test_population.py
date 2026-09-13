@@ -51,7 +51,7 @@ import pathmap  # noqa: E402
 # party-reserved ids, studies/unitsetup/FINDINGS.md 8 Q9). Every section is
 # synthetic -- no vault, no socket, no client -- so there is nothing here that
 # may skip.
-LEDGER = checks.Ledger("test_population", floor=73)   # SLICE-B2 +7, SLICE-B6 glow +4 (section 6); from the green run
+LEDGER = checks.Ledger("test_population", floor=75)   # SLICE-H11 +2 (section 7: the held weapon); SLICE-B2 +7, SLICE-B6 glow +4 (section 6); from the green run
 check = checks.adopt(LEDGER)
 
 AREA = "sculpt"
@@ -599,6 +599,45 @@ def section4():
           str(bad) if bad else f"all {len(sent)}")
 
 
+def section7():
+    """SLICE-H11: a spawn row's `weapon_item` is declared and named on the body.
+
+    Retail's create batch gives EVERY body its weapons -- 0x0161 per item and
+    a 0x006D [agent, leadhand, offhand] -- not only a henchman's (3,016
+    non-party 0x006D across the live corpus; F35). A row without the key
+    sends neither, so every earlier fixture is unchanged.
+    """
+    print("\n7. SLICE-H11: a row's weapon_item rides the body's create as "
+          "0x0161 + 0x006D")
+    sent = []
+    bodies = place({"bare": row(agent_id=20, definition=5),
+                    "armed": row(agent_id=21, definition=5,
+                                 weapon_item="starter_hammer")}, sent=sent)
+    items = [v for op, v, _l in sent if op == authsrv.GAME_SMSG_CREATE_NAMED_ITEM]
+    hands = [v for op, v, _l in sent if op == authsrv.GAME_SMSG_NPC_UPDATE_WEAPONS]
+    wid = authsrv.SPAWN_WEAPON_ITEM_ID + 21
+    check(len(items) == 1 and items[0][0] == wid
+          and items[0][1] == authsrv.agents.item_template("starter_hammer")["file_id"]
+          and hands == [[21, wid, 0]]
+          and bodies[21].get("weapon_item") == "starter_hammer"
+          and bodies[20].get("weapon_item") is None,
+          "the armed row gets ONE 0x0161 (item id = the base + its agent id, "
+          "the hammer's file) and ONE 0x006D [agent, that item, 0]; the bare "
+          "row gets neither and carries no weapon_item",
+          f"items {[(v[0], v[1]) for v in items]}, hands {hands}")
+    codec = Codec()
+    bad = []
+    for op, values, _l in sent:
+        if op in (authsrv.GAME_SMSG_CREATE_NAMED_ITEM,
+                  authsrv.GAME_SMSG_NPC_UPDATE_WEAPONS):
+            try:
+                codec.encode("GAME_SMSG", op, values)
+            except Exception as exc:                          # noqa: BLE001
+                bad.append((hex(op), str(exc)[:60]))
+    check(not bad, "and both encode through the real codec",
+          str(bad) if bad else "both encode")
+
+
 def section5():
     """The party co-loads with every area, so its ids are reserved.
 
@@ -654,6 +693,7 @@ def main():
     section4()
     section5()
     section6()
+    section7()
     return LEDGER.verdict()
 
 
