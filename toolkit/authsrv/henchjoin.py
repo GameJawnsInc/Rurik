@@ -42,6 +42,15 @@ WHAT IS JOINED, per connection with a henchman body created in it:
   cadence    the gap between one party 0x0029 and the next by the same body
              while the observer is moving; leads sent while the observer has
              stood > 1 s; and 0x0028 halts per body against its leads.
+  fight      (--fight, SLICE-H4) every party opening start again, with: the
+             LEAD from the observer's last start / press (c2s 0x0026, 0x0027)
+             ON THE SAME TARGET; whether T was the observer's 0x00C1
+             selection; the body's distance to T (sample-and-hold) by
+             profession and kind; the body's last movement order before it
+             (0x0029 lead / 0x002A naming T); the swing CADENCE inside a bout
+             per profession; the damage FRACTION [16|17, T, H, f32] a plain
+             swing lands (the dword is the f32 bits); and how the bout ended
+             (T's 0x00F1 dead bit inside 6 s).
 
 Read-only; standard library only; live captures only.
 """
@@ -49,6 +58,7 @@ import argparse
 import collections
 import math
 import os
+import struct
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -344,6 +354,106 @@ def hostile_targets():
     return opens, switches
 
 
+def _f32(v):
+    return struct.unpack("<f", struct.pack("<I", int(v) & 0xFFFFFFFF))[0]
+
+
+def party_fights():
+    """SLICE-H4 -> dict(opens, cadence{prof: [s]}, fracs{(prof, lvl): [f]},
+    ends[(T_died, observer_after)]) over the henchman connections."""
+    out = dict(opens=[], cadence=collections.defaultdict(list),
+               fracs=collections.defaultdict(list), ends=[], conns=0)
+    for capdir, gf in livewire.live_connections():
+        stamp = os.path.basename(capdir)
+        conn, merged, _ok = livewire.decode_conn(capdir, gf)
+        if not merged:
+            continue
+        party = party_of(merged)
+        if not party:
+            continue
+        me = whose_agent(merged)
+        if me is None:
+            continue
+        out["conns"] += 1
+        prof = {a: pl[0] for a, pl in party.items()}
+        lvl = {a: pl[1] for a, pl in party.items()}
+        pos, dead = {}, {}
+        me_starts, presses = [], []          # (t, T)
+        selected = None
+        last_order, last_start = {}, {}      # H -> (t, op, end, named)
+        body_starts = collections.defaultdict(list)
+        events = []                          # (t, kind, A, T) + deaths
+        for t, d, op, v in merged:
+            if d == "c2s":
+                if op in (0x003D, 0x0047) and len(v) > 1 \
+                        and isinstance(v[1], (tuple, list)):
+                    pos[me] = (float(v[1][0]), float(v[1][1]))
+                elif op == 0x00C1 and len(v) > 1:
+                    selected = int(v[1])
+                elif op == 0x0027 and len(v) > 3:
+                    presses.append((t, int(v[3])))
+                elif op == 0x0026 and len(v) > 1:
+                    presses.append((t, int(v[1])))
+                continue
+            if op == CREATE and len(v) > 5 and isinstance(v[5], (tuple, list)):
+                pos[int(v[1])] = (float(v[5][0]), float(v[5][1]))
+            elif op in (LEAD, DEST, 0x002C) and len(v) > 2 \
+                    and isinstance(v[2], (tuple, list)):
+                pos[int(v[1])] = (float(v[2][0]), float(v[2][1]))
+                if int(v[1]) in party:
+                    last_order[int(v[1])] = (
+                        t, op, (float(v[2][0]), float(v[2][1])),
+                        int(v[5]) if op == DEST and len(v) > 5 else None)
+            elif op == STATUS and len(v) > 2:
+                was = dead.get(int(v[1]), False)
+                dead[int(v[1])] = bool(int(v[2]) & DEAD_BIT)
+                if dead[int(v[1])] and not was:
+                    events.append((t, "death", int(v[1]), None))
+            elif op == PFLOAT_T and len(v) > 4 and int(v[1]) in (16, 17):
+                tgt, atk = int(v[2]), int(v[3])
+                ls = last_start.get(atk)
+                if atk in party and ls and t - ls[0] <= 2.5 \
+                        and ls[1] == tgt and ls[2] == 4:
+                    out["fracs"][(prof[atk], lvl[atk])].append(_f32(v[4]))
+            elif op == PINT_T and len(v) > 3 and int(v[1]) in (4, 50):
+                kind, A, T = int(v[1]), int(v[2]), int(v[3])
+                events.append((t, kind, A, T))
+                if A == me:
+                    me_starts.append((t, T))
+                    continue
+                if A not in party:
+                    continue
+                prev = last_start.get(A)
+                opens = prev is None or t - prev[0] > BOUT_GAP
+                if not opens and prev[1] == T and prev[2] == 4 and kind == 4:
+                    out["cadence"][prof[A]].append(t - prev[0])
+                last_start[A] = (t, T, kind)
+                body_starts[A].append((t, T))
+                if not opens:
+                    continue
+                same = [s for s in me_starts if t - PRE <= s[0] < t and s[1] == T] \
+                    + [p for p in presses if t - PRE <= p[0] < t and p[1] == T]
+                lead = min(t - s[0] for s in same) if same else None
+                dT = (math.hypot(pos[T][0] - pos[A][0], pos[T][1] - pos[A][1])
+                      if A in pos and T in pos else None)
+                lo = last_order.get(A)
+                out["opens"].append(dict(
+                    stamp=stamp, t=t, H=A, T=T, kind=kind, prof=prof[A],
+                    lead=lead, selected=(selected == T), dT=dT,
+                    order=(None if lo is None else lo[1]),
+                    order_names_T=(lo is not None and lo[1] == DEST and lo[3] == T)))
+        for H, sts in body_starts.items():
+            for i, (t, T) in enumerate(sts):
+                if i + 1 < len(sts) and sts[i + 1][0] - t <= BOUT_GAP:
+                    continue
+                after = [e for e in events if t - 1.0 <= e[0] <= t + 6.0]
+                out["ends"].append((
+                    any(e[1] == "death" and e[2] == T for e in after),
+                    any(e[1] in (4, 50) and e[2] == me and e[3] == T
+                        and e[0] > t for e in after)))
+    return out
+
+
 def pct(xs, p):
     if not xs:
         return None
@@ -357,7 +467,60 @@ def main(argv=None):
     ap.add_argument("--casts", action="store_true")
     ap.add_argument("--hostile", action="store_true",
                     help="SLICE-H3: how a hostile picks among the party")
+    ap.add_argument("--fight", action="store_true",
+                    help="SLICE-H4: how a party body fights -- the lead from "
+                         "the observer's start, the reach, the cadence, the "
+                         "damage fraction, the bout's end")
     args = ap.parse_args(argv)
+    if args.fight:
+        f = party_fights()
+        opens = f["opens"]
+        leads = [r["lead"] for r in opens if r["lead"] is not None]
+        print(f"PARTY FIGHTS -- {f['conns']} connections, {len(opens)} party "
+              f"opening starts")
+        print(f"  LEAD from the observer's last start/press ON THE SAME TARGET "
+              f"inside {PRE:.0f} s: {len(leads)} of {len(opens)}; p10/p50/p90 = "
+              f"{pct(leads, .1):.2f} {pct(leads, .5):.2f} {pct(leads, .9):.2f} s")
+        print(f"  T was the observer's 0x00C1 selection: "
+              f"{sum(1 for r in opens if r['selected'])} of {len(opens)}")
+        print("  DISTANCE body -> T at the opening start, by (profession, kind):")
+        bk = collections.defaultdict(list)
+        for r in opens:
+            if r["dT"] is not None:
+                bk[(r["prof"], r["kind"])].append(r["dT"])
+        for k in sorted(bk):
+            d = bk[k]
+            print(f"    prof={k[0]} kind={k[1]} n={len(d)} p10/p50/p90 = "
+                  f"{pct(d, .1):.0f} {pct(d, .5):.0f} {pct(d, .9):.0f}")
+        oc = collections.Counter((r["prof"], r["order"], r["order_names_T"])
+                                 for r in opens)
+        print("  the body's last movement order before it (prof, op, 0x002A "
+              "names T):", {(k[0], hex(k[1]) if k[1] else None, k[2]): n
+                            for k, n in sorted(oc.items(), key=str)})
+        print("  CADENCE between plain swings by one body, by profession:")
+        for p in sorted(f["cadence"]):
+            c = f["cadence"][p]
+            print(f"    prof={p} n={len(c)} p10/p50/p90 = {pct(c, .1):.2f} "
+                  f"{pct(c, .5):.2f} {pct(c, .9):.2f} s")
+        print("  DAMAGE FRACTION of T's maximum per plain swing (f32; negative "
+              "is damage), by (profession, level):")
+        for k in sorted(f["fracs"]):
+            x = f["fracs"][k]
+            print(f"    prof={k[0]} lvl={k[1]} n={len(x)} p10/p50/p90 = "
+                  f"{pct(x, .1):.3f} {pct(x, .5):.3f} {pct(x, .9):.3f}")
+        ec = collections.Counter(f["ends"])
+        print(f"  BOUT ENDS (T died inside 6 s, the observer started on T "
+              f"after): {dict(ec)}; T died: "
+              f"{sum(n for k, n in ec.items() if k[0])} of {len(f['ends'])}")
+        if args.rows:
+            for r in opens:
+                print(f"    {r['stamp']} t={r['t']:8.3f} H={r['H']:3d} "
+                      f"prof={r['prof']} T={r['T']:4d} kind={r['kind']} "
+                      f"lead={r['lead']!r} sel={r['selected']!s:5s} "
+                      f"dT={r['dT']!r} order="
+                      f"{hex(r['order']) if r['order'] else None} "
+                      f"namesT={r['order_names_T']}")
+        return 0
     if args.hostile:
         opens, switches = hostile_targets()
         c = collections.Counter((r["tclass"], r["rank"], r["hit_by_T"])

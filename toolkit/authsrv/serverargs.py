@@ -853,6 +853,19 @@ def build_parser(*, doc, GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING,
                          "0x009A, bags, appearance, pipeline-first): the "
                          "SLICE-B7 shape, follow and heal only, no panel. The "
                          "revert arm if the full rig asserts on a client.")
+    ap.add_argument("--party-no-fight", action="store_true",
+                    help="SLICE-H4 REVERT: the party never swings or casts at "
+                         "a foe -- every run before 2026-09-13. By default a "
+                         "party body fights the leader's target when the "
+                         "leader starts or presses on it (inside 6 s), else "
+                         "a hostile that opened on the party; a caster swings "
+                         "from casting range, a melee body chases (studies/"
+                         "slice F30, henchjoin.py --fight).")
+    ap.add_argument("--hero-weapon", default=None, metavar="KEY",
+                    help="SLICE-H4: the party body's weapon, an attack_speed "
+                         "rates key (staff, sword, ...) -- its swing interval. "
+                         "Default: the profession's (PARTY_WEAPON_BY_"
+                         "PROFESSION), or the [party.KEY] row's `weapon`.")
     ap.add_argument("--hostile-target-player", action="store_true",
                     help="SLICE-H3 REVERT: hostiles chase, swing at and cast at "
                          "the PLAYER only -- every run before 2026-09-13. By "

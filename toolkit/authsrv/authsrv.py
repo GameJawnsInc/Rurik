@@ -9362,6 +9362,48 @@ SCALE_MEANS_RESURRECT = {"Resurrect"}
 # the cured case SLICE-F10 proved. Activation and recharge are the client's
 # own row (1.0 s / 2 s; 0.75 s / 2 s). `--hero-skills` still overrides.
 HERO_SKILLS = ((281, 1.0, 2.0), (276, 0.75, 2.0))
+# ---- SLICE-H4: THE PARTY FIGHTS (studies/slice F30, henchjoin.py --fight) --
+#
+# Read off retail's own henchmen, 89 opening starts by a party body: 77 came
+# inside 6 s of the leader's own start or press ON THAT TARGET (p50 0.50 s
+# behind it, p90 1.55), and the target was the leader's SELECTED one in 80 of
+# 89; the rest opened on a hostile that had started on the party, or on
+# nothing this join can see (12). A MELEE body (the Warrior) chased its foe
+# by a 0x002A naming it -- 17 of its 27 opening starts stood behind one --
+# and opened at ~100-134 u; a CASTER swung from where the formation had put
+# it, the Monk at 378 u p50 (p10 146, p90 761) and the Elementalist at 547
+# (positions sample-and-held, so those carry the tape's staleness). Retail's
+# monk cast heals between swings; its plain swings ran 1.91 s apart (p50; the
+# Warrior's 1.48, the Elementalist's 1.89 -- staff/wand 1.75 and sword/axe
+# 1.33 by the client's own rates, with the tick's jitter). Each plain swing
+# landed a FRACTION of the target's maximum: the level-20 Monk 0.038 p50
+# (p10 0.022, p90 0.049), the Warrior 0.043, the Elementalist 0.039.
+# The bout ended in the target's DEATH 60 times of 89.
+PARTY_FIGHTS = True            # False (--party-no-fight): the party never
+                               # swings or casts at a foe -- every run before
+                               # 2026-09-13.
+PARTY_ENGAGE_WINDOW = 6.0      # s: a leader's start/press this recent engages
+                               # the party on its target (F28/F30's join window).
+PARTY_RANGED_REACH = 1248.0    # u, centre to centre: casting range, "also the
+                               # range of all caster weapons (staffs and wands)"
+                               # -- WIKI (GWW, "Range", raw read 2026-09-13).
+                               # Retail's Monk opened at 378 u p50, max ~1237.
+PARTY_MELEE_PROFESSIONS = (1, 7, 10)   # Warrior, Assassin, Dervish: the body
+                               # chases to enemy_reach(); everyone else swings
+                               # from PARTY_RANGED_REACH (RECONSTRUCTION: the
+                               # Ranger and Paragon are projectile classes the
+                               # corpus shows one and zero opening swings for).
+PARTY_HIT_FRACTION = 0.038     # of the TARGET's maximum per plain swing, the
+                               # figure at AR 60 -- OBSERVED, retail's level-20
+                               # Monk henchman (n=35); scaled by the target's
+                               # armour as ENEMY_HIT_FRACTION is.
+# The weapon a party body swings with, by profession: the attack-speed rates
+# key (content attack_speed.rates). RECONSTRUCTION from the cadences above and
+# GWW's weapon classes; a [party.KEY] row's `weapon` or --hero-weapon wins.
+PARTY_WEAPON_BY_PROFESSION = {1: "sword", 2: "shortbow", 3: "staff", 4: "staff",
+                              5: "staff", 6: "staff", 7: "daggers", 8: "staff",
+                              9: "spear", 10: "scythe"}
+HERO_WEAPON = None             # --hero-weapon KEY / [party.KEY].weapon
 # The health fraction at or below which a party caster will heal. OURS, and it
 # is AI rather than protocol -- studies/monsterai established that ArenaNet's
 # decision logic is not recoverable from anything, so this is authored or it
@@ -12593,6 +12635,7 @@ def attack_tick(send, state, conn_id, rec=None):
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
          [agents.GV_ATTACK_STARTED, PLAYER_AGENT_ID, target_id, 0],
          f"attack_started: player swings at {target_id}")
+    leader_engaged(state, target_id, now, "swing")        # SLICE-H4
     _press_answered(state, rec, conn_id, "swing")
     # The hold follows the START, in that order -- every player [8, 31, 1]
     # outside a press burst rides immediately behind its own
@@ -12740,6 +12783,8 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0,
     if not armed and not skill_strike \
             and now - agent.get("last_hit", 0.0) < ATTACK_INTERVAL:
         return
+    if swing:
+        leader_engaged(state, target_id, now, "swing")    # SLICE-H4
 
     # THE GUARD RUNS BEFORE ANY EFFECT -- before the timer is consumed, before
     # the health is bookkept, before the first send. Until 2026-08-14 the
@@ -13881,6 +13926,14 @@ def handle_skill_press(values, send, state, conn_id, opcode, rec=None):
                 state["cast_busy_until"] = (now + _run / _spd
                                             + (e5_at - begin) + aftercast)
 
+    # SLICE-H4: a press at a foe engages the party on it (retail: 77 of 89
+    # party opening starts followed the leader's own start or press on the
+    # target inside 6 s). An accepted press only -- the refusals returned
+    # above -- and only one aimed at a live hostile row.
+    _prow = state.get("agents", {}).get(target) if target else None
+    if (_prow is not None and not _prow.get("dead")
+            and _prow.get("allegiance") == agents.ALLEGIANCE_HOSTILE):
+        leader_engaged(state, target, now, "press")
     send(GAME_SMSG_SKILL_ACTIVATED_BROADCAST,
          [PLAYER_AGENT_ID, skill_id, copy],
          f"SKILL_ACTIVATED_BROADCAST(skill {skill_id} via {which})")
@@ -16577,18 +16630,20 @@ def ally_cast_tick(send, state, conn_id):
     the same reason: `land_skill` is called from inside that reach gate, so an
     ally's cast would otherwise never resolve.
 
-    WHAT IT DELIBERATELY DOES NOT DO, and the boundary is the honest part:
+    WHAT IT DID NOT DO AT FIRST, and where each half went:
 
-      * NO DAMAGE. `land_skill` still names `PLAYER_AGENT_ID` at its damage,
-        effect and condition sites, so a party body casting anything that hurts
-        or enchants would aim at the player. For a heal every one of those sites
-        is inert -- `skill_damage` is None for a heal, and a heal Spell opens no
-        episode -- which is why this is reachable now and a damage-dealing hero
-        is not. Parameterising those four sites is the next rung, not this one.
-      * NO SWING. A party body never attacks; `attacks_back` stays False.
-      * NO TARGETING BY THE PLAYER. The hero heals who it likes, and the
-        commander UI's flags and stances (0x0015/0x001A, decoded in pvpui) are
-        not wired to anything here.
+      * NO DAMAGE -- `land_skill` named `PLAYER_AGENT_ID` at its damage,
+        effect and condition sites. SLICE-H3 parameterised them on the cast
+        target and SLICE-H4 routes a hostile target through `hurt_agent_row`,
+        so a FOE skill on a party bar (target byte 5) is cast here at the
+        body's fight target (`party_fight_target`) inside casting range and
+        held otherwise.
+      * NO SWING -- the party's swings are `ally_attack_tick`'s (SLICE-H4),
+        run right after this tick; `attacks_back` stays False because that
+        flag is the HOSTILE's "is animate and will fight" pair.
+      * NO TARGETING BY THE PLAYER -- still true of the commander UI's flags
+        and stances (0x0015/0x001A, decoded in pvpui, SLICE-H5); the leader's
+        own swing or press is what engages the party (F30).
 
     `pick_skill` is reused rather than replaced: its docstring declares it a
     testing fixture and not a decision about AI, and that boundary is exactly
@@ -16633,25 +16688,46 @@ def ally_cast_tick(send, state, conn_id):
         if _res is not None:
             target, slot = _dead, _res
         else:
-            target = ally_heal_target(state, agent_id)
-            if target is None:
-                continue
+            # SLICE-H4: a FOE skill (the client's target byte 5) goes at the
+            # body's fight target inside casting range; a heal at whoever is
+            # hurt (`ally_heal_target`); a slot with nobody to aim at is HELD
+            # and the round robin steps past it, bounded by what was held
+            # (enemy_attack_tick's own loop and its reason). The client's
+            # target byte still decides whether a slot may land on the ally
+            # picked: a code-4 skill lands on an OTHER ally and never on the
+            # caster, so a hero cannot use one on itself.
+            _heal_t = ally_heal_target(state, agent_id)
+            _foe_t = party_fight_target(state, agent_id, agent, now)
+            if _foe_t is not None:
+                _fx, _fy = target_pos(state, _foe_t)
+                if (target_dead(state, _foe_t)
+                        or math.hypot(_fx - agent["pos"][0],
+                                      _fy - agent["pos"][1]) > PARTY_RANGED_REACH):
+                    _foe_t = None
             slot = pick_skill(agent, now)
-            if slot is not None and skill_resurrects(skills[slot][0]):
+            _held = set()
+            target = None
+            while slot is not None:
+                _sid = skills[slot][0]
+                _kind = skill_target_kind(_sid)
+                if skill_resurrects(_sid):
+                    target = None                  # nobody is dead: held
+                elif _kind == "foe":
+                    target = _foe_t
+                else:
+                    target = _heal_t
+                    if _kind == "other_ally" and target == agent_id:
+                        target = None
+                if target is not None:
+                    break
+                _held.add(slot)
                 agent["last_slot"] = slot
-                slot = pick_skill(agent, now)
-                if slot is not None and skill_resurrects(skills[slot][0]):
-                    slot = None
+                _next = pick_skill(agent, now)
+                slot = None if (_next is None or _next in _held) else _next
             if slot is None:
                 continue
         skill_id, activation, recharge = skills[slot]
-        # The client's own target byte decides whether this slot may land on
-        # the ally we picked -- the same gate the hostile cast site applies,
-        # and the same reason: a code-4 skill lands on an OTHER ally and never
-        # on the caster, so a hero cannot use one on itself.
         kind = skill_target_kind(skill_id)
-        if kind == "other_ally" and target == agent_id:
-            continue
         if ENERGY:
             cost, units = skill_cost(skill_id)
             pool = agent_energy(agent)
@@ -16668,15 +16744,31 @@ def ally_cast_tick(send, state, conn_id):
                           f"{pool.current:.2f}", flush=True)
                 continue
             pool.spend(cost)
+        # SLICE-H4 / F24: a party body's ATTACK skill is a swing -- it waits
+        # for the swing clock, its strike is a windup away, and it closes
+        # with the attack trio's 46 through land_skill (the hostile's rule).
+        _atk = NPC_ATTACK_SKILL_SWINGS and _is_attack_skill(skill_id)
+        _interval = ((agent.get("attack_speed") or ENEMY_ATTACK_SPEED)
+                     * attack_interval_factor(state, agent_id))
+        if _atk and now - agent.get("last_swing", 0.0) < _interval:
+            continue
         agent["cast_target"] = target
         agent["skill_ready"][slot] = now + recharge
         agent["last_slot"] = slot
         agent["casting"] = slot
-        agent["cast_lands_at"] = now + activation
-        face_player(send, state, agent_id, agent, conn_id)
-        _op, _vals = cast_anim_msg(agents.GV_SKILL_ACTIVATED, agent_id,
+        if _atk:
+            agent["last_swing"] = now
+            agent["cast_lands_at"] = (now + swing_windup(_interval)
+                                      if activation == 0.0 else now + activation)
+        else:
+            agent["cast_lands_at"] = now + activation
+        face_player(send, state, agent_id, agent, conn_id,
+                    at=target_pos(state, target))
+        _op, _vals = cast_anim_msg(agents.GV_ATTACK_SKILL_ACTIVATED if _atk
+                                   else agents.GV_SKILL_ACTIVATED, agent_id,
                                    target, skill_id)
-        send(_op, _vals, f"party agent {agent_id} casts skill {skill_id}")
+        send(_op, _vals, f"party agent {agent_id} "
+                         f"{'strikes with' if _atk else 'casts'} skill {skill_id}")
         print(f"[c{conn_id}] party agent {agent_id} ({agent['name']}) casts "
               f"skill {skill_id} at {target} (slot {slot + 1} of "
               f"{len(skills)})", flush=True)
@@ -16812,46 +16904,79 @@ def hostile_target(state, agent_id, agent, now):
     return best[1]
 
 
-def hurt_party_body(send, state, attacker_id, tid, dealt, frac, conn_id, what):
-    """SLICE-H3: `dealt` health off party body `tid`, on the same property-16
-    channel a hit on any agent rides ([16, TARGET, cause, fraction]); the
-    body dies through kill_agent with no kill reward -- a party death pays
-    nobody."""
+def hurt_agent_row(send, state, attacker_id, tid, dealt, frac, conn_id, what):
+    """`dealt` health off agent row `tid`, on the same property-16 channel a
+    hit on any agent rides ([16, TARGET, cause, fraction]). A PARTY body
+    (SLICE-H3) dies through kill_agent with no kill reward -- a party death
+    pays nobody; a HOSTILE (SLICE-H4, the party's own hit) dies with the
+    reward, the objective and the morale the player's hit pays: the party's
+    kill is the party's (WIKI, GWW "Experience": shared by the party).
+    `last_hit` is written for a party body only -- on a hostile it is the
+    PLAYER's own swing timer (hit_enemy's interval gate), and a hero's hit
+    must not refuse the player's next swing."""
     row = state.get("agents", {}).get(tid)
     if row is None or row.get("dead"):
         return
     now = time.time()
+    hostile = row.get("allegiance") == agents.ALLEGIANCE_HOSTILE
     row["health"] = max(0.0, row["health"] - dealt)
-    row["last_hit"] = now
+    if not hostile:
+        row["last_hit"] = now
+    elif ENERGY:
+        # SILENT, as hit_enemy's own half is: retail's adrenaline traffic is
+        # self-scoped 9 of 9.
+        agent_adrenaline(row).on_damage_taken(
+            dealt / float(row["max_health"] or 1.0), now)
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
          [agents.PROP_DAMAGE, tid, attacker_id, frac],
-         f"{what}: {dealt:.0f} to party agent {tid}")
-    print(f"[c{conn_id}] party agent {tid} ({row.get('name', '?')}) takes "
-          f"{dealt:.0f} from agent {attacker_id} ({what}): "
-          f"{row['health']:.0f}/{row['max_health']:.0f}", flush=True)
+         f"{what}: {dealt:.0f} to {'agent' if hostile else 'party agent'} {tid}")
+    print(f"[c{conn_id}] {'agent' if hostile else 'party agent'} {tid} "
+          f"({row.get('name', '?')}) takes {dealt:.0f} from agent "
+          f"{attacker_id} ({what}): {row['health']:.0f}/{row['max_health']:.0f}",
+          flush=True)
     if row["health"] <= 0.0:
-        kill_agent(send, state, tid, row, conn_id, now, reward=False)
-        print(f"[c{conn_id}] PARTY AGENT {tid} IS DEAD -- it waits for a "
-              f"resurrection (SLICE-H3)", flush=True)
+        kill_agent(send, state, tid, row, conn_id, now, reward=hostile)
+        if not hostile:
+            print(f"[c{conn_id}] PARTY AGENT {tid} IS DEAD -- it waits for a "
+                  f"resurrection (SLICE-H3)", flush=True)
+
+
+hurt_party_body = hurt_agent_row          # SLICE-H3's name for the party half
 
 
 def land_swing_on_body(send, state, agent_id, agent, tid, conn_id, bonus=0.0,
                        skill_id=None):
-    """SLICE-H3: land_swing's closing half aimed at a party body -- the same
-    ENEMY_HIT_FRACTION at the body's own armour (its row's rating, else the
-    creature formula from its level and profession), the skill's bonus after
-    armour, retail's [finished, damage] order."""
+    """land_swing's closing half aimed at an AGENT ROW: a hostile's swing at
+    a party body (SLICE-H3, ENEMY_HIT_FRACTION) or a party body's swing at a
+    hostile (SLICE-H4, PARTY_HIT_FRACTION -- retail's level-20 Monk landed
+    0.038 of the target's maximum per plain swing) -- the fraction at the
+    row's own armour (its rating, else the creature formula from its level
+    and profession), the skill's bonus after armour, retail's [finished,
+    damage] order. A BLINDED body misses nine in ten (SKILLS-BL) like the
+    player's and the hostile's swing do."""
     row = state.get("agents", {}).get(tid)
     if row is None or row.get("dead"):
         return
-    dealt = float(row["max_health"]) * ENEMY_HIT_FRACTION
+    party = agent.get("allegiance") == agents.ALLEGIANCE_PLAYER
+    if skill_id is None and blind_miss(state, agent_id):
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.GV_MELEE_ATTACK_FINISHED, agent_id, 0],
+             "melee_attack_finished")
+        attack_fails(send, state, agent_id, tid, agents.ATTACK_FAIL_MISS,
+                     conn_id, "Blind")
+        print(f"[c{conn_id}] agent {agent_id} swung BLIND at agent {tid} and "
+              f"missed", flush=True)
+        return
+    dealt = float(row["max_health"]) * (PARTY_HIT_FRACTION if party
+                                        else ENEMY_HIT_FRACTION)
     armour = row.get("armor_rating")
     if armour is None:
         armour = creature_armor_rating(row.get("npc") or {})
     if ARMOUR_TERM and armour is not None:
         dealt *= armour_multiplier(float(armour))
     dealt += float(bonus)
-    what = "an enemy swing" if skill_id is None else f"skill {skill_id}"
+    what = (("a party swing" if party else "an enemy swing") if skill_id is None
+            else f"skill {skill_id}")
     frac = _damage_fraction(dealt, row["max_health"], agents.PROP_DAMAGE, what)
     if skill_id is None:
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
@@ -16862,7 +16987,7 @@ def land_swing_on_body(send, state, agent_id, agent, tid, conn_id, bonus=0.0,
              [agents.GV_ATTACK_SKILL_FINISHED, agent_id, 0],
              f"attack_skill_finished: agent {agent_id}'s skill {skill_id} "
              f"strikes party agent {tid} (+{bonus:.0f})")
-    hurt_party_body(send, state, agent_id, tid, dealt, frac, conn_id, what)
+    hurt_agent_row(send, state, agent_id, tid, dealt, frac, conn_id, what)
 
 
 def skill_resurrects(skill_id):
@@ -16922,6 +17047,171 @@ def resurrect_target(send, state, tid, conn_id, caster_id, skill_id):
     row = state.get("agents", {}).get(tid)
     if row is not None and row.get("dead"):
         revive_party_body(send, state, tid, row, conn_id, why=why)
+
+
+def leader_engaged(state, target_id, now, why):
+    """SLICE-H4: the leader's own start or press at `target_id` -- what the
+    party reads to fight (F30: 77 of 89 retail party opening starts followed
+    one inside 6 s, p50 0.50 s behind it)."""
+    state["leader_engaged"] = {"target": target_id, "at": now, "why": why}
+
+
+def party_melee(agent):
+    """Does this party body fight in melee (chase to enemy_reach()) or from
+    caster range? By profession, PARTY_MELEE_PROFESSIONS."""
+    return ((agent.get("npc") or {}).get("profession")
+            in PARTY_MELEE_PROFESSIONS)
+
+
+def party_reach(agent):
+    return enemy_reach() if party_melee(agent) else PARTY_RANGED_REACH
+
+
+def party_attack_speed(npc):
+    """The interval a party body swings at: HERO_WEAPON's rate when set
+    (--hero-weapon / [party.KEY].weapon), else the profession's weapon
+    (PARTY_WEAPON_BY_PROFESSION), else ENEMY_ATTACK_SPEED."""
+    key = HERO_WEAPON or PARTY_WEAPON_BY_PROFESSION.get(
+        (npc or {}).get("profession"))
+    return float(agents.ATTACK_SPEED.get(key, ENEMY_ATTACK_SPEED))
+
+
+def live_hostile(state, tid):
+    row = state.get("agents", {}).get(tid) if tid is not None else None
+    return (row is not None and not row.get("dead")
+            and row.get("allegiance") == agents.ALLEGIANCE_HOSTILE
+            and not (row.get("effects", 0) & agents.EFFECT_TRANSITION))
+
+
+def hostile_fights_party(state, hid):
+    """Has this hostile OPENED on the party -- its H3 pick locked on the
+    player or a party body?"""
+    row = state.get("agents", {}).get(hid) or {}
+    if not row.get("target_locked"):
+        return False
+    t = row.get("target")
+    return t == PLAYER_AGENT_ID or any(t == aid for aid, _r in party_bodies(state))
+
+
+def party_fight_target(state, agent_id, agent, now):
+    """SLICE-H4: who this party body fights, or None (it stands down).
+
+    THE RULE, fitted to F30's 89 retail opening starts and said so:
+      1. the leader's target, when the leader started or pressed on a live
+         hostile inside PARTY_ENGAGE_WINDOW (72 of 89 followed the leader;
+         80 of 89 named the leader's selected target);
+      2. else the body's current foe while it lives and either the leader's
+         last engagement is still on it or it is fighting the party --
+         retail's bouts ran to the target's death 60 times of 89;
+      3. else the nearest hostile that has opened on the party (5 of 89
+         followed a hostile's start on the party with no leader start);
+      4. else nobody. The 12 retail bouts that opened on none of these are
+         not modelled.
+    The pick is written to agent["fight"]; a CHANGE drops the swing state so
+    a windup aimed at the old foe does not land on the new one.
+    """
+    if not PARTY_FIGHTS:
+        return None
+    cur = agent.get("fight")
+    le = state.get("leader_engaged")
+    pick, why = None, None
+    if (le and now - le["at"] <= PARTY_ENGAGE_WINDOW
+            and live_hostile(state, le["target"])):
+        pick, why = le["target"], "the leader's target"
+    elif cur is not None and live_hostile(state, cur) and (
+            (le and le["target"] == cur) or hostile_fights_party(state, cur)):
+        pick, why = cur, agent.get("fight_why")
+    else:
+        ax, ay = agent["pos"]
+        best = None
+        for hid, row in list(state.get("agents", {}).items()):
+            if not live_hostile(state, hid) or not hostile_fights_party(state, hid):
+                continue
+            hx, hy = row["pos"]
+            d = math.hypot(hx - ax, hy - ay)
+            if best is None or d < best[0]:
+                best = (d, hid)
+        if best is not None:
+            pick, why = best[1], "it opened on the party"
+    if pick != cur:
+        agent["fight"] = pick
+        agent["fight_why"] = why
+        agent["swinging"] = False
+        agent["swing_lands_at"] = None
+        if pick is not None:
+            print(f"[{agent.get('name', agent_id)}] party agent {agent_id} "
+                  f"fights agent {pick} ({why}) [SLICE-H4]", flush=True)
+        elif cur is not None:
+            print(f"[{agent.get('name', agent_id)}] party agent {agent_id} "
+                  f"stands down [SLICE-H4]", flush=True)
+    return pick
+
+
+def ally_attack_tick(send, state, conn_id):
+    """SLICE-H4: the PARTY's own swings -- the auto-attack retail's Monk ran
+    between its heals (32 starts in one connection, F28), in the hostile's
+    own wire shape ([4, body, foe, 0] open; [1, body, 0] then [16, foe, body,
+    fraction] a windup later; retail's [finished, damage] order for every
+    other-agent swing). Runs AFTER ally_cast_tick: a cast that tick armed
+    beats the swing, as a hostile's cast in flight does.
+
+    What the swing is aimed by is `party_fight_target`; what it lands is
+    `land_swing` -> `land_swing_on_body` with PARTY_HIT_FRACTION at the foe's
+    armour. A MELEE body swings only parked (mid-follow no swing, the
+    hostile's rule); a CASTER swings from its slot when the foe is inside
+    PARTY_RANGED_REACH and its own walk has arrived.
+    """
+    if not PARTY_FIGHTS:
+        return
+    now = time.time()
+    for agent_id, agent in list(state.get("agents", {}).items()):
+        if agent_id not in state.get("agents", {}):
+            continue
+        if agent.get("allegiance") != agents.ALLEGIANCE_PLAYER:
+            continue
+        if agent.get("dead") or (agent.get("effects", 0)
+                                 & agents.EFFECT_TRANSITION):
+            agent["swinging"] = False
+            agent["swing_lands_at"] = None
+            continue
+        tid = party_fight_target(state, agent_id, agent, now)
+        if tid is None or target_dead(state, tid):
+            agent["swinging"] = False
+            agent["swing_lands_at"] = None
+            continue
+        # An armed swing lands first, wherever the foe went (SLICE-F21).
+        due = agent.get("swing_lands_at")
+        if due is not None:
+            if now >= due:
+                agent["swing_lands_at"] = None
+                land_swing(send, state, agent_id, agent, conn_id,
+                           target_id=tid)
+            continue
+        if agent.get("cast_lands_at") is not None:
+            continue                          # a cast in flight beats it
+        tx, ty = target_pos(state, tid)
+        ax, ay = agent["pos"]
+        dist = math.hypot(tx - ax, ty - ay)
+        melee = party_melee(agent)
+        fol = agent.get("follow")
+        walking = fol is not None and (melee or fol.get("arrived_at") is None)
+        if dist > party_reach(agent) or walking:
+            agent["swinging"] = False
+            continue
+        interval = ((agent.get("attack_speed") or ENEMY_ATTACK_SPEED)
+                    * attack_interval_factor(state, agent_id))
+        if not agent.get("swinging"):
+            agent["swinging"] = True
+            agent["last_swing"] = 0.0         # swing on arrival, not an interval later
+            print(f"[c{conn_id}] party agent {agent_id} ({agent['name']}) "
+                  f"attacks agent {tid}, {dist:.0f} u out [SLICE-H4]",
+                  flush=True)
+        if now - agent.get("last_swing", 0.0) < interval:
+            continue
+        agent["last_swing"] = now
+        face_player(send, state, agent_id, agent, conn_id, at=(tx, ty))
+        start_swing(send, agent_id, conn_id, target_id=tid)
+        agent["swing_lands_at"] = now + swing_windup(interval)
 
 
 def party_slot_point(state, slot):
@@ -17008,7 +17298,20 @@ def enemy_move_tick(send, state, conn_id, rec=None):
             _tgt = (tx, ty)
             _stop = HERO_FOLLOW_STOP if _ally else None
             _slot = False
-            if _ally and PARTY_SLOT_LEADS:
+            _leash = HERO_FOLLOW_LEASH if _ally else None
+            _ft = (party_fight_target(state, agent_id, agent, now)
+                   if _ally else None)
+            if _ally and _ft is not None and party_melee(agent):
+                # SLICE-H4: a MELEE party body chases its foe by a 0x002A
+                # naming it, in the hostile's own shape and radii (retail's
+                # Warrior henchman: 17 of 27 opening starts stood behind
+                # one), and gives up at the hostile's leash; a caster stays
+                # in its slot and swings from range (F30).
+                _tid = _ft
+                _tgt = target_pos(state, _ft)
+                dist = math.hypot(_tgt[0] - ax, _tgt[1] - ay)
+                _stop, _slot, _leash = None, False, None
+            elif _ally and PARTY_SLOT_LEADS:
                 # SLICE-H2: a party body walks to its SLOT in the leader's
                 # frame, not to the leader (F28) -- the same follow machinery
                 # aimed at a different point, parking on the lead's own end.
@@ -17017,7 +17320,7 @@ def enemy_move_tick(send, state, conn_id, rec=None):
                 _stop, _slot = PARTY_SLOT_STOP, True
             _npc_follow_tick(send, state, conn_id, agent_id, agent,
                              _tgt, dist, now, pm, rec,
-                             leash=HERO_FOLLOW_LEASH if _ally else None,
+                             leash=_leash,
                              stop_at=_stop, slot=_slot, target_id=_tid)
             continue
         if _ally:
@@ -18449,7 +18752,8 @@ def start_swing(send, agent_id, conn_id, target_id=PLAYER_AGENT_ID):
     """
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
          [agents.GV_ATTACK_STARTED, agent_id, target_id, 0],
-         f"attack_started: agent {agent_id} swings at the player")
+         f"attack_started: agent {agent_id} swings at "
+         f"{'the player' if target_id == PLAYER_AGENT_ID else 'agent %d' % target_id}")
 
 
 def land_swing(send, state, agent_id, agent, conn_id, bonus=0.0,
@@ -18836,9 +19140,11 @@ def land_skill(send, state, agent_id, agent, conn_id):
         return
     agent["casting"] = None
     if _tbody:
-        # SLICE-H3: the spell was at a party body.
-        hurt_party_body(send, state, agent_id, _tid, dealt, frac, conn_id,
-                        f"skill {skill_id}")
+        # SLICE-H3: the spell was at a party body; SLICE-H4: or a party
+        # body's spell at a hostile -- the row's allegiance decides the
+        # reward inside.
+        hurt_agent_row(send, state, agent_id, _tid, dealt, frac, conn_id,
+                       f"skill {skill_id}")
         return
     state["player_health"] = max(0.0, state["player_health"] - dealt)
     # THE GAIN PRECEDES THE DAMAGE (see hit_enemy for the census). No strike
@@ -20995,7 +21301,9 @@ def _handle_request_players(send, state, conn_id, stop, rec):
              "party_slot": _i,                  # SLICE-H2: its formation slot
              "allegiance": agents.ALLEGIANCE_PLAYER,
              "effects": 0,
-             "attack_speed": ENEMY_ATTACK_SPEED,
+             # SLICE-H4: its own weapon's interval (a Monk's staff, 1.75 --
+             # retail's Monk henchman swung 1.91 s apart p50).
+             "attack_speed": party_attack_speed(_hro),
              "resend_definition": True,
              "attacks_back": False,
              # SLICE-B7c: the party body's bar, empty until --hero-skills.
@@ -21791,6 +22099,9 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # hostiles have just finished changing, so healing on
                         # the same tick as the damage is what a player sees.
                         ally_cast_tick(send, state, conn_id)
+                        # SLICE-H4: and the party's swings, after its casts --
+                        # a cast this tick armed beats the swing.
+                        ally_attack_tick(send, state, conn_id)
                         # The third sweep, and the first that mutates state["agents"]
                         # on a schedule rather than only when the player acts. Last,
                         # so a body that died this tick is seen dead by burrow_tick
@@ -25388,6 +25699,8 @@ def main():
         a.hero_level = int(_prow.get("level", _pbody.get("level", 1)))
         a.hero_vitals = (f"{int(_prow.get('health', 100))},"
                          f"{int(_prow.get('energy', 30))}")
+        if _prow.get("weapon") and not a.hero_weapon:
+            a.hero_weapon = str(_prow["weapon"])       # SLICE-H4
         if not a.party_no_commander:
             a.hero_activate = True
             a.hero_char = True
@@ -26375,6 +26688,19 @@ def main():
         print("[map] --no-interact-route: an out-of-range interact is HELD "
               "and nobody walks the player over. Every run before 2026-09-12, "
               "and the known-bad arm.", flush=True)
+    if a.party_no_fight:
+        global PARTY_FIGHTS
+        PARTY_FIGHTS = False
+        print("[party] --party-no-fight: the party never swings or casts at a "
+              "foe -- every run before SLICE-H4 (2026-09-13); retail's party "
+              "bodies opened on the leader's target 72 times in 89.", flush=True)
+    if a.hero_weapon:
+        global HERO_WEAPON
+        if a.hero_weapon not in agents.ATTACK_SPEED:
+            raise SystemExit(f"--hero-weapon {a.hero_weapon!r}: not an "
+                             f"attack_speed rates key "
+                             f"({', '.join(sorted(agents.ATTACK_SPEED))})")
+        HERO_WEAPON = a.hero_weapon
     if a.hostile_target_player:
         global HOSTILE_TARGETS_PARTY
         HOSTILE_TARGETS_PARTY = False

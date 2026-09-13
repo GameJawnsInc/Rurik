@@ -1358,6 +1358,7 @@ skills = [281, 276, 2]
 level = 5
 health = 100
 energy = 30
+weapon = "staff"
 
 [party.slice.provenance]
 source = "invented"
@@ -1369,4 +1370,7 @@ bar is SLICE-B3's default (Orison of Healing 281, Restore Condition 276) -- a \
 retail level-20 Monk henchman carried Orison, Word of Healing, Heal Other, \
 Healing Breeze and Resurrection Signet (F28, henchjoin.py), and this row \
 should grow toward that as the effect rows exist. Level and vitals are the \
-body row's; the hero body is created with 100 health today."""
+body row's; the hero body is created with 100 health today. `weapon` is the \
+attack_speed rates key the body swings at (SLICE-H4): a staff, 1.75 s -- \
+retail's Monk henchman swung 1.91 s apart p50 (F30), and GWW's caster \
+weapons share casting range."""
