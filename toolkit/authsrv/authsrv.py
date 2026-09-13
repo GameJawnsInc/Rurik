@@ -11328,6 +11328,17 @@ def withheld_replay_take(send, state, conn_id):
     return wr
 
 
+def refuse_move_while_dead(state, conn_id, opcode):
+    """A movement report from a dead player: refused, printed once per death."""
+    n = state.get("corpse_reports", 0) + 1
+    state["corpse_reports"] = n
+    if n == 1:
+        which = ("keyboard" if opcode == GAME_CMSG_TURN_TO_DIRECTION
+                 else "click")
+        print(f"[c{conn_id}] DEAD: {which} report refused -- a corpse does "
+              f"not move (further ones counted) [SLICE-F23]", flush=True)
+
+
 def refuse_move_while_rooted(state, conn_id, opcode, cast, values=()):
     """A movement report during the windup: refused, printed once per cast."""
     now = time.time()
@@ -14929,6 +14940,23 @@ def kill_player(send, state, conn_id, why="took a killing blow"):
     state["player_dead"], state["player_died_at"] = True, time.time()
     strip_effects(send, state, PLAYER_AGENT_ID, conn_id, "the player died")
     state["attacking"] = None          # a corpse stops swinging back
+    # AND STOPS WALKING (SLICE-F23: "I slid around after dying too"). The
+    # keyboard lead chain re-granted leads to the corpse -- `KBD LEAD
+    # RE-GRANT 1 ... the client silent` right after the KILL -- because
+    # nothing here ended the leg the key had armed. Every movement order
+    # this server could re-issue for the player is dropped: the keyboard leg
+    # (the chain's operand), the integrator's dest, the follow, the router
+    # chain. The movement LATCHES stay with the arms that own them (their
+    # writer counts are locked by test_cancelwalk / test_playerswing /
+    # test_position_trust for a reason): the four grant ticks in handle()
+    # and the two movement arms are gated on player_dead, so a stale latch
+    # can grant nothing until revive_player clears the flag and the next
+    # report re-stamps it. No send: the KILL status is what the client acts
+    # on, and a grant to a corpse is the defect.
+    state.pop("kbd_leg", None)
+    state["dest"] = None
+    _approach_abandon(state)
+    router_abandon(state, None, "death", time.time())
     send(GAME_SMSG_AGENT_UPDATE_STATUS,
          [PLAYER_AGENT_ID, agents.EFFECT_DEAD], f"KILL the player ({why})")
     # AND THE BILL, in ArenaNet's own order: the death bit first, the morale
@@ -15185,13 +15213,21 @@ def degen_tick(send, state, conn_id):
     """
     if not EFFECTS:
         return
+    # THE CLOCK IS STAMPED ON EVERY TICK, live effects or not (SLICE-F23, the
+    # owner's run 20260912T205237: "one of his skills kills me instantly").
+    # It used to be stamped only below the live-effects return, so the
+    # stamp froze at the last tick of the PREVIOUS Bleeding -- across the
+    # death that stripped it and the minutes of quiet after -- and the next
+    # Bleeding's first tick charged 3 pips x 2 x that whole gap: 90 health
+    # gone in one tick at 856-865 of the log, 55 at 599-693. A gap with no
+    # live effect costs nothing, so its length must never reach `dt`.
+    now = time.time()
+    last = state.get("degen_at")
+    state["degen_at"] = now
     table = state.get("effects")
     if not table or not table.live:
         return
-    now = time.time()
-    last = state.get("degen_at") or now
-    dt = now - last
-    state["degen_at"] = now
+    dt = now - (last if last is not None else now)
     if dt <= 0:
         return
     for agent_id in sorted({ep["agent"] for ep in table.live.values()}):
@@ -18303,6 +18339,7 @@ def player_revive_due(send, state, conn_id):
     # (test_guards section 6).
     frac = _fraction(1.0, agents.GV_HEALTH, "refill the player to a full pool")
     state["player_dead"] = False
+    state["corpse_reports"] = 0
     # THE GRACE WINDOW STARTS HERE, not at the refill: a player who is put back
     # on their feet and killed again before they can act has not had a turn,
     # and the deferred-refill experiment must not be able to move a game rule.
@@ -21307,7 +21344,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                 # flight, once per leg) do the real refusing. The deferred
                 # click flush rides the same ticks under the bundle
                 # (REV-2: recv-thread-only sending).
-                if D1_LEAD and kind == "game":
+                if D1_LEAD and kind == "game" and not state.get("player_dead"):
                     _a2_watchdog(send, state, rec)
                     grant_flush_tick(send, state, conn_id, rec)
                     heading_hold_tick(send, state, conn_id, rec)
@@ -21315,7 +21352,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                     kbd_lead_chain_tick(send, state, conn_id, rec)
                 # ROUTER-B2: the chain scheduler rides the same quiet
                 # ticks (recv-thread-only sending, same as the flush).
-                if ROUTER and kind == "game":
+                if ROUTER and kind == "game" and not state.get("player_dead"):
                     router_chain_tick(send, state, conn_id, rec)
                 if (PORTALS and kind == "game"
                         and portal_tick(send, state, conn_id, _local_host)):
@@ -21362,7 +21399,8 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
             # a held click gets first claim on each floor opening, ahead of
             # the report that would otherwise stamp the clock past it, and
             # every player-grant sender is serialized on this one thread.
-            if D1_LEAD and kind == "game" and msgs:
+            if D1_LEAD and kind == "game" and msgs \
+                    and not state.get("player_dead"):
                 grant_flush_tick(send, state, conn_id, rec)
                 heading_hold_tick(send, state, conn_id, rec)
                 kbd_lead_refresh_tick(send, state, conn_id, rec)
@@ -21370,7 +21408,8 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
             # ROUTER-B2: a due leg gets the same pre-batch claim -- the
             # batch may carry the very input that abandons the chain, and
             # a leg whose ETA passed before that input arrived was owed.
-            if ROUTER and kind == "game" and msgs:
+            if ROUTER and kind == "game" and msgs \
+                    and not state.get("player_dead"):
                 router_chain_tick(send, state, conn_id, rec)
             # SLICE-B8: a batch may carry the report that puts the player
             # inside a portal; check before the batch is acted on, so the
@@ -21969,6 +22008,14 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # there is nothing to read; the request is the
                         # message.
                         cancel_action(send, state, conn_id)
+                    elif (opcode in (GAME_CMSG_TURN_TO_DIRECTION,
+                                     GAME_CMSG_MOVE_TO_COORD)
+                          and state.get("player_dead")):
+                        # SLICE-F23: a corpse does not move. The attack and
+                        # skill arms already refuse a dead player; the
+                        # movement arms did not, and every arm below is an
+                        # answer (a lead, a grant, a position take).
+                        refuse_move_while_dead(state, conn_id, opcode)
                     elif (opcode in (GAME_CMSG_TURN_TO_DIRECTION,
                                      GAME_CMSG_MOVE_TO_COORD)
                           and (opcode == GAME_CMSG_MOVE_TO_COORD

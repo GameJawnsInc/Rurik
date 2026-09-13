@@ -43,7 +43,7 @@ import checks  # noqa: E402
 import effects  # noqa: E402
 from codec import Codec  # noqa: E402
 
-LEDGER = checks.Ledger("the effect channel", floor=74)
+LEDGER = checks.Ledger("the effect channel", floor=80)   # SLICE-F23 +6 (the degen clock across quiet ticks; a corpse does not walk); from the green run
 
 
 
@@ -687,6 +687,29 @@ def section_degeneration():
               "in fact it sends nothing at all on a steady rate",
               f"{len(sent)} message(s) -- the whole point of a rate is that "
               f"the client does the arithmetic")
+    # SLICE-F23: THE CLOCK RUNS ACROSS QUIET TICKS. The owner's run
+    # 20260912T205237: a Bleeding applied minutes after the previous one
+    # had been stripped by a death killed a 90-health player on its FIRST
+    # tick, because the stamp froze at the last live tick and the whole
+    # quiet gap was charged. A quiet tick must move the clock.
+    quiet_state = {"player_health": 100.0, "player_dead": False,
+                   "degen_at": _time.time() - 300.0}
+    authsrv.effect_table(quiet_state)             # a table with nothing live
+    authsrv.degen_tick(send, quiet_state, 0)
+    LEDGER.ok(abs(quiet_state["degen_at"] - _time.time()) < 0.5,
+              "a tick with NO live effect still stamps the clock",
+              f"stamp {_time.time() - quiet_state['degen_at']:.2f} s old")
+    authsrv.apply_condition(quiet, quiet_state, authsrv.PLAYER_AGENT_ID, 478,
+                            21.0, 12, 0, 382)
+    authsrv.degen_tick(send, quiet_state, 0)
+    LEDGER.ok(quiet_state["player_health"] > 99.0
+              and not quiet_state.get("player_dead"),
+              "so a Bleeding applied after a 300 s quiet gap costs ~nothing on "
+              "its first tick -- not 3 pips x 2 x 300 s = 1800 health (the "
+              "'kills me instantly' of the owner's run, twice: 90 -> dead at "
+              "log 856-865, 55 -> dead at 599-693)",
+              f"{quiet_state['player_health']:.2f}/100, dead "
+              f"{quiet_state.get('player_dead')}")
 
     print("\n4g. an expiry clears the rate, which is the easy thing to forget")
     table = authsrv.effect_table(state)
@@ -822,6 +845,51 @@ def section_deaths():
               "stripping an agent with no effects sends nothing",
               "every tick a death is processed would otherwise emit an empty "
               "log line")
+
+    print("\n6a. SLICE-F23: a corpse does not walk")
+    # The owner: "I slid around after dying too." The keyboard lead chain
+    # re-granted leads to the corpse ("KBD LEAD RE-GRANT 1 ... the client
+    # silent" right after the KILL). kill_player drops every movement order.
+    import os
+    st = {"player_health": 0.0, "player_dead": False, "agents": {},
+          "kbd_leg": {"t0": 1.0}, "dest": (500.0, 0.0), "walking": True,
+          "heading": (766.0, 0.0), "heading_hold": {"x": 1},
+          "click_leg": {"t0": 1.0}, "click_moving_at": 1.0,
+          "kbd_moving_at": 1.0, "attacking": 10,
+          "approach": {"target": 10, "t0": 1.0},
+          "router_chain": {"i": 0, "n": 2, "queue": [1]}}
+    corpse = []
+    authsrv.kill_player(lambda op, v, why="", quiet=False: corpse.append(op),
+                        st, 0, "test")
+    LEDGER.ok(st["player_dead"] and "kbd_leg" not in st and st["dest"] is None
+              and st.get("approach") is None and "router_chain" not in st
+              and st["attacking"] is None
+              and st["click_moving_at"] == 1.0 and st["kbd_moving_at"] == 1.0,
+              "kill_player drops the keyboard leg (the chain's operand), the "
+              "dest, the follow and the router chain -- nothing is left for a "
+              "grant tick to re-issue -- and leaves the movement LATCHES to "
+              "the arms that own them (their writer counts are locked)",
+              f"{ {k: st.get(k) for k in ('dest', 'approach', 'attacking', 'click_moving_at', 'kbd_moving_at')} }, "
+              f"kbd_leg {'kbd_leg' in st}, chain {'router_chain' in st}")
+    LEDGER.ok(authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT not in corpse
+              and authsrv.GAME_SMSG_AGENT_UPDATE_DESTINATION not in corpse,
+              "and sends no movement message of its own -- the KILL status is "
+              "what the client acts on", f"{[hex(o) for o in corpse]}")
+    src = open(os.path.join(os.path.dirname(authsrv.__file__), "authsrv.py"),
+               encoding="utf-8").read()
+    LEDGER.ok(src.count('and not state.get("player_dead")') >= 4
+              and src.count("refuse_move_while_dead(state, conn_id, opcode)\n") == 1
+              and src.rindex("refuse_move_while_dead(state, conn_id, opcode)\n")
+              < src.index("elif opcode == GAME_CMSG_TURN_TO_DIRECTION:"),
+              "the four grant ticks in handle() are gated on player_dead and "
+              "a dead player's movement report is refused ahead of both "
+              "movement arms", f"gates {src.count('and not state.get(\"player_dead\")')}")
+    rs = {"player_dead": True}
+    authsrv.refuse_move_while_dead(rs, 0, authsrv.GAME_CMSG_TURN_TO_DIRECTION)
+    authsrv.refuse_move_while_dead(rs, 0, authsrv.GAME_CMSG_MOVE_TO_COORD)
+    LEDGER.ok(rs.get("corpse_reports") == 2,
+              "refused corpse reports are counted (printed once per death)",
+              f"{rs.get('corpse_reports')}")
 
     print("\n6b. the flag, so the channel can be isolated in a run")
     saved = authsrv.EFFECTS

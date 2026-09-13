@@ -1181,6 +1181,32 @@ pass-by: every catch now costs one swing that lands. **Unobserved on a client.**
 the owner's kiter is still never swung at after a catch, or if a swing opens on a body that
 was never in reach (the debt stamped on a stale-point halt).
 
+## SLICE-F23 — **two bugs off the C4 run: the degeneration clock froze across quiet ticks (the "instant kill"), and a corpse walked on its own lead chain**
+
+**The owner** (harness `20260912T205237`): *"enemy swings when it catches me now. Weird bugs
+though. I think one of his skills, maybe Sever Artery, kills me instantly. I slid around
+after dying too."* Both are in the log, and neither is Sever Artery's damage.
+
+**The instant kill is the degeneration clock.** Sever Artery inflicts Bleeding (3 pips,
+−6 health/s). `degen_tick` stamped its clock (`degen_at`) only *below* the early return for
+"no live effects", so the stamp froze at the last tick of the PREVIOUS Bleeding — across the
+death that stripped it and the minutes of quiet after — and the next Bleeding's first tick
+charged 3 × 2 × that whole gap. Log 856–865: Bleeding applied at 90/100, `KILL the player
+(bled out)` nine lines later with no damage between; 599–693 the same from 55/100. The
+clock is stamped on every tick now, live effects or not, so a quiet gap never reaches `dt`.
+`test_effects` §4f: a 300 s quiet gap followed by a Bleeding costs nothing on its first tick.
+
+**The slide is our own lead chain.** Right after the KILL: `KBD LEAD RE-GRANT 1 … the copy
+arriving at the lead's end, the client silent` — the keyboard-lead chain re-granting the leg
+the held key had armed, to a corpse; the client sent nothing. `kill_player` now drops every
+order this server could re-issue (the keyboard leg, the integrator's dest, the follow, the
+router chain — the movement latches stay with the arms whose writer counts are locked), the
+four grant ticks in `handle()` are gated on `player_dead`, and a dead player's movement
+report is refused ahead of both movement arms (`refuse_move_while_dead`, printed once per
+death, the counter reset at revive). No send: the KILL status is what the client acts on.
+`test_effects` §6a. Both unobserved on a client until the next pass; the run question is the
+obvious pair — *does Bleeding tick you down at 6 a second now, and does the corpse stay put?*
+
 ## SLICE-F6 — what the desk cannot settle
 
 Carried so the next session does not re-read the same bytes hoping for more:
